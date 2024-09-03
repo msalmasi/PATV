@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spin the Wheel</title>
+  <link rel="stylesheet" href="http://localhost:3000/public/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="arcadeInfo">
+    <div class="arcade-text">Player<br><br><br>
+      <span id="usernameSpan">?</span>
+    </div>
+  <div id="jackpot">
+    <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
+  </div>
+      <div class="balance-display">Balance<br><br><br>
+      <span id="userBalance">Loading balance...</span>
+    </div>
+</div>
+  <div class="wheel-container">
+    <canvas id="wheelCanvas" width="500" height="500"></canvas>
+    <div id="resultContainer">
+        <span id="resultText"></span>
+    </div>
+    <br>
+    <div id="spinButton">
+      <img id="coinslot" src="http://localhost:3000/public/coinslot.webp"></img>
+    </div>
+    <br>
+
+
+  </div>
+  <script src="http://localhost:3000/public/script.js"></script>
+</body>
+</html>
