@@ -6,10 +6,32 @@ body {
     height: 100vh;
     /* background-color: #282c34; */
     background-color: #0F0F11;
-    color: white;
+    color: rgb(255, 255, 255);
     margin: 0;
-    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+  }
 
+  form {
+    background: none;
+    
+  }
+
+  .link-button {
+    background: none;
+    border: none;
+    color: rgb(109, 109, 109);
+    cursor: pointer;
+    font-size: 16px;
+    font-family: ubuntu;
+    margin-right: -20px;
+  }
+  .link-button:focus {
+    outline: none;
+  }
+  .link-button:active {
+    color:red;
+  }
+  .link-button:hover {
+    color: white;
   }
 
   #logo {
@@ -53,6 +75,11 @@ body {
     color: #ffffff;
 }
 
+#registerlink {
+    color: #ffffff;
+    text-decoration: none;
+}
+
 .hidden {
     display: none;
 }
@@ -61,18 +88,16 @@ body {
     display: flex; /* Ensures flexbox is used to layout the children */
 }
 
+.avatar {
+    display: grid;
+    align-items: center;
+    grid-template-columns: 1fr 1fr;
+}
 .avatar img {
     width: 40px; /* Set the size of the avatar */
     height: 40px;
     margin-left: 10px; /* Adds some space between the Sign In link and the avatar */
 }
-
-form {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
-  }
   
   input[type="text"],
   input[type="password"] {
@@ -82,6 +107,7 @@ form {
     box-sizing: border-box;
     border: 1px solid #ccc;
     border-radius: 4px;
+    color: black;
   }
   
   label {
@@ -96,9 +122,14 @@ form {
     padding: 10px 20px;
     cursor: pointer;
     border-radius: 4px;
-    margin-top: 10px;
   }
-  
-  button:hover {
-    background: #5058f4;
-  }
+
+  #spinButton img {
+    width: 100px; /* Adjust size as needed */
+    transition: transform 0.1s ease; /* Smooth transition for pressing effect */
+}
+
+#spinButton:active img {
+    transform: scale(0.95); /* Slightly scale down the image */
+    box-shadow: 1px 1px 2px 0px rgba(0,0,0,0.1); /* Reduced shadow to simulate pressing */
+}

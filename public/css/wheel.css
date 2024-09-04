@@ -108,6 +108,7 @@ wheel {
     justify-content: center;
     border-radius: 50%;
     z-index: 100;
+    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
 }
 
 #resultText {
@@ -175,6 +176,7 @@ wheel {
   text-align: center;
   color: #4AFFEF; /* Bright cyan, typical of neon arcade style */
   text-shadow: 0 0 5px #4AFFEF, 0 0 10px #4AFFEF, 0 0 20px #4AFFEF, 0 0 40px #4AFFEF; /* Glow effect */
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
 }
 
 .balance-display {
@@ -184,4 +186,5 @@ wheel {
   text-align: center;
   color: #FFC600; /* Bright yellow */
   text-shadow: 0 0 5px #FFC600, 0 0 10px #FFC600, 0 0 20px #FFC600; /* Glow effect */
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
 }

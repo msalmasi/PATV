@@ -1,5 +1,5 @@
 <!-- views/register.ejs -->
-<%- include('layout', { title: 'Spin the Wheel', user: user}) %>
+<%- include('layout', { title: 'Public Access Registration', user: user}) %>
 <h2>Register</h2>
 <form action="/register" method="POST">
     <label for="username">Username:</label>
@@ -8,5 +8,5 @@
     <input type="password" id="password" name="password" required><br>
     <label for="email">Email:</label>
     <input type="text" id="email" name="email" required><br>
-    <button id="login" type="submit">Register</button>
+    <button id="login" type="submit">Register</button> or </span><a id="registerlink" href="/login">Login</a>
 </form>

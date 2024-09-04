@@ -15,15 +15,26 @@
         <nav class="navbar">
             <div class="navbar-left">
                 <a href="/" id="logo">publicaccess.tv</a>
-                <!-- <a href="/watch" class="activePage">Watch</a>
-                <a href="/spin" class="inactivePage">Spin</a> -->
+                <a href="/" class="activePage">📺</a>
+                <% if (typeof user == 'undefined' || !user) { %>
+                <a href="/login" class="inactivePage"><img src="/public/img/star.gif" height="16px" width="auto"></a>
+                <% } else { %>
+                <a href="/u/<%= user %>/wheel" class="inactivePage"><img src="/public/img/star.gif" height="16px" width="auto"></a>
+                <% } %>
+                <a href="/info" class="inactivePage">📄</a>
+                <a href="/store" class="inactivePage">🏪</a>
+                <a href="https://discord.gg/publicaccess" class="inactivePage"><img src="/public/img/discord.png" height="16px" width="auto"></a>
+                <a href="https://twitch.tv/publicaccess_ttv" class="inactivePage"><img src="/public/img/twitch.png" height="16px" width="auto"></a>
             </div>
             <div class="navbar-right">
-                <% if (!user) { %>
-                    <a href="/login">Sign In</a>
+                <% if (typeof user == 'undefined' || !user) { %>
+                    <a href="/login" class="inactivePage">Sign In</a>
                 <% } else { %>
                     <div class="avatar">
-                        <a href="/u/<%= user %>/wheel"><img src="/public/star.gif" alt="User Avatar"></a>
+                        <form action="/logout" method="POST" style="display: inline;">
+                            <button class="link-button" type="submit">Log Out</button>
+                        </form>
+                        <a href="/u/<%= user %>/wheel"><img src="/public/img/avatar.png" alt="User Avatar"></a>
                     </div>
                 <% } %>
                 
