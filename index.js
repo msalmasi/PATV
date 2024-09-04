@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const app = express();
@@ -6,6 +7,32 @@ const path = require('path');
 const port = 3000;
 const sqlite3 = require('sqlite3').verbose()
 const { v4: uuidv4 } = require('uuid');
+const {fileURLToPath} = require('url')
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
+const morgan = require('morgan');
+const { registerUser, loginUser } = require('./user.controller');
+const authenticateToken = require('./middleware/authenticateToken');
+const cookieParser = require('cookie-parser');
+
+
+// Set the view engine to ejs
+app.set('view engine', 'ejs');
+
+// Set the views directory
+app.set('views', './views');
+
+// Set morgan logging
+// app.use(morgan("combined"));
+
+// Custom middleware test
+app.use((req, res, next) => {
+    console.log("Request method: ", req.params);
+    next();
+});
+
+// Cookie Parser Middleware
+app.use(cookieParser()); 
 
 // Connect to SQLite database
 const db = new sqlite3.Database('./myapp.db', (err) => {
@@ -22,8 +49,8 @@ function createTables() {
     db.run(`CREATE TABLE IF NOT EXISTS users (
         userId TEXT PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
-        avatar TEXT NOT NULL DEFAULT avatar.png,
-        displayname TEXT NOT NULL,
+        avatar TEXT NOT NULL DEFAULT "avatar.png",
+        displayname TEXT,
         email TEXT NOT NULL UNIQUE,
         password TEXT NOT NULL,
         discordId TEXT,
@@ -98,29 +125,36 @@ module.exports = db;
 
 app.use(cors());
 app.use(express.json()); // Middleware to parse JSON bodies
+app.use(express.urlencoded({ extended: true }));
 
 let clients = []; // Keep track of connected clients for SSE
 
 // Serve static files from the public directory
 app.use('/public', express.static('public'));
 
-// HTTP GET endpoint to get user balance
-app.get('/api/u/:username/balance', (req, res) => {
-    const username = req.params.username;
-    db.get(`SELECT points_balance FROM users WHERE username = ?`, [username], (err, row) => {
-        if (err) {
-            return res.status(500).json({ error: err.message });
-            console.log('points pb ' + error)
-        }
-        if (row) {
-            return res.json({ balance: row.points_balance });
-            console.log('points pb ' + row)
-        } else {
-            return res.status(404).json({ error: 'User not found' });
-            console.log('points pb 404')
-        }
-    });
+// Homepage
+app.get('/', (req, res) => {
+    res.render('home');
 });
+
+// Example route with authentication middleware
+app.get('/protected', authenticateToken, (req, res) => {
+    res.json({ message: 'Protected route accessed successfully.' });
+  });
+
+app.get('/register', (req, res) => {
+    res.render('register');
+});
+
+app.get('/login', (req, res) => {
+    res.render('login');
+});
+
+// HTTP POST endpoint for registering a new user.
+app.post('/register', registerUser);
+
+// HTTP POST endpoint for logging in. 
+app.post('/login', loginUser);
 
 // Function to get the total jackpot
 function getJackpotTotal(req, res) {
@@ -129,17 +163,59 @@ function getJackpotTotal(req, res) {
             res.status(500).json({ error: err.message });
             return;
         }
-        res.json({ jackpotTotal: row.total || 0 }); // Return 0 if null
+        return res.json({ jackpotTotal: row.total || 0 }); // Return 0 if null
     });
 }
+
+// Function to get the username from a userId
+function getUsername(userId) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT username FROM users WHERE userId = ?`, [userId], (err, row) => {
+            if (err) {
+                reject(err.message); // Reject the promise with the error
+            } else if (row) {
+                resolve(row.username); // Resolve the promise with the username
+            } else {
+                reject('User not found'); // Reject if no user is found
+            }
+        });
+    });
+}
+
+// Function to get the User Balance
+function getUserBalance(req, res) {
+    const username = req.params.username;
+    db.get(`SELECT points_balance FROM users WHERE username = ?`, [username], (err, row) => {
+        if (err) {
+            return res.status(500).json({ error: err.message });
+        }
+        if (row) {
+            return res.json({ balance: row.points_balance });
+        } else {
+            return res.status(404).json({ error: 'User not found' });
+        }
+    });
+}
+
+// HTTP GET endpoint to get user balance
+app.get('/api/u/:username/balance', getUserBalance)
 
 // HTTP GET endpoint to retrieve the jackpot total.
 app.get('/api/jackpot', getJackpotTotal);
 
-// HTTP GET endpoint to retrieve the Gold Wheel page.
-app.get('/u/:username/wheel', (req,res) => {
-    const username = "pb";
-    res.sendFile("B:/OneDrive/Documents/PATV/index.html");
+app.get('/u/:username/wheel', authenticateToken, async (req, res) => {
+    const username = req.params.username;
+    try {
+        usernameToken = await getUsername(req.userId);
+        if (usernameToken !== username) {
+            console.log(req.userId);
+            return res.status(403).send("Access denied");
+        }
+        res.render('wheel');
+        // Proceed with fetching user data and generating wheel
+    } catch (error) {
+        res.status(500).json({ error: error });
+    }
 });
 
 // HTTP POST endpoint to trigger wheel spin
@@ -193,7 +269,7 @@ app.post('/api/u/:username/wheel/spin', (req, res) => {
                                     db.run('UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?', [userId]);
                                     
                                     // Update the wheel spins log.
-                                    db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [spinId, userId, transactionType, -5000]);
+                                    db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionId, userId, transactionType, -5000]);
 
                                     // Add to the jackpot.
                                     db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, 100]);
@@ -220,6 +296,44 @@ app.post('/api/u/:username/wheel/spin', (req, res) => {
 
 
 });
+
+// Prune pending/unresolved spins.
+const checkAndResolvePendingSpins = () => {
+    const oneMinuteAgo = new Date(Date.now() - 60000);  // 60000 milliseconds = 1 minute
+    db.all(`SELECT spinId, userId FROM wheel_spins WHERE result = 'PENDING' AND timestamp < ?`, [oneMinuteAgo.toISOString()], (err, spins) => {
+        if (err) {
+            console.error("Error fetching pending spins:", err);
+            return;
+        }
+        spins.forEach(spin => {
+            // Update spin status to FAILED
+            db.run(`UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`, [spin.spinId], (err) => {
+                if (err) {
+                    console.error("Error updating spin status:", err);
+                    return;
+                }
+                // Refund logic here
+                refundUser(spin.userId, spin.spinId);
+            });
+        });
+    });
+};
+
+// Function to handle refund
+const refundUser = (userId, spinId) => {
+    console.log(`Refunding user ${userId} for spin ${spinId}`);
+    // Add refund logic, e.g., update user balance, log transaction, etc.
+    const transactionId = uuidv4();
+    const transactionType = "Refund";
+    const jackpotId = uuidv4();
+    db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionId, userId, transactionType, +5000]);
+    db.run('UPDATE users SET points_balance = points_balance + 5000 WHERE userId = ?', [userId]);
+    db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, -100]);
+
+};
+
+// Set interval to run this cleanup function every minute
+setInterval(checkAndResolvePendingSpins, 60000);
 
 // HTTP POST endpoint to record the result of a wheel spin.
 app.post('/api/u/:username/wheel/spin/result', (req, res) => {

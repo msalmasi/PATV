@@ -16,7 +16,7 @@ centerImage.id = 'centerImage';
 document.querySelector('.wheel-container').appendChild(centerImage);
 
 // Set your custom image or GIF URL
-centerImage.src = 'http://localhost:3000/public/giphy.gif';
+centerImage.src = 'http://localhost:3000/public/star.gif';
 
 const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
@@ -152,7 +152,7 @@ function fetchUsername(username) {
   document.getElementById('usernameSpan').textContent = username;
 }
 
-// Fetch the User Balance
+// Fetch and Set the User Balance
 function fetchUserBalance(username) {
   fetch(`http://localhost:3000/api/u/${username}/balance`)
       .then(response => response.json())

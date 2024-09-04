@@ -1,0 +1,189 @@
+body {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #282c34;
+    color: white;
+    margin: 0;
+    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+
+  }
+
+  #arcadeInfo {
+    padding-top: 100px;
+    margin-top: 25px;
+    margin-left: 5vw;
+    margin-right: 5vw;
+    display: grid;
+    grid-template-columns: 1fr 6fr 1fr;
+  }
+  
+  .wheel-container {
+    text-align: center;
+  }
+  
+  #coinslot {
+    height: auto;
+    width: 25%;
+    margin-left: 20px;
+    margin-top: 20px;
+    font-size: 18px;
+    cursor: pointer;
+    border: none;
+    /* background-color: #61dafb; */
+    color: black;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+  }
+
+  #coinslot {
+    border: none;
+    outline: none;
+    cursor: pointer;
+    background-color: transparent;
+    transition: box-shadow 0.1s ease;
+    box-shadow: 2px 2px 4px 0px rgba(0,0,0,0.5);
+}
+
+#spinButton img {
+    width: 100px; /* Adjust size as needed */
+    transition: transform 0.1s ease; /* Smooth transition for pressing effect */
+}
+
+#spinButton:active img {
+    transform: scale(0.95); /* Slightly scale down the image */
+    box-shadow: 1px 1px 2px 0px rgba(0,0,0,0.1); /* Reduced shadow to simulate pressing */
+}
+  
+  /* #spinButton:hover {
+    background-color: #21a1f1;
+  } */
+  
+  canvas {
+    border: 5px solid #F2AE2E;
+    border-radius: 50%;
+  }
+
+  /* Wheel container should match canvas size and be centered */
+.wheel-container {
+    position: relative;
+    width: 500px; /* Match the canvas size */
+    height: 500px; /* Match the canvas size */
+    margin: 0 auto;
+  }
+  
+  #arrow {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-40%) translateY(-15%); /* Rotate 180 degrees */
+    width: 0;
+    height: 0;
+    border-left: 20px solid transparent;
+    border-right: 20px solid transparent;
+    border-top: 30px solid #F2AE2E; /* Arrow color */
+    z-index: 100; /* Ensure it appears above the canvas */
+  }
+  
+  /* Center image replacing the center circle */
+  #centerImage {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100px; /* Adjust size as needed */
+    height: 100px; /* Adjust size as needed */
+    transform: translate(-45%, -50%);
+    border-radius: 50%;
+    z-index: 5;
+  }
+
+#resultContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: none;
+    width: 102%;
+    height: 102%;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    z-index: 100;
+}
+
+#resultText {
+    color: #F2AE2E;
+    font-size: 164px;
+    text-align: center;
+    padding: 20px;
+}
+
+#jackpot {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  width: auto;
+  padding-bottom: 20px;
+}
+
+.neon{
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+  font-size:2vw;
+  color: #FFC600;/*#FFD5FF;*/
+  font-weight: 400;
+  letter-spacing: 8px;
+  text-shadow: 1px 0px 4px #FFD5FF, 2px 0px 4px #FFD5FF, 3px 0px 4px #FFD5FF, 2px 0px 3px #FFD5FF, 2px 3px 15px #FFD5FF, 2px 0px 15px, 5px 0px 125px, 20px 0vw 200px #FFD5FF,40px 0vw 200px #FFD5FF;
+  text-align: center;
+}
+
+.flicker-slow{
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+  color: #FFC600;
+  font-size: 100%;
+  font-weight: 400;
+  letter-spacing: 8px;
+  text-shadow: 1px 0px 4px #FFD5FF, 2px 0px 4px #FFD5FF, 3px 0px 4px #FFD5FF, 2px 0px 3px #FFD5FF, 2px 3px 15px #FFD5FF, 2px 0px 15px, 5px 0px 125px, 20px 0vw 200px #FFD5FF,40px 0vw 200px #FFD5FF;
+
+  animation: flicker 3s linear infinite;
+}
+
+.flicker-fast{
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+  color: #FFC600;
+  font-size: 100%;
+  font-weight: 400;
+  letter-spacing: 8px;
+  text-shadow: 1px 0px 4px #FFD5FF, 2px 0px 4px #FFD5FF, 3px 0px 4px #FFD5FF, 2px 0px 3px #D42CCA, 2px 3px 15px #FFD5FF, 2px 0px 15px, 5px 0px 125px, 20px 0vw 200px #FFD5FF,40px 0vw 200px #FFD5FF;
+
+  animation: flicker 1s linear infinite;
+}
+
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+    /* text-shadow: none; */
+    opacity: .99;
+    
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+    opacity: 0.4;
+  }
+}
+
+.arcade-text {
+  margin-left: 20px;
+  margin-top: 15px;
+  margin-bottom: 55px;
+  text-align: center;
+  color: #4AFFEF; /* Bright cyan, typical of neon arcade style */
+  text-shadow: 0 0 5px #4AFFEF, 0 0 10px #4AFFEF, 0 0 20px #4AFFEF, 0 0 40px #4AFFEF; /* Glow effect */
+}
+
+.balance-display {
+  margin-left: 20px;
+  margin-top: 20px;
+  font-size: 1.2em;
+  text-align: center;
+  color: #FFC600; /* Bright yellow */
+  text-shadow: 0 0 5px #FFC600, 0 0 10px #FFC600, 0 0 20px #FFC600; /* Glow effect */
+}
