@@ -1,10 +1,7 @@
 <!-- views/home.ejs -->
 <%- include('layout', { title: 'Public Access Television', user: user}) %>
+<link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
 <body>
-<script type="application/javascript" src="/public/js/chat.js"></script>
-<script>
-    maxMessageCount = {{.MessageHistoryCount }}
-</script>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script type="application/javascript" src="/public/js/jquery.js"></script>
 <script type="application/javascript" src="/public/js/both.js"></script>
@@ -78,14 +75,48 @@
     </div>
     <% if (typeof user == 'undefined' || !user) { %>
     <% } else { %>
+<div id="arcadePanel">
     <div id="spinButton">
         <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
-      </div>
+    </div>
+    <div id="arcadeInfo">
+        <div class="arcade-text">Player<span id="usernameSpan"><%= user %></span></div>
+        <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
+    </div>
+</div>
     <% } %>
 </div>
     <% if (typeof user == 'undefined' || !user) { %>
     <% } else { %>
     <script>
+        // Set the Username
+        var user = "<%= user %>"
+        function fetchUsername(user) {
+        document.getElementById('usernameSpan').textContent = user;
+        }
+
+        // Fetch and Set the User Balance
+        function fetchUserBalance(user) {
+        fetch(`http://localhost:3000/api/u/${user}/balance`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.balance !== undefined) {
+                    document.getElementById('userBalance').textContent = data.balance;
+                } else {
+                    console.error('Failed to fetch balance:', data.error);
+                    document.getElementById('userBalance').textContent = 'Error fetching balance';
+                }
+            })
+            .catch(error => {
+                console.error('Fetch error:', error);
+                document.getElementById('userBalance').textContent = 'Error fetching balance';
+            });
+        }
+
+        // Assuming username is available via some means (e.g., login session)
+        fetchUsername(user);
+        fetchUserBalance(user);
+
         // Spin the wheel as a user.
         function userSpin() {
         
@@ -94,14 +125,19 @@
         fetch(url, {
             headers: {    "content-type": "application/json",
             },
-            body: JSON.stringify({username: <%= user.username %>}),
+            body: JSON.stringify({username: user}),
             method: "POST",
         })
         .then(response => response.json())
         .then(data => {
-            if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinID if so.
+            if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
             console.log('Spin ID received:', data.spinId);
             spinId = data.spinId;
+            // Store spinId in local storage or a global variable
+            localStorage.setItem('currentSpinID', spinId);
+            // Set up SSE listener with this spinId
+            setupSSE(spinId);
+            fetchUserBalance(user); // Update the User Balance
             }
         })
         .catch(error => {
@@ -111,6 +147,42 @@
 
         // Uses the button to initiate a userSpin
         spinButton.addEventListener('click', userSpin);
+
+        // Function for displaying the winning result
+        function displaySpinResult(result) {
+        const balanceElement = document.getElementById('userBalance');
+        const rewardDiv = document.createElement('div');
+        rewardDiv.className = 'arcade-animation';
+        rewardDiv.textContent = `+${result} Points!`;
+
+        // Position the reward div near the balance
+        balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+
+        // Apply animation
+        rewardDiv.style.animation = 'pop-in 0.5s forwards';
+
+        setTimeout(() => {
+            rewardDiv.remove(); // Remove the animation element after it completes
+        }, 1000); // Assuming the animation takes 5 seconds
+        }
+
+        function setupSSE(spinId) {
+            // Logic for updating the balance from the backend.
+            const url = `/events?spinId=${encodeURIComponent(spinId)}`;
+            const eventSource = new EventSource(url);
+            eventSource.onmessage = function(event) {
+                const result = JSON.parse(event.data);
+                console.log('Spin result received:', result);
+                // Update UI based on the result
+                displaySpinResult(result.result);
+                eventSource.close();
+            };
+
+            eventSource.onerror = function(event) {
+            console.error('EventSource failed:', event);
+            eventSource.close();
+            };
+        }
     </script>
     <% } %>
     <script type="text/javascript">

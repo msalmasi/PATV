@@ -172,6 +172,7 @@ function fetchUserBalance(username) {
 
 // Assuming username is available via some means (e.g., login session)
 username = getUsernameFromUrl();
+console.log(username);
 fetchUsername(username);
 fetchUserBalance(username);
 
@@ -212,7 +213,7 @@ function userSpin() {
       if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinID if so.
       console.log('Spin ID received:', data.spinId);
       spinId = data.spinId;
-      fetchUserBalance(username); // Update the Wheel Balance
+      fetchUserBalance(username); // Update the User Balance
       fetchJackpotTotal()
       }
   })

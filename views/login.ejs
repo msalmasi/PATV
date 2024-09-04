@@ -1,14 +1,16 @@
 <!-- views/login.ejs -->
 <%- include('layout', { title: 'Home Page'}) %>
 <body>
+    <div class="loginform">
     <h2>Login</h2>
     <form action="/login" method="POST">
-        <label for="username">Username:</label>
+        <label for="username">Username</label>
         <input type="text" id="username" name="username" required><br>
-        <label for="password">Password:</label>
+        <label for="password">Password</label>
         <input type="password" id="password" name="password" required><br>
-        <button id="login" type="submit">Login</button><span> or </span><a id="registerlink" href="/register">Register</a>
+        <button id="login" type="submit">Login</button><a id="registerlink" href="/register">Register</a>
     </form>
+    </div>
     <script>
 
 function login () {

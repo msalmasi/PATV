@@ -17,14 +17,6 @@ body {
     margin-right: 5vw;
 }
 
-header {
-    font-family: ubuntu;
-    color: #3CC47C;
-    margin-left: 0px;
-    padding-top: 10px;
-    padding-bottom: 10px;
-}
-
 #altlink p {
         font-family: ubuntu;
         color: #828081;
@@ -95,7 +87,7 @@ header {
 
 
 #twitch_embed {
-    grid-template-rows: 1fr;
+    grid-template-rows: 5fr 1fr;
     position: relative;
 /*    padding-top: 1vh;*/
 /*    max-height: calc(var(--var-max-height) - 10vh);*/

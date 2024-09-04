@@ -86,7 +86,8 @@ function drawWheel() {
 }
 
 // Wheel Animation Function
-function spinWheel() {
+function spinWheel(wheelSpinner) {
+  console.log("Spinning wheel for:", wheelSpinner);
   hideResultOverlay()
   if (isSpinning) return;
   isSpinning = true;
@@ -124,7 +125,7 @@ function spinWheel() {
     } else {
       setTimeout(() => { // Allow the wheel to visually stop before showing the result
         isSpinning = false;
-        determineSpinResult();
+        determineSpinResult(wheelSpinner);
       }, 500); 
     }
   }
@@ -158,33 +159,27 @@ function fetchJackpotTotal() {
 
 fetchJackpotTotal()
 
-// Spin the wheel as a user.
-function userSpin() {
-  
-  const username = getUsernameFromUrl();
-  const url = `http://localhost:3000/api/u/${username}/wheel/spin`;
+// Function for displaying the winning result
+function displayPointsReward(result) {
+  const balanceElement = document.getElementById('jackpotTotal');
+  const rewardDiv = document.createElement('div');
+  rewardDiv.className = 'arcade-animation';
+  rewardDiv.textContent = `+${result} Points!`;
 
-  fetch(url, {
-    headers: {    "content-type": "application/json",
-    },
-    body: JSON.stringify({username: username}),
-    method: "POST",
-  })
-  .then(response => response.json())
-  .then(data => {
-      if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinID if so.
-      console.log('Spin ID received:', data.spinId);
-      spinId = data.spinId;
-      fetchJackpotTotal()
-      }
-  })
-  .catch(error => {
-      console.error('Error making the POST request:', error);
-  });
+  // Position the reward div near the balance
+  balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+
+  // Apply animation
+  rewardDiv.style.animation = 'pop-in 0.5s forwards';
+
+  setTimeout(() => {
+      rewardDiv.remove(); // Remove the animation element after it completes
+  }, 20000); // Assuming the animation takes 5 seconds
 }
 
 // Logic for the winning result.
-function determineSpinResult() {
+function determineSpinResult(wheelSpinner) {
+  console.log("Determining results for:", wheelSpinner);
   const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
   const segmentAngle = (2 * Math.PI) / totalSize;
 
@@ -200,8 +195,8 @@ function determineSpinResult() {
       // Display the result on the page.
       drawResultOverlay(result);
       // Send result to backend.
-      const username = getUsernameFromUrl();
-      const url = `http://localhost:3000/api/u/${username}/wheel/spin/result`;
+      const username = wheelSpinner;
+      const url = `http://localhost:3000/api/g/wheel/spin/result`;
       fetch(url, {
         headers: {    "content-type": "application/json",
         },
@@ -211,8 +206,10 @@ function determineSpinResult() {
       .then(response => response.json())
       .then(data => {
           console.log('Server response:', data.message);
-          fetchUserBalance(username);
           // Additional actions based on response can be handled here
+          if (data.result) {
+            displayPointsReward(data.result);
+        }
       })
       .catch(error => {
           console.error('Error sending spin result:', error);
@@ -246,14 +243,18 @@ function hideResultOverlay() {
 }
 
 // Logic for initiating the user spin from the backend.
-const evtSource = new EventSource('/events');
+const url = `/events?spin&user=public`;
+const evtSource = new EventSource(url);
 
 evtSource.onmessage = function(event) {
     const data = JSON.parse(event.data);
-    const username = getUsernameFromUrl();
-    if (data.message === `Spin: public`) {
-        console.log("Received spin command:", data);
-        spinWheel(); // Function to start the wheel spinning
+    if (data.message.includes(`public spin`)) {
+        // console.log("Received spin command:", data);
+        const segments = data.message.split(' '); // Split the path by ' '
+        // Assuming the structure /u/username/wheel, username would be at index 2
+        wheelSpinner = segments[4];
+        spinId = segments[2];
+        spinWheel(wheelSpinner); // Function to start the wheel spinning
     }
 };
 

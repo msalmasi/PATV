@@ -1,12 +1,14 @@
 <!-- views/register.ejs -->
 <%- include('layout', { title: 'Public Access Registration', user: user}) %>
+<div class="loginform">
 <h2>Register</h2>
 <form action="/register" method="POST">
-    <label for="username">Username:</label>
+    <label for="username">Username</label>
     <input type="text" id="username" name="username" required><br>
-    <label for="password">Password:</label>
+    <label for="password">Password</label>
     <input type="password" id="password" name="password" required><br>
-    <label for="email">Email:</label>
+    <label for="email">Email</label>
     <input type="text" id="email" name="email" required><br>
-    <button id="login" type="submit">Register</button> or </span><a id="registerlink" href="/login">Login</a>
+    <button id="login" type="submit">Register</button><a id="registerlink" href="/login">Login</a>
 </form>
+</div>
