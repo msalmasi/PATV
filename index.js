@@ -31,6 +31,19 @@ app.use((req, res, next) => {
     next();
 });
 
+// Helper Middleware for Auth
+function checkAuth(req, res, next) {
+    try {
+        const token = req.cookies.jwt;  // Assuming JWT is stored in cookies
+        const decoded = jwt.verify(token, process.env.SECRET_KEY);
+        req.user = decoded;  // Attach user data to request
+        next();
+    } catch (error) {
+        req.user = null;
+        next();
+    }
+}
+
 // Cookie Parser Middleware
 app.use(cookieParser()); 
 
@@ -133,8 +146,16 @@ let clients = []; // Keep track of connected clients for SSE
 app.use('/public', express.static('public'));
 
 // Homepage
-app.get('/', (req, res) => {
-    res.render('home');
+app.get('/', authenticateToken, async (req, res) => {
+    try {
+        usernameToken = await getUsername(req.userId);
+        console.log(usernameToken);
+        res.render('home', { user: usernameToken });
+        // Proceed with fetching user data and generating wheel
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: error });
+    }
 });
 
 // Example route with authentication middleware
@@ -147,7 +168,7 @@ app.get('/register', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-    res.render('login');
+    res.render('login', { user: req.userId });
 });
 
 // HTTP POST endpoint for registering a new user.
@@ -211,7 +232,7 @@ app.get('/u/:username/wheel', authenticateToken, async (req, res) => {
             console.log(req.userId);
             return res.status(403).send("Access denied");
         }
-        res.render('wheel');
+        res.render('wheel', {user: usernameToken});
         // Proceed with fetching user data and generating wheel
     } catch (error) {
         res.status(500).json({ error: error });

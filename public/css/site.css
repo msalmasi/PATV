@@ -1,0 +1,520 @@
+:root {
+    --var-border: 1px solid #606060;
+    --var-border-radius: 5px;
+    --var-message-color: #f4f4f4;
+    --var-link-color: #a9c8c3;
+    --var-contrast-color: #3CC47C;
+    --var-background-color: #0F0F11;
+    --var-popout-color: #393940;
+    --var-max-height: 90vh;
+    --var-max-width: 90vw;
+}
+
+html {
+    background: var(--var-background-color);
+    font-family: "Hack";
+    font-size: 14px;
+}
+
+dt {
+    font-weight: bold;
+}
+
+body {
+    height: var(--var-max-height);
+    margin-top: 0px;
+    margin-bottom: 0px;
+    margin-left: 5vw;
+    margin-right: 5vw;
+}
+
+header {
+    font-family: ubuntu;
+    color: #3CC47C;
+    margin-left: 0px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+#altlink p {
+        font-family: ubuntu;
+        color: #828081;
+        margin-bottom: 20px;
+
+}
+
+/* unvisited link */
+#altlink a:link {
+  color: grey;
+}
+
+/* visited link */
+#altlink a:visited {
+  color: white;
+}
+
+/* mouse over link */
+#altlink a:hover {
+  color: white;
+}
+
+/* selected link */
+#altlink a:active {
+  color: hotpink;
+}
+
+span.name {
+    font-weight: bold;
+}
+
+span.cmdme {
+    font-style: italic;
+}
+
+span.msg {
+    font-style: normal;
+    color: #cfccd1;
+}
+
+.msg a, .doornotice {
+    color: #cfccd1;
+}
+
+span.svmsg {
+    font-style: italic;
+    color: #ea6260;
+}
+
+input[type=text] {
+    background: transparent;
+    border: var(--var-border);
+    border-radius: var(--var-border-radius);
+    color: var(--var-message-color);
+    padding: 5px;
+    font-weight: bold;
+}
+
+.grid-root {
+  display: grid;
+  height: var(--var-max-height);
+  margin: 0px 0px;
+  max-height: var(--var-max-height);
+  max-width: var(--var-max-width);
+  width: var(--var-max-width);
+}
+
+.pretty-button {
+    padding: 5px 10px;
+}
+
+.button {
+    background: #232328;
+    color: var(--var-message-color);
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    border-radius: var(--var-border-radius);
+}
+
+.button:hover {
+    background: #46464f;
+}
+
+.scrollbar {
+    /* Firefox compatable scrollbar settings */
+    scrollbar-color: #3CC47C transparent;
+    scrollbar-width: thin;
+}
+
+.scrollbar::-webkit-scrollbar {
+width: 6px;
+}
+
+.scrollbar::-webkit-scrollbar-thumb {
+    background-color: #3CC47C;
+    scrollbar-width: thin;
+}
+
+.announcement {
+    font-weight: bold;
+    color: #ea6260;
+    text-align: center;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    border-top: 3px solid red;
+    border-bottom: 3px solid red;
+}
+
+.helptext {
+    color: white;
+}
+
+#emotesbody {
+  color: var(--var-message-color);
+}
+
+.emotedef {
+  float: left;
+  padding: 5px 5px 15px 5px;
+}
+
+.emotedef img {
+  height: 112px;
+  width: 112px;
+}
+
+.emote {
+    height: 28px;
+}
+
+.notice {
+    color: #595959;
+    font-size: 75%;
+}
+
+.command {
+    color: #B1B1B1;
+}
+
+.commanderror {
+    color: #e82222;
+}
+
+.notice,
+.command,
+.announcement {
+    display: block;
+    text-align: center;
+}
+
+.mention {
+    background: #1cf67ed9;
+    color: var(--var-background-color);
+    padding: 1px 2px;
+    border-radius: 4px;
+}
+
+.contrast {
+    color: var(--var-contrast-color);
+}
+
+.spoiler {
+    border-radius: 3px;
+    padding: 0px 3px;
+}
+
+.spoiler *,
+.spoiler {
+    background: var(--var-popout-color);
+    color: var(--var-popout-color);
+}
+
+.spoiler-active {
+    background: var(--var-background-color);
+    color: aqua;
+}
+
+.range-div {
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 5px;
+    padding: 5px;
+}
+
+.range-div>input[type=button] {
+    flex: 2;
+}
+
+.hiddendiv {
+    display: none;
+    color: var(--var-message-color);
+    background: var(--var-popout-color);
+    padding: 2em;
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+#videoWrapper {
+    height: max-content;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+#videoOverlay {
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.75);
+    z-index: 3;
+    text-align: center;
+    vertical-align: middle;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+}
+
+#videoElement {
+    z-index: 1;
+    position: relative;
+    width: 100%;
+}
+
+#loadingFiles {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#doorentry {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    height: 100%;
+}
+
+#twitch_embed {
+    grid-template-rows: 1fr;
+    position: relative;
+/*    padding-top: 1vh;*/
+/*    max-height: calc(var(--var-max-height) - 10vh);*/
+    min-width: 300px;
+    min-height:  50vh;
+    padding-bottom: 10vh;
+}
+
+#hidden {
+    display: none;
+    position: absolute;
+    top: 54px;
+    left: 0px;
+    right: 0px;
+    margin: 0px 0px 0px 5px;
+    padding: 3px;
+    background: var(--var-popout-color);
+}
+
+#hidden:hover,
+#optionBox:hover~#hidden {
+    display: unset;
+}
+
+#optionBox,
+#notifyBox {
+    color: var(--var-contrast-color);
+    font-weight: bold;
+    font-size: 12px;
+    text-align: center;
+}
+
+#accessRequest div {
+    margin-bottom: 5px;
+}
+
+#colorInputDiv {
+    font-size: 14px;
+}
+
+#colorInput {
+    border: 2px solid var(--var-message-color);
+}
+
+
+#playing {
+    color: #288a85;
+    font-size: x-Large;
+}
+
+#chatButtons {
+    margin: 5px;
+}
+
+#chatButtons button {
+    margin: 5px 0px;
+}
+
+#joinbox {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin: 10px;
+}
+
+#joinbox div {
+    margin: 5px auto;
+}
+
+#joinbox a {
+    text-decoration: none;
+    color: var(--var-link-color);
+}
+
+#joinbox a:hover {
+    text-decoration: underline;
+}
+
+#chat {
+    display: grid;
+    grid-template-rows: 1.5em min-content 1fr 6em 2.5em 1em;
+    grid-gap: 10px;
+    margin: 0px 0px 0px 5px;
+    overflow: auto;
+    font-size: 12px;
+}
+
+#twitch_chat {
+    margin: 0px 5px 0px 5px;
+}
+
+#messages {
+    color: var(--var-message-color);
+    overflow-y: scroll;
+    border: var(--var-border);
+}
+
+#messages div {
+    padding: .1em .5em .15em .5em;
+    word-wrap: break-word;
+}
+
+#msgbox {
+    position: relative;
+    display: grid;
+}
+
+#msg {
+    background: transparent;
+    border: var(--var-border);
+    border-radius: var(--var-border-radius);
+    border-bottom-right-radius: 0px;
+    padding: 5px;
+    color: var(--var-message-color);
+    resize: none;
+}
+
+#suggestions {
+    background: #3b3b43;
+    position: absolute;
+    min-width: 10em;
+    max-height: 35em;
+    overflow-y: scroll;
+    border-radius: 5px 5px 0px 5px;
+    color: var(--var-message-color);
+}
+
+#suggestions>div {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+}
+
+#suggestions>div>img {
+    margin-right: 1em;
+}
+
+#suggestions div.selectedName {
+    color: var(--var-contrast-color);
+}
+
+#helpbody {
+    color: #b1b1b1;
+}
+
+#colorName {
+    font-weight: bold;
+    background: var(--var-background-color);
+    padding: -10px;
+}
+
+#colorSubmit:disabled {
+    display: none;
+}
+
+#remote {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    margin: 1em auto;
+    width: 50px;
+    z-index: 99;
+}
+
+#devKeys {
+    display: none;
+    position: absolute;
+    z-index: 99;
+    color: var(--var-contrast-color);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: grid;
+}
+
+.tabs {
+    display: flex;
+    cursor: pointer;
+    background-color: #333;
+    margin: 0px 0px 0px 5px;
+}
+
+.tab {
+    padding: 10px;
+    color: white;
+    background-color: #444;
+    border: 1px solid #333;
+    text-align: center;
+    flex: 1;
+}
+
+.tab.active {
+    background-color: #0F0F11;
+}
+
+/* ------------------- */
+/* CONDITIONAL CLASSES */
+/* ------------------- */
+
+/* ------------- */
+/* COMBINED MODE */
+/* ------------- */
+.combined {
+  grid-template-columns: 5fr 1fr;
+}
+
+/* --------------- */
+/* VIDEO ONLY MODE */
+/* --------------- */
+.video-only #videoElement {
+/*  height: 90vh;*/
+}
+
+/* ---------------------- */
+/* COMBINED MODE (MOBILE) */
+/* ---------------------- */
+@media screen and (max-width: 480px) {
+  .combined {
+    grid-template-columns: 1fr;
+    grid-template-rows: 70.25vw 1fr;
+  }
+
+  .combined #pa_chatwindow {
+    max-height: calc(var(--var-max-height) - 66.25vw);
+  }
+}
+
+  .combined #twitch_embed {
+    max-height: 90vh;
+    padding-bottom: 10vh;
+  }
+}

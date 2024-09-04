@@ -1,5 +1,112 @@
 <!-- views/home.ejs -->
-<%- include('layout', { title: 'Home Page', body: `
-    <h1>Welcome to Our Website</h1>
-    <p>This is the home page.</p>
-`}) %>
+<%- include('layout', { title: 'Spin the Wheel', user: user}) %>
+<body>
+<script type="application/javascript" src="/public/js/chat.js"></script>
+<script>
+    maxMessageCount = {{.MessageHistoryCount }}
+</script>
+  <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+<script type="application/javascript" src="/public/js/jquery.js"></script>
+<script type="application/javascript" src="/public/js/both.js"></script>
+<script type="application/javascript" src="/public/js/consts.js"></script>
+<script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
+<script type="application/javascript" src="/public/js/video.js"></script>
+<script src= "https://player.twitch.tv/js/embed/v1.js"></script>
+<!-- <script src="https://cdn.jsdelivr.net/npm/ovenplayer/dist/ovenplayer.js"></script> -->
+<style>
+    .hide { display:none !important; }
+
+    /* Optional: The following css just makes sure the twitch video stays responsive */
+    #twitch {
+      position: relative;
+      padding-bottom: 56.25%; /* 16:9 */
+      padding-top: 25px;
+      height: 0;
+    }
+    #twitch object, #twitch iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+</style>
+<div class="grid-root combined">
+
+<div id="videoWrapper">
+    <div id="videoOverlay" class="">
+        <img src="/public/img/mute-icon.png" />
+    </div>
+<!-- <div id="player_id"></div> -->
+
+  <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline>
+    <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
+  </video-js>
+    <div id="twitch" class="hide">
+  </div>
+
+<!--       <script>
+
+        // Initialize OvenPlayer
+        const player = OvenPlayer.create('player_id', {
+            sources: [
+                {
+                    label: 'label_for_webrtc',
+                    // Set the type to 'webrtc'
+                    type: 'webrtc',
+                    // Set the file to WebRTC Signaling URL with OvenMediaEngine 
+                    file: 'wss://stream.houseplants.cc:3334/app/stream'
+                }
+            ]
+        });
+    </script> -->
+  
+<div id="altlink">
+<p>Stream this with low latency in VLC (<a href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)</p>
+</div>
+</div>
+
+    <!-- Tabs -->
+<div id="twitch_embed" class="tab-content active">
+    <div id="twitch_chat">
+        <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?parent=localhost"
+            height="100%"
+            width="100%">
+        </iframe>
+    </div>
+</div>
+        <script type="text/javascript">
+        var options = {
+          channel: "publicaccess_ttv", // TODO: Change this to the streams username you want to embed
+          width: 640,
+          height: 360,
+        };
+        var player2 = new Twitch.Player("twitch", options);
+
+        player2.addEventListener(Twitch.Player.READY, initiate)
+
+        function initiate() {
+          player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
+          player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
+          player2.removeEventListener(Twitch.Player.READY, initiate);
+        }
+
+        function handleOnline() {
+          document.getElementById("twitch").classList.remove('hide');
+          document.getElementById("videoElement").classList.add('hide');
+          document.getElementById("videoOverlay").classList.add('hide');
+          player2.removeEventListener(Twitch.Player.ONLINE, handleOnline);
+          player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
+          player2.setMuted(false);
+        }
+
+        function handleOffline() {
+          document.getElementById("twitch").classList.add('hide');
+          document.getElementById("videoElement").classList.remove('hide');
+          document.getElementById("videoOverlay").classList.remove('hide');
+          player2.removeEventListener(Twitch.Player.OFFLINE, handleOffline);
+          player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
+          player2.setMuted(true);
+        }
+    </script>
+</body>

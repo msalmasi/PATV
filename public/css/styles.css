@@ -1,0 +1,104 @@
+body {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    /* background-color: #282c34; */
+    background-color: #0F0F11;
+    color: white;
+    margin: 0;
+    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+
+  }
+
+  #logo {
+    color: #3CC47C;
+    font-weight: bold;
+    font-size: 20px;
+  }
+
+  .header {
+    width: 100vw;
+    font-family: ubuntu;
+    align-items: center;
+    background-color: #18181b;
+    box-shadow: var(--shadow-elevation-1) !important;
+  }
+  
+  .navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    padding: 10px 20px;
+}
+
+.activePage {
+    color: white;
+    font-weight: bold;
+}
+
+.inactivePage {
+    color: rgb(109, 109, 109);
+}
+
+.navbar a {
+    text-decoration: none;
+    margin-right: 20px; /* Space between nav items */
+    font-size: 16px;
+}
+
+.navbar a:hover {
+    color: #ffffff;
+}
+
+.hidden {
+    display: none;
+}
+.navbar-right {
+    margin-right: -20px;
+    display: flex; /* Ensures flexbox is used to layout the children */
+}
+
+.avatar img {
+    width: 40px; /* Set the size of the avatar */
+    height: 40px;
+    margin-left: 10px; /* Adds some space between the Sign In link and the avatar */
+}
+
+form {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+  }
+  
+  input[type="text"],
+  input[type="password"] {
+    padding: 8px;
+    margin: 10px 0;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  label {
+    display: block;
+    margin-bottom: 5px;
+  }
+  
+  button {
+    background: #5c67f2;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-top: 10px;
+  }
+  
+  button:hover {
+    background: #5058f4;
+  }

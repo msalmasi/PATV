@@ -1,5 +1,5 @@
 <!-- views/register.ejs -->
-<%- include('layout', { title: 'Home Page', body: `
+<%- include('layout', { title: 'Spin the Wheel', user: user}) %>
 <h2>Register</h2>
 <form action="/register" method="POST">
     <label for="username">Username:</label>
@@ -10,4 +10,3 @@
     <input type="text" id="email" name="email" required><br>
     <button id="login" type="submit">Register</button>
 </form>
-`}) %>

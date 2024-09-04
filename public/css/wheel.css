@@ -1,4 +1,4 @@
-body {
+wheel {
     display: grid;
     grid-template-rows: auto auto 1fr;
     justify-content: center;
@@ -8,11 +8,9 @@ body {
     color: white;
     margin: 0;
     font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
-
   }
 
   #arcadeInfo {
-    padding-top: 100px;
     margin-top: 25px;
     margin-left: 5vw;
     margin-right: 5vw;
@@ -114,7 +112,7 @@ body {
 
 #resultText {
     color: #F2AE2E;
-    font-size: 164px;
+    font-size: 104px;
     text-align: center;
     padding: 20px;
 }
@@ -129,7 +127,7 @@ body {
 
 .neon{
   font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
-  font-size:2vw;
+  font-size: 30px;
   color: #FFC600;/*#FFD5FF;*/
   font-weight: 400;
   letter-spacing: 8px;

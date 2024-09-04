@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
-    <link rel="stylesheet" href="/public/wheel.css">
-    <link rel="stylesheet" href="/public/styles.css">
+    <link rel="stylesheet" href="/public/css/styles.css">
+    <link rel="stylesheet" type="text/css" href="/public/css/site.css">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">
 </head>
@@ -15,22 +15,22 @@
         <nav class="navbar">
             <div class="navbar-left">
                 <a href="/" id="logo">publicaccess.tv</a>
-                <a href="/watch">Watch</a>
-                <a href="/spin">Spin</a>
+                <!-- <a href="/watch" class="activePage">Watch</a>
+                <a href="/spin" class="inactivePage">Spin</a> -->
             </div>
             <div class="navbar-right">
-                <a href="/signin">Sign In</a>
-                <div class="avatar">
-                    
-                    <img src="/public/giphy.gif" alt="User Avatar">
-                </div>
+                <% if (!user) { %>
+                    <a href="/login">Sign In</a>
+                <% } else { %>
+                    <div class="avatar">
+                        <a href="/u/<%= user %>/wheel"><img src="/public/star.gif" alt="User Avatar"></a>
+                    </div>
+                <% } %>
+                
+
             </div>
         </nav>
     </header>
-    
-    <main>
-        <%- body %>
-    </main>
 
 </body>
 </html>

@@ -1,5 +1,6 @@
 <!-- views/login.ejs -->
-<%- include('layout', { title: 'Home Page', body: `
+<%- include('layout', { title: 'Home Page'}) %>
+<body>
     <h2>Login</h2>
     <form action="/login" method="POST">
         <label for="username">Username:</label>
@@ -29,4 +30,4 @@ fetch('/login', {
 login.addEventListener('click', login);
 
     </script>
-`}) %>
+</body>
