@@ -1,0 +1,26 @@
+<%- include('layout', { title: 'Public Access Leaderboard'}) %>
+    <meta charset="UTF-8">
+    <title>Leaderboard</title>
+    <link rel="stylesheet" href="/public/css/leaderboard.css"> <!-- Path to your CSS file -->
+<body>
+    <h1>Leaderboard</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Username</th>
+                <th>Points</th>
+            </tr>
+        </thead>
+        <tbody>
+            <% users.forEach((user, index) => { %>
+                <tr>
+                    <td><%= index + 1 %></td>
+                    <td><%= user.username %></td>
+                    <td><%= user.points_balance.toLocaleString() %></td> <!-- Formatting numbers with commas -->
+                </tr>
+            <% }); %>
+        </tbody>
+    </table>
+</body>
+</html>

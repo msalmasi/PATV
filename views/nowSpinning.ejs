@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="3" >
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <title>Now Spinning</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css?family=Lato:400,700');
+        
+        html {
+        }
+        
+        body {
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive !important; /* Retro, pixelated font */
+          text-transform: uppercase;
+          text-align: center;
+        }
+        
+        h1 {
+          font-size: 4em;
+          font-weight: 100;
+          letter-spacing: 3px;
+          padding-top: 0px;
+          color: #FCFCFC;
+          text-transform: uppercase;
+          margin-bottom: 0px;
+          margin-top: 10px;
+        }
+        
+        p {
+            margin-top: 0px;
+            margin-bottom: 5px;
+          font-size: 2em;
+          font-weight: 100;
+          color: #FCFCFC;
+          letter-spacing: 1px;
+          animation: bounce 1s ease-in infinite;
+        }
+        
+        @keyframes bounce {
+          50% {
+             transform: translateY(-10px);
+          }
+        }
+        </style>
+        
+        
+        
+</head>
+<body>
+    <p>Now Spinning</p>
+    <h1><%= username %></h1>
+    <style>
+        p { animation: bounce 1s infinite; }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+    </style>
+</body>
+</html>

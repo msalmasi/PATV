@@ -210,6 +210,55 @@ app.get('/login', addUser, (req, res) => {
     res.render('login', { user: username });
 });
 
+// HTTP GET endpoint to retrieve the last result.
+app.get('/api/g/wheel/last-result', async (req, res) => {
+    const sql = `
+        SELECT userId, result
+        FROM wheel_spins
+        WHERE type = 'public'
+        ORDER BY timestamp DESC
+        LIMIT 1
+    `;
+
+    try {
+        const lastResult = await getQuery(sql);
+        if (!lastResult) {
+            return res.status(404).send("No public spin results found.");
+        }
+
+        // Fetch username based on userId
+        const userSql = `SELECT username FROM users WHERE userId = ?`;
+        const user = await getQuery(userSql, [lastResult.userId]);
+
+        if (lastResult.result === "PENDING") {
+            res.render('nowSpinning', { username: user.username });
+        } else {
+            res.render('lastSpinner', { username: user.username });
+        }
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).send("Failed to fetch the last result.");
+    }
+});
+
+// HTTP GET endpoint to retrieve the leaderboards.
+app.get('/rankings', async (req, res) => {
+    const sql = `
+        SELECT username, points_balance
+        FROM users
+        ORDER BY points_balance DESC
+        LIMIT 100
+    `;
+
+    try {
+        const users = await getQuery(sql);  // Adjust getQuery to handle multiple rows if needed
+        res.render('leaderboard', { users });
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).send("Failed to fetch rankings.");
+    }
+});
+
 // HTTP POST endpoint for registering a new user.
 app.post('/register', registerUser);
 
@@ -278,11 +327,11 @@ function runQuery(sql, params = []) {
 
 function getQuery(sql, params = []) {
     return new Promise((resolve, reject) => {
-        db.get(sql, params, (err, result) => {
+        db.all(sql, params, (err, results) => {
             if (err) {
                 reject(err);
             } else {
-                resolve(result);
+                resolve(results);
             }
         });
     });
@@ -292,8 +341,16 @@ function getQuery(sql, params = []) {
 app.get('/api/classes', async (req, res) => {
     const sql = 'SELECT class FROM classes';
     try {
-        const classes = await getQuery(sql, []);
-        res.json(classes);
+        db.all(sql, [], (err, rows) => {
+            if (err) {
+                console.error(err.message);
+                res.status(500).send("Failed to retrieve classes.");
+                return;
+            }
+            // Ensure to send an array of class names
+            const classNames = rows.map(row => row.class);
+            res.json(classNames);
+        });
     } catch (error) {
         console.error(error);
         res.status(500).send("Failed to retrieve classes.");
@@ -341,6 +398,24 @@ app.post('/api/g/wheel/jackpot', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send("Failed to update the jackpot.");
+    }
+});
+
+// HTTP Post Endpoint To Get Last 100 Spin Results
+app.post('/api/g/wheel/results', async (req, res) => {
+    const sql = `
+        SELECT userId, result
+        FROM wheel_spins
+        ORDER BY timestamp DESC
+        LIMIT 100
+    `;
+
+    try {
+        const results = await getQuery(sql); // Assuming getQuery can handle multiple rows and is adjusted accordingly
+        res.json(results);
+    } catch (error) {
+        console.error('Database error:', error);
+        res.status(500).send("Failed to retrieve wheel spin results.");
     }
 });
 
@@ -487,8 +562,8 @@ app.post('/api/u/:username/wheel/spin', authenticateToken, (req, res) => {
                                         db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, 100]);
 
                                         // Update the transaction log.
-                                        db.run('INSERT INTO wheel_spins (spinId, userId, result, transactionId) VALUES (?, ?, ?, ?)', 
-                                            [spinId, userId, 'PENDING', transactionId], (err) => {
+                                        db.run('INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?)', 
+                                            [spinId, userId, 'gold', 'PENDING', transactionId], (err) => {
                                                 if (err) {
                                                     return res.status(500).json({ error: 'Failed to create spin record' });
                                                 }
@@ -550,7 +625,7 @@ app.post('/api/g/wheel/spin', (req, res) => {
                                 const spinId = uuidv4();
                                 const transactionId = uuidv4();
                                 const jackpotId = uuidv4();
-                                const transactionType = "Wager: Gold Spin";
+                                const transactionType = "Wager: Public Spin";
 
                                 // Send a message to connected clients to spin the wheel.
                                 const spinData = { message: `public spinid ${spinId} from ${username}`, timestamp: new Date() };
@@ -568,8 +643,8 @@ app.post('/api/g/wheel/spin', (req, res) => {
                                     db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, 100]);
 
                                     // Update the transaction log.
-                                    db.run('INSERT INTO wheel_spins (spinId, userId, result, transactionId) VALUES (?, ?, ?, ?)', 
-                                        [spinId, userId, 'PENDING', transactionId], (err) => {
+                                    db.run('INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?)', 
+                                        [spinId, userId, 'public', 'PENDING', transactionId], (err) => {
                                             if (err) {
                                                 return res.status(500).json({ error: 'Failed to create spin record' });
                                             }
@@ -631,7 +706,7 @@ setInterval(checkAndResolvePendingSpins, 60000);
 // HTTP POST endpoint to record the result of a public wheel spin.
 app.post('/api/g/wheel/spin/result', (req, res) => {
     const { spinId, result } = req.body;
-    const transactionType = "Reward: Gold Spin";
+    const transactionType = "Reward: Public Spin";
     const transactionId = uuidv4();
     // Update the wheel spin table with the result.
     db.run('UPDATE wheel_spins SET result = ? WHERE spinId = ?', [result, spinId]);

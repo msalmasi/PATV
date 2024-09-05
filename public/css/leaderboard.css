@@ -1,0 +1,48 @@
+/* General body and background styles */
+body {
+    background-color: #000; /* Dark background for that arcade feel */
+    color: #FFF; /* Bright text for good contrast */
+    font-family: 'Press Start 2P', monospace; /* Retro, pixelated font */
+    margin: 0;
+}
+
+/* Table styling */
+table {
+    margin-left: auto;
+    margin-right: auto;
+    width: 50%; /* Full-width table */
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+table, th, td {
+    border: 1px solid #FFF; /* White borders for visibility */
+}
+
+th, td {
+    padding: 10px;
+    text-align: center;
+}
+
+th {
+    background-color: #222; /* Slightly lighter header background */
+}
+
+tr:nth-child(even) {
+    background-color: #111; /* Alternate rows styling */
+}
+
+/* Header styles */
+h1 {
+    padding-top: 30px;
+    text-align: center;
+    color: #FFC300; /* Bright yellow for the main heading */
+    text-shadow: 0 0 10px #FFC300; /* Glowing effect */
+}
+
+/* Glow effects for rows on hover */
+tr:hover {
+    background-color: #333; /* Darker background on hover */
+    color: #FFD700;
+    text-shadow: 0 0 20px #FFD700; /* Bright yellow glow on hover */
+}

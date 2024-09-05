@@ -76,24 +76,39 @@
     <form action="/api/u/username/class" method="POST" onsubmit="return setUsernameAction(this)">
         <label for="userClassUsername">Username:</label>
         <input type="text" id="userClassUsername" name="username" required>
-
+    
         <label for="userClass">Class:</label>
         <select name="class" id="userClass" required>
-            <option value="pleb">Pleb</option>
-            <option value="high roller">High Roller</option>
-            <option value="VIP">VIP</option>
-            <option value="staff">Staff</option>
-            <option value="admin">Admin</option>
+            <option value="">Select a class...</option>
         </select>
         <button type="submit">Set Class</button>
     </form>
 
     <script>
-    function setUsernameAction(form) {
-        form.action = form.action.replace('username', document.getElementById('userClassUsername').value);
-        return true;
-    }
-    </script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const classSelect = document.getElementById('userClass');
+        
+            fetch('/api/classes')
+            .then(response => response.json())
+            .then(classes => {
+                classes.forEach(className => {
+                    const option = document.createElement('option');
+                    option.value = className;
+                    option.textContent = className;
+                    classSelect.appendChild(option);
+                });
+            })
+            .catch(error => {
+                console.error('Failed to load classes:', error);
+            });
+        });
+        
+        function setUsernameAction(form) {
+            const username = document.getElementById('userClassUsername').value;
+            form.action = form.action.replace('username', encodeURIComponent(username));
+            return true;
+        }
+        </script>
     </div>
 
     <!-- Class List Management Form -->
