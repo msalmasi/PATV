@@ -1,10 +1,11 @@
-wheel {
+#wheel {
     display: grid;
+    width: 100vw;
     grid-template-rows: auto auto 1fr;
     justify-content: center;
     align-items: center;
     height: 100vh;
-    background-color: #282c34;
+    /* background-color: #282c34; */
     color: white;
     margin: 0;
     font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
@@ -180,6 +181,7 @@ wheel {
 }
 
 .balance-display {
+  grid-template-rows: auto auto;
   margin-left: 20px;
   margin-top: 20px;
   font-size: 1.2em;
@@ -187,4 +189,25 @@ wheel {
   color: #FFC600; /* Bright yellow */
   text-shadow: 0 0 5px #FFC600, 0 0 10px #FFC600, 0 0 20px #FFC600; /* Glow effect */
   font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+}
+
+.arcade-animation {
+  margin-top: 30px;
+  font-size: 1em;
+  color: #FFD700;  // Gold color for reward points
+  text-shadow: 0 0 5px #FFD700, 0 0 10px #FFD700, 0 0 20px #FFD700;  // Glowing effect
+}
+
+.arcade-animation-neg {
+  margin-top: 30px;
+  font-size: 1em;
+  color: #ff0000;
+  text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000, 0 0 20px #ff0000 !important;  // Glowing effect
+}
+
+.friendo {
+  position: relative;
+  bottom: 450px;
+  right: -375px;
+  z-index: -10;
 }

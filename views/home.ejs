@@ -28,64 +28,64 @@
       height: 100%;
     }
 </style>
-<div class="grid-root combined">
+    <div class="grid-root combined">
 
-<div id="videoWrapper">
-    <div id="videoOverlay" class="">
-        <img src="/public/img/mute-icon.png" />
+    <div id="videoWrapper">
+        <div id="videoOverlay" class="">
+            <img src="/public/img/mute-icon.png" />
+        </div>
+        
+        <!-- <div id="player_id"></div> -->
+
+        <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline>
+            <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
+        </video-js>
+        
+        <div id="twitch" class="hide">
+        </div>
+
+        <!--       <script>
+
+                // Initialize OvenPlayer
+                const player = OvenPlayer.create('player_id', {
+                    sources: [
+                        {
+                            label: 'label_for_webrtc',
+                            // Set the type to 'webrtc'
+                            type: 'webrtc',
+                            // Set the file to WebRTC Signaling URL with OvenMediaEngine 
+                            file: 'wss://stream.houseplants.cc:3334/app/stream'
+                        }
+                    ]
+                });
+            </script> -->
+    
+        <div id="altlink">
+        <p>Stream this with low latency in VLC (<a href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)</p>
+        </div>
     </div>
-<!-- <div id="player_id"></div> -->
 
-  <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline>
-    <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
-  </video-js>
-    <div id="twitch" class="hide">
-  </div>
+    <div id="twitch_embed" class="tab-content active">
+        <div id="twitch_chat">
+            <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=localhost"
+                height="100%"
+                width="100%">
+            </iframe>
+        </div>
 
-
-
-<!--       <script>
-
-        // Initialize OvenPlayer
-        const player = OvenPlayer.create('player_id', {
-            sources: [
-                {
-                    label: 'label_for_webrtc',
-                    // Set the type to 'webrtc'
-                    type: 'webrtc',
-                    // Set the file to WebRTC Signaling URL with OvenMediaEngine 
-                    file: 'wss://stream.houseplants.cc:3334/app/stream'
-                }
-            ]
-        });
-    </script> -->
-  
-<div id="altlink">
-<p>Stream this with low latency in VLC (<a href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)</p>
-</div>
-</div>
-
-    <!-- Tabs -->
-<div id="twitch_embed" class="tab-content active">
-    <div id="twitch_chat">
-        <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=localhost"
-            height="100%"
-            width="100%">
-        </iframe>
+        <% if (typeof user == 'undefined' || !user) { %>
+        <% } else { %>
+        <div id="arcadePanel">
+            <div id="spinButton">
+                <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
+            </div>
+            <div id="arcadeInfo">
+                <div class="arcade-text">Player<span id="usernameSpan"><%= user %></span></div>
+                <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
+            </div>
+        </div>
+            <% } %>
     </div>
-    <% if (typeof user == 'undefined' || !user) { %>
-    <% } else { %>
-<div id="arcadePanel">
-    <div id="spinButton">
-        <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
-    </div>
-    <div id="arcadeInfo">
-        <div class="arcade-text">Player<span id="usernameSpan"><%= user %></span></div>
-        <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
-    </div>
-</div>
-    <% } %>
-</div>
     <% if (typeof user == 'undefined' || !user) { %>
     <% } else { %>
     <script>
@@ -136,7 +136,9 @@
             // Store spinId in local storage or a global variable
             localStorage.setItem('currentSpinID', spinId);
             // Set up SSE listener with this spinId
-            setupSSE(spinId);
+            setupResultsListener(spinId);
+            wager = 5000;
+            displayWagerCost(wager);
             fetchUserBalance(user); // Update the User Balance
             }
         })
@@ -166,23 +168,42 @@
         }, 1000); // Assuming the animation takes 5 seconds
         }
 
-        function setupSSE(spinId) {
-            // Logic for updating the balance from the backend.
-            const url = `/events?spinId=${encodeURIComponent(spinId)}`;
-            const eventSource = new EventSource(url);
+        function setupResultsListener(spinId) {
+            const eventSource = new EventSource(`/events?type=results&identifier=${spinId}`);
+
             eventSource.onmessage = function(event) {
                 const result = JSON.parse(event.data);
                 console.log('Spin result received:', result);
                 // Update UI based on the result
                 displaySpinResult(result.result);
+                fetchUserBalance(user);
                 eventSource.close();
             };
 
             eventSource.onerror = function(event) {
-            console.error('EventSource failed:', event);
-            eventSource.close();
+                console.error('EventSource failed:', event);
+                eventSource.close();
             };
         }
+
+        // Function for displaying the winning result
+        function displayWagerCost(wager) {
+        const balanceElement = document.getElementById('userBalance');
+        const rewardDiv = document.createElement('div');
+        rewardDiv.className = 'arcade-animation-neg';
+        rewardDiv.textContent = `-${wager} Points!`;
+
+        // Position the reward div near the balance
+        balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+
+        // Apply animation
+        rewardDiv.style.animation = 'pop-in 0.5s forwards';
+
+        setTimeout(() => {
+            rewardDiv.remove(); // Remove the animation element after it completes
+        }, 2000); // Assuming the animation takes 5 seconds
+        }
+
     </script>
     <% } %>
     <script type="text/javascript">
@@ -219,4 +240,3 @@
         player2.setMuted(true);
         }
     </script>
-</body>

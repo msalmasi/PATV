@@ -163,10 +163,17 @@ app.get('/', addUser, async (req, res) => {
     }
 });
 
+// Just for fun
+app.get('/friendo', (req, res) => {
+
+    res.render("friendo", {title: "friendo"})
+  
+})
+
 // Example route with authentication middleware
 app.get('/protected', authenticateToken, (req, res) => {
     res.json({ message: 'Protected route accessed successfully.' });
-  });
+});
 
 app.get('/register', addUser, async (req, res) => {
     const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
@@ -262,6 +269,7 @@ app.get('/g/wheel', addUser, (req, res) => {
 // HTTP POST endpoint to trigger wheel spin
 app.post('/api/u/:username/wheel/spin', authenticateToken, (req, res) => {
     const username = req.body.username;
+    const pageId = req.body.pageId;
     let userId = 0;
     try {
         if (req.username !== username) {
@@ -306,8 +314,7 @@ app.post('/api/u/:username/wheel/spin', authenticateToken, (req, res) => {
 
                                     // Send a message to connected clients to spin the wheel.
                                     const spinData = { message: `Spin: ${username}`, timestamp: new Date() };
-                                    clients.forEach(client => client.res.write(`data: ${JSON.stringify(spinData)}\n\n`)); // Notify all clients
-
+                                    sendEvent('spin', pageId, spinData);
                                     
                                     db.serialize(() => {
                                         // Deduct points from user balance.
@@ -388,86 +395,7 @@ app.post('/api/g/wheel/spin', (req, res) => {
                                 // Send a message to connected clients to spin the wheel.
                                 const spinData = { message: `public spinid ${spinId} from ${username}`, timestamp: new Date() };
                                 console.log(spinData);
-                                sendSpinCommand(userId, spinData);
-                                
-                                db.serialize(() => {
-                                    // Deduct points from user balance.
-                                    db.run('UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?', [userId]);
-                                    
-                                    // Update the wheel spins log.
-                                    db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionId, userId, transactionType, -5000]);
-
-                                    // Add to the jackpot.
-                                    db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, 100]);
-
-                                    // Update the transaction log.
-                                    db.run('INSERT INTO wheel_spins (spinId, userId, result, transactionId) VALUES (?, ?, ?, ?)', 
-                                        [spinId, userId, 'PENDING', transactionId], (err) => {
-                                            if (err) {
-                                                return res.status(500).json({ error: 'Failed to create spin record' });
-                                            }
-
-                                            res.status(200).json({ spinId });
-                                    });
-                                });
-                            });
-                            }
-                    });
-            } else {
-                console.log('No matching record found for the given userId');
-                return res.status(500).json({ error: 'Failed to create spin record' });
-            }
-        }
-    });
-
-
-});
-
-// HTTP POST endpoint to trigger public wheel spin
-app.post('/api/g/wheel/spin', (req, res) => {
-    const username = req.body.username;
-    let userId = 0;
-
-    // Use the username to resolve the userId
-    db.get(`SELECT userId FROM users WHERE username = ?;`,[username], (err, row) => {
-        if (err) {
-            console.error('Error executing SQL: ' + err.message);
-        } else {
-            if (row) {
-                console.log('UserId found:', row.userId);
-                userId = row.userId;
-                    // Check if there is a spin in progress.
-                    db.get(`SELECT * FROM wheel_spins WHERE result = ? AND userId = ? ORDER BY rowid DESC LIMIT 1;`,['PENDING', userId], (err, row) => {
-                        if(typeof row !== 'undefined') {
-                            let error = username +' rejected. Spin in progress.'
-                            console.log(error)
-                            return res.status(400).json({ error: 'Free spin in progress.' });
-                        }
-                        
-                        else {
-                            // Check if the user has enough points
-                            console.log(`user is ${userId}`)
-                            console.log(row)
-                            db.get('SELECT points_balance FROM users WHERE userId = ?', [userId], (err, row) => {
-                                console.log(userId);
-                                console.log(row);
-                                if (err) {
-                                    return res.status(500).json({ error: 'Database error' });
-                                }
-                            
-                                if (row.points_balance < 5000) {
-                                    return res.status(400).json({ error: 'Insufficient points' });
-                                }
-                            
-                                const spinId = uuidv4();
-                                const transactionId = uuidv4();
-                                const jackpotId = uuidv4();
-                                const transactionType = "Wager: Gold Spin";
-
-                                // Send a message to connected clients to spin the wheel.
-                                const spinData = { message: `Spin: ${username}`, timestamp: new Date() };
-                                clients.forEach(client => client.res.write(`data: ${JSON.stringify(spinData)}\n\n`)); // Notify all clients
-
+                                sendEvent('spin', 'public', spinData);
                                 
                                 db.serialize(() => {
                                     // Deduct points from user balance.
@@ -504,7 +432,7 @@ app.post('/api/g/wheel/spin', (req, res) => {
 
 // Prune pending/unresolved spins.
 const checkAndResolvePendingSpins = () => {
-    const oneMinuteAgo = new Date(Date.now() - 60000);  // 60000 milliseconds = 1 minute
+    const oneMinuteAgo = new Date(Date.now() - 120000);  // 60000 milliseconds = 1 minute
     db.all(`SELECT spinId, userId FROM wheel_spins WHERE result = 'PENDING' AND timestamp < ?`, [oneMinuteAgo.toISOString()], (err, spins) => {
         if (err) {
             console.error("Error fetching pending spins:", err);
@@ -582,7 +510,8 @@ app.post('/api/g/wheel/spin/result', (req, res) => {
                                 if (err) {
                                 return res.status(500).json({ error: 'Failed to create spin record' });
                                 }
-                                res.status(200).json({ transactionId });
+                                sendEvent("results", spinId, { result: jackpotTotal });
+                                res.status(200).json({ transactionId: transactionId, result: jackpotTotal });
                         }); 
                         });
                     }
@@ -600,7 +529,7 @@ app.post('/api/g/wheel/spin/result', (req, res) => {
                             console.log(transactionId);
                             // Send a message to connected clients to spin the wheel.
                             console.log("sending spin data to clients" + spinId + result);
-                            sendSpinResult(spinId, { result: result });
+                            sendEvent("results", spinId, { result: result });
                             res.status(200).json({ transactionId: transactionId, result: result });
                     });
                     }
@@ -656,7 +585,7 @@ app.post('/api/u/:username/wheel/spin/result', authenticateToken, (req, res) => 
                                 return res.status(500).json({ error: 'Failed to create spin record' });
                                 }
 
-                                res.status(200).json({ transactionId });
+                                res.status(200).json({ transactionId: transactionId, result: jackpotTotal });
                         }); 
                         });
                     }
@@ -672,7 +601,7 @@ app.post('/api/u/:username/wheel/spin/result', authenticateToken, (req, res) => 
                             return res.status(500).json({ error: 'Failed to create spin record' });
                             }
 
-                            res.status(200).json({ transactionId });
+                            res.status(200).json({ transactionId: transactionId, result: result });
                     });
                     }
                 } else {
@@ -686,67 +615,48 @@ app.post('/api/u/:username/wheel/spin/result', authenticateToken, (req, res) => 
 
 // Server-Sent Events setup to send commands to the client
 app.get('/events', (req, res) => {
-    const spinId = req.query.spinId;
+    const { type, identifier } = req.query;  // 'type' could be 'spin' or 'results'
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+
     res.flushHeaders(); // Flush the headers to establish SSE connection
 
-    const clientId = Date.now();
-    const newClient = {
-        id: clientId,
-        res
-    };
-    clients.push(newClient);
-
     // Register this connection to receive updates for the specified spinId
-    registerClient(spinId, res);
+    registerClient(type, identifier, res);
 
     req.on('close', () => {
-        unregisterClient(spinId, res); // Clean up when the client disconnects
+        unregisterClient(type, identifier, res); // Clean up when the client disconnects
         res.end();
     });
 
-    req.on('close', () => {
-        console.log(`Client ${clientId} Connection closed`);
-        clients = clients.filter(client => client.id !== clientId);
-    });
 });
 
-function registerClient(spinId, res) {
-    if (!clients[spinId]) {
-        clients[spinId] = [];  // Initialize if not already present
+function registerClient(type, identifier, res) {
+    if (!clients[type]) {
+        clients[type] = {};
     }
-    clients[spinId].push(res);
+    if (!clients[type][identifier]) {
+        clients[type][identifier] = [];
+    }
+    clients[type][identifier].push(res);
 }
 
-function unregisterClient(spinId, res) {
-    if (clients[spinId]) {
-        clients[spinId] = clients[spinId].filter(client => client !== res);
-        if (clients[spinId].length === 0) {
-            delete clients[spinId];
-        }
-    } else {
-        console.error(`Tried to unregister client for non-existent spinId: ${spinId}`);
+function unregisterClient(type, identifier, res) {
+    clients[type][identifier] = clients[type][identifier].filter(client => client !== res);
+    if (clients[type][identifier].length === 0) {
+        delete clients[type][identifier];
     }
+    res.end();
 }
 
-// Function to send events to clients listening to a specific spinId
-function sendSpinResult(spinId, result) {
-    const data = JSON.stringify(result);
-    if (clients[spinId]) {
-        clients[spinId].forEach(client => client.write(`data: ${data}\n\n`));
+// Function to send events to clients listening for them.
+function sendEvent(type, identifier, message) {
+    const data = JSON.stringify(message);
+    if (clients[type] && clients[type][identifier]) {
+        clients[type][identifier].forEach(client => client.write(`data: ${data}\n\n`));
     }
-}
-
-// Function to send spin event to clients
-function sendSpinCommand(userId, spinData) {
-    console.log('user id is ' + userId);
-    const data = JSON.stringify(spinData);
-    if (clients[userId]) {
-        clients[userId].forEach(client => client.write(`data: ${data}\n\n`));
-    }
-    console.log(clients);
 }
 
 app.listen(port, () => {

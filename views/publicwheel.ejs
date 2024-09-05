@@ -1,9 +1,11 @@
 <!-- views/wheel.ejs -->
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/wheel.css">
-<div id="jackpot">
-  <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
-</div>
+<link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
 <div id="wheel">
+  <div id="jackpot">
+    <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
+  </div>
   <div class="wheel-container">
     <canvas id="wheelCanvas" width="500" height="500"></canvas>
     <div id="resultContainer">

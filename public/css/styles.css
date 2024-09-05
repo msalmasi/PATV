@@ -1,9 +1,8 @@
 body {
     display: grid;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto;
     justify-content: center;
     align-items: center;
-    height: 100vh;
     /* background-color: #282c34; */
     background-color: #0F0F11;
     color: rgb(255, 255, 255);
@@ -150,18 +149,4 @@ button {
     margin-top: 10px;
     margin-right: 20px;
     background-color: #3CC47C;
-}
-
-@keyframes pop-in {
-    0% { transform: scale(0); opacity: 0; }
-    50% { transform: scale(1.2); opacity: 1; }
-    100% { transform: scale(1); opacity: 1; }
-}
-
-.arcade-animation {
-    font-size: 1.5em;
-    color: #FFD700;  // Gold color for reward points
-    text-shadow: 0 0 5px #FFD700, 0 0 10px #FFD700, 0 0 20px #FFD700;  // Glowing effect
-    position: absolute;  // Ensure this aligns correctly with your layout
-    margin-left: 20px;  // Adjust spacing to match your design
 }

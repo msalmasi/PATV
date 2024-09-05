@@ -2,7 +2,7 @@ const canvas = document.getElementById('wheelCanvas');
 const ctx = canvas.getContext('2d');
 
 // Load the audio file at the start of the script
-const tickerSound = new Audio('public/wheel.ogg');
+const tickerSound = new Audio('http://localhost:3000/public/wheel.ogg');
 
 // Arrow element
 const arrow = document.createElement('div');
@@ -15,7 +15,7 @@ centerImage.id = 'centerImage';
 document.querySelector('.wheel-container').appendChild(centerImage);
 
 // Set your custom image or GIF URL
-centerImage.src = 'http://localhost:3000/public/star.gif';
+centerImage.src = 'http://localhost:3000/public/img/star.gif';
 
 const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
@@ -159,24 +159,6 @@ function fetchJackpotTotal() {
 
 fetchJackpotTotal()
 
-// Function for displaying the winning result
-function displayPointsReward(result) {
-  const balanceElement = document.getElementById('jackpotTotal');
-  const rewardDiv = document.createElement('div');
-  rewardDiv.className = 'arcade-animation';
-  rewardDiv.textContent = `+${result} Points!`;
-
-  // Position the reward div near the balance
-  balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
-
-  // Apply animation
-  rewardDiv.style.animation = 'pop-in 0.5s forwards';
-
-  setTimeout(() => {
-      rewardDiv.remove(); // Remove the animation element after it completes
-  }, 20000); // Assuming the animation takes 5 seconds
-}
-
 // Logic for the winning result.
 function determineSpinResult(wheelSpinner) {
   console.log("Determining results for:", wheelSpinner);
@@ -207,9 +189,6 @@ function determineSpinResult(wheelSpinner) {
       .then(data => {
           console.log('Server response:', data.message);
           // Additional actions based on response can be handled here
-          if (data.result) {
-            displayPointsReward(data.result);
-        }
       })
       .catch(error => {
           console.error('Error sending spin result:', error);
@@ -242,20 +221,26 @@ function hideResultOverlay() {
   resultContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.65)'; // Semi-transparent background
 }
 
-// Logic for initiating the user spin from the backend.
-const url = `/events?spin&user=public`;
-const evtSource = new EventSource(url);
+// Function for initiating the user spin from the backend.
+function setupSpinListener(username) {
+  const eventSource = new EventSource(`/events?type=spin&identifier=public`);
+  console.log(eventSource);
+  eventSource.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      console.log('Received command to start spinning:', data);
+      const segments = data.message.split(' '); // Split the path by ' '
+      // Assuming the structure /u/username/wheel, username would be at index 2
+      wheelSpinner = segments[4];
+      spinId = segments[2];
+      spinWheel(wheelSpinner); // Function to start the wheel spinning
+  };
 
-evtSource.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    if (data.message.includes(`public spin`)) {
-        // console.log("Received spin command:", data);
-        const segments = data.message.split(' '); // Split the path by ' '
-        // Assuming the structure /u/username/wheel, username would be at index 2
-        wheelSpinner = segments[4];
-        spinId = segments[2];
-        spinWheel(wheelSpinner); // Function to start the wheel spinning
-    }
-};
+  eventSource.onerror = function(event) {
+      console.error('EventSource failed:', event);
+      eventSource.close();
+  };
+}
+
+setupSpinListener('public');
 
 drawWheel();
