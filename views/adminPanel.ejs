@@ -1,0 +1,138 @@
+<%- include('layout', { title: 'Admin Panel', user: user}) %>
+<body>
+    <div class="panel">
+    <h1>Admin Panel</h1>
+    <h2>Welcome, <%= user %>!</h2>
+        </div>
+
+    <!-- Manual Wheel Spin Form -->
+    <div class="panel">
+    <h3>Manual Wheel Spin</h3>
+    <form action="/api/g/wheel/spin" method="POST">
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required>
+        <button type="submit">Spin Wheel</button>
+    </form>
+    </div> 
+
+    <!-- Jackpot Panel -->
+    <div class="panel">
+    <h3>Jackpot Panel</h3>
+    <form action="/api/g/wheel/jackpot" method="POST">
+        <label for="jackpotAmount">Amount:</label>
+        <input type="number" id="jackpotAmount" name="amount" required>
+        <select name="action">
+            <option value="add">Add to Jackpot</option>
+            <option value="remove">Remove from Jackpot</option>
+        </select>
+        <button type="submit">Update Jackpot</button>
+    </form>
+    </div> 
+    
+    <!-- Points Panel -->
+    <div class="panel">
+    <h3>Points Panel</h3>
+    <form id="pointsTransferForm" action="/api/u/username/transfer" method="POST">
+        <label for="pointsUsername">Username:</label>
+        <input type="text" id="pointsUsername" name="username" required>
+        <label for="pointsAmount">Amount:</label>
+        <input type="number" id="pointsAmount" name="amount" required>
+        <select name="action">
+            <option value="add">Add Points</option>
+            <option value="remove">Remove Points</option>
+        </select>
+        <button type="submit">Transfer Points</button>
+    </form>
+    </div>
+    
+    <!-- This edits the URL in the POST form. -->
+    <script>
+        document.getElementById('pointsTransferForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+        
+            var amount = document.getElementById('pointsAmount').value;
+            var username = document.getElementById('pointsUsername').value;
+            console.log(amount);
+            // Prepare the fetch request
+            fetch(this.getAttribute('action').replace('username', encodeURIComponent(username)), {
+                headers: {    "content-type": "application/json",},
+                body: JSON.stringify({ amount: amount }),
+                method: 'POST',
+            }).then(response => {
+                return response.json();
+            }).then(data => {
+                console.log('Success:', data);
+                // handle success
+            }).catch(error => {
+                console.error('Error:', error);
+                // handle error
+            });
+        });
+    </script>
+
+    <!-- User Class Assignment Form -->
+    <div class="panel">
+    <h3>Assign User Class</h3>
+    <form action="/api/u/username/class" method="POST" onsubmit="return setUsernameAction(this)">
+        <label for="userClassUsername">Username:</label>
+        <input type="text" id="userClassUsername" name="username" required>
+
+        <label for="userClass">Class:</label>
+        <select name="class" id="userClass" required>
+            <option value="pleb">Pleb</option>
+            <option value="high roller">High Roller</option>
+            <option value="VIP">VIP</option>
+            <option value="staff">Staff</option>
+            <option value="admin">Admin</option>
+        </select>
+        <button type="submit">Set Class</button>
+    </form>
+
+    <script>
+    function setUsernameAction(form) {
+        form.action = form.action.replace('username', document.getElementById('userClassUsername').value);
+        return true;
+    }
+    </script>
+    </div>
+
+    <!-- Class List Management Form -->
+    <div class="panel">
+    <h3>Manage Classes</h3>
+    <form id="classListForm" action="/api/classes/edit" method="POST">
+        <label for="classAction">Action:</label>
+        <select name="action" id="classAction" required>
+            <option value="add">Add</option>
+            <option value="remove">Remove</option>
+        </select>
+
+        <label for="className">Class Name:</label>
+        <input type="text" id="className" name="className" required>
+        
+        <button type="submit">Submit</button>
+    </form>
+
+    <div id="currentClasses">
+        <h4>Current Classes:</h4>
+        <ul id="classList"></ul>
+    </div>
+
+    <script>
+    window.onload = function() {
+        fetch('/api/classes')
+        .then(response => response.json())
+        .then(data => {
+            const classList = document.getElementById('classList');
+            data.forEach(cls => {
+                const li = document.createElement('li');
+                li.textContent = cls;
+                classList.appendChild(li);
+            });
+        })
+        .catch(error => console.error('Error fetching classes:', error));
+    }
+    </script>
+    </div>
+    <script src="/scripts/admin.js"></script> <!-- Path to your JavaScript file -->
+</body>
+</html>

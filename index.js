@@ -81,7 +81,8 @@ function createTables() {
         twitchBonus INTEGER DEFAULT 0,
         twitchBonus_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (class) REFERENCES classes(class)
     )`, (err) => {
         if (err) {
             console.log('Error creating table users', err);
@@ -137,6 +138,18 @@ function createTables() {
             console.log('Table jackpot_rakes created or already exists.');
         }
     });
+
+    db.run(`CREATE TABLE IF NOT EXISTS classes (
+        classId TEXT PRIMARY KEY,
+        class TEXT NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table transactions', err);
+        } else {
+            console.log('Table classes created or already exists.');
+        }
+    });
     // Add additional tables as needed
 }
 
@@ -160,6 +173,18 @@ app.get('/', addUser, async (req, res) => {
     } catch (error) {
         console.log(error);
         res.status(500).json({ error: error });
+    }
+});
+
+// Admin Panel Endpoint
+app.get('/admin/panel', addUser, (req, res) => {
+    console.log(req.user);
+    const userType = req.user.class;
+    username = req.user.username;
+    if (userType === 'admin' || userType === 'staff') {
+        res.render('adminPanel', { user: username });
+    } else {
+        res.status(403).send("Access denied. You must be an admin or staff to access this page.");
     }
 });
 
@@ -238,6 +263,43 @@ function getUserBalance(req, res) {
     });
 }
 
+// Utility functions for inserting and updating data
+function runQuery(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function(err) {
+            if (err) {
+                reject(err);
+            } else {
+                resolve({ id: this.lastID, changes: this.changes });
+            }
+        });
+    });
+}
+
+function getQuery(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, result) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve(result);
+            }
+        });
+    });
+}
+
+// HTTP GET endpoint to get the list of classes
+app.get('/api/classes', async (req, res) => {
+    const sql = 'SELECT class FROM classes';
+    try {
+        const classes = await getQuery(sql, []);
+        res.json(classes);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Failed to retrieve classes.");
+    }
+});
+
 // HTTP GET endpoint to get user balance
 app.get('/api/u/:username/balance', getUserBalance)
 
@@ -264,6 +326,104 @@ app.get('/g/wheel', addUser, (req, res) => {
         const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
         res.render('publicwheel', { user: username });
         // Proceed with fetching user data and generating wheel
+});
+
+// HTTP Post endpoint to update the jackpot
+app.post('/api/g/wheel/jackpot', authenticateToken, async (req, res) => {
+    const { amount } = req.body;
+    const userId = req.userId; // Assuming this is set by the authenticateToken middleware
+    const jackpotId = uuidv4; // Function to generate a UUID v4
+
+    const sql = `INSERT INTO jackpot_rakes (jackpotid, spinid, userid, amount) VALUES (?, ?, ?, ?)`;
+    try {
+        await runQuery(sql, [jackpotId, 0, userId, amount]);
+        res.json({ message: "Jackpot updated successfully." });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Failed to update the jackpot.");
+    }
+});
+
+// HTTP Post endpoint to update the user balance.
+app.post('/api/u/:username/transfer', authenticateToken, async (req, res) => {
+    console.log(req);
+    const amount  = req.body.amount;
+    console.log (amount)
+    const username = req.params.username;
+    const transactionId = uuidv4(); // Function to generate a UUID v4
+
+    // Begin transaction to ensure atomicity
+    db.serialize(async () => {
+        db.run("BEGIN TRANSACTION");
+        try {
+            // Update user's balance
+            let sql = `UPDATE users SET points_balance = points_balance + ? WHERE username = ?`;
+            await runQuery(sql, [amount, username]);
+
+            // Log the transaction
+            sql = `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)`;
+            const user = await getQuery(`SELECT userId FROM users WHERE username = ?`, [username]);
+            await runQuery(sql, [transactionId, user.userId, "staff transfer", amount]);
+
+            db.run("COMMIT");
+            res.json({ message: "Points transferred successfully." });
+        } catch (error) {
+            db.run("ROLLBACK");
+            console.error(error);
+            res.status(500).send("Failed to transfer points.");
+        }
+    });
+});
+
+// HTTP POST endpoint to update a user class.
+app.post('/api/u/:username/class', authenticateToken, async (req, res) => {
+    const username = req.params.username;
+    const userClass = req.body.class;
+
+    const sql = 'UPDATE users SET class = ? WHERE username = ?';
+    try {
+        const result = await runQuery(sql, [userClass, username]);
+        if (result.changes) {
+            res.json({ message: "User class updated successfully." });
+        } else {
+            res.status(404).send("User not found.");
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Failed to update user class.");
+    }
+});
+
+// HTTP POST endpoint to edit the list of classes.
+app.post('/api/classes/edit', authenticateToken, async (req, res) => {
+    const { action, className } = req.body;
+
+    if (action === 'add') {
+        const classId = uuidv4(); // Function to generate a UUID v4
+        const sql = 'INSERT INTO classes (classId, class) VALUES (?, ?)';
+        try {
+            await runQuery(sql, [classId, className]);
+            res.json({ message: "Class added successfully." });
+        } catch (error) {
+            console.error(error);
+            res.status(500).send("Failed to add class.");
+        }
+    } else if (action === 'remove') {
+        const sql = 'DELETE FROM classes WHERE name = ?';
+        try {
+            const result = await runQuery(sql, [className]);
+            if (result.changes) {
+                res.json({ message: "Class removed successfully." });
+            } else {
+                res.status(404).send("Class not found.");
+            }
+        } catch (error) {
+            console.error(error);
+            res.status(500).send("Failed to remove class.");
+        }
+    } else {
+        res.status(400).send("Invalid action specified.");
+    }
 });
 
 // HTTP POST endpoint to trigger wheel spin

@@ -131,7 +131,7 @@ button {
     border-radius: 4px;
 }
 
-.loginform {
+.panel {
     margin-left: auto;
     margin-right: auto;
     width: 300px;
@@ -140,12 +140,12 @@ button {
     margin-top: 30px;
 }
 
-.loginform label {
+.panel label {
     padding-top: 5px;
     margin-bottom: -5px;
 }
 
-.loginform button {
+.panel button {
     margin-top: 10px;
     margin-right: 20px;
     background-color: #3CC47C;
