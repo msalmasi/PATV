@@ -12,9 +12,19 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const morgan = require('morgan');
 const { registerUser, loginUser } = require('./user.controller');
+const { createTables, runQuery, getQuery } = require('./dbUtils');
 const authenticateToken = require('./middleware/authenticateToken');
 const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const flash = require('connect-flash');
 
+app.use(session({ secret: process.env.APP_SESSION_SECRET, resave: true, saveUninitialized: true }));
+app.use(flash());
+app.use((req, res, next) => {
+    res.locals.success_msg = req.flash('success');
+    res.locals.error_msg = req.flash('error');
+    next();
+});
 
 // Set the view engine to ejs
 app.set('view engine', 'ejs');
@@ -60,98 +70,6 @@ const db = new sqlite3.Database('./myapp.db', (err) => {
     }
 });
 
-// Setup DB
-function createTables() {
-    db.run(`CREATE TABLE IF NOT EXISTS users (
-        userId TEXT PRIMARY KEY,
-        username TEXT NOT NULL UNIQUE,
-        avatar TEXT NOT NULL DEFAULT "avatar.png",
-        class TEXT NOT NULL DEFAULT "pleb",
-        displayname TEXT,
-        email TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL,
-        discordId TEXT,
-        twitchId TEXT,
-        streamId TEXT,
-        streamKey TEXT,
-        points_balance INTEGER DEFAULT 0,
-        liked INTEGER DEFAULT 0,
-        discordBonus INTEGER DEFAULT 0,
-        discordBonus_at TIMESTAMP,
-        twitchBonus INTEGER DEFAULT 0,
-        twitchBonus_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (class) REFERENCES classes(class)
-    )`, (err) => {
-        if (err) {
-            console.log('Error creating table users', err);
-        } else {
-            console.log('Table users created or already exists.');
-        }
-    });
-
-    db.run(`CREATE TABLE IF NOT EXISTS transactions (
-        transactionId TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
-        type TEXT NOT NULL,
-        points INTEGER NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(userId)
-    )`, (err) => {
-        if (err) {
-            console.log('Error creating table transactions', err);
-        } else {
-            console.log('Table transactions created or already exists.');
-        }
-    });
-
-    db.run(`CREATE TABLE IF NOT EXISTS wheel_spins (
-        spinId TEXT PRIMARY KEY,
-        type TEXT,
-        userId TEXT,
-        result TEXT NOT NULL,
-        transactionId TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(userId),
-        FOREIGN KEY (transactionId) REFERENCES transactions(transactionId)
-    )`, (err) => {
-        if (err) {
-            console.log('Error creating table transactions', err);
-        } else {
-            console.log('Table wheel_spins created or already exists.');
-        }
-    });
-
-    db.run(`CREATE TABLE IF NOT EXISTS jackpot_rakes (
-        jackpotId TEXT PRIMARY KEY,
-        spinId TEXT,
-        userId TEXT,
-        amount INTEGER NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (userId) REFERENCES users(userId),
-        FOREIGN KEY (spinId) REFERENCES transactions(wheel_spins)
-    )`, (err) => {
-        if (err) {
-            console.log('Error creating table transactions', err);
-        } else {
-            console.log('Table jackpot_rakes created or already exists.');
-        }
-    });
-
-    db.run(`CREATE TABLE IF NOT EXISTS classes (
-        classId TEXT PRIMARY KEY,
-        class TEXT NOT NULL,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`, (err) => {
-        if (err) {
-            console.log('Error creating table transactions', err);
-        } else {
-            console.log('Table classes created or already exists.');
-        }
-    });
-    // Add additional tables as needed
-}
 
 module.exports = db;
 
@@ -195,6 +113,26 @@ app.get('/friendo', (req, res) => {
   
 })
 
+app.get('/testemail', (req, res) => {
+const sgMail = require('@sendgrid/mail')
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+const msg = {
+  to: 'salmasi@gmail.com', // Change to your recipient
+  from: 'no-reply@publicaccess.tv', // Change to your verified sender
+  subject: 'Sending with SendGrid is Fun',
+  text: 'and easy to do anywhere, even with Node.js',
+  html: '<strong>and easy to do anywhere, even with Node.js</strong>',
+}
+sgMail
+  .send(msg)
+  .then(() => {
+    console.log('Email sent')
+  })
+  .catch((error) => {
+    console.error(error)
+  })
+});
+
 // Example route with authentication middleware
 app.get('/protected', authenticateToken, (req, res) => {
     res.json({ message: 'Protected route accessed successfully.' });
@@ -208,6 +146,36 @@ app.get('/register', addUser, async (req, res) => {
 app.get('/login', addUser, (req, res) => {
     const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
     res.render('login', { user: username });
+});
+
+// HTTP GET endpoint for verifying endpoint
+app.get('/verify-email', async (req, res) => {
+    const { token } = req.query;
+    const sql = `SELECT userId, tokenExpires FROM users WHERE emailVerificationToken = ?`;
+
+    try {
+        const results = await getQuery(sql, [token]); // `results` is now more appropriately named
+        if (!results || results.length === 0) {
+            return res.status(400).send('Invalid or expired token');
+        }
+
+        const result = results[0]; // Access the first element of the array
+        if (new Date(result.tokenExpires) < new Date()) {
+            return res.status(400).send('Token has expired');
+        }
+
+        // Token is valid, update user status
+        const updateSql = `UPDATE users SET isEmailVerified = 1, emailVerificationToken = NULL, tokenExpires = NULL WHERE userId = ?`;
+        const updateResult = await runQuery(updateSql, [result.userId]);
+        if (updateResult.changes > 0) {
+            res.send('Email verified successfully!');
+        } else {
+            res.send('No changes made to the database.');
+        }
+    } catch (error) {
+        console.error('Failed to verify email', error);
+        res.status(500).send('Server error');
+    }
 });
 
 // HTTP GET endpoint to retrieve the last result.
@@ -309,31 +277,6 @@ function getUserBalance(req, res) {
         } else {
             return res.status(404).json({ error: 'User not found' });
         }
-    });
-}
-
-// Utility functions for inserting and updating data
-function runQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.run(sql, params, function(err) {
-            if (err) {
-                reject(err);
-            } else {
-                resolve({ id: this.lastID, changes: this.changes });
-            }
-        });
-    });
-}
-
-function getQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
-        db.all(sql, params, (err, results) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(results);
-            }
-        });
     });
 }
 

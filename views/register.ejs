@@ -1,14 +1,33 @@
-<!-- views/register.ejs -->
 <%- include('layout', { title: 'Public Access Registration', user: user}) %>
+<% if (success_msg) { %>
+    <div class="alert alert-success"><%= success_msg %></div>
+<% } %>
+<% if (error_msg) { %>
+    <div class="alert alert-danger"><%= error_msg %></div>
+<% } %>
 <div class="panel">
-<h2>Register</h2>
-<form action="/register" method="POST">
-    <label for="username">Username</label>
-    <input type="text" id="username" name="username" required><br>
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password" required><br>
-    <label for="email">Email</label>
-    <input type="text" id="email" name="email" required><br>
-    <button id="login" type="submit">Register</button><a id="registerlink" href="/login">Login</a>
-</form>
+    <h2>Register</h2>
+    <form action="/register" method="POST" onsubmit="return validateForm()">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required><br>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required minlength="6"><br>
+        <label for="confirm_password">Confirm Password</label>
+        <input type="password" id="confirm_password" required><br>
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required><br>
+        <button id="login" type="submit">Register</button>
+        <a id="registerlink" href="/login">Login</a>
+    </form>
 </div>
+<script>
+    function validateForm() {
+        var password = document.getElementById("password").value;
+        var confirmPassword = document.getElementById("confirm_password").value;
+        if (password != confirmPassword) {
+            alert("Passwords do not match.");
+            return false;
+        }
+        return true;
+    }
+</script>
