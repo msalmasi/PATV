@@ -17,14 +17,32 @@ const authenticateToken = require('./middleware/authenticateToken');
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
 const flash = require('connect-flash');
+const crypto = require('crypto');
+const sgMail = require('@sendgrid/mail');
 
-app.use(session({ secret: process.env.APP_SESSION_SECRET, resave: true, saveUninitialized: true }));
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+let MemoryStore = session.MemoryStore;
+
+// Cookie Parser Middleware
+app.use(cookieParser(process.env.APP_SESSION_SECRET)); 
+
+app.use(session({
+    secret: process.env.APP_SESSION_SECRET,
+    resave: true,
+    saveUninitialized: true,
+    cookie: { secure: 'auto' }  // This should be set based on your environment.
+}));
+
 app.use(flash());
-app.use((req, res, next) => {
-    res.locals.success_msg = req.flash('success');
-    res.locals.error_msg = req.flash('error');
-    next();
-});
+
+// // Sessuib
+// app.use(session({
+//     secret: process.env.APP_SESSION_SECRET,
+//     resave: true,  // Forces the session to be saved back to the session store, even if the session was never modified
+//     saveUninitialized: false,  // Don't create session until something stored
+//     cookie: { secure: 'auto' }  // Use 'auto' to secure cookies only if the connection is secure
+// }));
 
 // Set the view engine to ejs
 app.set('view engine', 'ejs');
@@ -57,9 +75,6 @@ function addUser(req, res, next) {
     next(); // Proceed regardless of token validity
 }
 
-// Cookie Parser Middleware
-app.use(cookieParser()); 
-
 // Connect to SQLite database
 const db = new sqlite3.Database('./myapp.db', (err) => {
     if (err) {
@@ -69,7 +84,6 @@ const db = new sqlite3.Database('./myapp.db', (err) => {
         createTables();
     }
 });
-
 
 module.exports = db;
 
@@ -113,26 +127,6 @@ app.get('/friendo', (req, res) => {
   
 })
 
-app.get('/testemail', (req, res) => {
-const sgMail = require('@sendgrid/mail')
-sgMail.setApiKey(process.env.SENDGRID_API_KEY)
-const msg = {
-  to: 'salmasi@gmail.com', // Change to your recipient
-  from: 'no-reply@publicaccess.tv', // Change to your verified sender
-  subject: 'Sending with SendGrid is Fun',
-  text: 'and easy to do anywhere, even with Node.js',
-  html: '<strong>and easy to do anywhere, even with Node.js</strong>',
-}
-sgMail
-  .send(msg)
-  .then(() => {
-    console.log('Email sent')
-  })
-  .catch((error) => {
-    console.error(error)
-  })
-});
-
 // Example route with authentication middleware
 app.get('/protected', authenticateToken, (req, res) => {
     res.json({ message: 'Protected route accessed successfully.' });
@@ -140,12 +134,23 @@ app.get('/protected', authenticateToken, (req, res) => {
 
 app.get('/register', addUser, async (req, res) => {
     const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
-    res.render('register', { user: username });
+    let errorMessages = req.flash('error');
+    let successMessages = req.flash('success');
+    res.render('register', { 
+        user: username, 
+        errors: errorMessages,
+        success: successMessages
+    });
 });
 
-app.get('/login', addUser, (req, res) => {
-    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
-    res.render('login', { user: username });
+app.get('/login', (req, res) => {
+    // Retrieve flash messages and pass them to the EJS template
+    let errorMessages = req.flash('error');
+    let successMessages = req.flash('success');
+    res.render('login', {
+        errors: errorMessages,
+        success: successMessages
+    });
 });
 
 // HTTP GET endpoint for verifying endpoint
@@ -154,27 +159,30 @@ app.get('/verify-email', async (req, res) => {
     const sql = `SELECT userId, tokenExpires FROM users WHERE emailVerificationToken = ?`;
 
     try {
-        const results = await getQuery(sql, [token]); // `results` is now more appropriately named
+        const results = await getQuery(sql, [token]);
         if (!results || results.length === 0) {
-            return res.status(400).send('Invalid or expired token');
+            req.flash('error', 'Invalid or expired token');
+            return res.redirect('/login');
         }
 
-        const result = results[0]; // Access the first element of the array
+        const result = results[0];
         if (new Date(result.tokenExpires) < new Date()) {
-            return res.status(400).send('Token has expired');
+            req.flash('error', 'Token has expired');
+            return res.redirect('/login');
         }
 
-        // Token is valid, update user status
         const updateSql = `UPDATE users SET isEmailVerified = 1, emailVerificationToken = NULL, tokenExpires = NULL WHERE userId = ?`;
         const updateResult = await runQuery(updateSql, [result.userId]);
         if (updateResult.changes > 0) {
-            res.send('Email verified successfully!');
+            req.flash('success', 'Email verified successfully!');
         } else {
-            res.send('No changes made to the database.');
+            req.flash('error', 'No changes made to the database.');
         }
+        res.redirect('/login');
     } catch (error) {
         console.error('Failed to verify email', error);
-        res.status(500).send('Server error');
+        req.flash('error', 'Server error');
+        res.redirect('/login');
     }
 });
 
@@ -206,6 +214,105 @@ app.get('/api/g/wheel/last-result', async (req, res) => {
     } catch (error) {
         console.error('Database error:', error);
         res.status(500).send("Failed to fetch the last result.");
+    }
+});
+
+// HTTP POST endpoint to reset password
+app.post('/reset-password/:token', async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password, confirm_password } = req.body;
+
+        if (password !== confirm_password) {
+            req.flash('error', 'Passwords do not match.');
+            return res.redirect('back');
+        }
+
+        const user = await db.get('SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ?', [token, Date.now()]);
+        if (!user) {
+            req.flash('error', 'Password reset token is invalid or has expired.');
+            return res.redirect('back');
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 12);
+        await db.run('UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE resetPasswordToken = ?', [hashedPassword, token]);
+
+        req.flash('success', 'Success! Your password has been changed.');
+        res.redirect('/login');
+    } catch (error) {
+        console.error('Reset Password Error:', error);
+        req.flash('error', 'Error resetting password.');
+        res.redirect('back');
+    }
+});
+
+// HTTP POST endpoint to send a password reset link
+app.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    const token = crypto.randomBytes(20).toString('hex'); // Generate a token
+    const expires = new Date(Date.now() + 3600000); // Token expires in 1 hour
+
+    try {
+        const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
+        if (!user) {
+            req.flash('error', 'No account with that email address exists.');
+            return res.redirect('/forgot-password');
+        }
+
+        // Store the token and expiration time in the database
+        await db.run('UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE email = ?', [token, expires, email]);
+
+        // Send email with the reset link
+        const resetUrl = `http://${req.headers.host}/reset-password/${token}`;
+        const msg = {
+            to: email,
+            from: 'no-reply@publicaccess.tv',
+            subject: 'Password Reset',
+            text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
+                   Please click on the following link, or paste this into your browser to complete the process:\n\n
+                   ${resetUrl} \n\n
+                   If you did not request this, please ignore this email and your password will remain unchanged.\n`
+        };
+
+        await sgMail.send(msg);
+        req.flash('success', 'An e-mail has been sent to ' + email + ' with further instructions.');
+        res.redirect('/forgot-password');
+    } catch (error) {
+        console.error('Forgot Password Error:', error);
+        req.flash('error', 'Error resetting password.');
+        res.redirect('/forgot-password');
+    }
+});
+
+app.get('/forgot-password', (req, res) => {
+    // Retrieve flash messages and pass them to the EJS template
+    let errorMessages = req.flash('error');
+    let successMessages = req.flash('success');
+    res.render('forgotPassword', {
+        errors: errorMessages,
+        success: successMessages
+    });
+});
+
+app.get('/reset-password/:token', async (req, res) => {
+    const { token } = req.params;
+    let errorMessages = req.flash('error');
+    let successMessages = req.flash('success');
+    // Optionally, validate the token before rendering the reset form
+    try {
+        const user = await db.get('SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ?', [token, new Date()]);
+        if (!user) {
+            req.flash('error', 'Password reset token is invalid or has expired.');
+            return res.redirect('/forgot-password');
+        }
+        res.render('resetPassword', { 
+            token: token,
+            errors: errorMessages,
+            success: successMessages 
+        });
+    } catch (error) {
+        req.flash('error', 'Error accessing reset form.');
+        res.redirect('/forgot-password');
     }
 });
 

@@ -1,10 +1,4 @@
 <%- include('layout', { title: 'Public Access Registration', user: user}) %>
-<% if (success_msg) { %>
-    <div class="alert alert-success"><%= success_msg %></div>
-<% } %>
-<% if (error_msg) { %>
-    <div class="alert alert-danger"><%= error_msg %></div>
-<% } %>
 <div class="panel">
     <h2>Register</h2>
     <form action="/register" method="POST" onsubmit="return validateForm()">
@@ -18,6 +12,12 @@
         <input type="email" id="email" name="email" required><br>
         <button id="login" type="submit">Register</button>
         <a id="registerlink" href="/login">Login</a>
+        <% if (success != '') { %>
+            <div class="alert alert-success"><br><br><%= success %></div>
+        <% } %>
+        <% if (errors != '') { %>
+            <div class="alert alert-danger"><br><br><%= errors %></div>
+        <% } %>
     </form>
 </div>
 <script>

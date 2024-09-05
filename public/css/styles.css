@@ -85,6 +85,12 @@ header {
     text-decoration: none;
 }
 
+#forgotpasswordlink {
+    color: #888888;
+    text-decoration: none;
+}
+
+
 .hidden {
     display: none;
 }

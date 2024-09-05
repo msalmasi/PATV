@@ -1,6 +1,7 @@
 <!-- views/login.ejs -->
 <%- include('layout', { title: 'Home Page'}) %>
 <body>
+
     <div class="panel">
     <h2>Login</h2>
     <form action="/login" method="POST">
@@ -8,7 +9,14 @@
         <input type="text" id="username" name="username" required><br>
         <label for="password">Password</label>
         <input type="password" id="password" name="password" required><br>
-        <button id="login" type="submit">Login</button><a id="registerlink" href="/register">Register</a>
+        <button id="login" type="submit">Login</button><a id="registerlink" href="/register">Register</a><br><br>
+        <a id="forgotpasswordlink" href="/forgot-password">Forgot Password</a>
+        <% if (errors != "") { %>
+            <div class="alert alert-danger"><br><br><%= errors %></div>
+        <% } %>
+        <% if (success != "") { %>
+            <div class="alert alert-success"><br><br><%= success %></div>
+        <% } %>
     </form>
     </div>
     <script>
@@ -25,7 +33,7 @@ fetch('/login', {
 .then(data => {
     localStorage.setItem('jwt', data.token);  // Store JWT in LocalStorage
 })
-.catch(error => console.error('Error:', error));
+.catch(errors => console.errors('Error:', errors));
 }
 
 // Uses the button to login

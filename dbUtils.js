@@ -33,6 +33,8 @@ function createTables() {
         emailVerificationToken VARCHAR(255),
         tokenExpires DATETIME,
         isEmailVerified INTEGER DEFAULT 0,
+        resetPasswordToken TEXT,
+        resetPasswordExpires DATETIME,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`, (err) => {

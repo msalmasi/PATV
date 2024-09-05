@@ -106,11 +106,13 @@ function loginUser(req, res) {
   db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
       if (err) {
           console.error(err.message);
-          res.status(500).send('Error logging in');
+          req.flash('error', 'Error logging in user');
+          return res.redirect('/login');
           return;
       }
       if (!user || !(await bcrypt.compare(password, user.password))) {
-          return res.status(401).send('Authentication failed');
+        req.flash('error', 'Authentication failed');
+        return res.redirect('/login');
       }
       // const token = jwt.sign({ userId: user.id }, process.env.SECRET_KEY, { expiresIn: '1h' });
       // res.json({ token: token });
