@@ -131,8 +131,35 @@
         <h4>Current Classes:</h4>
         <ul id="classList"></ul>
     </div>
+    </div>
 
-    <script>
+    <!-- PRize List Management Form -->
+    <div class="panel">
+        <h3>Manage Prizes</h3>
+        <form id="prizeListForm" action="/api/prizes/edit" method="POST">
+            <label for="prizeAction">Action:</label>
+            <select name="action" id="prizeAction" required>
+                <option value="add">Add</option>
+                <option value="remove">Remove</option>
+            </select>
+    
+            <label for="prizeName">Prize Name:</label>
+            <input type="text" id="prizeName" name="prizeName" required>
+            <div id="costContainer">  <!-- Container for the cost input -->
+                <label for="cost">Prize Cost:</label>
+                <input type="text" id="cost" name="cost">
+            </div>
+            <button type="submit">Submit</button>
+        </form>
+    
+        <div id="currentPrizes">
+            <h4>Current Prizes:</h4>
+            <ul id="prizeList"></ul>
+        </div>
+
+
+</body>
+<script>
     window.onload = function() {
         fetch('/api/classes')
         .then(response => response.json())
@@ -145,9 +172,34 @@
             });
         })
         .catch(error => console.error('Error fetching classes:', error));
+
+        fetch('/api/prizes')
+        .then(response => response.json())
+        .then(data => {
+            const prizeList = document.getElementById('prizeList');
+            data.forEach(cls => {
+                const li = document.createElement('li');
+                li.textContent = cls;
+                prizeList.appendChild(li);
+            });
+        })
+        .catch(error => console.error('Error fetching prizes:', error));
+
+    const actionSelect = document.getElementById('prizeAction');
+    const costContainer = document.getElementById('costContainer');
+
+    function toggleCostInput() {
+        if (actionSelect.value === 'add') {
+            costContainer.style.display = 'block';
+        } else {
+            costContainer.style.display = 'none';
+        }
     }
-    </script>
-    </div>
+
+    actionSelect.addEventListener('change', toggleCostInput);
+    toggleCostInput(); // To set initial visibility state
+};
+</script>
+    
     <script src="/scripts/admin.js"></script> <!-- Path to your JavaScript file -->
-</body>
 </html>

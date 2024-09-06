@@ -1,0 +1,69 @@
+<%- include('layout', { title: 'Shop', user: user}) %>
+<link rel="stylesheet" href="/public/css/shop.css">
+
+<div class="shop-container">
+    <h1 class="shop-title">Arcade Shop</h1>
+    <ul class="product-list">
+        <!-- Items will be dynamically inserted here -->
+    </ul>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const productList = document.querySelector('.product-list');
+    
+        // Fetch prizes from the API
+        fetch('/api/prizes')
+        .then(response => response.json())
+        .then(prizes => {
+            // Ensure prizes data is an array and not empty
+            if (Array.isArray(prizes) && prizes.length) {
+                prizes.forEach(prize => {
+                    const li = document.createElement('li');
+                    li.className = 'product-item';
+                    li.innerHTML = `
+                        <h3>${prize.name}</h3>
+                        <p>Cost: ${prize.cost} Coins</p>
+                        <button class="buy-btn" data-product="${prize.id}">Buy</button>
+                    `;
+                    productList.appendChild(li);
+                });
+                addBuyButtonEventListeners();  // Call to add event listeners after elements are created
+            } else {
+                productList.innerHTML = '<li>No prizes available at the moment.</li>';
+            }
+        })
+        .catch(error => {
+            console.error('Failed to fetch prizes:', error);
+            productList.innerHTML = '<li>Error loading prizes. Please try again later.</li>';
+        });
+    
+        // Function to handle purchase buttons
+        function addBuyButtonEventListeners() {
+            document.querySelectorAll('.buy-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const product = this.getAttribute('data-product');
+                    fetch(`/shop`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ product: product })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Purchase successful!');
+                        } else {
+                            alert('Purchase failed: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error making the purchase');
+                    });
+                });
+            });
+        }
+    });
+    </script>

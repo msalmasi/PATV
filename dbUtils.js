@@ -71,7 +71,7 @@ function createTables() {
         FOREIGN KEY (transactionId) REFERENCES transactions(transactionId)
     )`, (err) => {
         if (err) {
-            console.log('Error creating table transactions', err);
+            console.log('Error creating table wheel_spins', err);
         } else {
             console.log('Table wheel_spins created or already exists.');
         }
@@ -87,7 +87,7 @@ function createTables() {
         FOREIGN KEY (spinId) REFERENCES transactions(wheel_spins)
     )`, (err) => {
         if (err) {
-            console.log('Error creating table transactions', err);
+            console.log('Error creating table jackpot_rakes', err);
         } else {
             console.log('Table jackpot_rakes created or already exists.');
         }
@@ -99,9 +99,22 @@ function createTables() {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, (err) => {
         if (err) {
-            console.log('Error creating table transactions', err);
+            console.log('Error creating table classes', err);
         } else {
             console.log('Table classes created or already exists.');
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS prizes (
+        prizeId TEXT PRIMARY KEY,
+        prize TEXT NOT NULL,
+        cost INTEGER NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table prizes', err);
+        } else {
+            console.log('Table prizes created or already exists.');
         }
     });
     // Add additional tables as needed

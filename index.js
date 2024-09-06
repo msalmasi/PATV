@@ -111,12 +111,13 @@ app.get('/', addUser, async (req, res) => {
 // Admin Panel Endpoint
 app.get('/admin/panel', addUser, (req, res) => {
     console.log(req.user);
-    const userType = req.user.class;
+    const userType = req.user ? req.user.class : null;
     username = req.user.username;
-    if (userType === 'admin' || userType === 'staff') {
+    if (userType === 'Admin' || userType === 'Staff') {
         res.render('adminPanel', { user: username });
     } else {
-        res.status(403).send("Access denied. You must be an admin or staff to access this page.");
+        req.flash('error', "Access denied. You must be an admin or staff to access this page.");
+        return res.redirect('/login');
     }
 });
 
@@ -294,6 +295,30 @@ app.get('/forgot-password', (req, res) => {
     });
 });
 
+app.get('/info', addUser, (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    // Retrieve flash messages and pass them to the EJS template
+    let errorMessages = req.flash('error');
+    let successMessages = req.flash('success');
+    res.render('info', {
+        user: username,
+        errors: errorMessages,
+        success: successMessages
+    });
+});
+
+app.get('/shop', addUser, (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    // Retrieve flash messages and pass them to the EJS template
+    let errorMessages = req.flash('error');
+    let successMessages = req.flash('success');
+    res.render('shop', {
+        user: username,
+        errors: errorMessages,
+        success: successMessages
+    });
+});
+
 app.get('/reset-password/:token', async (req, res) => {
     const { token } = req.params;
     let errorMessages = req.flash('error');
@@ -344,6 +369,17 @@ app.post('/login', loginUser);
 app.post('/logout', (req, res) => {
     res.clearCookie('jwt');
     res.redirect('/');
+});
+
+// HTTP post endpoint to shop
+app.post('/shop', (req, res) => {
+    const { product } = req.body;
+    // Process the purchase based on the product and user's available coins, etc.
+    if (validPurchase) {
+        res.json({ success: true });
+    } else {
+        res.json({ success: false, message: "Insufficient coins" });
+    }
 });
 
 // Function to get the total jackpot
@@ -404,6 +440,26 @@ app.get('/api/classes', async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send("Failed to retrieve classes.");
+    }
+});
+
+// HTTP GET endpoint to get the list of prizes
+app.get('/api/prizes', async (req, res) => {
+    const sql = 'SELECT prize FROM prizes';
+    try {
+        db.all(sql, [], (err, rows) => {
+            if (err) {
+                console.error(err.message);
+                res.status(500).send("Failed to retrieve prizes.");
+                return;
+            }
+            // Ensure to send an array of class names
+            const prizeNames = rows.map(row => row.prize);
+            res.json(prizeNames);
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Failed to retrieve prizes.");
     }
 });
 
@@ -501,53 +557,115 @@ app.post('/api/u/:username/transfer', authenticateToken, async (req, res) => {
 });
 
 // HTTP POST endpoint to update a user class.
-app.post('/api/u/:username/class', authenticateToken, async (req, res) => {
-    const username = req.params.username;
-    const userClass = req.body.class;
-
-    const sql = 'UPDATE users SET class = ? WHERE username = ?';
-    try {
-        const result = await runQuery(sql, [userClass, username]);
-        if (result.changes) {
-            res.json({ message: "User class updated successfully." });
-        } else {
-            res.status(404).send("User not found.");
+app.post('/api/u/:username/class', addUser, async (req, res) => {
+    console.log(req.user);
+    const userType = req.user ? req.user.class : null;
+    username = req.user.username;
+    if (userType === 'Admin' || userType === 'Staff') {
+        const username = req.params.username;
+        const userClass = req.body.class;
+    
+        const sql = 'UPDATE users SET class = ? WHERE username = ?';
+        try {
+            const result = await runQuery(sql, [userClass, username]);
+            if (result.changes) {
+                res.json({ message: "User class updated successfully." });
+            } else {
+                res.status(404).send("User not found.");
+            }
+        } catch (error) {
+            console.error(error);
+            res.status(500).send("Failed to update user class.");
         }
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Failed to update user class.");
+    } else {
+        req.flash('error', "Access denied. You must be an admin or staff to access this page.");
+        return res.redirect('/login');
     }
 });
 
 // HTTP POST endpoint to edit the list of classes.
-app.post('/api/classes/edit', authenticateToken, async (req, res) => {
-    const { action, className } = req.body;
+app.post('/api/classes/edit', addUser, async (req, res) => {
+    console.log(req.user);
+    const userType = req.user ? req.user.class : null;
+    username = req.user.username;
+    if (userType === 'Admin' || userType === 'Staff') {
+        const { action, className } = req.body;
 
-    if (action === 'add') {
-        const classId = uuidv4(); // Function to generate a UUID v4
-        const sql = 'INSERT INTO classes (classId, class) VALUES (?, ?)';
-        try {
-            await runQuery(sql, [classId, className]);
-            res.json({ message: "Class added successfully." });
-        } catch (error) {
-            console.error(error);
-            res.status(500).send("Failed to add class.");
+        if (action === 'add') {
+            const classId = uuidv4(); // Function to generate a UUID v4
+            const sql = 'INSERT INTO classes (classId, class) VALUES (?, ?)';
+            try {
+                await runQuery(sql, [classId, className]);
+                res.json({ message: "Class added successfully." });
+            } catch (error) {
+                console.error(error);
+                res.status(500).send("Failed to add class.");
+            }
+        } else if (action === 'remove') {
+            const sql = 'DELETE FROM classes WHERE class = ?';
+            try {
+                const result = await runQuery(sql, [className]);
+                if (result.changes) {
+                    res.json({ message: "Class removed successfully." });
+                } else {
+                    res.status(404).send("Class not found.");
+                }
+            } catch (error) {
+                console.error(error);
+                res.status(500).send("Failed to remove class.");
+            }
+        } else {
+            res.status(400).send("Invalid action specified.");
         }
-    } else if (action === 'remove') {
-        const sql = 'DELETE FROM classes WHERE name = ?';
+        res.render('adminPanel', { user: username });
+    } else {
+        req.flash('error', "Access denied. You must be an admin or staff to access this page.");
+        return res.redirect('/login');
+    }
+});
+
+// HTTP POST endpoint to edit the list of classes.
+app.post('/api/prizes/edit', addUser, async (req, res) => {
+    const userType = req.user ? req.user.class : null;
+    if (userType === 'Admin' || userType === 'Staff') {
+        const { action, prizeName, cost } = req.body;
+
         try {
-            const result = await runQuery(sql, [className]);
-            if (result.changes) {
-                res.json({ message: "Class removed successfully." });
+            if (action === 'add') {
+                // First, check if the prize already exists
+                const checkSql = 'SELECT prizeId FROM prizes WHERE prize = ?';
+                const result = await getQuery(checkSql, [prizeName]);
+                const existingPrize = result[0]; // Assuming getQuery returns an array of results
+
+                if (existingPrize) {
+                    // If it exists, update the cost
+                    const updateSql = 'UPDATE prizes SET cost = ? WHERE prizeId = ?';
+                    await runQuery(updateSql, [cost, existingPrize.prizeId]);
+                    res.json({ message: "Prize cost updated successfully." });
+                } else {
+                    // If it does not exist, add new prize
+                    const prizeId = uuidv4();
+                    const insertSql = 'INSERT INTO prizes (prizeId, prize, cost) VALUES (?, ?, ?)';
+                    await runQuery(insertSql, [prizeId, prizeName, cost]);
+                    res.json({ message: "Prize added successfully." });
+                }
+            } else if (action === 'remove') {
+                const deleteSql = 'DELETE FROM prizes WHERE prize = ?';
+                const result = await runQuery(deleteSql, [prizeName]);
+                if (result.changes) {
+                    res.json({ message: "Prize removed successfully." });
+                } else {
+                    res.status(404).send("Prize not found.");
+                }
             } else {
-                res.status(404).send("Class not found.");
+                res.status(400).send("Invalid action specified.");
             }
         } catch (error) {
             console.error(error);
-            res.status(500).send("Failed to remove class.");
+            res.status(500).send("Failed to process prize.");
         }
     } else {
-        res.status(400).send("Invalid action specified.");
+        res.status(403).send("Access denied. You must be an admin or staff to access this page.");
     }
 });
 

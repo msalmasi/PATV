@@ -1,7 +1,7 @@
 #wheel {
     display: grid;
     width: 100vw;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto auto;
     justify-content: center;
     align-items: center;
     height: 100vh;
@@ -206,8 +206,13 @@
 }
 
 .friendo {
+  float: right;
   position: relative;
-  bottom: 450px;
-  right: -375px;
+  bottom: 250px;
+  right: -425px;
   z-index: -10;
+}
+
+#coinslot {
+  cursor: url('http://localhost:3000/public/img/coin.png'), auto;
 }

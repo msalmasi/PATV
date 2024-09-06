@@ -10,6 +10,87 @@ body {
     font-family: ubuntu;
   }
 
+/* The Modal (background) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 200; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+  }
+  
+  /* Modal Content */
+  .modal-content {
+    margin: 15% auto; /* 15% from the top and centered */
+  }
+
+  #infoBtn {
+    margin-left: 20px;
+width: 10px;
+font-size: 40px;
+  }
+  
+  /* The Close Button */
+  .close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+  }
+
+  .shop-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: center;
+}
+
+.shop-title {
+    color: #4AFFEF; /* Bright cyan */
+    text-shadow: 0 0 5px #4AFFEF, 0 0 10px #4AFFEF, 0 0 20px #4AFFEF; /* Neon glow effect */
+}
+
+.product-list {
+    list-style: none;
+    padding: 0;
+}
+
+.product-item {
+    background: #222;
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+h3 {
+    margin: 10px 0;
+}
+
+.buy-btn {
+    background-color: #FFC600;
+    border: none;
+    padding: 10px 20px;
+    color: black;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.buy-btn:hover {
+    background-color: #FFD700;
+}
+  
+  .close:hover,
+  .close:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
 form {
     background: none;
 }
@@ -76,6 +157,12 @@ header {
     font-size: 16px;
 }
 
+.logo {
+    color: #3CC47C;
+    font-weight: bold;
+    font-family: ubuntu;
+}
+
 .navbar a:hover {
     color: #ffffff;
 }
@@ -98,6 +185,11 @@ header {
 .navbar-right {
     margin-right: -20px;
     display: flex; /* Ensures flexbox is used to layout the children */
+}
+
+.infolink {
+    color: white;
+    text-decoration: none;
 }
 
 .avatar {
@@ -155,4 +247,34 @@ button {
     margin-top: 10px;
     margin-right: 20px;
     background-color: #3CC47C;
+}
+
+.infopanel {
+    margin-left: auto;
+    margin-right: auto;
+    width: 40%;
+    max-width: 800px;
+    min-width: 300px;
+    background-color: #18181b;
+    padding: 10px 30px 30px 30px;
+    margin-top: 30px;
+}
+
+.infoImage {
+    padding-left: 5px;
+}
+
+.infopanel label {
+    padding-top: 5px;
+    margin-bottom: -5px;
+}
+
+.infopanel button {
+    margin-top: 10px;
+    margin-right: 20px;
+    background-color: #3CC47C;
+}
+
+#costContainer {
+    display: block; /* Hide by default, assuming 'Remove' is default */
 }

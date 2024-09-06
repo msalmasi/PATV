@@ -1,0 +1,69 @@
+<!-- views/home.ejs -->
+<%- include('layout', { title: 'Public Access Info', user: user}) %>
+<body>
+    <% if (errors != "") { %>
+    <div class="panel">
+    <div class="alert alert-danger"><br><br><%= errors %></div>
+    </div>
+    <% } %>
+    <% if (success != "") { %>
+    <div class="panel">
+    <div class="alert alert-success"><br><br><%= success %></div>
+    </div>
+    <% } %>
+    <div class="infopanel">
+        <h2>Howdy</h2>
+        <p>Welcome to the home of Public Access TV.</p>
+        <p>Public Access TV is a private streaming video platform and community for a group of misfits, weirdos, and oddballs.</p>
+        Watch the livestream on <a href="/" class="infolink"><span class="logo">PublicAccess.tv</span></a> or <a href="https://twitch.tv/publicaccess_ttv" class="inactivePage"><img class="infoImage" src="/public/img/twitch.png" height="16px" width="auto"></a></a><br><br>
+        Join the Public Access community on <a href="https://discord.gg/publicaccess" class="infolink"><img src="/public/img/discord.png" class="infoImage" height="16px" width="auto"></a><br><br>
+        Watch TV and Movies on <a href="https://plex.houseplants.cc/" class="infolink"><img src="/public/img/plex.png" class="infoImage" height="16px" width="auto"></a> or<a href="https://jellyfin.houseplants.cc/" class="infolink"><img src="/public/img/jellyfin.png" class="infoImage" height="16px" width="auto"></a>
+        <!-- Earn PAT (Public Access Tokens) by watching the stream, chatting, or gambling in the <a href="#casino" class="infolink">🎰</a><br><br>
+        Redeem points for community perks and rewards in the <a href="/store" class="infolink">🏪</a> -->
+    </div>
+
+    <div class="infopanel">
+        <h2 id="PAT">What is PAT?</h2>
+        <p>PAT (Public Access Token) is our community token. You can use your points to buy community perks, Plex or Jellyfin invites, and other prizes from the <a href="/store" class="infolink">🏪</a>.</p>
+        Earn PAT (Public Access Tokens) by watching the stream, chatting, or gambling in the casino:<br><br>
+
+        <% if (typeof user == 'undefined' || !user) { %>
+        <a href="/login" class="infolink">Spin the Wheel of Fortune <img class="infoImage" src="/public/img/star.gif" height="16px" width="auto"></a><br><br>
+        <% } else { %>
+        <a href="/u/<%= user %>/wheel" class="infolink">Spin the Wheel of Fortune <img src="/public/img/star.gif" height="16px" width="auto"></a><br><br>
+        <% } %>
+        Start a poker game or play blackjack on <a href="https://discord.com/channels/913269267691094026/1192942144458084433" class="infolink"><img src="/public/img/discord.png" class="infoImage" height="16px" width="auto"></a>
+        <br><br>Winning contests and earning bonuses.
+        <br><br>More games coming soon.
+    </div>
+
+    <div class="infopanel">
+        <h2>Discord Commands</h2>
+        <p>/balance: Check your balance.</p>
+        <p>/tip: Tip a user.</p>
+        <p>/spin: Spin the channel Wheel.</p>
+        /chips check: See your poker chip balance.
+    </div>
+
+    <div class="infopanel">
+        <h2 id="casino">Poker Commands</h2>
+        <p>/buyin: Buy poker chips.</p>
+        <p>/cashout: Cashout poker chips.</p>
+        <p>/chips beg: Beg for chips.</p>
+        /new-game [sb-bb]: Start a poker table.
+    </div>
+
+    <div class="infopanel">
+        <h2 id="casino">Twitch Commands</h2>
+        <p>!balance: Check your balance.</p>
+        <p>!tip: Tip a user.</p>
+        !spin: Spin the channel Wheel.
+    </div>
+</body>
+
+
+
+
+
+
+
