@@ -22,9 +22,9 @@
                     const li = document.createElement('li');
                     li.className = 'product-item';
                     li.innerHTML = `
-                        <h3>${prize.name}</h3>
+                        <h3>${prize.prize}</h3>
                         <p>Cost: ${prize.cost} Coins</p>
-                        <button class="buy-btn" data-product="${prize.id}">Buy</button>
+                        <button class="buy-btn" data-product="${prize.prizeId}">Buy</button>
                     `;
                     productList.appendChild(li);
                 });

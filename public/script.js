@@ -256,7 +256,6 @@ function determineSpinResult() {
       .then(data => {
           console.log('Server response:', data.message);
           fetchUserBalance(username);
-          console.log("djasodiahj" + data.result);
           // Additional actions based on response can be handled here
           if (data.result) {
             displayPointsReward(data.result);

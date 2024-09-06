@@ -114,7 +114,13 @@ app.get('/admin/panel', addUser, (req, res) => {
     const userType = req.user ? req.user.class : null;
     username = req.user.username;
     if (userType === 'Admin' || userType === 'Staff') {
-        res.render('adminPanel', { user: username });
+        let errorMessages = req.flash('error');
+        let successMessages = req.flash('success');
+        res.render('adminPanel', { 
+            user: username, 
+            errors: errorMessages,
+            success: successMessages
+        });
     } else {
         req.flash('error', "Access denied. You must be an admin or staff to access this page.");
         return res.redirect('/login');
@@ -342,7 +348,9 @@ app.get('/reset-password/:token', async (req, res) => {
 });
 
 // HTTP GET endpoint to retrieve the leaderboards.
-app.get('/rankings', async (req, res) => {
+app.get('/rankings', addUser, async (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    
     const sql = `
         SELECT username, points_balance
         FROM users
@@ -352,7 +360,7 @@ app.get('/rankings', async (req, res) => {
 
     try {
         const users = await getQuery(sql);  // Adjust getQuery to handle multiple rows if needed
-        res.render('leaderboard', { users });
+        res.render('leaderboard', { user: username, users });
     } catch (error) {
         console.error('Database error:', error);
         res.status(500).send("Failed to fetch rankings.");
@@ -372,15 +380,51 @@ app.post('/logout', (req, res) => {
 });
 
 // HTTP post endpoint to shop
-app.post('/shop', (req, res) => {
+app.post('/shop', addUser, async (req, res) => {
     const { product } = req.body;
-    // Process the purchase based on the product and user's available coins, etc.
-    if (validPurchase) {
-        res.json({ success: true });
-    } else {
-        res.json({ success: false, message: "Insufficient coins" });
+    const userId = req.user.userId; // Assuming userId is available from session or token
+    const username = req.user ? req.user.username : null
+    try {
+        // Check if the prize exists and get its cost
+        const prizes = await getQuery('SELECT prizeId, cost, prize FROM prizes WHERE prizeId = ?', [product]);
+        
+        if (prizes.length === 0) {
+            return res.status(404).json({ success: false, message: "Prize not found" });
+        }
+        const prize = prizes[0];
+
+        // Check if the user has enough points
+        const users = await getQuery('SELECT points_balance FROM users WHERE userId = ?', [userId]);
+        if (users.length === 0 || users[0].points_balance < prize.cost) {
+            return res.status(400).json({ success: false, message: "Insufficient coins" });
+        }
+
+        // Deduct the prize cost from the user's points balance
+        await runQuery('UPDATE users SET points_balance = points_balance - ? WHERE userId = ?', [prize.cost, userId]);
+
+        // Log the transaction
+        const transactionId = uuidv4();
+        await runQuery('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', 
+                     [transactionId, userId, `purchase of ${prize.prize}`, -prize.cost]);
+
+        // Send an email notification
+        const msg = {
+            to: 'pb@publicaccess.tv', // Recipient email address
+            from: 'no-reply@publicaccess.tv', // Your verified sender
+            subject: 'Purchase Notification',
+            text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
+            html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
+        };
+        await sgMail.send(msg);
+
+        // Respond to the user
+        res.json({ success: true, message: "Purchase successful" });
+    } catch (error) {
+        console.error('Server error:', error);
+        res.status(500).send("Failed to process the purchase.");
     }
 });
+
 
 // Function to get the total jackpot
 function getJackpotTotal(req, res) {
@@ -443,9 +487,9 @@ app.get('/api/classes', async (req, res) => {
     }
 });
 
-// HTTP GET endpoint to get the list of prizes
+// HTTP GET endpoint to get the list of prizes with their costs
 app.get('/api/prizes', async (req, res) => {
-    const sql = 'SELECT prize FROM prizes';
+    const sql = 'SELECT prizeId, prize, cost FROM prizes'; // Updated SQL to fetch the cost as well
     try {
         db.all(sql, [], (err, rows) => {
             if (err) {
@@ -453,9 +497,10 @@ app.get('/api/prizes', async (req, res) => {
                 res.status(500).send("Failed to retrieve prizes.");
                 return;
             }
-            // Ensure to send an array of class names
-            const prizeNames = rows.map(row => row.prize);
-            res.json(prizeNames);
+            // Send an array of objects with both prize names and costs
+            res.json(rows.map(row => {
+                return { prize: row.prize, cost: row.cost, prizeId: row.prizeId };
+            }));
         });
     } catch (error) {
         console.error(error);
@@ -617,6 +662,7 @@ app.post('/api/classes/edit', addUser, async (req, res) => {
         } else {
             res.status(400).send("Invalid action specified.");
         }
+        
         res.render('adminPanel', { user: username });
     } else {
         req.flash('error', "Access denied. You must be an admin or staff to access this page.");
@@ -641,31 +687,37 @@ app.post('/api/prizes/edit', addUser, async (req, res) => {
                     // If it exists, update the cost
                     const updateSql = 'UPDATE prizes SET cost = ? WHERE prizeId = ?';
                     await runQuery(updateSql, [cost, existingPrize.prizeId]);
-                    res.json({ message: "Prize cost updated successfully." });
+                    req.flash('success', "Prize cost updated successfully.");
+                    return res.redirect('/admin/panel');
                 } else {
                     // If it does not exist, add new prize
                     const prizeId = uuidv4();
                     const insertSql = 'INSERT INTO prizes (prizeId, prize, cost) VALUES (?, ?, ?)';
                     await runQuery(insertSql, [prizeId, prizeName, cost]);
-                    res.json({ message: "Prize added successfully." });
+                    req.flash('success', "Prize added successfully.");
+                    return res.redirect('/admin/panel');
                 }
             } else if (action === 'remove') {
                 const deleteSql = 'DELETE FROM prizes WHERE prize = ?';
                 const result = await runQuery(deleteSql, [prizeName]);
                 if (result.changes) {
-                    res.json({ message: "Prize removed successfully." });
+                    req.flash('success', "Prize removed successfully.");
+                    return res.redirect('/admin/panel');
                 } else {
-                    res.status(404).send("Prize not found.");
+                    req.flash('error', "Prize not found.");
+                    return res.redirect('/admin/panel');
                 }
             } else {
-                res.status(400).send("Invalid action specified.");
+                req.flash('error', "Invalid action specified.");
+                return res.redirect('/admin/panel');
             }
         } catch (error) {
-            console.error(error);
-            res.status(500).send("Failed to process prize.");
+            req.flash('error', "Failed to process prize.");
+            return res.redirect('/admin/panel');
         }
     } else {
-        res.status(403).send("Access denied. You must be an admin or staff to access this page.");
+        req.flash('error', "Access denied. You must be an admin or staff to access this page.");
+        return res.redirect('/login');
     }
 });
 

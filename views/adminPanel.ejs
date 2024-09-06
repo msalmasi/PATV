@@ -3,6 +3,12 @@
     <div class="panel">
     <h1>Admin Panel</h1>
     <h2>Welcome, <%= user %>!</h2>
+    <% if (errors != "") { %>
+        <div class="alert alert-danger"><br><br><%= errors %></div>
+    <% } %>
+    <% if (success != "") { %>
+        <div class="alert alert-success"><br><br><%= success %></div>
+    <% } %>
         </div>
 
     <!-- Manual Wheel Spin Form -->
@@ -177,13 +183,28 @@
         .then(response => response.json())
         .then(data => {
             const prizeList = document.getElementById('prizeList');
-            data.forEach(cls => {
+            // Ensure data is an array and has items
+            if (Array.isArray(data) && data.length > 0) {
+                data.forEach(prize => {
+                    const li = document.createElement('li');
+                    // Assuming each 'prize' object has 'prize' and 'cost' properties
+                    li.textContent = `${prize.prize} - Cost: ${prize.cost} Coins`;
+                    prizeList.appendChild(li);
+                });
+            } else {
+                // Handle case where no prizes are returned or data is not in expected format
                 const li = document.createElement('li');
-                li.textContent = cls;
+                li.textContent = 'No prizes available.';
                 prizeList.appendChild(li);
-            });
+            }
         })
-        .catch(error => console.error('Error fetching prizes:', error));
+        .catch(error => {
+            console.error('Error fetching prizes:', error);
+            const prizeList = document.getElementById('prizeList');
+            const li = document.createElement('li');
+            li.textContent = 'Failed to load prizes.';
+            prizeList.appendChild(li);
+        });
 
     const actionSelect = document.getElementById('prizeAction');
     const costContainer = document.getElementById('costContainer');
