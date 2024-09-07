@@ -987,7 +987,7 @@ app.post('/api/u/:username/wheel/spin', authenticateToken, async (req, res) => {
             return res.status(400).send('Insufficient points');
         }
 
-        const pendingSpins = await getQuery(`SELECT * FROM wheel_spins WHERE result = 'PENDING' AND userId = ? ORDER BY rowid DESC LIMIT 1;`, [user.userId]);
+        const pendingSpins = await getQuery(`SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`, [user.userId]);
         const pendingSpin = pendingSpins[0]; // Since getQuery uses db.all, it returns an array
 
         if (pendingSpin) {
