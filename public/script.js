@@ -306,6 +306,7 @@ function displayPointsReward(result) {
   const balanceElement = document.getElementById('userBalance');
   const rewardDiv = document.createElement('div');
   rewardDiv.className = 'arcade-animation';
+  rewardDiv.id = 'rewardDiv'
   rewardDiv.textContent = `+${result} Points!`;
 
   // Position the reward div near the balance
@@ -316,25 +317,31 @@ function displayPointsReward(result) {
 
   setTimeout(() => {
       rewardDiv.remove(); // Remove the animation element after it completes
-  }, 2000); // Assuming the animation takes 5 seconds
+  }, 500); // Assuming the animation takes 5 seconds
 }
 
 // Function for displaying the winning result
 function displayWagerCost(wager) {
   const balanceElement = document.getElementById('userBalance');
-  const rewardDiv = document.createElement('div');
-  rewardDiv.className = 'arcade-animation-neg';
-  rewardDiv.textContent = `-${wager} Points!`;
+  const costDiv = document.createElement('div');
+  costDiv.className = 'arcade-animation-neg';
+  costDiv.textContent = `-${wager} Points!`;
+  console.log(document.getElementById('rewardDiv'));
+  const rewardDiv = document.getElementById('rewardDiv');
+    if (rewardDiv) {
+      rewardDiv.remove(); // Remove the animation element after it completes
+    }
+  
 
   // Position the reward div near the balance
-  balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+  balanceElement.parentNode.insertBefore(costDiv, balanceElement.nextSibling);
 
   // Apply animation
-  rewardDiv.style.animation = 'pop-in 0.5s forwards';
+  costDiv.style.animation = 'pop-in 0.5s forwards';
 
   setTimeout(() => {
-      rewardDiv.remove(); // Remove the animation element after it completes
-  }, 2000); // Assuming the animation takes 5 seconds
+      costDiv.remove(); // Remove the animation element after it completes
+  }, 500); // Assuming the animation takes 5 seconds
 }
 
 // Uses the button to initiate a userSpin
