@@ -2,7 +2,7 @@ const canvas = document.getElementById('wheelCanvas');
 const ctx = canvas.getContext('2d');
 
 // Load the audio file at the start of the script
-const tickerSound = new Audio('http://localhost:3000/public/wheel.ogg');
+const tickerSound = new Audio('/public/wheel.ogg');
 
 // Arrow element
 const arrow = document.createElement('div');
@@ -15,7 +15,7 @@ centerImage.id = 'centerImage';
 document.querySelector('.wheel-container').appendChild(centerImage);
 
 // Set your custom image or GIF URL
-centerImage.src = 'http://localhost:3000/public/img/star.gif';
+centerImage.src = '/public/img/star.gif';
 
 const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
@@ -141,7 +141,7 @@ let spinId = 0;
 
 // Fetch the Jackpot Total
 function fetchJackpotTotal() {
-  fetch(`http://localhost:3000/api/jackpot`)
+  fetch(`/api/jackpot`)
       .then(response => response.json())
       .then(data => {
           if (data.jackpotTotal !== undefined) {
@@ -178,7 +178,7 @@ function determineSpinResult(wheelSpinner) {
       drawResultOverlay(result);
       // Send result to backend.
       const username = wheelSpinner;
-      const url = `http://localhost:3000/api/g/wheel/spin/result`;
+      const url = `/api/g/wheel/spin/result`;
       fetch(url, {
         headers: {    "content-type": "application/json",
         },

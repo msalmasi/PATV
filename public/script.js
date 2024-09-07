@@ -19,7 +19,7 @@ centerImage.id = 'centerImage';
 document.querySelector('.wheel-container').appendChild(centerImage);
 
 // Set your custom image or GIF URL
-centerImage.src = 'http://localhost:3000/public/img/star.gif';
+centerImage.src = '/public/img/star.gif';
 
 const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
@@ -157,7 +157,7 @@ function fetchUsername(username) {
 
 // Fetch and Set the User Balance
 function fetchUserBalance(username) {
-  fetch(`http://localhost:3000/api/u/${username}/balance`)
+  fetch(`/api/u/${username}/balance`)
       .then(response => response.json())
       .then(data => {
           if (data.balance !== undefined) {
@@ -181,7 +181,7 @@ fetchUserBalance(username);
 
 // Fetch the Jackpot Total
 function fetchJackpotTotal() {
-  fetch(`http://localhost:3000/api/jackpot`)
+  fetch(`/api/jackpot`)
       .then(response => response.json())
       .then(data => {
           if (data.jackpotTotal !== undefined) {
@@ -203,7 +203,7 @@ fetchJackpotTotal()
 function userSpin() {
   console.log(pageId);
   const username = getUsernameFromUrl();
-  const url = `http://localhost:3000/api/u/${username}/wheel/spin`;
+  const url = `/api/u/${username}/wheel/spin`;
 
   fetch(url, {
     headers: {    "content-type": "application/json",
@@ -253,7 +253,7 @@ function determineSpinResult() {
       drawResultOverlay(result);
       // Send result to backend.
       const username = getUsernameFromUrl();
-      const url = `http://localhost:3000/api/u/${username}/wheel/spin/result`;
+      const url = `/api/u/${username}/wheel/spin/result`;
       fetch(url, {
         headers: {    "content-type": "application/json",
         },

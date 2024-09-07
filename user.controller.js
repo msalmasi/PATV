@@ -94,7 +94,7 @@ async function updateUserWithToken(userId, token) {
 
 // Function to handle email validation
 async function sendVerificationEmail(email, username, token) {
-  const link = `http://localhost:3000/verify-email?token=${token}`;
+  const link = `http://publicaccess.tv/verify-email?token=${token}`;
   const msg = {
       to: email,
       from: 'no-reply@publicaccess.tv',

@@ -231,7 +231,7 @@ margin-right: auto;
 }
 
 #coinslot {
-  cursor: url('http://localhost:3000/public/img/coin.png'), auto;
+  cursor: url('/public/img/coin.png'), auto;
 }
 
 .spin-status {

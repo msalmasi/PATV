@@ -76,7 +76,7 @@
 
             <div id="twitch_embed" class="tab-content active">
                 <div id="twitch_chat">
-                    <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=localhost"
+                    <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=publicaccess.tv"
                         height="100%" width="100%">
                     </iframe>
                 </div>
@@ -85,7 +85,7 @@
                     <% } else { %>
                         <div id="arcadePanel">
                             <div id="spinButton">
-                                <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
+                                <img id="coinslot" src="/public/coinslot.png"></img>
                             </div>
                             <div id="arcadeInfo">
                                 <div class="arcade-text">Player<span id="usernameSpan">
@@ -110,7 +110,7 @@
 
                         // Fetch and Set the User Balance
                         function fetchUserBalance(user) {
-                            fetch(`http://localhost:3000/api/u/${user}/balance`)
+                            fetch(`/api/u/${user}/balance`)
                                 .then(response => response.json())
                                 .then(data => {
                                     if (data.balance !== undefined) {
@@ -133,7 +133,7 @@
                         // Spin the wheel as a user.
                         function userSpin() {
 
-                            const url = `http://localhost:3000/api/g/wheel/spin`;
+                            const url = `/api/g/wheel/spin`;
 
                             fetch(url, {
                                 headers: {
