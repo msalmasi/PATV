@@ -966,182 +966,136 @@ app.post('/api/prizes/edit', addUser, async (req, res) => {
 });
 
 // HTTP POST endpoint to trigger wheel spin
-app.post('/api/u/:username/wheel/spin', authenticateToken, (req, res) => {
+app.post('/api/u/:username/wheel/spin', authenticateToken, async (req, res) => {
     const username = req.body.username;
     const pageId = req.body.pageId;
-    let userId = 0;
+    
+    if (req.username !== username) {
+        return res.status(403).send("Access denied");
+    }
+
     try {
-        if (req.username !== username) {
-            console.log(req.userId);
-            return res.status(403).send("Access denied");
+        checkAndResolvePendingSpins();
+        const users = await getQuery(`SELECT userId, points_balance FROM users WHERE username = ?;`, [username]);
+        const user = users[0]; // Since getQuery uses db.all, it returns an array
+
+        if (!user) {
+            return res.status(404).send('User not found');
         }
-    // Use the username to resolve the userId
-        db.get(`SELECT userId FROM users WHERE username = ?;`,[username], (err, row) => {
-            if (err) {
-                console.error('Error executing SQL: ' + err.message);
-            } else {
-                if (row) {
-                    console.log('UserId found:', row.userId);
-                    userId = row.userId;
-                        // Check if there is a spin in progress.
-                        db.get(`SELECT * FROM wheel_spins WHERE result = ? AND userId = ? ORDER BY rowid DESC LIMIT 1;`,['PENDING', userId], (err, row) => {
-                            if(typeof row !== 'undefined') {
-                                let error = username +' rejected. Spin in progress.'
-                                console.log(error)
-                                return res.status(400).json({ error: 'Free spin in progress.' });
-                            }
-                            
-                            else {
-                                // Check if the user has enough points
-                                console.log(`user is ${userId}`)
-                                console.log(row)
-                                db.get('SELECT points_balance FROM users WHERE userId = ?', [userId], (err, row) => {
-                                    console.log(userId);
-                                    console.log(row);
-                                    if (err) {
-                                        return res.status(500).json({ error: 'Database error' });
-                                    }
-                                
-                                    if (row.points_balance < 5000) {
-                                        return res.status(400).json({ error: 'Insufficient points' });
-                                    }
-                                
-                                    const spinId = uuidv4();
-                                    const transactionId = uuidv4();
-                                    const jackpotId = uuidv4();
-                                    const transactionType = "Wager: Gold Spin";
 
-                                    // Send a message to connected clients to spin the wheel.
-                                    const spinData = { message: `Spin: ${username}`, timestamp: new Date() };
-                                    sendEvent('spin', pageId, spinData);
-                                    
-                                    db.serialize(() => {
-                                        // Deduct points from user balance.
-                                        db.run('UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?', [userId]);
-                                        
-                                        // Update the wheel spins log.
-                                        db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionId, userId, transactionType, -5000]);
+        if (user.points_balance < 5000) {
+            return res.status(400).send('Insufficient points');
+        }
 
-                                        // Add to the jackpot.
-                                        db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, 100]);
+        const pendingSpins = await getQuery(`SELECT * FROM wheel_spins WHERE result = 'PENDING' AND userId = ? ORDER BY rowid DESC LIMIT 1;`, [user.userId]);
+        const pendingSpin = pendingSpins[0]; // Since getQuery uses db.all, it returns an array
 
-                                        // Update the transaction log.
-                                        db.run('INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?)', 
-                                            [spinId, userId, 'gold', 'PENDING', transactionId], (err) => {
-                                                if (err) {
-                                                    return res.status(500).json({ error: 'Failed to create spin record' });
-                                                }
+        if (pendingSpin) {
+            return res.status(400).send('Free spin in progress.');
+        }
 
-                                                res.status(200).json({ spinId });
-                                        });
-                                    });
-                                });
-                                }
-                        });
-                } else {
-                    console.log('No matching record found for the given userId');
-                    return res.status(500).json({ error: 'Failed to create spin record' });
-                }
-            }
-        });
+        await runQuery('BEGIN TRANSACTION');
+
+        const spinId = uuidv4();
+        const transactionId = uuidv4();
+        const jackpotId = uuidv4();
+
+        await runQuery(`UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?;`, [user.userId]);
+        await runQuery(`INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`, [transactionId, user.userId, "Wager: Gold Spin", -5000]);
+        await runQuery(`INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`, [jackpotId, spinId, user.userId, 500]);
+        await runQuery(`INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`, [spinId, user.userId, 'gold', 'PENDING', transactionId]);
+
+        await runQuery('COMMIT');
+
+        sendEvent('spin', pageId, { message: `Spin: ${username}`, timestamp: new Date() });
+
+        res.json({ spinId });
     } catch (error) {
-        res.status(500).json({ error: error });
+        await runQuery('ROLLBACK');
+        console.error('Failed to process spin:', error);
+        res.status(500).send('Failed to process spin');
     }
 });
 
 // HTTP POST endpoint to trigger a public wheel spin
-app.post('/api/g/wheel/spin', (req, res) => {
+app.post('/api/g/wheel/spin', authenticateToken, async (req, res) => {
     const username = req.body.username;
-    let userId = 0;
+    const pageId = req.body.pageId;
+    
+    if (req.username !== username) {
+        return res.status(403).send("Access denied");
+    }
 
-    // Use the username to resolve the userId
-    db.get(`SELECT userId FROM users WHERE username = ?;`,[username], (err, row) => {
-        if (err) {
-            console.error('Error executing SQL: ' + err.message);
-        } else {
-            if (row) {
-                console.log('UserId found:', row.userId);
-                console.log('Username found:', username);
-                userId = row.userId;
-                    // Check if there is a spin in progress.
-                    db.get(`SELECT * FROM wheel_spins WHERE result = ?;`,['PENDING'], (err, row) => {
-                        if(typeof row !== 'undefined') {
-                            let error = username +' rejected. Spin in progress.'
-                            console.log(error)
-                            return res.status(400).json({ error: 'Free spin in progress.' });
-                        }
-                        
-                        else {
-                            // Check if the user has enough points
-                            console.log(`user is ${userId}`)
-                            console.log(row)
-                            db.get('SELECT points_balance FROM users WHERE userId = ?', [userId], (err, row) => {
-                                console.log(userId);
-                                console.log(row);
-                                if (err) {
-                                    return res.status(500).json({ error: 'Database error' });
-                                }
-                            
-                                if (row.points_balance < 5000) {
-                                    return res.status(400).json({ error: 'Insufficient points' });
-                                }
-                            
-                                const spinId = uuidv4();
-                                const transactionId = uuidv4();
-                                const jackpotId = uuidv4();
-                                const transactionType = "Wager: Public Spin";
+    try {
+        checkAndResolvePendingSpins();
+        const users = await getQuery(`SELECT userId, points_balance FROM users WHERE username = ?;`, [username]);
+        const user = users[0]; // Since getQuery uses db.all, it returns an array
 
-                                // Send a message to connected clients to spin the wheel.
-                                const spinData = { message: `public spinid ${spinId} from ${username}`, timestamp: new Date() };
-                                console.log(spinData);
-                                sendEvent('spin', 'public', spinData);
-                                
-                                db.serialize(() => {
-                                    // Deduct points from user balance.
-                                    db.run('UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?', [userId]);
-                                    
-                                    // Update the wheel spins log.
-                                    db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionId, userId, transactionType, -5000]);
-
-                                    // Add to the jackpot.
-                                    db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, 100]);
-
-                                    // Update the transaction log.
-                                    db.run('INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?)', 
-                                        [spinId, userId, 'public', 'PENDING', transactionId], (err) => {
-                                            if (err) {
-                                                return res.status(500).json({ error: 'Failed to create spin record' });
-                                            }
-
-                                            res.status(200).json({ spinId });
-                                    });
-                                });
-                            });
-                            }
-                    });
-            } else {
-                console.log('No matching record found for the given userId');
-                return res.status(500).json({ error: 'Failed to create spin record' });
-            }
+        if (!user) {
+            return res.status(404).send('User not found');
         }
-    });
 
+        if (user.points_balance < 5000) {
+            return res.status(400).send('Insufficient points');
+        }
 
+        const pendingSpins = await getQuery(`SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' ORDER BY rowid DESC LIMIT 1;`);
+        const pendingSpin = pendingSpins[0]; // Since getQuery uses db.all, it returns an array
+
+        if (pendingSpin) {
+            return res.status(400).send('Free spin in progress.');
+        }
+
+        await runQuery('BEGIN TRANSACTION');
+
+        const spinId = uuidv4();
+        const transactionId = uuidv4();
+        const jackpotId = uuidv4();
+
+        await runQuery(`UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?;`, [user.userId]);
+        await runQuery(`INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`, [transactionId, user.userId, "Wager: Public Spin", -5000]);
+        await runQuery(`INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`, [jackpotId, spinId, user.userId, 500]);
+        await runQuery(`INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`, [spinId, user.userId, 'public', 'PENDING', transactionId]);
+
+        await runQuery('COMMIT');
+
+        const spinData = { message: `public spinid ${spinId} from ${username}`, timestamp: new Date() };
+        sendEvent('spin', 'public', spinData);
+
+        res.json({ spinId });
+    } catch (error) {
+        await runQuery('ROLLBACK');
+        console.error('Failed to process spin:', error);
+        res.status(500).send('Failed to process spin');
+    }
 });
 
 // Prune pending/unresolved spins.
 const checkAndResolvePendingSpins = () => {
-    const oneMinuteAgo = new Date(Date.now() - 120000);  // 60000 milliseconds = 1 minute
-    db.all(`SELECT spinId, userId FROM wheel_spins WHERE result = 'PENDING' AND timestamp < ?`, [oneMinuteAgo.toISOString()], (err, spins) => {
+    const now = new Date();
+    const oneMinuteAgo = new Date(now.getTime() - 30000);  // 30000 milliseconds = 30 seconds
+    let sqliteTimestamp = oneMinuteAgo.toISOString().replace('T', ' ').slice(0, 19);
+    console.log("Current time:", now);
+    console.log("One minute ago:", oneMinuteAgo);
+
+    db.all(`SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'PENDING' AND timestamp < ?`, [sqliteTimestamp], (err, spins) => {
         if (err) {
             console.error("Error fetching pending spins:", err);
             return;
         }
+
+        if (spins.length === 0) {
+            console.log("No pending spins older than one minute.");
+            return;
+        }
+
+        console.log(`Found ${spins.length} pending spins to process.`);
         spins.forEach(spin => {
+            console.log(`Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`);
             // Update spin status to FAILED
             db.run(`UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`, [spin.spinId], (err) => {
                 if (err) {
-                    console.error("Error updating spin status:", err);
+                    console.error("Error updating spin status for spin ID " + spin.spinId + ":", err);
                     return;
                 }
                 // Refund logic here
@@ -1154,18 +1108,55 @@ const checkAndResolvePendingSpins = () => {
 // Function to handle refund
 const refundUser = (userId, spinId) => {
     console.log(`Refunding user ${userId} for spin ${spinId}`);
-    // Add refund logic, e.g., update user balance, log transaction, etc.
     const transactionId = uuidv4();
     const transactionType = "Refund";
     const jackpotId = uuidv4();
-    db.run('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionId, userId, transactionType, +5000]);
-    db.run('UPDATE users SET points_balance = points_balance + 5000 WHERE userId = ?', [userId]);
-    db.run('INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)', [jackpotId, spinId, userId, -100]);
 
+    // Start a transaction
+    db.serialize(() => {
+        db.run('BEGIN');
+
+        const updateTransaction = `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)`;
+        const updateBalance = `UPDATE users SET points_balance = points_balance + 5000 WHERE userId = ?`;
+        const updateJackpot = `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`;
+
+        db.run(updateTransaction, [transactionId, userId, transactionType, +5000], function(err) {
+            if (err) {
+                console.error("Error inserting transaction:", err);
+                db.run('ROLLBACK');
+                return;
+            }
+
+            db.run(updateBalance, [userId], function(err) {
+                if (err) {
+                    console.error("Error updating user balance:", err);
+                    db.run('ROLLBACK');
+                    return;
+                }
+
+                db.run(updateJackpot, [jackpotId, spinId, userId, -100], function(err) {
+                    if (err) {
+                        console.error("Error updating jackpot rakes:", err);
+                        db.run('ROLLBACK');
+                        return;
+                    }
+
+                    // If all operations are successful, commit the transaction
+                    db.run('COMMIT', err => {
+                        if (err) {
+                            console.error("Error committing transaction:", err);
+                            return;
+                        }
+                        console.log("Refund processed successfully for user", userId);
+                    });
+                });
+            });
+        });
+    });
 };
 
 // Set interval to run this cleanup function every minute
-setInterval(checkAndResolvePendingSpins, 60000);
+// setInterval(checkAndResolvePendingSpins, 5000);
 
 // HTTP POST endpoint to record the result of a public wheel spin.
 app.post('/api/g/wheel/spin/result', (req, res) => {

@@ -326,7 +326,6 @@ function displayWagerCost(wager) {
   const costDiv = document.createElement('div');
   costDiv.className = 'arcade-animation-neg';
   costDiv.textContent = `-${wager} Points!`;
-  console.log(document.getElementById('rewardDiv'));
   const rewardDiv = document.getElementById('rewardDiv');
     if (rewardDiv) {
       rewardDiv.remove(); // Remove the animation element after it completes
@@ -363,8 +362,29 @@ function setupSpinListener(username) {
 
   eventSource.onerror = function(event) {
       console.error('EventSource failed:', event);
+      checkConnection(eventSource);
       eventSource.close();
   };
+}
+
+// Function for reconnecting to Event Source
+var reconnectAttempts = 0;
+
+function checkConnection(es) {
+    if (es.readyState === EventSource.CLOSED) {
+        reconnectAttempts++;
+
+        if (reconnectAttempts > 5) { // After 5 failed attempts, refresh the page
+            console.log('Reconnecting failed multiple times, refreshing the page...');
+            window.location.reload();
+        } else {
+            console.log('Connection was closed, attempting to reconnect...');
+            setTimeout(function() {
+                eventSource = new EventSource('/events');
+                attachEventHandlers(eventSource);
+            }, 5000);
+        }
+    }
 }
 
 // Launches Spin Listener
