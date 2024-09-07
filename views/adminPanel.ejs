@@ -14,40 +14,108 @@
     <!-- Manual Wheel Spin Form -->
     <div class="panel">
     <h3>Manual Wheel Spin</h3>
-    <form action="/api/g/wheel/spin" method="POST">
+    <form id="manualSpinForm" action="/api/g/wheel/jackpot" method="POST">
         <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required>
-        <button type="submit">Spin Wheel</button>
+        <input type="text" id="spinUsername" name="username" required>
+        <button id="spin" type="submit">Spin Wheel</button>
     </form>
+    <div id="spinStatus" class="spin-status"></div>
     </div> 
+
+<script>
+    document.getElementById('manualSpinForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+    
+        var username = document.getElementById('spinUsername').value;
+        fetch('/api/g/wheel/spin', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({username: username})
+        })
+        .then(response => {
+            if (!response.ok) { // Handle non-200 responses
+                throw new Error('Spin already in progress');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+            document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
+            }
+        })
+        .catch(error => {
+            console.error('Error making the POST request:', error);
+            document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
+            document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
+            setTimeout(() => {
+                document.getElementById('spinStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+        }, 2000); 
+        });
+    });
+</script>
 
     <!-- Jackpot Panel -->
     <div class="panel">
     <h3>Jackpot Panel</h3>
-    <form action="/api/g/wheel/jackpot" method="POST">
+    <form id='jackpotForm' action="/api/g/wheel/jackpot" method="POST">
         <label for="jackpotAmount">Amount:</label>
         <input type="number" id="jackpotAmount" name="amount" required>
-        <select name="action">
-            <option value="add">Add to Jackpot</option>
-            <option value="remove">Remove from Jackpot</option>
-        </select>
         <button type="submit">Update Jackpot</button>
+        <div id="jackpotStatus" class="spin-status"></div>
     </form>
     </div> 
+
+    <script>
+        document.getElementById('jackpotForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+        
+            var jackpotAmount = document.getElementById('jackpotAmount').value;
+            fetch('/api/g/wheel/jackpot', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({amount: jackpotAmount})
+            })
+            .then(response => {
+                if (!response.ok) { // Handle non-200 responses
+                    throw new Error('Failed to update the jackpot.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const message = data.message;
+                console.log(message);
+                if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                document.getElementById('jackpotStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                document.getElementById('jackpotStatus').textContent = 'Jackpot updated successfully.'; // Display error message
+                document.getElementById('jackpotStatus').style.visibility = 'visible'; // Make the status message visible
+                }
+            })
+            .catch(error => {
+                console.error('Error making the POST request:', error);
+                document.getElementById('jackpotStatus').textContent = 'Failed to update the jackpot.........'; // Display error message
+                document.getElementById('jackpotStatus').style.visibility = 'visible'; // Make the status message visible
+                setTimeout(() => {
+                    document.getElementById('jackpotStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            }, 2000); 
+            });
+        });
+    </script>
     
     <!-- Points Panel -->
     <div class="panel">
     <h3>Points Panel</h3>
-    <form id="pointsTransferForm" action="/api/u/username/transfer" method="POST">
+    <form id="pointsTransferForm" action="/api/admin/transfer/username" method="POST">
         <label for="pointsUsername">Username:</label>
         <input type="text" id="pointsUsername" name="username" required>
         <label for="pointsAmount">Amount:</label>
         <input type="number" id="pointsAmount" name="amount" required>
-        <select name="action">
-            <option value="add">Add Points</option>
-            <option value="remove">Remove Points</option>
-        </select>
         <button type="submit">Transfer Points</button>
+        <div id="transferStatus" class="spin-status"></div>
+
     </form>
     </div>
     
@@ -58,20 +126,33 @@
         
             var amount = document.getElementById('pointsAmount').value;
             var username = document.getElementById('pointsUsername').value;
-            console.log(amount);
+
+            console.log(username);
             // Prepare the fetch request
             fetch(this.getAttribute('action').replace('username', encodeURIComponent(username)), {
                 headers: {    "content-type": "application/json",},
                 body: JSON.stringify({ amount: amount }),
                 method: 'POST',
             }).then(response => {
+                if (!response.ok) { // Handle non-200 responses
+                    throw new Error('Failed to transfer the points.');
+                }
                 return response.json();
             }).then(data => {
-                console.log('Success:', data);
-                // handle success
+                const message = data.message;
+                console.log(message);
+                if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                document.getElementById('transferStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                document.getElementById('transferStatus').textContent = 'PAT transferred successfully.'; // Display error message
+                document.getElementById('transferStatus').style.visibility = 'visible'; // Make the status message visible
+                }
             }).catch(error => {
-                console.error('Error:', error);
-                // handle error
+                console.error('Error making the POST request:', error);
+                document.getElementById('transferStatus').textContent = 'Transfer failed. Check the username.'; // Display error message
+                document.getElementById('transferStatus').style.visibility = 'visible'; // Make the status message visible
+                setTimeout(() => {
+                    document.getElementById('transferStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            }, 2000); 
             });
         });
     </script>
@@ -79,7 +160,7 @@
     <!-- User Class Assignment Form -->
     <div class="panel">
     <h3>Assign User Class</h3>
-    <form action="/api/u/username/class" method="POST" onsubmit="return setUsernameAction(this)">
+    <form id="classEditForm" action="/api/u/username/class/update" method="POST" onsubmit="return setUsernameAction(this)">
         <label for="userClassUsername">Username:</label>
         <input type="text" id="userClassUsername" name="username" required>
     
@@ -88,8 +169,46 @@
             <option value="">Select a class...</option>
         </select>
         <button type="submit">Set Class</button>
+        <div id="classEditStatus" class="spin-status"></div>
     </form>
+    </div>
 
+        <!-- This edits the URL in the POST form. -->
+        <script>
+            document.getElementById('classEditForm').addEventListener('submit', function(event) {
+                event.preventDefault();
+                const username = document.getElementById('userClassUsername').value;
+                const classSelect = document.getElementById('userClass').value;
+                console.log(username);
+                // Prepare the fetch request
+                fetch(this.getAttribute('action').replace('username', encodeURIComponent(username)), {
+                    headers: {    "content-type": "application/json",},
+                    body: JSON.stringify({ class: classSelect }),
+                    method: 'POST',
+                }).then(response => {
+                    if (!response.ok) { // Handle non-200 responses
+                        throw new Error('Failed to edit class.');
+                    }
+                    return response.json();
+                }).then(data => {
+                    const message = data.message;
+                    console.log(message);
+                    if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                    document.getElementById('classEditStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    document.getElementById('classEditStatus').textContent = 'Class edited successfully.'; // Display error message
+                    document.getElementById('classEditStatus').style.visibility = 'visible'; // Make the status message visible
+                    }
+                }).catch(error => {
+                    console.error('Error making the POST request:', error);
+                    document.getElementById('classEditStatus').textContent = 'Class change failed. Check the username.'; // Display error message
+                    document.getElementById('classEditStatus').style.visibility = 'visible'; // Make the status message visible
+                    setTimeout(() => {
+                        document.getElementById('classEditStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                }, 2000); 
+                });
+            });
+        </script>
+    
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const classSelect = document.getElementById('userClass');
@@ -109,13 +228,8 @@
             });
         });
         
-        function setUsernameAction(form) {
-            const username = document.getElementById('userClassUsername').value;
-            form.action = form.action.replace('username', encodeURIComponent(username));
-            return true;
-        }
         </script>
-    </div>
+    
 
     <!-- Class List Management Form -->
     <div class="panel">
@@ -126,11 +240,13 @@
             <option value="add">Add</option>
             <option value="remove">Remove</option>
         </select>
-
+    <br>
+    <br>
         <label for="className">Class Name:</label>
         <input type="text" id="className" name="className" required>
         
         <button type="submit">Submit</button>
+        <div id="classListStatus" class="spin-status"></div>
     </form>
 
     <div id="currentClasses">
@@ -138,6 +254,54 @@
         <ul id="classList"></ul>
     </div>
     </div>
+
+            <!-- This edits the URL in the POST form. -->
+            <script>
+                document.getElementById('classListForm').addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    const action = document.getElementById('classAction').value;
+                    const className = document.getElementById('className').value;
+                    console.log(className);
+                    // Prepare the fetch request
+                    fetch('/api/classes/edit', {
+                        headers: {    "content-type": "application/json",},
+                        body: JSON.stringify({ action: action, className: className }),
+                        method: 'POST',
+                    }).then(response => {
+                        if (!response.ok) { // Handle non-200 responses
+                            throw new Error('Failed to edit class list.');
+                        }
+                        return response.json();
+                    }).then(data => {
+                        fetch('/api/classes')
+                            .then(response => response.json())
+                            .then(data => {
+                                const classList = document.getElementById('classList');
+                                classList.innerHTML = "";
+                                data.forEach(cls => {
+                                    const li = document.createElement('li');
+                                    li.textContent = cls;
+                                    classList.appendChild(li);
+                                });
+                            })
+                            .catch(error => console.error('Error fetching classes:', error));
+                        const message = data.message;
+                        console.log(message);
+                        if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                        document.getElementById('classListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        document.getElementById('classListStatus').textContent = 'Class list edited successfully.'; // Display error message
+                        document.getElementById('classListStatus').style.visibility = 'visible'; // Make the status message visible
+                        }
+                    }).catch(error => {
+                        console.error('Error making the POST request:', error);
+                        document.getElementById('classListStatus').textContent = 'Class list change failed. Check the classname.'; // Display error message
+                        document.getElementById('classListStatus').style.visibility = 'visible'; // Make the status message visible
+                        setTimeout(() => {
+                            document.getElementById('classListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    }, 2000); 
+                    });
+                });
+            </script>
 
     <!-- PRize List Management Form -->
     <div class="panel">
@@ -153,16 +317,78 @@
             <input type="text" id="prizeName" name="prizeName" required>
             <div id="costContainer">  <!-- Container for the cost input -->
                 <label for="cost">Prize Cost:</label>
-                <input type="text" id="cost" name="cost">
+                <input type="text" id="prizeCost" name="cost">
             </div>
             <button type="submit">Submit</button>
+            <div id="PrizeListStatus" class="spin-status"></div>
         </form>
     
         <div id="currentPrizes">
             <h4>Current Prizes:</h4>
             <ul id="prizeList"></ul>
         </div>
-
+            <!-- This edits the URL in the POST form. -->
+            <script>
+                document.getElementById('prizeListForm').addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    const action = document.getElementById('prizeAction').value;
+                    const prizeName = document.getElementById('prizeName').value;
+                    const cost = document.getElementById('prizeCost').value;
+                    // Prepare the fetch request
+                    fetch('/api/prizes/edit', {
+                        headers: {    "content-type": "application/json",},
+                        body: JSON.stringify({ action: action, prizeName: prizeName, cost: cost }),
+                        method: 'POST',
+                    }).then(response => {
+                        if (!response.ok) { // Handle non-200 responses
+                            throw new Error('Failed to edit prize list.');
+                        }
+                        return response.json();
+                    }).then(data => {
+                        fetch('/api/prizes')
+                            .then(response => response.json())
+                            .then(data => {
+                                const prizeList = document.getElementById('prizeList');
+                                prizeList.innerHTML = "";
+                                // Ensure data is an array and has items
+                                if (Array.isArray(data) && data.length > 0) {
+                                    data.forEach(prize => {
+                                        const li = document.createElement('li');
+                                        // Assuming each 'prize' object has 'prize' and 'cost' properties
+                                        li.textContent = `${prize.prize} - Cost: ${prize.cost} Coins`;
+                                        prizeList.appendChild(li);
+                                    });
+                                } else {
+                                    // Handle case where no prizes are returned or data is not in expected format
+                                    const li = document.createElement('li');
+                                    li.textContent = 'No prizes available.';
+                                    prizeList.appendChild(li);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching prizes:', error);
+                                const prizeList = document.getElementById('prizeList');
+                                const li = document.createElement('li');
+                                li.textContent = 'Failed to load prizes.';
+                                prizeList.appendChild(li);
+                            });
+                        const message = data.message;
+                        console.log(message);
+                        if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        document.getElementById('PrizeListStatus').textContent = 'Class list edited successfully.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        }
+                    }).catch(error => {
+                        console.error('Error making the POST request:', error);
+                        document.getElementById('PrizeListStatus').textContent = 'Class list change failed. Check the classname.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        setTimeout(() => {
+                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    }, 2000); 
+                    });
+                });
+            </script>
 
 </body>
 <script>

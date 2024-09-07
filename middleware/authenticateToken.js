@@ -15,7 +15,8 @@ const authenticateToken = (req, res, next) => {
         req.username = decoded.username;
         next();
       } catch (err) {
-        return res.status(401).json({ message: 'Invalid token.' });
+        req.flash('error', "Please login again.");
+        return res.redirect('/login');
       }
 }
 

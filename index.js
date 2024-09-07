@@ -11,7 +11,7 @@ const {fileURLToPath} = require('url')
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const morgan = require('morgan');
-const { registerUser, loginUser } = require('./user.controller');
+const { registerUser, loginUser, updateUsername, updateEmail, updatePassword, updateDisplayname, updateAvatar, updateDiscordId, updateTwitchId } = require('./user.controller');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
 const authenticateToken = require('./middleware/authenticateToken');
 const cookieParser = require('cookie-parser');
@@ -19,6 +19,17 @@ const session = require('express-session');
 const flash = require('connect-flash');
 const crypto = require('crypto');
 const sgMail = require('@sendgrid/mail');
+const multer = require('multer');
+const sharp = require('sharp');
+const AWS = require('aws-sdk');
+const upload = multer({ dest: 'uploads/' });
+
+// AWS S3 configuration
+const s3 = new AWS.S3({
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    region: process.env.AWS_REGION
+  });
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
@@ -112,7 +123,7 @@ app.get('/', addUser, async (req, res) => {
 app.get('/admin/panel', addUser, (req, res) => {
     console.log(req.user);
     const userType = req.user ? req.user.class : null;
-    username = req.user.username;
+    const username = req.user ? req.user.username : null;
     if (userType === 'Admin' || userType === 'Staff') {
         let errorMessages = req.flash('error');
         let successMessages = req.flash('success');
@@ -210,13 +221,14 @@ app.get('/api/g/wheel/last-result', async (req, res) => {
         }
 
         // Fetch username based on userId
-        const userSql = `SELECT username FROM users WHERE userId = ?`;
-        const user = await getQuery(userSql, [lastResult.userId]);
+        const userSql = `SELECT displayname FROM users WHERE userId = ?`;
+        const user = await getQuery(userSql, [lastResult[0].userId]);
+        console.log(user[0]);
 
         if (lastResult.result === "PENDING") {
-            res.render('nowSpinning', { username: user.username });
+            res.render('nowSpinning', { username: user[0].displayname });
         } else {
-            res.render('lastSpinner', { username: user.username });
+            res.render('lastSpinner', { username: user[0].displayname });
         }
     } catch (error) {
         console.error('Database error:', error);
@@ -352,7 +364,7 @@ app.get('/rankings', addUser, async (req, res) => {
     const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
     
     const sql = `
-        SELECT username, points_balance
+        SELECT username, points_balance, displayname
         FROM users
         ORDER BY points_balance DESC
         LIMIT 100
@@ -378,6 +390,218 @@ app.post('/logout', (req, res) => {
     res.clearCookie('jwt');
     res.redirect('/');
 });
+
+// Get user profile
+app.get('/u/:username/profile', addUser, async (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    const usernameProfile = req.params.username;  // Fallback to null if no user in session
+    const sql = 'SELECT username, displayname, class, avatar, email, points_balance FROM users WHERE username = ?';
+
+    try {
+        const results = await getQuery(sql, [usernameProfile]);
+        if (results.length > 0) {
+            const user = results[0]; // Extract user data
+            res.render('profile', { // Render profile.ejs with user data
+                username: username,
+                usernameProfile: user.username,
+                displayname: user.displayname,
+                classh: user.class,
+                avatar: user.avatar,
+                email: user.email,
+                points_balance: user.points_balance
+            });
+        } else {
+            res.status(404).send("User not found.");
+        }
+    } catch (error) {
+        console.error("Failed to retrieve user data:", error);
+        res.status(500).send("Internal Server Error.");
+    }
+});
+
+// Get user profile
+app.get('/u/:username/tip', addUser, async (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    const usernameProfile = req.params.username;  // Fallback to null if no user in session
+    const sql = 'SELECT username, displayname, class, avatar, email, points_balance FROM users WHERE username = ?';
+
+    try {
+        const results = await getQuery(sql, [usernameProfile]);
+        if (results.length > 0) {
+            const user = results[0]; // Extract user data
+            res.render('tip', { // Render profile.ejs with user data
+                username: username,
+                usernameProfile: user.username,
+                displayname: user.displayname,
+                classh: user.class,
+                avatar: user.avatar,
+                email: user.email,
+                points_balance: user.points_balance
+            });
+        } else {
+            res.status(404).send("User not found.");
+        }
+    } catch (error) {
+        console.error("Failed to retrieve user data:", error);
+        res.status(500).send("Internal Server Error.");
+    }
+});
+
+// Tip another user
+app.post('/u/:username/tip', authenticateToken, addUser, async (req, res) => {
+    const { amount } = req.body;
+    const senderUsername = req.user ? req.user.username : null;  // Logged in user's username
+    const recipientUsername = req.params.username;
+
+    if (!senderUsername) {
+        return res.status(401).send('Authentication required');
+    }
+
+    if (senderUsername === recipientUsername) {
+        return res.status(400).send('Cannot tip oneself');
+    }
+
+    try {
+        // Check both users exist and fetch their current balances
+        const users = await getQuery('SELECT username, userId, points_balance FROM users WHERE username IN (?, ?)', [senderUsername, recipientUsername]);
+        if (users.length !== 2) {
+            return res.status(404).send('One or both users not found');
+        }
+
+        const sender = users.find(user => user.username === senderUsername);
+        const recipient = users.find(user => user.username === recipientUsername);
+
+        if (sender.points_balance < amount) {
+            return res.status(400).send('Insufficient balance');
+        }
+
+        // Deduct amount from sender's balance
+        await runQuery('UPDATE users SET points_balance = points_balance - ? WHERE userId = ?', [amount, sender.userId]);
+
+        // Add amount to recipient's balance 
+        await runQuery('UPDATE users SET points_balance = points_balance + ? WHERE userId = ?', [amount, recipient.userId]);
+
+        // Log transaction for sender
+        const transactionIdSender = uuidv4();
+        await runQuery('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionIdSender, sender.userId, 'tip sent', -amount]);
+
+        // Log transaction for receiver
+        const transactionIdReceiver = uuidv4();
+        await runQuery('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', [transactionIdReceiver, recipient.userId, 'tip received', amount]);
+        console.log('Tip sent successfully.')
+        res.json({ message: "Tip sent successfully." });
+    } catch (error) {
+        console.error('Failed to process tip:', error);
+        res.status(500).send('Failed to process tip');
+    }
+});
+
+// Get the user avatar
+app.get('/api/u/:username/avatar', addUser, async (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    const userId = req.user ? req.user.userId : null;  // Fallback to null if no user in session
+    const sql = 'SELECT avatar FROM users WHERE userId = ?';
+    try {
+        const user = await getQuery(sql, [userId]);
+        if (user) {
+            res.json({ avatar: user[0].avatar });
+        } else {
+            res.status(404).json({ error: 'User not found' });
+        }
+    } catch (error) {
+        console.error("Failed to retrieve avatar:", error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get user profile editor
+app.get('/u/:username/profile/edit', authenticateToken, addUser, async (req, res) => {
+    const username = req.user ? req.user.username : null;  // Fallback to null if no user in session
+    const usernameProfile = req.params.username;  // Fallback to null if no user in session
+    const sql = 'SELECT username, displayname, avatar, email, points_balance FROM users WHERE username = ?';
+
+    try {
+        if (username == usernameProfile) {
+            const results = await getQuery(sql, [usernameProfile]);
+            if (results.length > 0) {
+                const user = results[0]; // Extract user data
+                let errorMessages = req.flash('error');
+                let successMessages = req.flash('success');
+                res.render('editProfile', { // Render profile.ejs with user data
+                    username: user.username,
+                    displayname: user.displayname,
+                    avatar: user.avatar,
+                    email: user.email,
+                    points_balance: user.points_balance, 
+                    errors: errorMessages,
+                    success: successMessages
+                });
+            } else {
+                res.status(404).send("User not found.");
+            }
+        } else {
+                res.redirect(`/u/${username}/profile/edit`);
+        }
+    } catch (error) {
+        console.error("Failed to retrieve user data:", error);
+        res.status(500).send("Internal Server Error.");
+    }
+});
+
+// Fetch user profile
+app.get('/api/u/:username/profile', async (req, res) => {
+    const username = req.params.username;
+    const sql = 'SELECT username, class, displayname, avatar, points_balance FROM users WHERE username = ?';
+    
+    getQuery(sql, [username])
+        .then(results => {
+            if (results.length > 0) {
+                res.json(results[0]);
+            } else {
+                res.status(404).send("User not found.");
+            }
+        })
+        .catch(error => {
+            console.error("Failed to retrieve user data:", error);
+            res.status(500).send("Failed to retrieve user data.");
+        });
+});
+
+// Update user profile
+// app.post('/api/u/:username/profile', addUser, async (req, res) => {
+//     const { username, displayname, avatar, email, password } = req.body;
+//     const userId = req.user ? req.user.userId : null;  // Fallback to null if no user in session
+
+//     try {
+//         // Handle password update separately if provided
+//         if (password) {
+//             const hashedPassword = await bcrypt.hash(password, 10);
+//             await runQuery('UPDATE users SET password = ? WHERE userId = ?', [hashedPassword, userId]);
+//         }
+
+//         const updateSql = 'UPDATE users SET username = ?, displayname = ?, avatar = ?, email = ? WHERE userId = ?';
+//         const result = await runQuery(updateSql, [username, displayname, avatar, email, userId]);
+        
+//         if (result.changes > 0) {
+//             res.send("Profile updated successfully.");
+//         } else {
+//             res.status(404).send("No updates made. User not found.");
+//         }
+//     } catch (error) {
+//         console.error("Failed to update profile:", error);
+//         res.status(500).send("Failed to update profile.");
+//     }
+// });
+
+app.post('/api/u/:username/update/username', authenticateToken, addUser, updateUsername)
+
+app.post('/api/u/:username/update/displayname', authenticateToken, addUser, updateDisplayname)
+
+app.post('/api/u/:username/update/email', authenticateToken, addUser, updateEmail)
+
+app.post('/api/u/:username/update/password', authenticateToken, addUser, updatePassword)
+
+app.post('/api/u/:username/update/avatar', authenticateToken, addUser, upload.single('avatar'), updateAvatar)
 
 // HTTP post endpoint to shop
 app.post('/shop', addUser, async (req, res) => {
@@ -519,8 +743,8 @@ app.get('/u/:username/wheel', authenticateToken, async (req, res) => {
     const username = req.params.username;
     try {
         if (req.username !== username) {
-            console.log(req.userId);
-            return res.status(403).send("Access denied");
+            req.flash('error', 'Invalid login.');
+            return res.redirect('/login');
         }
         res.render('wheel', {user: req.username});
         // Proceed with fetching user data and generating wheel
@@ -537,18 +761,29 @@ app.get('/g/wheel', addUser, (req, res) => {
 });
 
 // HTTP Post endpoint to update the jackpot
-app.post('/api/g/wheel/jackpot', authenticateToken, async (req, res) => {
+app.post('/api/g/wheel/jackpot', addUser, async (req, res) => {
     const { amount } = req.body;
-    const userId = req.userId; // Assuming this is set by the authenticateToken middleware
-    const jackpotId = uuidv4; // Function to generate a UUID v4
-
-    const sql = `INSERT INTO jackpot_rakes (jackpotid, spinid, userid, amount) VALUES (?, ?, ?, ?)`;
-    try {
-        await runQuery(sql, [jackpotId, 0, userId, amount]);
-        res.json({ message: "Jackpot updated successfully." });
-    } catch (error) {
-        console.error(error);
-        res.status(500).send("Failed to update the jackpot.");
+    const userId = req.user.userId; // Assuming this is set by the authenticateToken middleware
+    const jackpotId = uuidv4(); // Function to generate a UUID v4
+    const spinId = uuidv4();
+    const userType = req.user ? req.user.class : null;
+    const username = req.user ? req.user.username : null;
+    if (userType === 'Admin' || userType === 'Staff') {
+        const sql = `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`;
+        try {
+            await runQuery(sql, [jackpotId, spinId, userId, amount]);
+            res.json({ message: "Jackpot updated successfully." });
+            // req.flash('success', "Jackpot updated successfully.");
+            // return res.redirect('/admin/panel');
+        } catch (error) {
+            console.error(error);
+            res.json({ message: "Failed to update the jackpot." });
+            // req.flash('error', "Failed to update the jackpot.");
+            // return res.redirect('/admin/panel');
+        }
+    } else {
+        req.flash('error', "Access denied. You must be an admin or staff to access this page.");
+        return res.redirect('/login');
     }
 });
 
@@ -571,41 +806,46 @@ app.post('/api/g/wheel/results', async (req, res) => {
 });
 
 // HTTP Post endpoint to update the user balance.
-app.post('/api/u/:username/transfer', authenticateToken, async (req, res) => {
-    console.log(req);
+app.post('/api/admin/transfer/:username', authenticateToken, addUser, async (req, res) => {
     const amount  = req.body.amount;
-    console.log (amount)
     const username = req.params.username;
+    const userType = req.user ? req.user.class : null;
     const transactionId = uuidv4(); // Function to generate a UUID v4
 
-    // Begin transaction to ensure atomicity
-    db.serialize(async () => {
-        db.run("BEGIN TRANSACTION");
-        try {
-            // Update user's balance
-            let sql = `UPDATE users SET points_balance = points_balance + ? WHERE username = ?`;
-            await runQuery(sql, [amount, username]);
+    if (userType === 'Admin' || userType === 'Staff') {
+        // Begin transaction to ensure atomicity
+        db.serialize(async () => {
+            db.run("BEGIN TRANSACTION");
+            try {
+                // Update user's balance
+                let sql = `UPDATE users SET points_balance = points_balance + ? WHERE username = ?`;
+                await runQuery(sql, [amount, username]);
 
-            // Log the transaction
-            sql = `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)`;
-            const user = await getQuery(`SELECT userId FROM users WHERE username = ?`, [username]);
-            await runQuery(sql, [transactionId, user.userId, "staff transfer", amount]);
+                // Log the transaction
+                sql = `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)`;
+                const user = await getQuery(`SELECT userId FROM users WHERE username = ?`, [username]);
+                console.log(user);
+                await runQuery(sql, [transactionId, user[0].userId, "staff transfer", amount]);
 
-            db.run("COMMIT");
-            res.json({ message: "Points transferred successfully." });
-        } catch (error) {
-            db.run("ROLLBACK");
-            console.error(error);
-            res.status(500).send("Failed to transfer points.");
-        }
-    });
+                db.run("COMMIT");
+                res.json({ message: "Points transferred successfully." });
+            } catch (error) {
+                db.run("ROLLBACK");
+                console.error(error);
+                res.status(500).send("Failed to transfer points.");
+            }
+        });
+    } else {
+        req.flash('error', "Access denied. You must be an admin or staff to access this page.");
+        return res.redirect('/login');
+    }
 });
 
 // HTTP POST endpoint to update a user class.
-app.post('/api/u/:username/class', addUser, async (req, res) => {
+app.post('/api/u/:username/class/update', addUser, async (req, res) => {
     console.log(req.user);
     const userType = req.user ? req.user.class : null;
-    username = req.user.username;
+    const username = req.user ? req.user.username : null;
     if (userType === 'Admin' || userType === 'Staff') {
         const username = req.params.username;
         const userClass = req.body.class;
@@ -632,19 +872,30 @@ app.post('/api/u/:username/class', addUser, async (req, res) => {
 app.post('/api/classes/edit', addUser, async (req, res) => {
     console.log(req.user);
     const userType = req.user ? req.user.class : null;
-    username = req.user.username;
+    const username = req.user ? req.user.username : null;
     if (userType === 'Admin' || userType === 'Staff') {
         const { action, className } = req.body;
 
         if (action === 'add') {
-            const classId = uuidv4(); // Function to generate a UUID v4
-            const sql = 'INSERT INTO classes (classId, class) VALUES (?, ?)';
-            try {
-                await runQuery(sql, [classId, className]);
-                res.json({ message: "Class added successfully." });
-            } catch (error) {
-                console.error(error);
-                res.status(500).send("Failed to add class.");
+            // First, check if the prize already exists
+            const checkSql = 'SELECT classId FROM classes WHERE class = ?';
+            const result = await getQuery(checkSql, [className]);
+            const existingPrize = result[0]; // Assuming getQuery returns an array of results
+
+            if (existingPrize) {
+                // If it exists, don't do anything.
+                res.status(200).send("Class already exists.");
+            } else {
+                // If it does not exist, add new class
+                const classId = uuidv4(); // Function to generate a UUID v4
+                const sql = 'INSERT INTO classes (classId, class) VALUES (?, ?)';
+                try {
+                    await runQuery(sql, [classId, className]);
+                    res.json({ message: "Class added successfully." });
+                } catch (error) {
+                    console.error(error);
+                    res.status(500).send("Failed to add class.");
+                }
             }
         } else if (action === 'remove') {
             const sql = 'DELETE FROM classes WHERE class = ?';
@@ -662,8 +913,6 @@ app.post('/api/classes/edit', addUser, async (req, res) => {
         } else {
             res.status(400).send("Invalid action specified.");
         }
-        
-        res.render('adminPanel', { user: username });
     } else {
         req.flash('error', "Access denied. You must be an admin or staff to access this page.");
         return res.redirect('/login');
@@ -687,33 +936,28 @@ app.post('/api/prizes/edit', addUser, async (req, res) => {
                     // If it exists, update the cost
                     const updateSql = 'UPDATE prizes SET cost = ? WHERE prizeId = ?';
                     await runQuery(updateSql, [cost, existingPrize.prizeId]);
-                    req.flash('success', "Prize cost updated successfully.");
-                    return res.redirect('/admin/panel');
+                    res.json({ message: "Prize cost edited successfully." });
                 } else {
                     // If it does not exist, add new prize
                     const prizeId = uuidv4();
                     const insertSql = 'INSERT INTO prizes (prizeId, prize, cost) VALUES (?, ?, ?)';
                     await runQuery(insertSql, [prizeId, prizeName, cost]);
-                    req.flash('success', "Prize added successfully.");
-                    return res.redirect('/admin/panel');
+                    res.json({ message: "Prize added successfully." });
                 }
             } else if (action === 'remove') {
                 const deleteSql = 'DELETE FROM prizes WHERE prize = ?';
                 const result = await runQuery(deleteSql, [prizeName]);
                 if (result.changes) {
-                    req.flash('success', "Prize removed successfully.");
-                    return res.redirect('/admin/panel');
+                    res.json({ message: "Prize removed successfully." });
                 } else {
-                    req.flash('error', "Prize not found.");
-                    return res.redirect('/admin/panel');
+                    res.status(404).send("Prize not found.");
                 }
             } else {
-                req.flash('error', "Invalid action specified.");
-                return res.redirect('/admin/panel');
+                res.status(400).send("Invalid action specified.");
             }
         } catch (error) {
-            req.flash('error', "Failed to process prize.");
-            return res.redirect('/admin/panel');
+            console.error(error);
+            res.status(500).send("Failed to process prize.");
         }
     } else {
         req.flash('error', "Access denied. You must be an admin or staff to access this page.");

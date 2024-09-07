@@ -3,9 +3,9 @@
 
 <div class="shop-container">
     <h1 class="shop-title">Arcade Shop</h1>
-    <ul class="product-list">
+    <div class="product-list">
         <!-- Items will be dynamically inserted here -->
-    </ul>
+    </div>
 </div>
 
 <script>
@@ -19,12 +19,18 @@
             // Ensure prizes data is an array and not empty
             if (Array.isArray(prizes) && prizes.length) {
                 prizes.forEach(prize => {
-                    const li = document.createElement('li');
+                    const li = document.createElement('div');
                     li.className = 'product-item';
                     li.innerHTML = `
+                        <div class="buy-btn-div">
                         <h3>${prize.prize}</h3>
-                        <p>Cost: ${prize.cost} Coins</p>
+                        </div>
+                        <div class="buy-btn-div">
+                        <p>PAT ${prize.cost.toLocaleString()}</p>
+                        </div>
+                        <div class="buy-btn-div">
                         <button class="buy-btn" data-product="${prize.prizeId}">Buy</button>
+                        </div>
                     `;
                     productList.appendChild(li);
                 });

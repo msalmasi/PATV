@@ -24,6 +24,21 @@
     grid-template-columns: 1fr 3fr;
 }
 
+.spin-status {
+    color: red;
+    font-size: 16px;
+    text-align: center;
+    padding: 10px;
+    visibility: hidden; /* Hide it by default */
+    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+    color: #ff0000;
+    text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000, 0 0 20px #ff0000 !important;
+  }
+
+  #coinslot {
+    cursor: url('http://localhost:3000/public/img/coin.png'), auto;
+  }
+
 #spinButton {
     width: 100px;
 }

@@ -1,8 +1,6 @@
 body {
     display: grid;
     grid-template-rows: auto;
-    justify-content: center;
-    align-items: center;
     /* background-color: #282c34; */
     background-color: #0F0F11;
     color: rgb(255, 255, 255);
@@ -44,7 +42,7 @@ font-size: 40px;
   }
 
   .shop-container {
-    max-width: 600px;
+    max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
     text-align: center;
@@ -56,15 +54,24 @@ font-size: 40px;
 }
 
 .product-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
     list-style: none;
     padding: 0;
+    width: 1000px;
 }
 
 .product-item {
-    background: #222;
-    margin: 10px 0;
+    display: grid;
+    grid-template-rows: 1fr 1fr 1fr;
+    background: #18181b;
+    margin: 10px 10px;
     padding: 10px;
-    border-radius: 5px;
+    border-color: #FFC600;
+    border-style: solid;
+    border-radius: 0px;
+    height: 200px;
+    width: 200px;
 }
 
 h3 {
@@ -78,6 +85,8 @@ h3 {
     color: black;
     cursor: pointer;
     transition: background-color 0.3s ease;
+    width: 100px;
+
 }
 
 .buy-btn:hover {
@@ -102,7 +111,8 @@ form {
     cursor: pointer;
     font-size: 16px;
     font-family: ubuntu;
-    margin-right: -20px;
+    width: 100px;
+    margin-left: -22px;
 }
 
 .link-button:focus {
@@ -124,14 +134,13 @@ form {
 }
 
 header {
-    width: 100vw;
+    width: 100%;
     font-family: ubuntu;
     align-items: center;
     background-color: #18181b;
     box-shadow: var(--shadow-elevation-1) !important;
     color: #3CC47C;
     margin-left: 0px;
-    min-width: 600px;
 }
 
 .navbar {
@@ -139,6 +148,7 @@ header {
     justify-content: space-between;
     align-items: center;
     color: white;
+    overflow: visible;
     padding: 20px 20px;
 }
 
@@ -195,33 +205,20 @@ header {
 .avatar {
     display: grid;
     align-items: center;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
 }
 
 .avatar img {
     width: 40px; /* Set the size of the avatar */
     height: 40px;
     margin-left: 10px; /* Adds some space between the Sign In link and the avatar */
+    border-radius: 50%; // This makes the image round
+    object-fit: cover; // Ensures the image covers the area without stretching
 }
 
-input[type="text"],
-input[type="password"] {
-    padding: 8px;
-    margin: 10px 0;
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    color: black;
-}
-
-label {
-    display: block;
-    margin-bottom: 5px;
-}
 
 button {
-    background: #5c67f2;
+    background: #3CC47C;
     color: white;
     border: none;
     padding: 10px 20px;
@@ -277,4 +274,164 @@ button {
 
 #costContainer {
     display: block; /* Hide by default, assuming 'Remove' is default */
+}
+
+.profile-container {
+    width: auto;
+    margin: 50px auto;
+    padding: 20px;
+    padding-bottom: 0;
+    border: 1px solid #333;
+    border-radius: 8px;
+    background-color: #111;
+}
+
+.profile-container img {
+    margin-right: 25px;
+    width: 40px; /* Set the size of the avatar */
+    height: 40px;
+    margin-left: 10px; /* Adds some space between the Sign In link and the avatar */
+    border-radius: 50%; // This makes the image round
+    object-fit: cover; // Ensures the image covers the area without stretching
+}
+
+#profile-header {
+    display: grid;
+    grid-template-rows: 60px 10px;
+    grid-template-columns: 70px 1fr;
+    align-items: center;
+}
+
+#profile-header h1 {
+padding-bottom: 15px;
+}
+
+#profile-content {
+    margin-left: 10px;
+    font-size: 20px;
+}
+
+input[type="text"], input[type="email"], input[type="password"], input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    margin-top: 10px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    color: black;
+    box-sizing: border-box;
+}
+
+#profile-action {
+    grid-column: 2;
+padding-bottom: 20px;
+}
+.profileButton {
+    margin-bottom: 20px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    background-color: #333;
+    color: #fff;
+    cursor: pointer;
+}
+
+.profileButton:hover {
+    background-color: #444;
+}
+
+.spin-status {
+    height: 0px;
+    color: red;
+    font-size: 16px;
+    text-align: center;
+    padding: 10px;
+    visibility: hidden; /* Hide it by default */
+    color: #ff0000;
+    text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000, 0 0 20px #ff0000 !important;
+  }
+
+  body {
+    height: var(--var-max-height);
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
+.grid-root {
+  display: grid;
+  height: var(--var-max-height);
+  margin: 0px 0px;
+  max-height: var(--var-max-height);
+  max-width: 100%;
+  width: var(--var-max-width);
+}
+
+#videoWrapper {
+    height: max-content;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+#videoOverlay {
+    height: 100%;
+    width: 100%;
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.75);
+    z-index: 3;
+    text-align: center;
+    vertical-align: middle;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#videoElement {
+    z-index: 1;
+    position: relative;
+    width: 100%;
+}
+
+#twitch_embed {
+    grid-template-rows: 6fr 1fr;
+    position: relative;
+/*    padding-top: 1vh;*/
+/*    max-height: calc(var(--var-max-height) - 10vh);*/
+    min-height:  50vh;
+    padding-bottom: 10vh;
+    max-height: 90vh;
+    padding-bottom: 10vh;
+}
+
+#twitch_chat {
+    width: 96%;
+    margin: 0px 5px 10px 5px;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: grid;
+}
+
+.combined {
+  grid-template-columns: 5fr 2fr;
+}
+
+@media screen and (max-width: 850px) {
+  .combined {
+    grid-template-columns: 1fr;
+    grid-template-rows: 70.25vw 1fr;
+  }
+
+  #logo {
+    display: none;
+}
+
+  .combined #twitch_chat {
+    margin-top: 60px;
+    max-height: calc(var(--var-max-height) - 66.25vw);
+  }
 }

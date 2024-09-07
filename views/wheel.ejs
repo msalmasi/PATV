@@ -1,90 +1,98 @@
 <!-- views/wheel.ejs -->
-<%- include('layout', { title: 'Spin the Wheel', user: user}) %>
-<link rel="stylesheet" href="/public/css/wheel.css">
-<!-- Modal -->
-<div id="rulesModal" class="modal">
-    <div class="modal-content">
-        <div class="infopanel">
-            <span class="close">&times;</span>
-            <h2>Wheel Rules</h2>
-            <p>Welcome to the Spin the Wheel Game! Here are the rules:</p>
-            <ul>
-                <li>Spin the wheel to win points based on where it stops.</li>
-                <li>Each spin costs 5000 <a href='/info#PAT' class='infolink'>PAT</a>.</li>
-                <li>Do not close the window until your spin is complete or it won't count and you will need to wait to spin again.</li>
-                <li>You can only spin one wheel at a time.</li>
-                <li>Jackpots occur randomly and can significantly increase your points!</li>
-            </ul>
+<%- include('layout', { title: 'Spin the Wheel' , user: user}) %>
+    <link rel="stylesheet" href="/public/css/wheel.css">
+    <!-- Modal -->
+    <div id="rulesModal" class="modal">
+        <div class="modal-content">
+            <div class="infopanel">
+                <span class="close">&times;</span>
+                <h2>Wheel Rules</h2>
+                <p>Welcome to the Spin the Wheel Game! Here are the rules:</p>
+                <ul>
+                    <li>Spin the wheel to win points based on where it stops.</li>
+                    <li>Each spin costs 5000 <a href='/info#PAT' class='infolink'>PAT</a>.</li>
+                    <li>Do not close the window until your spin is complete or it won't count and you will need to wait
+                        to spin again.</li>
+                    <li>You can only spin one wheel at a time.</li>
+                    <li>Jackpots occur randomly and can significantly increase your points!</li>
+                </ul>
+            </div>
         </div>
     </div>
-</div>
-<div id="wheel">
-<div id="arcadeInfo">
-    <div class="arcade-text">Player<br><br><br>
-      <span id="usernameSpan">?</span>
+    <div id="wheel">
+        <div id="arcadeInfo">
+            <div class="arcade-text">Player<br><br><br>
+                <span id="usernameSpan">?</span>
+            </div>
+            <div id="jackpot">
+                <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span
+                        class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span
+                        class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
+            </div>
+            <div class="balance-display">Balance<br><br><br>
+                <span id="userBalance">Loading balance...</span>
+
+            </div>
+        </div>
+
+        <div class="wheel-container">
+            <canvas id="wheelCanvas" width="500" height="500"></canvas>
+            <div id="resultContainer">
+                <span id="resultText"></span>
+            </div>
+        </div>
+
+        <br>
+        <div class="wheelPanel">
+            <div id="spinButton">
+                <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
+            </div>
+            <div class="infoBtn">
+                <button id="infoBtn" class="link-button">ℹ️</button>
+            </div>
+            <div id="spinStatus" class="spin-status"></div>
+            <br>
+        </div>
     </div>
-  <div id="jackpot">
-    <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
-  </div>
-      <div class="balance-display">Balance<br><br><br>
-      <span id="userBalance">Loading balance...</span>
+    <div class="friendo">
+
+        <%- include('friendo') %>
     </div>
-</div>
-  <div class="wheel-container">
-    <canvas id="wheelCanvas" width="500" height="500"></canvas>
-    <div id="resultContainer">
-        <span id="resultText"></span>
-    </div>
-    <br>
-    <div id="spinButton">
-      <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
-    </div>
-    <button id="infoBtn" class="link-button">ℹ️</button>
-    <br>
-  </div>
-  
-  <div class="friendo">
-    
-    <%- include('friendo') %>
-</div>
-  
-</div>
 
 
+    <script src="http://localhost:3000/public/script.js"></script>
+    <script>
+        // Get the modal
+        var modal = document.getElementById('rulesModal');
 
-  <script src="http://localhost:3000/public/script.js"></script>
-  <script>
-    // Get the modal
-    var modal = document.getElementById('rulesModal');
-    
-    // Get the button that opens the modal
-    var btn = document.getElementById('infoBtn');
-    
-    // Get the <span> element that closes the modal
-    var span = document.getElementsByClassName("close")[0];
-    
-    // When the user clicks the button, open the modal 
-    btn.onclick = function() {
-        modal.style.display = "block";
-    }
-    
-    // When the user clicks on <span> (x), close the modal
-    span.onclick = function() {
-        modal.style.display = "none";
-    }
-    
-    // When the user clicks anywhere outside of the modal, close it
-    window.onclick = function(event) {
-        if (event.target == modal) {
+        // Get the button that opens the modal
+        var btn = document.getElementById('infoBtn');
+
+        // Get the <span> element that closes the modal
+        var span = document.getElementsByClassName("close")[0];
+
+        // When the user clicks the button, open the modal 
+        btn.onclick = function () {
+            modal.style.display = "block";
+        }
+
+        // When the user clicks on <span> (x), close the modal
+        span.onclick = function () {
             modal.style.display = "none";
         }
-    }
-    
-    // Check if the user has already visited
-    window.onload = function() {
-        if (!localStorage.getItem('hasVisited')) {
-            modal.style.display = "block";
-            localStorage.setItem('hasVisited', 'true');
+
+        // When the user clicks anywhere outside of the modal, close it
+        window.onclick = function (event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
         }
-    }
+
+        // Check if the user has already visited
+        window.onload = function () {
+            if (!localStorage.getItem('hasVisited')) {
+                modal.style.display = "block";
+                localStorage.setItem('hasVisited', 'true');
+            }
+        }
     </script>

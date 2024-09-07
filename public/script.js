@@ -211,7 +211,12 @@ function userSpin() {
     body: JSON.stringify({username: username, pageId: pageId}),
     method: "POST",
   })
-  .then(response => response.json())
+  .then(response => {
+    if (!response.ok) { // Handle non-200 responses
+        throw new Error('Spin already in progress');
+    }
+    return response.json();
+})
   .then(data => {
       if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinID if so.
       console.log('Spin ID received:', data.spinId);
@@ -220,10 +225,13 @@ function userSpin() {
       displayWagerCost(wager);
       fetchUserBalance(username); // Update the User Balance
       fetchJackpotTotal()
+      document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
       }
   })
   .catch(error => {
       console.error('Error making the POST request:', error);
+      document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
+      document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
   });
 }
 
@@ -259,6 +267,7 @@ function determineSpinResult() {
           // Additional actions based on response can be handled here
           if (data.result) {
             displayPointsReward(data.result);
+            document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
           }
       })
       .catch(error => {

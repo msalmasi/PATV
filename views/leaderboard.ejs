@@ -16,7 +16,7 @@
             <% users.forEach((user, index) => { %>
                 <tr>
                     <td><%= index + 1 %></td>
-                    <td><%= user.username %></td>
+                    <td><a href="/u/<%= user.username %>/profile" class="leaderboardLink"><%= user.displayname %></a></td>
                     <td><%= user.points_balance.toLocaleString() %></td> <!-- Formatting numbers with commas -->
                 </tr>
             <% }); %>

@@ -1,50 +1,57 @@
 <!-- views/home.ejs -->
-<%- include('layout', { title: 'Public Access Television', user: user}) %>
-<link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
-<body>
-  <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
-<script type="application/javascript" src="/public/js/jquery.js"></script>
-<script type="application/javascript" src="/public/js/both.js"></script>
-<script type="application/javascript" src="/public/js/consts.js"></script>
-<script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
-<script type="application/javascript" src="/public/js/video.js"></script>
-<script src= "https://player.twitch.tv/js/embed/v1.js"></script>
-<!-- <script src="https://cdn.jsdelivr.net/npm/ovenplayer/dist/ovenplayer.js"></script> -->
-<style>
-    .hide { display:none !important; }
+<%- include('layout', { title: 'Public Access Television' , user: user}) %>
+    <link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
+    <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+    <!-- <script type="application/javascript" src="/public/js/jquery.js"></script>
+    <script type="application/javascript" src="/public/js/both.js"></script>
+    <script type="application/javascript" src="/public/js/consts.js"></script> -->
+    <script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
+    <script type="application/javascript" src="/public/js/video.js"></script>
+    <script src="https://player.twitch.tv/js/embed/v1.js"></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/ovenplayer/dist/ovenplayer.js"></script> -->
+    <style>
+        .hide {
+            display: none !important;
+        }
 
-    /* Optional: The following css just makes sure the twitch video stays responsive */
-    #twitch {
-      position: relative;
-      padding-bottom: 56.25%; /* 16:9 */
-      padding-top: 25px;
-      height: 0;
-    }
-    #twitch object, #twitch iframe {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
-</style>
-    <div class="grid-root combined">
+        /* Optional: The following css just makes sure the twitch video stays responsive */
+        #twitch {
+            position: relative;
+            padding-bottom: 56.25%;
+            /* 16:9 */
+            padding-top: 25px;
+            height: 0;
+        }
 
-    <div id="videoWrapper">
-        <div id="videoOverlay" class="">
-            <img src="/public/img/mute-icon.png" />
-        </div>
-        
-        <!-- <div id="player_id"></div> -->
+        #twitch object,
+        #twitch iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
 
-        <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline>
-            <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
-        </video-js>
-        
-        <div id="twitch" class="hide">
-        </div>
+    <body>
+        <div class="grid-root combined">
 
-        <!--       <script>
+            <div id="videoWrapper">
+                <div id="videoOverlay" class="">
+                    <img src="/public/img/mute-icon.png" />
+                </div>
+
+                <!-- <div id="player_id"></div> -->
+
+                <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls
+                    playsinline>
+                    <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
+                </video-js>
+
+                <div id="twitch" class="hide">
+                </div>
+
+                <!--       <script>
 
                 // Initialize OvenPlayer
                 const player = OvenPlayer.create('player_id', {
@@ -59,184 +66,202 @@
                     ]
                 });
             </script> -->
-    
-        <div id="altlink">
-        <p>Stream this with low latency in VLC (<a href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)</p>
-        </div>
-    </div>
 
-    <div id="twitch_embed" class="tab-content active">
-        <div id="twitch_chat">
-            <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=localhost"
-                height="100%"
-                width="100%">
-            </iframe>
-        </div>
-
-        <% if (typeof user == 'undefined' || !user) { %>
-        <% } else { %>
-        <div id="arcadePanel">
-            <div id="spinButton">
-                <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
+                <div id="altlink">
+                    <p>Stream this with low latency in VLC (<a
+                            href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)
+                    </p>
+                </div>
             </div>
-            <div id="arcadeInfo">
-                <div class="arcade-text">Player<span id="usernameSpan"><%= user %></span></div>
-                <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
+
+            <div id="twitch_embed" class="tab-content active">
+                <div id="twitch_chat">
+                    <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=localhost"
+                        height="100%" width="100%">
+                    </iframe>
+                </div>
+
+                <% if (typeof user=='undefined' || !user) { %>
+                    <% } else { %>
+                        <div id="arcadePanel">
+                            <div id="spinButton">
+                                <img id="coinslot" src="http://localhost:3000/public/coinslot.png"></img>
+                            </div>
+                            <div id="arcadeInfo">
+                                <div class="arcade-text">Player<span id="usernameSpan">
+                                        <%= user %>
+                                    </span></div>
+                                <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
+                                <div id="spinStatus" class="spin-status"></div>
+                            </div>
+
+                        </div>
+                        <% } %>
             </div>
         </div>
-            <% } %>
-    </div>
-    <% if (typeof user == 'undefined' || !user) { %>
-    <% } else { %>
-    <script>
-        // Set the Username
-        var user = "<%= user %>"
-        function fetchUsername(user) {
-        document.getElementById('usernameSpan').textContent = user;
-        }
+            <% if (typeof user=='undefined' || !user) { %>
+                <% } else { %>
+                    <script>
+                        // Set the Username
+                        var user = "<%= user %>"
+                        function fetchUsername(user) {
+                            document.getElementById('usernameSpan').textContent = user;
+                        }
 
-        // Fetch and Set the User Balance
-        function fetchUserBalance(user) {
-        fetch(`http://localhost:3000/api/u/${user}/balance`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.balance !== undefined) {
-                    document.getElementById('userBalance').textContent = data.balance;
-                } else {
-                    console.error('Failed to fetch balance:', data.error);
-                    document.getElementById('userBalance').textContent = 'Error fetching balance';
-                }
-            })
-            .catch(error => {
-                console.error('Fetch error:', error);
-                document.getElementById('userBalance').textContent = 'Error fetching balance';
-            });
-        }
+                        // Fetch and Set the User Balance
+                        function fetchUserBalance(user) {
+                            fetch(`http://localhost:3000/api/u/${user}/balance`)
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.balance !== undefined) {
+                                        document.getElementById('userBalance').textContent = data.balance;
+                                    } else {
+                                        console.error('Failed to fetch balance:', data.error);
+                                        document.getElementById('userBalance').textContent = 'Error fetching balance';
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Fetch error:', error);
+                                    document.getElementById('userBalance').textContent = 'Error fetching balance';
+                                });
+                        }
 
-        // Assuming username is available via some means (e.g., login session)
-        fetchUsername(user);
-        fetchUserBalance(user);
+                        // Assuming username is available via some means (e.g., login session)
+                        fetchUsername(user);
+                        fetchUserBalance(user);
 
-        // Spin the wheel as a user.
-        function userSpin() {
-        
-        const url = `http://localhost:3000/api/g/wheel/spin`;
+                        // Spin the wheel as a user.
+                        function userSpin() {
 
-        fetch(url, {
-            headers: {    "content-type": "application/json",
-            },
-            body: JSON.stringify({username: user}),
-            method: "POST",
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-            console.log('Spin ID received:', data.spinId);
-            spinId = data.spinId;
-            // Store spinId in local storage or a global variable
-            localStorage.setItem('currentSpinID', spinId);
-            // Set up SSE listener with this spinId
-            setupResultsListener(spinId);
-            wager = 5000;
-            displayWagerCost(wager);
-            fetchUserBalance(user); // Update the User Balance
-            }
-        })
-        .catch(error => {
-            console.error('Error making the POST request:', error);
-        });
-        }
+                            const url = `http://localhost:3000/api/g/wheel/spin`;
 
-        // Uses the button to initiate a userSpin
-        spinButton.addEventListener('click', userSpin);
+                            fetch(url, {
+                                headers: {
+                                    "content-type": "application/json",
+                                },
+                                body: JSON.stringify({ username: user }),
+                                method: "POST",
+                            })
+                                .then(response => {
+                                    if (!response.ok) { // Handle non-200 responses
+                                        throw new Error('Spin already in progress');
+                                    }
+                                    return response.json();
+                                })
+                                .then(data => {
+                                    if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                                        console.log('Spin ID received:', data.spinId);
+                                        spinId = data.spinId;
+                                        // Store spinId in local storage or a global variable
+                                        localStorage.setItem('currentSpinID', spinId);
+                                        // Set up SSE listener with this spinId
+                                        setupResultsListener(spinId);
+                                        wager = 5000;
+                                        displayWagerCost(wager);
+                                        fetchUserBalance(user); // Update the User Balance
+                                        document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Error making the POST request:', error);
+                                    document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
+                                    document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
+                                    setTimeout(() => {
+                                        document.getElementById('spinStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                                    }, 2000);
+                                });
+                        }
 
-        // Function for displaying the winning result
-        function displaySpinResult(result) {
-        const balanceElement = document.getElementById('userBalance');
-        const rewardDiv = document.createElement('div');
-        rewardDiv.className = 'arcade-animation';
-        rewardDiv.textContent = `+${result} Points!`;
+                        // Uses the button to initiate a userSpin
+                        spinButton.addEventListener('click', userSpin);
 
-        // Position the reward div near the balance
-        balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+                        // Function for displaying the winning result
+                        function displaySpinResult(result) {
+                            const balanceElement = document.getElementById('userBalance');
+                            const rewardDiv = document.createElement('div');
+                            rewardDiv.className = 'arcade-animation';
+                            rewardDiv.textContent = `+${result} Points!`;
 
-        // Apply animation
-        rewardDiv.style.animation = 'pop-in 0.5s forwards';
+                            // Position the reward div near the balance
+                            balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
 
-        setTimeout(() => {
-            rewardDiv.remove(); // Remove the animation element after it completes
-        }, 1000); // Assuming the animation takes 5 seconds
-        }
+                            // Apply animation
+                            rewardDiv.style.animation = 'pop-in 0.5s forwards';
 
-        function setupResultsListener(spinId) {
-            const eventSource = new EventSource(`/events?type=results&identifier=${spinId}`);
+                            setTimeout(() => {
+                                rewardDiv.remove(); // Remove the animation element after it completes
+                            }, 1000); // Assuming the animation takes 5 seconds
+                        }
 
-            eventSource.onmessage = function(event) {
-                const result = JSON.parse(event.data);
-                console.log('Spin result received:', result);
-                // Update UI based on the result
-                displaySpinResult(result.result);
-                fetchUserBalance(user);
-                eventSource.close();
-            };
+                        function setupResultsListener(spinId) {
+                            const eventSource = new EventSource(`/events?type=results&identifier=${spinId}`);
 
-            eventSource.onerror = function(event) {
-                console.error('EventSource failed:', event);
-                eventSource.close();
-            };
-        }
+                            eventSource.onmessage = function (event) {
+                                const result = JSON.parse(event.data);
+                                console.log('Spin result received:', result);
+                                // Update UI based on the result
+                                displaySpinResult(result.result);
+                                fetchUserBalance(user);
+                                eventSource.close();
+                            };
 
-        // Function for displaying the winning result
-        function displayWagerCost(wager) {
-        const balanceElement = document.getElementById('userBalance');
-        const rewardDiv = document.createElement('div');
-        rewardDiv.className = 'arcade-animation-neg';
-        rewardDiv.textContent = `-${wager} Points!`;
+                            eventSource.onerror = function (event) {
+                                console.error('EventSource failed:', event);
+                                eventSource.close();
+                            };
+                        }
 
-        // Position the reward div near the balance
-        balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+                        // Function for displaying the winning result
+                        function displayWagerCost(wager) {
+                            const balanceElement = document.getElementById('userBalance');
+                            const rewardDiv = document.createElement('div');
+                            rewardDiv.className = 'arcade-animation-neg';
+                            rewardDiv.textContent = `-${wager} Points!`;
 
-        // Apply animation
-        rewardDiv.style.animation = 'pop-in 0.5s forwards';
+                            // Position the reward div near the balance
+                            balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
 
-        setTimeout(() => {
-            rewardDiv.remove(); // Remove the animation element after it completes
-        }, 2000); // Assuming the animation takes 5 seconds
-        }
+                            // Apply animation
+                            rewardDiv.style.animation = 'pop-in 0.5s forwards';
 
-    </script>
-    <% } %>
-    <script type="text/javascript">
-        var options = {
-        channel: "publicaccess_ttv", // TODO: Change this to the streams username you want to embed
-        width: 640,
-        height: 360,
-        };
-        var player2 = new Twitch.Player("twitch", options);
+                            setTimeout(() => {
+                                rewardDiv.remove(); // Remove the animation element after it completes
+                            }, 2000); // Assuming the animation takes 5 seconds
+                        }
 
-        player2.addEventListener(Twitch.Player.READY, initiate)
+                    </script>
+                    <% } %>
+                        <script type="text/javascript">
+                            var options = {
+                                channel: "publicaccess_ttv", // TODO: Change this to the streams username you want to embed
+                                width: 640,
+                                height: 360,
+                            };
+                            var player2 = new Twitch.Player("twitch", options);
 
-        function initiate() {
-        player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
-        player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
-        player2.removeEventListener(Twitch.Player.READY, initiate);
-        }
+                            player2.addEventListener(Twitch.Player.READY, initiate)
 
-        function handleOnline() {
-        document.getElementById("twitch").classList.remove('hide');
-        document.getElementById("videoElement").classList.add('hide');
-        document.getElementById("videoOverlay").classList.add('hide');
-        player2.removeEventListener(Twitch.Player.ONLINE, handleOnline);
-        player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
-        player2.setMuted(false);
-        }
+                            function initiate() {
+                                player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
+                                player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
+                                player2.removeEventListener(Twitch.Player.READY, initiate);
+                            }
 
-        function handleOffline() {
-        document.getElementById("twitch").classList.add('hide');
-        document.getElementById("videoElement").classList.remove('hide');
-        document.getElementById("videoOverlay").classList.remove('hide');
-        player2.removeEventListener(Twitch.Player.OFFLINE, handleOffline);
-        player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
-        player2.setMuted(true);
-        }
-    </script>
+                            function handleOnline() {
+                                document.getElementById("twitch").classList.remove('hide');
+                                document.getElementById("videoElement").classList.add('hide');
+                                document.getElementById("videoOverlay").classList.add('hide');
+                                player2.removeEventListener(Twitch.Player.ONLINE, handleOnline);
+                                player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
+                                player2.setMuted(false);
+                            }
+
+                            function handleOffline() {
+                                document.getElementById("twitch").classList.add('hide');
+                                document.getElementById("videoElement").classList.remove('hide');
+                                document.getElementById("videoOverlay").classList.remove('hide');
+                                player2.removeEventListener(Twitch.Player.OFFLINE, handleOffline);
+                                player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
+                                player2.setMuted(true);
+                            }
+                        </script>

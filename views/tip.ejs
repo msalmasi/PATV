@@ -1,0 +1,63 @@
+<!-- views/tip.ejs -->
+<%- include('layout', { title: `${username} Tip`, user: username}) %>
+        <body>
+            <div class="profile-container">
+                <div id="profile-header"><img src="<%= avatar %>" alt="User Avatar"><h1><%= displayname %> Tipjar</h1></div>                
+                <div id="profile-content">         
+                    <p><%= usernameProfile %></p><%= classh %>
+                    <p>PAT <%= points_balance %></p>
+                
+                    <form id="pointsTransferForm" action="/u/<%= usernameProfile %>/tip" method="POST">
+                        <label for="pointsAmount">Amount:</label>
+                        <input type="number" id="pointsAmount" name="amount" required>
+                        <button type="submit">Transfer Points</button>
+                        <div id="transferStatus" class="spin-status"></div>
+                    </form>
+                </div>
+                </div>
+            </div>
+        </body>
+                
+
+            
+                
+            
+
+                <!-- This edits the URL in the POST form. -->
+                <script>
+                    document.getElementById('pointsTransferForm').addEventListener('submit', function(event) {
+                        event.preventDefault();
+                    
+                        var amount = document.getElementById('pointsAmount').value;
+            
+                        // Prepare the fetch request
+                        fetch('/u/<%= usernameProfile %>/tip', {
+                            headers: {    "content-type": "application/json",},
+                            body: JSON.stringify({ amount: amount }),
+                            method: 'POST',
+                        }).then(response => {
+                            if (!response.ok) { // Handle non-200 responses
+                                throw new Error('Failed to transfer the points.');
+                            }
+                            return response.json();
+                        }).then(data => {
+                            const message = data.message;
+                            console.log(message);
+                            if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                            document.getElementById('transferStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                            document.getElementById('transferStatus').textContent = 'PAT transferred successfully.'; // Display error message
+                            document.getElementById('transferStatus').style.visibility = 'visible'; // Make the status message visible
+                            setTimeout(() => {
+                                document.getElementById('transferStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        }, 2000); 
+                            }
+                        }).catch(error => {
+                            console.error('Error making the POST request:', error);
+                            document.getElementById('transferStatus').textContent = 'Transfer failed. Check the username.'; // Display error message
+                            document.getElementById('transferStatus').style.visibility = 'visible'; // Make the status message visible
+                            setTimeout(() => {
+                                document.getElementById('transferStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        }, 2000); 
+                        });
+                    });
+                </script>

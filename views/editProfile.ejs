@@ -1,0 +1,60 @@
+<!-- views/profile.ejs -->
+<%- include('layout', { title: `${username} Profile Editor`, user: username}) %>
+<body>
+    <div class="profile-container">
+        <% if (errors != "") { %>
+            <div class="alert alert-danger"><br><br><%= errors %></div>
+        <% } %>
+        <% if (success != "") { %>
+            <div class="alert alert-success"><br><br><%= success %></div>
+        <% } %>
+        <h1>Edit Profile</h1>
+
+        <form id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="<%= username %>" required>
+            <button class="profileButton" type="submit">Update Username</button>
+        </form>
+
+        <form id="displaynameForm" action="/api/u/<%= username %>/update/displayname" method="post">
+            <label for="displayname">Display Name:</label>
+            <input type="text" id="displayname" name="displayname" value="<%= displayname %>" required>
+            <button class="profileButton" type="submit">Update Display Name</button>
+        </form>
+
+        <form id="emailForm" action="/api/u/<%= username %>/update/email" method="post">
+            <label for="email">Email:</label>
+            <input type="email" id="email" name="email" value="<%= email %>" required>
+            <button class="profileButton" type="submit">Update Email</button>
+        </form>
+
+        <form id="passwordForm" action="/api/u/<%= username %>/update/password" method="post">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required minlength="6"><br>
+            <label for="confirm_password">Confirm Password</label>
+            <input type="password" id="confirm_password" required><br>
+            <button class="profileButton" type="submit">Update Password</button>
+        </form>
+
+        <form id="uploadForm" enctype="multipart/form-data">
+            <label for="avatar">Avatar URL:</label>
+            <input type="text" id="avatar" name="avatarURL" value="<%= avatar %>" required>
+            <button type="submit">Upload Avatar</button>
+            <input type="file" id="avatarFile" name="avatar" accept="image/*" required>
+            
+        </form>
+        <div id="uploadStatus" class="spin-status"></div>
+    </div>
+</body>
+<script src="/public/js/upload-avatar.js"></script>
+<script>
+    function validateForm() {
+        var password = document.getElementById("password").value;
+        var confirmPassword = document.getElementById("confirm_password").value;
+        if (password != confirmPassword) {
+            alert("Passwords do not match.");
+            return false;
+        }
+        return true;
+    }
+</script>

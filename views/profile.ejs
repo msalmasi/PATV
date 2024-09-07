@@ -1,0 +1,30 @@
+<!-- views/profile.ejs -->
+<%- include('layout', { title: `${usernameProfile} on Public Access`, user: username}) %>
+        <body>
+            <div class="profile-container">
+                <div id="profile-header"><img src="<%= avatar %>" alt="User Avatar"><h1><%= displayname %></h1>                
+                    <% if (username == usernameProfile) { %>
+                    <div id="profile-action"> 
+                        <a href="/u/<%= username %>/profile/edit" class="infolink">Edit</a>
+                    </div>
+                    <% } else { %>
+                        <div id="profile-action"> 
+                            <a href="/u/<%= usernameProfile %>/tip" class="infolink">Tip</a>
+                        </div>
+                        <% } %></div>
+                <div id="profile-content">         
+                    <p><%= usernameProfile %></p><%= classh %>
+                    <p>PAT <%= points_balance %></p>
+                    <% if (username == usernameProfile) { %>
+                    <form action="/logout" method="POST" style="display: inline;">
+                        <button class="link-button" type="submit">Log Out</button>
+                    </form>
+                    <% } else { %>
+                        <% } %>
+                </div>
+
+
+                
+            </div>
+        </body>
+

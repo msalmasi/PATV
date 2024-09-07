@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
     <link rel="stylesheet" href="/public/css/styles.css">
-    <link rel="stylesheet" type="text/css" href="/public/css/site.css">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">
 </head>
@@ -21,22 +20,21 @@
                 <% } else { %>
                 <a href="/u/<%= user %>/wheel" class="inactivePage"><img src="/public/img/star.gif" height="16px" width="auto"></a>
                 <% } %>
-                <a href="/info" class="inactivePage">📄</a>
+                <a href="/info" id="infoLink" class="inactivePage">📄</a>
                 <a href="/shop" class="inactivePage">🏪</a>
                 <a href="/rankings" class="inactivePage">🏆</a>
                 <a href="https://jellyfin.houseplants.cc/" class="inactivePage"><img src="/public/img/jellyfin.png" height="16px" width="auto"></a>
                 <a href="https://discord.gg/publicaccess" class="inactivePage"><img src="/public/img/discord.png" height="16px" width="auto"></a>
                 <a href="https://twitch.tv/publicaccess_ttv" class="inactivePage"><img src="/public/img/twitch.png" height="16px" width="auto"></a>
+                <a id="adminLink" style="display: none;" href="/admin/panel" class="inactivePage">🛠️</a>
+
             </div>
             <div class="navbar-right">
                 <% if (typeof user == 'undefined' || !user) { %>
                     <a href="/login" class="inactivePage">Sign In</a>
                 <% } else { %>
                     <div class="avatar">
-                        <form action="/logout" method="POST" style="display: inline;">
-                            <button class="link-button" type="submit">Log Out</button>
-                        </form>
-                        <a href="/u/<%= user %>/wheel"><img src="/public/img/avatar.png" alt="User Avatar"></a>
+                        <a href="/u/<%= user %>/profile"><img id="userAvatar" src="/public/img/coin.png" alt="User Avatar"></a>
                     </div>
                 <% } %>
                 
@@ -46,4 +44,25 @@
     </header>
 
 </body>
+<% if (typeof user == 'undefined' || !user) { %>
+
+<% } else { %>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+
+        fetch('/api/u/<%= user %>/profile')
+            .then(response => response.json())
+            .then(data => {
+                if (data.avatar) {
+                    document.getElementById('userAvatar').src = data.avatar;
+                }
+                if (data.class === "Admin") {
+                    document.getElementById('adminLink').style.display = 'inline';
+                    document.getElementById('infoLink').style.display = 'none';
+                }
+            })
+            .catch(error => console.error('Failed to fetch user data:', error));
+        });
+    </script>
+    <% } %>
 </html>
