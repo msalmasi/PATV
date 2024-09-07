@@ -431,7 +431,6 @@ padding-bottom: 20px;
 }
 
   .combined #twitch_chat {
-    margin-top: 60px;
     max-height: calc(var(--var-max-height) - 66.25vw);
   }
 }

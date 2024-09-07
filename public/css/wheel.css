@@ -129,7 +129,7 @@
 }
 
   .wheelPanel {
-
+width: 400px;
 margin-left: auto;
 margin-right: auto;
   }
@@ -165,7 +165,15 @@ margin-right: auto;
 }
 
 #spinButton {
+  width: 125px;
+  margin-left: auto;
+margin-right: auto;
+}
 
+.infoBtn {
+  width: 125px;
+  margin-left: auto;
+margin-right: auto;
 }
 
 #spinButton:active img {
