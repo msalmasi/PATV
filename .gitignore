@@ -1,0 +1,9 @@
+# ignore all .a files
+*.db
+
+# ignore .env
+.env
+
+# ignore all files in any directory named build
+/node-modules
+/node_modules
