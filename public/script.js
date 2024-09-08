@@ -221,8 +221,8 @@ function userSpin() {
       if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinID if so.
       console.log('Spin ID received:', data.spinId);
       spinId = data.spinId;
-      wager = 5000;
-      displayWagerCost(wager);
+      // wager = 5000;
+      // displayWagerCost(wager);
       fetchUserBalance(username); // Update the User Balance
       fetchJackpotTotal()
       document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
@@ -352,12 +352,11 @@ function setupSpinListener(username) {
   console.log(eventSource);
   eventSource.onmessage = function(event) {
       const data = JSON.parse(event.data);
-      console.log('Received command to start spinning:', data);
-      const segments = data.message.split(' '); // Split the path by ' '
-      // Assuming the structure /u/username/wheel, username would be at index 2
-      wheelSpinner = segments[4];
-      spinId = segments[2];
-      spinWheel(); // Function to start the wheel spinning
+      console.log(data);
+      if (data.message.includes("Request") && data.spinId) {
+          console.log("Spin request received:", data);
+          acknowledgeSpin(data.spinId);
+      }
   };
 
   eventSource.onerror = function(event) {
@@ -365,6 +364,36 @@ function setupSpinListener(username) {
       checkConnection(eventSource);
       eventSource.close();
   };
+}
+
+function acknowledgeSpin(spinId) {
+  fetch(`/api/u/acknowledge-spin`, {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ spinId: spinId })
+  })
+  .then(response => response.json())
+  .then(data => {
+      console.log('Acknowledgment response:', data);
+      if (data.success) {
+          console.log("Spin command received:", data);
+          const segments = data.message.split(' '); // Split the path by ' '
+          // Assuming the structure /u/username/wheel, username would be at index 2
+          wheelSpinner = segments[4];
+          spinId = data.spinId;
+          wager = 5000;
+          displayWagerCost(wager);
+          fetchUserBalance(username); // Update the User Balance
+          spinWheel(); // Function to start the wheel spinning
+      } else {
+          alert('Failed to acknowledge spin:', data.message);
+      }
+  })
+  .catch(error => {
+      console.error('Error sending acknowledgment:', error);
+  });
 }
 
 // Function for reconnecting to Event Source

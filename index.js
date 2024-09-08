@@ -1313,76 +1313,86 @@ app.post("/api/prizes/edit", addUser, async (req, res) => {
 
 // HTTP POST endpoint to trigger wheel spin
 app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
-  const username = req.body.username;
-  const pageId = req.body.pageId;
-
-  if (req.username !== username) {
-    return res.status(403).send("Access denied");
-  }
-
-  try {
-    checkAndResolvePendingSpins();
-    const users = await getQuery(
-      `SELECT userId, points_balance FROM users WHERE username = ?;`,
-      [username]
-    );
-    const user = users[0]; // Since getQuery uses db.all, it returns an array
-
-    if (!user) {
-      return res.status(404).send("User not found");
+    const username = req.body.username;
+    const pageId = req.body.pageId;
+  
+    if (req.username !== username) {
+      return res.status(403).send("Access denied");
     }
-
-    if (user.points_balance < 5000) {
-      return res.status(400).send("Insufficient points");
+  
+    try {
+      checkAndResolvePendingSpins();
+      const user = await getQuery(`SELECT userId, points_balance FROM users WHERE username = ?;`, [username]);
+  
+      if (!user.length || user[0].points_balance < 5000) {
+        return res.status(400).send("Insufficient points or user not found");
+      }
+  
+      const pendingSpin = await getQuery(
+        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        [user[0].userId]
+      );
+  
+      if (pendingSpin.length) {
+        return res.status(400).send("Free spin in progress.");
+      }
+  
+      // Prepare a potential transaction but do not commit
+      const spinId = uuidv4();
+      const transactionId = uuidv4();
+      const jackpotId = uuidv4();
+  
+      // Log the intent to spin, pending client acknowledgment
+      await runQuery(
+        `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
+        [spinId, user[0].userId, "gold", "INTENT", transactionId]
+      );
+  
+      // Send the spin command to the client
+      sendEvent("spin", pageId, {
+        message: `Request: ${username}`,
+        spinId: spinId, // Include the spin ID for tracking
+        timestamp: new Date()
+      });
+  
+      res.json({ spinId });
+    } catch (error) {
+      console.error("Failed to prepare spin:", error);
+      res.status(500).send("Failed to process spin");
     }
+  });
 
-    const pendingSpins = await getQuery(
-      `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
-      [user.userId]
-    );
-    const pendingSpin = pendingSpins[0]; // Since getQuery uses db.all, it returns an array
+  // Endpoint to finalize the spin after client acknowledgment
+app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
+    const { spinId } = req.body;
+  
+    try {
+      const spinDetails = await getQuery(`SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`, [spinId]);
+  
+      if (!spinDetails.length) {
+        return res.status(404).send("Spin not found or already processed");
+      }
 
-    if (pendingSpin) {
-      return res.status(400).send("Free spin in progress.");
+    //   sendEvent("spin", pageId, {
+    //     message: `Spin: ${username}`,
+    //     spinId: spinId, // Include the spin ID for tracking
+    //     timestamp: new Date(),
+    //   });
+  
+      await runQuery("BEGIN TRANSACTION");
+  
+      await runQuery(`UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`, [spinDetails[0].userId]);
+      await runQuery(`UPDATE wheel_spins SET result = 'PENDING' WHERE spinId = ?`, [spinId]);
+  
+      await runQuery("COMMIT");
+  
+      res.json({ success: true, message: "Spin confirmed and points deducted" });
+    } catch (error) {
+      await runQuery("ROLLBACK");
+      console.error("Failed to finalize spin:", error);
+      res.status(500).json({ success: false, message: "Failed to finalize spin" });
     }
-
-    await runQuery("BEGIN TRANSACTION");
-
-    const spinId = uuidv4();
-    const transactionId = uuidv4();
-    const jackpotId = uuidv4();
-
-    await runQuery(
-      `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?;`,
-      [user.userId]
-    );
-    await runQuery(
-      `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
-      [transactionId, user.userId, "Wager: Gold Spin", -5000]
-    );
-    await runQuery(
-      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-      [jackpotId, spinId, user.userId, 500]
-    );
-    await runQuery(
-      `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
-      [spinId, user.userId, "gold", "PENDING", transactionId]
-    );
-
-    await runQuery("COMMIT");
-
-    sendEvent("spin", pageId, {
-      message: `Spin: ${username}`,
-      timestamp: new Date(),
-    });
-
-    res.json({ spinId });
-  } catch (error) {
-    await runQuery("ROLLBACK");
-    console.error("Failed to process spin:", error);
-    res.status(500).send("Failed to process spin");
-  }
-});
+  });
 
 // HTTP POST endpoint to trigger a public wheel spin
 app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
@@ -1846,5 +1856,5 @@ function sendEvent(type, identifier, message) {
 }
 
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
+  console.log(`Server running on port   ${port}`);
 });
