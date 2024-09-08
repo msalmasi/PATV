@@ -219,7 +219,7 @@ app.get("/verify-email", async (req, res) => {
 });
 
 app.get("/auth/twitch", (req, res) => {
-  const redirectUri = `http://localhost:3000/auth/twitch/callback`;
+  const redirectUri = `/auth/twitch/callback`;
   const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?${querystring.stringify(
     {
       client_id: "bkwg34x1vqv51507a603f0e0clpg4b",
@@ -234,7 +234,7 @@ app.get("/auth/twitch", (req, res) => {
 app.get("/auth/twitch/callback", async (req, res) => {
   try {
     const code = req.query.code;
-    const redirectUri = `http://localhost:3000/auth/twitch/callback`;
+    const redirectUri = `/auth/twitch/callback`;
 
     // Exchange code for an access token
     const tokenResponse = await axios.post(
@@ -1846,5 +1846,5 @@ function sendEvent(type, identifier, message) {
 }
 
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running on port ${port}`);
 });
