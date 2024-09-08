@@ -130,7 +130,7 @@ function loginUser(req, res) {
       // const token = jwt.sign({ userId: user.userId }, process.env.SECRET_KEY, { expiresIn: '1h' });
       // res.json({ token: token });
           const token = jwt.sign({ userId: user.userId, username: user.username, class: user.class }, process.env.SECRET_KEY, { expiresIn: '168h' });
-          res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: 'Strict' });
+          res.cookie('jwt', token, { httpOnly: true, secure: false, sameSite: 'Lax' });
           res.redirect(`/u/${username}/wheel`);  // Redirect to a secure page
   });
 };

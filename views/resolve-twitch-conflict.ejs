@@ -1,0 +1,16 @@
+<!-- views/resolve-twitch-conflict.ejs -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Resolve Twitch Account Conflict</title>
+</head>
+<body>
+    <h1>Account Conflict Detected</h1>
+    <p>An existing account is already linked with this Twitch ID. Would you like to merge your current account with it?</p>
+    <form action="/merge-accounts" method="post">
+        <button type="submit" name="decision" value="yes">Yes, Merge Accounts</button>
+        <button type="submit" name="decision" value="no">No, Keep Separate</button>
+    </form>
+</body>
+</html>

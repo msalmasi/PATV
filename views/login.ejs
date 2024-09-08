@@ -18,6 +18,7 @@
             <div class="alert alert-success"><br><br><%= success %></div>
         <% } %>
     </form>
+        <button id="platformButton" onclick="loginWithTwitch()"><img src="/public/img/twitchbutton.png"></button>
     </div>
     <script>
 
@@ -41,3 +42,8 @@ login.addEventListener('click', login);
 
     </script>
 </body>
+<script>
+    function loginWithTwitch() {
+        window.location.href = '/auth/twitch'; // Redirect to the Twitch authentication route
+    }
+    </script>

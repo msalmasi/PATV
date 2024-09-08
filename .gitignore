@@ -7,3 +7,4 @@
 # ignore all files in any directory named build
 /node-modules
 /node_modules
+/twitchbot

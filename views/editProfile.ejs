@@ -43,6 +43,8 @@
             <input type="file" id="avatarFile" name="avatar" accept="image/*" required>
             
         </form>
+        <!-- Place this inside your HTML body where you want the Twitch login button -->
+        <button id="platformButton" onclick="loginWithTwitch()"><img src="/public/img/twitchbutton.png"></button>
         <div id="uploadStatus" class="spin-status"></div>
     </div>
 </body>
@@ -58,3 +60,10 @@
         return true;
     }
 </script>
+
+<!-- Include this script to handle the button click -->
+<script>
+    function loginWithTwitch() {
+        window.location.href = '/auth/twitch'; // Redirect to the Twitch authentication route
+    }
+    </script>

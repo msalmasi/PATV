@@ -380,7 +380,7 @@ function checkConnection(es) {
         } else {
             console.log('Connection was closed, attempting to reconnect...');
             setTimeout(function() {
-                eventSource = new EventSource('/events');
+                eventSource = new EventSource('/events?type=spin&identifier=${pageId}');
                 attachEventHandlers(eventSource);
             }, 5000);
         }

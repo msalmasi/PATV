@@ -21,7 +21,8 @@ body {
     background-color: rgb(0,0,0); /* Fallback color */
     background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
   }
-  
+
+
   /* Modal Content */
   .modal-content {
     margin: 15% auto; /* 15% from the top and centered */
@@ -286,7 +287,7 @@ button {
     background-color: #111;
 }
 
-.profile-container img {
+#profile-header img {
     margin-right: 25px;
     width: 40px; /* Set the size of the avatar */
     height: 40px;
@@ -434,3 +435,16 @@ padding-bottom: 20px;
     max-height: calc(var(--var-max-height) - 66.25vw);
   }
 }
+
+#platformButton {
+    background: none !important;
+    background-color: none !important;
+    border: none;
+    color: rgb(109, 109, 109);
+    cursor: pointer;
+    font-size: 16px;
+    font-family: ubuntu;
+    width: 170px;
+    margin-left: -22px;
+}
+  
