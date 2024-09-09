@@ -1,10 +1,9 @@
-<!-- views/resolve-twitch-conflict.ejs -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resolve Twitch Account Conflict</title>
+    <title>Resolve Discord Account Conflict</title>
     <link rel="stylesheet" href="/css/style.css">
     <style>
         .container {
@@ -34,17 +33,17 @@ button:hover {
 </head>
 <body>
     <div class="container">
-        <h1>Account Conflict Detected</h1>        
-        <p>Twitch user <strong><%= twitchDisplayname %></strong> is already associated with an existing account.</p>
+        <h1>Resolve Account Conflict</h1>
+        <p>Discord user <strong><%= discordUsername %></strong> is already associated with an existing account.</p>
         <p>Would you like to merge this account with your current account: <strong><%= currentUserUsername %></strong>?</p>
         <p>Your <strong>PAT <%= existingPAT %></strong> will be transferred to the this account.</p>
 
-        <form id="resolveConflictForm" action="/merge-accounts-twitch" method="post">
+        <form id="resolveConflictForm" action="/merge-accounts-discord" method="post">
             <input type="hidden" name="decision" value="yes">
             <button type="submit">Yes, merge accounts</button>
         </form>
 
-        <form id="cancelMergeForm" action="/merge-accounts-twitch" method="post">
+        <form id="cancelMergeForm" action="/merge-accounts-discord" method="post">
             <input type="hidden" name="decision" value="no">
             <button type="button" onclick="cancelMerge()">No, keep separate</button>
         </form>

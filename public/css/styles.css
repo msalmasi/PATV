@@ -448,3 +448,71 @@ padding-bottom: 20px;
     margin-left: -22px;
 }
   
+
+#discordLoginButton {
+    display: flex; 
+    width: 217px;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem; 
+    padding-left: 1.5rem;
+    padding-right: 1.5rem; 
+    align-items: center; 
+    border-radius: 0.5rem; 
+    border-width: 1px; 
+    border-color: #D1D5DB; 
+    font-size: 0.875rem;
+    line-height: 1.25rem; 
+    font-weight: 500; 
+    color: #ffffff; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
+    background-color: #5865F2;
+}
+
+#discordLoginButton:hover {
+ background-color: #2537f3; 
+ }
+
+#discordLoginDiv {
+    justify-content: center; 
+    align-items: center; 
+}
+
+#discordLoginDiv svg {
+margin-right: 0.5rem; 
+width: 1.5rem; 
+height: 1.5rem; 
+}
+
+#twitchLoginButton {
+    display: flex; 
+    width: 217px;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem; 
+    padding-left: 1.5rem;
+    padding-right: 1.5rem; 
+    align-items: center; 
+    border-radius: 0.5rem; 
+    border-width: 1px; 
+    border-color: #D1D5DB; 
+    font-size: 0.875rem;
+    line-height: 1.25rem; 
+    font-weight: 500; 
+    color: #000000; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
+    background-color: #ffffff;
+}
+
+#twitchLoginButton:hover {
+ background-color: #E5E7EB; 
+ }
+
+#twitchLoginDiv {
+    justify-content: center; 
+    align-items: center; 
+}
+
+#twitchLoginDiv svg {
+margin-right: 0.5rem; 
+width: 1.5rem; 
+height: 1.5rem; 
+}

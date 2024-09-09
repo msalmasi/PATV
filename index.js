@@ -219,7 +219,7 @@ app.get("/verify-email", async (req, res) => {
 });
 
 app.get("/auth/twitch", (req, res) => {
-  const redirectUri = `https://publicaccess.tv/auth/twitch/callback`;
+  const redirectUri = `http://localhost:3000/auth/twitch/callback`;
   const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?${querystring.stringify(
     {
       client_id: "bkwg34x1vqv51507a603f0e0clpg4b",
@@ -234,7 +234,7 @@ app.get("/auth/twitch", (req, res) => {
 app.get("/auth/twitch/callback", async (req, res) => {
   try {
     const code = req.query.code;
-    const redirectUri = `https://publicaccess.tv/auth/twitch/callback`;
+    const redirectUri = `http://localhost:3000/auth/twitch/callback`;
 
     // Exchange code for an access token
     const tokenResponse = await axios.post(
@@ -291,19 +291,19 @@ app.get("/auth/twitch/callback", async (req, res) => {
         // Temporarily store necessary info in session or another store
         req.session.conflict = {
           existingUserId: existingTwitchUser[0].userId,
+          existingPAT: existingTwitchUser[0].points_balance,
           currentUserId: currentUser.userId,
           currentUserUsername: currentUser.username,
           twitchId: twitchUser.id,
-          twitchDisplayname: twitchUser.display_name
+          twitchDisplayname: twitchUser.display_name,
         };
         return res.redirect("/resolve-twitch-conflict"); // Redirect to a page to handle the decision
       } else {
         // No conflict, update current user with Twitch ID
-        await runQuery("UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?", [
-          twitchUser.id,
-          twitchUser.display_name,
-          currentUser.userId,
-        ]);
+        await runQuery(
+          "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
+          [twitchUser.id, twitchUser.display_name, currentUser.userId]
+        );
         return res.redirect(`/u/${currentUser.username}/profile/edit`);
       }
     } else {
@@ -323,11 +323,10 @@ app.get("/auth/twitch/callback", async (req, res) => {
           [twitchUser.email]
         );
         if (existingTwitchEmail.length > 0) {
-          await runQuery("UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE email = ?", [
-            twitchUser.id,
-            twitchUser.display_name,
-            twitchUser.email,
-          ]);
+          await runQuery(
+            "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE email = ?",
+            [twitchUser.id, twitchUser.display_name, twitchUser.email]
+          );
           currentUser = existingTwitchEmail[0];
         } else {
           //create a new user
@@ -361,10 +360,18 @@ app.get("/auth/twitch/callback", async (req, res) => {
           currentUser = newUser;
         }
       }
-        // Create JWT for the new or found user and set as cookie
-        const token = jwt.sign({ userId: currentUser.userId, username: currentUser.username, class: currentUser.class }, process.env.SECRET_KEY, { expiresIn: '1h' });
-        res.cookie('jwt', token, { httpOnly: true, secure: true });
-        res.redirect('/');
+      // Create JWT for the new or found user and set as cookie
+      const token = jwt.sign(
+        {
+          userId: currentUser.userId,
+          username: currentUser.username,
+          class: currentUser.class,
+        },
+        process.env.SECRET_KEY,
+        { expiresIn: "1h" }
+      );
+      res.cookie("jwt", token, { httpOnly: true, secure: true });
+      res.redirect("/");
     }
   } catch (error) {
     console.error("Failed to authenticate with Twitch:", error);
@@ -376,47 +383,305 @@ app.get("/resolve-twitch-conflict", (req, res) => {
   // Check if there is a conflict information stored in the session
   if (!req.session.conflict) {
     // No conflict data found, redirect to a safe default, e.g., user profile or dashboard
-    return res.redirect("/profile");
+    return res.redirect("/");
   }
 
-  const { existingUserId, currentUserId, currentUserUsername, twitchId, twitchDisplayname } =
-    req.session.conflict;
+  const {
+    existingUserId,
+    existingPAT,
+    currentUserId,
+    currentUserUsername,
+    twitchId,
+    twitchDisplayname,
+  } = req.session.conflict;
   res.render("resolve-twitch-conflict", {
     existingUserId: existingUserId,
+    existingPAT: existingPAT,
     currentUserId: currentUserId,
     currentUserUsername: currentUserUsername,
     twitchId: twitchId,
-    twitchDisplayname: twitchDisplayname
+    twitchDisplayname: twitchDisplayname,
   });
 });
 
 // Endpoint to resolve Twitch account conflicts
-app.post("/merge-accounts", async (req, res) => {
+app.post("/merge-accounts-twitch", async (req, res) => {
   const decision = req.body.decision;
-  const { existingUserId, currentUserUsername, currentUserId, twitchId, twitchDisplayname } =
-    req.session.conflict;
+  const {
+    existingUserId,
+    currentUserUsername,
+    currentUserId,
+    twitchId,
+    twitchDisplayname,
+  } = req.session.conflict;
 
   if (decision === "yes") {
     // User decided to merge accounts
     try {
       // Import points_balance and other necessary data
-      const results = await getQuery(
-        "SELECT points_balance FROM users WHERE userId = ?",
-        [existingUserId]
+      const results = await getQuery("SELECT * FROM users WHERE userId = ?", [
+        existingUserId,
+      ]);
+      const currentResults = await getQuery(
+        "SELECT discordId FROM users WHERE userId = ?",
+        [currentUserId]
       );
       const points_balance =
         results.length > 0 ? results[0].points_balance : null;
+      const discordId = results.length > 0 ? results[0].discordId : null;
+      const discordUsername =
+        results.length > 0 ? results[0].discordUsername : null;
+      const currentDiscordId =
+        results.length > 0 ? currentResults[0].discordId : null;
+      if (!currentDiscordId) {
+        await runQuery(
+          "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
+          [discordId, discordUsername, currentUserId]
+        );
+      }
       await runQuery(
         "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
         [points_balance, currentUserId]
       );
-      await runQuery("UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?", [
-        twitchId,
-        twitchDisplayname,
-        currentUserId,
-      ]);
+      await runQuery(
+        "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
+        [twitchId, twitchDisplayname, currentUserId]
+      );
       await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
 
+      res.redirect(`/u/${currentUserUsername}/profile/edit`);
+    } catch (error) {
+      console.error("Error merging accounts:", error);
+      res.status(500).send("Failed to merge accounts");
+    }
+  } else {
+    // User decided not to merge accounts
+    res.redirect(`/u/${currentUserUsername}/profile/edit`);
+  }
+});
+
+// Endpoint for Discord auth
+app.get("/auth/discord", (req, res) => {
+  const redirectUri = `http://localhost:3000/auth/discord/callback`;
+  const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${querystring.stringify(
+    {
+      client_id: "1282737917760110733",
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "identify email",
+    }
+  )}`;
+  res.redirect(discordAuthUrl);
+});
+
+app.get("/auth/discord/callback", async (req, res) => {
+  try {
+    const code = req.query.code;
+    const redirectUri = `http://localhost:3000/auth/discord/callback`;
+
+    // Exchange the code for an access token
+    const tokenResponse = await axios.post(
+      "https://discord.com/api/oauth2/token",
+      querystring.stringify({
+        client_id: "1282737917760110733",
+        client_secret: "yF1ssAxqilPOgrgaNQhwt65xCx3-HOfX",
+        code: code,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+      }),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      }
+    );
+
+    const accessToken = tokenResponse.data.access_token;
+
+    // Use the access token to get user information from Discord
+    const userProfileResponse = await axios.get(
+      "https://discord.com/api/users/@me",
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    const discordUser = userProfileResponse.data;
+    console.log(userProfileResponse);
+    console.log(discordUser);
+
+    // Attempt to decode the existing JWT from the cookie
+    let currentUser;
+    if (req.cookies.jwt) {
+      try {
+        currentUser = jwt.verify(req.cookies.jwt, process.env.SECRET_KEY);
+      } catch (error) {
+        console.error("JWT verification failed:", error);
+      }
+    }
+
+    if (currentUser) {
+      // Update existing user record with Discord ID
+      const existingDiscordUser = await getQuery(
+        "SELECT * FROM users WHERE discordId = ? AND userId != ?",
+        [discordUser.id, currentUser.userId]
+      );
+      if (existingDiscordUser.length > 0) {
+        req.session.conflict = {
+          existingUserId: existingDiscordUser[0].userId,
+          existingPAT: existingDiscordUser[0].points_balance,
+          currentUserId: currentUser.userId,
+          currentUserUsername: currentUser.username,
+          discordId: discordUser.id,
+          discordUsername: discordUser.username,
+        };
+        return res.redirect("/resolve-discord-conflict");
+      } else {
+        await runQuery(
+          "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
+          [discordUser.id, discordUser.username, currentUser.userId]
+        );
+        return res.redirect(`/u/${currentUser.username}/profile/edit`);
+      }
+    } else {
+      // Handle new or returning Discord users
+      const existingUser = await getQuery(
+        "SELECT * FROM users WHERE discordId = ?",
+        [discordUser.id]
+      );
+      if (existingUser.length > 0) {
+        currentUser = existingUser[0];
+      } else {
+        // No user found, check if there is a user with the same email.
+        const existingDiscordEmail = await getQuery(
+          "SELECT * FROM users WHERE email = ?",
+          [discordUser.email]
+        );
+        if (existingDiscordEmail.length > 0) {
+          await runQuery(
+            "UPDATE users SET discordId = ?, discordUsername = ? WHERE email = ?",
+            [discordUser.id, discordUser.username, discordUser.email]
+          );
+          currentUser = existingDiscordEmail[0];
+        } else {
+          // Create a new user
+          const password = Math.random().toString(36).substring(2, 15);
+          const hashedPassword = await bcrypt.hash(password, 12);
+          const newUser = {
+            userId: uuidv4(),
+            username: discordUser.username, // Discord username
+            displayname: discordUser.username,
+            email: discordUser.email, // Discord email
+            password: hashedPassword,
+            avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
+            discordId: discordUser.id,
+            discordUsername: discordUser.username,
+            points_balance: 500000,
+          };
+          await runQuery(
+            "INSERT INTO users (userId, username, displayname, email, password, avatar, discordId, discordUsername, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+              newUser.userId,
+              newUser.username,
+              newUser.displayname,
+              newUser.email,
+              newUser.password,
+              newUser.avatar,
+              newUser.discordId,
+              newUser.discordUsername,
+              newUser.points_balance,
+            ]
+          );
+          console.log("whattttttttttttttttttttttt");
+          currentUser = newUser;
+        }
+      }
+      // Create JWT for the new or found user and set as cookie
+      const token = jwt.sign(
+        {
+          userId: currentUser.userId,
+          username: currentUser.username,
+          class: currentUser.class,
+        },
+        process.env.SECRET_KEY,
+        { expiresIn: "1h" }
+      );
+      res.cookie("jwt", token, { httpOnly: true, secure: true });
+      res.redirect("/");
+    }
+  } catch (error) {
+    console.error("Failed to authenticate with Discord:", error);
+    res.status(500).send("Authentication failed");
+  }
+});
+
+// Page for resolving Discord conflicts
+app.get("/resolve-discord-conflict", (req, res) => {
+  if (!req.session.conflict) {
+    return res.redirect("/");
+  }
+  const {
+    existingUserId,
+    existingPAT,
+    currentUserId,
+    currentUserUsername,
+    discordId,
+    discordUsername,
+  } = req.session.conflict;
+  res.render("resolve-discord-conflict", {
+    existingUserId,
+    currentUserId,
+    existingPAT,
+    currentUserUsername,
+    discordId,
+    discordUsername,
+  });
+});
+
+// Endpoint to resolve Discord account conflicts
+app.post("/merge-accounts-discord", async (req, res) => {
+  const decision = req.body.decision;
+  const {
+    existingUserId,
+    currentUserId,
+    currentUserUsername,
+    discordId,
+    discordUsername,
+  } = req.session.conflict;
+
+  if (decision === "yes") {
+    try {
+      // Merge logic here
+      const results = await getQuery("SELECT * FROM users WHERE userId = ?", [
+        existingUserId,
+      ]);
+      const currentResults = await getQuery(
+        "SELECT twitchId FROM users WHERE userId = ?",
+        [currentUserId]
+      );
+      console.log(results[0]);
+      const points_balance =
+        results.length > 0 ? results[0].points_balance : null;
+      const twitchId = results.length > 0 ? results[0].twitchId : null;
+      const twitchDisplayname =
+        results.length > 0 ? results[0].twitchDisplayname : null;
+      const currentTwitchId =
+        results.length > 0 ? currentResults[0].twitchId : null;
+      if (!currentTwitchId) {
+        await runQuery(
+          "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
+          [twitchId, twitchDisplayname, currentUserId]
+        );
+      }
+      await runQuery(
+        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
+        [points_balance, currentUserId]
+      );
+      await runQuery(
+        "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
+        [discordId, discordUsername, currentUserId]
+      );
+      await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
       res.redirect(`/u/${currentUserUsername}/profile/edit`);
     } catch (error) {
       console.error("Error merging accounts:", error);
@@ -782,7 +1047,7 @@ app.get(
     const username = req.user ? req.user.username : null; // Fallback to null if no user in session
     const usernameProfile = req.params.username; // Fallback to null if no user in session
     const sql =
-      "SELECT username, displayname, avatar, email, points_balance FROM users WHERE username = ?";
+      "SELECT username, displayname, twitchDisplayname, discordUsername, avatar, email, points_balance FROM users WHERE username = ?";
 
     try {
       if (username == usernameProfile) {
@@ -795,6 +1060,8 @@ app.get(
             // Render profile.ejs with user data
             username: user.username,
             displayname: user.displayname,
+            twitchDisplayname: user.twitchDisplayname,
+            discordUsername: user.discordUsername,
             avatar: user.avatar,
             email: user.email,
             points_balance: user.points_balance,
@@ -1313,106 +1580,119 @@ app.post("/api/prizes/edit", addUser, async (req, res) => {
 
 // HTTP POST endpoint to trigger wheel spin
 app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
-    const username = req.body.username;
-    const pageId = req.body.pageId;
-  
-    if (req.username !== username) {
-      return res.status(403).send("Access denied");
+  const username = req.body.username;
+  const pageId = req.body.pageId;
+
+  if (req.username !== username) {
+    return res.status(403).send("Access denied");
+  }
+
+  try {
+    checkAndResolveStalledSpins();
+    checkAndResolvePendingSpins();
+    const user = await getQuery(
+      `SELECT userId, points_balance FROM users WHERE username = ?;`,
+      [username]
+    );
+
+    if (!user.length || user[0].points_balance < 5000) {
+      return res.status(400).send("Insufficient points or user not found");
     }
-  
-    try {
-        checkAndResolveStalledSpins();
-      checkAndResolvePendingSpins();
-      const user = await getQuery(`SELECT userId, points_balance FROM users WHERE username = ?;`, [username]);
-  
-      if (!user.length || user[0].points_balance < 5000) {
-        return res.status(400).send("Insufficient points or user not found");
-      }
-  
-      const pendingSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
-        [user[0].userId]
-      );
-  
-      if (pendingSpin.length) {
-        return res.status(400).send("Free spin in progress.");
-      }
 
-      const stalledSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
-        [user[0].userId]
-      );
-  
-      if (stalledSpin.length) {
-        return res.status(400).send("Stalled spin.");
-      }
-  
-      // Prepare a potential transaction but do not commit
-      const spinId = uuidv4();
-      const transactionId = uuidv4();
+    const pendingSpin = await getQuery(
+      `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+      [user[0].userId]
+    );
 
-  
-      // Log the intent to spin, pending client acknowledgment
-      await runQuery(
-        `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
-        [spinId, user[0].userId, "gold", "INTENT", transactionId]
-      );
-  
-      // Send the spin command to the client
-      sendEvent("spin", pageId, {
-        message: `Request: ${username}`,
-        spinId: spinId, // Include the spin ID for tracking
-        timestamp: new Date()
-      });
-  
-      res.json({ spinId });
-    } catch (error) {
-      console.error("Failed to prepare spin:", error);
-      res.status(500).send("Failed to process spin");
+    if (pendingSpin.length) {
+      return res.status(400).send("Free spin in progress.");
     }
-  });
 
-  // Endpoint to finalize the spin after client acknowledgment
-app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
-    const { spinId } = req.body;
+    const stalledSpin = await getQuery(
+      `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+      [user[0].userId]
+    );
+
+    if (stalledSpin.length) {
+      return res.status(400).send("Stalled spin.");
+    }
+
+    // Prepare a potential transaction but do not commit
+    const spinId = uuidv4();
     const transactionId = uuidv4();
-    const jackpotId = uuidv4();
 
-    try {
-      const spinDetails = await getQuery(`SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`, [spinId]);
-  
-      if (!spinDetails.length) {
-        return res.status(404).send("Spin not found or already processed");
-      }
+    // Log the intent to spin, pending client acknowledgment
+    await runQuery(
+      `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
+      [spinId, user[0].userId, "gold", "INTENT", transactionId]
+    );
+
+    // Send the spin command to the client
+    sendEvent("spin", pageId, {
+      message: `Request: ${username}`,
+      spinId: spinId, // Include the spin ID for tracking
+      timestamp: new Date(),
+    });
+
+    res.json({ spinId });
+  } catch (error) {
+    console.error("Failed to prepare spin:", error);
+    res.status(500).send("Failed to process spin");
+  }
+});
+
+// Endpoint to finalize the spin after client acknowledgment
+app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
+  const { spinId } = req.body;
+  const transactionId = uuidv4();
+  const jackpotId = uuidv4();
+
+  try {
+    const spinDetails = await getQuery(
+      `SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`,
+      [spinId]
+    );
+
+    if (!spinDetails.length) {
+      return res.status(404).send("Spin not found or already processed");
+    }
 
     //   sendEvent("spin", pageId, {
     //     message: `Spin: ${username}`,
     //     spinId: spinId, // Include the spin ID for tracking
     //     timestamp: new Date(),
     //   });
-  
-      await runQuery("BEGIN TRANSACTION");
-  
-      await runQuery(`UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`, [spinDetails[0].userId]);
-      await runQuery(
-        `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
-        [transactionId, spinDetails[0].userId, "Wager: Gold Spin", -5000]
-      );
-      await runQuery(
-        `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-        [jackpotId, spinId, spinDetails[0].userId, 500]
-      );
-      await runQuery(`UPDATE wheel_spins SET result = 'PENDING', type = 'gold' WHERE spinId = ?`, [spinId]);
-  
-      await runQuery("COMMIT");
-  
-      res.json({ success: true, message: "Spin confirmed and points deducted" });
-    } catch (error) {
-      await runQuery("ROLLBACK");
-      console.error("Failed to finalize spin:", error);
-      res.status(500).json({ success: false, message: "Failed to finalize spin" });
-    }
-  });
+
+    await runQuery("BEGIN TRANSACTION");
+
+    await runQuery(
+      `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`,
+      [spinDetails[0].userId]
+    );
+    await runQuery(
+      `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
+      [transactionId, spinDetails[0].userId, "Wager: Gold Spin", -5000]
+    );
+    await runQuery(
+      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
+      [jackpotId, spinId, spinDetails[0].userId, 500]
+    );
+    await runQuery(
+      `UPDATE wheel_spins SET result = 'PENDING', type = 'gold' WHERE spinId = ?`,
+      [spinId]
+    );
+
+    await runQuery("COMMIT");
+
+    res.json({ success: true, message: "Spin confirmed and points deducted" });
+  } catch (error) {
+    await runQuery("ROLLBACK");
+    console.error("Failed to finalize spin:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to finalize spin" });
+  }
+});
 
 // HTTP POST endpoint to trigger a public wheel spin
 app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
@@ -1426,107 +1706,126 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
   try {
     checkAndResolveStalledPublicSpins();
     checkAndResolvePendingPublicSpins();
-    const user = await getQuery(`SELECT userId, points_balance FROM users WHERE username = ?;`, [username]);
-  
+    const user = await getQuery(
+      `SELECT userId, points_balance FROM users WHERE username = ?;`,
+      [username]
+    );
+
     if (!user.length || user[0].points_balance < 5000) {
       return res.status(400).send("Insufficient points or user not found");
     }
 
     const pendingSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
-        [user[0].userId]
-      );
-  
-      if (pendingSpin.length) {
-        return res.status(400).send("Free spin in progress.");
-      }
+      `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+      [user[0].userId]
+    );
 
-      const stalledSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
-        [user[0].userId]
-      );
-  
-      if (stalledSpin.length) {
-        return res.status(400).send("Stalled spin.");
-      }
+    if (pendingSpin.length) {
+      return res.status(400).send("Free spin in progress.");
+    }
+
+    const stalledSpin = await getQuery(
+      `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+      [user[0].userId]
+    );
+
+    if (stalledSpin.length) {
+      return res.status(400).send("Stalled spin.");
+    }
 
     // Prepare a potential transaction but do not commit
     const spinId = uuidv4();
     const transactionId = uuidv4();
 
-
     // Log the intent to spin, pending client acknowledgment
     await runQuery(
-        `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
-        [spinId, user[0].userId, "public", "INTENT", transactionId]
+      `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
+      [spinId, user[0].userId, "public", "INTENT", transactionId]
     );
 
     // Send the spin command to the client
-    sendEvent("spin", 'public', {
-        message: `Request: ${username}`,
-        spinId: spinId, // Include the spin ID for tracking
-        timestamp: new Date()
+    sendEvent("spin", "public", {
+      message: `Request: ${username}`,
+      spinId: spinId, // Include the spin ID for tracking
+      timestamp: new Date(),
     });
 
     res.json({ spinId });
-    } catch (error) {
+  } catch (error) {
     console.error("Failed to prepare spin:", error);
     res.status(500).send("Failed to process spin");
-    }
+  }
 });
 
-  // Endpoint to finalize the spin after client acknowledgment
-  app.post("/api/g/acknowledge-spin", async (req, res) => {
-    const { spinId } = req.body;
-    const transactionId = uuidv4();
-    const jackpotId = uuidv4();
+// Endpoint to finalize the spin after client acknowledgment
+app.post("/api/g/acknowledge-spin", async (req, res) => {
+  const { spinId } = req.body;
+  const transactionId = uuidv4();
+  const jackpotId = uuidv4();
 
-    try {
-      const spinDetails = await getQuery(`SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`, [spinId]);
-        const spinUser = await getQuery('SELECT username FROM users WHERE userId = ?', [spinDetails[0].userId]);
-        const username = spinUser[0].username;
-      if (!spinDetails.length) {
-        return res.status(404).send("Spin not found or already processed");
-      }
+  try {
+    const spinDetails = await getQuery(
+      `SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`,
+      [spinId]
+    );
+    const spinUser = await getQuery(
+      "SELECT username FROM users WHERE userId = ?",
+      [spinDetails[0].userId]
+    );
+    const username = spinUser[0].username;
+    if (!spinDetails.length) {
+      return res.status(404).send("Spin not found or already processed");
+    }
 
     //   sendEvent("spin", pageId, {
     //     message: `Spin: ${username}`,
     //     spinId: spinId, // Include the spin ID for tracking
     //     timestamp: new Date(),
     //   });
-  
-      await runQuery("BEGIN TRANSACTION");
 
-      await runQuery(`UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`, [spinDetails[0].userId]);
-      console.log(spinDetails[0].userId);
-      console.log(spinDetails);
-      console.log(transactionId);
-      console.log(spinId);
-      console.log(jackpotId);
-      await runQuery(
-        `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
-        [transactionId, spinDetails[0].userId, "Wager: Public Spin", -5000]
-      );
-      await runQuery(
-        `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-        [jackpotId, spinId, spinDetails[0].userId, 500]
-      );
-      await runQuery(`UPDATE wheel_spins SET result = 'PENDING', type = 'public' WHERE spinId = ?`, [spinId]);
-  
-      await runQuery("COMMIT");
-      const spinData = {
-        message: `public spinid ${spinId} from ${username}`,
-        spinId: spinId, // Include the spin ID for tracking
-        timestamp: new Date(),
-      };
-      sendEvent("spin", spinId, spinData);
-      res.json({ success: true, message: `public spinid ${spinId} from ${username}` });
-    } catch (error) {
-      await runQuery("ROLLBACK");
-      console.error("Failed to finalize spin:", error);
-      res.status(500).json({ success: false, message: "Failed to finalize spin" });
-    }
-  });
+    await runQuery("BEGIN TRANSACTION");
+
+    await runQuery(
+      `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`,
+      [spinDetails[0].userId]
+    );
+    console.log(spinDetails[0].userId);
+    console.log(spinDetails);
+    console.log(transactionId);
+    console.log(spinId);
+    console.log(jackpotId);
+    await runQuery(
+      `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
+      [transactionId, spinDetails[0].userId, "Wager: Public Spin", -5000]
+    );
+    await runQuery(
+      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
+      [jackpotId, spinId, spinDetails[0].userId, 500]
+    );
+    await runQuery(
+      `UPDATE wheel_spins SET result = 'PENDING', type = 'public' WHERE spinId = ?`,
+      [spinId]
+    );
+
+    await runQuery("COMMIT");
+    const spinData = {
+      message: `public spinid ${spinId} from ${username}`,
+      spinId: spinId, // Include the spin ID for tracking
+      timestamp: new Date(),
+    };
+    sendEvent("spin", spinId, spinData);
+    res.json({
+      success: true,
+      message: `public spinid ${spinId} from ${username}`,
+    });
+  } catch (error) {
+    await runQuery("ROLLBACK");
+    console.error("Failed to finalize spin:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to finalize spin" });
+  }
+});
 
 // Prune pending/unresolved spins.
 const checkAndResolvePendingSpins = () => {
@@ -1581,152 +1880,152 @@ const checkAndResolvePendingSpins = () => {
 
 // Prune pending/unresolved spins.
 const checkAndResolveStalledSpins = () => {
-    const now = new Date();
-    const oneMinuteAgo = new Date(now.getTime() - 2000); // 2000 milliseconds = 2 seconds
-    let sqliteTimestamp = oneMinuteAgo
-      .toISOString()
-      .replace("T", " ")
-      .slice(0, 19);
-    console.log("Current time:", now);
-    console.log("One minute ago:", oneMinuteAgo);
-  
-    db.all(
-      `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND type = 'gold' AND timestamp < ?`,
-      [sqliteTimestamp],
-      (err, spins) => {
-        if (err) {
-          console.error("Error fetching stalled spins:", err);
-          return;
-        }
-  
-        if (spins.length === 0) {
-          console.log("No stalled spins older than 2 seconds.");
-          return;
-        }
-  
-        console.log(`Found ${spins.length} stalled spins to process.`);
-        spins.forEach((spin) => {
-          console.log(
-            `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
-          );
-          // Update spin status to FAILED
-          db.run(
-            `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
-            [spin.spinId],
-            (err) => {
-              if (err) {
-                console.error(
-                  "Error updating spin status for spin ID " + spin.spinId + ":",
-                  err
-                );
-                return;
-              }
-            }
-          );
-        });
-      }
-    );
-  };
+  const now = new Date();
+  const oneMinuteAgo = new Date(now.getTime() - 2000); // 2000 milliseconds = 2 seconds
+  let sqliteTimestamp = oneMinuteAgo
+    .toISOString()
+    .replace("T", " ")
+    .slice(0, 19);
+  console.log("Current time:", now);
+  console.log("One minute ago:", oneMinuteAgo);
 
-  // Prune pending/unresolved spins.
-const checkAndResolvePendingPublicSpins = () => {
-    const now = new Date();
-    const oneMinuteAgo = new Date(now.getTime() - 30000); // 30000 milliseconds = 30 seconds
-    let sqliteTimestamp = oneMinuteAgo
-      .toISOString()
-      .replace("T", " ")
-      .slice(0, 19);
-    console.log("Current time:", now);
-    console.log("One minute ago:", oneMinuteAgo);
-  
-    db.all(
-      `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND timestamp < ?`,
-      [sqliteTimestamp],
-      (err, spins) => {
-        if (err) {
-          console.error("Error fetching pending spins:", err);
-          return;
-        }
-  
-        if (spins.length === 0) {
-          console.log("No pending spins older than one minute.");
-          return;
-        }
-  
-        console.log(`Found ${spins.length} pending spins to process.`);
-        spins.forEach((spin) => {
-          console.log(
-            `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
-          );
-          // Update spin status to FAILED
-          db.run(
-            `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
-            [spin.spinId],
-            (err) => {
-              if (err) {
-                console.error(
-                  "Error updating spin status for spin ID " + spin.spinId + ":",
-                  err
-                );
-                return;
-              }
-              // Refund logic here
-              refundUser(spin.userId, spin.spinId);
-            }
-          );
-        });
+  db.all(
+    `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND type = 'gold' AND timestamp < ?`,
+    [sqliteTimestamp],
+    (err, spins) => {
+      if (err) {
+        console.error("Error fetching stalled spins:", err);
+        return;
       }
-    );
-  };
-  
-  // Prune pending/unresolved spins.
-  const checkAndResolveStalledPublicSpins = () => {
-      const now = new Date();
-      const oneMinuteAgo = new Date(now.getTime() - 2000); // 2000 milliseconds = 2 seconds
-      let sqliteTimestamp = oneMinuteAgo
-        .toISOString()
-        .replace("T", " ")
-        .slice(0, 19);
-      console.log("Current time:", now);
-      console.log("One minute ago:", oneMinuteAgo);
-    
-      db.all(
-        `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND timestamp < ?`,
-        [sqliteTimestamp],
-        (err, spins) => {
-          if (err) {
-            console.error("Error fetching stalled spins:", err);
-            return;
+
+      if (spins.length === 0) {
+        console.log("No stalled spins older than 2 seconds.");
+        return;
+      }
+
+      console.log(`Found ${spins.length} stalled spins to process.`);
+      spins.forEach((spin) => {
+        console.log(
+          `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
+        );
+        // Update spin status to FAILED
+        db.run(
+          `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
+          [spin.spinId],
+          (err) => {
+            if (err) {
+              console.error(
+                "Error updating spin status for spin ID " + spin.spinId + ":",
+                err
+              );
+              return;
+            }
           }
-    
-          if (spins.length === 0) {
-            console.log("No stalled spins older than 2 seconds.");
-            return;
+        );
+      });
+    }
+  );
+};
+
+// Prune pending/unresolved spins.
+const checkAndResolvePendingPublicSpins = () => {
+  const now = new Date();
+  const oneMinuteAgo = new Date(now.getTime() - 30000); // 30000 milliseconds = 30 seconds
+  let sqliteTimestamp = oneMinuteAgo
+    .toISOString()
+    .replace("T", " ")
+    .slice(0, 19);
+  console.log("Current time:", now);
+  console.log("One minute ago:", oneMinuteAgo);
+
+  db.all(
+    `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND timestamp < ?`,
+    [sqliteTimestamp],
+    (err, spins) => {
+      if (err) {
+        console.error("Error fetching pending spins:", err);
+        return;
+      }
+
+      if (spins.length === 0) {
+        console.log("No pending spins older than one minute.");
+        return;
+      }
+
+      console.log(`Found ${spins.length} pending spins to process.`);
+      spins.forEach((spin) => {
+        console.log(
+          `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
+        );
+        // Update spin status to FAILED
+        db.run(
+          `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
+          [spin.spinId],
+          (err) => {
+            if (err) {
+              console.error(
+                "Error updating spin status for spin ID " + spin.spinId + ":",
+                err
+              );
+              return;
+            }
+            // Refund logic here
+            refundUser(spin.userId, spin.spinId);
           }
-    
-          console.log(`Found ${spins.length} stalled spins to process.`);
-          spins.forEach((spin) => {
-            console.log(
-              `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
-            );
-            // Update spin status to FAILED
-            db.run(
-              `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
-              [spin.spinId],
-              (err) => {
-                if (err) {
-                  console.error(
-                    "Error updating spin status for spin ID " + spin.spinId + ":",
-                    err
-                  );
-                  return;
-                }
-              }
-            );
-          });
-        }
-      );
-    };
+        );
+      });
+    }
+  );
+};
+
+// Prune pending/unresolved spins.
+const checkAndResolveStalledPublicSpins = () => {
+  const now = new Date();
+  const oneMinuteAgo = new Date(now.getTime() - 2000); // 2000 milliseconds = 2 seconds
+  let sqliteTimestamp = oneMinuteAgo
+    .toISOString()
+    .replace("T", " ")
+    .slice(0, 19);
+  console.log("Current time:", now);
+  console.log("One minute ago:", oneMinuteAgo);
+
+  db.all(
+    `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND timestamp < ?`,
+    [sqliteTimestamp],
+    (err, spins) => {
+      if (err) {
+        console.error("Error fetching stalled spins:", err);
+        return;
+      }
+
+      if (spins.length === 0) {
+        console.log("No stalled spins older than 2 seconds.");
+        return;
+      }
+
+      console.log(`Found ${spins.length} stalled spins to process.`);
+      spins.forEach((spin) => {
+        console.log(
+          `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
+        );
+        // Update spin status to FAILED
+        db.run(
+          `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
+          [spin.spinId],
+          (err) => {
+            if (err) {
+              console.error(
+                "Error updating spin status for spin ID " + spin.spinId + ":",
+                err
+              );
+              return;
+            }
+          }
+        );
+      });
+    }
+  );
+};
 
 // Function to handle refund
 const refundUser = (userId, spinId) => {
@@ -1853,12 +2152,10 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                           .json({ error: "Failed to create spin record" });
                       }
                       sendEvent("results", spinId, { result: jackpotTotal });
-                      res
-                        .status(200)
-                        .json({
-                          transactionId: transactionId,
-                          result: jackpotTotal,
-                        });
+                      res.status(200).json({
+                        transactionId: transactionId,
+                        result: jackpotTotal,
+                      });
                     }
                   );
                 }
@@ -1969,12 +2266,10 @@ app.post(
                             .json({ error: "Failed to create spin record" });
                         }
 
-                        res
-                          .status(200)
-                          .json({
-                            transactionId: transactionId,
-                            result: jackpotTotal,
-                          });
+                        res.status(200).json({
+                          transactionId: transactionId,
+                          result: jackpotTotal,
+                        });
                       }
                     );
                   }

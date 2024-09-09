@@ -221,26 +221,6 @@ function hideResultOverlay() {
   resultContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.65)'; // Semi-transparent background
 }
 
-// Function for initiating the user spin from the backend.
-function setupSpinListener(username) {
-  const eventSource = new EventSource(`/events?type=spin&identifier=public`);
-  console.log(eventSource);
-  eventSource.onmessage = function(event) {
-      const data = JSON.parse(event.data);
-      console.log(data);
-      if (data.message.includes("Request") && data.spinId) {
-          console.log("Spin request received:", data);
-          acknowledgeSpin(data.spinId);
-      }
-  };
-
-  eventSource.onerror = function(event) {
-    console.error('EventSource failed:', event);
-    checkConnection(eventSource);
-    eventSource.close();
-};
-}
-
 function acknowledgeSpin(spinId) {
   fetch(`/api/g/acknowledge-spin`, {
       method: 'POST',
@@ -269,6 +249,28 @@ function acknowledgeSpin(spinId) {
   });
 }
 
+
+// Function for initiating the user spin from the backend.
+function setupSpinListener(username) {
+  const eventSource = new EventSource(`/events?type=spin&identifier=public`);
+  console.log(eventSource);
+  eventSource.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      console.log(data);
+      if (data.message.includes("Request") && data.spinId) {
+          console.log("Spin request received:", data);
+          acknowledgeSpin(data.spinId);
+      }
+  };
+
+  eventSource.onerror = function(event) {
+    console.error('EventSource failed:', event);
+    checkConnection(eventSource);
+    eventSource.close();
+};
+}
+
+
 // Function for reconnecting to Event Source
 var reconnectAttempts = 0;
 
@@ -282,8 +284,7 @@ function checkConnection(es) {
       } else {
           console.log('Connection was closed, attempting to reconnect...');
           setTimeout(function() {
-              eventSource = new EventSource('/events?type=spin&identifier=public');
-              attachEventHandlers(eventSource);
+            setupSpinListener('public');
           }, 5000);
       }
   }

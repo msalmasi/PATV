@@ -21,6 +21,7 @@ function createTables() {
         email TEXT UNIQUE,
         password TEXT NOT NULL,
         discordId TEXT,
+        discordUsername TEXT,
         twitchId TEXT,
         twitchDisplayname TEXT,
         streamId TEXT,
