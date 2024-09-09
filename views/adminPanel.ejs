@@ -11,6 +11,25 @@
     <% } %>
         </div>
 
+        
+    <div class="panel">
+        <h3>Create Redemption Code</h3>
+    <form action="/api/admin/redemption-codes" method="post">
+        <input type="text" name="code" placeholder="Enter code" required>
+        <input type="number" name="points" placeholder="Point value" required>
+        <input type="number" name="uses_allowed" placeholder="Number of uses" required>
+        <input type="date" name="expiration_date" placeholder="Expiration date">
+        <button type="submit">Save Code</button>
+    </form>
+
+    </div>
+
+    <div class="panel">
+        <h3>Existing Redemption Codes</h3>
+    <div id="redemptionCodesList"></div>
+    </div>
+
+
     <!-- Manual Wheel Spin Form -->
     <div class="panel">
     <h3>Manual Wheel Spin</h3>
@@ -445,6 +464,53 @@
 
     actionSelect.addEventListener('change', toggleCostInput);
     toggleCostInput(); // To set initial visibility state
+
+    fetchRedemptionCodes();
+
+function fetchRedemptionCodes() {
+    fetch('/api/admin/redemption-codes')
+        .then(response => response.json())
+        .then(data => {
+            const list = document.getElementById('redemptionCodesList');
+            list.innerHTML = ''; // Clear previous list
+            data.forEach(code => {
+                const codeElement = document.createElement('div');
+                codeElement.innerHTML = `
+                    <button class="link-button" onclick="toggleUsers('${code.code}', this)"><span>${code.code}</span></button><span>${code.uses_remaining} left</span><button class="link-button" onclick="deleteCode('${code.code}')"><span>❌</span></button>
+                    
+                    <ul id="users-${code.code}" style="display:none;"></ul>
+                `;
+                list.appendChild(codeElement);
+            });
+        });
+}
+
+window.deleteCode = function(code) {
+    fetch(`/api/admin/redemption-codes/${code}`, { method: 'DELETE' })
+        .then(response => {
+            if (response.ok) fetchRedemptionCodes();
+            else alert('Failed to delete code');
+        });
+};
+
+window.toggleUsers = function(code, button) {
+        const userList = document.getElementById(`users-${code}`);
+        if (userList.style.display === 'none') {
+            fetch(`/api/admin/redemption-codes/${code}/users`)
+                .then(response => response.json())
+                .then(data => {
+                    userList.innerHTML = ''; // Clear list
+                    data.forEach(user => {
+                        const userItem = document.createElement('li');
+                        userItem.textContent = `${user.username} (User ID: ${user.userId})`;
+                        userList.appendChild(userItem);
+                    });
+                    userList.style.display = 'block';
+                });
+        } else {
+            userList.style.display = 'none';
+        }
+    };
 };
 </script>
     

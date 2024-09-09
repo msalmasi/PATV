@@ -1528,6 +1528,134 @@ app.post("/api/classes/edit", addUser, async (req, res) => {
   }
 });
 
+// HTTP POST endpoint to edit the list of redemption codes.
+app.post("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {
+    const { code, points, uses_allowed, expiration_date } = req.body;
+    const userType = req.user ? req.user.class : null;
+    if (userType === "Admin" || userType === "Staff") {
+        try {
+            const existingCode = await getQuery("SELECT code FROM redemption_codes WHERE code = ?", [code]);
+            if (existingCode.length > 0) {
+                // Update existing code
+                await runQuery("UPDATE redemption_codes SET points = ?, uses_allowed = ?, uses_remaining = ?, expiration_date = ? WHERE code = ?", [points, uses_allowed, uses_allowed, expiration_date, code]);
+            } else {
+                // Insert new code
+                await runQuery("INSERT INTO redemption_codes (code, points, uses_allowed, uses_remaining, expiration_date) VALUES (?, ?, ?, ?, ?)", [code, points, uses_allowed, uses_allowed, expiration_date]);
+            }
+            res.send("Redemption code updated successfully");
+        } catch (error) {
+            console.error("Failed to update redemption code:", error);
+            res.status(500).send("Failed to update redemption code");
+        }
+    } else {
+        req.flash(
+          "error",
+          "Access denied. You must be an admin or staff to access this page."
+        );
+        return res.redirect("/login");
+      }
+});
+
+// HTTP GET end to list redemption codes.
+app.get("/api/admin/redemption-codes", authenticateToken, addUser, async (req, res) => {
+    const userType = req.user ? req.user.class : null;
+    if (userType === "Admin" || userType === "Staff") {
+        try {
+            const codes = await getQuery("SELECT code, points, uses_remaining FROM redemption_codes WHERE uses_remaining > 0 ORDER BY created_at DESC");
+            res.json(codes);
+        } catch (error) {
+            console.error("Error fetching redemption codes:", error);
+            res.status(500).send("Failed to fetch redemption codes");
+        }
+    } else {
+        req.flash(
+        "error",
+        "Access denied. You must be an admin or staff to access this page."
+        );
+        return res.redirect("/login");
+    }
+});
+
+// HTTP DELETE endpoint for redemption code
+app.delete("/api/admin/redemption-codes/:code", authenticateToken, addUser, async (req, res) => {
+        const userType = req.user ? req.user.class : null;
+        if (userType === "Admin" || userType === "Staff") {
+        const { code } = req.params;
+        try {
+            await runQuery("DELETE FROM redemption_codes WHERE code = ?", [code]);
+            res.send("Redemption code deleted successfully");
+        } catch (error) {
+            console.error("Error deleting redemption code:", error);
+            res.status(500).send("Failed to delete redemption code");
+        }
+    } else {
+        req.flash(
+        "error",
+        "Access denied. You must be an admin or staff to access this page."
+        );
+        return res.redirect("/login");
+    }
+});
+
+// Get Users Who Redeemed a Code
+app.get("/api/admin/redemption-codes/:code/users", authenticateToken, addUser, async (req, res) => {
+    const { code } = req.params;
+    const userType = req.user ? req.user.class : null;
+    if (userType === "Admin" || userType === "Staff") {
+        try {
+            const users = await getQuery(
+                "SELECT u.username, u.userId FROM user_redemptions ur JOIN users u ON ur.userId = u.userId WHERE ur.code = ?",
+                [code]
+            );
+            res.json(users);
+        } catch (error) {
+            console.error("Failed to fetch users for code:", error);
+            res.status(500).send("Failed to fetch users");
+        }
+} else {
+    req.flash(
+    "error",
+    "Access denied. You must be an admin or staff to access this page."
+    );
+    return res.redirect("/login");
+}
+});
+
+// HTTP POST endpoint to edit the list of redemption codes.
+app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
+    const { code } = req.body;
+    const userId = req.user.userId; // Assuming you have user identification set up
+
+    try {
+        const codeData = await getQuery("SELECT * FROM redemption_codes WHERE code = ? AND (expiration_date IS NULL OR expiration_date > CURRENT_TIMESTAMP) AND uses_remaining > 0", [code]);
+        const transactionId = uuidv4();
+        if (codeData.length === 0) {
+            return res.status(404).send("Invalid or expired code");
+        }
+
+        const userRedemption = await getQuery("SELECT * FROM user_redemptions WHERE userId = ? AND code = ?", [userId, code]);
+        if (userRedemption.length > 0) {
+            return res.status(400).send("Code has already been redeemed by you");
+        }
+
+        await runQuery("BEGIN TRANSACTION");
+        await runQuery("INSERT INTO user_redemptions (userId, code) VALUES (?, ?)", [userId, code]);
+        await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [codeData[0].points, userId]);
+        await runQuery("UPDATE redemption_codes SET uses_remaining = uses_remaining - 1 WHERE code = ?", [code]);
+        await runQuery(
+            "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+            [transactionId, userId, `redemption (${codeData[0].code})`, codeData[0].points]
+          );
+        await runQuery("COMMIT");
+        
+        res.send("Code redeemed successfully");
+    } catch (error) {
+        await runQuery("ROLLBACK");
+        console.error("Failed to redeem code:", error);
+        res.status(500).send("Failed to redeem code");
+    }
+});
+
 // HTTP POST endpoint to edit the list of classes.
 app.post("/api/prizes/edit", addUser, async (req, res) => {
   const userType = req.user ? req.user.class : null;

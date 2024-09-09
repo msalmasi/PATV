@@ -62,6 +62,36 @@ function createTables() {
         }
     });
 
+    db.run(`CREATE TABLE IF NOT EXISTS user_redemptions (
+        redemption_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId TEXT NOT NULL,
+        code TEXT NOT NULL,
+        redeemed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(userId),
+        FOREIGN KEY (code) REFERENCES redemption_codes(code)
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table user_redemptions', err);
+        } else {
+            console.log('Table user_redemptions created or already exists.');
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS redemption_codes (
+        code TEXT PRIMARY KEY,
+        points INTEGER NOT NULL,
+        uses_allowed INTEGER DEFAULT 1,
+        uses_remaining INTEGER DEFAULT 1,
+        expiration_date DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table redemption_codes', err);
+        } else {
+            console.log('Table redemption_codes created or already exists.');
+        }
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS wheel_spins (
         spinId TEXT PRIMARY KEY,
         type TEXT,
@@ -120,6 +150,14 @@ function createTables() {
         }
     });
     // Add additional tables as needed
+    db.serialize(() => {
+        db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_code ON user_redemptions (userId, code);`, (err) => {
+          if (err) {
+            return console.error("Error creating unique index:", err.message);
+          }
+          console.log("Unique index created successfully.");
+        });
+      });
 }
 
 // Utility functions for inserting and updating data

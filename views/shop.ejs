@@ -3,6 +3,10 @@
 
 <div class="shop-container">
     <h1 class="shop-title">Arcade Shop</h1>
+    <form action="/api/redeem-code" method="post">
+        <input type="text" name="code" placeholder="Enter your redemption code" required>
+        <button id="codeBtn" type="submit">Redeem Code</button>
+    </form>
     <div class="product-list">
         <!-- Items will be dynamically inserted here -->
     </div>
