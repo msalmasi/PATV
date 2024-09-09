@@ -1476,7 +1476,7 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
 });
 
   // Endpoint to finalize the spin after client acknowledgment
-  app.post("/api/g/acknowledge-spin", authenticateToken, async (req, res) => {
+  app.post("/api/g/acknowledge-spin", async (req, res) => {
     const { spinId } = req.body;
     const transactionId = uuidv4();
     const jackpotId = uuidv4();
