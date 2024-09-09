@@ -219,10 +219,10 @@ app.get("/verify-email", async (req, res) => {
 });
 
 app.get("/auth/twitch", (req, res) => {
-  const redirectUri = `https://publicaccess.tv/auth/twitch/callback`;
+  const redirectUri = process.env.TWITCH_AUTH_CALLBACK;
   const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?${querystring.stringify(
     {
-      client_id: "bkwg34x1vqv51507a603f0e0clpg4b",
+      client_id: process.env.TWITCH_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
       scope: "user:read:email user:read:subscriptions",
@@ -234,14 +234,14 @@ app.get("/auth/twitch", (req, res) => {
 app.get("/auth/twitch/callback", async (req, res) => {
   try {
     const code = req.query.code;
-    const redirectUri = `https://publicaccess.tv/auth/twitch/callback`;
+    const redirectUri = process.env.TWITCH_AUTH_CALLBACK;
 
     // Exchange code for an access token
     const tokenResponse = await axios.post(
       "https://id.twitch.tv/oauth2/token",
       querystring.stringify({
-        client_id: "bkwg34x1vqv51507a603f0e0clpg4b",
-        client_secret: "yvhzwae0oxclchcfjzore8k4rudsva",
+        client_id: process.env.TWITCH_CLIENT_ID,
+        client_secret: process.env.TWITCH_SECRET_KEY,
         code: code,
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
@@ -462,10 +462,10 @@ app.post("/merge-accounts-twitch", async (req, res) => {
 
 // Endpoint for Discord auth
 app.get("/auth/discord", (req, res) => {
-  const redirectUri = `https://publicaccess.tv/auth/discord/callback`;
+  const redirectUri = process.env.DISCORD_AUTH_CALLBACK;
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${querystring.stringify(
     {
-      client_id: "1282737917760110733",
+      client_id: process.env.DISCORD_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
       scope: "identify email",
@@ -477,14 +477,14 @@ app.get("/auth/discord", (req, res) => {
 app.get("/auth/discord/callback", async (req, res) => {
   try {
     const code = req.query.code;
-    const redirectUri = `https://publicaccess.tv/auth/discord/callback`;
+    const redirectUri = process.env.DISCORD_AUTH_CALLBACK;
 
     // Exchange the code for an access token
     const tokenResponse = await axios.post(
       "https://discord.com/api/oauth2/token",
       querystring.stringify({
-        client_id: "1282737917760110733",
-        client_secret: "yF1ssAxqilPOgrgaNQhwt65xCx3-HOfX",
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_SECRET_KEY,
         code: code,
         grant_type: "authorization_code",
         redirect_uri: redirectUri,
