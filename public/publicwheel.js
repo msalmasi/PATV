@@ -86,8 +86,8 @@ function drawWheel() {
 }
 
 // Wheel Animation Function
-function spinWheel(wheelSpinner) {
-  console.log("Spinning wheel for:", wheelSpinner);
+function spinWheel(wheelSpinner, spinId) {
+  console.log("Spinning wheel for:", wheelSpinner, spinId);
   hideResultOverlay()
   if (isSpinning) return;
   isSpinning = true;
@@ -125,7 +125,7 @@ function spinWheel(wheelSpinner) {
     } else {
       setTimeout(() => { // Allow the wheel to visually stop before showing the result
         isSpinning = false;
-        determineSpinResult(wheelSpinner);
+        determineSpinResult(wheelSpinner, spinId);
       }, 500); 
     }
   }
@@ -160,8 +160,8 @@ function fetchJackpotTotal() {
 fetchJackpotTotal()
 
 // Logic for the winning result.
-function determineSpinResult(wheelSpinner) {
-  console.log("Determining results for:", wheelSpinner);
+function determineSpinResult(wheelSpinner, spinId) {
+  console.log("Determining results for:", wheelSpinner, spinId);
   const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
   const segmentAngle = (2 * Math.PI) / totalSize;
 
@@ -227,12 +227,11 @@ function setupSpinListener(username) {
   console.log(eventSource);
   eventSource.onmessage = function(event) {
       const data = JSON.parse(event.data);
-      console.log('Received command to start spinning:', data);
-      const segments = data.message.split(' '); // Split the path by ' '
-      // Assuming the structure /u/username/wheel, username would be at index 2
-      wheelSpinner = segments[4];
-      spinId = segments[2];
-      spinWheel(wheelSpinner); // Function to start the wheel spinning
+      console.log(data);
+      if (data.message.includes("Request") && data.spinId) {
+          console.log("Spin request received:", data);
+          acknowledgeSpin(data.spinId);
+      }
   };
 
   eventSource.onerror = function(event) {
@@ -240,6 +239,34 @@ function setupSpinListener(username) {
     checkConnection(eventSource);
     eventSource.close();
 };
+}
+
+function acknowledgeSpin(spinId) {
+  fetch(`/api/g/acknowledge-spin`, {
+      method: 'POST',
+      headers: {
+          'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ spinId: spinId })
+  })
+  .then(response => response.json())
+  .then(data => {
+      console.log('Acknowledgment response:', data);
+      if (data.success) {
+          console.log("Spin command received:", data);
+          const segments = data.message.split(' '); // Split the path by ' '
+          // Assuming the structure /u/username/wheel, username would be at index 2
+          console.log(segments);
+          wheelSpinner = segments[4];
+          spinId = segments[2];
+          spinWheel(wheelSpinner, spinId); // Function to start the wheel spinning
+      } else {
+          alert('Failed to acknowledge spin:', data.message);
+      }
+  })
+  .catch(error => {
+      console.error('Error sending acknowledgment:', error);
+  });
 }
 
 // Function for reconnecting to Event Source
@@ -255,7 +282,7 @@ function checkConnection(es) {
       } else {
           console.log('Connection was closed, attempting to reconnect...');
           setTimeout(function() {
-              eventSource = new EventSource('/events');
+              eventSource = new EventSource('/events?type=spin&identifier=public');
               attachEventHandlers(eventSource);
           }, 5000);
       }

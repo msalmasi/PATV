@@ -155,9 +155,9 @@
                                         // Store spinId in local storage or a global variable
                                         localStorage.setItem('currentSpinID', spinId);
                                         // Set up SSE listener with this spinId
+                                        console.log('hoopla'+spinId);
+                                        setupWagerListener(spinId);
                                         setupResultsListener(spinId);
-                                        wager = 5000;
-                                        displayWagerCost(wager);
                                         fetchUserBalance(user); // Update the User Balance
                                         document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
                                     }
@@ -203,6 +203,32 @@
                                 // Update UI based on the result
                                 displaySpinResult(result.result);
                                 fetchUserBalance(user);
+                                eventSource.close();
+                            };
+
+                            eventSource.onerror = function (event) {
+                                console.error('EventSource failed:', event);
+                                eventSource.close();
+                            };
+                        }
+                        
+                        function setupWagerListener(spinId) {
+                            console.log('hoopla2'+spinId);
+                            const eventSource = new EventSource(`/events?type=spin&identifier=${spinId}`);
+
+                            eventSource.onmessage = function (event) {
+                                const data = JSON.parse(event.data);
+                                console.log('Spin command received:', data);
+                                console.log(data.message);
+                                console.log(data);
+                                if (data.message.includes("public spinid") && data.spinId) {
+                                    console.log('hoopla4'+spinId);
+                                    console.log("Spin command received:", data);
+                                    wager = 5000;
+                                    displayWagerCost(wager);
+                                    fetchUserBalance(user);
+                                }
+                                // Update UI based on the result
                                 eventSource.close();
                             };
 

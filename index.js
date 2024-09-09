@@ -1330,7 +1330,7 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
       }
   
       const pendingSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
         [user[0].userId]
       );
   
@@ -1339,14 +1339,10 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
       }
 
       const stalledSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'gold' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
         [user[0].userId]
       );
   
-      if (pendingSpin.length) {
-        return res.status(400).send("Free spin in progress.");
-      }
-
       if (stalledSpin.length) {
         return res.status(400).send("Stalled spin.");
       }
@@ -1406,7 +1402,7 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
         `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
         [jackpotId, spinId, spinDetails[0].userId, 500]
       );
-      await runQuery(`UPDATE wheel_spins SET result = 'PENDING' WHERE spinId = ?`, [spinId]);
+      await runQuery(`UPDATE wheel_spins SET result = 'PENDING', type = 'gold' WHERE spinId = ?`, [spinId]);
   
       await runQuery("COMMIT");
   
@@ -1428,68 +1424,109 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
   }
 
   try {
-    checkAndResolvePendingSpins();
-    const users = await getQuery(
-      `SELECT userId, points_balance FROM users WHERE username = ?;`,
-      [username]
-    );
-    const user = users[0]; // Since getQuery uses db.all, it returns an array
-
-    if (!user) {
-      return res.status(404).send("User not found");
+    checkAndResolveStalledPublicSpins();
+    checkAndResolvePendingPublicSpins();
+    const user = await getQuery(`SELECT userId, points_balance FROM users WHERE username = ?;`, [username]);
+  
+    if (!user.length || user[0].points_balance < 5000) {
+      return res.status(400).send("Insufficient points or user not found");
     }
 
-    if (user.points_balance < 5000) {
-      return res.status(400).send("Insufficient points");
-    }
+    const pendingSpin = await getQuery(
+        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        [user[0].userId]
+      );
+  
+      if (pendingSpin.length) {
+        return res.status(400).send("Free spin in progress.");
+      }
 
-    const pendingSpins = await getQuery(
-      `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' ORDER BY rowid DESC LIMIT 1;`
-    );
-    const pendingSpin = pendingSpins[0]; // Since getQuery uses db.all, it returns an array
+      const stalledSpin = await getQuery(
+        `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        [user[0].userId]
+      );
+  
+      if (stalledSpin.length) {
+        return res.status(400).send("Stalled spin.");
+      }
 
-    if (pendingSpin) {
-      return res.status(400).send("Free spin in progress.");
-    }
-
-    await runQuery("BEGIN TRANSACTION");
-
+    // Prepare a potential transaction but do not commit
     const spinId = uuidv4();
+    const transactionId = uuidv4();
+
+
+    // Log the intent to spin, pending client acknowledgment
+    await runQuery(
+        `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
+        [spinId, user[0].userId, "public", "INTENT", transactionId]
+    );
+
+    // Send the spin command to the client
+    sendEvent("spin", 'public', {
+        message: `Request: ${username}`,
+        spinId: spinId, // Include the spin ID for tracking
+        timestamp: new Date()
+    });
+
+    res.json({ spinId });
+    } catch (error) {
+    console.error("Failed to prepare spin:", error);
+    res.status(500).send("Failed to process spin");
+    }
+});
+
+  // Endpoint to finalize the spin after client acknowledgment
+  app.post("/api/g/acknowledge-spin", authenticateToken, async (req, res) => {
+    const { spinId } = req.body;
     const transactionId = uuidv4();
     const jackpotId = uuidv4();
 
-    await runQuery(
-      `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?;`,
-      [user.userId]
-    );
-    await runQuery(
-      `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
-      [transactionId, user.userId, "Wager: Public Spin", -5000]
-    );
-    await runQuery(
-      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-      [jackpotId, spinId, user.userId, 500]
-    );
-    await runQuery(
-      `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
-      [spinId, user.userId, "public", "PENDING", transactionId]
-    );
+    try {
+      const spinDetails = await getQuery(`SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`, [spinId]);
+        const spinUser = await getQuery('SELECT username FROM users WHERE userId = ?', [spinDetails[0].userId]);
+        const username = spinUser[0].username;
+      if (!spinDetails.length) {
+        return res.status(404).send("Spin not found or already processed");
+      }
 
-    await runQuery("COMMIT");
+    //   sendEvent("spin", pageId, {
+    //     message: `Spin: ${username}`,
+    //     spinId: spinId, // Include the spin ID for tracking
+    //     timestamp: new Date(),
+    //   });
+  
+      await runQuery("BEGIN TRANSACTION");
 
-    const spinData = {
-      message: `public spinid ${spinId} from ${username}`,
-      timestamp: new Date(),
-    };
-    sendEvent("spin", "public", spinData);
-
-    res.json({ spinId });
-  } catch (error) {
-    await runQuery("ROLLBACK");
-    console.error("Failed to process spin:", error);
-    res.status(500).send("Failed to process spin");
-  }
-});
+      await runQuery(`UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`, [spinDetails[0].userId]);
+      console.log(spinDetails[0].userId);
+      console.log(spinDetails);
+      console.log(transactionId);
+      console.log(spinId);
+      console.log(jackpotId);
+      await runQuery(
+        `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
+        [transactionId, spinDetails[0].userId, "Wager: Public Spin", -5000]
+      );
+      await runQuery(
+        `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
+        [jackpotId, spinId, spinDetails[0].userId, 500]
+      );
+      await runQuery(`UPDATE wheel_spins SET result = 'PENDING', type = 'public' WHERE spinId = ?`, [spinId]);
+  
+      await runQuery("COMMIT");
+      const spinData = {
+        message: `public spinid ${spinId} from ${username}`,
+        spinId: spinId, // Include the spin ID for tracking
+        timestamp: new Date(),
+      };
+      sendEvent("spin", spinId, spinData);
+      res.json({ success: true, message: `public spinid ${spinId} from ${username}` });
+    } catch (error) {
+      await runQuery("ROLLBACK");
+      console.error("Failed to finalize spin:", error);
+      res.status(500).json({ success: false, message: "Failed to finalize spin" });
+    }
+  });
 
 // Prune pending/unresolved spins.
 const checkAndResolvePendingSpins = () => {
@@ -1503,7 +1540,7 @@ const checkAndResolvePendingSpins = () => {
   console.log("One minute ago:", oneMinuteAgo);
 
   db.all(
-    `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'PENDING' AND timestamp < ?`,
+    `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'PENDING' AND type = 'gold' AND timestamp < ?`,
     [sqliteTimestamp],
     (err, spins) => {
       if (err) {
@@ -1554,7 +1591,7 @@ const checkAndResolveStalledSpins = () => {
     console.log("One minute ago:", oneMinuteAgo);
   
     db.all(
-      `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND timestamp < ?`,
+      `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND type = 'gold' AND timestamp < ?`,
       [sqliteTimestamp],
       (err, spins) => {
         if (err) {
@@ -1590,6 +1627,106 @@ const checkAndResolveStalledSpins = () => {
       }
     );
   };
+
+  // Prune pending/unresolved spins.
+const checkAndResolvePendingPublicSpins = () => {
+    const now = new Date();
+    const oneMinuteAgo = new Date(now.getTime() - 30000); // 30000 milliseconds = 30 seconds
+    let sqliteTimestamp = oneMinuteAgo
+      .toISOString()
+      .replace("T", " ")
+      .slice(0, 19);
+    console.log("Current time:", now);
+    console.log("One minute ago:", oneMinuteAgo);
+  
+    db.all(
+      `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND timestamp < ?`,
+      [sqliteTimestamp],
+      (err, spins) => {
+        if (err) {
+          console.error("Error fetching pending spins:", err);
+          return;
+        }
+  
+        if (spins.length === 0) {
+          console.log("No pending spins older than one minute.");
+          return;
+        }
+  
+        console.log(`Found ${spins.length} pending spins to process.`);
+        spins.forEach((spin) => {
+          console.log(
+            `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
+          );
+          // Update spin status to FAILED
+          db.run(
+            `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
+            [spin.spinId],
+            (err) => {
+              if (err) {
+                console.error(
+                  "Error updating spin status for spin ID " + spin.spinId + ":",
+                  err
+                );
+                return;
+              }
+              // Refund logic here
+              refundUser(spin.userId, spin.spinId);
+            }
+          );
+        });
+      }
+    );
+  };
+  
+  // Prune pending/unresolved spins.
+  const checkAndResolveStalledPublicSpins = () => {
+      const now = new Date();
+      const oneMinuteAgo = new Date(now.getTime() - 2000); // 2000 milliseconds = 2 seconds
+      let sqliteTimestamp = oneMinuteAgo
+        .toISOString()
+        .replace("T", " ")
+        .slice(0, 19);
+      console.log("Current time:", now);
+      console.log("One minute ago:", oneMinuteAgo);
+    
+      db.all(
+        `SELECT spinId, userId, timestamp FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND timestamp < ?`,
+        [sqliteTimestamp],
+        (err, spins) => {
+          if (err) {
+            console.error("Error fetching stalled spins:", err);
+            return;
+          }
+    
+          if (spins.length === 0) {
+            console.log("No stalled spins older than 2 seconds.");
+            return;
+          }
+    
+          console.log(`Found ${spins.length} stalled spins to process.`);
+          spins.forEach((spin) => {
+            console.log(
+              `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
+            );
+            // Update spin status to FAILED
+            db.run(
+              `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
+              [spin.spinId],
+              (err) => {
+                if (err) {
+                  console.error(
+                    "Error updating spin status for spin ID " + spin.spinId + ":",
+                    err
+                  );
+                  return;
+                }
+              }
+            );
+          });
+        }
+      );
+    };
 
 // Function to handle refund
 const refundUser = (userId, spinId) => {
