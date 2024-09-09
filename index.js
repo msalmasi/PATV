@@ -219,7 +219,7 @@ app.get("/verify-email", async (req, res) => {
 });
 
 app.get("/auth/twitch", (req, res) => {
-  const redirectUri = `https://publicaccess.tv//auth/twitch/callback`;
+  const redirectUri = `https://publicaccess.tv/auth/twitch/callback`;
   const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?${querystring.stringify(
     {
       client_id: "bkwg34x1vqv51507a603f0e0clpg4b",
@@ -234,7 +234,7 @@ app.get("/auth/twitch", (req, res) => {
 app.get("/auth/twitch/callback", async (req, res) => {
   try {
     const code = req.query.code;
-    const redirectUri = `https://publicaccess.tv//auth/twitch/callback`;
+    const redirectUri = `https://publicaccess.tv/auth/twitch/callback`;
 
     // Exchange code for an access token
     const tokenResponse = await axios.post(
@@ -462,7 +462,7 @@ app.post("/merge-accounts-twitch", async (req, res) => {
 
 // Endpoint for Discord auth
 app.get("/auth/discord", (req, res) => {
-  const redirectUri = `https://publicaccess.tv//auth/discord/callback`;
+  const redirectUri = `https://publicaccess.tv/auth/discord/callback`;
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${querystring.stringify(
     {
       client_id: "1282737917760110733",
@@ -477,7 +477,7 @@ app.get("/auth/discord", (req, res) => {
 app.get("/auth/discord/callback", async (req, res) => {
   try {
     const code = req.query.code;
-    const redirectUri = `https://publicaccess.tv//auth/discord/callback`;
+    const redirectUri = `https://publicaccess.tv/auth/discord/callback`;
 
     // Exchange the code for an access token
     const tokenResponse = await axios.post(
