@@ -343,7 +343,7 @@ function displayPointsReward(result) {
   const rewardDiv = document.createElement('div');
   rewardDiv.className = 'arcade-animation';
   rewardDiv.id = 'rewardDiv'
-  rewardDiv.textContent = `+${result} Points!`;
+  rewardDiv.textContent = `PAT +${result}!`;
 
   // Position the reward div near the balance
   balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
@@ -361,7 +361,7 @@ function displayWagerCost(wager) {
   const balanceElement = document.getElementById('userBalance');
   const costDiv = document.createElement('div');
   costDiv.className = 'arcade-animation-neg';
-  costDiv.textContent = `-${wager} Points!`;
+  costDiv.textContent = `PAT -${wager}!`;
   const rewardDiv = document.getElementById('rewardDiv');
     if (rewardDiv) {
       rewardDiv.remove(); // Remove the animation element after it completes
