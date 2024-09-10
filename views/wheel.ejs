@@ -23,6 +23,15 @@
         <div id="arcadeInfo">
             <div class="arcade-text">Player<br><br><br>
                 <span id="usernameSpan">?</span>
+                <div class="level-display">
+                    <div><span id="userLevel">Level <%= level %></span></div><br>
+                    <div class="level-bar">
+                        <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;"></div>
+                    </div>
+                    <div class="level-info">
+                        <span id="userXP"><%= xp %></span>
+                    </div>
+                </div>
             </div>
             <div id="jackpot">
                 <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span

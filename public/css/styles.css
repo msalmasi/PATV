@@ -516,3 +516,40 @@ margin-right: 0.5rem;
 width: 1.5rem; 
 height: 1.5rem; 
 }
+
+.level-display {
+    margin: 20px 0;
+    padding: 10px;
+    background-color: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.level-bar {
+    position: relative;
+    width: 80%;
+    height: 20px;
+    background-color: #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 10px auto;
+}
+
+.level-progress {
+    height: 100%;
+    background: linear-gradient(to right, #4AFFEF, #11d4c4);
+    border-radius: 10px;
+    transition: width 0.4s ease-in-out;
+    z-index: -10;
+}
+
+.level-info {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+/* 
+.profile-container h1 {
+    color: #333;
+    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+} */

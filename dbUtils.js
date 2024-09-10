@@ -28,6 +28,7 @@ function createTables() {
         streamKey TEXT,
         points_balance INTEGER DEFAULT 0,
         xp INTEGER DEFAULT 0,
+        level INTEGER DEFAULT 0,
         liked INTEGER DEFAULT 0,
         discordBonus INTEGER DEFAULT 0,
         discordBonus_at TIMESTAMP,
@@ -123,6 +124,18 @@ function createTables() {
             console.log('Error creating table jackpot_rakes', err);
         } else {
             console.log('Table jackpot_rakes created or already exists.');
+        }
+    });
+
+    db.run(`CREATE TABLE IF NOT EXISTS levels (
+        level INTEGER PRIMARY KEY,
+        xp_required INTEGER NOT NULL,
+        points_reward INTEGER NOT NULL
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table levels', err);
+        } else {
+            console.log('Table levels created or already exists.');
         }
     });
 

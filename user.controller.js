@@ -256,6 +256,33 @@ async function updateTwitchId(req, res) {
   res.redirect(`/u/${username}/profile/edit`);
 };
 
+// Calculate XP for next level
+function xpForNextLevel(currentLevel) {
+  return Math.pow(currentLevel + 1, 2) * 1000;
+}
+
+// Update Levels
+async function updateLevel(userId, additionalXp) {
+  const userDetails = await getQuery("SELECT xp, level FROM users WHERE userId = ?", [userId]);
+  if (userDetails.length === 0) {
+    console.error("User not found");
+    return;
+  }
+
+  let { xp, level } = userDetails[0];
+  xp += additionalXp;
+
+  while (xp >= xpForNextLevel(level)) {
+    xp -= xpForNextLevel(level);
+    level++;
+    const pointsReward = 10 * xpForNextLevel(level);
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [pointsReward, userId]);
+  }
+
+  await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [xp, level, userId]);
+  console.log(`User ${userId} is now level ${level} with ${xp} XP.`);
+}
+
 // Function to Award Badges
 async function awardBadge(userId, badgeId) {
   try {
@@ -276,8 +303,7 @@ async function awardBadge(userId, badgeId) {
     const points = badgeDetails[0].points;
 
     // Update the user's points
-    const sqlUpdateUser = "UPDATE users SET xp = xp + ? WHERE userId = ?";
-    await runQuery(sqlUpdateUser, [points, userId]);
+    updateLevel(userId, points);
 
     // Insert the badge award into the user_badges table
     const sqlInsertBadge = "INSERT INTO user_badges (userId, badgeId) VALUES (?, ?)";
@@ -302,5 +328,7 @@ module.exports = {
   updateAvatar,
   updateDiscordId,
   updateTwitchId,
-  awardBadge
+  awardBadge,
+  xpForNextLevel,
+  updateLevel
 };

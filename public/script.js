@@ -173,11 +173,45 @@ function fetchUserBalance(username) {
       });
 }
 
+
 // Assuming username is available via some means (e.g., login session)
 username = getUsernameFromUrl();
 console.log(username);
 fetchUsername(username);
 fetchUserBalance(username);
+
+// Calculate XP for next level
+function xpForNextLevel(currentLevel) {
+  return Math.pow(currentLevel + 1, 2) * 1000;
+}
+
+// Update the level bar
+function fetchUserLevel(username) {
+  fetch(`/api/u/${username}/level`)
+      .then(response => response.json())
+      .then(data => {
+          if (data.level !== undefined) {
+            console.log("howdydoody");
+            xp = data.xp;
+            level = data.level;
+            const xpNeeded = xpForNextLevel(level); // This function needs to return the XP needed for the next level
+            const progressPercentage = (xp / xpNeeded) * 100;
+            const progressBar = document.querySelector('.level-progress');
+            progressBar.style.width = `${progressPercentage}%`;
+            document.getElementById('userXP').textContent = `${xp} XP`;
+            document.getElementById('userLevel').textContent = `Level ${level}`;
+          } else {
+              console.error('Failed to fetch user level:', data.error);
+              const levelInfo = document.querySelector('.level-info');
+            levelInfo.textContent =  'Error fetching balance';
+          }
+      })
+      .catch(error => {
+          console.error('Fetch error:', error);
+          const levelInfo = document.querySelector('.level-info');
+            levelInfo.textContent =  'Error fetching balance';
+      });
+}
 
 // Fetch the Jackpot Total
 function fetchJackpotTotal() {
@@ -264,9 +298,11 @@ function determineSpinResult() {
       .then(data => {
           console.log('Server response:', data.message);
           fetchUserBalance(username);
+          fetchUserLevel(username);
           // Additional actions based on response can be handled here
           if (data.result) {
             displayPointsReward(data.result);
+            displayXPReward(data.xp);
             document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
           }
       })
@@ -330,7 +366,6 @@ function displayWagerCost(wager) {
     if (rewardDiv) {
       rewardDiv.remove(); // Remove the animation element after it completes
     }
-  
 
   // Position the reward div near the balance
   balanceElement.parentNode.insertBefore(costDiv, balanceElement.nextSibling);
@@ -342,6 +377,25 @@ function displayWagerCost(wager) {
       costDiv.remove(); // Remove the animation element after it completes
   }, 500); // Assuming the animation takes 5 seconds
 }
+
+    // Function for displaying the winning result
+    function displayXPReward(xp) {
+      const xpElement = document.getElementById('userXP');
+      const xpDiv = document.createElement('div');
+      xpDiv.className = 'arcade-animation-xp';
+      xpDiv.id = 'xpDiv'
+      xpDiv.textContent = `+${xp}!`;
+    
+      // Position the reward div near the balance
+      xpElement.parentNode.insertBefore(xpDiv, xpElement.nextSibling);
+    
+      // Apply animation
+      xpDiv.style.animation = 'pop-in 0.5s forwards';
+    
+      setTimeout(() => {
+          xpDiv.remove(); // Remove the animation element after it completes
+      }, 1000); // Assuming the animation takes 5 seconds
+    }
 
 // Uses the button to initiate a userSpin
 spinButton.addEventListener('click', userSpin);

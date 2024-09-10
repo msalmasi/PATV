@@ -1,5 +1,6 @@
 <!-- views/profile.ejs -->
 <%- include('layout', { title: `${usernameProfile} on Public Access`, user: username}) %>
+
         <body>
             <div class="profile-container">
                 <div id="profile-header"><img src="<%= avatar %>" alt="User Avatar"><h1><%= displayname %></h1>                
@@ -12,6 +13,17 @@
                             <a href="/u/<%= usernameProfile %>/tip" class="infolink">Tip</a>
                         </div>
                         <% } %></div>
+                        <div class="level-display">
+                            Level <%= level %>
+                            <div class="level-bar">
+                                
+                                <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;"><span><%= xp %></span></div>
+                                
+                            </div>
+                            <div class="level-info">
+                                Next Level: <%= xpForNextLevel(level) %> XP
+                            </div>
+                        </div>
                 <div id="profile-content">         
                     <p><%= usernameProfile %></p><%= classh %>
                     <p>PAT <%= points_balance %></p>
@@ -39,4 +51,3 @@
                 </ul>
             </div>
         </body>
-

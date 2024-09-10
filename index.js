@@ -22,6 +22,8 @@ const {
   updateDiscordId,
   updateTwitchId,
   awardBadge,
+  xpForNextLevel,
+  updateLevel,
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
 const authenticateToken = require("./middleware/authenticateToken");
@@ -904,7 +906,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   const usernameProfile = req.params.username; // Fallback to null if no user in session
   const sql =
-    "SELECT username, displayname, class, avatar, email, points_balance FROM users WHERE username = ?";
+    "SELECT username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
 
   try {
     const badges = await getQuery('SELECT b.* FROM badges b JOIN user_badges ub ON b.badgeId = ub.badgeId WHERE ub.userId = ?', [req.user.userId]);
@@ -917,10 +919,13 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         usernameProfile: user.username,
         displayname: user.displayname,
         classh: user.class,
+        level: user.level,
+        xp: user.xp,
         avatar: user.avatar,
         email: user.email,
         points_balance: user.points_balance,
-        badges: badges
+        badges: badges,
+        xpForNextLevel: xpForNextLevel
       });
     } else {
       res.clearCookie("jwt");
@@ -1279,6 +1284,25 @@ function getUserBalance(req, res) {
   );
 }
 
+// Function to get the User Level
+function getUserLevel (req, res) {
+    const username = req.params.username;
+    db.get(
+      `SELECT xp, level FROM users WHERE username = ?`,
+      [username],
+      (err, row) => {
+        if (err) {
+          return res.status(500).json({ error: err.message });
+        }
+        if (row) {
+          return res.json({ xp: row.xp, level: row.level });
+        } else {
+          return res.status(404).json({ error: "User not found" });
+        }
+      }
+    );
+  }
+
 // HTTP GET endpoint to get the list of classes
 app.get("/api/classes", async (req, res) => {
   const sql = "SELECT class FROM classes";
@@ -1325,18 +1349,30 @@ app.get("/api/prizes", async (req, res) => {
 // HTTP GET endpoint to get user balance
 app.get("/api/u/:username/balance", getUserBalance);
 
+// HTTP GET endpoint to get user balance
+app.get("/api/u/:username/level", getUserLevel);
+
 // HTTP GET endpoint to retrieve the jackpot total.
 app.get("/api/jackpot", getJackpotTotal);
 
 // HTTP GET endpoint to show the wheel.
-app.get("/u/:username/wheel", authenticateToken, async (req, res) => {
+app.get("/u/:username/wheel", authenticateToken, addUser, async (req, res) => {
   const username = req.params.username;
+  const sql =
+    "SELECT username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
   try {
     if (req.username !== username) {
       req.flash("error", "Invalid login.");
       return res.redirect("/login");
     }
-    res.render("wheel", { user: req.username });
+    const results = await getQuery(sql, [username]);
+    const user = results[0];
+    res.render("wheel", { 
+        user: req.username,
+        level: user.level,
+        xp: user.xp,
+        xpForNextLevel: xpForNextLevel
+     });
     // Proceed with fetching user data and generating wheel
   } catch (error) {
     res.status(500).json({ error: error });
@@ -2470,10 +2506,12 @@ app.post(
                             .status(500)
                             .json({ error: "Failed to create spin record" });
                         }
-
+                        const xp = jackpotTotal*0.005;
+                        updateLevel(userId, xp);
                         res.status(200).json({
                           transactionId: transactionId,
                           result: jackpotTotal,
+                          xp: xp,
                         });
                       }
                     );
@@ -2496,10 +2534,11 @@ app.post(
                         .status(500)
                         .json({ error: "Failed to create spin record" });
                     }
-
+                    xp = result * 0.005;
+                    updateLevel(userId, xp);
                     res
                       .status(200)
-                      .json({ transactionId: transactionId, result: result });
+                      .json({ transactionId: transactionId, result: result, xp: xp });
                   }
                 );
               }
