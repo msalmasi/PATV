@@ -264,7 +264,7 @@ function userSpin() {
   })
   .catch(error => {
       console.error('Error making the POST request:', error);
-      document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
+      document.getElementById('spinStatus').textContent = 'Spin in progress...'; // Display error message
       document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
   });
 }

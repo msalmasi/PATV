@@ -13,6 +13,7 @@
                     <li>Each spin costs 5000 <a href='/info#PAT' class='infolink'>PAT</a>.</li>
                     <li>Do not close the window until your spin is complete or it won't count and you will need to wait
                         to spin again.</li>
+                    <li>If you are having issues, refresh the page.</li>
                     <li>You can only spin one wheel at a time.</li>
                     <li>Jackpots occur randomly and can significantly increase your points!</li>
                 </ul>
@@ -46,11 +47,16 @@
         <div class="wheelPanel">
             <div id="spinButton">
                 <img id="coinslot" src="/public/coinslot.png"></img>
+                <div class="friendo">
+                    <div id="spinStatus" class="spin-status"></div>
+                    <%- include('friendo') %>
+
+                </div>
             </div>
             <div class="infoBtn">
-                <button id="infoBtn" class="link-button">ℹ️</button>
+                <button id="infoBtn" class="link-button">ℹ️</button>   
             </div>
-            <div id="spinStatus" class="spin-status"></div>
+            
             <br>
         </div>
     </div>
@@ -63,10 +69,7 @@
             <span id="userXP"><%= xp %> / <%= xpForNextLevel(level) %> XP</span>
         </div>
     </div>
-    <div class="friendo">
 
-        <%- include('friendo') %>
-    </div>
 
 
     <script src="/public/script.js"></script>
