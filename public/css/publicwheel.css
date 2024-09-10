@@ -18,8 +18,8 @@
 }
 
 #arcadePanel {
-    margin-top: 20px;
-    margin-left: 2px;
+    margin-top: 25px;
+    margin-left: -2px;
     display: grid;
     grid-template-columns: 1fr 3fr;
 }
@@ -57,7 +57,17 @@
     width: 400px;
     height: 170px;
     display: grid;
-    grid-template-rows: 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr 1fr;
+}
+
+.level-display {
+  width: 100%;
+  margin-top: 40px;
+  grid-template-rows: auto auto;
+  text-align: center;
+  color: #4AFFEF; /* Bright cyan, typical of neon arcade style */
+  text-shadow: 0 0 5px #D42CCA, 0 0 10px #D42CCA, 0 0 20px #D42CCA, 0 0 40px #D42CCA; /* Glow effect */
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
 }
 
 .arcade-text {

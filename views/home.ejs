@@ -1,5 +1,5 @@
 <!-- views/home.ejs -->
-<%- include('layout', { title: 'Public Access Television' , user: user}) %>
+<%- include('layout', { title: 'Public Access Television' , user: username}) %>
     <link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
     <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
     <!-- <script type="application/javascript" src="/public/js/jquery.js"></script>
@@ -34,24 +34,29 @@
     </style>
 
     <body>
-        <div class="grid-root combined">
+            <div class="grid-root combined">
 
-            <div id="videoWrapper">
-                <div id="videoOverlay" class="">
-                    <img src="/public/img/mute-icon.png" />
-                </div>
+                <div id="videoWrapper">
+                    <div id="videoOverlay" class="">
+                        <div id="altlink">
+                            <p>Stream this with low latency in VLC (<a
+                                    href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)
+                            </p>
+                        </div>
+                        <img src="/public/img/mute-icon.png" />
+                    </div>
 
-                <!-- <div id="player_id"></div> -->
+                    <!-- <div id="player_id"></div> -->
 
-                <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls
-                    playsinline>
-                    <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
-                </video-js>
+                    <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls
+                        playsinline>
+                        <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
+                    </video-js>
 
-                <div id="twitch" class="hide">
-                </div>
+                    <div id="twitch" class="hide">
+                    </div>
 
-                <!--       <script>
+                    <!--       <script>
 
                 // Initialize OvenPlayer
                 const player = OvenPlayer.create('player_id', {
@@ -66,233 +71,257 @@
                     ]
                 });
             </script> -->
-
-                <div id="altlink">
-                    <p>Stream this with low latency in VLC (<a
-                            href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)
-                    </p>
-                </div>
-            </div>
-
-            <div id="twitch_embed" class="tab-content active">
-                <div id="twitch_chat">
-                    <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=publicaccess.tv"
-                        height="100%" width="100%">
-                    </iframe>
                 </div>
 
-                <% if (typeof user=='undefined' || !user) { %>
-                    <% } else { %>
+                <div id="twitch_embed" class="tab-content active">
+                    <div id="twitch_chat">
+                        <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=localhost"
+                            height="100%" width="100%">
+                        </iframe>
+                    </div>
+                </div>
+            <% if (typeof username=='undefined' || !username) { %>
+                <% } else { %>
+                        <div class="level-display">
+                            <div><span id="userLevel">Level <%= level %></span></div>
+                            <div class="level-bar">
+                                <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;">
+                                </div>
+                            </div>
+                            <div class="level-info">
+                                <span id="userXP">
+                                    <%= xp %> / <%= xpForNextLevel(level) %> XP
+                                </span>
+                            </div>
+                        </div>
                         <div id="arcadePanel">
                             <div id="spinButton">
                                 <img id="coinslot" src="/public/coinslot.png"></img>
                             </div>
                             <div id="arcadeInfo">
                                 <div class="arcade-text">Player<span id="usernameSpan">
-                                        <%= user %>
-                                    </span></div>
+                                        <%= displayname %>
+                                    </span></div><br>
                                 <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
                                 <div id="spinStatus" class="spin-status"></div>
                             </div>
-
                         </div>
-                        <% } %>
-            </div>
-        </div>
-            <% if (typeof user=='undefined' || !user) { %>
-                <% } else { %>
-                    <script>
-                        // Set the Username
-                        var user = "<%= user %>"
-                        function fetchUsername(user) {
-                            document.getElementById('usernameSpan').textContent = user;
-                        }
-
-                        // Fetch and Set the User Balance
-                        function fetchUserBalance(user) {
-                            fetch(`/api/u/${user}/balance`)
-                                .then(response => response.json())
-                                .then(data => {
-                                    if (data.balance !== undefined) {
-                                        document.getElementById('userBalance').textContent = data.balance;
-                                    } else {
-                                        console.error('Failed to fetch balance:', data.error);
-                                        document.getElementById('userBalance').textContent = 'Error fetching balance';
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Fetch error:', error);
-                                    document.getElementById('userBalance').textContent = 'Error fetching balance';
-                                });
-                        }
-
-                        // Assuming username is available via some means (e.g., login session)
-                        fetchUsername(user);
-                        fetchUserBalance(user);
-
-                        // Spin the wheel as a user.
-                        function userSpin() {
-
-                            const url = `/api/g/wheel/spin`;
-
-                            fetch(url, {
-                                headers: {
-                                    "content-type": "application/json",
-                                },
-                                body: JSON.stringify({ username: user }),
-                                method: "POST",
-                            })
-                                .then(response => {
-                                    if (!response.ok) { // Handle non-200 responses
-                                        throw new Error('Spin already in progress');
-                                    }
-                                    return response.json();
-                                })
-                                .then(data => {
-                                    if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-                                        console.log('Spin ID received:', data.spinId);
-                                        spinId = data.spinId;
-                                        // Store spinId in local storage or a global variable
-                                        localStorage.setItem('currentSpinID', spinId);
-                                        // Set up SSE listener with this spinId
-                                        console.log('hoopla'+spinId);
-                                        setupWagerListener(spinId);
-                                        setupResultsListener(spinId);
-                                        fetchUserBalance(user); // Update the User Balance
-                                        document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Error making the POST request:', error);
-                                    document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
-                                    document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
-                                    setTimeout(() => {
-                                        document.getElementById('spinStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                                    }, 2000);
-                                });
-                        }
-
-                        // Uses the button to initiate a userSpin
-                        spinButton.addEventListener('click', userSpin);
-
-                        // Function for displaying the winning result
-                        function displaySpinResult(result) {
-                            const balanceElement = document.getElementById('userBalance');
-                            const rewardDiv = document.createElement('div');
-                            rewardDiv.className = 'arcade-animation';
-                            rewardDiv.id = 'rewardDiv'
-                            rewardDiv.textContent = `+${result} Points!`;
-
-                            // Position the reward div near the balance
-                            balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
-
-                            // Apply animation
-                            rewardDiv.style.animation = 'pop-in 0.5s forwards';
-
-                            setTimeout(() => {
-                                rewardDiv.remove(); // Remove the animation element after it completes
-                            }, 1000); // Assuming the animation takes 5 seconds
-                        }
-
-                        function setupResultsListener(spinId) {
-                            const eventSource = new EventSource(`/events?type=results&identifier=${spinId}`);
-
-                            eventSource.onmessage = function (event) {
-                                const result = JSON.parse(event.data);
-                                console.log('Spin result received:', result);
-                                // Update UI based on the result
-                                displaySpinResult(result.result);
-                                fetchUserBalance(user);
-                                eventSource.close();
-                            };
-
-                            eventSource.onerror = function (event) {
-                                console.error('EventSource failed:', event);
-                                eventSource.close();
-                            };
-                        }
-                        
-                        function setupWagerListener(spinId) {
-                            console.log('hoopla2'+spinId);
-                            const eventSource = new EventSource(`/events?type=spin&identifier=${spinId}`);
-
-                            eventSource.onmessage = function (event) {
-                                const data = JSON.parse(event.data);
-                                console.log('Spin command received:', data);
-                                console.log(data.message);
-                                console.log(data);
-                                if (data.message.includes("public spinid") && data.spinId) {
-                                    console.log('hoopla4'+spinId);
-                                    console.log("Spin command received:", data);
-                                    wager = 5000;
-                                    displayWagerCost(wager);
-                                    fetchUserBalance(user);
-                                }
-                                // Update UI based on the result
-                                eventSource.close();
-                            };
-
-                            eventSource.onerror = function (event) {
-                                console.error('EventSource failed:', event);
-                                eventSource.close();
-                            };
-                        }
-
-                        // Function for displaying the winning result
-                        function displayWagerCost(wager) {
-                            const balanceElement = document.getElementById('userBalance');
-                            const costDiv = document.createElement('div');
-                            costDiv.className = 'arcade-animation-neg';
-                            costDiv.textContent = `-${wager} Points!`;
-                            const rewardDiv = document.getElementById('rewardDiv');
-                                if (rewardDiv) {
-                                rewardDiv.remove(); // Remove the animation element after it completes
-                                }
-
-                            // Position the reward div near the balance
-                            balanceElement.parentNode.insertBefore(costDiv, balanceElement.nextSibling);
-
-                            // Apply animation
-                            costDiv.style.animation = 'pop-in 0.5s forwards';
-
-                            setTimeout(() => {
-                                costDiv.remove(); // Remove the animation element after it completes
-                            }, 2000); // Assuming the animation takes 5 seconds
-                        }
-
-                    </script>
                     <% } %>
-                        <script type="text/javascript">
-                            var options = {
-                                channel: "publicaccess_ttv", // TODO: Change this to the streams username you want to embed
-                                width: 640,
-                                height: 360,
-                            };
-                            var player2 = new Twitch.Player("twitch", options);
+        </div>
+        <% if (typeof username=='undefined' || !username) { %>
+            <% } else { %>
+                <script>
+                    // Set the Username
+                    var user = "<%= username %>"
+                    function fetchUsername(user) {
+                        document.getElementById('usernameSpan').textContent = user;
+                    }
 
-                            player2.addEventListener(Twitch.Player.READY, initiate)
+                    // Fetch and Set the User Balance
+                    function fetchUserBalance(user) {
+                        fetch(`/api/u/${user}/balance`)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.balance !== undefined) {
+                                    document.getElementById('userBalance').textContent = data.balance;
+                                } else {
+                                    console.error('Failed to fetch balance:', data.error);
+                                    document.getElementById('userBalance').textContent = 'Error fetching balance';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Fetch error:', error);
+                                document.getElementById('userBalance').textContent = 'Error fetching balance';
+                            });
+                    }
 
-                            function initiate() {
-                                player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
-                                player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
-                                player2.removeEventListener(Twitch.Player.READY, initiate);
+                    // Assuming username is available via some means (e.g., login session)
+                    fetchUsername(user);
+                    fetchUserBalance(user);
+
+                    // Spin the wheel as a user.
+                    function userSpin() {
+
+                        const url = `/api/g/wheel/spin`;
+
+                        fetch(url, {
+                            headers: {
+                                "content-type": "application/json",
+                            },
+                            body: JSON.stringify({ username: user }),
+                            method: "POST",
+                        })
+                            .then(response => {
+                                if (!response.ok) { // Handle non-200 responses
+                                    throw new Error('Spin already in progress');
+                                }
+                                return response.json();
+                            })
+                            .then(data => {
+                                if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                                    console.log('Spin ID received:', data.spinId);
+                                    spinId = data.spinId;
+                                    // Store spinId in local storage or a global variable
+                                    localStorage.setItem('currentSpinID', spinId);
+                                    // Set up SSE listener with this spinId
+                                    console.log('hoopla' + spinId);
+                                    setupWagerListener(spinId);
+                                    setupResultsListener(spinId);
+                                    fetchUserBalance(user); // Update the User Balance
+                                    document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error making the POST request:', error);
+                                document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
+                                document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
+                                setTimeout(() => {
+                                    document.getElementById('spinStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                                }, 2000);
+                            });
+                    }
+
+                    // Uses the button to initiate a userSpin
+                    spinButton.addEventListener('click', userSpin);
+
+                    // Function for displaying the winning result
+                    function displaySpinResult(result) {
+                        const balanceElement = document.getElementById('userBalance');
+                        const rewardDiv = document.createElement('div');
+                        rewardDiv.className = 'arcade-animation';
+                        rewardDiv.id = 'rewardDiv'
+                        rewardDiv.textContent = `PAT +${result}!`;
+
+                        // Position the reward div near the balance
+                        balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
+
+                        // Apply animation
+                        rewardDiv.style.animation = 'pop-in 0.5s forwards';
+
+                        setTimeout(() => {
+                            rewardDiv.remove(); // Remove the animation element after it completes
+                        }, 1000); // Assuming the animation takes 5 seconds
+                    }
+
+                                        // Function for displaying the winning result
+                    function displayXPReward(xp) {
+                    const xpElement = document.getElementById('userXP');
+                    const xpDiv = document.createElement('div');
+                    xpDiv.className = 'arcade-animation-xp';
+                    xpDiv.id = 'xpDiv'
+                    xpDiv.textContent = `+${xp} XP!`;
+
+                    // Position the reward div near the balance
+                    xpElement.parentNode.insertBefore(xpDiv, xpElement.nextSibling);
+
+                    // Apply animation
+                    xpDiv.style.animation = 'pop-in 0.5s forwards';
+
+                    setTimeout(() => {
+                        xpDiv.remove(); // Remove the animation element after it completes
+                    }, 2500); // Assuming the animation takes 5 seconds
+                    }
+
+                    function setupResultsListener(spinId) {
+                        const eventSource = new EventSource(`/events?type=results&identifier=${spinId}`);
+
+                        eventSource.onmessage = function (event) {
+                            const result = JSON.parse(event.data);
+                            console.log('Spin result received:', result);
+                            // Update UI based on the result
+                            displaySpinResult(result.result);
+                            fetchUserBalance(user);
+                            displayXPReward(result.xp);
+                            eventSource.close();
+                        };
+
+                        eventSource.onerror = function (event) {
+                            console.error('EventSource failed:', event);
+                            eventSource.close();
+                        };
+                    }
+
+                    function setupWagerListener(spinId) {
+                        console.log('hoopla2' + spinId);
+                        const eventSource = new EventSource(`/events?type=spin&identifier=${spinId}`);
+
+                        eventSource.onmessage = function (event) {
+                            const data = JSON.parse(event.data);
+                            console.log('Spin command received:', data);
+                            console.log(data.message);
+                            console.log(data);
+                            if (data.message.includes("public spinid") && data.spinId) {
+                                console.log('hoopla4' + spinId);
+                                console.log("Spin command received:", data);
+                                wager = 5000;
+                                displayWagerCost(wager);
+                                fetchUserBalance(user);
                             }
+                            // Update UI based on the result
+                            eventSource.close();
+                        };
 
-                            function handleOnline() {
-                                document.getElementById("twitch").classList.remove('hide');
-                                document.getElementById("videoElement").classList.add('hide');
-                                document.getElementById("videoOverlay").classList.add('hide');
-                                player2.removeEventListener(Twitch.Player.ONLINE, handleOnline);
-                                player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
-                                player2.setMuted(false);
-                            }
+                        eventSource.onerror = function (event) {
+                            console.error('EventSource failed:', event);
+                            eventSource.close();
+                        };
+                    }
 
-                            function handleOffline() {
-                                document.getElementById("twitch").classList.add('hide');
-                                document.getElementById("videoElement").classList.remove('hide');
-                                document.getElementById("videoOverlay").classList.remove('hide');
-                                player2.removeEventListener(Twitch.Player.OFFLINE, handleOffline);
-                                player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
-                                player2.setMuted(true);
-                            }
-                        </script>
+                    // Function for displaying the winning result
+                    function displayWagerCost(wager) {
+                        const balanceElement = document.getElementById('userBalance');
+                        const costDiv = document.createElement('div');
+                        costDiv.className = 'arcade-animation-neg';
+                        costDiv.textContent = `PAT -${wager}!`;
+                        const rewardDiv = document.getElementById('rewardDiv');
+                        if (rewardDiv) {
+                            rewardDiv.remove(); // Remove the animation element after it completes
+                        }
+
+                        // Position the reward div near the balance
+                        balanceElement.parentNode.insertBefore(costDiv, balanceElement.nextSibling);
+
+                        // Apply animation
+                        costDiv.style.animation = 'pop-in 0.5s forwards';
+
+                        setTimeout(() => {
+                            costDiv.remove(); // Remove the animation element after it completes
+                        }, 2000); // Assuming the animation takes 5 seconds
+                    }
+
+                </script>
+                <% } %>
+                    <script type="text/javascript">
+                        var options = {
+                            channel: "publicaccess_ttv", // TODO: Change this to the streams username you want to embed
+                            width: 640,
+                            height: 360,
+                        };
+                        var player2 = new Twitch.Player("twitch", options);
+
+                        player2.addEventListener(Twitch.Player.READY, initiate)
+
+                        function initiate() {
+                            player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
+                            player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
+                            player2.removeEventListener(Twitch.Player.READY, initiate);
+                        }
+
+                        function handleOnline() {
+                            document.getElementById("twitch").classList.remove('hide');
+                            document.getElementById("videoElement").classList.add('hide');
+                            document.getElementById("videoOverlay").classList.add('hide');
+                            player2.removeEventListener(Twitch.Player.ONLINE, handleOnline);
+                            player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
+                            player2.setMuted(false);
+                        }
+
+                        function handleOffline() {
+                            document.getElementById("twitch").classList.add('hide');
+                            document.getElementById("videoElement").classList.remove('hide');
+                            document.getElementById("videoOverlay").classList.remove('hide');
+                            player2.removeEventListener(Twitch.Player.OFFLINE, handleOffline);
+                            player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
+                            player2.setMuted(true);
+                        }
+                    </script>

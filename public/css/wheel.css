@@ -1,7 +1,7 @@
 #wheel {
     padding-top: 0px;
     display: grid;
-    grid-template-rows: 2fr 3fr 1fr 3fr;
+    grid-template-rows: 2fr 3fr 2fr;
     justify-content: center;
     align-items: center;
     /* background-color: #282c34; */
@@ -13,7 +13,7 @@
 
   #arcadeInfo {
     max-width: 1388px;
-    margin-top: 25px;
+    margin-top: 10px;
     margin-left: auto;
     margin-right: auto;
     display: grid;
@@ -21,6 +21,8 @@
   }
 
   #jackpot {
+    position: relative;
+    left: 10px;
     margin-left: auto;
     margin-right: auto;
     text-align: center;
@@ -28,8 +30,12 @@
     padding-bottom: 20px;
   }
   
+  #xpDiv {
+    height: 5px;
+  }
+
   .level-display {
-    margin-top: -20px;
+    margin-top: 0px;
     grid-template-rows: auto auto;
     margin-left: 20px;
     margin-bottom: 55px;
@@ -39,6 +45,7 @@
     font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
   }
   .arcade-text {
+    width: 220px;
     grid-template-rows: auto auto;
     margin-left: 20px;
     margin-top: 15px;
@@ -50,6 +57,7 @@
   }
   
   .balance-display {
+    width: 220px;
     grid-template-rows: auto auto;
     margin-right: 20px;
     margin-top: 20px;

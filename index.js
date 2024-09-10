@@ -126,8 +126,24 @@ app.use("/public", express.static("public"));
 // Homepage
 app.get("/", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
+  const sql =
+    "SELECT username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
+
   try {
-    res.render("home", { user: username });
+    const results = await getQuery(sql, [username]);
+      const user = results[0]; // Extract user data
+      res.render("home", {
+        // Render profile.ejs with user data
+        username: user.username,
+        displayname: user.displayname,
+        classh: user.class,
+        level: user.level,
+        xp: user.xp,
+        avatar: user.avatar,
+        email: user.email,
+        points_balance: user.points_balance,
+        xpForNextLevel: xpForNextLevel
+      });
     // Proceed with fetching user data and generating wheel
   } catch (error) {
     console.log(error);
@@ -2392,7 +2408,9 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                           .status(500)
                           .json({ error: "Failed to create spin record" });
                       }
-                      sendEvent("results", spinId, { result: jackpotTotal });
+                      xp = jackpotTotal * 0.005;
+                      updateLevel(userId, xp);
+                      sendEvent("results", spinId, { result: jackpotTotal, xp: xp });
                       res.status(200).json({
                         transactionId: transactionId,
                         result: jackpotTotal,
@@ -2421,7 +2439,9 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                   console.log(transactionId);
                   // Send a message to connected clients to spin the wheel.
                   console.log("sending spin data to clients" + spinId + result);
-                  sendEvent("results", spinId, { result: result });
+                  xp = result * 0.005;
+                  updateLevel(userId, xp);
+                  sendEvent("results", spinId, { result: result, xp: xp });
                   res
                     .status(200)
                     .json({ transactionId: transactionId, result: result });

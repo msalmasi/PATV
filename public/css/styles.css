@@ -359,9 +359,24 @@ padding-bottom: 20px;
 }
 
 .grid-root {
+    display: grid;
+    
+}
+
+.grid-content {
+    padding-bottom: 16px;
   display: grid;
   height: var(--var-max-height);
-  margin: 0px 0px;
+  /* margin: 0px 0px; */
+  max-height: var(--var-max-height);
+  max-width: 100%;
+  width: var(--var-max-width);
+}
+
+.grid-footer {
+  display: grid;
+  height: var(--var-max-height);
+  /* margin: 0px 0px; */
   max-height: var(--var-max-height);
   max-width: 100%;
   width: var(--var-max-width);
@@ -382,9 +397,23 @@ padding-bottom: 20px;
     z-index: 3;
     text-align: center;
     vertical-align: middle;
-    display: flex;
+    display: grid;
+    grid-template-rows: 1fr 6fr;
+    grid-template-columns: 1fr 1fr 1fr;
     justify-content: center;
     align-items: center;
+}
+
+#altlink {
+    grid-column: 2;
+    grid-row: 3;
+}
+
+#videoOverlay img {
+    margin-left: auto;
+    margin-right: auto;
+    grid-column: 2;
+    grid-row: 2;
 }
 
 #videoElement {
@@ -394,19 +423,21 @@ padding-bottom: 20px;
 }
 
 #twitch_embed {
-    grid-template-rows: 6fr 1fr;
-    position: relative;
+    /* position: relative; */
 /*    padding-top: 1vh;*/
 /*    max-height: calc(var(--var-max-height) - 10vh);*/
     min-height:  50vh;
-    padding-bottom: 10vh;
+    height: 99%;
+    width: 99%;
+
+    /* padding-bottom: 10vh;
     max-height: 90vh;
-    padding-bottom: 10vh;
+    padding-bottom: 10vh; */
 }
 
 #twitch_chat {
-    width: 96%;
-    margin: 0px 5px 10px 5px;
+    
+    /* margin: 0px 5px 10px 5px; */
 }
 
 .tab-content {
@@ -424,7 +455,7 @@ padding-bottom: 20px;
 @media screen and (max-width: 850px) {
   .combined {
     grid-template-columns: 1fr;
-    grid-template-rows: 70.25vw 1fr;
+    grid-template-rows: 1fr 2fr 200px 200px;
   }
 
   #logo {
@@ -432,7 +463,22 @@ padding-bottom: 20px;
 }
 
   .combined #twitch_chat {
-    max-height: calc(var(--var-max-height) - 66.25vw);
+    /* padding: 3px;
+    padding: 20px;
+    margin: 20px;
+    height: 100%; */
+    /* max-height: calc(var(--var-max-height) - 66.25vw); */
+  }
+
+  .level-display {
+    margin-top: 0px !important;
+    padding-top: 60px;
+    height: 100px;
+  }
+
+  #arcadePanel {
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
 }
 
@@ -517,14 +563,7 @@ width: 1.5rem;
 height: 1.5rem; 
 }
 
-.level-display {
-    margin: 20px 0;
-    padding: 10px;
-    background-color: none;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    text-align: center;
-}
+
 
 .level-bar {
     position: relative;
