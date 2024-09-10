@@ -353,7 +353,7 @@ function displayPointsReward(result) {
 
   setTimeout(() => {
       rewardDiv.remove(); // Remove the animation element after it completes
-  }, 500); // Assuming the animation takes 5 seconds
+  }, 2500); // Assuming the animation takes 5 seconds
 }
 
 // Function for displaying the winning result
@@ -375,7 +375,7 @@ function displayWagerCost(wager) {
 
   setTimeout(() => {
       costDiv.remove(); // Remove the animation element after it completes
-  }, 500); // Assuming the animation takes 5 seconds
+  }, 2500); // Assuming the animation takes 5 seconds
 }
 
     // Function for displaying the winning result
@@ -384,7 +384,7 @@ function displayWagerCost(wager) {
       const xpDiv = document.createElement('div');
       xpDiv.className = 'arcade-animation-xp';
       xpDiv.id = 'xpDiv'
-      xpDiv.textContent = `+${xp}!`;
+      xpDiv.textContent = `+${xp} XP!`;
     
       // Position the reward div near the balance
       xpElement.parentNode.insertBefore(xpDiv, xpElement.nextSibling);
@@ -394,7 +394,7 @@ function displayWagerCost(wager) {
     
       setTimeout(() => {
           xpDiv.remove(); // Remove the animation element after it completes
-      }, 1000); // Assuming the animation takes 5 seconds
+      }, 2500); // Assuming the animation takes 5 seconds
     }
 
 // Uses the button to initiate a userSpin
