@@ -132,6 +132,7 @@ app.get("/", addUser, async (req, res) => {
   try {
     const results = await getQuery(sql, [username]);
       const user = results[0]; // Extract user data
+      if (username) {
       res.render("home", {
         // Render profile.ejs with user data
         username: user.username,
@@ -144,6 +145,13 @@ app.get("/", addUser, async (req, res) => {
         points_balance: user.points_balance,
         xpForNextLevel: xpForNextLevel
       });
+    }
+
+    else {
+        res.render("home", {
+            username: username
+        });
+    }
     // Proceed with fetching user data and generating wheel
   } catch (error) {
     console.log(error);
