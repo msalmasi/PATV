@@ -36,46 +36,38 @@ async function registerUser(req, res) {
   const userId = uuidv4();
   const { username, password, email } = req.body;
 
-  // Validate email format (basic check)
   if (!/\S+@\S+\.\S+/.test(email)) {
-      req.flash('error', 'Invalid email address.');
-      return res.redirect('/register');
+    req.flash('error', 'Invalid email address.');
+    return res.redirect('/register');
   }
 
   try {
-      const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const sqlCheckUser = "SELECT * FROM users WHERE username = ? OR email = ?";
+    const user = await getQuery(sqlCheckUser, [username, email]);
 
-      // Check if the username or email is already taken
-      db.get(`SELECT * FROM users WHERE username = ? OR email = ?`, [username, email], async (err, user) => {
-          if (err) {
-              console.error(err.message);
-              req.flash('error', 'Error processing request');
-              return res.redirect('/register');
-          }
-          if (user) {
-              req.flash('error', 'Username or email already taken');
-              return res.redirect('/register');
-          }
+    if (user.length > 0) {
+      req.flash('error', 'Username or email already taken');
+      return res.redirect('/register');
+    }
 
-          // Store the hashedPassword in the database with starting points.
-          db.run('INSERT INTO users (userId, username, displayname, password, email, points_balance, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-                  [userId, username, username, hashedPassword, email, 500000, '/public/img/avatar.png'], function(err) {
-              if (err) {
-                  console.error(err.message);
-                  req.flash('error', 'Error registering new user');
-                  return res.redirect('/register');
-              }
-              const token = generateValidationToken();
-              updateUserWithToken(userId, token);
-              sendVerificationEmail(email, username, token);
-              req.flash('success', 'Successfully registered! Please login.');
-              res.redirect('/login');
-          });
-      });
+    const sqlInsertUser = 'INSERT INTO users (userId, username, displayname, password, email, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    await runQuery(sqlInsertUser, [userId, username, username, hashedPassword, email, 500000, 0, '/public/img/avatar.png']);
+    
+    const token = generateValidationToken();
+    updateUserWithToken(userId, token);
+    sendVerificationEmail(email, username, token);
+
+    // Award "New User" badge
+    const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
+    await awardBadge(userId, newUserBadgeId);
+
+    req.flash('success', 'Successfully registered! Please login.');
+    res.redirect('/login');
   } catch (error) {
-      console.error(error);
-      req.flash('error', 'Server error');
-      res.redirect('/register');
+    console.error(`Server error during registration: ${error}`);
+    req.flash('error', 'Server error');
+    res.redirect('/register');
   }
 }
 
@@ -264,6 +256,42 @@ async function updateTwitchId(req, res) {
   res.redirect(`/u/${username}/profile/edit`);
 };
 
+// Function to Award Badges
+async function awardBadge(userId, badgeId) {
+  try {
+    // Check if the badge has already been awarded
+    const existingBadge = await getQuery("SELECT * FROM user_badges WHERE userId = ? AND badgeId = ?", [userId, badgeId]);
+    if (existingBadge.length > 0) {
+      console.log(`User ${userId} already has badge ${badgeId}. No badge awarded.`);
+      return; // Exit the function if the badge has already been awarded
+    }
+
+    await runQuery("BEGIN TRANSACTION"); // Begin transaction
+
+    // Get the points associated with the badge
+    const badgeDetails = await getQuery("SELECT points FROM badges WHERE badgeId = ?", [badgeId]);
+    if (badgeDetails.length === 0) {
+      throw new Error('Badge not found');
+    }
+    const points = badgeDetails[0].points;
+
+    // Update the user's points
+    const sqlUpdateUser = "UPDATE users SET xp = xp + ? WHERE userId = ?";
+    await runQuery(sqlUpdateUser, [points, userId]);
+
+    // Insert the badge award into the user_badges table
+    const sqlInsertBadge = "INSERT INTO user_badges (userId, badgeId) VALUES (?, ?)";
+    await runQuery(sqlInsertBadge, [userId, badgeId]);
+
+    await runQuery("COMMIT"); // Commit the transaction
+
+    console.log(`Badge ${badgeId} awarded to user ${userId} with ${points} points added.`);
+  } catch (error) {
+    await runQuery("ROLLBACK"); // Rollback in case of error
+    console.error(`Error awarding badge: ${error.message}`);
+  }
+}
+
 module.exports = {
   registerUser,
   loginUser,
@@ -273,5 +301,6 @@ module.exports = {
   updateDisplayname,
   updateAvatar,
   updateDiscordId,
-  updateTwitchId
+  updateTwitchId,
+  awardBadge
 };

@@ -27,6 +27,7 @@ function createTables() {
         streamId TEXT,
         streamKey TEXT,
         points_balance INTEGER DEFAULT 0,
+        xp INTEGER DEFAULT 0,
         liked INTEGER DEFAULT 0,
         discordBonus INTEGER DEFAULT 0,
         discordBonus_at TIMESTAMP,
@@ -137,6 +138,39 @@ function createTables() {
         }
     });
 
+    db.run(`
+        CREATE TABLE IF NOT EXISTS badges (
+          badgeId TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL,
+          icon TEXT,
+          points INTEGER DEFAULT 0,
+          requirement TEXT NOT NULL,
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`, (err) => {
+            if (err) {
+                console.log('Error creating table badges', err);
+            } else {
+                console.log('Table badges created or already exists.');
+            }
+        });
+  
+      db.run(`
+        CREATE TABLE IF NOT EXISTS user_badges (
+          userId TEXT NOT NULL,
+          badgeId TEXT NOT NULL,
+          awardedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (userId, badgeId),
+          FOREIGN KEY (userId) REFERENCES users(userId),
+          FOREIGN KEY (badgeId) REFERENCES badges(badgeId)
+               )`, (err) => {
+            if (err) {
+                console.log('Error creating table user_badges', err);
+            } else {
+                console.log('Table user_badges created or already exists.');
+            }
+        });
+
     db.run(`CREATE TABLE IF NOT EXISTS prizes (
         prizeId TEXT PRIMARY KEY,
         prize TEXT NOT NULL,
@@ -184,5 +218,16 @@ function getQuery(sql, params = []) {
         });
     });
 }
+
+// Close the database connection when the Node.js process terminates
+process.on('SIGINT', () => {
+    db.close((err) => {
+      if (err) {
+        console.error('Error closing the database', err.message);
+      }
+      console.log('Database connection closed.');
+      process.exit(0);
+    });
+  });
 
 module.exports = { createTables, runQuery, getQuery };

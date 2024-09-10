@@ -21,6 +21,7 @@ const {
   updateAvatar,
   updateDiscordId,
   updateTwitchId,
+  awardBadge,
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
 const authenticateToken = require("./middleware/authenticateToken");
@@ -206,6 +207,9 @@ app.get("/verify-email", async (req, res) => {
     const updateSql = `UPDATE users SET isEmailVerified = 1, emailVerificationToken = NULL, tokenExpires = NULL WHERE userId = ?`;
     const updateResult = await runQuery(updateSql, [result.userId]);
     if (updateResult.changes > 0) {
+      // Award badge for email verification
+      const badgeId = 'ilovespam'; // Replace with your actual badge ID
+      await awardBadge(result.userId, badgeId);
       req.flash("success", "Email verified successfully!");
     } else {
       req.flash("error", "No changes made to the database.");
@@ -903,6 +907,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
     "SELECT username, displayname, class, avatar, email, points_balance FROM users WHERE username = ?";
 
   try {
+    const badges = await getQuery('SELECT b.* FROM badges b JOIN user_badges ub ON b.badgeId = ub.badgeId WHERE ub.userId = ?', [req.user.userId]);
     const results = await getQuery(sql, [usernameProfile]);
     if (results.length > 0) {
       const user = results[0]; // Extract user data
@@ -915,6 +920,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         avatar: user.avatar,
         email: user.email,
         points_balance: user.points_balance,
+        badges: badges
       });
     } else {
       res.clearCookie("jwt");
@@ -1655,6 +1661,77 @@ app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
         res.status(500).send("Failed to redeem code");
     }
 });
+
+// Get all badges
+app.get("/api/badges", async (req, res) => {
+    try {
+      const badges = await getQuery("SELECT * FROM badges");
+      console.log(badges);
+      res.json(badges);
+    } catch (error) {
+      console.error("Failed to fetch badges:", error);
+      res.status(500).send("Failed to retrieve badges");
+    }
+  });
+
+// Create a new badge ADMIN
+app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (req, res) => {
+    const { name, description, icon, points, requirement } = req.body;
+    const badgeId = uuidv4();
+    const userType = req.user ? req.user.class : null;
+    if (userType === "Admin" || userType === "Staff") {
+    try {
+      await runQuery("INSERT INTO badges (badgeId, name, description, icon, points, requirement) VALUES (?, ?, ?, ?, ?, ?)", [badgeId, name, description, icon, points, requirement]);
+      res.status(201).send("Badge created successfully");
+    } catch (error) {
+      console.error("Failed to create badge:", error);
+      res.status(500).send("Failed to create badge");
+    }
+} else {
+    req.flash(
+    "error",
+    "Access denied. You must be an admin or staff to access this page."
+    );
+    return res.redirect("/login");
+}
+  });
+
+  // Delete a badge ADMIN
+  app.delete("/api/badges/:badgeId", authenticateToken, addUser, async (req, res) => {
+    const { badgeId } = req.params;
+    const userType = req.user ? req.user.class : null;
+    if (userType === "Admin" || userType === "Staff") {
+    try {
+      await runQuery("DELETE FROM badges WHERE badgeId = ?", [badgeId]);
+      res.send("Badge deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete badge:", error);
+      res.status(500).send("Failed to delete badge");
+    }
+} else {
+    req.flash(
+    "error",
+    "Access denied. You must be an admin or staff to access this page."
+    );
+    return res.redirect("/login");
+}
+  });
+
+  // Get user badges
+  app.get("/api/badges/:badgeId/users", authenticateToken, addUser, async (req, res) => {
+    const { badgeId } = req.params;
+    console.log(badgeId);
+    try {
+        const badgeUsers = await getQuery(
+            "SELECT u.username, u.userId FROM user_badges ub JOIN users u ON ub.userId = u.userId WHERE ub.badgeId = ?",
+            [badgeId]
+        ); console.log(badgeUsers);
+      res.json(badgeUsers);
+    } catch (error) {
+      console.error("Failed to fetch user badges:", error);
+      res.status(500).send("Failed to retrieve user badges");
+    }
+  });
 
 // HTTP POST endpoint to edit the list of classes.
 app.post("/api/prizes/edit", addUser, async (req, res) => {

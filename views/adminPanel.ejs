@@ -21,7 +21,6 @@
         <input type="date" name="expiration_date" placeholder="Expiration date">
         <button type="submit">Save Code</button>
     </form>
-
     </div>
 
     <div class="panel">
@@ -29,7 +28,48 @@
     <div id="redemptionCodesList"></div>
     </div>
 
+    <div class="panel">
+    <form id="badges" action="/api/badges/add" method="post">
 
+          <label for="name">Badge Name:</label>
+          <input type="text" id="name" name="name" required>
+          <label for="description">Description:</label>
+          <textarea id="description" name="description" required></textarea>
+          <label for="points">Points:</label>
+          <input type="number" id="points" name="points" required>
+          <label for="icon">Icon URL:</label>
+          <input type="text" id="icon" name="icon">
+          <label for="requirement">Requirement:</label>
+          <input type="text" id="requirement" name="requirement" required>
+        <button type="submit">Create Badge</button>
+      </form>
+      </div>
+
+          <!-- Badge Management -->
+    <div class="panel">
+        <h3>Existing Badges</h3>
+        <div id="badgesList"></div>
+    </div>
+
+<script>
+    document.getElementById('badges').addEventListener('submit', function(event) {
+    event.preventDefault();
+    var formData = new FormData(this); // Use FormData to handle data correctly
+
+    fetch(this.action, {
+        method: 'POST',
+        body: formData // FormData will set the Content-Type to multipart/form-data automatically
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Success:', data);
+        // Additional logic to handle response
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+});
+</script>
     <!-- Manual Wheel Spin Form -->
     <div class="panel">
     <h3>Manual Wheel Spin</h3>
@@ -476,7 +516,7 @@ function fetchRedemptionCodes() {
             data.forEach(code => {
                 const codeElement = document.createElement('div');
                 codeElement.innerHTML = `
-                    <button class="link-button" onclick="toggleUsers('${code.code}', this)"><span>${code.code}</span></button><span>${code.uses_remaining} left</span><button class="link-button" onclick="deleteCode('${code.code}')"><span>❌</span></button>
+                    <button class="link-button" onclick="toggleCodeUsers('${code.code}', this)"><span>${code.code}</span></button><span>${code.uses_remaining} left</span><button class="link-button" onclick="deleteCode('${code.code}')"><span>❌</span></button>
                     
                     <ul id="users-${code.code}" style="display:none;"></ul>
                 `;
@@ -493,7 +533,7 @@ window.deleteCode = function(code) {
         });
 };
 
-window.toggleUsers = function(code, button) {
+window.toggleCodeUsers = function(code, button) {
         const userList = document.getElementById(`users-${code}`);
         if (userList.style.display === 'none') {
             fetch(`/api/admin/redemption-codes/${code}/users`)
@@ -511,8 +551,61 @@ window.toggleUsers = function(code, button) {
             userList.style.display = 'none';
         }
     };
+
+    fetchBadges();
+
+    function fetchBadges() {
+        fetch('/api/badges')
+            .then(response => response.json())
+            .then(data => {
+                const list = document.getElementById('badgesList');
+                list.innerHTML = ''; // Clear previous list
+                data.forEach(badge => {
+                    fetch(`/api/badges/${badge.badgeId}/users`)
+                        .then(response => response.json())
+                        .then(users => {
+                            const badgeElement = document.createElement('div');
+                            badgeElement.innerHTML = `
+                                <button class="link-button" onclick="toggleUsers('${badge.badgeId}', this)">
+                                    <span>${badge.name} (${users.length} users)</span>
+                                </button>
+                                <button class="link-button" onclick="deleteBadge('${badge.badgeId}')">
+                                    <span>❌</span>
+                                </button>
+                                <ul id="users-${badge.badgeId}" style="display:none;"></ul>
+                            `;
+                            list.appendChild(badgeElement);
+                        });
+                });
+            });
+    }
+
+    window.deleteBadge = function(badgeId) {
+        fetch(`/api/badges/${badgeId}`, { method: 'DELETE' })
+            .then(response => {
+                if (response.ok) fetchBadges();
+                else alert('Failed to delete badge');
+            });
+    };
+
+    window.toggleUsers = function(badgeId, button) {
+        const userList = document.getElementById(`users-${badgeId}`);
+        if (userList.style.display === 'none') {
+            fetch(`/api/badges/${badgeId}/users`)
+                .then(response => response.json())
+                .then(data => {
+                    userList.innerHTML = ''; // Clear list
+                    data.forEach(user => {
+                        const userItem = document.createElement('li');
+                        userItem.textContent = `${user.username} (User ID: ${user.userId})`;
+                        userList.appendChild(userItem);
+                    });
+                    userList.style.display = 'block';
+                });
+        } else {
+            userList.style.display = 'none';
+        }
+    };
 };
 </script>
-    
-    <script src="/scripts/admin.js"></script> <!-- Path to your JavaScript file -->
 </html>

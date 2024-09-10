@@ -26,5 +26,17 @@
 
                 
             </div>
+
+            <div class="profile-container">
+                <h1><%= displayname %>'s Badges</h1>
+                <ul>
+                  <% badges.forEach(badge => { %>
+                    <li>
+                      <img src="<%= badge.icon %>" alt="<%= badge.name %> Icon" style="height:50px;">
+                      <strong><%= badge.name %></strong> - <%= badge.description %>
+                    </li>
+                  <% }) %>
+                </ul>
+            </div>
         </body>
 
