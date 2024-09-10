@@ -1,7 +1,7 @@
 #wheel {
     padding-top: 50px;
     display: grid;
-    grid-template-rows: 2fr 3fr 2fr;
+    grid-template-rows: 2fr 3fr 1fr 3fr;
     justify-content: center;
     align-items: center;
     /* background-color: #282c34; */
@@ -29,9 +29,14 @@
   }
   
   .level-display {
-    position: relative;
-
-    top: 20px;
+    margin-top: -20px;
+    grid-template-rows: auto auto;
+    margin-left: 20px;
+    margin-bottom: 55px;
+    text-align: center;
+    color: #4AFFEF; /* Bright cyan, typical of neon arcade style */
+    text-shadow: 0 0 5px #4AFFEF, 0 0 10px #4AFFEF, 0 0 20px #4AFFEF, 0 0 40px #4AFFEF; /* Glow effect */
+    font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
   }
   .arcade-text {
     grid-template-rows: auto auto;

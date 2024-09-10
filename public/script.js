@@ -198,7 +198,7 @@ function fetchUserLevel(username) {
             const progressPercentage = (xp / xpNeeded) * 100;
             const progressBar = document.querySelector('.level-progress');
             progressBar.style.width = `${progressPercentage}%`;
-            document.getElementById('userXP').textContent = `${xp} XP`;
+            document.getElementById('userXP').textContent = `${xp} / ${xpNeeded} XP`;
             document.getElementById('userLevel').textContent = `Level ${level}`;
           } else {
               console.error('Failed to fetch user level:', data.error);
