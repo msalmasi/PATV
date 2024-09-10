@@ -1,12 +1,14 @@
 <%- include('layout', { title: 'Shop', user: user}) %>
 <link rel="stylesheet" href="/public/css/shop.css">
-
 <div class="shop-container">
-    <h1 class="shop-title">Arcade Shop</h1>
+    <h1 class="shop-title">PAT Redemption Codes</h1>
     <form action="/api/redeem-code" method="post">
         <input type="text" name="code" placeholder="Enter your redemption code" required>
-        <button id="codeBtn" type="submit">Redeem Code</button>
+        <button class="buy-btn" type="submit">Redeem</button>
     </form>
+</div>
+<div class="shop-container">
+    <h1 class="shop-title">Arcade Shop</h1>
     <div class="product-list">
         <!-- Items will be dynamically inserted here -->
     </div>
