@@ -1,5 +1,6 @@
 # ignore all .a files
 *.db
+*.sqlite
 
 # ignore .env
 .env
@@ -8,7 +9,7 @@ config.json
 # ignore all files in any directory named build
 /node-modules
 /node_modules
-/discordself
+/fileupload
 /twitchbot/node_modules
 /discord-bot/node_modules
 /blackjack/node_modules
