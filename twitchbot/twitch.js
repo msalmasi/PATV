@@ -20,15 +20,6 @@ const {
   updateLevel,
 } = require("../user.controller");
 
-// Connect to SQLite database
-const db = new sqlite3.Database("../myapp.db", (err) => {
-  if (err) {
-    console.error("Error opening database " + err.message);
-  } else {
-    console.log("Database connected.");
-  }
-});
-
 const client = new tmi.Client({
   connection: {
     secure: true,
