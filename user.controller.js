@@ -298,7 +298,7 @@ async function updateLevel(userId, additionalXp) {
   while (xp >= xpForNextLevel(level)) {
     xp -= xpForNextLevel(level);
     level++;
-    const pointsReward = 10 * xpForNextLevel(level);
+    const pointsReward = 10 * xpForNextLevel(level-1);
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [pointsReward, userId]);
   }
 

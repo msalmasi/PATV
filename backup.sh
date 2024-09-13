@@ -1,1 +1,1 @@
-/usr/bin/sqlite3 /home/ubuntu/streamlabs-api-demo/db.sqlite ".backup '/home/ubuntu/streamlabs-api-demo/backup_file-`date +"%d-%m-%Y"`.sqlite'"
+/usr/bin/sqlite3 /home/PATV/myapp.db ".backup '/home/PATV/backup_file-`date +"%d-%m-%Y"`.db'"
