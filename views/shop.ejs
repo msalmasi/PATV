@@ -2,13 +2,16 @@
 <link rel="stylesheet" href="/public/css/shop.css">
 <div class="shop-container">
     <h1 class="shop-title">PAT Redemption Codes</h1>
-    <form action="/api/redeem-code" method="post">
-        <input type="text" name="code" placeholder="Enter your redemption code" required>
-        <button class="buy-btn" type="submit">Redeem</button>
+    <form id="codeform" action="/api/redeem-code" method="post">
+        <input type="text" id="code" name="code" placeholder="Enter your redemption code" required>
+        <button class="code-btn" type="submit">Redeem</button>
     </form>
+    <div id="codeStatus" class="spin-status"></div>
 </div>
 <div class="shop-container">
+    <div id="shopStatus" class="spin-status"></div>
     <h1 class="shop-title">Arcade Shop</h1>
+    
     <div class="product-list">
         <!-- Items will be dynamically inserted here -->
     </div>
@@ -62,20 +65,69 @@
                         },
                         body: JSON.stringify({ product: product })
                     })
-                    .then(response => response.json())
+                    .then(response => {
+            if (!response.ok) { // Handle non-200 responses
+                throw new Error('Failed to buy the item.');
+            }
+            return response.json();
+        })
                     .then(data => {
-                        if (data.success) {
-                            alert('Purchase successful!');
-                        } else {
-                            alert('Purchase failed: ' + data.message);
-                        }
+                        const message = data.message;
+            if (message.includes("successful")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+            console.log("booboo");
+            document.getElementById('shopStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            document.getElementById('shopStatus').textContent = 'Purchased item successfully.'; // Display error message
+            document.getElementById('shopStatus').style.visibility = 'visible'; // Make the status message visible
+            }
                     })
                     .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error making the purchase');
+                        console.error('Error making the POST request:', error);
+            document.getElementById('shopStatus').textContent = 'Failed to purchase item.........'; // Display error message
+            document.getElementById('shopStatus').style.visibility = 'visible'; // Make the status message visible
+            setTimeout(() => {
+                document.getElementById('shopStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+        }, 2000); 
                     });
                 });
             });
         }
     });
     </script>
+
+<script>
+    document.getElementById('codeform').addEventListener('submit', function(event) {
+    event.preventDefault();
+    var code = document.getElementById('code').value;
+
+
+    fetch('/api/redeem-code', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({code: code})
+    })
+    .then(response => {
+            if (!response.ok) { // Handle non-200 responses
+                throw new Error('Failed to add the redemption code.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            const message = data.message;
+            if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+            document.getElementById('codeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            document.getElementById('codeStatus').textContent = 'Added redemption code successfully.'; // Display error message
+            document.getElementById('codeStatus').style.visibility = 'visible'; // Make the status message visible
+            }
+        })
+        .catch(error => {
+            console.error('Error making the POST request:', error);
+            document.getElementById('codeStatus').textContent = 'Failed to add the redemption code.........'; // Display error message
+            document.getElementById('codeStatus').style.visibility = 'visible'; // Make the status message visible
+            setTimeout(() => {
+                document.getElementById('codeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+        }, 2000); 
+        });
+});
+</script>

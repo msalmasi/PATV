@@ -52,7 +52,7 @@ async function registerUser(req, res) {
     }
 
     const sqlInsertUser = 'INSERT INTO users (userId, username, displayname, password, email, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-    await runQuery(sqlInsertUser, [userId, username, username, hashedPassword, email, 500000, 0, '/public/img/avatar.png']);
+    await runQuery(sqlInsertUser, [userId, username, username, hashedPassword, email, 50000, 0, '/public/img/avatar.png']);
     
     const token = generateValidationToken();
     updateUserWithToken(userId, token);
@@ -74,6 +74,29 @@ async function registerUser(req, res) {
 // Function to generate a unique validation link
 function generateValidationToken() {
   return crypto.randomBytes(20).toString('hex');
+}
+
+// In case of username collision, generate a unique username.
+async function generateUniqueUsername(baseUsername) {
+  let username = baseUsername;
+  let isUnique = false;
+  let counter = 1;
+
+  while (!isUnique) {
+    // Check if the username already exists in the database
+    const existingUser = await getQuery("SELECT xp, level FROM users WHERE username = ?", [username]);
+
+    if (existingUser[0]) {
+      // Username exists, append a number and check again
+      username = `${baseUsername}${counter}`;
+      counter++;
+    } else {
+      // Username is unique
+      isUnique = true;
+    }
+  }
+
+  return username; // Return the unique username
 }
 
 // Funtion to add email validation token to a user
@@ -122,7 +145,7 @@ function loginUser(req, res) {
       // const token = jwt.sign({ userId: user.userId }, process.env.SECRET_KEY, { expiresIn: '1h' });
       // res.json({ token: token });
           const token = jwt.sign({ userId: user.userId, username: user.username, class: user.class }, process.env.SECRET_KEY, { expiresIn: '168h' });
-          res.cookie('jwt', token, { httpOnly: true, secure: false, sameSite: 'Lax' });
+          res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: 'Lax' });
           res.redirect(`/u/${username}/wheel`);  // Redirect to a secure page
   });
 };
@@ -259,7 +282,7 @@ async function updateTwitchId(req, res) {
 // Calculate XP for next level
 function xpForNextLevel(currentLevel) {
   return Math.pow(currentLevel + 1, 2) * 1000;
-}
+};
 
 // Update Levels
 async function updateLevel(userId, additionalXp) {
@@ -281,25 +304,26 @@ async function updateLevel(userId, additionalXp) {
 
   await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [xp, level, userId]);
   console.log(`User ${userId} is now level ${level} with ${xp} XP.`);
-}
+};
 
 // Function to Award Badges
 async function awardBadge(userId, badgeId) {
   try {
+    // Check if the badge exists
+    const badgeDetails = await getQuery("SELECT points FROM badges WHERE badgeId = ?", [badgeId]);
+    if (badgeDetails.length === 0) {
+      throw new Error('Badge not found'); // Throw an error if the badge doesn't exist
+    }
+
     // Check if the badge has already been awarded
     const existingBadge = await getQuery("SELECT * FROM user_badges WHERE userId = ? AND badgeId = ?", [userId, badgeId]);
     if (existingBadge.length > 0) {
       console.log(`User ${userId} already has badge ${badgeId}. No badge awarded.`);
-      return; // Exit the function if the badge has already been awarded
+      throw new Error('Badge already awarded'); // Throw an error if the badge has already been awarded
     }
 
     await runQuery("BEGIN TRANSACTION"); // Begin transaction
 
-    // Get the points associated with the badge
-    const badgeDetails = await getQuery("SELECT points FROM badges WHERE badgeId = ?", [badgeId]);
-    if (badgeDetails.length === 0) {
-      throw new Error('Badge not found');
-    }
     const points = badgeDetails[0].points;
 
     // Update the user's points
@@ -311,12 +335,53 @@ async function awardBadge(userId, badgeId) {
 
     await runQuery("COMMIT"); // Commit the transaction
 
-    console.log(`Badge ${badgeId} awarded to user ${userId} with ${points} points added.`);
+    console.log(`Badge ${badgeId} awarded to user ${userId} with ${points} XP added.`);
+    return { success: true, message: `Badge ${badgeId} awarded to user ${userId}.` };
   } catch (error) {
     await runQuery("ROLLBACK"); // Rollback in case of error
     console.error(`Error awarding badge: ${error.message}`);
+    throw error; // Rethrow the error so the calling function can handle it
   }
-}
+};
+
+// Function to Award Bonus PAT
+async function awardBonus(userId, type, amount) {
+  if (!userId || !amount || !type) {
+    console.error("Missing required fields");
+  }
+
+  try {
+    // Start a transaction
+    const transactionId = uuidv4();
+    const bonusId = uuidv4();
+    await runQuery("BEGIN TRANSACTION");
+
+    // Add points to the winner's points balance
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+
+    // Insert into bonus_winners table   
+    await runQuery(
+      "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
+      [bonusId, type, userId, transactionId, amount]
+    );
+
+    // Log the transaction
+    await runQuery(
+      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+      [transactionId, userId, "bonus win", amount]
+    );
+
+    // Commit the transaction
+    await runQuery("COMMIT");
+    console.log(`${amount} PAT bonus points awarded to ${userId} successfully.`)
+    return  { success: true, message: `${amount} PAT bonus points awarded to ${userId} successfully.` };
+  } catch (error) {
+    // Rollback in case of error
+    await runQuery("ROLLBACK");
+    console.error("Failed to process bonus winner:", error);
+    throw error; // Rethrow the error so the calling function can handle it
+  }
+};
 
 module.exports = {
   registerUser,
@@ -330,5 +395,7 @@ module.exports = {
   updateTwitchId,
   awardBadge,
   xpForNextLevel,
-  updateLevel
+  updateLevel,
+  awardBonus,
+  generateUniqueUsername
 };

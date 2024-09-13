@@ -9,19 +9,23 @@
                         <a href="/u/<%= username %>/profile/edit" class="infolink">Edit</a>
                     </div>
                     <% } else { %>
+                        <% if (typeof user == 'undefined' || !user) { %>
+                            <% } else { %>
                         <div id="profile-action"> 
                             <a href="/u/<%= usernameProfile %>/tip" class="infolink">Tip</a>
                         </div>
-                        <% } %></div>
-                        <div class="level-display">
+                        <% } %>
+                            
+                        <% } %></div><br>
+                        <div class="level-display" style="text-align: center;">
                             Level <%= level %>
                             <div class="level-bar">
                                 
                                 <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;"><span><%= xp %></span></div>
                                 
                             </div>
-                            <div class="level-info">
-                                Next Level: <%= xpForNextLevel(level) %> XP
+                            <div class="level-info" style="text-align: center;">
+                                Next Level: <%= xpForNextLevel(level) - xp %> XP
                             </div>
                         </div>
                 <div id="profile-content">         
@@ -40,14 +44,16 @@
             </div>
 
             <div class="profile-container">
-                <h1><%= displayname %>'s Badges</h1>
-                <ul>
+                <div id="profile-header">
+                <h1>Badges</h1>
+            </div>
+                <div class="profile-badges">
                   <% badges.forEach(badge => { %>
-                    <li>
-                      <img src="<%= badge.icon %>" alt="<%= badge.name %> Icon" style="height:50px;">
-                      <strong><%= badge.name %></strong> - <%= badge.description %>
-                    </li>
+                    <div class="badge">
+                      <img src="<%= badge.icon %>" title="<%= badge.description %>" style="height:50px;">
+                      <strong><%= badge.name %></strong> 
+                    </div>
                   <% }) %>
-                </ul>
+                </div>
             </div>
         </body>

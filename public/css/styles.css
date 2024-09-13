@@ -278,13 +278,21 @@ button {
 }
 
 .profile-container {
+    min-width: 300px;
     width: auto;
-    margin: 50px auto;
+    margin-top: 50px; 
+    margin-left: auto;
+    margin-right: auto;
     padding: 20px;
-    padding-bottom: 0;
+    padding-bottom: 20px;
     border: 1px solid #333;
     border-radius: 8px;
     background-color: #111;
+}
+
+.profile-badges {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
 }
 
 #profile-header img {
@@ -301,6 +309,19 @@ button {
     grid-template-rows: 60px 10px;
     grid-template-columns: 70px 1fr;
     align-items: center;
+}
+
+.badge {
+    width: 100px;
+    align-items: center;
+    display: grid;
+    justify-content: center;
+    text-align: center;
+}
+
+.badge img {
+    margin-left: auto;
+    margin-right: auto;
 }
 
 #profile-header h1 {

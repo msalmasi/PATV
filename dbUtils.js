@@ -64,6 +64,63 @@ function createTables() {
         }
     });
 
+    db.run(`CREATE TABLE IF NOT EXISTS bonus_winners (
+        bonusId TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        userId TEXT NOT NULL,
+        transactionId TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(userId),
+        FOREIGN KEY (transactionId) REFERENCES transactions(transactionId)
+        )`, (err) => {
+            if (err) {
+                console.log('Error creating table bonus_winners', err);
+            } else {
+                console.log('Table bonus_winners created or already exists.');
+            }
+        });
+
+    db.run(`CREATE TABLE IF NOT EXISTS poker_cashier (
+        cashierId TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        transactionId TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        action TEXT NOT NULL, -- 'buyin' or 'cashout'
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(userId),
+        FOREIGN KEY (transactionId) REFERENCES transactions(transactionId)
+        );`, (err) => {
+            if (err) {
+                console.log('Error creating table poker_cashier', err);
+            } else {
+                console.log('Table poker_cashier created or already exists.');
+            }
+        });
+
+    db.run(`CREATE TABLE IF NOT EXISTS blackjack (
+        blackjackId TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        wager INTEGER NOT NULL,
+        payout INTEGER DEFAULT 0,
+        result TEXT, -- Win, Lose, Draw, Blackjack, etc.
+        wagerTransactionId TEXT NOT NULL,
+        payoutTransactionId TEXT,
+        pvalue INTEGER, -- Player's final value
+        spvalue INTEGER, -- Player's split final value (if applicable)
+        dvalue INTEGER, -- Dealer's final value
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(userId),
+        FOREIGN KEY (wagerTransactionId) REFERENCES transactions(transactionId),
+        FOREIGN KEY (payoutTransactionId) REFERENCES transactions(transactionId)
+        );`, (err) => {
+            if (err) {
+                console.log('Error creating table blackjack', err);
+            } else {
+                console.log('Table blackjack created or already exists.');
+            }
+        });
+
     db.run(`CREATE TABLE IF NOT EXISTS user_redemptions (
         redemption_id INTEGER PRIMARY KEY AUTOINCREMENT,
         userId TEXT NOT NULL,
@@ -118,7 +175,7 @@ function createTables() {
         amount INTEGER NOT NULL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (userId) REFERENCES users(userId),
-        FOREIGN KEY (spinId) REFERENCES transactions(wheel_spins)
+        FOREIGN KEY (spinId) REFERENCES wheel_spins(spinId)
     )`, (err) => {
         if (err) {
             console.log('Error creating table jackpot_rakes', err);

@@ -164,7 +164,6 @@
                                     // Store spinId in local storage or a global variable
                                     localStorage.setItem('currentSpinID', spinId);
                                     // Set up SSE listener with this spinId
-                                    console.log('hoopla' + spinId);
                                     setupWagerListener(spinId);
                                     setupResultsListener(spinId);
                                     fetchUserBalance(user); // Update the User Balance
@@ -242,7 +241,6 @@
                     }
 
                     function setupWagerListener(spinId) {
-                        console.log('hoopla2' + spinId);
                         const eventSource = new EventSource(`/events?type=spin&identifier=${spinId}`);
 
                         eventSource.onmessage = function (event) {

@@ -24,6 +24,8 @@ const {
   awardBadge,
   xpForNextLevel,
   updateLevel,
+  awardBonus,
+  generateUniqueUsername
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
 const authenticateToken = require("./middleware/authenticateToken");
@@ -330,10 +332,17 @@ app.get("/auth/twitch/callback", async (req, res) => {
         return res.redirect("/resolve-twitch-conflict"); // Redirect to a page to handle the decision
       } else {
         // No conflict, update current user with Twitch ID
+        bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUser.userId]);
+        if (bonus[0].twitchBonus === 0) {
+          const badgeId = 'twitch-user'; // Replace with your actual badge ID
+          await awardBadge(currentUser.userId, badgeId);
+          await awardBonus(currentUser.userId, "twitch connect", 50000)
+        }
         await runQuery(
-          "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
-          [twitchUser.id, twitchUser.display_name, currentUser.userId]
+          "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+          [twitchUser.id, twitchUser.display_name, 1, currentUser.userId]
         );
+        // Award Badge
         return res.redirect(`/u/${currentUser.username}/profile/edit`);
       }
     } else {
@@ -353,25 +362,34 @@ app.get("/auth/twitch/callback", async (req, res) => {
           [twitchUser.email]
         );
         if (existingTwitchEmail.length > 0) {
+          bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]);
+          console.log(existingTwitchEmail[0]);
+          console.log(bonus[0]);
+          if (bonus[0].twitchBonus === 0) {
+            const badgeId = 'twitch-user'; // Replace with your actual badge ID
+            await awardBadge(existingTwitchEmail[0].userId, badgeId);
+            await awardBonus(existingTwitchEmail[0].userId, "twitch connect", 50000)
+          }
           await runQuery(
-            "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE email = ?",
-            [twitchUser.id, twitchUser.display_name, twitchUser.email]
+            "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE email = ?",
+            [twitchUser.id, twitchUser.display_name, 1, twitchUser.email]
           );
           currentUser = existingTwitchEmail[0];
         } else {
           //create a new user
+          const newUserUsername = await generateUniqueUsername(twitchUser.display_name);
           const password = Math.random().toString(36).substring(2, 15);
           const hashedPassword = await bcrypt.hash(password, 12);
           const newUser = {
             userId: uuidv4(),
-            username: twitchUser.display_name,
+            username: newUserUsername,
             displayname: twitchUser.display_name,
             email: twitchUser.email,
             password: hashedPassword,
             twitchId: twitchUser.id,
             twitchDisplayname: twitchUser.display_name,
             avatar: twitchUser.profile_image_url,
-            points_balance: 500000,
+            points_balance: 50000,
           };
           await runQuery(
             "INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -386,6 +404,18 @@ app.get("/auth/twitch/callback", async (req, res) => {
               newUser.avatar,
               newUser.points_balance,
             ]
+          );
+          bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [newUser.userId]);
+          if (bonus[0].twitchBonus === 0) {
+            const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
+            await awardBadge(newUser.userId, newUserBadgeId);
+            const badgeId = 'twitch-user'; // Replace with your actual badge ID
+            await awardBadge(newUser.userId, badgeId);
+            await awardBonus(newUser.userId, "twitch connect", 50000)
+          }
+          await runQuery(
+            "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+            [1, newUser.userId]
           );
           currentUser = newUser;
         }
@@ -478,7 +508,16 @@ app.post("/merge-accounts-twitch", async (req, res) => {
         [twitchId, twitchDisplayname, currentUserId]
       );
       await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
-
+      bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUserId]);
+      if (bonus[0].twitchBonus === 0) {
+        const badgeId = 'twitch-user'; // Replace with your actual badge ID
+        await awardBadge(currentUserId, badgeId);
+        await awardBonus(currentUserId, "twitch connect", 50000)
+      }
+      await runQuery(
+        "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+        [1, currentUserId]
+      );
       res.redirect(`/u/${currentUserUsername}/profile/edit`);
     } catch (error) {
       console.error("Error merging accounts:", error);
@@ -567,9 +606,15 @@ app.get("/auth/discord/callback", async (req, res) => {
         };
         return res.redirect("/resolve-discord-conflict");
       } else {
+        bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUser.userId]);
+        if (bonus[0].discordBonus === 0) {
+          const badgeId = 'discord-user'; // Replace with your actual badge ID
+          await awardBadge(currentUser.userId, badgeId);
+          await awardBonus(currentUser.userId, "discord connect", 50000)
+        }
         await runQuery(
-          "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
-          [discordUser.id, discordUser.username, currentUser.userId]
+          "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+          [discordUser.id, discordUser.username, 1, currentUser.userId]
         );
         return res.redirect(`/u/${currentUser.username}/profile/edit`);
       }
@@ -588,26 +633,34 @@ app.get("/auth/discord/callback", async (req, res) => {
           [discordUser.email]
         );
         if (existingDiscordEmail.length > 0) {
+          bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]);
+          if (bonus[0].discordBonus === 0) {
+            const badgeId = 'discord-user'; // Replace with your actual badge ID
+            await awardBadge(existingDiscordEmail[0].userId, badgeId);
+            await awardBonus(existingDiscordEmail[0].userId, "discord connect", 50000)
+          }
           await runQuery(
-            "UPDATE users SET discordId = ?, discordUsername = ? WHERE email = ?",
-            [discordUser.id, discordUser.username, discordUser.email]
+            "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE email = ?",
+            [discordUser.id, discordUser.username, 1, discordUser.email]
           );
           currentUser = existingDiscordEmail[0];
         } else {
           // Create a new user
           const password = Math.random().toString(36).substring(2, 15);
           const hashedPassword = await bcrypt.hash(password, 12);
+          const newUserUsername = await generateUniqueUsername(discordUser.username);
           const newUser = {
             userId: uuidv4(),
-            username: discordUser.username, // Discord username
+            username: newUserUsername, // Discord username
             displayname: discordUser.username,
             email: discordUser.email, // Discord email
             password: hashedPassword,
             avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
             discordId: discordUser.id,
             discordUsername: discordUser.username,
-            points_balance: 500000,
+            points_balance: 50000,
           };
+          
           await runQuery(
             "INSERT INTO users (userId, username, displayname, email, password, avatar, discordId, discordUsername, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
@@ -622,7 +675,18 @@ app.get("/auth/discord/callback", async (req, res) => {
               newUser.points_balance,
             ]
           );
-          console.log("whattttttttttttttttttttttt");
+          bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [newUser.userId]);
+          if (bonus[0].discordBonus === 0) {
+            const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
+            await awardBadge(newUser.userId, newUserBadgeId);
+            const badgeId = 'discord-user'; // Replace with your actual badge ID
+            await awardBadge(newUser.userId, badgeId);
+            await awardBonus(newUser.userId, "discord connect", 50000)
+          }
+          await runQuery(
+            "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+            [1, newUser.userId]
+          );
           currentUser = newUser;
         }
       }
@@ -712,6 +776,16 @@ app.post("/merge-accounts-discord", async (req, res) => {
         [discordId, discordUsername, currentUserId]
       );
       await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
+      bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUserId]);
+      if (bonus[0].discordBonus === 0) {
+        const badgeId = 'discord-user'; // Replace with your actual badge ID
+        await awardBadge(currentUserId, badgeId);
+        await awardBonus(currentUserId, "discord connect", 50000)
+      }
+      await runQuery(
+        "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+        [1, currentUserId]
+      );
       res.redirect(`/u/${currentUserUsername}/profile/edit`);
     } catch (error) {
       console.error("Error merging accounts:", error);
@@ -930,13 +1004,13 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   const usernameProfile = req.params.username; // Fallback to null if no user in session
   const sql =
-    "SELECT username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
+    "SELECT userId, username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
 
   try {
-    const badges = await getQuery('SELECT b.* FROM badges b JOIN user_badges ub ON b.badgeId = ub.badgeId WHERE ub.userId = ?', [req.user.userId]);
     const results = await getQuery(sql, [usernameProfile]);
     if (results.length > 0) {
       const user = results[0]; // Extract user data
+      const badges = await getQuery('SELECT b.* FROM badges b JOIN user_badges ub ON b.badgeId = ub.badgeId WHERE ub.userId = ?', [user.userId]);
       res.render("profile", {
         // Render profile.ejs with user data
         username: username,
@@ -960,6 +1034,108 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
     res.status(500).send("Internal Server Error.");
   }
 });
+
+// This endpoint checks if a user with the given discordId exists.
+app.get('/api/users/discord/:discordId', async (req, res) => {
+    const { discordId } = req.params;
+    try {
+      const user = await getQuery('SELECT * FROM users WHERE discordId = ?', [discordId]);
+
+      if (user.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({ user: user[0] });
+
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to retrieve user' });
+    }
+  });
+
+// This endpoint checks if a user with the given twitchId exists.
+app.get('/api/users/twitch/:twitchId', async (req, res) => {
+    const { twitchId } = req.params;
+    try {
+      const user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
+      if (user && user.length > 0) {
+        res.json({ user: user[0] });
+      } else {
+        res.json({ user: null });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to retrieve user' });
+    }
+  });
+
+// Endpoint to get user by Twitch display name
+app.get("/api/users/twitch/displayname/:displayName", async (req, res) => {
+    const { displayName } = req.params;
+  
+    try {
+      const user = await getQuery("SELECT * FROM users WHERE twitchDisplayname = ?", [displayName]);
+  
+      if (user.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+  
+      res.json({ user: user[0] });
+    } catch (error) {
+      console.error("Error fetching user by Twitch display name:", error);
+      res.status(500).json({ message: "Failed to retrieve user" });
+    }
+  });
+
+// This endpoint checks if a user with the given username exists.
+app.get('/api/users/username/:username', async (req, res) => {
+    const { username } = req.params;
+    try {
+      const user = await getQuery('SELECT username FROM users WHERE username = ?', [username]);
+      if (user && user.length > 0) {
+        res.json({ exists: true });
+      } else {
+        res.json({ exists: false });
+      }
+    } catch (error) {
+      console.error('Error checking username:', error.message);
+      res.status(500).send('Server error');
+    }
+  });
+
+// This endpoint creates a new Twitch user based on the info sent from the bot.
+app.post('/api/users/twitch/register', async (req, res) => {
+    const { username, displayname, email, twitchId, profileImage, twitchDisplayname, avatar, points_balance } = req.body;
+    const userId = uuidv4();
+  
+    try {
+      const password = Math.random().toString(36).substring(2, 15);
+      const hashedPassword = await bcrypt.hash(password, 12);
+      await runQuery(
+        'INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, username, displayname, email, hashedPassword, twitchId, twitchDisplayname, avatar, points_balance]
+      );
+      res.json({ user: { userId, username, displayname, points_balance } });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create new user' });
+    }
+  });
+
+  // This endpoint creates a new Discord user based on the info sent from the bot.
+app.post('/api/users/discord/register', async (req, res) => {
+    const { username, displayname, email, discordId, profileImage, discordUsername, avatar, points_balance } = req.body;
+    const userId = uuidv4();
+  
+    try {
+      const password = Math.random().toString(36).substring(2, 15);
+      const hashedPassword = await bcrypt.hash(password, 12);
+      await runQuery(
+        'INSERT INTO users (userId, username, displayname, email, password, discordId, discordUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, username, displayname, email, hashedPassword, discordId, discordUsername, avatar, points_balance]
+      );
+      res.json({ user: { userId, username, displayname, points_balance } });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to create new user' });
+    }
+  });
 
 // Get user profile
 app.get("/u/:username/tip", addUser, async (req, res) => {
@@ -990,6 +1166,71 @@ app.get("/u/:username/tip", addUser, async (req, res) => {
     res.status(500).send("Internal Server Error.");
   }
 });
+
+// Tip another user through a chatbot
+app.post("/u/:username/chattip", async (req, res) => {
+    const { amount } = req.body;
+    const senderUsername = req.body.sender;
+    const recipientUsername = req.body.recipient;
+    const password = req.body.password;
+
+    if (password !== process.env.TWITCH_BOT_TOKEN) {
+        return res.status(403).send("Access denied");
+    }
+  
+    if (senderUsername === recipientUsername) {
+      return res.status(400).send("Cannot tip oneself");
+    }
+  
+    try {
+      // Check both users exist and fetch their current balances
+      const users = await getQuery(
+        "SELECT username, userId, points_balance FROM users WHERE username IN (?, ?)",
+        [senderUsername, recipientUsername]
+      );
+      if (users.length !== 2) {
+        return res.status(404).send("One or both users not found");
+      }
+  
+      const sender = users.find((user) => user.username === senderUsername);
+      const recipient = users.find((user) => user.username === recipientUsername);
+  
+      if (sender.points_balance < amount) {
+        return res.status(400).send("Insufficient balance");
+      }
+  
+      // Deduct amount from sender's balance
+      await runQuery(
+        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
+        [amount, sender.userId]
+      );
+  
+      // Add amount to recipient's balance
+      await runQuery(
+        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
+        [amount, recipient.userId]
+      );
+  
+      // Log transaction for sender
+      const transactionIdSender = uuidv4();
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionIdSender, sender.userId, "tip sent", -amount]
+      );
+  
+      // Log transaction for receiver
+      const transactionIdReceiver = uuidv4();
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionIdReceiver, recipient.userId, "tip received", amount]
+      );
+      console.log("Tip sent successfully.");
+      res.json({ message: "Tip sent successfully." });
+    } catch (error) {
+      console.error("Failed to process tip:", error);
+      res.status(500).send("Failed to process tip");
+    }
+  });
 
 // Tip another user
 app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
@@ -1258,6 +1499,70 @@ app.post("/shop", addUser, async (req, res) => {
     res.status(500).send("Failed to process the purchase.");
   }
 });
+
+// HTTP post endpoint to shop
+app.post("/chatshop", async (req, res) => {
+    const { product, username, userId, password } = req.body;
+    
+    if (password !== process.env.TWITCH_BOT_TOKEN) {
+        return res.status(403).send("Access denied");
+    }
+
+    try {
+      // Check if the prize exists and get its cost
+      const prizes = await getQuery(
+        "SELECT prizeId, cost, prize FROM prizes WHERE prizeId = ?",
+        [product]
+      );
+  
+      if (prizes.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Prize not found" });
+      }
+      const prize = prizes[0];
+  
+      // Check if the user has enough points
+      const users = await getQuery(
+        "SELECT points_balance FROM users WHERE userId = ?",
+        [userId]
+      );
+      if (users.length === 0 || users[0].points_balance < prize.cost) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Insufficient coins" });
+      }
+  
+      // Deduct the prize cost from the user's points balance
+      await runQuery(
+        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
+        [prize.cost, userId]
+      );
+  
+      // Log the transaction
+      const transactionId = uuidv4();
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionId, userId, `purchase of ${prize.prize}`, -prize.cost]
+      );
+  
+      // Send an email notification
+      const msg = {
+        to: "pb@publicaccess.tv", // Recipient email address
+        from: "no-reply@publicaccess.tv", // Your verified sender
+        subject: "Purchase Notification",
+        text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
+        html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
+      };
+      await sgMail.send(msg);
+  
+      // Respond to the user
+      res.json({ success: true, message: "Purchase successful" });
+    } catch (error) {
+      console.error("Server error:", error);
+      res.status(500).send("Failed to process the purchase.");
+    }
+  });
 
 // Function to get the total jackpot
 function getJackpotTotal(req, res) {
@@ -1608,7 +1913,7 @@ app.post("/api/admin/redemption-codes", authenticateToken, addUser, async (req, 
                 // Insert new code
                 await runQuery("INSERT INTO redemption_codes (code, points, uses_allowed, uses_remaining, expiration_date) VALUES (?, ?, ?, ?, ?)", [code, points, uses_allowed, uses_allowed, expiration_date]);
             }
-            res.send("Redemption code updated successfully");
+            res.json({ message: "Points transferred successfully." });
         } catch (error) {
             console.error("Failed to update redemption code:", error);
             res.status(500).send("Failed to update redemption code");
@@ -1714,7 +2019,7 @@ app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
           );
         await runQuery("COMMIT");
         
-        res.send("Code redeemed successfully");
+        res.json({ message: "Code redeemed successfully." });
     } catch (error) {
         await runQuery("ROLLBACK");
         console.error("Failed to redeem code:", error);
@@ -1742,7 +2047,7 @@ app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (re
     if (userType === "Admin" || userType === "Staff") {
     try {
       await runQuery("INSERT INTO badges (badgeId, name, description, icon, points, requirement) VALUES (?, ?, ?, ?, ?, ?)", [badgeId, name, description, icon, points, requirement]);
-      res.status(201).send("Badge created successfully");
+      res.json({ message: "Badge created successfully." });
     } catch (error) {
       console.error("Failed to create badge:", error);
       res.status(500).send("Failed to create badge");
@@ -1792,6 +2097,138 @@ app.post("/api/badges/add", upload.none(), authenticateToken, addUser, async (re
       res.status(500).send("Failed to retrieve user badges");
     }
   });
+
+  // Endpoint to start a blackjack hand and record the wager
+app.post("/api/blackjack/wager", async (req, res) => {
+    const { userId, wager, password } = req.body;
+  
+    // Authentication check
+    if (password !== process.env.BOT_TOKEN) {
+      return res.status(403).send("Access denied");
+    }
+  
+    // Input validation
+    if (!userId || !wager || wager <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid inputs" });
+    }
+  
+    try {
+      await runQuery("BEGIN TRANSACTION");
+  
+      // Check if the user has enough balance
+      const users = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
+      if (users.length === 0 || users[0].points_balance < wager) {
+        return res.status(400).json({ success: false, message: "Insufficient balance" });
+      }
+  
+      // Deduct the wager from the user's balance
+      const transactionId = uuidv4();
+      await runQuery(
+        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
+        [wager, userId]
+      );
+  
+      // Log the transaction for the wager
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionId, userId, "blackjack wager", -wager]
+      );
+  
+      // Create a new blackjack row
+      const blackjackId = uuidv4();
+      await runQuery(
+        "INSERT INTO blackjack (blackjackId, userId, wager, wagerTransactionId) VALUES (?, ?, ?, ?)",
+        [blackjackId, userId, wager, transactionId]
+      );
+  
+      await runQuery("COMMIT");
+  
+      return res.json({ success: true, message: "Blackjack wager recorded", blackjackId });
+    } catch (error) {
+      await runQuery("ROLLBACK");
+      console.error("Failed to record blackjack wager:", error);
+      return res.status(500).json({ success: false, message: "Failed to record blackjack wager" });
+    }
+  });
+
+  // Endpoint to record blackjack results and payout
+app.post("/api/blackjack/result", async (req, res) => {
+    const { blackjackId, userId, payout, result, pvalue, spvalue, dvalue, password } = req.body;
+  
+    // Authentication check
+    if (password !== process.env.BOT_TOKEN) {
+      return res.status(403).send("Access denied");
+    }
+  
+    // Input validation
+    if (!blackjackId || !userId || payout == null || !result || pvalue == null || dvalue == null) {
+      return res.status(400).json({ success: false, message: "Invalid inputs" });
+    }
+  
+    try {
+      await runQuery("BEGIN TRANSACTION");
+  
+      // Log the payout transaction
+      const transactionId = uuidv4();
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionId, userId, "blackjack payout", payout]
+      );
+  
+      // Add the payout to the user's balance
+      await runQuery(
+        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
+        [payout, userId]
+      );
+  
+      // Update the blackjack row with the payout and result
+      await runQuery(
+        "UPDATE blackjack SET payout = ?, result = ?, payoutTransactionId = ?, pvalue = ?, spvalue = ?, dvalue = ? WHERE blackjackId = ?",
+        [payout, result, transactionId, pvalue, spvalue, dvalue, blackjackId]
+      );
+  
+      await runQuery("COMMIT");
+  
+      return res.json({ success: true, message: "Blackjack result recorded", payout });
+    } catch (error) {
+      await runQuery("ROLLBACK");
+      console.error("Failed to record blackjack result:", error);
+      return res.status(500).json({ success: false, message: "Failed to record blackjack result" });
+    }
+  });
+
+// Create an endpoint for awarding badges
+app.post("/api/award-badge", async (req, res) => {
+    const { userId, badgeId, password } = req.body;
+  
+    // Check for authentication
+    if (password !== process.env.TWITCH_BOT_TOKEN) {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+  
+    // Validate the required fields
+    if (!userId || !badgeId) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+  
+    try {
+      // Call the awardBadge function to award the badge
+      const result = await awardBadge(userId, badgeId);
+  
+      // Respond with success
+      return res.json(result);
+    } catch (error) {
+      if (error.message === 'Badge not found') {
+        return res.status(404).json({ success: false, message: "Badge not found" });
+      } else if (error.message === 'Badge already awarded') {
+        return res.status(400).json({ success: false, message: "Badge already awarded" });
+      } else {
+        console.error("Failed to award badge:", error);
+        return res.status(500).json({ success: false, message: "Failed to award badge" });
+      }
+    }
+  });
+  
 
 // HTTP POST endpoint to edit the list of classes.
 app.post("/api/prizes/edit", addUser, async (req, res) => {
@@ -2021,6 +2458,69 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
     res.status(500).send("Failed to process spin");
   }
 });
+
+// HTTP POST endpoint to trigger a chatbot spin
+app.post("/api/g/wheel/chatspin", async (req, res) => {
+    const username = req.body.username;
+    const password = req.body.password;
+    const pageId = req.body.pageId;
+    if (password !== process.env.TWITCH_BOT_TOKEN) {
+        return res.status(403).send("Access denied");
+    }
+    
+    try {
+      checkAndResolveStalledPublicSpins();
+      checkAndResolvePendingPublicSpins();
+      const user = await getQuery(
+        `SELECT userId, points_balance FROM users WHERE username = ?;`,
+        [username]
+      );
+  
+      if (!user.length || user[0].points_balance < 5000) {
+        return res.status(400).send("Insufficient points or user not found");
+      }
+  
+      const pendingSpin = await getQuery(
+        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        [user[0].userId]
+      );
+  
+      if (pendingSpin.length) {
+        return res.status(400).send("Free spin in progress.");
+      }
+  
+      const stalledSpin = await getQuery(
+        `SELECT * FROM wheel_spins WHERE result = 'INTENT' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
+        [user[0].userId]
+      );
+  
+      if (stalledSpin.length) {
+        return res.status(400).send("Stalled spin.");
+      }
+  
+      // Prepare a potential transaction but do not commit
+      const spinId = uuidv4();
+      const transactionId = uuidv4();
+  
+      // Log the intent to spin, pending client acknowledgment
+      await runQuery(
+        `INSERT INTO wheel_spins (spinId, userId, type, result, transactionId) VALUES (?, ?, ?, ?, ?);`,
+        [spinId, user[0].userId, "public", "INTENT", transactionId]
+      );
+  
+      // Send the spin command to the client
+      sendEvent("spin", "public", {
+        message: `Request: ${username}`,
+        spinId: spinId, // Include the spin ID for tracking
+        timestamp: new Date(),
+      });
+  
+      res.json({ spinId });
+    } catch (error) {
+      console.error("Failed to prepare spin:", error);
+      res.status(500).send("Failed to process spin");
+    }
+  });
 
 // Endpoint to finalize the spin after client acknowledgment
 app.post("/api/g/acknowledge-spin", async (req, res) => {
@@ -2468,6 +2968,157 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
   });
 });
 
+// HTTP POST endpoint to handle adding XP
+app.post('/api/update-level', async (req, res) => {
+  const { userId, additionalXp, password } = req.body;
+  const xp = parseInt(additionalXp);
+  // Authentication check
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).json({ success: false, message: 'Access denied' });
+  }
+
+  // Input validation
+  if (!userId || isNaN(additionalXp)) {
+    return res.status(400).json({ success: false, message: 'Invalid inputs' });
+  }
+
+  try {
+    // Call the updateLevel function
+    await updateLevel(userId, xp);
+
+    // Respond with success
+    return res.json({ success: true, message: `User ${userId} level and XP updated.` });
+  } catch (error) {
+    console.error('Failed to update level:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update level' });
+  }
+});
+
+// HTTP POST endpoint to handle adding XP
+app.post('/api/admin/update-level', authenticateToken, addUser, async (req, res) => {
+  const { username, additionalXp } = req.body;
+  const userType = req.user ? req.user.class : null;
+  const xp = parseInt(additionalXp);
+  if (userType === "Admin" || userType === "Staff") {
+    // Input validation
+    // if (!username || typeof additionalXp !== 'number' || isNaN(additionalXp)) {
+    //   return res.status(400).json({ success: false, message: 'Invalid inputs' });
+    // }
+      try {
+        // Update user's balance
+    // Call the updateLevel function
+    const user = await getQuery(
+      `SELECT userId FROM users WHERE username = ?`,
+      [username]
+    );
+    await updateLevel(user[0].userId, xp);
+        res.json({ message: "Xp added successfully." });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send("Failed to add xp.");
+      }
+  } else {
+    req.flash(
+      "error",
+      "Access denied. You must be an admin or staff to access this page."
+    );
+    return res.redirect("/login");
+  }
+
+});
+
+// HTTP POST endpoint to handle bonus winner
+app.post("/api/bonus/chatwinner", async (req, res) => {
+    const { userId, type, amount } = req.body;
+    const password = req.body.password;
+
+    if (password !== process.env.TWITCH_BOT_TOKEN) {
+        return res.status(403).send("Access denied");
+    }
+  
+    if (!userId || !amount || !type) {
+      return res.status(400).send("Missing required fields");
+    }
+  
+    try {
+      // Start a transaction
+      const transactionId = uuidv4();
+      const bonusId = uuidv4();
+      await runQuery("BEGIN TRANSACTION");
+  
+      // Add points to the winner's points balance
+      await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+  
+      // Insert into bonus_winners table   
+      await runQuery(
+        "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
+        [bonusId, type, userId, transactionId, amount]
+      );
+  
+      // Log the transaction
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionId, userId, "bonus win", amount]
+      );
+  
+      // Commit the transaction
+      await runQuery("COMMIT");
+  
+      res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
+    } catch (error) {
+      // Rollback in case of error
+      await runQuery("ROLLBACK");
+      console.error("Failed to process bonus winner:", error);
+      res.status(500).send("Failed to process bonus winner");
+    }
+  });
+
+// HTTP POST endpoint to handle bonus winner
+app.post("/api/bonus/winner", authenticateToken, addUser, async (req, res) => {
+  const { userId, type, amount } = req.body;
+
+  const userType = req.user ? req.user.class : null;
+  if (userType !== "Admin" || userType !== "Staff") {
+      return res.status(403).send("Access denied");
+  }
+
+  if (!userId || !amount || !type) {
+    return res.status(400).send("Missing required fields");
+  }
+
+  try {
+    // Start a transaction
+    const transactionId = uuidv4();
+    const bonusId = uuidv4();
+    await runQuery("BEGIN TRANSACTION");
+
+    // Add points to the winner's points balance
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+
+    // Insert into bonus_winners table   
+    await runQuery(
+      "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
+      [bonusId, type, userId, transactionId, amount]
+    );
+
+    // Log the transaction
+    await runQuery(
+      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+      [transactionId, userId, "bonus win", amount]
+    );
+
+    // Commit the transaction
+    await runQuery("COMMIT");
+
+    res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
+  } catch (error) {
+    // Rollback in case of error
+    await runQuery("ROLLBACK");
+    console.error("Failed to process bonus winner:", error);
+    res.status(500).send("Failed to process bonus winner");
+  }
+});
+
 // HTTP POST endpoint to record the result of a wheel spin.
 app.post(
   "/api/u/:username/wheel/spin/result",
@@ -2583,6 +3234,61 @@ app.post(
   }
 );
 
+// POST endpoint for buying or cashing out poker chips
+app.post('/api/poker/cashier', async (req, res) => {
+    const { userId, amount, action } = req.body;
+  
+    if (amount <= 0) {
+      return res.status(400).send('Amount must be greater than 0.');
+    }
+  
+    try {
+      await runQuery('BEGIN TRANSACTION');
+  
+      // Get user's current points balance
+      const userResult = await getQuery('SELECT points_balance FROM users WHERE userId = ?', [userId]);
+      if (!userResult.length) {
+        throw new Error('User not found');
+      }
+      const userBalance = userResult[0].points_balance;
+  
+      if (action === 'buyin') {
+        // Check if user has enough points
+        if (userBalance < amount) {
+          throw new Error('Insufficient balance');
+        }
+  
+        // Subtract points from user's balance
+        await runQuery('UPDATE users SET points_balance = points_balance - ? WHERE userId = ?', [amount, userId]);
+  
+      } else if (action === 'cashout') {
+        // Add points to user's balance
+        await runQuery('UPDATE users SET points_balance = points_balance + ? WHERE userId = ?', [amount, userId]);
+      } else {
+        throw new Error('Invalid action');
+      }
+  
+      // Log transaction
+      const transactionId = uuidv4();
+      const transactionType = action === 'buyin' ? 'Poker Buy-in' : 'Poker Cashout';
+      await runQuery('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', 
+                     [transactionId, userId, transactionType, action === 'buyin' ? -amount : amount]);
+  
+      // Create poker_cashier entry
+      const cashierId = uuidv4();
+      await runQuery('INSERT INTO poker_cashier (cashierId, userId, transactionId, amount, action) VALUES (?, ?, ?, ?, ?)', 
+                     [cashierId, userId, transactionId, amount, action]);
+  
+      await runQuery('COMMIT');
+      res.json({ message: `${action} successful`, balance: userBalance - (action === 'buyin' ? amount : -amount) });
+  
+    } catch (error) {
+      await runQuery('ROLLBACK');
+      console.error('Transaction failed:', error.message);
+      res.status(500).send(error.message);
+    }
+  });
+
 // Server-Sent Events setup to send commands to the client
 app.get("/events", (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
@@ -2635,3 +3341,4 @@ function sendEvent(type, identifier, message) {
 app.listen(port, () => {
   console.log(`Server running on port   ${port}`);
 });
+

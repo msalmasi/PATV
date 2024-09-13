@@ -14,19 +14,60 @@
         
     <div class="panel">
         <h3>Create Redemption Code</h3>
-    <form action="/api/admin/redemption-codes" method="post">
-        <input type="text" name="code" placeholder="Enter code" required>
-        <input type="number" name="points" placeholder="Point value" required>
-        <input type="number" name="uses_allowed" placeholder="Number of uses" required>
-        <input type="date" name="expiration_date" placeholder="Expiration date">
+    <form id="redemption-codes" action="/api/admin/redemption-codes" method="post">
+        <input type="text" id="code" name="code" placeholder="Enter code" required>
+        <input type="number" id="points" name="points" placeholder="Point value" required>
+        <input type="number" id="uses_allowed" name="uses_allowed" placeholder="Number of uses" required>
+        <input type="date" id="expiration_date" name="expiration_date" placeholder="Expiration date">
         <button type="submit">Save Code</button>
     </form>
+    <div id="codeStatus" class="spin-status"></div>
     </div>
 
     <div class="panel">
         <h3>Existing Redemption Codes</h3>
     <div id="redemptionCodesList"></div>
     </div>
+
+    <script>
+        document.getElementById('redemption-codes').addEventListener('submit', function(event) {
+        event.preventDefault();
+        var code = document.getElementById('code').value;
+        var points = document.getElementById('points').value;
+        var uses_allowed = document.getElementById('uses_allowed').value;
+        var expiration_date = document.getElementById('expiration_date').value;
+
+        fetch('/api/admin/redemption-codes', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({code: code, points: points, uses_allowed: uses_allowed, expiration_date: expiration_date})
+        })
+        .then(response => {
+                if (!response.ok) { // Handle non-200 responses
+                    throw new Error('Failed to add the redemption code.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                const message = data.message;
+                if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                document.getElementById('codeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                document.getElementById('codeStatus').textContent = 'Added redemption code successfully.'; // Display error message
+                document.getElementById('codeStatus').style.visibility = 'visible'; // Make the status message visible
+                }
+            })
+            .catch(error => {
+                console.error('Error making the POST request:', error);
+                document.getElementById('codeStatus').textContent = 'Failed to add the redemption code.........'; // Display error message
+                document.getElementById('codeStatus').style.visibility = 'visible'; // Make the status message visible
+                setTimeout(() => {
+                    document.getElementById('codeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            }, 2000); 
+            });
+    });
+    </script>
 
     <div class="panel">
     <form id="badges" action="/api/badges/add" method="post">
@@ -43,6 +84,7 @@
           <input type="text" id="requirement" name="requirement" required>
         <button type="submit">Create Badge</button>
       </form>
+      <div id="badgeStatus" class="spin-status"></div>
       </div>
 
           <!-- Badge Management -->
@@ -62,11 +104,21 @@
     })
     .then(response => response.json())
     .then(data => {
-        console.log('Success:', data);
+        const message = data.message;
+        if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                document.getElementById('badgeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                document.getElementById('badgeStatus').textContent = 'Added badge successfully.'; // Display error message
+                document.getElementById('badgeStatus').style.visibility = 'visible'; // Make the status message visible
+                }
         // Additional logic to handle response
     })
     .catch(error => {
-        console.error('Error:', error);
+        console.error('Error making the POST request:', error);
+                document.getElementById('badgeStatus').textContent = 'Failed to add the badge.........'; // Display error message
+                document.getElementById('badgeStatus').style.visibility = 'visible'; // Make the status message visible
+                setTimeout(() => {
+                    document.getElementById('badgeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            }, 2000); 
     });
 });
 </script>
@@ -211,6 +263,57 @@
                 document.getElementById('transferStatus').style.visibility = 'visible'; // Make the status message visible
                 setTimeout(() => {
                     document.getElementById('transferStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+            }, 2000); 
+            });
+        });
+    </script>
+
+    <!-- XP Panel -->
+    <div class="panel">
+        <h3>XP Panel</h3>
+        <form id="xpTransferForm" action="/api/admin/update-level" method="POST">
+            <label for="xpUsername">Username:</label>
+            <input type="text" id="xpUsername" name="username" required>
+            <label for="xpAmount">Amount:</label>
+            <input type="number" id="xpAmount" name="xp" required>
+            <button type="submit">Transfer Points</button>
+            <div id="xpStatus" class="spin-status"></div>
+    
+        </form>
+        </div>
+
+            <!-- This edits the URL in the POST form. -->
+    <script>
+        document.getElementById('xpTransferForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+        
+            var xp = document.getElementById('xpAmount').value;
+            var username = document.getElementById('xpUsername').value;
+
+            // Prepare the fetch request
+            fetch('/api/admin/update-level', {
+                headers: {    "content-type": "application/json",},
+                body: JSON.stringify({ username: username, additionalXp: xp }),
+                method: 'POST',
+            }).then(response => {
+                if (!response.ok) { // Handle non-200 responses
+                    throw new Error('Failed to transfer XP.');
+                }
+                return response.json();
+            }).then(data => {
+                const message = data.message;
+                console.log(message);
+                if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                document.getElementById('xpStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                document.getElementById('xpStatus').textContent = 'XP added successfully.'; // Display error message
+                document.getElementById('xpStatus').style.visibility = 'visible'; // Make the status message visible
+                }
+            }).catch(error => {
+                console.error('Error making the POST request:', error);
+                document.getElementById('xpStatus').textContent = 'XP adding failed. Check the username.'; // Display error message
+                document.getElementById('xpStatus').style.visibility = 'visible'; // Make the status message visible
+                setTimeout(() => {
+                    document.getElementById('xpStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
             }, 2000); 
             });
         });
