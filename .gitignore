@@ -3,10 +3,13 @@
 
 # ignore .env
 .env
+config.json
 
 # ignore all files in any directory named build
 /node-modules
 /node_modules
-/twitchbot
-/discord-bot
-/blackjack
+/discordself
+/twitchbot/node_modules
+/discord-bot/node_modules
+/blackjack/node_modules
+/discordself/node_modules
