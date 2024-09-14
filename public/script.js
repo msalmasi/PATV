@@ -416,7 +416,6 @@ function setupSpinListener(username) {
   eventSource.onerror = function(event) {
       console.error('EventSource failed:', event);
       checkConnection(eventSource);
-      eventSource.close();
   };
 }
 
