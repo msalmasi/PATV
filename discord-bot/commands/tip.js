@@ -75,7 +75,7 @@ module.exports = {
           const recipientBalance = recipientBalanceResponse.data.balance;
 
           interaction.reply({
-            content: `${senderDiscordUser.username} (PAT ${senderBalance}) tipped PAT ${amount} to ${recipientDiscordUser.username} (PAT ${recipientBalance}).`
+            content: `${senderDiscordUser} (PAT ${senderBalance}) tipped PAT ${amount} to ${recipientDiscordUser} (PAT ${recipientBalance}).`
           });
         } else {
           interaction.reply({
@@ -102,7 +102,7 @@ module.exports = {
         }
       }
     } catch (error) {
-      console.error(`Error processing tip from ${senderDiscordUser.username} to ${recipientDiscordUser.username}:`, error.message);
+      console.error(`Error processing tip from ${senderDiscordUser} to ${recipientDiscordUser}:`, error.message);
       interaction.reply({
         content: `There was an error processing your tip.`,
         ephemeral: true,
