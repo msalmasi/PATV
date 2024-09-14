@@ -818,7 +818,7 @@ app.get("/api/g/wheel/last-result", async (req, res) => {
     const user = await getQuery(userSql, [lastResult[0].userId]);
     console.log(user[0]);
 
-    if (lastResult.result === "PENDING") {
+    if (lastResult[0].result === "PENDING") {
       res.render("nowSpinning", { username: user[0].displayname });
     } else {
       res.render("lastSpinner", { username: user[0].displayname });
