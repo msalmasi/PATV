@@ -293,6 +293,7 @@ button {
 .profile-badges {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    grid-template-rows: repeat(auto-fit, minmax(125px, 1fr));
 }
 
 #profile-header img {
@@ -313,6 +314,7 @@ button {
 
 .badge {
     width: 100px;
+    height: 100px;
     align-items: center;
     display: grid;
     justify-content: center;
