@@ -135,7 +135,7 @@ async function endRaffle(channelId, raffleDurationMinutes) {
   // Find the discordUsername of the winnerId from the backend
   try {
     const userResponse = await axios.get(
-      `https://publicaccess.tv/api/users/discord/${winnerId}`
+      process.env.BACKEND_BASE_URL+`/api/users/discord/${winnerId}`
     );
     if (userResponse.data && userResponse.data.user) {
       discordUsername = userResponse.data.user.discordUsername;
@@ -156,7 +156,7 @@ async function endRaffle(channelId, raffleDurationMinutes) {
 
   // Send the result to the backend
   try {
-    await axios.post("https://publicaccess.tv/api/bonus/chatwinner", {
+    await axios.post(process.env.BACKEND_BASE_URL+`/api/bonus/chatwinner`, {
       userId: userId,
       type: "discord-raffle",
       amount: randomPrize,
@@ -339,7 +339,7 @@ const DISCORD_DEGEN_BADGE_ID = 'discord-degen'; // The badgeId for "discord-dege
 
 
         // Call the API to award the "discord-degen" badge
-        const response = await axios.post('https://publicaccess.tv/api/award-badge', {
+        const response = await axios.post(process.env.BACKEND_BASE_URL+'/api/award-badge', {
           userId: discordUser.userId,
           badgeId: DISCORD_DEGEN_BADGE_ID,
           password: process.env.DISCORD_BOT_TOKEN, // Authenticate the request
@@ -349,7 +349,7 @@ const DISCORD_DEGEN_BADGE_ID = 'discord-degen'; // The badgeId for "discord-dege
             const winnerBalance = await findUserBalance(discordId);
             // Send the result to the backend
               try {
-              await axios.post("https://publicaccess.tv/api/bonus/chatwinner", {
+              await axios.post(process.env.BACKEND_BASE_URL+`/api/bonus/chatwinner`, {
                   userId: discordUser.userId,
                   type: "discord-casino",
                   amount: bonus,
@@ -378,7 +378,7 @@ async function processCashout(discordId, amount, discordUsername) {
     const balance = await findUserBalance(discordId);
         // Call the backend API to perform the cash-out
         try {
-        const response = await axios.post('https://publicaccess.tv/api/poker/cashier', {
+        const response = await axios.post(process.env.BACKEND_BASE_URL+'/api/poker/cashier', {
             userId: user.userId, // Use the backend userId
             amount: amount,
             action: 'cashout'
@@ -403,7 +403,7 @@ async function addLevelUpBonus(levelBonus, winnerId, channel) {
   // Find the discordUsername of the winnerId from the backend
   try {
     const userResponse = await axios.get(
-      `https://publicaccess.tv/api/users/discord/${winnerId}`
+      process.env.BACKEND_BASE_URL+`/api/users/discord/${winnerId}`
     );
     if (userResponse.data && userResponse.data.user) {
       discordUsername = userResponse.data.user.discordUsername;
@@ -420,7 +420,7 @@ async function addLevelUpBonus(levelBonus, winnerId, channel) {
 
   // Send the result to the backend
   try {
-    await axios.post("https://publicaccess.tv/api/bonus/chatwinner", {
+    await axios.post(process.env.BACKEND_BASE_URL+`/api/bonus/chatwinner`, {
       userId: userId,
       type: "discord-levelup",
       amount: levelBonus,
@@ -445,7 +445,7 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
   // Find the discordUsername of the winnerId from the backend
   try {
     const userResponse = await axios.get(
-      `https://publicaccess.tv/api/users/discord/${winnerId}`
+      process.env.BACKEND_BASE_URL+`/api/users/discord/${winnerId}`
     );
     if (userResponse.data && userResponse.data.user) {
       discordUsername = userResponse.data.user.discordUsername;

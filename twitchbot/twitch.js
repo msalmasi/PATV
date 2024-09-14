@@ -161,7 +161,7 @@ async function createTwitchUser(twitchId, displayName, profileImage) {
     };
 
     const response = await axios.post(
-      "https://publicaccess.tv/api/users/twitch/register",
+      process.env.BACKEND_BASE_URL+`/api/users/twitch/register`,
       newUser
     );
     return response.data.user; // Returns the new user data
@@ -180,7 +180,7 @@ async function generateUniqueUsername(baseUsername) {
   while (!isUnique) {
     // Check if the username already exists in the database
     const existingUserResponse = await axios.get(
-      `https://publicaccess.tv/api/users/username/${username}`
+      process.env.BACKEND_BASE_URL+`/api/users/username/${username}`
     );
     if (existingUserResponse.data && existingUserResponse.data.exists) {
       // Username exists, append a number and check again
@@ -198,36 +198,32 @@ async function generateUniqueUsername(baseUsername) {
 // Find an existing user with TwitchId or automatically create a new user for spins.
 async function findOrCreateTwitchUser(twitchId, displayName, profileImage) {
   try {
-    // Step 1: Check if the user already exists in the backend
-    const userResponse = await axios.get(
-      `https://publicaccess.tv/api/users/twitch/${twitchId}`
-    );
+    // Check if the user already exists in the backend
+    const userResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/users/twitch/${twitchId}`);
 
     if (userResponse.data && userResponse.data.user) {
       // User found, return the existing user data
-      const currentUser = userResponse.data.user;
-      return currentUser;
+      return userResponse.data.user;
     } else {
-      // User doesn't exist, create a new one
-      console.log(
-        `Twitch user with ID ${twitchId} not found. Creating new user...`
-      );
-      const newUser = await createTwitchUser(
-        twitchId,
-        displayName,
-        profileImage
-      );
-
+      // This block may not be reached since a 404 error will be thrown
+      // Proceed to create the user in the catch block
+    }
+  } catch (error) {
+    if (error.response && error.response.status === 404) {
+      // User not found, create a new one
+      console.log(`Twitch user with ID ${twitchId} not found. Creating new user...`);
+      const newUser = await createTwitchUser(twitchId, displayName, profileImage);
       if (newUser) {
         console.log(`New user ${newUser.username} created.`);
         return newUser;
       } else {
         throw new Error("Error creating new Twitch user");
       }
+    } else {
+      // Other errors (network issues, server errors, etc.)
+      console.error("Error finding or creating Twitch user:", error.message);
+      throw error;
     }
-  } catch (error) {
-    console.error("Error finding or creating Twitch user:", error.message);
-    throw error;
   }
 }
 
@@ -236,14 +232,14 @@ async function findUserBalance(twitchId) {
   try {
     // Step 1: Check if the user already exists in the backend
     const userResponse = await axios.get(
-      `https://publicaccess.tv/api/users/twitch/${twitchId}`
+      process.env.BACKEND_BASE_URL+`/api/users/twitch/${twitchId}`
     );
     if (userResponse.data && userResponse.data.user) {
       // User found, return the existing user data
       const currentUser = userResponse.data.user;
       console.log(`User ${currentUser.username} found.`);
       const userBalanceResponse = await axios.get(
-        `https://publicaccess.tv/api/u/${currentUser.username}/balance`
+        process.env.BACKEND_BASE_URL+`/api/u/${currentUser.username}/balance`
       );
       const userBalance = userBalanceResponse.data.balance;
       return userBalance;
@@ -268,7 +264,7 @@ async function handleSpinCommand(channel, twitchId, displayName, profileImage) {
     profileImage
   );
   console.log(`Spinning the wheel for ${user.username}`);
-  const url = `https://publicaccess.tv/api/g/wheel/chatspin`;
+  const url = process.env.BACKEND_BASE_URL+`/api/g/wheel/chatspin`;
 
   fetch(url, {
     headers: {
@@ -317,7 +313,7 @@ async function handleSpinCommand(channel, twitchId, displayName, profileImage) {
 
 async function setupResultsListener(spinId, channel, twitchId, displayName) {
   const eventSource = new EventSource(
-    `https://publicaccess.tv/events?type=results&identifier=${spinId}`
+    process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
   );
 
   eventSource.onmessage = async function (event) {
@@ -436,7 +432,7 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
 
 async function setupWagerListener(spinId, channel, twitchId, displayName) {
   const eventSource = new EventSource(
-    `https://publicaccess.tv/events?type=spin&identifier=${spinId}`
+    process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
   );
 
   eventSource.onmessage = async function (event) {
@@ -488,7 +484,7 @@ async function handleBalanceCommand(
 
     // Step 2: Fetch the user's balance using the API endpoint
     const balanceResponse = await axios.get(
-      `https://publicaccess.tv/api/u/${user.username}/balance`
+      process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`
     );
 
     if (
@@ -543,7 +539,7 @@ async function handleTipCommand(
     let recipient;
     try {
       const recipientResponse = await axios.get(
-        `https://publicaccess.tv/api/users/twitch/displayname/${cleanRecipientDisplayName}`
+        process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${cleanRecipientDisplayName}`
       );
       recipient = recipientResponse.data.user;
     } catch (error) {
@@ -569,7 +565,7 @@ async function handleTipCommand(
     // Step 4: Send tip using the existing /chattip endpoint
     try {
       const tipResponse = await axios.post(
-        `https://publicaccess.tv/u/${recipient.username}/chattip`,
+        process.env.BACKEND_BASE_URL+`/u/${recipient.username}/chattip`,
         {
           amount: amount,
           sender: sender.username,
@@ -585,9 +581,9 @@ async function handleTipCommand(
         // Fetch updated balances for both sender and recipient
         const [senderBalanceResponse, recipientBalanceResponse] =
           await Promise.all([
-            axios.get(`https://publicaccess.tv/api/u/${sender.username}/balance`),
+            axios.get(process.env.BACKEND_BASE_URL+`/api/u/${sender.username}/balance`),
             axios.get(
-              `https://publicaccess.tv/api/u/${recipient.username}/balance`
+              process.env.BACKEND_BASE_URL+`/api/u/${recipient.username}/balance`
             ),
           ]);
 
@@ -612,7 +608,7 @@ async function handleTipCommand(
       ) {
         // Handle insufficient balance error
         const senderBalanceResponse = await axios.get(
-          `https://publicaccess.tv/api/u/${sender.username}/balance`
+          process.env.BACKEND_BASE_URL+`/api/u/${sender.username}/balance`
         );
         const senderBalance = senderBalanceResponse.data.balance;
         return client.say(
@@ -707,7 +703,7 @@ async function endRaffle(channel, raffleDurationMinutes) {
 
   // Find the displayname of for the winnerId
   const userResponse = await axios.get(
-    `https://publicaccess.tv/api/users/twitch/${winnerId}`
+    process.env.BACKEND_BASE_URL+`/api/users/twitch/${winnerId}`
   );
 
   if (userResponse.data && userResponse.data.user) {
@@ -726,7 +722,7 @@ async function endRaffle(channel, raffleDurationMinutes) {
 
   // Send the result to the backend
   try {
-    await axios.post("https://publicaccess.tv/api/bonus/chatwinner", {
+    await axios.post(process.env.BACKEND_BASE_URL+`/api/bonus/chatwinner`, {
       userId: userId,
       type: "twitch-raffle",
       amount: randomPrize,

@@ -50,7 +50,7 @@ async function deal(message, wamount, user) {
         const inswin = wamount - insamount
         const insloss = -wamount - insamount
         const lossins = parseInt(wamount) + parseInt(insamount)
-        const wagerResponse = await axios.post('https://publicaccess.tv/api/blackjack/wager', {
+        const wagerResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/wager`, {
             userId: user.userId,  // Ensure you have user.userId from your findOrCreateUser function
             wager: wamount,
             password: process.env.BOT_TOKEN
@@ -66,7 +66,7 @@ async function deal(message, wamount, user) {
                 case 'WIN':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const WinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const WinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,  // Make sure to store the blackjackId from the wager response
                         userId: user.userId,
                         payout: 2 * wamount,
@@ -85,7 +85,7 @@ async function deal(message, wamount, user) {
                 case 'TIE':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const TieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const TieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -104,7 +104,7 @@ async function deal(message, wamount, user) {
                 case 'LOSE':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const LoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const LoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -123,7 +123,7 @@ async function deal(message, wamount, user) {
                 case "DOUBLE WIN":
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const DoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const DoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -142,7 +142,7 @@ async function deal(message, wamount, user) {
                 case "DOUBLE LOSE":
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const DoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const DoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -wamount,
@@ -161,7 +161,7 @@ async function deal(message, wamount, user) {
                 case "DOUBLE TIE":
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const DoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const DoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -181,7 +181,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -wamount,
@@ -201,7 +201,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -221,7 +221,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -241,7 +241,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -261,7 +261,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -281,7 +281,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -301,7 +301,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -321,7 +321,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -341,7 +341,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -361,7 +361,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2.5*wamount,
@@ -381,7 +381,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2.5*wamount,
@@ -401,7 +401,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3.5*wamount,
@@ -421,7 +421,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3.5*wamount,
@@ -441,7 +441,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 1.5*wamount,
@@ -461,7 +461,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 1.5*wamount,
@@ -481,7 +481,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -502,7 +502,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -2*wamount,
@@ -522,7 +522,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -542,7 +542,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -562,7 +562,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -582,7 +582,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -602,7 +602,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -622,7 +622,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -642,7 +642,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -662,7 +662,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -wamount,
@@ -682,7 +682,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2.5*wamount,
@@ -702,7 +702,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -722,7 +722,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 5*wamount,
@@ -742,7 +742,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4.5*wamount,
@@ -762,7 +762,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -782,7 +782,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0.5*wamount,
@@ -802,7 +802,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 5.5*wamount,
@@ -822,7 +822,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -2*wamount,
@@ -842,7 +842,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -862,7 +862,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -882,7 +882,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -902,7 +902,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -922,7 +922,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -942,7 +942,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -962,7 +962,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -wamount,
@@ -982,7 +982,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0,
@@ -1002,7 +1002,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitTieDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitTieDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -1022,7 +1022,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2.5*wamount,
@@ -1042,7 +1042,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4.5*wamount,
@@ -1062,7 +1062,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitWinDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitWinDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 5*wamount,
@@ -1082,7 +1082,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0.5*wamount,
@@ -1102,7 +1102,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitLoseDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitLoseDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -1122,7 +1122,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitBlackjackDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitBlackjackDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 5.5*wamount,
@@ -1142,7 +1142,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -3*wamount,
@@ -1162,7 +1162,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 5*wamount,
@@ -1182,7 +1182,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -1202,7 +1202,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -1222,7 +1222,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -1242,7 +1242,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -1262,7 +1262,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 3*wamount,
@@ -1282,7 +1282,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -wamount,
@@ -1302,7 +1302,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -wamount,
@@ -1322,7 +1322,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleTieDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleTieDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -1342,7 +1342,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackDoubleTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackDoubleTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 4*wamount,
@@ -1362,7 +1362,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackDoubleWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackDoubleWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 6*wamount,
@@ -1382,7 +1382,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleWinDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleWinDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 6*wamount,
@@ -1402,7 +1402,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackDoubleLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackDoubleLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -1422,7 +1422,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleLoseDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleLoseDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2*wamount,
@@ -1442,7 +1442,7 @@ async function deal(message, wamount, user) {
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var yval2 = game.ycard2.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const SplitDoubleBlackjackDoubleBlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const SplitDoubleBlackjackDoubleBlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 7*wamount,
@@ -1461,7 +1461,7 @@ async function deal(message, wamount, user) {
                 case 'BLACKJACK':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const BlackjackResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const BlackjackResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 2.5*wamount,
@@ -1480,7 +1480,7 @@ async function deal(message, wamount, user) {
                 case 'INSURANCE PAYOUT':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const InsurancePayoutResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const InsurancePayoutResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: wamount,
@@ -1499,7 +1499,7 @@ async function deal(message, wamount, user) {
                 case 'INSURANCE WIN':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const InsuranceWinResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const InsuranceWinResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 1.5*wamount,
@@ -1518,7 +1518,7 @@ async function deal(message, wamount, user) {
                 case 'INSURANCE LOSE':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const InsuranceLoseResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const InsuranceLoseResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: -0.5*wamount,
@@ -1537,7 +1537,7 @@ async function deal(message, wamount, user) {
                 case 'INSURANCE TIE':
                     var yval = game.ycard.reduce((accum,item) => accum + item.value, 0)
                     var dval = game.dcard.reduce((accum,item) => accum + item.value, 0)
-                    const InsuranceTieResultResponse = await axios.post('https://publicaccess.tv/api/blackjack/result', {
+                    const InsuranceTieResultResponse = await axios.post(process.env.BACKEND_BASE_URL+`/api/blackjack/result`, {
                         blackjackId: wagerResponse.data.blackjackId,
                         userId: user.userId,
                         payout: 0.5*wamount,
@@ -1594,7 +1594,7 @@ client.on("messageCreate", async message => {
             }
 
             // Fetch the user's balance from the backend API
-            const balanceResponse = await axios.get(`https://publicaccess.tv/api/u/${user.username}/balance`);
+            const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
             const balance = balanceResponse.data.balance;
 
             if (balance >= wamount) {

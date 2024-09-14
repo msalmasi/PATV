@@ -3,6 +3,7 @@ const axios = require("axios");
 
 // Creates a new user with Discord
 async function createDiscordUser(discordId, discordUsername, profileImage) {
+  console.log("test");
     try {
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
@@ -23,7 +24,7 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
       };
   
       const response = await axios.post(
-        "https://publicaccess.tv/api/users/discord/register",
+        process.env.BACKEND_BASE_URL+`/api/users/discord/register`,
         newUser
       );
       return response.data.user; // Returns the new user data
@@ -41,7 +42,7 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
     while (!isUnique) {
       // Check if the username already exists in the database
       const existingUserResponse = await axios.get(
-        `https://publicaccess.tv/api/users/username/${username}`
+        process.env.BACKEND_BASE_URL+`/api/users/username/${username}`
       );
       if (existingUserResponse.data && existingUserResponse.data.exists) {
         // Username exists, append a number and check again
@@ -56,32 +57,34 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
     return username; // Return the unique username
   }
 
-// Find an existing user with discordId or automatically create a new user for spins.
-async function findOrCreateDiscordUser(discordId, discordUsername, avatarUrl) {
+  async function findOrCreateDiscordUser(discordId, discordUsername, avatarUrl) {
     try {
-      // Check if user already exists in your backend
-      const userResponse = await axios.get(`https://publicaccess.tv/api/users/discord/${discordId}`);
+      // Check if the user already exists in your backend
+      const userResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/users/discord/${discordId}`);
       
       if (userResponse.data && userResponse.data.user) {
+        // User found, return the existing user data
         return userResponse.data.user;
       } else {
-        // Create new user if they don't exist
-        const newUser = await createDiscordUser(
-          discordId,
-          discordUsername,
-          avatarUrl,
-        );
-        if (newUser) {
-            console.log(`New user ${newUser.username} created.`);
-            console.log(newUser);
-            return newUser;
-          } else {
-            throw new Error("Error creating new Discord user");
-          }
+        // This block may not be reached since a 404 error will be thrown
+        // Proceed to create the user in the catch block
       }
     } catch (error) {
-      console.error("Error finding or creating Discord user:", error.message);
-      throw error;
+      if (error.response && error.response.status === 404) {
+        // User not found, create a new one
+        console.log(`Discord user with ID ${discordId} not found. Creating new user...`);
+        const newUser = await createDiscordUser(discordId, discordUsername, avatarUrl);
+        if (newUser) {
+          console.log(`New user ${newUser.username} created.`);
+          return newUser;
+        } else {
+          throw new Error("Error creating new Discord user");
+        }
+      } else {
+        // Other errors (network issues, server errors, etc.)
+        console.error("Error finding or creating Discord user:", error.message);
+        throw error;
+      }
     }
   }
 
@@ -90,14 +93,14 @@ async function findUserBalance(discordId) {
     try {
       // Step 1: Check if the user already exists in the backend
       const userResponse = await axios.get(
-        `https://publicaccess.tv/api/users/discord/${discordId}`
+        process.env.BACKEND_BASE_URL+`/api/users/discord/${discordId}`
       );
       if (userResponse.data && userResponse.data.user) {
         // User found, return the existing user data
         const currentUser = userResponse.data.user;
         console.log(`User ${currentUser.username} found.`);
         const userBalanceResponse = await axios.get(
-          `https://publicaccess.tv/api/u/${currentUser.username}/balance`
+          process.env.BACKEND_BASE_URL+`/api/u/${currentUser.username}/balance`
         );
         const userBalance = userBalanceResponse.data.balance;
         return userBalance;
