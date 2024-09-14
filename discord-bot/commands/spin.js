@@ -23,7 +23,7 @@ module.exports = {
       );
 
       console.log(`Spinning the wheel for ${user.username}`);
-      const url = `http://localhost:3000/api/g/wheel/chatspin`;
+      const url = `https://publicaccess.tv/api/g/wheel/chatspin`;
 
       // Step 3: Make the spin request to the backend
       const spinResponse = await axios.post(url, {
@@ -56,7 +56,7 @@ module.exports = {
 
 async function setupResultsListener(spinId, interaction, user) {
   const eventSource = new EventSource(
-    `http://localhost:3000/events?type=results&identifier=${spinId}`
+    `https://publicaccess.tv/events?type=results&identifier=${spinId}`
   );
   
 
@@ -64,7 +64,7 @@ async function setupResultsListener(spinId, interaction, user) {
     const result = JSON.parse(event.data);
     console.log("Spin result received:", result);
 
-    const spinnerBalanceResponse = await axios.get(`http://localhost:3000/api/u/${user.username}/balance`);
+    const spinnerBalanceResponse = await axios.get(`https://publicaccess.tv/api/u/${user.username}/balance`);
     const spinnerBalance = spinnerBalanceResponse.data.balance;
 
     if (result.result > 50000) {
@@ -88,7 +88,7 @@ async function setupResultsListener(spinId, interaction, user) {
 
 async function setupWagerListener(spinId, interaction) {
     const eventSource = new EventSource(
-        `http://localhost:3000/events?type=spin&identifier=${spinId}`
+        `https://publicaccess.tv/events?type=spin&identifier=${spinId}`
       );
 
   eventSource.onmessage = async function (event) {
@@ -96,7 +96,8 @@ async function setupWagerListener(spinId, interaction) {
     console.log("Spin command received:", data);
 
     if (data.message.includes("public spinid") && data.spinId) {
-      const spinnerBalanceResponse = await axios.get(`http://localhost:3000/api/u/${interaction.user.username}/balance`);
+      var spinnerUsername = message.split(" ")[4];
+      const spinnerBalanceResponse = await axios.get(`https://publicaccess.tv/api/u/${spinnerUsername}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
       interaction.editReply(
         `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`

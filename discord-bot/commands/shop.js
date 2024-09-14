@@ -11,7 +11,7 @@ module.exports = {
   async execute(interaction) {
     try {
       // Fetch the list of prizes from the backend API
-      const response = await axios.get('http://localhost:3000/api/prizes');
+      const response = await axios.get('https://publicaccess.tv/api/prizes');
       const prizes = response.data;
 
       if (prizes.length === 0) {
@@ -54,7 +54,7 @@ module.exports = {
       user = await findOrCreateDiscordUser(discordId, displayName, profileImage);
 
       // Attempt to purchase the selected item via the backend API
-      const response = await axios.post('http://localhost:3000/chatshop', {
+      const response = await axios.post('https://publicaccess.tv/chatshop', {
         product: selectedPrizeId,
         username: user.username,
         userId: user.userId,
@@ -81,7 +81,7 @@ module.exports = {
             const member = interaction.member; // Guild member
             member.roles.add(role); // Add role to member
         }
-        const balanceResponse = await axios.get(`http://localhost:3000/api/u/${user.username}/balance`);
+        const balanceResponse = await axios.get(`https://publicaccess.tv/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
         interaction.guild.channels.cache.get('1245478269294346320').send(`${interaction.user} bought ${selectedPrizeName.prizeName}`)
         await interaction.update({ content: `You successfully purchased ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost})! You have PAT ${balance}. Please wait up to 24 hours for activation.`, components: [], ephemeral: true });
@@ -93,7 +93,7 @@ module.exports = {
     } catch (error) {
       if (error.response && error.response.status === 400 && error.response.data.message === "Insufficient coins") {
         // Handle insufficient balance
-        const balanceResponse = await axios.get(`http://localhost:3000/api/u/${user.username}/balance`);
+        const balanceResponse = await axios.get(`https://publicaccess.tv/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
         await interaction.update({ content: `You have insufficient funds to buy ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost}). You have PAT ${balance}.`, components: [], ephemeral: true });
       } else {
@@ -108,7 +108,7 @@ module.exports = {
 async function getPrizeDetails(prizeId) {
     try {
       // Fetch the prize details using the prizeId from the backend API
-      const response = await axios.get(`http://localhost:3000/api/prizes`);
+      const response = await axios.get(`https://publicaccess.tv/api/prizes`);
   
       const prizes = response.data;
   

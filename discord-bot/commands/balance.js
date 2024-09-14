@@ -20,7 +20,7 @@ module.exports = {
       
       // Step 2: Fetch the user's balance using the API endpoint
       const balanceResponse = await axios.get(
-        `http://localhost:3000/api/u/${user.username}/balance`
+        `https://publicaccess.tv/api/u/${user.username}/balance`
       );
 
       if (

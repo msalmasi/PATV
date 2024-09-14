@@ -26,7 +26,7 @@ module.exports = {
       const user = await findOrCreateDiscordUser(discordId, displayName, profileImage);
 
       // Step 2: Call the backend API to perform the buy-in
-      const response = await axios.post('http://localhost:3000/api/poker/cashier', {
+      const response = await axios.post('https://publicaccess.tv/api/poker/cashier', {
         userId: user.userId, // Use the backend userId
         amount: amount,
         action: 'buyin'
@@ -42,7 +42,7 @@ module.exports = {
     } catch (error) {
       if (error.response && error.response.status === 400 && error.response.data === 'Insufficient balance') {
         // Fetch user's current balance and inform them of insufficient funds
-        const balanceResponse = await axios.get(`http://localhost:3000/api/u/${user.username}/balance`);
+        const balanceResponse = await axios.get(`https://publicaccess.tv/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
         interaction.reply({ content: `${interaction.user} (PAT ${balance}), you have insufficient funds to buy ${amount} poker chips.`, ephemeral: true });
       } else {

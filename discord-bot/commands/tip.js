@@ -32,7 +32,7 @@ module.exports = {
       let recipient;
       try {
         const recipientResponse = await axios.get(
-          `http://localhost:3000/api/users/discord/${recipientDiscordUser.id}`
+          `https://publicaccess.tv/api/users/discord/${recipientDiscordUser.id}`
         );
         recipient = recipientResponse.data.user;
       } catch (error) {
@@ -55,7 +55,7 @@ module.exports = {
       // Step 3: Send tip using the existing /chattip endpoint
       try {
         const tipResponse = await axios.post(
-          `http://localhost:3000/u/${recipient.username}/chattip`,
+          `https://publicaccess.tv/u/${recipient.username}/chattip`,
           {
             amount: amount,
             sender: sender.username,
@@ -67,8 +67,8 @@ module.exports = {
         if (tipResponse.data.message === "Tip sent successfully.") {
           // Fetch updated balances for both sender and recipient
           const [senderBalanceResponse, recipientBalanceResponse] = await Promise.all([
-            axios.get(`http://localhost:3000/api/u/${sender.username}/balance`),
-            axios.get(`http://localhost:3000/api/u/${recipient.username}/balance`)
+            axios.get(`https://publicaccess.tv/api/u/${sender.username}/balance`),
+            axios.get(`https://publicaccess.tv/api/u/${recipient.username}/balance`)
           ]);
 
           const senderBalance = senderBalanceResponse.data.balance;
@@ -86,7 +86,7 @@ module.exports = {
       } catch (error) {
         if (error.response && error.response.status === 400 && error.response.data === "Insufficient balance") {
           const senderBalanceResponse = await axios.get(
-            `http://localhost:3000/api/u/${sender.username}/balance`
+            `https://publicaccess.tv/api/u/${sender.username}/balance`
           );
           const senderBalance = senderBalanceResponse.data.balance;
           return interaction.reply({
