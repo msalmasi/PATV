@@ -38,9 +38,9 @@ module.exports = {
         // You can reply to the interaction first and follow-up later
         
         interaction.editReply(`Spinning the wheel for you, ${discordUser.username}!`);
-
-        // Set up listeners for the wager and results
         setupWagerListener(spinId, interaction);
+        // Set up listeners for the wager and results
+        
         await setupResultsListener(spinId, interaction, user);
       } else {
         throw new Error("Spin request failed.");
@@ -55,10 +55,10 @@ module.exports = {
 // EVENT LISTENERS
 
 async function setupResultsListener(spinId, interaction, user) {
+  
   const eventSource = new EventSource(
     `https://publicaccess.tv/events?type=results&identifier=${spinId}`
-  );
-  
+  );  
 
   eventSource.onmessage = async function (event) {
     const result = JSON.parse(event.data);
@@ -96,7 +96,7 @@ async function setupWagerListener(spinId, interaction) {
     console.log("Spin command received:", data);
 
     if (data.message.includes("public spinid") && data.spinId) {
-      var spinnerUsername = message.split(" ")[4];
+      var spinnerUsername = data.message.split(" ")[4];
       console.log (spinnerUsername);
       const spinnerBalanceResponse = await axios.get(`https://publicaccess.tv/api/u/${spinnerUsername}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
