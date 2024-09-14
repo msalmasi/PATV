@@ -69,11 +69,11 @@ async function setupResultsListener(spinId, interaction, user) {
 
     if (result.result > 50000) {
       await interaction.followUp(
-        `PAT ${result.result} JACKPOT for ${user.username}!!!! (New Balance: PAT ${spinnerBalance})`
+        `PAT ${result.result} JACKPOT for ${interaction.user}!!!! (New Balance: PAT ${spinnerBalance})`
       );
     } else {
       await interaction.followUp(
-        `You won PAT ${result.result} and gained ${result.xp} XP, ${user.username} (New Balance: PAT ${spinnerBalance}).`
+        `You won PAT ${result.result} and gained ${result.xp} XP, ${interaction.user} (New Balance: PAT ${spinnerBalance}).`
       );
     }
 
