@@ -97,6 +97,7 @@ async function setupWagerListener(spinId, interaction) {
 
     if (data.message.includes("public spinid") && data.spinId) {
       var spinnerUsername = message.split(" ")[4];
+      console.log (spinnerUsername);
       const spinnerBalanceResponse = await axios.get(`https://publicaccess.tv/api/u/${spinnerUsername}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
       interaction.editReply(
