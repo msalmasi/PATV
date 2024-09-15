@@ -19,7 +19,7 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
         password: hashedPassword,
         discordId: discordId,
         discordUsername: discordUsername,
-        avatar: `https://cdn.discordapp.com/avatars/${discordId}/${profileImage}.png` || "/public/img/avatar.png",
+        avatar: profileImage || "/public/img/avatar.png",
         points_balance: 50000,
       };
   
