@@ -202,9 +202,7 @@ client.on("messageCreate", (message) => {
     message.content.startsWith("!") ||
     message.guild.id != "913269267691094026" ||
     message.author.id == "934679177762832414" ||
-    message.author.id == "568592114590547979" ||
-    message.author.id == "1130228791453692036" ||
-    message.author.id == "568592114590547979"
+    message.author.id == "1130228791453692036"
   ) {
     return;
   }
