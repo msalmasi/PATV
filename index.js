@@ -1113,6 +1113,18 @@ app.post('/api/users/twitch/register', async (req, res) => {
         'INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, username, displayname, email, hashedPassword, twitchId, twitchDisplayname, avatar, points_balance]
       );
+      bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [userId]);
+      if (bonus[0].twitchBonus === 0) {
+        const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
+        await awardBadge(userId, newUserBadgeId);
+        const badgeId = 'twitch-user'; // Replace with your actual badge ID
+        await awardBadge(userId, badgeId);
+        await awardBonus(userId, "twitch connect", 50000)
+      }
+      await runQuery(
+        "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+        [1, userId]
+      );
       res.json({ user: { userId, username, displayname, points_balance } });
     } catch (error) {
       res.status(500).json({ error: 'Failed to create new user' });
@@ -1130,6 +1142,18 @@ app.post('/api/users/discord/register', async (req, res) => {
       await runQuery(
         'INSERT INTO users (userId, username, displayname, email, password, discordId, discordUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, username, displayname, email, hashedPassword, discordId, discordUsername, avatar, points_balance]
+      );
+      bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [userId]);
+      if (bonus[0].discordBonus === 0) {
+        const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
+        await awardBadge(userId, newUserBadgeId);
+        const badgeId = 'discord-user'; // Replace with your actual badge ID
+        await awardBadge(userId, badgeId);
+        await awardBonus(userId, "discord connect", 50000)
+      }
+      await runQuery(
+        "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+        [1, userId]
       );
       res.json({ user: { userId, username, displayname, points_balance } });
     } catch (error) {

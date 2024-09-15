@@ -9,7 +9,7 @@
                         <a href="/u/<%= username %>/profile/edit" class="infolink">Edit</a>
                     </div>
                     <% } else { %>
-                        <% if (typeof user == 'undefined' || !user) { %>
+                        <% if (typeof username == 'undefined' || !username) { %>
                             <% } else { %>
                         <div id="profile-action"> 
                             <a href="/u/<%= usernameProfile %>/tip" class="infolink">Tip</a>

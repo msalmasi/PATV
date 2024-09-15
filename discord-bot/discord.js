@@ -457,12 +457,12 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
   }
 
   console.log(
-    `User with ID ${winnerId} won a level up bonus of ${levelBonus}!`
+    `User with ID ${winnerId} won a level up bonus of ${levelXpBonus}!`
   );
 
   // Send the result to the backend
   try {
-    await axios.post("/api/update-level", {
+    await axios.post(process.env.BACKEND_BASE_URL+`/api/update-level`, {
       userId: userId,
       additionalXp: levelXpBonus,
       password: process.env.DISCORD_BOT_TOKEN,

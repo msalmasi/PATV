@@ -3,7 +3,6 @@ const axios = require("axios");
 
 // Creates a new user with Discord
 async function createDiscordUser(discordId, discordUsername, profileImage) {
-  console.log("test");
     try {
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
