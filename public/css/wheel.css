@@ -280,3 +280,53 @@ margin-right: auto;
   padding: 10px;
   visibility: hidden; /* Hide it by default */
 }
+
+/* Parent container for the animation */
+.arcade-animation-container {
+  position: fixed;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 500px;
+  max-width: 500px;
+  background-color: rgba(0, 0, 0, 0.8); /* Semi-transparent background */
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  z-index: 1000;
+  color: #fff; /* Text color for better contrast */
+  display: grid;
+  grid-template-rows: 1fr 1fr 2fr;
+  font-family: 'Press Start 2P', cursive; /* Retro, pixelated font */
+}
+
+/* Level-up message */
+.arcade-animation-level-up {
+  font-size: 2em;
+  color: gold;
+  margin-bottom: 10px;
+  margin-top: 30px;
+}
+
+/* Bonus points message */
+.arcade-animation-bonus-points {
+  font-size: 1.5em;
+  color: lightgreen;
+  margin-bottom: 10px;
+  margin-top: 30px;
+}
+
+/* Dancing frog image */
+.arcade-animation-frog-dance {
+  margin-top: 30px;
+  width: 200px;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Apply the pop-in animation to the container */
+.arcade-animation-container {
+  animation: pop-in 0.5s forwards;
+}

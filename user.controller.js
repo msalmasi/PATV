@@ -290,22 +290,36 @@ async function updateLevel(userId, additionalXp) {
   const userDetails = await getQuery("SELECT xp, level FROM users WHERE userId = ?", [userId]);
   if (userDetails.length === 0) {
     console.error("User not found");
-    return;
+    return null;
   }
 
   let { xp, level } = userDetails[0];
+  let originalLevel = level;
   xp += additionalXp;
+
+  let totalBonusPoints = 0;
+  let levelsGained = 0;
 
   while (xp >= xpForNextLevel(level)) {
     xp -= xpForNextLevel(level);
     level++;
-    const pointsReward = 10 * xpForNextLevel(level-1);
+    levelsGained++;
+    const pointsReward = 10 * xpForNextLevel(level - 1);
+    totalBonusPoints += pointsReward;
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [pointsReward, userId]);
   }
 
   await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [xp, level, userId]);
   console.log(`User ${userId} is now level ${level} with ${xp} XP.`);
+
+  return {
+    leveledUp: levelsGained > 0,
+    newLevel: level,
+    levelsGained: levelsGained,
+    bonusPoints: totalBonusPoints
+  };
 };
+
 
 // Function to Award Badges
 async function awardBadge(userId, badgeId) {

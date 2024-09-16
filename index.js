@@ -2236,8 +2236,9 @@ app.post("/api/blackjack/result", async (req, res) => {
       );
   
       await runQuery("COMMIT");
-  
-      return res.json({ success: true, message: "Blackjack result recorded", payout });
+      xp = Math.abs(payout) * 0.005;
+      const levelUpInfo = await updateLevel(userId, xp);
+      return res.json({ success: true, message: "Blackjack result recorded", payout, levelUpInfo });
     } catch (error) {
       await runQuery("ROLLBACK");
       console.error("Failed to record blackjack result:", error);
@@ -2964,18 +2965,19 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                   db.run(
                     "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
                     [transactionId, userId, "Jackpot Win", jackpotTotal],
-                    (err) => {
+                    async (err) => {
                       if (err) {
                         return res
                           .status(500)
                           .json({ error: "Failed to create spin record" });
                       }
                       xp = jackpotTotal * 0.005;
-                      updateLevel(userId, xp);
-                      sendEvent("results", spinId, { result: jackpotTotal, xp: xp });
+                      const levelUpInfo = await updateLevel(userId, xp);
+                      sendEvent("results", spinId, { result: jackpotTotal, xp: xp, levelUp: levelUpInfo });
                       res.status(200).json({
                         transactionId: transactionId,
                         result: jackpotTotal,
+                        levelUp: levelUpInfo
                       });
                     }
                   );
@@ -2992,7 +2994,7 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
               db.run(
                 "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
                 [transactionId, userId, transactionType, result],
-                (err) => {
+                async (err) => {
                   if (err) {
                     return res
                       .status(500)
@@ -3002,11 +3004,11 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                   // Send a message to connected clients to spin the wheel.
                   console.log("sending spin data to clients" + spinId + result);
                   xp = result * 0.005;
-                  updateLevel(userId, xp);
-                  sendEvent("results", spinId, { result: result, xp: xp });
+                  const levelUpInfo = await updateLevel(userId, xp);
+                  sendEvent("results", spinId, { result: result, xp: xp, levelUp: levelUpInfo });
                   res
                     .status(200)
-                    .json({ transactionId: transactionId, result: result });
+                    .json({ transactionId: transactionId, result: result, levelUp: levelUpInfo });
                 }
               );
             }
@@ -3233,18 +3235,19 @@ app.post(
                     db.run(
                       "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
                       [transactionId, userId, "Jackpot Win", jackpotTotal],
-                      (err) => {
+                      async (err) => {
                         if (err) {
                           return res
                             .status(500)
                             .json({ error: "Failed to create spin record" });
                         }
                         const xp = jackpotTotal*0.005;
-                        updateLevel(userId, xp);
+                        const levelUpInfo = await updateLevel(userId, xp);
                         res.status(200).json({
                           transactionId: transactionId,
                           result: jackpotTotal,
                           xp: xp,
+                          levelUp: levelUpInfo
                         });
                       }
                     );
@@ -3261,17 +3264,17 @@ app.post(
                 db.run(
                   "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
                   [transactionId, userId, transactionType, result],
-                  (err) => {
+                  async (err) => {
                     if (err) {
                       return res
                         .status(500)
                         .json({ error: "Failed to create spin record" });
                     }
                     xp = result * 0.005;
-                    updateLevel(userId, xp);
+                    const levelUpInfo = await updateLevel(userId, xp);
                     res
                       .status(200)
-                      .json({ transactionId: transactionId, result: result, xp: xp });
+                      .json({ transactionId: transactionId, result: result, xp: xp, levelUp: levelUpInfo });
                   }
                 );
               }

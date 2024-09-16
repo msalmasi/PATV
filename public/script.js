@@ -203,13 +203,13 @@ function fetchUserLevel(username) {
           } else {
               console.error('Failed to fetch user level:', data.error);
               const levelInfo = document.querySelector('.level-info');
-            levelInfo.textContent =  'Error fetching balance';
+            levelInfo.textContent =  'Error fetching XP';
           }
       })
       .catch(error => {
           console.error('Fetch error:', error);
           const levelInfo = document.querySelector('.level-info');
-            levelInfo.textContent =  'Error fetching balance';
+            levelInfo.textContent =  'Error fetching XP';
       });
 }
 
@@ -289,29 +289,72 @@ function determineSpinResult() {
       const username = getUsernameFromUrl();
       const url = `/api/u/${username}/wheel/spin/result`;
       fetch(url, {
-        headers: {    "content-type": "application/json",
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ spinId: spinId, result: result }),
         method: "POST"
       })
       .then(response => response.json())
       .then(data => {
-          console.log('Server response:', data.message);
-          fetchUserBalance(username);
-          fetchUserLevel(username);
-          // Additional actions based on response can be handled here
-          if (data.result) {
-            displayPointsReward(data.result);
-            displayXPReward(data.xp);
-            document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
+        console.log('Server response:', data.message);
+        fetchUserBalance(username);
+        fetchUserLevel(username);
+        // Additional actions based on response can be handled here
+        if (data.result) {
+          displayPointsReward(data.result);
+          displayXPReward(data.xp);
+          if (data.levelUp && data.levelUp.leveledUp) {
+            console.log("leveledup!!!");
+            displayLevelUpAnimation(data.levelUp.levelsGained, data.levelUp.newLevel, data.levelUp.bonusPoints);
           }
+          document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
+        }
       })
       .catch(error => {
-          console.error('Error sending spin result:', error);
+        console.error('Error sending spin result:', error);
       });
       break;
     }
   }
+}
+
+// Function to display level-up animation
+function displayLevelUpAnimation(levelsGained, newLevel, bonusPoints) {
+  // Create a parent div for the animation
+  const animationContainer = document.createElement('div');
+  animationContainer.className = 'arcade-animation-container';
+  animationContainer.id = 'animationContainer';
+
+  // Create a div for level-up message
+  const levelUpDiv = document.createElement('div');
+  levelUpDiv.className = 'arcade-animation-level-up';
+  levelUpDiv.textContent = `Level Up (+${levelsGained})! You reached Level ${newLevel}!`;
+
+  // Create a div for bonus points message
+  const bonusPointsDiv = document.createElement('div');
+  bonusPointsDiv.className = 'arcade-animation-bonus-points';
+  bonusPointsDiv.textContent = `You received a PAT ${bonusPoints} level up bonus!`;
+
+  // Create an image element for the dancing frog
+  const frogDanceImg = document.createElement('img');
+  frogDanceImg.className = 'arcade-animation-frog-dance';
+  frogDanceImg.src = `/public/img/dancefrog.gif`;
+  frogDanceImg.alt = 'Dancing Frog';
+
+  // Append child elements to the parent container
+  animationContainer.appendChild(levelUpDiv);
+  animationContainer.appendChild(bonusPointsDiv);
+  animationContainer.appendChild(frogDanceImg);
+
+  // Append the parent container to the body
+  document.body.appendChild(animationContainer);
+
+  // Apply animation to the container
+  animationContainer.style.animation = 'pop-in 0.5s forwards';
+
+  // Remove the animation container after the animation completes
+  setTimeout(() => {
+    animationContainer.remove();
+  }, 5000); // Adjust duration as needed
 }
 
 // Displays the winning result over the wheel.

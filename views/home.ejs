@@ -230,7 +230,11 @@
                             // Update UI based on the result
                             displaySpinResult(result.result);
                             fetchUserBalance(user);
+                            fetchUserLevel(user);
                             displayXPReward(result.xp);
+                            if (result.levelUp && result.levelUp.leveledUp) {
+            displayLevelUpAnimation(result.levelUp.levelsGained, result.levelUp.newLevel, result.levelUp.bonusPoints);
+          }
                             eventSource.close();
                         };
 
@@ -286,6 +290,78 @@
                             costDiv.remove(); // Remove the animation element after it completes
                         }, 2000); // Assuming the animation takes 5 seconds
                     }
+
+                    // Function to display level-up animation
+function displayLevelUpAnimation(levelsGained, newLevel, bonusPoints) {
+  // Create a parent div for the animation
+  const animationContainer = document.createElement('div');
+  animationContainer.className = 'arcade-animation-container';
+  animationContainer.id = 'animationContainer';
+
+  // Create a div for level-up message
+  const levelUpDiv = document.createElement('div');
+  levelUpDiv.className = 'arcade-animation-level-up';
+  levelUpDiv.textContent = `Level Up (+${levelsGained})! You reached Level ${newLevel}!`;
+
+  // Create a div for bonus points message
+  const bonusPointsDiv = document.createElement('div');
+  bonusPointsDiv.className = 'arcade-animation-bonus-points';
+  bonusPointsDiv.textContent = `You received a PAT ${bonusPoints} level up bonus!`;
+
+  // Create an image element for the dancing frog
+  const frogDanceImg = document.createElement('img');
+  frogDanceImg.className = 'arcade-animation-frog-dance';
+  frogDanceImg.src = `/public/img/dancefrog.gif`;
+  frogDanceImg.alt = 'Dancing Frog';
+
+  // Append child elements to the parent container
+  animationContainer.appendChild(levelUpDiv);
+  animationContainer.appendChild(bonusPointsDiv);
+  animationContainer.appendChild(frogDanceImg);
+
+  // Append the parent container to the body
+  document.body.appendChild(animationContainer);
+
+  // Apply animation to the container
+  animationContainer.style.animation = 'pop-in 0.5s forwards';
+
+  // Remove the animation container after the animation completes
+  setTimeout(() => {
+    animationContainer.remove();
+  }, 5000); // Adjust duration as needed
+}
+
+// Calculate XP for next level
+function xpForNextLevel(currentLevel) {
+  return Math.pow(currentLevel + 1, 2) * 1000;
+}
+
+// Update the level bar
+function fetchUserLevel(username) {
+  fetch(`/api/u/${username}/level`)
+      .then(response => response.json())
+      .then(data => {
+          if (data.level !== undefined) {
+            xp = data.xp;
+            level = data.level;
+            const xpNeeded = xpForNextLevel(level); // This function needs to return the XP needed for the next level
+            const progressPercentage = (xp / xpNeeded) * 100;
+            const progressBar = document.querySelector('.level-progress');
+            progressBar.style.width = `${progressPercentage}%`;
+            document.getElementById('userXP').textContent = `${xp} / ${xpNeeded} XP`;
+            document.getElementById('userLevel').textContent = `Level ${level}`;
+          } else {
+              console.error('Failed to fetch user level:', data.error);
+              const levelInfo = document.querySelector('.level-info');
+            levelInfo.textContent =  'Error fetching XP';
+          }
+      })
+      .catch(error => {
+          console.error('Fetch error:', error);
+          const levelInfo = document.querySelector('.level-info');
+            levelInfo.textContent =  'Error fetching XP';
+      });
+}
 
                 </script>
                 <% } %>
