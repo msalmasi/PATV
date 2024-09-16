@@ -1469,9 +1469,9 @@ app.post("/shop", addUser, async (req, res) => {
   const userId = req.user.userId; // Assuming userId is available from session or token
   const username = req.user ? req.user.username : null;
   try {
-    // Check if the prize exists and get its cost
+    // Check if the prize exists and get its cost and quantity
     const prizes = await getQuery(
-      "SELECT prizeId, cost, prize FROM prizes WHERE prizeId = ?",
+      "SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?",
       [product]
     );
 
@@ -1481,6 +1481,13 @@ app.post("/shop", addUser, async (req, res) => {
         .json({ success: false, message: "Prize not found" });
     }
     const prize = prizes[0];
+
+    // Check if the prize is in stock
+    if (prize.quantity <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Prize is out of stock" });
+    }
 
     // Check if the user has enough points
     const users = await getQuery(
@@ -1493,10 +1500,19 @@ app.post("/shop", addUser, async (req, res) => {
         .json({ success: false, message: "Insufficient coins" });
     }
 
+    // Start a transaction (if supported)
+    await runQuery("BEGIN TRANSACTION");
+
     // Deduct the prize cost from the user's points balance
     await runQuery(
       "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
       [prize.cost, userId]
+    );
+
+    // Decrement the prize quantity
+    await runQuery(
+      "UPDATE prizes SET quantity = quantity - 1 WHERE prizeId = ?",
+      [prize.prizeId]
     );
 
     // Log the transaction
@@ -1505,6 +1521,9 @@ app.post("/shop", addUser, async (req, res) => {
       "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
       [transactionId, userId, `purchase of ${prize.prize}`, -prize.cost]
     );
+
+    // Commit the transaction
+    await runQuery("COMMIT");
 
     // Send an email notification
     const msg = {
@@ -1520,9 +1539,14 @@ app.post("/shop", addUser, async (req, res) => {
     res.json({ success: true, message: "Purchase successful" });
   } catch (error) {
     console.error("Server error:", error);
+
+    // Rollback the transaction in case of error
+    await runQuery("ROLLBACK");
+
     res.status(500).send("Failed to process the purchase.");
   }
 });
+
 
 // HTTP post endpoint to shop
 app.post("/chatshop", async (req, res) => {
@@ -1678,7 +1702,7 @@ app.get("/api/classes", async (req, res) => {
 
 // HTTP GET endpoint to get the list of prizes with their costs
 app.get("/api/prizes", async (req, res) => {
-  const sql = "SELECT prizeId, prize, cost FROM prizes"; // Updated SQL to fetch the cost as well
+  const sql = "SELECT prizeId, prize, cost, quantity FROM prizes"; // Updated SQL to fetch the cost as well
   try {
     db.all(sql, [], (err, rows) => {
       if (err) {
@@ -1689,7 +1713,7 @@ app.get("/api/prizes", async (req, res) => {
       // Send an array of objects with both prize names and costs
       res.json(
         rows.map((row) => {
-          return { prize: row.prize, cost: row.cost, prizeId: row.prizeId };
+          return { prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity };
         })
       );
     });
@@ -2253,31 +2277,37 @@ app.post("/api/award-badge", async (req, res) => {
     }
   });
   
+// Route to render the manage prizes page
+app.get('/admin/manage-prizes', addUser, (req, res) => {
+  const userType = req.user ? req.user.class : null;
+  const username = req.user ? req.user.username : null;
+  if (userType === "Admin" || userType === "Staff") {
+    res.render('managePrizes', { user: username });
+  } else {
+    req.flash("error", "Access denied. You must be an admin or staff to access this page.");
+    res.redirect("/login");
+  }
+});
 
-// HTTP POST endpoint to edit the list of classes.
+// HTTP POST endpoint to edit the list of prizes.
 app.post("/api/prizes/edit", addUser, async (req, res) => {
   const userType = req.user ? req.user.class : null;
   if (userType === "Admin" || userType === "Staff") {
-    const { action, prizeName, cost } = req.body;
+    const { action, prizeId, prizeName, cost, quantity } = req.body;
 
     try {
       if (action === "add") {
-        // First, check if the prize already exists
-        const checkSql = "SELECT prizeId FROM prizes WHERE prize = ?";
-        const result = await getQuery(checkSql, [prizeName]);
-        const existingPrize = result[0]; // Assuming getQuery returns an array of results
-
-        if (existingPrize) {
-          // If it exists, update the cost
-          const updateSql = "UPDATE prizes SET cost = ? WHERE prizeId = ?";
-          await runQuery(updateSql, [cost, existingPrize.prizeId]);
-          res.json({ message: "Prize cost edited successfully." });
+        if (prizeId) {
+          // Update existing prize
+          const updateSql = "UPDATE prizes SET prize = ?, cost = ?, quantity = ? WHERE prizeId = ?";
+          await runQuery(updateSql, [prizeName, cost, quantity, prizeId]);
+          res.json({ message: "Prize updated successfully." });
         } else {
-          // If it does not exist, add new prize
-          const prizeId = uuidv4();
+          // Add new prize
+          const newPrizeId = uuidv4();
           const insertSql =
-            "INSERT INTO prizes (prizeId, prize, cost) VALUES (?, ?, ?)";
-          await runQuery(insertSql, [prizeId, prizeName, cost]);
+            "INSERT INTO prizes (prizeId, prize, cost, quantity) VALUES (?, ?, ?, ?)";
+          await runQuery(insertSql, [newPrizeId, prizeName, cost, quantity]);
           res.json({ message: "Prize added successfully." });
         }
       } else if (action === "remove") {

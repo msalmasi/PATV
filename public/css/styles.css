@@ -64,14 +64,14 @@ font-size: 40px;
 
 .product-item {
     display: grid;
-    grid-template-rows: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr 1fr;
     background: #18181b;
     margin: 10px 10px;
     padding: 10px;
     border-color: #FFC600;
     border-style: solid;
     border-radius: 0px;
-    height: 200px;
+    height: 250px;
     width: 200px;
 }
 
@@ -239,6 +239,13 @@ button {
 .panel label {
     padding-top: 5px;
     margin-bottom: -5px;
+}
+
+.panel a {
+    margin-top: 15px;
+    display: grid;
+    grid-template-columns: 4fr 10px;
+    color: #ffffff;
 }
 
 .panel button {

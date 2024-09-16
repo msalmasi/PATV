@@ -245,6 +245,7 @@ function createTables() {
         prizeId TEXT PRIMARY KEY,
         prize TEXT NOT NULL,
         cost INTEGER NOT NULL,
+        quantity INTEGER NOT NULL DEFAULT 0,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, (err) => {
         if (err) {

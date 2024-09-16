@@ -467,8 +467,15 @@
 
     <!-- PRize List Management Form -->
     <div class="panel">
-        <h3>Manage Prizes</h3>
-        <form id="prizeListForm" action="/api/prizes/edit" method="POST">
+        <a href="/admin/manage-prizes" style="text-decoration: none;">
+
+        <div><h3>Manage Prizes</h3></div>
+        <div><h3> ></h3></div>
+    </a>
+    </div>    
+    <br>
+    <br>
+        <!-- <form id="prizeListForm" action="/api/prizes/edit" method="POST">
             <label for="prizeAction">Action:</label>
             <select name="action" id="prizeAction" required>
                 <option value="add">Add</option>
@@ -477,7 +484,7 @@
     
             <label for="prizeName">Prize Name:</label>
             <input type="text" id="prizeName" name="prizeName" required>
-            <div id="costContainer">  <!-- Container for the cost input -->
+            <div id="costContainer"> 
                 <label for="cost">Prize Cost:</label>
                 <input type="text" id="prizeCost" name="cost">
             </div>
@@ -488,9 +495,9 @@
         <div id="currentPrizes">
             <h4>Current Prizes:</h4>
             <ul id="prizeList"></ul>
-        </div>
+        </div> -->
             <!-- This edits the URL in the POST form. -->
-            <script>
+            <!-- <script>
                 document.getElementById('prizeListForm').addEventListener('submit', function(event) {
                     event.preventDefault();
                     const action = document.getElementById('prizeAction').value;
@@ -538,19 +545,19 @@
                         console.log(message);
                         if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
                         document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                        document.getElementById('PrizeListStatus').textContent = 'Class list edited successfully.'; // Display error message
+                        document.getElementById('PrizeListStatus').textContent = 'Prize list edited successfully.'; // Display error message
                         document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
                         }
                     }).catch(error => {
                         console.error('Error making the POST request:', error);
-                        document.getElementById('PrizeListStatus').textContent = 'Class list change failed. Check the classname.'; // Display error message
+                        document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the classname.'; // Display error message
                         document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
                         setTimeout(() => {
                             document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
                     }, 2000); 
                     });
                 });
-            </script>
+            </script> -->
 
 </body>
 <script>
@@ -567,46 +574,46 @@
         })
         .catch(error => console.error('Error fetching classes:', error));
 
-        fetch('/api/prizes')
-        .then(response => response.json())
-        .then(data => {
-            const prizeList = document.getElementById('prizeList');
-            // Ensure data is an array and has items
-            if (Array.isArray(data) && data.length > 0) {
-                data.forEach(prize => {
-                    const li = document.createElement('li');
-                    // Assuming each 'prize' object has 'prize' and 'cost' properties
-                    li.textContent = `${prize.prize} - Cost: ${prize.cost} Coins`;
-                    prizeList.appendChild(li);
-                });
-            } else {
-                // Handle case where no prizes are returned or data is not in expected format
-                const li = document.createElement('li');
-                li.textContent = 'No prizes available.';
-                prizeList.appendChild(li);
-            }
-        })
-        .catch(error => {
-            console.error('Error fetching prizes:', error);
-            const prizeList = document.getElementById('prizeList');
-            const li = document.createElement('li');
-            li.textContent = 'Failed to load prizes.';
-            prizeList.appendChild(li);
-        });
+    //     fetch('/api/prizes')
+    //     .then(response => response.json())
+    //     .then(data => {
+    //         const prizeList = document.getElementById('prizeList');
+    //         // Ensure data is an array and has items
+    //         if (Array.isArray(data) && data.length > 0) {
+    //             data.forEach(prize => {
+    //                 const li = document.createElement('li');
+    //                 // Assuming each 'prize' object has 'prize' and 'cost' properties
+    //                 li.textContent = `${prize.prize} - Cost: ${prize.cost} Coins - Qty: ${prize.quantity}`;
+    //                 prizeList.appendChild(li);
+    //             });
+    //         } else {
+    //             // Handle case where no prizes are returned or data is not in expected format
+    //             const li = document.createElement('li');
+    //             li.textContent = 'No prizes available.';
+    //             prizeList.appendChild(li);
+    //         }
+    //     })
+    //     .catch(error => {
+    //         console.error('Error fetching prizes:', error);
+    //         const prizeList = document.getElementById('prizeList');
+    //         const li = document.createElement('li');
+    //         li.textContent = 'Failed to load prizes.';
+    //         prizeList.appendChild(li);
+    //     });
 
-    const actionSelect = document.getElementById('prizeAction');
-    const costContainer = document.getElementById('costContainer');
+    // const actionSelect = document.getElementById('prizeAction');
+    // const costContainer = document.getElementById('costContainer');
 
-    function toggleCostInput() {
-        if (actionSelect.value === 'add') {
-            costContainer.style.display = 'block';
-        } else {
-            costContainer.style.display = 'none';
-        }
-    }
+    // function toggleCostInput() {
+    //     if (actionSelect.value === 'add') {
+    //         costContainer.style.display = 'block';
+    //     } else {
+    //         costContainer.style.display = 'none';
+    //     }
+    // }
 
-    actionSelect.addEventListener('change', toggleCostInput);
-    toggleCostInput(); // To set initial visibility state
+    // actionSelect.addEventListener('change', toggleCostInput);
+    // toggleCostInput(); // To set initial visibility state
 
     fetchRedemptionCodes();
 

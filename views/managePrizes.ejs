@@ -1,0 +1,274 @@
+<%- include('layout', { title: 'Manage Prizes', user: user}) %>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
+<body>
+
+  <div class="container mt-5">
+    <h1>Manage Prizes</h1>
+    <br>
+    <h3>Add New Prize</h3>
+            <form id="prizeListForm" action="/api/prizes/edit" method="POST">    
+            <label for="prizeName">Prize Name:</label>
+            <input type="text" id="prizeName" name="prizeName" required>
+            <div id="costContainer"> 
+                <label for="cost">Prize Cost:</label>
+                <input type="text" id="prizeCost" name="cost">
+            </div>
+            <div id="qtyContainer">
+                                <label for="cost">Prize Qty:</label>
+                <input type="text" id="prizeQty" name="quantity">
+            </div>
+            <button id="addPrizeBtn" class="btn btn-primary mb-3">Add New Prize</button>
+            <div id="PrizeListStatus" class="spin-status"></div>
+        </form>
+    
+    <table class="table table-bordered" id="prizesTable">
+      <thead>
+        <tr>
+          <th>Prize ID</th>
+          <th>Prize Name</th>
+          <th>Cost</th>
+          <th>Quantity</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Prizes will be dynamically inserted here -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal for Editing Prize -->
+  <div class="modal fade" id="editPrizeModal" tabindex="-1" role="dialog" aria-labelledby="editPrizeModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <form id="editPrizeForm">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editPrizeModalLabel">Edit Prize</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="closeEditModal()">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="editPrizeId" name="prizeId">
+            <div class="form-group">
+              <label for="editPrizeName">Prize Name</label>
+              <input type="text" class="form-control" id="editPrizeName" name="prizeName" required>
+            </div>
+            <div class="form-group">
+              <label for="editPrizeCost">Cost</label>
+              <input type="number" class="form-control" id="editPrizeCost" name="cost" required min="0">
+            </div>
+            <div class="form-group">
+              <label for="editPrizeQuantity">Quantity</label>
+              <input type="number" class="form-control" id="editPrizeQuantity" name="quantity" required min="0">
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal" onclick="closeEditModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Include JS libraries -->
+  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <!-- Include Bootstrap JS -->
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+  <!-- Custom Script -->
+  <script>
+    $(document).ready(function() {
+      fetchPrizes();
+
+      // Fetch prizes and populate the table
+      function fetchPrizes() {
+        $.ajax({
+  url: '/api/prizes',
+  method: 'GET',
+  success: function(response) {
+    // Since response is an array of prizes, we can directly pass it to populatePrizesTable
+    populatePrizesTable(response);
+  },
+  error: function() {
+    document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the prize name.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        setTimeout(() => {
+                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    }, 2000); 
+  }
+});
+      }
+
+      // Populate the prizes table
+      function populatePrizesTable(prizes) {
+        const tbody = $('#prizesTable tbody');
+        tbody.empty();
+        prizes.forEach(prize => {
+          const row = `
+            <tr>
+              <td>${prize.prizeId}</td>
+              <td>${prize.prize}</td>
+              <td>${prize.cost}</td>
+              <td>${prize.quantity}</td>
+              <td>
+                <button class="btn btn-sm btn-info" onclick="openEditModal('${prize.prizeId}', '${prize.prize}', ${prize.cost}, ${prize.quantity})">Edit</button>
+                <button class="btn btn-sm btn-danger" onclick="removePrize('${prize.prize}')">Remove</button>
+              </td>
+            </tr>
+          `;
+          tbody.append(row);
+        });
+      }
+
+      // Open the edit modal with prize details
+      window.openEditModal = function(prizeId, prizeName, cost, quantity) {
+        $('#editPrizeId').val(prizeId);
+        $('#editPrizeName').val(prizeName);
+        $('#editPrizeCost').val(cost);
+        $('#editPrizeQuantity').val(quantity);
+        $('#editPrizeModal').modal('show');
+      };
+
+      // Close the edit modal
+      window.closeEditModal = function() {
+        $('#editPrizeForm')[0].reset();
+        $('#editPrizeModal').modal('hide');
+      };
+
+    });
+
+    // Handle form submission for adding/editing prize
+$('#editPrizeForm').submit(function(event) {
+  event.preventDefault();
+  const prizeId = $('#editPrizeId').val();
+  const prizeName = $('#editPrizeName').val();
+  const cost = $('#editPrizeCost').val();
+  const quantity = $('#editPrizeQuantity').val();
+
+  let action = 'add'; // Use 'add' for both adding and editing
+
+  $.ajax({
+    url: '/api/prizes/edit',
+    method: 'POST',
+    data: {
+      action: action,
+      prizeId: prizeId,
+      prizeName: prizeName,
+      cost: cost,
+      quantity: quantity
+    },
+    success: function(response) {
+        if (response.message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        document.getElementById('PrizeListStatus').textContent = 'Prize list edited successfully.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+    }
+      closeEditModal();
+      fetchPrizes();
+    },
+    error: function(xhr) {
+        document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the prize name.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        setTimeout(() => {
+                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    }, 2000); 
+    }
+  });
+});
+
+    // Remove a prize
+    window.removePrize = function(prizeName) {
+      if (confirm('Are you sure you want to remove this prize?')) {
+        $.ajax({
+          url: '/api/prizes/edit',
+          method: 'POST',
+          data: {
+            action: 'remove',
+            prizeName: prizeName
+          },
+          success: function(response) {
+            if (response.message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        document.getElementById('PrizeListStatus').textContent = 'Prize removed successfully.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+    }
+            fetchPrizes();
+          },
+          error: function(xhr) {
+            document.getElementById('PrizeListStatus').textContent = 'Failed to remove prize. Check the prize name.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        setTimeout(() => {
+                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    }, 2000); 
+          }
+        });
+      }
+    };
+
+    //adding prizes
+document.getElementById('prizeListForm').addEventListener('submit', function(event) {
+                    event.preventDefault();
+                    const action = "add";
+                    const prizeName = document.getElementById('prizeName').value;
+                    const cost = document.getElementById('prizeCost').value;
+                    const quantity = document.getElementById('prizeQty').value;
+                    // Prepare the fetch request
+                    fetch('/api/prizes/edit', {
+                        headers: {    "content-type": "application/json",},
+                        body: JSON.stringify({ action: action, prizeName: prizeName, cost: cost, quantity: quantity }),
+                        method: 'POST',
+                    }).then(response => {
+                        if (!response.ok) { // Handle non-200 responses
+                            throw new Error('Failed to edit prize list.');
+                        }
+                        return response.json();
+                    }).then(data => {
+                        fetch('/api/prizes')
+                            .then(response => response.json())
+                            .then(data => {
+                                const prizeList = document.getElementById('prizeList');
+                                prizeList.innerHTML = "";
+                                // Ensure data is an array and has items
+                                if (Array.isArray(data) && data.length > 0) {
+                                    data.forEach(prize => {
+                                        const li = document.createElement('li');
+                                        // Assuming each 'prize' object has 'prize' and 'cost' properties
+                                        li.textContent = `${prize.prize} - Cost: ${prize.cost} Coins`;
+                                        prizeList.appendChild(li);
+                                    });
+                                } else {
+                                    // Handle case where no prizes are returned or data is not in expected format
+                                    const li = document.createElement('li');
+                                    li.textContent = 'No prizes available.';
+                                    prizeList.appendChild(li);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error fetching prizes:', error);
+                                const prizeList = document.getElementById('prizeList');
+                                const li = document.createElement('li');
+                                li.textContent = 'Failed to load prizes.';
+                                prizeList.appendChild(li);
+                            });
+                        const message = data.message;
+                        console.log(message);
+                        if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
+                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                        document.getElementById('PrizeListStatus').textContent = 'Prize list edited successfully.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        }
+                    }).catch(error => {
+                        console.error('Error making the POST request:', error);
+                        document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the classname.'; // Display error message
+                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
+                        setTimeout(() => {
+                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
+                    }, 2000); 
+                    });
+                });
+                
+  </script>
+</body>
