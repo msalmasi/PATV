@@ -725,7 +725,7 @@ async function exchangeChannelPoints(points, twitchDisplayname) {
     console.log("Raffle winner logged in backend.");
     client.say(
       channel,
-      `@${displayName} exchanged channel points for PAT ${points}!`
+      `@${twitchDisplayname} exchanged channel points for PAT ${points}!`
     );
   } catch (error) {
     console.error("Failed to log channel point redemption.", error);
