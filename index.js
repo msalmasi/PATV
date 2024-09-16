@@ -487,7 +487,7 @@ app.post("/merge-accounts-twitch", async (req, res) => {
         [currentUserId]
       );
       const points_balance =
-        results.length > 0 ? results[0].points_balance : null;
+        results.length > 0 ? results[0].points_balance : 0;
       const discordId = results.length > 0 ? results[0].discordId : null;
       const discordUsername =
         results.length > 0 ? results[0].discordUsername : null;
@@ -755,7 +755,7 @@ app.post("/merge-accounts-discord", async (req, res) => {
       );
       console.log(results[0]);
       const points_balance =
-        results.length > 0 ? results[0].points_balance : null;
+        results.length > 0 ? results[0].points_balance : 0;
       const twitchId = results.length > 0 ? results[0].twitchId : null;
       const twitchDisplayname =
         results.length > 0 ? results[0].twitchDisplayname : null;

@@ -167,7 +167,8 @@ async function updateUsername(req, res) {
           }
           await runQuery('UPDATE users SET username = ? WHERE userId = ?', [username, userId]);
           req.flash('success', 'Username changed.');
-          res.redirect(`/u/${username}/profile/edit`);
+          res.clearCookie("jwt");
+          res.redirect(`/login`);
         });
 };
 
