@@ -3,6 +3,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const axios = require('axios'); // Ensure axios is imported
+const { exchangeChannelPoints } = require("./twitchbot/twitch"); 
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,6 +15,9 @@ async function handleEvent(notification) {
     const { user_name, user_id, reward, id } = redemption;
   
     console.log(`Channel Point Redemption by ${user_name}: ${reward.title}`);
+    const points = reward.title.split(" ")[1];
+    const twitchDisplayname = user_name;
+    await exchangeChannelPoints(points, twitchDisplayname);
   
     // Implement your custom logic here
     // For example, award points, trigger actions, etc.
@@ -69,7 +73,7 @@ function getHmacMessage(req) {
   
   async function createEventSubSubscription() {
     try {
-      const callbackUrl = 'https://8847-173-68-204-91.ngrok-free.app/webhooks/callback'; // Replace with your public URL (e.g., ngrok URL)
+      const callbackUrl = 'https://publicaccess.tv/webhooks/callback'; // Replace with your public URL (e.g., ngrok URL)
   
       const response = await axios.post(
         'https://api.twitch.tv/helix/eventsub/subscriptions',

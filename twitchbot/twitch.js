@@ -686,6 +686,52 @@ async function onChatMessage(twitchUser) {
   }
 }
 
+async function exchangeChannelPoints(points, twitchDisplayname) {
+     // Step 3: Check if the recipient exists using the endpoint
+     let recipient;
+     const channel = 'publicaccess_ttv'
+     try {
+       const recipientResponse = await axios.get(
+         process.env.BACKEND_BASE_URL+`/api/users/twitch/displayname/${twitchDisplayname}`
+       );
+       recipient = recipientResponse.data.user;
+     } catch (error) {
+       if (error.response && error.response.status === 404) {
+         // Handle recipient not found
+         return client.say(
+           channel,
+           `@${twitchDisplayname}, your PATV account was not found.`
+         );
+       } else {
+         // Handle other errors
+         console.error(
+           `Error fetching recipient ${twitchDisplayname}:`,
+           error
+         );
+         return client.say(
+           channel,
+           `@${twitchDisplayname}, there was an error retrieving your information.`
+         );
+       }
+     }
+     // Send the result to the backend
+  try {
+    await axios.post(process.env.BACKEND_BASE_URL+`/api/bonus/chatwinner`, {
+      userId: recipient.userId,
+      type: "twitch-channelpoints",
+      amount: points,
+      password: process.env.TWITCH_BOT_TOKEN,
+    });
+    console.log("Raffle winner logged in backend.");
+    client.say(
+      channel,
+      `@${displayName} exchanged channel points for PAT ${points}!`
+    );
+  } catch (error) {
+    console.error("Failed to log channel point redemption.", error);
+  }
+}
+
 // Function to end the raffle and select a winner
 async function endRaffle(channel, raffleDurationMinutes) {
   if (currentRaffleParticipants.size === 0) {
@@ -748,3 +794,7 @@ function initializeBot() {
 
 // Initialize the bot
 initializeBot();
+
+module.exports = {
+  exchangeChannelPoints
+}
