@@ -343,7 +343,6 @@ const DISCORD_DEGEN_BADGE_ID = 'discord-degen'; // The badgeId for "discord-dege
           password: process.env.DISCORD_BOT_TOKEN, // Authenticate the request
         });
         if (response.data.success == true) {
-            console.log(response.data);
             const winnerBalance = await findUserBalance(discordId);
             // Send the result to the backend
               try {
@@ -471,7 +470,7 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
 }
 
 function extractLevel(message) {
-  const regex = /(\d+)!$/; // Regular expression to capture a number before an exclamation point at the end
+  const regex = /(\d+)\*\*!$/; // Regular expression to capture a number before an exclamation point at the end
   const match = message.match(regex);
 
   if (match && match[1]) {
