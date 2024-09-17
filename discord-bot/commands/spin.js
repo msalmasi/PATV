@@ -67,7 +67,7 @@ async function setupResultsListener(spinId, interaction, user) {
     const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
     const spinnerBalance = spinnerBalanceResponse.data.balance;
 
-    if (result.result > 50000) {
+    if (result.result > 1000000) {
       await interaction.followUp(
         `PAT ${result.result} JACKPOT for ${interaction.user}!!!! (New Balance: PAT ${spinnerBalance})`
       );

@@ -21,34 +21,36 @@ const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 
+const multiplier = 1 + (20 * 0.01);
+
 // Set the Wheel Prizes
 const segments = [
-  { color: '#FF6347', label: '3000', size: 1 },
-  { color: '#FFD700', label: '6000', size: 1 },
-  { color: '#ADFF2F', label: '4000', size: 1 },
-  { color: '#00FA9A', label: '8500', size: 0.9 },
-  { color: '#1E90FF', label: '750', size: 1 },
-  { color: '#EE82EE', label: '0', size: 1 },
-  { color: '#FF69B4', label: '25000', size: 0.5 },
-  { color: '#20B2AA', label: '1000', size: 1 },
-  { color: '#FFA500', label: '6500', size: 1 },
-  { color: '#B22222', label: '5000', size: 1 },
-  { color: '#8A2BE2', label: '4500', size: 1 },
-  { color: '#5F9EA0', label: '1500', size: 1 },
-  { color: '#EE82EE', label: '0', size: 1 },
-  { color: '#FFD700', label: '50000', size: .1 },
-  { color: '#DB7093', label: '2500', size: 1 },
-  { color: '#3CB371', label: '500', size: 1 },
-  { color: '#4682B4', label: '2000', size: 1 },
-  { color: '#FF1493', label: '12500', size: .8 },
-  { color: '#00CED1', label: '0', size: 1 },
-  { color: '#FFD700', label: '7500', size: 1 },
-  { color: '#3CB371', label: '5500', size: 1 },
-  { color: '#4682B4', label: '3500', size: 1 },
-  { color: '#FF1493', label: '9000', size: 1 },
-  { color: '#8A2BE2', label: '10000', size: 1 },
-  { color: '#00CED1', label: '0', size: 1 },
-  { color: '#FFD700', label: '🏆🏆🏆JACKPOT🏆🏆🏆', size: 0.05 }  
+  { color: '#FF6347', label: Math.round(3000 * multiplier), size: 1 },
+  { color: '#FFD700', label: Math.round(6000 * multiplier), size: 1 },
+  { color: '#ADFF2F', label: Math.round(4000 * multiplier), size: 1 },
+  { color: '#00FA9A', label: Math.round(8500 * multiplier), size: 0.9 },
+  { color: '#1E90FF', label: Math.round(750 * multiplier), size: 1 },
+  { color: '#EE82EE', label: Math.round(0 * multiplier), size: 1 },
+  { color: '#FF69B4', label: Math.round(25000 * multiplier), size: 0.5 },
+  { color: '#20B2AA', label: Math.round(1000 * multiplier), size: 1 },
+  { color: '#FFA500', label: Math.round(6500 * multiplier), size: 1 },
+  { color: '#B22222', label: Math.round(5000 * multiplier), size: 1 },
+  { color: '#8A2BE2', label: Math.round(4500 * multiplier), size: 1 },
+  { color: '#5F9EA0', label: Math.round(1500 * multiplier), size: 1 },
+  { color: '#EE82EE', label: Math.round(0 * multiplier), size: 1 },
+  { color: '#FFD700', label: Math.round(50000 * multiplier), size: 0.1 },
+  { color: '#DB7093', label: Math.round(2500 * multiplier), size: 1 },
+  { color: '#3CB371', label: Math.round(500 * multiplier), size: 1 },
+  { color: '#4682B4', label: Math.round(2000 * multiplier), size: 1 },
+  { color: '#FF1493', label: Math.round(12500 * multiplier), size: 0.8 },
+  { color: '#00CED1', label: Math.round(0 * multiplier), size: 1 },
+  { color: '#FFD700', label: Math.round(7500 * multiplier), size: 1 },
+  { color: '#3CB371', label: Math.round(5500 * multiplier), size: 1 },
+  { color: '#4682B4', label: Math.round(3500 * multiplier), size: 1 },
+  { color: '#FF1493', label: Math.round(9000 * multiplier), size: 1 },
+  { color: '#8A2BE2', label: Math.round(10000 * multiplier), size: 1 },
+  { color: '#00CED1', label: Math.round(0 * multiplier), size: 1 },
+  { color: '#FFD700', label: '🏆🏆🏆JACKPOT🏆🏆🏆', size: 0.05 }
 ];
 
 let currentAngle = 0 - ((2 * Math.PI) / 4);

@@ -25,8 +25,80 @@ const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 
+// Assuming username is available via some means (e.g., login session)
+username = getUsernameFromUrl();
+console.log(username);
+
+// Fetch user balance and username first
+fetchUsername(username);
+fetchUserBalance(username);
+
+// Fetch user level, then define segments and draw wheel
+fetchUserLevel(username).then(userLevel => {
+  console.log('User level:', userLevel);
+
+  // Calculate the multiplier based on the user's level (1% per level)
+  const multiplier = 1 + (userLevel * 0.01);
+  console.log('Multiplier:', multiplier);
+
+  // Define the wheel segments, scaling by user level
+  segments = [
+    { color: '#FF6347', label: Math.round(3000 * multiplier), size: 1 },
+    { color: '#FFD700', label: Math.round(6000 * multiplier), size: 1 },
+    { color: '#ADFF2F', label: Math.round(4000 * multiplier), size: 1 },
+    { color: '#00FA9A', label: Math.round(8500 * multiplier), size: 0.9 },
+    { color: '#1E90FF', label: Math.round(750 * multiplier), size: 1 },
+    { color: '#EE82EE', label: Math.round(0 * multiplier), size: 1 },
+    { color: '#FF69B4', label: Math.round(25000 * multiplier), size: 0.5 },
+    { color: '#20B2AA', label: Math.round(1000 * multiplier), size: 1 },
+    { color: '#FFA500', label: Math.round(6500 * multiplier), size: 1 },
+    { color: '#B22222', label: Math.round(5000 * multiplier), size: 1 },
+    { color: '#8A2BE2', label: Math.round(4500 * multiplier), size: 1 },
+    { color: '#5F9EA0', label: Math.round(1500 * multiplier), size: 1 },
+    { color: '#EE82EE', label: Math.round(0 * multiplier), size: 1 },
+    { color: '#FFD700', label: Math.round(50000 * multiplier), size: 0.1 },
+    { color: '#DB7093', label: Math.round(2500 * multiplier), size: 1 },
+    { color: '#3CB371', label: Math.round(500 * multiplier), size: 1 },
+    { color: '#4682B4', label: Math.round(2000 * multiplier), size: 1 },
+    { color: '#FF1493', label: Math.round(12500 * multiplier), size: 0.8 },
+    { color: '#00CED1', label: Math.round(0 * multiplier), size: 1 },
+    { color: '#FFD700', label: Math.round(7500 * multiplier), size: 1 },
+    { color: '#3CB371', label: Math.round(5500 * multiplier), size: 1 },
+    { color: '#4682B4', label: Math.round(3500 * multiplier), size: 1 },
+    { color: '#FF1493', label: Math.round(9000 * multiplier), size: 1 },
+    { color: '#8A2BE2', label: Math.round(10000 * multiplier), size: 1 },
+    { color: '#00CED1', label: Math.round(0 * multiplier), size: 1 },
+    { color: '#FFD700', label: '🏆🏆🏆JACKPOT🏆🏆🏆', size: 0.05 }
+  ];
+
+  // Update the wheel display with these values (implement your rendering logic here)
+  drawWheel();
+
+  // Change wheel border based on user level
+  adjustWheelBorder(userLevel);
+});
+
+// Function to adjust wheel border based on level
+function adjustWheelBorder(userLevel) {
+  const wheelElement = document.getElementById('wheelCanvas');
+  const arrow = document.getElementById('arrow');
+  let borderColor;
+
+  if (userLevel < 10) {
+    borderColor = '#FFFFFF'; // White for levels 1-9
+  } else if (userLevel >= 10 && userLevel < 20) {
+    borderColor = '#C0C0C0'; // Silver for levels 10-19
+  } else {
+    borderColor = '#F2AE2E'; // Gold for level 20 and above
+  }
+
+  // Apply border color
+  wheelElement.style.borderColor = borderColor;
+  arrow.style.borderTopColor = borderColor;
+}
+
 // Set the Wheel Prizes
-const segments = [
+let segments = [
   { color: '#FF6347', label: '3000', size: 1 },
   { color: '#FFD700', label: '6000', size: 1 },
   { color: '#ADFF2F', label: '4000', size: 1 },
@@ -173,43 +245,50 @@ function fetchUserBalance(username) {
       });
 }
 
-
-// Assuming username is available via some means (e.g., login session)
-username = getUsernameFromUrl();
-console.log(username);
-fetchUsername(username);
-fetchUserBalance(username);
-
 // Calculate XP for next level
 function xpForNextLevel(currentLevel) {
   return Math.pow(currentLevel + 1, 2) * 1000;
 }
 
-// Update the level bar
+// Update the level bar and return the user's level
 function fetchUserLevel(username) {
-  fetch(`/api/u/${username}/level`)
+  return fetch(`/api/u/${username}/level`)
       .then(response => response.json())
       .then(data => {
           if (data.level !== undefined) {
-            console.log("howdydoody");
-            xp = data.xp;
-            level = data.level;
-            const xpNeeded = xpForNextLevel(level); // This function needs to return the XP needed for the next level
+            // Logging for debugging
+            console.log("User level fetched successfully:", data.level);
+
+            // Set the XP and level values
+            const xp = Math.round(data.xp);
+            const level = data.level;
+
+            // Calculate XP needed for the next level
+            const xpNeeded = xpForNextLevel(level);
             const progressPercentage = (xp / xpNeeded) * 100;
+
+            // Update the level progress bar
             const progressBar = document.querySelector('.level-progress');
             progressBar.style.width = `${progressPercentage}%`;
+
+            // Update the XP and level display
             document.getElementById('userXP').textContent = `${xp} / ${xpNeeded} XP`;
             document.getElementById('userLevel').textContent = `Level ${level}`;
+
+            // Return the user level to be used for other functions (e.g., wheel initialization)
+            return level;
           } else {
               console.error('Failed to fetch user level:', data.error);
               const levelInfo = document.querySelector('.level-info');
-            levelInfo.textContent =  'Error fetching XP';
+              levelInfo.textContent = 'Error fetching XP';
+              return 1; // Default to level 1 in case of error
           }
       })
       .catch(error => {
           console.error('Fetch error:', error);
           const levelInfo = document.querySelector('.level-info');
-            levelInfo.textContent =  'Error fetching XP';
+          levelInfo.textContent = 'Error fetching XP';
+          return 1; // Default to level 1 in case of error
       });
 }
 
@@ -282,7 +361,8 @@ function determineSpinResult() {
   for (let i = 0; i < segments.length; i++) {
     cumulativeAngle += (segments[i].size / totalSize) * 2 * Math.PI;
     if (angle <= cumulativeAngle) {
-      const result = segments[i].label;
+      const resultInt = segments[i].label;
+      const result = resultInt.toString();
       // Display the result on the page.
       drawResultOverlay(result);
       // Send result to backend.
@@ -514,5 +594,3 @@ function checkConnection(es) {
 
 // Launches Spin Listener
 setupSpinListener(username);
-
-drawWheel();

@@ -320,7 +320,7 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
     const result = JSON.parse(event.data);
     const spinnerBalance = await findUserBalance(twitchId);
     console.log("Spin result received:", result);
-    if (result.result > 50000) {
+    if (result.result > 1000000) {
       client.say(
         channel,
         `PAT ${result.result} JACKPOT @${displayName}!!!!!!!!`

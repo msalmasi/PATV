@@ -89,7 +89,7 @@
     text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000, 0 0 20px #ff0000 !important;  // Glowing effect
   }
 
-  canvas {
+  #wheelCanvas {
     border: 5px solid #F2AE2E;
     border-radius: 50%;
   }
