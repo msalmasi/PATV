@@ -175,7 +175,8 @@ function determineSpinResult(wheelSpinner, spinId) {
   for (let i = 0; i < segments.length; i++) {
     cumulativeAngle += (segments[i].size / totalSize) * 2 * Math.PI;
     if (angle <= cumulativeAngle) {
-      const result = segments[i].label;
+      const resultInt = segments[i].label;
+      const result = resultInt.toString();
       // Display the result on the page.
       drawResultOverlay(result);
       // Send result to backend.
