@@ -3435,15 +3435,19 @@ async function getPokerNowGameStats(pokerNowId) {
 // Fetch all active Poker Now games from the database
 app.get("/poker", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
-
+  const sql =
+  "SELECT username, displayname, twitchDisplayname, discordUsername, avatar, email, points_balance FROM users WHERE username = ?";
   try {
+    const results = await getQuery(sql, [username]);
+    const user = results[0];
+    const discordUsername = user ? user.discordUsername : null;
       const games = await getQuery(`
           SELECT p.pokerNowId, p.url, p.blinds, p.date_created, u.displayname, u.username 
           FROM poker_now_games p 
           JOIN users u ON p.userId = u.userId
           ORDER BY p.date_created DESC
       `);
-      res.render("activeGames", { games, user: username });
+      res.render("activeGames", { games, user: username, discordUsername });
   } catch (error) {
       console.error("Failed to load games:", error.message);
       res.status(500).send("Failed to load games.");
