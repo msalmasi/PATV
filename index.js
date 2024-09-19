@@ -141,7 +141,7 @@ app.get("/", addUser, async (req, res) => {
         displayname: user.displayname,
         classh: user.class,
         level: user.level,
-        xp: user.xp,
+        xp: Math.round(user.xp),
         avatar: user.avatar,
         email: user.email,
         points_balance: user.points_balance,
@@ -1747,7 +1747,7 @@ app.get("/u/:username/wheel", authenticateToken, addUser, async (req, res) => {
     res.render("wheel", { 
         user: req.username,
         level: user.level,
-        xp: user.xp,
+        xp: Math.round(user.xp),
         xpForNextLevel: xpForNextLevel
      });
     // Proceed with fetching user data and generating wheel
