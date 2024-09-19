@@ -1,4 +1,4 @@
-<%- include('layout', { title: 'Admin Panel', user: user}) %>
+<%- include('layout', { title: 'Poker Games', user: user}) %>
 
 <head>
     <meta charset="UTF-8">
@@ -29,7 +29,7 @@
     
     <h1>Active Poker Now Games</h1>
 
-        
+    <% if (games && games.length > 0) { %>
         <% games.forEach(game => { %>
             <a href="<%= game.url %>"><div class="panel">
                 <p>
@@ -39,11 +39,12 @@
                 <!-- <strong>URL:</strong> <a href="<%= game.url %>"><%= game.url %></a><br> -->
                 <strong>Date Created:</strong> <%= new Date(game.date_created).toLocaleString() %>
             </p>
-        </div></a>
-        <% }) %>
+        </div></a>            <a href="https://discord.com/channels/913269267691094026/1192942161747001344"></a>
+            <div class="panel"><p>No more tables.<br><br> Start a new table in our #poker channel!</p></div></a>
+            <% }) %>
     
-        <% if (typeof game == 'undefined' || !game){ %>
-            <a href="https://discord.com/channels/913269267691094026/1192942161747001344">
+        <% } else { %>
+            <a href="https://discord.com/channels/913269267691094026/1192942161747001344"></a>
             <div class="panel"><p>No active tables.<br><br> Start a new table in our #poker channel!</p></div></a>
             <% } %>
 
