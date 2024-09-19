@@ -507,7 +507,7 @@ function displayWagerCost(wager) {
       const xpDiv = document.createElement('div');
       xpDiv.className = 'arcade-animation-xp';
       xpDiv.id = 'xpDiv'
-      xpDiv.textContent = `+${xp} XP!`;
+      xpDiv.textContent = `+${Math.round(xp)} XP!`;
     
       // Position the reward div near the balance
       xpElement.parentNode.insertBefore(xpDiv, xpElement.nextSibling);
