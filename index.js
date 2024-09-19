@@ -1018,7 +1018,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         displayname: user.displayname,
         classh: user.class,
         level: user.level,
-        xp: user.xp,
+        xp: Math.round(user.xp),
         avatar: user.avatar,
         email: user.email,
         points_balance: user.points_balance,
