@@ -27,25 +27,47 @@
 </head>
 <body>
     
-    <h1>Active Poker Now Games</h1>
+    <h1>Poker Now Tables</h1>
 
     <% if (games && games.length > 0) { %>
         <% games.forEach(game => { %>
-            <a href="<%= game.url %>"><div class="panel">
-                <p>
+            <a href="<%= game.url %>"><div class="pokerpanel">
+                
                 <!-- <strong>Game ID:</strong> <%= game.pokerNowId %><br> -->
-                <strong><%= game.username %></strong>'s Table<br><br>
-                <strong>Blinds:</strong> <%= game.blinds %><br><br>
-                <!-- <strong>URL:</strong> <a href="<%= game.url %>"><%= game.url %></a><br> -->
-                <strong>Date Created:</strong> <%= new Date(game.date_created).toLocaleString() %>
-            </p>
-        </div></a>            <a href="https://discord.com/channels/913269267691094026/1192942161747001344"></a>
-            <div class="panel"><p>No more tables.<br><br> Start a new table in our #poker channel!</p></div></a>
+                <div class="pokerpanelheader"><img src="/public/img/coin.png" alt="Avatar" class="user-avatar" id="avatar-<%= game.pokerNowId %>" height="50px" />
+                <h3><strong><%= game.displayname %></strong>'s Table (<%= game.blinds %>)</h3></div><br>
+                <strong><a href="<%= game.url %>">Poker Now Link</a></strong><br><br>
+                Created: <%= new Date(game.date_created).toLocaleString() %>
+            
+        </div></a> 
+         
             <% }) %>
-    
+            <a href="https://discord.com/channels/913269267691094026/1192942161747001344">
+            <div class="pokerpanel"><p>No more tables.<br><br> <strong>Start a new table</strong> in our #poker channel!</p></div></a>
         <% } else { %>
-            <a href="https://discord.com/channels/913269267691094026/1192942161747001344"></a>
-            <div class="panel"><p>No active tables.<br><br> Start a new table in our #poker channel!</p></div></a>
+            <a href="https://discord.com/channels/913269267691094026/1192942161747001344">
+            <div class="pokerpanel"><p>No active tables.<br><br> <strong>Start a new table</strong> in our #poker channel!</p></div></a>
             <% } %>
 
 </body>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const games = <%- JSON.stringify(games) %>; // Pass the games data to the frontend
+      
+      games.forEach(function (game) {
+        fetch(`/api/u/${game.username}/profile`)
+          .then(response => response.json())
+          .then(data => {
+            console.log(data);
+            if (data.avatar) {
+              // Update the avatar image for this game
+              const avatarElement = document.getElementById(`avatar-${game.pokerNowId}`);
+              avatarElement.src = data.avatar;
+            }
+          })
+          .catch(error => {
+            console.error('Error fetching avatar for user', game.username, error);
+          });
+      });
+    });
+  </script>

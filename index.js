@@ -3438,7 +3438,7 @@ app.get("/poker", addUser, async (req, res) => {
 
   try {
       const games = await getQuery(`
-          SELECT p.pokerNowId, p.url, p.blinds, p.date_created, u.username 
+          SELECT p.pokerNowId, p.url, p.blinds, p.date_created, u.displayname, u.username 
           FROM poker_now_games p 
           JOIN users u ON p.userId = u.userId
           ORDER BY p.date_created DESC
