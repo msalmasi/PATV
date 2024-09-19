@@ -342,7 +342,7 @@ function fetchUserLevel(username) {
       .then(response => response.json())
       .then(data => {
           if (data.level !== undefined) {
-            xp = data.xp;
+            const xp = Math.round(data.xp);
             level = data.level;
             const xpNeeded = xpForNextLevel(level); // This function needs to return the XP needed for the next level
             const progressPercentage = (xp / xpNeeded) * 100;
