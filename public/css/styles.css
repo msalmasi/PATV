@@ -492,6 +492,10 @@ padding-bottom: 20px;
     display: none;
 }
 
+    #jellyfinLink {
+        display: none;
+    }
+
   .combined #twitch_chat {
     /* padding: 3px;
     padding: 20px;

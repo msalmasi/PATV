@@ -255,7 +255,7 @@ client.on("messageCreate", (message) => {
 });
 
 
-client.on("messageUpdate", (oldMessage, newMessage) => {
+client.on("messageUpdate", async (oldMessage, newMessage) => {
   if (
     // Announces a poker game started by the Poker Now Bot
     newMessage.member.user.id == "613156357239078913" &&
@@ -265,6 +265,35 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
     newMessage.channel.send(
       `<@&${"1192959473984212992"}> ${newMessage.mentions.members.first()} is starting a poker game!`
     );
+
+    const gameRegex = /the URL of your new (\d+\/\d+) game is:\s+(https:\/\/www\.pokernow\.club\/games\/([a-zA-Z0-9\-_]+))/;
+    const match = newMessage.content.match(gameRegex);
+    
+    if (match) {
+        const blinds = match[1];  // Extract blinds (e.g., "1000/2000")
+        const url = match[2];
+        const pokerNowId = match[3];
+        console.log(newMessage.mentions.members.first());
+        const discordId = newMessage.mentions.members.first().id;
+        const displayName = newMessage.mentions.members.first();
+        const avatar = newMessage.mentions.members.first().displayAvatarURL()
+        const discordUser = await findOrCreateDiscordUser(discordId, displayName, avatar);
+        console.log("di "+discordUser);
+        const userId = discordUser.userId; // Get the user ID
+        console.log('ui '+userId);
+        // Call API to add game
+        try {
+            const response = await fetch(process.env.BACKEND_BASE_URL+`/api/pokernow/add`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ pokerNowId, userId, url, blinds })
+            });
+            const data = await response.json();
+            console.log(data.message);
+        } catch (error) {
+            console.error("Failed to add Poker Now game:", error.message);
+        }
+    }
   }
   // Processes cashout commands
   if (

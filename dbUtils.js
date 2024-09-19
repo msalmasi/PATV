@@ -241,6 +241,22 @@ function createTables() {
             }
         });
 
+        db.run(`
+                CREATE TABLE IF NOT EXISTS poker_now_games (
+        pokerNowId TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        url TEXT NOT NULL,
+        blinds TEXT NOT NULL,
+        date_created DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(userId)
+    )`, (err) => {
+                if (err) {
+                    console.log('Error creating table poker_now_games', err);
+                } else {
+                    console.log('Table poker_now_games created or already exists.');
+                }
+            });
+
     db.run(`CREATE TABLE IF NOT EXISTS prizes (
         prizeId TEXT PRIMARY KEY,
         prize TEXT NOT NULL,

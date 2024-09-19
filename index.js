@@ -3395,6 +3395,75 @@ function sendEvent(type, identifier, message) {
   }
 }
 
+// Function to add a new poker game
+async function addPokerNowGame(pokerNowId, userId, url, blinds) {
+  try {
+      const insertSql = "INSERT INTO poker_now_games (pokerNowId, userId, url, blinds) VALUES (?, ?, ?, ?)";
+      await runQuery(insertSql, [pokerNowId, userId, url, blinds]);
+      console.log(`Poker game ${pokerNowId} added by user ${userId}`);
+  } catch (error) {
+      console.error("Failed to add PokerNow game:", error.message);
+  }
+}
+
+// HTTP POST endpoint for Discord bot to add Poker Now game
+app.post("/api/pokernow/add", async (req, res) => {
+  const { pokerNowId, userId, url, blinds } = req.body;
+  try {
+      if (!pokerNowId || !userId || !url || !blinds) {
+          return res.status(400).json({ error: "Missing required fields" });
+      }
+      await addPokerNowGame(pokerNowId, userId, url, blinds);
+      res.status(200).json({ message: "Poker Now game added successfully" });
+  } catch (error) {
+      res.status(500).json({ error: "Failed to add Poker Now game" });
+  }
+});
+
+// Function to get game stats from Poker Now API
+async function getPokerNowGameStats(pokerNowId) {
+  try {
+      const response = await fetch(`https://www.pokernow.club/api/v2/games/${pokerNowId}`);
+      const data = await response.json();
+      return data;
+  } catch (error) {
+      console.error("Failed to fetch game stats:", error.message);
+      return null;
+  }
+}
+
+// Fetch all active Poker Now games from the database
+app.get("/poker", addUser, async (req, res) => {
+  const username = req.user ? req.user.username : null; // Fallback to null if no user in session
+
+  try {
+      const games = await getQuery(`
+          SELECT p.pokerNowId, p.url, p.blinds, p.date_created, u.username 
+          FROM poker_now_games p 
+          JOIN users u ON p.userId = u.userId
+          ORDER BY p.date_created DESC
+      `);
+      res.render("activeGames", { games, user: username });
+  } catch (error) {
+      console.error("Failed to load games:", error.message);
+      res.status(500).send("Failed to load games.");
+  }
+});
+
+// Function to clean up old Poker Now games (older than 12 hours)
+async function cleanUpOldGames() {
+  try {
+      const deleteSql = `DELETE FROM poker_now_games WHERE date_created < datetime('now', '-12 hours')`;
+      await runQuery(deleteSql);
+      console.log("Old Poker Now games cleaned up successfully.");
+  } catch (error) {
+      console.error("Failed to clean up old games:", error.message);
+  }
+}
+
+// Run cleanup every hour (3600000 ms)
+setInterval(cleanUpOldGames, 3600000);  // Run cleanup every 1 hour
+
 app.listen(port, () => {
   console.log(`Server running on port   ${port}`);
 });

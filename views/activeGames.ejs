@@ -1,0 +1,50 @@
+<%- include('layout', { title: 'Admin Panel', user: user}) %>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Poker Now Games</title>
+    <style>
+        h1 {
+          margin-top: 30px;
+          margin-left: auto;
+          margin-right: auto;
+            
+        }
+        ul {
+            list-style-type: none;
+        }
+        p {
+            color: #ffffff;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        a {
+            color: #ffffff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    
+    <h1>Active Poker Now Games</h1>
+
+        
+        <% games.forEach(game => { %>
+            <a href="<%= game.url %>"><div class="panel">
+                <p>
+                <!-- <strong>Game ID:</strong> <%= game.pokerNowId %><br> -->
+                <strong><%= game.username %></strong>'s Table<br><br>
+                <strong>Blinds:</strong> <%= game.blinds %><br><br>
+                <!-- <strong>URL:</strong> <a href="<%= game.url %>"><%= game.url %></a><br> -->
+                <strong>Date Created:</strong> <%= new Date(game.date_created).toLocaleString() %>
+            </p>
+        </div></a>
+        <% }) %>
+    
+        <% if (typeof game == 'undefined' || !game){ %>
+            <a href="https://discord.com/channels/913269267691094026/1192942161747001344">
+            <div class="panel"><p>No active tables.<br><br> Start a new table in our #poker channel!</p></div></a>
+            <% } %>
+
+</body>
