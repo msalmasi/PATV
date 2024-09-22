@@ -1057,11 +1057,12 @@ app.get('/api/users/twitch/:twitchId', async (req, res) => {
     const { twitchId } = req.params;
     try {
       const user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
-      if (user && user.length > 0) {
-        res.json({ user: user[0] });
-      } else {
-        res.json({ user: null });
+      if (user.length === 0) {
+        return res.status(404).json({ message: "User not found" });
       }
+
+      res.json({ user: user[0] });
+
     } catch (error) {
       res.status(500).json({ error: 'Failed to retrieve user' });
     }

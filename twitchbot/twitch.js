@@ -1,6 +1,6 @@
 require("dotenv").config();
 const tmi = require("tmi.js");
-const { createTables, runQuery, getQuery } = require("../dbUtils");
+const { runQuery, getQuery } = require("../dbUtils");
 const sqlite3 = require("sqlite3").verbose();
 const axios = require("axios");
 const bcrypt = require("bcrypt");
