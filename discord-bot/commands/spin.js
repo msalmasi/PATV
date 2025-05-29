@@ -107,6 +107,11 @@ async function setupWagerListener(spinId, interaction) {
       );
       eventSource.close();
     }
+
+    else {
+      console.log ("whats going on");
+      eventSource.close();
+    }
     
   };
 
