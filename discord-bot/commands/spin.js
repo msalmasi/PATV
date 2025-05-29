@@ -56,11 +56,11 @@ module.exports = {
 
 async function setupResultsListener(spinId, interaction, user) {
   
-  const eventSource = new EventSource(
+  const eventSource1 = new EventSource(
     process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
   );  
 
-  eventSource.onmessage = async function (event) {
+  eventSource1.onmessage = async function (event) {
     const result = JSON.parse(event.data);
     console.log("Spin result received:", result);
 
@@ -77,12 +77,12 @@ async function setupResultsListener(spinId, interaction, user) {
       );
     }
 
-    eventSource.close();
+    eventSource1.close();
   };
 
-  eventSource.onerror = function (event) {
+  eventSource1.onerror = function (event) {
     console.error("EventSource failed:", event);
-    eventSource.close();
+    eventSource1.close();
   };
 }
 
