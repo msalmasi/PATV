@@ -60,8 +60,8 @@ async function setupResultsListener(spinId, interaction, user) {
     process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
   );  
 
-  eventSource1.onmessage = async function (event1) {
-    const result = JSON.parse(event1.data);
+  eventSource1.onmessage = async function (event) {
+    const result = JSON.parse(event.data);
     console.log("Spin result received:", result);
 
     const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
@@ -82,26 +82,22 @@ async function setupResultsListener(spinId, interaction, user) {
     
   };
 
-  eventSource1.onerror = async function (event1) {
-    console.error("EventSource failed:", event1);
+  eventSource1.onerror = async function (event) {
+    console.error("EventSource failed:", event);
     eventSource1.close();
   };
 }
 
 async function setupWagerListener(spinId, interaction) {
-  console.log("spin ID for wage listener is", spinId)
     const eventSource = new EventSource(
         process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
       );
-console.log ("whats going on4");
 
   eventSource.onmessage = async function (event) {
     const data = JSON.parse(event.data);
     console.log("Spin command received:", data);
-    console.log ("whats going on3");
 
     if (data.message.includes("public spinid") && data.spinId) {
-      console.log ("whats going on2");
       var spinnerUsername = data.message.split(" ")[4];
       console.log (spinnerUsername);
       const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
