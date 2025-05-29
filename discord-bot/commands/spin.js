@@ -91,7 +91,7 @@ async function setupWagerListener(spinId, interaction) {
         process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
       );
 
-      log(eventSource)
+      console.log(eventSource)
 
   eventSource.onmessage = async function (event) {
     const data = JSON.parse(event.data);
