@@ -2634,7 +2634,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       spinId: spinId, // Include the spin ID for tracking
       timestamp: new Date(),
     };
-    sendEvent("spin", spinId, spinData);
+    await sendEvent("spin", spinId, spinData);
     res.json({
       success: true,
       message: `public spinid ${spinId} from ${username}`,
