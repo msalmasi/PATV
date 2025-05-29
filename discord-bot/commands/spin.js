@@ -38,7 +38,7 @@ module.exports = {
         // You can reply to the interaction first and follow-up later
         
         interaction.editReply(`Spinning the wheel for you, ${discordUser.username}!`);
-        setupWagerListener(spinId, interaction);
+        await setupWagerListener(spinId, interaction);
         // Set up listeners for the wager and results
         
         await setupResultsListener(spinId, interaction, user);
@@ -86,94 +86,29 @@ async function setupResultsListener(spinId, interaction, user) {
   };
 }
 
-// Function to set up wager listener, now returns a Promise
-function setupWagerListenerWithPromise(spinId, interaction) {
-  return new Promise((resolve, reject) => {
-    const eventSourceUrl = `${process.env.BACKEND_BASE_URL}/events?type=spin&identifier=${spinId}`;
-    console.log(`[SpinID: ${spinId}][WAGER] Setting up EventSource to: ${eventSourceUrl}`);
-    const eventSource = new EventSource(eventSourceUrl);
-    let processed = false; // To prevent multiple resolves/rejects
+async function setupWagerListener(spinId, interaction) {
+    const eventSource = new EventSource(
+        process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
+      );
 
-    const timeoutDuration = 15000; // 15-second timeout for the wager event
-    const timeoutId = setTimeout(() => {
-      if (processed) return;
-      processed = true;
-      console.warn(`[SpinID: ${spinId}][WAGER] Listener timed out after ${timeoutDuration}ms.`);
-      eventSource.close();
-      reject(new Error('Wager event listener timed out.'));
-    }, timeoutDuration);
+  eventSource.onmessage = async function (event) {
+    const data = JSON.parse(event.data);
+    console.log("Spin command received:", data);
 
-    eventSource.onmessage = async function (event) {
-      if (processed) return; // Already handled by a previous message, error, or timeout
+    if (data.message.includes("public spinid") && data.spinId) {
+      var spinnerUsername = data.message.split(" ")[4];
+      console.log (spinnerUsername);
+      const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
+      const spinnerBalance = spinnerBalanceResponse.data.balance;
+      interaction.editReply(
+        `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
+      );
+    }
+    eventSource.close();
+  };
 
-      console.log(`[SpinID: ${spinId}][WAGER] RAW EVENT RECEIVED: data=${event.data}`);
-      let data;
-      try {
-        data = JSON.parse(event.data);
-        console.log(`[SpinID: ${spinId}][WAGER] PARSED DATA:`, data);
-      } catch (parseError) {
-        console.error(`[SpinID: ${spinId}][WAGER] JSON parse error:`, parseError, `Raw data: ${event.data}`);
-        // If parsing fails, this message is not what we expect.
-        // We'll keep listening for a valid message or until timeout.
-        return;
-      }
-
-      // Check if this is the specific message we are looking for
-      if (data.message && data.message.includes("public spinid") && data.spinId === spinId) {
-        processed = true; // Mark as processed
-        clearTimeout(timeoutId); // Clear the timeout
-
-        try {
-          // Username extraction: This part is fragile and highly dependent on the exact message format.
-          // Original: var spinnerUsername = data.message.split(" ")[4];
-          // Consider if interaction.user.username is always the spinner for this message.
-          // Or if the backend can send `username` as a direct field in `data`.
-          let spinnerUsername = interaction.user.username; // Default to the interaction user
-          const parts = data.message.split(" ");
-          if (parts.length > 4 && parts[2] === spinId && parts[3] === "from") { // Example: "public spinid {spinId} from {username}"
-             spinnerUsername = parts[4];
-             console.log(`[SpinID: ${spinId}][WAGER] Extracted spinnerUsername: ${spinnerUsername} using specific format.`);
-          } else if (data.message.toLowerCase().includes(interaction.user.username.toLowerCase())) {
-            // Fallback if the user's name is simply in the message string
-             console.log(`[SpinID: ${spinId}][WAGER] Using interaction.user.username as spinnerUsername was found in message.`);
-          } else if (parts.length > 4) {
-            // Fallback to original potentially fragile split if specific formats don't match
-            spinnerUsername = parts[4];
-            console.warn(`[SpinID: ${spinId}][WAGER] Extracted spinnerUsername using original split(" ")[4]: ${spinnerUsername}. This might be fragile.`);
-          } else {
-            console.warn(`[SpinID: ${spinId}][WAGER] Could not reliably extract spinnerUsername from message "${data.message}". Defaulting to interaction user: ${interaction.user.username}.`);
-          }
-          
-          const spinnerBalanceResponse = await axios.get(`${process.env.BACKEND_BASE_URL}/api/u/${spinnerUsername}/balance`);
-          const spinnerBalance = spinnerBalanceResponse.data.balance;
-
-          await interaction.editReply(
-            `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
-          );
-          console.log(`[SpinID: ${spinId}][WAGER] Discord message successfully edited with wager info.`);
-          eventSource.close(); // Close AFTER successful processing
-          resolve(); // Resolve the promise
-        } catch (error) {
-          console.error(`[SpinID: ${spinId}][WAGER] Error processing target event or editing reply:`, error.message);
-          eventSource.close(); // Close on error
-          reject(error); // Reject the promise
-        }
-      } else {
-        // This was a message, but not the one we're looking for.
-        // Log it and continue listening (do not close, do not resolve/reject).
-        console.log(`[SpinID: ${spinId}][WAGER] Received non-target message. Data:`, data, `Still listening...`);
-      }
-    };
-
-    eventSource.onerror = function (errEvent) {
-      if (processed) return;
-      processed = true;
-      clearTimeout(timeoutId);
-      const errorMessage = errEvent.message || (errEvent.type ? `EventSource error type: ${errEvent.type}` : 'Unknown EventSource error');
-      console.error(`[SpinID: ${spinId}][WAGER] EventSource error:`, errorMessage, errEvent);
-      eventSource.close();
-      reject(new Error(`Wager EventSource error: ${errorMessage}`));
-    };
-  });
+  eventSource.onerror = function (event) {
+    console.error("Wager EventSource failed:", event);
+    eventSource.close();
+  };
 }
-
