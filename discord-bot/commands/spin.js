@@ -71,13 +71,15 @@ async function setupResultsListener(spinId, interaction, user) {
       await interaction.followUp(
         `PAT ${result.result} JACKPOT for ${interaction.user}!!!! (New Balance: PAT ${spinnerBalance})`
       );
+      eventSource1.close();
     } else {
       await interaction.followUp(
         `You won PAT ${result.result} and gained ${result.xp} XP, ${interaction.user} (New Balance: PAT ${spinnerBalance}).`
       );
+      eventSource1.close();
     }
 
-    eventSource1.close();
+    
   };
 
   eventSource1.onerror = function (event) {
@@ -103,9 +105,9 @@ async function setupWagerListener(spinId, interaction) {
       await interaction.editReply(
         `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
       );
-      
+      eventSource.close();
     }
-    eventSource.close();
+    
   };
 
   eventSource.onerror = function (event) {
