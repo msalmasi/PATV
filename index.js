@@ -84,10 +84,10 @@ app.set("views", "./views");
 // app.use(morgan("combined"));
 
 // Custom middleware test
-app.use((req, res, next) => {
-  console.log("Request method: ", req.params);
-  next();
-});
+// app.use((req, res, next) => {
+//   console.log("Request method: ", req.params);
+//   next();
+// });
 
 // Helper Middleware for Auth
 function addUser(req, res, next) {
