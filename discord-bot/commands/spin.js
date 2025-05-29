@@ -89,6 +89,7 @@ async function setupResultsListener(spinId, interaction, user) {
 }
 
 async function setupWagerListener(spinId, interaction) {
+  console.log("spin ID for wage listener is", spinId)
     const eventSource = new EventSource(
         process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
       );
