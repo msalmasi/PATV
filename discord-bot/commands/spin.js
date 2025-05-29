@@ -82,7 +82,7 @@ async function setupResultsListener(spinId, interaction, user) {
     
   };
 
-  eventSource1.onerror = function (event1) {
+  eventSource1.onerror = async function (event1) {
     console.error("EventSource failed:", event1);
     eventSource1.close();
   };
@@ -118,7 +118,7 @@ console.log ("whats going on4");
     
   };
 
-  eventSource.onerror = function (event) {
+  eventSource.onerror = async function (event) {
     console.error("Wager EventSource failed:", event);
     eventSource.close();
   };
