@@ -91,8 +91,6 @@ async function setupWagerListener(spinId, interaction) {
         process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
       );
 
-      console.log(eventSource)
-
   eventSource.onmessage = async function (event) {
     const data = JSON.parse(event.data);
     console.log("Spin command received:", data);
@@ -105,8 +103,8 @@ async function setupWagerListener(spinId, interaction) {
       interaction.editReply(
         `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
       );
+      eventSource.close();
     }
-    eventSource.close();
   };
 
   eventSource.onerror = function (event) {
