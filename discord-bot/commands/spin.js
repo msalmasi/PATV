@@ -92,12 +92,15 @@ async function setupWagerListener(spinId, interaction) {
     const eventSource = new EventSource(
         process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
       );
+console.log ("whats going on4");
 
   eventSource.onmessage = async function (event) {
     const data = JSON.parse(event.data);
     console.log("Spin command received:", data);
+    console.log ("whats going on3");
 
     if (data.message.includes("public spinid") && data.spinId) {
+      console.log ("whats going on2");
       var spinnerUsername = data.message.split(" ")[4];
       console.log (spinnerUsername);
       const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
