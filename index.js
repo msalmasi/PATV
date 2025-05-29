@@ -3351,11 +3351,17 @@ app.post('/api/poker/cashier', async (req, res) => {
 app.get("/events", (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
 
+  console.log(`[${new Date().toISOString()}] HIT /events endpoint. Type: ${req.query.type}, Identifier: ${req.query.identifier}`);
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader('X-Accel-Buffering', 'no');
+
+  console.log(`[${new Date().toISOString()}] HEADERS SET. X-Accel-Buffering is:`, res.getHeader('X-Accel-Buffering'));
+
   res.flushHeaders(); // Flush the headers to establish SSE connection
+  console.log(`[${new Date().toISOString()}] Headers flushed.`);
 
   // Register this connection to receive updates for the specified spinId
   registerClient(type, identifier, res);
