@@ -100,11 +100,12 @@ async function setupWagerListener(spinId, interaction) {
       console.log (spinnerUsername);
       const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
-      interaction.editReply(
+      await interaction.editReply(
         `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
       );
-      eventSource.close();
+      
     }
+    eventSource.close();
   };
 
   eventSource.onerror = function (event) {
