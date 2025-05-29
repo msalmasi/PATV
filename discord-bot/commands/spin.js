@@ -60,8 +60,8 @@ async function setupResultsListener(spinId, interaction, user) {
     process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
   );  
 
-  eventSource1.onmessage = async function (event) {
-    const result = JSON.parse(event.data);
+  eventSource1.onmessage = async function (event1) {
+    const result = JSON.parse(event1.data);
     console.log("Spin result received:", result);
 
     const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
@@ -82,8 +82,8 @@ async function setupResultsListener(spinId, interaction, user) {
     
   };
 
-  eventSource1.onerror = function (event) {
-    console.error("EventSource failed:", event);
+  eventSource1.onerror = function (event1) {
+    console.error("EventSource failed:", event1);
     eventSource1.close();
   };
 }
