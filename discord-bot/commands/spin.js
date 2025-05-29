@@ -1,7 +1,90 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const axios = require('axios');
-const { findOrCreateDiscordUser } = require('../userUtils'); // Ensure this path is correct
+const { findOrCreateDiscordUser } = require('../userUtils');
 const EventSource = require('eventsource');
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('spin')
+    .setDescription('Spin the wheel and try your luck!'),
+  
+  async execute(interaction) {
+    const discordUser = interaction.user;
+
+    try {
+      // Step 1: Defer the reply to prevent timeouts
+      await interaction.deferReply();
+
+      // Step 2: Ensure the user exists (either found or created)
+      const user = await findOrCreateDiscordUser(
+        discordUser.id,
+        discordUser.username,
+        discordUser.displayAvatarURL()
+      );
+
+      console.log(`Spinning the wheel for ${user.username}`);
+      const url = process.env.BACKEND_BASE_URL+`/api/g/wheel/chatspin`;
+
+      // Step 3: Make the spin request to the backend
+      const spinResponse = await axios.post(url, {
+        username: user.username,
+        password: process.env.DISCORD_BOT_TOKEN,
+      });
+
+      // Step 4: Check if the spin is successful
+      if (spinResponse.data.spinId) {
+        const spinId = spinResponse.data.spinId;
+        console.log(spinId);
+        // You can reply to the interaction first and follow-up later
+        
+        interaction.editReply(`Spinning the wheel for you, ${discordUser.username}!`);
+        setupWagerListener(spinId, interaction);
+        // Set up listeners for the wager and results
+        
+        await setupResultsListener(spinId, interaction, user);
+      } else {
+        throw new Error("Spin request failed.");
+      }
+    } catch (error) {
+      console.error(`Error during spin for ${discordUser.username}:`, error.message);
+      interaction.editReply(`Sorry ${discordUser.username}, something went wrong while spinning.`);
+    }
+  },
+};
+
+// EVENT LISTENERS
+
+async function setupResultsListener(spinId, interaction, user) {
+  
+  const eventSource = new EventSource(
+    process.env.BACKEND_BASE_URL+`/events?type=results&identifier=${spinId}`
+  );  
+
+  eventSource.onmessage = async function (event) {
+    const result = JSON.parse(event.data);
+    console.log("Spin result received:", result);
+
+    const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
+    const spinnerBalance = spinnerBalanceResponse.data.balance;
+
+    if (result.result > 1000000) {
+      await interaction.followUp(
+        `PAT ${result.result} JACKPOT for ${interaction.user}!!!! (New Balance: PAT ${spinnerBalance})`
+      );
+    } else {
+      await interaction.followUp(
+        `You won PAT ${result.result} and gained ${result.xp} XP, ${interaction.user} (New Balance: PAT ${spinnerBalance}).`
+      );
+    }
+
+    eventSource.close();
+  };
+
+  eventSource.onerror = function (event) {
+    console.error("EventSource failed:", event);
+    eventSource.close();
+  };
+}
 
 // Function to set up wager listener, now returns a Promise
 function setupWagerListenerWithPromise(spinId, interaction) {
@@ -94,135 +177,3 @@ function setupWagerListenerWithPromise(spinId, interaction) {
   });
 }
 
-// setupResultsListener can remain as is, or be refactored similarly if it also needs more robustness
-async function setupResultsListener(spinId, interaction, user) {
-  const eventSourceUrl = `${process.env.BACKEND_BASE_URL}/events?type=results&identifier=${spinId}`;
-  console.log(`[SpinID: ${spinId}][RESULTS] Setting up EventSource to: ${eventSourceUrl}`);
-  const eventSource = new EventSource(eventSourceUrl);
-  let processed = false;
-
-  const timeoutDuration = 30000; // 30-second timeout for results
-  const timeoutId = setTimeout(() => {
-    if (processed) return;
-    processed = true;
-    console.warn(`[SpinID: ${spinId}][RESULTS] Listener timed out after ${timeoutDuration}ms.`);
-    eventSource.close();
-    interaction.followUp(`Sorry ${interaction.user.username}, timed out waiting for spin results (Spin ID: ${spinId}).`).catch(e => {});
-    // Optionally reject a promise if this function were to return one
-  }, timeoutDuration);
-
-  eventSource.onmessage = async function (event) {
-    if (processed) return;
-    processed = true;
-    clearTimeout(timeoutId);
-
-    console.log(`[SpinID: ${spinId}][RESULTS] RAW EVENT RECEIVED: data=${event.data}`);
-    const result = JSON.parse(event.data); // Assuming result event data is always valid JSON
-    console.log(`[SpinID: ${spinId}][RESULTS] PARSED DATA:`, result);
-
-    try {
-        const spinnerBalanceResponse = await axios.get(`${process.env.BACKEND_BASE_URL}/api/u/${user.username}/balance`);
-        const spinnerBalance = spinnerBalanceResponse.data.balance;
-
-        if (result.result > 1000000) { // Ensure result.result is the numeric win amount
-        await interaction.followUp(
-            `PAT ${result.result} JACKPOT for ${interaction.user}!!!! (New Balance: PAT ${spinnerBalance})`
-        );
-        } else {
-        await interaction.followUp(
-            `You won PAT ${result.result} and gained ${result.xp || 0} XP, ${interaction.user} (New Balance: PAT ${spinnerBalance}).`
-        );
-        }
-    } catch (e) {
-        console.error(`[SpinID: ${spinId}][RESULTS] Error processing result or sending followup:`, e.message);
-        await interaction.followUp(`Got your spin result (Won PAT ${result.result}), but there was an issue displaying full details, ${interaction.user}.`).catch(err => {});
-    } finally {
-        eventSource.close();
-    }
-  };
-
-  eventSource.onerror = function (errEvent) {
-    if (processed) return;
-    processed = true;
-    clearTimeout(timeoutId);
-    const errorMessage = errEvent.message || (errEvent.type ? `EventSource error type: ${errEvent.type}` : 'Unknown EventSource error');
-    console.error(`[SpinID: ${spinId}][RESULTS] EventSource error:`, errorMessage, errEvent);
-    eventSource.close();
-    interaction.followUp(`Sorry ${interaction.user.username}, there was an error receiving spin results (Spin ID: ${spinId}).`).catch(e => {});
-  };
-}
-
-
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName('spin')
-    .setDescription('Spin the wheel and try your luck!'),
-
-  async execute(interaction) {
-    const discordUser = interaction.user;
-    let spinId; // Define spinId here for broader scope in catch block
-
-    try {
-      await interaction.deferReply();
-
-      const user = await findOrCreateDiscordUser(
-        discordUser.id,
-        discordUser.username,
-        discordUser.displayAvatarURL()
-      );
-
-      console.log(`[User: ${user.username}] Initiating spin.`);
-      const url = `${process.env.BACKEND_BASE_URL}/api/g/wheel/chatspin`;
-
-      const spinResponse = await axios.post(url, {
-        username: user.username,
-        password: process.env.DISCORD_BOT_TOKEN, // Ensure this is the intended auth mechanism
-      });
-
-      if (spinResponse.data && spinResponse.data.spinId) {
-        spinId = spinResponse.data.spinId;
-        console.log(`[SpinID: ${spinId}] Spin request successful. Got spinId.`);
-        
-        // Initial reply, can be a placeholder before wager confirmation
-        await interaction.editReply(`Processing your spin, ${discordUser.username} (ID: ${spinId})...`);
-
-        try {
-          // Await the wager listener to process the specific event and edit the reply
-          await setupWagerListenerWithPromise(spinId, interaction);
-          console.log(`[SpinID: ${spinId}] Wager listener promise resolved (message should be edited).`);
-        } catch (wagerError) {
-          console.error(`[SpinID: ${spinId}] Wager listener failed or timed out:`, wagerError.message);
-          // If wager confirmation is critical, you might send a specific followup
-          // For example: await interaction.followUp(`Couldn't confirm wager details for spin ${spinId}. Proceeding to results...`);
-          // If it's non-critical, the current flow will just move to results.
-        }
-        
-        // Proceed to setup results listener
-        // This setup is still async in terms of when events arrive, but the setup itself is quick.
-        // If sequential display is critical (e.g. results ONLY after wager confirmed visually for a time),
-        // you might add a small delay or make setupResultsListener also promise-based for its first event.
-        setupResultsListener(spinId, interaction, user); // Fire-and-forget the setup of this listener
-        console.log(`[SpinID: ${spinId}] Results listener setup initiated.`);
-
-      } else {
-        console.error("[No SpinID] Spin request to backend failed or did not return a spinId. Response:", spinResponse.data);
-        await interaction.editReply("Sorry, your spin request to the backend failed.");
-        return; // Stop execution if no spinId
-      }
-    } catch (error) {
-      const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
-      console.error(`[SpinID: ${spinId || 'N/A'}][User: ${discordUser.username}] Critical error during spin command:`, errorMessage, error.stack);
-      // Ensure reply is edited or followed up, even on error
-      const errorReplyMessage = `Sorry ${discordUser.username}, an unexpected error occurred with your spin.`;
-      if (interaction.replied || interaction.deferred) {
-        await interaction.editReply(errorReplyMessage).catch(e => {
-            console.error(`[SpinID: ${spinId || 'N/A'}] Failed to editReply on error, trying followUp:`, e);
-            interaction.followUp(errorReplyMessage).catch(e2 => console.error(`[SpinID: ${spinId || 'N/A'}] Failed to followUp on error:`, e2));
-        });
-      } else {
-         // Should not happen if deferReply is used first.
-        await interaction.reply(errorReplyMessage).catch(e => console.error(`[SpinID: ${spinId || 'N/A'}] Failed to send initial reply on error:`, e));
-      }
-    }
-  },
-};
