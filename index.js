@@ -2578,6 +2578,21 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
     }
   });
 
+  // On your backend, run once at server startup
+setInterval(() => {
+    // 'clients' is your object storing active SSE connections
+    Object.values(clients).forEach(identifierMap => {
+        Object.values(identifierMap).forEach(clientArray => {
+            clientArray.forEach(client => {
+                try {
+                    // An SSE comment starts with a colon and is ignored by the onmessage handler
+                    client.write(': keep-alive\n\n');
+                } catch (e) { /* handle error if client is disconnected */ }
+            });
+        });
+    });
+}, 30000); // 30 seconds
+
 // Endpoint to finalize the spin after client acknowledgment
 app.post("/api/g/acknowledge-spin", async (req, res) => {
   const { spinId } = req.body;
