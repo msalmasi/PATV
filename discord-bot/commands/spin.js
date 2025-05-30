@@ -38,7 +38,7 @@ module.exports = {
         // You can reply to the interaction first and follow-up later
         
         interaction.editReply(`Spinning the wheel for you, ${discordUser.username}!`);
-        await setupWagerListener(spinId, interaction);
+        setupWagerListener(spinId, interaction);
         // Set up listeners for the wager and results
         
         await setupResultsListener(spinId, interaction, user);
@@ -89,34 +89,40 @@ async function setupResultsListener(spinId, interaction, user) {
 }
 
 async function setupWagerListener(spinId, interaction) {
+    // 1. We connect to the STABLE, hardcoded SSE channel that Cloudflare likes.
     const eventSource = new EventSource(
-        process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=abc1234`
-      );
+        process.env.BACKEND_BASE_URL + `/events?type=spin&identifier=abc1234`
+    );
 
-  eventSource.onmessage = async function (event) {
-    const data = JSON.parse(event.data);
-    console.log("Spin command received:", data);
+    eventSource.onmessage = async function (event) {
+        const data = JSON.parse(event.data);
+        console.log(`[Listener for ${spinId}] Received public event with data for spin: ${data.spinId}`);
 
-    if (data.message.includes("public spinid") && data.spinId) {
-      var spinnerUsername = data.message.split(" ")[4];
-      console.log (spinnerUsername);
-      const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
-      const spinnerBalance = spinnerBalanceResponse.data.balance;
-      await interaction.editReply(
-        `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
-      );
-      eventSource.close();
-    }
+        // 2. We CHECK if the public event we received is the one this specific listener is waiting for.
+        if (data.message.includes("public spinid") && data.spinId === spinId) {
+            console.log(`[Listener for ${spinId}] Event MATCHED! Processing now.`);
+            
+            // This listener will now only execute its logic for the correct spin.
+            var spinnerUsername = data.message.split(" ")[4];
+            console.log(spinnerUsername);
+            const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL + `/api/u/${spinnerUsername}/balance`);
+            const spinnerBalance = spinnerBalanceResponse.data.balance;
+            
+            await interaction.editReply(
+                `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
+            );
+            
+            // 3. We close the listener ONLY after it has done its specific job.
+            eventSource.close();
+        } else {
+            // This was an event for a different spin. This listener ignores it and stays open,
+            // waiting for its own event or for the bot to time out its interaction.
+            console.log(`[Listener for ${spinId}] Event ignored, was for a different spin.`);
+        }
+    };
 
-    else {
-      console.log ("whats going on");
-      eventSource.close();
-    }
-    
-  };
-
-  eventSource.onerror = async function (event) {
-    console.error("Wager EventSource failed:", event);
-    eventSource.close();
-  };
+    eventSource.onerror = function (event) {
+        console.error(`Wager EventSource failed for spinId ${spinId}:`, event);
+        eventSource.close();
+    };
 }
