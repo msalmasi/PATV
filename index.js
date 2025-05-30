@@ -2649,7 +2649,10 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       spinId: spinId, // Include the spin ID for tracking
       timestamp: new Date(),
     };
-    sendEvent("spin", "abc1234", spinData);
+      const timeoutId = setTimeout(() => {
+        sendEvent("spin", "abc1234", spinData);
+    }, 500);
+    
     res.json({
       success: true,
       message: `public spinid ${spinId} from ${username}`,
