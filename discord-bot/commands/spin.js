@@ -115,8 +115,7 @@ async function setupWagerListener(spinId, interaction) {
             // 3. We close the listener ONLY after it has done its specific job.
             eventSource.close();
         } else {
-            // This was an event for a different spin. This listener ignores it and stays open,
-            // waiting for its own event or for the bot to time out its interaction.
+            // This was an event for a different spin.
             console.log(`[Listener for ${spinId}] Event ignored, was for a different spin.`);
             eventSource.close();
         }
