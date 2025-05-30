@@ -89,59 +89,41 @@ async function setupResultsListener(spinId, interaction, user) {
 }
 
 async function setupWagerListener(spinId, interaction) {
-    // Connect to the stable, public SSE channel
+    // 1. We connect to the STABLE, hardcoded SSE channel that Cloudflare likes.
     const eventSource = new EventSource(
         process.env.BACKEND_BASE_URL + `/events?type=spin&identifier=abc1234`
     );
-
-    // --- The Lifespan Timeout ---
-    // Give this listener a 3-minute lifespan. If it hasn't succeeded by then,
-    // assume it's a zombie and close it to prevent memory leaks.
-    const timeoutDuration = 180000; // 3 minutes in milliseconds
-    const timeoutId = setTimeout(() => {
-        console.log(`[Listener for ${spinId}] TIMING OUT after 3 minutes. Closing connection to prevent zombie state.`);
-        eventSource.close();
-    }, timeoutDuration);
-    // ----------------------------
 
     eventSource.onmessage = async function (event) {
         const data = JSON.parse(event.data);
         console.log(`[Listener for ${spinId}] Received public event with data for spin: ${data.spinId}`);
 
-        // Check if the public event is the one this listener is waiting for
+        // 2. We CHECK if the public event we received is the one this specific listener is waiting for.
         if (data.message.includes("public spinid") && data.spinId === spinId) {
             console.log(`[Listener for ${spinId}] Event MATCHED! Processing now.`);
             
-            // --- Cancel the self-destruct timer because we succeeded ---
-            clearTimeout(timeoutId);
-            // ---------------------------------------------------------
+            // This listener will now only execute its logic for the correct spin.
+            var spinnerUsername = data.message.split(" ")[4];
+            console.log(spinnerUsername);
+            const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL + `/api/u/${spinnerUsername}/balance`);
+            const spinnerBalance = spinnerBalanceResponse.data.balance;
             
-            try {
-                var spinnerUsername = data.message.split(" ")[4];
-                console.log(spinnerUsername);
-                const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL + `/api/u/${spinnerUsername}/balance`);
-                const spinnerBalance = spinnerBalanceResponse.data.balance;
-                
-                await interaction.editReply(
-                    `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
-                );
-            } catch (error) {
-                console.error(`[Listener for ${spinId}] Error during processing:`, error.message);
-            } finally {
-                // Always close the listener after it has done its job.
-                eventSource.close();
-            }
+            interaction.editReply(
+                `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
+            );
+            
+            // 3. We close the listener ONLY after it has done its specific job.
+            eventSource.close();
         } else {
-            // It was an event for a different spin. Ignore it and keep listening.
+            // This was an event for a different spin. This listener ignores it and stays open,
+            // waiting for its own event or for the bot to time out its interaction.
             console.log(`[Listener for ${spinId}] Event ignored, was for a different spin.`);
+            eventSource.close();
         }
     };
 
     eventSource.onerror = function (event) {
         console.error(`Wager EventSource failed for spinId ${spinId}:`, event);
-        // --- Cancel the self-destruct timer on error too ---
-        clearTimeout(timeoutId);
-        // ------------------------------------------------
         eventSource.close();
     };
 }
