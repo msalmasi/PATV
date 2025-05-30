@@ -46,8 +46,8 @@ module.exports = {
         throw new Error("Spin request failed.");
       }
     } catch (error) {
-      console.error(`Error during spin for ${discordUser.username}:`, error);
-      interaction.editReply(`Sorry ${discordUser.username}, something went wrong while spinning.`);
+      console.error(`Error during spin for ${discordUser.username}:`, error.response.data);
+      interaction.editReply(`Sorry ${discordUser.username}, ${error.response.data} 😵.`);
     }
   },
 };
