@@ -47,7 +47,7 @@ module.exports = {
       }
     } catch (error) {
       console.error(`Error during spin for ${discordUser.username}:`, error.response.data);
-      interaction.editReply(`Sorry ${discordUser.username}, ${error.response.data} 😵.`);
+      interaction.editReply(`I can't do that right now, ${interaction.user}. ${error.response.data} 😵`);
     }
   },
 };
