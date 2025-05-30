@@ -90,7 +90,7 @@ async function setupResultsListener(spinId, interaction, user) {
 
 async function setupWagerListener(spinId, interaction) {
     const eventSource = new EventSource(
-        process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=${spinId}`
+        process.env.BACKEND_BASE_URL+`/events?type=spin&identifier=abc1234`
       );
 
   eventSource.onmessage = async function (event) {
