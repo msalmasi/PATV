@@ -2650,7 +2650,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       timestamp: new Date(),
     };
       const timeoutId = setTimeout(() => {
-        sendEvent("spin", "abc1234", spinData);
+        sendEvent("spin", spinId, spinData);
     }, 500);
     
     res.json({
