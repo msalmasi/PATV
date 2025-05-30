@@ -37,7 +37,7 @@ module.exports = {
         console.log(spinId);
         // You can reply to the interaction first and follow-up later
         
-        interaction.editReply(`Spinning the wheel for you, ${discordUser.username}!`);
+        interaction.editReply(`${interaction.user} requested a spin!`);
         setupWagerListener(spinId, interaction);
         // Set up listeners for the wager and results
         
@@ -103,7 +103,7 @@ async function setupWagerListener(spinId, interaction) {
       const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
       await interaction.editReply(
-        `Spinning the wheel for PAT 5000, good luck ${interaction.user}! (New Balance: PAT ${spinnerBalance}).`
+        `${interaction.user} is spinning the wheel for PAT 5000, good luck! (New Balance: PAT ${spinnerBalance}).`
       );
       
     }
