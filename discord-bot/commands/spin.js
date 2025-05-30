@@ -38,7 +38,7 @@ module.exports = {
         // You can reply to the interaction first and follow-up later
         
         interaction.editReply(`Spinning the wheel for you, ${discordUser.username}!`);
-        await setupWagerListener(spinId, interaction);
+        setupWagerListener(spinId, interaction);
         // Set up listeners for the wager and results
         
         await setupResultsListener(spinId, interaction, user);
