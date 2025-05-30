@@ -47,7 +47,7 @@ module.exports = {
       }
     } catch (error) {
       console.error(`Error during spin for ${discordUser.username}:`, error.response.data);
-      interaction.editReply(`I can't do that right now, ${interaction.user}. ${error.response.data} 😵`);
+      interaction.editReply(`${interaction.user}, I can't do that right now: ${error.response.data} 😵`);
     }
   },
 };
@@ -69,12 +69,12 @@ async function setupResultsListener(spinId, interaction, user) {
 
     if (result.result > 1000000) {
       await interaction.followUp(
-        `PAT ${result.result} JACKPOT for ${interaction.user}!!!! (New Balance: PAT ${spinnerBalance})`
+        `${interaction.user} won PAT ${result.result} JACKPOT!!!! (New Balance: PAT ${spinnerBalance})`
       );
       eventSource1.close();
     } else {
       await interaction.followUp(
-        `You won PAT ${result.result} and gained ${result.xp} XP, ${interaction.user} (New Balance: PAT ${spinnerBalance}).`
+        `${interaction.user} won PAT ${result.result} and gained ${result.xp} XP. (New Balance: PAT ${spinnerBalance}).`
       );
       eventSource1.close();
     }
@@ -103,7 +103,7 @@ async function setupWagerListener(spinId, interaction) {
       const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${spinnerUsername}/balance`);
       const spinnerBalance = spinnerBalanceResponse.data.balance;
       await interaction.editReply(
-        `Spinning the wheel for PAT 5000, good luck! Your current balance is PAT ${spinnerBalance}.`
+        `Spinning the wheel for PAT 5000, good luck ${interaction.user}! (New Balance: PAT ${spinnerBalance}).`
       );
       
     }

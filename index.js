@@ -2533,7 +2533,7 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
       );
   
       if (!user.length || user[0].points_balance < 5000) {
-        return res.status(400).send("Insufficient points or user not found");
+        return res.status(400).send("Insufficient points.");
       }
   
       const pendingSpin = await getQuery(
@@ -2542,7 +2542,7 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
       );
   
       if (pendingSpin.length) {
-        return res.status(400).send("Free spin in progress.");
+        return res.status(400).send("Spin in progress.");
       }
   
       const stalledSpin = await getQuery(
