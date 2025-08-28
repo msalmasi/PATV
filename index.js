@@ -41,8 +41,8 @@ const upload = multer({ dest: "uploads/" });
 const axios = require("axios");
 const querystring = require("querystring");
 
-import { Resend } from 'resend';
-const resend = new Resend(process.env.RESEND_API_KEY);
+const { Resend } = require("resend");
+const instanceResend = new Resend(process.env.RESEND_API_KEY);
 
 // AWS S3 configuration
 const s3 = new AWS.S3({
@@ -898,7 +898,7 @@ app.post("/forgot-password", async (req, res) => {
                    If you did not request this, please ignore this email and your password will remain unchanged.\n`,
     };
 
-    await resend.emails..send(msg);
+    await instanceResend.emails.send(msg);
     req.flash(
       "success",
       "An e-mail has been sent to " + email + " with further instructions."
@@ -1537,7 +1537,7 @@ app.post("/shop", addUser, async (req, res) => {
       text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
       html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
     };
-    await resend.emails..send(msg);
+    await instanceResend.emails.send(msg);
 
     // Respond to the user
     res.json({ success: true, message: "Purchase successful" });
@@ -1606,7 +1606,7 @@ app.post("/chatshop", async (req, res) => {
         text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
         html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
       };
-      await resend.emails..send(msg);
+      await instanceResend.emails.send(msg);
   
       // Respond to the user
       res.json({ success: true, message: "Purchase successful" });
