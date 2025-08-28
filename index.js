@@ -887,7 +887,7 @@ app.post("/forgot-password", async (req, res) => {
     );
 
     // Send email with the reset link
-    const resetUrl = `http://${req.headers.host}/reset-password/${token}`;
+    const resetUrl = `https://${req.headers.host}/reset-password/${token}`;
     const msg = {
       to: email,
       from: "no-reply@publicaccess.tv",
