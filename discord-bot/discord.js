@@ -239,7 +239,7 @@ client.on("messageCreate", (message) => {
       .catch(console.error);
   }
   if (
-    message.author.id == "568592114590547979" &&
+    message.author.id == "675758566304514086" &&
     message.content.includes("advanced to") &&
     message.guild.id == "913269267691094026"
   ) {
