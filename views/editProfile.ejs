@@ -95,6 +95,15 @@
             </button>
         </div>
 
+        <br>
+        <div id="camfrogDiv">
+            <form id="camfrogForm" action="/api/u/<%= username %>/update/camfrog" method="post">
+                <label for="camfrogUsername">Camfrog Username:<% if (typeof camfrogUsername !== 'undefined' && camfrogUsername) { %><strong style="color:#00CC66"> <%= camfrogUsername %></strong><% } %></label>
+                <input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= (typeof camfrogUsername !== 'undefined' && camfrogUsername) ? camfrogUsername : '' %>" placeholder="Enter your Camfrog username">
+                <button class="profileButton" type="submit">Link Camfrog</button>
+            </form>
+        </div>
+
         <div id="uploadStatus" class="spin-status"></div>
     </div>
 </body>

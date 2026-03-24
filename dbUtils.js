@@ -24,6 +24,7 @@ function createTables() {
         discordUsername TEXT,
         twitchId TEXT,
         twitchDisplayname TEXT,
+        camfrogUsername TEXT,
         streamId TEXT,
         streamKey TEXT,
         points_balance INTEGER DEFAULT 0,

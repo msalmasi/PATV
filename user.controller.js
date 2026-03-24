@@ -280,6 +280,16 @@ async function updateTwitchId(req, res) {
   res.redirect(`/u/${username}/profile/edit`);
 };
 
+// Update camfrog username
+async function updateCamfrogUsername(req, res) {
+  const { camfrogUsername } = req.body;
+  const userId = req.user.userId;
+  const username = req.user.username;
+  await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [camfrogUsername, userId]);
+  req.flash('success', 'Camfrog username updated.');
+  res.redirect(`/u/${username}/profile/edit`);
+};
+
 // Calculate XP for next level
 function xpForNextLevel(currentLevel) {
   return Math.pow(currentLevel + 1, 2) * 1000;
@@ -408,6 +418,7 @@ module.exports = {
   updateAvatar,
   updateDiscordId,
   updateTwitchId,
+  updateCamfrogUsername,
   awardBadge,
   xpForNextLevel,
   updateLevel,

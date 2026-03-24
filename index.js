@@ -21,6 +21,7 @@ const {
   updateAvatar,
   updateDiscordId,
   updateTwitchId,
+  updateCamfrogUsername,
   awardBadge,
   xpForNextLevel,
   updateLevel,
@@ -1351,7 +1352,7 @@ app.get(
     const username = req.user ? req.user.username : null; // Fallback to null if no user in session
     const usernameProfile = req.params.username; // Fallback to null if no user in session
     const sql =
-      "SELECT username, displayname, twitchDisplayname, discordUsername, avatar, email, points_balance FROM users WHERE username = ?";
+      "SELECT username, displayname, twitchDisplayname, discordUsername, camfrogUsername, avatar, email, points_balance FROM users WHERE username = ?";
 
     try {
       if (username == usernameProfile) {
@@ -1366,6 +1367,7 @@ app.get(
             displayname: user.displayname,
             twitchDisplayname: user.twitchDisplayname,
             discordUsername: user.discordUsername,
+            camfrogUsername: user.camfrogUsername,
             avatar: user.avatar,
             email: user.email,
             points_balance: user.points_balance,
@@ -1466,6 +1468,32 @@ app.post(
   upload.single("avatar"),
   updateAvatar
 );
+
+app.post(
+  "/api/u/:username/update/camfrog",
+  authenticateToken,
+  addUser,
+  updateCamfrogUsername
+);
+
+// Lookup user by Camfrog username
+app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
+  const { camfrogUsername } = req.params;
+  try {
+    const results = await getQuery(
+      "SELECT userId, username, displayname, camfrogUsername, points_balance FROM users WHERE camfrogUsername = ?",
+      [camfrogUsername]
+    );
+    if (results.length > 0) {
+      res.json({ user: results[0] });
+    } else {
+      res.status(404).json({ message: "User not found" });
+    }
+  } catch (error) {
+    console.error("Error finding Camfrog user:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
 
 // HTTP post endpoint to shop
 app.post("/shop", addUser, async (req, res) => {
