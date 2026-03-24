@@ -1770,6 +1770,19 @@ app.get("/api/prizes", async (req, res) => {
   }
 });
 
+// HTTP GET endpoint to get top balances (JSON)
+app.get("/api/rankings/top", async (req, res) => {
+  const limit = parseInt(req.query.limit) || 5;
+  const sql = `SELECT username, displayname, points_balance FROM users ORDER BY points_balance DESC LIMIT ?`;
+  try {
+    const users = await getQuery(sql, [limit]);
+    res.json({ users });
+  } catch (error) {
+    console.error("Database error:", error);
+    res.status(500).json({ error: "Failed to fetch rankings" });
+  }
+});
+
 // HTTP GET endpoint to get user balance
 app.get("/api/u/:username/balance", getUserBalance);
 
