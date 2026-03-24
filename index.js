@@ -1476,6 +1476,21 @@ app.post(
   updateCamfrogUsername
 );
 
+// Zero out a user's balance (for account merging)
+app.post("/api/users/zero-balance", async (req, res) => {
+  const { userId, password } = req.body;
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).send("Access denied");
+  }
+  try {
+    await runQuery("UPDATE users SET points_balance = 0 WHERE userId = ?", [userId]);
+    res.json({ message: "Balance zeroed" });
+  } catch (error) {
+    console.error("Error zeroing balance:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // Lookup user by Camfrog username
 app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   const { camfrogUsername } = req.params;
