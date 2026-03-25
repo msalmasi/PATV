@@ -1094,7 +1094,7 @@ app.get("/api/users/twitch/displayname/:displayName", async (req, res) => {
 app.get('/api/users/username/:username', async (req, res) => {
     const { username } = req.params;
     try {
-      const user = await getQuery('SELECT username FROM users WHERE username = ?', [username]);
+      const user = await getQuery('SELECT username FROM users WHERE LOWER(username) = LOWER(?)', [username]);
       if (user && user.length > 0) {
         res.json({ exists: true });
       } else {
@@ -1110,7 +1110,7 @@ app.get('/api/users/username/:username', async (req, res) => {
 app.post('/api/users/twitch/register', async (req, res) => {
     const { username, displayname, email, twitchId, profileImage, twitchDisplayname, avatar, points_balance } = req.body;
     const userId = uuidv4();
-  
+
     try {
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
@@ -1496,7 +1496,7 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   const { camfrogUsername } = req.params;
   try {
     const results = await getQuery(
-      "SELECT userId, username, displayname, camfrogUsername, points_balance FROM users WHERE camfrogUsername = ?",
+      "SELECT userId, username, displayname, camfrogUsername, points_balance, xp, level FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
       [camfrogUsername]
     );
     if (results.length > 0) {
@@ -1507,6 +1507,25 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   } catch (error) {
     console.error("Error finding Camfrog user:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// This endpoint creates a new Camfrog user
+app.post('/api/users/camfrog/register', async (req, res) => {
+  const { username, displayname, email, password, camfrogUsername, avatar, points_balance } = req.body;
+  const userId = uuidv4();
+
+  try {
+    await runQuery(
+      'INSERT INTO users (userId, username, displayname, email, password, camfrogUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [userId, username, displayname, email, password, camfrogUsername, avatar, points_balance || 50000]
+    );
+    const newUserBadgeId = 'fresh_meat';
+    await awardBadge(userId, newUserBadgeId);
+    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: points_balance || 50000 } });
+  } catch (error) {
+    console.error('Error creating Camfrog user:', error.message);
+    res.status(500).json({ error: 'Failed to create new user' });
   }
 });
 
@@ -2422,7 +2441,7 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
     );
 
     if (pendingSpin.length) {
-      return res.status(400).send("Free spin in progress.");
+      return res.status(400).send("Spin in progress.");
     }
 
     const stalledSpin = await getQuery(
@@ -2538,7 +2557,7 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
     );
 
     if (pendingSpin.length) {
-      return res.status(400).send("Free spin in progress.");
+      return res.status(400).send("Spin in progress.");
     }
 
     const stalledSpin = await getQuery(
