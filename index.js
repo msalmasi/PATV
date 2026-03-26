@@ -3638,7 +3638,7 @@ app.get("/api/stats/spins", async (req, res) => {
               SUM(CASE WHEN ws.result LIKE '%JACKPOT%' THEN 1 ELSE 0 END) as jackpot_count
        FROM wheel_spins ws
        JOIN users u ON ws.userId = u.userId
-       WHERE ws.type = 'public' AND ws.result NOT IN ('PENDING','INTENT')${sinceClause}${userClause}
+       WHERE ws.result NOT IN ('PENDING','INTENT')${sinceClause}${userClause}
        GROUP BY ws.userId`,
       params
     );
