@@ -2977,7 +2977,7 @@ const refundUser = (userId, spinId) => {
 
           db.run(
             updateJackpot,
-            [jackpotId, spinId, userId, -100],
+            [jackpotId, spinId, userId, -500],
             function (err) {
               if (err) {
                 console.error("Error updating jackpot rakes:", err);
@@ -3587,75 +3587,148 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
-// Spin stats: top winners by total PAT won
-// Query params: limit, since (ISO date or "today"/"week"/"month"), user (username)
+// Helper: parse "since" query param into a Date
+function parseSince(s) {
+  if (!s) return null;
+  s = s.toLowerCase();
+  if (s === "today") { const d = new Date(); d.setHours(0,0,0,0); return d; }
+  if (s === "week") return new Date(Date.now() - 7 * 86400000);
+  if (s === "month") return new Date(Date.now() - 30 * 86400000);
+  if (s === "year") return new Date(Date.now() - 365 * 86400000);
+  if (s.endsWith("h")) { const h = parseInt(s); if (!isNaN(h)) return new Date(Date.now() - h * 3600000); }
+  if (s.endsWith("d")) { const d = parseInt(s); if (!isNaN(d)) return new Date(Date.now() - d * 86400000); }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Spin stats: top winners by total PAT won (includes jackpot winnings)
+// Query params: limit, since, user
 app.get("/api/stats/spins", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 15;
     const user = req.query.user;
+    const sinceDate = parseSince(req.query.since);
     let sinceClause = "";
+    let sinceTxClause = "";
     const params = [];
+    const txParams = [];
 
-    // Time filtering
-    if (req.query.since) {
-      let sinceDate;
-      const s = req.query.since.toLowerCase();
-      if (s === "today") {
-        sinceDate = new Date();
-        sinceDate.setHours(0, 0, 0, 0);
-      } else if (s === "week") {
-        sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - 7);
-      } else if (s === "month") {
-        sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - 30);
-      } else if (s === "year") {
-        sinceDate = new Date();
-        sinceDate.setFullYear(sinceDate.getFullYear() - 1);
-      } else if (s.endsWith("h")) {
-        const hours = parseInt(s);
-        if (!isNaN(hours)) {
-          sinceDate = new Date(Date.now() - hours * 3600000);
-        }
-      } else if (s.endsWith("d")) {
-        const days = parseInt(s);
-        if (!isNaN(days)) {
-          sinceDate = new Date(Date.now() - days * 86400000);
-        }
-      } else {
-        sinceDate = new Date(s);
-      }
-      if (sinceDate && !isNaN(sinceDate.getTime())) {
-        sinceClause = " AND ws.timestamp >= ?";
-        params.push(sinceDate.toISOString());
-      }
+    if (sinceDate) {
+      sinceClause = " AND ws.timestamp >= ?";
+      sinceTxClause = " AND t.timestamp >= ?";
+      params.push(sinceDate.toISOString());
+      txParams.push(sinceDate.toISOString());
     }
 
-    // User filtering
     let userClause = "";
+    let userTxClause = "";
     if (user) {
       userClause = " AND u.username = ? COLLATE NOCASE";
+      userTxClause = " AND u.username = ? COLLATE NOCASE";
       params.push(user);
+      txParams.push(user);
     }
 
-    params.push(limit);
-    const rows = await getQuery(
-      `SELECT u.username,
+    // Get regular spin winnings (non-jackpot)
+    const spinRows = await getQuery(
+      `SELECT u.username, ws.userId,
               COUNT(ws.spinId) as total_spins,
-              SUM(CASE WHEN ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as total_won,
-              MAX(CASE WHEN ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as biggest_win
+              SUM(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as regular_won,
+              MAX(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as biggest_regular,
+              SUM(CASE WHEN ws.result LIKE '%JACKPOT%' THEN 1 ELSE 0 END) as jackpot_count
        FROM wheel_spins ws
        JOIN users u ON ws.userId = u.userId
        WHERE ws.type = 'public' AND ws.result NOT IN ('PENDING','INTENT')${sinceClause}${userClause}
        GROUP BY ws.userId
-       ORDER BY total_won DESC
+       ORDER BY regular_won DESC
        LIMIT ?`,
-      params
+      [...params, limit]
     );
-    res.json(rows);
+
+    // Get jackpot winnings from transactions table
+    const jackpotRows = await getQuery(
+      `SELECT u.username, SUM(t.points) as jackpot_won, MAX(t.points) as biggest_jackpot
+       FROM transactions t
+       JOIN users u ON t.userId = u.userId
+       WHERE t.type = 'Jackpot Win'${sinceTxClause}${userTxClause}
+       GROUP BY t.userId`,
+      txParams
+    );
+    const jackpotMap = {};
+    for (const jr of jackpotRows) {
+      jackpotMap[jr.username] = { won: jr.jackpot_won || 0, biggest: jr.biggest_jackpot || 0 };
+    }
+
+    // Merge results
+    const results = spinRows.map(r => {
+      const jp = jackpotMap[r.username] || { won: 0, biggest: 0 };
+      const total_won = (r.regular_won || 0) + jp.won;
+      const wager_cost = (r.total_spins || 0) * 5000;
+      const net_profit = total_won - wager_cost;
+      return {
+        username: r.username,
+        total_spins: r.total_spins,
+        regular_won: r.regular_won || 0,
+        jackpot_won: jp.won,
+        jackpot_count: r.jackpot_count || 0,
+        total_won,
+        wager_cost,
+        net_profit,
+        biggest_win: Math.max(r.biggest_regular || 0, jp.biggest),
+      };
+    });
+
+    // Re-sort by total_won (including jackpots)
+    results.sort((a, b) => b.total_won - a.total_won);
+    res.json(results);
   } catch (error) {
     console.error("Spin stats error:", error);
     res.status(500).json({ error: "Failed to fetch spin stats" });
+  }
+});
+
+// Jackpot history
+app.get("/api/stats/jackpots", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const sinceDate = parseSince(req.query.since);
+    let sinceClause = "";
+    const params = [];
+
+    if (sinceDate) {
+      sinceClause = " AND t.timestamp >= ?";
+      params.push(sinceDate.toISOString());
+    }
+
+    params.push(limit);
+    const rows = await getQuery(
+      `SELECT u.username, t.points as amount, t.timestamp
+       FROM transactions t
+       JOIN users u ON t.userId = u.userId
+       WHERE t.type = 'Jackpot Win'${sinceClause}
+       ORDER BY t.timestamp DESC
+       LIMIT ?`,
+      params
+    );
+
+    // Current jackpot pot
+    const potRow = await getQuery(`SELECT SUM(amount) as pot FROM jackpot_rakes`);
+    const currentPot = potRow[0]?.pot || 0;
+
+    // Total jackpots hit
+    const countRow = await getQuery(
+      `SELECT COUNT(*) as count FROM transactions WHERE type = 'Jackpot Win'${sinceClause}`,
+      sinceDate ? [sinceDate.toISOString()] : []
+    );
+
+    res.json({
+      current_pot: currentPot,
+      total_jackpots: countRow[0]?.count || 0,
+      recent: rows
+    });
+  } catch (error) {
+    console.error("Jackpot stats error:", error);
+    res.status(500).json({ error: "Failed to fetch jackpot stats" });
   }
 });
 
