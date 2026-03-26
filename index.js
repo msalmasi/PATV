@@ -3633,8 +3633,9 @@ app.get("/api/stats/spins", async (req, res) => {
     const spinRows = await getQuery(
       `SELECT u.username, ws.userId,
               COUNT(ws.spinId) as total_spins,
-              SUM(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as regular_won,
-              MAX(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as biggest_regular,
+              SUM(CASE WHEN ws.result = 'FAILED' THEN 1 ELSE 0 END) as failed_spins,
+              SUM(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT','FAILED') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as regular_won,
+              MAX(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT','FAILED') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as biggest_regular,
               SUM(CASE WHEN ws.result LIKE '%JACKPOT%' THEN 1 ELSE 0 END) as jackpot_count
        FROM wheel_spins ws
        JOIN users u ON ws.userId = u.userId
@@ -3661,7 +3662,8 @@ app.get("/api/stats/spins", async (req, res) => {
     const results = spinRows.map(r => {
       const jp = jackpotMap[r.username] || { won: 0, biggest: 0 };
       const total_won = (r.regular_won || 0) + jp.won;
-      const wager_cost = (r.total_spins || 0) * 5000;
+      const paid_spins = (r.total_spins || 0) - (r.failed_spins || 0);  // FAILED spins are refunded
+      const wager_cost = paid_spins * 5000;
       const net_profit = total_won - wager_cost;
       return {
         username: r.username,
