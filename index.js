@@ -3629,7 +3629,7 @@ app.get("/api/stats/spins", async (req, res) => {
       txParams.push(user);
     }
 
-    // Get regular spin winnings (non-jackpot)
+    // Get ALL spin data (no limit in SQL — we limit after merging with jackpots)
     const spinRows = await getQuery(
       `SELECT u.username, ws.userId,
               COUNT(ws.spinId) as total_spins,
@@ -3639,10 +3639,8 @@ app.get("/api/stats/spins", async (req, res) => {
        FROM wheel_spins ws
        JOIN users u ON ws.userId = u.userId
        WHERE ws.type = 'public' AND ws.result NOT IN ('PENDING','INTENT')${sinceClause}${userClause}
-       GROUP BY ws.userId
-       ORDER BY regular_won DESC
-       LIMIT ?`,
-      [...params, limit]
+       GROUP BY ws.userId`,
+      params
     );
 
     // Get jackpot winnings from transactions table
@@ -3678,9 +3676,9 @@ app.get("/api/stats/spins", async (req, res) => {
       };
     });
 
-    // Re-sort by total_won (including jackpots)
+    // Sort by total_won (including jackpots) and THEN limit
     results.sort((a, b) => b.total_won - a.total_won);
-    res.json(results);
+    res.json(results.slice(0, limit));
   } catch (error) {
     console.error("Spin stats error:", error);
     res.status(500).json({ error: "Failed to fetch spin stats" });
