@@ -191,7 +191,8 @@ function determineSpinResult(wheelSpinner, spinId) {
       .then(response => response.json())
       .then(data => {
           console.log('Server response:', data.message);
-          // Additional actions based on response can be handled here
+          // Refresh jackpot display after spin result is recorded
+          fetchJackpotTotal();
       })
       .catch(error => {
           console.error('Error sending spin result:', error);
