@@ -161,6 +161,9 @@ function fetchJackpotTotal() {
 
 fetchJackpotTotal()
 
+// Auto-refresh jackpot every 5 seconds
+setInterval(fetchJackpotTotal, 5000);
+
 // Logic for the winning result.
 function determineSpinResult(wheelSpinner, spinId) {
   console.log("Determining results for:", wheelSpinner, spinId);
