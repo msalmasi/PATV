@@ -2615,8 +2615,7 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
       }
   
       const pendingSpin = await getQuery(
-        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' AND userId = ? ORDER BY rowid DESC LIMIT 1;`,
-        [user[0].userId]
+        `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' ORDER BY rowid DESC LIMIT 1;`
       );
   
       if (pendingSpin.length) {
