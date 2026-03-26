@@ -3570,6 +3570,135 @@ async function cleanUpOldGames() {
 // Run cleanup every hour (3600000 ms)
 setInterval(cleanUpOldGames, 3600000);  // Run cleanup every 1 hour
 
+// ─── Bot Stats API ───
+
+// Leaderboard: top balances
+app.get("/api/leaderboard", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 15;
+    const rows = await getQuery(
+      `SELECT username, points_balance, xp, level FROM users WHERE points_balance > 0 ORDER BY points_balance DESC LIMIT ?`,
+      [limit]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+// Spin stats: top winners by total PAT won
+// Query params: limit, since (ISO date or "today"/"week"/"month"), user (username)
+app.get("/api/stats/spins", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 15;
+    const user = req.query.user;
+    let sinceClause = "";
+    const params = [];
+
+    // Time filtering
+    if (req.query.since) {
+      let sinceDate;
+      const s = req.query.since.toLowerCase();
+      if (s === "today") {
+        sinceDate = new Date();
+        sinceDate.setHours(0, 0, 0, 0);
+      } else if (s === "week") {
+        sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - 7);
+      } else if (s === "month") {
+        sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - 30);
+      } else if (s === "year") {
+        sinceDate = new Date();
+        sinceDate.setFullYear(sinceDate.getFullYear() - 1);
+      } else if (s.endsWith("h")) {
+        const hours = parseInt(s);
+        if (!isNaN(hours)) {
+          sinceDate = new Date(Date.now() - hours * 3600000);
+        }
+      } else if (s.endsWith("d")) {
+        const days = parseInt(s);
+        if (!isNaN(days)) {
+          sinceDate = new Date(Date.now() - days * 86400000);
+        }
+      } else {
+        sinceDate = new Date(s);
+      }
+      if (sinceDate && !isNaN(sinceDate.getTime())) {
+        sinceClause = " AND ws.timestamp >= ?";
+        params.push(sinceDate.toISOString());
+      }
+    }
+
+    // User filtering
+    let userClause = "";
+    if (user) {
+      userClause = " AND u.username = ? COLLATE NOCASE";
+      params.push(user);
+    }
+
+    params.push(limit);
+    const rows = await getQuery(
+      `SELECT u.username,
+              COUNT(ws.spinId) as total_spins,
+              SUM(CASE WHEN ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as total_won,
+              MAX(CASE WHEN ws.result NOT IN ('PENDING','INTENT') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as biggest_win
+       FROM wheel_spins ws
+       JOIN users u ON ws.userId = u.userId
+       WHERE ws.type = 'public' AND ws.result NOT IN ('PENDING','INTENT')${sinceClause}${userClause}
+       GROUP BY ws.userId
+       ORDER BY total_won DESC
+       LIMIT ?`,
+      params
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("Spin stats error:", error);
+    res.status(500).json({ error: "Failed to fetch spin stats" });
+  }
+});
+
+// User spin history
+app.get("/api/stats/spins/:username", async (req, res) => {
+  try {
+    const username = req.params.username;
+    const user = await getQuery(`SELECT userId FROM users WHERE username = ? COLLATE NOCASE`, [username]);
+    if (!user.length) return res.status(404).json({ error: "User not found" });
+
+    const rows = await getQuery(
+      `SELECT ws.result, ws.timestamp
+       FROM wheel_spins ws
+       WHERE ws.userId = ? AND ws.type = 'public' AND ws.result NOT IN ('PENDING','INTENT')
+       ORDER BY ws.timestamp DESC
+       LIMIT 50`,
+      [user[0].userId]
+    );
+    const total_spins = rows.length;
+    const total_won = rows.reduce((sum, r) => sum + parseInt(r.result || 0), 0);
+    const biggest = Math.max(...rows.map(r => parseInt(r.result || 0)), 0);
+    res.json({ username, total_spins, total_won, biggest_win: biggest, recent: rows.slice(0, 10) });
+  } catch (error) {
+    console.error("User spin stats error:", error);
+    res.status(500).json({ error: "Failed to fetch user spin stats" });
+  }
+});
+
+// XP leaderboard
+app.get("/api/stats/xp", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 15;
+    const rows = await getQuery(
+      `SELECT username, xp, level FROM users WHERE xp > 0 ORDER BY xp DESC LIMIT ?`,
+      [limit]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error("XP stats error:", error);
+    res.status(500).json({ error: "Failed to fetch XP stats" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port   ${port}`);
 });
