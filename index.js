@@ -1808,6 +1808,31 @@ app.get("/api/u/:username/balance", getUserBalance);
 // HTTP GET endpoint to get user balance
 app.get("/api/u/:username/level", getUserLevel);
 
+// HTTP GET endpoint to get user transaction history
+app.get("/api/u/:username/transactions", async (req, res) => {
+  const { username } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+  try {
+    // Find user by username or camfrogUsername (case-insensitive)
+    const userRows = await getQuery(
+      "SELECT userId FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?)",
+      [username, username]
+    );
+    if (!userRows || userRows.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    const userId = userRows[0].userId;
+    const transactions = await getQuery(
+      "SELECT type, points, timestamp FROM transactions WHERE userId = ? ORDER BY timestamp DESC LIMIT ?",
+      [userId, limit]
+    );
+    res.json({ transactions });
+  } catch (err) {
+    console.error("Transaction history error:", err);
+    res.status(500).json({ error: "Failed to fetch transactions" });
+  }
+});
+
 // HTTP GET endpoint to retrieve the jackpot total.
 app.get("/api/jackpot", getJackpotTotal);
 
