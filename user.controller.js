@@ -43,7 +43,7 @@ async function registerUser(req, res) {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 12);
-    const sqlCheckUser = "SELECT * FROM users WHERE username = ? OR email = ?";
+    const sqlCheckUser = "SELECT * FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)";
     const user = await getQuery(sqlCheckUser, [username, email]);
 
     if (user.length > 0) {
