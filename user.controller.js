@@ -386,9 +386,9 @@ async function updateCamfrogUsername(req, res) {
     );
 
     if (claimed.length > 0) {
-      req.flash('error', `Warning: "${camfrogUsername}" is currently linked to account "${claimed[0].username}". Verifying with the code below will unlink it from that account and move it to yours. Type in the Camfrog room: !verify ${code} (expires in 15 minutes)`);
+      req.flash('error', `Warning: "${camfrogUsername}" is currently linked to account "${claimed[0].username}". Verifying will unlink it from that account and move it to yours. !verify ${code}`);
     } else {
-      req.flash('success', `To verify ownership of "${camfrogUsername}", type this in the Camfrog room: !verify ${code} (expires in 15 minutes)`);
+      req.flash('success', `Verify ownership of "${camfrogUsername}" to complete the link. !verify ${code}`);
     }
   } catch (err) {
     console.error('[CF-LINK] Initiate error:', err);
@@ -402,7 +402,7 @@ async function updateCamfrogUsername(req, res) {
 // Verifies the chat author's username matches the pending link, then completes it.
 async function verifyCamfrogLink(req, res) {
   const { code, camfrogUsername, password } = req.body;
-  if (password !== process.env.BOT_TOKEN) {
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
     return res.status(403).json({ error: 'Invalid bot token' });
   }
   if (!code || !camfrogUsername) {

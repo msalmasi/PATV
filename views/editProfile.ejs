@@ -2,11 +2,102 @@
 <%- include('layout', { title: `${username} Profile Editor`, user: username}) %>
 <body>
     <div class="profile-container">
-        <% if (errors != "") { %>
-            <div class="alert alert-danger"><br><br><%= errors %></div>
-        <% } %>
-        <% if (success != "") { %>
-            <div class="alert alert-success"><br><br><%= success %></div>
+        <%
+          // Detect a verification message and parse out the code for prominent display
+          function parseVerify(msg) {
+            const m = String(msg).match(/!verify (\w+)/);
+            return m ? { code: m[1], full: msg } : null;
+          }
+          const verifyInfo = (errors && parseVerify(errors)) || (success && parseVerify(success));
+        %>
+        <% if (verifyInfo) { %>
+            <div class="verify-box">
+                <div class="verify-header">⚠ Verify Your Camfrog Username</div>
+                <div class="verify-msg"><%= (errors || success).replace(/!verify \w+.*/, '').trim() %></div>
+                <div class="verify-instructions">Type this in the Camfrog room:</div>
+                <div class="verify-code-wrap">
+                    <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
+                    <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',2000);">Copy</button>
+                </div>
+                <div class="verify-expires">⏱ Code expires in 15 minutes</div>
+            </div>
+            <style>
+                .verify-box {
+                    background: linear-gradient(135deg, #1a2f1a, #0f1f0f);
+                    border: 2px solid #4CAF50;
+                    border-radius: 12px;
+                    padding: 24px;
+                    margin: 20px 0;
+                    box-shadow: 0 0 24px rgba(76,175,80,0.3);
+                    animation: pulse-border 2s ease-in-out infinite;
+                }
+                @keyframes pulse-border {
+                    0%, 100% { box-shadow: 0 0 24px rgba(76,175,80,0.3); }
+                    50% { box-shadow: 0 0 36px rgba(76,175,80,0.6); }
+                }
+                .verify-header {
+                    font-size: 1.4rem;
+                    font-weight: 700;
+                    color: #FFD54F;
+                    margin-bottom: 12px;
+                }
+                .verify-msg {
+                    color: #b0b0b0;
+                    font-size: 0.95rem;
+                    margin-bottom: 16px;
+                    line-height: 1.4;
+                }
+                .verify-instructions {
+                    color: #ddd;
+                    font-size: 0.9rem;
+                    margin-bottom: 8px;
+                }
+                .verify-code-wrap {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    background: #0a0f0a;
+                    padding: 14px 18px;
+                    border-radius: 8px;
+                    border: 1px solid #2a4a2a;
+                }
+                .verify-cmd {
+                    font-family: 'Courier New', monospace;
+                    font-size: 1.2rem;
+                    color: #fff;
+                    flex: 1;
+                }
+                .verify-code {
+                    color: #4CAF50;
+                    font-weight: 700;
+                    font-size: 1.4rem;
+                    letter-spacing: 2px;
+                }
+                .verify-copy {
+                    background: #4CAF50;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 600;
+                    font-size: 0.9rem;
+                }
+                .verify-copy:hover { background: #45a049; }
+                .verify-expires {
+                    color: #888;
+                    font-size: 0.8rem;
+                    margin-top: 12px;
+                    text-align: right;
+                }
+            </style>
+        <% } else { %>
+            <% if (errors != "") { %>
+                <div class="alert alert-danger"><br><br><%= errors %></div>
+            <% } %>
+            <% if (success != "") { %>
+                <div class="alert alert-success"><br><br><%= success %></div>
+            <% } %>
         <% } %>
         <h1>Edit Profile</h1>
 
