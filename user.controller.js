@@ -280,14 +280,179 @@ async function updateTwitchId(req, res) {
   res.redirect(`/u/${username}/profile/edit`);
 };
 
-// Update camfrog username
+// Internal helper: complete the camfrog link.
+// Handles three cases:
+//   1. CF-prefixed auto account with this camfrog username → merge balance + delete it
+//   2. Another non-CF account already claims this camfrog username → unlink it (no merge, it's a different user's account)
+//   3. No existing account → just set the link
+// Assumes ownership has been verified (via chat code).
+async function completeCamfrogLink(userId, camfrogUsername) {
+  const cfLower = camfrogUsername.toLowerCase().trim();
+
+  // Case 1: existing CF auto-account
+  const autoAccounts = await getQuery(
+    "SELECT userId, points_balance, xp, level, twitchBonus, twitchBonus_at, discordBonus, discordBonus_at, liked FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username LIKE 'CF%'",
+    [cfLower, userId]
+  );
+
+  // Case 2: existing non-CF account that has this camfrog username linked
+  const otherAccounts = await getQuery(
+    "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username NOT LIKE 'CF%'",
+    [cfLower, userId]
+  );
+
+  let unlinkedFrom = null;
+  if (otherAccounts.length > 0) {
+    const other = otherAccounts[0];
+    console.log(`[CF-RELINK] Unlinking camfrog "${cfLower}" from account ${other.username} (${other.userId})`);
+    await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [other.userId]);
+    unlinkedFrom = other.username;
+  }
+
+  if (autoAccounts.length > 0) {
+    const auto = autoAccounts[0];
+    const me = await getQuery('SELECT points_balance, xp, level FROM users WHERE userId = ?', [userId]);
+    const mergedBalance = (me[0]?.points_balance || 0) + (auto.points_balance || 0);
+    const mergedXp = (me[0]?.xp || 0) + (auto.xp || 0);
+    const mergedLevel = Math.max(me[0]?.level || 1, auto.level || 1);
+
+    console.log(`[CF-MERGE] Merging auto account ${auto.userId} into ${userId}: +PAT ${auto.points_balance}, +XP ${auto.xp}`);
+
+    await runQuery(
+      `UPDATE users SET
+        camfrogUsername = ?,
+        points_balance = ?,
+        xp = ?,
+        level = ?,
+        liked = COALESCE(liked, 0) + ?,
+        twitchBonus = CASE WHEN twitchBonus = 1 OR ? = 1 THEN 1 ELSE 0 END,
+        twitchBonus_at = COALESCE(twitchBonus_at, ?),
+        discordBonus = CASE WHEN discordBonus = 1 OR ? = 1 THEN 1 ELSE 0 END,
+        discordBonus_at = COALESCE(discordBonus_at, ?)
+      WHERE userId = ?`,
+      [cfLower, mergedBalance, mergedXp, mergedLevel, auto.liked || 0,
+       auto.twitchBonus, auto.twitchBonus_at, auto.discordBonus, auto.discordBonus_at, userId]
+    );
+
+    await runQuery('UPDATE transactions SET userId = ? WHERE userId = ?', [userId, auto.userId]);
+    await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
+
+    return { merged: true, addedBalance: auto.points_balance || 0, addedXp: auto.xp || 0, unlinkedFrom };
+  } else {
+    await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [cfLower, userId]);
+    return { merged: false, unlinkedFrom };
+  }
+}
+
+// Step 1: Initiate camfrog link — generates a verification code the user must type in chat.
+// Does NOT update camfrogUsername yet. Prevents account hijacking.
 async function updateCamfrogUsername(req, res) {
   const { camfrogUsername } = req.body;
   const userId = req.user.userId;
   const username = req.user.username;
-  await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [camfrogUsername, userId]);
-  req.flash('success', 'Camfrog username updated.');
+  const cfLower = (camfrogUsername || '').toLowerCase().trim();
+
+  // Empty string = unlink
+  if (!cfLower) {
+    await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [null, userId]);
+    req.flash('success', 'Camfrog username unlinked.');
+    return res.redirect(`/u/${username}/profile/edit`);
+  }
+
+  try {
+    // Check if the user is already linked to this same camfrog username — no-op
+    const me = await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]);
+    if (me[0]?.camfrogUsername && me[0].camfrogUsername.toLowerCase() === cfLower) {
+      req.flash('success', 'Camfrog username already linked.');
+      return res.redirect(`/u/${username}/profile/edit`);
+    }
+
+    // Check if another non-CF account already owns this camfrog username
+    const claimed = await getQuery(
+      "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ? AND username NOT LIKE 'CF%'",
+      [cfLower, userId]
+    );
+
+    // Clear any old pending verification for this user
+    await runQuery('DELETE FROM pending_camfrog_links WHERE userId = ?', [userId]);
+
+    // Generate a verification code: 6 random alphanumeric chars
+    const code = crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();  // 15 min
+
+    await runQuery(
+      'INSERT INTO pending_camfrog_links (code, userId, camfrogUsername, expires_at) VALUES (?, ?, ?, ?)',
+      [code, userId, cfLower, expiresAt]
+    );
+
+    if (claimed.length > 0) {
+      req.flash('error', `Warning: "${camfrogUsername}" is currently linked to account "${claimed[0].username}". Verifying with the code below will unlink it from that account and move it to yours. Type in the Camfrog room: !verify ${code} (expires in 15 minutes)`);
+    } else {
+      req.flash('success', `To verify ownership of "${camfrogUsername}", type this in the Camfrog room: !verify ${code} (expires in 15 minutes)`);
+    }
+  } catch (err) {
+    console.error('[CF-LINK] Initiate error:', err);
+    req.flash('error', 'Failed to initiate Camfrog link.');
+  }
   res.redirect(`/u/${username}/profile/edit`);
+};
+
+// Step 2: Bot calls this when a user types !verify CODE in Camfrog chat.
+// Body: { code, camfrogUsername (from chat author), password (bot token) }
+// Verifies the chat author's username matches the pending link, then completes it.
+async function verifyCamfrogLink(req, res) {
+  const { code, camfrogUsername, password } = req.body;
+  if (password !== process.env.BOT_TOKEN) {
+    return res.status(403).json({ error: 'Invalid bot token' });
+  }
+  if (!code || !camfrogUsername) {
+    return res.status(400).json({ error: 'Missing code or camfrogUsername' });
+  }
+
+  try {
+    const pending = await getQuery(
+      'SELECT userId, camfrogUsername, expires_at FROM pending_camfrog_links WHERE code = ?',
+      [code.toUpperCase()]
+    );
+    if (pending.length === 0) {
+      return res.status(404).json({ error: 'Invalid or expired verification code' });
+    }
+
+    const entry = pending[0];
+    if (new Date(entry.expires_at) < new Date()) {
+      await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code.toUpperCase()]);
+      return res.status(410).json({ error: 'Verification code expired' });
+    }
+
+    // Critical: confirm the chat author's username matches the username they claimed
+    if (entry.camfrogUsername.toLowerCase() !== camfrogUsername.toLowerCase()) {
+      return res.status(403).json({
+        error: `Code belongs to camfrog user "${entry.camfrogUsername}", not "${camfrogUsername}". Each user must verify their own link.`
+      });
+    }
+
+    // Complete the link with merge logic
+    const result = await completeCamfrogLink(entry.userId, entry.camfrogUsername);
+
+    // Clear the pending entry
+    await runQuery('DELETE FROM pending_camfrog_links WHERE code = ?', [code.toUpperCase()]);
+
+    // Get the website username for the response
+    const userRow = await getQuery('SELECT username FROM users WHERE userId = ?', [entry.userId]);
+
+    res.json({
+      success: true,
+      websiteUsername: userRow[0]?.username,
+      camfrogUsername: entry.camfrogUsername,
+      merged: result.merged,
+      addedBalance: result.addedBalance || 0,
+      addedXp: result.addedXp || 0,
+      unlinkedFrom: result.unlinkedFrom || null,
+    });
+  } catch (err) {
+    console.error('[CF-VERIFY] Error:', err);
+    res.status(500).json({ error: 'Verification failed' });
+  }
 };
 
 // Calculate XP for next level
@@ -419,6 +584,7 @@ module.exports = {
   updateDiscordId,
   updateTwitchId,
   updateCamfrogUsername,
+  verifyCamfrogLink,
   awardBadge,
   xpForNextLevel,
   updateLevel,

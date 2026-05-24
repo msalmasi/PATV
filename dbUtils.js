@@ -65,6 +65,21 @@ function createTables() {
         }
     });
 
+    db.run(`CREATE TABLE IF NOT EXISTS pending_camfrog_links (
+        code TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        camfrogUsername TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME NOT NULL,
+        FOREIGN KEY (userId) REFERENCES users(userId)
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table pending_camfrog_links', err);
+        } else {
+            console.log('Table pending_camfrog_links created or already exists.');
+        }
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS bonus_winners (
         bonusId TEXT PRIMARY KEY,
         type TEXT NOT NULL,

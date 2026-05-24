@@ -22,6 +22,7 @@ const {
   updateDiscordId,
   updateTwitchId,
   updateCamfrogUsername,
+  verifyCamfrogLink,
   awardBadge,
   xpForNextLevel,
   updateLevel,
@@ -1475,6 +1476,9 @@ app.post(
   addUser,
   updateCamfrogUsername
 );
+
+// Verify a pending Camfrog link — called by the bot when a user types !verify CODE
+app.post("/api/users/camfrog/verify", verifyCamfrogLink);
 
 // Zero out a user's balance (for account merging)
 app.post("/api/users/zero-balance", async (req, res) => {
