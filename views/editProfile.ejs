@@ -3,17 +3,25 @@
 <body>
     <div class="profile-container">
         <%
-          // Detect a verification message and parse out the code for prominent display
+          // Normalize flash message — could be string, array, or empty
+          function flashStr(v) {
+            if (!v) return '';
+            if (Array.isArray(v)) return v.join(' ');
+            return String(v);
+          }
+          const errStr = flashStr(errors);
+          const succStr = flashStr(success);
           function parseVerify(msg) {
-            const m = String(msg).match(/!verify (\w+)/);
+            const m = msg && msg.match(/!verify (\w+)/);
             return m ? { code: m[1], full: msg } : null;
           }
-          const verifyInfo = (errors && parseVerify(errors)) || (success && parseVerify(success));
+          const verifyInfo = parseVerify(errStr) || parseVerify(succStr);
+          const verifyMsgText = (errStr || succStr).replace(/!verify \w+.*/, '').trim();
         %>
         <% if (verifyInfo) { %>
             <div class="verify-box">
                 <div class="verify-header">⚠ Verify Your Camfrog Username</div>
-                <div class="verify-msg"><%= (errors || success).replace(/!verify \w+.*/, '').trim() %></div>
+                <div class="verify-msg"><%= verifyMsgText %></div>
                 <div class="verify-instructions">Type this in the Camfrog room:</div>
                 <div class="verify-code-wrap">
                     <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
@@ -92,11 +100,11 @@
                 }
             </style>
         <% } else { %>
-            <% if (errors != "") { %>
-                <div class="alert alert-danger"><br><br><%= errors %></div>
+            <% if (errStr) { %>
+                <div class="alert alert-danger"><br><br><%= errStr %></div>
             <% } %>
-            <% if (success != "") { %>
-                <div class="alert alert-success"><br><br><%= success %></div>
+            <% if (succStr) { %>
+                <div class="alert alert-success"><br><br><%= succStr %></div>
             <% } %>
         <% } %>
         <h1>Edit Profile</h1>
