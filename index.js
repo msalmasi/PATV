@@ -983,9 +983,23 @@ app.get("/rankings", addUser, async (req, res) => {
         LIMIT 100
     `;
 
+  // Recent jackpot winners
+  const jackpotSql = `
+        SELECT u.username, u.displayname, t.points AS amount, t.timestamp
+        FROM transactions t
+        JOIN users u ON t.userId = u.userId
+        WHERE t.type = 'Jackpot Win'
+        ORDER BY t.timestamp DESC
+        LIMIT 50
+    `;
+
   try {
-    const users = await getQuery(sql); // Adjust getQuery to handle multiple rows if needed
-    res.render("leaderboard", { user: username, users });
+    const users = await getQuery(sql);
+    const jackpots = await getQuery(jackpotSql);
+    // Current jackpot pot total
+    const potRow = await getQuery(`SELECT SUM(amount) AS pot FROM jackpot_rakes`);
+    const currentPot = (potRow[0] && potRow[0].pot) || 0;
+    res.render("leaderboard", { user: username, users, jackpots, currentPot });
   } catch (error) {
     console.error("Database error:", error);
     res.status(500).send("Failed to fetch rankings.");

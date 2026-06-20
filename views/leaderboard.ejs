@@ -4,23 +4,98 @@
     <link rel="stylesheet" href="/public/css/leaderboard.css"> <!-- Path to your CSS file -->
 <body>
     <h1>Leaderboard</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Rank</th>
-                <th>Username</th>
-                <th>Points</th>
-            </tr>
-        </thead>
-        <tbody>
-            <% users.forEach((user, index) => { %>
+
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="points" onclick="showTab('points')">TOP BALANCES</button>
+        <button class="tab-btn" data-tab="jackpots" onclick="showTab('jackpots')">JACKPOTS</button>
+    </div>
+
+    <!-- TOP BALANCES TAB -->
+    <div id="tab-points" class="tab-content active">
+        <table>
+            <thead>
                 <tr>
-                    <td><%= index + 1 %></td>
-                    <td><a href="/u/<%= user.username %>/profile" class="leaderboardLink"><%= user.displayname %></a></td>
-                    <td><%= user.points_balance.toLocaleString() %></td> <!-- Formatting numbers with commas -->
+                    <th>Rank</th>
+                    <th>Username</th>
+                    <th>Points</th>
                 </tr>
-            <% }); %>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <% users.forEach((u, index) => { %>
+                    <tr>
+                        <td><%= index + 1 %></td>
+                        <td><a href="/u/<%= u.username %>/profile" class="leaderboardLink"><%= u.displayname %></a></td>
+                        <td><%= u.points_balance.toLocaleString() %></td>
+                    </tr>
+                <% }); %>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- JACKPOTS TAB -->
+    <div id="tab-jackpots" class="tab-content">
+        <p class="pot-banner">Current Pot: <%= (typeof currentPot !== 'undefined' ? currentPot : 0).toLocaleString() %></p>
+        <% if (!jackpots || jackpots.length === 0) { %>
+            <p class="empty-msg">No jackpots have been won yet. Be the first!</p>
+        <% } else { %>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Winner</th>
+                        <th>Amount</th>
+                        <th>When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% jackpots.forEach((j, index) => { %>
+                        <tr>
+                            <td><%= index + 1 %></td>
+                            <td><a href="/u/<%= j.username %>/profile" class="leaderboardLink"><%= j.displayname || j.username %></a></td>
+                            <td class="jackpot-amount"><%= (j.amount || 0).toLocaleString() %></td>
+                            <td class="jackpot-time" data-ts="<%= j.timestamp %>"><%= j.timestamp %></td>
+                        </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        <% } %>
+    </div>
+
+    <script>
+        function showTab(name) {
+            document.querySelectorAll('.tab-content').forEach(function(el) {
+                el.classList.toggle('active', el.id === 'tab-' + name);
+            });
+            document.querySelectorAll('.tab-btn').forEach(function(btn) {
+                btn.classList.toggle('active', btn.dataset.tab === name);
+            });
+            // Remember last tab
+            try { localStorage.setItem('rankingsTab', name); } catch (e) {}
+        }
+
+        // Render relative timestamps for jackpots
+        (function() {
+            function relTime(ts) {
+                if (!ts) return '';
+                // SQLite timestamps are UTC ("YYYY-MM-DD HH:MM:SS")
+                var d = new Date(ts.replace(' ', 'T') + 'Z');
+                if (isNaN(d)) return ts;
+                var secs = Math.floor((Date.now() - d.getTime()) / 1000);
+                if (secs < 60) return secs + 's ago';
+                if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+                if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+                if (secs < 2592000) return Math.floor(secs / 86400) + 'd ago';
+                return d.toLocaleDateString();
+            }
+            document.querySelectorAll('.jackpot-time').forEach(function(el) {
+                el.textContent = relTime(el.dataset.ts);
+            });
+            // Restore last-viewed tab
+            try {
+                var saved = localStorage.getItem('rankingsTab');
+                if (saved) showTab(saved);
+            } catch (e) {}
+        })();
+    </script>
 </body>
 </html>
