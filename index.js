@@ -3048,6 +3048,24 @@ const refundUser = (userId, spinId) => {
 // setInterval(checkAndResolvePendingSpins, 5000);
 
 // HTTP POST endpoint to record the result of a public wheel spin.
+// ── Jackpot odds config ──
+// The jackpot rate is gated by a secondary server-side roll so we can tune it
+// independently of the visual wheel slice (which can't be shrunk below a landable size).
+// The jackpot slice is landed on ~1 in 467 spins (slice weight 0.05 / total weight 23.35).
+// Overall jackpot odds = sliceOdds / targetOdds  =>  ~1 in 5000 spins (~weekly at current volume).
+const JACKPOT_TARGET_ODDS = 5000;   // tune this to make the jackpot more/less frequent
+const JACKPOT_SLICE_ODDS = 467;     // ~1 in N spins land on the visual jackpot slice
+const JACKPOT_CONFIRM_CHANCE = JACKPOT_SLICE_ODDS / JACKPOT_TARGET_ODDS; // ~0.0934
+// Near-miss consolation = the largest wheel prize.
+// Largest base prize 50000 * multiplier 1.2 = 60000  =>  consolation 60000.
+// Keep SPIN_MULTIPLIER / LARGEST_BASE_PRIZE in sync with public/publicwheel.js + public/script.js.
+const SPIN_MULTIPLIER = 1 + (20 * 0.01);
+const LARGEST_BASE_PRIZE = 50000;
+const JACKPOT_CONSOLATION = Math.round(LARGEST_BASE_PRIZE * SPIN_MULTIPLIER);
+// Minimum jackpot floor — after a jackpot is won, the pot resets to this instead of 0.
+// Kept above the consolation so winning the jackpot is always worth more than a near miss.
+const JACKPOT_MINIMUM = 100000;
+
 app.post("/api/g/wheel/spin/result", (req, res) => {
   const { spinId, result } = req.body;
   const transactionType = "Reward: Public Spin";
@@ -3072,8 +3090,8 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
           if (row) {
             console.log("UserId found:", row.userId);
             userId = row.userId;
-            if (result.includes("JACKPOT") === true) {
-              // Check if there is a JACKPOT.
+            if (result.includes("JACKPOT") === true && Math.random() < JACKPOT_CONFIRM_CHANCE) {
+              // JACKPOT CONFIRMED (secondary roll passed) — pay the full pot.
               db.get(
                 "SELECT SUM(amount) AS total FROM jackpot_rakes",
                 (err, row) => {
@@ -3087,7 +3105,7 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                     [userId]
                   );
 
-                  // Clear the Jackpot.
+                  // Clear the Jackpot, then re-seed to the minimum floor.
                   db.run(
                     `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
                     [uuidv4(), spinId, userId, -jackpotTotal],
@@ -3098,6 +3116,11 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                           .json({ error: "Failed to create spin record" });
                       }
                     }
+                  );
+                  // Seed the pot back up to the minimum jackpot floor.
+                  db.run(
+                    `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
+                    [uuidv4(), spinId, userId, JACKPOT_MINIMUM]
                   );
 
                   // Log the transaction.
@@ -3112,14 +3135,44 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                       }
                       xp = jackpotTotal * 0.005;
                       const levelUpInfo = await updateLevel(userId, xp);
-                      sendEvent("results", spinId, { result: jackpotTotal, xp: xp, levelUp: levelUpInfo });
+                      sendEvent("results", spinId, { result: jackpotTotal, xp: xp, levelUp: levelUpInfo, jackpot: true });
                       res.status(200).json({
                         transactionId: transactionId,
                         result: jackpotTotal,
+                        jackpot: true,
                         levelUp: levelUpInfo
                       });
                     }
                   );
+                }
+              );
+            } else if (result.includes("JACKPOT") === true) {
+              // JACKPOT NEAR MISS (landed on the slice but secondary roll failed).
+              // Award a consolation = 2x the largest wheel prize so it feels like a bonus, not a bust.
+              const consolation = JACKPOT_CONSOLATION;
+              db.run(
+                `UPDATE users SET points_balance = points_balance + ${consolation} WHERE userId = ?`,
+                [userId]
+              );
+              db.run(
+                "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+                [transactionId, userId, "Jackpot Near Miss", consolation],
+                async (err) => {
+                  if (err) {
+                    return res
+                      .status(500)
+                      .json({ error: "Failed to create spin record" });
+                  }
+                  const xp = consolation * 0.005;
+                  const levelUpInfo = await updateLevel(userId, xp);
+                  sendEvent("results", spinId, { result: consolation, xp: xp, levelUp: levelUpInfo, jackpot: false, nearMiss: true });
+                  res.status(200).json({
+                    transactionId: transactionId,
+                    result: consolation,
+                    jackpot: false,
+                    nearMiss: true,
+                    levelUp: levelUpInfo
+                  });
                 }
               );
             } else {
@@ -3144,10 +3197,10 @@ app.post("/api/g/wheel/spin/result", (req, res) => {
                   console.log("sending spin data to clients" + spinId + result);
                   xp = result * 0.005;
                   const levelUpInfo = await updateLevel(userId, xp);
-                  sendEvent("results", spinId, { result: result, xp: xp, levelUp: levelUpInfo });
+                  sendEvent("results", spinId, { result: result, xp: xp, levelUp: levelUpInfo, jackpot: false });
                   res
                     .status(200)
-                    .json({ transactionId: transactionId, result: result, levelUp: levelUpInfo });
+                    .json({ transactionId: transactionId, result: result, jackpot: false, levelUp: levelUpInfo });
                 }
               );
             }
@@ -3342,8 +3395,8 @@ app.post(
             if (row) {
               console.log("UserId found:", row.userId);
               userId = row.userId;
-              if (result.includes("JACKPOT") === true) {
-                // Check if there is a JACKPOT.
+              if (result.includes("JACKPOT") === true && Math.random() < JACKPOT_CONFIRM_CHANCE) {
+                // JACKPOT CONFIRMED (secondary roll passed) — pay the full pot.
                 db.get(
                   "SELECT SUM(amount) AS total FROM jackpot_rakes",
                   (err, row) => {
@@ -3357,7 +3410,7 @@ app.post(
                       [userId]
                     );
 
-                    // Clear the Jackpot.
+                    // Clear the Jackpot, then re-seed to the minimum floor.
                     db.run(
                       `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
                       [uuidv4(), spinId, userId, -jackpotTotal],
@@ -3368,6 +3421,11 @@ app.post(
                             .json({ error: "Failed to create spin record" });
                         }
                       }
+                    );
+                    // Seed the pot back up to the minimum jackpot floor.
+                    db.run(
+                      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
+                      [uuidv4(), spinId, userId, JACKPOT_MINIMUM]
                     );
 
                     // Log the transaction.
@@ -3386,10 +3444,39 @@ app.post(
                           transactionId: transactionId,
                           result: jackpotTotal,
                           xp: xp,
+                          jackpot: true,
                           levelUp: levelUpInfo
                         });
                       }
                     );
+                  }
+                );
+              } else if (result.includes("JACKPOT") === true) {
+                // JACKPOT NEAR MISS — consolation = 2x largest wheel prize.
+                const consolation = JACKPOT_CONSOLATION;
+                db.run(
+                  `UPDATE users SET points_balance = points_balance + ${consolation} WHERE userId = ?`,
+                  [userId]
+                );
+                db.run(
+                  "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+                  [transactionId, userId, "Jackpot Near Miss", consolation],
+                  async (err) => {
+                    if (err) {
+                      return res
+                        .status(500)
+                        .json({ error: "Failed to create spin record" });
+                    }
+                    const xp = consolation * 0.005;
+                    const levelUpInfo = await updateLevel(userId, xp);
+                    res.status(200).json({
+                      transactionId: transactionId,
+                      result: consolation,
+                      xp: xp,
+                      jackpot: false,
+                      nearMiss: true,
+                      levelUp: levelUpInfo
+                    });
                   }
                 );
               } else {

@@ -363,8 +363,10 @@ function determineSpinResult() {
     if (angle <= cumulativeAngle) {
       const resultInt = segments[i].label;
       const result = resultInt.toString();
-      // Display the result on the page.
-      drawResultOverlay(result);
+      const isJackpotLanding = result.includes("JACKPOT");
+      // Display the result. For a jackpot landing, show suspense — the server
+      // decides the real outcome via its secondary roll.
+      drawResultOverlay(isJackpotLanding ? "🎰 ROLLING FOR JACKPOT..." : result);
       // Send result to backend.
       const username = getUsernameFromUrl();
       const url = `/api/u/${username}/wheel/spin/result`;
@@ -375,9 +377,17 @@ function determineSpinResult() {
       })
       .then(response => response.json())
       .then(data => {
-        console.log('Server response:', data.message);
+        console.log('Server response:', data);
         fetchUserBalance(username);
         fetchUserLevel(username);
+        // For jackpot landings, show the server-authoritative outcome
+        if (isJackpotLanding) {
+          if (data.jackpot) {
+            drawResultOverlay("🏆🏆🏆 JACKPOT! " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
+          } else {
+            drawResultOverlay("SO CLOSE! Consolation: " + Number(data.result).toLocaleString());
+          }
+        }
         // Additional actions based on response can be handled here
         if (data.result) {
           displayPointsReward(data.result);

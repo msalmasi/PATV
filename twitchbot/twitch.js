@@ -320,7 +320,7 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
     const result = JSON.parse(event.data);
     const spinnerBalance = await findUserBalance(twitchId);
     console.log("Spin result received:", result);
-    if (result.result > 1000000) {
+    if (result.jackpot) {
       client.say(
         channel,
         `PAT ${result.result} JACKPOT @${displayName}!!!!!!!!`
@@ -412,6 +412,12 @@ async function setupResultsListener(spinId, channel, twitchId, displayName) {
       clientSayPrize(
         channel,
         `YOU WON THE PAT ${result.result} JACKPOT AND GAINED ${result.xp} XP @${displayName} (PAT ${spinnerBalance})!!!!!!!! YOU ARE AMAZING AND SO COOL!`
+      );
+    } else if (result.nearMiss) {
+      // Landed on the jackpot slice but the secondary roll missed — consolation prize
+      client.say(
+        channel,
+        `SO CLOSE @${displayName}!!! You hit the jackpot wheel but just missed the pot — consolation prize: PAT ${result.result} (+${result.xp} XP). (PAT ${spinnerBalance})`
       );
     } else {
       // Update UI based on the result

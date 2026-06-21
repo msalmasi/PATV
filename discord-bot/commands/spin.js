@@ -67,9 +67,14 @@ async function setupResultsListener(spinId, interaction, user) {
     const spinnerBalanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
     const spinnerBalance = spinnerBalanceResponse.data.balance;
 
-    if (result.result > 1000000) {
+    if (result.jackpot) {
       await interaction.followUp(
         `${interaction.user} won PAT ${result.result} JACKPOT!!!! (New Balance: PAT ${spinnerBalance})`
+      );
+      eventSource1.close();
+    } else if (result.nearMiss) {
+      await interaction.followUp(
+        `SO CLOSE ${interaction.user}!!! You hit the jackpot wheel but just missed the pot — consolation prize: PAT ${result.result} (+${result.xp} XP). (New Balance: PAT ${spinnerBalance})`
       );
       eventSource1.close();
     } else {
