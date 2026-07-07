@@ -32,6 +32,25 @@ client.on("messageCreate", message => {
         }
     }
 
+    if (message.author.id == '926267272501272636' && message.content.startsWith('!png')) {
+        // "!png <sb>/<bb> <@hostId>" -> run PokerNow /new-game. Blinds/mention order-agnostic.
+        const pngParts = message.content.trim().split(/\s+/);
+        let blinds = null;
+        let hostId = null;
+        for (const p of pngParts.slice(1)) {
+            if (/^\d+\/\d+$/.test(p)) blinds = p;
+            const m = p.match(/^<@!?(\d+)>$/);
+            if (m) hostId = m[1];
+        }
+        if (!blinds) blinds = '100/200';
+        const [sb, bb] = blinds.split('/');
+        console.log(`New game: sb=${sb} bb=${bb} host=${hostId}`);
+        // /new-game [small blind] [big blind] — the resulting URL is caught + registered
+        // by the PATV Discord bot's messageUpdate listener.
+        message.channel.sendSlash('613156357239078913', 'new-game', sb, bb)
+            .catch(err => console.error('new-game slash failed:', err && err.message));
+    }
+
     if (message.author.id == '926267272501272636' && message.content.startsWith('!prc')) {
       // Split the message into parts
         const parts = message.content.split(' ');
