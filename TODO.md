@@ -4,6 +4,22 @@ Running list of future changes and known issues. Newest items at the top.
 
 ---
 
+## Features
+
+### Gear / items for the heist game (NEXT)
+**Priority:** High · **Area:** bot (`frida-bot.py`)
+
+Add purchasable one-use gear that plugs into the heist round structure — a PAT **sink** with
+strategy. Ideas:
+- **Lockpick** — auto-pass one round (skip the roll).
+- **Smoke bomb** — advantage (roll 2d20 keep higher) for a round.
+- **Insider tip** — lower the next round's DC.
+- **Getaway car** — survive a pinch once (don't get eliminated).
+Buy with PAT (sink), stored on the character sheet, consumed during a heist. Consider a
+`!gear` / `!buy` shop command and showing owned gear on `!sheet` and the /sheet page.
+
+---
+
 ## Security
 
 ### Move wheel spin result determination server-side

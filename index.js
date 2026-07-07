@@ -394,7 +394,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
             twitchId: twitchUser.id,
             twitchDisplayname: twitchUser.display_name,
             avatar: twitchUser.profile_image_url,
-            points_balance: 50000,
+            points_balance: 5000,
           };
           await runQuery(
             "INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -663,7 +663,7 @@ app.get("/auth/discord/callback", async (req, res) => {
             avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
             discordId: discordUser.id,
             discordUsername: discordUser.username,
-            points_balance: 50000,
+            points_balance: 5000,
           };
           
           await runQuery(
@@ -1514,7 +1514,7 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   const { camfrogUsername } = req.params;
   try {
     const results = await getQuery(
-      "SELECT userId, username, displayname, camfrogUsername, points_balance, xp, level FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
+      "SELECT userId, username, displayname, camfrogUsername, discordId, discordUsername, points_balance, xp, level FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
       [camfrogUsername]
     );
     if (results.length > 0) {
@@ -1536,11 +1536,11 @@ app.post('/api/users/camfrog/register', async (req, res) => {
   try {
     await runQuery(
       'INSERT INTO users (userId, username, displayname, email, password, camfrogUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, username, displayname, email, password, camfrogUsername, avatar, points_balance || 50000]
+      [userId, username, displayname, email, password, camfrogUsername, avatar, points_balance || 5000]
     );
     const newUserBadgeId = 'fresh_meat';
     await awardBadge(userId, newUserBadgeId);
-    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: points_balance || 50000 } });
+    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: points_balance || 5000 } });
   } catch (error) {
     console.error('Error creating Camfrog user:', error.message);
     res.status(500).json({ error: 'Failed to create new user' });
@@ -3695,6 +3695,21 @@ app.post("/api/pokernow/add", async (req, res) => {
       res.status(200).json({ message: "Poker Now game added successfully" });
   } catch (error) {
       res.status(500).json({ error: "Failed to add Poker Now game" });
+  }
+});
+
+// List active Poker Now games as JSON (for the Camfrog bot's !poker command)
+app.get("/api/pokernow/games", async (req, res) => {
+  try {
+    const games = await getQuery(`
+        SELECT p.pokerNowId, p.url, p.blinds, p.date_created, u.displayname, u.username
+        FROM poker_now_games p
+        JOIN users u ON p.userId = u.userId
+        ORDER BY p.date_created DESC`);
+    res.json({ games });
+  } catch (error) {
+    console.error("Failed to list poker games:", error.message);
+    res.status(500).json({ error: "Failed to list games" });
   }
 });
 

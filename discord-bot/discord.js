@@ -11,6 +11,7 @@ const { token } = require("./config.json");
 const axios = require("axios");
 require("dotenv").config();
 const { findOrCreateDiscordUser, findUserBalance } = require("./userUtils"); // Helper function to find or create user
+const pokerServer = require("./pokerServer"); // HTTP bridge for Camfrog-driven poker chips/games
 
 // Create a new Discord client instance
 const client = new Client({
@@ -515,6 +516,7 @@ client.login(token);
 // Once the bot is ready, log to the console
 client.once("ready", () => {
   console.log(`Logged in as ${client.user.tag}!`);
+  pokerServer.start(client); // Start the Camfrog poker bridge HTTP server
 });
 
 // Initialize the bot
