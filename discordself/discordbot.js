@@ -7,6 +7,8 @@ const POKERNOW_BOT = '613156357239078913';
 const PATV_BOT = '926267272501272636';
 const BACKEND = process.env.BACKEND_BASE_URL || 'https://publicaccess.tv';
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 // ── PokerNow new-game registration ─────────────────────────────────────────────
 // The selfbot invokes /new-game, so it (not the PATV bot) reliably sees the result —
 // even if PokerNow replies ephemerally. We register the game directly against the
@@ -42,11 +44,16 @@ function httpsJson(method, url, body) {
 
 function extractGame(text) {
   if (!text) return null;
-  const m = String(text).match(
-    /the URL of your new (\d+\/\d+) game is:\s+(https:\/\/www\.pokernow\.club\/games\/([\w\-]+))/
-  );
-  if (!m) return null;
-  return { blinds: m[1], url: m[2], pokerNowId: m[3] };
+  const s = String(text);
+  // Blinds from the standard phrasing; fall back to any x/y if wording shifts.
+  const blindsMatch = s.match(/new (\d+\/\d+) game/) || s.match(/(\d+\/\d+)/);
+  const urlMatch = s.match(/(https?:\/\/(?:www\.)?pokernow\.(?:club|com)\/games\/([\w\-]+))/i);
+  if (!urlMatch) return null;
+  return {
+    blinds: blindsMatch ? blindsMatch[1] : '',
+    url: urlMatch[1],
+    pokerNowId: urlMatch[2],
+  };
 }
 
 // Pull any candidate text out of a message/interaction reply (content + embeds).
@@ -133,15 +140,33 @@ client.on("messageCreate", async (message) => {
     }
     if (!blinds) blinds = '100/200';
     const [sb, bb] = blinds.split('/');
-    pendingHost = { hostId, at: Date.now() };
+    pendingHost = { hostId, blinds, at: Date.now() };
     console.log(`New game: sb=${sb} bb=${bb} host=${hostId}`);
     try {
-      // /new-game [small blind] [big blind]. sendSlash resolves to the reply, which
-      // often already contains the URL (esp. if ephemeral). Fallbacks below catch the
-      // public post/edit cases too.
+      // /new-game [small blind] [big blind]. PokerNow posts the reply WITHOUT the URL,
+      // then edits the URL in a moment later — so we can't trust the immediate reply or
+      // rely on edit events firing. Poll the channel for the PokerNow bot's message and
+      // read its current (edited) content.
       const reply = await message.channel.sendSlash(POKERNOW_BOT, 'new-game', sb, bb);
-      const g = gameFromMessage(reply);
-      if (g) await registerGame(g, hostId);
+      let g = gameFromMessage(reply);
+      for (let i = 0; i < 12 && !g; i++) {
+        await sleep(1500);
+        try {
+          const recent = await message.channel.messages.fetch({ limit: 8 });
+          for (const [, m] of recent) {
+            if (m.author && m.author.id === POKERNOW_BOT) {
+              const cand = gameFromMessage(m);
+              if (cand && !registeredGames.has(cand.pokerNowId)) { g = cand; break; }
+            }
+          }
+        } catch (e) {}
+      }
+      if (g) {
+        if (!g.blinds) g.blinds = blinds; // fall back to the blinds from the trigger
+        await registerGame(g, hostId);
+      } else {
+        console.error('new-game: URL not found in channel after polling');
+      }
     } catch (err) {
       console.error('new-game slash failed:', err && err.message);
     }
@@ -168,7 +193,7 @@ client.on("messageCreate", async (message) => {
   // Fallback: PokerNow posts the new-game URL publicly.
   if (message.author.id == POKERNOW_BOT && pendingHost && Date.now() - pendingHost.at < 120000) {
     const g = gameFromMessage(message);
-    if (g) await registerGame(g, pendingHost.hostId);
+    if (g) { if (!g.blinds) g.blinds = pendingHost.blinds; await registerGame(g, pendingHost.hostId); }
   }
 });
 
@@ -177,7 +202,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
   if (!newMessage || !newMessage.author) return;
   if (newMessage.author.id == POKERNOW_BOT && pendingHost && Date.now() - pendingHost.at < 120000) {
     const g = gameFromMessage(newMessage);
-    if (g) await registerGame(g, pendingHost.hostId);
+    if (g) { if (!g.blinds) g.blinds = pendingHost.blinds; await registerGame(g, pendingHost.hostId); }
   }
 });
 
