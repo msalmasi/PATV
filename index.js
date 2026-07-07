@@ -3676,6 +3676,13 @@ function sendEvent(type, identifier, message) {
 // Function to add a new poker game
 async function addPokerNowGame(pokerNowId, userId, url, blinds) {
   try {
+      // Dedup: the game can be reported by both the selfbot and the Discord bot's
+      // messageUpdate listener — only insert the first time.
+      const existing = await getQuery("SELECT pokerNowId FROM poker_now_games WHERE pokerNowId = ?", [pokerNowId]);
+      if (existing.length > 0) {
+          console.log(`Poker game ${pokerNowId} already registered, skipping.`);
+          return;
+      }
       const insertSql = "INSERT INTO poker_now_games (pokerNowId, userId, url, blinds) VALUES (?, ?, ?, ?)";
       await runQuery(insertSql, [pokerNowId, userId, url, blinds]);
       console.log(`Poker game ${pokerNowId} added by user ${userId}`);
