@@ -1211,129 +1211,87 @@ app.get("/u/:username/tip", addUser, async (req, res) => {
   }
 });
 
+// Shared, overdraft-safe PAT transfer used by both tip endpoints.
+// The debit is a single atomic conditional UPDATE (check + deduct in one statement),
+// so concurrent tips can never overdraw a balance or mint PAT — this is what the old
+// read-then-check-then-update flow got wrong (a TOCTOU race that created PAT).
+// Returns { ok, status, msg }.
+async function transferPat(senderUsername, recipientUsername, rawAmount) {
+  const amount = Math.floor(Number(rawAmount));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, status: 400, msg: "Invalid tip amount" };
+  }
+  if (!senderUsername || !recipientUsername) {
+    return { ok: false, status: 400, msg: "Missing sender or recipient" };
+  }
+  if (senderUsername === recipientUsername) {
+    return { ok: false, status: 400, msg: "Cannot tip oneself" };
+  }
+
+  const users = await getQuery(
+    "SELECT username, userId, points_balance FROM users WHERE username IN (?, ?)",
+    [senderUsername, recipientUsername]
+  );
+  const sender = users.find((u) => u.username === senderUsername);
+  const recipient = users.find((u) => u.username === recipientUsername);
+  if (!sender || !recipient) {
+    return { ok: false, status: 404, msg: "One or both users not found" };
+  }
+
+  // Atomic conditional debit: the balance check and the deduction are the SAME statement.
+  // If the balance is insufficient, no row changes and nothing is deducted.
+  const debit = await runQuery(
+    "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
+    [amount, sender.userId, amount]
+  );
+  if (!debit || debit.changes === 0) {
+    return { ok: false, status: 400, msg: "Insufficient balance" };
+  }
+
+  // Credit recipient (atomic single statement).
+  await runQuery(
+    "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
+    [amount, recipient.userId]
+  );
+
+  // Ledger entries.
+  await runQuery(
+    "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+    [uuidv4(), sender.userId, "tip sent", -amount]
+  );
+  await runQuery(
+    "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+    [uuidv4(), recipient.userId, "tip received", amount]
+  );
+
+  return { ok: true, status: 200, msg: "Tip sent successfully." };
+}
+
 // Tip another user through a chatbot
 app.post("/u/:username/chattip", async (req, res) => {
-    const { amount } = req.body;
-    const senderUsername = req.body.sender;
-    const recipientUsername = req.body.recipient;
-    const password = req.body.password;
-
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
-        return res.status(403).send("Access denied");
-    }
-  
-    if (senderUsername === recipientUsername) {
-      return res.status(400).send("Cannot tip oneself");
-    }
-  
-    try {
-      // Check both users exist and fetch their current balances
-      const users = await getQuery(
-        "SELECT username, userId, points_balance FROM users WHERE username IN (?, ?)",
-        [senderUsername, recipientUsername]
-      );
-      if (users.length !== 2) {
-        return res.status(404).send("One or both users not found");
-      }
-  
-      const sender = users.find((user) => user.username === senderUsername);
-      const recipient = users.find((user) => user.username === recipientUsername);
-  
-      if (sender.points_balance < amount) {
-        return res.status(400).send("Insufficient balance");
-      }
-  
-      // Deduct amount from sender's balance
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
-        [amount, sender.userId]
-      );
-  
-      // Add amount to recipient's balance
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-        [amount, recipient.userId]
-      );
-  
-      // Log transaction for sender
-      const transactionIdSender = uuidv4();
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionIdSender, sender.userId, "tip sent", -amount]
-      );
-  
-      // Log transaction for receiver
-      const transactionIdReceiver = uuidv4();
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionIdReceiver, recipient.userId, "tip received", amount]
-      );
-      console.log("Tip sent successfully.");
-      res.json({ message: "Tip sent successfully." });
-    } catch (error) {
-      console.error("Failed to process tip:", error);
-      res.status(500).send("Failed to process tip");
-    }
-  });
+  if (req.body.password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).send("Access denied");
+  }
+  try {
+    const r = await transferPat(req.body.sender, req.body.recipient, req.body.amount);
+    if (!r.ok) return res.status(r.status).send(r.msg);
+    res.json({ message: r.msg });
+  } catch (error) {
+    console.error("Failed to process tip:", error);
+    res.status(500).send("Failed to process tip");
+  }
+});
 
 // Tip another user
 app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
-  const { amount } = req.body;
   const senderUsername = req.user ? req.user.username : null; // Logged in user's username
-  const recipientUsername = req.params.username;
-
   if (!senderUsername) {
     return res.status(401).send("Authentication required");
   }
-
-  if (senderUsername === recipientUsername) {
-    return res.status(400).send("Cannot tip oneself");
-  }
-
   try {
-    // Check both users exist and fetch their current balances
-    const users = await getQuery(
-      "SELECT username, userId, points_balance FROM users WHERE username IN (?, ?)",
-      [senderUsername, recipientUsername]
-    );
-    if (users.length !== 2) {
-      return res.status(404).send("One or both users not found");
-    }
-
-    const sender = users.find((user) => user.username === senderUsername);
-    const recipient = users.find((user) => user.username === recipientUsername);
-
-    if (sender.points_balance < amount) {
-      return res.status(400).send("Insufficient balance");
-    }
-
-    // Deduct amount from sender's balance
-    await runQuery(
-      "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
-      [amount, sender.userId]
-    );
-
-    // Add amount to recipient's balance
-    await runQuery(
-      "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-      [amount, recipient.userId]
-    );
-
-    // Log transaction for sender
-    const transactionIdSender = uuidv4();
-    await runQuery(
-      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-      [transactionIdSender, sender.userId, "tip sent", -amount]
-    );
-
-    // Log transaction for receiver
-    const transactionIdReceiver = uuidv4();
-    await runQuery(
-      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-      [transactionIdReceiver, recipient.userId, "tip received", amount]
-    );
-    console.log("Tip sent successfully.");
-    res.json({ message: "Tip sent successfully." });
+    const r = await transferPat(senderUsername, req.params.username, req.body.amount);
+    if (!r.ok) return res.status(r.status).send(r.msg);
+    res.json({ message: r.msg });
   } catch (error) {
     console.error("Failed to process tip:", error);
     res.status(500).send("Failed to process tip");
@@ -3717,6 +3675,25 @@ app.get("/api/pokernow/games", async (req, res) => {
   } catch (error) {
     console.error("Failed to list poker games:", error.message);
     res.status(500).json({ error: "Failed to list games" });
+  }
+});
+
+// Manually remove a Poker Now game from the list (host-triggered via the Camfrog bot).
+app.post("/api/pokernow/remove", async (req, res) => {
+  const { pokerNowId, password } = req.body;
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).json({ error: "Access denied" });
+  }
+  if (!pokerNowId) {
+    return res.status(400).json({ error: "Missing pokerNowId" });
+  }
+  try {
+    const result = await runQuery("DELETE FROM poker_now_games WHERE pokerNowId = ?", [pokerNowId]);
+    const removed = result && typeof result.changes === "number" ? result.changes : 0;
+    res.json({ message: "removed", removed });
+  } catch (error) {
+    console.error("Failed to remove poker game:", error.message);
+    res.status(500).json({ error: "Failed to remove game" });
   }
 });
 
