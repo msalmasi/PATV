@@ -382,10 +382,10 @@ function determineSpinResult() {
         fetchUserLevel(username);
         // For jackpot landings, show the server-authoritative outcome
         if (isJackpotLanding) {
-          if (data.jackpot) {
-            drawResultOverlay("🏆🏆🏆 JACKPOT! " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
-          } else {
-            drawResultOverlay("SO CLOSE! Consolation: " + Number(data.result).toLocaleString());
+          if (data.grand) {
+            drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE pot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
+          } else if (data.jackpot) {
+            drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the pot: " + Number(data.result).toLocaleString() + " 🏆");
           }
         }
         // Additional actions based on response can be handled here

@@ -68,14 +68,15 @@ async function setupResultsListener(spinId, interaction, user) {
     const spinnerBalance = spinnerBalanceResponse.data.balance;
 
     if (result.jackpot) {
-      await interaction.followUp(
-        `${interaction.user} won PAT ${result.result} JACKPOT!!!! (New Balance: PAT ${spinnerBalance})`
-      );
-      eventSource1.close();
-    } else if (result.nearMiss) {
-      await interaction.followUp(
-        `SO CLOSE ${interaction.user}!!! You hit the jackpot wheel but just missed the pot — consolation prize: PAT ${result.result} (+${result.xp} XP). (New Balance: PAT ${spinnerBalance})`
-      );
+      if (result.grand) {
+        await interaction.followUp(
+          `🏆🏆🏆 ${interaction.user} hit the GRAND JACKPOT and won the ENTIRE pot: PAT ${result.result}!!!! (+${result.xp} XP, New Balance: PAT ${spinnerBalance})`
+        );
+      } else {
+        await interaction.followUp(
+          `🏆 ${interaction.user} hit the JACKPOT and won ${result.jackpotPct}% of the pot: PAT ${result.result}! (+${result.xp} XP, New Balance: PAT ${spinnerBalance})`
+        );
+      }
       eventSource1.close();
     } else {
       await interaction.followUp(

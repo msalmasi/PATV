@@ -198,10 +198,10 @@ function determineSpinResult(wheelSpinner, spinId) {
           console.log('Server response:', data);
           // For jackpot landings, show the server-authoritative outcome
           if (isJackpotLanding) {
-              if (data.jackpot) {
-                  drawResultOverlay("🏆🏆🏆 JACKPOT! " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
-              } else {
-                  drawResultOverlay("SO CLOSE! Consolation: " + Number(data.result).toLocaleString());
+              if (data.grand) {
+                  drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE pot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
+              } else if (data.jackpot) {
+                  drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the pot: " + Number(data.result).toLocaleString() + " 🏆");
               }
           }
           // Refresh jackpot display after spin result is recorded
