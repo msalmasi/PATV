@@ -3243,6 +3243,144 @@ app.post(
   }
 );
 
+// -- Restored bonus/xp/jackpot endpoints (accidentally removed during the wheel refactor) --
+app.post("/api/bonus/chatwinner", async (req, res) => {
+    const { userId, type, amount } = req.body;
+    const password = req.body.password;
+
+    if (password !== process.env.TWITCH_BOT_TOKEN) {
+        return res.status(403).send("Access denied");
+    }
+  
+    if (!userId || !amount || !type) {
+      return res.status(400).send("Missing required fields");
+    }
+  
+    try {
+      // Start a transaction
+      const transactionId = uuidv4();
+      const bonusId = uuidv4();
+      await runQuery("BEGIN TRANSACTION");
+  
+      // Add points to the winner's points balance
+      await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+  
+      // Insert into bonus_winners table   
+      await runQuery(
+        "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
+        [bonusId, type, userId, transactionId, amount]
+      );
+  
+      // Log the transaction
+      await runQuery(
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [transactionId, userId, "bonus win", amount]
+      );
+  
+      // Commit the transaction
+      await runQuery("COMMIT");
+  
+      res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
+    } catch (error) {
+      // Rollback in case of error
+      await runQuery("ROLLBACK");
+      console.error("Failed to process bonus winner:", error);
+      res.status(500).send("Failed to process bonus winner");
+    }
+  });
+
+// Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same
+// updateLevel path as the wheel, so level-ups and their bonuses behave identically.
+app.post("/api/u/grant-xp", async (req, res) => {
+  const { userId, xp, password } = req.body;
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).send("Access denied");
+  }
+  if (!userId || xp === undefined || xp === null || isNaN(Number(xp))) {
+    return res.status(400).send("Missing or invalid userId/xp");
+  }
+  try {
+    const info = await updateLevel(userId, Number(xp));
+    res.status(200).json({ success: true, info });
+  } catch (error) {
+    console.error("grant-xp error:", error);
+    res.status(500).send("Failed to grant XP");
+  }
+});
+
+// Adjust the jackpot pool from the !heist game. Positive amount FEEDS the bank
+// (e.g. busted heist wagers), negative DRAINS it (heist winnings paid out from the pot).
+// Bot-authenticated (same token pattern as chatwinner). Returns the new pot total.
+app.post("/api/g/heist/jackpot-adjust", async (req, res) => {
+  const { amount, userId, password } = req.body;
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).send("Access denied");
+  }
+  if (amount === undefined || amount === null || isNaN(Number(amount))) {
+    return res.status(400).send("Missing or invalid amount");
+  }
+  try {
+    const jackpotId = uuidv4();
+    const spinId = uuidv4();
+    await runQuery(
+      "INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+      [jackpotId, spinId, userId || null, Math.round(Number(amount))]
+    );
+    const rows = await getQuery("SELECT SUM(amount) AS pot FROM jackpot_rakes");
+    const pot = (rows && rows[0] && rows[0].pot) || 0;
+    res.status(200).json({ success: true, jackpotTotal: pot });
+  } catch (error) {
+    console.error("Heist jackpot-adjust error:", error);
+    res.status(500).send("Failed to adjust jackpot");
+  }
+});
+
+// HTTP POST endpoint to handle bonus winner
+app.post("/api/bonus/winner", authenticateToken, addUser, async (req, res) => {
+  const { userId, type, amount } = req.body;
+
+  const userType = req.user ? req.user.class : null;
+  if (userType !== "Admin" || userType !== "Staff") {
+      return res.status(403).send("Access denied");
+  }
+
+  if (!userId || !amount || !type) {
+    return res.status(400).send("Missing required fields");
+  }
+
+  try {
+    // Start a transaction
+    const transactionId = uuidv4();
+    const bonusId = uuidv4();
+    await runQuery("BEGIN TRANSACTION");
+
+    // Add points to the winner's points balance
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+
+    // Insert into bonus_winners table   
+    await runQuery(
+      "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
+      [bonusId, type, userId, transactionId, amount]
+    );
+
+    // Log the transaction
+    await runQuery(
+      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+      [transactionId, userId, "bonus win", amount]
+    );
+
+    // Commit the transaction
+    await runQuery("COMMIT");
+
+    res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
+  } catch (error) {
+    // Rollback in case of error
+    await runQuery("ROLLBACK");
+    console.error("Failed to process bonus winner:", error);
+    res.status(500).send("Failed to process bonus winner");
+  }
+});
+
 app.get("/events", (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
 
