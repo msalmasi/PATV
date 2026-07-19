@@ -173,6 +173,9 @@ function createTables() {
         userId TEXT,
         result TEXT NOT NULL,
         transactionId TEXT NOT NULL,
+        segment_index INTEGER,
+        payout INTEGER,
+        jackpot_pct INTEGER,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (userId) REFERENCES users(userId),
         FOREIGN KEY (transactionId) REFERENCES transactions(transactionId)
@@ -182,6 +185,16 @@ function createTables() {
         } else {
             console.log('Table wheel_spins created or already exists.');
         }
+    });
+
+    // Migration for existing DBs: add the server-authoritative spin columns if missing.
+    // (ALTER TABLE ADD COLUMN errors "duplicate column name" if it already exists — ignore that.)
+    ['segment_index INTEGER', 'payout INTEGER', 'jackpot_pct INTEGER'].forEach((col) => {
+        db.run(`ALTER TABLE wheel_spins ADD COLUMN ${col}`, (err) => {
+            if (err && !/duplicate column/i.test(err.message)) {
+                console.log('wheel_spins migration error:', err.message);
+            }
+        });
     });
 
     db.run(`CREATE TABLE IF NOT EXISTS jackpot_rakes (

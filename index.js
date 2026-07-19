@@ -2494,11 +2494,10 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
       return res.status(404).send("Spin not found or already processed");
     }
 
-    //   sendEvent("spin", pageId, {
-    //     message: `Spin: ${username}`,
-    //     spinId: spinId, // Include the spin ID for tracking
-    //     timestamp: new Date(),
-    //   });
+    // Gold wheel scales prizes by the spinner's level (matches the wheel's displayed values).
+    const lvlRow = await getQuery("SELECT level FROM users WHERE userId = ?", [spinDetails[0].userId]);
+    const spinnerLevel = (lvlRow[0] && lvlRow[0].level) || 0;
+    const outcome = await computeSpinResult(1 + spinnerLevel * 0.01 - 0.01);
 
     await runQuery("BEGIN TRANSACTION");
 
@@ -2515,13 +2514,18 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
       [jackpotId, spinId, spinDetails[0].userId, 500]
     );
     await runQuery(
-      `UPDATE wheel_spins SET result = 'PENDING', type = 'gold' WHERE spinId = ?`,
-      [spinId]
+      `UPDATE wheel_spins SET result = 'PENDING', type = 'gold', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ?`,
+      [outcome.segmentIndex, outcome.payout, outcome.jackpotPct, spinId]
     );
 
     await runQuery("COMMIT");
 
-    res.json({ success: true, message: "Spin confirmed and points deducted" });
+    res.json({
+      success: true,
+      message: "Spin confirmed and points deducted",
+      targetIndex: outcome.segmentIndex,
+      display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
+    });
   } catch (error) {
     await runQuery("ROLLBACK");
     console.error("Failed to finalize spin:", error);
@@ -2682,20 +2686,17 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       `SELECT userId FROM wheel_spins WHERE spinId = ? AND result = 'INTENT'`,
       [spinId]
     );
+    if (!spinDetails.length) {
+      return res.status(404).send("Spin not found or already processed");
+    }
     const spinUser = await getQuery(
       "SELECT username FROM users WHERE userId = ?",
       [spinDetails[0].userId]
     );
     const username = spinUser[0].username;
-    if (!spinDetails.length) {
-      return res.status(404).send("Spin not found or already processed");
-    }
 
-    //   sendEvent("spin", pageId, {
-    //     message: `Spin: ${username}`,
-    //     spinId: spinId, // Include the spin ID for tracking
-    //     timestamp: new Date(),
-    //   });
+    // Public/OBS wheel prizes are fixed (level-20 multiplier), same as publicwheel.js.
+    const outcome = await computeSpinResult(PUBLIC_WHEEL_MULTIPLIER);
 
     await runQuery("BEGIN TRANSACTION");
 
@@ -2703,11 +2704,6 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`,
       [spinDetails[0].userId]
     );
-    console.log(spinDetails[0].userId);
-    console.log(spinDetails);
-    console.log(transactionId);
-    console.log(spinId);
-    console.log(jackpotId);
     await runQuery(
       `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
       [transactionId, spinDetails[0].userId, "Wager: Public Spin", -5000]
@@ -2717,8 +2713,8 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       [jackpotId, spinId, spinDetails[0].userId, 500]
     );
     await runQuery(
-      `UPDATE wheel_spins SET result = 'PENDING', type = 'public' WHERE spinId = ?`,
-      [spinId]
+      `UPDATE wheel_spins SET result = 'PENDING', type = 'public', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ?`,
+      [outcome.segmentIndex, outcome.payout, outcome.jackpotPct, spinId]
     );
 
     await runQuery("COMMIT");
@@ -2730,10 +2726,12 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       const timeoutId = setTimeout(() => {
         sendEvent("spin", spinId, spinData);
     }, 500);
-    
+
     res.json({
       success: true,
       message: `public spinid ${spinId} from ${username}`,
+      targetIndex: outcome.segmentIndex,
+      display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
     });
   } catch (error) {
     await runQuery("ROLLBACK");
@@ -2771,24 +2769,10 @@ const checkAndResolvePendingSpins = () => {
 
       console.log(`Found ${spins.length} pending spins to process.`);
       spins.forEach((spin) => {
-        console.log(
-          `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
-        );
-        // Update spin status to FAILED
-        db.run(
-          `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
-          [spin.spinId],
-          (err) => {
-            if (err) {
-              console.error(
-                "Error updating spin status for spin ID " + spin.spinId + ":",
-                err
-              );
-              return;
-            }
-            // Refund logic here
-            refundUser(spin.userId, spin.spinId);
-          }
+        // Timeout auto-settle: the outcome was decided server-side at spin time, so credit
+        // it even though the wheel page never pinged back (e.g. OBS was closed). Idempotent.
+        settleSpin(spin.spinId).catch((e) =>
+          console.error("Auto-settle failed for " + spin.spinId + ":", e && e.message)
         );
       });
     }
@@ -2871,24 +2855,10 @@ const checkAndResolvePendingPublicSpins = () => {
 
       console.log(`Found ${spins.length} pending spins to process.`);
       spins.forEach((spin) => {
-        console.log(
-          `Processing spin: ${spin.spinId}, Timestamp: ${spin.timestamp}`
-        );
-        // Update spin status to FAILED
-        db.run(
-          `UPDATE wheel_spins SET result = 'FAILED' WHERE spinId = ?`,
-          [spin.spinId],
-          (err) => {
-            if (err) {
-              console.error(
-                "Error updating spin status for spin ID " + spin.spinId + ":",
-                err
-              );
-              return;
-            }
-            // Refund logic here
-            refundUser(spin.userId, spin.spinId);
-          }
+        // Timeout auto-settle: the outcome was decided server-side at spin time, so credit
+        // it even though the wheel page never pinged back (e.g. OBS was closed). Idempotent.
+        settleSpin(spin.spinId).catch((e) =>
+          console.error("Auto-settle failed for " + spin.spinId + ":", e && e.message)
         );
       });
     }
@@ -3046,501 +3016,188 @@ function rollJackpotPercent() {
   return JACKPOT_TIERS[0].min; // float-rounding fallback
 }
 
-app.post("/api/g/wheel/spin/result", (req, res) => {
-  const { spinId, result } = req.body;
-  const transactionType = "Reward: Public Spin";
-  const transactionId = uuidv4();
-  // Update the wheel spin table with the result.
-  db.run("UPDATE wheel_spins SET result = ? WHERE spinId = ?", [
-    result,
-    spinId,
-  ]);
+// ─── Server-authoritative wheel ──────────────────────────────────────────────
+// The wheel layout is the single source of truth here — the server weighted-picks
+// the winning slice and computes the payout at spin time. The client only renders
+// this config and animates to land on the chosen slice; it never decides or reports
+// the prize. Keep this in sync with public/publicwheel.js + public/script.js visuals
+// (served via GET /api/wheel/config so they can't drift).
+const PUBLIC_WHEEL_MULTIPLIER = 1 + (20 * 0.01); // 1.2 — the public/OBS wheel is fixed at level 20
+const WHEEL_SEGMENTS = [
+  { color: '#FF6347', base: 3000,  size: 1 },
+  { color: '#FFD700', base: 6000,  size: 1 },
+  { color: '#ADFF2F', base: 4000,  size: 1 },
+  { color: '#00FA9A', base: 8500,  size: 0.9 },
+  { color: '#1E90FF', base: 750,   size: 1 },
+  { color: '#EE82EE', base: 0,     size: 1 },
+  { color: '#FF69B4', base: 25000, size: 0.5 },
+  { color: '#20B2AA', base: 1000,  size: 1 },
+  { color: '#FFA500', base: 6500,  size: 1 },
+  { color: '#B22222', base: 5000,  size: 1 },
+  { color: '#8A2BE2', base: 4500,  size: 1 },
+  { color: '#5F9EA0', base: 1500,  size: 1 },
+  { color: '#EE82EE', base: 0,     size: 1 },
+  { color: '#FFD700', base: 50000, size: 0.1 },
+  { color: '#DB7093', base: 2500,  size: 1 },
+  { color: '#3CB371', base: 500,   size: 1 },
+  { color: '#4682B4', base: 2000,  size: 1 },
+  { color: '#FF1493', base: 12500, size: 0.8 },
+  { color: '#00CED1', base: 0,     size: 1 },
+  { color: '#FFD700', base: 7500,  size: 1 },
+  { color: '#3CB371', base: 5500,  size: 1 },
+  { color: '#4682B4', base: 3500,  size: 1 },
+  { color: '#FF1493', base: 9000,  size: 1 },
+  { color: '#8A2BE2', base: 10000, size: 1 },
+  { color: '#00CED1', base: 0,     size: 1 },
+  { color: '#FFD700', jackpot: true, label: '🏆🏆🏆JACKPOT🏆🏆🏆', size: 0.05 },
+];
+function segValue(seg, multiplier) { return seg.jackpot ? 0 : Math.round(seg.base * multiplier); }
 
-  let userId = 0;
+// Weighted pick over slice `size`.
+function pickSegment() {
+  const total = WHEEL_SEGMENTS.reduce((a, s) => a + s.size, 0);
+  let r = Math.random() * total;
+  for (let i = 0; i < WHEEL_SEGMENTS.length; i++) {
+    r -= WHEEL_SEGMENTS[i].size;
+    if (r < 0) return i;
+  }
+  return WHEEL_SEGMENTS.length - 1;
+}
 
-  db.serialize(() => {
-    // Find the UserId associated with the Spin.
-    db.get(
-      `SELECT userId FROM wheel_spins WHERE spinId = ?;`,
-      [spinId],
-      (err, row) => {
-        if (err) {
-          console.error("Error executing SQL: " + err.message);
-        } else {
-          if (row) {
-            console.log("UserId found:", row.userId);
-            userId = row.userId;
-            if (result.includes("JACKPOT") === true) {
-              // Landed the jackpot slice — the second roll decides what % of the pot you take.
-              db.get(
-                "SELECT SUM(amount) AS total FROM jackpot_rakes",
-                (err, row) => {
-                  if (err) {
-                    return;
-                  }
-                  const pot = row.total || 0;
-                  const pct = rollJackpotPercent();
-                  const isGrand = pct >= 1.0;
-                  const payout = Math.max(0, Math.round(pot * pct));
+function getJackpotPot() {
+  return getQuery("SELECT COALESCE(SUM(amount),0) AS total FROM jackpot_rakes").then((r) => (r[0] ? r[0].total : 0) || 0);
+}
 
-                  // Credit the winner.
-                  db.run(
-                    `UPDATE users SET points_balance = points_balance + ${payout} WHERE userId = ?`,
-                    [userId]
-                  );
-                  // Draw the payout out of the pot.
-                  db.run(
-                    `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
-                    [uuidv4(), spinId, userId, -payout]
-                  );
-                  // A GRAND (100%) win empties the pot — reseed it to the floor.
-                  if (isGrand) {
-                    db.run(
-                      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
-                      [uuidv4(), spinId, userId, JACKPOT_MINIMUM]
-                    );
-                  }
-                  // Log the transaction.
-                  db.run(
-                    "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                    [transactionId, userId, isGrand ? "Jackpot Win" : "Jackpot Win (partial)", payout],
-                    async (err) => {
-                      if (err) {
-                        return res
-                          .status(500)
-                          .json({ error: "Failed to create spin record" });
-                      }
-                      const xp = payout * 0.005;
-                      const levelUpInfo = await updateLevel(userId, xp);
-                      const pctInt = Math.round(pct * 100);
-                      sendEvent("results", spinId, { result: payout, xp: xp, levelUp: levelUpInfo, jackpot: true, jackpotPct: pctInt, grand: isGrand });
-                      res.status(200).json({
-                        transactionId: transactionId,
-                        result: payout,
-                        jackpot: true,
-                        jackpotPct: pctInt,
-                        grand: isGrand,
-                        levelUp: levelUpInfo
-                      });
-                    }
-                  );
-                }
-              );
-            } else {
-              // Add points to the user balance.
-              db.run(
-                `UPDATE users SET points_balance = points_balance + ${result} WHERE userId = ?`,
-                [userId]
-              );
+// Compute the result for a spin: which slice + payout. `multiplier` scales the fixed prizes —
+// the gold wheel uses the spinner's level, the public/OBS wheel is fixed at level 20. The
+// jackpot slice is pot-based (rolls a % of the pot) and unaffected by the multiplier.
+async function computeSpinResult(multiplier) {
+  const idx = pickSegment();
+  const seg = WHEEL_SEGMENTS[idx];
+  if (seg.jackpot) {
+    const pot = await getJackpotPot();
+    const pct = rollJackpotPercent();
+    return { segmentIndex: idx, payout: Math.max(0, Math.round(pot * pct)), jackpotPct: Math.round(pct * 100) };
+  }
+  return { segmentIndex: idx, payout: segValue(seg, multiplier), jackpotPct: null };
+}
 
-              // Log the transaction.
-              db.run(
-                "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                [transactionId, userId, transactionType, result],
-                async (err) => {
-                  if (err) {
-                    return res
-                      .status(500)
-                      .json({ error: "Failed to create spin record" });
-                  }
-                  console.log(transactionId);
-                  // Send a message to connected clients to spin the wheel.
-                  console.log("sending spin data to clients" + spinId + result);
-                  xp = result * 0.005;
-                  const levelUpInfo = await updateLevel(userId, xp);
-                  sendEvent("results", spinId, { result: result, xp: xp, levelUp: levelUpInfo, jackpot: false });
-                  res
-                    .status(200)
-                    .json({ transactionId: transactionId, result: result, jackpot: false, levelUp: levelUpInfo });
-                }
-              );
-            }
-          } else {
-            console.log("No matching record found for the given spinId");
-            return res
-              .status(500)
-              .json({ error: "Failed to create spin record" });
-          }
-        }
-      }
-    );
+function spinDisplay(spin) {
+  const seg = WHEEL_SEGMENTS[spin.segment_index];
+  const isJackpot = !!(seg && seg.jackpot);
+  const grand = isJackpot && (spin.jackpot_pct >= 100);
+  return { result: spin.payout || 0, jackpot: isJackpot, jackpotPct: spin.jackpot_pct || 0, grand };
+}
+
+// The ONLY crediting path for the wheel. Idempotent: the atomic PENDING->SETTLED claim
+// guarantees a spin can only ever be credited once, no matter how many times it's called
+// (client "landed" ping, the timeout sweep, a retry, or a forged request).
+async function settleSpin(spinId) {
+  const rows = await getQuery(
+    "SELECT spinId, userId, type, result, segment_index, payout, jackpot_pct FROM wheel_spins WHERE spinId = ?",
+    [spinId]
+  );
+  if (!rows.length) return { ok: false, status: 404, error: 'not_found' };
+  let spin = rows[0];
+  if (spin.result === 'SETTLED') return { ok: true, already: true, ...spinDisplay(spin) };
+  if (spin.result !== 'PENDING') return { ok: false, status: 409, error: 'not_pending' };
+
+  const claim = await runQuery("UPDATE wheel_spins SET result = 'SETTLED' WHERE spinId = ? AND result = 'PENDING'", [spinId]);
+  if (!claim || claim.changes === 0) {
+    const again = await getQuery("SELECT * FROM wheel_spins WHERE spinId = ?", [spinId]);
+    return { ok: true, already: true, ...(again.length ? spinDisplay(again[0]) : {}) };
+  }
+
+  const seg = WHEEL_SEGMENTS[spin.segment_index];
+  const isJackpot = !!(seg && seg.jackpot);
+  const grand = isJackpot && (spin.jackpot_pct >= 100);
+  const payout = spin.payout || 0;
+
+  if (payout > 0) {
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [payout, spin.userId]);
+  }
+  if (isJackpot) {
+    await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -payout]);
+    if (grand) {
+      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, JACKPOT_MINIMUM]);
+    }
+  }
+  const txnType = isJackpot
+    ? (grand ? "Jackpot Win" : "Jackpot Win (partial)")
+    : (spin.type === 'gold' ? "Reward: Gold Spin" : "Reward: Public Spin");
+  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), spin.userId, txnType, payout]);
+
+  const xp = payout * 0.005;
+  const levelUpInfo = await updateLevel(spin.userId, xp);
+  const out = { result: payout, jackpot: isJackpot, jackpotPct: spin.jackpot_pct || 0, grand, xp, levelUp: levelUpInfo };
+  sendEvent("results", spinId, out);
+  return { ok: true, ...out };
+}
+
+// Client renders the wheel from this so its visuals match the authoritative weights.
+app.get("/api/wheel/config", (req, res) => {
+  // Optional ?level=N returns the gold wheel's level-scaled labels; otherwise the fixed public wheel.
+  const level = parseInt(req.query.level);
+  const multiplier = Number.isFinite(level) ? (1 + level * 0.01 - 0.01) : PUBLIC_WHEEL_MULTIPLIER;
+  res.json({
+    multiplier,
+    segments: WHEEL_SEGMENTS.map((s) => ({
+      color: s.color,
+      size: s.size,
+      jackpot: !!s.jackpot,
+      label: s.jackpot ? s.label : String(Math.round(s.base * multiplier)),
+    })),
   });
 });
 
-// HTTP POST endpoint to handle adding XP
-app.post('/api/update-level', async (req, res) => {
-  const { userId, additionalXp, password } = req.body;
-  const xp = parseInt(additionalXp);
-  // Authentication check
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
-    return res.status(403).json({ success: false, message: 'Access denied' });
-  }
-
-  // Input validation
-  if (!userId || isNaN(additionalXp)) {
-    return res.status(400).json({ success: false, message: 'Invalid inputs' });
-  }
-
+// Called by the wheel page when the animation LANDS. Carries only spinId — the payout
+// was decided server-side at spin time, so nothing here is client-controlled.
+app.post("/api/wheel/settle", async (req, res) => {
+  const spinId = req.body && req.body.spinId;
+  if (!spinId) return res.status(400).json({ error: 'missing spinId' });
   try {
-    // Call the updateLevel function
-    await updateLevel(userId, xp);
-
-    // Respond with success
-    return res.json({ success: true, message: `User ${userId} level and XP updated.` });
-  } catch (error) {
-    console.error('Failed to update level:', error);
-    return res.status(500).json({ success: false, message: 'Failed to update level' });
+    const r = await settleSpin(spinId);
+    if (!r.ok) return res.status(r.status || 500).json(r);
+    res.json(r);
+  } catch (e) {
+    console.error("settle error:", e);
+    res.status(500).json({ error: 'settle failed' });
   }
 });
 
-// HTTP POST endpoint to handle adding XP
-app.post('/api/admin/update-level', authenticateToken, addUser, async (req, res) => {
-  const { username, additionalXp } = req.body;
-  const userType = req.user ? req.user.class : null;
-  const xp = parseInt(additionalXp);
-  if (userType === "Admin" || userType === "Staff") {
-    // Input validation
-    // if (!username || typeof additionalXp !== 'number' || isNaN(additionalXp)) {
-    //   return res.status(400).json({ success: false, message: 'Invalid inputs' });
-    // }
-      try {
-        // Update user's balance
-    // Call the updateLevel function
-    const user = await getQuery(
-      `SELECT userId FROM users WHERE username = ?`,
-      [username]
-    );
-    await updateLevel(user[0].userId, xp);
-        res.json({ message: "Xp added successfully." });
-      } catch (error) {
-        console.error(error);
-        res.status(500).send("Failed to add xp.");
-      }
-  } else {
-    req.flash(
-      "error",
-      "Access denied. You must be an admin or staff to access this page."
-    );
-    return res.redirect("/login");
-  }
-
-});
-
-// HTTP POST endpoint to handle bonus winner
-app.post("/api/bonus/chatwinner", async (req, res) => {
-    const { userId, type, amount } = req.body;
-    const password = req.body.password;
-
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
-        return res.status(403).send("Access denied");
-    }
-  
-    if (!userId || !amount || !type) {
-      return res.status(400).send("Missing required fields");
-    }
-  
-    try {
-      // Start a transaction
-      const transactionId = uuidv4();
-      const bonusId = uuidv4();
-      await runQuery("BEGIN TRANSACTION");
-  
-      // Add points to the winner's points balance
-      await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
-  
-      // Insert into bonus_winners table   
-      await runQuery(
-        "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-        [bonusId, type, userId, transactionId, amount]
-      );
-  
-      // Log the transaction
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionId, userId, "bonus win", amount]
-      );
-  
-      // Commit the transaction
-      await runQuery("COMMIT");
-  
-      res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
-    } catch (error) {
-      // Rollback in case of error
-      await runQuery("ROLLBACK");
-      console.error("Failed to process bonus winner:", error);
-      res.status(500).send("Failed to process bonus winner");
-    }
-  });
-
-// Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same
-// updateLevel path as the wheel, so level-ups and their bonuses behave identically.
-app.post("/api/u/grant-xp", async (req, res) => {
-  const { userId, xp, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
-    return res.status(403).send("Access denied");
-  }
-  if (!userId || xp === undefined || xp === null || isNaN(Number(xp))) {
-    return res.status(400).send("Missing or invalid userId/xp");
-  }
+// Back-compat shim: the client no longer decides the prize. Any posted `result` is
+// ignored; we settle from the server-computed payout (so a stale wheel page still works).
+app.post("/api/g/wheel/spin/result", async (req, res) => {
+  const spinId = req.body && req.body.spinId;
+  if (!spinId) return res.status(400).json({ error: 'missing spinId' });
   try {
-    const info = await updateLevel(userId, Number(xp));
-    res.status(200).json({ success: true, info });
-  } catch (error) {
-    console.error("grant-xp error:", error);
-    res.status(500).send("Failed to grant XP");
+    const r = await settleSpin(spinId);
+    if (!r.ok) return res.status(r.status || 500).json(r);
+    res.json(r);
+  } catch (e) {
+    console.error("spin/result settle error:", e);
+    res.status(500).json({ error: 'settle failed' });
   }
 });
 
-// Adjust the jackpot pool from the !heist game. Positive amount FEEDS the bank
-// (e.g. busted heist wagers), negative DRAINS it (heist winnings paid out from the pot).
-// Bot-authenticated (same token pattern as chatwinner). Returns the new pot total.
-app.post("/api/g/heist/jackpot-adjust", async (req, res) => {
-  const { amount, userId, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
-    return res.status(403).send("Access denied");
-  }
-  if (amount === undefined || amount === null || isNaN(Number(amount))) {
-    return res.status(400).send("Missing or invalid amount");
-  }
-  try {
-    const jackpotId = uuidv4();
-    const spinId = uuidv4();
-    await runQuery(
-      "INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-      [jackpotId, spinId, userId || null, Math.round(Number(amount))]
-    );
-    const rows = await getQuery("SELECT SUM(amount) AS pot FROM jackpot_rakes");
-    const pot = (rows && rows[0] && rows[0].pot) || 0;
-    res.status(200).json({ success: true, jackpotTotal: pot });
-  } catch (error) {
-    console.error("Heist jackpot-adjust error:", error);
-    res.status(500).send("Failed to adjust jackpot");
-  }
-});
-
-// HTTP POST endpoint to handle bonus winner
-app.post("/api/bonus/winner", authenticateToken, addUser, async (req, res) => {
-  const { userId, type, amount } = req.body;
-
-  const userType = req.user ? req.user.class : null;
-  if (userType !== "Admin" || userType !== "Staff") {
-      return res.status(403).send("Access denied");
-  }
-
-  if (!userId || !amount || !type) {
-    return res.status(400).send("Missing required fields");
-  }
-
-  try {
-    // Start a transaction
-    const transactionId = uuidv4();
-    const bonusId = uuidv4();
-    await runQuery("BEGIN TRANSACTION");
-
-    // Add points to the winner's points balance
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
-
-    // Insert into bonus_winners table   
-    await runQuery(
-      "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-      [bonusId, type, userId, transactionId, amount]
-    );
-
-    // Log the transaction
-    await runQuery(
-      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-      [transactionId, userId, "bonus win", amount]
-    );
-
-    // Commit the transaction
-    await runQuery("COMMIT");
-
-    res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
-  } catch (error) {
-    // Rollback in case of error
-    await runQuery("ROLLBACK");
-    console.error("Failed to process bonus winner:", error);
-    res.status(500).send("Failed to process bonus winner");
-  }
-});
-
-// HTTP POST endpoint to record the result of a wheel spin.
+// Back-compat shim (gold): ignores any posted `result`, settles server-side.
 app.post(
   "/api/u/:username/wheel/spin/result",
   authenticateToken,
-  (req, res) => {
-    const { spinId, result } = req.body;
-    const transactionType = "Reward: Gold Spin";
-    const transactionId = uuidv4();
-    // Update the wheel spin table with the result.
-    db.run("UPDATE wheel_spins SET result = ? WHERE spinId = ?", [
-      result,
-      spinId,
-    ]);
-
-    let userId = 0;
-
-    db.serialize(() => {
-      // Find the UserId associated with the Spin.
-      db.get(
-        `SELECT userId FROM wheel_spins WHERE spinId = ?;`,
-        [spinId],
-        (err, row) => {
-          if (err) {
-            console.error("Error executing SQL: " + err.message);
-          } else {
-            if (row) {
-              console.log("UserId found:", row.userId);
-              userId = row.userId;
-              if (result.includes("JACKPOT") === true) {
-                // Landed the jackpot slice — the second roll decides what % of the pot you take.
-                db.get(
-                  "SELECT SUM(amount) AS total FROM jackpot_rakes",
-                  (err, row) => {
-                    if (err) {
-                      return;
-                    }
-                    const pot = row.total || 0;
-                    const pct = rollJackpotPercent();
-                    const isGrand = pct >= 1.0;
-                    const payout = Math.max(0, Math.round(pot * pct));
-
-                    // Credit the winner.
-                    db.run(
-                      `UPDATE users SET points_balance = points_balance + ${payout} WHERE userId = ?`,
-                      [userId]
-                    );
-                    // Draw the payout out of the pot.
-                    db.run(
-                      `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
-                      [uuidv4(), spinId, userId, -payout]
-                    );
-                    // A GRAND (100%) win empties the pot — reseed it to the floor.
-                    if (isGrand) {
-                      db.run(
-                        `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`,
-                        [uuidv4(), spinId, userId, JACKPOT_MINIMUM]
-                      );
-                    }
-                    // Log the transaction.
-                    db.run(
-                      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                      [transactionId, userId, isGrand ? "Jackpot Win" : "Jackpot Win (partial)", payout],
-                      async (err) => {
-                        if (err) {
-                          return res
-                            .status(500)
-                            .json({ error: "Failed to create spin record" });
-                        }
-                        const xp = payout * 0.005;
-                        const levelUpInfo = await updateLevel(userId, xp);
-                        res.status(200).json({
-                          transactionId: transactionId,
-                          result: payout,
-                          xp: xp,
-                          jackpot: true,
-                          jackpotPct: Math.round(pct * 100),
-                          grand: isGrand,
-                          levelUp: levelUpInfo
-                        });
-                      }
-                    );
-                  }
-                );
-              } else {
-                // Add points to the user balance.
-                db.run(
-                  `UPDATE users SET points_balance = points_balance + ${result} WHERE userId = ?`,
-                  [userId]
-                );
-
-                // Log the transaction.
-                db.run(
-                  "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                  [transactionId, userId, transactionType, result],
-                  async (err) => {
-                    if (err) {
-                      return res
-                        .status(500)
-                        .json({ error: "Failed to create spin record" });
-                    }
-                    xp = result * 0.005;
-                    const levelUpInfo = await updateLevel(userId, xp);
-                    res
-                      .status(200)
-                      .json({ transactionId: transactionId, result: result, xp: xp, levelUp: levelUpInfo });
-                  }
-                );
-              }
-            } else {
-              console.log("No matching record found for the given spinId");
-              return res
-                .status(500)
-                .json({ error: "Failed to create spin record" });
-            }
-          }
-        }
-      );
-    });
+  async (req, res) => {
+    const spinId = req.body && req.body.spinId;
+    if (!spinId) return res.status(400).json({ error: 'missing spinId' });
+    try {
+      const r = await settleSpin(spinId);
+      if (!r.ok) return res.status(r.status || 500).json(r);
+      res.json(r);
+    } catch (e) {
+      console.error("gold spin/result settle error:", e);
+      res.status(500).json({ error: 'settle failed' });
+    }
   }
 );
 
-// POST endpoint for buying or cashing out poker chips
-app.post('/api/poker/cashier', async (req, res) => {
-    const { userId, amount, action } = req.body;
-  
-    if (amount <= 0) {
-      return res.status(400).send('Amount must be greater than 0.');
-    }
-  
-    try {
-      await runQuery('BEGIN TRANSACTION');
-  
-      // Get user's current points balance
-      const userResult = await getQuery('SELECT points_balance FROM users WHERE userId = ?', [userId]);
-      if (!userResult.length) {
-        throw new Error('User not found');
-      }
-      const userBalance = userResult[0].points_balance;
-  
-      if (action === 'buyin') {
-        // Check if user has enough points
-        if (userBalance < amount) {
-          throw new Error('Insufficient balance');
-        }
-  
-        // Subtract points from user's balance
-        await runQuery('UPDATE users SET points_balance = points_balance - ? WHERE userId = ?', [amount, userId]);
-  
-      } else if (action === 'cashout') {
-        // Add points to user's balance
-        await runQuery('UPDATE users SET points_balance = points_balance + ? WHERE userId = ?', [amount, userId]);
-      } else {
-        throw new Error('Invalid action');
-      }
-  
-      // Log transaction
-      const transactionId = uuidv4();
-      const transactionType = action === 'buyin' ? 'Poker Buy-in' : 'Poker Cashout';
-      await runQuery('INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)', 
-                     [transactionId, userId, transactionType, action === 'buyin' ? -amount : amount]);
-  
-      // Create poker_cashier entry
-      const cashierId = uuidv4();
-      await runQuery('INSERT INTO poker_cashier (cashierId, userId, transactionId, amount, action) VALUES (?, ?, ?, ?, ?)', 
-                     [cashierId, userId, transactionId, amount, action]);
-  
-      await runQuery('COMMIT');
-      res.json({ message: `${action} successful`, balance: userBalance - (action === 'buyin' ? amount : -amount) });
-  
-    } catch (error) {
-      await runQuery('ROLLBACK');
-      console.error('Transaction failed:', error.message);
-      res.status(500).send(error.message);
-    }
-  });
-
-// Server-Sent Events setup to send commands to the client
 app.get("/events", (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
 
@@ -3773,9 +3430,18 @@ app.get("/api/stats/spins", async (req, res) => {
       `SELECT u.username, ws.userId,
               COUNT(ws.spinId) as total_spins,
               SUM(CASE WHEN ws.result = 'FAILED' THEN 1 ELSE 0 END) as failed_spins,
-              SUM(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT','FAILED') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as regular_won,
-              MAX(CASE WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT','FAILED') THEN CAST(ws.result AS INTEGER) ELSE 0 END) as biggest_regular,
-              SUM(CASE WHEN ws.result LIKE '%JACKPOT%' THEN 1 ELSE 0 END) as jackpot_count
+              SUM(CASE
+                    WHEN ws.result = 'SETTLED' AND ws.jackpot_pct IS NULL THEN COALESCE(ws.payout,0)
+                    WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT','FAILED','SETTLED') THEN CAST(ws.result AS INTEGER)
+                    ELSE 0 END) as regular_won,
+              MAX(CASE
+                    WHEN ws.result = 'SETTLED' AND ws.jackpot_pct IS NULL THEN COALESCE(ws.payout,0)
+                    WHEN ws.result NOT LIKE '%JACKPOT%' AND ws.result NOT IN ('PENDING','INTENT','FAILED','SETTLED') THEN CAST(ws.result AS INTEGER)
+                    ELSE 0 END) as biggest_regular,
+              SUM(CASE
+                    WHEN ws.result = 'SETTLED' AND ws.jackpot_pct IS NOT NULL THEN 1
+                    WHEN ws.result LIKE '%JACKPOT%' THEN 1
+                    ELSE 0 END) as jackpot_count
        FROM wheel_spins ws
        JOIN users u ON ws.userId = u.userId
        WHERE ws.result NOT IN ('PENDING','INTENT')${sinceClause}${userClause}
@@ -3783,12 +3449,12 @@ app.get("/api/stats/spins", async (req, res) => {
       params
     );
 
-    // Get jackpot winnings from transactions table
+    // Get jackpot winnings from transactions table (full + partial jackpot wins)
     const jackpotRows = await getQuery(
       `SELECT u.username, SUM(t.points) as jackpot_won, MAX(t.points) as biggest_jackpot
        FROM transactions t
        JOIN users u ON t.userId = u.userId
-       WHERE t.type = 'Jackpot Win'${sinceTxClause}${userTxClause}
+       WHERE t.type LIKE 'Jackpot Win%'${sinceTxClause}${userTxClause}
        GROUP BY t.userId`,
       txParams
     );
@@ -3879,16 +3545,23 @@ app.get("/api/stats/spins/:username", async (req, res) => {
     if (!user.length) return res.status(404).json({ error: "User not found" });
 
     const rows = await getQuery(
-      `SELECT ws.result, ws.timestamp
+      `SELECT ws.result, ws.payout, ws.jackpot_pct, ws.timestamp
        FROM wheel_spins ws
        WHERE ws.userId = ? AND ws.type = 'public' AND ws.result NOT IN ('PENDING','INTENT')
        ORDER BY ws.timestamp DESC
        LIMIT 50`,
       [user[0].userId]
     );
+    // New rows store the amount in `payout` (result='SETTLED'); old rows kept it in `result`.
+    const wonOf = (r) => {
+      if (r.result === 'SETTLED') return r.payout || 0;
+      if (r.result === 'FAILED') return 0;
+      const n = parseInt(r.result, 10);
+      return Number.isFinite(n) ? n : 0;
+    };
     const total_spins = rows.length;
-    const total_won = rows.reduce((sum, r) => sum + parseInt(r.result || 0), 0);
-    const biggest = Math.max(...rows.map(r => parseInt(r.result || 0)), 0);
+    const total_won = rows.reduce((sum, r) => sum + wonOf(r), 0);
+    const biggest = Math.max(0, ...rows.map(wonOf));
     res.json({ username, total_spins, total_won, biggest_win: biggest, recent: rows.slice(0, 10) });
   } catch (error) {
     console.error("User spin stats error:", error);

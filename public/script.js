@@ -162,17 +162,34 @@ function drawWheel() {
 }
 
 // Wheel Animation Function
-function spinWheel() {
-  hideResultOverlay()
+// The SERVER already decided which slice wins (targetIndex); we animate the wheel to land
+// there. The spin reveals the result, it no longer determines it (anti-forgery refactor).
+function spinWheel(targetIndex) {
+  hideResultOverlay();
   if (isSpinning) return;
+  if (typeof targetIndex !== 'number' || targetIndex < 0 || targetIndex >= segments.length) {
+    console.error("No/invalid targetIndex from server; aborting spin.", targetIndex);
+    return;
+  }
   isSpinning = true;
 
-  const spinTimeTotal = 5000 + Math.random() * 10000; // Randomized spin time between 5-10 seconds
-  const spinAngleStart = Math.random() * 10 + 10; // Randomized initial spin velocity
-  const tickInterval = 2*(2 * Math.PI) / segments.length; // Interval at which the sound should play
+  const twoPi = 2 * Math.PI;
+  const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
+  let cumBefore = 0;
+  for (let i = 0; i < targetIndex; i++) cumBefore += (segments[i].size / totalSize) * twoPi;
+  const sliceFrac = (segments[targetIndex].size / totalSize) * twoPi;
+  const A = cumBefore + sliceFrac / 2;
+  const targetMod = (((3 * Math.PI / 2 - A) % twoPi) + twoPi) % twoPi;
 
-  let lastTickAngle = 0;
+  const start = currentAngle;
+  const startMod = ((start % twoPi) + twoPi) % twoPi;
+  const delta = (((targetMod - startMod) % twoPi) + twoPi) % twoPi;
+  const extraTurns = 5;
+  const finalAngle = start + extraTurns * twoPi + delta;
 
+  const spinTimeTotal = 6000;
+  const tickInterval = 2 * twoPi / segments.length;
+  let lastTickAngle = start;
   let startTime = null;
 
   function animateSpin(timestamp) {
@@ -180,28 +197,24 @@ function spinWheel() {
     const elapsed = timestamp - startTime;
     const progress = Math.min(elapsed / spinTimeTotal, 1);
 
-    const spinAngle = spinAngleStart * (1 - easeOut(progress)) * (Math.PI / 180);
-    currentAngle = (currentAngle + spinAngle) % (2 * Math.PI);
-    // Play the ticker sound at each segment interval
-    if ((currentAngle - lastTickAngle) < 0) {
-      lastTickAngle = 0; // Reset when completing a full loop
-  }
-
-  if (currentAngle - lastTickAngle >= tickInterval) {
+    currentAngle = start + (finalAngle - start) * easeOut(progress);
+    if (currentAngle - lastTickAngle >= tickInterval) {
       tickerSound.pause();
-      tickerSound.currentTime = 0; // Reset the audio
+      tickerSound.currentTime = 0;
       tickerSound.play();
       lastTickAngle += tickInterval;
-  }
+    }
     drawWheel();
 
     if (progress < 1) {
       requestAnimationFrame(animateSpin);
     } else {
-      setTimeout(() => { // Allow the wheel to visually stop before showing the result
+      currentAngle = finalAngle;
+      drawWheel();
+      setTimeout(() => {
         isSpinning = false;
-        determineSpinResult();
-      }, 500); 
+        settleAndReveal();
+      }, 500);
     }
   }
 
@@ -349,62 +362,41 @@ function userSpin() {
 }
 
 // Logic for the winning result.
-function determineSpinResult() {
-  const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
-  const segmentAngle = (2 * Math.PI) / totalSize;
-
-  // Adjust current angle so that 0 degrees aligns with the arrow (top position)
-  // CurrentAngle represents the change in the startangle and endangle so we can know the length of rotations to unwind, and correspond this with the number of segments and size of segment to get to the same position.
-  let angle = (2 * Math.PI - ((currentAngle + ((2 * Math.PI) / 4)) % (2 * Math.PI))) % (2 * Math.PI); // The 0 position is on the right by default, so we add a quarter rotation to the current angle to compensate.
-  let cumulativeAngle = 0;
-
-  for (let i = 0; i < segments.length; i++) {
-    cumulativeAngle += (segments[i].size / totalSize) * 2 * Math.PI;
-    if (angle <= cumulativeAngle) {
-      const resultInt = segments[i].label;
-      const result = resultInt.toString();
-      const isJackpotLanding = result.includes("JACKPOT");
-      // Display the result. For a jackpot landing, show suspense — the server
-      // decides the real outcome via its secondary roll.
-      drawResultOverlay(isJackpotLanding ? "🎰 ROLLING FOR JACKPOT..." : result);
-      // Send result to backend.
-      const username = getUsernameFromUrl();
-      const url = `/api/u/${username}/wheel/spin/result`;
-      fetch(url, {
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ spinId: spinId, result: result }),
-        method: "POST"
-      })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Server response:', data);
-        fetchUserBalance(username);
-        fetchUserLevel(username);
-        // For jackpot landings, show the server-authoritative outcome
-        if (isJackpotLanding) {
-          if (data.grand) {
-            drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE pot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
-          } else if (data.jackpot) {
-            drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the pot: " + Number(data.result).toLocaleString() + " 🏆");
-          }
-        }
-        // Additional actions based on response can be handled here
-        if (data.result) {
-          displayPointsReward(data.result);
-          displayXPReward(data.xp);
-          if (data.levelUp && data.levelUp.leveledUp) {
-            console.log("leveledup!!!");
-            displayLevelUpAnimation(data.levelUp.levelsGained, data.levelUp.newLevel, data.levelUp.bonusPoints);
-          }
-          document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
-        }
-      })
-      .catch(error => {
-        console.error('Error sending spin result:', error);
-      });
-      break;
+// The wheel landed — tell the server (spinId only). It credits the payout it decided at
+// spin time and returns it; we just render the reveal. Nothing here is client-authoritative.
+function settleAndReveal() {
+  const username = getUsernameFromUrl();
+  fetch(`/api/wheel/settle`, {
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ spinId: spinId }),
+    method: "POST"
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Settle response:', data);
+    fetchUserBalance(username);
+    fetchUserLevel(username);
+    if (data.grand) {
+      drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE pot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
+    } else if (data.jackpot) {
+      drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the pot: " + Number(data.result).toLocaleString() + " 🏆");
+    } else {
+      drawResultOverlay(Number(data.result || 0).toLocaleString());
     }
-  }
+    if (data.result !== undefined) {
+      displayPointsReward(data.result);
+      displayXPReward(data.xp);
+      if (data.levelUp && data.levelUp.leveledUp) {
+        console.log("leveledup!!!");
+        displayLevelUpAnimation(data.levelUp.levelsGained, data.levelUp.newLevel, data.levelUp.bonusPoints);
+      }
+      const ss = document.getElementById('spinStatus');
+      if (ss) ss.style.visibility = 'hidden';
+    }
+  })
+  .catch(error => {
+    console.error('Error settling spin:', error);
+  });
 }
 
 // Function to display level-up animation
@@ -552,27 +544,23 @@ function setupSpinListener(username) {
   };
 }
 
-function acknowledgeSpin(spinId) {
+function acknowledgeSpin(ackSpinId) {
   fetch(`/api/u/acknowledge-spin`, {
       method: 'POST',
       headers: {
           'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ spinId: spinId })
+      body: JSON.stringify({ spinId: ackSpinId })
   })
   .then(response => response.json())
   .then(data => {
       console.log('Acknowledgment response:', data);
       if (data.success) {
-          console.log("Spin command received:", data);
-          const segments = data.message.split(' '); // Split the path by ' '
-          // Assuming the structure /u/username/wheel, username would be at index 2
-          wheelSpinner = segments[4];
-          spinId = data.spinId;
+          spinId = ackSpinId;            // set the global spinId used by settleAndReveal
           wager = 5000;
           displayWagerCost(wager);
-          fetchUserBalance(username); // Update the User Balance
-          spinWheel(); // Function to start the wheel spinning
+          fetchUserBalance(username);    // Update the User Balance
+          spinWheel(data.targetIndex);   // animate to the server-chosen slice
       } else {
           alert('Failed to acknowledge spin:', data.message);
       }
