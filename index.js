@@ -1298,6 +1298,51 @@ app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
   }
 });
 
+// ── Wager escrow for bot-run games (duels, brawls) ──
+// charge = atomically lock a stake (can't be tipped out afterward); payout = release
+// winnings/refund. Bot-token gated. The atomic conditional debit is what makes escrow safe.
+app.post("/api/wager/charge", async (req, res) => {
+  const { username, password } = req.body || {};
+  const amount = Math.floor(Number(req.body && req.body.amount));
+  const reason = ((req.body && req.body.reason) || "Wager").toString().slice(0, 40);
+  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
+  try {
+    const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
+    if (!users.length) return res.status(404).json({ ok: false, error: "no_user" });
+    const userId = users[0].userId;
+    // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW.
+    const debit = await runQuery(
+      "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
+      [amount, userId, amount]
+    );
+    if (!debit || debit.changes === 0) return res.status(402).json({ ok: false, error: "insufficient" });
+    await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), userId, reason, -amount]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("wager charge error:", e);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+app.post("/api/wager/payout", async (req, res) => {
+  const { username, password } = req.body || {};
+  const amount = Math.floor(Number(req.body && req.body.amount));
+  const reason = ((req.body && req.body.reason) || "Winnings").toString().slice(0, 40);
+  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
+  try {
+    const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
+    if (!users.length) return res.status(404).json({ ok: false, error: "no_user" });
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, users[0].userId]);
+    await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), users[0].userId, reason, amount]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("wager payout error:", e);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
 // Get the user avatar
 app.get("/api/u/:username/avatar", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
