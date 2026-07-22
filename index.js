@@ -983,12 +983,14 @@ app.get("/rankings", addUser, async (req, res) => {
         LIMIT 100
     `;
 
-  // Recent jackpot winners
+  // Recent jackpot winners — match both full ("Jackpot Win") and partial
+  // ("Jackpot Win (partial)") payouts. Since 2026-07-19 wins record as partial,
+  // so the old exact `= 'Jackpot Win'` match silently dropped every recent winner.
   const jackpotSql = `
         SELECT u.username, u.displayname, t.points AS amount, t.timestamp
         FROM transactions t
         JOIN users u ON t.userId = u.userId
-        WHERE t.type = 'Jackpot Win'
+        WHERE t.type LIKE 'Jackpot Win%'
         ORDER BY t.timestamp DESC
         LIMIT 50
     `;
