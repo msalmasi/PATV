@@ -337,9 +337,10 @@ function userSpin() {
     body: JSON.stringify({username: username, pageId: pageId}),
     method: "POST",
   })
-  .then(response => {
-    if (!response.ok) { // Handle non-200 responses
-        throw new Error('Spin already in progress');
+  .then(async response => {
+    if (!response.ok) { // Handle non-200 responses — surface the server's reason (limit, in-progress, etc.)
+        const msg = await response.text().catch(() => '');
+        throw new Error(msg || 'Spin already in progress');
     }
     return response.json();
 })
@@ -351,12 +352,13 @@ function userSpin() {
       // displayWagerCost(wager);
       fetchUserBalance(username); // Update the User Balance
       fetchJackpotTotal()
+      if (typeof updateSpinsLeft === 'function') updateSpinsLeft(); // refresh the daily counter
       document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
       }
   })
   .catch(error => {
       console.error('Error making the POST request:', error);
-      document.getElementById('spinStatus').textContent = 'Spin in progress...'; // Display error message
+      document.getElementById('spinStatus').textContent = error.message || 'Spin in progress...'; // Show the server's reason
       document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
   });
 }

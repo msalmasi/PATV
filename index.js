@@ -1598,6 +1598,15 @@ app.post("/shop", addUser, async (req, res) => {
       [prize.cost, userId]
     );
 
+    // Digital prize effect: the spin boost permanently raises this user's daily gold-spin
+    // cap by 100 (stackable — buy it again for another +100/day).
+    if (prize.prizeId === "spinboost100") {
+      await runQuery(
+        "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + 100 WHERE userId = ?",
+        [userId]
+      );
+    }
+
     // Decrement the prize quantity
     await runQuery(
       "UPDATE prizes SET quantity = quantity - 1 WHERE prizeId = ?",
@@ -1888,6 +1897,28 @@ app.get("/g/wheel", addUser, (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   res.render("publicwheel", { user: username });
   // Proceed with fetching user data and generating wheel
+});
+
+// Remaining gold spins for the day (10 per user level, plus any purchased +100 boosts).
+app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res) => {
+  try {
+    const username = req.params.username;
+    if (req.username !== username) return res.status(403).send("Access denied");
+    const user = await getQuery(
+      "SELECT userId, level, extra_daily_spins FROM users WHERE username = ?;",
+      [username]
+    );
+    if (!user.length) return res.status(404).json({ error: "User not found" });
+    const limit = 10 * (user[0].level || 1) + (user[0].extra_daily_spins || 0);
+    const cnt = await getQuery(
+      "SELECT COUNT(*) AS c FROM wheel_spins WHERE userId = ? AND type = 'gold' AND result != 'FAILED' AND date(timestamp) = date('now');",
+      [user[0].userId]
+    );
+    const used = cnt[0].c;
+    res.json({ used, limit, left: Math.max(0, limit - used) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // HTTP Post endpoint to update the jackpot
@@ -2475,12 +2506,24 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
     checkAndResolveStalledSpins();
     checkAndResolvePendingSpins();
     const user = await getQuery(
-      `SELECT userId, points_balance FROM users WHERE username = ?;`,
+      `SELECT userId, points_balance, level, extra_daily_spins FROM users WHERE username = ?;`,
       [username]
     );
 
     if (!user.length || user[0].points_balance < 5000) {
       return res.status(400).send("Insufficient points or user not found");
+    }
+
+    // Daily gold-spin cap: 10 per user level, plus any purchased "+100 Daily Gold Spins" boosts.
+    const dailyLimit = 10 * (user[0].level || 1) + (user[0].extra_daily_spins || 0);
+    const spunToday = await getQuery(
+      `SELECT COUNT(*) AS c FROM wheel_spins WHERE userId = ? AND type = 'gold' AND result != 'FAILED' AND date(timestamp) = date('now');`,
+      [user[0].userId]
+    );
+    if (spunToday[0].c >= dailyLimit) {
+      return res.status(429).send(
+        `Daily gold-spin limit reached (${dailyLimit}/day). Come back tomorrow, level up for more, or buy +100 Daily Gold Spins in the shop.`
+      );
     }
 
     const pendingSpin = await getQuery(

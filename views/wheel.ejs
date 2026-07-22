@@ -15,6 +15,9 @@
                         to spin again.</li>
                     <li>If you are having issues, refresh the page.</li>
                     <li>You can only spin one wheel at a time.</li>
+                    <li>You get <strong>10 spins per day for each of your levels</strong>. Want more? Buy
+                        <strong>+100 Daily Gold Spins</strong> in the <a href='/shop' class='infolink'>shop</a>. Your
+                        remaining spins for the day show on the <em>Spins Left</em> panel.</li>
                     <li>Jackpots occur randomly and can significantly increase your points!</li>
                 </ul>
             </div>
@@ -33,6 +36,9 @@
             <div class="balance-display">Balance<br><br><br>
                 <span id="userBalance">Loading balance...</span>
 
+            </div>
+            <div class="balance-display">Spins Left<br><br><br>
+                <span id="spinsLeft">…</span>
             </div>
         </div>
 
@@ -107,4 +113,17 @@
                 localStorage.setItem('hasVisited', 'true');
             }
         }
+
+        // Live "spins left today" counter (10/level/day + purchased boosts).
+        // Exposed as a global so script.js can refresh it right after a spin.
+        function updateSpinsLeft() {
+            var el = document.getElementById('spinsLeft');
+            if (!el) return;
+            fetch('/api/u/<%= user %>/wheel/spins-left', { credentials: 'same-origin' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (d) { if (d) el.textContent = d.left + ' / ' + d.limit; })
+                .catch(function () { });
+        }
+        updateSpinsLeft();
+        setInterval(updateSpinsLeft, 8000);
     </script>
