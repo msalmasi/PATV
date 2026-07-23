@@ -1310,9 +1310,13 @@ app.post("/api/wager/charge", async (req, res) => {
   if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
   if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
   try {
-    const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
+    const users = await getQuery("SELECT userId, casino_banned FROM users WHERE username = ?", [username]);
     if (!users.length) return res.status(404).json({ ok: false, error: "no_user" });
     const userId = users[0].userId;
+    // Casino-banned users can't be charged for casino games (blackjack/hold'em/poker/wheel).
+    if (users[0].casino_banned && /^(blackjack|holdem|poker|wheel)/i.test(reason)) {
+      return res.status(403).json({ ok: false, error: "casino_banned" });
+    }
     // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW.
     const debit = await runQuery(
       "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
@@ -1342,6 +1346,39 @@ app.post("/api/wager/payout", async (req, res) => {
   } catch (e) {
     console.error("wager payout error:", e);
     res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+// ── Casino ban ── one flag (users.casino_banned) blocks a user from ALL casino play:
+// the web wheel & blackjack, the chat games, and Discord (which routes to the web). Every
+// casino money endpoint checks it. Admin sets it via the bot token.
+app.post("/api/admin/casino-ban", async (req, res) => {
+  const { username, banned, password } = req.body || {};
+  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  if (!username) return res.status(400).json({ ok: false, error: "bad_request" });
+  try {
+    const r = await runQuery(
+      "UPDATE users SET casino_banned = ? WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?)",
+      [banned ? 1 : 0, username, username]
+    );
+    if (!r || r.changes === 0) return res.status(404).json({ ok: false, error: "no_user" });
+    res.json({ ok: true, banned: !!banned });
+  } catch (e) {
+    console.error("casino-ban error:", e);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
+// Is a user banned from the casino? (chat/Discord bots use this for a clean message)
+app.get("/api/u/:username/casino-banned", async (req, res) => {
+  try {
+    const u = await getQuery(
+      "SELECT casino_banned FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?)",
+      [req.params.username, req.params.username]
+    );
+    res.json({ banned: !!(u.length && u[0].casino_banned) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -2322,11 +2359,16 @@ app.post("/api/blackjack/wager", async (req, res) => {
       await runQuery("BEGIN TRANSACTION");
   
       // Check if the user has enough balance
-      const users = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
+      const users = await getQuery("SELECT points_balance, casino_banned FROM users WHERE userId = ?", [userId]);
       if (users.length === 0 || users[0].points_balance < wager) {
+        await runQuery("ROLLBACK");
         return res.status(400).json({ success: false, message: "Insufficient balance" });
       }
-  
+      if (users[0].casino_banned) {
+        await runQuery("ROLLBACK");
+        return res.status(403).json({ success: false, message: "You are banned from the casino." });
+      }
+
       // Deduct the wager from the user's balance
       const transactionId = uuidv4();
       await runQuery(
@@ -2506,12 +2548,15 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
     checkAndResolveStalledSpins();
     checkAndResolvePendingSpins();
     const user = await getQuery(
-      `SELECT userId, points_balance, level, extra_daily_spins FROM users WHERE username = ?;`,
+      `SELECT userId, points_balance, level, extra_daily_spins, casino_banned FROM users WHERE username = ?;`,
       [username]
     );
 
     if (!user.length || user[0].points_balance < 5000) {
       return res.status(400).send("Insufficient points or user not found");
+    }
+    if (user[0].casino_banned) {
+      return res.status(403).send("You are banned from the casino.");
     }
 
     // Daily gold-spin cap: 10 per user level, plus any purchased "+100 Daily Gold Spins" boosts.
@@ -2638,12 +2683,15 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
     checkAndResolveStalledPublicSpins();
     checkAndResolvePendingPublicSpins();
     const user = await getQuery(
-      `SELECT userId, points_balance FROM users WHERE username = ?;`,
+      `SELECT userId, points_balance, casino_banned FROM users WHERE username = ?;`,
       [username]
     );
 
     if (!user.length || user[0].points_balance < 5000) {
       return res.status(400).send("Insufficient points or user not found");
+    }
+    if (user[0].casino_banned) {
+      return res.status(403).send("You are banned from the casino.");
     }
 
     const pendingSpin = await getQuery(
@@ -2701,14 +2749,17 @@ app.post("/api/g/wheel/chatspin", async (req, res) => {
       checkAndResolveStalledPublicSpins();
       checkAndResolvePendingPublicSpins();
       const user = await getQuery(
-        `SELECT userId, points_balance FROM users WHERE username = ?;`,
+        `SELECT userId, points_balance, casino_banned FROM users WHERE username = ?;`,
         [username]
       );
-  
+
       if (!user.length || user[0].points_balance < 5000) {
         return res.status(400).send("Insufficient points.");
       }
-  
+      if (user[0].casino_banned) {
+        return res.status(403).send("You are banned from the casino.");
+      }
+
       const pendingSpin = await getQuery(
         `SELECT * FROM wheel_spins WHERE result = 'PENDING' AND type = 'public' ORDER BY rowid DESC LIMIT 1;`
       );
@@ -3627,6 +3678,20 @@ function parseSince(s) {
 
 // Spin stats: top winners by total PAT won (includes jackpot winnings)
 // Query params: limit, since, user
+// Total tip volume (PAT) across the room over a recent window — used by the turf Laundering tap.
+app.get("/api/stats/tips-volume", async (req, res) => {
+  try {
+    const minutes = Math.max(1, Math.min(20160, parseInt(req.query.minutes) || 1440));
+    const row = await getQuery(
+      "SELECT COALESCE(SUM(ABS(points)), 0) AS volume FROM transactions WHERE type = 'tip sent' AND timestamp >= datetime('now', ?)",
+      [`-${minutes} minutes`]
+    );
+    res.json({ volume: (row[0] && row[0].volume) || 0, minutes });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/stats/spins", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 15;
