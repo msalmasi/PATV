@@ -2670,6 +2670,13 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
   }
 });
 
+// Public-wheel spin cooldown — mirrors the Camfrog bot's !spin cooldown (in-memory, 60s per user,
+// started only on a SUCCESSFUL spin so a rejected attempt doesn't lock anyone out). Kept separate
+// from the bot (which uses /api/g/wheel/chatspin with its own in-memory cooldown), so the two never
+// interfere. In-memory like the bot's — it simply resets if the server restarts.
+const publicSpinCooldowns = new Map(); // userId -> last successful spin timestamp (ms)
+const PUBLIC_SPIN_COOLDOWN_MS = 60 * 1000;
+
 // HTTP POST endpoint to trigger a public wheel spin
 app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
   const username = req.body.username;
@@ -2692,6 +2699,13 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
     }
     if (user[0].casino_banned) {
       return res.status(403).send("You are banned from the casino.");
+    }
+
+    // Per-user cooldown (only started on a successful spin below).
+    const lastSpin = publicSpinCooldowns.get(user[0].userId) || 0;
+    const remainingMs = PUBLIC_SPIN_COOLDOWN_MS - (Date.now() - lastSpin);
+    if (remainingMs > 0) {
+      return res.status(429).send(`Slow down! You can spin again in ${Math.ceil(remainingMs / 1000)}s.`);
     }
 
     const pendingSpin = await getQuery(
@@ -2728,6 +2742,9 @@ app.post("/api/g/wheel/spin", authenticateToken, async (req, res) => {
       spinId: spinId, // Include the spin ID for tracking
       timestamp: new Date(),
     });
+
+    // Spin accepted — NOW start this user's cooldown (same as the bot: only on success).
+    publicSpinCooldowns.set(user[0].userId, Date.now());
 
     res.json({ spinId });
   } catch (error) {

@@ -151,9 +151,10 @@
                             body: JSON.stringify({ username: user }),
                             method: "POST",
                         })
-                            .then(response => {
-                                if (!response.ok) { // Handle non-200 responses
-                                    throw new Error('Spin already in progress');
+                            .then(async response => {
+                                if (!response.ok) { // surface the server's reason (cooldown, in-progress, etc.)
+                                    const msg = await response.text().catch(() => '');
+                                    throw new Error(msg || 'Spin already in progress');
                                 }
                                 return response.json();
                             })
@@ -172,11 +173,12 @@
                             })
                             .catch(error => {
                                 console.error('Error making the POST request:', error);
-                                document.getElementById('spinStatus').textContent = 'Spin is currently in progress...'; // Display error message
-                                document.getElementById('spinStatus').style.visibility = 'visible'; // Make the status message visible
+                                const el = document.getElementById('spinStatus');
+                                el.textContent = error.message || 'Spin is currently in progress...'; // show the real reason (e.g. cooldown)
+                                el.style.visibility = 'visible';
                                 setTimeout(() => {
-                                    document.getElementById('spinStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                                }, 2000);
+                                    el.style.visibility = 'hidden';
+                                }, 3000);
                             });
                     }
 

@@ -487,11 +487,12 @@ async function addLevelUpXpBonus(levelXpBonus, winnerId, channel) {
     `User with ID ${winnerId} won a level up bonus of ${levelXpBonus}!`
   );
 
-  // Send the result to the backend
+  // Send the result to the backend. NOTE: there is no /api/update-level route (it 404s) —
+  // the bot-authenticated XP endpoint is /api/u/grant-xp with { userId, xp, password }.
   try {
-    await axios.post(process.env.BACKEND_BASE_URL+`/api/update-level`, {
+    await axios.post(process.env.BACKEND_BASE_URL+`/api/u/grant-xp`, {
       userId: userId,
-      additionalXp: levelXpBonus,
+      xp: levelXpBonus,
       password: process.env.DISCORD_BOT_TOKEN,
     });
   } catch (error) {
