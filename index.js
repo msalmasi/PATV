@@ -1369,6 +1369,23 @@ app.post("/api/admin/casino-ban", async (req, res) => {
   }
 });
 
+// Everyone currently casino-banned — for the bot's admin panel, which needs to SHOW the list, not
+// just probe one user at a time. Same bot-token auth as the setter; sent as a POST so the token
+// isn't sitting in a URL/query string.
+app.post("/api/admin/casino-bans", async (req, res) => {
+  const { password } = req.body || {};
+  if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
+  try {
+    const rows = await getQuery(
+      "SELECT username, camfrogUsername FROM users WHERE casino_banned = 1 ORDER BY LOWER(username)"
+    );
+    res.json({ ok: true, users: rows || [] });
+  } catch (e) {
+    console.error("casino-bans list error:", e);
+    res.status(500).json({ ok: false, error: "server_error" });
+  }
+});
+
 // Is a user banned from the casino? (chat/Discord bots use this for a clean message)
 app.get("/api/u/:username/casino-banned", async (req, res) => {
   try {
