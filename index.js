@@ -94,19 +94,35 @@ app.set("views", "./views");
 //   next();
 // });
 
+// Reject an API request that has no valid session, rather than letting the route dereference
+// req.user and throw a 500. addUser deliberately proceeds regardless of token validity (pages need
+// to render logged-out), so any route that actually REQUIRES a user has to say so.
+// These are fetch/XHR endpoints, so answer with JSON — a redirect would be useless to the caller.
+function requireUser(req, res, next) {
+  if (!req.user || !req.user.userId) {
+    return res
+      .status(401)
+      .json({ success: false, message: "Your session has expired — please log in again." });
+  }
+  next();
+}
+
 // Helper Middleware for Auth
 function addUser(req, res, next) {
+  // Always define req.user (null when not logged in) so callers can test it consistently — it used
+  // to be left *undefined* when there was no cookie at all, which reads differently from null.
+  // Verified synchronously: the old callback form called next() outside the callback, which only
+  // happens to work because jwt.verify is synchronous for a string secret.
+  req.user = null;
   const token = req.cookies.jwt;
   if (token) {
-    jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
-      if (!err) {
-        req.user = decoded; // Attach user details to request
-      } else {
-        req.user = null;
-      }
-    });
+    try {
+      req.user = jwt.verify(token, process.env.SECRET_KEY);
+    } catch (err) {
+      req.user = null; // expired or tampered — treat as logged out
+    }
   }
-  next(); // Proceed regardless of token validity
+  next(); // Proceed regardless of token validity; use requireUser to demand a session
 }
 
 // Connect to SQLite database
@@ -1607,10 +1623,10 @@ app.post('/api/users/camfrog/register', async (req, res) => {
 });
 
 // HTTP post endpoint to shop
-app.post("/shop", addUser, async (req, res) => {
+app.post("/shop", addUser, requireUser, async (req, res) => {
   const { product } = req.body;
-  const userId = req.user.userId; // Assuming userId is available from session or token
-  const username = req.user ? req.user.username : null;
+  const userId = req.user.userId; // guaranteed by requireUser
+  const username = req.user.username;
   try {
     // Check if the prize exists and get its cost and quantity
     const prizes = await getQuery(
@@ -1621,15 +1637,16 @@ app.post("/shop", addUser, async (req, res) => {
     if (prizes.length === 0) {
       return res
         .status(404)
-        .json({ success: false, message: "Prize not found" });
+        .json({ success: false, message: "That item isn't in the shop any more." });
     }
     const prize = prizes[0];
 
     // Check if the prize is in stock
     if (prize.quantity <= 0) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Prize is out of stock" });
+      return res.status(400).json({
+        success: false,
+        message: `${prize.prize} is out of stock — check back later.`,
+      });
     }
 
     // Check if the user has enough points
@@ -1637,10 +1654,22 @@ app.post("/shop", addUser, async (req, res) => {
       "SELECT points_balance FROM users WHERE userId = ?",
       [userId]
     );
-    if (users.length === 0 || users[0].points_balance < prize.cost) {
+    if (users.length === 0) {
       return res
-        .status(400)
-        .json({ success: false, message: "Insufficient coins" });
+        .status(404)
+        .json({ success: false, message: "We couldn't find your account — try logging in again." });
+    }
+    const balance = users[0].points_balance || 0;
+    if (balance < prize.cost) {
+      // Tell them exactly how short they are — "Insufficient coins" left people guessing.
+      const short = prize.cost - balance;
+      return res.status(400).json({
+        success: false,
+        message: `${prize.prize} costs ${prize.cost.toLocaleString()} PAT and you have ` +
+                 `${balance.toLocaleString()} — ${short.toLocaleString()} short.`,
+        balance,
+        cost: prize.cost,
+      });
     }
 
     // Start a transaction (if supported)
@@ -1677,25 +1706,41 @@ app.post("/shop", addUser, async (req, res) => {
     // Commit the transaction
     await runQuery("COMMIT");
 
-    // Send an email notification
-    const msg = {
-      to: "pb@publicaccess.tv", // Recipient email address
-      from: "no-reply@publicaccess.tv", // Your verified sender
-      subject: "Purchase Notification",
-      text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
-      html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
-    };
-    await instanceResend.emails.send(msg);
+    // Confirm to the user FIRST. The notification email is not part of the purchase: it used to be
+    // awaited inside this try, so a mail outage threw, hit the catch, ran a ROLLBACK that does
+    // nothing after COMMIT, and told a user who had genuinely been charged that it failed.
+    const remaining = balance - prize.cost;
+    res.json({
+      success: true,
+      message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
+               `Balance: ${remaining.toLocaleString()} PAT.`,
+      prize: prize.prize,
+      cost: prize.cost,
+      balance: remaining,
+      remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
+    });
 
-    // Respond to the user
-    res.json({ success: true, message: "Purchase successful" });
+    // Fire-and-forget notification — never let it affect the purchase result.
+    instanceResend.emails
+      .send({
+        to: "pb@publicaccess.tv",
+        from: "no-reply@publicaccess.tv",
+        subject: "Purchase Notification",
+        text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
+        html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
+      })
+      .catch((e) => console.error("Purchase email failed (purchase itself was fine):", e.message));
   } catch (error) {
-    console.error("Server error:", error);
-
-    // Rollback the transaction in case of error
-    await runQuery("ROLLBACK");
-
-    res.status(500).send("Failed to process the purchase.");
+    console.error("Shop purchase error:", error);
+    try {
+      await runQuery("ROLLBACK");
+    } catch (e) {
+      /* nothing to roll back */
+    }
+    // JSON, not text — the page parses JSON and would otherwise show a generic failure.
+    res
+      .status(500)
+      .json({ success: false, message: "Something went wrong buying that — you have not been charged." });
   }
 });
 
@@ -1976,9 +2021,9 @@ app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res)
 });
 
 // HTTP Post endpoint to update the jackpot
-app.post("/api/g/wheel/jackpot", addUser, async (req, res) => {
+app.post("/api/g/wheel/jackpot", addUser, requireUser, async (req, res) => {
   const { amount } = req.body;
-  const userId = req.user.userId; // Assuming this is set by the authenticateToken middleware
+  const userId = req.user.userId; // guaranteed by requireUser
   const jackpotId = uuidv4(); // Function to generate a UUID v4
   const spinId = uuidv4();
   const userType = req.user ? req.user.class : null;
@@ -2255,18 +2300,20 @@ app.get("/api/admin/redemption-codes/:code/users", authenticateToken, addUser, a
 // HTTP POST endpoint to edit the list of redemption codes.
 app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
     const { code } = req.body;
-    const userId = req.user.userId; // Assuming you have user identification set up
+    const userId = req.user && req.user.userId; // authenticateToken ran first, but don't assume
 
     try {
         const codeData = await getQuery("SELECT * FROM redemption_codes WHERE code = ? AND (expiration_date IS NULL OR expiration_date > CURRENT_TIMESTAMP) AND uses_remaining > 0", [code]);
         const transactionId = uuidv4();
+        // JSON, not text — the shop page parses JSON, so a text body meant these specific
+        // reasons were swallowed and shown as one generic failure.
         if (codeData.length === 0) {
-            return res.status(404).send("Invalid or expired code");
+            return res.status(404).json({ success: false, message: "That code isn't valid, has expired, or has been fully used." });
         }
 
         const userRedemption = await getQuery("SELECT * FROM user_redemptions WHERE userId = ? AND code = ?", [userId, code]);
         if (userRedemption.length > 0) {
-            return res.status(400).send("Code has already been redeemed by you");
+            return res.status(400).json({ success: false, message: "You've already redeemed that code." });
         }
 
         await runQuery("BEGIN TRANSACTION");
@@ -2279,11 +2326,20 @@ app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
           );
         await runQuery("COMMIT");
         
-        res.json({ message: "Code redeemed successfully." });
+        const gained = codeData[0].points || 0;
+        const after = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
+        const bal = after.length ? (after[0].points_balance || 0) : null;
+        res.json({
+            success: true,
+            message: `Code redeemed successfully — +${gained.toLocaleString()} PAT` +
+                     (bal === null ? "." : `. Balance: ${bal.toLocaleString()} PAT.`),
+            points: gained,
+            balance: bal,
+        });
     } catch (error) {
-        await runQuery("ROLLBACK");
+        try { await runQuery("ROLLBACK"); } catch (e) { /* nothing to roll back */ }
         console.error("Failed to redeem code:", error);
-        res.status(500).send("Failed to redeem code");
+        res.status(500).json({ success: false, message: "Something went wrong redeeming that code — no PAT was added." });
     }
 });
 

@@ -18,6 +18,20 @@
 </div>
 
 <script>
+    // Purchases are irreversible and cost real PAT, so the outcome has to be unmistakable:
+    // colour-coded, and failures stay up longer than confirmations so they're actually read.
+    let shopStatusTimer = null;
+    function showShopStatus(message, ok) {
+        const status = document.getElementById('shopStatus');
+        if (!status) return;
+        status.textContent = message;
+        status.style.color = ok ? '#81C784' : '#e57373';
+        status.style.fontWeight = '600';
+        status.style.visibility = 'visible';
+        clearTimeout(shopStatusTimer);
+        shopStatusTimer = setTimeout(() => { status.style.visibility = 'hidden'; }, ok ? 6000 : 9000);
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const productList = document.querySelector('.product-list');
     
@@ -38,7 +52,7 @@
                         <p>PAT ${prize.cost.toLocaleString()}</p>
                         </div>
                         <div class="buy-btn-div">
-                        <p>${prize.quantity.toLocaleString()} Left</p>
+                        <p class="product-stock">${prize.quantity.toLocaleString()} Left</p>
                         </div>
                         <div class="buy-btn-div">
                         <button class="buy-btn" data-product="${prize.prizeId}">Buy</button>
@@ -68,28 +82,37 @@
                         },
                         body: JSON.stringify({ product: product })
                     })
-                    .then(response => {
-            if (!response.ok) { // Handle non-200 responses
-                throw new Error('Failed to buy the item.');
-            }
-            return response.json();
-        })
-                    .then(data => {
-                        const message = data.message;
-            if (message.includes("successful")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-            console.log("booboo");
-            document.getElementById('shopStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-            document.getElementById('shopStatus').textContent = 'Purchased item successfully.'; // Display error message
-            document.getElementById('shopStatus').style.visibility = 'visible'; // Make the status message visible
-            }
+                    // The server explains WHY a purchase failed (not logged in, not enough PAT,
+                    // out of stock). Read that message instead of throwing it away and showing a
+                    // generic failure — "please log in again" is actionable, "Failed" isn't.
+                    .then(response => response.json()
+                        .catch(() => ({}))                      // non-JSON body (e.g. a crash page)
+                        .then(data => ({ ok: response.ok, data })))
+                    .then(({ ok, data }) => {
+                        const succeeded = ok && data && data.success;
+                        // The server already words each outcome (out of stock, how much short,
+                        // session expired) — show that rather than a generic line.
+                        showShopStatus(
+                            (data && data.message) ||
+                                (succeeded ? 'Purchase complete.' : 'Could not buy that item.'),
+                            succeeded);
+                        if (succeeded) {
+                            button.disabled = true;             // no accidental double-buy
+                            button.textContent = 'Purchased';
+                            if (typeof data.remaining_stock === 'number') {
+                                const item = button.closest('.product-item');
+                                const stockEl = item && item.querySelector('.product-stock');
+                                if (stockEl) {
+                                    stockEl.textContent = data.remaining_stock > 0
+                                        ? `${data.remaining_stock.toLocaleString()} Left`
+                                        : 'Out of stock';
+                                }
+                            }
+                        }
                     })
                     .catch(error => {
                         console.error('Error making the POST request:', error);
-            document.getElementById('shopStatus').textContent = 'Failed to purchase item.........'; // Display error message
-            document.getElementById('shopStatus').style.visibility = 'visible'; // Make the status message visible
-            setTimeout(() => {
-                document.getElementById('shopStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-        }, 2000); 
+                        showShopStatus('Could not reach the server — try again.', false);
                     });
                 });
             });
@@ -98,6 +121,18 @@
     </script>
 
 <script>
+    let codeStatusTimer = null;
+    function showCodeStatus(message, ok) {
+        const status = document.getElementById('codeStatus');
+        if (!status) return;
+        status.textContent = message;
+        status.style.color = ok ? '#81C784' : '#e57373';
+        status.style.fontWeight = '600';
+        status.style.visibility = 'visible';
+        clearTimeout(codeStatusTimer);
+        codeStatusTimer = setTimeout(() => { status.style.visibility = 'hidden'; }, ok ? 6000 : 9000);
+    }
+
     document.getElementById('codeform').addEventListener('submit', function(event) {
     event.preventDefault();
     var code = document.getElementById('code').value;
@@ -110,27 +145,21 @@
         },
         body: JSON.stringify({code: code})
     })
-    .then(response => {
-            if (!response.ok) { // Handle non-200 responses
-                throw new Error('Failed to add the redemption code.');
-            }
-            return response.json();
-        })
-        .then(data => {
-            const message = data.message;
-            if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-            document.getElementById('codeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-            document.getElementById('codeStatus').textContent = 'Added redemption code successfully.'; // Display error message
-            document.getElementById('codeStatus').style.visibility = 'visible'; // Make the status message visible
-            }
-        })
-        .catch(error => {
-            console.error('Error making the POST request:', error);
-            document.getElementById('codeStatus').textContent = 'Failed to add the redemption code.........'; // Display error message
-            document.getElementById('codeStatus').style.visibility = 'visible'; // Make the status message visible
-            setTimeout(() => {
-                document.getElementById('codeStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-        }, 2000); 
-        });
+    // Same treatment as a purchase: show what the server actually said (bad code, already used,
+    // expired) instead of one catch-all failure line.
+    .then(response => response.json()
+        .catch(() => ({}))
+        .then(data => ({ ok: response.ok, data })))
+    .then(({ ok, data }) => {
+        const message = (data && data.message) || '';
+        const succeeded = ok && /success/i.test(message);
+        showCodeStatus(message || (succeeded ? 'Code redeemed.' : 'That code could not be redeemed.'),
+                       succeeded);
+        if (succeeded) document.getElementById('code').value = '';
+    })
+    .catch(error => {
+        console.error('Error making the POST request:', error);
+        showCodeStatus('Could not reach the server — try again.', false);
+    });
 });
 </script>
