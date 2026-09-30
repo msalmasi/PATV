@@ -1611,6 +1611,43 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   }
 });
 
+// Bot-only: rename the publicaccess.tv username of the account linked to a Camfrog login.
+// Used by Pepe's !patv set (a player renaming themselves, or an admin renaming a player). The
+// website's own /update/username needs that user's login cookie, which the bot can't have.
+// Every other table references users by userId, so only users.username changes.
+app.post("/api/users/camfrog/rename", async (req, res) => {
+  const { camfrogUsername, newUsername, password } = req.body || {};
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).json({ ok: false, error: "unauthorized" });
+  }
+  const name = String(newUsername || "").trim();
+  if (!/^[A-Za-z0-9_.-]{3,24}$/.test(name)) {
+    return res.status(400).json({ ok: false, error: "usernames are 3-24 characters: letters, numbers, _ . -" });
+  }
+  try {
+    const rows = await getQuery(
+      "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
+      [camfrogUsername]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ ok: false, error: "no account for that Camfrog user" });
+    }
+    const user = rows[0];
+    const taken = await getQuery(
+      "SELECT userId FROM users WHERE LOWER(username) = LOWER(?) AND userId != ?",
+      [name, user.userId]
+    );
+    if (taken.length > 0) {
+      return res.status(409).json({ ok: false, error: "that username is taken" });
+    }
+    await runQuery("UPDATE users SET username = ? WHERE userId = ?", [name, user.userId]);
+    res.json({ ok: true, old: user.username, username: name });
+  } catch (error) {
+    console.error("Error renaming Camfrog user:", error);
+    res.status(500).json({ ok: false, error: "internal server error" });
+  }
+});
+
 // This endpoint creates a new Camfrog user
 app.post('/api/users/camfrog/register', async (req, res) => {
   const { username, displayname, email, password, camfrogUsername, avatar, points_balance } = req.body;
