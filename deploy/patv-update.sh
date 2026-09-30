@@ -200,7 +200,7 @@ done <<< "$CHANGED"
 APPS=("${!APPSET[@]}"); DIRS=("${!NPMSET[@]}")
 
 git merge -q --ff-only "$NEW" || { log "fast-forward failed"; exit 1; }
-log "applied $(short "$CUR") -> $(short "$NEW") ($(echo "$CHANGED" | wc -l) files)"
+log "applied $(short "$CUR") -> $(short "$NEW") ($(echo "$CHANGED" | grep -c .) files)"
 
 WHY=""
 if [ ${#DIRS[@]} -gt 0 ] && ! npm_install "${DIRS[@]}"; then

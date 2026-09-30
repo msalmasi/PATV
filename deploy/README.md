@@ -53,3 +53,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the same syntax checks, plus a 
 The updater script updates itself when `deploy/` changes. Unit-file changes need `install.sh` to be run again.
 
 pm2 is saved and enabled at boot (`pm2-root.service`). After adding or removing an app, run `pm2 save`.
+
+## DNS
+
+`python deploy/cfdns.py list | set A name ip [--proxied] | delete name` manages publicaccess.tv records. The token is read from `~/.config/cloudflare/publicaccess.token`; never commit it.
