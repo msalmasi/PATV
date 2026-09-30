@@ -1,1 +1,0 @@
-/usr/bin/sqlite3 /home/PATV/myapp.db ".backup '/home/PATV/backup_file-`date +"%d-%m-%Y"`.db'"
