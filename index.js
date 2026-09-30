@@ -4,7 +4,7 @@ const cors = require("cors");
 const app = express();
 const fs = require("fs");
 const path = require("path");
-const port = 3000;
+const port = Number(process.env.PORT) || 3000;
 const sqlite3 = require("sqlite3").verbose();
 const { v4: uuidv4 } = require("uuid");
 const { fileURLToPath } = require("url");
@@ -145,6 +145,14 @@ let clients = []; // Keep track of connected clients for SSE
 
 // Serve static files from the public directory
 app.use("/public", express.static("public"));
+
+// Health check for the deploy pipeline: up, and the database answers.
+app.get("/healthz", (req, res) => {
+  db.get("SELECT 1 AS ok", (err) => {
+    if (err) return res.status(503).json({ ok: false, error: "database" });
+    res.json({ ok: true, uptime: Math.round(process.uptime()) });
+  });
+});
 
 // Homepage
 app.get("/", addUser, async (req, res) => {

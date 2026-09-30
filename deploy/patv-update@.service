@@ -1,0 +1,10 @@
+[Unit]
+Description=PATV deploy check (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=HOME=/root PM2_HOME=/root/.pm2
+ExecStart=/opt/patv-deploy/patv-update.sh %i
+TimeoutStartSec=20min

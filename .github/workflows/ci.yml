@@ -1,0 +1,30 @@
+name: CI
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax-check server code
+        run: |
+          fail=0
+          for f in $(git ls-files '*.js' | grep -Ev '^(public|views|uploads)/'); do
+            node --check "$f" || fail=1
+          done
+          exit $fail
+      - name: Lockfiles install cleanly
+        run: |
+          for d in . discord-bot discordself twitchbot blackjack; do
+            echo "::group::npm ci $d"
+            (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund) || exit 1
+            echo "::endgroup::"
+          done
+      - name: Deploy scripts parse
+        run: bash -n deploy/patv-update.sh && bash -n deploy/install.sh

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check GitHub for PATV updates every 2 minutes (%i)
+
+[Timer]
+OnBootSec=3min
+OnActiveSec=1min
+OnUnitInactiveSec=2min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
