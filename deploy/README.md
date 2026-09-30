@@ -54,6 +54,12 @@ The updater script updates itself when `deploy/` changes. Unit-file changes need
 
 pm2 is saved and enabled at boot (`pm2-root.service`). After adding or removing an app, run `pm2 save`.
 
+## Refreshing staging's data
+
+Staging, and staging Pepe (which writes to it), drift from prod over time. On the VPS,
+`bash /home/PATV/deploy/refresh-staging-db.sh` replaces staging's database with a fresh copy of
+prod's. It keeps the old copy as `myapp.db.previous`.
+
 ## DNS
 
 `python deploy/cfdns.py list | set A name ip [--proxied] | delete name` manages publicaccess.tv records. The token is read from `~/.config/cloudflare/publicaccess.token`; never commit it.
