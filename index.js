@@ -1617,7 +1617,7 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
 // Every other table references users by userId, so only users.username changes.
 app.post("/api/users/camfrog/rename", async (req, res) => {
   const { camfrogUsername, newUsername, password } = req.body || {};
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
+  if (!isBotToken(password)) {
     return res.status(403).json({ ok: false, error: "unauthorized" });
   }
   const name = String(newUsername || "").trim();
@@ -1649,7 +1649,19 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
 });
 
 // This endpoint creates a new Camfrog user
+// Bot-only routes: the caller must present the bot token. An unset token
+// never matches, so a server without one (staging) refuses them all.
+function isBotToken(token) {
+  const expected = process.env.TWITCH_BOT_TOKEN;
+  return typeof expected === "string" && expected.length > 0 && token === expected;
+}
+
+// Pepe registers new Camfrog users here. It can set a PAT balance, so it's bot-only.
+// ("password" in the body is the new account's hashed password, not the token.)
 app.post('/api/users/camfrog/register', async (req, res) => {
+  if (!isBotToken((req.body || {}).botToken)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
   const { username, displayname, email, password, camfrogUsername, avatar, points_balance } = req.body;
   const userId = uuidv4();
 
