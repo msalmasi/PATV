@@ -66,3 +66,21 @@ Both spin-result endpoints (`/api/g/wheel/spin/result` and `/api/u/:username/whe
 use these constants.
 
 ---
+
+## Maybe
+
+Undecided — worth doing only if the trade-off makes sense later.
+
+### Make the PATV GitHub repo private
+**Area:** GitHub / deploy pipeline
+
+`msalmasi/PATV` is public, so anyone can read the backend code, including which routes are
+bot-only and how they're checked. No secrets are committed (`.env` and the bot `config.json`
+files are untracked), so this is about exposure of the code, not credentials.
+
+**If we do it:** the VPS fetches over anonymous HTTPS today, so both checkouts
+(`/home/PATV`, `/home/PATV-staging`) would need a read-only GitHub **deploy key**, and their
+remotes would switch to SSH (`git@github.com:msalmasi/PATV.git`). GitHub Actions keeps working.
+Check the deploy log (`/var/log/patv-deploy-*.log`) right after the switch.
+
+---
