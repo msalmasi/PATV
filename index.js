@@ -31,7 +31,7 @@ const {
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
 const authenticateToken = require("./middleware/authenticateToken");
-const { issueLogin, renewLogin, clearLogin } = require("./middleware/loginCookie");
+const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCookie");
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
 const flash = require("connect-flash");
@@ -109,7 +109,7 @@ function requireUser(req, res, next) {
 }
 
 // Helper Middleware for Auth
-function addUser(req, res, next) {
+async function addUser(req, res, next) {
   // Always define req.user (null when not logged in) so callers can test it consistently — it used
   // to be left *undefined* when there was no cookie at all, which reads differently from null.
   // Verified synchronously: the old callback form called next() outside the callback, which only
@@ -117,11 +117,21 @@ function addUser(req, res, next) {
   req.user = null;
   const token = req.cookies.jwt;
   if (token) {
+    let decoded = null;
     try {
-      req.user = jwt.verify(token, process.env.SECRET_KEY);
-      renewLogin(res, req.user); // sliding login: stay signed in while you keep visiting
+      decoded = jwt.verify(token, process.env.SECRET_KEY);
     } catch (err) {
-      req.user = null; // expired or tampered — treat as logged out
+      decoded = null; // expired or tampered — treat as logged out
+    }
+    if (decoded) {
+      // Current name/class from the DB, sliding renewal, sign-out if the account is gone
+      // (middleware/loginCookie.js). A DB hiccup keeps the token's view rather than logging out.
+      try {
+        req.user = await refreshLogin(res, decoded, getQuery);
+      } catch (err) {
+        console.error("login refresh failed:", err.message);
+        req.user = decoded;
+      }
     }
   }
   next(); // Proceed regardless of token validity; use requireUser to demand a session
@@ -165,7 +175,7 @@ app.get("/", addUser, async (req, res) => {
   try {
     const results = await getQuery(sql, [username]);
       const user = results[0]; // Extract user data
-      if (username) {
+      if (username && user) {
       res.render("home", {
         // Render profile.ejs with user data
         username: user.username,
