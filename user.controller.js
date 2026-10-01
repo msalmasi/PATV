@@ -1,6 +1,7 @@
 // user.controller.js
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { issueLogin, clearLogin } = require('./middleware/loginCookie');
 const sqlite3 = require('sqlite3').verbose()
 const { v4: uuidv4 } = require('uuid');
 const sgMail = require('@sendgrid/mail');
@@ -144,8 +145,7 @@ function loginUser(req, res) {
       }
       // const token = jwt.sign({ userId: user.userId }, process.env.SECRET_KEY, { expiresIn: '1h' });
       // res.json({ token: token });
-          const token = jwt.sign({ userId: user.userId, username: user.username, class: user.class }, process.env.SECRET_KEY, { expiresIn: '168h' });
-          res.cookie('jwt', token, { httpOnly: true, secure: true, sameSite: 'Lax' });
+          issueLogin(res, user);   // 90-day sliding login (middleware/loginCookie.js)
           res.redirect(`/u/${username}/wheel`);  // Redirect to a secure page
   });
 };
@@ -167,7 +167,7 @@ async function updateUsername(req, res) {
           }
           await runQuery('UPDATE users SET username = ? WHERE userId = ?', [username, userId]);
           req.flash('success', 'Username changed.');
-          res.clearCookie("jwt");
+          clearLogin(res);
           res.redirect(`/login`);
         });
 };

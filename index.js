@@ -31,6 +31,7 @@ const {
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
 const authenticateToken = require("./middleware/authenticateToken");
+const { issueLogin, renewLogin, clearLogin } = require("./middleware/loginCookie");
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
 const flash = require("connect-flash");
@@ -118,6 +119,7 @@ function addUser(req, res, next) {
   if (token) {
     try {
       req.user = jwt.verify(token, process.env.SECRET_KEY);
+      renewLogin(res, req.user); // sliding login: stay signed in while you keep visiting
     } catch (err) {
       req.user = null; // expired or tampered — treat as logged out
     }
@@ -449,17 +451,8 @@ app.get("/auth/twitch/callback", async (req, res) => {
           currentUser = newUser;
         }
       }
-      // Create JWT for the new or found user and set as cookie
-      const token = jwt.sign(
-        {
-          userId: currentUser.userId,
-          username: currentUser.username,
-          class: currentUser.class,
-        },
-        process.env.SECRET_KEY,
-        { expiresIn: "1h" }
-      );
-      res.cookie("jwt", token, { httpOnly: true, secure: true });
+      // Sign them in (90-day sliding login - see middleware/loginCookie.js)
+      issueLogin(res, currentUser);
       res.redirect("/");
     }
   } catch (error) {
@@ -719,17 +712,8 @@ app.get("/auth/discord/callback", async (req, res) => {
           currentUser = newUser;
         }
       }
-      // Create JWT for the new or found user and set as cookie
-      const token = jwt.sign(
-        {
-          userId: currentUser.userId,
-          username: currentUser.username,
-          class: currentUser.class,
-        },
-        process.env.SECRET_KEY,
-        { expiresIn: "1h" }
-      );
-      res.cookie("jwt", token, { httpOnly: true, secure: true });
+      // Sign them in (90-day sliding login - see middleware/loginCookie.js)
+      issueLogin(res, currentUser);
       res.redirect("/");
     }
   } catch (error) {
@@ -1040,7 +1024,7 @@ app.post("/login", loginUser);
 
 // HTTP POST endpoint for logging out.
 app.post("/logout", (req, res) => {
-  res.clearCookie("jwt");
+  clearLogin(res);
   res.redirect("/");
 });
 
@@ -1071,7 +1055,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         xpForNextLevel: xpForNextLevel
       });
     } else {
-      res.clearCookie("jwt");
+      clearLogin(res);
       res.redirect("/");
     }
   } catch (error) {

@@ -3,6 +3,7 @@
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv');
 const cookieParser = require('cookie-parser');
+const { renewLogin } = require('./loginCookie');
 
 // Middleware to verify token
 const authenticateToken = (req, res, next) => {
@@ -13,6 +14,7 @@ const authenticateToken = (req, res, next) => {
         const decoded = jwt.verify(token, process.env.SECRET_KEY);
         req.userId = decoded.userId;
         req.username = decoded.username;
+        renewLogin(res, decoded);   // sliding login: stay signed in while you keep visiting
         next();
       } catch (err) {
         req.flash('error', "Please login again.");
