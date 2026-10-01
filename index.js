@@ -1595,7 +1595,8 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
       [camfrogUsername]
     );
     if (results.length > 0) {
-      res.json({ user: results[0] });
+      // roles: what they own from the store (Pepe reads "high roller" for uncapped blackjack)
+      res.json({ user: { ...results[0], roles: await userRoles(results[0].userId) } });
     } else {
       res.status(404).json({ message: "User not found" });
     }
@@ -1680,6 +1681,36 @@ app.post('/api/users/camfrog/register', async (req, res) => {
 // instead of vanishing.
 const STORE_OWNER_USERNAME = process.env.STORE_OWNER_USERNAME || "pb";
 
+// Prizes that are a ROLE (role names as they are in Discord). Owning one is recorded in
+// user_roles; a second purchase of a role you already have is refused.
+const ROLE_PRIZES = {
+  "147ce895-37c2-4c43-98cc-9f7045de0cf3": "scout",
+  "c0e57e08-6696-4c51-94ec-485f13a68cd8": "curator",
+  "491cde2e-097e-4c2a-a351-ce441137ba38": "high roller",
+};
+
+async function userRoles(userId) {
+  const rows = await getQuery("SELECT role FROM user_roles WHERE userId = ?", [userId]);
+  return rows.map((r) => r.role);
+}
+
+// The Discord bot's local bridge (discord-bot/pokerServer.js): announce a purchase in the
+// purchases channel and grant a role there. Prod only - unset on staging, where it's skipped.
+// Never throws; resolves to the bridge's answer or {error}.
+function discordBridge(path, body, timeoutMs = 8000) {
+  const secret = process.env.STORE_BRIDGE_SECRET;
+  const url = process.env.STORE_BRIDGE_URL || "http://127.0.0.1:3020";
+  if (!secret) return Promise.resolve({ error: "bridge not configured" });
+  return axios
+    .post(url + path, body, { headers: { "x-bot-secret": secret }, timeout: timeoutMs })
+    .then((r) => r.data)
+    .catch((e) => {
+      const data = e.response && e.response.data;
+      console.error(`discord bridge ${path} failed:`, (data && data.error) || e.message);
+      return data && data.error ? data : { error: e.message };
+    });
+}
+
 // Purchases run one at a time. They share one SQLite connection, and a second BEGIN while the
 // first purchase's transaction is open fails ("cannot start a transaction within a transaction").
 let _purchaseChain = Promise.resolve();
@@ -1701,11 +1732,16 @@ function purchasePrize({ userId, username, prizeId, source }) {
     if (prize.quantity <= 0) {
       return { success: false, status: 400, message: `${prize.prize} is out of stock — check back later.` };
     }
-    const users = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
+    const users = await getQuery(
+      "SELECT points_balance, discordId, camfrogUsername FROM users WHERE userId = ?", [userId]);
     if (users.length === 0) {
       return { success: false, status: 404, message: "We couldn't find your account." };
     }
     const balance = users[0].points_balance || 0;
+    const role = ROLE_PRIZES[prize.prizeId] || null;
+    if (role && (await userRoles(userId)).includes(role)) {
+      return { success: false, status: 409, message: `You already have the ${prize.prize.replace(/ role$/i, "")} role.` };
+    }
     if (balance < prize.cost) {
       // Tell them exactly how short they are — "Insufficient coins" left people guessing.
       const short = prize.cost - balance;
@@ -1737,6 +1773,10 @@ function purchasePrize({ userId, username, prizeId, source }) {
           "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + 100 WHERE userId = ?",
           [userId]);
       }
+      if (role) {
+        await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)",
+                       [userId, role, `purchase:${source}`]);
+      }
       await runQuery(
         "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
         [uuidv4(), userId, `purchase of ${prize.prize}`, -prize.cost]);
@@ -1759,23 +1799,40 @@ function purchasePrize({ userId, username, prizeId, source }) {
       };
     }
 
-    // The notification is not part of the purchase: a mail outage must never turn a completed,
-    // charged purchase into a reported failure.
+    // Notifications are not part of the purchase: an outage must never turn a completed, charged
+    // purchase into a reported failure. Resend RESOLVES with {error} instead of throwing, so the
+    // old .catch() alone never saw a failed send.
     instanceResend.emails
       .send({
-        to: "pb@publicaccess.tv",
+        to: process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv",
         from: "no-reply@publicaccess.tv",
         subject: "Purchase Notification",
         text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`,
         html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins</strong> (via ${source}).`,
       })
+      .then((r) => { if (r && r.error) console.error("Purchase email failed (purchase itself was fine):", r.error); })
       .catch((e) => console.error("Purchase email failed (purchase itself was fine):", e.message));
+
+    // Discord: the Discord shop announces its own sales and grants roles itself; for website and
+    // Camfrog purchases the bot's bridge posts the sale in the purchases channel and grants the
+    // role (if they've linked Discord). Awaited only for a role, so the buyer hears the outcome.
+    let discord_role = null;
+    if (source !== "discord") {
+      const job = discordBridge("/store/purchase", {
+        username, camfrogUsername: users[0].camfrogUsername || null, discordId: users[0].discordId || null,
+        prize: prize.prize, cost: prize.cost, source, role,
+      });
+      if (role) {
+        const r = await job;
+        discord_role = r.granted ? "granted" : (r.reason || r.error || "failed");
+      }
+    }
 
     const remaining = balance - prize.cost;
     return {
       success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost,
       balance: remaining, remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
-      owner: owner ? owner.username : null,
+      owner: owner ? owner.username : null, role, discord_role,
       message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
                `Balance: ${remaining.toLocaleString()} PAT.`,
     };

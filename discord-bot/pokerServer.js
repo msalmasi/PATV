@@ -129,6 +129,46 @@ async function handleNewGame(client, body, res) {
   return send(res, 200, { ok: true, pending: true });
 }
 
+// ─── Prize store (called by the PATV backend, index.js purchasePrize) ───────────────────────
+const PURCHASES_CHANNEL_ID = '1245478269294346320'; // where the Discord shop announces sales
+
+async function guildMember(client, discordId) {
+  const channel = await client.channels.fetch(PURCHASES_CHANNEL_ID);
+  const guild = channel.guild;
+  const member = await guild.members.fetch(discordId).catch(() => null);
+  return { channel, guild, member };
+}
+
+// POST /store/purchase { username, camfrogUsername, discordId, prize, cost, source, role }
+// A website or Camfrog purchase: announce it like the Discord shop does, and grant the role.
+async function handleStorePurchase(client, body, res) {
+  const { username, camfrogUsername, discordId, prize, source, role } = body;
+  if (!prize) return send(res, 400, { error: 'missing_prize' });
+  const { channel, guild, member } = discordId ? await guildMember(client, discordId)
+                                               : { channel: await client.channels.fetch(PURCHASES_CHANNEL_ID) };
+  const who = member ? `${member}` : (camfrogUsername ? `${username} (Camfrog: ${camfrogUsername})` : username);
+  const where = source === 'camfrog' ? 'in Camfrog' : source === 'website' ? 'on the website' : `via ${source}`;
+  await channel.send(`${who} bought ${prize} ${where}`);
+
+  if (!role) return send(res, 200, { ok: true });
+  if (!discordId) return send(res, 200, { ok: true, granted: false, reason: 'no_discord' });
+  if (!member) return send(res, 200, { ok: true, granted: false, reason: 'not_in_server' });
+  const r = guild.roles.cache.find((x) => x.name.toLowerCase() === String(role).toLowerCase());
+  if (!r) return send(res, 200, { ok: true, granted: false, reason: 'no_such_role' });
+  await member.roles.add(r);
+  return send(res, 200, { ok: true, granted: true });
+}
+
+// POST /store/role-members { role } -> { discordIds: [...] } — who holds a role in the server.
+async function handleRoleMembers(client, body, res) {
+  const channel = await client.channels.fetch(PURCHASES_CHANNEL_ID);
+  const guild = channel.guild;
+  await guild.members.fetch();
+  const r = guild.roles.cache.find((x) => x.name.toLowerCase() === String(body.role || '').toLowerCase());
+  if (!r) return send(res, 404, { error: 'no_such_role' });
+  return send(res, 200, { role: r.name, discordIds: r.members.map((m) => m.id) });
+}
+
 function start(client) {
   const PORT = process.env.POKER_BRIDGE_PORT || 3020;
   const HOST = process.env.POKER_BRIDGE_HOST || '127.0.0.1';
@@ -152,6 +192,8 @@ function start(client) {
     try {
       if (path === '/poker/chips') return await handleChips(client, body, res);
       if (path === '/poker/newgame') return await handleNewGame(client, body, res);
+      if (path === '/store/purchase') return await handleStorePurchase(client, body, res);
+      if (path === '/store/role-members') return await handleRoleMembers(client, body, res);
       return send(res, 404, { error: 'not_found' });
     } catch (err) {
       console.error('[poker-bridge] handler error:', err && err.message);

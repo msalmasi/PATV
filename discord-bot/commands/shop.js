@@ -62,24 +62,17 @@ module.exports = {
       });
 
       if (response.data && response.data.success) {
-        // Purchase successful
-        if (selectedPrizeId == '147ce895-37c2-4c43-98cc-9f7045de0cf3');
-        {
-            const role = interaction.guild.roles.cache.find(role => role.name === 'scout'); // Find role in cached roles
-            const member = interaction.member; // Guild member
-            member.roles.add(role); // Add role to member
-        }
-        if (selectedPrizeId == 'c0e57e08-6696-4c51-94ec-485f13a68cd8');
-        {
-            const role = interaction.guild.roles.cache.find(role => role.name === 'curator'); // Find role in cached roles
-            const member = interaction.member; // Guild member
-            member.roles.add(role); // Add role to member
-        }
-        if (selectedPrizeId == '491cde2e-097e-4c2a-a351-ce441137ba38');
-        {
-            const role = interaction.guild.roles.cache.find(role => role.name === 'high roller'); // Find role in cached roles
-            const member = interaction.member; // Guild member
-            member.roles.add(role); // Add role to member
+        // Purchase successful. Grant the role a role prize stands for. (Each check used to end in a
+        // stray `;` - `if (...);` - so its block ran for EVERY purchase and gave all three roles.)
+        const ROLE_FOR_PRIZE = {
+          '147ce895-37c2-4c43-98cc-9f7045de0cf3': 'scout',
+          'c0e57e08-6696-4c51-94ec-485f13a68cd8': 'curator',
+          '491cde2e-097e-4c2a-a351-ce441137ba38': 'high roller',
+        };
+        const roleName = ROLE_FOR_PRIZE[selectedPrizeId];
+        if (roleName) {
+          const role = interaction.guild.roles.cache.find(r => r.name === roleName);
+          if (role) await interaction.member.roles.add(role);
         }
         const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
@@ -96,6 +89,9 @@ module.exports = {
         const balanceResponse = await axios.get(process.env.BACKEND_BASE_URL+`/api/u/${user.username}/balance`);
         const balance = balanceResponse.data.balance;
         await interaction.update({ content: `You have insufficient funds to buy ${selectedPrizeName.prizeName} (PAT ${selectedPrizeName.prizeCost}). You have PAT ${balance}.`, components: [], ephemeral: true });
+      } else if (error.response && error.response.data && error.response.data.message) {
+        // The backend's own reason: out of stock, already have that role, short by N PAT, ...
+        await interaction.update({ content: `Purchase failed: ${error.response.data.message}`, components: [], ephemeral: true });
       } else {
         console.error('Error during purchase:', error);
         await interaction.update({ content: 'There was an error processing your purchase.', components: [], ephemeral: true });

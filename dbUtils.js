@@ -65,6 +65,20 @@ function createTables() {
         }
     });
 
+    // Roles a user owns (bought in the prize store, or granted by an admin). The site's own
+    // record: Discord roles follow from it, and Pepe reads it (High Roller = no blackjack cap).
+    db.run(`CREATE TABLE IF NOT EXISTS user_roles (
+        userId TEXT NOT NULL,
+        role TEXT NOT NULL,
+        source TEXT,
+        granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (userId, role)
+    )`, (err) => {
+        if (err) {
+            console.log('Error creating table user_roles', err);
+        }
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS pending_camfrog_links (
         code TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
