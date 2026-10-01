@@ -1673,192 +1673,153 @@ app.post('/api/users/camfrog/register', async (req, res) => {
   }
 });
 
-// HTTP post endpoint to shop
-app.post("/shop", addUser, requireUser, async (req, res) => {
-  const { product } = req.body;
-  const userId = req.user.userId; // guaranteed by requireUser
-  const username = req.user.username;
-  try {
-    // Check if the prize exists and get its cost and quantity
-    const prizes = await getQuery(
-      "SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?",
-      [product]
-    );
+// ─── Prize store ──────────────────────────────────────────────────────────────────────────────
+// One purchase path for every storefront: the website (/shop), the Discord bot (/chatshop) and
+// Pepe in Camfrog (/api/shop/camfrog/buy). The PAT a buyer spends goes to the store owner's
+// account (STORE_OWNER_USERNAME, default "pb") - the person who actually redeems the prizes -
+// instead of vanishing.
+const STORE_OWNER_USERNAME = process.env.STORE_OWNER_USERNAME || "pb";
 
+// Purchases run one at a time. They share one SQLite connection, and a second BEGIN while the
+// first purchase's transaction is open fails ("cannot start a transaction within a transaction").
+let _purchaseChain = Promise.resolve();
+function _serialPurchase(fn) {
+  const run = _purchaseChain.then(fn, fn);
+  _purchaseChain = run.catch(() => {});
+  return run;
+}
+
+// Returns {success, status, message, prize, cost, balance, remaining_stock, owner}. Never throws.
+function purchasePrize({ userId, username, prizeId, source }) {
+  return _serialPurchase(async () => {
+    const prizes = await getQuery(
+      "SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?", [prizeId]);
     if (prizes.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "That item isn't in the shop any more." });
+      return { success: false, status: 404, message: "That item isn't in the shop any more." };
     }
     const prize = prizes[0];
-
-    // Check if the prize is in stock
     if (prize.quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: `${prize.prize} is out of stock — check back later.`,
-      });
+      return { success: false, status: 400, message: `${prize.prize} is out of stock — check back later.` };
     }
-
-    // Check if the user has enough points
-    const users = await getQuery(
-      "SELECT points_balance FROM users WHERE userId = ?",
-      [userId]
-    );
+    const users = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
     if (users.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "We couldn't find your account — try logging in again." });
+      return { success: false, status: 404, message: "We couldn't find your account." };
     }
     const balance = users[0].points_balance || 0;
     if (balance < prize.cost) {
       // Tell them exactly how short they are — "Insufficient coins" left people guessing.
       const short = prize.cost - balance;
-      return res.status(400).json({
-        success: false,
+      return {
+        success: false, status: 400, balance, cost: prize.cost,
         message: `${prize.prize} costs ${prize.cost.toLocaleString()} PAT and you have ` +
                  `${balance.toLocaleString()} — ${short.toLocaleString()} short.`,
-        balance,
-        cost: prize.cost,
-      });
+      };
+    }
+    const owners = await getQuery("SELECT userId, username FROM users WHERE username = ?", [STORE_OWNER_USERNAME]);
+    const owner = owners[0] || null;
+    if (!owner) {
+      console.error(`STORE OWNER '${STORE_OWNER_USERNAME}' not found — sale proceeds go nowhere`);
     }
 
-    // Start a transaction (if supported)
-    await runQuery("BEGIN TRANSACTION");
-
-    // Deduct the prize cost from the user's points balance
-    await runQuery(
-      "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
-      [prize.cost, userId]
-    );
-
-    // Digital prize effect: the spin boost permanently raises this user's daily gold-spin
-    // cap by 100 (stackable — buy it again for another +100/day).
-    if (prize.prizeId === "spinboost100") {
+    try {
+      await runQuery("BEGIN TRANSACTION");
+      const paid = await runQuery(
+        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
+        [prize.cost, userId, prize.cost]);
+      if (!paid.changes) throw new Error("balance changed mid-purchase");
+      const stock = await runQuery(
+        "UPDATE prizes SET quantity = quantity - 1 WHERE prizeId = ? AND quantity > 0", [prize.prizeId]);
+      if (!stock.changes) throw new Error("sold out mid-purchase");
+      // Digital prize effect: the spin boost permanently raises this user's daily gold-spin
+      // cap by 100 (stackable — buy it again for another +100/day).
+      if (prize.prizeId === "spinboost100") {
+        await runQuery(
+          "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + 100 WHERE userId = ?",
+          [userId]);
+      }
       await runQuery(
-        "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + 100 WHERE userId = ?",
-        [userId]
-      );
+        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [uuidv4(), userId, `purchase of ${prize.prize}`, -prize.cost]);
+      if (owner) {
+        await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
+                       [prize.cost, owner.userId]);
+        await runQuery(
+          "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+          [uuidv4(), owner.userId, `store sale: ${prize.prize} to ${username} (${source})`, prize.cost]);
+      }
+      await runQuery("COMMIT");
+    } catch (error) {
+      try { await runQuery("ROLLBACK"); } catch (e) { /* nothing open */ }
+      const known = /mid-purchase/.test(error.message);
+      if (!known) console.error("Shop purchase error:", error);
+      return {
+        success: false, status: known ? 409 : 500,
+        message: known ? "That changed while you were buying it — please try again. You have not been charged."
+                       : "Something went wrong buying that — you have not been charged.",
+      };
     }
 
-    // Decrement the prize quantity
-    await runQuery(
-      "UPDATE prizes SET quantity = quantity - 1 WHERE prizeId = ?",
-      [prize.prizeId]
-    );
-
-    // Log the transaction
-    const transactionId = uuidv4();
-    await runQuery(
-      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-      [transactionId, userId, `purchase of ${prize.prize}`, -prize.cost]
-    );
-
-    // Commit the transaction
-    await runQuery("COMMIT");
-
-    // Confirm to the user FIRST. The notification email is not part of the purchase: it used to be
-    // awaited inside this try, so a mail outage threw, hit the catch, ran a ROLLBACK that does
-    // nothing after COMMIT, and told a user who had genuinely been charged that it failed.
-    const remaining = balance - prize.cost;
-    res.json({
-      success: true,
-      message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
-               `Balance: ${remaining.toLocaleString()} PAT.`,
-      prize: prize.prize,
-      cost: prize.cost,
-      balance: remaining,
-      remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
-    });
-
-    // Fire-and-forget notification — never let it affect the purchase result.
+    // The notification is not part of the purchase: a mail outage must never turn a completed,
+    // charged purchase into a reported failure.
     instanceResend.emails
       .send({
         to: "pb@publicaccess.tv",
         from: "no-reply@publicaccess.tv",
         subject: "Purchase Notification",
-        text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
-        html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
+        text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`,
+        html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins</strong> (via ${source}).`,
       })
       .catch((e) => console.error("Purchase email failed (purchase itself was fine):", e.message));
-  } catch (error) {
+
+    const remaining = balance - prize.cost;
+    return {
+      success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost,
+      balance: remaining, remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
+      owner: owner ? owner.username : null,
+      message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
+               `Balance: ${remaining.toLocaleString()} PAT.`,
+    };
+  }).catch((error) => {
     console.error("Shop purchase error:", error);
-    try {
-      await runQuery("ROLLBACK");
-    } catch (e) {
-      /* nothing to roll back */
-    }
-    // JSON, not text — the page parses JSON and would otherwise show a generic failure.
-    res
-      .status(500)
-      .json({ success: false, message: "Something went wrong buying that — you have not been charged." });
-  }
+    return { success: false, status: 500, message: "Something went wrong buying that — you have not been charged." };
+  });
+}
+
+// Website purchase
+app.post("/shop", addUser, requireUser, async (req, res) => {
+  const r = await purchasePrize({ userId: req.user.userId, username: req.user.username,
+                                  prizeId: req.body.product, source: "website" });
+  const { status, ...body } = r;
+  res.status(status).json(body);
 });
 
-
-// HTTP post endpoint to shop
+// Discord bot purchase (discord-bot/commands/shop.js) - same response shape it always had.
 app.post("/chatshop", async (req, res) => {
-    const { product, username, userId, password } = req.body;
-    
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
-        return res.status(403).send("Access denied");
-    }
+  const { product, username, userId, password } = req.body;
+  if (password !== process.env.TWITCH_BOT_TOKEN) {
+    return res.status(403).send("Access denied");
+  }
+  const r = await purchasePrize({ userId, username, prizeId: product, source: "discord" });
+  if (r.success) return res.json({ success: true, message: "Purchase successful" });
+  return res.status(r.status).json({ success: false, message: r.message });
+});
 
-    try {
-      // Check if the prize exists and get its cost
-      const prizes = await getQuery(
-        "SELECT prizeId, cost, prize FROM prizes WHERE prizeId = ?",
-        [product]
-      );
-  
-      if (prizes.length === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Prize not found" });
-      }
-      const prize = prizes[0];
-  
-      // Check if the user has enough points
-      const users = await getQuery(
-        "SELECT points_balance FROM users WHERE userId = ?",
-        [userId]
-      );
-      if (users.length === 0 || users[0].points_balance < prize.cost) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Insufficient coins" });
-      }
-  
-      // Deduct the prize cost from the user's points balance
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
-        [prize.cost, userId]
-      );
-  
-      // Log the transaction
-      const transactionId = uuidv4();
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionId, userId, `purchase of ${prize.prize}`, -prize.cost]
-      );
-  
-      // Send an email notification
-      const msg = {
-        to: "pb@publicaccess.tv", // Recipient email address
-        from: "no-reply@publicaccess.tv", // Your verified sender
-        subject: "Purchase Notification",
-        text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins.`,
-        html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins.</strong>`,
-      };
-      await instanceResend.emails.send(msg);
-  
-      // Respond to the user
-      res.json({ success: true, message: "Purchase successful" });
-    } catch (error) {
-      console.error("Server error:", error);
-      res.status(500).send("Failed to process the purchase.");
-    }
-  });
+// Pepe (Camfrog) purchase: bot-only, by Camfrog login.
+app.post("/api/shop/camfrog/buy", async (req, res) => {
+  const { camfrogUsername, prizeId, botToken } = req.body || {};
+  if (!isBotToken(botToken)) {
+    return res.status(403).json({ success: false, message: "forbidden" });
+  }
+  const users = await getQuery(
+    "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?)", [camfrogUsername || ""]);
+  if (users.length === 0) {
+    return res.status(404).json({ success: false, message: "no PATV account for that Camfrog user" });
+  }
+  const r = await purchasePrize({ userId: users[0].userId, username: users[0].username,
+                                  prizeId, source: "camfrog" });
+  const { status, ...body } = r;
+  res.status(status).json({ ...body, username: users[0].username });
+});
 
 // Function to get the total jackpot
 function getJackpotTotal(req, res) {
