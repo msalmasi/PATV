@@ -259,6 +259,8 @@ function acknowledgeSpin(spinId) {
 function setupSpinListener(username) {
   const eventSource = new EventSource(`/events?type=spin&identifier=public`);
   console.log(eventSource);
+  // Connected: forget earlier failures, so drops spread over days never add up to a reload.
+  eventSource.onopen = function() { reconnectAttempts = 0; };
   eventSource.onmessage = function(event) {
       const data = JSON.parse(event.data);
       console.log(data);
@@ -278,20 +280,30 @@ function setupSpinListener(username) {
 // Function for reconnecting to Event Source
 var reconnectAttempts = 0;
 
+// The browser retries a dropped stream by itself (readyState CONNECTING); it only gives up -
+// CLOSED - when a retry gets a non-stream answer, e.g. the error page while the site restarts.
+// Then we reconnect ourselves, but ONLY once /healthz says the site is back: reloading (or
+// reconnecting) into a restart left OBS showing an error page with no script in it - a dead
+// wheel until someone refreshed the source by hand.
 function checkConnection(es) {
-  if (es.readyState === EventSource.CLOSED) {
-      reconnectAttempts++;
-
-      if (reconnectAttempts > 5) { // After 5 failed attempts, refresh the page
-          console.log('Reconnecting failed multiple times, refreshing the page...');
-          window.location.reload();
-      } else {
-          console.log('Connection was closed, attempting to reconnect...');
-          setTimeout(function() {
-            setupSpinListener('public');
-          }, 5000);
+  if (es.readyState !== EventSource.CLOSED) return;
+  reconnectAttempts++;
+  const delay = Math.min(60000, 5000 * reconnectAttempts);
+  console.log(`Connection closed - retrying in ${delay / 1000}s (attempt ${reconnectAttempts})`);
+  setTimeout(async function() {
+    try {
+      const r = await fetch('/healthz', { cache: 'no-store' });
+      if (r.ok) {
+        if (reconnectAttempts > 5) {
+          window.location.reload();          // a fresh page, now that the site is up
+        } else {
+          setupSpinListener('public');
+        }
+        return;
       }
-  }
+    } catch (e) { /* still down */ }
+    checkConnection(es);                     // site still down: wait longer and check again
+  }, delay);
 }
 
 

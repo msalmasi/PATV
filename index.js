@@ -3637,6 +3637,13 @@ app.post("/api/bonus/winner", authenticateToken, addUser, async (req, res) => {
   }
 });
 
+// Is a wheel page (the OBS "WheelSource") connected to receive spins? Pepe checks before a
+// !spin and his OBS watchdog refreshes the source when nothing is listening.
+app.get("/api/g/wheel/listeners", (req, res) => {
+  const list = (clients.spin && clients.spin.public) || [];
+  res.json({ listeners: list.length });
+});
+
 app.get("/events", (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
 

@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="3" >
+    <!-- Refresh every 3s, but only while the site answers: a plain meta refresh that fired during
+         a site restart loaded an error page with no refresh in it, and the OBS source died. -->
+    <script>setInterval(function () { fetch('/healthz', { cache: 'no-store' })
+      .then(function (r) { if (r.ok) location.reload(); }).catch(function () {}); }, 3000);</script>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <title>Now Spinning</title>
     <style>
