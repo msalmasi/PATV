@@ -1,6 +1,12 @@
-// pokerServer.js — HTTP bridge so the Camfrog bot can drive PokerNow chips/games.
+// botBridge.js — the Discord bot's local HTTP bridge: lets the other services ask THIS bot to do
+// things on Discord. Secret-protected (X-Bot-Secret = BOT_BRIDGE_SECRET). Formerly pokerServer.js.
 //
-// The Camfrog bot (Python) can't post to Discord, but the selfbot only reacts to
+//   /store/purchase, /store/role-members   the PATV backend's prize store (index.js): announce
+//                                          website/Camfrog sales, grant role prizes, list holders
+//   /poker/chips, /poker/newgame           Pepe's PokerNow bridge (off in Camfrog since the
+//                                          built-in Hold'em; kept working). Details below.
+//
+// PokerNow: the Camfrog bot (Python) can't post to Discord, but the selfbot only reacts to
 // !pac / !prc / !png posted BY this bot in #poker. So this tiny HTTP server lets the
 // Camfrog bot ask us to (a) charge PAT + post !pac (buy-in), (b) post !prc (cash-out),
 // (c) post !png (new game). Downstream is all existing machinery:
@@ -170,12 +176,14 @@ async function handleRoleMembers(client, body, res) {
 }
 
 function start(client) {
-  const PORT = process.env.POKER_BRIDGE_PORT || 3020;
-  const HOST = process.env.POKER_BRIDGE_HOST || '127.0.0.1';
-  const SECRET = process.env.POKER_BRIDGE_SECRET;
+  // BOT_BRIDGE_*; the old POKER_BRIDGE_* names still work.
+  const env = (k) => process.env[`BOT_BRIDGE_${k}`] || process.env[`POKER_BRIDGE_${k}`];
+  const PORT = env('PORT') || 3020;
+  const HOST = env('HOST') || '127.0.0.1';
+  const SECRET = env('SECRET');
 
   if (!SECRET) {
-    console.warn('[poker-bridge] POKER_BRIDGE_SECRET is not set — bridge will refuse all requests.');
+    console.warn('[bot-bridge] BOT_BRIDGE_SECRET is not set — bridge will refuse all requests.');
   }
 
   const server = http.createServer(async (req, res) => {
@@ -196,14 +204,14 @@ function start(client) {
       if (path === '/store/role-members') return await handleRoleMembers(client, body, res);
       return send(res, 404, { error: 'not_found' });
     } catch (err) {
-      console.error('[poker-bridge] handler error:', err && err.message);
+      console.error('[bot-bridge] handler error:', err && err.message);
       return send(res, 500, { error: 'server_error' });
     }
   });
 
-  server.on('error', (e) => console.error('[poker-bridge] server error:', e && e.message));
+  server.on('error', (e) => console.error('[bot-bridge] server error:', e && e.message));
   server.listen(PORT, HOST, () => {
-    console.log(`[poker-bridge] listening on ${HOST}:${PORT}`);
+    console.log(`[bot-bridge] listening on ${HOST}:${PORT}`);
   });
 
   return server;

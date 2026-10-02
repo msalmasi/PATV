@@ -1694,12 +1694,13 @@ async function userRoles(userId) {
   return rows.map((r) => r.role);
 }
 
-// The Discord bot's local bridge (discord-bot/pokerServer.js): announce a purchase in the
+// The Discord bot's local bridge (discord-bot/botBridge.js): announce a purchase in the
 // purchases channel and grant a role there. Prod only - unset on staging, where it's skipped.
 // Never throws; resolves to the bridge's answer or {error}.
 function discordBridge(path, body, timeoutMs = 8000) {
-  const secret = process.env.STORE_BRIDGE_SECRET;
-  const url = process.env.STORE_BRIDGE_URL || "http://127.0.0.1:3020";
+  // BOT_BRIDGE_*; the earlier STORE_BRIDGE_* names still work.
+  const secret = process.env.BOT_BRIDGE_SECRET || process.env.STORE_BRIDGE_SECRET;
+  const url = process.env.BOT_BRIDGE_URL || process.env.STORE_BRIDGE_URL || "http://127.0.0.1:3020";
   if (!secret) return Promise.resolve({ error: "bridge not configured" });
   return axios
     .post(url + path, body, { headers: { "x-bot-secret": secret }, timeout: timeoutMs })
