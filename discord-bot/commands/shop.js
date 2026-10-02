@@ -12,27 +12,35 @@ module.exports = {
     try {
       // Fetch the list of prizes from the backend API
       const response = await axios.get(process.env.BACKEND_BASE_URL+'/api/prizes');
-      const prizes = response.data;
+      // In stock only, cheapest first (same as Pepe's !prizes in Camfrog).
+      const prizes = (response.data || [])
+        .filter((p) => (p.quantity || 0) > 0)
+        .sort((a, b) => a.cost - b.cost);
 
       if (prizes.length === 0) {
         return interaction.reply({ content: 'The shop is currently empty.', ephemeral: true });
       }
 
-      // Create the select menu options from the prizes
-      const options = prizes.map((item) => ({
-        label: `${item.prize} (PAT ${item.cost})`,
-        value: item.prizeId // We'll use prizeId to handle purchase
-      }));
-
-      // Create a select menu component with the available items
-      const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('select_prize')
-        .setPlaceholder('Choose an item to buy')
-        .addOptions(options);
-
-      // Send the initial reply with the select menu
-      const row = new ActionRowBuilder().addComponents(selectMenu);
-      await interaction.reply({ content: 'Here are the available items in the shop:', components: [row], ephemeral: true });
+      // Discord allows 25 options per select menu and 5 menus per message, so the prizes are
+      // split into menus of 25 (customIds select_prize, select_prize_2, ...). One menu of
+      // everything broke /shop outright the day the store passed 25 prizes.
+      const PER_MENU = 25, MAX_MENUS = 5;
+      const rows = [];
+      for (let i = 0; i < prizes.length && rows.length < MAX_MENUS; i += PER_MENU) {
+        const chunk = prizes.slice(i, i + PER_MENU);
+        const n = rows.length;
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(n === 0 ? 'select_prize' : `select_prize_${n + 1}`)
+          .setPlaceholder(prizes.length > PER_MENU
+            ? `Choose an item (${i + 1}–${i + chunk.length}, PAT ${chunk[0].cost.toLocaleString()}+)`
+            : 'Choose an item to buy')
+          .addOptions(chunk.map((item) => ({
+            label: `${item.prize} (PAT ${item.cost.toLocaleString()})`.slice(0, 100),
+            value: item.prizeId, // We'll use prizeId to handle purchase
+          })));
+        rows.push(new ActionRowBuilder().addComponents(selectMenu));
+      }
+      await interaction.reply({ content: 'Here are the available items in the shop:', components: rows, ephemeral: true });
 
     } catch (error) {
       console.error('Error fetching shop items:', error);

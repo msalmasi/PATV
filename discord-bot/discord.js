@@ -77,7 +77,7 @@ function startRaffle(channelId) {
 // Shop Command Enhancement
 client.on("interactionCreate", async (interaction) => {
   if (interaction.isStringSelectMenu()) {
-    if (interaction.customId === "select_prize") {
+    if (interaction.customId === "select_prize" || interaction.customId.startsWith("select_prize_")) {   // one per menu of 25
       const shopCommand = require("./commands/shop"); // Adjust the path as needed
       await shopCommand.handleSelectMenu(interaction);
     }
