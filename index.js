@@ -1143,7 +1143,13 @@ app.get('/api/users/username/:username', async (req, res) => {
 
 // This endpoint creates a new Twitch user based on the info sent from the bot.
 app.post('/api/users/twitch/register', async (req, res) => {
-    const { username, displayname, email, twitchId, profileImage, twitchDisplayname, avatar, points_balance } = req.body;
+    // Bot-only (it used to take ANY caller, with the starting balance from the request body).
+    // New accounts start at 0 - the connect bonus below is their welcome PAT.
+    if (!isPlatformBot((req.body || {}).botToken)) {
+      return res.status(403).json({ error: "unauthorized" });
+    }
+    const { username, displayname, email, twitchId, profileImage, twitchDisplayname, avatar } = req.body;
+    const points_balance = 0;
     const userId = uuidv4();
 
     try {
@@ -1173,7 +1179,13 @@ app.post('/api/users/twitch/register', async (req, res) => {
 
   // This endpoint creates a new Discord user based on the info sent from the bot.
 app.post('/api/users/discord/register', async (req, res) => {
-    const { username, displayname, email, discordId, profileImage, discordUsername, avatar, points_balance } = req.body;
+    // Bot-only (it used to take ANY caller, with the starting balance from the request body).
+    // New accounts start at 0 - the connect bonus below is their welcome PAT.
+    if (!isPlatformBot((req.body || {}).botToken)) {
+      return res.status(403).json({ error: "unauthorized" });
+    }
+    const { username, displayname, email, discordId, profileImage, discordUsername, avatar } = req.body;
+    const points_balance = 0;
     const userId = uuidv4();
   
     try {
@@ -1646,6 +1658,13 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
 // This endpoint creates a new Camfrog user
 // Bot-only routes: the caller must present the bot token. An unset token
 // never matches, so a server without one (staging) refuses them all.
+// The Discord/Twitch bots authenticate with their own shared token (same .env as this server).
+function isPlatformBot(token) {
+  if (isBotToken(token)) return true;
+  const d = process.env.DISCORD_BOT_TOKEN;
+  return typeof d === "string" && d.length > 0 && token === d;
+}
+
 function isBotToken(token) {
   const expected = process.env.TWITCH_BOT_TOKEN;
   return typeof expected === "string" && expected.length > 0 && token === expected;

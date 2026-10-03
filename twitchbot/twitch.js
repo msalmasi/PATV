@@ -157,7 +157,7 @@ async function createTwitchUser(twitchId, displayName, profileImage) {
       twitchId: twitchId,
       twitchDisplayname: displayName,
       avatar: profileImage || "/public/img/avatar.png",
-      points_balance: 50000,
+      botToken: process.env.TWITCH_BOT_TOKEN,      // the register endpoint is bot-only
     };
 
     const response = await axios.post(

@@ -19,7 +19,7 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
         discordId: discordId,
         discordUsername: discordUsername,
         avatar: profileImage || "/public/img/avatar.png",
-        points_balance: 50000,
+        botToken: process.env.DISCORD_BOT_TOKEN,   // the register endpoint is bot-only
       };
   
       const response = await axios.post(
