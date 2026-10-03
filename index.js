@@ -1001,7 +1001,15 @@ app.get("/achievements", addUser, async (req, res) => {
     if (req.user && req.user.userId) {
       owned = new Set((await getQuery("SELECT badgeId FROM user_badges WHERE userId = ?", [req.user.userId])).map((r) => r.badgeId));
     }
-    res.render("achievements", { user: req.user ? req.user.username : null, achievements: achievements.list(), holders, owned });
+    // The original PATV badges (sign-up, email, Discord, Twitch, casino) sit alongside the Camfrog ones.
+    const site = (await getQuery("SELECT badgeId, name, description, icon, points FROM badges WHERE badgeId NOT LIKE 'cf_%'"))
+      .map((b) => ({ id: b.badgeId, name: b.name, desc: b.description, icon: b.icon, xp: b.points || 0, pat: 0,
+                     tier: "common", site: true }));
+    const siteHolders = Object.fromEntries((await getQuery(
+      "SELECT badgeId, COUNT(*) AS n FROM user_badges WHERE badgeId NOT LIKE 'cf_%' GROUP BY badgeId")).map((r) => [r.badgeId, r.n]));
+    res.render("achievements", { user: req.user ? req.user.username : null,
+                                 achievements: site.concat(achievements.list()),
+                                 holders: Object.assign({}, holders, siteHolders), owned });
   } catch (e) {
     console.error("[achievements] page:", e);
     res.status(500).send("Couldn't load achievements.");

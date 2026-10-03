@@ -20,13 +20,14 @@
 </style>
 <div class="ach-wrap">
   <h1>Achievements</h1>
-  <p class="ach-lede">Earned in the Camfrog rooms — chat, grab the mic, use Pepe's commands, rob vaults, win games.
+  <p class="ach-lede">Earned around PATV and in the Camfrog rooms — sign up, link your accounts, chat, grab the mic, use Pepe's commands, rob vaults, win games.
     Every one comes with XP and a PAT bonus from the Federal Reserve, and Pepe announces it in the room.
     Link your Camfrog account on your profile to collect them here.</p>
   <% if (owned) { %>
     <div class="ach-stats">You have <%= owned.size %> / <%= achievements.length %></div>
   <% } %>
-  <% const groups = [["Getting started", ["cf_linked","cf_cmd_1","cf_level_"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ["The room & each other", ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ["The wheel", ["cf_spin","cf_wheel"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ["Games & fights", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Everything else", ["cf_"]]];
+  <% const siteIds = achievements.filter(a => a.site).map(a => a.id);
+     const groups = [["PATV", siteIds], ["Getting started", ["cf_linked","cf_cmd_1","cf_level_"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ["The room & each other", ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ["The wheel", ["cf_spin","cf_wheel"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ["Games & fights", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Everything else", ["cf_"]]];
      const used = new Set(); %>
   <% groups.forEach(([title, prefixes]) => {
        const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
@@ -40,7 +41,7 @@
           <div>
             <div class="nm"><%= a.name %></div>
             <div class="ds"><%= a.desc %></div>
-            <div class="rw">+<%= (a.xp || 0).toLocaleString() %> XP · +<%= (a.pat || 0).toLocaleString() %> PAT</div>
+            <div class="rw">+<%= (a.xp || 0).toLocaleString() %> XP<% if (a.pat) { %> · +<%= a.pat.toLocaleString() %> PAT<% } %></div>
             <div class="hd"><%= (holders[a.id] || 0).toLocaleString() %> <%= (holders[a.id] || 0) === 1 ? 'player has' : 'players have' %> it</div>
           </div>
         </div>
