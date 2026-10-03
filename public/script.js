@@ -432,9 +432,12 @@ function settleAndReveal() {
     fetchUserBalance(username);
     fetchUserLevel(username);
     if (data.grand) {
-      drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE jackpot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
+      showJackpotRoll(100, Number(data.result) || 0, true, tickerSound);
+      setTimeout(hideJackpotRoll, 45000);
     } else if (data.jackpot) {
-      drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the jackpot: " + Number(data.result).toLocaleString() + " 🏆");
+      // Animate the server's % roll (needle over the roll's bands), then count up the win.
+      showJackpotRoll(data.jackpotPct || 0, Number(data.result) || 0, false, tickerSound);
+      setTimeout(hideJackpotRoll, 45000);
     } else {
       drawResultOverlay(Number(data.result || 0).toLocaleString());
     }
@@ -510,6 +513,7 @@ function drawResultOverlay(result) {
 
 // Hides the winning result over the wheel.
 function hideResultOverlay() {
+  if (typeof hideJackpotRoll === 'function') hideJackpotRoll();
   const resultContainer = document.getElementById('resultContainer');
   const resultText = document.getElementById('resultText');
 
