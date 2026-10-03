@@ -7,12 +7,16 @@
                     <% if (username == usernameProfile) { %>
                     <div id="profile-action"> 
                         <a href="/u/<%= username %>/profile/edit" class="infolink">Edit</a>
+                        <a href="/history" class="infolink">PAT History</a>
                     </div>
                     <% } else { %>
                         <% if (typeof username == 'undefined' || !username) { %>
                             <% } else { %>
                         <div id="profile-action"> 
                             <a href="/u/<%= usernameProfile %>/tip" class="infolink">Tip</a>
+                            <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %>
+                            <a href="/history?user=<%= encodeURIComponent(usernameProfile) %>" class="infolink">PAT History</a>
+                            <% } %>
                         </div>
                         <% } %>
                             

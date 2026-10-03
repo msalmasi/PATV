@@ -1145,7 +1145,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         email: user.email,
         points_balance: user.points_balance,
         badges: badges,
-        xpForNextLevel: xpForNextLevel
+        xpForNextLevel: xpForNextLevel,
+        // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
+        canSeeHistory: !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class))
       });
     } else {
       clearLogin(res);
