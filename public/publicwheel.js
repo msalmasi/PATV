@@ -21,34 +21,34 @@ const wheelRadius = canvas.width / 2;
 const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 
-const multiplier = 1 + (20 * 0.01);
+const multiplier = 1.10;   // same as the server's PUBLIC_WHEEL_MULTIPLIER
 
 // Set the Wheel Prizes
 let segments = [
-  { color: '#FF6347', label: String(Math.round(2600 * multiplier)), size: 1 },
-  { color: '#FFD700', label: String(Math.round(5200 * multiplier)), size: 1 },
-  { color: '#ADFF2F', label: String(Math.round(3550 * multiplier)), size: 1 },
-  { color: '#00FA9A', label: String(Math.round(7500 * multiplier)), size: 0.9 },
-  { color: '#1E90FF', label: String(Math.round(680 * multiplier)), size: 1 },
+  { color: '#FF6347', label: String(Math.round(2700 * multiplier)), size: 1 },
+  { color: '#FFD700', label: String(Math.round(5350 * multiplier)), size: 1 },
+  { color: '#ADFF2F', label: String(Math.round(3650 * multiplier)), size: 1 },
+  { color: '#00FA9A', label: String(Math.round(7750 * multiplier)), size: 0.9 },
+  { color: '#1E90FF', label: String(Math.round(700 * multiplier)), size: 1 },
   { color: '#EE82EE', label: String(Math.round(0 * multiplier)), size: 1 },
-  { color: '#FF69B4', label: String(Math.round(22000 * multiplier)), size: 0.5 },
-  { color: '#20B2AA', label: String(Math.round(890 * multiplier)), size: 1 },
-  { color: '#FFA500', label: String(Math.round(5750 * multiplier)), size: 1 },
-  { color: '#B22222', label: String(Math.round(4400 * multiplier)), size: 1 },
-  { color: '#8A2BE2', label: String(Math.round(4000 * multiplier)), size: 1 },
-  { color: '#5F9EA0', label: String(Math.round(1350 * multiplier)), size: 1 },
+  { color: '#FF69B4', label: String(Math.round(22500 * multiplier)), size: 0.5 },
+  { color: '#20B2AA', label: String(Math.round(920 * multiplier)), size: 1 },
+  { color: '#FFA500', label: String(Math.round(5950 * multiplier)), size: 1 },
+  { color: '#B22222', label: String(Math.round(4550 * multiplier)), size: 1 },
+  { color: '#8A2BE2', label: String(Math.round(4100 * multiplier)), size: 1 },
+  { color: '#5F9EA0', label: String(Math.round(1400 * multiplier)), size: 1 },
   { color: '#EE82EE', label: String(Math.round(0 * multiplier)), size: 1 },
-  { color: '#FFD700', label: String(Math.round(44500 * multiplier)), size: 0.1 },
-  { color: '#DB7093', label: String(Math.round(2200 * multiplier)), size: 1 },
-  { color: '#3CB371', label: String(Math.round(420 * multiplier)), size: 1 },
-  { color: '#4682B4', label: String(Math.round(1800 * multiplier)), size: 1 },
-  { color: '#FF1493', label: String(Math.round(11000 * multiplier)), size: 0.8 },
+  { color: '#FFD700', label: String(Math.round(46000 * multiplier)), size: 0.1 },
+  { color: '#DB7093', label: String(Math.round(2250 * multiplier)), size: 1 },
+  { color: '#3CB371', label: String(Math.round(430 * multiplier)), size: 1 },
+  { color: '#4682B4', label: String(Math.round(1850 * multiplier)), size: 1 },
+  { color: '#FF1493', label: String(Math.round(11500 * multiplier)), size: 0.8 },
   { color: '#00CED1', label: String(Math.round(0 * multiplier)), size: 1 },
-  { color: '#FFD700', label: String(Math.round(6700 * multiplier)), size: 1 },
-  { color: '#3CB371', label: String(Math.round(4800 * multiplier)), size: 1 },
-  { color: '#4682B4', label: String(Math.round(3150 * multiplier)), size: 1 },
-  { color: '#FF1493', label: String(Math.round(7950 * multiplier)), size: 1 },
-  { color: '#8A2BE2', label: String(Math.round(8900 * multiplier)), size: 1 },
+  { color: '#FFD700', label: String(Math.round(6900 * multiplier)), size: 1 },
+  { color: '#3CB371', label: String(Math.round(4950 * multiplier)), size: 1 },
+  { color: '#4682B4', label: String(Math.round(3250 * multiplier)), size: 1 },
+  { color: '#FF1493', label: String(Math.round(8200 * multiplier)), size: 1 },
+  { color: '#8A2BE2', label: String(Math.round(9200 * multiplier)), size: 1 },
   { color: '#00CED1', label: String(Math.round(0 * multiplier)), size: 1 },
   { color: '#FFD700', label: '🏆 JACKPOT 🏆', size: 0.00777, jackpot: true }
 ];

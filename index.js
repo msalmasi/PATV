@@ -3000,7 +3000,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
     );
     const username = spinUser[0].username;
 
-    // Public/OBS wheel prizes are fixed (level-20 multiplier), same as publicwheel.js.
+    // Public/OBS wheel prizes are fixed (PUBLIC_WHEEL_MULTIPLIER), same as publicwheel.js.
     const outcome = await computeSpinResult(PUBLIC_WHEEL_MULTIPLIER);
 
     await runQuery("BEGIN TRANSACTION");
@@ -3322,39 +3322,40 @@ function rollJackpotPercent() {
 // this config and animates to land on the chosen slice; it never decides or reports
 // the prize. Keep this in sync with public/publicwheel.js + public/script.js visuals
 // (served via GET /api/wheel/config so they can't drift).
-const PUBLIC_WHEEL_MULTIPLIER = 1 + (20 * 0.01); // 1.2 — the public/OBS wheel is fixed at level 20
-// The gold wheel's prizes grow 1% every TWO spinner levels (level 1 = x1.00, level 21 = x1.10),
-// capped at level 40 (x1.19 - regular slices ~97% back, ~102% with the jackpot slice).
-const GOLD_WHEEL_MAX_LEVEL = 40;
+const PUBLIC_WHEEL_MULTIPLIER = 1.10; // the public/OBS wheel's fixed bonus (~97.5% total payback - the max any spinner gets)
+// The gold wheel's prizes grow 1% every TWO spinner levels, capped at level 20 (x1.09). Rule: no
+// spinner gets back more than ~97.5% including the jackpot slice. With these slices: level 1 ~89%,
+// level 20+ ~96.6%, the public wheel ~97.5%, and the real spin mix averages ~95%.
+const GOLD_WHEEL_MAX_LEVEL = 20;
 function goldWheelMultiplier(level) {
   const lv = Math.max(1, Math.min(GOLD_WHEEL_MAX_LEVEL, Math.floor(Number(level) || 1)));
   return 1 + Math.floor((lv - 1) / 2) * 0.01;
 }
 const WHEEL_SEGMENTS = [
-  { color: '#FF6347', base: 2600,  size: 1 },
-  { color: '#FFD700', base: 5200,  size: 1 },
-  { color: '#ADFF2F', base: 3550,  size: 1 },
-  { color: '#00FA9A', base: 7500,  size: 0.9 },
-  { color: '#1E90FF', base: 680,   size: 1 },
+  { color: '#FF6347', base: 2700,  size: 1 },
+  { color: '#FFD700', base: 5350,  size: 1 },
+  { color: '#ADFF2F', base: 3650,  size: 1 },
+  { color: '#00FA9A', base: 7750,  size: 0.9 },
+  { color: '#1E90FF', base: 700,   size: 1 },
   { color: '#EE82EE', base: 0,     size: 1 },
-  { color: '#FF69B4', base: 22000, size: 0.5 },
-  { color: '#20B2AA', base: 890,   size: 1 },
-  { color: '#FFA500', base: 5750,  size: 1 },
-  { color: '#B22222', base: 4400,  size: 1 },
-  { color: '#8A2BE2', base: 4000,  size: 1 },
-  { color: '#5F9EA0', base: 1350,  size: 1 },
+  { color: '#FF69B4', base: 22500, size: 0.5 },
+  { color: '#20B2AA', base: 920,   size: 1 },
+  { color: '#FFA500', base: 5950,  size: 1 },
+  { color: '#B22222', base: 4550,  size: 1 },
+  { color: '#8A2BE2', base: 4100,  size: 1 },
+  { color: '#5F9EA0', base: 1400,  size: 1 },
   { color: '#EE82EE', base: 0,     size: 1 },
-  { color: '#FFD700', base: 44500, size: 0.1 },
-  { color: '#DB7093', base: 2200,  size: 1 },
-  { color: '#3CB371', base: 420,   size: 1 },
-  { color: '#4682B4', base: 1800,  size: 1 },
-  { color: '#FF1493', base: 11000, size: 0.8 },
+  { color: '#FFD700', base: 46000, size: 0.1 },
+  { color: '#DB7093', base: 2250,  size: 1 },
+  { color: '#3CB371', base: 430,   size: 1 },
+  { color: '#4682B4', base: 1850,  size: 1 },
+  { color: '#FF1493', base: 11500, size: 0.8 },
   { color: '#00CED1', base: 0,     size: 1 },
-  { color: '#FFD700', base: 6700,  size: 1 },
-  { color: '#3CB371', base: 4800,  size: 1 },
-  { color: '#4682B4', base: 3150,  size: 1 },
-  { color: '#FF1493', base: 7950,  size: 1 },
-  { color: '#8A2BE2', base: 8900,  size: 1 },
+  { color: '#FFD700', base: 6900,  size: 1 },
+  { color: '#3CB371', base: 4950,  size: 1 },
+  { color: '#4682B4', base: 3250,  size: 1 },
+  { color: '#FF1493', base: 8200,  size: 1 },
+  { color: '#8A2BE2', base: 9200,  size: 1 },
   { color: '#00CED1', base: 0,     size: 1 },
   { color: '#FFD700', jackpot: true, label: '🏆 JACKPOT 🏆', size: 0.00777 },  // 23.3 / 0.00777 => 1 in 3,000
 ];
@@ -3376,7 +3377,7 @@ function getJackpotPot() {
 }
 
 // Compute the result for a spin: which slice + payout. `multiplier` scales the fixed prizes —
-// the gold wheel uses the spinner's level, the public/OBS wheel is fixed at level 20. The
+// the gold wheel uses the spinner's level, the public/OBS wheel is fixed at x1.10. The
 // jackpot slice rolls a % of the wheel jackpot (the pot, capped) and ignores the multiplier.
 async function computeSpinResult(multiplier) {
   const idx = pickSegment();
