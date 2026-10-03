@@ -41,7 +41,7 @@
           <div>
             <div class="nm"><%= a.name %></div>
             <div class="ds"><%= a.desc %></div>
-            <div class="rw">+<%= (a.xp || 0).toLocaleString() %> XP<% if (a.pat) { %> · +<%= a.pat.toLocaleString() %> PAT<% } %></div>
+            <div class="rw"><%= [a.xp ? '+' + a.xp.toLocaleString() + ' XP' : '', a.pat ? '+' + a.pat.toLocaleString() + ' PAT' : ''].filter(Boolean).join(' · ') %></div>
             <div class="hd"><%= (holders[a.id] || 0).toLocaleString() %> <%= (holders[a.id] || 0) === 1 ? 'player has' : 'players have' %> it</div>
           </div>
         </div>
