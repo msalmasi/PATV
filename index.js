@@ -2789,7 +2789,7 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
     );
     await runQuery(
       `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-      [jackpotId, spinId, spinDetails[0].userId, 500]
+      [jackpotId, spinId, spinDetails[0].userId, 5000]
     );
     await runQuery(
       `UPDATE wheel_spins SET result = 'PENDING', type = 'gold', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ?`,
@@ -3011,7 +3011,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
     );
     await runQuery(
       `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
-      [jackpotId, spinId, spinDetails[0].userId, 500]
+      [jackpotId, spinId, spinDetails[0].userId, 5000]
     );
     await runQuery(
       `UPDATE wheel_spins SET result = 'PENDING', type = 'public', segment_index = ?, payout = ?, jackpot_pct = ? WHERE spinId = ?`,
@@ -3249,7 +3249,7 @@ const refundUser = (userId, spinId) => {
 
           db.run(
             updateJackpot,
-            [jackpotId, spinId, userId, -500],
+            [jackpotId, spinId, userId, -5000],
             function (err) {
               if (err) {
                 console.error("Error updating jackpot rakes:", err);
