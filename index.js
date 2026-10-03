@@ -990,6 +990,40 @@ app.get("/reset-password/:token", async (req, res) => {
   }
 });
 
+// ── Camfrog achievements (achievements.js / achievements.json) ──
+const achievements = require("./achievements");
+app.get("/achievements", addUser, async (req, res) => {
+  try {
+    await achievements.ready;
+    const holders = Object.fromEntries((await getQuery(
+      "SELECT badgeId, COUNT(*) AS n FROM user_badges WHERE badgeId LIKE 'cf_%' GROUP BY badgeId")).map((r) => [r.badgeId, r.n]));
+    let owned = null;
+    if (req.user && req.user.userId) {
+      owned = new Set((await getQuery("SELECT badgeId FROM user_badges WHERE userId = ?", [req.user.userId])).map((r) => r.badgeId));
+    }
+    res.render("achievements", { user: req.user ? req.user.username : null, achievements: achievements.list(), holders, owned });
+  } catch (e) {
+    console.error("[achievements] page:", e);
+    res.status(500).send("Couldn't load achievements.");
+  }
+});
+app.get("/api/achievements", async (req, res) => {
+  res.json({ achievements: achievements.list() });
+});
+// Pepe awards an achievement when he sees its threshold crossed in Camfrog.
+app.post("/api/g/achievement", async (req, res) => {
+  const b = req.body || {};
+  if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
+  try {
+    const r = await achievements.award({ userId: b.userId, camfrogUsername: b.camfrogUsername, username: b.username },
+                                       String(b.badgeId || ""), updateLevel, { silent: !!b.silent });
+    res.status(r.ok ? 200 : 404).json(r);
+  } catch (e) {
+    console.error("[achievements] award:", e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // HTTP GET endpoint to retrieve the leaderboards.
 app.get("/rankings", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session

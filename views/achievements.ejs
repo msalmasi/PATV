@@ -1,0 +1,52 @@
+<%- include('layout', { title: 'Achievements', user: user}) %>
+    <link rel="stylesheet" href="/public/css/leaderboard.css">
+<style>
+  .ach-wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; }
+  .ach-wrap h1 { text-align: center; }
+  .ach-lede { text-align: center; color: #9a9; font-family: Ubuntu, sans-serif; max-width: 640px; margin: 0 auto 24px; line-height: 1.5; }
+  .ach-stats { text-align: center; font-family: 'Press Start 2P', monospace; font-size: 11px; color: #ffd700; margin-bottom: 24px; }
+  .ach-group { font-family: 'Press Start 2P', monospace; font-size: 12px; color: #81c784; margin: 28px 0 12px; }
+  .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .ach { background: #111; border: 2px solid #222; border-radius: 10px; padding: 14px; display: flex; gap: 12px; align-items: center; }
+  .ach img { width: 64px; height: 64px; image-rendering: pixelated; flex: none; }
+  .ach .nm { font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.5; color: #fff; }
+  .ach .ds { font-family: Ubuntu, sans-serif; font-size: 13px; color: #aaa; margin: 4px 0; }
+  .ach .rw { font-family: Ubuntu, sans-serif; font-size: 12px; color: #ffd700; }
+  .ach .hd { font-family: Ubuntu, sans-serif; font-size: 11px; color: #777; }
+  .ach.locked img { filter: grayscale(1) brightness(.45); }
+  .ach.got { border-color: #4caf50; box-shadow: 0 0 12px rgba(76, 175, 80, .35); }
+  .ach.legendary .nm { color: #ffd700; }
+  .ach.rare .nm { color: #b388ff; }
+</style>
+<div class="ach-wrap">
+  <h1>Achievements</h1>
+  <p class="ach-lede">Earned in the Camfrog rooms — chat, grab the mic, use Pepe's commands, rob vaults, win games.
+    Every one comes with XP and a PAT bonus from the Federal Reserve, and Pepe announces it in the room.
+    Link your Camfrog account on your profile to collect them here.</p>
+  <% if (owned) { %>
+    <div class="ach-stats">You have <%= owned.size %> / <%= achievements.length %></div>
+  <% } %>
+  <% const groups = [["Getting started", ["cf_linked","cf_cmd_1"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_250","cf_cmd_kinds","cf_imagine","cf_ask","cf_dj"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan"]], ["Games", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Gangs & the room", ["cf_gang","cf_turf","cf_tipper","cf_beg"]]];
+     const used = new Set(); %>
+  <% groups.forEach(([title, prefixes]) => {
+       const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
+       items.forEach(a => used.add(a.id));
+       if (!items.length) return; %>
+    <div class="ach-group"><%= title %></div>
+    <div class="ach-grid">
+      <% items.forEach(a => { const got = owned && owned.has(a.id); %>
+        <div class="ach <%= a.tier %> <%= owned ? (got ? 'got' : 'locked') : '' %>">
+          <img src="<%= a.icon %>" alt="">
+          <div>
+            <div class="nm"><%= a.name %></div>
+            <div class="ds"><%= a.desc %></div>
+            <div class="rw">+<%= (a.xp || 0).toLocaleString() %> XP · +<%= (a.pat || 0).toLocaleString() %> PAT</div>
+            <div class="hd"><%= (holders[a.id] || 0).toLocaleString() %> <%= (holders[a.id] || 0) === 1 ? 'player has' : 'players have' %> it</div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% }) %>
+</div>
+</body>
+</html>

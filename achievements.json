@@ -1,0 +1,54 @@
+{
+  "_doc": "Camfrog achievements (Pepe 1.64). Seeded into the badges table on start (points = XP, pat = PAT from the 'achievements' payout vault). metric/threshold say what Pepe counts; icon is the badge art. Keep ids stable - they're badgeIds.",
+  "achievements": [
+    {"id": "cf_linked", "name": "Frog Bridge", "emoji": "🌉", "desc": "Linked your Camfrog account to PATV.", "metric": "linked", "threshold": 1, "xp": 2000, "pat": 25000, "tier": "common"},
+
+    {"id": "cf_chat_100", "name": "Yapper", "emoji": "💬", "desc": "Sent 100 messages in the Camfrog rooms.", "metric": "chat", "threshold": 100, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_chat_1k", "name": "Motor Mouth", "emoji": "👄", "desc": "1,000 messages. Do you ever stop?", "metric": "chat", "threshold": 1000, "xp": 3000, "pat": 25000, "tier": "uncommon"},
+    {"id": "cf_chat_10k", "name": "Town Crier", "emoji": "📣", "desc": "10,000 messages. The room is your stage.", "metric": "chat", "threshold": 10000, "xp": 10000, "pat": 100000, "tier": "rare"},
+    {"id": "cf_chat_50k", "name": "Never Shuts Up", "emoji": "🗣️", "desc": "50,000 messages. A living legend of noise.", "metric": "chat", "threshold": 50000, "xp": 25000, "pat": 250000, "tier": "legendary"},
+    {"id": "cf_streak_7", "name": "Regular", "emoji": "📅", "desc": "Chatted 7 days in a row.", "metric": "streak", "threshold": 7, "xp": 3000, "pat": 25000, "tier": "uncommon"},
+    {"id": "cf_streak_30", "name": "Part of the Furniture", "emoji": "🛋️", "desc": "Chatted 30 days in a row.", "metric": "streak", "threshold": 30, "xp": 15000, "pat": 150000, "tier": "rare"},
+
+    {"id": "cf_mic_10", "name": "Open Mic", "emoji": "🎤", "desc": "Grabbed the mic 10 times.", "metric": "mic_ups", "threshold": 10, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_mic_100", "name": "Mic Hog", "emoji": "🐷", "desc": "Grabbed the mic 100 times.", "metric": "mic_ups", "threshold": 100, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_mic_10h", "name": "Radio Voice", "emoji": "📻", "desc": "10 hours on the mic.", "metric": "mic_minutes", "threshold": 600, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_mic_100h", "name": "Golden Pipes", "emoji": "🎙️", "desc": "100 hours on the mic.", "metric": "mic_minutes", "threshold": 6000, "xp": 20000, "pat": 250000, "tier": "legendary"},
+    {"id": "cf_top_mic", "name": "Hour of Power", "emoji": "⏱️", "desc": "Top mic of the hour.", "metric": "top_mic", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+
+    {"id": "cf_cmd_1", "name": "Pepe, Do a Thing", "emoji": "🐸", "desc": "Used your first Pepe command.", "metric": "commands", "threshold": 1, "xp": 500, "pat": 5000, "tier": "common"},
+    {"id": "cf_cmd_250", "name": "Power User", "emoji": "⌨️", "desc": "Used 250 Pepe commands.", "metric": "commands", "threshold": 250, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_cmd_kinds", "name": "Swiss Army Frog", "emoji": "🧰", "desc": "Used 15 different Pepe commands.", "metric": "command_kinds", "threshold": 15, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_imagine_10", "name": "Prompt Artist", "emoji": "🎨", "desc": "Made 10 images with !imagine.", "metric": "cmd:!imagine", "threshold": 10, "xp": 3000, "pat": 25000, "tier": "uncommon"},
+    {"id": "cf_ask_100", "name": "Curious Frog", "emoji": "❓", "desc": "Asked Pepe 100 questions with !ask.", "metric": "cmd:!ask", "threshold": 100, "xp": 3000, "pat": 25000, "tier": "uncommon"},
+    {"id": "cf_dj_25", "name": "Request Line", "emoji": "🎶", "desc": "Queued 25 songs on the jukebox.", "metric": "songs", "threshold": 25, "xp": 3000, "pat": 25000, "tier": "uncommon"},
+
+    {"id": "cf_heist_1", "name": "Ski Mask", "emoji": "🥷", "desc": "Rode on your first heist.", "metric": "heists", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_heist_50", "name": "Career Criminal", "emoji": "🦹", "desc": "50 heists. It's a lifestyle now.", "metric": "heists", "threshold": 50, "xp": 10000, "pat": 100000, "tier": "rare"},
+    {"id": "cf_crack", "name": "Safecracker", "emoji": "🔓", "desc": "Opened a vault door.", "metric": "cracks", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_crack_bank", "name": "Fed Up", "emoji": "🏛️", "desc": "Cracked the PAT Federal Reserve.", "metric": "bank_cracks", "threshold": 1, "xp": 20000, "pat": 250000, "tier": "legendary"},
+    {"id": "cf_door_fail", "name": "So Close", "emoji": "🚨", "desc": "Made it to the vault door... and tripped the alarm.", "metric": "door_fails", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_convoy", "name": "Highway Robbery", "emoji": "🚚", "desc": "Took a gang's convoy.", "metric": "convoys", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+
+    {"id": "cf_bj_natural", "name": "Natural", "emoji": "🂡", "desc": "Dealt a blackjack at Pepe's table.", "metric": "bj_naturals", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_bj_100", "name": "Card Counter", "emoji": "🃏", "desc": "Played 100 hands of blackjack.", "metric": "bj_hands", "threshold": 100, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_holdem_pot", "name": "Pot Odds", "emoji": "♠️", "desc": "Won a hold'em pot.", "metric": "holdem_pots", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_lotto_win", "name": "Lucky Numbers", "emoji": "🎟️", "desc": "Won a prize in the PAT Lottery.", "metric": "lotto_wins", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_lotto_jackpot", "name": "Powerball Pepe", "emoji": "🎰", "desc": "Hit the PAT Lottery JACKPOT.", "metric": "lotto_jackpots", "threshold": 1, "xp": 25000, "pat": 500000, "tier": "legendary"},
+    {"id": "cf_bingo", "name": "B-I-N-G-O", "emoji": "🔢", "desc": "Won a game of PAT Bingo.", "metric": "bingo_wins", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_wager", "name": "Called It", "emoji": "🤝", "desc": "Won a PAT wager.", "metric": "wager_wins", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_market", "name": "Oracle", "emoji": "🔮", "desc": "Backed the right side of a prediction market.", "metric": "market_wins", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_loan", "name": "Good Credit", "emoji": "💳", "desc": "Paid a PAT loan back in full.", "metric": "loans_repaid", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+
+    {"id": "cf_trivia", "name": "Big Brain", "emoji": "🧠", "desc": "Won a round of trivia.", "metric": "trivia_wins", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_pictionary", "name": "Picasso Frog", "emoji": "🖼️", "desc": "Guessed a Pictionary drawing first.", "metric": "pictionary_wins", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_showdown", "name": "Bullseye", "emoji": "🎯", "desc": "Won a showdown.", "metric": "showdown_wins", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_fight_1", "name": "First Blood", "emoji": "🥊", "desc": "Won a duel, brawl or arena fight.", "metric": "fight_wins", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_fight_25", "name": "Gladiator", "emoji": "⚔️", "desc": "Won 25 fights.", "metric": "fight_wins", "threshold": 25, "xp": 10000, "pat": 100000, "tier": "rare"},
+
+    {"id": "cf_gang", "name": "Made Man", "emoji": "🎩", "desc": "Joined (or founded) a gang.", "metric": "gangs", "threshold": 1, "xp": 1000, "pat": 10000, "tier": "common"},
+    {"id": "cf_turf", "name": "Turf Lord", "emoji": "🗺️", "desc": "Helped your gang seize a borough.", "metric": "turf_claims", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon"},
+    {"id": "cf_tipper", "name": "Big Tipper", "emoji": "💸", "desc": "Tipped other people 10 times.", "metric": "tips", "threshold": 10, "xp": 2000, "pat": 20000, "tier": "common"},
+    {"id": "cf_beg_10", "name": "Have Some Dignity", "emoji": "🥺", "desc": "Begged Pepe for PAT 10 times.", "metric": "begs", "threshold": 10, "xp": 500, "pat": 5000, "tier": "common"}
+  ]
+}
