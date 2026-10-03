@@ -2779,7 +2779,7 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
     // Gold wheel scales prizes by the spinner's level (matches the wheel's displayed values).
     const lvlRow = await getQuery("SELECT level FROM users WHERE userId = ?", [spinDetails[0].userId]);
     const spinnerLevel = (lvlRow[0] && lvlRow[0].level) || 0;
-    const outcome = await computeSpinResult(1 + spinnerLevel * 0.01 - 0.01);
+    const outcome = await computeSpinResult(goldWheelMultiplier(spinnerLevel));
 
     await runQuery("BEGIN TRANSACTION");
 
@@ -3323,6 +3323,13 @@ function rollJackpotPercent() {
 // the prize. Keep this in sync with public/publicwheel.js + public/script.js visuals
 // (served via GET /api/wheel/config so they can't drift).
 const PUBLIC_WHEEL_MULTIPLIER = 1 + (20 * 0.01); // 1.2 — the public/OBS wheel is fixed at level 20
+// The gold wheel's prizes grow 1% per spinner level, but only up to level 30 (x1.29): past that the
+// regular slices alone would pay back more than they cost.
+const GOLD_WHEEL_MAX_LEVEL = 30;
+function goldWheelMultiplier(level) {
+  const lv = Math.max(1, Math.min(GOLD_WHEEL_MAX_LEVEL, Number(level) || 1));
+  return 1 + lv * 0.01 - 0.01;
+}
 const WHEEL_SEGMENTS = [
   { color: '#FF6347', base: 2500,  size: 1 },
   { color: '#FFD700', base: 5000,  size: 1 },
@@ -3447,7 +3454,7 @@ async function settleSpin(spinId) {
 app.get("/api/wheel/config", (req, res) => {
   // Optional ?level=N returns the gold wheel's level-scaled labels; otherwise the fixed public wheel.
   const level = parseInt(req.query.level);
-  const multiplier = Number.isFinite(level) ? (1 + level * 0.01 - 0.01) : PUBLIC_WHEEL_MULTIPLIER;
+  const multiplier = Number.isFinite(level) ? goldWheelMultiplier(level) : PUBLIC_WHEEL_MULTIPLIER;
   res.json({
     multiplier,
     segments: WHEEL_SEGMENTS.map((s) => ({
