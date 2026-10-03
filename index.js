@@ -1658,6 +1658,26 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
 // This endpoint creates a new Camfrog user
 // Bot-only routes: the caller must present the bot token. An unset token
 // never matches, so a server without one (staging) refuses them all.
+const funding = require("./funding");
+
+// ── Funded payouts (1.63): Pepe syncs the Reserve balance + which vault pays each website payout
+// flow, and settles the Reserve claims the website records. See funding.js.
+app.post("/api/g/funding-sync", (req, res) => {
+  if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+  funding.sync(req.body || {});
+  res.json({ ok: true });
+});
+app.get("/api/g/reserve-claims", async (req, res) => {
+  if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
+  try { res.json({ claims: await funding.claims() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/g/reserve-claims/settle", async (req, res) => {
+  if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+  try { res.json({ settled: await funding.settle((req.body || {}).ids) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // The Discord/Twitch bots authenticate with their own shared token (same .env as this server).
 function isPlatformBot(token) {
   if (isBotToken(token)) return true;
@@ -1682,11 +1702,14 @@ app.post('/api/users/camfrog/register', async (req, res) => {
   try {
     await runQuery(
       'INSERT INTO users (userId, username, displayname, email, password, camfrogUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, username, displayname, email, password, camfrogUsername, avatar, points_balance || 5000]
+      [userId, username, displayname, email, password, camfrogUsername, avatar, 0]
     );
+    // 1.63: the welcome PAT comes out of a vault ("new_account" payout row), never minted.
+    const welcome = Math.max(0, Math.floor(Number(points_balance) || 5000));
+    const funded = await funding.fundPayout(userId, welcome, "new_account", "Welcome PAT");
     const newUserBadgeId = 'fresh_meat';
     await awardBadge(userId, newUserBadgeId);
-    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: points_balance || 5000 } });
+    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: funded ? welcome : 0 } });
   } catch (error) {
     console.error('Error creating Camfrog user:', error.message);
     res.status(500).json({ error: 'Failed to create new user' });
@@ -2409,6 +2432,10 @@ app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
             return res.status(400).json({ success: false, message: "You've already redeemed that code." });
         }
 
+        // 1.63: a code's PAT comes out of a vault ("redeem_codes" payout row), never minted.
+        if (!(await funding.takeFunds("redeem_codes", codeData[0].points, userId, `redemption (${codeData[0].code})`))) {
+            return res.status(503).json({ success: false, message: "The bank can't cover codes right now — try again later." });
+        }
         await runQuery("BEGIN TRANSACTION");
         await runQuery("INSERT INTO user_redemptions (userId, code) VALUES (?, ?)", [userId, code]);
         await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [codeData[0].points, userId]);
@@ -2535,12 +2562,22 @@ app.post("/api/blackjack/wager", async (req, res) => {
         return res.status(403).json({ success: false, message: "You are banned from the casino." });
       }
 
+      // 1.63: the table is banked by the casino jackpot - refuse a wager it couldn't pay out
+      // (everything still in play x2), then the wager goes INTO the jackpot.
+      const potRow = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
+      const openRow = await getQuery("SELECT COALESCE(SUM(wager),0) AS t FROM blackjack WHERE payout IS NULL");
+      if (((potRow[0] && potRow[0].t) || 0) < 2 * (((openRow[0] && openRow[0].t) || 0) + Number(wager))) {
+        await runQuery("ROLLBACK");
+        return res.status(409).json({ success: false, message: "The casino jackpot can't cover that bet right now." });
+      }
       // Deduct the wager from the user's balance
       const transactionId = uuidv4();
       await runQuery(
         "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
         [wager, userId]
       );
+      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                     [uuidv4(), null, userId, Number(wager)]);
   
       // Log the transaction for the wager
       await runQuery(
@@ -2589,11 +2626,15 @@ app.post("/api/blackjack/result", async (req, res) => {
         [transactionId, userId, "blackjack payout", payout]
       );
   
-      // Add the payout to the user's balance
+      // Add the payout to the user's balance - paid OUT of the casino jackpot (1.63)
       await runQuery(
         "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
         [payout, userId]
       );
+      if (Number(payout) > 0) {
+        await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                       [uuidv4(), null, userId, -Number(payout)]);
+      }
   
       // Update the blackjack row with the payout and result
       await runQuery(
@@ -3438,23 +3479,28 @@ async function settleSpin(spinId) {
   const seg = WHEEL_SEGMENTS[spin.segment_index];
   const isJackpot = !!(seg && seg.jackpot);
   const grand = isJackpot && (spin.jackpot_pct >= 100);
-  const payout = spin.payout || 0;
-
-  if (payout > 0) {
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [payout, spin.userId]);
-  }
+  let payout = spin.payout || 0;
   if (!isJackpot && payout > 0) {
-    // Regular prizes are paid out of the casino jackpot too (the house bank); if the pot can't
-    // cover the whole prize, only what it holds is drawn and the rest is minted.
+    // Regular prizes are paid out of the casino jackpot (the house bank). Whatever the pot can't
+    // cover comes from the "wheel_shortfall" vault (the Reserve) - or isn't paid; never minted.
     const fromPot = Math.min(payout, Math.max(0, await getJackpotPot()));
     if (fromPot > 0) {
       await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -fromPot]);
     }
+    const short = payout - fromPot;
+    if (short > 0 && !(await funding.takeFunds("wheel_shortfall", short, spin.userId, "wheel prize shortfall"))) {
+      payout = fromPot;
+      await runQuery("UPDATE wheel_spins SET payout = ? WHERE spinId = ?", [payout, spinId]);
+    }
+  }
+  if (payout > 0) {
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [payout, spin.userId]);
   }
   if (isJackpot && payout > 0) {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -payout]);
     const left = await getJackpotPot();
-    if (left < JACKPOT_MINIMUM) {
+    if (left < JACKPOT_MINIMUM && await funding.takeFunds("wheel_shortfall", JACKPOT_MINIMUM - left, spin.userId, "wheel jackpot reseed")) {
+      // the reseed comes from the Reserve (a claim Pepe settles), not from nowhere
       await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, JACKPOT_MINIMUM - left]);
     }
   }
@@ -3546,6 +3592,13 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
   
     if (!userId || !amount || !type) {
       return res.status(400).send("Missing required fields");
+    }
+    // 1.63: Discord/Twitch rewards are paid OUT of a vault ("platform_rewards"), never minted.
+    // (Pepe's own credits through here are already paid for on his side.)
+    if (Number(amount) > 0 && /^(discord|twitch)-/i.test(String(type))) {
+      if (!(await funding.takeFunds("platform_rewards", amount, userId, type))) {
+        return res.status(409).json({ success: false, skipped: true, message: "the bank can't cover it" });
+      }
     }
   
     try {

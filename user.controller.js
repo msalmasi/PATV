@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const sgMail = require('@sendgrid/mail');
 const crypto = require('crypto');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
+const funding = require('./funding');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
@@ -479,9 +480,13 @@ async function updateLevel(userId, additionalXp) {
     xp -= xpForNextLevel(level);
     level++;
     levelsGained++;
-    const pointsReward = 10 * xpForNextLevel(level - 1);
-    totalBonusPoints += pointsReward;
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [pointsReward, userId]);
+    // 1.63: 50,000 x the new level, paid OUT of the vault the "levelup" payout row names (the
+    // Reserve) - never minted; skipped when it can't cover it. (It was 10 x the XP for the level,
+    // ~10k x level^2 - ~17M for a single level at 41 - and created from nothing.)
+    const pointsReward = LEVELUP_REWARD_PER_LEVEL * level;
+    if (await funding.fundPayout(userId, pointsReward, "levelup", `Level-up reward (Lv ${level})`)) {
+      totalBonusPoints += pointsReward;
+    }
   }
 
   await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [xp, level, userId]);
@@ -535,12 +540,18 @@ async function awardBadge(userId, badgeId) {
 };
 
 // Function to Award Bonus PAT
+const LEVELUP_REWARD_PER_LEVEL = 50000;
+
 async function awardBonus(userId, type, amount) {
   if (!userId || !amount || !type) {
     console.error("Missing required fields");
   }
 
   try {
+    // 1.63: bonuses are paid OUT of a vault (connect bonuses: "connect_bonus"; anything else:
+    // "platform_rewards") and skipped when it can't cover them - never minted.
+    const flow = /connect/i.test(String(type)) ? "connect_bonus" : "platform_rewards";
+    if (!(await funding.takeFunds(flow, amount, userId, type))) return;
     // Start a transaction
     const transactionId = uuidv4();
     const bonusId = uuidv4();
