@@ -3323,12 +3323,12 @@ function rollJackpotPercent() {
 // the prize. Keep this in sync with public/publicwheel.js + public/script.js visuals
 // (served via GET /api/wheel/config so they can't drift).
 const PUBLIC_WHEEL_MULTIPLIER = 1 + (20 * 0.01); // 1.2 — the public/OBS wheel is fixed at level 20
-// The gold wheel's prizes grow 1% per spinner level, but only up to level 30 (x1.29): past that the
-// regular slices alone would pay back more than they cost.
-const GOLD_WHEEL_MAX_LEVEL = 30;
+// The gold wheel's prizes grow 1% every TWO spinner levels (level 1 = x1.00, level 21 = x1.10). At
+// the old 1%/level, level 21+ got back more than they spent; now the regular slices alone only pass
+// 100% around level 57.
 function goldWheelMultiplier(level) {
-  const lv = Math.max(1, Math.min(GOLD_WHEEL_MAX_LEVEL, Number(level) || 1));
-  return 1 + lv * 0.01 - 0.01;
+  const lv = Math.max(1, Math.floor(Number(level) || 1));
+  return 1 + Math.floor((lv - 1) / 2) * 0.01;
 }
 const WHEEL_SEGMENTS = [
   { color: '#FF6347', base: 2500,  size: 1 },
