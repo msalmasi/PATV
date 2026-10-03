@@ -38,7 +38,7 @@ fetchUserLevel(username).then(userLevel => {
   console.log('User level:', userLevel);
 
   // Calculate the multiplier based on the user's level (1% per level)
-  const multiplier = 1 + Math.floor((Math.max(userLevel, 1) - 1) / 2) * 0.01;   // 1% per 2 levels, same as the server
+  const multiplier = 1 + Math.floor((Math.min(Math.max(userLevel, 1), 40) - 1) / 2) * 0.01;   // 1% per 2 levels, capped at 40 - same as the server
   console.log('Multiplier:', multiplier);
 
   // Define the wheel segments, scaling by user level
