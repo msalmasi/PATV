@@ -1106,11 +1106,49 @@ app.get("/rankings", addUser, async (req, res) => {
     // Current jackpot pot total
     const potRow = await getQuery(`SELECT SUM(amount) AS pot FROM jackpot_rakes`);
     const currentPot = (potRow[0] && potRow[0].pot) || 0;
-    res.render("leaderboard", { user: username, users, jackpots, currentPot });
+    let supply = null;
+    try { supply = await patSupply(); } catch (e) { console.error("supply:", e.message); }
+    res.render("leaderboard", { user: username, users, jackpots, currentPot, supply });
   } catch (error) {
     console.error("Database error:", error);
     res.status(500).send("Failed to fetch rankings.");
   }
+});
+
+// ── Total PAT supply ── every PAT is in a wallet or a pool. Wallets and the casino jackpot live
+// here; Pepe holds the rest (Federal Reserve, turf stakes/tills, gang treasuries, escrow...) and
+// posts a snapshot of them every few minutes.
+const supplyReady = runQuery(`CREATE TABLE IF NOT EXISTS supply_snapshot (
+  id INTEGER PRIMARY KEY CHECK (id = 1), pools TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).catch(() => {});
+app.post("/api/stats/supply", async (req, res) => {
+  if ((req.body || {}).password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false });
+  const pools = Array.isArray(req.body.pools) ? req.body.pools : [];
+  const clean = pools.slice(0, 50).map((p) => ({ key: String(p.key || "").slice(0, 40), label: String(p.label || "").slice(0, 80),
+                                                 amount: Math.max(0, Math.floor(Number(p.amount) || 0)) }));
+  try {
+    await supplyReady;
+    await runQuery("INSERT INTO supply_snapshot (id, pools, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP) " +
+                   "ON CONFLICT(id) DO UPDATE SET pools = excluded.pools, updated_at = CURRENT_TIMESTAMP", [JSON.stringify(clean)]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("supply snapshot:", e);
+    res.status(500).json({ ok: false });
+  }
+});
+async function patSupply() {
+  await supplyReady;
+  const w = await getQuery("SELECT COALESCE(SUM(points_balance), 0) AS w, COUNT(*) AS n FROM users");
+  const j = await getQuery("SELECT COALESCE(SUM(amount), 0) AS j FROM jackpot_rakes");
+  const snap = await getQuery("SELECT pools, updated_at FROM supply_snapshot WHERE id = 1");
+  let pools = [];
+  try { pools = snap.length ? JSON.parse(snap[0].pools) : []; } catch (e) { pools = []; }
+  const rows = [{ key: "wallets", label: `👛 Player wallets (${Number(w[0].n).toLocaleString()} accounts)`, amount: Math.floor(Number(w[0].w) || 0) },
+                { key: "jackpot", label: "🎰 Casino jackpot", amount: Math.floor(Number(j[0].j) || 0) }, ...pools];
+  rows.sort((a, b) => b.amount - a.amount);
+  return { total: rows.reduce((s, r) => s + r.amount, 0), rows, updated: snap.length ? snap[0].updated_at : null };
+}
+app.get("/api/stats/supply", async (req, res) => {
+  try { res.json(await patSupply()); } catch (e) { res.status(500).json({ error: "failed" }); }
 });
 
 // HTTP POST endpoint for registering a new user.

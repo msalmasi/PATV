@@ -4,10 +4,14 @@
     <link rel="stylesheet" href="/public/css/leaderboard.css"> <!-- Path to your CSS file -->
 <body>
     <h1>Leaderboard</h1>
+    <% if (typeof supply !== 'undefined' && supply) { %>
+        <p class="pot-banner" style="cursor:pointer" onclick="showTab('supply')" title="See where it all is">Total PAT supply: <%= supply.total.toLocaleString() %></p>
+    <% } %>
 
     <div class="tabs">
         <button class="tab-btn active" data-tab="points" onclick="showTab('points')">TOP BALANCES</button>
         <button class="tab-btn" data-tab="jackpots" onclick="showTab('jackpots')">JACKPOTS</button>
+        <button class="tab-btn" data-tab="supply" onclick="showTab('supply')">PAT SUPPLY</button>
     </div>
 
     <!-- TOP BALANCES TAB -->
@@ -30,6 +34,26 @@
                 <% }); %>
             </tbody>
         </table>
+    </div>
+
+    <!-- PAT SUPPLY TAB -->
+    <div id="tab-supply" class="tab-content">
+        <% if (typeof supply !== 'undefined' && supply) { %>
+            <p class="pot-banner">Total PAT supply: <%= supply.total.toLocaleString() %></p>
+            <table>
+                <thead><tr><th>Where it is</th><th>PAT</th><th>Share</th></tr></thead>
+                <tbody>
+                <% supply.rows.forEach((r) => { %>
+                    <tr><td><%= r.label %></td><td><%= r.amount.toLocaleString() %></td>
+                        <td><%= supply.total ? (r.amount / supply.total * 100).toFixed(1) : '0.0' %>%</td></tr>
+                <% }); %>
+                </tbody>
+            </table>
+            <p class="empty-msg">PAT is never minted or burned by the games — it moves between wallets and these pools.
+                <% if (supply.updated) { %>Pepe's pools as of <%= supply.updated %> UTC.<% } else { %>Pepe hasn't reported his pools yet.<% } %></p>
+        <% } else { %>
+            <p class="empty-msg">Supply data isn't available right now.</p>
+        <% } %>
     </div>
 
     <!-- JACKPOTS TAB -->
