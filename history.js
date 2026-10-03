@@ -112,6 +112,8 @@ const RULES = [
   [/^staff transfer$/i, "admin", "🛠️", () => `Staff transfer`],
   [/^(fine|modfine|automod-fine)(-refund)?$/i, "admin", "⚖️", (a, m) => m[2] ? `Fine refunded` : `Fined`],
   [/^Refund$/i, "admin", "↩️", () => `Refund`],
+  [/^ledger-correction$/i, "admin", "📒", () => `Balance carried over from before the full history (merges, resets, older records)`],
+  [/^balance-zeroed$/i, "admin", "🔀", () => `Balance moved out (account merge)`],
 ];
 
 // A rule's optional 5th field is the word that joins the counterparty on ("vs", "to", "from";

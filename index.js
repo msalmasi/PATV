@@ -539,6 +539,8 @@ app.post("/merge-accounts-twitch", async (req, res) => {
         "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
         [twitchId, twitchDisplayname, currentUserId]
       );
+      // keep the merged account's PAT history with the balance it brings (else /history can't add up)
+      await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [currentUserId, existingUserId]);
       await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
       bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUserId]);
       if (bonus[0].twitchBonus === 0) {
@@ -798,6 +800,8 @@ app.post("/merge-accounts-discord", async (req, res) => {
         "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
         [discordId, discordUsername, currentUserId]
       );
+      // keep the merged account's PAT history with the balance it brings (else /history can't add up)
+      await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [currentUserId, existingUserId]);
       await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
       bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUserId]);
       if (bonus[0].discordBonus === 0) {
@@ -1694,7 +1698,13 @@ app.post("/api/users/zero-balance", async (req, res) => {
     return res.status(403).send("Access denied");
   }
   try {
+    const before = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
     await runQuery("UPDATE users SET points_balance = 0 WHERE userId = ?", [userId]);
+    const was = before.length ? Number(before[0].points_balance) || 0 : 0;
+    if (was) {   // logged, so the ledger still adds up to the balance
+      await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
+        [uuidv4(), userId, "balance-zeroed", -was]);
+    }
     res.json({ message: "Balance zeroed" });
   } catch (error) {
     console.error("Error zeroing balance:", error);
