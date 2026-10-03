@@ -24,33 +24,33 @@ const centerY = canvas.height / 2;
 const multiplier = 1 + (20 * 0.01);
 
 // Set the Wheel Prizes
-const segments = [
-  { color: '#FF6347', label: Math.round(3000 * multiplier), size: 1 },
-  { color: '#FFD700', label: Math.round(6000 * multiplier), size: 1 },
-  { color: '#ADFF2F', label: Math.round(4000 * multiplier), size: 1 },
-  { color: '#00FA9A', label: Math.round(8500 * multiplier), size: 0.9 },
-  { color: '#1E90FF', label: Math.round(750 * multiplier), size: 1 },
-  { color: '#EE82EE', label: Math.round(0 * multiplier), size: 1 },
-  { color: '#FF69B4', label: Math.round(25000 * multiplier), size: 0.5 },
-  { color: '#20B2AA', label: Math.round(1000 * multiplier), size: 1 },
-  { color: '#FFA500', label: Math.round(6500 * multiplier), size: 1 },
-  { color: '#B22222', label: Math.round(5000 * multiplier), size: 1 },
-  { color: '#8A2BE2', label: Math.round(4500 * multiplier), size: 1 },
-  { color: '#5F9EA0', label: Math.round(1500 * multiplier), size: 1 },
-  { color: '#EE82EE', label: Math.round(0 * multiplier), size: 1 },
-  { color: '#FFD700', label: Math.round(50000 * multiplier), size: 0.1 },
-  { color: '#DB7093', label: Math.round(2500 * multiplier), size: 1 },
-  { color: '#3CB371', label: Math.round(500 * multiplier), size: 1 },
-  { color: '#4682B4', label: Math.round(2000 * multiplier), size: 1 },
-  { color: '#FF1493', label: Math.round(12500 * multiplier), size: 0.8 },
-  { color: '#00CED1', label: Math.round(0 * multiplier), size: 1 },
-  { color: '#FFD700', label: Math.round(7500 * multiplier), size: 1 },
-  { color: '#3CB371', label: Math.round(5500 * multiplier), size: 1 },
-  { color: '#4682B4', label: Math.round(3500 * multiplier), size: 1 },
-  { color: '#FF1493', label: Math.round(9000 * multiplier), size: 1 },
-  { color: '#8A2BE2', label: Math.round(10000 * multiplier), size: 1 },
-  { color: '#00CED1', label: Math.round(0 * multiplier), size: 1 },
-  { color: '#FFD700', label: '🏆🏆🏆JACKPOT🏆🏆🏆', size: 0.05 }
+let segments = [
+  { color: '#FF6347', label: String(Math.round(2500 * multiplier)), size: 1 },
+  { color: '#FFD700', label: String(Math.round(5000 * multiplier)), size: 1 },
+  { color: '#ADFF2F', label: String(Math.round(3400 * multiplier)), size: 1 },
+  { color: '#00FA9A', label: String(Math.round(7200 * multiplier)), size: 0.9 },
+  { color: '#1E90FF', label: String(Math.round(650 * multiplier)), size: 1 },
+  { color: '#EE82EE', label: String(Math.round(0 * multiplier)), size: 1 },
+  { color: '#FF69B4', label: String(Math.round(21000 * multiplier)), size: 0.5 },
+  { color: '#20B2AA', label: String(Math.round(850 * multiplier)), size: 1 },
+  { color: '#FFA500', label: String(Math.round(5500 * multiplier)), size: 1 },
+  { color: '#B22222', label: String(Math.round(4200 * multiplier)), size: 1 },
+  { color: '#8A2BE2', label: String(Math.round(3800 * multiplier)), size: 1 },
+  { color: '#5F9EA0', label: String(Math.round(1300 * multiplier)), size: 1 },
+  { color: '#EE82EE', label: String(Math.round(0 * multiplier)), size: 1 },
+  { color: '#FFD700', label: String(Math.round(42500 * multiplier)), size: 0.1 },
+  { color: '#DB7093', label: String(Math.round(2100 * multiplier)), size: 1 },
+  { color: '#3CB371', label: String(Math.round(400 * multiplier)), size: 1 },
+  { color: '#4682B4', label: String(Math.round(1700 * multiplier)), size: 1 },
+  { color: '#FF1493', label: String(Math.round(10500 * multiplier)), size: 0.8 },
+  { color: '#00CED1', label: String(Math.round(0 * multiplier)), size: 1 },
+  { color: '#FFD700', label: String(Math.round(6400 * multiplier)), size: 1 },
+  { color: '#3CB371', label: String(Math.round(4600 * multiplier)), size: 1 },
+  { color: '#4682B4', label: String(Math.round(3000 * multiplier)), size: 1 },
+  { color: '#FF1493', label: String(Math.round(7600 * multiplier)), size: 1 },
+  { color: '#8A2BE2', label: String(Math.round(8500 * multiplier)), size: 1 },
+  { color: '#00CED1', label: String(Math.round(0 * multiplier)), size: 1 },
+  { color: '#FFD700', label: '🏆 JACKPOT 🏆', size: 0.00777, jackpot: true }
 ];
 
 let currentAngle = 0 - ((2 * Math.PI) / 4);
@@ -72,19 +72,69 @@ function drawWheel() {
     ctx.fillStyle = segment.color;
     ctx.fill();
 
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate((angleStart + angleEnd) / 2);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#fff';
-    ctx.font = '16px Arial';
-    ctx.fillText(segment.label, wheelRadius - 10, 10);
-    ctx.restore();
+    if (!segment.jackpot) {           // the jackpot's label is drawn by drawJackpotGlow
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate((angleStart + angleEnd) / 2);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#fff';
+      ctx.font = '16px Arial';
+      ctx.fillText(segment.label, wheelRadius - 10, 10);
+      ctx.restore();
+    }
 
     angleStart = angleEnd;
   });
+  drawJackpotGlow();
 
   // No center circle, center image replaces it
+}
+
+// The jackpot slice is a thin sliver (~1 in 3,000 spins) - drawn with a pulsing gold glow and a
+// trophy at the rim so it reads on stream. The slice itself is drawn at its true size.
+function drawJackpotGlow() {
+  const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
+  let a0 = currentAngle;
+  for (const seg of segments) {
+    const a1 = a0 + (seg.size / totalSize) * 2 * Math.PI;
+    if (seg.jackpot) {
+      const mid = (a0 + a1) / 2;
+      const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 250);
+      ctx.save();
+      ctx.shadowColor = '#FFD700';
+      ctx.shadowBlur = 12 + 14 * pulse;
+      ctx.strokeStyle = 'rgba(255, 236, 140, ' + (0.75 + 0.25 * pulse) + ')';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(centerX + wheelRadius * Math.cos(mid), centerY + wheelRadius * Math.sin(mid));
+      ctx.stroke();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(mid);
+      ctx.textAlign = 'right';
+      ctx.font = 'bold 16px Arial';
+      ctx.fillStyle = '#FFD700';
+      ctx.fillText(seg.label, wheelRadius - 10, -6);
+      ctx.restore();
+    }
+    a0 = a1;
+  }
+}
+// Keep the glow pulsing between spins (the spin animation redraws on its own).
+setInterval(() => { if (!isSpinning && segments.length) drawWheel(); }, 60);
+
+// The server owns the slice table (/api/wheel/config) - the arrays here are only a fallback.
+function loadWheelConfig(level) {
+  const q = (level !== undefined && level !== null) ? ('?level=' + encodeURIComponent(level)) : '';
+  return fetch('/api/wheel/config' + q)
+    .then(r => r.json())
+    .then(cfg => {
+      if (cfg && Array.isArray(cfg.segments) && cfg.segments.length && !isSpinning) {
+        segments = cfg.segments;
+        drawWheel();
+      }
+    })
+    .catch(err => console.error('wheel config fetch failed, using the built-in table:', err));
 }
 
 // Wheel Animation Function — the SERVER already decided which slice wins (targetIndex);
@@ -162,7 +212,9 @@ function fetchJackpotTotal() {
       .then(response => response.json())
       .then(data => {
           if (data.jackpotTotal !== undefined) {
-              document.getElementById('jackpotTotal').textContent = data.jackpotTotal;
+              // The wheel's jackpot is the casino pot capped (wheelJackpot); older servers lack it.
+              const shown = (data.wheelJackpot !== undefined) ? data.wheelJackpot : data.jackpotTotal;
+              document.getElementById('jackpotTotal').textContent = Number(shown).toLocaleString();
           } else {
               console.error('Failed to fetch balance:', data.error);
               document.getElementById('jackpotTotal').textContent = 'Error fetching balance';
@@ -175,6 +227,7 @@ function fetchJackpotTotal() {
 }
 
 fetchJackpotTotal()
+loadWheelConfig();   // the public/OBS wheel: fixed level 20 on the server
 
 // Auto-refresh jackpot every 5 seconds
 setInterval(fetchJackpotTotal, 5000);
@@ -191,9 +244,9 @@ function settleAndReveal(spinId) {
   .then(data => {
     console.log('Settle response:', data);
     if (data.grand) {
-      drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE pot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
+      drawResultOverlay("🏆🏆🏆 GRAND JACKPOT! The WHOLE jackpot: " + Number(data.result).toLocaleString() + " 🏆🏆🏆");
     } else if (data.jackpot) {
-      drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the pot: " + Number(data.result).toLocaleString() + " 🏆");
+      drawResultOverlay("🏆 JACKPOT! You won " + (data.jackpotPct || 0) + "% of the jackpot: " + Number(data.result).toLocaleString() + " 🏆");
     } else {
       drawResultOverlay(Number(data.result || 0).toLocaleString());
     }

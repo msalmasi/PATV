@@ -1886,7 +1886,11 @@ function getJackpotTotal(req, res) {
       res.status(500).json({ error: err.message });
       return;
     }
-    return res.json({ jackpotTotal: row.total || 0 }); // Return 0 if null
+    const total = row.total || 0;
+    // jackpotTotal = the whole casino pot (Pepe's vault reads this). wheelJackpot = what the wheel's
+    // jackpot slice rolls against: the pot, capped.
+    return res.json({ jackpotTotal: total, wheelJackpot: Math.min(Math.max(0, total), WHEEL_JACKPOT_CAP),
+                      wheelJackpotCap: WHEEL_JACKPOT_CAP });
   });
 }
 
@@ -3277,25 +3281,20 @@ const refundUser = (userId, spinId) => {
 // setInterval(checkAndResolvePendingSpins, 5000);
 
 // HTTP POST endpoint to record the result of a public wheel spin.
-// ── Jackpot odds config ──
-// The jackpot rate is gated by a secondary server-side roll so we can tune it
-// independently of the visual wheel slice (which can't be shrunk below a landable size).
-// The jackpot slice is landed on ~1 in 467 spins (slice weight 0.05 / total weight 23.35).
-// Overall jackpot odds = sliceOdds / targetOdds  =>  ~1 in 5000 spins (~weekly at current volume).
-const JACKPOT_TARGET_ODDS = 5000;   // tune this to make the jackpot more/less frequent
-const JACKPOT_SLICE_ODDS = 467;     // ~1 in N spins land on the visual jackpot slice
-const JACKPOT_CONFIRM_CHANCE = JACKPOT_SLICE_ODDS / JACKPOT_TARGET_ODDS; // ~0.0934
-// Near-miss consolation = the largest wheel prize.
-// Largest base prize 50000 * multiplier 1.2 = 60000  =>  consolation 60000.
-// Keep SPIN_MULTIPLIER / LARGEST_BASE_PRIZE in sync with public/publicwheel.js + public/script.js.
-const SPIN_MULTIPLIER = 1 + (20 * 0.01);
-const LARGEST_BASE_PRIZE = 50000;
-const JACKPOT_CONSOLATION = Math.round(LARGEST_BASE_PRIZE * SPIN_MULTIPLIER);
-// Minimum jackpot floor — after the whole pot is won, it reseeds to this instead of 0.
+// ── Jackpot config ──
+// The wheel is house-banked: every spin's 5,000 PAT goes into the casino jackpot and every prize
+// (regular slices included) is paid out of it. The jackpot slice is a thin glowing sliver
+// (~1 in 3,000 spins) and EVERY landing pays - there's no hidden second gate. What it pays is a
+// rolled % of the WHEEL JACKPOT, which is the casino pot capped at WHEEL_JACKPOT_CAP; anything above
+// the cap stays in the pot as the casino's bank (blackjack, the lottery, heists).
+// Monte Carlo (Oct 2026, real spin mix): regular slices 90% + jackpot ~4.6% => ~95% total payback,
+// pot grows ~1.5M / 2 weeks from the wheel alone; a hit is ~400k typical, 1 in 10 >= ~1.9M.
+const WHEEL_JACKPOT_CAP = 5000000;
+// Floor: if a win ever leaves the pot below this, it's topped back up (minted) so the wheel
+// always shows a live jackpot. With the cap, a win can only empty the pot when it's under 5M.
 const JACKPOT_MINIMUM = 100000;
 
-// Landing the jackpot slice triggers a second roll that decides what PERCENT of the
-// current pot you win. Skewed low so most hits are modest and the full 100% (GRAND) is
+// Landing the jackpot slice rolls what PERCENT of the wheel jackpot you win. Skewed low so most hits are modest and the full 100% (GRAND) is
 // rare-but-possible, and the payout scales with (and is drawn from) the pot so the wheel
 // self-regulates. [weight, minPct, maxPct]; weights sum to 1. Average ≈ 14% of the pot;
 // GRAND ≈ 1 in 200 slice hits (~1 in 93k spins at current odds). Tune freely.
@@ -3325,32 +3324,32 @@ function rollJackpotPercent() {
 // (served via GET /api/wheel/config so they can't drift).
 const PUBLIC_WHEEL_MULTIPLIER = 1 + (20 * 0.01); // 1.2 — the public/OBS wheel is fixed at level 20
 const WHEEL_SEGMENTS = [
-  { color: '#FF6347', base: 3000,  size: 1 },
-  { color: '#FFD700', base: 6000,  size: 1 },
-  { color: '#ADFF2F', base: 4000,  size: 1 },
-  { color: '#00FA9A', base: 8500,  size: 0.9 },
-  { color: '#1E90FF', base: 750,   size: 1 },
+  { color: '#FF6347', base: 2500,  size: 1 },
+  { color: '#FFD700', base: 5000,  size: 1 },
+  { color: '#ADFF2F', base: 3400,  size: 1 },
+  { color: '#00FA9A', base: 7200,  size: 0.9 },
+  { color: '#1E90FF', base: 650,   size: 1 },
   { color: '#EE82EE', base: 0,     size: 1 },
-  { color: '#FF69B4', base: 25000, size: 0.5 },
-  { color: '#20B2AA', base: 1000,  size: 1 },
-  { color: '#FFA500', base: 6500,  size: 1 },
-  { color: '#B22222', base: 5000,  size: 1 },
-  { color: '#8A2BE2', base: 4500,  size: 1 },
-  { color: '#5F9EA0', base: 1500,  size: 1 },
+  { color: '#FF69B4', base: 21000, size: 0.5 },
+  { color: '#20B2AA', base: 850,   size: 1 },
+  { color: '#FFA500', base: 5500,  size: 1 },
+  { color: '#B22222', base: 4200,  size: 1 },
+  { color: '#8A2BE2', base: 3800,  size: 1 },
+  { color: '#5F9EA0', base: 1300,  size: 1 },
   { color: '#EE82EE', base: 0,     size: 1 },
-  { color: '#FFD700', base: 50000, size: 0.1 },
-  { color: '#DB7093', base: 2500,  size: 1 },
-  { color: '#3CB371', base: 500,   size: 1 },
-  { color: '#4682B4', base: 2000,  size: 1 },
-  { color: '#FF1493', base: 12500, size: 0.8 },
+  { color: '#FFD700', base: 42500, size: 0.1 },
+  { color: '#DB7093', base: 2100,  size: 1 },
+  { color: '#3CB371', base: 400,   size: 1 },
+  { color: '#4682B4', base: 1700,  size: 1 },
+  { color: '#FF1493', base: 10500, size: 0.8 },
   { color: '#00CED1', base: 0,     size: 1 },
-  { color: '#FFD700', base: 7500,  size: 1 },
-  { color: '#3CB371', base: 5500,  size: 1 },
-  { color: '#4682B4', base: 3500,  size: 1 },
-  { color: '#FF1493', base: 9000,  size: 1 },
-  { color: '#8A2BE2', base: 10000, size: 1 },
+  { color: '#FFD700', base: 6400,  size: 1 },
+  { color: '#3CB371', base: 4600,  size: 1 },
+  { color: '#4682B4', base: 3000,  size: 1 },
+  { color: '#FF1493', base: 7600,  size: 1 },
+  { color: '#8A2BE2', base: 8500,  size: 1 },
   { color: '#00CED1', base: 0,     size: 1 },
-  { color: '#FFD700', jackpot: true, label: '🏆🏆🏆JACKPOT🏆🏆🏆', size: 0.05 },
+  { color: '#FFD700', jackpot: true, label: '🏆 JACKPOT 🏆', size: 0.00777 },  // 23.3 / 0.00777 => 1 in 3,000
 ];
 function segValue(seg, multiplier) { return seg.jackpot ? 0 : Math.round(seg.base * multiplier); }
 
@@ -3371,12 +3370,12 @@ function getJackpotPot() {
 
 // Compute the result for a spin: which slice + payout. `multiplier` scales the fixed prizes —
 // the gold wheel uses the spinner's level, the public/OBS wheel is fixed at level 20. The
-// jackpot slice is pot-based (rolls a % of the pot) and unaffected by the multiplier.
+// jackpot slice rolls a % of the wheel jackpot (the pot, capped) and ignores the multiplier.
 async function computeSpinResult(multiplier) {
   const idx = pickSegment();
   const seg = WHEEL_SEGMENTS[idx];
   if (seg.jackpot) {
-    const pot = await getJackpotPot();
+    const pot = Math.min(Math.max(0, await getJackpotPot()), WHEEL_JACKPOT_CAP);
     const pct = rollJackpotPercent();
     return { segmentIndex: idx, payout: Math.max(0, Math.round(pot * pct)), jackpotPct: Math.round(pct * 100) };
   }
@@ -3417,10 +3416,19 @@ async function settleSpin(spinId) {
   if (payout > 0) {
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [payout, spin.userId]);
   }
-  if (isJackpot) {
+  if (!isJackpot && payout > 0) {
+    // Regular prizes are paid out of the casino jackpot too (the house bank); if the pot can't
+    // cover the whole prize, only what it holds is drawn and the rest is minted.
+    const fromPot = Math.min(payout, Math.max(0, await getJackpotPot()));
+    if (fromPot > 0) {
+      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -fromPot]);
+    }
+  }
+  if (isJackpot && payout > 0) {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -payout]);
-    if (grand) {
-      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, JACKPOT_MINIMUM]);
+    const left = await getJackpotPot();
+    if (left < JACKPOT_MINIMUM) {
+      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, JACKPOT_MINIMUM - left]);
     }
   }
   const txnType = isJackpot
@@ -3448,6 +3456,7 @@ app.get("/api/wheel/config", (req, res) => {
       jackpot: !!s.jackpot,
       label: s.jackpot ? s.label : String(Math.round(s.base * multiplier)),
     })),
+    jackpotCap: WHEEL_JACKPOT_CAP,
   });
 });
 
