@@ -1,0 +1,84 @@
+<%- include('layout', { title: 'PAT History', user: user}) %>
+    <link rel="stylesheet" href="/public/css/leaderboard.css">
+<style>
+  .hx { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .hx h1 { text-align: center; }
+  .hx .who { text-align: center; color: #9a9; margin-bottom: 18px; }
+  .hx form.look { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .hx input, .hx select, .hx button { background: #111; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; font-family: inherit; }
+  .hx button { cursor: pointer; }
+  .tabs2 { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 10px 0 18px; }
+  .tabs2 a { padding: 5px 10px; border: 1px solid #333; border-radius: 14px; color: #ccc; text-decoration: none; font-size: 13px; }
+  .tabs2 a.on { border-color: #4caf50; color: #fff; background: #1b2b1b; }
+  .sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .sum a { background: #111; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; text-decoration: none; color: #ddd; }
+  .sum a.on { border-color: #4caf50; }
+  .sum .l { font-weight: bold; margin-bottom: 4px; }
+  .sum .n { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .pos { color: #66bb6a; } .neg { color: #ef5350; } .mut { color: #888; }
+  .day { margin: 18px 0 6px; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
+  .row2 { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid #1c1c1c; }
+  .row2 .ic { width: 24px; text-align: center; flex: none; }
+  .row2 .tx { flex: 1; min-width: 0; }
+  .row2 .tm { color: #777; font-size: 12px; width: 52px; flex: none; font-variant-numeric: tabular-nums; }
+  .row2 .am { width: 130px; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
+  .pager { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+  .pager a { color: #81c784; }
+</style>
+<div class="hx">
+  <h1>PAT History</h1>
+  <% if (error) { %><div class="who neg"><%= error %></div><% } %>
+  <% if (canLookup) { %>
+    <form class="look" method="get" action="/history">
+      <input name="user" placeholder="username or camfrog name" value="<%= target || '' %>">
+      <input type="hidden" name="period" value="<%= period %>">
+      <button type="submit">Look up</button>
+    </form>
+  <% } %>
+  <% if (data) { %>
+    <div class="who">Showing <b><%= target %></b><%= own ? ' (you)' : '' %> · <%= data.count.toLocaleString() %> transactions</div>
+    <% const q = (o) => '/history?' + new URLSearchParams(Object.assign({ user: target, period, cat: cat || '' }, o)).toString(); %>
+    <div class="tabs2">
+      <% [['7d','7 days'],['30d','30 days'],['90d','90 days'],['all','All time']].forEach(([p, l]) => { %>
+        <a class="<%= p === period ? 'on' : '' %>" href="<%= q({ period: p, page: 1 }) %>"><%= l %></a>
+      <% }) %>
+    </div>
+    <div class="sum">
+      <a class="<%= !cat ? 'on' : '' %>" href="<%= q({ cat: '', page: 1 }) %>">
+        <% let tin = 0, tout = 0; Object.values(data.totals).forEach(t => { tin += t.in; tout += t.out; }); %>
+        <div class="l">Everything</div>
+        <div class="n"><span class="pos">+<%= tin.toLocaleString() %></span> · <span class="neg">−<%= tout.toLocaleString() %></span>
+          · net <span class="<%= tin - tout >= 0 ? 'pos' : 'neg' %>"><%= (tin - tout >= 0 ? '+' : '−') + Math.abs(tin - tout).toLocaleString() %></span></div>
+      </a>
+      <% Object.entries(data.totals).sort((a, b) => (b[1].in + b[1].out) - (a[1].in + a[1].out)).forEach(([k, t]) => { const net = t.in - t.out; %>
+        <a class="<%= cat === k ? 'on' : '' %>" href="<%= q({ cat: k, page: 1 }) %>">
+          <div class="l"><%= t.label %> <span class="mut">(<%= t.n %>)</span></div>
+          <div class="n"><span class="pos">+<%= t.in.toLocaleString() %></span> · <span class="neg">−<%= t.out.toLocaleString() %></span>
+            · net <span class="<%= net >= 0 ? 'pos' : 'neg' %>"><%= (net >= 0 ? '+' : '−') + Math.abs(net).toLocaleString() %></span></div>
+        </a>
+      <% }) %>
+    </div>
+    <% let lastDay = null; data.items.forEach(it => {
+         const ts = new Date(String(it.timestamp).replace(' ', 'T') + 'Z');
+         const day = ts.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' });
+         const tm = ts.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+         if (day !== lastDay) { lastDay = day; %>
+      <div class="day"><%= day %></div>
+    <% } %>
+      <div class="row2">
+        <div class="ic"><%= it.icon %></div>
+        <div class="tx"><%= it.text %></div>
+        <div class="tm"><%= tm %></div>
+        <div class="am <%= it.points >= 0 ? 'pos' : 'neg' %>"><%= (it.points >= 0 ? '+' : '−') + Math.abs(it.points).toLocaleString() %> PAT</div>
+      </div>
+    <% }) %>
+    <% if (!data.items.length) { %><div class="who mut">Nothing in this period.</div><% } %>
+    <div class="pager">
+      <% if (data.page > 1) { %><a href="<%= q({ page: data.page - 1 }) %>">← newer</a><% } %>
+      <span class="mut">page <%= data.page %> / <%= data.pages %></span>
+      <% if (data.page < data.pages) { %><a href="<%= q({ page: data.page + 1 }) %>">older →</a><% } %>
+    </div>
+  <% } %>
+</div>
+</body>
+</html>

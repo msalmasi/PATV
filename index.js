@@ -990,6 +990,37 @@ app.get("/reset-password/:token", async (req, res) => {
   }
 });
 
+// ── PAT history: a readable transaction log (history.js). You see your own; admins/staff can
+// look anyone up by username or Camfrog name. ──
+const history = require("./history");
+app.get("/history", addUser, async (req, res) => {
+  const me = req.user;
+  const canLookup = !!me && (me.class === "Admin" || me.class === "Staff");
+  const period = ["7d", "30d", "90d", "all"].includes(req.query.period) ? req.query.period : "30d";
+  const cat = req.query.cat || null;
+  const page = parseInt(req.query.page) || 1;
+  const render = (o) => res.render("history", Object.assign({ user: me ? me.username : null, canLookup, period, cat,
+                                                              target: null, own: false, data: null, error: null }, o));
+  try {
+    if (!me) return render({ error: "Log in to see your PAT history." });
+    let target = me.username, userId = me.userId;
+    const asked = String(req.query.user || "").trim();
+    if (asked && asked.toLowerCase() !== me.username.toLowerCase()) {
+      if (!canLookup) return render({ target: me.username, error: "You can only see your own history." });
+      const u = await getQuery(
+        `SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?)
+         ORDER BY CASE WHEN LOWER(username) = LOWER(?) THEN 0 ELSE 1 END LIMIT 1`, [asked, asked, asked]);
+      if (!u.length) return render({ target: asked, error: `No user called "${asked}".` });
+      target = u[0].username; userId = u[0].userId;
+    }
+    const data = await history.forUser(userId, { period, cat, page });
+    render({ target, own: userId === me.userId, data });
+  } catch (e) {
+    console.error("[history]", e);
+    render({ error: "Couldn't load the history." });
+  }
+});
+
 // ── Camfrog achievements (achievements.js / achievements.json) ──
 const achievements = require("./achievements");
 app.get("/achievements", addUser, async (req, res) => {
@@ -1339,12 +1370,12 @@ async function transferPat(senderUsername, recipientUsername, rawAmount) {
 
   // Ledger entries.
   await runQuery(
-    "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-    [uuidv4(), sender.userId, "tip sent", -amount]
+    "INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)",
+    [uuidv4(), sender.userId, "tip sent", -amount, recipient.userId]
   );
   await runQuery(
-    "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-    [uuidv4(), recipient.userId, "tip received", amount]
+    "INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)",
+    [uuidv4(), recipient.userId, "tip received", amount, sender.userId]
   );
 
   achievements.checkWeb(sender.userId);            // tipped / tips-received achievements
