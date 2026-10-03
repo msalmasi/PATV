@@ -1000,7 +1000,7 @@ app.get("/history", addUser, async (req, res) => {
   const cat = req.query.cat || null;
   const page = parseInt(req.query.page) || 1;
   const render = (o) => res.render("history", Object.assign({ user: me ? me.username : null, canLookup, period, cat,
-                                                              target: null, own: false, data: null, error: null }, o));
+                                                              target: null, targetId: null, own: false, data: null, error: null }, o));
   try {
     if (!me) return render({ error: "Log in to see your PAT history." });
     let target = me.username, userId = me.userId;
@@ -1014,7 +1014,8 @@ app.get("/history", addUser, async (req, res) => {
       target = u[0].username; userId = u[0].userId;
     }
     const data = await history.forUser(userId, { period, cat, page });
-    render({ target, own: userId === me.userId, data });
+    const tu = await getQuery("SELECT username, camfrogUsername, discordUsername, twitchDisplayname FROM users WHERE userId = ?", [userId]);
+    render({ target, targetId: history.identity(tu[0]), own: userId === me.userId, data });
   } catch (e) {
     console.error("[history]", e);
     render({ error: "Couldn't load the history." });
@@ -1414,6 +1415,21 @@ app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
   }
 });
 
+// The other person a bot-moved PAT row was with (duel opponent, loan lender/borrower, wager
+// opponent), sent by Pepe as a username or Camfrog name. Stored as their userId in
+// transactions.counterparty so /history can say "Won a duel vs bob". Unknown -> null.
+async function resolveCounterparty(name) {
+  if (!name) return null;
+  try {
+    const r = await getQuery(
+      "SELECT userId FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?) LIMIT 1",
+      [String(name), String(name)]);
+    return r.length ? r[0].userId : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // ── Wager escrow for bot-run games (duels, brawls) ──
 // charge = atomically lock a stake (can't be tipped out afterward); payout = release
 // winnings/refund. Bot-token gated. The atomic conditional debit is what makes escrow safe.
@@ -1437,7 +1453,8 @@ app.post("/api/wager/charge", async (req, res) => {
       [amount, userId, amount]
     );
     if (!debit || debit.changes === 0) return res.status(402).json({ ok: false, error: "insufficient" });
-    await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), userId, reason, -amount]);
+    const cp = await resolveCounterparty(req.body.counterparty);
+    await runQuery("INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)", [uuidv4(), userId, reason, -amount, cp]);
     res.json({ ok: true });
   } catch (e) {
     console.error("wager charge error:", e);
@@ -1455,7 +1472,8 @@ app.post("/api/wager/payout", async (req, res) => {
     const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
     if (!users.length) return res.status(404).json({ ok: false, error: "no_user" });
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, users[0].userId]);
-    await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), users[0].userId, reason, amount]);
+    const cp = await resolveCounterparty(req.body.counterparty);
+    await runQuery("INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)", [uuidv4(), users[0].userId, reason, amount, cp]);
     res.json({ ok: true });
   } catch (e) {
     console.error("wager payout error:", e);
@@ -3687,6 +3705,7 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
       }
     }
   
+    const cp = await resolveCounterparty(req.body.counterparty);
     try {
       // Start a transaction
       const transactionId = uuidv4();
@@ -3704,8 +3723,8 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
   
       // Log the transaction
       await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionId, userId, "bonus win", amount]
+        "INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)",
+        [transactionId, userId, "bonus win", amount, cp]
       );
   
       // Commit the transaction
