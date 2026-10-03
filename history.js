@@ -149,6 +149,7 @@ async function forUser(userId, { period = "30d", cat = null, page = 1, perPage =
       if (hit) r.cpName = hit.username;
     }
   }
+  for (const r of rows) r.points = Number(r.points) || 0;       // some legacy rows store points as text
   const items = rows.map((r) => ({ ...r, cp: r.cpName, ...describe({ type: r.type, points: r.points, cp: r.cpName }) }));
   const totals = {};
   for (const it of items) {
