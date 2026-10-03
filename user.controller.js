@@ -490,6 +490,7 @@ async function updateLevel(userId, additionalXp) {
   }
 
   await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [xp, level, userId]);
+  if (levelsGained > 0) require("./achievements").checkWeb(userId);   // level achievements
   console.log(`User ${userId} is now level ${level} with ${xp} XP.`);
 
   return {

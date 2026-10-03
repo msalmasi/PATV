@@ -1010,6 +1010,15 @@ app.get("/achievements", addUser, async (req, res) => {
 app.get("/api/achievements", async (req, res) => {
   res.json({ achievements: achievements.list() });
 });
+achievements.setUpdateLevel(updateLevel);
+app.get("/api/g/achievement-feed", async (req, res) => {
+  if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
+  try { res.json({ feed: await achievements.feed() }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/g/achievement-feed/ack", async (req, res) => {
+  if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+  try { await achievements.ackFeed((req.body || {}).ids); res.json({ ok: true }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // Pepe awards an achievement when he sees its threshold crossed in Camfrog.
 app.post("/api/g/achievement", async (req, res) => {
   const b = req.body || {};
@@ -1330,6 +1339,8 @@ async function transferPat(senderUsername, recipientUsername, rawAmount) {
     [uuidv4(), recipient.userId, "tip received", amount]
   );
 
+  achievements.checkWeb(sender.userId);            // tipped / tips-received achievements
+  achievements.checkWeb(recipient.userId);
   return { ok: true, status: 200, msg: "Tip sent successfully." };
 }
 
@@ -1853,6 +1864,7 @@ function purchasePrize({ userId, username, prizeId, source }) {
       if (role) {
         await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)",
                        [userId, role, `purchase:${source}`]);
+        achievements.checkWeb(userId);               // e.g. High Roller
       }
       await runQuery(
         "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
@@ -3545,6 +3557,7 @@ async function settleSpin(spinId) {
 
   const xp = payout * 0.005;
   const levelUpInfo = await updateLevel(spin.userId, xp);
+  achievements.checkWeb(spin.userId);              // spins / wheel winnings / jackpot achievements
   const out = { result: payout, jackpot: isJackpot, jackpotPct: spin.jackpot_pct || 0, grand, xp, levelUp: levelUpInfo };
   sendEvent("results", spinId, out);
   return { ok: true, ...out };

@@ -26,7 +26,7 @@
   <% if (owned) { %>
     <div class="ach-stats">You have <%= owned.size %> / <%= achievements.length %></div>
   <% } %>
-  <% const groups = [["Getting started", ["cf_linked","cf_cmd_1"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_250","cf_cmd_kinds","cf_imagine","cf_ask","cf_dj"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan"]], ["Games", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Gangs & the room", ["cf_gang","cf_turf","cf_tipper","cf_beg"]]];
+  <% const groups = [["Getting started", ["cf_linked","cf_cmd_1","cf_level_"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ["The room & each other", ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ["The wheel", ["cf_spin","cf_wheel"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ["Games & fights", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Everything else", ["cf_"]]];
      const used = new Set(); %>
   <% groups.forEach(([title, prefixes]) => {
        const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
