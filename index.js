@@ -1039,9 +1039,18 @@ app.get("/achievements", addUser, async (req, res) => {
     await achievements.ready;
     const holders = Object.fromEntries((await getQuery(
       "SELECT badgeId, COUNT(*) AS n FROM user_badges WHERE badgeId LIKE 'cf_%' GROUP BY badgeId")).map((r) => [r.badgeId, r.n]));
-    let owned = null;
-    if (req.user && req.user.userId) {
-      owned = new Set((await getQuery("SELECT badgeId FROM user_badges WHERE userId = ?", [req.user.userId])).map((r) => r.badgeId));
+    let owned = null, viewing = null;
+    // ?user=name shows that person's achievements (Pepe's !achievements links here); otherwise yours.
+    const asked = String(req.query.user || "").trim();
+    let who = req.user && req.user.userId ? { userId: req.user.userId, username: req.user.username } : null;
+    if (asked) {
+      const u = await getQuery(
+        `SELECT userId, username, displayname FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(camfrogUsername) = LOWER(?)
+         ORDER BY CASE WHEN LOWER(username) = LOWER(?) THEN 0 ELSE 1 END LIMIT 1`, [asked, asked, asked]);
+      if (u.length) { who = u[0]; viewing = u[0].displayname || u[0].username; }
+    }
+    if (who) {
+      owned = new Set((await getQuery("SELECT badgeId FROM user_badges WHERE userId = ?", [who.userId])).map((r) => r.badgeId));
     }
     // The original PATV badges (sign-up, email, Discord, Twitch, casino) sit alongside the Camfrog ones.
     const site = (await getQuery("SELECT badgeId, name, description, icon, points FROM badges WHERE badgeId NOT LIKE 'cf_%'"))
@@ -1049,7 +1058,8 @@ app.get("/achievements", addUser, async (req, res) => {
                      tier: "common", site: true }));
     const siteHolders = Object.fromEntries((await getQuery(
       "SELECT badgeId, COUNT(*) AS n FROM user_badges WHERE badgeId NOT LIKE 'cf_%' GROUP BY badgeId")).map((r) => [r.badgeId, r.n]));
-    res.render("achievements", { user: req.user ? req.user.username : null,
+    res.render("achievements", { user: req.user ? req.user.username : null, viewing,
+                                 own: !viewing || (req.user && who && who.userId === req.user.userId),
                                  achievements: site.concat(achievements.list()),
                                  holders: Object.assign({}, holders, siteHolders), owned });
   } catch (e) {

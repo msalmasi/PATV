@@ -24,7 +24,7 @@
     Every one comes with XP and a PAT bonus from the Federal Reserve, and Pepe announces it in the room.
     Link your Camfrog account on your profile to collect them here.</p>
   <% if (owned) { %>
-    <div class="ach-stats">You have <%= owned.size %> / <%= achievements.length %></div>
+    <div class="ach-stats"><%= (typeof viewing !== 'undefined' && viewing && !own) ? viewing + ' has' : 'You have' %> <%= owned.size %> / <%= achievements.length %></div>
   <% } %>
   <% const siteIds = achievements.filter(a => a.site).map(a => a.id);
      const groups = [["PATV", siteIds], ["Getting started", ["cf_linked","cf_cmd_1","cf_level_"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ["The room & each other", ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ["The wheel", ["cf_spin","cf_wheel"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ["Games & fights", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Everything else", ["cf_"]]];
