@@ -1001,6 +1001,8 @@ app.get("/reset-password/:token", async (req, res) => {
 // Clips & snaps (moved off Netlify) and prediction markets
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
+const pondlife = require("./pondlife");
+pondlife.register(app, { isBotToken, addUser });
 
 const history = require("./history");
 app.get("/history", addUser, async (req, res) => {
@@ -1184,7 +1186,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   const usernameProfile = req.params.username; // Fallback to null if no user in session
   const sql =
-    "SELECT userId, username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
+    "SELECT userId, username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?";
 
   try {
     const results = await getQuery(sql, [usernameProfile]);
@@ -1205,7 +1207,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         badges: badges,
         xpForNextLevel: xpForNextLevel,
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
-        canSeeHistory: !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class))
+        canSeeHistory: !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
+        heistSheet: await pondlife.sheetFor(user.camfrogUsername),
+        pond: pondlife.LINKS
       });
     } else {
       clearLogin(res);

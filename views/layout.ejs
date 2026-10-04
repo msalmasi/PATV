@@ -12,41 +12,118 @@
 <body>
     <header>
         <nav class="navbar">
+            <%
+              const wheelHref = (typeof user == 'undefined' || !user) ? '/login' : '/u/' + user + '/wheel';
+              const main = [
+                ['/', '📺', 'Watch'],
+                [wheelHref, '<img src="/public/img/star.gif" height="16" alt="">', 'Wheel'],
+                ['/feed', '🎞️', 'Clips & snaps'],
+                ['/markets', '🔮', 'Markets'],
+                ['/pondlife', '🐸', 'Pond Life'],
+                ['/rankings', '🏆', 'Rankings'],
+              ];
+              const more = [
+                ['/poker', '🃏', 'Poker'],
+                ['/shop', '🏪', 'Prize shop'],
+                ['/achievements', '🏅', 'Achievements'],
+                ['/history', '📜', 'PAT history'],
+                ['/info', '📄', 'Info', 'infoLink'],
+                ['/admin/panel', '🛠️', 'Admin', 'adminLink'],
+              ];
+              const ext = [
+                ['https://pepe.publicaccess.tv', '<img src="/public/img/pepe.png" height="16" alt="">', 'PepeFrog commands'],
+                ['https://discord.gg/publicaccess', '<img src="/public/img/discord.png" height="16" alt="">', 'Discord'],
+                ['https://twitch.tv/publicaccess_ttv', '<img src="/public/img/twitch.png" height="16" alt="">', 'Twitch'],
+                ['https://jellyfin.houseplants.cc/', '<img src="/public/img/jellyfin.png" height="16" alt="">', 'Jellyfin'],
+              ];
+              const item = (l, labelled) => '<a href="' + l[0] + '" class="nav-link' + (l[3] ? ' ' + l[3] : '') + '"'
+                + (l[3] === 'adminLink' ? ' hidden' : '') + (l[0].startsWith('http') ? ' rel="noopener"' : '')
+                + ' title="' + l[2].replace(/&/g, '&amp;') + '"><span class="ic">' + l[1] + '</span>'
+                + (labelled ? '<span class="lb">' + l[2].replace(/&/g, '&amp;') + '</span>' : '') + '</a>';
+            %>
             <div class="navbar-left">
-                <a href="/" id="logo">publicaccess.tv</a>
-                <a href="/" class="activePage">📺</a>
-                <% if (typeof user == 'undefined' || !user) { %>
-                <a href="/login" class="inactivePage"><img src="/public/img/star.gif" height="16px" width="auto"></a>
-                <% } else { %>
-                <a href="/u/<%= user %>/wheel" class="inactivePage"><img src="/public/img/star.gif" height="16px" width="auto"></a>
-                <% } %>
-                <a href="/poker" class="inactivePage">🃏</a>
-                <a href="/info" id="infoLink" class="inactivePage">📄</a>
-                <a href="/shop" class="inactivePage">🏪</a>
-                <a href="/rankings" class="inactivePage" title="Rankings">🏆</a>
-                <a href="/achievements" class="inactivePage" title="Achievements">🏅</a>
-                <a href="/history" class="inactivePage" title="Your PAT history">📜</a>
-                <a href="/feed" class="inactivePage" title="Clips &amp; snaps">🎞️</a>
-                <a href="/markets" class="inactivePage" title="Prediction markets">🔮</a>
-                <a href="https://jellyfin.houseplants.cc/" id="jellyfinLink" class="inactivePage"><img src="/public/img/jellyfin.png" height="16px" width="auto"></a>
-                <a href="https://discord.gg/publicaccess" class="inactivePage"><img src="/public/img/discord.png" height="16px" width="auto"></a>
-                <a href="https://twitch.tv/publicaccess_ttv" id="twitchLink" class="inactivePage"><img src="/public/img/twitch.png" height="16px" width="auto"></a>
-                <a href="https://pepe.publicaccess.tv" id="pepeLink" class="inactivePage" title="PepeFrog — bot commands &amp; live pages" rel="noopener"><img src="/public/img/pepe.png" height="16px" width="auto" alt="PepeFrog"></a>
-                <a id="adminLink" style="display: none;" href="/admin/panel" class="inactivePage">🛠️</a>
-
+                <a href="/" id="logo"><span class="logo-full">publicaccess.tv</span><span class="logo-short">PATV</span></a>
+                <div class="nav-main"><%- main.map((l) => item(l, false)).join('') %></div>
+                <details class="nav-more">
+                    <summary>More <span aria-hidden="true">▾</span></summary>
+                    <div class="nav-pop">
+                        <%- more.map((l) => item(l, true)).join('') %>
+                        <div class="nav-sep"></div>
+                        <%- ext.map((l) => item(l, true)).join('') %>
+                    </div>
+                </details>
             </div>
             <div class="navbar-right">
                 <% if (typeof user == 'undefined' || !user) { %>
-                    <a href="/login" class="inactivePage">Sign In</a>
+                    <a href="/login" class="nav-signin">Sign In</a>
                 <% } else { %>
                     <div class="avatar">
-                        <a href="/u/<%= user %>/profile"><img id="userAvatar" src="/public/img/coin.png" alt="User Avatar"></a>
+                        <a href="/u/<%= user %>/profile" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>
                     </div>
                 <% } %>
-                
-
+                <details class="nav-burger">
+                    <summary aria-label="Menu">☰</summary>
+                    <div class="nav-pop">
+                        <%- main.map((l) => item(l, true)).join('') %>
+                        <div class="nav-sep"></div>
+                        <%- more.map((l) => item(l, true)).join('') %>
+                        <div class="nav-sep"></div>
+                        <%- ext.map((l) => item(l, true)).join('') %>
+                    </div>
+                </details>
             </div>
         </nav>
+        <style>
+            /* Nav (2026-10): main icons + "More" on desktop, one ☰ menu on phones */
+            .navbar { gap: 12px; padding: 14px 20px; position: relative; z-index: 50; }
+            .navbar-left { display: flex; align-items: center; gap: 4px; min-width: 0; }
+            .navbar-right { display: flex; align-items: center; gap: 10px; margin-right: 0; }
+            .navbar a { margin-right: 0; }
+            #logo { margin-right: 14px; white-space: nowrap; }
+            .nav-main { display: flex; align-items: center; gap: 2px; }
+            .nav-link { display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: rgb(150,150,150); }
+            .nav-link:hover, .nav-link:focus-visible { background: #24242a; color: #fff; }
+            .nav-link.current { color: #fff; background: #1f2b22; box-shadow: inset 0 -2px 0 #3CC47C; }
+            .nav-link .ic { width: 20px; text-align: center; line-height: 1; }
+            .nav-link[hidden] { display: none; }
+            .logo-short { display: none; }
+            .nav-more, .nav-burger { position: relative; }
+            .nav-more > summary, .nav-burger > summary { list-style: none; cursor: pointer; color: rgb(170,170,170); padding: 6px 10px; border-radius: 6px; user-select: none; }
+            .nav-more > summary::-webkit-details-marker, .nav-burger > summary::-webkit-details-marker { display: none; }
+            .nav-more > summary:hover, .nav-burger > summary:hover, details[open] > summary { background: #24242a; color: #fff; }
+            .nav-pop { position: absolute; top: calc(100% + 6px); min-width: 220px; background: #1d1d22; border: 1px solid #2c2c33;
+                       border-radius: 10px; padding: 6px; display: grid; gap: 2px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+            .nav-more .nav-pop { left: 0; }
+            .nav-burger .nav-pop { right: 0; }
+            .nav-pop .nav-link { padding: 8px 10px; }
+            .nav-sep { height: 1px; background: #2c2c33; margin: 4px 2px; }
+            .nav-burger { display: none; }
+            .nav-burger > summary { font-size: 22px; line-height: 1; padding: 6px 10px; }
+            .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
+            .navbar .avatar img { margin-left: 0; }
+            @media (max-width: 760px) {
+                .nav-main, .nav-more { display: none; }
+                .nav-burger { display: block; }
+                .navbar { padding: 10px 12px; }
+                #logo { display: inline !important; font-size: 18px; }
+                .logo-full { display: none; }
+                .logo-short { display: inline; }
+                .nav-burger .nav-pop { position: fixed; top: 58px; left: 10px; right: 10px; min-width: 0; max-height: calc(100vh - 80px); overflow-y: auto; }
+            }
+        </style>
+        <script>
+            // Highlight the page you're on; close an open menu when clicking elsewhere.
+            (function () {
+                var p = location.pathname;
+                document.querySelectorAll('.navbar .nav-link').forEach(function (a) {
+                    var h = a.getAttribute('href');
+                    if (h && h.charAt(0) === '/' && (h === '/' ? p === '/' : p === h || p.indexOf(h + '/') === 0 || (h.indexOf('/wheel') > 0 && p.indexOf('/wheel') > 0))) a.classList.add('current');
+                });
+                document.addEventListener('click', function (e) {
+                    document.querySelectorAll('.navbar details[open]').forEach(function (d) { if (!d.contains(e.target)) d.removeAttribute('open'); });
+                });
+            })();
+        </script>
     </header>
 
 </body>
@@ -63,8 +140,8 @@
                     document.getElementById('userAvatar').src = data.avatar;
                 }
                 if (data.class === "Admin") {
-                    document.getElementById('adminLink').style.display = 'inline';
-                    document.getElementById('infoLink').style.display = 'none';
+                    document.querySelectorAll('.adminLink').forEach(function (el) { el.hidden = false; });
+                    document.querySelectorAll('.infoLink').forEach(function (el) { el.hidden = true; });
                 }
             })
             .catch(error => console.error('Failed to fetch user data:', error));

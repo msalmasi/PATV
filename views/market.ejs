@@ -16,6 +16,13 @@
   .mk th, .mk td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; }
   .mk th { color: #888; font-weight: normal; }
   .mk td.r, .mk th.r { text-align: right; }
+  .mk .notice { background: #13200f; border: 1px solid #4caf50; border-radius: 8px; padding: 10px 12px; }
+  .mk form.bet { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; margin: 14px 0; display: grid; gap: 10px; }
+  .mk .opts-pick { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+  .mk .opts-pick label { cursor: pointer; }
+  .mk form.bet .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .mk form.bet input[type=number] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 180px; }
+  .mk form.bet button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; }
 </style>
 <div class="mk">
   <p><a href="/markets">‹ All markets</a></p>
@@ -39,12 +46,42 @@
         </div>
       <% }) %>
     </div>
-    <% if (m.status === 'open') { %><p class="info">Bet in the room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p><% } %>
+    <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+    <% if (m.status === 'open') { %>
+      <% if (user) { %>
+        <form class="bet" method="post" action="/markets/<%= m.id %>/bet">
+          <div class="opts-pick">
+            <% m.options.forEach((o, i) => { %>
+              <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <%= o.name %><%= o.mult ? ' · ' + o.mult.toFixed(2) + 'x' : '' %></label>
+            <% }) %>
+          </div>
+          <div class="row">
+            <input type="number" name="amount" min="<%= minBet %>" step="100" placeholder="PAT (min <%= minBet.toLocaleString() %>)" required>
+            <button type="submit">Place bet</button>
+            <% if (bal !== null) { %><span class="info">You have <%= bal.toLocaleString() %> PAT</span><% } %>
+          </div>
+          <p class="info">Your PAT goes into escrow until the judge settles. Winners split the losing side's pool minus 5%.</p>
+        </form>
+      <% } else { %>
+        <p class="info"><a href="/login">Sign in</a> to bet here, or in the room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p>
+      <% } %>
+    <% } %>
+    <% if (orders && orders.length) { %>
+      <h3>Your website bets</h3>
+      <div class="tbl"><table>
+        <tr><th>On</th><th class="r">PAT</th><th>Status</th></tr>
+        <% orders.forEach((o) => { %>
+          <tr><td><%= o.option %></td><td class="r"><%= Number(o.amount).toLocaleString() %></td>
+              <td><%= o.status === 'placed' ? '✅ placed' : o.status === 'failed' ? '❌ ' + (o.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
+        <% }) %>
+      </table></div>
+      <% if (orders.some((o) => o.status === 'pending' || o.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
+    <% } %>
     <h3>Bets</h3>
     <div class="tbl"><table>
       <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When (UTC)</th></tr>
       <% (m.bets || []).slice().sort((a, b) => b.ts - a.ts).forEach((b) => { %>
-        <tr><td><%= b.nick %></td><td><%= b.option %></td>
+        <tr><td><%= b.nick %><%= b.web ? ' 🌐' : '' %></td><td><%= b.option %></td>
             <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%= b.ts ? new Date(b.ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '' %></td></tr>
       <% }) %>
       <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888">No bets yet.</td></tr><% } %>

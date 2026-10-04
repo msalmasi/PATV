@@ -1,0 +1,53 @@
+<%- include('layout', { title: 'Pond Life', user: user}) %>
+<style>
+  .pl { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .pl h1 { text-align: center; margin-bottom: 4px; }
+  .pl .sub { text-align: center; color: #9a9; margin: 0 auto 26px; max-width: 62ch; line-height: 1.55; }
+  .pl .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .pl .part { background: #111; border: 1px solid #222; border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  .pl .part h2 { margin: 0 0 6px; font-size: 18px; }
+  .pl .part p { color: #bbb; font-size: 14px; line-height: 1.55; margin: 0 0 12px; }
+  .pl .part a { display: block; color: #81c784; text-decoration: none; padding: 3px 0; font-size: 14px; }
+  .pl .part a:hover { color: #a5d6a7; }
+  .pl .you { margin: 22px 0; padding: 14px 18px; border: 1px solid #4caf50; border-radius: 10px; background: #13200f; }
+  .pl .you a { color: #ffd700; }
+  .pl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .pl .flow { color: #9a9; font-size: 14px; text-align: center; margin-top: 26px; line-height: 1.7; }
+</style>
+<div class="pl">
+  <h1>🐸 Pond Life</h1>
+  <p class="sub">London's frog underworld. Roll a character, pull heists to get rich, join a gang, and fight
+    for the boroughs on the turf map. It all runs in the Camfrog rooms with Pepe, and it all pays in PAT.</p>
+
+  <% if (sheet) { %>
+    <div class="you">Your character: <a href="<%= sheet.url %>">open your heist sheet</a><%= sheet.cls ? ' · ' + sheet.cls : '' %></div>
+  <% } else if (user) { %>
+    <div class="you">No sheet linked yet. Type <code>!sheet</code> in a room with Pepe to roll one (link your Camfrog name on your profile so it shows up here).</div>
+  <% } %>
+
+  <div class="grid">
+    <div class="part">
+      <h2>🥷 Heists</h2>
+      <p>Your character sheet (six stats, a class, gear) decides every roll. Crew up, survive the rounds to bank loot, bail or go for the vault door. Store, casino, convoy and the Federal Reserve.</p>
+      <a href="<%= links.heistHelp %>">How heists work ›</a>
+      <a href="<%= links.heistBoard %>">Heist leaderboard ›</a>
+    </div>
+    <div class="part">
+      <h2>🗺️ Turf Wars</h2>
+      <p>London's boroughs each run a business that earns its owner PAT. Claim open turf, raid rivals, fortify what you hold, and climb the season score.</p>
+      <a href="<%= links.turfGuide %>">The Turf Wars guide ›</a>
+      <a href="<%= links.turfHelp %>">Turf commands ›</a>
+      <a href="<%= links.turfMap %>">Live turf map ›</a>
+    </div>
+    <div class="part">
+      <h2>🎩 Gangs</h2>
+      <p>Gangs share a treasury, wages and heat. A gang takes turf together, defends it together, and splits what it earns. Too much heat brings the police.</p>
+      <a href="<%= links.gangs %>">Gang leaderboard ›</a>
+      <a href="<%= links.turfHelp %>">Gang commands ›</a>
+    </div>
+  </div>
+
+  <p class="flow">Start: <code>!sheet</code> to roll a character · <code>!heist</code> to pull a job · <code>!gang</code> to start or join a gang · <code>!turf</code> to see the map · <code>!pondlife</code> for these links in chat</p>
+</div>
+</body>
+</html>

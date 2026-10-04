@@ -9,6 +9,16 @@ const { runQuery, getQuery } = require("./dbUtils");
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS markets (
   id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, closes INTEGER, updated INTEGER)`).catch(() => {});
 
+// Website bets (orders). The PAT moves in Pepe (escrow): he claims pending orders every few
+// seconds, places each through the same checks as a chat bet, and acks the result. A bet carries its
+// order id, so an order claimed twice (Pepe restarted mid-way) is never placed twice.
+const ordersReady = runQuery(`CREATE TABLE IF NOT EXISTS market_orders (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, market_id INTEGER NOT NULL, user_id TEXT NOT NULL,
+  username TEXT NOT NULL, camfrog TEXT, option TEXT NOT NULL, amount INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending', message TEXT, created INTEGER, claimed INTEGER, updated INTEGER)`).catch(() => {});
+const MIN_BET = 500;
+const RECLAIM_MS = 2 * 60 * 1000;   // a claimed order with no answer after this is handed out again
+
 const FEE_PCT = 5;
 const LIVE = new Set(["open", "closed", "settling"]);
 
@@ -62,6 +72,59 @@ function register(app, { isBotToken, addUser }) {
     }
   });
 
+  // A signed-in user bets from the market page
+  app.post("/markets/:id/bet", addUser, async (req, res) => {
+    const id = parseInt(String(req.params.id).replace(/^m/i, ""), 10);
+    const back = (msg) => res.redirect(`/markets/${id}?msg=${encodeURIComponent(msg)}`);
+    if (!req.user || !req.user.userId) return res.redirect("/login");
+    try {
+      await ready; await ordersReady;
+      const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
+      if (!rows.length) return back("That market doesn't exist.");
+      const m = JSON.parse(rows[0].data);
+      if (m.status !== "open" || m.closes * 1000 < Date.now()) return back("Betting on this market is closed.");
+      const option = String((req.body || {}).option || "");
+      if (!(m.options || []).includes(option)) return back("Pick one of the options.");
+      const amount = Math.floor(Number(String((req.body || {}).amount || "").replace(/[, ]/g, "")) || 0);
+      if (amount < MIN_BET) return back(`The minimum bet is ${MIN_BET.toLocaleString()} PAT.`);
+      const u = (await getQuery("SELECT username, camfrogUsername, points_balance, casino_banned FROM users WHERE userId = ?", [req.user.userId]))[0];
+      if (!u) return back("Couldn't find your account.");
+      if (u.casino_banned) return back("You're banned from the casino, so no betting.");
+      if (Number(u.points_balance) < amount) return back(`You only have ${Number(u.points_balance).toLocaleString()} PAT.`);
+      const open = await getQuery("SELECT COUNT(*) AS n FROM market_orders WHERE user_id = ? AND status IN ('pending','claimed')", [req.user.userId]);
+      if (open[0].n >= 5) return back("You already have bets waiting to be placed — give Pepe a moment.");
+      await runQuery(`INSERT INTO market_orders (market_id, user_id, username, camfrog, option, amount, status, created, updated)
+                      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        [id, req.user.userId, u.username, u.camfrogUsername || null, option, amount, Date.now(), Date.now()]);
+      back(`Sent to Pepe: ${amount.toLocaleString()} PAT on ${option}. It's placed within a few seconds.`);
+    } catch (e) {
+      console.error("[markets] bet:", e);
+      back("Something went wrong — nothing was charged. Try again.");
+    }
+  });
+
+  // Pepe takes the pending orders (and any claimed ones he never answered)
+  app.post("/api/markets/orders/claim", async (req, res) => {
+    if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    await ordersReady;
+    const now = Date.now();
+    const rows = await getQuery(`SELECT * FROM market_orders WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
+                                 ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
+    for (const o of rows) await runQuery("UPDATE market_orders SET status = 'claimed', claimed = ?, updated = ? WHERE id = ?", [now, now, o.id]);
+    res.json({ orders: rows.map((o) => ({ id: o.id, market_id: o.market_id, username: o.username, camfrog: o.camfrog,
+                                          option: o.option, amount: o.amount })) });
+  });
+
+  app.post("/api/markets/orders/ack", async (req, res) => {
+    if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    await ordersReady;
+    for (const r of ((req.body || {}).results || []).slice(0, 50)) {
+      await runQuery("UPDATE market_orders SET status = ?, message = ?, updated = ? WHERE id = ?",
+        [r.ok ? "placed" : "failed", String(r.message || "").slice(0, 200), Date.now(), parseInt(r.id, 10) || 0]);
+    }
+    res.json({ ok: true });
+  });
+
   app.get("/markets", addUser, async (req, res) => {
     await ready;
     const rows = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)));
@@ -74,8 +137,16 @@ function register(app, { isBotToken, addUser }) {
     await ready;
     const id = parseInt(String(req.params.id).replace(/^m/i, ""), 10);
     const rows = id ? await getQuery("SELECT data FROM markets WHERE id = ?", [id]) : [];
-    if (!rows.length) return res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000 });
-    res.render("market", { user: req.user ? req.user.username : null, m: view(JSON.parse(rows[0].data)), now: Date.now() / 1000 });
+    if (!rows.length) return res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000, orders: [], msg: null, bal: null });
+    let orders = [], bal = null;
+    if (req.user && req.user.userId) {
+      await ordersReady;
+      orders = await getQuery("SELECT * FROM market_orders WHERE user_id = ? AND market_id = ? ORDER BY id DESC LIMIT 10", [req.user.userId, id]);
+      const u = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]);
+      bal = u.length ? Number(u[0].points_balance) : null;
+    }
+    res.render("market", { user: req.user ? req.user.username : null, m: view(JSON.parse(rows[0].data)), now: Date.now() / 1000,
+                           orders, msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, bal, minBet: MIN_BET });
   });
 }
 
