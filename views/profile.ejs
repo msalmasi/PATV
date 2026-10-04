@@ -1,82 +1,133 @@
-<!-- views/profile.ejs -->
-<%- include('layout', { title: `${usernameProfile} on Public Access`, user: username}) %>
+<%- include('layout', { title: `${displayname || usernameProfile} on Public Access`, user: username, og: typeof og !== 'undefined' ? og : null }) %>
+<%
+  const need = xpForNextLevel(level);
+  const pct = Math.max(0, Math.min(100, need ? (xp / need) * 100 : 0));
+  const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
+  const isMe = username && username == usernameProfile;
+  const role = (classh || '').toLowerCase();
+%>
+<style>
+  .pf { max-width: 920px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; }
+  .pf a { color: #81c784; text-decoration: none; }
+  .pf a:hover { color: #a5d6a7; }
+  .pf .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; }
+  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px 22px; align-items: center;
+              background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
+  .pf .avatar { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d;
+                box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
+  .pf .who h1 { margin: 0; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
+  .pf .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+  .pf .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pf .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
+  .pf .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
+  .pf .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
+  .pf .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pf .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
+             background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; }
+  .pf .btn:hover { border-color: #4caf50; }
+  .pf .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
+  .pf .btn.ghost { background: transparent; }
+  .pf form.inline { display: inline; margin: 0; }
+  .pf .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .pf .stat { background: #111; border: 1px solid #222; border-radius: 12px; padding: 14px 16px; }
+  .pf .stat .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .pf .stat .v { font-size: 24px; font-weight: bold; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .pf .stat .v.gold { color: #ffd700; }
+  .pf .stat .s { font-size: 12px; color: #888; margin-top: 2px; }
+  .pf .lvl { display: grid; gap: 8px; }
+  .pf .lvl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .pf .lvl-top b { font-size: 18px; }
+  .pf .bar { height: 14px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
+  .pf .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .pf .muted { color: #888; font-size: 13px; }
+  .pf h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
+  .pf .gtf { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+  .pf .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+  .pf .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+  .pf .badge { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 8px; text-align: center; display: grid; gap: 6px; justify-items: center; }
+  .pf .badge img { height: 48px; width: 48px; object-fit: contain; image-rendering: pixelated; }
+  .pf .badge span { font-size: 12px; line-height: 1.25; color: #ccc; overflow-wrap: anywhere; }
+  .pf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 560px) {
+    .pf .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .pf .chips, .pf .actions { justify-content: center; }
+    .pf .gtf { grid-template-columns: 1fr; }
+  }
+</style>
+<div class="pf">
+  <section class="card hero">
+    <img class="avatar" src="<%= avatar %>" alt="<%= usernameProfile %>'s avatar" onerror="this.src='/public/img/avatar.png'">
+    <div class="who">
+      <h1><%= displayname || usernameProfile %></h1>
+      <div class="handle">@<%= usernameProfile %><% if (typeof camfrog !== 'undefined' && camfrog) { %> · 🐸 <%= camfrog %> on Camfrog<% } %></div>
+      <div class="chips">
+        <span class="chip">Level <%= level %></span>
+        <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
+        <% if (badges.length) { %><span class="chip">🏅 <%= badges.length %> badge<%= badges.length === 1 ? '' : 's' %></span><% } %>
+        <% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %><span class="chip">🥷 <%= heistSheet.cls %></span><% } %>
+      </div>
+    </div>
+    <div class="actions">
+      <% if (isMe) { %>
+        <a class="btn primary" href="/u/<%= username %>/profile/edit">✏️ Edit profile</a>
+        <a class="btn" href="/history">📜 PAT history</a>
+        <a class="btn" href="/wallet">👛 Wallet</a>
+        <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
+        <form class="inline" action="/logout" method="POST"><button class="btn ghost" type="submit">Log out</button></form>
+      <% } else { %>
+        <% if (username) { %><a class="btn primary" href="/u/<%= usernameProfile %>/tip">💸 Tip</a><% } %>
+        <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
+        <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %>
+          <a class="btn" href="/history?user=<%= encodeURIComponent(usernameProfile) %>">📜 PAT history</a>
+        <% } %>
+      <% } %>
+    </div>
+  </section>
 
-        <body>
-            <div class="profile-container">
-                <div id="profile-header"><img src="<%= avatar %>" alt="User Avatar"><h1><%= displayname %></h1>                
-                    <% if (username == usernameProfile) { %>
-                    <div id="profile-action"> 
-                        <a href="/u/<%= username %>/profile/edit" class="infolink">Edit</a>
-                        <a href="/history" class="infolink">PAT History</a>
-                    </div>
-                    <% } else { %>
-                        <% if (typeof username == 'undefined' || !username) { %>
-                            <% } else { %>
-                        <div id="profile-action"> 
-                            <a href="/u/<%= usernameProfile %>/tip" class="infolink">Tip</a>
-                            <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %>
-                            <a href="/history?user=<%= encodeURIComponent(usernameProfile) %>" class="infolink">PAT History</a>
-                            <% } %>
-                        </div>
-                        <% } %>
-                            
-                        <% } %></div><br>
-                        <div class="level-display" style="text-align: center;">
-                            Level <%= level %>
-                            <div class="level-bar">
-                                
-                                <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;"><span><%= xp %></span></div>
-                                
-                            </div>
-                            <div class="level-info" style="text-align: center;">
-                                Next Level: <%= xpForNextLevel(level) - xp %> XP
-                            </div>
-                        </div>
-                <div id="profile-content">         
-                    <p><%= usernameProfile %></p><%= classh %>
-                    <p>PAT <%= points_balance %></p>
-                    <% if (username == usernameProfile) { %>
-                    <form action="/logout" method="POST" style="display: inline;">
-                        <button class="link-button" type="submit">Log Out</button>
-                    </form>
-                    <% } else { %>
-                        <% } %>
-                </div>
+  <section class="stats">
+    <div class="stat"><div class="k">PAT balance</div><div class="v gold"><%= fmt(points_balance) %></div><div class="s">in their wallet</div></div>
+    <div class="stat"><div class="k">Level</div><div class="v"><%= level %></div><div class="s"><%= Math.round(pct) %>% to level <%= level + 1 %></div></div>
+    <div class="stat"><div class="k">Badges</div><div class="v"><%= badges.length %></div><div class="s"><a href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">see all achievements</a></div></div>
+  </section>
 
+  <section class="card lvl">
+    <div class="lvl-top"><b>Level <%= level %></b><span class="muted"><%= fmt(xp) %> / <%= fmt(need) %> XP · <%= fmt(need - xp) %> to go</span></div>
+    <div class="bar" role="progressbar" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
+    <div class="muted">XP comes from chatting, the mic and games. Every level-up pays a PAT bonus.</div>
+  </section>
 
-                
-            </div>
+  <section class="card">
+    <h2>Grand Theft Frog</h2>
+    <div class="gtf">
+      <div>
+        <% if (typeof heistSheet !== 'undefined' && heistSheet) { %>
+          <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= heistSheet.url %>">Heist sheet</a><%= heistSheet.cls ? ' · ' + heistSheet.cls : '' %></div>
+        <% } else { %>
+          <div class="muted" style="margin-bottom:8px">No heist sheet yet — <code>!sheet</code> in a room with Pepe rolls one.</div>
+        <% } %>
+        <% if (typeof gtf !== 'undefined' && gtf) { %>
+          <div class="links">
+            <a href="/gtf">What is GTF?</a><a href="<%= gtf.heistHelp %>">Heists</a><a href="<%= gtf.turfGuide %>">Turf Wars</a>
+            <a href="<%= gtf.turfMap %>">Turf map</a><a href="<%= gtf.gangs %>">Gangs</a><a href="/bounties">Bounties</a>
+          </div>
+        <% } %>
+      </div>
+      <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
+    </div>
+  </section>
 
-            <div class="profile-container">
-                <div id="profile-header"><h1>🔫 Grand Theft Frog</h1></div>
-                <div style="text-align:center;line-height:1.9;padding:4px 0 10px">
-                    <% if (typeof heistSheet !== 'undefined' && heistSheet) { %>
-                        <a href="<%= heistSheet.url %>" class="infolink">🥷 Heist sheet<%= heistSheet.cls ? ' · ' + heistSheet.cls : '' %></a>
-                    <% } else { %>
-                        <span style="color:#888">No heist sheet yet — <code>!sheet</code> in a room with Pepe rolls one.</span>
-                    <% } %><br>
-                    <% if (typeof gtf !== 'undefined' && gtf) { %>
-                        <a href="/gtf">What is Grand Theft Frog?</a> ·
-                        <a href="<%= gtf.heistHelp %>">Heists</a> ·
-                        <a href="<%= gtf.turfGuide %>">Turf Wars guide</a> ·
-                        <a href="<%= gtf.turfMap %>">Turf map</a> ·
-                        <a href="<%= gtf.gangs %>">Gangs</a> ·
-                        <a href="/bounties">Bounties</a>
-                    <% } %>
-                </div>
-            </div>
-
-            <div class="profile-container">
-                <div id="profile-header">
-                <h1>Badges</h1>
-            </div>
-                <div class="profile-badges">
-                  <% badges.forEach(badge => { %>
-                    <div class="badge">
-                      <img src="<%= badge.icon %>" title="<%= badge.description %>" style="height:50px;">
-                      <strong><%= badge.name %></strong> 
-                    </div>
-                  <% }) %>
-                </div>
-            </div>
-        </body>
+  <section class="card">
+    <h2>Badges</h2>
+    <% if (!badges.length) { %>
+      <p class="muted" style="margin:0">No badges yet. <a href="/achievements">How to earn them</a></p>
+    <% } else { %>
+      <div class="badges">
+        <% badges.forEach((badge) => { %>
+          <div class="badge" title="<%= badge.description %>"><img src="<%= badge.icon %>" alt=""><span><%= badge.name %></span></div>
+        <% }) %>
+      </div>
+    <% } %>
+  </section>
+</div>
+</body>
+</html>

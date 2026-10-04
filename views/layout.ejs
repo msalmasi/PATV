@@ -5,6 +5,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
+    <%
+      // Link previews (og.js): a page can set `og`; everything else gets a generic card.
+      const _og = (typeof og !== 'undefined' && og) ? og : (typeof ogBase !== 'undefined' ? {
+        title: title, description: 'Public Access TV — live streams, Pepe the frog, PAT games, markets and more.',
+        image: ogBase + '/og/page.png?t=' + encodeURIComponent(String(title).slice(0, 80)), url: ogBase + (typeof ogPath !== 'undefined' ? ogPath : '/') } : null);
+    %>
+    <% if (_og) { %>
+    <meta property="og:site_name" content="Public Access TV">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<%= _og.title %>">
+    <meta property="og:description" content="<%= _og.description %>">
+    <meta name="description" content="<%= _og.description %>">
+    <meta property="og:image" content="<%= _og.image %>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:url" content="<%= _og.url %>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<%= _og.title %>">
+    <meta name="twitter:description" content="<%= _og.description %>">
+    <meta name="twitter:image" content="<%= _og.image %>">
+    <meta name="theme-color" content="#4caf50">
+    <% } %>
     <link rel="stylesheet" href="/public/css/styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">

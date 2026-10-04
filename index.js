@@ -154,6 +154,9 @@ app.use(cors());
 // with its own larger limit in media.js.
 app.use((req, res, next) => (req.path === "/api/media" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
+// link previews (og.js): every page knows its absolute URL for the Open Graph tags
+const og = require("./og");
+app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogPath = req.originalUrl.split("?")[0]; next(); });
 
 let clients = []; // Keep track of connected clients for SSE
 
@@ -1004,6 +1007,8 @@ require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");
 gtf.register(app, { isBotToken, addUser });
 require("./bounties").register(app, { isBotToken, addUser });
+// 1.91: link previews — every page knows its absolute URL; og.js draws the preview images
+og.register(app);
 // 1.90: one action queue for everything started on the site, plus the new game pages
 require("./actions").register(app, { isBotToken, addUser });
 require("./lotto").register(app, { isBotToken, addUser });
@@ -1217,7 +1222,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
         canSeeHistory: !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
-        gtf: gtf.LINKS
+        gtf: gtf.LINKS,
+        camfrog: user.camfrogUsername || null,
+        og: og.forProfile(req, user)
       });
     } else {
       clearLogin(res);

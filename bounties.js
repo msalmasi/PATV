@@ -188,6 +188,7 @@ function register(app, { isBotToken, addUser }) {
         base.isAdmin = u.class === "Admin";
       }
     }
+    res.locals.og = require("./og").forBounty(req, JSON.parse(rows[0].data));
     res.render("bounty", { ...base, b: view(JSON.parse(rows[0].data), me) });
   });
 }

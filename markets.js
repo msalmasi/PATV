@@ -265,6 +265,7 @@ function register(app, { isBotToken, addUser }) {
       }
       acts = await actions.recentFor(req.user.userId, "market-" + id);
     }
+    res.locals.og = require("./og").forMarket(req, JSON.parse(rows[0].data));
     res.render("market", { user: req.user ? req.user.username : null, m: view(JSON.parse(rows[0].data), me), now: Date.now() / 1000, judgeMe, acts, inIt,
                            orders, msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, bal, minBet: MIN_BET });
   });

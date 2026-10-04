@@ -105,6 +105,8 @@ function register(app, { isBotToken, addUser }) {
           .sort((a, b) => b.amount - a.amount)] : [];
       // chance a ticket wins anything listed
       const anyOdds = prizes.length ? Math.round(1 / prizes.reduce((s, p) => s + (p.odds ? 1 / p.odds : 0), 0)) : null;
+      res.locals.og = { title: "Pepe Lotto — this week's jackpot", description: "Pick 4 of 1-30 + a Pepe Ball. Draws every Sunday 9pm ET. Buy tickets on PATV or with !lotto in a Camfrog room.",
+                        image: res.locals.ogBase + "/og/lotto.png?v=" + Math.floor(Date.now() / 600000), url: res.locals.ogBase + "/lotto" };
       res.render("lotto", {
         user: req.user ? req.user.username : null, L, updated: row ? row.updated : null, me, mine, prizes, anyOdds,
         acts, msg: req.query.msg ? String(req.query.msg).trim().slice(0, 200) : null,
