@@ -4,6 +4,7 @@
   .mk a { color: #81c784; }
   .mk .ref { color: #81c784; font-family: monospace; }
   .mk h1 { font-size: 22px; margin: 18px 0 4px; }
+  .mk h3 { margin: 22px 0 8px; }
   .mk .info { color: #888; font-size: 13px; line-height: 1.7; }
   .mk .opts { display: grid; gap: 8px; margin: 18px 0; }
   .mk .opt { display: grid; grid-template-columns: minmax(70px, 160px) 1fr auto; gap: 10px; align-items: center; }
@@ -11,24 +12,169 @@
   .mk .bar span { display: block; height: 100%; background: #4caf50; }
   .mk .opt.won .bar span { background: #ffd700; }
   .mk .num { color: #ccc; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+  .mk .price { font-size: 20px; font-weight: bold; color: #fff; font-variant-numeric: tabular-nums; }
   .mk .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
   .mk table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
   .mk th, .mk td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; }
   .mk th { color: #888; font-weight: normal; }
   .mk td.r, .mk th.r { text-align: right; }
+  .mk .up { color: #81c784; } .mk .down { color: #e57373; }
   .mk .notice { background: #13200f; border: 1px solid #4caf50; border-radius: 8px; padding: 10px 12px; }
   .mk form.bet { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; margin: 14px 0; display: grid; gap: 10px; }
+  .mk form.judge { border-color: #e0a030; }
   .mk .opts-pick { display: flex; flex-wrap: wrap; gap: 8px 16px; }
   .mk .opts-pick label { cursor: pointer; }
-  .mk form.bet .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .mk form.bet input[type=number] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 180px; }
-  .mk form.bet button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; }
+  .mk form .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .mk form input[type=number], .mk form input[type=text] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 180px; }
+  .mk form button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; }
+  .mk form button.sell { background: #b85c38; padding: 5px 10px; }
+  .mk form.judge button { background: #e0a030; color: #111; }
+  .mk form.inline { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin: 0; }
+  .mk form.inline input[type=text] { width: 70px; padding: 5px 8px; }
+  .mk .chart { background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 8px; }
+  .mk .chart svg { display: block; width: 100%; height: 180px; }
+  .mk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #ccc; margin-top: 6px; }
+  .mk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 </style>
+<%
+  const COLORS = ['#4caf50', '#e57373', '#64b5f6', '#ffd54f', '#ba68c8', '#4dd0e1', '#ff8a65', '#aed581'];
+  const pc = (p) => (p * 100).toFixed(p >= 0.995 || p <= 0.005 ? 1 : 0) + '%';
+  const fmt = (n) => Math.round(n).toLocaleString();
+  const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  const judgeOk = typeof judgeMe !== 'undefined' && judgeMe && m && (m.status === 'open' || m.status === 'closed');
+%>
 <div class="mk">
   <p><a href="/markets">‹ All markets</a></p>
   <% if (!m) { %>
     <h1>Market not found</h1>
     <p class="info">It may have been settled more than 60 days ago.</p>
+  <% } else if (m.shares) { %>
+    <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
+    <div class="info">
+      <%= m.status === 'open' ? 'Trading open — closes ' + new Date(m.closes * 1000).toUTCString()
+         : m.status === 'settled' ? 'Resolved: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '') + ' — each ' + m.result + ' share paid 1 PAT'
+         : m.status === 'void' ? 'Voided — holders got their cost back'
+         : m.status === 'settling' ? 'Paying out…' : 'Trading closed — waiting for the judge' %><br>
+      Volume <%= fmt(m.total) %> PAT · <%= m.betCount %> trade<%= m.betCount === 1 ? '' : 's' %> · <%= m.bettors %> holder<%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
+    </div>
+    <div class="opts">
+      <% m.options.forEach((o, i) => { %>
+        <div class="opt <%= o.won ? 'won' : '' %>">
+          <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
+          <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffd700' : COLORS[i % COLORS.length] %>"></span></div>
+          <div class="num"><span class="price"><%= pc(o.price) %></span> · <%= o.price.toFixed(2) %> PAT/share</div>
+        </div>
+      <% }) %>
+    </div>
+    <% if (m.history.length > 1) {
+      const W = 600, H = 170, t0 = m.history[0][0], t1 = Math.max(m.history[m.history.length - 1][0], t0 + 1);
+      const x = (t) => ((t - t0) / (t1 - t0) * W).toFixed(1), y = (p) => (H - p * H).toFixed(1); %>
+      <div class="chart">
+        <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" aria-label="Price history">
+          <line x1="0" y1="<%= H / 2 %>" x2="<%= W %>" y2="<%= H / 2 %>" stroke="#333" stroke-dasharray="4 4" fill="none" vector-effect="non-scaling-stroke"/>
+          <% m.options.forEach((o, i) => { %>
+            <polyline fill="none" stroke="<%= COLORS[i % COLORS.length] %>" stroke-width="2" vector-effect="non-scaling-stroke"
+              points="<%= m.history.map((h) => x(h[0]) + ',' + y(h[1][o.name] != null ? h[1][o.name] : 0)).join(' ') %>"/>
+          <% }) %>
+        </svg>
+        <div class="legend">
+          <% m.options.forEach((o, i) => { %><span><i style="background: <%= COLORS[i % COLORS.length] %>"></i><%= o.name %></span><% }) %>
+          <span style="margin-left:auto;color:#888">since <%= when(t0) %> UTC · dashed = 50%</span>
+        </div>
+      </div>
+    <% } %>
+    <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+
+    <% if (m.mine && m.mine.length) { %>
+      <h3>Your position</h3>
+      <div class="tbl"><table>
+        <tr><th>Outcome</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Now</th><th class="r">Cost</th><th class="r">Value</th><th class="r">P/L</th><% if (m.status === 'open') { %><th class="r">Sell</th><% } %></tr>
+        <% m.mine.forEach((p) => { %>
+          <tr><td><b><%= p.option %></b></td><td class="r"><%= fmt(p.shares) %></td>
+              <td class="r"><%= p.entry.toFixed(3) %></td><td class="r"><%= p.price.toFixed(3) %></td>
+              <td class="r"><%= fmt(p.cost) %></td><td class="r"><%= fmt(p.value) %></td>
+              <td class="r <%= p.pnl >= 0 ? 'up' : 'down' %>"><%= (p.pnl >= 0 ? '+' : '−') + fmt(Math.abs(p.pnl)) %> (<%= p.cost ? (p.pnl / p.cost * 100).toFixed(0) : 0 %>%)</td>
+              <% if (m.status === 'open') { %><td class="r">
+                <form class="inline" method="post" action="/markets/<%= m.id %>/sell">
+                  <input type="hidden" name="option" value="<%= p.option %>">
+                  <input type="text" name="shares" value="all" aria-label="Shares to sell" inputmode="decimal">
+                  <button class="sell" type="submit">Sell</button>
+                </form></td><% } %></tr>
+        <% }) %>
+      </table></div>
+      <p class="info">Entry = what you paid per share, fee included. Value = shares × today's price. A sale returns a bit less, because your own sale moves the price and there's a 2% fee. If your outcome wins, each share pays 1 PAT.</p>
+    <% } %>
+
+    <% if (m.status === 'open') { %>
+      <% if (user) { %>
+        <form class="bet" method="post" action="/markets/<%= m.id %>/bet" id="buy">
+          <div class="opts-pick">
+            <% m.options.forEach((o, i) => { %>
+              <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <%= o.name %> · <%= pc(o.price) %></label>
+            <% }) %>
+          </div>
+          <div class="row">
+            <input type="number" name="amount" min="<%= minBet %>" step="100" placeholder="PAT to spend (min <%= minBet.toLocaleString() %>)" required>
+            <button type="submit">Buy shares</button>
+            <% if (bal !== null) { %><span class="info">You have <%= bal.toLocaleString() %> PAT</span><% } %>
+          </div>
+          <p class="info" id="est">Each share pays 1 PAT if its outcome wins. Sell any time before trading closes.</p>
+        </form>
+        <script>
+          (() => {
+            const b = <%- JSON.stringify(m.b) %>, q = <%- JSON.stringify(m.q).replace(/</g, '\\u003c') %>, fee = 0.02;
+            const f = document.getElementById('buy'), out = document.getElementById('est');
+            const upd = () => {
+              const opt = (f.querySelector('input[name=option]:checked') || {}).value, spend = Number(f.amount.value) || 0;
+              if (!opt || spend <= 0) return;
+              const vals = Object.values(q).map((v) => v / b), mx = Math.max(...vals);
+              const S = vals.reduce((a, v) => a + Math.exp(v - mx), 0), Ei = Math.exp(q[opt] / b - mx);
+              const net = spend * (1 - fee), d = b * Math.log(1 + S * (Math.exp(net / b) - 1) / Ei);
+              out.textContent = `≈ ${Math.round(d).toLocaleString()} ${opt} shares at ${(spend / d).toFixed(3)} PAT each. They pay ${Math.round(d).toLocaleString()} PAT (+${Math.round(d - spend).toLocaleString()}) if ${opt} wins.`;
+            };
+            f.addEventListener('input', upd);
+          })();
+        </script>
+      <% } else { %>
+        <p class="info"><a href="/login">Sign in</a> to trade here, or in the room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p>
+      <% } %>
+    <% } %>
+
+    <% if (judgeOk) { %>
+      <form class="bet judge" method="post" action="/markets/<%= m.id %>/resolve">
+        <b>⚖️ Resolve this market</b>
+        <div class="opts-pick">
+          <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <%= o.name %> won</label><% }) %>
+          <label><input type="radio" name="outcome" value="void"> void (refund holders)</label>
+        </div>
+        <div class="row"><button type="submit">Resolve</button>
+          <span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
+      </form>
+    <% } %>
+
+    <% if (orders && orders.length) { %>
+      <h3>Your website orders</h3>
+      <div class="tbl"><table>
+        <tr><th>Order</th><th>Outcome</th><th class="r">Amount</th><th>Status</th></tr>
+        <% orders.forEach((o) => { const k = o.kind || 'buy'; %>
+          <tr><td><%= k %></td><td><%= k === 'resolve' ? o.outcome : o.option %></td>
+              <td class="r"><%= k === 'buy' ? Number(o.amount).toLocaleString() + ' PAT' : k === 'sell' ? (o.shares || 'all') + ' sh' : '' %></td>
+              <td><%= o.status === 'placed' ? '✅ ' + (o.message || 'done') : o.status === 'failed' ? '❌ ' + (o.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
+        <% }) %>
+      </table></div>
+      <% if (orders.some((o) => o.status === 'pending' || o.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
+    <% } %>
+
+    <h3>Trades</h3>
+    <div class="tbl"><table>
+      <tr><th>Who</th><th>Side</th><th>Outcome</th><th class="r">Shares</th><th class="r">PAT</th><th class="r">Price</th><th class="r">When (UTC)</th></tr>
+      <% m.trades.slice(0, 100).forEach((t) => { %>
+        <tr><td><%= t.nick %><%= t.web ? ' 🌐' : '' %></td><td class="<%= t.side === 'buy' ? 'up' : 'down' %>"><%= t.side %></td><td><%= t.option %></td>
+            <td class="r"><%= fmt(t.shares) %></td><td class="r"><%= fmt(t.pat) %></td>
+            <td class="r"><%= t.shares ? (t.pat / t.shares).toFixed(3) : '' %></td><td class="r"><%= when(t.ts) %></td></tr>
+      <% }) %>
+      <% if (!m.trades.length) { %><tr><td colspan="7" style="color:#888">No trades yet.</td></tr><% } %>
+    </table></div>
   <% } else { %>
     <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
     <div class="info">
@@ -36,6 +182,7 @@
          : m.status === 'settled' ? 'Settled: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '')
          : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge' %><br>
       Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
+      · <i>pool market (from before share trading)</i>
     </div>
     <div class="opts">
       <% m.options.forEach((o) => { %>
@@ -66,13 +213,23 @@
         <p class="info"><a href="/login">Sign in</a> to bet here, or in the room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p>
       <% } %>
     <% } %>
+    <% if (judgeOk) { %>
+      <form class="bet judge" method="post" action="/markets/<%= m.id %>/resolve">
+        <b>⚖️ Settle this market</b>
+        <div class="opts-pick">
+          <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <%= o.name %> won</label><% }) %>
+          <label><input type="radio" name="outcome" value="void"> void (refund everyone)</label>
+        </div>
+        <div class="row"><button type="submit">Settle</button><span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
+      </form>
+    <% } %>
     <% if (orders && orders.length) { %>
-      <h3>Your website bets</h3>
+      <h3>Your website orders</h3>
       <div class="tbl"><table>
         <tr><th>On</th><th class="r">PAT</th><th>Status</th></tr>
         <% orders.forEach((o) => { %>
-          <tr><td><%= o.option %></td><td class="r"><%= Number(o.amount).toLocaleString() %></td>
-              <td><%= o.status === 'placed' ? '✅ placed' : o.status === 'failed' ? '❌ ' + (o.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
+          <tr><td><%= (o.kind === 'resolve' ? 'settle: ' + o.outcome : o.option) %></td><td class="r"><%= o.kind === 'resolve' ? '' : Number(o.amount).toLocaleString() %></td>
+              <td><%= o.status === 'placed' ? '✅ ' + (o.message || 'placed') : o.status === 'failed' ? '❌ ' + (o.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
         <% }) %>
       </table></div>
       <% if (orders.some((o) => o.status === 'pending' || o.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
@@ -82,7 +239,7 @@
       <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When (UTC)</th></tr>
       <% (m.bets || []).slice().sort((a, b) => b.ts - a.ts).forEach((b) => { %>
         <tr><td><%= b.nick %><%= b.web ? ' 🌐' : '' %></td><td><%= b.option %></td>
-            <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%= b.ts ? new Date(b.ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '' %></td></tr>
+            <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%= when(b.ts) %></td></tr>
       <% }) %>
       <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888">No bets yet.</td></tr><% } %>
     </table></div>

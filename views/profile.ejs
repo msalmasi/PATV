@@ -48,19 +48,20 @@
             </div>
 
             <div class="profile-container">
-                <div id="profile-header"><h1>🐸 Pond Life</h1></div>
+                <div id="profile-header"><h1>🔫 Grand Theft Frog</h1></div>
                 <div style="text-align:center;line-height:1.9;padding:4px 0 10px">
                     <% if (typeof heistSheet !== 'undefined' && heistSheet) { %>
                         <a href="<%= heistSheet.url %>" class="infolink">🥷 Heist sheet<%= heistSheet.cls ? ' · ' + heistSheet.cls : '' %></a>
                     <% } else { %>
                         <span style="color:#888">No heist sheet yet — <code>!sheet</code> in a room with Pepe rolls one.</span>
                     <% } %><br>
-                    <% if (typeof pond !== 'undefined' && pond) { %>
-                        <a href="/pondlife">What is Pond Life?</a> ·
-                        <a href="<%= pond.heistHelp %>">Heists</a> ·
-                        <a href="<%= pond.turfGuide %>">Turf Wars guide</a> ·
-                        <a href="<%= pond.turfMap %>">Turf map</a> ·
-                        <a href="<%= pond.gangs %>">Gangs</a>
+                    <% if (typeof gtf !== 'undefined' && gtf) { %>
+                        <a href="/gtf">What is Grand Theft Frog?</a> ·
+                        <a href="<%= gtf.heistHelp %>">Heists</a> ·
+                        <a href="<%= gtf.turfGuide %>">Turf Wars guide</a> ·
+                        <a href="<%= gtf.turfMap %>">Turf map</a> ·
+                        <a href="<%= gtf.gangs %>">Gangs</a> ·
+                        <a href="/bounties">Bounties</a>
                     <% } %>
                 </div>
             </div>

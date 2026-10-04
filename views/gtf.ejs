@@ -1,4 +1,4 @@
-<%- include('layout', { title: 'Pond Life', user: user}) %>
+<%- include('layout', { title: 'Grand Theft Frog', user: user}) %>
 <style>
   .pl { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
   .pl h1 { text-align: center; margin-bottom: 4px; }
@@ -15,9 +15,9 @@
   .pl .flow { color: #9a9; font-size: 14px; text-align: center; margin-top: 26px; line-height: 1.7; }
 </style>
 <div class="pl">
-  <h1>🐸 Pond Life</h1>
-  <p class="sub">London's frog underworld. Roll a character, pull heists to get rich, join a gang, and fight
-    for the boroughs on the turf map. It all runs in the Camfrog rooms with Pepe, and it all pays in PAT.</p>
+  <h1>🔫 Grand Theft Frog</h1>
+  <p class="sub">The crime side of PATV. Roll a character, pull heists to get rich, put bounties on rivals, join a
+    gang and fight for turf. A new map every season. It all runs in the Camfrog rooms with Pepe, and it all pays in PAT.</p>
 
   <% if (sheet) { %>
     <div class="you">Your character: <a href="<%= sheet.url %>">open your heist sheet</a><%= sheet.cls ? ' · ' + sheet.cls : '' %></div>
@@ -34,7 +34,7 @@
     </div>
     <div class="part">
       <h2>🗺️ Turf Wars</h2>
-      <p>London's boroughs each run a business that earns its owner PAT. Claim open turf, raid rivals, fortify what you hold, and climb the season score.</p>
+      <p>Every district on this season's map runs a business that earns its owner PAT. Claim open turf, raid rivals, fortify what you hold, and climb the season score. The map changes each season.</p>
       <a href="<%= links.turfGuide %>">The Turf Wars guide ›</a>
       <a href="<%= links.turfHelp %>">Turf commands ›</a>
       <a href="<%= links.turfMap %>">Live turf map ›</a>
@@ -45,9 +45,14 @@
       <a href="<%= links.gangs %>">Gang leaderboard ›</a>
       <a href="<%= links.turfHelp %>">Gang commands ›</a>
     </div>
+    <div class="part">
+      <h2>🎯 Bounties</h2>
+      <p>Put PAT on a job: anyone can chip in, hunters claim it, and the poster pays whoever pulled it off. The pot sits in escrow until then.</p>
+      <a href="/bounties">The bounty board ›</a>
+    </div>
   </div>
 
-  <p class="flow">Start: <code>!sheet</code> to roll a character · <code>!heist</code> to pull a job · <code>!gang</code> to start or join a gang · <code>!turf</code> to see the map · <code>!pondlife</code> for these links in chat</p>
+  <p class="flow">Start: <code>!sheet</code> to roll a character · <code>!heist</code> to pull a job · <code>!gang</code> to start or join a gang · <code>!turf</code> to see the map · <code>!bounty</code> to post a job · <code>!gtf</code> for these links in chat</p>
 </div>
 </body>
 </html>

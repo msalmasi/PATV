@@ -1001,8 +1001,9 @@ app.get("/reset-password/:token", async (req, res) => {
 // Clips & snaps (moved off Netlify) and prediction markets
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
-const pondlife = require("./pondlife");
-pondlife.register(app, { isBotToken, addUser });
+const gtf = require("./gtf");
+gtf.register(app, { isBotToken, addUser });
+require("./bounties").register(app, { isBotToken, addUser });
 
 const history = require("./history");
 app.get("/history", addUser, async (req, res) => {
@@ -1208,8 +1209,8 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         xpForNextLevel: xpForNextLevel,
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
         canSeeHistory: !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
-        heistSheet: await pondlife.sheetFor(user.camfrogUsername),
-        pond: pondlife.LINKS
+        heistSheet: await gtf.sheetFor(user.camfrogUsername),
+        gtf: gtf.LINKS
       });
     } else {
       clearLogin(res);

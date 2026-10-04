@@ -1,0 +1,117 @@
+<%- include('layout', { title: b ? b.ref + ' · ' + b.task : 'Bounty not found', user: user}) %>
+<style>
+  .bt { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .bt a { color: #81c784; }
+  .bt .ref { color: #e0a030; font-family: monospace; }
+  .bt h1 { font-size: 22px; margin: 18px 0 4px; overflow-wrap: anywhere; }
+  .bt h3 { margin: 22px 0 8px; }
+  .bt .info { color: #888; font-size: 13px; line-height: 1.7; }
+  .bt .pot { font-size: 30px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; margin: 10px 0 2px; }
+  .bt .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
+  .bt table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .bt th, .bt td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; }
+  .bt th { color: #888; font-weight: normal; }
+  .bt td.r, .bt th.r { text-align: right; }
+  .bt .notice { background: #13200f; border: 1px solid #4caf50; border-radius: 8px; padding: 10px 12px; }
+  .bt .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 16px 0; }
+  .bt form { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 10px; align-content: start; }
+  .bt form.owner { border-color: #e0a030; }
+  .bt form .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .bt input[type=number], .bt input[type=text] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+  .bt button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; justify-self: start; }
+  .bt form.owner button { background: #e0a030; color: #111; }
+  .bt button.danger { background: #5a2a2a; color: #f2b8b8; }
+  .bt label { cursor: pointer; }
+</style>
+<%
+  const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
+%>
+<div class="bt">
+  <p><a href="/bounties">‹ Bounty board</a></p>
+  <% if (!b) { %>
+    <h1>Bounty not found</h1>
+    <p class="info">It may have closed more than 60 days ago.</p>
+  <% } else { const open = b.status === 'open' && b.deadline > now; %>
+    <h1><span class="ref"><%= b.ref %></span> <%= b.task %></h1>
+    <div class="pot"><%= b.total.toLocaleString() %> PAT</div>
+    <div class="info">
+      Posted by <b><%= b.creator %></b> in <%= b.room || 'a room' %> · <%= when(b.created) %> UTC<br>
+      <%= b.status === 'open' ? (open ? 'Open — ends in ' + left(b.deadline) + ' (' + when(b.deadline) + ' UTC)' : 'Expired — refunds on the way')
+         : b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).join(', ') + (b.resolved ? ' · ' + when(b.resolved) + ' UTC' : '')
+         : b.status === 'cancelled' ? 'Cancelled — everyone who chipped in was refunded'
+         : b.status === 'expired' ? 'Expired unpaid — everyone who chipped in was refunded' : b.status %>
+    </div>
+    <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+
+    <% if (open) { %>
+      <% if (user) { %>
+        <div class="forms">
+          <form method="post" action="/bounties/<%= b.id %>/add">
+            <b>💰 Chip in</b>
+            <input type="number" name="amount" min="<%= addMin %>" step="100" placeholder="PAT (min <%= addMin.toLocaleString() %>)" required>
+            <div class="row"><button type="submit">Add to pot</button><% if (bal !== null) { %><span class="info">You have <%= bal.toLocaleString() %> PAT</span><% } %></div>
+            <span class="info">Held in escrow. Refunded if it's cancelled or expires unpaid.</span>
+          </form>
+          <% if (!b.mineCreator) { %>
+            <form method="post" action="/bounties/<%= b.id %>/claim">
+              <b>🙋 <%= b.mineClaim ? 'Update your claim' : 'Claim it' %></b>
+              <input type="text" name="note" maxlength="160" placeholder="Proof or a note for <%= b.creator %> (optional)" value="<%= b.mineClaim ? b.mineClaim.note : '' %>">
+              <button type="submit"><%= b.mineClaim ? 'Update claim' : 'I did it' %></button>
+              <span class="info"><%= b.creator %> decides who gets paid.</span>
+            </form>
+          <% } %>
+          <% if (b.mineCreator || isAdmin) { %>
+            <form class="owner" method="post" action="/bounties/<%= b.id %>/resolve">
+              <b>✅ Pay hunters<%= b.mineCreator ? '' : ' (admin)' %></b>
+              <% if (b.claims.length) { %>
+                <% b.claims.forEach((c) => { %><label><input type="checkbox" name="hunters" value="<%= c.nick %>"> <%= c.nick %></label><% }) %>
+                <button type="submit">Pay the pot</button>
+                <span class="info">Split evenly between the ticked hunters, minus 5%.</span>
+              <% } else { %>
+                <span class="info">Nobody has claimed it yet.</span>
+              <% } %>
+            </form>
+            <form class="owner" method="post" action="/bounties/<%= b.id %>/cancel">
+              <b>✖ Cancel<%= b.mineCreator ? '' : ' (admin)' %></b>
+              <label><input type="checkbox" required> Refund everyone and close <%= b.ref %></label>
+              <button class="danger" type="submit">Cancel bounty</button>
+            </form>
+          <% } %>
+        </div>
+      <% } else { %>
+        <p class="info"><a href="/login">Sign in</a> to chip in or claim it here, or in the room: <code>!bounty claim <%= b.ref %></code></p>
+      <% } %>
+    <% } %>
+
+    <% if (actions && actions.length) { %>
+      <h3>Your actions</h3>
+      <div class="tbl"><table>
+        <tr><th>Action</th><th>Details</th><th>Status</th></tr>
+        <% actions.forEach((a) => { %>
+          <tr><td><%= a.kind %></td>
+              <td><%= a.kind === 'add' ? Number(a.amount).toLocaleString() + ' PAT' : a.kind === 'claim' ? (a.note || '') : a.kind === 'resolve' ? JSON.parse(a.hunters || '[]').join(', ') : '' %></td>
+              <td><%= a.status === 'done' ? '✅ ' + (a.message || 'done') : a.status === 'failed' ? '❌ ' + (a.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
+        <% }) %>
+      </table></div>
+      <% if (actions.some((a) => a.status === 'pending' || a.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
+    <% } %>
+
+    <h3>Claims</h3>
+    <div class="tbl"><table>
+      <tr><th>Hunter</th><th>Note</th><th class="r">When (UTC)</th></tr>
+      <% b.claims.forEach((c) => { %>
+        <tr><td><%= (b.hunters || []).includes(c.nick) ? '🏆 ' : '' %><%= c.nick %></td><td><%= c.note %></td><td class="r"><%= when(c.ts) %></td></tr>
+      <% }) %>
+      <% if (!b.claims.length) { %><tr><td colspan="3" style="color:#888">No claims yet.</td></tr><% } %>
+    </table></div>
+
+    <h3>The pot</h3>
+    <div class="tbl"><table>
+      <tr><th>Backer</th><th class="r">PAT</th></tr>
+      <% b.backers.forEach((c) => { %><tr><td><%= c.nick %></td><td class="r"><%= c.amount.toLocaleString() %></td></tr><% }) %>
+    </table></div>
+  <% } %>
+</div>
+</body>
+</html>

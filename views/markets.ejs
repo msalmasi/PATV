@@ -32,13 +32,18 @@
         <div class="q"><span class="ref"><%= m.ref %></span> <%= m.question %></div>
         <span class="pill <%= m.status %>"><%= m.status === 'open' ? 'open · closes in ' + left(m.closes) : m.status === 'settled' ? 'settled: ' + m.result : m.status %></span>
       </div>
-      <div class="info">Pool <%= m.total.toLocaleString() %> PAT · <%= m.bettors %> bettor<%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · <%= m.room || '' %></div>
+      <div class="info"><%= m.shares ? 'Volume' : 'Pool' %> <%= Math.round(m.total).toLocaleString() %> PAT · <%= m.bettors %> <%= m.shares ? 'holder' : 'bettor' %><%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · <%= m.room || '' %></div>
       <div class="opts">
         <% m.options.forEach((o) => { %>
           <div class="opt <%= o.won ? 'won' : '' %>">
             <div><%= o.won ? '🏆 ' : '' %><%= o.name %></div>
-            <div class="bar"><span style="width: <%= o.share %>%"></span></div>
-            <div class="num"><%= o.share %>% · <%= o.pool.toLocaleString() %><%= o.mult ? ' · pays ' + o.mult.toFixed(2) + 'x' : '' %></div>
+            <% if (m.shares) { %>
+              <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%"></span></div>
+              <div class="num"><b><%= Math.round(o.price * 100) %>%</b> · <%= o.price.toFixed(2) %> PAT/share</div>
+            <% } else { %>
+              <div class="bar"><span style="width: <%= o.share %>%"></span></div>
+              <div class="num"><%= o.share %>% · <%= o.pool.toLocaleString() %><%= o.mult ? ' · pays ' + o.mult.toFixed(2) + 'x' : '' %></div>
+            <% } %>
           </div>
         <% }) %>
       </div>
@@ -46,14 +51,14 @@
 <% }; %>
 <div class="mk">
   <h1>Prediction Markets</h1>
-  <p class="sub">Bet PAT on what happens next. Winners split the losing side's pool (minus a 5% fee) in proportion to their stake.</p>
+  <p class="sub">Trade PAT on what happens next. Prices are the crowd's odds: buy shares in an outcome, sell any time while trading is open, and every winning share pays 1 PAT.</p>
   <h2>LIVE</h2>
   <% if (!live.length) { %><p class="empty">No open markets right now.</p><% } %>
   <% live.forEach((m) => card(m)) %>
   <h2>RECENTLY SETTLED</h2>
   <% if (!done.length) { %><p class="empty">Nothing settled yet.</p><% } %>
   <% done.forEach((m) => card(m)) %>
-  <p class="how">Start one in a Camfrog room: <code>!market new Will X happen? judge @someone closes 2d</code> · bet with <code>!market M3 yes 5k</code></p>
+  <p class="how">Start one in a Camfrog room: <code>!market new Will X happen? judge @someone closes 2d</code> · buy with <code>!market M3 yes 5k</code> · sell with <code>!market sell M3 yes all</code> · <code>!market mine</code> shows your positions</p>
 </div>
 </body>
 </html>

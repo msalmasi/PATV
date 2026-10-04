@@ -1,6 +1,7 @@
-// pondlife.js — "Pond Life", the game that ties Pepe's heists, turf wars and gangs together.
-// Pepe registers each player's heist sheet here when he publishes it, so a PATV profile can link
-// it; /pondlife is the overview page linking the guides and the live boards.
+// gtf.js — "Grand Theft Frog" (GTF), the crime game that ties Pepe's heists, turf wars and gangs
+// together. Pepe registers each player's heist sheet here when he publishes it, so a PATV profile
+// can link it; /gtf is the overview page linking the guides and the live boards. The turf map's
+// districts change from season to season, so nothing here names them.
 const { runQuery, getQuery } = require("./dbUtils");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS heist_sheets (
@@ -39,13 +40,14 @@ function register(app, { isBotToken, addUser }) {
     res.json({ success: true });
   });
 
-  app.get("/pondlife", addUser, async (req, res) => {
+  app.get("/pondlife", (req, res) => res.redirect(301, "/gtf"));
+  app.get("/gtf", addUser, async (req, res) => {
     let sheet = null;
     if (req.user && req.user.userId) {
       const u = await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]);
       sheet = u.length ? await sheetFor(u[0].camfrogUsername) : null;
     }
-    res.render("pondlife", { user: req.user ? req.user.username : null, links: LINKS, sheet });
+    res.render("gtf", { user: req.user ? req.user.username : null, links: LINKS, sheet });
   });
 }
 

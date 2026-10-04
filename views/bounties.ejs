@@ -1,0 +1,47 @@
+<%- include('layout', { title: 'Bounty Board', user: user}) %>
+<style>
+  .bt { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .bt h1 { text-align: center; margin-bottom: 4px; }
+  .bt .sub { text-align: center; color: #9a9; margin: 0 0 22px; }
+  .bt h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 26px 0 10px; }
+  .bt .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .bt .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; color: inherit; text-decoration: none; }
+  .bt .card:hover { border-color: #e0a030; }
+  .bt .ref { color: #e0a030; font-family: monospace; font-size: 13px; }
+  .bt .task { font-weight: bold; color: #fff; font-size: 15px; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+  .bt .pot { font-size: 22px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; }
+  .bt .info { color: #888; font-size: 13px; }
+  .bt .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; justify-self: start; }
+  .bt .pill.resolved { border-color: #4caf50; color: #81c784; }
+  .bt .empty { color: #888; text-align: center; }
+  .bt .how { color: #888; font-size: 13px; text-align: center; margin-top: 26px; }
+  .bt code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+</style>
+<%
+  const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
+  const card = (b) => { %>
+    <a class="card" href="/bounties/<%= b.id %>">
+      <span class="ref"><%= b.ref %> · posted by <%= b.creator %></span>
+      <span class="task"><%= b.task %></span>
+      <span class="pot"><%= b.total.toLocaleString() %> PAT</span>
+      <span class="info">
+        <% if (b.status === 'open') { %><%= b.claims.length %> claim<%= b.claims.length === 1 ? '' : 's' %> · <%= b.backers.length %> backer<%= b.backers.length === 1 ? '' : 's' %> · ends in <%= left(b.deadline) %>
+        <% } else if (b.status === 'resolved') { %>paid to <%= (b.hunters || []).join(', ') %>
+        <% } else { %><%= b.status %> — refunded<% } %>
+      </span>
+      <% if (b.status !== 'open') { %><span class="pill <%= b.status %>"><%= b.status %></span><% } %>
+    </a>
+<% }; %>
+<div class="bt">
+  <h1>Bounty Board</h1>
+  <p class="sub">Put PAT on a job. Anyone can chip in to the pot, hunters claim it, and the poster pays whoever did it.</p>
+  <h2>OPEN BOUNTIES</h2>
+  <% if (!live.length) { %><p class="empty">No open bounties right now.</p><% } %>
+  <div class="grid"><% live.forEach((b) => card(b)) %></div>
+  <h2>RECENTLY CLOSED</h2>
+  <% if (!done.length) { %><p class="empty">Nothing closed yet.</p><% } %>
+  <div class="grid"><% done.forEach((b) => card(b)) %></div>
+  <p class="how">Post one in a Camfrog room: <code>!bounty get Brian on cam tonight 10k by 2d</code> · the pot sits in escrow until it's paid, cancelled or expires (then everyone is refunded).</p>
+</div>
+</body>
+</html>
