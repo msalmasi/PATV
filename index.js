@@ -152,7 +152,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1015,6 +1015,7 @@ require("./lotto").register(app, { isBotToken, addUser });
 require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
+require("./staking").register(app, { isBotToken, addUser });
 app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
 
 const history = require("./history");

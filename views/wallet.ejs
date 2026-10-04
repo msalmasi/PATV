@@ -73,6 +73,10 @@
   const hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/wallet"><input type="hidden" name="tag" value="wallet">';
   const LS = { offered: 'offer', accepting: 'accepting…', funding: 'funding…', active: 'active', repaid: 'repaid', forgiven: 'forgiven', declined: 'declined', cancelled: 'cancelled', expired: 'expired', failed: 'failed' };
   const terms = [1, 3, 7, 14, 30, 60, 90].filter((d) => !reserve || !reserve.max_days || d <= reserve.max_days);
+  const VN = { bank: '🏦 Bank', house: '🎰 House', mm: '📈 Market maker', auto: '🤖 Auto' };
+  const VK = ['bank', 'house', 'mm', 'auto'];
+  const vaultSelect = '<select name="a3" aria-label="Vault">' + VK.map((k) => '<option value="' + k + '"' + (k === 'auto' ? ' selected' : '') + '>' + VN[k] + '</option>').join('') + '</select>';
+  const holdLine = (h) => VK.filter((k) => h && h[k]).map((k) => VN[k] + ' ' + fmt(h[k].value)).join(' · ');
 %>
   <h1>Wallet</h1>
   <p class="bal"><b><%= fmt(bal) %></b> PAT</p>
@@ -84,24 +88,31 @@
   <!-- ───────── Stashes ───────── -->
   <h2>MY STASHES</h2>
   <% if (canAct) { %>
-    <% if (!myStashes.length) { %><p class="info">You don't own or share a stash yet. A stash is a shared PAT account you can stake for yield.</p><% } %>
+    <% if (!myStashes.length) { %><p class="info">You don't own or share a stash yet. A stash is a shared PAT account you can stake into the vaults for yield.</p><% } %>
     <div class="grid">
     <% myStashes.forEach((s) => { %>
       <div class="card<%= s.owner_me ? ' own' : '' %>">
         <span class="ref"><%= s.owner %>/<%= s.name %><%= s.owner_me ? ' · yours' : ' · member' %></span>
         <div class="stats">
           <div class="stat"><span>Balance</span><b class="gold"><%= fmt(s.balance) %></b></div>
-          <div class="stat"><span>Staked</span><b class="green"><%= fmt(s.staked) %></b></div>
-          <div class="stat"><span>Free</span><b><%= fmt(s.free) %></b></div>
-          <div class="stat"><span>Earned</span><b class="green"><%= fmt(s.earned) %></b></div>
+          <div class="stat"><span>In vaults</span><b class="green"><%= fmt(s.vaulted) %></b></div>
         </div>
+        <span class="info"><%= holdLine(s.hold) || 'Nothing staked in the vaults.' %></span>
         <span class="info">Members: <%= [s.owner].concat(s.members || []).join(', ') %></span>
         <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-          <select name="a0"><option value="deposit">Deposit</option><option value="withdraw">Withdraw</option><option value="stake">Stake</option><option value="unstake">Unstake</option></select>
+          <select name="a0"><option value="deposit">Deposit</option><option value="withdraw">Withdraw</option></select>
           <input type="hidden" name="a1" value="<%= s.ref %>">
           <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
           <button type="submit">Go</button>
         </form>
+        <form class="inline" method="post" action="/act"><%- hidden('stash') %>
+          <select name="a0"><option value="stake">Stake</option><option value="unstake">Unstake</option></select>
+          <input type="hidden" name="a1" value="<%= s.ref %>">
+          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
+          <%- vaultSelect %>
+          <button type="submit">Queue</button>
+        </form>
+        <span class="info">Stakes and unstakes run at the next daily cut-off at that day's price; a withdrawal waits if the vault has no free cash.</span>
         <% if (s.owner_me) { %>
           <details><summary>Members &amp; close</summary>
             <form class="inline" method="post" action="/act"><%- hidden('stash') %>
@@ -132,45 +143,16 @@
 
   <!-- ───────── Staking ───────── -->
   <h2>STAKING</h2>
-  <p class="explain">Staked PAT earns a daily share of the game fees the admins route to stakers, split pro rata to amount × time staked, and it compounds back into the stash. A dial (the fee share <i>k</i>) keeps the yield inside the target band — when fees run hot it turns down, when they're thin it turns up and the Federal Reserve can top up.</p>
-  <% if (!staking) { %><p class="info">No staking numbers from Pepe yet.</p><% } else {
-       const band = staking.apr >= staking.apr_min && staking.apr <= staking.apr_max; %>
-    <div class="stats">
-      <div class="stat"><span>Total staked</span><b class="gold"><%= fmt(staking.staked) %></b></div>
-      <div class="stat"><span>Last APR</span><b class="<%= band ? 'green' : 'red' %>"><%= pct(staking.apr) %></b></div>
-      <div class="stat"><span>Target band</span><b><%= pct(staking.apr_min, 0) %>–<%= pct(staking.apr_max, 0) %></b></div>
-      <div class="stat"><span>Fee dial k</span><b><%= pct(staking.k, 0) %></b></div>
-      <div class="stat"><span>Rewards pool</span><b><%= fmt(staking.pool) %></b></div>
-      <div class="stat"><span>Paid this week</span><b class="green"><%= fmt(staking.paid7) %></b></div>
-      <div class="stat"><span>Reserve top-up</span><b class="<%= staking.topup ? 'green' : '' %>"><%= staking.topup ? 'on' : 'off' %></b></div>
-      <div class="stat"><span>Next payout</span><b><%- staking.next_pay ? cd(staking.next_pay) : '—' %></b></div>
-    </div>
-    <p class="info">This week: <%= fmt(staking.inflow7) %> PAT of fees came in<%= staking.topup7 ? ', ' + fmt(staking.topup7) + ' topped up by the Reserve' : '' %>.
-      <% if (staking.potential_apr != null) { %>Fees at the full dial would pay <b><%= pct(staking.potential_apr) %></b>.<% } %></p>
-    <% const ps = (staking.payouts || []).slice(-30);
-       if (ps.length >= 2) {
-         const vals = ps.map((p) => p.apr).concat([staking.apr_min, staking.apr_max]);
-         const hi = Math.max(...vals) * 1.1 || 1, lo = Math.min(0, ...vals);
-         const X = (i) => (i * 300 / (ps.length - 1)).toFixed(1), Y = (v) => (60 - (v - lo) / (hi - lo) * 56 - 2).toFixed(1); %>
-      <div class="spark">
-        <svg viewBox="0 0 300 60" preserveAspectRatio="none" role="img" aria-label="APR per payout">
-          <rect x="0" y="<%= Y(staking.apr_max) %>" width="300" height="<%= Math.max(0.5, Y(staking.apr_min) - Y(staking.apr_max)) %>" fill="#4caf50" opacity="0.12"></rect>
-          <polyline fill="none" stroke="#ffd700" stroke-width="1.6" vector-effect="non-scaling-stroke" points="<%= ps.map((p, i) => X(i) + ',' + Y(p.apr)).join(' ') %>"></polyline>
-        </svg>
-        <div class="info">APR per payout, last <%= ps.length %> (green band = target <%= pct(staking.apr_min, 0) %>–<%= pct(staking.apr_max, 0) %>)</div>
-      </div>
-    <% } %>
-    <% if (ps.length) { %>
-      <details><summary>Recent payouts</summary>
-        <div class="tbl"><table>
-          <tr><th>When (UTC)</th><th class="r">Paid</th><th class="r">From pool</th><th class="r">Top-up</th><th class="r">Fees in</th><th class="r">Avg staked</th><th class="r">APR</th><th class="r">k</th><th class="r">Stashes</th></tr>
-          <% ps.slice().reverse().slice(0, 14).forEach((p) => { %>
-            <tr><td><%= when(p.ts) %></td><td class="r"><%= fmt(p.paid) %></td><td class="r"><%= fmt(p.from_pool) %></td><td class="r"><%= fmt(p.topup) %></td>
-              <td class="r"><%= fmt(p.inflow) %></td><td class="r"><%= fmt(p.avg_staked) %></td><td class="r"><%= pct(p.apr) %></td><td class="r"><%= pct(p.k, 0) %></td><td class="r"><%= p.stashes %></td></tr>
-          <% }) %>
-        </table></div>
-      </details>
-    <% } %>
+  <% if (!vaults) { %><p class="info">No staking numbers from Pepe yet. <a href="/staking">Staking dashboard ›</a></p><% } else {
+       const ap = (f) => f == null ? '—' : pct(f); %>
+    <div class="tbl"><table>
+      <tr><th>Vault</th><th class="r">Share price</th><th class="r">APR 7d</th><th class="r">APR 30d</th></tr>
+      <% VK.forEach((k) => { const a = (vaults.apr || {})[k] || {}; %>
+        <tr><td><%= VN[k] %></td><td class="r"><%= (Number((vaults.prices || {})[k]) || 0).toFixed(4) %></td>
+          <td class="r <%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= ap(a[7]) %></td><td class="r <%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= ap(a[30]) %></td></tr>
+      <% }) %>
+    </table></div>
+    <p class="info"><%- vaults.next_epoch ? 'Next cut-off in ' + cd(vaults.next_epoch) + ' · ' : '' %><a href="/staking">Full staking dashboard ›</a></p>
   <% } %>
 
   <!-- ───────── Loans ───────── -->
@@ -330,13 +312,12 @@
     <h2>ADMIN · ALL STASHES</h2>
     <% if (!admin.stashes.length) { %><p class="info">No stashes.</p><% } else { %>
       <div class="tbl"><table>
-        <tr><th>Stash</th><th class="r">Balance</th><th class="r">Staked</th><th class="r">Free</th><th class="r">Earned</th><th>Members</th></tr>
+        <tr><th>Stash</th><th class="r">Balance</th><th class="r">In vaults</th><th>Holdings</th><th>Members</th></tr>
         <% admin.stashes.forEach((s) => { %>
-          <tr><td><%= s.owner %>/<%= s.name %></td><td class="r"><%= fmt(s.balance) %></td><td class="r"><%= fmt(s.staked) %></td><td class="r"><%= fmt(s.free) %></td>
-            <td class="r"><%= fmt(s.earned) %></td><td><%= (s.members || []).join(', ') %></td></tr>
+          <tr><td><%= s.owner %>/<%= s.name %></td><td class="r"><%= fmt(s.balance) %></td><td class="r"><%= fmt(s.vaulted) %></td>
+            <td><%= holdLine(s.hold) %></td><td><%= (s.members || []).join(', ') %></td></tr>
         <% }) %>
-        <tr class="tot"><td><%= admin.stashes.length %> stashes</td><td class="r"><%= fmt(admin.totals.balance) %></td><td class="r"><%= fmt(admin.totals.staked) %></td>
-          <td class="r"><%= fmt(admin.totals.balance - admin.totals.staked) %></td><td class="r"><%= fmt(admin.totals.earned) %></td><td></td></tr>
+        <tr class="tot"><td><%= admin.stashes.length %> stashes</td><td class="r"><%= fmt(admin.totals.balance) %></td><td class="r"><%= fmt(admin.totals.vaulted) %></td><td></td><td></td></tr>
       </table></div>
     <% } %>
   <% } %>

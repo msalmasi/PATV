@@ -1,13 +1,15 @@
-// wallet.js — a signed-in user's PAT wallet on PATV (/wallet): stashes, staking, loans, the Federal
-// Reserve, and market positions.
+// wallet.js — a signed-in user's PAT wallet on PATV (/wallet): stashes, vault stakes, loans, the
+// Federal Reserve, and market positions.
 //
-// Stashes, staking and loans run in Pepe; he pushes a full snapshot of each here whenever one
+// Vault staking has its own snapshot and page (staking.js, /staking); the wallet shows a summary and
+// each stash's holdings from it. Stashes and loans run in Pepe; he pushes a full snapshot of each here whenever one
 // changes (POST /api/wallet/stashes and /api/wallet/loans). We keep only the latest snapshot of each
 // (table wallet_snapshots, one row per key). Everything a user does here goes through the website
 // action queue (actions.js, POST /act), which Pepe runs as the user's linked Camfrog name.
 const { runQuery, getQuery } = require("./dbUtils");
 const markets = require("./markets");
 const actions = require("./actions");
+const staking = require("./staking");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS wallet_snapshots (
   key TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER)`).catch(() => {});
@@ -25,19 +27,8 @@ function cleanStashes(body) {
     balance: Math.floor(num(s.balance)), staked: Math.floor(num(s.staked)), earned: Math.floor(num(s.earned)),
     created: num(s.created) || null, closed: num(s.closed) || null,
   })).filter((s) => s.name && s.owner);
-  const k = body.staking || {};
-  const staking = {
-    staked: Math.floor(num(k.staked)), k: num(k.k), apr: num(k.apr), apr_min: num(k.apr_min), apr_max: num(k.apr_max),
-    topup: !!k.topup, pool: Math.floor(num(k.pool)), paid7: Math.floor(num(k.paid7)), inflow7: Math.floor(num(k.inflow7)),
-    topup7: Math.floor(num(k.topup7)), potential_apr: k.potential_apr == null ? null : num(k.potential_apr),
-    next_pay: num(k.next_pay) || null,
-    payouts: (Array.isArray(k.payouts) ? k.payouts : []).slice(-90).map((p) => ({
-      id: p.id == null ? null : str(p.id, 40), ts: num(p.ts), paid: Math.floor(num(p.paid)), from_pool: Math.floor(num(p.from_pool)),
-      topup: Math.floor(num(p.topup)), inflow: Math.floor(num(p.inflow)), avg_staked: Math.floor(num(p.avg_staked)),
-      apr: num(p.apr), k: num(p.k), stashes: Math.floor(num(p.stashes)),
-    })),
-  };
-  return { stashes, staking };
+  // (the old fee-share `staking` object is no longer stored: vault staking lives in staking.js)
+  return { stashes };
 }
 
 function cleanLoans(body) {
@@ -108,14 +99,16 @@ function register(app, { isBotToken, addUser }) {
       const camfrog = u.camfrogUsername || null;
       const me = camfrog ? low(camfrog) : null;
       const isAdmin = u.class === "Admin";
-      const st = (await load("stashes")) || { stashes: [], staking: null };
+      const st = (await load("stashes")) || { stashes: [] };
+      const sk = await staking.latest(); // vault staking snapshot (staking.js)
       const ln = (await load("loans")) || { loans: [], requests: [], reserve: null };
       const open = (st.stashes || []).filter((s) => !s.closed);
 
       // stashes I own or belong to; `ref` is how the chat command names it for me
       const myStashes = me ? open.filter((s) => low(s.owner) === me || (s.members || []).some((m) => low(m) === me)).map((s) => {
         const owner = low(s.owner) === me;
-        return { ...s, owner_me: owner, ref: owner ? s.name : `${s.owner}/${s.name}`, free: s.balance - s.staked };
+        const p = staking.positionFor(sk, s);
+        return { ...s, owner_me: owner, ref: owner ? s.name : `${s.owner}/${s.name}`, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
       }).sort((a, b) => (b.owner_me - a.owner_me) || (b.balance - a.balance)) : [];
 
       const mineLoan = (l) => me && (low(l.borrower) === me || low(l.lender) === me);
@@ -143,10 +136,13 @@ function register(app, { isBotToken, addUser }) {
 
       let admin = null;
       if (isAdmin) {
-        const all = open.slice().sort((a, b) => b.balance - a.balance).map((s) => ({ ...s, free: s.balance - s.staked }));
+        const all = open.slice().sort((a, b) => b.balance - a.balance).map((s) => {
+          const p = staking.positionFor(sk, s);
+          return { ...s, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
+        });
         admin = {
           stashes: all,
-          totals: all.reduce((t, s) => ({ balance: t.balance + s.balance, staked: t.staked + s.staked, earned: t.earned + s.earned }), { balance: 0, staked: 0, earned: 0 }),
+          totals: all.reduce((t, s) => ({ balance: t.balance + s.balance, vaulted: t.vaulted + s.vaulted }), { balance: 0, vaulted: 0 }),
           pending: (ln.requests || []).filter((r) => r.status === "pending" || r.status === "approving").sort((a, b) => (a.created || 0) - (b.created || 0)),
           reserveLoans: (ln.loans || []).filter((l) => l.reserve && OPEN.has(l.status)).map((l) => ({ ...l, ref: `L${l.id}`, left: Math.max(0, l.owed - l.paid) }))
             .sort((a, b) => (a.due || 0) - (b.due || 0)),
@@ -155,7 +151,7 @@ function register(app, { isBotToken, addUser }) {
 
       res.render("wallet", {
         user: u.username, signedIn: true, msg, camfrog, isAdmin, now: Date.now() / 1000,
-        bal: Number(u.points_balance) || 0, myStashes, staking: st.staking || null, stashesUpdated: st.updated || null,
+        bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
         borrowed, lent, loanHistory, myRequests, reserve: ln.reserve || null, positions, admin,
         acts: await actions.recentFor(req.user.userId, "wallet"),
       });

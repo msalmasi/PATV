@@ -1,0 +1,257 @@
+<%- include('layout', { title: 'Staking', user: user}) %>
+<style>
+  .sk { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
+  .sk a { color: #81c784; }
+  .sk h1 { text-align: center; margin-bottom: 4px; }
+  .sk h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 30px 0 10px; line-height: 1.6; }
+  .sk h3 { margin: 18px 0 8px; font-size: 15px; color: #ddd; }
+  .sk .center { text-align: center; }
+  .sk .info { color: #888; font-size: 13px; line-height: 1.6; }
+  .sk .explain { background: #0d0d0d; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; color: #bbb; font-size: 13px; line-height: 1.55; margin: 0 0 12px; }
+  .sk .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .sk .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+  .sk .card .vname { font-weight: bold; color: #fff; font-size: 16px; }
+  .sk .card .price { font-size: 26px; color: #ffd700; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .sk .card .price small { font-size: 12px; color: #888; font-weight: normal; }
+  .sk .kv { display: grid; grid-template-columns: auto auto; gap: 3px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .sk .kv span { color: #888; } .sk .kv b { color: #ddd; text-align: right; font-weight: normal; }
+  .sk .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .sk .stat { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .sk .stat span { display: block; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .sk .stat b { color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .sk .stat em { display: block; color: #888; font-size: 12px; font-style: normal; }
+  .sk .gold { color: #ffd700 !important; } .sk .up { color: #81c784 !important; } .sk .down { color: #e57373 !important; }
+  .sk .chart { background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 8px; }
+  .sk .chart svg { display: block; width: 100%; height: auto; }
+  .sk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #ccc; margin-top: 6px; }
+  .sk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .sk .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
+  .sk table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .sk th, .sk td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; vertical-align: top; overflow-wrap: normal; }
+  .sk td { color: #ddd; } .sk th { color: #888; font-weight: normal; white-space: nowrap; }
+  .sk td.r, .sk th.r { text-align: right; white-space: nowrap; }
+  .sk tr.tot td { color: #ffd700; font-weight: bold; border-top: 1px solid #333; }
+  .sk .rev { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .sk .rev .card h4 { margin: 0; color: #fff; font-size: 14px; }
+  .sk .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .sk .tabs label { background: #1c1c1c; color: #ccc; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  .sk input.tabsel { display: none; }
+  .sk #rv7:checked ~ .tabs label[for=rv7], .sk #rv30:checked ~ .tabs label[for=rv30] { background: #4caf50; color: #fff; }
+  .sk .rvp { display: none; }
+  .sk #rv7:checked ~ .rvp.d7, .sk #rv30:checked ~ .rvp.d30 { display: block; }
+  .sk form { display: grid; gap: 8px; margin: 0; }
+  .sk .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; margin-top: 12px; }
+  .sk .forms > form { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; align-content: start; }
+  .sk input[type=text], .sk select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 9px; box-sizing: border-box; width: 100%; max-width: 100%; font: inherit; font-size: 14px; }
+  .sk button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; font-weight: bold; }
+  .sk button.alt { background: #333; color: #ddd; }
+  .sk .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; }
+  .sk .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; display: inline-block; white-space: nowrap; }
+  .sk code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+</style>
+<%
+  const V = {
+    bank:  { icon: '🏦', name: 'Bank',         color: '#64b5f6', acct: 'bank' },
+    house: { icon: '🎰', name: 'House',        color: '#e57373', acct: 'jackpot' },
+    mm:    { icon: '📈', name: 'Market maker', color: '#ffd54f', acct: 'mm' },
+    auto:  { icon: '🤖', name: 'Auto',         color: '#4caf50', acct: null },
+  };
+  const KEYS = ['bank', 'house', 'mm', 'auto'];
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString();
+  const pct = (f, d) => ((Number(f) || 0) * 100).toFixed(d == null ? 1 : d) + '%';
+  const apr = (f) => f == null ? '—' : pct(f);
+  const price = (p) => (Number(p) || 0).toFixed(4);
+  const day = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : '';
+  const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s > 0 ? Math.max(1, Math.floor(s/60)) + 'm' : 'now'; };
+  const cd = (t) => '<span data-until="' + Number(t) + '">' + left(t) + '</span>';
+  const amb = (v) => v == null ? '—' : typeof v === 'boolean' ? (v ? 'on' : 'off') : Math.abs(v) <= 1 && v !== 0 ? pct(v) : fmt(v);
+  const hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/staking"><input type="hidden" name="tag" value="staking">';
+  const vaultSelect = (sel) => '<select name="a3">' + KEYS.map((k) => '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + V[k].icon + ' ' + V[k].name + '</option>').join('') + '</select>';
+%>
+<div class="sk">
+  <h1>Staking</h1>
+  <p class="explain">Stashes can stake PAT into the protocol's vaults and own a slice of what they earn.
+    The <b>🏦 Bank</b> lends to players, the <b>🎰 House</b> banks the casino games and the jackpot, and the <b>📈 Market maker</b> seeds and trades the prediction markets.
+    Each vault is priced per share: its value (NAV) divided by its shares, so the share price rises as the vault takes in fees and profits and falls when it pays out.
+    <b>🤖 Auto</b> spreads itself over the three by target weights. Stakes and withdrawals run once a day at the cut-off, at that day's price.
+    <a href="/economy#protocol">How the protocol works ›</a></p>
+
+  <%- include('partials/actions', { acts, msg }) %>
+
+<% if (!snap) { %>
+  <p class="info center">No staking numbers from Pepe yet.</p>
+<% } else {
+     const s = snap.settings || {};
+     const share = (k) => snap.nav[k] ? (snap.staked[k] || 0) / snap.nav[k] : 0;
+%>
+  <div class="stats">
+    <div class="stat"><span>Next cut-off</span><b><%- snap.next_epoch ? cd(snap.next_epoch) : '—' %></b><% if (snap.next_epoch) { %><em><%= when(snap.next_epoch) %> UTC</em><% } %></div>
+    <div class="stat"><span>Pending requests</span><b><%= pending.length %></b></div>
+    <div class="stat"><span>Total in vaults</span><b class="gold"><%= fmt((snap.nav.bank || 0) + (snap.nav.house || 0) + (snap.nav.mm || 0)) %></b></div>
+    <div class="stat"><span>Staked by stashes</span><b class="up"><%= fmt((snap.staked.bank || 0) + (snap.staked.house || 0) + (snap.staked.mm || 0)) %></b></div>
+  </div>
+
+  <!-- ───────── Vaults ───────── -->
+  <h2>VAULTS</h2>
+  <div class="grid">
+    <% KEYS.forEach((k) => { const a = (snap.apr || {})[k] || {}; %>
+      <div class="card" style="border-top: 3px solid <%= V[k].color %>">
+        <span class="vname"><%= V[k].icon %> <%= V[k].name %></span>
+        <span class="price"><%= price(snap.prices[k]) %> <small>PAT / share</small></span>
+        <div class="kv">
+          <% if (k === 'auto') { %>
+            <span>Value</span><b><%= fmt(snap.auto_nav) %></b>
+          <% } else { %>
+            <span>Value (NAV)</span><b><%= fmt(snap.nav[k]) %></b>
+            <span>Stakers' share</span><b><%= pct(share(k)) %></b>
+          <% } %>
+          <span>APR 7 days</span><b class="<%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= apr(a[7]) %></b>
+          <span>APR 30 days</span><b class="<%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= apr(a[30]) %></b>
+          <% if (k === 'auto') { %>
+            <span>Target split</span><b><%= ['bank', 'house', 'mm'].map((t) => V[t].icon + ' ' + pct(snap.targets[t], 0)).join(' ') %></b>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+  <div class="stats" style="margin-top:12px">
+    <div class="stat"><span>🏦 Bank cash</span><b><%= fmt(snap.bank_cash) %></b><em><%= fmt(Math.max(0, snap.nav.bank - snap.bank_cash)) %> lent out</em></div>
+    <div class="stat"><span>📈 Market maker cash</span><b><%= fmt(snap.mm_cash) %></b><em><%= fmt(Math.max(0, snap.nav.mm - snap.mm_cash)) %> committed to markets</em></div>
+    <div class="stat"><span>🎟️ Lotto pot</span><b class="gold"><%= fmt(snap.lotto_pot) %></b></div>
+  </div>
+  <p class="info">Settings: APR ceiling <b><%= amb(s.ceil) %></b> · floor <b><%= amb(s.floor) %></b> · Reserve top-up <b><%= amb(s.topup) %></b> ·
+    stakers can own up to <b><%= s.staker_max == null ? '—' : pct(s.staker_max, 0) %></b> of a vault ·
+    Auto bands: Bank ≥ <b><%= s.bank_min == null ? '—' : pct(s.bank_min, 0) %></b>, House ≤ <b><%= s.house_max == null ? '—' : pct(s.house_max, 0) %></b>, Market maker ≤ <b><%= s.mm_max == null ? '—' : pct(s.mm_max, 0) %></b>.
+    <% if (snap.updated) { %>Updated <%= when(snap.updated / 1000) %> UTC.<% } %></p>
+
+  <!-- ───────── Share price chart ───────── -->
+  <h2>SHARE PRICE</h2>
+  <% const ts = chart.ts;
+     const vals = [];
+     KEYS.forEach((k) => (chart.series[k] || []).forEach((v) => { if (v != null) vals.push(v); }));
+     if (ts.length < 2 || !vals.length) { %>
+    <p class="info">The chart starts after the second daily cut-off.</p>
+  <% } else {
+       const W = 640, H = 260, L = 66, R = 12, T = 12, B = 32;
+       let lo = Math.min(1, ...vals), hi = Math.max(1, ...vals);
+       if (hi - lo < 0.002) { hi += 0.001; lo -= 0.001; }
+       const padv = (hi - lo) * 0.08; lo -= padv; hi += padv;
+       const t0 = ts[0], t1 = ts[ts.length - 1];
+       const X = (t) => (L + (t - t0) / (t1 - t0) * (W - L - R)).toFixed(1);
+       const Y = (v) => (T + (hi - v) / (hi - lo) * (H - T - B)).toFixed(1);
+       const ticks = [0, 1, 2, 3, 4].map((i) => lo + (hi - lo) * i / 4);
+       const segs = (arr) => { const out = []; let cur = []; arr.forEach((v, i) => { if (v == null) { if (cur.length) out.push(cur); cur = []; } else cur.push(X(ts[i]) + ',' + Y(v)); }); if (cur.length) out.push(cur); return out; };
+       const xl = [0, Math.floor((ts.length - 1) / 2), ts.length - 1]; %>
+    <div class="chart">
+      <svg viewBox="0 0 <%= W %> <%= H %>" role="img" aria-label="Share price per vault, normalised to 1.0 at the first cut-off">
+        <% ticks.forEach((v) => { %>
+          <line x1="<%= L %>" y1="<%= Y(v) %>" x2="<%= W - R %>" y2="<%= Y(v) %>" stroke="#1f1f1f"/>
+          <text x="<%= L - 6 %>" y="<%= Number(Y(v)) + 6 %>" fill="#888" font-size="17" text-anchor="end"><%= v.toFixed(3) %></text>
+        <% }) %>
+        <line x1="<%= L %>" y1="<%= Y(1) %>" x2="<%= W - R %>" y2="<%= Y(1) %>" stroke="#444" stroke-dasharray="4 4"/>
+        <line x1="<%= L %>" y1="<%= T %>" x2="<%= L %>" y2="<%= H - B %>" stroke="#333"/>
+        <line x1="<%= L %>" y1="<%= H - B %>" x2="<%= W - R %>" y2="<%= H - B %>" stroke="#333"/>
+        <% xl.forEach((i, n) => { %>
+          <text x="<%= X(ts[i]) %>" y="<%= H - 6 %>" fill="#888" font-size="17" text-anchor="<%= n === 0 ? 'start' : n === 2 ? 'end' : 'middle' %>"><%= day(ts[i]) %></text>
+        <% }) %>
+        <% KEYS.forEach((k) => segs(chart.series[k] || []).forEach((pts) => { %>
+          <polyline fill="none" stroke="<%= V[k].color %>" stroke-width="2" stroke-linejoin="round" points="<%= pts.join(' ') %>"/>
+        <% })) %>
+      </svg>
+      <div class="legend">
+        <% KEYS.forEach((k) => { const sr = (chart.series[k] || []).filter((v) => v != null); const last = sr[sr.length - 1]; %>
+          <span><i style="background: <%= V[k].color %>"></i><%= V[k].name %><%= last != null ? ' ' + ((last - 1) * 100 >= 0 ? '+' : '') + ((last - 1) * 100).toFixed(2) + '%' : '' %></span>
+        <% }) %>
+        <span style="margin-left:auto;color:#888">1.0 = price at <%= day(t0) %> · <%= ts.length %> cut-offs</span>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- ───────── Revenue by source ───────── -->
+  <h2>REVENUE BY SOURCE</h2>
+  <% if (!rev.length) { %><p class="info">No cut-offs yet.</p><% } else { %>
+    <input class="tabsel" type="radio" name="rv" id="rv7" checked>
+    <input class="tabsel" type="radio" name="rv" id="rv30">
+    <div class="tabs"><label for="rv7">Last 7 days</label><label for="rv30">Last 30 days</label></div>
+    <% rev.forEach((r) => { %>
+      <div class="rvp d<%= r.days %>">
+        <div class="rev">
+          <% [['bank', V.bank.icon + ' Bank'], ['jackpot', V.house.icon + ' House'], ['mm', V.mm.icon + ' Market maker'], ['lotto', '🎟️ Lotto']].forEach(([acct, title]) => { const a = r.accounts[acct]; %>
+            <div class="card">
+              <h4><%= title %></h4>
+              <div class="tbl"><table>
+                <% if (!a.in.length && !a.out.length) { %><tr><td style="color:#888">Nothing moved.</td></tr><% } %>
+                <% a.in.forEach((x) => { %><tr><td><%= x.k %></td><td class="r up">+<%= fmt(x.v) %></td></tr><% }) %>
+                <% a.out.forEach((x) => { %><tr><td><%= x.k %></td><td class="r down">−<%= fmt(x.v) %></td></tr><% }) %>
+                <tr class="tot"><td>Net</td><td class="r <%= a.net >= 0 ? 'up' : 'down' %>"><%= (a.net >= 0 ? '+' : '−') + fmt(Math.abs(a.net)) %></td></tr>
+              </table></div>
+            </div>
+          <% }) %>
+        </div>
+        <p class="info">PAT in (revenue) and out (costs and payouts) per account over the last <%= r.epochs %> daily cut-off<%= r.epochs === 1 ? '' : 's' %>. Stakes and withdrawals aren't counted here.</p>
+      </div>
+    <% }) %>
+  <% } %>
+
+  <!-- ───────── Your stakes ───────── -->
+  <h2>YOUR STAKES</h2>
+  <% if (!signedIn) { %>
+    <p class="info"><a href="/login">Sign in</a> to see and manage your stashes' stakes.</p>
+  <% } else if (!camfrog) { %>
+    <p class="hint">Link your Camfrog name (<code>!verify</code>) to stake from here — Pepe runs it as you.</p>
+  <% } else if (!mine.length) { %>
+    <p class="info">You don't own or share a stash yet. <a href="/wallet">Create one in your wallet ›</a></p>
+  <% } else { %>
+    <div class="tbl"><table>
+      <tr><th>Stash</th><th>Vault</th><th class="r">Shares</th><th class="r">Price</th><th class="r">Value</th></tr>
+      <% let grand = 0; mine.forEach((m) => { const rows = KEYS.filter((k) => m.hold[k]); grand += m.total; %>
+        <% if (!rows.length) { %>
+          <tr><td><%= m.owner %>/<%= m.name %></td><td colspan="4" style="color:#888">nothing staked</td></tr>
+        <% } %>
+        <% rows.forEach((k, i) => { %>
+          <tr><td><%= i === 0 ? m.owner + '/' + m.name : '' %></td><td><%= V[k].icon %> <%= V[k].name %></td>
+            <td class="r"><%= (Number(m.hold[k].shares) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }) %></td>
+            <td class="r"><%= price(snap.prices[k]) %></td><td class="r"><%= fmt(m.hold[k].value) %></td></tr>
+        <% }) %>
+        <% m.pending.forEach((q) => { %>
+          <tr><td></td><td colspan="4" style="color:#e8d9a0">⏳ <%= q.kind %> <%= q.amount ? fmt(q.amount) + ' PAT' : q.shares ? q.shares.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' shares' : '' %>
+            <%= q.kind === 'withdraw' ? 'from' : 'into' %> <%= (V[q.vault] || { name: q.vault }).name %> · <%= q.state || 'queued' %><%= q.ts ? ' · ' + when(q.ts) + ' UTC' : '' %></td></tr>
+        <% }) %>
+      <% }) %>
+      <tr class="tot"><td>Total</td><td></td><td></td><td></td><td class="r"><%= fmt(grand) %></td></tr>
+    </table></div>
+
+    <div class="forms">
+      <form method="post" action="/act"><%- hidden('stash') %>
+        <b>📥 Stake</b>
+        <input type="hidden" name="a0" value="stake">
+        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner %>/<%= m.name %></option><% }) %></select>
+        <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
+        <%- vaultSelect('auto') %>
+        <button type="submit">Stake</button>
+        <span class="info">Moves PAT from the stash into the vault at the next daily cut-off, at that day's share price.</span>
+      </form>
+      <form method="post" action="/act"><%- hidden('stash') %>
+        <b>📤 Unstake</b>
+        <input type="hidden" name="a0" value="unstake">
+        <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner %>/<%= m.name %></option><% }) %></select>
+        <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
+        <%- vaultSelect('auto') %>
+        <button class="alt" type="submit">Unstake</button>
+        <span class="info">Runs at the next daily cut-off at that day's price and pays back into the stash. If the vault has no free cash (it's lent out or committed to markets), the withdrawal waits in the queue until it does.</span>
+      </form>
+    </div>
+  <% } %>
+<% } %>
+
+  <script>
+    (function () {
+      const fmt = (s) => s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s >= 60 ? Math.floor(s/60) + 'm ' + (s%60) + 's' : s > 0 ? s + 's' : 'now';
+      const tick = () => document.querySelectorAll('[data-until]').forEach((el) => { el.textContent = fmt(Math.max(0, Math.round(Number(el.dataset.until) - Date.now() / 1000))); });
+      tick(); setInterval(tick, 1000);
+    })();
+  </script>
+</div>
+</body>
+</html>
