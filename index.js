@@ -1474,6 +1474,41 @@ async function resolveCounterparty(name) {
   }
 }
 
+// ── Idempotency for bot money routes ──
+// A bot that retries a request whose response it never saw (timeout, restart) must not move PAT
+// twice. Callers may send `idempotency_key` (or an Idempotency-Key header); the first request with a
+// key claims it, and any repeat gets the original response back instead of running again.
+const idemReady = runQuery(`CREATE TABLE IF NOT EXISTS idempotency_keys (
+  key TEXT PRIMARY KEY, endpoint TEXT NOT NULL, status INTEGER, body TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`).catch(() => {});
+function idemKey(req) {
+  const k = (req.body && req.body.idempotency_key) || req.get("Idempotency-Key");
+  return k ? String(k).slice(0, 120) : null;
+}
+// Returns {replay: true} after sending the stored response, or {replay: false, done(status, body)}.
+async function idemBegin(req, res, endpoint) {
+  const key = idemKey(req);
+  if (!key) return { replay: false, done: () => {}, fail: () => {} };
+  await idemReady;
+  const claimed = await runQuery("INSERT OR IGNORE INTO idempotency_keys (key, endpoint) VALUES (?, ?)", [key, endpoint]);
+  if (!claimed || claimed.changes === 0) {
+    const prev = await getQuery("SELECT status, body FROM idempotency_keys WHERE key = ?", [key]);
+    if (prev.length && prev[0].status) {
+      res.status(prev[0].status).json(JSON.parse(prev[0].body || "{}"));
+    } else {
+      res.status(409).json({ ok: false, error: "in_progress" });   // the first attempt is still running
+    }
+    return { replay: true };
+  }
+  return {
+    replay: false,
+    done: (status, body) => runQuery("UPDATE idempotency_keys SET status = ?, body = ? WHERE key = ?",
+                                     [status, JSON.stringify(body || {}), key]).catch(() => {}),
+    // a crash releases the key so a retry can run (nothing was committed)
+    fail: () => runQuery("DELETE FROM idempotency_keys WHERE key = ? AND status IS NULL", [key]).catch(() => {}),
+  };
+}
+
 // ── Wager escrow for bot-run games (duels, brawls) ──
 // charge = atomically lock a stake (can't be tipped out afterward); payout = release
 // winnings/refund. Bot-token gated. The atomic conditional debit is what makes escrow safe.
@@ -1483,24 +1518,28 @@ app.post("/api/wager/charge", async (req, res) => {
   const reason = ((req.body && req.body.reason) || "Wager").toString().slice(0, 40);
   if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
   if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
+  const idem = await idemBegin(req, res, "wager/charge");
+  if (idem.replay) return;
+  const reply = (status, body) => { idem.done(status, body); return res.status(status).json(body); };
   try {
     const users = await getQuery("SELECT userId, casino_banned FROM users WHERE username = ?", [username]);
-    if (!users.length) return res.status(404).json({ ok: false, error: "no_user" });
+    if (!users.length) return reply(404, { ok: false, error: "no_user" });
     const userId = users[0].userId;
     // Casino-banned users can't be charged for casino games (blackjack/hold'em/poker/wheel).
     if (users[0].casino_banned && /^(blackjack|holdem|poker|wheel)/i.test(reason)) {
-      return res.status(403).json({ ok: false, error: "casino_banned" });
+      return reply(403, { ok: false, error: "casino_banned" });
     }
     // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW.
     const debit = await runQuery(
       "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
       [amount, userId, amount]
     );
-    if (!debit || debit.changes === 0) return res.status(402).json({ ok: false, error: "insufficient" });
+    if (!debit || debit.changes === 0) return reply(402, { ok: false, error: "insufficient" });
     const cp = await resolveCounterparty(req.body.counterparty);
     await runQuery("INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)", [uuidv4(), userId, reason, -amount, cp]);
-    res.json({ ok: true });
+    reply(200, { ok: true });
   } catch (e) {
+    idem.fail();
     console.error("wager charge error:", e);
     res.status(500).json({ ok: false, error: "server_error" });
   }
@@ -1512,14 +1551,18 @@ app.post("/api/wager/payout", async (req, res) => {
   const reason = ((req.body && req.body.reason) || "Winnings").toString().slice(0, 40);
   if (password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false, error: "unauthorized" });
   if (!username || !Number.isFinite(amount) || amount <= 0) return res.status(400).json({ ok: false, error: "bad_request" });
+  const idem = await idemBegin(req, res, "wager/payout");
+  if (idem.replay) return;
   try {
     const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
-    if (!users.length) return res.status(404).json({ ok: false, error: "no_user" });
+    if (!users.length) { idem.done(404, { ok: false, error: "no_user" }); return res.status(404).json({ ok: false, error: "no_user" }); }
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, users[0].userId]);
     const cp = await resolveCounterparty(req.body.counterparty);
     await runQuery("INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)", [uuidv4(), users[0].userId, reason, amount, cp]);
+    idem.done(200, { ok: true });
     res.json({ ok: true });
   } catch (e) {
+    idem.fail();
     console.error("wager payout error:", e);
     res.status(500).json({ ok: false, error: "server_error" });
   }
@@ -3756,14 +3799,26 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
     }
   
     const cp = await resolveCounterparty(req.body.counterparty);
+    const idem = await idemBegin(req, res, "bonus/chatwinner");
+    if (idem.replay) return;
     try {
       // Start a transaction
       const transactionId = uuidv4();
       const bonusId = uuidv4();
       await runQuery("BEGIN TRANSACTION");
   
-      // Add points to the winner's points balance
-      await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+      // Credit, or debit only what the balance covers: a deduction can never take anyone below zero.
+      const amt = Number(amount);
+      const upd = amt < 0
+        ? await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ? AND points_balance >= ?", [amt, userId, -amt])
+        : await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amt, userId]);
+      if (!upd || upd.changes === 0) {
+        await runQuery("ROLLBACK");
+        const body = amt < 0 ? { success: false, error: "insufficient" } : { success: false, error: "no_user" };
+        const status = amt < 0 ? 402 : 404;
+        idem.done(status, body);
+        return res.status(status).json(body);
+      }
   
       // Insert into bonus_winners table   
       await runQuery(
@@ -3780,10 +3835,12 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
       // Commit the transaction
       await runQuery("COMMIT");
   
+      idem.done(200, { message: "Bonus winner logged and points awarded successfully" });
       res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
     } catch (error) {
       // Rollback in case of error
       await runQuery("ROLLBACK");
+      idem.fail();
       console.error("Failed to process bonus winner:", error);
       res.status(500).send("Failed to process bonus winner");
     }
