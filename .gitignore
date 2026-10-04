@@ -20,4 +20,5 @@ myapp.db.backup_phantom_cleanup_20260410_153639
 # Runtime data on the server - never deploy over it
 uploads/
 backups/
+media/
 *.bak

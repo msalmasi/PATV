@@ -1,0 +1,59 @@
+<%- include('layout', { title: 'Prediction Markets', user: user}) %>
+<style>
+  .mk { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .mk h1 { text-align: center; margin-bottom: 4px; }
+  .mk .sub { text-align: center; color: #9a9; margin: 0 0 22px; }
+  .mk h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 26px 0 10px; }
+  .mk .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; display: block; color: inherit; text-decoration: none; }
+  .mk .card:hover { border-color: #4caf50; }
+  .mk .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+  .mk .q { font-weight: bold; font-size: 16px; color: #fff; }
+  .mk .ref { color: #81c784; font-family: monospace; }
+  .mk .info { color: #888; font-size: 13px; margin-top: 2px; }
+  .mk .opts { display: grid; gap: 6px; margin-top: 10px; }
+  .mk .opt { display: grid; grid-template-columns: minmax(70px, 140px) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
+  .mk .bar { height: 10px; background: #1c1c1c; border-radius: 5px; overflow: hidden; }
+  .mk .bar span { display: block; height: 100%; background: #4caf50; }
+  .mk .opt.won .bar span { background: #ffd700; }
+  .mk .num { color: #ccc; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mk .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; }
+  .mk .pill.open { border-color: #4caf50; color: #81c784; }
+  .mk .pill.closed, .mk .pill.settling { border-color: #e0a030; color: #e0a030; }
+  .mk .pill.void { color: #888; }
+  .mk .empty { color: #888; text-align: center; }
+  .mk .how { color: #888; font-size: 13px; text-align: center; margin-top: 26px; }
+  .mk code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+</style>
+<%
+  const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
+  const card = (m) => { %>
+    <a class="card" href="/markets/<%= m.id %>">
+      <div class="top">
+        <div class="q"><span class="ref"><%= m.ref %></span> <%= m.question %></div>
+        <span class="pill <%= m.status %>"><%= m.status === 'open' ? 'open · closes in ' + left(m.closes) : m.status === 'settled' ? 'settled: ' + m.result : m.status %></span>
+      </div>
+      <div class="info">Pool <%= m.total.toLocaleString() %> PAT · <%= m.bettors %> bettor<%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · <%= m.room || '' %></div>
+      <div class="opts">
+        <% m.options.forEach((o) => { %>
+          <div class="opt <%= o.won ? 'won' : '' %>">
+            <div><%= o.won ? '🏆 ' : '' %><%= o.name %></div>
+            <div class="bar"><span style="width: <%= o.share %>%"></span></div>
+            <div class="num"><%= o.share %>% · <%= o.pool.toLocaleString() %><%= o.mult ? ' · pays ' + o.mult.toFixed(2) + 'x' : '' %></div>
+          </div>
+        <% }) %>
+      </div>
+    </a>
+<% }; %>
+<div class="mk">
+  <h1>Prediction Markets</h1>
+  <p class="sub">Bet PAT on what happens next. Winners split the losing side's pool (minus a 5% fee) in proportion to their stake.</p>
+  <h2>LIVE</h2>
+  <% if (!live.length) { %><p class="empty">No open markets right now.</p><% } %>
+  <% live.forEach((m) => card(m)) %>
+  <h2>RECENTLY SETTLED</h2>
+  <% if (!done.length) { %><p class="empty">Nothing settled yet.</p><% } %>
+  <% done.forEach((m) => card(m)) %>
+  <p class="how">Start one in a Camfrog room: <code>!market new Will X happen? judge @someone closes 2d</code> · bet with <code>!market M3 yes 5k</code></p>
+</div>
+</body>
+</html>

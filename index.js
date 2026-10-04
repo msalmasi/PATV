@@ -150,7 +150,9 @@ const db = new sqlite3.Database("./myapp.db", (err) => {
 module.exports = db;
 
 app.use(cors());
-app.use(express.json()); // Middleware to parse JSON bodies
+// Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
+// with its own larger limit in media.js.
+app.use((req, res, next) => (req.path === "/api/media" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 
 let clients = []; // Keep track of connected clients for SSE
@@ -996,6 +998,10 @@ app.get("/reset-password/:token", async (req, res) => {
 
 // ── PAT history: a readable transaction log (history.js). You see your own; admins/staff can
 // look anyone up by username or Camfrog name. ──
+// Clips & snaps (moved off Netlify) and prediction markets
+require("./media").register(app, { isBotToken, addUser });
+require("./markets").register(app, { isBotToken, addUser });
+
 const history = require("./history");
 app.get("/history", addUser, async (req, res) => {
   const me = req.user;

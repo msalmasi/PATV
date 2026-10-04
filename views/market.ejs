@@ -1,0 +1,55 @@
+<%- include('layout', { title: m ? m.ref + ' · ' + m.question : 'Market not found', user: user}) %>
+<style>
+  .mk { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .mk a { color: #81c784; }
+  .mk .ref { color: #81c784; font-family: monospace; }
+  .mk h1 { font-size: 22px; margin: 18px 0 4px; }
+  .mk .info { color: #888; font-size: 13px; line-height: 1.7; }
+  .mk .opts { display: grid; gap: 8px; margin: 18px 0; }
+  .mk .opt { display: grid; grid-template-columns: minmax(70px, 160px) 1fr auto; gap: 10px; align-items: center; }
+  .mk .bar { height: 12px; background: #1c1c1c; border-radius: 6px; overflow: hidden; }
+  .mk .bar span { display: block; height: 100%; background: #4caf50; }
+  .mk .opt.won .bar span { background: #ffd700; }
+  .mk .num { color: #ccc; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
+  .mk .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
+  .mk table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .mk th, .mk td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; }
+  .mk th { color: #888; font-weight: normal; }
+  .mk td.r, .mk th.r { text-align: right; }
+</style>
+<div class="mk">
+  <p><a href="/markets">‹ All markets</a></p>
+  <% if (!m) { %>
+    <h1>Market not found</h1>
+    <p class="info">It may have been settled more than 60 days ago.</p>
+  <% } else { %>
+    <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
+    <div class="info">
+      <%= m.status === 'open' ? 'Open — closes ' + new Date(m.closes * 1000).toUTCString()
+         : m.status === 'settled' ? 'Settled: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '')
+         : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge' %><br>
+      Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
+    </div>
+    <div class="opts">
+      <% m.options.forEach((o) => { %>
+        <div class="opt <%= o.won ? 'won' : '' %>">
+          <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
+          <div class="bar"><span style="width: <%= o.share %>%"></span></div>
+          <div class="num"><%= o.share %>% · <%= o.pool.toLocaleString() %> PAT<%= o.mult ? ' · pays ' + o.mult.toFixed(2) + 'x' : '' %></div>
+        </div>
+      <% }) %>
+    </div>
+    <% if (m.status === 'open') { %><p class="info">Bet in the room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p><% } %>
+    <h3>Bets</h3>
+    <div class="tbl"><table>
+      <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When (UTC)</th></tr>
+      <% (m.bets || []).slice().sort((a, b) => b.ts - a.ts).forEach((b) => { %>
+        <tr><td><%= b.nick %></td><td><%= b.option %></td>
+            <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%= b.ts ? new Date(b.ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '' %></td></tr>
+      <% }) %>
+      <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888">No bets yet.</td></tr><% } %>
+    </table></div>
+  <% } %>
+</div>
+</body>
+</html>
