@@ -195,8 +195,13 @@ function register(app, { isBotToken, addUser }) {
     const id = parseInt(String(req.params.id).replace(/^m/i, ""), 10);
     if (!req.user || !req.user.userId) return res.redirect("/login");
     await ready; await ordersReady;
-    const outcome = String((req.body || {}).outcome || "");
+    let outcome = String((req.body || {}).outcome || "");
     if (!outcome) return res.redirect(`/markets/${id}?msg=${encodeURIComponent("Pick the winning option (or void).")}`);
+    if (outcome === "void") {
+      const reason = String((req.body || {}).reason || "").replace(/\s+/g, " ").trim().slice(0, 160);
+      if (reason.length < 4) return res.redirect(`/markets/${id}?msg=${encodeURIComponent("Say why you're voiding it (holders and admins see the reason).")}`);
+      outcome = "void " + reason;
+    }
     queue(req, res, id, { kind: "resolve", outcome }, `Sent to Pepe: resolve as ${outcome}. Payouts follow in a few seconds.`);
   });
 

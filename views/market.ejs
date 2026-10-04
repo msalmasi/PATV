@@ -146,8 +146,10 @@
         <b>⚖️ Resolve this market</b>
         <div class="opts-pick">
           <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <%= o.name %> won</label><% }) %>
-          <label><input type="radio" name="outcome" value="void"> void (refund holders)</label>
+          <label><input type="radio" name="outcome" value="void"> void</label>
         </div>
+        <input type="text" name="reason" maxlength="160" placeholder="Reason (required to void)" style="width:100%;box-sizing:border-box">
+        <p class="info" style="margin:0">Void: trading fees are kept, the Federal Reserve takes back its seed first, and holders split what's left — up to what they put in.</p>
         <div class="row"><button type="submit">Resolve</button>
           <span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
       </form>
@@ -221,8 +223,9 @@
         <b>⚖️ Settle this market</b>
         <div class="opts-pick">
           <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <%= o.name %> won</label><% }) %>
-          <label><input type="radio" name="outcome" value="void"> void (refund everyone)</label>
+          <label><input type="radio" name="outcome" value="void"> void (refund every stake in full)</label>
         </div>
+        <input type="text" name="reason" maxlength="160" placeholder="Reason (required to void)" style="width:100%;box-sizing:border-box">
         <div class="row"><button type="submit">Settle</button><span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
       </form>
     <% } %>
