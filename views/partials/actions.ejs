@@ -1,0 +1,27 @@
+<%# Recent website actions for this page. Pass { acts, msg }. Auto-refreshes while any are waiting. %>
+<% if (typeof msg !== 'undefined' && msg) { %><p class="act-notice"><%= msg %></p><% } %>
+<% if (typeof acts !== 'undefined' && acts && acts.length) { %>
+  <div class="act-box">
+    <div class="act-head">Your recent requests to Pepe</div>
+    <% acts.forEach((a) => { %>
+      <div class="act-row act-<%= a.status %>">
+        <span class="act-st"><%= a.status === 'done' ? '✅' : a.status === 'failed' ? '❌' : '⏳' %></span>
+        <span class="act-label"><%= a.label %></span>
+        <span class="act-msg"><%= a.status === 'pending' || a.status === 'claimed' ? 'waiting for Pepe…' : (a.message || '') %></span>
+      </div>
+    <% }) %>
+  </div>
+  <% if (acts.some((a) => a.status === 'pending' || a.status === 'claimed')) { %>
+    <script>setTimeout(() => location.replace(location.pathname + location.search.replace(/[?&]msg=[^&]*/, '')), 4000)</script>
+  <% } %>
+<% } %>
+<style>
+  .act-notice { background: #13200f; border: 1px solid #4caf50; border-radius: 8px; padding: 10px 12px; }
+  .act-box { border: 1px solid #222; border-radius: 10px; background: #0d0d0d; margin: 12px 0; overflow: hidden; }
+  .act-head { font-size: 12px; color: #888; padding: 8px 12px; border-bottom: 1px solid #1c1c1c; }
+  .act-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 8px; padding: 8px 12px; border-bottom: 1px solid #161616; font-size: 13px; }
+  .act-row:last-child { border-bottom: 0; }
+  .act-label { color: #bbb; font-family: monospace; overflow-wrap: anywhere; }
+  .act-msg { grid-column: 2; color: #e0e0e0; overflow-wrap: anywhere; }
+  .act-failed .act-msg { color: #e57373; }
+</style>

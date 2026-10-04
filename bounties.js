@@ -6,6 +6,7 @@
 // few seconds, runs through the same checks as the chat command, and acks. An action carries its
 // id, so one claimed twice (Pepe restarted mid-way) is never applied twice.
 const { runQuery, getQuery } = require("./dbUtils");
+const actions = require("./actions");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS bounties (
   id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, deadline INTEGER, updated INTEGER)`).catch(() => {});
@@ -159,7 +160,14 @@ function register(app, { isBotToken, addUser }) {
     const now = Date.now() / 1000;
     const live = rows.filter((b) => b.status === "open").sort((a, b) => b.total - a.total);
     const done = rows.filter((b) => b.status !== "open").sort((a, b) => (b.resolved || b.deadline) - (a.resolved || a.deadline)).slice(0, 40);
-    res.render("bounties", { user: req.user ? req.user.username : null, live, done, now });
+    let linked = false, acts = [];
+    if (req.user && req.user.userId) {
+      const u = await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]);
+      linked = !!(u[0] && u[0].camfrogUsername);
+      acts = await actions.recentFor(req.user.userId, "bounties");
+    }
+    res.render("bounties", { user: req.user ? req.user.username : null, live, done, now, linked, acts,
+                             msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
   });
 
   app.get("/bounties/:id", addUser, async (req, res) => {

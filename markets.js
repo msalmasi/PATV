@@ -5,6 +5,16 @@
 // and renders /markets and /markets/:id. Parimutuel maths mirrors pepe_market.py: winners split the
 // losing pool minus the fee, pro rata to their stake.
 const { runQuery, getQuery } = require("./dbUtils");
+const actions = require("./actions");
+
+// Pepe as judge (1.90): keep just the display fields of his ruling
+function cleanAi(ai) {
+  if (!ai || typeof ai !== "object") return null;
+  return { state: String(ai.state || ""), result: ai.result == null ? null : String(ai.result).slice(0, 60),
+           confidence: Number(ai.confidence) || 0, reason: String(ai.reason || "").slice(0, 240),
+           until: Number(ai.until) || 0,
+           disputes: (ai.disputes || []).slice(0, 30).map((d) => ({ nick: String(d.nick || "").slice(0, 60), why: String(d.why || "").slice(0, 160) })) };
+}
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS markets (
   id INTEGER PRIMARY KEY, data TEXT NOT NULL, status TEXT, closes INTEGER, updated INTEGER)`).catch(() => {});
@@ -89,6 +99,7 @@ function register(app, { isBotToken, addUser }) {
           creator: m.creator || "", judge: m.judge || "", room: m.room || "", status: m.status || "open",
           created: Number(m.created) || 0, closes: Number(m.closes) || 0, result: m.result || null,
           settled_by: m.settled_by || null, fee: Number(m.fee) || 0, ended: Number(m.ended) || null,
+          ai_judge: !!m.ai_judge, ai: cleanAi(m.ai), ...(m.model === "pool" ? { model: "pool" } : {}),
           bets: (m.bets || []).map((x) => ({ nick: String(x.nick || ""), option: String(x.option || ""),
                                            amount: Math.floor(Number(x.amount) || 0), ts: Number(x.ts) || 0, web: !!x.web })),
         };
@@ -214,10 +225,18 @@ function register(app, { isBotToken, addUser }) {
 
   app.get("/markets", addUser, async (req, res) => {
     await ready;
-    const rows = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)));
+    const rows = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)))
+      .filter((m) => m.shares);
     const live = rows.filter((m) => LIVE.has(m.status)).sort((a, b) => a.closes - b.closes);
     const done = rows.filter((m) => !LIVE.has(m.status)).sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 40);
-    res.render("markets", { user: req.user ? req.user.username : null, live, done, now: Date.now() / 1000 });
+    let linked = false, acts = [];
+    if (req.user && req.user.userId) {
+      const u = await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]);
+      linked = !!(u[0] && u[0].camfrogUsername);
+      acts = await actions.recentFor(req.user.userId, "markets");
+    }
+    res.render("markets", { user: req.user ? req.user.username : null, live, done, now: Date.now() / 1000, linked, acts,
+                            msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null });
   });
 
   app.get("/markets/:id", addUser, async (req, res) => {
@@ -225,7 +244,7 @@ function register(app, { isBotToken, addUser }) {
     const id = parseInt(String(req.params.id).replace(/^m/i, ""), 10);
     const rows = id ? await getQuery("SELECT data FROM markets WHERE id = ?", [id]) : [];
     if (!rows.length) return res.status(404).render("market", { user: req.user ? req.user.username : null, m: null, now: Date.now() / 1000, orders: [], msg: null, bal: null });
-    let orders = [], bal = null, me = null, judgeMe = false;
+    let orders = [], bal = null, me = null, judgeMe = false, acts = [], inIt = false;
     if (req.user && req.user.userId) {
       await ordersReady;
       orders = await getQuery("SELECT * FROM market_orders WHERE user_id = ? AND market_id = ? ORDER BY id DESC LIMIT 10", [req.user.userId, id]);
@@ -235,9 +254,13 @@ function register(app, { isBotToken, addUser }) {
         me = [u[0].camfrogUsername, u[0].username];
         const raw = JSON.parse(rows[0].data);
         judgeMe = u[0].class === "Admin" || (!!u[0].camfrogUsername && String(raw.judge || "").toLowerCase() === u[0].camfrogUsername.toLowerCase());
+        const cf = String(u[0].camfrogUsername || "").toLowerCase();
+        inIt = !!cf && (Object.keys(raw.positions || {}).includes(cf) || (raw.bets || []).some((b) => String(b.nick).toLowerCase() === cf)
+                        || String(raw.creator || "").toLowerCase() === cf);
       }
+      acts = await actions.recentFor(req.user.userId, "market-" + id);
     }
-    res.render("market", { user: req.user ? req.user.username : null, m: view(JSON.parse(rows[0].data), me), now: Date.now() / 1000, judgeMe,
+    res.render("market", { user: req.user ? req.user.username : null, m: view(JSON.parse(rows[0].data), me), now: Date.now() / 1000, judgeMe, acts, inIt,
                            orders, msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, bal, minBet: MIN_BET });
   });
 }

@@ -1004,6 +1004,13 @@ require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");
 gtf.register(app, { isBotToken, addUser });
 require("./bounties").register(app, { isBotToken, addUser });
+// 1.90: one action queue for everything started on the site, plus the new game pages
+require("./actions").register(app, { isBotToken, addUser });
+require("./lotto").register(app, { isBotToken, addUser });
+require("./polls").register(app, { isBotToken, addUser });
+require("./wagers").register(app, { isBotToken, addUser });
+require("./wallet").register(app, { isBotToken, addUser });
+app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
 
 const history = require("./history");
 app.get("/history", addUser, async (req, res) => {

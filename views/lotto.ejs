@@ -1,0 +1,200 @@
+<%- include('layout', { title: 'Pepe Lotto', user: user}) %>
+<style>
+  .lt { max-width: 920px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .lt a { color: #81c784; }
+  .lt h1 { text-align: center; margin-bottom: 4px; }
+  .lt .sub { text-align: center; color: #9a9; margin: 0 0 18px; }
+  .lt h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 28px 0 10px; line-height: 1.6; }
+  .lt .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; }
+  .lt .hero { text-align: center; display: grid; gap: 6px; }
+  .lt .hero .lbl { color: #888; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .lt .jackpot { font-size: clamp(30px, 9vw, 54px); font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; line-height: 1.1; overflow-wrap: anywhere; }
+  .lt .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
+  .lt .stat { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 8px 10px; }
+  .lt .stat b { display: block; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; }
+  .lt .stat span { color: #888; font-size: 12px; }
+  .lt .closed { color: #e57373; }
+  .lt .open { color: #81c784; }
+  .lt .info { color: #888; font-size: 13px; line-height: 1.6; }
+  .lt .balls { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; vertical-align: middle; }
+  .lt .ball { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%;
+              background: #eee; color: #111; font-weight: bold; font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+  .lt .ball.pb { background: #4caf50; color: #fff; box-shadow: 0 0 0 2px #2e7d32 inset; }
+  .lt .ball.hit { background: #ffd700; color: #111; }
+  .lt .ball.sm { width: 22px; height: 22px; font-size: 11px; }
+  .lt .tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 12px; max-height: 360px; overflow-y: auto; padding: 4px 0; }
+  .lt .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
+  .lt table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .lt th, .lt td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; white-space: nowrap; }
+  .lt th { color: #888; font-weight: normal; }
+  .lt td.r, .lt th.r { text-align: right; }
+  .lt tr.jp td { color: #ffd700; font-weight: bold; }
+  .lt form.buy { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 10px; margin: 10px 0; }
+  .lt form.buy .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .lt form.buy input[type=number] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px; width: 64px; }
+  .lt form.buy input.pbin { border-color: #4caf50; }
+  .lt form.buy button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; }
+  .lt .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  .lt .hint { background: #1a1608; border: 1px solid #5a4a10; border-radius: 8px; padding: 10px 12px; color: #ddd; }
+  .lt .winners { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+  .lt .winners span b { color: #ffd700; }
+  .lt .empty { color: #888; text-align: center; }
+  .lt code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+</style>
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString();
+  const etDate = (ts, withTime) => ts ? new Date(ts * 1000).toLocaleString('en-US', Object.assign({ timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' },
+                                        withTime ? { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' } : {})) : '';
+  const balls = (w, pb, sm, drawn) => { %>
+    <span class="balls"><% (w || []).forEach((n) => { %><span class="ball<%= sm ? ' sm' : '' %><%= drawn && drawn.white.includes(n) ? ' hit' : '' %>"><%= n %></span><% }) %><span class="ball pb<%= sm ? ' sm' : '' %>" title="Pepe Ball"><%= pb %></span></span>
+<% }; %>
+<div class="lt">
+  <h1>Pepe Lotto</h1>
+  <p class="sub">Pick <%= rules.WHITE_PICK %> numbers from 1–<%= rules.WHITE_MAX %> plus a Pepe Ball from 1–<%= rules.BALL_MAX %>. Drawn every Sunday at 9 PM ET.</p>
+
+  <% if (!L) { %>
+    <div class="card"><p class="empty">Pepe hasn't posted the lotto yet — check back after he's next online.</p></div>
+  <% } else {
+       const closeAt = L.next_at - L.close_secs;
+       const latest = L.history[0] || null;
+  %>
+    <div class="card hero">
+      <span class="lbl">Jackpot · draw #<%= L.draw %></span>
+      <span class="jackpot"><%= fmt(L.jackpot) %> PAT</span>
+      <span class="info">Match all <%= rules.WHITE_PICK %> + the Pepe Ball to win it. Split between jackpot winners; rolls over if nobody hits.</span>
+      <div class="stats">
+        <div class="stat"><b id="lt-cd" data-at="<%= L.next_at %>">—</b><span>until the draw · <%= etDate(L.next_at, true) %></span></div>
+        <div class="stat"><b><%= fmt(L.sold) %></b><span>tickets sold this draw</span></div>
+        <div class="stat"><b><%= fmt(L.price) %> PAT</b><span>per ticket</span></div>
+        <div class="stat">
+          <% if (L.sales_open) { %><b class="open" id="lt-close" data-at="<%= closeAt %>">open</b><span>sales close <%= etDate(closeAt, true) %></span>
+          <% } else { %><b class="closed">closed</b><span>sales reopen after the draw</span><% } %>
+        </div>
+      </div>
+    </div>
+
+    <%- include('partials/actions', { acts, msg }) %>
+
+    <h2>YOUR TICKETS THIS DRAW</h2>
+    <% if (!user) { %>
+      <p class="info"><a href="/login">Sign in</a> to see your tickets and buy from here.</p>
+    <% } else if (!me || !me.camfrogUsername) { %>
+      <p class="hint">Link your Camfrog name (<code>!verify</code>) to see your tickets and buy them from the site.</p>
+    <% } else if (!mine || !mine.count) { %>
+      <p class="info">No tickets yet for draw #<%= L.draw %>, <%= me.camfrogUsername %>.</p>
+    <% } else { %>
+      <div class="card">
+        <p class="info" style="margin-top:0"><b style="color:#fff"><%= fmt(mine.count) %></b> ticket<%= mine.count === 1 ? '' : 's' %> for draw #<%= L.draw %><%= mine.count > mine.tickets.length ? ' (showing the first ' + mine.tickets.length + ')' : '' %></p>
+        <div class="tickets"><% mine.tickets.forEach((t) => { %><div><% balls(t[0], t[1], true) %></div><% }) %></div>
+      </div>
+    <% } %>
+
+    <% if (user && me && me.camfrogUsername) { %>
+      <% if (L.sales_open) { %>
+        <p class="info">Your balance: <b style="color:#ffd700"><%= fmt(me.points_balance) %> PAT</b> · tickets are <%= fmt(L.price) %> PAT each.</p>
+        <div class="forms">
+          <form class="buy" method="post" action="/act">
+            <b>Quick pick</b>
+            <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
+            <input type="hidden" name="a0" value="quick">
+            <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
+            <div class="row">
+              <input type="number" name="a1" min="1" max="500" value="1" required aria-label="How many tickets">
+              <span class="info">ticket(s), random numbers</span>
+            </div>
+            <div class="row"><button type="submit">Buy quick picks</button></div>
+          </form>
+          <form class="buy" method="post" action="/act" id="lt-pick">
+            <b>Pick your own</b>
+            <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="lotto">
+            <input type="hidden" name="a4" value="pb">
+            <input type="hidden" name="back" value="/lotto"><input type="hidden" name="tag" value="lotto">
+            <div class="row">
+              <% for (let i = 0; i < rules.WHITE_PICK; i++) { %><input type="number" name="a<%= i %>" min="1" max="<%= rules.WHITE_MAX %>" required aria-label="Number <%= i + 1 %>"><% } %>
+            </div>
+            <div class="row">
+              <span class="info">Pepe Ball</span>
+              <input class="pbin" type="number" name="a5" min="1" max="<%= rules.BALL_MAX %>" required aria-label="Pepe Ball">
+            </div>
+            <p class="info" id="lt-pick-err" style="color:#e57373;margin:0;display:none">Pick <%= rules.WHITE_PICK %> different numbers.</p>
+            <div class="row"><button type="submit">Buy 1 ticket</button></div>
+          </form>
+        </div>
+      <% } else { %>
+        <p class="info">Sales are closed for this draw — they reopen once Pepe draws the numbers.</p>
+      <% } %>
+    <% } %>
+
+    <h2>PRIZES &amp; ODDS</h2>
+    <div class="tbl">
+      <table>
+        <tr><th>Match</th><th class="r">Prize</th><th class="r">Odds</th></tr>
+        <% prizes.forEach((p) => { %>
+          <tr class="<%= p.jackpot ? 'jp' : '' %>">
+            <td><%= p.w %> number<%= p.w === 1 ? '' : 's' %><%= p.ball ? ' + Pepe Ball' : '' %><%= p.jackpot ? ' — JACKPOT' : '' %></td>
+            <td class="r"><%= fmt(p.amount) %> PAT</td>
+            <td class="r"><%= p.odds ? '1 in ' + fmt(p.odds) : '—' %></td>
+          </tr>
+        <% }) %>
+      </table>
+    </div>
+    <% if (anyOdds) { %><p class="info">Odds of winning any prize: about 1 in <%= fmt(anyOdds) %> per ticket.</p><% } %>
+
+    <h2>PAST DRAWS</h2>
+    <% if (!L.history.length) { %>
+      <p class="empty">No draws yet — the first one is <%= etDate(L.next_at, true) %>.</p>
+    <% } else { %>
+      <% if (latest && latest.won && latest.won.length) { %>
+        <div class="card" style="margin-bottom:12px">
+          <p class="info" style="margin-top:0">Top winners of draw #<%= latest.draw %> (<% balls(latest.white, latest.pb, true) %>)</p>
+          <div class="winners">
+            <% latest.won.slice().sort((a, b) => b[1] - a[1]).slice(0, 12).forEach((w) => { %><span><%= w[0] %> <b><%= fmt(w[1]) %></b></span><% }) %>
+          </div>
+        </div>
+      <% } %>
+      <div class="tbl">
+        <table>
+          <tr><th>Draw</th><th>Date</th><th>Numbers</th><th class="r">Tickets</th><th class="r">Winners</th><th class="r">PAT paid</th><th>Jackpot</th></tr>
+          <% L.history.forEach((h) => { %>
+            <tr>
+              <td>#<%= h.draw %></td>
+              <td><%= etDate(h.ts) %></td>
+              <td><% balls(h.white, h.pb, true) %></td>
+              <td class="r"><%= fmt(h.tickets) %></td>
+              <td class="r"><%= fmt(h.winners) %></td>
+              <td class="r"><%= fmt(h.paid) %></td>
+              <td><%= h.jackpot_winners && h.jackpot_winners.length ? h.jackpot_winners.join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : 'rolled over (' + fmt(h.jackpot) + ')' %></td>
+            </tr>
+          <% }) %>
+        </table>
+      </div>
+    <% } %>
+  <% } %>
+
+  <p class="info" style="text-align:center;margin-top:26px">In a Camfrog room: <code>!lotto quick 5</code> or <code>!lotto 3 9 14 27 pb 6</code> · where the PAT goes: <a href="/economy#casino">the PAT economy</a></p>
+</div>
+<script>
+(function () {
+  function left(s) {
+    if (s <= 0) return 'now';
+    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+    return d ? d + 'd ' + h + 'h ' + m + 'm' : h ? h + 'h ' + m + 'm ' + x + 's' : m + 'm ' + x + 's';
+  }
+  var cd = document.getElementById('lt-cd'), cl = document.getElementById('lt-close');
+  function tick() {
+    var now = Math.floor(Date.now() / 1000);
+    if (cd) { var s = +cd.dataset.at - now; cd.textContent = s > 0 ? left(s) : 'drawing…'; }
+    if (cl) { var c = +cl.dataset.at - now; if (c <= 0) { cl.textContent = 'closed'; cl.className = 'closed'; } else cl.textContent = 'open · ' + left(c); }
+  }
+  tick(); setInterval(tick, 1000);
+  var f = document.getElementById('lt-pick');
+  if (f) f.addEventListener('submit', function (e) {
+    var seen = {}, dup = false;
+    for (var i = 0; i < <%= rules.WHITE_PICK %>; i++) { var v = f.elements['a' + i].value; if (seen[v]) dup = true; seen[v] = 1; }
+    document.getElementById('lt-pick-err').style.display = dup ? '' : 'none';
+    if (dup) e.preventDefault();
+  });
+})();
+</script>
+</body>
+</html>

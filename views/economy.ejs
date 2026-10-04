@@ -1,0 +1,519 @@
+<%- include('layout', { title: 'PAT Economy Guide', user: user}) %>
+<style>
+  .eco { max-width: 980px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
+  .eco *, .eco *::before, .eco *::after { box-sizing: border-box; }
+  .eco h1 { text-align: center; margin: 6px 0 4px; }
+  .eco .sub { text-align: center; color: #9a9; margin: 0 auto 22px; max-width: 64ch; line-height: 1.55; }
+  .eco a { color: #81c784; text-decoration: none; }
+  .eco a:hover { color: #a5d6a7; }
+  .eco code { background: #1c1c1c; border: 1px solid #262626; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; color: #e8f5e9; white-space: normal; }
+
+  .eco .toc { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; margin-bottom: 28px; }
+  .eco .toc .lbl { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #ffd700; margin-bottom: 10px; }
+  .eco .toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .eco .toc a { display: inline-block; padding: 5px 10px; border: 1px solid #2a2a2a; border-radius: 14px; font-size: 13px; background: #161616; }
+  .eco .toc a:hover { border-color: #4caf50; }
+  @media (min-width: 900px) {
+    .eco .toc { position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.55); }
+  }
+
+  .eco section { margin: 0 0 34px; scroll-margin-top: 90px; }
+  .eco .kicker { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #4caf50; letter-spacing: .5px; margin-bottom: 6px; }
+  .eco h2 { color: #ffd700; margin: 0 0 8px; font-size: 22px; }
+  .eco h3 { margin: 0 0 6px; font-size: 17px; color: #fff; }
+  .eco p { line-height: 1.6; margin: 0 0 10px; }
+  .eco .lead { color: #bbb; max-width: 72ch; }
+  .eco .new { display: inline-block; font-size: 10px; font-weight: bold; color: #111; background: #81c784; border-radius: 8px; padding: 1px 6px; vertical-align: middle; margin-left: 4px; }
+  .eco .exp { background: #e0a030; }
+
+  .eco .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 14px; margin-top: 12px; }
+  .eco .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .eco .card:hover { border-color: #2e4d2f; }
+  .eco .card p { color: #bbb; font-size: 14px; }
+  .eco .card ul { margin: 0 0 10px; padding-left: 18px; color: #bbb; font-size: 14px; line-height: 1.6; }
+  .eco .cmd { font-size: 13px; color: #9a9; margin: 8px 0 6px; line-height: 1.9; }
+  .eco .goes { font-size: 13px; color: #ccc; border-top: 1px dashed #2a2a2a; padding-top: 8px; margin-top: 8px; line-height: 1.5; }
+  .eco .goes b { color: #ffd700; font-weight: normal; }
+  .eco .wide { grid-column: 1 / -1; }
+
+  .eco .note { margin: 14px 0 0; padding: 12px 16px; border: 1px solid #4caf50; border-radius: 10px; background: #13200f; color: #cfe8cf; font-size: 14px; line-height: 1.55; }
+  .eco .warn { border-color: #e0a030; background: #201a0c; color: #ecdcb5; }
+
+  .eco .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 14px 0 4px; font-size: 13px; }
+  .eco .flow span { background: #161616; border: 1px solid #2a2a2a; border-radius: 8px; padding: 6px 10px; }
+  .eco .flow .arr { border: 0; background: none; color: #4caf50; padding: 0; }
+
+  .eco .tbl { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #222; border-radius: 10px; margin-top: 12px; }
+  .eco table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
+  .eco th, .eco td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1e1e1e; vertical-align: top; }
+  .eco th { background: #161616; color: #ffd700; font-weight: normal; font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .5px; }
+  .eco tr:last-child td { border-bottom: 0; }
+  .eco td.n { white-space: nowrap; color: #81c784; }
+  .eco .cfg { color: #e0a030; font-size: 12px; }
+
+  .eco .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; margin-top: 12px; }
+  .eco .links a { display: block; background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+  .eco .links a:hover { border-color: #4caf50; }
+  .eco .links small { display: block; color: #888; margin-top: 2px; }
+  .eco .top { font-size: 12px; color: #666; text-align: right; margin-top: 8px; }
+  .eco .top a { color: #666; }
+</style>
+<div class="eco" id="top">
+  <h1>💰 The PAT Economy</h1>
+  <p class="sub">Everything you can do with PAT: earn it, gamble it, bet it, lend it, stake it, or steal it.
+    Most of it runs through Pepe in the Camfrog rooms, and a lot of it works right here on the site too.</p>
+
+  <nav class="toc" aria-label="Contents">
+    <div class="lbl">JUMP TO</div>
+    <ul>
+      <li><a href="#pat">🪙 What is PAT</a></li>
+      <li><a href="#flow">🏛️ Where PAT goes</a></li>
+      <li><a href="#casino">🎰 Casino</a></li>
+      <li><a href="#betting">🤝 Wagers &amp; pools</a></li>
+      <li><a href="#markets">📈 Markets</a></li>
+      <li><a href="#judge">🤖 AI judge</a></li>
+      <li><a href="#bounties">🎯 Bounties</a></li>
+      <li><a href="#loans">🏦 Loans</a></li>
+      <li><a href="#stash">🔐 Stashes &amp; staking</a></li>
+      <li><a href="#gtf">🔫 Grand Theft Frog</a></li>
+      <li><a href="#polls">🗳️ Polls</a></li>
+      <li><a href="#web">🌐 On the website</a></li>
+      <li><a href="#fees">🧾 Fees</a></li>
+      <li><a href="#links">🔗 Links</a></li>
+    </ul>
+  </nav>
+
+  <!-- 1. PAT -->
+  <section id="pat">
+    <div class="kicker">THE BASICS</div>
+    <h2>🪙 What PAT is</h2>
+    <p class="lead">PAT (Public Access Token) is the points currency of PATV. It's one balance shared by the website, the
+      Camfrog rooms and Discord, so PAT you win from Pepe in a room is the same PAT you spend on the site.
+      It isn't crypto and it isn't real money, but you can spend it on real prizes in the <a href="/shop">shop</a>.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>💬 Hang out</h3>
+        <p>Chatting in a room enters you in Pepe's automatic raffles, and whoever spends the most time on mic each hour
+          gets a top-mic reward. Chat messages and mic time also earn XP.</p>
+        <div class="cmd"><code>!xp</code> · <code>!level</code></div>
+      </div>
+      <div class="card">
+        <h3>⬆️ Level up</h3>
+        <p>1 XP per chat message, 1 XP per second on mic. Every new level pays a PAT reward that grows with your level,
+          plus a stat point every 10 levels for your heist character.</p>
+      </div>
+      <div class="card">
+        <h3>🏅 Achievements</h3>
+        <p>100 achievements for chatting, mic time, games, heists and more. Each one is a pixel badge on your profile,
+          plus XP and a PAT bonus.</p>
+        <div class="cmd"><code>!achievements</code> · <a href="/achievements">/achievements</a></div>
+      </div>
+      <div class="card">
+        <h3>🎲 Play</h3>
+        <p>Spin the wheel, win at the tables, win trivia, crack a vault, collect on a good bet. Getting tipped counts too:
+          anyone can send you PAT with <code>!tip</code>.</p>
+        <div class="cmd">Broke? <code>!beg</code> for a small handout (only when you're nearly out).</div>
+      </div>
+      <div class="card wide">
+        <h3>👛 Your wallet and history</h3>
+        <p>Your balance shows on your profile. <a href="/history">/history</a> lists every PAT transaction on your account
+          (tips, wins, bets, bonuses), and <code>!history</code> shows your last five in chat.
+          The <a href="/rankings">leaderboard</a> shows the top balances and the <b>total PAT supply</b>: every PAT that
+          exists, in wallets, vaults, escrow and stashes. Link your Camfrog name on your profile (then type
+          <code>!verify</code> with the code) so your room PAT and site PAT are one balance.</p>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 2. Flow -->
+  <section id="flow">
+    <div class="kicker">MONEY FLOW</div>
+    <h2>🏛️ Where PAT goes</h2>
+    <p class="lead">When you pay for something (a spin, a ticket, a fee, a paid command) that PAT doesn't vanish.
+      <b>PAT is never burned.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
+      heist loot and rewards.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>🏛️ The Federal Reserve</h3>
+        <p>The big central vault. It collects most non-gambling spending, pays level-up and achievement rewards,
+          seeds the prediction markets, lends PAT, and is the target of the legendary bank heist.
+          <code>!reserve</code> shows its balance.</p>
+      </div>
+      <div class="card">
+        <h3>🎰 The casino jackpot</h3>
+        <p>The casino's bank. Wheel spins, casino rake, losing bets and lotto tickets go in; it pays the wheel,
+          blackjack wins, the lottery and the casino heist. <code>!jackpot</code> (or <code>!vault</code>) shows what's in it.</p>
+      </div>
+      <div class="card">
+        <h3>🧭 The routing table</h3>
+        <p>Every fee in the game has a row in one table that says where it goes: the Reserve, the casino jackpot,
+          a gang's turf business, or stakers. Each fee can be split, and whatever isn't routed somewhere else lands
+          in the Reserve. The admins tune the splits.</p>
+      </div>
+      <div class="card">
+        <h3>🔒 Escrow</h3>
+        <p>When you stake PAT on something that takes days (a wager, a market, a loan, a bounty, a bingo card) it leaves
+          your wallet straight away and is held in escrow. Every step is recorded, so if Pepe restarts mid-game your
+          PAT is either paid out or refunded: never lost, never paid twice.</p>
+      </div>
+    </div>
+    <div class="flow" aria-hidden="true">
+      <span>You spend PAT</span><span class="arr">→</span><span>Reserve · Jackpot · Turf · Stakers</span><span class="arr">→</span><span>Prizes · Loot · Rewards</span><span class="arr">→</span><span>Your wallet</span>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 3. Casino -->
+  <section id="casino">
+    <div class="kicker">GAMES OF CHANCE</div>
+    <h2>🎰 The casino</h2>
+    <p class="lead">Pepe runs the tables in the Camfrog rooms and shows the action on stream. Each game runs in one room;
+      Pepe tells you where to head if you type a command somewhere else.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>🎡 Wheel of Misfortune</h3>
+        <p>5,000 PAT a spin, on the site or in chat. Where it stops is what you win. The thin gold slice is the
+          jackpot: it hits about 1 in 3,000 spins and pays a share of the casino jackpot (up to 5M).</p>
+        <div class="cmd"><code>!spin</code> · or the wheel on your profile</div>
+        <div class="goes"><b>PAT goes:</b> every spin into the casino jackpot, which pays the prizes.</div>
+      </div>
+      <div class="card">
+        <h3>🂡 Blackjack</h3>
+        <p>Pepe deals from a 6-deck shoe, shuffled fresh and provably fair every round. Blackjack pays 3:2, dealer hits
+          soft 17. Double, split (up to 4 hands), insurance. Bets 100 to 10,000 PAT, up to 6 players.</p>
+        <div class="cmd"><code>!bj start</code> · <code>!bet 500</code> · <code>!hit</code> / <code>!stand</code> · <code>!autobet</code></div>
+        <div class="goes"><b>PAT goes:</b> the house pays winners; half of every losing bet feeds the jackpot.</div>
+      </div>
+      <div class="card">
+        <h3>🂠 Texas Hold'em</h3>
+        <p>No-limit cash game in chat. Chips are PAT 1:1: buy in to sit (20 to 200 big blinds), cash out any time.
+          Your hole cards come by private message. Up to 9 players. Can't run alongside a blackjack table.</p>
+        <div class="cmd"><code>!holdem start 25/50</code> · <code>!sit 5000</code> · <code>!call</code> · <code>!raise 600</code> · <code>!stand</code></div>
+        <div class="goes"><b>PAT goes:</b> pots go to the winners, minus a small rake set by the admins.</div>
+      </div>
+      <div class="card">
+        <h3>🎟️ PAT Lottery</h3>
+        <p>Powerball-style, drawn every Sunday at 9pm ET, ball by ball on stream. Pick 4 numbers from 1–30 plus a Pepe Ball
+          from 1–10, or let Pepe pick. 1,000 PAT a ticket, no limit. All 4 + Pepe Ball wins the jackpot
+          (1 in 274,050); smaller prizes from 1k to 500k, and about 1 in 6 tickets wins something.
+          Results are on <a href="/lotto">/lotto</a>.</p>
+        <div class="cmd"><code>!lotto 3 7 12 25 pb 4</code> · <code>!lotto quick 20</code> · <code>!lotto odds</code></div>
+        <div class="goes"><b>PAT goes:</b> tickets go into the casino jackpot, which <i>is</i> the lotto jackpot. It grows all week, unless a crew robs the casino first.</div>
+      </div>
+      <div class="card">
+        <h3>🔢 Bingo</h3>
+        <p>75-ball bingo on the stream overlay. Cards are 2,500 PAT (up to 4), sent by PM. Type <code>!bingo</code> the moment
+          you have a line; Pepe checks it for you. First line wins 30% of the prize pool, first full card wins the rest.
+          A wrong call costs 1,000 PAT and a 60s sit-out.</p>
+        <div class="cmd"><code>!bingo start</code> · <code>!bingo buy 3</code> · <code>!bingo</code></div>
+        <div class="goes"><b>PAT goes:</b> 10% of card sales to the casino, the rest is the prize pool. Unclaimed prizes roll into the next game.</div>
+      </div>
+      <div class="card">
+        <h3>🧠 Trivia</h3>
+        <p>Everyone pays the buy-in (default 1,000 PAT) into one pot and the winner takes it all. Pick a topic if you like.</p>
+        <div class="cmd"><code>!trivia 5000 movies</code> · <code>!join</code></div>
+        <div class="goes"><b>PAT goes:</b> player to player, winner takes the pot.</div>
+      </div>
+      <div class="card">
+        <h3>💲 Showdown</h3>
+        <p>Price-is-Right style: guess Pepe's secret number (1–10,000). 10,000 PAT buy-in, closest without going over takes the
+          pot, and nailing it exactly pays a bonus.</p>
+        <div class="cmd"><code>!showdown</code> · <code>!guess 4200</code></div>
+        <div class="goes"><b>PAT goes:</b> the pot is just the buy-ins, back to the players.</div>
+      </div>
+      <div class="card">
+        <h3>⚔️ Duels, brawls &amp; the Arena</h3>
+        <p>Dice duels (100 to 50,000 PAT), 1v1 brawls using your heist character's stats, and the Arena: a battle royale where
+          the last fighter standing takes the pot.</p>
+        <div class="cmd"><code>!duel @bob 5000</code> · <code>!brawl @bob 10k</code> · <code>!arena 5000</code> · <code>!accept</code></div>
+        <div class="goes"><b>PAT goes:</b> winner takes the pot; brawls and the Arena send a small cut to the jackpot.</div>
+      </div>
+      <div class="card">
+        <h3>🎨 Pictionary</h3>
+        <p>Pepe draws live on stream, you guess in chat. Free to play; the first right guess each round wins PAT.</p>
+        <div class="cmd"><code>!pictionary 5 animals</code></div>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 4. Betting between people -->
+  <section id="betting">
+    <div class="kicker">PLAYER VS PLAYER</div>
+    <h2>🤝 Wagers &amp; betting pools</h2>
+    <p class="lead">Bet on anything that happens, in the room or out in the world. Somebody you both trust is the judge
+      and calls the result. Stakes sit in escrow until then. Everything shows on <a href="/wagers">/wagers</a>.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>🤝 1-on-1 wagers</h3>
+        <p>Challenge one person. Your stake is held right away; they have 10 minutes to accept and match it.
+          The judge (anyone but the two of you) picks the winner, or voids it to refund both. Min 1,000 PAT.
+          If the judge doesn't settle by the deadline (default 7 days, max 30), both get their PAT back.</p>
+        <div class="cmd"><code>!wager @bob 10k Lakers win tonight judge @carol by 2d</code><br><code>!accept</code> · <code>!wager settle W12 @bob</code> · <code>!wager list</code></div>
+        <div class="goes"><b>PAT goes:</b> winner takes the pot minus a 5% fee.</div>
+      </div>
+      <div class="card">
+        <h3>👥 Betting pools <span class="new">NEW</span></h3>
+        <p>A bet the whole room can get in on. Make a question (yes/no, or your own options), name a judge, and everyone
+          backs the side they like with as much as they want. When the judge calls it, the winners split the losing side's
+          pool in proportion to what they put in, so a correct bet never comes back smaller than it went in.
+          This is the classic racetrack (parimutuel) model.</p>
+        <div class="cmd"><code>!pool new Will it rain Friday? judge @carol closes 2d</code><br><code>!pool new Who wins? judge @carol options a/b/c</code><br><code>!pool M5 yes 5k</code></div>
+        <div class="goes"><b>PAT goes:</b> winners get their stake back plus their share of the losing pool, minus 5% of the losing side (set by the admins). If nobody backed the winner, or it's voided, everyone is refunded.</div>
+      </div>
+    </div>
+    <div class="note">Pools vs markets: in a pool your odds are only fixed when betting closes and you can't get out early.
+      In a <a href="#markets">prediction market</a> you buy at today's price and can sell any time.</div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 5. Markets -->
+  <section id="markets">
+    <div class="kicker">TRADE THE ODDS</div>
+    <h2>📈 Prediction markets</h2>
+    <p class="lead">Polymarket-style share trading. Each answer has a price between 0 and 1 PAT, and that price is the
+      crowd's odds: 0.70 means "about 70% likely". Every share of the winning answer pays out 1 PAT, losing shares pay 0.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>📊 How it works</h3>
+        <ul>
+          <li>Buying pushes an answer's price up, selling pushes it down.</li>
+          <li>Sell any time while trading's open: lock in a profit or cut a loss before the result.</li>
+          <li>Yes/no by default, or 2–6 answers. Trading closes at the set time (default 1 day, max 30).</li>
+          <li>The judge can't trade. A void refunds what holders paid.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>⌨️ Commands</h3>
+        <div class="cmd"><code>!market new Will Sam come back this week? judge @carol closes 2d</code><br>
+          <code>!market M3 yes 5k</code> (spend 5k, min 500)<br>
+          <code>!market sell M3 yes all</code><br>
+          <code>!market mine</code> · <code>!market list</code></div>
+        <p>Your positions on <a href="/markets">/markets</a> show your entry price, today's price and your profit or loss, with a price chart.</p>
+      </div>
+      <div class="card">
+        <h3>🏛️ Who pays the winners?</h3>
+        <p>An automated market maker (LMSR, the maths behind many prediction sites) is always there to trade with you.
+          The Federal Reserve seeds each market's liquidity and the pot can always cover every winning share.
+          What's left over afterwards goes back to the Reserve.</p>
+        <div class="goes"><b>PAT goes:</b> 2% fee on every buy and sell, routed by the routing table.</div>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 6. AI judge -->
+  <section id="judge">
+    <div class="kicker">EXPERIMENTAL</div>
+    <h2>🤖 Pepe as judge <span class="new exp">NEW · EXPERIMENTAL</span></h2>
+    <p class="lead">No neutral human around? A market, pool or wager can name Pepe himself as the judge.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>1. Name him</h3>
+        <p>Use <code>judge @pepe</code> when you create it. Works best for questions with a clear, checkable answer.</p>
+      </div>
+      <div class="card">
+        <h3>2. He proposes</h3>
+        <p>When it's time, Pepe proposes a result and posts his reasoning so everyone can see why.</p>
+      </div>
+      <div class="card">
+        <h3>3. Dispute window</h3>
+        <p>Players then get a dispute window (default 1 hour) to object if they think he got it wrong:</p>
+        <div class="cmd"><code>!market dispute M3 why</code> · <code>!wager dispute W3 why</code> · ask him early: <code>!market ai M3</code></div>
+      </div>
+      <div class="card">
+        <h3>4. Pay out or escalate</h3>
+        <p>Enough disputes and it goes to an admin to decide. Otherwise it pays out automatically when the window closes.</p>
+      </div>
+    </div>
+    <div class="note warn">This is new. Pepe can be wrong, so read his reasoning and use the dispute window if you disagree.</div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 7. Bounties -->
+  <section id="bounties">
+    <div class="kicker">GET STUFF DONE</div>
+    <h2>🎯 Bounties</h2>
+    <div class="grid">
+      <div class="card">
+        <p>Put PAT up for someone to do something. Others can chip in to grow the pot. Hunters claim it ("I did it"),
+          and the poster pays whoever pulled it off; several hunters split it evenly. You can't claim your own bounty.</p>
+        <div class="cmd"><code>!bounty kick plantbaked 1000 by 2d</code> · <code>!bounty add BT3 500</code><br><code>!bounty claim BT3</code> · <code>!bounty resolve BT3 @hunter</code> · <code>!bounties</code></div>
+        <div class="goes"><b>PAT goes:</b> held in escrow; the hunters get the pot minus a 5% fee. Cancelled or expired (default 7 days)? Everyone who put money in is refunded.</div>
+      </div>
+      <div class="card">
+        <h3>🌐 On the site</h3>
+        <p>See every bounty on <a href="/bounties">/bounties</a>, chip in, claim one with a note, and (if you posted it)
+          pay the hunters or cancel.</p>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 8. Loans -->
+  <section id="loans">
+    <div class="kicker">CREDIT</div>
+    <h2>🏦 Loans</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>🤝 Person to person</h3>
+        <p>Lend PAT with interest (a flat rate for the term, max 50%). The amount is held from you right away; they have
+          10 minutes to accept. Borrowers can repay early, in part or in full.</p>
+        <p>When it's due, Pepe collects automatically: whatever they have, then the rest as PAT comes in. Anything still
+          owed grows 2% a day (capped at +50% of the loan) and the borrower carries a public <b>LATE</b> mark until square.</p>
+        <div class="cmd"><code>!loan @bob 50k 10% 7d</code> · <code>!loan repay L5</code> · <code>!loan check @bob</code> · <code>!loans</code></div>
+        <div class="goes"><b>PAT goes:</b> the lender always gets the full amount back; 10% of the interest and penalties goes to the Reserve.</div>
+      </div>
+      <div class="card">
+        <h3>🏛️ Federal Reserve loans <span class="new">NEW</span></h3>
+        <p>Borrow straight from the Reserve at the Reserve's rate. Within your limit it's approved instantly; your limit grows
+          with your level and a clean repayment record. Want more? Ask the admins, who can also grant loans themselves.</p>
+        <div class="cmd"><code>!loan reserve 50k 7d</code> · <code>!loan request 200k 14d why</code> (bigger amounts) · <code>!loan reserve</code> shows your limit</div>
+        <div class="goes"><b>PAT goes:</b> principal and interest go back to the Reserve. Unpaid loans are collected automatically,
+          and a late borrower is marked LATE and can't borrow again until they're square.</div>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 9. Stashes & staking -->
+  <section id="stash">
+    <div class="kicker">SAVE &amp; EARN</div>
+    <h2>🔐 Stashes &amp; staking</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>🔐 Stashes</h3>
+        <p>Personal vaults. Park PAT outside your wallet and share it with accounts you trust: anyone you grant can
+          deposit and withdraw. Up to 3 stashes, 10 members each. Closing one pays what's left to the owner.</p>
+        <div class="cmd"><code>!stash create savings</code> · <code>!stash deposit savings 50k</code><br><code>!stash grant savings @myalt</code> · <code>!stash withdraw savings 10k</code> · <code>!stash list</code></div>
+      </div>
+      <div class="card">
+        <h3>📈 Staking <span class="new">NEW</span></h3>
+        <p>Stake PAT in a stash to earn a share of the game fees that are routed to stakers. Payouts are daily, split by how much
+          you staked and for how long, and they auto-compound (your earnings are staked too).</p>
+        <p>The yield floats inside a target range the admins set: the share of fees sent to stakers is turned up or down to keep it
+          in range, and the Reserve can top it up if it drops below.</p>
+        <div class="cmd"><code>!stash stake savings 100k</code> · <code>!stash unstake savings all</code> · <code>!stash yield</code></div>
+      </div>
+      <div class="card">
+        <h3>👛 Your wallet page</h3>
+        <p>See your stashes, staked PAT and loans in one place on <a href="/wallet">/wallet</a>.</p>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 10. GTF -->
+  <section id="gtf">
+    <div class="kicker">CRIME PAYS</div>
+    <h2>🔫 Grand Theft Frog</h2>
+    <p class="lead">The crime side of PATV. Roll a character with <code>!sheet</code> and go to work. Full guide on <a href="/gtf">/gtf</a>.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>🥷 Heists</h3>
+        <p>Crew up and survive rounds of dice rolls to bank loot; bail out or go for the vault door. The store is always open;
+          the casino job robs the casino jackpot and the bank job cracks the Federal Reserve.</p>
+        <div class="cmd"><code>!heist</code> · <code>!join</code> · <code>!bail</code> · <code>!shop</code></div>
+        <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. PAT is never burned.</div>
+      </div>
+      <div class="card">
+        <h3>🗺️ Turf Wars</h3>
+        <p>Gangs fight over the districts on this season's map (the map changes every season). Each district runs a business
+          that earns its owner PAT every day. Claim, raid, defend, and climb the season score.</p>
+        <div class="cmd"><code>!turf</code> · <code>!claim</code> · <code>!raid</code></div>
+        <div class="goes"><b>PAT goes:</b> some fees route to the gang that owns the matching turf business.</div>
+      </div>
+      <div class="card">
+        <h3>🎩 Gangs</h3>
+        <p>A gang shares a treasury, wages and heat. Take turf together, defend it together, split what it earns.</p>
+        <div class="cmd"><code>!gang create [TAG] name</code> · <code>!gang invite @user</code></div>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 11. Polls -->
+  <section id="polls">
+    <div class="kicker">HAVE YOUR SAY</div>
+    <h2>🗳️ Polls</h2>
+    <div class="grid">
+      <div class="card">
+        <p>Free, no PAT involved. One vote per person, in the room or on the site. Every poll gets a live results page;
+          see them all on <a href="/polls">/polls</a>.</p>
+        <div class="cmd"><code>!poll Best pizza? pepperoni, margherita, pineapple</code> · type the number to vote · <code>!results</code></div>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 12. Website -->
+  <section id="web">
+    <div class="kicker">NO CAMFROG NEEDED</div>
+    <h2>🌐 Doing it all from the website</h2>
+    <div class="grid">
+      <div class="card">
+        <p>Once your Camfrog name is linked to your PATV account (start the link on your profile, then type
+          <code>!verify</code> with the code in a room), you can do most of this right here:</p>
+        <ul>
+          <li>create and trade <a href="/markets">markets</a>, join <a href="/wagers">pools and wagers</a></li>
+          <li>post, fund and claim <a href="/bounties">bounties</a></li>
+          <li>vote in and start <a href="/polls">polls</a></li>
+          <li>buy <a href="/lotto">lotto</a> tickets</li>
+          <li>manage your stashes and loans on <a href="/wallet">/wallet</a></li>
+        </ul>
+        <p>It's the same balance and the same rules as in the room; Pepe places your orders through the normal checks.</p>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- Fees -->
+  <section id="fees">
+    <div class="kicker">AT A GLANCE</div>
+    <h2>🧾 Fees</h2>
+    <p class="lead">Fees aren't burned: each one is routed to the Reserve, the casino jackpot, turf businesses or stakers.
+      <span class="cfg">⚙ = set by the admins, can change.</span></p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>WHAT</th><th>FEE</th><th>NOTES</th></tr></thead>
+        <tbody>
+          <tr><td>Wheel spin</td><td class="n">5,000 / spin</td><td>All into the casino jackpot, which pays the prizes</td></tr>
+          <tr><td>Blackjack</td><td class="n">½ of losing bets</td><td>To the casino jackpot; winners paid by the house</td></tr>
+          <tr><td>Hold'em</td><td class="n">small rake <span class="cfg">⚙</span></td><td>Taken from pots</td></tr>
+          <tr><td>Lotto ticket</td><td class="n">1,000 / ticket</td><td>Whole ticket into the casino jackpot (the lotto jackpot)</td></tr>
+          <tr><td>Bingo</td><td class="n">10% of card sales</td><td>To the casino; the rest is the prize pool</td></tr>
+          <tr><td>1-on-1 wager</td><td class="n">5% of the pot</td><td>Only when someone wins; voids are free</td></tr>
+          <tr><td>Betting pool</td><td class="n">5% of losing side <span class="cfg">⚙</span></td><td>Winners never get back less than they bet</td></tr>
+          <tr><td>Prediction market</td><td class="n">2% per trade</td><td>On every buy and sell</td></tr>
+          <tr><td>Bounty</td><td class="n">5% of payout</td><td>Refunds on cancel or expiry are free</td></tr>
+          <tr><td>Player loan</td><td class="n">10% of interest</td><td>To the Reserve; principal never taxed</td></tr>
+          <tr><td>Late loan</td><td class="n">+2% / day</td><td>On what's still owed, capped at +50% of the loan</td></tr>
+          <tr><td>Brawl / Arena</td><td class="n">small cut <span class="cfg">⚙</span></td><td>To the casino jackpot</td></tr>
+          <tr><td>Fee splits</td><td class="n"><span class="cfg">⚙</span></td><td>Where each fee goes is set in the routing table</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- Links -->
+  <section id="links">
+    <div class="kicker">GO PLAY</div>
+    <h2>🔗 Links</h2>
+    <div class="links">
+      <a href="/markets">📈 Markets<small>trade the odds</small></a>
+      <a href="/wagers">🤝 Wagers &amp; pools<small>bets between people</small></a>
+      <a href="/bounties">🎯 Bounties<small>post or hunt a job</small></a>
+      <a href="/lotto">🎟️ Lotto<small>tickets and results</small></a>
+      <a href="/polls">🗳️ Polls<small>vote and results</small></a>
+      <a href="/wallet">👛 Wallet<small>stashes, stakes, loans</small></a>
+      <a href="/gtf">🔫 Grand Theft Frog<small>heists, turf, gangs</small></a>
+      <a href="/history">🧾 History<small>every PAT in and out</small></a>
+      <a href="https://pepe.publicaccess.tv/help">📖 Pepe's commands<small>the full command list</small></a>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+</div>
+</body>
+</html>

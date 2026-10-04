@@ -1,0 +1,54 @@
+<%# Pepe-as-judge box for a market/pool page. Pass { m, kind: 'market'|'pool', inIt, now }. %>
+<% if (m && m.ai_judge) {
+  const ai = m.ai || {};
+  const ref = 'M' + m.id;
+  const live = m.status === 'open' || m.status === 'closed';
+  const left = Math.max(0, Math.round((ai.until || 0) - now)); %>
+  <div class="aij">
+    <div class="aij-head">🤖 Judged by Pepe <span class="aij-tag">AI · experimental</span></div>
+    <% if (ai.state === 'proposed' && live) { %>
+      <p>Pepe's call: <b><%= ai.result %></b> (<%= Math.round((ai.confidence || 0) * 100) %>% sure) — <%= ai.reason %></p>
+      <p class="aij-sub">Pays out in <%= Math.floor(left / 60) %> min unless enough people dispute it<%= (ai.disputes || []).length ? ' (' + ai.disputes.length + ' so far)' : '' %>.</p>
+    <% } else if (ai.state === 'disputed' && live) { %>
+      <p>Pepe said <b><%= ai.result %></b>, but it was disputed — an admin will settle it.</p>
+      <% (ai.disputes || []).forEach((d) => { %><p class="aij-sub">⚖️ <%= d.nick %>: <%= d.why || '(no reason)' %></p><% }) %>
+    <% } else if (ai.state === 'thinking') { %>
+      <p>Pepe is looking it up right now…</p>
+    <% } else if (ai.state === 'unsure' && live) { %>
+      <p>Pepe couldn't tell yet — <%= ai.reason %>. He'll look again in a few hours.</p>
+    <% } else if (live) { %>
+      <p>When <%= kind === 'market' ? 'trading' : 'betting' %> closes, Pepe searches the web, proposes the result with his reasoning, and it pays out after a dispute window.</p>
+    <% } %>
+    <% if (live && inIt) { %>
+      <div class="aij-forms">
+        <% if (ai.state === 'proposed') { %>
+          <form method="post" action="/act">
+            <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="<%= kind %>">
+            <input type="hidden" name="a0" value="dispute"><input type="hidden" name="a1" value="<%= ref %>">
+            <input type="hidden" name="back" value="/markets/<%= m.id %>"><input type="hidden" name="tag" value="market-<%= m.id %>">
+            <input type="text" name="a2" maxlength="160" placeholder="Why is Pepe wrong?">
+            <button type="submit" class="aij-dis">Dispute</button>
+          </form>
+        <% } else if (ai.state !== 'disputed' && ai.state !== 'thinking') { %>
+          <form method="post" action="/act">
+            <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="<%= kind %>">
+            <input type="hidden" name="a0" value="ai"><input type="hidden" name="a1" value="<%= ref %>">
+            <input type="hidden" name="back" value="/markets/<%= m.id %>"><input type="hidden" name="tag" value="market-<%= m.id %>">
+            <button type="submit">Ask Pepe to decide now</button>
+          </form>
+        <% } %>
+      </div>
+    <% } %>
+  </div>
+  <style>
+    .aij { border: 1px solid #3a4a7a; background: #10141f; border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
+    .aij p { margin: 6px 0; overflow-wrap: anywhere; }
+    .aij-head { font-weight: bold; }
+    .aij-tag { font-size: 11px; color: #9fb3ff; border: 1px solid #3a4a7a; border-radius: 10px; padding: 1px 8px; margin-left: 6px; font-weight: normal; }
+    .aij-sub { color: #999; font-size: 13px; }
+    .aij-forms form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .aij-forms input[type=text] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 10px; }
+    .aij-forms button { background: #3a4a7a; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; }
+    .aij-forms button.aij-dis { background: #b85c38; }
+  </style>
+<% } %>

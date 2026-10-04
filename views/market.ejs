@@ -84,6 +84,7 @@
       </div>
     <% } %>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+    <%- include('partials/aijudge', { m, kind: 'market', inIt: typeof inIt !== 'undefined' && inIt, now }) %>
 
     <% if (m.mine && m.mine.length) { %>
       <h3>Your position</h3>
@@ -152,6 +153,7 @@
       </form>
     <% } %>
 
+    <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: null }) %>
     <% if (orders && orders.length) { %>
       <h3>Your website orders</h3>
       <div class="tbl"><table>
@@ -182,7 +184,7 @@
          : m.status === 'settled' ? 'Settled: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '')
          : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge' %><br>
       Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
-      · <i>pool market (from before share trading)</i>
+      · <i><%= m.model === 'pool' ? 'betting pool' : 'pool market (from before share trading)' %></i>
     </div>
     <div class="opts">
       <% m.options.forEach((o) => { %>
@@ -194,6 +196,7 @@
       <% }) %>
     </div>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+    <%- include('partials/aijudge', { m, kind: 'pool', inIt: typeof inIt !== 'undefined' && inIt, now }) %>
     <% if (m.status === 'open') { %>
       <% if (user) { %>
         <form class="bet" method="post" action="/markets/<%= m.id %>/bet">
@@ -223,6 +226,7 @@
         <div class="row"><button type="submit">Settle</button><span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
       </form>
     <% } %>
+    <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: null }) %>
     <% if (orders && orders.length) { %>
       <h3>Your website orders</h3>
       <div class="tbl"><table>

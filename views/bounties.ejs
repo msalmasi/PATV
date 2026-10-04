@@ -16,6 +16,11 @@
   .bt .empty { color: #888; text-align: center; }
   .bt .how { color: #888; font-size: 13px; text-align: center; margin-top: 26px; }
   .bt code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .bt form.newbt { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+  .bt form.newbt label { display: grid; gap: 4px; font-size: 13px; color: #bbb; min-width: 0; }
+  .bt form.newbt .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .bt form.newbt input, .bt form.newbt select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+  .bt form.newbt button { background: #e0a030; color: #111; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; justify-self: start; }
 </style>
 <%
   const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
@@ -34,13 +39,32 @@
 <% }; %>
 <div class="bt">
   <h1>Bounty Board</h1>
-  <p class="sub">Put PAT on a job. Anyone can chip in to the pot, hunters claim it, and the poster pays whoever did it.</p>
+  <p class="sub"><a href="#new" style="color:#e0a030">＋ Post a bounty</a> · Put PAT on a job. Anyone can chip in to the pot, hunters claim it, and the poster pays whoever did it.</p>
   <h2>OPEN BOUNTIES</h2>
   <% if (!live.length) { %><p class="empty">No open bounties right now.</p><% } %>
   <div class="grid"><% live.forEach((b) => card(b)) %></div>
   <h2>RECENTLY CLOSED</h2>
   <% if (!done.length) { %><p class="empty">Nothing closed yet.</p><% } %>
   <div class="grid"><% done.forEach((b) => card(b)) %></div>
+  <h2 id="new">POST A BOUNTY</h2>
+  <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: typeof msg !== 'undefined' ? msg : null }) %>
+  <% if (!user) { %>
+    <p class="empty"><a href="/login" style="color:#81c784">Sign in</a> to post a bounty.</p>
+  <% } else if (typeof linked === 'undefined' || !linked) { %>
+    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a room) to post bounties from here.</p>
+  <% } else { %>
+    <form class="newbt" method="post" action="/act">
+      <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="bounty">
+      <input type="hidden" name="back" value="/bounties"><input type="hidden" name="tag" value="bounties">
+      <label>The job <input type="text" name="a0" maxlength="200" required placeholder="get Brian on cam tonight"></label>
+      <div class="row2">
+        <label>Reward (PAT) <input type="number" name="a1" min="100" step="100" required placeholder="10000"></label>
+        <label>Expires in <select name="a2"><option value="by 1d">1 day</option><option value="by 2d">2 days</option><option value="by 7d" selected>7 days</option><option value="by 30d">30 days</option></select></label>
+      </div>
+      <button type="submit">Post bounty</button>
+      <span class="info">The reward is held in escrow. You pay whoever pulls it off (5% fee); cancel or let it expire and everyone is refunded.</span>
+    </form>
+  <% } %>
   <p class="how">Post one in a Camfrog room: <code>!bounty get Brian on cam tonight 10k by 2d</code> · the pot sits in escrow until it's paid, cancelled or expires (then everyone is refunded).</p>
 </div>
 </body>

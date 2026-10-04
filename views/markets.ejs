@@ -23,6 +23,13 @@
   .mk .empty { color: #888; text-align: center; }
   .mk .how { color: #888; font-size: 13px; text-align: center; margin-top: 26px; }
   .mk code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .mk form.newmk { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
+  .mk form.newmk label { display: grid; gap: 4px; font-size: 13px; color: #bbb; min-width: 0; }
+  .mk form.newmk label.chk { display: flex; align-items: center; gap: 6px; }
+  .mk form.newmk .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
+  .mk form.newmk input[type=text], .mk form.newmk select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+  .mk form.newmk button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; justify-self: start; }
+  .mk form.newmk .info { color: #888; font-size: 12px; margin: 0; }
 </style>
 <%
   const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
@@ -51,13 +58,50 @@
 <% }; %>
 <div class="mk">
   <h1>Prediction Markets</h1>
-  <p class="sub">Trade PAT on what happens next. Prices are the crowd's odds: buy shares in an outcome, sell any time while trading is open, and every winning share pays 1 PAT.</p>
+  <p class="sub"><a href="#new" style="color:#81c784">＋ Start a market</a> · Trade PAT on what happens next. Prices are the crowd's odds: buy shares in an outcome, sell any time while trading is open, and every winning share pays 1 PAT.</p>
   <h2>LIVE</h2>
   <% if (!live.length) { %><p class="empty">No open markets right now.</p><% } %>
   <% live.forEach((m) => card(m)) %>
   <h2>RECENTLY SETTLED</h2>
   <% if (!done.length) { %><p class="empty">Nothing settled yet.</p><% } %>
   <% done.forEach((m) => card(m)) %>
+  <h2 id="new">START A MARKET</h2>
+  <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: typeof msg !== 'undefined' ? msg : null }) %>
+  <% if (!user) { %>
+    <p class="empty"><a href="/login" style="color:#81c784">Sign in</a> to start a market.</p>
+  <% } else if (!linked) { %>
+    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a room) to start markets from here — you create it as that name.</p>
+  <% } else { %>
+    <form class="newmk" method="post" action="/act">
+      <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="market">
+      <input type="hidden" name="back" value="/markets"><input type="hidden" name="tag" value="markets">
+      <input type="hidden" name="a0" value="new">
+      <label>Question <input type="text" name="a1" maxlength="200" required placeholder="Will Samira come back this week?"></label>
+      <label>Answers (optional, 2–6, separated by /) <input type="text" name="a2" maxlength="190" placeholder="yes / no" data-prefix="options "></label>
+      <div class="row2">
+        <label>Judge <input type="text" name="a3" maxlength="40" placeholder="@someone" data-prefix="judge "></label>
+        <label class="chk"><input type="checkbox" data-ai> 🤖 Let Pepe judge it (AI, experimental)</label>
+        <label>Trading closes in <select name="a4"><option value="closes 1h">1 hour</option><option value="closes 1d" selected>1 day</option><option value="closes 2d">2 days</option><option value="closes 7d">7 days</option><option value="closes 30d">30 days</option></select></label>
+      </div>
+      <button type="submit">Create market</button>
+      <p class="info">The judge can't trade on it. The Federal Reserve seeds the liquidity; trades pay a 2% fee. With Pepe as judge he looks it up when trading closes, proposes the result, and it pays out after a dispute window.</p>
+    </form>
+    <script>
+      (() => {
+        const f = document.querySelector('form.newmk'), ai = f.querySelector('[data-ai]'), j = f.a3;
+        ai.addEventListener('change', () => { j.disabled = ai.checked; j.required = !ai.checked; });
+        j.required = true;
+        f.addEventListener('submit', () => {
+          f.querySelectorAll('[data-prefix]').forEach((el) => {
+            const v = el.value.trim().replace(/^(options|judge)\s+/i, '');
+            el.value = v ? el.dataset.prefix + v : '';
+          });
+          if (ai.checked) { j.disabled = false; j.value = 'judge @pepe'; }
+        });
+      })();
+    </script>
+  <% } %>
+  <p class="how">Looking for simple betting pools and 1-on-1 wagers? <a href="/wagers" style="color:#81c784">/wagers</a> · How it all works: <a href="/economy#markets" style="color:#81c784">economy guide</a></p>
   <p class="how">Start one in a Camfrog room: <code>!market new Will X happen? judge @someone closes 2d</code> · buy with <code>!market M3 yes 5k</code> · sell with <code>!market sell M3 yes all</code> · <code>!market mine</code> shows your positions</p>
 </div>
 </body>
