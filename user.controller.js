@@ -8,6 +8,7 @@ const sgMail = require('@sendgrid/mail');
 const crypto = require('crypto');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
 const funding = require('./funding');
+const { moveUserRows, copyCamfrogBadges } = require('./accountMerge');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
@@ -307,6 +308,9 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     const other = otherAccounts[0];
     console.log(`[CF-RELINK] Unlinking camfrog "${cfLower}" from account ${other.username} (${other.userId})`);
     await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [other.userId]);
+    // the Camfrog achievements go with the Camfrog name (quietly: no second XP/PAT)
+    const copied = await copyCamfrogBadges(other.userId, userId);
+    if (copied) console.log(`[CF-RELINK] copied ${copied} Camfrog achievement(s) to ${userId}`);
     unlinkedFrom = other.username;
   }
 
@@ -336,6 +340,11 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     );
 
     await runQuery('UPDATE transactions SET userId = ? WHERE userId = ?', [userId, auto.userId]);
+    // Everything else the auto account owned (badges, cosmetics, roles, spins, orders…) moves too.
+    // Badges left behind used to be awarded AGAIN, with full XP + PAT, once the merged account was
+    // active (the auto account had them from the quiet backfill).
+    const moved = await moveUserRows(auto.userId, userId);
+    console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(moved)}`);
     await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
 
     return { merged: true, addedBalance: auto.points_balance || 0, addedXp: auto.xp || 0, unlinkedFrom };
