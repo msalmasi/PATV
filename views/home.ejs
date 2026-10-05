@@ -37,6 +37,8 @@
 <script src="/public/js/video.js" defer></script>
 <% } %>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
 <%- include('partials/cosmetics-css') %>
 <style>
   .hm { --card: #111; --line: #222; --muted: #8a8a8a; --green: #4caf50; --lime: #c6e94f; --gold: #ffd700;
@@ -86,7 +88,25 @@
   .hm .wheel .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .hm .wheel .res { font-size: 13px; color: #c9d3c9; min-height: 18px; margin-top: 6px; }
   .hm .wheel .res b { color: var(--gold); }
-  .hm .stage-off { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: 0 12px 12px; }
+  /* the stage wheel: the Wheel page's coin-op (arcade-wheel.css), compact */
+  .hm .aw.aw-hm { display: block; max-width: none; width: 100%; margin: 0; padding: 0; font-size: 18px; }
+  .hm .aw.aw-hm::before { display: none; }
+  .hm .aw-hm .aw-coinop { display: flex; flex-direction: column; max-width: none; margin: 0; gap: 10px; padding: 12px; }
+  .hm .aw-hm .aw-credit { font-size: 24px; padding: 4px 10px; }
+  .hm .aw-hm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; width: 100%; }
+  .hm .aw-hm .aw-door { padding: 10px 8px 8px; }
+  .hm .aw-hm .aw-plate { padding: 6px 4px; }
+  .hm .aw-hm .aw-plate .p { font-size: 15px; }
+  .hm .aw-hm .aw-plate .ins { font-size: 8px; }
+  .hm .aw-hm .aw-slot-area { height: 48px; }
+  .hm .aw-hm .aw-slot { width: 86px; }
+  .hm .aw-hm .aw-coinbtn { color: var(--aw-text) !important; }
+  .hm .aw-hm .aw-coinbtn .aw-coin { --s: 72px; }
+  .hm .aw-hm .aw-status { min-height: 2.4em; font-size: 18px; }
+  .hm .aw-hm a.aw-tool { text-align: center; color: var(--aw-text) !important; }
+  .hm .stage-off { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 0 12px 12px; }
+  .hm .stage-off > * { flex: 1 1 240px; min-width: 0; }
+  .hm .stage-off > .aw-hm { flex: 0 1 340px; }
 
   /* ── you ── */
   .hm .me { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; background: linear-gradient(90deg, #121a13, #111 60%); }
@@ -147,6 +167,21 @@
   .hm .todo a.hot { border-color: #3a5a2a; }
   .hm .todo a.hot small { color: #9ccc65; }
   .hm .todo .tag { position: absolute; top: -7px; right: 8px; font-size: 10px; padding: 1px 7px; border-radius: 999px; background: #6b5a20; color: #fff3c4; font-weight: bold; }
+  .hm .tf { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: end; }
+  .hm .tf a { display: grid; justify-items: center; gap: 4px; text-align: center; background: #111; border: 1px solid #222; border-radius: 14px; padding: 12px 8px; color: #e6e6e6 !important; position: relative; }
+  .hm .tf a:hover, .hm .tf a:focus-visible { border-color: #2f5a34; }
+  .hm .tf .r1 a { border-color: #6b5a20; background: linear-gradient(180deg, #2a2410, #111 70%); padding-top: 20px; }
+  .hm .tf .r2 a { border-color: #4a4f55; padding-top: 16px; }
+  .hm .tf .r3 a { border-color: #5a4330; padding-top: 14px; }
+  .hm .tf .rk { position: absolute; top: 6px; left: 8px; font-family: 'Press Start 2P', monospace; font-size: 11px; color: var(--muted); }
+  .hm .tf .r1 .rk { color: #ffd700; } .hm .tf .r2 .rk { color: #cfd8dc; } .hm .tf .r3 .rk { color: #d7a46b; }
+  .hm .tf .av { width: 88px; height: 88px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 16px 16px; }
+  .hm .tf .r1 .av { width: 104px; height: 104px; }
+  .hm .tf .av svg { width: 100%; height: 100%; image-rendering: pixelated; shape-rendering: crispEdges; }
+  .hm .tf .av img { width: 70%; height: 70%; border-radius: 50%; object-fit: cover; }
+  .hm .tf .nm { font-weight: bold; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .tf .pt { color: var(--gold); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .hm .tf .lv { color: var(--muted); font-size: 12px; }
   .hm .pitch { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; }
   .hm .pitch p { margin: 0; color: #c9d3c9; font-size: 14.5px; line-height: 1.5; }
   .hm .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--muted); justify-content: center; padding-top: 4px; }
@@ -156,6 +191,7 @@
     .hm .stage-body { grid-template-columns: minmax(0, 1fr); }
     .hm .stage-side { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
     .hm .main { grid-template-columns: minmax(0, 1fr); }
+    .hm .tf { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   }
   @media (max-width: 760px) {
     .hm .lr { grid-template-columns: minmax(0, 1fr); }
@@ -168,6 +204,8 @@
     .hm .me .gtf { display: none; }
     .hm .lr-feed { height: 300px; }
     .hm .todo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hm .tf { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hm .tf .r1 { grid-column: 1 / -1; }
     .hm .pitch { grid-template-columns: minmax(0, 1fr); }
     .hm .stage-body, .hm .stage-off { padding: 0 8px 8px; }
   }
@@ -201,16 +239,33 @@
     <div class="stage-off" id="stageOff"></div>
     <!-- the stage widgets render once and move between the live side panel and the off-air strip -->
     <div class="hide" id="stageWidgets">
-      <div class="box wheel" id="wheelBox">
-        <h3>🎡 Spin the stage wheel</h3>
+      <div class="aw aw-hm" id="wheelBox">
         <% if (me) { %>
-          <div class="row">
-            <button class="btn primary" type="button" id="spinBtn">Spin · 5,000 PAT</button>
-            <span class="muted">PAT <b id="balTxt" style="color:#fff"><%= fmt(me.points_balance) %></b></span>
+        <div class="aw-coinop" id="coinop">
+          <div class="aw-credit" aria-hidden="true"><span>CREDIT</span><span class="n" id="creditCount">00</span></div>
+          <div class="aw-hm-row">
+            <div class="aw-door">
+              <div class="aw-plate"><span class="p">5000</span><span class="u">PAT</span><span class="ins">STAGE WHEEL</span></div>
+              <div class="aw-slot-area">
+                <div class="aw-dropclip" id="dropClip"><div class="aw-coin aw-flycoin" id="clipCoin" aria-hidden="true">PAT</div></div>
+                <div class="aw-slot" id="coinSlot" aria-hidden="true"></div>
+              </div>
+            </div>
+            <button type="button" class="aw-coinbtn" id="spinButton" aria-describedby="spinStatus">
+              <span class="aw-coin" aria-hidden="true">PAT</span>
+              <span class="cap">INSERT COIN</span>
+            </button>
           </div>
-          <div class="res" id="spinRes" aria-live="polite"></div>
+          <div class="aw-status" id="spinStatus" role="status" aria-live="polite">Spin the wheel on stream · you have <span id="balTxt"><%= fmt(me.points_balance) %></span> PAT</div>
+          <div class="aw-tools"><button type="button" class="aw-tool" id="muteBtn" aria-pressed="false">SOUND ON</button><a class="aw-tool" href="<%= wheelHref %>">MY WHEEL</a></div>
+          <div class="aw-coin aw-flycoin" id="flyCoin" aria-hidden="true">PAT</div>
+        </div>
         <% } else { %>
-          <p class="muted" style="margin:0"><a href="/login">Sign in</a> to spin the wheel on stream — it spins live in OBS.</p>
+        <div class="aw-coinop">
+          <div class="aw-credit" aria-hidden="true"><span>CREDIT</span><span class="n">00</span></div>
+          <a class="aw-coinbtn" href="/login"><span class="aw-coin" aria-hidden="true">PAT</span><span class="cap">SIGN IN TO PLAY</span></a>
+          <div class="aw-status">Spin the stage wheel live on stream.</div>
+        </div>
         <% } %>
       </div>
       <% if (feat) { %>
@@ -299,16 +354,6 @@
         <% (S0.topBounties || []).forEach((b) => { %><a class="it" href="/bounties/<%= encodeURIComponent(b.id) %>"><span>🎯</span><span class="q"><%= b.task %></span><span class="v"><%= short(b.pot) %></span></a><% }) %>
         <% if (!feat && !S0.lotto && !(S0.closing || []).length && !(S0.topBounties || []).length) { %><p class="muted" style="margin:0">Quiet right now.</p><% } %>
       </section>
-      <section class="card" aria-labelledby="topH">
-        <h2 id="topH">Richest frogs <a href="/rankings">Rankings ›</a></h2>
-        <ol class="top5">
-          <% (S0.top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
-            <li><span class="rk"><%= i + 1 %></span><img src="<%= pic(u.avatar) %>" alt="" loading="lazy">
-              <a class="n" href="/u/<%= encodeURIComponent(u.username) %>/profile"><span class="<%= cs ? 'cx-name' : '' %>" style="<%= cs %>"><%= u.displayname || u.username %></span></a>
-              <span class="p"><%= short(u.points_balance) %></span></li>
-          <% }) %>
-        </ol>
-      </section>
     </aside>
   </div>
 
@@ -323,6 +368,24 @@
         </a>
       <% }) %>
     </div>
+  </section>
+
+  <!-- ───── top frogs ───── -->
+  <section aria-labelledby="tfH">
+    <h2 id="tfH">Top frogs <a href="/rankings">All rankings ›</a></h2>
+    <ol class="tf">
+      <% (top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
+        <li class="r<%= i + 1 %>">
+          <a href="/u/<%= encodeURIComponent(u.username) %>/profile">
+            <span class="rk"><%= i + 1 %></span>
+            <span class="av"><% if (u.gtf) { %><%- u.gtf %><% } else { %><img src="<%= pic(u.avatar) %>" alt="" loading="lazy"><% } %></span>
+            <span class="nm <%= cs ? 'cx-name' : '' %>" style="<%= cs %>"><%= u.displayname || u.username %></span>
+            <span class="pt"><%= short(u.points_balance) %> PAT</span>
+            <span class="lv">Level <%= u.level %></span>
+          </a>
+        </li>
+      <% }) %>
+    </ol>
   </section>
 
   <nav class="foot" aria-label="More">
@@ -383,55 +446,67 @@
 
 <% if (me) { %>
 <script>
-  // Spin the OBS wheel on the stage (same API, price and cooldown as the old homepage arcade).
+  // The stage wheel: the Wheel page's coin-op (public/js/coinop.js, unchanged) driving the PUBLIC
+  // wheel in OBS - same /api/g/wheel/spin, 5,000 PAT and cooldown as the old homepage arcade.
   (function () {
     'use strict';
     var user = <%- JSON.stringify(me.username).replace(/</g, '\\u003c') %>;
-    var btn = document.getElementById('spinBtn'), res = document.getElementById('spinRes');
-    var OFF = 'The wheel isn\'t on the stage right now.';
-    if (!btn) return;
-    function say(x) { res.textContent = ''; if (typeof x === 'string') res.textContent = x; else res.appendChild(x); }
+    var onStage = null;
+    window.wheelBalance = <%= Number(me.points_balance) || 0 %>;
+    window.wheelSpinsLeft = null;
+    window.setSpinStatus = function (msg, kind, html) {
+      var ss = document.getElementById('spinStatus'); if (!ss) return;
+      ss.className = 'aw-status' + (kind ? ' ' + kind : '');
+      if (html) ss.innerHTML = msg; else ss.textContent = msg;
+    };
     function bal() {
-      fetch('/api/u/' + encodeURIComponent(user) + '/balance').then(function (r) { return r.json(); }).then(function (d) {
+      return fetch('/api/u/' + encodeURIComponent(user) + '/balance').then(function (r) { return r.json(); }).then(function (d) {
         if (d.balance === undefined) return;
-        var t = Number(d.balance).toLocaleString('en-US');
-        document.getElementById('balTxt').textContent = t; var b2 = document.getElementById('balTop'); if (b2) b2.textContent = t;
+        window.wheelBalance = Number(d.balance);
+        var t = window.wheelBalance.toLocaleString('en-US');
+        var a = document.getElementById('balTxt'); if (a) a.textContent = t;
+        var b = document.getElementById('balTop'); if (b) b.textContent = t;
       }).catch(function () {});
     }
-    function onStage() {
-      fetch('/api/g/wheel/listeners').then(function (r) { return r.json(); }).then(function (d) {
-        var n = Number(d.listeners) || 0;
-        btn.disabled = n === 0;
-        if (!n && !res.textContent) say(OFF);
-        else if (n && res.textContent === OFF) say('');
-      }).catch(function () {});
+    function checkStage() {
+      return fetch('/api/g/wheel/listeners').then(function (r) { return r.json(); })
+        .then(function (d) { onStage = (Number(d.listeners) || 0) > 0; }).catch(function () { onStage = null; });
     }
-    onStage(); setInterval(onStage, 30000);
-    btn.addEventListener('click', function () {
-      btn.disabled = true; say('Spinning on stage…');
-      fetch('/api/g/wheel/spin', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: user }) })
-        .then(function (r) { return r.ok ? r.json() : r.text().then(function (t) { throw new Error((t || 'The wheel is busy.').slice(0, 160)); }); })
-        .then(function (d) {
-          if (!d.spinId) throw new Error('The wheel is busy.');
-          bal();
-          var es = new EventSource('/events?type=results&identifier=' + encodeURIComponent(d.spinId));
-          var done = setTimeout(function () { es.close(); btn.disabled = false; }, 90000);
-          es.onmessage = function (ev) {
-            var r = {}; try { r = JSON.parse(ev.data); } catch (e) {}
-            var s = document.createElement('span');
-            s.appendChild(document.createTextNode('Landed on '));
-            var b = document.createElement('b'); b.textContent = '+' + Number(r.result || 0).toLocaleString('en-US') + ' PAT'; s.appendChild(b);
-            if (r.xp) s.appendChild(document.createTextNode(' and +' + Math.round(r.xp) + ' XP'));
-            if (r.levelUp && r.levelUp.leveledUp) s.appendChild(document.createTextNode(' — level ' + r.levelUp.newLevel + '!'));
-            say(s); bal(); es.close(); clearTimeout(done);
-            setTimeout(function () { btn.disabled = false; }, 2000);
-          };
-          es.onerror = function () { es.close(); clearTimeout(done); btn.disabled = false; };
-        })
-        .catch(function (e) { say(e.message); setTimeout(function () { btn.disabled = false; }, 3000); });
-    });
+    checkStage(); setInterval(checkStage, 30000);
+    function fire(name, detail) { document.dispatchEvent(new CustomEvent(name, { detail: detail || {} })); }
+    window.userSpin = function () {
+      return checkStage().then(function () {
+        if (onStage === false) return { ok: false, message: 'The wheel isn\'t on the stage right now - try again when it\'s up.' };
+        return fetch('/api/g/wheel/spin', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: user }) })
+          .then(function (r) {
+            if (r.redirected || r.status === 401) return { ok: false, login: true, message: 'Sign in again.' };
+            return r.ok ? r.json().then(function (d) { return d.spinId ? { ok: true, spinId: d.spinId } : { ok: false, message: 'The wheel is busy.' }; })
+                        : r.text().then(function (t) { if (/^\s*</.test(t || '')) t = ''; return { ok: false, message: (t || 'The wheel is busy - try again in a moment.').slice(0, 160) }; });
+          })
+          .then(function (res) {
+            if (!res.ok) return res;
+            bal();
+            // the coin has dropped: the wheel is spinning on stream now
+            Promise.resolve(window.wheelCoinGate).then(function () { fire('wheel:spinstart'); window.setSpinStatus('Spinning on stream…', 'ok'); });
+            var es = new EventSource('/events?type=results&identifier=' + encodeURIComponent(res.spinId));
+            var guard = setTimeout(function () { es.close(); fire('wheel:result', {}); window.setSpinStatus('No result yet - check the stream.', ''); }, 90000);
+            es.onmessage = function (ev) {
+              var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
+              clearTimeout(guard); es.close();
+              var won = Number(d.result) || 0;
+              fire('wheel:result', { result: won });
+              window.setSpinStatus(won > 0 ? '+' + won.toLocaleString('en-US') + ' PAT' + (d.xp ? ' · +' + Math.round(d.xp) + ' XP' : '') +
+                (d.levelUp && d.levelUp.leveledUp ? ' · LEVEL ' + d.levelUp.newLevel + '!' : '') : 'No prize this time.', won > 0 ? 'win' : '');
+              bal();
+            };
+            es.onerror = function () { clearTimeout(guard); es.close(); fire('wheel:result', {}); };
+            return res;
+          });
+      });
+    };
   })();
 </script>
+<script src="/public/js/coinop.js?v=aw1" defer></script>
 <% } %>
 
 <% if (me && room) { %>
@@ -445,7 +520,13 @@
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
     function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
-    function nameEl(u) { var n = el('span', 'w', label(u)); if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; } return n; }
+    function nameEl(u) {
+      var n = el('span', 'w', label(u));
+      if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
+      if (u && !u.anon && u.login && u.display && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
+      return n;
+    }
+    function chipTitle(c, u) { if (u && !u.anon && u.login && u.display && u.display.toLowerCase() !== u.login.toLowerCase()) c.title = u.login; return c; }
     function line(it) {
       if (it.k === 'msg' || it.k === 'tx') {
         var d = el('div', 'ln' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
@@ -458,7 +539,7 @@
         : it.k === 'topic' ? '📌 topic: ' + it.text : null;
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
-    function chip(u, cls) { return el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)); }
+    function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
     // room audio: off by default, your choice remembered on this device
     var au = document.getElementById('lrAudio'), ab = document.getElementById('lrAudioBtn'), at = document.getElementById('lrAudioTxt'), playing = false;
     function pref(v) { try { if (v === undefined) return localStorage.getItem('patvRoomAudio') === '1'; localStorage.setItem('patvRoomAudio', v ? '1' : '0'); } catch (e) { return false; } }

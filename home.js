@@ -66,6 +66,19 @@ async function loadStats() {
   return out;
 }
 
+// Top frogs (bottom of the homepage): the richest five with their GTF pixel avatars, like /rankings'
+// podium. Rendering avatars costs a few queries each, so this has its own longer cache.
+let topCache = null, topAt = 0;
+async function topFrogs() {
+  if (topCache && Date.now() - topAt < 60 * 1000) return topCache;
+  const rows = await many("SELECT username, displayname, avatar, points_balance, level FROM users ORDER BY points_balance DESC LIMIT 5");
+  for (const r of rows) {
+    try { const av = userstats.avatarFor(await cosmetics.profileData(r.username)); r.gtf = av && av.svg ? av.svg : null; } catch (e) { r.gtf = null; }
+  }
+  topCache = rows; topAt = Date.now();
+  return rows;
+}
+
 function stats() {
   if (statsCache && Date.now() - statsAt < STATS_TTL) return Promise.resolve(statsCache);
   if (!statsLoading) {
@@ -105,7 +118,7 @@ function register(app, { addUser, xpForNextLevel }) {
           "SELECT username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?",
           [username]))[0] || null;
       }
-      const [S, rooms] = await Promise.all([stats(), bridge.summary(!!me)]);
+      const [S, rooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
       const room = rooms.find((r) => r.live) || rooms[0] || null;
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
@@ -113,7 +126,7 @@ function register(app, { addUser, xpForNextLevel }) {
       res.locals.og = { title: "Public Access TV", description: "Live streams, Pepe the frog, Camfrog rooms live on the web, PAT games, markets and more.",
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
-        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage: bridge.stage(),
+        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage: bridge.stage(), top,
         // kept for anything that still reads the old locals
         displayname: me ? me.displayname : null, classh: me ? me.class : null, level: me ? me.level : null,
         xp: me ? Math.round(me.xp) : null, avatar: me ? me.avatar : null, email: me ? me.email : null,
