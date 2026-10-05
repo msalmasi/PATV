@@ -1501,13 +1501,21 @@ async function tipJarNewCount(userId) {
       + (since ? "?" : "datetime('now', '-7 days')"), since ? [userId, since] : [userId]);
   return r.length ? r[0].n || 0 : 0;
 }
+// Who was on the other end of a tip row `t`. Most older tips (Camfrog !tip before Oct 2026) have no
+// counterparty stored, but every transfer writes its two ledger rows back to back (sent, then
+// received, same amount), so the partner row sits at rowid -1 / +1. Read-only: nothing is rewritten.
+const TIP_PARTNER_JOIN = `LEFT JOIN transactions p
+      ON p.rowid = (CASE WHEN t.type = 'tip received' THEN t.rowid - 1 ELSE t.rowid + 1 END)
+     AND p.type = (CASE WHEN t.type = 'tip received' THEN 'tip sent' ELSE 'tip received' END)
+     AND p.points = -t.points`;
+const TIP_CP = "COALESCE(t.counterparty, p.userId)";
 /** One page of the owner's received or sent tips, with who was on the other end. */
 async function tipJarPage(userId, kind, offset) {
   await tipNoteReady;
   const type = kind === "sent" ? "tip sent" : "tip received";
   const rows = await getQuery(
     `SELECT t.points, t.timestamp, t.note, u.username, u.displayname, u.avatar
-       FROM transactions t LEFT JOIN users u ON u.userId = t.counterparty
+       FROM transactions t ${TIP_PARTNER_JOIN} LEFT JOIN users u ON u.userId = ${TIP_CP}
       WHERE t.userId = ? AND t.type = ?
       ORDER BY t.timestamp DESC, t.rowid DESC LIMIT ? OFFSET ?`,
     [userId, type, TIPJAR_PAGE + 1, Math.max(0, offset | 0)]);
@@ -1518,19 +1526,20 @@ async function tipJarData(userId) {
   const seenRow = await getQuery("SELECT seen_at FROM tipjar_seen WHERE userId = ?", [userId]);
   const seenAt = seenRow.length ? seenRow[0].seen_at : null;
   const [tot] = await getQuery(
-    `SELECT COALESCE(SUM(CASE WHEN type = 'tip received' THEN points END), 0) AS recv,
-            COALESCE(SUM(CASE WHEN type = 'tip received' AND timestamp >= datetime('now', '-7 days') THEN points END), 0) AS week,
-            COALESCE(SUM(CASE WHEN type = 'tip received' AND timestamp >= datetime('now', '-30 days') THEN points END), 0) AS month,
-            COUNT(CASE WHEN type = 'tip received' THEN 1 END) AS recvCount,
-            COUNT(DISTINCT CASE WHEN type = 'tip received' THEN counterparty END) AS tippers,
-            COALESCE(-SUM(CASE WHEN type = 'tip sent' THEN points END), 0) AS sent,
-            COUNT(CASE WHEN type = 'tip sent' THEN 1 END) AS sentCount
-       FROM transactions WHERE userId = ? AND type IN ('tip received', 'tip sent')`, [userId]);
+    `SELECT COALESCE(SUM(CASE WHEN t.type = 'tip received' THEN t.points END), 0) AS recv,
+            COALESCE(SUM(CASE WHEN t.type = 'tip received' AND t.timestamp >= datetime('now', '-7 days') THEN t.points END), 0) AS week,
+            COALESCE(SUM(CASE WHEN t.type = 'tip received' AND t.timestamp >= datetime('now', '-30 days') THEN t.points END), 0) AS month,
+            COUNT(CASE WHEN t.type = 'tip received' THEN 1 END) AS recvCount,
+            COUNT(DISTINCT CASE WHEN t.type = 'tip received' THEN ${TIP_CP} END) AS tippers,
+            COALESCE(-SUM(CASE WHEN t.type = 'tip sent' THEN t.points END), 0) AS sent,
+            COUNT(CASE WHEN t.type = 'tip sent' THEN 1 END) AS sentCount
+       FROM transactions t ${TIP_PARTNER_JOIN}
+      WHERE t.userId = ? AND t.type IN ('tip received', 'tip sent')`, [userId]);
   const top = await getQuery(
     `SELECT u.username, u.displayname, u.avatar, SUM(t.points) AS total, COUNT(*) AS n, MAX(t.timestamp) AS last
-       FROM transactions t JOIN users u ON u.userId = t.counterparty
+       FROM transactions t ${TIP_PARTNER_JOIN} JOIN users u ON u.userId = ${TIP_CP}
       WHERE t.userId = ? AND t.type = 'tip received'
-      GROUP BY t.counterparty ORDER BY total DESC LIMIT 5`, [userId]);
+      GROUP BY u.userId ORDER BY total DESC LIMIT 5`, [userId]);
   // GTF pixel avatars for the top tippers (server-rendered like the rankings podium)
   const avatars = {};
   for (const t of top) {
