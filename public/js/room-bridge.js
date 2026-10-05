@@ -43,8 +43,11 @@
     function meterLoop() {
       if (!analyser || !playing) { bars.forEach(function (b) { b.style.height = ''; }); return; }
       var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d);
-      var n = bars.length, step = Math.floor(d.length / (n * 2)) || 1;
-      for (var i = 0; i < n; i++) { var v = d[i * step] / 255; bars[i].style.height = Math.max(2, Math.round(v * 14)) + 'px'; }
+      var n = bars.length, span = Math.max(1, Math.floor(d.length / n));
+      for (var i = 0; i < n; i++) {
+        var v = 0; for (var k = i * span; k < (i + 1) * span && k < d.length; k++) v = Math.max(v, d[k]);
+        bars[i].style.height = Math.max(2, Math.round(v / 255 * 14)) + 'px';
+      }
       raf = requestAnimationFrame(meterLoop);
     }
     function wireMeter() {
@@ -57,16 +60,37 @@
         src.connect(analyser); analyser.connect(actx.destination);
       } catch (e) { analyser = null; }
     }
+    // The room arrives in ~1 s pieces in real time, so playing the moment the first bytes land means
+    // stuttering forever. Fill a small cushion first (CUSHION s of audio, or give up waiting after
+    // 20 s and play what there is), then play.
+    var CUSHION = 2.5, waitTimer = null;
+    function ahead() { var b = au.buffered; return b.length ? b.end(b.length - 1) - au.currentTime : 0; }
     function start() {
+      clearInterval(waitTimer);
+      au.preload = 'auto';
       au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
+      au.load();
       wireMeter();
       if (actx && actx.state === 'suspended') actx.resume();
+      playing = true; paint(); store('patvRoomAudio', 1);
       setState('connecting…', 'wait');
-      au.play().then(function () { playing = true; startedAt = Date.now(); paint(); meterLoop(); store('patvRoomAudio', 1); })
-        .catch(function () { playing = false; paint(); setState('tap ▶ to listen', ''); });
+      var t0 = Date.now(), lastGot = 0, grewAt = Date.now();
+      waitTimer = setInterval(function () {
+        if (!playing) { clearInterval(waitTimer); return; }
+        var got = ahead();
+        if (got > 0.2) setState('buffering ' + Math.min(100, Math.round(got / CUSHION * 100)) + '%', 'wait');
+        // a paused element stops fetching after a couple of seconds - so "it stopped growing" counts as full too
+        if (got > lastGot + 0.05) { lastGot = got; grewAt = Date.now(); }
+        var full = got >= CUSHION || (got > 0.8 && Date.now() - grewAt > 1500);
+        if (!full && Date.now() - t0 < 20000) return;
+        clearInterval(waitTimer);
+        if (got <= 0) { stop('no audio from the room right now — ▶ to retry'); return; }
+        au.play().then(function () { startedAt = Date.now() - au.currentTime * 1000; meterLoop(); })
+          .catch(function () { playing = false; paint(); setState('tap ▶ to listen', ''); });
+      }, 250);
     }
     function stop(msg) {
-      playing = false; cancelAnimationFrame(raf);
+      playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer);
       au.pause(); au.removeAttribute('src'); au.load();
       jump.classList.add('hide'); paint(); setState(msg || 'Room audio', '');
     }
@@ -84,6 +108,11 @@
       if (behind >= 6 && state.textContent === 'LIVE') setState('LIVE · catching up…', 'wait');
     }, 2000);
     paint();
+    box.rbDebug = function () {                 // for diagnosing "I can't hear it" from the console
+      var lvl = null;
+      if (analyser) { var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d); lvl = Math.max.apply(null, d); }
+      return { ctx: actx ? actx.state : null, meter: !!analyser, level: lvl, t: au.currentTime, ahead: ahead(), muted: au.muted, volume: au.volume };
+    };
     return {
       update: function (d) {
         var on = !!(d && d.room && d.room.audio);
