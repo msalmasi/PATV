@@ -3,7 +3,12 @@
   const need = xpForNextLevel(level);
   const pct = Math.max(0, Math.min(100, need ? (xp / need) * 100 : 0));
   const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
-  const isMe = username && username == usernameProfile;
+  const previewing = typeof previewVisitor !== 'undefined' && !!previewVisitor;
+  const isMe = username && username == usernameProfile && !previewing;
+  // section order + visibility (profilelayout.js). Hidden sections render only for the owner/admins, greyed.
+  const L = typeof layout !== 'undefined' && layout ? layout : { order: ['stats', 'level', 'avatar', 'analytics', 'gtf', 'badges'],
+    hidden: () => false, show: () => true, seesHidden: false, anyHidden: false };
+  const hidTag = (id) => L.hidden(id) ? '<span class="pf-hid">\u{1F441} Hidden from visitors</span>' : '';
   const role = (classh || '').toLowerCase();
   // equipped cosmetics (cosmetics.js preloads them for this route)
   const pc = typeof profileCosmetics !== 'undefined' && profileCosmetics ? profileCosmetics : null;
@@ -77,6 +82,17 @@
   .pf .avs-r { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
   .pf .avs-rar { font-size: 11px; text-transform: capitalize; }
   .pf .avs-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .pf .pf-slot { position: relative; min-width: 0; display: grid; }
+  .pf .pf-slot.is-hidden > :not(.pf-hid), .pf .stat.is-hidden > :not(.pf-hid) { opacity: .45; filter: grayscale(.6); }
+  .pf .pf-slot.is-hidden > .card, .pf .pf-slot.is-hidden > .stats > .stat, .pf .stat.is-hidden { border-style: dashed; border-color: #3a3a3a; }
+  .pf .pf-hid { position: absolute; top: -9px; right: 14px; z-index: 5; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: 999px;
+                background: #1d1a10; border: 1px solid #5a4a1c; color: #e8cf7a; white-space: nowrap; pointer-events: none; }
+  .pf .stat.is-hidden { position: relative; }
+  .pf .pf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 14px;
+                border-radius: 12px; border: 1px solid #3a3320; background: #15130b; color: #e8dfb8; font-size: 13px; }
+  .pf .pf-bar.preview { border-color: #2f6d8f; background: #0d1a22; color: #b9def2; }
+  .pf .pf-bar .btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pf .pf-bar .btn { padding: 5px 11px; font-size: 13px; }
   @media (max-width: 560px) {
     .pf .avs { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pf .avs-info { width: 100%; }
@@ -121,7 +137,7 @@
         <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
         <form class="inline" action="/logout" method="POST"><button class="btn ghost" type="submit">Log out</button></form>
       <% } else { %>
-        <% if (username) { %><a class="btn primary" href="/u/<%= usernameProfile %>/tip">💸 Tip</a><% } %>
+        <% if (username && !previewing) { %><a class="btn primary" href="/u/<%= usernameProfile %>/tip">💸 Tip</a><% } %>
         <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
         <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %>
           <a class="btn" href="/history?user=<%= encodeURIComponent(usernameProfile) %>">📜 PAT history</a>
@@ -131,20 +147,38 @@
     <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
 
+  <% if (previewing) { %>
+    <div class="pf-bar preview" role="status"><span>👁 Previewing your profile as a visitor sees it — hidden sections and your private panels are left out.</span>
+      <span class="btns"><a class="btn" href="/u/<%= usernameProfile %>/profile">Back to my view</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span></div>
+  <% } else if (L.seesHidden && L.anyHidden) { %>
+    <div class="pf-bar"><span>👁 Greyed-out sections are hidden from visitors<%= isMe ? '' : ' (you see them as an admin)' %>.</span>
+      <% if (isMe) { %><span class="btns"><a class="btn" href="/u/<%= usernameProfile %>/profile?preview=visitor">Preview as visitor</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span><% } %></div>
+  <% } %>
+
+  <%
+    const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null;
+    const hasAnalytics = (typeof analytics !== 'undefined' && analytics) || (isMe && !(typeof camfrog !== 'undefined' && camfrog));
+    const has = {
+      stats: true, level: true, gtf: true, badges: true,
+      avatar: !!(av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))),
+      analytics: !!hasAnalytics,
+    };
+    const SEC = {};
+    SEC.stats = function () { %>
   <section class="stats">
-    <div class="stat"><div class="k">PAT balance</div><div class="v gold"><%= fmt(points_balance) %></div><div class="s">in their wallet</div></div>
+    <% if (L.show('stats_balance')) { %><div class="stat<%= L.hidden('stats_balance') ? ' is-hidden' : '' %>"><%- hidTag('stats_balance') %><div class="k">PAT balance</div><div class="v gold"><%= fmt(points_balance) %></div><div class="s">in their wallet</div></div><% } %>
     <div class="stat"><div class="k">Level</div><div class="v"><%= level %></div><div class="s"><%= Math.round(pct) %>% to level <%= level + 1 %></div></div>
     <div class="stat"><div class="k">Badges</div><div class="v"><%= badges.length %></div><div class="s"><a href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">see all achievements</a></div></div>
   </section>
-
+  <% };
+    SEC.level = function () { %>
   <section class="card lvl">
     <div class="lvl-top"><b>Level <%= level %></b><span class="muted"><%= fmt(xp) %> / <%= fmt(need) %> XP · <%= fmt(need - xp) %> to go</span></div>
     <div class="bar" role="progressbar" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
     <div class="muted">XP comes from chatting, the mic and games. Every level-up pays a PAT bonus.</div>
   </section>
-
-  <% const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null; %>
-  <% if (av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))) { %>
+  <% };
+    SEC.avatar = function () { %>
   <section class="card avs" aria-label="Grand Theft Frogger avatar">
     <div class="avs-frame<%= av.svg ? '' : ' empty' %>">
       <% if (av.svg) { %><%- av.svg %><% } else { %><span class="avs-ph" aria-hidden="true">🐸</span><% } %>
@@ -170,16 +204,17 @@
       </div>
     </div>
   </section>
-  <% } %>
-
+  <% };
+    SEC.analytics = function () { %>
   <% if (typeof analytics !== 'undefined' && analytics && !analytics.empty) { %>
-    <%- include('partials/user-analytics', { a: analytics }) %>
+    <%- include('partials/user-analytics', { a: analytics, L }) %>
   <% } else if (typeof analytics !== 'undefined' && analytics && analytics.empty) { %>
     <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">Pepe hasn't recorded any Camfrog activity for <%= camfrog %> yet — it shows up here after some chat or mic time.</p></section>
   <% } else if (isMe && !(typeof camfrog !== 'undefined' && camfrog)) { %>
     <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">No Camfrog name is linked to this account, so there's no chat or mic activity to show. Accounts Pepe makes in Camfrog are linked automatically.</p></section>
   <% } %>
-
+  <% };
+    SEC.gtf = function () { %>
   <section class="card">
     <h2>Grand Theft Frogger</h2>
     <div class="gtf">
@@ -199,7 +234,8 @@
       <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
     </div>
   </section>
-
+  <% };
+    SEC.badges = function () { %>
   <section class="card">
     <h2>Badges</h2>
     <% if (!badges.length) { %>
@@ -212,6 +248,13 @@
       </div>
     <% } %>
   </section>
+  <% };
+  %>
+  <% L.order.forEach((id) => { if (!SEC[id] || !has[id] || !L.show(id)) return; %>
+  <div class="pf-slot<%= L.hidden(id) ? ' is-hidden' : '' %>" data-sec="<%= id %>"><%- hidTag(id) %>
+  <% SEC[id](); %>
+  </div>
+  <% }) %>
 </div>
 </body>
 </html>

@@ -190,9 +190,11 @@ const TYPE_LABEL = {
   promote: ["Promotions", "Promoted"], strike: ["Automod strikes", "Automod strike"],
   michog_strike: ["Mic-hog strikes", "Mic-hog strike"], timeout: ["Time-outs", "Timed out"],
   demoted: ["Automod demotions", "Demoted by automod"], suspension: ["Red-list suspensions", "Red-list suspended"],
+  topic: ["Topic changes", "Topic changed"],   // 2.00: actor-only (count + time + room; never the topic text)
 };
 const SINGULAR = { kick: "Kick", ban: "Ban", mute: "Mute", mic_block: "Mic block", demote: "Demotion", fine: "Fine",
-  warning: "Warning", mic_unblock: "Mic unblock", unmute: "Unmute", unban: "Unban", promote: "Promotion" };
+  warning: "Warning", mic_unblock: "Mic unblock", unmute: "Unmute", unban: "Unban", promote: "Promotion",
+  topic: "Topic change" };
 // i: 0 = plural count label, 1 = "done to them" label, 2 = one action they took
 const typeName = (t, i = 0) => (i === 2 ? SINGULAR[t] || t : (TYPE_LABEL[t] || [t, t])[i]);
 

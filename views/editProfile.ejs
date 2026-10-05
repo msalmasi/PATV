@@ -1,231 +1,501 @@
-<!-- views/profile.ejs -->
-<%- include('layout', { title: `${username} Profile Editor`, user: username}) %>
-<body>
-    <div class="profile-container">
-        <%
-          // Normalize flash message — could be string, array, or empty
-          function flashStr(v) {
-            if (!v) return '';
-            if (Array.isArray(v)) return v.join(' ');
-            return String(v);
-          }
-          const errStr = flashStr(errors);
-          const succStr = flashStr(success);
-          function parseVerify(msg) {
-            const m = msg && msg.match(/!verify (\w+)/);
-            return m ? { code: m[1], full: msg } : null;
-          }
-          const verifyInfo = parseVerify(errStr) || parseVerify(succStr);
-          const verifyMsgText = (errStr || succStr).replace(/!verify \w+.*/, '').trim();
-        %>
-        <% if (verifyInfo) { %>
-            <div class="verify-box">
-                <div class="verify-header">⚠ Verify Your Camfrog Username</div>
-                <div class="verify-msg"><%= verifyMsgText %></div>
-                <div class="verify-instructions">Type this in the Camfrog room:</div>
-                <div class="verify-code-wrap">
-                    <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
-                    <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',2000);">Copy</button>
-                </div>
-                <div class="verify-expires">⏱ Code expires in 15 minutes</div>
-            </div>
-            <style>
-                .verify-box {
-                    background: linear-gradient(135deg, #1a2f1a, #0f1f0f);
-                    border: 2px solid #4CAF50;
-                    border-radius: 12px;
-                    padding: 24px;
-                    margin: 20px 0;
-                    box-shadow: 0 0 24px rgba(76,175,80,0.3);
-                    animation: pulse-border 2s ease-in-out infinite;
-                }
-                @keyframes pulse-border {
-                    0%, 100% { box-shadow: 0 0 24px rgba(76,175,80,0.3); }
-                    50% { box-shadow: 0 0 36px rgba(76,175,80,0.6); }
-                }
-                .verify-header {
-                    font-size: 1.4rem;
-                    font-weight: 700;
-                    color: #FFD54F;
-                    margin-bottom: 12px;
-                }
-                .verify-msg {
-                    color: #b0b0b0;
-                    font-size: 0.95rem;
-                    margin-bottom: 16px;
-                    line-height: 1.4;
-                }
-                .verify-instructions {
-                    color: #ddd;
-                    font-size: 0.9rem;
-                    margin-bottom: 8px;
-                }
-                .verify-code-wrap {
-                    display: flex;
-                    align-items: center;
-                    gap: 12px;
-                    background: #0a0f0a;
-                    padding: 14px 18px;
-                    border-radius: 8px;
-                    border: 1px solid #2a4a2a;
-                }
-                .verify-cmd {
-                    font-family: 'Courier New', monospace;
-                    font-size: 1.2rem;
-                    color: #fff;
-                    flex: 1;
-                }
-                .verify-code {
-                    color: #4CAF50;
-                    font-weight: 700;
-                    font-size: 1.4rem;
-                    letter-spacing: 2px;
-                }
-                .verify-copy {
-                    background: #4CAF50;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-weight: 600;
-                    font-size: 0.9rem;
-                }
-                .verify-copy:hover { background: #45a049; }
-                .verify-expires {
-                    color: #888;
-                    font-size: 0.8rem;
-                    margin-top: 12px;
-                    text-align: right;
-                }
-            </style>
-        <% } else { %>
-            <% if (errStr) { %>
-                <div class="alert alert-danger"><br><br><%= errStr %></div>
-            <% } %>
-            <% if (succStr) { %>
-                <div class="alert alert-success"><br><br><%= succStr %></div>
-            <% } %>
-        <% } %>
-        <h1>Edit Profile</h1>
+<%- include('layout', { title: 'Edit profile · Public Access', user: username }) %>
+<%
+  // Normalize flash message — could be string, array, or empty
+  function flashStr(v) {
+    if (!v) return '';
+    if (Array.isArray(v)) return v.join(' ');
+    return String(v);
+  }
+  const errStr = flashStr(errors);
+  const succStr = flashStr(success);
+  function parseVerify(msg) {
+    const m = msg && msg.match(/!verify (\w+)/);
+    return m ? { code: m[1], full: msg } : null;
+  }
+  const verifyInfo = parseVerify(errStr) || parseVerify(succStr);
+  const verifyMsgText = (errStr || succStr).replace(/!verify \w+.*/, '').trim();
 
-        <form id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" value="<%= username %>" required>
-            <button class="profileButton" type="submit">Update Username</button>
-        </form>
+  // equipped cosmetics, same as the profile hero
+  const pc = typeof profileCosmetics !== 'undefined' && profileCosmetics ? profileCosmetics : null;
+  const cx = (k) => (pc && pc.equipped && pc.equipped[k] ? pc.equipped[k].r : null);
+  const cxName = cx('name_color'), cxBorder = cx('profile_border'), cxDeco = cx('avatar_decoration'), cxBanner = cx('profile_banner'), cxFx = cx('profile_effect');
+  const role = (typeof classh !== 'undefined' && classh ? classh : '').toLowerCase();
+  const lay = typeof layout !== 'undefined' && layout ? layout : { order: [], hidden: [] };
+  const secs = typeof sections !== 'undefined' ? sections : [];
+  const subs = typeof subSections !== 'undefined' ? subSections : {};
+  const byId = Object.fromEntries(secs.map((s) => [s.id, s]));
+  const isHidden = (id) => lay.hidden.includes(id);
+  const camfrogName = typeof camfrogUsername !== 'undefined' && camfrogUsername ? camfrogUsername : '';
+%>
+<%- include('partials/cosmetics-css') %>
+<style>
+  .pe { max-width: 920px; margin: 0 auto; padding: 18px 16px 64px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; }
+  .pe a { color: #81c784; text-decoration: none; }
+  .pe a:hover { color: #a5d6a7; }
+  .pe .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; scroll-margin-top: 80px; }
+  .pe h1 { margin: 0; font-size: 26px; }
+  .pe h2 { margin: 0 0 4px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
+  .pe .lede { color: #888; font-size: 13px; margin: 0 0 14px; }
+  .pe .muted { color: #888; font-size: 13px; }
+  .pe code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .pe .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pe .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
+             background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; line-height: 1.2; text-decoration: none; }
+  .pe .btn:hover { border-color: #4caf50; }
+  .pe .btn:focus-visible, .pe input:focus-visible, .pe .lay-grip:focus-visible, .pe .mv button:focus-visible { outline: 2px solid #81c784; outline-offset: 2px; }
+  .pe .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
+  .pe .btn.primary:hover { background: #43a047; }
+  .pe .btn.ghost { background: transparent; }
+  .pe .btn.twitch { background: #9146ff; border-color: #9146ff; color: #fff !important; }
+  .pe .btn.discord { background: #5865f2; border-color: #5865f2; color: #fff !important; }
+  .pe .btn svg { width: 18px; height: 18px; flex: none; }
+  .pe #twitchLoginButton, .pe #discordLoginButton { display: inline-flex; width: auto; padding: 8px 14px; border-radius: 8px; font-size: 14px; font-weight: bold; }
+  .pe #twitchLoginButton { background: #9146ff; border-color: #9146ff; color: #fff !important; }
+  .pe #twitchLoginButton:hover { background: #7c2ff7; }
+  .pe #discordLoginButton { background: #5865f2; border-color: #5865f2; color: #fff !important; }
+  .pe #discordLoginButton:hover { background: #4752e0; }
+  .pe .btn:disabled { opacity: .45; cursor: default; }
+  .pe .btn.primary:disabled:hover { background: #4caf50; }
+  .pe .jump { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pe .jump a { font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
+  .pe .jump a:hover { border-color: #4caf50; }
 
-        <form id="displaynameForm" action="/api/u/<%= username %>/update/displayname" method="post">
-            <label for="displayname">Display Name:</label>
-            <input type="text" id="displayname" name="displayname" value="<%= displayname %>" required>
-            <button class="profileButton" type="submit">Update Display Name</button>
-        </form>
+  /* messages */
+  .pe .msg { border-radius: 12px; padding: 12px 16px; font-size: 14px; border: 1px solid; }
+  .pe .msg.ok { border-color: #2e5e30; background: #0f1a10; color: #c8e6c9; }
+  .pe .msg.err { border-color: #6b2b2b; background: #1d0f0f; color: #ffcdd2; }
 
-        <form id="emailForm" action="/api/u/<%= username %>/update/email" method="post">
-            <label for="email">Email:</label>
-            <input type="email" id="email" name="email" value="<%= email %>" required>
-            <button class="profileButton" type="submit">Update Email</button>
-        </form>
+  /* hero preview (mirrors the profile hero) */
+  .pe .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 20px; align-items: center;
+              background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
+  .pe .avatar { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d;
+                box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
+  .pe .who .nm { margin: 0; font-size: 26px; line-height: 1.15; font-weight: bold; overflow-wrap: anywhere; }
+  .pe .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+  .pe .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pe .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
+  .pe .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
+  .pe .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
+  .pe .chip.pv { border-color: #5a4a1c; background: #1d1a10; color: #e8cf7a; }
+  .pe .hero-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 
-        <form id="passwordForm" action="/api/u/<%= username %>/update/password" method="post">
-            <label for="password">Password</label>
-            <input type="password" id="password" name="password" required minlength="6"><br>
-            <label for="confirm_password">Confirm Password</label>
-            <input type="password" id="confirm_password" required><br>
-            <button class="profileButton" type="submit">Update Password</button>
-        </form>
+  /* forms */
+  .pe .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 18px; }
+  .pe form.field { margin: 0; display: grid; gap: 6px; align-content: start; }
+  .pe label.lbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; }
+  .pe .row { display: flex; gap: 8px; }
+  .pe .row input { flex: 1; min-width: 0; }
+  .pe input[type="text"], .pe input[type="email"], .pe input[type="password"] {
+    width: 100%; margin: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #0b0b0b; color: #e6e6e6;
+    font-size: 15px; font-family: inherit; box-sizing: border-box; }
+  .pe input[type="text"]:focus, .pe input[type="email"]:focus, .pe input[type="password"]:focus { border-color: #4caf50; outline: none; }
+  .pe .hint { font-size: 12px; color: #777; }
+  .pe .status { font-size: 13px; min-height: 18px; }
+  .pe .status.ok { color: #81c784; }
+  .pe .status.err { color: #ef9a9a; }
 
-        <form id="uploadForm" enctype="multipart/form-data">
-            <label for="avatar">Avatar URL:</label>
-            <input type="text" id="avatar" name="avatarURL" value="<%= avatar %>" required>
-            <button type="submit">Upload Avatar</button>
-            <input type="file" id="avatarFile" name="avatar" accept="image/*" required>
-            
-        </form>
-        <br>
-        <!-- Place this inside your HTML body where you want the Twitch login button -->
-        <div id="twitchLoginDiv">
-            <label for="twitch">Connected Twitch Account:<strong style="color:#9146FF"> <%= twitchDisplayname %></strong></label>
-            <p ></p>
-            <button id="twitchLoginButton" onclick="loginWithTwitch()" class="twitch-btn">
-            
-                <svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
-                viewBox="0 0 2400 2800" style="enable-background:new 0 0 2400 2800;" xml:space="preserve">
-           <style type="text/css">
-               .st0{fill:#FFFFFF;}
-               .st1{fill:#9146FF;}
-           </style>
-           <title>Asset 2</title>
-           <g>
-               <polygon class="st0" points="2200,1300 1800,1700 1400,1700 1050,2050 1050,1700 600,1700 600,200 2200,200 	"/>
-               <g>
-                   <g id="Layer_1-2">
-                       <path class="st1" d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600
-                           V1300z"/>
-                       <rect x="1700" y="550" class="st1" width="200" height="600"/>
-                       <rect x="1150" y="550" class="st1" width="200" height="600"/>
-                   </g>
-               </g>
-           </g>
-           </svg>
-                <span>Continue with Twitch</span>
+  /* avatar */
+  .pe .avup { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px 18px; align-items: center; }
+  .pe .avup img { width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 2px solid #2b2b2b; background: #0d0d0d; }
+  .pe .file { position: relative; display: inline-flex; }
+  .pe .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .pe .file:focus-within .btn { outline: 2px solid #81c784; outline-offset: 2px; }
 
-            </button>
-        </div>    
-        <br>
-        <div id="discordLoginDiv">
-            <label for="twitch">Connected Discord Account: <strong style="color:#5865F2"> <%= discordUsername %></strong></label>
-            <p ></p>
-            <button id="discordLoginButton" onclick="loginWithDiscord()" class="discord-btn">
-            
-                <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-                    width="800px" height="800px" viewBox="0 -28.5 256 256" version="1.1" preserveAspectRatio="xMidYMid">
-                    <g>
-                        <path
-                            d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"
-                            fill="#FFFFFF" fill-rule="nonzero">
+  /* connections */
+  .pe .conn { display: grid; gap: 10px; }
+  .pe .conn-row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #0d0d0d;
+                  border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 12px; }
+  .pe .conn-ico { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; font-size: 18px; }
+  .pe .conn-ico svg { width: 20px; height: 20px; }
+  .pe .conn-name { font-size: 14px; }
+  .pe .conn-name b { display: block; font-size: 15px; overflow-wrap: anywhere; }
+  .pe .conn-name .none { color: #777; font-weight: normal; }
+  .pe .conn-cf { grid-column: 1 / -1; }
 
-                        </path>
-                    </g>
-                </svg>
+  /* layout editor */
+  .pe .lay-fixed { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px dashed #2b2b2b; color: #888; font-size: 13px; margin-bottom: 8px; }
+  .pe .lay { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .pe .lay-item { display: grid; grid-template-columns: 28px 30px minmax(0, 1fr) auto auto; gap: 10px; align-items: center;
+                  background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 12px; transition: border-color .15s, background .15s; }
+  .pe .lay-item.off { background: #0b0b0b; border-style: dashed; }
+  .pe .lay-item.off .lay-ico, .pe .lay-item.off .lay-txt { opacity: .5; }
+  .pe .lay-item.dragging { border-color: #4caf50; background: #102012; box-shadow: 0 8px 24px rgba(0,0,0,.5); position: relative; z-index: 2; }
+  .pe .lay-grip { width: 28px; height: 36px; border: 0; padding: 0; border-radius: 6px; background: transparent; color: #666; cursor: grab; touch-action: none;
+                  font-size: 18px; line-height: 1; display: grid; place-items: center; }
+  .pe .lay-grip:hover { color: #ccc; background: #181818; }
+  .pe .lay-item.dragging .lay-grip { cursor: grabbing; }
+  .pe .lay-ico { font-size: 20px; text-align: center; }
+  .pe .lay-txt b { display: block; font-size: 15px; color: #e6e6e6; }
+  .pe .lay-txt small { display: block; color: #888; font-size: 12px; margin-top: 1px; }
+  .pe .lay-subs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .pe .lay-subs label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #bbb; padding: 3px 9px 3px 6px; border-radius: 999px;
+                        border: 1px solid #2a2a2a; background: #141414; cursor: pointer; user-select: none; }
+  .pe .lay-subs label:has(input:not(:checked)) { color: #777; border-style: dashed; text-decoration: line-through; }
+  .pe .lay-subs input { margin: 0; accent-color: #4caf50; }
+  .pe .lay-item.off .lay-subs { pointer-events: none; }
+  .pe .sw { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: #aaa; user-select: none; white-space: nowrap; }
+  .pe .sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .pe .sw .tr { width: 38px; height: 22px; border-radius: 999px; background: #2a2a2a; position: relative; transition: background .15s; flex: none; }
+  .pe .sw .tr::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #888; transition: transform .15s, background .15s; }
+  .pe .sw input:checked + .tr { background: #2e7d32; }
+  .pe .sw input:checked + .tr::after { transform: translateX(16px); background: #fff; }
+  .pe .sw input:focus-visible + .tr { outline: 2px solid #81c784; outline-offset: 2px; }
+  .pe .sw .st { min-width: 46px; }
+  .pe .mv { display: inline-flex; gap: 4px; }
+  .pe .mv button { width: 32px; height: 32px; padding: 0; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #ccc; cursor: pointer; font-size: 12px; }
+  .pe .mv button:hover:not(:disabled) { border-color: #4caf50; color: #fff; }
+  .pe .mv button:disabled { opacity: .3; cursor: default; }
+  .pe .lay-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; }
+  .pe .lay-actions .dirty { font-size: 13px; color: #e8cf7a; display: none; }
+  .pe .lay-actions .dirty.on { display: inline; }
+  .pe .lay-note { font-size: 12px; color: #777; margin-top: 10px; }
+  .pe .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-                <span>Continue with Discord</span>
+  /* verify box (kept from before) */
+  .verify-box { background: linear-gradient(135deg, #1a2f1a, #0f1f0f); border: 2px solid #4CAF50; border-radius: 14px; padding: 22px; box-shadow: 0 0 24px rgba(76,175,80,0.3); animation: pulse-border 2s ease-in-out infinite; }
+  @keyframes pulse-border { 0%, 100% { box-shadow: 0 0 24px rgba(76,175,80,0.3); } 50% { box-shadow: 0 0 36px rgba(76,175,80,0.6); } }
+  .verify-header { font-size: 1.3rem; font-weight: 700; color: #FFD54F; margin-bottom: 12px; }
+  .verify-msg { color: #b0b0b0; font-size: 0.95rem; margin-bottom: 16px; line-height: 1.4; }
+  .verify-instructions { color: #ddd; font-size: 0.9rem; margin-bottom: 8px; }
+  .verify-code-wrap { display: flex; align-items: center; gap: 12px; background: #0a0f0a; padding: 14px 18px; border-radius: 8px; border: 1px solid #2a4a2a; flex-wrap: wrap; }
+  .verify-cmd { font-family: 'Courier New', monospace; font-size: 1.2rem; color: #fff; flex: 1; }
+  .verify-code { color: #4CAF50; font-weight: 700; font-size: 1.4rem; letter-spacing: 2px; }
+  .verify-copy { background: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+  .verify-copy:hover { background: #45a049; }
+  .verify-expires { color: #888; font-size: 0.8rem; margin-top: 12px; text-align: right; }
 
-            </button>
-        </div>
+  @media (max-width: 600px) {
+    .pe { padding-top: 12px; }
+    .pe .card { padding: 16px 14px; }
+    .pe .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .pe .chips { justify-content: center; }
+    .pe .hero-foot { justify-content: center; }
+    .pe .hero .cx-banner { margin: -16px -14px 0; }
+    .pe .lay-item { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px 10px; padding: 10px; }
+    .pe .lay-item .lay-ico { display: none; }
+    .pe .lay-item .lay-grip { grid-row: 1 / span 2; align-self: center; }
+    .pe .lay-item .lay-txt { grid-column: 2 / -1; }
+    .pe .lay-item .sw { grid-column: 2; grid-row: 2; justify-self: start; }
+    .pe .lay-item .mv { grid-column: 3; grid-row: 2; }
+    .pe .lay-subs { margin-top: 6px; }
+    .pe .avup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .pe .conn-row { grid-template-columns: 36px minmax(0, 1fr); }
+    .pe .conn-row > .btn, .pe .conn-row > form { grid-column: 1 / -1; }
+    .pe .conn-row > .btn { width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .verify-box { animation: none; } .pe .lay-item, .pe .sw .tr, .pe .sw .tr::after { transition: none; } }
+</style>
 
-        <br>
-        <div id="camfrogDiv">
-            <form id="camfrogForm" action="/api/u/<%= username %>/update/camfrog" method="post">
-                <label for="camfrogUsername">Camfrog Username:<% if (typeof camfrogUsername !== 'undefined' && camfrogUsername) { %><strong style="color:#00CC66"> <%= camfrogUsername %></strong><% } %></label>
-                <input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= (typeof camfrogUsername !== 'undefined' && camfrogUsername) ? camfrogUsername : '' %>" placeholder="Enter your Camfrog username">
-                <button class="profileButton" type="submit">Link Camfrog</button>
-            </form>
-        </div>
+<div class="pe">
+  <div class="top">
+    <h1>Edit profile</h1>
+    <a class="btn" href="/u/<%= username %>/profile">View profile →</a>
+  </div>
 
-        <div id="uploadStatus" class="spin-status"></div>
+  <% if (verifyInfo) { %>
+    <div class="verify-box">
+      <div class="verify-header">⚠ Verify Your Camfrog Username</div>
+      <div class="verify-msg"><%= verifyMsgText %></div>
+      <div class="verify-instructions">Type this in the Camfrog room:</div>
+      <div class="verify-code-wrap">
+        <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
+        <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',2000);">Copy</button>
+      </div>
+      <div class="verify-expires">⏱ Code expires in 15 minutes</div>
     </div>
-</body>
-<script src="/public/js/upload-avatar.js"></script>
+  <% } else { %>
+    <% if (errStr) { %><div class="msg err" role="alert"><%= errStr %></div><% } %>
+    <% if (succStr) { %><div class="msg ok" role="status"><%= succStr %></div><% } %>
+  <% } %>
+
+  <!-- live preview of the profile hero -->
+  <section class="card hero cx-host" aria-label="Profile preview">
+    <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
+    <% if (cxFx) { %><div class="cx-fx cx-fx-<%= cxFx.effect %>" aria-hidden="true"></div><% } %>
+    <span class="cx-av">
+      <% if (cxDeco && cxDeco.conic) { %><span class="cx-conic<%= cxDeco.spin ? ' cx-spin' : '' %>" style="<%= cxDeco.conic %>" aria-hidden="true"></span><% } %>
+      <img class="avatar" id="pvAvatar" src="<%= avatar %>" alt="Your avatar" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
+      <% if (cxDeco && cxDeco.emoji) { %><span class="cx-emoji" aria-hidden="true"><%= cxDeco.emoji %></span><% } %>
+    </span>
+    <div class="who">
+      <div class="nm"><% if (cxName && cxName.css) { %><span class="cx-name" id="pvName" style="<%= cxName.css %>"><%= displayname || username %></span><% } else { %><span id="pvName"><%= displayname || username %></span><% } %></div>
+      <div class="handle">@<span id="pvHandle"><%= username %></span><% if (camfrogName) { %> · 🐸 <%= camfrogName %> on Camfrog<% } %></div>
+      <div class="chips">
+        <span class="chip pv">Preview</span>
+        <% if (typeof level !== 'undefined' && level != null) { %><span class="chip">Level <%= level %></span><% } %>
+        <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
+      </div>
+    </div>
+    <div class="hero-foot">
+      <span class="muted">Name colour, banner, border and avatar ring come from your equipped cosmetics.</span>
+      <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
+    </div>
+    <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
+  </section>
+
+  <nav class="jump" aria-label="Sections">
+    <a href="#account">Account</a><a href="#avatar">Avatar</a><a href="#layout">Profile layout</a><a href="#connections">Connections</a><a href="#password">Password</a>
+  </nav>
+
+  <section class="card" id="account">
+    <h2>Account</h2>
+    <p class="lede">Your display name is what everyone sees; your username is in your profile link.</p>
+    <div class="grid2">
+      <form class="field" id="displaynameForm" action="/api/u/<%= username %>/update/displayname" method="post">
+        <label class="lbl" for="displayname">Display name</label>
+        <div class="row"><input type="text" id="displayname" name="displayname" value="<%= displayname %>" required><button class="btn primary" type="submit">Save</button></div>
+      </form>
+      <form class="field" id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
+        <label class="lbl" for="username">Username</label>
+        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" required><button class="btn" type="submit">Change</button></div>
+        <span class="hint">Changes your profile address.</span>
+      </form>
+      <form class="field" id="emailForm" action="/api/u/<%= username %>/update/email" method="post">
+        <label class="lbl" for="email">Email</label>
+        <div class="row"><input type="email" id="email" name="email" value="<%= email %>" required><button class="btn" type="submit">Change</button></div>
+        <span class="hint">We'll send a link to verify the new address.</span>
+      </form>
+    </div>
+  </section>
+
+  <section class="card" id="avatar">
+    <h2>Avatar</h2>
+    <p class="lede">Square images look best — it's cropped to 200×200.</p>
+    <form id="uploadForm" class="avup" enctype="multipart/form-data">
+      <img id="avPreview" src="<%= avatar %>" alt="" onerror="this.src='/public/img/avatar.png'">
+      <div style="display:grid;gap:8px;min-width:0">
+        <div class="row" style="flex-wrap:wrap">
+          <span class="file"><span class="btn">📁 Choose image</span><input type="file" id="avatarFile" name="avatar" accept="image/*" required aria-label="Choose an avatar image"></span>
+          <button class="btn primary" type="submit" id="avSave" disabled>Upload</button>
+        </div>
+        <div class="status" id="uploadStatus" role="status" aria-live="polite"></div>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" id="layout">
+    <h2>Profile layout</h2>
+    <p class="lede">Drag sections to reorder them, or use the arrows. Switch one off to hide it from visitors — you'll still see it on your own profile, greyed out.</p>
+    <form id="layoutForm" action="/api/u/<%= username %>/update/layout" method="post">
+      <div class="lay-fixed">🔒 <span><b style="color:#ccc">Profile header</b> — always first: avatar, name, level, pinned badges</span></div>
+      <ol class="lay" id="layList" aria-describedby="layHelp">
+        <% lay.order.forEach((id, i) => { const s = byId[id]; if (!s) return; const off = isHidden(id); %>
+        <li class="lay-item<%= off ? ' off' : '' %>" data-id="<%= id %>" data-label="<%= s.label %>">
+          <input type="hidden" name="order" value="<%= id %>">
+          <button type="button" class="lay-grip" aria-label="Reorder <%= s.label %> (arrow keys move it)" title="Drag to reorder">⠿</button>
+          <span class="lay-ico" aria-hidden="true"><%= s.icon %></span>
+          <div class="lay-txt">
+            <b><%= s.label %></b><small><%= s.desc %></small>
+            <% if (subs[id] && subs[id].length) { %>
+              <div class="lay-subs" role="group" aria-label="<%= s.label %> panels">
+                <% subs[id].forEach((p) => { %>
+                  <label><input type="checkbox" name="show" value="<%= p.id %>"<%= isHidden(p.id) ? '' : ' checked' %>><%= p.label %></label>
+                <% }) %>
+              </div>
+            <% } %>
+          </div>
+          <label class="sw"><input type="checkbox" name="show" value="<%= id %>"<%= off ? '' : ' checked' %> aria-label="Show <%= s.label %> to visitors"><span class="tr" aria-hidden="true"></span><span class="st"><%= off ? 'Hidden' : 'Visible' %></span></label>
+          <span class="mv"><button type="button" class="up" aria-label="Move <%= s.label %> up">▲</button><button type="button" class="dn" aria-label="Move <%= s.label %> down">▼</button></span>
+        </li>
+        <% }) %>
+      </ol>
+      <p class="sr" id="layHelp">Each section has a reorder handle (use the up and down arrow keys on it), move up and move down buttons, and a switch that shows or hides it for visitors.</p>
+      <div class="sr" id="layLive" aria-live="polite"></div>
+      <div class="lay-actions">
+        <button class="btn primary" type="submit">Save layout</button>
+        <a class="btn" href="/u/<%= username %>/profile?preview=visitor">👁 Preview as visitor</a>
+        <button class="btn ghost" type="submit" name="reset" value="1" id="layReset">Reset to default</button>
+        <span class="dirty" id="layDirty">Unsaved changes</span>
+      </div>
+      <p class="lay-note">Hiding only hides: your private panels (moderated against, top words, moderation commands) are never shown to visitors whatever you pick here.</p>
+    </form>
+  </section>
+
+  <section class="card" id="connections">
+    <h2>Connections</h2>
+    <p class="lede">Link your accounts so PAT, XP and badges follow you everywhere.</p>
+    <div class="conn">
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#9146ff">
+          <svg viewBox="0 0 2400 2800" aria-hidden="true"><polygon fill="#fff" points="2200,1300 1800,1700 1400,1700 1050,2050 1050,1700 600,1700 600,200 2200,200"/><path fill="#9146ff" d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600V1300z"/><rect fill="#9146ff" x="1700" y="550" width="200" height="600"/><rect fill="#9146ff" x="1150" y="550" width="200" height="600"/></svg>
+        </span>
+        <span class="conn-name">Twitch<b><% if (twitchDisplayname) { %><span style="color:#bf94ff"><%= twitchDisplayname %></span><% } else { %><span class="none">Not connected</span><% } %></b></span>
+        <button type="button" id="twitchLoginButton" class="btn twitch" onclick="loginWithTwitch()"><%= twitchDisplayname ? 'Reconnect' : 'Continue with Twitch' %></button>
+      </div>
+      <div class="conn-row">
+        <span class="conn-ico" style="background:#5865f2">
+          <svg viewBox="0 -28.5 256 256" aria-hidden="true"><path fill="#fff" d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"/></svg>
+        </span>
+        <span class="conn-name">Discord<b><% if (discordUsername) { %><span style="color:#aab3ff"><%= discordUsername %></span><% } else { %><span class="none">Not connected</span><% } %></b></span>
+        <button type="button" id="discordLoginButton" class="btn discord" onclick="loginWithDiscord()"><%= discordUsername ? 'Reconnect' : 'Continue with Discord' %></button>
+      </div>
+      <div class="conn-row" id="camfrogDiv">
+        <span class="conn-ico" style="background:#123d22">🐸</span>
+        <span class="conn-name">Camfrog<b><% if (camfrogName) { %><span style="color:#00cc66"><%= camfrogName %></span><% } else { %><span class="none">Not linked</span><% } %></b></span>
+        <span></span>
+        <form class="field conn-cf" id="camfrogForm" action="/api/u/<%= username %>/update/camfrog" method="post">
+          <label class="lbl" for="camfrogUsername">Camfrog username</label>
+          <div class="row"><input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= camfrogName %>" placeholder="Enter your Camfrog username"><button class="btn primary" type="submit">Link Camfrog</button></div>
+          <span class="hint">You'll get a <code>!verify</code> code to type in a room with Pepe.</span>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="password">
+    <h2>Password</h2>
+    <p class="lede">At least 6 characters.</p>
+    <form class="grid2" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
+      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password">New password</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"></div>
+      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password">Confirm password</label><input type="password" id="confirm_password" required minlength="6" autocomplete="new-password"></div>
+      <div><button class="btn primary" type="submit">Update password</button> <span class="status err" id="pwStatus" role="status" aria-live="polite"></span></div>
+    </form>
+  </section>
+</div>
+
 <script>
-    function validateForm() {
-        var password = document.getElementById("password").value;
-        var confirmPassword = document.getElementById("confirm_password").value;
-        if (password != confirmPassword) {
-            alert("Passwords do not match.");
-            return false;
-        }
-        return true;
+  function validateForm() {
+    var p = document.getElementById("password").value, c = document.getElementById("confirm_password").value;
+    if (p !== c) { document.getElementById("pwStatus").textContent = "Passwords do not match."; return false; }
+    return true;
+  }
+  function loginWithTwitch() { window.location.href = '/auth/twitch'; }
+  function loginWithDiscord() { window.location.href = '/auth/discord'; }
+
+  (function () {
+    // live preview: display name
+    var dn = document.getElementById('displayname'), pvName = document.getElementById('pvName');
+    var fallback = <%- JSON.stringify(String(username)).replace(/</g, '\\u003c') %>;
+    if (dn && pvName) dn.addEventListener('input', function () { pvName.textContent = dn.value.trim() || fallback; });
+
+    // avatar: preview the chosen file, upload it, then show it in the hero
+    var form = document.getElementById('uploadForm'), file = document.getElementById('avatarFile');
+    var img = document.getElementById('avPreview'), pv = document.getElementById('pvAvatar');
+    var save = document.getElementById('avSave'), status = document.getElementById('uploadStatus');
+    var oldSrc = img ? img.src : '', obj = null;
+    function say(t, ok) { status.textContent = t; status.className = 'status ' + (ok ? 'ok' : 'err'); }
+    if (file) file.addEventListener('change', function () {
+      var f = file.files && file.files[0];
+      if (obj) { URL.revokeObjectURL(obj); obj = null; }
+      if (!f) { img.src = oldSrc; save.disabled = true; return; }
+      if (!/^image\//.test(f.type)) { say('That is not an image.', false); save.disabled = true; return; }
+      obj = URL.createObjectURL(f);
+      img.src = obj; if (pv) pv.src = obj;
+      save.disabled = false; say('Looks good? Hit Upload.', true);
+    });
+    if (form) form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = file.files && file.files[0];
+      if (!f) return;
+      var fd = new FormData(); fd.append('avatar', f);
+      save.disabled = true; say('Uploading…', true);
+      fetch('/api/u/' + encodeURIComponent(fallback) + '/update/avatar', { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (d) {
+          if (d && /success/i.test(d.message || '')) { say('Avatar updated.', true); oldSrc = img.src; }
+          else throw new Error();
+        })
+        .catch(function () { say("Upload failed — try a smaller image.", false); save.disabled = false; });
+    });
+
+    // ── profile layout: drag (pointer) + keyboard + up/down buttons ──
+    var list = document.getElementById('layList');
+    if (!list) return;
+    var live = document.getElementById('layLive'), dirty = document.getElementById('layDirty');
+    var initial = snapshot();
+    function items() { return Array.prototype.slice.call(list.children); }
+    function snapshot() {
+      return items().map(function (li) { return li.getAttribute('data-id'); }).join(',') + '|' +
+        Array.prototype.map.call(list.querySelectorAll('input[type=checkbox]'), function (c) { return c.checked ? 1 : 0; }).join('');
     }
+    function refresh(announceLi) {
+      var all = items();
+      all.forEach(function (li, i) {
+        li.querySelector('.up').disabled = i === 0;
+        li.querySelector('.dn').disabled = i === all.length - 1;
+      });
+      dirty.classList.toggle('on', snapshot() !== initial);
+      if (announceLi) live.textContent = announceLi.getAttribute('data-label') + ' moved to position ' + (all.indexOf(announceLi) + 1) + ' of ' + all.length;
+    }
+    function move(li, dir) {
+      if (dir < 0 && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
+      else if (dir > 0 && li.nextElementSibling) list.insertBefore(li.nextElementSibling, li);
+      else return false;
+      refresh(li);
+      return true;
+    }
+    list.addEventListener('click', function (e) {
+      var b = e.target.closest('.up, .dn');
+      if (!b) return;
+      var li = b.closest('.lay-item');
+      move(li, b.classList.contains('up') ? -1 : 1);
+      b.focus();
+    });
+    list.addEventListener('keydown', function (e) {
+      var g = e.target.closest('.lay-grip');
+      if (!g) return;
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        move(g.closest('.lay-item'), e.key === 'ArrowUp' ? -1 : 1);
+        g.focus();
+      }
+    });
+    list.addEventListener('change', function (e) {
+      var c = e.target;
+      if (c.type !== 'checkbox') return;
+      var li = c.closest('.lay-item');
+      if (c.closest('.sw')) {
+        li.classList.toggle('off', !c.checked);
+        li.querySelector('.sw .st').textContent = c.checked ? 'Visible' : 'Hidden';
+      }
+      refresh();
+    });
+    // pointer drag on the handle (mouse, pen and touch alike)
+    var drag = null;
+    list.addEventListener('pointerdown', function (e) {
+      var g = e.target.closest('.lay-grip');
+      if (!g || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      e.preventDefault();
+      var li = g.closest('.lay-item');
+      drag = { li: li, id: e.pointerId, g: g };
+      li.classList.add('dragging');
+      try { g.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    list.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var y = e.clientY;
+      var others = items().filter(function (x) { return x !== drag.li; });
+      var before = null;
+      for (var i = 0; i < others.length; i++) {
+        var r = others[i].getBoundingClientRect();
+        if (y < r.top + r.height / 2) { before = others[i]; break; }
+      }
+      if (before !== drag.li.nextElementSibling) {
+        if (before) list.insertBefore(drag.li, before); else list.appendChild(drag.li);
+        refresh();
+      }
+      // keep the item in view while dragging near the edges
+      if (y < 60) window.scrollBy(0, -12); else if (y > window.innerHeight - 60) window.scrollBy(0, 12);
+    });
+    function end(e) {
+      if (!drag || (e && e.pointerId !== drag.id)) return;
+      drag.li.classList.remove('dragging');
+      refresh(drag.li);
+      drag = null;
+    }
+    list.addEventListener('pointerup', end);
+    list.addEventListener('pointercancel', end);
+
+    var reset = document.getElementById('layReset');
+    if (reset) reset.addEventListener('click', function (e) {
+      if (!confirm('Reset your profile layout to the default order with everything visible?')) e.preventDefault();
+    });
+    document.getElementById('layoutForm').addEventListener('submit', function () { initial = snapshot(); });
+    window.addEventListener('beforeunload', function (e) {
+      if (snapshot() !== initial) { e.preventDefault(); e.returnValue = ''; }
+    });
+    refresh();
+  })();
 </script>
-
-<!-- Include this script to handle the button click -->
-<script>
-    function loginWithTwitch() {
-        window.location.href = '/auth/twitch'; // Redirect to the Twitch authentication route
-    }
-
-    function loginWithDiscord() {
-        window.location.href = '/auth/discord';
-    }
-    </script>
+</body>
+</html>

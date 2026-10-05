@@ -157,6 +157,7 @@ app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
 const userstats = require("./userstats");
+const profileLayout = require("./profilelayout");
 app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogPath = req.originalUrl.split("?")[0]; next(); });
 
 let clients = []; // Keep track of connected clients for SSE
@@ -1009,6 +1010,7 @@ require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
 require("./userstats").register(app, { isBotToken });
+profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
 
@@ -1213,6 +1215,12 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
     if (results.length > 0) {
       const user = results[0]; // Extract user data
       const badges = await getQuery('SELECT b.* FROM badges b JOIN user_badges ub ON b.badgeId = ub.badgeId WHERE ub.userId = ?', [user.userId]);
+      const isOwner = !!req.user && req.user.username === user.username;
+      const isAdmin = !!req.user && req.user.class === "Admin";
+      // ?preview=visitor: the owner sees their page exactly as a signed-out visitor would
+      const preview = isOwner && req.query.preview === "visitor";
+      let layout = null;
+      try { layout = await profileLayout.get(user.userId); } catch (e) { console.error("profile layout:", e.message); }
       res.render("profile", {
         // Render profile.ejs with user data
         username: username,
@@ -1227,7 +1235,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         badges: badges,
         xpForNextLevel: xpForNextLevel,
         // PAT history is private: the owner, plus site Admin/Staff (same rule as /history)
-        canSeeHistory: !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
+        canSeeHistory: !preview && !!req.user && (req.user.username === user.username || ["Admin", "Staff"].includes(req.user.class)),
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
         gtf: gtf.LINKS,
         camfrog: user.camfrogUsername || null,
@@ -1235,9 +1243,12 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         gtfAvatar: userstats.avatarFor(res.locals.profileCosmetics),
         // Camfrog activity analytics (userstats.js). "Moderated against" is owner + site admins only.
         analytics: await userstats.forProfile(user.camfrogUsername, {
-          owner: !!req.user && req.user.username === user.username,
-          admin: !!req.user && req.user.class === "Admin",
+          owner: isOwner && !preview,
+          admin: isAdmin && !preview,
         }),
+        // section order + visibility (profilelayout.js); hidden only ever hides more
+        layout: profileLayout.view(layout, { owner: isOwner, admin: isAdmin, preview }),
+        previewVisitor: preview,
         og: og.forProfile(req, user)
       });
     } else {
@@ -1695,7 +1706,7 @@ app.get(
     const username = req.user ? req.user.username : null; // Fallback to null if no user in session
     const usernameProfile = req.params.username; // Fallback to null if no user in session
     const sql =
-      "SELECT username, displayname, twitchDisplayname, discordUsername, camfrogUsername, avatar, email, points_balance FROM users WHERE username = ?";
+      "SELECT userId, username, displayname, class, level, twitchDisplayname, discordUsername, camfrogUsername, avatar, email, points_balance FROM users WHERE username = ?";
 
     try {
       if (username == usernameProfile) {
@@ -1704,6 +1715,9 @@ app.get(
           const user = results[0]; // Extract user data
           let errorMessages = req.flash("error");
           let successMessages = req.flash("success");
+          let pc = null, layout = profileLayout.sanitize(profileLayout.DEFAULT);
+          try { pc = await cosmetics.profileData(user.username); } catch (e) { console.error("edit profile cosmetics:", e.message); }
+          try { layout = await profileLayout.get(user.userId); } catch (e) { console.error("edit profile layout:", e.message); }
           res.render("editProfile", {
             // Render profile.ejs with user data
             username: user.username,
@@ -1714,6 +1728,12 @@ app.get(
             avatar: user.avatar,
             email: user.email,
             points_balance: user.points_balance,
+            level: user.level,
+            classh: user.class,
+            profileCosmetics: pc,
+            layout,
+            sections: profileLayout.SECTIONS,
+            subSections: profileLayout.SUBS,
             errors: errorMessages,
             success: successMessages,
           });
