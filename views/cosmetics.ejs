@@ -15,7 +15,7 @@
     if (s.includes('season') && it.season) out.push(it.season.label);
     if (s.includes('achievement') && it.unlock && it.unlock.achievement) out.push('Achievement unlock');
     if (s.includes('level') && it.unlock && it.unlock.level) out.push('Level ' + it.unlock.level);
-    if (s.includes('drop')) out.push('Game drop');
+    if (s.includes('drop')) out.push((it.drop_events || []).includes('bounty') ? 'Bounty drop' : 'Game drop');
     return out.join(' · ');
   };
   // What the item is and where it shows (data-driven from the catalog's kinds/tags), plus its set.
@@ -111,7 +111,7 @@
     <% } else if (it.unlock && it.unlock.achievement) { %>
       <div class="cxp-muted">🔓 Free with the achievement</div>
     <% } else { %>
-      <div class="cxp-muted">🎲 Drops from heists, the arena and bingo — or buy one on the market.</div>
+      <div class="cxp-muted">🎲 <%= (it.drop_events || []).includes('bounty') ? 'Drops from completed bounties' : 'Drops from heists, the arena, bingo and bounties' %> — or buy one on the market.</div>
     <% } %>
   </div>
 <% }; %>
@@ -248,7 +248,7 @@
   <% if (tab === 'shop') { %>
     <div class="howstrip">
       <div><b>🛍️ Shop</b>Buy with PAT — Pepe charges you.</div>
-      <div><b>🎲 Drops</b>Heists, the arena and bingo can drop GTF gear.</div>
+      <div><b>🎲 Drops</b>Heists, the arena, bingo and completed bounties can drop GTF gear.</div>
       <div><b>🏅 Unlocks</b>Achievements and levels 10 / 25 / 50 give free items.</div>
       <div><b>🏪 Trade</b>Sell or buy copies on the market (<%= fee %>% fee).</div>
     </div>
@@ -419,7 +419,7 @@
       <ul>
         <li><b>Shop</b> — pick an item and hit Buy. Pepe charges the PAT as you, so you need a linked Camfrog name. Prices by rarity:
           <% Object.keys(rarities).forEach((r, i) => { %><%= i ? ' · ' : '' %><span style="color:<%= RC(r) %>"><%= r %> <%= fmt(rarities[r].price) %></span><% }) %>.</li>
-        <li><b>Drops</b> — heists, the arena and bingo can drop items, mostly Grand Theft Frogger avatar gear. Rarer drops are rarer.</li>
+        <li><b>Drops</b> — heists, the arena, bingo and completed bounties (10,000+ PAT pots) can drop items, mostly Grand Theft Frogger avatar gear. Rarer drops are rarer, and some gear (the Wanted Poster, Lasso Frame and Sheriff Star) only drops from bounties.</li>
         <li><b>Achievements &amp; levels</b> — some items unlock for free when you earn an <a href="/achievements">achievement</a> or reach level 10, 25 or 50. They land in My items automatically.</li>
         <li><b>Seasonal</b> — limited items sell only during their season (Halloween, winter). After that the only way to get one is from another player.</li>
         <li><b>Gifts</b> — buy a new item for a friend from the shop, or give away a copy you own.</li>

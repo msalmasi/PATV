@@ -40,16 +40,16 @@ const GTF_KINDS = ["gtf_hat", "gtf_mask", "gtf_outfit", "gtf_prop", "gtf_bg", "g
 const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_prop: "prop", gtf_bg: "bg", gtf_frame: "frame" };
 const GTF_LAYERS = {
   gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
-            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown"],
+            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat"],
   gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades"],
   gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
                "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape"],
   gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice",
-             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie"],
+             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar"],
   gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
            "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
-           "lavalamp", "leopard", "redroom", "sakura", "clouds"],
-  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel", "glitter", "rainbow", "chain", "hearts"],
+           "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted"],
+  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel", "glitter", "rainbow", "chain", "hearts", "rope"],
 };
 const LAYER_EMOJI = {
   crown: "👑", tophat: "🎩", cowboy: "🤠", beanie: "🧢", halo: "😇", horns: "😈", party: "🥳", chef: "👨‍🍳", viking: "🪓", pirate: "🏴‍☠️",
@@ -65,6 +65,7 @@ const LAYER_EMOJI = {
   progress: "🏳️‍🌈", intersex: "🏳️‍🌈", trans: "🏳️‍⚧️", bi: "💗", lesbian: "🧡", pan: "💛", enby: "💜", ace: "🖤", aro: "💚", genderfluid: "🌊",
   lavalamp: "🫧", leopard: "🐆", redroom: "🟥", sakura: "🌸", clouds: "☁️",
   glitter: "✨", rainbow: "🌈", chain: "⛓️", hearts: "💖",
+  bountyhat: "🤠", sheriffstar: "⭐", wanted: "📜", rope: "🪢",
 };
 const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti"];
 const TAGS = CAT.tags || {};

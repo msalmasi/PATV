@@ -299,6 +299,16 @@
         P(0, x, c); P(1, x - 1, c); P(1, x + 1, c); P(2, x, c); P(1, x, mid);
       }
       P(2, 0, leaf); P(2, 10, leaf);
+    },
+    // ── 1.99g: bounties ──
+    bountyhat(P) {                                    // flat-brim bounty hunter's hat, rope band
+      const k = '#3B2A1E', d = '#24180F', l = '#5A4130', band = '#C9A66B', s = '#D9DDE3';
+      for (let x = -1; x <= 11; x++) P(2, x, x < 1 || x > 9 ? d : k);   // wide flat brim
+      for (let x = 2; x <= 8; x++) { P(1, x, band); P(0, x, k); }
+      for (let x = 3; x <= 7; x++) P(-1, x, k);
+      P(-1, 5, d);                                    // pinched crown
+      P(0, 2, l); P(-1, 3, l);                        // highlight
+      P(1, 7, s);                                     // silver concho
     }
   };
 
@@ -633,6 +643,15 @@
       for (let y = 13; y <= 15; y++) for (let x = 13; x <= 15; x++) A(y, x, w);
       A(14, 14, '#FF6EB4');                             // heart patch
       A(15, 12, s); A(15, 16, s); A(13, 12, s); A(13, 16, s);   // paws
+    },
+    sheriffstar(A) {                                  // 1.99g: tin star, ball-tipped points
+      const g = '#FFC83D', d = '#B8860B', t = '#FFE680', c = '#FFF3A0';
+      const star = ['...#...', '...#...', '#######', '.#####.', '..###..', '.##.##.', '##...##'];
+      for (let r = 0; r < 7; r++) for (let q = 0; q < 7; q++)
+        if (star[r][q] === '#') A(9 + r, 10 + q, (r >= 4 || q >= 5) ? d : g);
+      A(8, 13, t); A(11, 10, t); A(11, 16, t); A(16, 10, t); A(16, 16, t);   // ball tips
+      A(12, 13, c);                                   // centre stud
+      A(11, 12, t);                                   // shine
     }
   };
 
@@ -801,6 +820,19 @@
         if (d <= r) B(y, x, y > cy + 0.4 ? '#F3E5F5' : '#FFFFFF');
       }
       B(0, 9, '#FFF59D'); B(7, 1, '#FFFFFF'); B(8, 15, '#FFF59D'); B(10, 13, '#FFFFFF');   // twinkles
+    },
+    wanted(B) {                                       // 1.99g: a WANTED poster nailed to a plank wall
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++)
+        B(y, x, x % 4 === 3 ? '#3E2723' : ((y * 3 + x * 5) % 9 === 0 ? '#6D4C41' : '#5D4037'));
+      for (let y = 1; y < S; y++) for (let x = 1; x <= 15; x++)
+        B(y, x, (x * 5 + y * 3) % 11 === 0 ? '#E3C994' : '#F1DFB4');
+      for (let y = 1; y < S; y++) B(y, 15, '#D9BF8C');                 // shaded edge
+      const ink = '#4A2E1A';
+      for (let x = 2; x <= 14; x++) if (x !== 5 && x !== 9 && x !== 12) { B(2, x, ink); if (x % 2) B(3, x, ink); }   // WANTED
+      for (let x = 3; x <= 13; x++) if (x % 3) B(15, x, ink);         // REWARD
+      B(14, 8, '#C9A100'); B(15, 8, '#E0B84A'); B(16, 8, '#C9A100');  // $
+      for (const [y, x] of [[1, 1], [1, 15], [16, 1]]) B(y, x, '#8A8F98');   // nails
+      B(16, 14, '#C9AE7A'); B(16, 15, '#5D4037');                      // curled corner
     }
   };
 
@@ -866,6 +898,11 @@
       };
       heart(0, 0); heart(0, 14); heart(14, 0); heart(14, 14);
       for (const [y, x] of [[0, 8], [16, 8], [8, 0], [8, 16]]) F(y, x, '#FFFFFF');
+    },
+    rope(F) {                                         // 1.99g: lasso rope, knotted at the bottom
+      ring((y, x) => F(y, x, ['#8D6E3F', '#C8A165', '#E0C48C'][(x + y) % 3]));
+      for (const [y, x] of [[15, 7], [15, 8], [15, 9], [16, 7], [16, 8], [16, 9]]) F(y, x, '#6B4F2A');
+      F(15, 8, '#8D6E3F');
     }
   };
 
