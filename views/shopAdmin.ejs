@@ -1,0 +1,131 @@
+<%- include('layout', { title: 'Shop admin', user: user }) %>
+<%- include('partials/shop-css') %>
+<div class="sh">
+  <h1>Shop admin</h1>
+  <p class="sub"><a href="/shop">Shop</a> · <a href="/admin/manage-prizes">Classic prize editor</a></p>
+  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+  <div class="tabs"><a href="#review">Review (<%= review.length %>)</a><a href="#disputes">Disputes (<%= disputes.length %>)</a><a href="#orders">Orders</a><a href="#listings">Listings</a><a href="#official">Add official item</a><a href="#settings">Settings</a></div>
+  <div class="stats">
+    <div class="stat"><span>Marketplace orders</span><b><%= H.fmt(stats.n) %></b></div>
+    <div class="stat"><span>Fees to the Reserve</span><b class="price"><%= H.fmt(stats.fees) %></b></div>
+    <div class="stat"><span>Held for unfulfilled</span><b><%= H.fmt(stats.held) %></b><em>PAT</em></div>
+  </div>
+
+  <h2 id="review">Review queue</h2>
+  <% if (!review.length) { %><p class="muted">Nothing waiting for review.</p><% } %>
+  <div class="list">
+    <% review.forEach((l) => { %>
+      <div class="item">
+        <div class="top"><b><a href="/shop/item/<%= l.prizeId %>"><%= l.prize %></a></b><span class="muted">by <a href="/shop/seller/<%= encodeURIComponent(l.seller_name || '') %>"><%= l.seller_name %></a></span></div>
+        <div class="muted"><span class="price"><%= H.fmt(l.cost) %> PAT</span> · stock <%= H.fmt(l.quantity) %> · <%= l.category %><%= l.buyer_prompt ? ' · asks for: ' + l.buyer_prompt : '' %></div>
+        <% if (l.image_url) { %><div class="muted">Image: <a href="<%= l.image_url %>" rel="noopener noreferrer nofollow" target="_blank"><%= l.image_url %></a></div><% } %>
+        <% if (l.description) { %><div class="pre"><%= l.description %></div><% } %>
+        <div class="row">
+          <form method="POST" action="/shop/listing/<%= l.prizeId %>/approve"><input type="hidden" name="back" value="/shop/admin#review"><button type="submit">Approve</button></form>
+          <form method="POST" action="/shop/listing/<%= l.prizeId %>/reject" class="row" style="flex:1 1 220px">
+            <input type="hidden" name="back" value="/shop/admin#review">
+            <input type="text" name="note" maxlength="300" placeholder="Reason (shown to the seller)" style="flex:1 1 150px">
+            <button class="bad" type="submit">Reject</button>
+          </form>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+
+  <h2 id="disputes">Disputes</h2>
+  <% if (!disputes.length) { %><p class="muted">No open disputes.</p><% } %>
+  <div class="list">
+    <% disputes.forEach((o) => { %>
+      <div class="item">
+        <div class="top"><b><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></b><span class="muted"><%= o.buyer_name %> vs <%= o.seller_name %></span></div>
+        <div class="kv">
+          <span>Price</span><div class="price"><%= H.fmt(o.price) %> PAT</div>
+          <span>Was</span><div><%= H.status(o.dispute_from).label %><%= o.seller_paid ? ` — seller already paid ${H.fmt(o.net)}` : ' — seller not paid yet' %></div>
+          <% if (o.seller_paid) { %><span>Seller bal.</span><div><%= H.fmt(o.seller_balance) %> PAT<% if (o.seller_balance < o.net) { %> <span class="oos">(a refund would leave them at <%= H.fmt(o.seller_balance - o.net) %>)</span><% } %></div><% } %>
+          <span>Reason</span><div><%= o.dispute_reason %></div>
+          <% if (o.buyer_input) { %><span>Buyer info</span><div class="code"><%= o.buyer_input %></div><% } %>
+          <% if (o.seller_note) { %><span>Seller note</span><div class="code"><%= o.seller_note %></div><% } %>
+        </div>
+        <%- include('partials/shop-order-actions', { o, role: 'admin', back: '/shop/admin#disputes', H, settings }) %>
+      </div>
+    <% }) %>
+  </div>
+
+  <h2 id="orders">All orders</h2>
+  <div class="links" style="margin-bottom:8px">
+    <a href="/shop/admin#orders" class="<%= ost ? '' : 'on' %>">All</a>
+    <% ['paid', 'fulfilled', 'completed', 'disputed', 'refunded', 'cancelled'].forEach((s) => { %><a href="/shop/admin?ostatus=<%= s %>#orders" class="<%= ost === s ? 'on' : '' %>"><%= H.status(s).label.split(' —')[0] %></a><% }) %>
+  </div>
+  <div class="list">
+    <% orders.forEach((o) => { const st = H.status(o.status); %>
+      <div class="item" style="padding:9px 12px">
+        <div class="top"><span><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></span><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
+        <div class="muted"><%= H.day(o.created) %> · <%= o.buyer_name %> ← <%= o.official ? 'PATV Store' : o.seller_name %> · <%= H.fmt(o.price) %> PAT<%= o.fee ? ' · fee ' + H.fmt(o.fee) : '' %> · <%= o.source %></div>
+      </div>
+    <% }) %>
+  </div>
+  <% if (!orders.length) { %><p class="muted">No orders.</p><% } %>
+  <% if (opages > 1) { %>
+    <nav class="pager">
+      <% if (page > 1) { %><a href="/shop/admin?<%= ost ? 'ostatus=' + ost + '&' : '' %>page=<%= page - 1 %>#orders">‹ Newer</a><% } %>
+      <span class="cur"><%= page %> / <%= opages %></span>
+      <% if (page < opages) { %><a href="/shop/admin?<%= ost ? 'ostatus=' + ost + '&' : '' %>page=<%= page + 1 %>#orders">Older ›</a><% } %>
+    </nav>
+  <% } %>
+
+  <h2 id="listings">Listings</h2>
+  <form method="GET" action="/shop/admin" class="row" style="margin-bottom:8px">
+    <input type="search" name="lq" value="<%= lq %>" placeholder="Title or seller" style="flex:1 1 180px"><button type="submit" class="alt">Search</button>
+  </form>
+  <div class="list">
+    <% listings.forEach((l) => { const ls = H.lstatus(l.status); %>
+      <div class="item" style="padding:9px 12px">
+        <div class="top"><span><a href="/shop/item/<%= l.prizeId %>"><%= l.prize %></a> · <span class="price"><%= H.fmt(l.cost) %></span> · <%= l.seller_id ? l.seller_name : 'Official' %></span><span class="pill" style="color:<%= ls.color %>"><%= ls.label %></span></div>
+        <div class="row">
+          <span class="muted">stock <%= H.fmt(l.quantity) %> · sold <%= H.fmt(l.sold || 0) %></span>
+          <a class="btn alt" href="/shop/admin/edit/<%= l.prizeId %>">Edit</a>
+          <% if (l.status === 'active' && !l.seller_id) { %><form method="POST" action="/shop/listing/<%= l.prizeId %>/pause"><input type="hidden" name="back" value="/shop/admin#listings"><button class="alt" type="submit">Pause</button></form><% } %>
+          <% if (l.status === 'paused') { %><form method="POST" action="/shop/listing/<%= l.prizeId %>/activate"><input type="hidden" name="back" value="/shop/admin#listings"><button type="submit">Resume</button></form><% } %>
+          <% if (l.status !== 'removed') { %>
+            <form method="POST" action="/shop/listing/<%= l.prizeId %>/remove" class="row" data-q="Remove “<%= l.prize %>” from the shop?" onsubmit="return confirm(this.dataset.q)">
+              <input type="hidden" name="back" value="/shop/admin#listings">
+              <% if (l.seller_id) { %><input type="text" name="note" maxlength="300" placeholder="Reason" style="width:140px"><% } %>
+              <button class="bad" type="submit">Remove</button>
+            </form>
+          <% } else { %>
+            <form method="POST" action="/shop/listing/<%= l.prizeId %>/restore"><input type="hidden" name="back" value="/shop/admin#listings"><button class="alt" type="submit">Restore</button></form>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+
+  <h2 id="official">Add an official item</h2>
+  <form class="box" method="POST" action="/shop/listing" style="display:grid;gap:10px">
+    <input type="hidden" name="official" value="1">
+    <div class="formgrid">
+      <label class="wide">Title <input type="text" name="title" maxlength="80" required></label>
+      <label>Category <select name="category"><% categories.forEach((c) => { %><option><%= c %></option><% }) %></select></label>
+      <label>Price (PAT) <input type="number" name="price" min="1" required></label>
+      <label>Stock <input type="number" name="stock" min="0" value="1" required></label>
+      <label>Image URL (https, optional) <input type="url" name="image_url" maxlength="500"></label>
+      <label class="wide">Description <textarea name="description" maxlength="1000"></textarea></label>
+    </div>
+    <p class="muted" style="margin:0">Official items are sold instantly: the PAT goes to the store owner's account and the order is completed at once (as the classic prize store always did).</p>
+    <div><button type="submit">Add official item</button></div>
+  </form>
+
+  <h2 id="settings">Settings</h2>
+  <form class="box" method="POST" action="/shop/admin/settings" style="display:grid;gap:10px">
+    <div class="formgrid">
+      <label>Seller fee % (to the Federal Reserve) <input type="number" name="fee_pct" min="0" max="50" step="0.5" value="<%= settings.fee_pct %>" required></label>
+      <label>Min level to sell <input type="number" name="min_level" min="0" max="1000" value="<%= settings.min_level %>" required></label>
+      <label>Auto-complete after (days) <input type="number" name="auto_complete_days" min="1" max="90" value="<%= settings.auto_complete_days %>" required></label>
+      <label>Auto-refund unfulfilled after (days, 0 = never) <input type="number" name="auto_cancel_days" min="0" max="365" value="<%= settings.auto_cancel_days %>" required></label>
+      <label class="check wide"><input type="checkbox" name="require_approval" value="1" <%= settings.require_approval ? 'checked' : '' %>> New listings from non-staff need approval</label>
+      <label class="wide">Categories (one per line) <textarea name="categories" style="min-height:150px"><%= categories.join('\n') %></textarea></label>
+    </div>
+    <p class="muted" style="margin:0">A new fee % applies to orders placed after the change; open orders keep the fee they were bought at.</p>
+    <div><button type="submit">Save settings</button></div>
+  </form>
+</div>

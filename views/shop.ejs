@@ -1,165 +1,154 @@
-<%- include('layout', { title: 'Shop', user: user}) %>
-<link rel="stylesheet" href="/public/css/shop.css">
-<div class="shop-container">
-    <h1 class="shop-title">PAT Redemption Codes</h1>
-    <form id="codeform" action="/api/redeem-code" method="post">
-        <input type="text" id="code" name="code" placeholder="Enter your redemption code" required>
-        <button class="code-btn" type="submit">Redeem</button>
-    </form>
-    <div id="codeStatus" class="spin-status"></div>
-</div>
-<div class="shop-container">
-    <div id="shopStatus" class="spin-status"></div>
-    <h1 class="shop-title">Arcade Shop</h1>
-    
-    <div class="product-list">
-        <!-- Items will be dynamically inserted here -->
+<%- include('layout', { title: store && store.username ? store.username + "'s shop" : 'Shop', user: user }) %>
+<%- include('partials/shop-css') %>
+<%
+  const f = filters || {};
+  const baseQ = { q: f.q, cat: f.cat, min: f.min, max: f.max, instock: f.instock, official: f.official, sort: sort !== 'newest' ? sort : '' };
+  const path = store && store.username ? '/shop/seller/' + encodeURIComponent(store.username) : '/shop';
+  if (!store) baseQ.seller = f.seller;
+%>
+<div class="sh">
+<% if (store && store.missing) { %>
+  <h1>Shop not found</h1>
+  <p class="sub">There's no user called "<%= store.missing %>". <a href="/shop">Back to the shop</a></p>
+<% } else { %>
+  <% if (store) { %>
+    <div class="box seller" style="margin-top:14px">
+      <img src="<%= H.av(store.avatar) %>" alt="" onerror="this.src='/public/img/avatar.png'">
+      <div style="min-width:0">
+        <div style="color:#fff;font-weight:bold;font-size:18px"><%= store.displayname || store.username %>'s shop</div>
+        <div class="muted">@<%= store.username %> · <%= H.fmt(store.sales) %> sale<%= store.sales === 1 ? '' : 's' %> · <%= H.fmt(total) %> item<%= total === 1 ? '' : 's' %> for sale
+          · <a href="/u/<%= encodeURIComponent(store.username) %>/profile">profile</a></div>
+      </div>
     </div>
+  <% } else { %>
+    <h1>Shop</h1>
+    <p class="sub">Official prizes from the PATV store, and things other members are selling for PAT.</p>
+  <% } %>
+
+  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+
+  <div class="bar">
+    <div class="links">
+      <% if (store) { %><a href="/shop">← All items</a><% } %>
+      <% if (me) { %>
+        <a href="/shop/orders">My orders</a>
+        <a href="/shop/seller">Sell / my listings</a>
+        <% if (me.staff) { %><a href="/shop/admin">Shop admin</a><% } %>
+      <% } else { %><a href="/login">Sign in to buy or sell</a><% } %>
+    </div>
+    <% if (me) { %><div>Balance: <span class="bal" id="shopBalance"><%= H.fmt(me.points_balance) %></span> PAT</div><% } %>
+  </div>
+
+  <form class="box" method="GET" action="<%= path %>" style="display:grid;gap:10px">
+    <div class="row">
+      <input type="search" name="q" value="<%= f.q || '' %>" placeholder="<%= store ? 'Search this shop' : 'Search title, description or seller' %>" maxlength="80" aria-label="Search" style="flex:1 1 180px">
+      <button type="submit">Search</button>
+    </div>
+    <% const active = f.cat || f.min || f.max || (!store && f.seller) || f.instock || f.official || sort !== 'newest'; %>
+    <details <%= active ? 'open' : '' %>>
+      <summary>Filters &amp; sort<%= active ? ' (on)' : '' %></summary>
+      <div class="filters">
+        <label>Category
+          <select name="cat">
+            <option value="">All categories</option>
+            <% categories.forEach((c) => { %><option value="<%= c %>" <%= f.cat === c ? 'selected' : '' %>><%= c %><%= catCounts && catCounts[c] && !store ? ' (' + catCounts[c] + ')' : '' %></option><% }) %>
+          </select>
+        </label>
+        <label>Sort
+          <select name="sort">
+            <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>>Newest</option>
+            <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>>Price ↑</option>
+            <option value="price_desc" <%= sort === 'price_desc' ? 'selected' : '' %>>Price ↓</option>
+            <option value="popular" <%= sort === 'popular' ? 'selected' : '' %>>Popular</option>
+          </select>
+        </label>
+        <label>Min PAT <input type="number" name="min" min="0" value="<%= f.min %>" inputmode="numeric"></label>
+        <label>Max PAT <input type="number" name="max" min="0" value="<%= f.max %>" inputmode="numeric"></label>
+        <% if (!store) { %><label>Seller <input type="text" name="seller" value="<%= f.seller || '' %>" maxlength="60" placeholder="username"></label><% } %>
+        <div style="display:grid;gap:6px;align-content:end">
+          <label class="check"><input type="checkbox" name="instock" value="1" <%= f.instock ? 'checked' : '' %>> In stock only</label>
+          <% if (!store) { %><label class="check"><input type="checkbox" name="official" value="1" <%= f.official ? 'checked' : '' %>> Official store only</label><% } %>
+        </div>
+        <div class="row" style="align-self:end"><button type="submit">Apply</button><a class="btn alt" href="<%= path %>">Reset</a></div>
+      </div>
+    </details>
+  </form>
+
+  <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
+
+  <div class="muted" style="margin:4px 0 8px"><%= H.fmt(total) %> item<%= total === 1 ? '' : 's' %><%= pages > 1 ? ` · page ${page} of ${pages}` : '' %></div>
+  <% if (!items.length) { %>
+    <p class="muted" style="text-align:center;padding:24px 0">Nothing matches that. <a href="<%= path %>">Clear the filters</a>.</p>
+  <% } %>
+  <div class="grid">
+    <% items.forEach((it) => { const official = !it.seller_id; const quick = official && !it.buyer_prompt; %>
+      <div class="card">
+        <a href="/shop/item/<%= it.prizeId %>" style="color:inherit;text-decoration:none">
+          <div class="thumb"><% if (it.image_url) { %><img src="<%= it.image_url %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><%= official ? '🎁' : '🛍️' %><% } %></div>
+        </a>
+        <div class="body">
+          <a class="t" href="/shop/item/<%= it.prizeId %>" style="color:#fff;text-decoration:none"><%= it.prize %></a>
+          <div class="price"><%= H.fmt(it.cost) %> PAT</div>
+          <div class="meta">
+            <% if (official) { %><span class="pill official">Official</span><% } else { %>by <a href="/shop/seller/<%= encodeURIComponent(it.seller_name || '') %>"><%= it.seller_name %></a><% } %>
+          </div>
+          <div class="meta"><span class="<%= it.quantity > 0 ? '' : 'oos' %>" data-stock="<%= it.prizeId %>"><%= it.quantity > 0 ? H.fmt(it.quantity) + ' left' : 'Out of stock' %></span><%= it.sold ? ' · ' + H.fmt(it.sold) + ' sold' : '' %></div>
+          <% if (quick && me && it.quantity > 0) { %>
+            <button class="buy-btn" style="margin-top:4px" data-product="<%= it.prizeId %>" data-name="<%= it.prize %>" data-cost="<%= it.cost %>">Buy</button>
+          <% } else { %>
+            <a class="btn alt" style="margin-top:4px" href="/shop/item/<%= it.prizeId %>">View</a>
+          <% } %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+
+  <% if (pages > 1) { %>
+    <nav class="pager" aria-label="Pages">
+      <% if (page > 1) { %><a href="<%= path + H.qs(baseQ, { page: page - 1 }) %>">‹ Prev</a><% } %>
+      <% const lo = Math.max(1, page - 2), hi = Math.min(pages, page + 2);
+         if (lo > 1) { %><a href="<%= path + H.qs(baseQ, { page: 1 }) %>">1</a><% if (lo > 2) { %><span>…</span><% } }
+         for (let i = lo; i <= hi; i++) { if (i === page) { %><span class="cur"><%= i %></span><% } else { %><a href="<%= path + H.qs(baseQ, { page: i }) %>"><%= i %></a><% } }
+         if (hi < pages) { if (hi < pages - 1) { %><span>…</span><% } %><a href="<%= path + H.qs(baseQ, { page: pages }) %>"><%= pages %></a><% } %>
+      <% if (page < pages) { %><a href="<%= path + H.qs(baseQ, { page: page + 1 }) %>">Next ›</a><% } %>
+    </nav>
+  <% } %>
+
+  <% if (!store) { %>
+    <h2>PAT redemption codes</h2>
+    <form id="codeform" class="box row" action="/api/redeem-code" method="post">
+      <input type="text" id="code" name="code" placeholder="Enter your redemption code" required style="flex:1 1 200px">
+      <button class="code-btn" type="submit">Redeem</button>
+    </form>
+    <div id="codeStatus" class="status-msg" role="status" aria-live="polite"></div>
+  <% } %>
+<% } %>
 </div>
 
+<%- include('partials/shop-buy-js') %>
 <script>
-    // Purchases are irreversible and cost real PAT, so the outcome has to be unmistakable:
-    // colour-coded, and failures stay up longer than confirmations so they're actually read.
-    let shopStatusTimer = null;
-    function showShopStatus(message, ok) {
-        const status = document.getElementById('shopStatus');
-        if (!status) return;
-        status.textContent = message;
-        status.style.color = ok ? '#81C784' : '#e57373';
-        status.style.fontWeight = '600';
-        status.style.visibility = 'visible';
-        clearTimeout(shopStatusTimer);
-        shopStatusTimer = setTimeout(() => { status.style.visibility = 'hidden'; }, ok ? 6000 : 9000);
+  // Redemption codes: show what the server actually said (bad code, already used, expired).
+  (function () {
+    const form = document.getElementById('codeform');
+    if (!form) return;
+    let timer = null;
+    function show(message, ok) {
+      const el = document.getElementById('codeStatus');
+      el.textContent = message; el.style.color = ok ? '#81C784' : '#e57373';
+      clearTimeout(timer); timer = setTimeout(() => { el.textContent = ''; }, ok ? 6000 : 9000);
     }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const productList = document.querySelector('.product-list');
-    
-        // Fetch prizes from the API
-        fetch('/api/prizes')
-        .then(response => response.json())
-        .then(prizes => {
-            // Ensure prizes data is an array and not empty
-            if (Array.isArray(prizes) && prizes.length) {
-                prizes.forEach(prize => {
-                    const li = document.createElement('div');
-                    li.className = 'product-item';
-                    li.innerHTML = `
-                        <div class="buy-btn-div">
-                        <h3>${prize.prize}</h3>
-                        </div>
-                        <div class="buy-btn-div">
-                        <p>PAT ${prize.cost.toLocaleString()}</p>
-                        </div>
-                        <div class="buy-btn-div">
-                        <p class="product-stock">${prize.quantity.toLocaleString()} Left</p>
-                        </div>
-                        <div class="buy-btn-div">
-                        <button class="buy-btn" data-product="${prize.prizeId}">Buy</button>
-                        </div>
-                    `;
-                    productList.appendChild(li);
-                });
-                addBuyButtonEventListeners();  // Call to add event listeners after elements are created
-            } else {
-                productList.innerHTML = '<li>No prizes available at the moment.</li>';
-            }
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      fetch('/api/redeem-code', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ code: document.getElementById('code').value }) })
+        .then((r) => r.json().catch(() => ({})).then((data) => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+          const message = (data && data.message) || '';
+          const succeeded = ok && /success/i.test(message);
+          show(message || (succeeded ? 'Code redeemed.' : 'That code could not be redeemed.'), succeeded);
+          if (succeeded) document.getElementById('code').value = '';
         })
-        .catch(error => {
-            console.error('Failed to fetch prizes:', error);
-            productList.innerHTML = '<li>Error loading prizes. Please try again later.</li>';
-        });
-    
-        // Function to handle purchase buttons
-        function addBuyButtonEventListeners() {
-            document.querySelectorAll('.buy-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    const product = this.getAttribute('data-product');
-                    fetch(`/shop`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ product: product })
-                    })
-                    // The server explains WHY a purchase failed (not logged in, not enough PAT,
-                    // out of stock). Read that message instead of throwing it away and showing a
-                    // generic failure — "please log in again" is actionable, "Failed" isn't.
-                    .then(response => response.json()
-                        .catch(() => ({}))                      // non-JSON body (e.g. a crash page)
-                        .then(data => ({ ok: response.ok, data })))
-                    .then(({ ok, data }) => {
-                        const succeeded = ok && data && data.success;
-                        // The server already words each outcome (out of stock, how much short,
-                        // session expired) — show that rather than a generic line.
-                        showShopStatus(
-                            (data && data.message) ||
-                                (succeeded ? 'Purchase complete.' : 'Could not buy that item.'),
-                            succeeded);
-                        if (succeeded) {
-                            button.disabled = true;             // no accidental double-buy
-                            button.textContent = 'Purchased';
-                            if (typeof data.remaining_stock === 'number') {
-                                const item = button.closest('.product-item');
-                                const stockEl = item && item.querySelector('.product-stock');
-                                if (stockEl) {
-                                    stockEl.textContent = data.remaining_stock > 0
-                                        ? `${data.remaining_stock.toLocaleString()} Left`
-                                        : 'Out of stock';
-                                }
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error making the POST request:', error);
-                        showShopStatus('Could not reach the server — try again.', false);
-                    });
-                });
-            });
-        }
+        .catch(() => show('Could not reach the server — try again.', false));
     });
-    </script>
-
-<script>
-    let codeStatusTimer = null;
-    function showCodeStatus(message, ok) {
-        const status = document.getElementById('codeStatus');
-        if (!status) return;
-        status.textContent = message;
-        status.style.color = ok ? '#81C784' : '#e57373';
-        status.style.fontWeight = '600';
-        status.style.visibility = 'visible';
-        clearTimeout(codeStatusTimer);
-        codeStatusTimer = setTimeout(() => { status.style.visibility = 'hidden'; }, ok ? 6000 : 9000);
-    }
-
-    document.getElementById('codeform').addEventListener('submit', function(event) {
-    event.preventDefault();
-    var code = document.getElementById('code').value;
-
-
-    fetch('/api/redeem-code', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({code: code})
-    })
-    // Same treatment as a purchase: show what the server actually said (bad code, already used,
-    // expired) instead of one catch-all failure line.
-    .then(response => response.json()
-        .catch(() => ({}))
-        .then(data => ({ ok: response.ok, data })))
-    .then(({ ok, data }) => {
-        const message = (data && data.message) || '';
-        const succeeded = ok && /success/i.test(message);
-        showCodeStatus(message || (succeeded ? 'Code redeemed.' : 'That code could not be redeemed.'),
-                       succeeded);
-        if (succeeded) document.getElementById('code').value = '';
-    })
-    .catch(error => {
-        console.error('Error making the POST request:', error);
-        showCodeStatus('Could not reach the server — try again.', false);
-    });
-});
+  })();
 </script>

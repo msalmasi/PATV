@@ -1,0 +1,76 @@
+<%# Shared styles for the shop pages (/shop, item, storefront, seller/buyer dashboards, admin). Prefix sh-. %>
+<style>
+  .sh { max-width: 1040px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; box-sizing: border-box; }
+  .sh *, .sh *::before, .sh *::after { box-sizing: border-box; }
+  .sh a { color: #81c784; }
+  .sh h1 { text-align: center; margin: 10px 0 4px; }
+  .sh h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 28px 0 10px; line-height: 1.6; }
+  .sh h3 { margin: 14px 0 8px; font-size: 15px; color: #ddd; }
+  .sh .sub { text-align: center; color: #888; font-size: 13px; margin: 0 0 14px; }
+  .sh .muted { color: #888; font-size: 13px; }
+  .sh .notice { background: #13200f; border: 1px solid #4caf50; border-radius: 8px; padding: 10px 12px; margin: 10px 0; color: #ddd; }
+  .sh .warn { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; margin: 10px 0; }
+  .sh .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 8px 0 12px; }
+  .sh .links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sh .links a, .sh .chip { background: #1c1c1c; color: #ccc; border-radius: 16px; padding: 5px 11px; font-size: 13px; text-decoration: none; white-space: nowrap; border: 1px solid #2a2a2a; }
+  .sh .chip.on, .sh .links a.on { background: #4caf50; color: #fff; border-color: #4caf50; }
+  .sh .bal { color: #ffd700; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .sh .box { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; margin: 10px 0; min-width: 0; }
+  .sh form { margin: 0; }
+  .sh input[type=text], .sh input[type=number], .sh input[type=url], .sh input[type=search], .sh select, .sh textarea {
+    background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 9px; width: 100%; max-width: 100%; font: inherit; font-size: 14px; }
+  .sh textarea { min-height: 90px; resize: vertical; }
+  .sh label { display: grid; gap: 4px; font-size: 13px; color: #aaa; min-width: 0; }
+  .sh label.check { display: flex; gap: 8px; align-items: center; color: #ddd; }
+  .sh button, .sh .btn { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; font-weight: bold; font-size: 14px; text-decoration: none; display: inline-block; text-align: center; }
+  .sh button.alt, .sh .btn.alt { background: #333; color: #ddd; }
+  .sh button.bad, .sh .btn.bad { background: #8e2b2b; color: #fff; }
+  .sh button:disabled { opacity: .55; cursor: default; }
+  .sh .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .sh .row > * { min-width: 0; }
+  .sh .formgrid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+  .sh .formgrid .wide { grid-column: 1 / -1; }
+  .sh .filters { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); align-items: end; }
+  .sh .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .sh .card { background: #111; border: 1px solid #222; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; color: inherit; text-decoration: none; }
+  .sh .card:hover { border-color: #4caf50; }
+  .sh .thumb { aspect-ratio: 4 / 3; background: #0d0d0d center / cover no-repeat; display: flex; align-items: center; justify-content: center; font-size: 34px; color: #333; }
+  .sh .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sh .card .body { padding: 9px 10px 11px; display: grid; gap: 4px; flex: 1; align-content: start; }
+  .sh .card .t { color: #fff; font-weight: bold; font-size: 14px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .sh .price { color: #ffd700; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .sh .card .price { font-size: 15px; }
+  .sh .card .meta { color: #888; font-size: 12px; }
+  .sh .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor; display: inline-block; white-space: nowrap; line-height: 1.5; }
+  .sh .official { color: #ffd700; }
+  .sh .oos { color: #e57373; }
+  .sh .pager { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 18px 0; }
+  .sh .pager a, .sh .pager span { padding: 6px 11px; border-radius: 6px; background: #1c1c1c; color: #ccc; text-decoration: none; font-size: 13px; }
+  .sh .pager span.cur { background: #4caf50; color: #fff; }
+  .sh .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .sh .stat { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 8px 10px; min-width: 0; }
+  .sh .stat span { display: block; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .sh .stat b { color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .sh .stat em { display: block; color: #888; font-size: 12px; font-style: normal; }
+  .sh .list { display: grid; gap: 10px; }
+  .sh .item { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+  .sh .item .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between; }
+  .sh .item .top b { color: #fff; }
+  .sh .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 13px; }
+  .sh .kv > span { color: #888; } .sh .kv > div { color: #ddd; min-width: 0; }
+  .sh .pre { white-space: pre-wrap; color: #ddd; font-size: 14px; line-height: 1.5; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 10px 12px; }
+  .sh .code { font-family: ui-monospace, Consolas, monospace; }
+  .sh .tl { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #2a2a2a; display: grid; gap: 6px; font-size: 13px; }
+  .sh .tl li { position: relative; color: #ccc; }
+  .sh .tl li::before { content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--c, #666); }
+  .sh .tl li small { color: #777; display: block; }
+  .sh details > summary { cursor: pointer; color: #81c784; font-size: 14px; }
+  .sh details[open] > summary { margin-bottom: 8px; }
+  .sh .seller { display: flex; gap: 10px; align-items: center; min-width: 0; }
+  .sh .seller img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #4caf50; flex: none; background: #0d0d0d; }
+  .sh .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .sh .tabs a { background: #1c1c1c; color: #ccc; border-radius: 6px; padding: 6px 12px; font-size: 13px; text-decoration: none; }
+  .sh .tabs a:hover { background: #2a2a2a; }
+  .sh .status-msg { min-height: 1.4em; font-weight: 600; margin: 6px 0; }
+  @media (max-width: 420px) { .sh h2 { font-size: 11px; } .sh .grid { gap: 8px; } }
+</style>

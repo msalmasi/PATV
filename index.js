@@ -965,18 +965,6 @@ app.get("/info", addUser, (req, res) => {
   });
 });
 
-app.get("/shop", addUser, (req, res) => {
-  const username = req.user ? req.user.username : null; // Fallback to null if no user in session
-  // Retrieve flash messages and pass them to the EJS template
-  let errorMessages = req.flash("error");
-  let successMessages = req.flash("success");
-  res.render("shop", {
-    user: username,
-    errors: errorMessages,
-    success: successMessages,
-  });
-});
-
 app.get("/reset-password/:token", async (req, res) => {
   const { token } = req.params;
   let errorMessages = req.flash("error");
@@ -1952,20 +1940,9 @@ app.post('/api/users/camfrog/register', async (req, res) => {
 });
 
 // ─── Prize store ──────────────────────────────────────────────────────────────────────────────
-// One purchase path for every storefront: the website (/shop), the Discord bot (/chatshop) and
-// Pepe in Camfrog (/api/shop/camfrog/buy). The PAT a buyer spends goes to the store owner's
-// account (STORE_OWNER_USERNAME, default "pb") - the person who actually redeems the prizes -
-// instead of vanishing.
-const STORE_OWNER_USERNAME = process.env.STORE_OWNER_USERNAME || "pb";
-
-// Prizes that are a ROLE (role names as they are in Discord). Owning one is recorded in
-// user_roles; a second purchase of a role you already have is refused.
-const ROLE_PRIZES = {
-  "147ce895-37c2-4c43-98cc-9f7045de0cf3": "scout",
-  "c0e57e08-6696-4c51-94ec-485f13a68cd8": "curator",
-  "491cde2e-097e-4c2a-a351-ce441137ba38": "high roller",
-};
-
+// The shop (official prize store + user marketplace) lives in shop.js: the purchase path for the
+// website (/shop), the Discord bot (/chatshop) and Pepe (/api/shop/camfrog/buy), listings, orders,
+// seller/buyer dashboards and the shop admin. userRoles + discordBridge stay here (used elsewhere).
 async function userRoles(userId) {
   const rows = await getQuery("SELECT role FROM user_roles WHERE userId = ?", [userId]);
   return rows.map((r) => r.role);
@@ -1989,173 +1966,8 @@ function discordBridge(path, body, timeoutMs = 8000) {
     });
 }
 
-// Purchases run one at a time. They share one SQLite connection, and a second BEGIN while the
-// first purchase's transaction is open fails ("cannot start a transaction within a transaction").
-let _purchaseChain = Promise.resolve();
-function _serialPurchase(fn) {
-  const run = _purchaseChain.then(fn, fn);
-  _purchaseChain = run.catch(() => {});
-  return run;
-}
-
-// Returns {success, status, message, prize, cost, balance, remaining_stock, owner}. Never throws.
-function purchasePrize({ userId, username, prizeId, source }) {
-  return _serialPurchase(async () => {
-    const prizes = await getQuery(
-      "SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?", [prizeId]);
-    if (prizes.length === 0) {
-      return { success: false, status: 404, message: "That item isn't in the shop any more." };
-    }
-    const prize = prizes[0];
-    if (prize.quantity <= 0) {
-      return { success: false, status: 400, message: `${prize.prize} is out of stock — check back later.` };
-    }
-    const users = await getQuery(
-      "SELECT points_balance, discordId, camfrogUsername FROM users WHERE userId = ?", [userId]);
-    if (users.length === 0) {
-      return { success: false, status: 404, message: "We couldn't find your account." };
-    }
-    const balance = users[0].points_balance || 0;
-    const role = ROLE_PRIZES[prize.prizeId] || null;
-    if (role && (await userRoles(userId)).includes(role)) {
-      return { success: false, status: 409, message: `You already have the ${prize.prize.replace(/ role$/i, "")} role.` };
-    }
-    if (balance < prize.cost) {
-      // Tell them exactly how short they are — "Insufficient coins" left people guessing.
-      const short = prize.cost - balance;
-      return {
-        success: false, status: 400, balance, cost: prize.cost,
-        message: `${prize.prize} costs ${prize.cost.toLocaleString()} PAT and you have ` +
-                 `${balance.toLocaleString()} — ${short.toLocaleString()} short.`,
-      };
-    }
-    const owners = await getQuery("SELECT userId, username FROM users WHERE username = ?", [STORE_OWNER_USERNAME]);
-    const owner = owners[0] || null;
-    if (!owner) {
-      console.error(`STORE OWNER '${STORE_OWNER_USERNAME}' not found — sale proceeds go nowhere`);
-    }
-
-    try {
-      await runQuery("BEGIN TRANSACTION");
-      const paid = await runQuery(
-        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
-        [prize.cost, userId, prize.cost]);
-      if (!paid.changes) throw new Error("balance changed mid-purchase");
-      const stock = await runQuery(
-        "UPDATE prizes SET quantity = quantity - 1 WHERE prizeId = ? AND quantity > 0", [prize.prizeId]);
-      if (!stock.changes) throw new Error("sold out mid-purchase");
-      // Digital prize effect: the spin boost permanently raises this user's daily gold-spin
-      // cap by 100 (stackable — buy it again for another +100/day).
-      if (prize.prizeId === "spinboost100") {
-        await runQuery(
-          "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + 100 WHERE userId = ?",
-          [userId]);
-      }
-      if (role) {
-        await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)",
-                       [userId, role, `purchase:${source}`]);
-        achievements.checkWeb(userId);               // e.g. High Roller
-      }
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [uuidv4(), userId, `purchase of ${prize.prize}`, -prize.cost]);
-      if (owner) {
-        await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-                       [prize.cost, owner.userId]);
-        await runQuery(
-          "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-          [uuidv4(), owner.userId, `store sale: ${prize.prize} to ${username} (${source})`, prize.cost]);
-      }
-      await runQuery("COMMIT");
-    } catch (error) {
-      try { await runQuery("ROLLBACK"); } catch (e) { /* nothing open */ }
-      const known = /mid-purchase/.test(error.message);
-      if (!known) console.error("Shop purchase error:", error);
-      return {
-        success: false, status: known ? 409 : 500,
-        message: known ? "That changed while you were buying it — please try again. You have not been charged."
-                       : "Something went wrong buying that — you have not been charged.",
-      };
-    }
-
-    // Notifications are not part of the purchase: an outage must never turn a completed, charged
-    // purchase into a reported failure. Resend RESOLVES with {error} instead of throwing, so the
-    // old .catch() alone never saw a failed send.
-    instanceResend.emails
-      .send({
-        to: process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv",
-        from: "no-reply@publicaccess.tv",
-        subject: "Purchase Notification",
-        text: `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`,
-        html: `<strong>User ${username} purchased ${prize.prize} for ${prize.cost} coins</strong> (via ${source}).`,
-      })
-      .then((r) => { if (r && r.error) console.error("Purchase email failed (purchase itself was fine):", r.error); })
-      .catch((e) => console.error("Purchase email failed (purchase itself was fine):", e.message));
-
-    // Discord: the Discord shop announces its own sales and grants roles itself; for website and
-    // Camfrog purchases the bot's bridge posts the sale in the purchases channel and grants the
-    // role (if they've linked Discord). Awaited only for a role, so the buyer hears the outcome.
-    let discord_role = null;
-    if (source !== "discord") {
-      const job = discordBridge("/store/purchase", {
-        username, camfrogUsername: users[0].camfrogUsername || null, discordId: users[0].discordId || null,
-        prize: prize.prize, cost: prize.cost, source, role,
-      });
-      if (role) {
-        const r = await job;
-        discord_role = r.granted ? "granted" : (r.reason || r.error || "failed");
-      }
-    }
-
-    const remaining = balance - prize.cost;
-    return {
-      success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost,
-      balance: remaining, remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
-      owner: owner ? owner.username : null, role, discord_role,
-      message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
-               `Balance: ${remaining.toLocaleString()} PAT.`,
-    };
-  }).catch((error) => {
-    console.error("Shop purchase error:", error);
-    return { success: false, status: 500, message: "Something went wrong buying that — you have not been charged." };
-  });
-}
-
-// Website purchase
-app.post("/shop", addUser, requireUser, async (req, res) => {
-  const r = await purchasePrize({ userId: req.user.userId, username: req.user.username,
-                                  prizeId: req.body.product, source: "website" });
-  const { status, ...body } = r;
-  res.status(status).json(body);
-});
-
-// Discord bot purchase (discord-bot/commands/shop.js) - same response shape it always had.
-app.post("/chatshop", async (req, res) => {
-  const { product, username, userId, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
-    return res.status(403).send("Access denied");
-  }
-  const r = await purchasePrize({ userId, username, prizeId: product, source: "discord" });
-  if (r.success) return res.json({ success: true, message: "Purchase successful" });
-  return res.status(r.status).json({ success: false, message: r.message });
-});
-
-// Pepe (Camfrog) purchase: bot-only, by Camfrog login.
-app.post("/api/shop/camfrog/buy", async (req, res) => {
-  const { camfrogUsername, prizeId, botToken } = req.body || {};
-  if (!isBotToken(botToken)) {
-    return res.status(403).json({ success: false, message: "forbidden" });
-  }
-  const users = await getQuery(
-    "SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = LOWER(?)", [camfrogUsername || ""]);
-  if (users.length === 0) {
-    return res.status(404).json({ success: false, message: "no PATV account for that Camfrog user" });
-  }
-  const r = await purchasePrize({ userId: users[0].userId, username: users[0].username,
-                                  prizeId, source: "camfrog" });
-  const { status, ...body } = r;
-  res.status(status).json({ ...body, username: users[0].username });
-});
+const shop = require("./shop");
+shop.register(app, { isBotToken, addUser, requireUser, achievements, discordBridge, userRoles });
 
 // Function to get the total jackpot
 function getJackpotTotal(req, res) {
@@ -2246,29 +2058,6 @@ app.get("/api/classes", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).send("Failed to retrieve classes.");
-  }
-});
-
-// HTTP GET endpoint to get the list of prizes with their costs
-app.get("/api/prizes", async (req, res) => {
-  const sql = "SELECT prizeId, prize, cost, quantity FROM prizes"; // Updated SQL to fetch the cost as well
-  try {
-    db.all(sql, [], (err, rows) => {
-      if (err) {
-        console.error(err.message);
-        res.status(500).send("Failed to retrieve prizes.");
-        return;
-      }
-      // Send an array of objects with both prize names and costs
-      res.json(
-        rows.map((row) => {
-          return { prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity };
-        })
-      );
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Failed to retrieve prizes.");
   }
 });
 
@@ -2921,63 +2710,6 @@ app.post("/api/award-badge", async (req, res) => {
     }
   });
   
-// Route to render the manage prizes page
-app.get('/admin/manage-prizes', addUser, (req, res) => {
-  const userType = req.user ? req.user.class : null;
-  const username = req.user ? req.user.username : null;
-  if (userType === "Admin" || userType === "Staff") {
-    res.render('managePrizes', { user: username });
-  } else {
-    req.flash("error", "Access denied. You must be an admin or staff to access this page.");
-    res.redirect("/login");
-  }
-});
-
-// HTTP POST endpoint to edit the list of prizes.
-app.post("/api/prizes/edit", addUser, async (req, res) => {
-  const userType = req.user ? req.user.class : null;
-  if (userType === "Admin" || userType === "Staff") {
-    const { action, prizeId, prizeName, cost, quantity } = req.body;
-
-    try {
-      if (action === "add") {
-        if (prizeId) {
-          // Update existing prize
-          const updateSql = "UPDATE prizes SET prize = ?, cost = ?, quantity = ? WHERE prizeId = ?";
-          await runQuery(updateSql, [prizeName, cost, quantity, prizeId]);
-          res.json({ message: "Prize updated successfully." });
-        } else {
-          // Add new prize
-          const newPrizeId = uuidv4();
-          const insertSql =
-            "INSERT INTO prizes (prizeId, prize, cost, quantity) VALUES (?, ?, ?, ?)";
-          await runQuery(insertSql, [newPrizeId, prizeName, cost, quantity]);
-          res.json({ message: "Prize added successfully." });
-        }
-      } else if (action === "remove") {
-        const deleteSql = "DELETE FROM prizes WHERE prize = ?";
-        const result = await runQuery(deleteSql, [prizeName]);
-        if (result.changes) {
-          res.json({ message: "Prize removed successfully." });
-        } else {
-          res.status(404).send("Prize not found.");
-        }
-      } else {
-        res.status(400).send("Invalid action specified.");
-      }
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Failed to process prize.");
-    }
-  } else {
-    req.flash(
-      "error",
-      "Access denied. You must be an admin or staff to access this page."
-    );
-    return res.redirect("/login");
-  }
-});
-
 // HTTP POST endpoint to trigger wheel spin
 app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
   const username = req.body.username;

@@ -1,0 +1,36 @@
+<%- include('layout', { title: o ? 'Order #' + o.id : 'Order', user: user }) %>
+<%- include('partials/shop-css') %>
+<div class="sh">
+<% if (!o) { %>
+  <h1>Order not found</h1>
+  <p class="sub">It doesn't exist, or it isn't yours. <a href="/shop/orders">Your orders</a></p>
+<% } else { const st = H.status(o.status); const back = '/shop/orders/' + o.id; %>
+  <div class="links" style="margin:12px 0"><a href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : '/shop/orders' %>">← Back</a><% if (o.prize_id) { %><a href="/shop/item/<%= o.prize_id %>">Item page</a><% } %></div>
+  <h1 style="text-align:left;font-size:22px">Order #<%= o.id %></h1>
+  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+  <div class="box" style="display:grid;gap:10px">
+    <div class="top row" style="justify-content:space-between"><b style="color:#fff;font-size:17px"><%= o.title %></b><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
+    <div class="kv">
+      <span>Price</span><div class="price"><%= H.fmt(o.price) %> PAT</div>
+      <span>Buyer</span><div><%= o.buyer_name || '?' %></div>
+      <span>Seller</span><div><%= o.official ? 'PATV Store (official)' : (o.seller_name || '?') %></div>
+      <span>Ordered</span><div><%= H.when(o.created) %> via <%= o.source || 'website' %></div>
+      <% if (!o.official && (role === 'seller' || role === 'admin')) { %>
+        <span>Fee</span><div><%= o.fee_pct %>%<%= o.seller_paid ? ` — ${H.fmt(o.fee)} PAT; seller got ${H.fmt(o.net)}` : ` — seller gets ${H.fmt(o.price - Math.floor(o.price * o.fee_pct / 100))} on fulfilment` %></div>
+      <% } %>
+      <% if (o.buyer_input) { %><span>Buyer info</span><div class="code"><%= o.buyer_input %></div><% } %>
+      <% if (o.dispute_reason) { %><span>Dispute</span><div><%= o.dispute_reason %></div><% } %>
+      <% if (o.resolution) { %><span>Outcome</span><div><%= o.resolution %></div><% } %>
+    </div>
+    <% if (o.seller_note && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>
+      <div><span class="muted">Seller's note / code</span><div class="pre code"><%= o.seller_note %></div></div>
+    <% } %>
+    <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0">Completes automatically <%= H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) %> unless the buyer opens a dispute.</p><% } %>
+    <%- include('partials/shop-order-actions', { o, role, back, H, settings, staff: me && me.staff }) %>
+  </div>
+  <h2>Timeline</h2>
+  <ul class="tl">
+    <% events.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><b><%= H.status(e.status).label %></b><% if (e.actor) { %> by <%= e.actor %><% } %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
+  </ul>
+<% } %>
+</div>

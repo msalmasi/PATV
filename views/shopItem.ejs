@@ -1,0 +1,81 @@
+<%- include('layout', { title: p ? p.prize : 'Shop item', user: user }) %>
+<%- include('partials/shop-css') %>
+<div class="sh">
+<% if (!p) { %>
+  <h1>Item not found</h1>
+  <p class="sub">It may have sold out for good or been taken down. <a href="/shop">Back to the shop</a></p>
+<% } else { const official = !p.seller_id; const mine = me && me.userId === p.seller_id; %>
+  <div class="bar" style="margin-top:12px">
+    <div class="links"><a href="/shop">← Shop</a><% if (!official) { %><a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>">More from <%= p.seller_name %></a><% } %></div>
+    <% if (me) { %><div>Balance: <span class="bal" id="shopBalance"><%= H.fmt(me.points_balance) %></span> PAT</div><% } %>
+  </div>
+  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+  <% if (p.status !== 'active') { const ls = H.lstatus(p.status); %>
+    <p class="warn">This listing is <b style="color:<%= ls.color %>"><%= ls.label %></b> — buyers can't see it.<% if (p.review_note) { %> Note: <%= p.review_note %><% } %></p>
+  <% } %>
+
+  <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));align-items:start">
+    <div class="box" style="padding:0;overflow:hidden">
+      <div class="thumb" style="aspect-ratio:4/3;font-size:64px"><% if (p.image_url) { %><img src="<%= p.image_url %>" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><%= official ? '🎁' : '🛍️' %><% } %></div>
+    </div>
+    <div style="display:grid;gap:10px;min-width:0">
+      <div>
+        <h1 style="text-align:left;margin:0 0 6px;font-size:24px"><%= p.prize %></h1>
+        <div class="row">
+          <span class="price" style="font-size:24px"><%= H.fmt(p.cost) %> PAT</span>
+          <% if (official) { %><span class="pill official">Official store</span><% } %>
+          <% if (p.category) { %><a class="chip" href="/shop?cat=<%= encodeURIComponent(p.category) %>"><%= p.category %></a><% } %>
+        </div>
+      </div>
+      <div class="muted"><span class="<%= p.quantity > 0 ? '' : 'oos' %>" data-stock="<%= p.prizeId %>"><%= p.quantity > 0 ? H.fmt(p.quantity) + ' left' : 'Out of stock' %></span><%= p.sold ? ' · ' + H.fmt(p.sold) + ' sold' : '' %>
+        · <%= official ? 'Delivered instantly' : 'The seller delivers it — your PAT is held until they do' %></div>
+
+      <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
+      <% if (!me) { %>
+        <a class="btn" href="/login">Sign in to buy</a>
+      <% } else if (mine) { %>
+        <div class="row"><a class="btn alt" href="/shop/seller?edit=<%= p.prizeId %>#edit">Edit your listing</a></div>
+      <% } else if (p.status === 'active' && p.quantity > 0) { %>
+        <% if (p.buyer_prompt) { %>
+          <label>The seller needs: <b style="color:#ddd"><%= p.buyer_prompt %></b>
+            <input type="text" id="buyerInput" maxlength="300" required data-prompt="<%= p.buyer_prompt %>" placeholder="<%= p.buyer_prompt %>">
+          </label>
+        <% } %>
+        <div><button class="buy-btn" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>">Buy for <%= H.fmt(p.cost) %> PAT</button></div>
+        <% if (!official) { %><p class="muted" style="margin:0">You can cancel for a full refund until the seller fulfils it. After that, confirm you got it or open a dispute within <%= settings.auto_complete_days %> days.</p><% } %>
+      <% } %>
+
+      <div class="box seller">
+        <% if (official) { %>
+          <img src="/public/img/coin.png" alt="">
+          <div><b style="color:#fff">PATV Store</b><div class="muted">The official prize store</div></div>
+        <% } else { %>
+          <img src="<%= H.av(p.seller_avatar) %>" alt="" onerror="this.src='/public/img/avatar.png'">
+          <div style="min-width:0">
+            <a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>" style="color:#fff;font-weight:bold"><%= p.seller_display || p.seller_name %></a>
+            <div class="muted">@<%= p.seller_name %> · <%= H.fmt(sales) %> completed sale<%= sales === 1 ? '' : 's' %></div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <% if (p.description) { %>
+    <h2>Description</h2>
+    <div class="pre"><%= p.description %></div>
+  <% } %>
+
+  <% if (more && more.length) { %>
+    <h2><%= official ? 'More from the store' : 'More from ' + p.seller_name %></h2>
+    <div class="grid">
+      <% more.forEach((m) => { %>
+        <a class="card" href="/shop/item/<%= m.prizeId %>">
+          <div class="thumb"><% if (m.image_url) { %><img src="<%= m.image_url %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><%= official ? '🎁' : '🛍️' %><% } %></div>
+          <div class="body"><span class="t"><%= m.prize %></span><span class="price"><%= H.fmt(m.cost) %> PAT</span></div>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+<% } %>
+</div>
+<%- include('partials/shop-buy-js') %>

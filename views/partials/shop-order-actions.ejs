@@ -1,0 +1,55 @@
+<%# Actions on one marketplace order for the viewer's role. Pass { o, role, back, H, settings }. %>
+<% if (!o.official) { %>
+  <% if (role === 'buyer') { %>
+    <% if (o.status === 'paid') { %>
+      <form method="POST" action="/shop/orders/<%= o.id %>/cancel" data-q="Cancel this order and get <%= H.fmt(o.price) %> PAT back?" onsubmit="return confirm(this.dataset.q)">
+        <input type="hidden" name="back" value="<%= back %>">
+        <button class="alt" type="submit">Cancel order (full refund)</button>
+      </form>
+    <% } %>
+    <% if (o.status === 'fulfilled') { %>
+      <form method="POST" action="/shop/orders/<%= o.id %>/confirm"><input type="hidden" name="back" value="<%= back %>"><button type="submit">✓ I received it</button></form>
+    <% } %>
+    <% if (o.status === 'paid' || o.status === 'fulfilled') { %>
+      <details><summary>Something wrong? Open a dispute</summary>
+        <form method="POST" action="/shop/orders/<%= o.id %>/dispute" style="display:grid;gap:8px">
+          <input type="hidden" name="back" value="<%= back %>">
+          <textarea name="reason" maxlength="1000" required minlength="5" placeholder="What went wrong? An admin will read this." style="min-height:60px"></textarea>
+          <div><button class="bad" type="submit">Open dispute</button></div>
+        </form>
+      </details>
+    <% } %>
+  <% } %>
+  <% if (role === 'seller' && o.status === 'paid') { %>
+    <form method="POST" action="/shop/orders/<%= o.id %>/fulfil" style="display:grid;gap:8px">
+      <input type="hidden" name="back" value="<%= back %>">
+      <label>Note / code for the buyer <textarea name="note" maxlength="1000" style="min-height:60px"></textarea></label>
+      <div><button type="submit">Mark fulfilled</button></div>
+    </form>
+    <form method="POST" action="/shop/orders/<%= o.id %>/refund" class="row" data-q="Refund <%= H.fmt(o.price) %> PAT to the buyer?" onsubmit="return confirm(this.dataset.q)">
+      <input type="hidden" name="back" value="<%= back %>">
+      <input type="text" name="reason" maxlength="300" placeholder="Reason (optional)" style="flex:1 1 160px">
+      <button class="bad" type="submit">Refund buyer</button>
+    </form>
+  <% } %>
+  <% if (role === 'admin' || (typeof staff !== 'undefined' && staff)) { %>
+    <% if (o.status === 'disputed') { %>
+      <form method="POST" action="/shop/orders/<%= o.id %>/resolve_buyer" class="row" data-q="Refund the buyer <%= H.fmt(o.price) %> PAT<%= o.seller_paid ? ' and claw back ' + H.fmt(o.net) + ' from the seller' : '' %>?" onsubmit="return confirm(this.dataset.q)">
+        <input type="hidden" name="back" value="<%= back %>">
+        <input type="text" name="reason" maxlength="300" placeholder="Note (optional)" style="flex:1 1 160px">
+        <button class="bad" type="submit">Refund buyer</button>
+      </form>
+      <form method="POST" action="/shop/orders/<%= o.id %>/resolve_seller" class="row" data-q="Close the dispute for the seller<%= o.seller_paid ? '' : ' and pay them' %>?" onsubmit="return confirm(this.dataset.q)">
+        <input type="hidden" name="back" value="<%= back %>">
+        <input type="text" name="reason" maxlength="300" placeholder="Note (optional)" style="flex:1 1 160px">
+        <button type="submit">Pay seller</button>
+      </form>
+    <% } else if (o.status === 'paid' || o.status === 'fulfilled') { %>
+      <form method="POST" action="/shop/orders/<%= o.id %>/refund" class="row" data-q="Admin refund: give the buyer <%= H.fmt(o.price) %> PAT back<%= o.seller_paid ? ' and claw back ' + H.fmt(o.net) + ' from the seller' : '' %>?" onsubmit="return confirm(this.dataset.q)">
+        <input type="hidden" name="back" value="<%= back %>">
+        <input type="text" name="reason" maxlength="300" placeholder="Reason" style="flex:1 1 160px">
+        <button class="bad" type="submit">Admin refund</button>
+      </form>
+    <% } %>
+  <% } %>
+<% } %>

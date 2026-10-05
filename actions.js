@@ -37,8 +37,12 @@ async function queue(userId, { kind, args, tag, label }) {
   await ready;
   const u = (await getQuery("SELECT username, camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   if (!u) throw new Error("no account");
-  const open = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE user_id = ? AND status IN ('pending','claimed')", [userId]);
-  if (open[0].n >= 6) throw new Error("busy");
+  // The "busy" cap is for things a user starts; internal notices (kind "notify", e.g. shop order
+  // PMs) neither count towards it nor get dropped by it.
+  if (kind !== "notify") {
+    const open = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE user_id = ? AND status IN ('pending','claimed') AND kind != 'notify'", [userId]);
+    if (open[0].n >= 6) throw new Error("busy");
+  }
   const r = await runQuery(`INSERT INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     [userId, u.username, u.camfrogUsername || null, u.class === "Admin" ? 1 : 0, kind, JSON.stringify(args),

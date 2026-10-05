@@ -1,0 +1,27 @@
+<%- include('layout', { title: 'Edit item', user: user }) %>
+<%- include('partials/shop-css') %>
+<div class="sh">
+  <div class="links" style="margin:12px 0"><a href="/shop/admin#listings">← Shop admin</a></div>
+<% if (!p) { %>
+  <h1>Item not found</h1>
+<% } else { %>
+  <h1 style="text-align:left;font-size:22px">Edit <%= p.seller_id ? 'listing' : 'official item' %></h1>
+  <p class="muted"><%= p.seller_id ? 'Sold by ' + p.seller_name : 'Official store item' %> · <%= H.lstatus(p.status).label %> · <a href="/shop/item/<%= p.prizeId %>">view</a></p>
+  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+  <form class="box" method="POST" action="/shop/listing/<%= p.prizeId %>" style="display:grid;gap:10px">
+    <input type="hidden" name="back" value="/shop/admin/edit/<%= p.prizeId %>">
+    <div class="formgrid">
+      <label class="wide">Title <input type="text" name="title" maxlength="80" required value="<%= p.prize %>"></label>
+      <label>Category
+        <select name="category"><% categories.forEach((c) => { %><option <%= p.category === c ? 'selected' : '' %>><%= c %></option><% }) %></select>
+      </label>
+      <label>Price (PAT) <input type="number" name="price" min="1" required value="<%= p.cost %>"></label>
+      <label>Stock <input type="number" name="stock" min="0" required value="<%= p.quantity %>"></label>
+      <label>Image URL (https, optional) <input type="url" name="image_url" maxlength="500" value="<%= p.image_url || '' %>"></label>
+      <label class="wide">Description <textarea name="description" maxlength="1000"><%= p.description || '' %></textarea></label>
+      <% if (p.seller_id) { %><label class="wide">Ask the buyer for <input type="text" name="buyer_prompt" maxlength="120" value="<%= p.buyer_prompt || '' %>"></label><% } %>
+    </div>
+    <div><button type="submit">Save</button></div>
+  </form>
+<% } %>
+</div>

@@ -1,0 +1,144 @@
+<%- include('layout', { title: 'Seller dashboard', user: user }) %>
+<%- include('partials/shop-css') %>
+<%
+  const form = (l) => { const v = l || {}; %>
+    <div class="formgrid">
+      <label class="wide">Title <input type="text" name="title" maxlength="80" required value="<%= v.prize || '' %>" placeholder="e.g. $10 Steam gift card"></label>
+      <label>Category
+        <select name="category" required>
+          <% categories.forEach((c) => { %><option value="<%= c %>" <%= v.category === c ? 'selected' : '' %>><%= c %></option><% }) %>
+        </select>
+      </label>
+      <label>Price (PAT) <input type="number" name="price" min="1" step="1" required value="<%= v.cost || '' %>" inputmode="numeric"></label>
+      <label>Stock <input type="number" name="stock" min="0" step="1" required value="<%= v.quantity != null ? v.quantity : 1 %>" inputmode="numeric"></label>
+      <label>Image URL (optional, https://) <input type="url" name="image_url" maxlength="500" value="<%= v.image_url || '' %>" placeholder="https://…"></label>
+      <label class="wide">Description (plain text, up to 1,000 characters)
+        <textarea name="description" maxlength="1000"><%= v.description || '' %></textarea></label>
+      <label class="wide">Ask the buyer for (optional) <input type="text" name="buyer_prompt" maxlength="120" value="<%= v.buyer_prompt || '' %>" placeholder="e.g. your Steam ID"></label>
+    </div>
+<% }; %>
+<div class="sh">
+  <h1>Seller dashboard</h1>
+  <p class="sub">List things for PAT, fulfil orders, get paid. <a href="/shop/seller/<%= encodeURIComponent(me.username) %>">Your storefront ›</a></p>
+  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+  <div class="tabs">
+    <a href="#todo">To fulfil (<%= todo.length %>)</a><a href="#listings">Listings</a><a href="#revenue">Revenue</a><a href="#history">Sales</a><a href="#notify">Notifications</a><a href="/shop/orders">My purchases</a>
+  </div>
+
+  <div class="box muted" style="font-size:13px;line-height:1.55">
+    How it works: when someone buys, their PAT is held and you get a PM from Pepe and an email. Deliver the item, then press
+    <b>Mark fulfilled</b> (add the code or a note — only the buyer sees it). You're paid the price minus the
+    <b><%= settings.fee_pct %>%</b> shop fee right then. The buyer can confirm or dispute for <%= settings.auto_complete_days %> days.
+    <% if (settings.auto_cancel_days > 0) { %>Orders you don't fulfil within <%= settings.auto_cancel_days %> days are refunded automatically.<% } %>
+  </div>
+
+  <h2 id="todo">Orders to fulfil</h2>
+  <% if (!todo.length) { %><p class="muted">Nothing waiting. 🎉</p><% } %>
+  <div class="list">
+    <% todo.forEach((o) => { const st = H.status(o.status); %>
+      <div class="item">
+        <div class="top"><b><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></b><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
+        <div class="kv">
+          <span>Buyer</span><div><%= o.buyer_name %></div>
+          <span>Price</span><div class="price"><%= H.fmt(o.price) %> PAT <span class="muted">(you get <%= H.fmt(o.price - Math.floor(o.price * o.fee_pct / 100)) %>)</span></div>
+          <span>Ordered</span><div><%= H.when(o.created) %></div>
+          <% if (o.buyer_input) { %><span>They wrote</span><div class="code"><%= o.buyer_input %></div><% } %>
+          <% if (o.status === 'disputed') { %><span>Dispute</span><div><%= o.dispute_reason %></div><% } %>
+        </div>
+        <% if (o.status === 'paid') { %>
+          <form method="POST" action="/shop/orders/<%= o.id %>/fulfil" style="display:grid;gap:8px">
+            <input type="hidden" name="back" value="/shop/seller#todo">
+            <label>Note / code for the buyer <textarea name="note" maxlength="1000" placeholder="e.g. the gift card code, or how you delivered it" style="min-height:60px"></textarea></label>
+            <div class="row"><button type="submit">Mark fulfilled</button></div>
+          </form>
+          <details><summary>Can't deliver it? Refund</summary>
+            <form method="POST" action="/shop/orders/<%= o.id %>/refund" class="row" data-q="Refund <%= H.fmt(o.price) %> PAT to <%= o.buyer_name %>?" onsubmit="return confirm(this.dataset.q)">
+              <input type="hidden" name="back" value="/shop/seller#todo">
+              <input type="text" name="reason" maxlength="300" placeholder="Reason (optional)" style="flex:1 1 180px">
+              <button class="bad" type="submit">Refund buyer</button>
+            </form>
+          </details>
+        <% } else { %><p class="muted" style="margin:0">An admin is reviewing this dispute.</p><% } %>
+      </div>
+    <% }) %>
+  </div>
+
+  <h2 id="listings">Your listings</h2>
+  <% if (!canSell) { %>
+    <p class="warn">You need to be level <%= settings.min_level %> to sell in the shop (you're level <%= me.level || 0 %>). Keep chatting, playing and streaming!</p>
+  <% } else { %>
+    <% if (edit) { %>
+      <div class="box" id="edit">
+        <h3 style="margin-top:0">Edit "<%= edit.prize %>"</h3>
+        <form method="POST" action="/shop/listing/<%= edit.prizeId %>" style="display:grid;gap:10px">
+          <% form(edit) %>
+          <% if (settings.require_approval && !me.staff) { %><p class="muted" style="margin:0">Changing the title, description, category, image or buyer question sends it back for review. Price and stock changes go live at once.</p><% } %>
+          <div class="row"><button type="submit">Save</button><a class="btn alt" href="/shop/seller#listings">Cancel</a></div>
+        </form>
+      </div>
+    <% } %>
+    <details class="box" <%= listings.length ? '' : 'open' %>>
+      <summary>＋ New listing</summary>
+      <form method="POST" action="/shop/listing" style="display:grid;gap:10px">
+        <% form(null) %>
+        <p class="muted" style="margin:0"><%= settings.require_approval && !me.staff ? 'New listings go live once an admin approves them. ' : '' %>Only sell things you own and can deliver. A <%= settings.fee_pct %>% fee is taken from each sale.</p>
+        <div class="row"><button type="submit">List it</button></div>
+      </form>
+    </details>
+  <% } %>
+  <div class="list">
+    <% listings.forEach((l) => { const ls = H.lstatus(l.status); %>
+      <div class="item">
+        <div class="top"><b><a href="/shop/item/<%= l.prizeId %>"><%= l.prize %></a></b><span class="pill" style="color:<%= ls.color %>"><%= ls.label %></span></div>
+        <div class="muted"><span class="price"><%= H.fmt(l.cost) %> PAT</span> · <%= H.fmt(l.quantity) %> in stock · <%= H.fmt(l.sold || 0) %> sold · <%= l.category || '—' %></div>
+        <% if (l.review_note) { %><div class="warn" style="margin:0">Admin note: <%= l.review_note %></div><% } %>
+        <% if (l.status !== 'removed') { %>
+          <div class="row">
+            <a class="btn alt" href="/shop/seller?edit=<%= l.prizeId %>#edit">Edit</a>
+            <% if (l.status === 'active') { %>
+              <form method="POST" action="/shop/listing/<%= l.prizeId %>/pause"><button class="alt" type="submit">Pause</button></form>
+            <% } else if (l.status === 'paused') { %>
+              <form method="POST" action="/shop/listing/<%= l.prizeId %>/activate"><button type="submit">Resume</button></form>
+            <% } %>
+            <form method="POST" action="/shop/listing/<%= l.prizeId %>/remove" onsubmit="return confirm('Remove this listing? Open orders still need fulfilling.')"><button class="bad" type="submit">Remove</button></form>
+          </div>
+        <% } %>
+      </div>
+    <% }) %>
+  </div>
+  <% if (!listings.length && canSell) { %><p class="muted">No listings yet.</p><% } %>
+
+  <h2 id="revenue">Revenue</h2>
+  <div class="stats">
+    <% [['d7', 'Last 7 days'], ['d30', 'Last 30 days'], ['all', 'All time']].forEach(([k, label]) => { const r = rev[k]; %>
+      <div class="stat"><span><%= label %></span><b class="price"><%= H.fmt(r.net) %></b>
+        <em>net · <%= H.fmt(r.n) %> sale<%= r.n === 1 ? '' : 's' %></em>
+        <em>gross <%= H.fmt(r.gross) %> · fees <%= H.fmt(r.fees) %></em></div>
+    <% }) %>
+    <div class="stat"><span>Waiting on you</span><b><%= H.fmt(rev.held.t) %></b><em><%= rev.held.n %> unfulfilled order<%= rev.held.n === 1 ? '' : 's' %></em></div>
+  </div>
+  <% if (rev.best.length) { %>
+    <h3>Best sellers</h3>
+    <div class="list">
+      <% rev.best.forEach((b) => { %><div class="item" style="padding:8px 12px"><div class="top"><span><%= b.title %></span><span class="muted"><%= b.n %> sold · <span class="price"><%= H.fmt(b.net) %></span> net</span></div></div><% }) %>
+    </div>
+  <% } %>
+
+  <h2 id="history">Sales history</h2>
+  <% if (!history.length) { %><p class="muted">No sales yet.</p><% } %>
+  <div class="list">
+    <% history.forEach((o) => { const st = H.status(o.status); %>
+      <div class="item" style="padding:9px 12px">
+        <div class="top"><span><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %> → <%= o.buyer_name %></span><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
+        <div class="muted"><%= H.day(o.created) %> · <%= H.fmt(o.price) %> PAT<%= o.seller_paid ? ` · you got ${H.fmt(o.net)} (fee ${H.fmt(o.fee)})` : '' %></div>
+      </div>
+    <% }) %>
+  </div>
+
+  <h2 id="notify">Notifications</h2>
+  <form class="box" method="POST" action="/shop/prefs" style="display:grid;gap:8px">
+    <label class="check"><input type="checkbox" name="email" value="1" <%= prefs.email_off ? '' : 'checked' %>> Email me about shop orders <%= me.email ? '(' + me.email + ')' : '— no email on your account' %></label>
+    <label class="check"><input type="checkbox" name="pm" value="1" <%= prefs.pm_off ? '' : 'checked' %>> Pepe PMs me in Camfrog <%= me.camfrogUsername ? '(' + me.camfrogUsername + ')' : '— link Camfrog in your profile' %></label>
+    <div><button type="submit">Save</button></div>
+  </form>
+</div>
