@@ -1,0 +1,33 @@
+<%- include('layout', { title: 'Live rooms', user: user }) %>
+<style>
+  .rl { max-width: 900px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
+  .rl a { color: #81c784; text-decoration: none; }
+  .rl h1 { margin: 0; font-size: 26px; }
+  .rl .lead { color: #aaa; font-size: 14px; line-height: 1.55; margin: 0; }
+  .rl .list { display: grid; gap: 10px; }
+  .rl .room { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; color: #e6e6e6 !important; }
+  .rl .room:hover, .rl .room:focus-visible { border-color: #4caf50; }
+  .rl .room b { font-size: 18px; overflow-wrap: anywhere; }
+  .rl .room .sub { grid-column: 1 / -1; color: #999; font-size: 13px; overflow-wrap: anywhere; }
+  .rl .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
+  .rl .live.off { background: #1c1c1c; border-color: #333; color: #999; }
+  .rl .empty { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 24px; text-align: center; color: #999; }
+  .rl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+</style>
+<main class="rl">
+  <h1>📡 Live rooms</h1>
+  <p class="lead">Camfrog rooms Pepe sits in, live on PATV — read-only for now (v1). Room admins switch a room on with <code>!bridge on</code>; anyone can stay off the page with <code>!bridge hide</code>.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the chat and see who's in.<% } %></p>
+  <% if (!list.length) { %>
+    <div class="empty">No rooms are bridged right now.</div>
+  <% } else { %>
+    <div class="list">
+      <% list.forEach((r) => { %>
+        <a class="room" href="/rooms/<%= encodeURIComponent(r.slug) %>">
+          <b><%= r.name %></b>
+          <span class="live<%= r.live ? '' : ' off' %>"><%= r.live ? '● LIVE' : 'OFFLINE' %></span>
+          <span class="sub">👥 <%= r.count %> in the room · 🎙️ <%= r.micCount %> on the mic<% if (r.mic.length) { %>: <%= r.mic.join(', ') %><% } %><% if (r.topic) { %> · 📌 <%= r.topic %><% } %></span>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+</main>

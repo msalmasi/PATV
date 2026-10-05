@@ -1,0 +1,256 @@
+<%- include('layout', { title: room.name + ' — live on PATV', user: user }) %>
+<style>
+  .rm { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
+  .rm *, .rm *::before, .rm *::after { box-sizing: border-box; }
+  .rm a { color: #81c784; text-decoration: none; }
+  .rm a:hover { color: #a5d6a7; }
+  .rm .crumb { font-size: 13px; color: #888; }
+  .rm .hero { background: radial-gradient(120% 160% at 0% 0%, #17301a 0%, #111 55%); border: 1px solid #222; border-radius: 14px; padding: 16px 18px; display: grid; gap: 8px; min-width: 0; }
+  .rm .hero h1 { margin: 0; font-size: 26px; line-height: 1.2; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .rm .topic { color: #cfd8cf; font-size: 15px; overflow-wrap: anywhere; }
+  .rm .topic:empty { display: none; }
+  .rm .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rm .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; white-space: nowrap; }
+  .rm .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; font-weight: bold; letter-spacing: .06em; }
+  .rm .live.off { background: #1c1c1c; border-color: #333; color: #999; }
+  .rm .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5252; animation: rmPulse 1.6s ease-in-out infinite; }
+  .rm .live.off .dot { background: #666; animation: none; }
+  @keyframes rmPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .rm .banner { background: #12161d; border: 1px solid #2a3442; border-radius: 10px; padding: 10px 12px; color: #b9c7da; font-size: 13px; line-height: 1.5; }
+  .rm .banner b { color: #e3ecf8; }
+  .rm .grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+  .rm .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; min-width: 0; }
+  .rm h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6; display: flex; justify-content: space-between; gap: 8px; }
+  .rm h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #888; font-size: 12px; }
+  .rm .feed { height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 #111; display: flex; flex-direction: column; gap: 2px; padding-right: 4px; scroll-behavior: smooth; }
+  .rm .line { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: start; }
+  .rm .line:hover { background: #161616; }
+  .rm .line .body { min-width: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+  .rm .line .who { font-weight: bold; margin-right: 6px; }
+  .rm .line .when { color: #666; font-size: 11px; margin-left: 4px; white-space: nowrap; }
+  .rm .line.pepe { background: #0f1a10; }
+  .rm .sys { color: #8a8a8a; font-size: 12.5px; padding: 3px 6px 3px 42px; overflow-wrap: anywhere; }
+  .rm .sys.topic { color: #c9b46a; }
+  .rm .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: #0d0d0d; object-fit: cover; flex: none; overflow: hidden; }
+  .rm .av.anon { background: #2a2a2a !important; color: #888; }
+  .rm .people { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 46vh; overflow-y: auto; }
+  .rm .people li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; font-size: 14px; }
+  .rm .people li:hover { background: #161616; }
+  .rm .people .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rm .people .nm small { color: #777; margin-left: 4px; }
+  .rm .ic { display: inline-flex; gap: 4px; font-size: 13px; }
+  .rm .ic .off { opacity: .25; filter: grayscale(1); }
+  .rm .mic { display: grid; gap: 6px; }
+  .rm .mic .holder { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #0f1a10; border: 1px solid #234d2a; border-radius: 10px; padding: 6px 8px; }
+  .rm .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+  .rm .eq i { width: 3px; background: #4caf50; border-radius: 1px; animation: rmEq 1s ease-in-out infinite; }
+  .rm .eq i:nth-child(2) { animation-delay: .2s; } .rm .eq i:nth-child(3) { animation-delay: .4s; }
+  @keyframes rmEq { 0%, 100% { height: 4px; } 50% { height: 14px; } }
+  .rm .muted { color: #888; font-size: 13px; }
+  .rm .side { display: grid; gap: 14px; }
+  .rm .join ol { margin: 6px 0 0; padding-left: 18px; color: #bbb; font-size: 13px; line-height: 1.6; }
+  .rm .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 8px; border: 1px solid #4caf50; background: #4caf50; color: #fff !important; font-weight: bold; font-size: 14px; }
+  .rm .tease { text-align: center; padding: 34px 18px; display: grid; gap: 10px; justify-items: center; }
+  .rm .tease .big { font-size: 44px; }
+  .rm .jump { position: sticky; bottom: 4px; align-self: center; background: #4caf50; color: #fff; border: 0; border-radius: 999px; padding: 5px 14px; font: inherit; font-size: 12px; cursor: pointer; display: none; }
+  .rm .status { font-size: 12px; color: #777; }
+  .rm .status.err { color: #e57373; }
+  .cx-name { font-weight: bold; }
+  @media (max-width: 860px) {
+    .rm .grid { grid-template-columns: minmax(0, 1fr); }
+    .rm .feed { height: 58vh; }
+    .rm .hero h1 { font-size: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rm .dot, .rm .eq i { animation: none; }
+    .rm .feed { scroll-behavior: auto; }
+  }
+</style>
+<main class="rm">
+  <div class="crumb"><a href="/rooms">Live rooms</a> › <%= room.name %></div>
+  <section class="hero" aria-labelledby="rmTitle">
+    <h1 id="rmTitle"><%= room.name %>
+      <span class="live<%= room.live ? '' : ' off' %>" id="rmLive"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span>
+    </h1>
+    <div class="topic" id="rmTopic"><%= room.topic %></div>
+    <div class="meta">
+      <span class="chip" id="rmCount">👥 <%= room.count %> in the room</span>
+      <span class="chip">📡 Camfrog</span>
+    </div>
+  </section>
+  <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
+
+<% if (!signedIn) { %>
+  <section class="card tease">
+    <div class="big" aria-hidden="true">🐸</div>
+    <h2 style="justify-content:center">Sign in to watch the room live</h2>
+    <p class="muted">The live chat, the people in the room and who's on the mic are for signed-in PATV members.</p>
+    <a class="btn" href="/login">Sign in</a>
+    <p class="muted">No account? <a href="/register">Make one</a> — then link your Camfrog name with <code>!verify</code>.</p>
+  </section>
+<% } else { %>
+  <div class="grid">
+    <section class="card" aria-labelledby="chatH">
+      <h2 id="chatH">Chat <small id="rmStatus" class="status" aria-live="polite"></small></h2>
+      <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Room chat"></div>
+      <button class="jump" id="rmJump" type="button">New messages ↓</button>
+    </section>
+    <aside class="side">
+      <section class="card" aria-labelledby="micH">
+        <h2 id="micH">On the mic</h2>
+        <div class="mic" id="rmMic"></div>
+      </section>
+      <section class="card" aria-labelledby="pplH">
+        <h2 id="pplH">In the room <small id="rmPplN"></small></h2>
+        <ul class="people" id="rmPeople"></ul>
+        <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
+      </section>
+      <section class="card join" aria-labelledby="joinH">
+        <h2 id="joinH">Join on Camfrog</h2>
+        <ol>
+          <li>Open Camfrog (<a href="https://www.camfrog.com/" rel="noopener">get it here</a>) and sign in.</li>
+          <li>Open the <b>Room List</b> and search for <b><%= room.name %></b>.</li>
+          <li>Say hi — Pepe answers <code>!help</code>.</li>
+        </ol>
+      </section>
+    </aside>
+  </div>
+  <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
+  <script>
+  (function () {
+    'use strict';
+    var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
+    var data = JSON.parse(document.getElementById('rmInit').textContent);
+    var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
+    var cursor = 0, timer = null, fails = 0, lastPeople = '', lastMic = '';
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    function hue(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360; return h; }
+    function avatar(u) {
+      if (u && u.patv && u.patv.avatar) { var im = el('img', 'av'); im.src = u.patv.avatar; im.alt = ''; im.loading = 'lazy'; return im; }
+      var d = el('span', 'av' + (!u || u.anon ? ' anon' : ''), !u || u.anon ? '?' : (u.display || u.login || '?').charAt(0).toUpperCase());
+      if (u && !u.anon) d.style.background = 'hsl(' + hue(u.login || '') + ',55%,62%)';
+      d.setAttribute('aria-hidden', 'true');
+      return d;
+    }
+    function name(u) {
+      if (!u || u.anon) return el('span', 'who', 'someone');
+      var n;
+      if (u.patv) { n = el('a', 'who'); n.href = '/u/' + encodeURIComponent(u.patv.username) + '/profile'; n.textContent = u.display || u.login; }
+      else n = el('span', 'who', u.display || u.login);
+      if (u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
+      if (u.self) n.title = 'Pepe'; else if (u.display && u.login && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
+      return n;
+    }
+    function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+    function dur(ms) { var s = Math.round(ms / 1000); return s < 60 ? s + 's' : s < 3600 ? Math.round(s / 60) + 'm' : (s / 3600).toFixed(1) + 'h'; }
+    function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
+
+    function item(it) {
+      if (it.k === 'msg') {
+        var row = el('div', 'line' + (it.u && it.u.self ? ' pepe' : ''));
+        row.appendChild(avatar(it.u));
+        var b = el('div', 'body');
+        b.appendChild(name(it.u));
+        b.appendChild(document.createTextNode(it.text));
+        var t = el('time', 'when', hhmm(it.ts)); t.dateTime = new Date(it.ts).toISOString();
+        b.appendChild(t);
+        row.appendChild(b);
+        return row;
+      }
+      var txt = it.k === 'join' ? '→ ' + label(it.u) + ' joined'
+        : it.k === 'leave' ? '← ' + label(it.u) + ' left'
+        : it.k === 'mic' ? '🎙️ ' + label(it.u) + ' grabbed the mic'
+        : it.k === 'unmic' ? '🎙️ ' + label(it.u) + ' dropped the mic' + (it.ms ? ' after ' + dur(it.ms) : '')
+        : it.k === 'topic' ? '📌 topic: ' + it.text : null;
+      if (!txt) return null;
+      return el('div', 'sys' + (it.k === 'topic' ? ' topic' : ''), txt + ' · ' + hhmm(it.ts));
+    }
+
+    function nearBottom() { return feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 80; }
+    function addFeed(items, first) {
+      if (!items || !items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', 'Nothing said yet — it shows up here the moment someone talks.')); return; }
+      var stick = first || nearBottom();
+      if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
+      var frag = document.createDocumentFragment();
+      items.forEach(function (it) { var n = item(it); if (n) frag.appendChild(n); });
+      feedEl.appendChild(frag);
+      while (feedEl.childNodes.length > 300) feedEl.removeChild(feedEl.firstChild);
+      if (stick) { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
+      else jump.style.display = 'block';
+    }
+    jump.addEventListener('click', function () { feedEl.scrollTop = feedEl.scrollHeight; jump.style.display = 'none'; });
+    feedEl.addEventListener('scroll', function () { if (nearBottom()) jump.style.display = 'none'; });
+
+    function renderRoom(d) {
+      var r = d.room;
+      document.getElementById('rmTopic').textContent = r.topic || '';
+      document.getElementById('rmCount').textContent = '👥 ' + r.count + ' in the room';
+      var live = document.getElementById('rmLive');
+      live.classList.toggle('off', !r.live);
+      document.getElementById('rmLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
+      var mk = JSON.stringify(d.mic);
+      if (mk !== lastMic) {
+        lastMic = mk;
+        var mic = document.getElementById('rmMic'); mic.textContent = '';
+        if (!d.mic.length) mic.appendChild(el('p', 'muted', 'Nobody on the mic right now.'));
+        d.mic.forEach(function (u) {
+          var h = el('div', 'holder'); h.appendChild(avatar(u));
+          var n = el('span', 'nm'); n.appendChild(name(u)); h.appendChild(n);
+          var eq = el('span', 'eq'); eq.setAttribute('aria-label', 'talking');
+          if (!reduce) { eq.appendChild(el('i')); eq.appendChild(el('i')); eq.appendChild(el('i')); } else eq.textContent = '🎙️';
+          h.appendChild(eq); mic.appendChild(h);
+        });
+      }
+      var pk = JSON.stringify(d.members);
+      if (pk !== lastPeople) {
+        lastPeople = pk;
+        var ul = document.getElementById('rmPeople'); ul.textContent = '';
+        var ms = d.members.slice().sort(function (a, b) {
+          return (b.self ? 1 : 0) - (a.self ? 1 : 0) || (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (b.on_cam ? 1 : 0) - (a.on_cam ? 1 : 0)
+            || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b));
+        });
+        ms.forEach(function (u) {
+          var li = el('li'); li.appendChild(avatar(u));
+          var n = el('span', 'nm'); n.appendChild(name(u));
+          if (u.src === 'seen') n.appendChild(el('small', null, 'recently'));
+          li.appendChild(n);
+          var ic = el('span', 'ic');
+          var cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? 'On cam' : (u.on_cam === false ? 'Off cam' : 'Cam unknown'); ic.appendChild(cam);
+          var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
+          li.appendChild(ic); ul.appendChild(li);
+        });
+        document.getElementById('rmPplN').textContent = d.members.length ? '(' + d.members.length + ')' : '';
+        document.getElementById('rmListNote').textContent = r.listAt
+          ? 'From the room\'s participant list, checked ' + hhmm(r.listAt) + '. "recently" = seen in the last 45 minutes.'
+          : 'People Pepe has seen arrive or talk; the full list updates while this room is Pepe\'s active window.';
+      }
+    }
+
+    function apply(d, first) {
+      renderRoom(d);
+      if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
+      addFeed(d.feed, first);
+      cursor = Math.max(cursor, d.cursor);
+    }
+
+    function poll() {
+      timer = null;
+      if (document.hidden) return;
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + cursor, { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) { fails = 0; setStatus(''); apply(d, false); })
+        .catch(function () { fails++; setStatus(fails > 2 ? 'reconnecting…' : '', fails > 2); })
+        .then(function () { schedule(); });
+    }
+    function setStatus(t, err) { var s = document.getElementById('rmStatus'); s.textContent = t; s.classList.toggle('err', !!err); }
+    function schedule() { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(15000, 1500 * Math.pow(2, fails)) : 1500); }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { clearTimeout(timer); timer = null; poll(); } });
+
+    apply(data, true);
+    schedule();
+  })();
+  </script>
+<% } %>
+</main>

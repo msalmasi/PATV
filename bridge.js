@@ -1,0 +1,313 @@
+// bridge.js — Camfrog rooms live on PATV, read-only (room bridge v1, bot 1.99).
+//
+// Pepe streams what a bridged Camfrog room shows to anyone sitting in it — public chat lines, who's
+// in the room, who's on the mic, who's on cam, the topic — as PCP-shaped events (the v2 Pepe
+// Connector Protocol: message / member.join / member.leave / mic.grab / mic.release / cam.open /
+// cam.close / room.joined / room.left / room.update) plus a roster snapshot per room, batched every
+// ~1.5s:
+//   POST /api/bridge/sync  {password: bot token, v, protocol, connector, session, events[], rooms[], closed[]}
+// Rooms are opt-in on Pepe's side (`!bridge on|off`; Pepe's Pad is on by default). Pepe already
+// redacts opted-out users (`!incognito`, `!bridge hide`) before anything leaves him, never sends PMs
+// and drops slash commands; this side re-validates every field anyway, ignores `message.private`
+// outright, and everything is rendered with textContent / EJS escaping.
+//
+// Kept: per room the latest snapshot + the last FEED_KEEP feed items (chat lines, joins/leaves, mic,
+// topic changes), in memory, mirrored to SQLite so a restart doesn't blank the page.
+// Pages (signed-in only — a room's chat is semi-private):
+//   GET /rooms                 bridged rooms (counts only for visitors)
+//   GET /rooms/:slug           the live room view
+//   GET /api/rooms/:slug/live?after=<cursor>   JSON the page polls (~1.5s)
+const express = require("express");
+const { runQuery, getQuery } = require("./dbUtils");
+const cosmetics = require("./cosmetics");
+
+const FEED_KEEP = 200;
+const STALE_MS = 90 * 1000;              // no sync for this long -> the room shows as offline
+const MAX_EVENTS = 500, MAX_ROOMS = 20, MAX_MEMBERS = 400;
+const FEED_TYPES = new Set(["message", "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
+
+const ready = (async () => {
+  await runQuery(`CREATE TABLE IF NOT EXISTS bridge_rooms (
+    id TEXT PRIMARY KEY, slug TEXT, name TEXT, snap TEXT, updated INTEGER)`);
+  await runQuery(`CREATE TABLE IF NOT EXISTS bridge_feed (
+    c INTEGER PRIMARY KEY, room_id TEXT NOT NULL, ts INTEGER, data TEXT NOT NULL)`);
+  await runQuery("CREATE INDEX IF NOT EXISTS bridge_feed_room ON bridge_feed (room_id, c)");
+})().catch((e) => console.error("[bridge] init:", e));
+
+// ── sanitising (Pepe already cleans; this is the second line) ──
+const CTRL = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
+const str = (v, n) => String(v == null ? "" : v).replace(CTRL, " ").replace(/\s+/g, " ").trim().slice(0, n);
+const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:~\-]{0,127}$/;
+const LOGIN_RE = /^[\w.\-]{1,40}$/;
+const slugify = (s) => String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "room";
+
+function cleanUser(u) {
+  if (!u || typeof u !== "object") return null;
+  if (u.anonymous) return { anon: true, display: "someone" };
+  const login = str(u.login || u.id, 40);
+  if (!LOGIN_RE.test(login)) return null;
+  const out = { login, display: str(u.display, 40) || login };
+  if (u.is_self) out.self = true;
+  if (u.is_bot) out.bot = true;
+  if (typeof u.on_cam === "boolean") out.on_cam = u.on_cam;
+  if (u.on_mic) out.on_mic = true;
+  if (u.src === "list" || u.src === "seen" || u.src === "self") out.src = u.src;
+  return out;
+}
+
+function cleanRoomRef(r) {
+  if (!r || typeof r !== "object") return null;
+  const id = str(r.id, 128);
+  if (!id) return null;
+  return { id, name: str(r.name, 60) || id };
+}
+
+// ── state ──
+const rooms = new Map();                 // room id -> {id, name, slug, topic, members, mic, count, updated, listAt, joinedAt, feed[]}
+let cursor = 0;
+let loaded = null;
+
+function roomFor(ref) {
+  let R = rooms.get(ref.id);
+  if (!R) {
+    if (rooms.size >= MAX_ROOMS) return null;
+    R = { id: ref.id, name: ref.name, slug: "", topic: "", members: [], mic: [], count: 0, updated: 0, listAt: null, joinedAt: null, feed: [] };
+    rooms.set(ref.id, R);
+  }
+  if (ref.name && ref.name !== R.name) R.name = ref.name;
+  // slug from the display name; another room already holding it gets the id-based one
+  let slug = slugify(R.name);
+  for (const o of rooms.values()) if (o !== R && o.slug === slug) slug = slugify(R.id);
+  R.slug = slug;
+  return R;
+}
+
+function load() {
+  if (!loaded) {
+    loaded = (async () => {
+      await ready;
+      const rs = await getQuery("SELECT id, name, snap, updated FROM bridge_rooms");
+      for (const r of rs) {
+        const R = roomFor({ id: r.id, name: r.name });
+        if (!R) continue;
+        try { Object.assign(R, JSON.parse(r.snap || "{}")); } catch (e) { /* keep the empty room */ }
+        R.updated = Number(r.updated) || 0;
+        const feed = await getQuery("SELECT c, data FROM bridge_feed WHERE room_id = ? ORDER BY c DESC LIMIT ?", [r.id, FEED_KEEP]);
+        R.feed = feed.reverse().map((f) => { try { return Object.assign(JSON.parse(f.data), { c: f.c }); } catch (e) { return null; } }).filter(Boolean);
+      }
+      const m = await getQuery("SELECT MAX(c) AS c FROM bridge_feed");
+      cursor = Math.max(cursor, Number(m[0] && m[0].c) || 0);
+    })().catch((e) => { console.error("[bridge] load:", e); });
+  }
+  return loaded;
+}
+
+async function persistRoom(R) {
+  const snap = { topic: R.topic, members: R.members, mic: R.mic, count: R.count, listAt: R.listAt, joinedAt: R.joinedAt };
+  await runQuery(`INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, name = excluded.name, snap = excluded.snap, updated = excluded.updated`,
+    [R.id, R.slug, R.name, JSON.stringify(snap), R.updated]);
+}
+
+async function dropRoom(id) {
+  rooms.delete(id);
+  await runQuery("DELETE FROM bridge_rooms WHERE id = ?", [id]);
+  await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);
+}
+
+/** One PCP event -> a feed item (or null). */
+function feedItem(ev) {
+  const d = ev.data && typeof ev.data === "object" ? ev.data : {};
+  const ts = Date.parse(ev.ts) || Date.now();
+  switch (ev.type) {
+    case "message": {
+      const u = cleanUser(d.user);
+      const text = str(d.text, 400);
+      if (!u || !text || u.anon) return null;          // Pepe never sends an opted-out user's line; belt and braces
+      return { k: "msg", ts, u, text };
+    }
+    case "member.join": {
+      if (d.initial) return null;                        // the burst when Pepe enters the room
+      const u = cleanUser(d.user);
+      return u ? { k: "join", ts, u } : null;
+    }
+    case "member.leave": {
+      const u = cleanUser(d.user);
+      return u ? { k: "leave", ts, u } : null;
+    }
+    case "mic.grab": {
+      const u = cleanUser(d.user);
+      return u ? { k: "mic", ts, u } : null;
+    }
+    case "mic.release": {
+      const u = cleanUser(d.user);
+      return u ? { k: "unmic", ts, u, ms: Math.max(0, Math.min(864e5, Number(d.held_ms) || 0)) } : null;
+    }
+    case "room.update": {
+      const t = d.changes && typeof d.changes === "object" ? str(d.changes.topic, 200) : "";
+      return t ? { k: "topic", ts, text: t } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+async function ingest(body) {
+  await load();
+  const now = Date.now();
+  const touched = new Set();
+  for (const id of (Array.isArray(body.closed) ? body.closed : []).slice(0, MAX_ROOMS)) {
+    if (typeof id === "string" && rooms.has(id)) await dropRoom(id);
+  }
+  for (const s of (Array.isArray(body.rooms) ? body.rooms : []).slice(0, MAX_ROOMS)) {
+    const ref = cleanRoomRef(s && s.room);
+    if (!ref) continue;
+    const R = roomFor(ref);
+    if (!R) continue;
+    R.topic = str(s.topic, 200);
+    R.members = (Array.isArray(s.members) ? s.members : []).slice(0, MAX_MEMBERS).map(cleanUser).filter(Boolean);
+    R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map(cleanUser).filter(Boolean);
+    R.count = Math.max(R.members.length, Math.min(5000, Number(s.count) || 0));
+    R.listAt = Number(s.list_at) ? Number(s.list_at) * 1000 : null;
+    R.joinedAt = Number(s.joined_at) ? Number(s.joined_at) * 1000 : null;
+    R.updated = now;
+    touched.add(R);
+  }
+  const newItems = [];
+  for (const ev of (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS)) {
+    if (!ev || typeof ev !== "object" || ev.op !== "event" || ev.type === "message.private") continue;
+    const ref = cleanRoomRef(ev.scope && ev.scope.room);
+    if (!ref) continue;
+    if (ev.type === "room.left") { if (rooms.has(ref.id)) await dropRoom(ref.id); continue; }
+    const R = roomFor(ref);
+    if (!R) continue;
+    R.updated = now;
+    touched.add(R);
+    if (ev.type === "room.update" && ev.data && ev.data.changes && typeof ev.data.changes.topic === "string") R.topic = str(ev.data.changes.topic, 200);
+    if (!FEED_TYPES.has(ev.type)) continue;
+    const it = feedItem(ev);
+    if (!it) continue;
+    it.c = ++cursor;
+    R.feed.push(it);
+    if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
+    newItems.push([R.id, it]);
+  }
+  for (const [rid, it] of newItems) {
+    const { c, ...rest } = it;
+    await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, rid, it.ts, JSON.stringify(rest)]);
+  }
+  for (const R of touched) {
+    if (rooms.get(R.id) !== R) continue;
+    await persistRoom(R);
+    if (R.feed.length >= FEED_KEEP && R.feed[0]) await runQuery("DELETE FROM bridge_feed WHERE room_id = ? AND c < ?", [R.id, R.feed[0].c]);
+  }
+  return { rooms: touched.size, items: newItems.length };
+}
+
+// ── PATV accounts for Camfrog names (avatar + name colour), cached ──
+let linkCache = new Map(), linkAt = 0, linkLoading = null;
+function links() {
+  if (Date.now() - linkAt < 60 * 1000) return Promise.resolve(linkCache);
+  if (!linkLoading) {
+    linkLoading = getQuery(`SELECT username, camfrogUsername, avatar FROM users WHERE camfrogUsername IS NOT NULL AND camfrogUsername != ''`)
+      .then((rows) => {
+        const m = new Map();
+        for (const r of rows) {
+          const k = String(r.camfrogUsername).toLowerCase();
+          if (!m.has(k) || !String(r.username).startsWith("CF")) m.set(k, r);
+        }
+        linkCache = m; linkAt = Date.now();
+        return m;
+      })
+      .catch((e) => { console.error("[bridge] links:", e.message); return linkCache; })
+      .finally(() => { linkLoading = null; });
+  }
+  return linkLoading;
+}
+const safeImg = (u) => (typeof u === "string" && (/^https:\/\/[^\s"'<>]+$/.test(u) || /^\/[A-Za-z0-9/_.\-]+$/.test(u)) ? u : null);
+
+function withPatv(u, L) {
+  if (!u || u.anon) return u;
+  const acc = L.get(String(u.login).toLowerCase());
+  if (!acc) return u;
+  return { ...u, patv: { username: acc.username, avatar: safeImg(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" } };
+}
+
+const isLive = (R) => Date.now() - R.updated < STALE_MS;
+
+/** For the homepage / room list. `full` (signed-in) adds who's on the mic. */
+async function summary(full) {
+  await load();
+  return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
+    slug: R.slug, name: R.name, count: R.count, live: isLive(R), micCount: R.mic.length,
+    mic: full ? R.mic.map((u) => (u.anon ? "someone" : u.display)) : [],
+    topic: full ? R.topic : "",
+  }));
+}
+
+async function liveView(R, after) {
+  const L = await links();
+  const feed = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP)
+    .map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
+  return {
+    room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt },
+    members: R.members.map((u) => withPatv(u, L)),
+    mic: R.mic.map((u) => withPatv(u, L)),
+    feed, cursor,
+  };
+}
+
+function bySlug(slug) {
+  const s = String(slug || "").toLowerCase();
+  for (const R of rooms.values()) if (R.slug === s || slugify(R.id) === s) return R;
+  return null;
+}
+
+function register(app, { isBotToken, addUser }) {
+  load();
+  app.post("/api/bridge/sync", express.json({ limit: "1mb" }), async (req, res) => {
+    const body = req.body || {};
+    if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
+    try {
+      const r = await ingest(body);
+      res.json({ success: true, ...r });
+    } catch (e) {
+      console.error("[bridge] sync:", e);
+      res.status(500).json({ success: false, error: "sync failed" });
+    }
+  });
+
+  app.get("/api/rooms/:slug/live", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in to watch the room." });
+    await load();
+    const R = bySlug(req.params.slug);
+    if (!R) return res.status(404).json({ error: "No such room." });
+    const after = Math.max(0, Number(req.query.after) || 0);
+    res.json(await liveView(R, after > cursor ? 0 : after));
+  });
+
+  app.get("/rooms", addUser, async (req, res) => {
+    const list = await summary(!!(req.user && req.user.userId));
+    res.locals.og = { title: "Live rooms — Public Access TV", description: "Camfrog rooms Pepe sits in, live on PATV: chat, who's here and who's on the mic.",
+                      image: res.locals.ogBase + "/og/page.png?t=Live%20rooms", url: res.locals.ogBase + "/rooms" };
+    res.render("rooms", { user: req.user ? req.user.username : null, list, signedIn: !!(req.user && req.user.userId) });
+  });
+
+  app.get("/rooms/:slug", addUser, async (req, res) => {
+    await load();
+    const R = bySlug(req.params.slug);
+    const signedIn = !!(req.user && req.user.userId);
+    if (!R) {
+      return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such room",
+        message: "That room isn't bridged to PATV right now.", title: "Room not found" });
+    }
+    res.render("room", {
+      user: req.user ? req.user.username : null, signedIn,
+      room: { name: R.name, slug: R.slug, count: R.count, live: isLive(R), topic: signedIn ? R.topic : "" },
+      initial: signedIn ? await liveView(R, 0) : null,
+    });
+  });
+}
+
+module.exports = { register, summary, ingest, slugify, _rooms: rooms };

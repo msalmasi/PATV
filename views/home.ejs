@@ -1,403 +1,406 @@
 <!-- views/home.ejs -->
-<%- include('layout', { title: 'Public Access Television' , user: username}) %>
-    <link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
-    <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
-    <!-- <script type="application/javascript" src="/public/js/jquery.js"></script>
-    <script type="application/javascript" src="/public/js/both.js"></script>
-    <script type="application/javascript" src="/public/js/consts.js"></script> -->
-    <script src="https://vjs.zencdn.net/8.3.0/video.min.js"></script>
-    <script type="application/javascript" src="/public/js/video.js"></script>
-    <script src="https://player.twitch.tv/js/embed/v1.js"></script>
-    <!-- <script src="https://cdn.jsdelivr.net/npm/ovenplayer/dist/ovenplayer.js"></script> -->
-    <style>
-        .hide {
-            display: none !important;
-        }
+<%- include('layout', { title: 'Public Access Television', user: username }) %>
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const short = (n) => { n = Number(n) || 0; const a = Math.abs(n);
+    return a >= 1e9 ? (n / 1e9).toFixed(a >= 1e10 ? 0 : 1) + 'B' : a >= 1e6 ? (n / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M' : a >= 1e4 ? Math.round(n / 1e3) + 'K' : fmt(n); };
+  const room = (rooms || []).find((r) => r.live) || (rooms || [])[0] || null;
+  const S0 = S || {};
+  const need = me ? xpForNextLevel(me.level) : 1;
+  const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
+  const nameCss = me ? cosmeticName(me.username) : '';
+  const tables = S0.tables || [];
+  const pic = (a) => (typeof a === 'string' && /^(https?:\/\/|\/)/.test(a) ? a : '/public/img/avatar.png');
+  const cards = [
+    { href: '/rooms' + (room ? '/' + encodeURIComponent(room.slug) : ''), ic: '📡', t: 'Live rooms', d: 'Pepe\'s Camfrog rooms on the web: chat, who\'s in, who\'s on the mic.', s: room ? room.count + ' in ' + room.name : null, c: '#ef5350' },
+    { href: '/markets', ic: '🔮', t: 'Markets', d: 'Trade shares on what happens next. Prices move with every bet.', s: S0.markets ? S0.markets + ' live' : null, c: '#ba68c8' },
+    { href: '/lotto', ic: '🎟️', t: 'Lotto', d: 'Pick 4 + a Pepe Ball. Drawn every Sunday night.', s: S0.lotto ? short(S0.lotto.jackpot) + ' PAT jackpot' : null, c: '#ffd54f' },
+    { href: username ? '/u/' + encodeURIComponent(username) + '/wheel' : '/login', ic: '🎡', t: 'Wheel', d: 'The arcade wheel. Drop a coin, spin for PAT and XP.', s: S0.casinoPot ? short(S0.casinoPot) + ' jackpot' : null, c: '#4fc3f7' },
+    { href: '/tables', ic: '🃏', t: 'Casino tables', d: 'Hold\'em and Blackjack with Pepe dealing — from Camfrog or right here.', s: tables.length ? tables.join(' + ') + ' open' : null, c: '#66bb6a' },
+    { href: '/gtf', ic: '🔫', t: 'Grand Theft Frogger', d: 'Heists, gangs and turf wars. Crack the vault, split the take.', s: null, c: '#ff8a65' },
+    { href: '/bounties', ic: '🎯', t: 'Bounties', d: 'Post a challenge with a pot, chip in, or hunt one down.', s: S0.bounties ? S0.bounties + ' open' : null, c: '#e57373' },
+    { href: '/wagers', ic: '🤝', t: 'Wagers', d: 'Bet a friend head to head, with Pepe holding the money.', s: S0.wagers ? S0.wagers + ' live' : null, c: '#90a4ae' },
+    { href: '/staking', ic: '🏦', t: 'Staking', d: 'Own a slice of the Bank, the House and the Market maker.', s: S0.vaults ? short(S0.vaults.house) + ' in the House' : null, c: '#64b5f6' },
+    { href: '/cosmetics', ic: '🎨', t: 'Cosmetics', d: 'Name colours, frames, banners and GTF avatar gear.', s: null, c: '#f06292' },
+    { href: '/feed', ic: '🎞️', t: 'Clips & snaps', d: 'The best bits from the stream and the rooms.', s: null, c: '#a1887f' },
+    { href: '/economy', ic: '📘', t: 'How PAT works', d: 'The guide: where PAT comes from, where it goes, who holds it.', s: null, c: '#81c784' },
+  ];
+%>
+<link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+<script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
+<script src="/public/js/video.js" defer></script>
+<script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
+<%- include('partials/cosmetics-css') %>
+<style>
+  .hm { --card: #111; --line: #222; --muted: #8a8a8a; --green: #4caf50; --lime: #c6e94f; --gold: #ffd700;
+        max-width: 1180px; margin: 0 auto; padding: 18px 16px 64px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
+        display: grid; gap: 18px; box-sizing: border-box; width: 100%; }
+  .hm *, .hm *::before, .hm *::after { box-sizing: border-box; }
+  .hm a { color: #81c784; text-decoration: none; }
+  .hm a:hover { color: #a5d6a7; }
+  .hm .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }
+  .hm h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); font-family: 'Press Start 2P', monospace; font-size: 11px; line-height: 1.6;
+           display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .hm h2 a { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 13px; }
+  .hm .muted { color: var(--muted); font-size: 13px; }
 
-        /* Optional: The following css just makes sure the twitch video stays responsive */
-        #twitch {
-            position: relative;
-            padding-bottom: 56.25%;
-            /* 16:9 */
-            padding-top: 25px;
-            height: 0;
-        }
+  /* hero */
+  .hm .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: stretch;
+              background: radial-gradient(110% 140% at 0% 0%, #17301a 0%, #111 52%), #111; border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+  .hm .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: var(--lime); }
+  .hm .hero h1 { font-size: clamp(26px, 4.2vw, 40px); line-height: 1.1; margin: 10px 0 10px; }
+  .hm .hero h1 em { font-style: normal; background: linear-gradient(90deg, #4caf50, #c6e94f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hm .lead { color: #c9d3c9; font-size: 15.5px; line-height: 1.55; margin: 0 0 16px; max-width: 56ch; }
+  .hm .ctas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+  .hm .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 14px; font-weight: bold; }
+  .hm .btn:hover, .hm .btn:focus-visible { border-color: var(--green); }
+  .hm .btn.primary { background: var(--green); border-color: var(--green); color: #fff !important; }
+  .hm .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .hm .tile { background: rgba(0,0,0,.35); border: 1px solid #1f2a20; border-radius: 10px; padding: 9px 11px; min-width: 0; color: inherit !important; display: block; }
+  .hm a.tile:hover, .hm a.tile:focus-visible { border-color: #2f5a34; }
+  .hm .tile span { display: block; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hm .tile b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 2px; overflow-wrap: anywhere; }
+  .hm .tile em { display: block; font-style: normal; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hm .gold { color: var(--gold); } .hm .up { color: #81c784; }
 
-        #twitch object,
-        #twitch iframe {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+  /* stream */
+  .hm .tv { display: grid; gap: 8px; align-content: start; min-width: 0; }
+  .hm .tv-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .hm .tv-frame { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #262626; background: #000; aspect-ratio: 16 / 9; }
+  .hm .tv-frame #videoWrapper { position: absolute; inset: 0; display: block; height: auto; }
+  .hm .tv-frame .video-js { width: 100%; height: 100%; }
+  .hm .tv-frame #videoOverlay { position: absolute; inset: 0; display: grid; place-items: center; grid-template-rows: none; grid-template-columns: none; cursor: pointer; }
+  .hm .tv-frame #videoOverlay img { grid-column: auto; grid-row: auto; width: 56px; height: auto; opacity: .9; }
+  .hm .tv-frame #twitch { position: absolute; inset: 0; padding: 0; height: auto; }
+  .hm .tv-frame #twitch iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .hm .hide { display: none !important; }
 
-    <body>
-            <div class="grid-root combined">
+  /* personal strip */
+  .hm .me { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px 18px; align-items: center; background: linear-gradient(90deg, #121a13, #111 60%); }
+  .hm .me .pic { display: flex; gap: 8px; align-items: center; }
+  .hm .me .ava { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--green); background: #0d0d0d; display: block; }
+  .hm .me .gtf { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 16px 16px; display: grid; place-items: center; }
+  .hm .me .gtf svg { width: 60px; height: 60px; image-rendering: pixelated; shape-rendering: crispEdges; }
+  .hm .me .who { min-width: 0; display: grid; gap: 6px; }
+  .hm .me .who .nm { font-size: 19px; font-weight: bold; overflow-wrap: anywhere; color: #fff; }
+  .hm .me .row { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; color: #bbb; align-items: baseline; }
+  .hm .me .row b { color: #fff; font-variant-numeric: tabular-nums; }
+  .hm .bar { height: 10px; background: #1c1c1c; border-radius: 999px; overflow: hidden; max-width: 420px; }
+  .hm .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .hm .me .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .hm .me .acts .btn { padding: 7px 11px; font-size: 13px; }
+  .hm .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 8px 10px; color: #e8d9a0; font-size: 13px; grid-column: 1 / -1; }
 
-                <div id="videoWrapper">
-                    <div id="videoOverlay" class="">
-                        <div id="altlink">
-                            <p>Stream this with low latency in VLC (<a
-                                    href="rtmp://stream.publicaccess.tv/live/broadcast">rtmp://stream.publicaccess.tv/live/broadcast</a>)
-                            </p>
-                        </div>
-                        <img src="/public/img/mute-icon.png" />
-                    </div>
+  /* live room */
+  .hm .lr { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
+  .hm .lr-feed { display: flex; flex-direction: column; gap: 3px; height: 300px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 #111; padding-right: 4px; }
+  .hm .ln { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; padding: 3px 6px; border-radius: 6px; }
+  .hm .ln:hover { background: #161616; }
+  .hm .ln .w { font-weight: bold; margin-right: 6px; }
+  .hm .ln .t { color: #666; font-size: 11px; margin-left: 4px; }
+  .hm .ln.sys { color: #8a8a8a; font-size: 12.5px; }
+  .hm .ln.pepe { background: #0f1a10; }
+  .hm .lr-side { display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .hm .lr-box { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .hm .lr-box h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .hm .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .hm .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .chip.mic { border-color: #2f6d3a; background: #12301a; color: #c9f2cf; }
+  .hm .live { display: inline-flex; align-items: center; gap: 6px; font-family: Ubuntu, sans-serif; font-size: 11px; padding: 2px 9px; border-radius: 999px; background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; font-weight: bold; letter-spacing: .06em; vertical-align: 1px; }
+  .hm .live.off { background: #1c1c1c; border-color: #333; color: #999; }
+  .hm .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: hmPulse 1.6s ease-in-out infinite; }
+  .hm .live.off .dot { background: #666; animation: none; }
+  @keyframes hmPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .hm .tease { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; }
+  .hm .tease .big { font-size: 40px; }
+  .hm .ro { font-size: 12px; color: #9fb3c8; margin-top: 6px; }
 
-                    <!-- <div id="player_id"></div> -->
+  /* cards */
+  .hm .games { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .hm .game { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: start; background: var(--card); border: 1px solid var(--line);
+              border-radius: 14px; padding: 14px; color: #e6e6e6 !important; position: relative; overflow: hidden; transition: border-color .15s, transform .15s; }
+  .hm .game::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c); }
+  .hm .game:hover, .hm .game:focus-visible { border-color: var(--c); transform: translateY(-2px); }
+  .hm .game .gi { font-size: 24px; line-height: 1; grid-row: span 3; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #0d0d0d; }
+  .hm .game b { font-size: 15.5px; }
+  .hm .game p { margin: 0; color: #9a9a9a; font-size: 13px; line-height: 1.45; }
+  .hm .game .gs { font-size: 12px; color: var(--c); font-weight: bold; }
 
-                    <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls
-                        playsinline>
-                        <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
-                    </video-js>
+  /* top 5 */
+  .hm .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  .hm .top { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .hm .top li { display: grid; grid-template-columns: 26px 32px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px; padding: 7px 10px; }
+  .hm .top .rk { font-family: 'Press Start 2P', monospace; font-size: 11px; color: var(--muted); text-align: center; }
+  .hm .top li:nth-child(1) .rk { color: #ffd700; } .hm .top li:nth-child(2) .rk { color: #cfd8dc; } .hm .top li:nth-child(3) .rk { color: #d7a46b; }
+  .hm .top img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #1c1c1c; display: block; }
+  .hm .top .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
+  .hm .top .n small { color: var(--muted); margin-left: 6px; }
+  .hm .top .p { font-variant-numeric: tabular-nums; color: var(--gold); font-size: 13.5px; white-space: nowrap; }
+  .hm .about p { color: #bbb; font-size: 14px; line-height: 1.6; margin: 0 0 10px; }
+  .hm .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+  .hm code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
 
-                    <div id="twitch" class="hide">
-                    </div>
+  @media (max-width: 920px) {
+    .hm .hero { grid-template-columns: minmax(0, 1fr); padding: 18px; }
+    .hm .lr { grid-template-columns: minmax(0, 1fr); }
+    .hm .two { grid-template-columns: minmax(0, 1fr); }
+    .hm .me { grid-template-columns: auto minmax(0, 1fr); }
+    .hm .me .acts { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+  @media (max-width: 520px) {
+    .hm { padding: 12px 12px 48px; gap: 14px; }
+    .hm .hero { padding: 16px 14px; border-radius: 14px; }
+    .hm .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hm .tease { grid-template-columns: minmax(0, 1fr); text-align: center; justify-items: center; }
+    .hm .me .gtf { display: none; }
+    .hm .me .ava { width: 52px; height: 52px; }
+    .hm .games { grid-template-columns: minmax(0, 1fr); }
+    .hm .lr-feed { height: 260px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hm .dot { animation: none; }
+    .hm .game { transition: none; }
+    .hm .game:hover, .hm .game:focus-visible { transform: none; }
+  }
+</style>
 
-                    <!--       <script>
-
-                // Initialize OvenPlayer
-                const player = OvenPlayer.create('player_id', {
-                    sources: [
-                        {
-                            label: 'label_for_webrtc',
-                            // Set the type to 'webrtc'
-                            type: 'webrtc',
-                            // Set the file to WebRTC Signaling URL with OvenMediaEngine 
-                            file: 'wss://stream.houseplants.cc:3334/app/stream'
-                        }
-                    ]
-                });
-            </script> -->
-                </div>
-
-                <div id="twitch_embed" class="tab-content active">
-                    <div id="twitch_chat">
-                        <iframe src="https://www.twitch.tv/embed/publicaccess_ttv/chat?darkpopout&parent=publicaccess.tv"
-                            height="100%" width="100%">
-                        </iframe>
-                    </div>
-                </div>
-            <% if (typeof username=='undefined' || !username) { %>
-                <% } else { %>
-                        <div class="level-display">
-                            <div><span id="userLevel">Level <%= level %></span></div>
-                            <div class="level-bar">
-                                <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;">
-                                </div>
-                            </div>
-                            <div class="level-info">
-                                <span id="userXP">
-                                    <%= xp %> / <%= xpForNextLevel(level) %> XP
-                                </span>
-                            </div>
-                        </div>
-                        <div id="arcadePanel">
-                            <div id="spinButton">
-                                <img id="coinslot" src="/public/coinslot.png"></img>
-                            </div>
-                            <div id="arcadeInfo">
-                                <div class="arcade-text">Player<span id="usernameSpan">
-                                        <%= displayname %>
-                                    </span></div><br>
-                                <div class="balance-display">PAT<span id="userBalance">Loading balance...</span></div>
-                                <div id="spinStatus" class="spin-status"></div>
-                            </div>
-                        </div>
-                    <% } %>
+<main class="hm">
+  <!-- ───── hero ───── -->
+  <section class="hero" aria-labelledby="hmTitle">
+    <div>
+      <div class="eyebrow">PUBLIC ACCESS TELEVISION</div>
+      <h1 id="hmTitle">A TV station, a Camfrog crew and <em>a frog who runs the games.</em></h1>
+      <p class="lead">PATV is a community hangout: a live stream, Camfrog rooms where Pepe the frog deals cards, runs heists and DJs, and PAT — the points everyone plays with, here and in the rooms.</p>
+      <div class="ctas">
+        <% if (!me) { %>
+          <a class="btn primary" href="/register">Join PATV</a>
+          <a class="btn" href="/login">Sign in</a>
+        <% } else if (room) { %>
+          <a class="btn primary" href="/rooms/<%= encodeURIComponent(room.slug) %>">📡 Watch <%= room.name %> live</a>
+          <a class="btn" href="/u/<%= encodeURIComponent(me.username) %>/wheel">🎡 Spin the wheel</a>
+        <% } else { %>
+          <a class="btn primary" href="/u/<%= encodeURIComponent(me.username) %>/wheel">🎡 Spin the wheel</a>
+          <a class="btn" href="/markets">🔮 Markets</a>
+        <% } %>
+        <a class="btn" href="/economy">📘 How it works</a>
+      </div>
+      <div class="tiles" aria-label="Live numbers">
+        <% if (room) { %>
+          <a class="tile" href="/rooms/<%= encodeURIComponent(room.slug) %>"><span>In <%= room.name %></span><b class="<%= room.live ? 'up' : '' %>"><%= room.count %></b><em><%= room.live ? 'right now' : 'room offline' %></em></a>
+          <a class="tile" href="/rooms/<%= encodeURIComponent(room.slug) %>"><span>On the mic</span><b><%= room.micCount %></b><em><%= me && room.mic.length ? room.mic.join(', ') : (room.micCount ? 'talking now' : 'mic is free') %></em></a>
+        <% } %>
+        <% if (S0.lotto) { %><a class="tile" href="/lotto" title="<%= fmt(S0.lotto.jackpot) %> PAT"><span>Lotto jackpot</span><b class="gold"><%= short(S0.lotto.jackpot) %></b><em><%= fmt(S0.lotto.sold) %> tickets this week</em></a><% } %>
+        <a class="tile" href="/rankings" title="<%= fmt(S0.casinoPot) %> PAT"><span>Wheel jackpot</span><b class="gold"><%= short(S0.casinoPot) %></b><em>PAT in the pot</em></a>
+        <% if (S0.vaults) { %><a class="tile" href="/staking" title="<%= fmt(S0.vaults.house) %> PAT"><span>House vault</span><b><%= short(S0.vaults.house) %></b><em>banks the casino</em></a><% } %>
+        <a class="tile" href="/markets"><span>Live markets</span><b><%= S0.markets || 0 %></b><em><%= S0.bounties || 0 %> bounties · <%= S0.wagers || 0 %> wagers</em></a>
+      </div>
+    </div>
+    <div class="tv">
+      <div class="tv-head"><span>📺 On air</span><span><a href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch</a> · <a href="rtmp://stream.publicaccess.tv/live/broadcast">VLC (rtmp)</a></span></div>
+      <div class="tv-frame">
+        <div id="videoWrapper">
+          <div id="videoOverlay" role="button" tabindex="0" aria-label="Unmute the stream">
+            <img src="/public/img/mute-icon.png" alt="" />
+          </div>
+          <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline muted>
+            <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
+          </video-js>
         </div>
-        <% if (typeof username=='undefined' || !username) { %>
-            <% } else { %>
-                <script>
-                    // Set the Username
-                    var user = "<%= username %>"
-                    function fetchUsername(user) {
-                        document.getElementById('usernameSpan').textContent = user;
-                    }
+        <div id="twitch" class="hide"></div>
+      </div>
+      <p class="muted" style="margin:0">The stream starts muted — tap it for sound. When we're live on Twitch it switches over by itself.</p>
+    </div>
+  </section>
 
-                    // Fetch and Set the User Balance
-                    function fetchUserBalance(user) {
-                        fetch(`/api/u/${user}/balance`)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.balance !== undefined) {
-                                    document.getElementById('userBalance').textContent = data.balance;
-                                } else {
-                                    console.error('Failed to fetch balance:', data.error);
-                                    document.getElementById('userBalance').textContent = 'Error fetching balance';
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Fetch error:', error);
-                                document.getElementById('userBalance').textContent = 'Error fetching balance';
-                            });
-                    }
+  <!-- ───── you ───── -->
+  <% if (me) { %>
+  <section class="card me" aria-label="You">
+    <div class="pic">
+      <a href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your profile"><img class="ava" src="<%= pic(me.avatar) %>" alt=""></a>
+      <% if (gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your GTF avatar"><%- gtf %></a><% } %>
+    </div>
+    <div class="who">
+      <div class="nm"><span class="<%= nameCss ? 'cx-name' : '' %>" style="<%= nameCss %>"><%= me.displayname || me.username %></span></div>
+      <div class="row"><span>💰 <b><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ Level <b><%= me.level %></b></span><span><%= fmt(me.xp) %> / <%= fmt(need) %> XP</span></div>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="XP to the next level"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
+    </div>
+    <div class="acts">
+      <a class="btn primary" href="/u/<%= encodeURIComponent(me.username) %>/wheel">🎡 Spin</a>
+      <a class="btn" href="/lotto">🎟️ Lotto</a>
+      <a class="btn" href="/wallet">👛 Wallet</a>
+      <a class="btn" href="/u/<%= encodeURIComponent(me.username) %>/profile">🐸 Profile</a>
+    </div>
+    <% if (!me.camfrogUsername) { %>
+      <div class="hint">🔗 Link your Camfrog name to play from the site and in the rooms with one balance: type <code>!verify</code> in a room with Pepe.</div>
+    <% } %>
+  </section>
+  <% } %>
 
-                    // Assuming username is available via some means (e.g., login session)
-                    fetchUsername(user);
-                    fetchUserBalance(user);
+  <!-- ───── live room ───── -->
+  <% if (room) { %>
+  <section class="card" aria-labelledby="lrH">
+    <h2 id="lrH"><span>📡 <%= room.name %> <span class="live<%= room.live ? '' : ' off' %>" id="lrLive"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
+      <a href="/rooms/<%= encodeURIComponent(room.slug) %>">Open the room ›</a></h2>
+    <% if (me) { %>
+      <div class="lr">
+        <div>
+          <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat" tabindex="0"><p class="muted">Loading the room…</p></div>
+          <div class="ro">Live from Camfrog — read-only (v1). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
+        </div>
+        <div class="lr-side">
+          <div class="lr-box"><h3>Topic</h3><div id="lrTopic" style="font-size:13.5px;overflow-wrap:anywhere"><%= room.topic || '—' %></div></div>
+          <div class="lr-box"><h3>On the mic</h3><div class="chips" id="lrMic"></div></div>
+          <div class="lr-box"><h3>In the room · <span id="lrCount"><%= room.count %></span></h3><div class="chips" id="lrPeople"></div></div>
+        </div>
+      </div>
+    <% } else { %>
+      <div class="tease">
+        <div class="big" aria-hidden="true">🐸</div>
+        <div>
+          <b style="font-size:17px">Sign in to watch the room live</b>
+          <p class="muted" style="margin:4px 0 0"><%= room.count %> in the room<%= room.micCount ? ' · ' + room.micCount + ' on the mic' : '' %>. The chat, who's here and who's talking stream to PATV members as it happens.</p>
+        </div>
+        <a class="btn primary" href="/login">Sign in</a>
+      </div>
+    <% } %>
+  </section>
+  <% } %>
 
-                    // Spin the wheel as a user.
-                    function userSpin() {
+  <!-- ───── things to do ───── -->
+  <section aria-labelledby="gmH">
+    <h2 id="gmH">Things to do <a href="/rankings">Rankings ›</a></h2>
+    <div class="games">
+      <% cards.forEach((c) => { %>
+        <a class="game" href="<%= c.href %>" style="--c: <%= c.c %>">
+          <span class="gi" aria-hidden="true"><%= c.ic %></span>
+          <b><%= c.t %></b>
+          <p><%= c.d %></p>
+          <% if (c.s) { %><span class="gs"><%= c.s %></span><% } %>
+        </a>
+      <% }) %>
+    </div>
+  </section>
 
-                        const url = `/api/g/wheel/spin`;
+  <!-- ───── top 5 + about ───── -->
+  <div class="two">
+    <section class="card" aria-labelledby="topH">
+      <h2 id="topH">Richest frogs <a href="/rankings">All rankings ›</a></h2>
+      <ol class="top">
+        <% (S0.top || []).forEach((u, i) => { const st = cosmeticName(u.username); %>
+          <li>
+            <span class="rk"><%= i + 1 %></span>
+            <img src="<%= pic(u.avatar) %>" alt="" loading="lazy">
+            <a class="n" href="/u/<%= encodeURIComponent(u.username) %>/profile"><span class="<%= st ? 'cx-name' : '' %>" style="<%= st %>"><%= u.displayname || u.username %></span><small>Lv <%= u.level %></small></a>
+            <span class="p"><%= short(u.points_balance) %> PAT</span>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+    <section class="card about" aria-labelledby="abH">
+      <h2 id="abH">New here?</h2>
+      <p>Make an account, then say <code>!verify</code> to Pepe in a Camfrog room to link your name — your PAT, level and achievements follow you between the rooms and this site.</p>
+      <p>Pepe answers <code>!help</code> in any room he's in, and everything he can do is on the commands page.</p>
+      <div class="links">
+        <a href="https://pepe.publicaccess.tv" rel="noopener">🐸 Pepe's commands</a>
+        <a href="https://discord.gg/publicaccess" rel="noopener">💬 Discord</a>
+        <a href="https://twitch.tv/publicaccess_ttv" rel="noopener">📺 Twitch</a>
+        <a href="/achievements">🏅 Achievements</a>
+        <a href="/shop">🏪 Prize shop</a>
+        <a href="/info">📄 Info</a>
+      </div>
+      <p class="muted" style="margin-top:12px"><%= fmt(S0.members) %> members and counting.</p>
+    </section>
+  </div>
+</main>
 
-                        fetch(url, {
-                            headers: {
-                                "content-type": "application/json",
-                            },
-                            body: JSON.stringify({ username: user }),
-                            method: "POST",
-                        })
-                            .then(async response => {
-                                if (!response.ok) { // surface the server's reason (cooldown, in-progress, etc.)
-                                    const msg = await response.text().catch(() => '');
-                                    throw new Error(msg || 'Spin already in progress');
-                                }
-                                return response.json();
-                            })
-                            .then(data => {
-                                if (data.spinId !== undefined) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-                                    console.log('Spin ID received:', data.spinId);
-                                    spinId = data.spinId;
-                                    // Store spinId in local storage or a global variable
-                                    localStorage.setItem('currentSpinID', spinId);
-                                    // Set up SSE listener with this spinId
-                                    setupWagerListener(spinId);
-                                    setupResultsListener(spinId);
-                                    fetchUserBalance(user); // Update the User Balance
-                                    document.getElementById('spinStatus').style.visibility = 'hidden'; // Hide the status message
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error making the POST request:', error);
-                                const el = document.getElementById('spinStatus');
-                                el.textContent = error.message || 'Spin is currently in progress...'; // show the real reason (e.g. cooldown)
-                                el.style.visibility = 'visible';
-                                setTimeout(() => {
-                                    el.style.visibility = 'hidden';
-                                }, 3000);
-                            });
-                    }
+<script>
+  // Stream: the HLS player (video.js, /public/js/video.js) by default; the Twitch player while that channel is live.
+  window.addEventListener('load', function () {
+    var ov = document.getElementById('videoOverlay');
+    if (ov) ov.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ov.click(); } });
+    if (!window.Twitch || !document.getElementById('twitch')) return;
+    var tw = new Twitch.Player('twitch', { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
+    function online() {
+      document.getElementById('twitch').classList.remove('hide');
+      document.getElementById('videoWrapper').classList.add('hide');
+      try { var v = window.videojs && videojs.getPlayer('videoElement'); if (v) v.pause(); } catch (e) {}
+    }
+    function offline() {
+      document.getElementById('twitch').classList.add('hide');
+      document.getElementById('videoWrapper').classList.remove('hide');
+    }
+    tw.addEventListener(Twitch.Player.READY, function () {
+      tw.addEventListener(Twitch.Player.ONLINE, online);
+      tw.addEventListener(Twitch.Player.OFFLINE, offline);
+    });
+  });
+</script>
 
-                    // Uses the button to initiate a userSpin
-                    spinButton.addEventListener('click', userSpin);
-
-                    // Function for displaying the winning result
-                    function displaySpinResult(result) {
-                        const balanceElement = document.getElementById('userBalance');
-                        const rewardDiv = document.createElement('div');
-                        rewardDiv.className = 'arcade-animation';
-                        rewardDiv.id = 'rewardDiv'
-                        rewardDiv.textContent = `PAT +${result}!`;
-
-                        // Position the reward div near the balance
-                        balanceElement.parentNode.insertBefore(rewardDiv, balanceElement.nextSibling);
-
-                        // Apply animation
-                        rewardDiv.style.animation = 'pop-in 0.5s forwards';
-
-                        setTimeout(() => {
-                            rewardDiv.remove(); // Remove the animation element after it completes
-                        }, 1000); // Assuming the animation takes 5 seconds
-                    }
-
-                                        // Function for displaying the winning result
-                    function displayXPReward(xp) {
-                    const xpElement = document.getElementById('userXP');
-                    const xpDiv = document.createElement('div');
-                    xpDiv.className = 'arcade-animation-xp';
-                    xpDiv.id = 'xpDiv'
-                    xpDiv.textContent = `+${Math.round(xp)} XP!`;
-
-                    // Position the reward div near the balance
-                    xpElement.parentNode.insertBefore(xpDiv, xpElement.nextSibling);
-
-                    // Apply animation
-                    xpDiv.style.animation = 'pop-in 0.5s forwards';
-
-                    setTimeout(() => {
-                        xpDiv.remove(); // Remove the animation element after it completes
-                    }, 2500); // Assuming the animation takes 5 seconds
-                    }
-
-                    function setupResultsListener(spinId) {
-                        const eventSource = new EventSource(`/events?type=results&identifier=${spinId}`);
-
-                        eventSource.onmessage = function (event) {
-                            const result = JSON.parse(event.data);
-                            console.log('Spin result received:', result);
-                            // Update UI based on the result
-                            displaySpinResult(result.result);
-                            fetchUserBalance(user);
-                            fetchUserLevel(user);
-                            displayXPReward(result.xp);
-                            if (result.levelUp && result.levelUp.leveledUp) {
-            displayLevelUpAnimation(result.levelUp.levelsGained, result.levelUp.newLevel, result.levelUp.bonusPoints);
-          }
-                            eventSource.close();
-                        };
-
-                        eventSource.onerror = function (event) {
-                            console.error('EventSource failed:', event);
-                            eventSource.close();
-                        };
-                    }
-
-                    function setupWagerListener(spinId) {
-                        const eventSource = new EventSource(`/events?type=spin&identifier=${spinId}`);
-
-                        eventSource.onmessage = function (event) {
-                            const data = JSON.parse(event.data);
-                            console.log('Spin command received:', data);
-                            console.log(data.message);
-                            console.log(data);
-                            if (data.message.includes("public spinid") && data.spinId) {
-                                console.log('hoopla4' + spinId);
-                                console.log("Spin command received:", data);
-                                wager = 5000;
-                                displayWagerCost(wager);
-                                fetchUserBalance(user);
-                            }
-                            // Update UI based on the result
-                            eventSource.close();
-                        };
-
-                        eventSource.onerror = function (event) {
-                            console.error('EventSource failed:', event);
-                            eventSource.close();
-                        };
-                    }
-
-                    // Function for displaying the winning result
-                    function displayWagerCost(wager) {
-                        const balanceElement = document.getElementById('userBalance');
-                        const costDiv = document.createElement('div');
-                        costDiv.className = 'arcade-animation-neg';
-                        costDiv.textContent = `PAT -${wager}!`;
-                        const rewardDiv = document.getElementById('rewardDiv');
-                        if (rewardDiv) {
-                            rewardDiv.remove(); // Remove the animation element after it completes
-                        }
-
-                        // Position the reward div near the balance
-                        balanceElement.parentNode.insertBefore(costDiv, balanceElement.nextSibling);
-
-                        // Apply animation
-                        costDiv.style.animation = 'pop-in 0.5s forwards';
-
-                        setTimeout(() => {
-                            costDiv.remove(); // Remove the animation element after it completes
-                        }, 2000); // Assuming the animation takes 5 seconds
-                    }
-
-                    // Function to display level-up animation
-function displayLevelUpAnimation(levelsGained, newLevel, bonusPoints) {
-  // Create a parent div for the animation
-  const animationContainer = document.createElement('div');
-  animationContainer.className = 'arcade-animation-container';
-  animationContainer.id = 'animationContainer';
-
-  // Create a div for level-up message
-  const levelUpDiv = document.createElement('div');
-  levelUpDiv.className = 'arcade-animation-level-up';
-  levelUpDiv.textContent = `Level Up (+${levelsGained})! You reached Level ${newLevel}!`;
-
-  // Create a div for bonus points message
-  const bonusPointsDiv = document.createElement('div');
-  bonusPointsDiv.className = 'arcade-animation-bonus-points';
-  bonusPointsDiv.textContent = `You received a PAT ${bonusPoints} level up bonus!`;
-
-  // Create an image element for the dancing frog
-  const frogDanceImg = document.createElement('img');
-  frogDanceImg.className = 'arcade-animation-frog-dance';
-  frogDanceImg.src = `/public/img/dancefrog.gif`;
-  frogDanceImg.alt = 'Dancing Frog';
-
-  // Append child elements to the parent container
-  animationContainer.appendChild(levelUpDiv);
-  animationContainer.appendChild(bonusPointsDiv);
-  animationContainer.appendChild(frogDanceImg);
-
-  // Append the parent container to the body
-  document.body.appendChild(animationContainer);
-
-  // Apply animation to the container
-  animationContainer.style.animation = 'pop-in 0.5s forwards';
-
-  // Remove the animation container after the animation completes
-  setTimeout(() => {
-    animationContainer.remove();
-  }, 5000); // Adjust duration as needed
-}
-
-// Calculate XP for next level
-function xpForNextLevel(currentLevel) {
-  return Math.pow(currentLevel + 1, 2) * 1000;
-}
-
-// Update the level bar
-function fetchUserLevel(username) {
-  fetch(`/api/u/${username}/level`)
-      .then(response => response.json())
-      .then(data => {
-          if (data.level !== undefined) {
-            const xp = Math.round(data.xp);
-            level = data.level;
-            const xpNeeded = xpForNextLevel(level); // This function needs to return the XP needed for the next level
-            const progressPercentage = (xp / xpNeeded) * 100;
-            const progressBar = document.querySelector('.level-progress');
-            progressBar.style.width = `${progressPercentage}%`;
-            document.getElementById('userXP').textContent = `${xp} / ${xpNeeded} XP`;
-            document.getElementById('userLevel').textContent = `Level ${level}`;
-          } else {
-              console.error('Failed to fetch user level:', data.error);
-              const levelInfo = document.querySelector('.level-info');
-            levelInfo.textContent =  'Error fetching XP';
-          }
-      })
-      .catch(error => {
-          console.error('Fetch error:', error);
-          const levelInfo = document.querySelector('.level-info');
-            levelInfo.textContent =  'Error fetching XP';
-      });
-}
-
-                </script>
-                <% } %>
-                    <script type="text/javascript">
-                        var options = {
-                            channel: "publicaccess_ttv", // TODO: Change this to the streams username you want to embed
-                            width: 640,
-                            height: 360,
-                        };
-                        var player2 = new Twitch.Player("twitch", options);
-
-                        player2.addEventListener(Twitch.Player.READY, initiate)
-
-                        function initiate() {
-                            player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
-                            player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
-                            player2.removeEventListener(Twitch.Player.READY, initiate);
-                        }
-
-                        function handleOnline() {
-                            document.getElementById("twitch").classList.remove('hide');
-                            document.getElementById("videoElement").classList.add('hide');
-                            document.getElementById("videoOverlay").classList.add('hide');
-                            player2.removeEventListener(Twitch.Player.ONLINE, handleOnline);
-                            player2.addEventListener(Twitch.Player.OFFLINE, handleOffline);
-                            player2.setMuted(false);
-                        }
-
-                        function handleOffline() {
-                            document.getElementById("twitch").classList.add('hide');
-                            document.getElementById("videoElement").classList.remove('hide');
-                            document.getElementById("videoOverlay").classList.remove('hide');
-                            player2.removeEventListener(Twitch.Player.OFFLINE, handleOffline);
-                            player2.addEventListener(Twitch.Player.ONLINE, handleOnline);
-                            player2.setMuted(true);
-                        }
-                    </script>
+<% if (me && room) { %>
+<script>
+  // The live room widget: polls the bridge's JSON (bridge.js) every 3s while the tab is visible.
+  (function () {
+    'use strict';
+    var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
+    var feed = document.getElementById('lrFeed'), cursor = 0, timer = null, fails = 0, lastP = '', lastM = '';
+    function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
+    function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+    function nameEl(u) {
+      var n = el('span', 'w', label(u));
+      if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
+      return n;
+    }
+    function line(it) {
+      if (it.k === 'msg') {
+        var d = el('div', 'ln' + (it.u && it.u.self ? ' pepe' : ''));
+        d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
+        return d;
+      }
+      var t = it.k === 'join' ? '→ ' + label(it.u) + ' joined' : it.k === 'leave' ? '← ' + label(it.u) + ' left'
+        : it.k === 'mic' ? '🎙️ ' + label(it.u) + ' grabbed the mic' : it.k === 'unmic' ? '🎙️ ' + label(it.u) + ' dropped the mic'
+        : it.k === 'topic' ? '📌 topic: ' + it.text : null;
+      return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
+    }
+    function chip(u, cls) { var c = el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)); return c; }
+    function apply(d) {
+      var first = !cursor;
+      var near = first || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+      if (d.cursor < cursor) { cursor = 0; first = true; }
+      if (first) feed.textContent = '';
+      (d.feed || []).slice(-60).forEach(function (it) { var n = line(it); if (n) feed.appendChild(n); });
+      if (first && !feed.childNodes.length) feed.appendChild(el('p', 'muted', 'Quiet right now — lines show up here the moment someone talks.'));
+      if (!first && (d.feed || []).length && feed.firstChild && feed.firstChild.tagName === 'P') feed.removeChild(feed.firstChild);
+      while (feed.childNodes.length > 80) feed.removeChild(feed.firstChild);
+      if (near) feed.scrollTop = feed.scrollHeight;
+      cursor = Math.max(cursor, d.cursor || 0) || -1;
+      var r = d.room || {};
+      document.getElementById('lrTopic').textContent = r.topic || '—';
+      document.getElementById('lrCount').textContent = r.count;
+      document.getElementById('lrLive').classList.toggle('off', !r.live);
+      document.getElementById('lrLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
+      var mk = JSON.stringify(d.mic);
+      if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', 'Mic is free')); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
+      var pk = JSON.stringify(d.members);
+      if (pk !== lastP) {
+        lastP = pk; var p = document.getElementById('lrPeople'); p.textContent = '';
+        var ms = d.members.filter(function (u) { return !u.self; }).sort(function (a, b) { return (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b)); });
+        ms.slice(0, 24).forEach(function (u) { p.appendChild(chip(u, u.on_mic ? 'mic' : '')); });
+        if (ms.length > 24) p.appendChild(el('span', 'muted', '+' + (ms.length - 24) + ' more'));
+        if (!ms.length) p.appendChild(el('span', 'muted', 'Just Pepe'));
+      }
+    }
+    function poll() {
+      timer = null;
+      if (document.hidden) return;
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + Math.max(0, cursor), { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) { fails = 0; apply(d); })
+        .catch(function () { fails++; })
+        .then(function () { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(30000, 3000 * Math.pow(2, fails)) : 3000); });
+    }
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) poll(); });
+    poll();
+  })();
+</script>
+<% } %>

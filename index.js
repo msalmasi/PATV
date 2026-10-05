@@ -152,7 +152,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/bridge/sync" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -176,41 +176,8 @@ app.get("/healthz", (req, res) => {
   });
 });
 
-// Homepage
-app.get("/", addUser, async (req, res) => {
-  const username = req.user ? req.user.username : null; // Fallback to null if no user in session
-  const sql =
-    "SELECT username, displayname, class, level, xp, avatar, email, points_balance FROM users WHERE username = ?";
-
-  try {
-    const results = await getQuery(sql, [username]);
-      const user = results[0]; // Extract user data
-      if (username && user) {
-      res.render("home", {
-        // Render profile.ejs with user data
-        username: user.username,
-        displayname: user.displayname,
-        classh: user.class,
-        level: user.level,
-        xp: Math.round(user.xp),
-        avatar: user.avatar,
-        email: user.email,
-        points_balance: user.points_balance,
-        xpForNextLevel: xpForNextLevel
-      });
-    }
-
-    else {
-        res.render("home", {
-            username: username
-        });
-    }
-    // Proceed with fetching user data and generating wheel
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error });
-  }
-});
+// Homepage (home.js): live stats, the live Camfrog room, games, top 5, personal strip
+require("./home").register(app, { addUser, xpForNextLevel });
 
 // Admin Panel Endpoint
 app.get("/admin/panel", addUser, (req, res) => {
@@ -1011,6 +978,8 @@ require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./userstats").register(app, { isBotToken });
+const bridge = require("./bridge");
+bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /rooms, /api/bridge/sync
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
