@@ -38,6 +38,7 @@
   .pf .btn:hover { border-color: #4caf50; }
   .pf .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
   .pf .btn.ghost { background: transparent; }
+  .pf .btn .tj-new { padding: 1px 7px; border-radius: 999px; background: #4caf50; color: #fff; font-size: 11px; font-weight: bold; }
   .pf form.inline { display: inline; margin: 0; }
   .pf .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
   .pf .stat { background: #111; border: 1px solid #222; border-radius: 12px; padding: 14px 16px; }
@@ -135,6 +136,7 @@
     <div class="actions">
       <% if (isMe) { %>
         <a class="btn primary" href="/u/<%= username %>/profile/edit">✏️ Edit profile</a>
+        <a class="btn" href="/u/<%= encodeURIComponent(usernameProfile) %>/tip" title="See who tipped you and share your tip link">💰 Your tip jar<% if (typeof tipJarNew !== 'undefined' && tipJarNew > 0) { %> <span class="tj-new"><%= tipJarNew > 99 ? '99+' : tipJarNew %> new</span><% } %></a>
         <a class="btn" href="/history">📜 PAT history</a>
         <a class="btn" href="/wallet">👛 Wallet</a>
         <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>

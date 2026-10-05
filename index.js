@@ -1264,6 +1264,8 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         // the owner's recent "New avatar" requests (website action queue, tag "avatar")
         avatarActs: isOwner && !preview ? await require("./actions").recentFor(req.user.userId, "avatar", 3) : [],
         avatarMsg: isOwner && !preview ? String(req.query.msg || "").slice(0, 200) : "",
+        // "N new tips" on the owner's tip-jar button (since they last opened it)
+        tipJarNew: isOwner && !preview ? await tipJarNewCount(user.userId).catch(() => 0) : 0,
         og: og.forProfile(req, user)
       });
     } else {
@@ -1437,8 +1439,12 @@ app.get("/u/:username/tip", addUser, async (req, res) => {
       const b = await getQuery("SELECT COUNT(*) AS n FROM user_badges WHERE userId = ?", [r.userId]);
       badgeCount = b.length ? b[0].n || 0 : 0;
     } catch (e) { /* cosmetic only */ }
-    let balance = null, recent = [], sentTotal = 0, recvTotal = 0;
+    let balance = null, recent = [], sentTotal = 0, recvTotal = 0, jar = null;
     const isSelf = !!viewer && viewer === r.username;
+    if (isSelf) {
+      // The owner's own tip jar: a dashboard of what they've received/sent (owner-only data).
+      try { jar = await tipJarData(req.user.userId); } catch (e) { console.error("tip jar:", e.message); }
+    }
     if (req.user && !isSelf) {
       const me = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]);
       balance = me.length ? Math.floor(me[0].points_balance || 0) : 0;
@@ -1470,11 +1476,96 @@ app.get("/u/:username/tip", addUser, async (req, res) => {
       recent,
       sentTotal,
       recvTotal,
+      jar,
       noteMax: TIP_NOTE_MAX,
     });
   } catch (error) {
     console.error("Failed to load tip page:", error);
     res.status(500).send("Internal Server Error.");
+  }
+});
+
+// ── Tip jar (owner-only dashboard on /u/<you>/tip) ──
+// Per-user "last opened my tip jar" time, for the "N new tips" count on the profile. Its own
+// tiny table so the users table stays untouched.
+const tipJarReady = runQuery(`CREATE TABLE IF NOT EXISTS tipjar_seen (
+  userId TEXT PRIMARY KEY, seen_at TEXT NOT NULL)`).catch((e) => console.error("tipjar_seen:", e.message));
+const TIPJAR_PAGE = 20;
+/** Tips received since the owner last opened their jar (first visit: the last 7 days). */
+async function tipJarNewCount(userId) {
+  await tipJarReady;
+  const s = await getQuery("SELECT seen_at FROM tipjar_seen WHERE userId = ?", [userId]);
+  const since = s.length ? s[0].seen_at : null;
+  const r = await getQuery(
+    `SELECT COUNT(*) AS n FROM transactions WHERE userId = ? AND type = 'tip received' AND timestamp > `
+      + (since ? "?" : "datetime('now', '-7 days')"), since ? [userId, since] : [userId]);
+  return r.length ? r[0].n || 0 : 0;
+}
+/** One page of the owner's received or sent tips, with who was on the other end. */
+async function tipJarPage(userId, kind, offset) {
+  await tipNoteReady;
+  const type = kind === "sent" ? "tip sent" : "tip received";
+  const rows = await getQuery(
+    `SELECT t.points, t.timestamp, t.note, u.username, u.displayname, u.avatar
+       FROM transactions t LEFT JOIN users u ON u.userId = t.counterparty
+      WHERE t.userId = ? AND t.type = ?
+      ORDER BY t.timestamp DESC, t.rowid DESC LIMIT ? OFFSET ?`,
+    [userId, type, TIPJAR_PAGE + 1, Math.max(0, offset | 0)]);
+  return { items: rows.slice(0, TIPJAR_PAGE), more: rows.length > TIPJAR_PAGE };
+}
+async function tipJarData(userId) {
+  await tipJarReady; await tipNoteReady;
+  const seenRow = await getQuery("SELECT seen_at FROM tipjar_seen WHERE userId = ?", [userId]);
+  const seenAt = seenRow.length ? seenRow[0].seen_at : null;
+  const [tot] = await getQuery(
+    `SELECT COALESCE(SUM(CASE WHEN type = 'tip received' THEN points END), 0) AS recv,
+            COALESCE(SUM(CASE WHEN type = 'tip received' AND timestamp >= datetime('now', '-7 days') THEN points END), 0) AS week,
+            COALESCE(SUM(CASE WHEN type = 'tip received' AND timestamp >= datetime('now', '-30 days') THEN points END), 0) AS month,
+            COUNT(CASE WHEN type = 'tip received' THEN 1 END) AS recvCount,
+            COUNT(DISTINCT CASE WHEN type = 'tip received' THEN counterparty END) AS tippers,
+            COALESCE(-SUM(CASE WHEN type = 'tip sent' THEN points END), 0) AS sent,
+            COUNT(CASE WHEN type = 'tip sent' THEN 1 END) AS sentCount
+       FROM transactions WHERE userId = ? AND type IN ('tip received', 'tip sent')`, [userId]);
+  const top = await getQuery(
+    `SELECT u.username, u.displayname, u.avatar, SUM(t.points) AS total, COUNT(*) AS n, MAX(t.timestamp) AS last
+       FROM transactions t JOIN users u ON u.userId = t.counterparty
+      WHERE t.userId = ? AND t.type = 'tip received'
+      GROUP BY t.counterparty ORDER BY total DESC LIMIT 5`, [userId]);
+  // GTF pixel avatars for the top tippers (server-rendered like the rankings podium)
+  const avatars = {};
+  for (const t of top) {
+    try {
+      const av = userstats.avatarFor(await cosmetics.profileData(t.username));
+      if (av && av.svg) avatars[t.username] = av.svg;
+    } catch (e) { /* cosmetic only */ }
+  }
+  const received = await tipJarPage(userId, "received", 0);
+  const sent = await tipJarPage(userId, "sent", 0);
+  const newCount = received.items.filter((t) => seenAt ? t.timestamp > seenAt : false).length;
+  // Opening the jar marks everything as seen (the profile's "new" count resets).
+  await runQuery(
+    `INSERT INTO tipjar_seen (userId, seen_at) VALUES (?, datetime('now'))
+     ON CONFLICT(userId) DO UPDATE SET seen_at = excluded.seen_at`, [userId]).catch((e) => console.error("tipjar seen:", e.message));
+  return { totals: tot || {}, top, avatars, received, sent, seenAt, newCount, pageSize: TIPJAR_PAGE };
+}
+// "Load more" for the tip jar lists. Owner-only by construction: it only ever reads req.user's rows.
+app.get("/api/tipjar", addUser, async (req, res) => {
+  if (!req.user) return res.status(401).json({ error: "Sign in" });
+  try {
+    const kind = req.query.kind === "sent" ? "sent" : "received";
+    const page = await tipJarPage(req.user.userId, kind, parseInt(req.query.offset, 10) || 0);
+    await cosmetics.nameStyles(page.items.map((t) => t.username).filter(Boolean));
+    res.set("Cache-Control", "no-store").json({
+      more: page.more,
+      items: page.items.map((t) => ({
+        username: t.username || null, displayname: t.displayname || null, avatar: t.avatar || null,
+        nameCss: t.username ? cosmetics.nameStyle(t.username) : "",
+        points: Math.abs(Math.floor(t.points || 0)), timestamp: t.timestamp, note: t.note || null,
+      })),
+    });
+  } catch (e) {
+    console.error("tipjar api:", e.message);
+    res.status(500).json({ error: "Failed to load tips" });
   }
 });
 
