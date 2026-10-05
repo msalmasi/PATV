@@ -10,6 +10,12 @@
 //   * mod actions TAKEN: the counts are public; the itemised list is for the owner + site admins
 //   * moderation RECEIVED ("moderated against"): owner + site admins only — nobody else sees any of it
 //   * top words: owner + site admins only
+//   * commands: public, except moderation/admin commands (owner + site admins only)
+//
+// The sync also carries heist-sheet avatar seeds ({login: seed}) into cosmetic_avatar_seeds (the
+// table cosmetics.js reads), so every player with a sheet gets their GTF avatar on the profile —
+// before, a seed only arrived when the sheet happened to be re-published. avatarFor() renders that
+// avatar server-side with public/js/avatar.js (a pure function), so it can't fail to load.
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -18,6 +24,8 @@ const ready = (async () => {
     login TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER)`);
   await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_userstats_meta (
     id INTEGER PRIMARY KEY CHECK (id = 1), tz TEXT, days INTEGER, updated INTEGER)`);
+  // same schema as cosmetics.js creates (whichever module boots first makes it)
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
 })().catch((e) => console.error("[userstats] init:", e));
 
 const MAX_USERS = 200, DAYS = 90, RECENT = 20;
@@ -60,6 +68,13 @@ function clean(u) {
     const m = u.mic;
     out.mic = { secs: int(m.secs), sessions: int(m.sessions), longest: int(m.longest), last: int(m.last),
                 days: days(m.days), hours: hours(m.hours), rooms: map(m.rooms, 8, (v) => int(v)) };
+  }
+  if (u.cmds && typeof u.cmds === "object") {
+    const k = u.cmds;
+    const top = (a) => (Array.isArray(a) ? a : []).slice(0, 15).filter((t) => Array.isArray(t) && /^[a-z0-9_]{1,24}$/.test(String(t[0])))
+      .map((t) => [String(t[0]), int(t[1]), int(t[2]), KEY_RE.test(String(t[3])) ? String(t[3]) : "utility"]);
+    out.cmds = { total: int(k.total), mod_total: int(k.mod_total), paid: int(k.paid), days: days(k.days), mod_days: days(k.mod_days),
+                 cats: counts(k.cats), sources: counts(k.sources), top: top(k.top), mod_top: top(k.mod_top) };
   }
   if (u.mod && typeof u.mod === "object") {
     out.mod = { by: counts(u.mod.by), on: counts(u.mod.on), by_recent: recent(u.mod.by_recent), on_recent: recent(u.mod.on_recent) };
@@ -192,6 +207,59 @@ function roomBars(rooms, fmtV) {
   return list.map(([r, v]) => ({ room: roomName(r), value: v, label: fmtV(v), pct: max ? Math.max(2, (v / max) * 100) : 0 }));
 }
 
+const CAT = {
+  games: ["Games & casino", "#4caf50"], heists: ["Heists & GTF", "#ef5350"], economy: ["Economy", "#ffd54f"],
+  music: ["Music", "#4fc3f7"], media: ["Cams & media", "#ba68c8"], ai: ["AI & chat", "#81c784"],
+  utility: ["Utility", "#90a4ae"], moderation: ["Moderation & admin", "#ff8a65"],
+};
+
+/** Tiny 90-day sparkline (SVG, stretched; tooltips via data-tip like the bar charts). */
+function sparkline(axis, values, color) {
+  const W = axis.length * 4, H = 30;
+  const vals = axis.map((k) => Number(values[k] || 0));
+  const max = Math.max(...vals, 1);
+  let out = "";
+  axis.forEach((k, i) => {
+    const v = vals[i];
+    const tip = `${dayLabel(k)} · ${fmt(v)} command${v === 1 ? "" : "s"}`;
+    if (v > 0) {
+      const h = Math.max(1.5, (v / max) * H);
+      out += `<rect x="${i * 4 + 0.5}" y="${(H - h).toFixed(2)}" width="3" height="${h.toFixed(2)}" fill="${color}"/>`;
+    }
+    out += `<rect x="${i * 4}" y="0" width="4" height="${H}" class="ua-hit" data-tip="${esc(tip)}"><title>${esc(tip)}</title></rect>`;
+  });
+  return `<svg class="ua-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Commands per day, last ${axis.length} days">`
+    + `<line x1="0" x2="${W}" y1="${H}" y2="${H}" class="ua-base"/>${out}</svg>`;
+}
+
+function commandsModel(k, axis, priv) {
+  if (!k || !(k.total > 0)) return null;
+  const pubTotal = Math.max(0, k.total - (k.mod_total || 0));
+  const total = priv ? k.total : pubTotal;
+  if (!total) return null;
+  const daysAll = Object.assign({}, k.days || {});
+  if (priv) for (const [d, v] of Object.entries(k.mod_days || {})) daysAll[d] = (daysAll[d] || 0) + v;
+  const cats = Object.entries(k.cats || {}).filter(([c, n]) => n > 0 && (priv || c !== "moderation"))
+    .sort((a, b) => b[1] - a[1]);
+  const catSum = cats.reduce((a, [, n]) => a + n, 0) || 1;
+  const list = (priv ? [...(k.top || []), ...(k.mod_top || [])] : (k.top || []))
+    .filter((t) => priv || t[3] !== "moderation").sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const max = list.length ? list[0][1] : 1;
+  const d30 = axis[axis.length - 30];
+  return {
+    total: fmt(total), last30: fmt(Object.entries(daysAll).filter(([d]) => d >= d30).reduce((a, [, v]) => a + v, 0)),
+    paid: fmt(k.paid || 0), paidPct: total ? Math.round(((k.paid || 0) / total) * 100) : 0,
+    web: fmt((k.sources || {}).web || 0), pm: fmt((k.sources || {}).pm || 0),
+    spark: sparkline(axis, daysAll, "#90caf9"),
+    cats: cats.map(([c, n]) => ({ key: c, label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: fmt(n),
+                                  pct: (n / catSum) * 100, priv: c === "moderation" })),
+    top: list.map(([c, n, last, cat]) => ({ cmd: "!" + c, n: fmt(n), pct: Math.max(3, (n / max) * 100), last: ago(last),
+                                           color: (CAT[cat] || [0, "#90a4ae"])[1], cat: (CAT[cat] || [cat])[0],
+                                           priv: cat === "moderation" })),
+    hasMod: priv && (k.mod_total || 0) > 0,
+  };
+}
+
 /**
  * The view model for the profile's Analytics section, or null when there's nothing to show.
  * viewer: { owner: bool, admin: bool }
@@ -241,6 +309,7 @@ async function forProfile(camfrogLogin, viewer) {
     micChart: barChart(axis, Object.fromEntries(Object.entries(m.days || {}).map(([k, v]) => [k, v / 60])),
       { color: "#ffb74d", label: "Mic minutes per day", fmtV: (v) => dur(v * 60), unit: (v) => `${fmt(v)}m` }),
     hasChat: !!c.total, hasMic: !!m.secs,
+    cmds: commandsModel(s.cmds, axis, priv),
     chat30: sumDays(c.days, d30), mic30: sumDays(m.days, d30),
     hoursHtml: hourRow("Chat", c.hours, "76,175,80", (v) => `${fmt(v)} msgs`) + hourRow("Mic", m.hours, "255,183,77", (v) => dur(v)),
     chatRooms: roomBars(c.rooms, (v) => `${fmt(v)} msgs`),
@@ -256,6 +325,37 @@ async function forProfile(camfrogLogin, viewer) {
   };
 }
 
+// ── GTF avatar showcase (server-rendered; avatar.js is consumed as-is) ──
+let _avatarFn = null;
+function avatarFn() {
+  if (!_avatarFn) {
+    try {
+      require("./public/js/avatar.js");                    // attaches pepeAvatarSVG to globalThis
+      _avatarFn = typeof globalThis.pepeAvatarSVG === "function" ? globalThis.pepeAvatarSVG : null;
+    } catch (e) {
+      console.error("[userstats] avatar.js:", e.message);
+    }
+  }
+  return _avatarFn;
+}
+const GTF_SLOT = { gtf_bg: "Background", gtf_outfit: "Outfit", gtf_mask: "Mask", gtf_hat: "Hat", gtf_prop: "Prop", gtf_frame: "Frame" };
+const RARITY = { common: "#9e9e9e", uncommon: "#81c784", rare: "#4fc3f7", epic: "#ba68c8", legendary: "#ffb300" };
+
+/** pc = res.locals.profileCosmetics ({seed, gtf, equipped}). -> {svg, items[]} or {svg:null} */
+function avatarFor(pc) {
+  const eq = (pc && pc.equipped) || {};
+  const items = Object.keys(GTF_SLOT).filter((k) => eq[k] && eq[k].item).map((k) => ({
+    slot: GTF_SLOT[k], name: eq[k].item.name, rarity: eq[k].item.rarity || "common",
+    color: RARITY[eq[k].item.rarity] || RARITY.common, emoji: (eq[k].r && eq[k].r.emoji) || "", desc: eq[k].item.desc || "",
+  }));
+  let svg = null;
+  const fn = avatarFn();
+  if (fn && pc && pc.seed) {
+    try { svg = fn(Number(pc.seed), 176, pc.gtf || {}); } catch (e) { console.error("[userstats] avatar render:", e.message); }
+  }
+  return { svg, items };
+}
+
 function register(app, { isBotToken }) {
   // A batch of 40 users with 90 days each can pass express.json()'s default 100kb — index.js lets
   // this path through to the larger parser here.
@@ -266,7 +366,15 @@ function register(app, { isBotToken }) {
       await ready;
       const users = (Array.isArray(body.users) ? body.users : []).slice(0, MAX_USERS);
       const now = Date.now();
-      let saved = 0;
+      let saved = 0, seeds = 0;
+      const sd = body.seeds && typeof body.seeds === "object" && !Array.isArray(body.seeds) ? body.seeds : {};
+      for (const [login, seed] of Object.entries(sd).slice(0, 1000)) {
+        const l = str(login, 40).toLowerCase(), n = int(seed, 0, 2 ** 31);
+        if (!/^[\w.\-]{2,40}$/.test(l) || !n) continue;
+        await runQuery(`INSERT INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES (?, ?, ?)
+                        ON CONFLICT(camfrog) DO UPDATE SET seed = excluded.seed, updated = excluded.updated`, [l, n, now]);
+        seeds++;
+      }
       for (const u of users) {
         const row = u && typeof u === "object" ? clean(u) : null;
         if (!row) continue;
@@ -278,7 +386,7 @@ function register(app, { isBotToken }) {
       await runQuery(`INSERT INTO camfrog_userstats_meta (id, tz, days, updated) VALUES (1, ?, ?, ?)
                       ON CONFLICT(id) DO UPDATE SET tz = excluded.tz, days = excluded.days, updated = excluded.updated`,
         [str(body.tz, 60), int(body.days, 1, 365) || DAYS, now]);
-      res.json({ success: true, saved });
+      res.json({ success: true, saved, seeds });
     } catch (e) {
       console.error("[userstats] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -286,4 +394,4 @@ function register(app, { isBotToken }) {
   });
 }
 
-module.exports = { register, forProfile, get, clean };
+module.exports = { register, forProfile, get, clean, avatarFor };

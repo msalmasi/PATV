@@ -59,6 +59,20 @@
   .ua td.w, .ua td.room { overflow-wrap: normal; word-break: normal; }
   .ua td.room { color: #999; }
   .ua .empty { color: #777; font-size: 13px; }
+  .ua .cmdhead { display: flex; flex-wrap: wrap; gap: 6px 22px; align-items: baseline; }
+  .ua .cmdhead .big { font-size: 26px; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .ua .cmdhead .muted b { color: #ccc; font-weight: normal; }
+  .ua-spark { display: block; width: 100%; height: 34px; margin-top: 8px; }
+  .ua .catbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; background: #111; margin-top: 12px; }
+  .ua .catbar span { display: block; height: 100%; min-width: 3px; }
+  .ua .catleg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 12px; color: #aaa; }
+  .ua .catleg b { color: #ddd; font-weight: normal; margin-left: 3px; font-variant-numeric: tabular-nums; }
+  .ua .toplist { display: grid; gap: 6px; margin-top: 4px; }
+  .ua .toprow { display: grid; grid-template-columns: minmax(70px, 130px) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+  .ua .toprow code { background: none; padding: 0; color: #e6e6e6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ua .toprow .tb { height: 8px; background: #1a1a1a; border-radius: 999px; overflow: hidden; }
+  .ua .toprow .tb span { display: block; height: 100%; border-radius: 999px; }
+  .ua .toprow .tn { color: #999; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12px; }
   #ua-tip { position: fixed; z-index: 50; pointer-events: none; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px;
             padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.5); display: none; font-family: Ubuntu, sans-serif; }
   @media (max-width: 560px) {
@@ -121,6 +135,30 @@
         <% a.micRooms.forEach((r) => { %>
           <div class="rrow"><span class="rn" title="<%= r.room %>"><%= r.room %></span><span class="rv"><%= r.label %></span><div class="rb"><span style="width:<%= r.pct.toFixed(1) %>%;background:#ffb74d"></span></div></div>
         <% }) %>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (a.cmds) { const k = a.cmds; %>
+  <div class="blk">
+    <div class="sub">Commands<% if (k.hasMod) { %> <span class="lock">🔒 moderation & admin commands: only you & admins</span><% } %></div>
+    <div class="two">
+      <div>
+        <div class="cmdhead">
+          <span class="big"><%= k.total %></span>
+          <span class="muted"><b><%= k.last30 %></b> in 30 days · <b><%= k.paidPct %>%</b> PAT-priced<% if (k.web !== '0') { %> · <b><%= k.web %></b> from the website<% } %></span>
+        </div>
+        <%- k.spark %>
+        <div class="catbar" role="img" aria-label="Commands by category"><% k.cats.forEach((c) => { %><span style="width:<%= c.pct.toFixed(2) %>%;background:<%= c.color %>" data-tip="<%= c.label %> · <%= c.n %>"></span><% }) %></div>
+        <div class="catleg"><% k.cats.forEach((c) => { %><span><span class="dot" style="background:<%= c.color %>"></span><%= c.label %><b><%= c.n %></b></span><% }) %></div>
+      </div>
+      <div>
+        <div class="toplist">
+          <% k.top.forEach((t) => { %>
+            <div class="toprow" data-tip="<%= t.cmd %> · <%= t.n %> uses · last <%= t.last %> · <%= t.cat %>"><code><%= t.cmd %></code><div class="tb"><span style="width:<%= t.pct.toFixed(1) %>%;background:<%= t.color %>"></span></div><span class="tn"><%= t.n %> · <%= t.last %></span></div>
+          <% }) %>
+        </div>
       </div>
     </div>
   </div>

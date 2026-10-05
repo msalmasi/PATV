@@ -59,7 +59,30 @@
   .pf .showcase img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
   .pf .gtf-av { display: grid; justify-items: center; gap: 4px; }
   .pf .gtf-av .cx-gtf { width: 96px; height: 96px; display: grid; place-items: center; background: #0d0d0d; border-radius: 10px; font-size: 40px; }
+  .pf .avs { display: grid; grid-template-columns: 192px minmax(0, 1fr); gap: 18px 22px; align-items: center; }
+  .pf .avs-frame { width: 192px; height: 192px; box-sizing: border-box; border-radius: 14px; border: 1px solid #2a2a2a; display: grid; place-items: center;
+                   background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 24px 24px; overflow: hidden; }
+  .pf .avs-frame svg { display: block; width: 176px; height: 176px; image-rendering: pixelated; shape-rendering: crispEdges; }
+  .pf .avs-frame.empty { border-style: dashed; }
+  .pf .avs-ph { font-size: 64px; opacity: .35; filter: grayscale(.4); }
+  .pf .avs-info { min-width: 0; }
+  .pf .avs-info h2 { margin-bottom: 6px; }
+  .pf .avs-who { font-size: 18px; font-weight: bold; overflow-wrap: anywhere; }
+  .pf .avs-who .chip { font-size: 12px; font-weight: normal; vertical-align: 2px; margin-left: 4px; }
+  .pf .avs-items { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+  .pf .avs-items li { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px;
+                      background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 8px; padding: 6px 10px; }
+  .pf .avs-slot { color: #888; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  .pf .avs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ddd; }
+  .pf .avs-r { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+  .pf .avs-rar { font-size: 11px; text-transform: capitalize; }
+  .pf .avs-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   @media (max-width: 560px) {
+    .pf .avs { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .pf .avs-info { width: 100%; }
+    .pf .avs-items li { text-align: left; grid-template-columns: 84px minmax(0, 1fr) auto; }
+    .pf .avs-slot { font-size: 10px; letter-spacing: .04em; }
+    .pf .avs-links { justify-content: center; }
     .pf .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pf .chips, .pf .actions { justify-content: center; }
     .pf .gtf { grid-template-columns: 1fr; }
@@ -120,6 +143,35 @@
     <div class="muted">XP comes from chatting, the mic and games. Every level-up pays a PAT bonus.</div>
   </section>
 
+  <% const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null; %>
+  <% if (av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))) { %>
+  <section class="card avs" aria-label="Grand Theft Frog avatar">
+    <div class="avs-frame<%= av.svg ? '' : ' empty' %>">
+      <% if (av.svg) { %><%- av.svg %><% } else { %><span class="avs-ph" aria-hidden="true">🐸</span><% } %>
+    </div>
+    <div class="avs-info">
+      <h2>GTF avatar</h2>
+      <div class="avs-who"><%= displayname || usernameProfile %><% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %> <span class="chip">🥷 <%= heistSheet.cls %></span><% } %></div>
+      <% if (!av.svg) { %>
+        <p class="muted" style="margin:6px 0 0">No GTF avatar yet — <code>!sheet</code> in a room with Pepe rolls one<%= isMe ? '' : ' for them' %>.</p>
+      <% } %>
+      <% if (av.items.length) { %>
+        <ul class="avs-items">
+          <% av.items.forEach((it) => { %>
+            <li title="<%= it.desc %>"><span class="avs-slot"><%= it.slot %></span><span class="avs-name"><span class="avs-r" style="background:<%= it.color %>"></span><%= it.emoji %> <%= it.name %></span><span class="avs-rar" style="color:<%= it.color %>"><%= it.rarity %></span></li>
+          <% }) %>
+        </ul>
+      <% } else if (av.svg) { %>
+        <p class="muted" style="margin:6px 0 0">Wearing nothing from the GTF wardrobe yet.</p>
+      <% } %>
+      <div class="avs-links">
+        <% if (isMe) { %><a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Change look</a><% } else { %><a class="btn" href="/cosmetics">🎨 GTF wardrobe</a><% } %>
+        <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">🥷 Heist sheet</a><% } %>
+      </div>
+    </div>
+  </section>
+  <% } %>
+
   <% if (typeof analytics !== 'undefined' && analytics && !analytics.empty) { %>
     <%- include('partials/user-analytics', { a: analytics }) %>
   <% } else if (typeof analytics !== 'undefined' && analytics && analytics.empty) { %>
@@ -144,24 +196,7 @@
           </div>
         <% } %>
       </div>
-      <% if (pc && pc.seed) { %>
-        <div class="gtf-av">
-          <span class="cx-gtf" data-seed="<%= pc.seed %>" data-size="96" data-layers="<%= JSON.stringify(pc.gtf || {}) %>">🐸</span>
-          <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
-        </div>
-        <script>
-          (function () {
-            var el = document.querySelector('.pf .cx-gtf[data-layers]');
-            var s = document.createElement('script');
-            s.src = '/public/js/avatar.js';
-            s.onload = function () {
-              if (typeof window.pepeAvatarSVG !== 'function') return;
-              try { el.innerHTML = window.pepeAvatarSVG(+el.getAttribute('data-seed') || 1, 96, JSON.parse(el.getAttribute('data-layers') || '{}')); } catch (e) { /* keep the frog */ }
-            };
-            document.head.appendChild(s);
-          })();
-        </script>
-      <% } else if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
+      <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
     </div>
   </section>
 

@@ -1219,6 +1219,8 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
         gtf: gtf.LINKS,
         camfrog: user.camfrogUsername || null,
+        // GTF avatar, server-rendered with the equipped cosmetic layers (userstats.js -> avatar.js)
+        gtfAvatar: userstats.avatarFor(res.locals.profileCosmetics),
         // Camfrog activity analytics (userstats.js). "Moderated against" is owner + site admins only.
         analytics: await userstats.forProfile(user.camfrogUsername, {
           owner: !!req.user && req.user.username === user.username,
