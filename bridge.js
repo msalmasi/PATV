@@ -67,6 +67,7 @@ function cleanRoomRef(r) {
 }
 
 // ── state ──
+const SEEN_EVENTS = new Map();          // recent PCP event ids (dedupe re-sent batches)
 const rooms = new Map();                 // room id -> {id, name, slug, topic, members, mic, count, updated, listAt, joinedAt, feed[]}
 let cursor = 0;
 let loaded = null;
@@ -151,7 +152,8 @@ function feedItem(ev) {
       const u = cleanUser(d.user);
       const text = str(d.text, 400);
       if (!u || !text || u.anon) return null;
-      return { k: "tx", ts, u, text };
+      const id = /^tx-[0-9a-f]{8,32}$/.test(String(d.id || "")) ? String(d.id) : null;
+      return id ? { k: "tx", ts, u, text, id } : { k: "tx", ts, u, text };
     }
     case "room.update": {
       const t = d.changes && typeof d.changes === "object" ? str(d.changes.topic, 200) : "";
@@ -242,6 +244,13 @@ async function ingest(body) {
   const newItems = [];
   for (const ev of (Array.isArray(body.events) ? body.events : []).slice(0, MAX_EVENTS)) {
     if (!ev || typeof ev !== "object" || ev.op !== "event" || ev.type === "message.private") continue;
+    // at-least-once delivery: a batch Pepe re-sends after a slow response must not double the feed
+    const evId = typeof ev.id === "string" ? ev.id.slice(0, 128) : "";
+    if (evId) {
+      if (SEEN_EVENTS.has(evId)) continue;
+      SEEN_EVENTS.set(evId, now);
+      if (SEEN_EVENTS.size > 5000) SEEN_EVENTS.delete(SEEN_EVENTS.keys().next().value);
+    }
     const ref = cleanRoomRef(ev.scope && ev.scope.room);
     if (!ref) continue;
     if (ev.type === "room.left") { if (rooms.has(ref.id)) { audioClose(ref.id); await dropRoom(ref.id); } continue; }
@@ -253,6 +262,7 @@ async function ingest(body) {
     if (!FEED_TYPES.has(ev.type)) continue;
     const it = feedItem(ev);
     if (!it) continue;
+    if (it.k === "tx" && it.id && R.feed.some((x) => x.k === "tx" && x.id === it.id)) continue;   // one line per mic-up
     it.c = ++cursor;
     R.feed.push(it);
     if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
