@@ -141,7 +141,7 @@
         <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
         <form class="inline" action="/logout" method="POST"><button class="btn ghost" type="submit">Log out</button></form>
       <% } else { %>
-        <% if (username && !previewing) { %><a class="btn primary" href="/u/<%= usernameProfile %>/tip">💸 Tip</a><% } %>
+        <% if (!previewing) { %><a class="btn primary" href="/u/<%= encodeURIComponent(usernameProfile) %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a><% } %>
         <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
         <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %>
           <a class="btn" href="/history?user=<%= encodeURIComponent(usernameProfile) %>">📜 PAT history</a>

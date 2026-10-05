@@ -1416,42 +1416,84 @@ app.post('/api/users/discord/register', async (req, res) => {
     }
   });
 
-// Get user profile
+// The tip page (views/tip.ejs): the recipient's card (GTF avatar, equipped name colour, level,
+// pinned badges), the viewer's own balance and the recent tips between the two of them.
+// The recipient's PAT balance is NOT shown here - it's a profile privacy option (stats_balance).
 app.get("/u/:username/tip", addUser, async (req, res) => {
-  const username = req.user ? req.user.username : null; // Fallback to null if no user in session
-  const usernameProfile = req.params.username; // Fallback to null if no user in session
-  const sql =
-    "SELECT username, displayname, class, avatar, email, points_balance FROM users WHERE username = ?";
-
+  const viewer = req.user ? req.user.username : null;
   try {
-    const results = await getQuery(sql, [usernameProfile]);
-    if (results.length > 0) {
-      const user = results[0]; // Extract user data
-      res.render("tip", {
-        // Render profile.ejs with user data
-        username: username,
-        usernameProfile: user.username,
-        displayname: user.displayname,
-        classh: user.class,
-        avatar: user.avatar,
-        email: user.email,
-        points_balance: user.points_balance,
-      });
-    } else {
-      res.status(404).send("User not found.");
+    const rows = await getQuery(
+      "SELECT userId, username, displayname, class, level, avatar, camfrogUsername FROM users WHERE username = ?",
+      [req.params.username]);
+    if (!rows.length) {
+      return notFound(req, res, "No such profile",
+        "There's no PATV account called <code>" + escHtml(req.params.username) + "</code> to tip.");
     }
+    const r = rows[0];
+    let pc = null;
+    try { pc = await cosmetics.profileData(r.username); } catch (e) { console.error("tip cosmetics:", e.message); }
+    let badgeCount = 0;
+    try {
+      const b = await getQuery("SELECT COUNT(*) AS n FROM user_badges WHERE userId = ?", [r.userId]);
+      badgeCount = b.length ? b[0].n || 0 : 0;
+    } catch (e) { /* cosmetic only */ }
+    let balance = null, recent = [], sentTotal = 0, recvTotal = 0;
+    const isSelf = !!viewer && viewer === r.username;
+    if (req.user && !isSelf) {
+      const me = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]);
+      balance = me.length ? Math.floor(me[0].points_balance || 0) : 0;
+      await tipNoteReady;
+      // The viewer's own ledger rows with this person (both directions live on the viewer's side).
+      recent = await getQuery(
+        `SELECT type, points, timestamp, note FROM transactions
+          WHERE userId = ? AND counterparty = ? AND type IN ('tip sent', 'tip received')
+          ORDER BY timestamp DESC, rowid DESC LIMIT 8`, [req.user.userId, r.userId]);
+      const tot = await getQuery(
+        `SELECT type, COALESCE(SUM(ABS(points)), 0) AS total FROM transactions
+          WHERE userId = ? AND counterparty = ? AND type IN ('tip sent', 'tip received') GROUP BY type`,
+        [req.user.userId, r.userId]);
+      for (const t of tot) { if (t.type === "tip sent") sentTotal = t.total; else recvTotal = t.total; }
+    }
+    res.render("tip", {
+      username: viewer,
+      usernameProfile: r.username,
+      displayname: r.displayname,
+      classh: r.class,
+      level: r.level || 0,
+      avatar: r.avatar,
+      camfrog: r.camfrogUsername || null,
+      badgeCount,
+      profileCosmetics: pc,
+      gtfAvatar: userstats.avatarFor(pc),
+      isSelf,
+      balance,
+      recent,
+      sentTotal,
+      recvTotal,
+      noteMax: TIP_NOTE_MAX,
+    });
   } catch (error) {
-    console.error("Failed to retrieve user data:", error);
+    console.error("Failed to load tip page:", error);
     res.status(500).send("Internal Server Error.");
   }
 });
+
+// Optional short message riding on a web tip, stored on both ledger rows (transactions.note) and
+// shown to the recipient on their history and on the tip page. Plain text, one line, capped.
+const TIP_NOTE_MAX = 80;
+const tipNoteReady = runQuery("ALTER TABLE transactions ADD COLUMN note TEXT").catch(() => {});
+function cleanTipNote(v) {
+  const s = String(v == null ? "" : v).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  return s ? Array.from(s).slice(0, TIP_NOTE_MAX).join("") : null;
+}
 
 // Shared, overdraft-safe PAT transfer used by both tip endpoints.
 // The debit is a single atomic conditional UPDATE (check + deduct in one statement),
 // so concurrent tips can never overdraw a balance or mint PAT — this is what the old
 // read-then-check-then-update flow got wrong (a TOCTOU race that created PAT).
 // Returns { ok, status, msg }.
-async function transferPat(senderUsername, recipientUsername, rawAmount) {
+async function transferPat(senderUsername, recipientUsername, rawAmount, note = null) {
   const amount = Math.floor(Number(rawAmount));
   if (!Number.isFinite(amount) || amount <= 0) {
     return { ok: false, status: 400, msg: "Invalid tip amount" };
@@ -1489,19 +1531,22 @@ async function transferPat(senderUsername, recipientUsername, rawAmount) {
     [amount, recipient.userId]
   );
 
-  // Ledger entries.
+  // Ledger entries (note = the optional web-tip message, null otherwise).
+  await tipNoteReady;
   await runQuery(
-    "INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)",
-    [uuidv4(), sender.userId, "tip sent", -amount, recipient.userId]
+    "INSERT INTO transactions (transactionId, userId, type, points, counterparty, note) VALUES (?, ?, ?, ?, ?, ?)",
+    [uuidv4(), sender.userId, "tip sent", -amount, recipient.userId, note]
   );
   await runQuery(
-    "INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)",
-    [uuidv4(), recipient.userId, "tip received", amount, sender.userId]
+    "INSERT INTO transactions (transactionId, userId, type, points, counterparty, note) VALUES (?, ?, ?, ?, ?, ?)",
+    [uuidv4(), recipient.userId, "tip received", amount, sender.userId, note]
   );
 
   achievements.checkWeb(sender.userId);            // tipped / tips-received achievements
   achievements.checkWeb(recipient.userId);
-  return { ok: true, status: 200, msg: "Tip sent successfully." };
+  const after = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [sender.userId]);
+  return { ok: true, status: 200, msg: "Tip sent successfully.", amount,
+           balance: after.length ? Math.floor(after[0].points_balance || 0) : null };
 }
 
 // Tip another user through a chatbot
@@ -1525,11 +1570,29 @@ app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
   if (!senderUsername) {
     return res.status(401).send("Authentication required");
   }
+  // Same-origin only (the login cookie is SameSite=Lax; this is a second check where the browser
+  // sends Origin/Referer).
+  const host = req.get("host"), src = req.get("origin") || req.get("referer");
+  if (src && host) {
+    let same = false;
+    try { same = new URL(src).host === host; } catch (e) { same = false; }
+    if (!same) return res.status(403).send("Cross-site tip refused");
+  }
+  // The page sends a per-attempt idempotency key so a double-click / retried request can't send
+  // twice. Keys are namespaced by sender so one user's key can never replay another user's result.
+  req.body = req.body || {};
+  const rawKey = req.body.idempotency_key || req.get("Idempotency-Key");
+  if (rawKey) req.body.idempotency_key = `tip:${senderUsername}:${String(rawKey).slice(0, 64)}`;
+  const idem = await idemBegin(req, res, "tip");
+  if (idem.replay) return;
   try {
-    const r = await transferPat(senderUsername, req.params.username, req.body.amount);
-    if (!r.ok) return res.status(r.status).send(r.msg);
-    res.json({ message: r.msg });
+    const r = await transferPat(senderUsername, req.params.username, req.body.amount, cleanTipNote(req.body.note));
+    if (!r.ok) { idem.fail(); return res.status(r.status).send(r.msg); }
+    const body = { message: r.msg, amount: r.amount, balance: r.balance };
+    idem.done(200, body);
+    res.json(body);
   } catch (error) {
+    idem.fail();
     console.error("Failed to process tip:", error);
     res.status(500).send("Failed to process tip");
   }

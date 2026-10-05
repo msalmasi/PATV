@@ -7,7 +7,10 @@
 // a tip (the new transactions.counterparty column; older tips are paired by time + amount).
 const { runQuery, getQuery } = require("./dbUtils");
 
-const ready = runQuery("ALTER TABLE transactions ADD COLUMN counterparty TEXT").catch(() => {});
+const ready = Promise.all([
+  runQuery("ALTER TABLE transactions ADD COLUMN counterparty TEXT").catch(() => {}),
+  runQuery("ALTER TABLE transactions ADD COLUMN note TEXT").catch(() => {}),     // web-tip message (1.99x)
+]);
 
 const CATS = {
   wheel: "🎡 Wheel", casino: "🎰 Casino", heist: "🥷 Heists & turf", games: "🥊 Games & fights",
@@ -222,7 +225,7 @@ async function forUser(userId, { period = "30d", cat = null, page = 1, perPage =
   const where = since ? "AND t.timestamp >= datetime('now', ?)" : "";
   const params = since ? [userId, since] : [userId];
   const rows = await getQuery(
-    `SELECT t.transactionId, t.type AS rawType, t.points, t.timestamp, t.counterparty,
+    `SELECT t.transactionId, t.type AS rawType, t.points, t.timestamp, t.counterparty, t.note,
             COALESCE(b.type, t.type) AS type
        FROM transactions t
        LEFT JOIN bonus_winners b ON b.transactionId = t.transactionId

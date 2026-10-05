@@ -25,6 +25,7 @@
   .pager { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
   .cp { color: #81c784; border-bottom: 1px dotted #557; text-decoration: none; }
   a.cp:hover { color: #a5d6a7; }
+  .tnote { font-size: 12px; color: #b9b9a0; font-style: italic; margin-top: 2px; overflow-wrap: anywhere; }
   .pager a { color: #81c784; }
 </style>
 <div class="hx">
@@ -69,7 +70,7 @@
     <% } %>
       <div class="row2">
         <div class="ic"><%= it.icon %></div>
-        <div class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <a class="cp" href="/u/<%= encodeURIComponent(it.cp.name) %>/profile" title="<%= it.cp.title %>"><%= it.cp.name %></a><% if (it.cp.alt) { %> <span class="mut">(<%= it.cp.alt %>)</span><% } %><% } %></div>
+        <div class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <a class="cp" href="/u/<%= encodeURIComponent(it.cp.name) %>/profile" title="<%= it.cp.title %>"><%= it.cp.name %></a><% if (it.cp.alt) { %> <span class="mut">(<%= it.cp.alt %>)</span><% } %><% } %><% if (it.note) { %><div class="tnote">&ldquo;<%= it.note %>&rdquo;</div><% } %></div>
         <div class="tm"><%= tm %></div>
         <div class="am <%= it.points >= 0 ? 'pos' : 'neg' %>"><%= (it.points >= 0 ? '+' : '−') + Math.abs(it.points).toLocaleString() %> PAT</div>
       </div>
