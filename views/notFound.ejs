@@ -1,0 +1,23 @@
+<%- include('layout', { title: 'Not found', user: user}) %>
+<style>
+  .nf { max-width: 560px; margin: 48px auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; text-align: center; }
+  .nf .frog { font-size: 64px; line-height: 1; }
+  .nf h1 { margin: 12px 0 6px; }
+  .nf p { color: #bbb; line-height: 1.55; margin: 0 auto 22px; max-width: 46ch; overflow-wrap: anywhere; }
+  .nf code { background: #1c1c1c; padding: 1px 6px; border-radius: 4px; color: #ddd; }
+  .nf .go { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .nf .go a { color: #81c784; text-decoration: none; border: 1px solid #2e4d2b; border-radius: 8px; padding: 8px 14px; }
+  .nf .go a:hover { background: #13200f; }
+</style>
+<div class="nf">
+  <div class="frog">🐸</div>
+  <h1><%= heading || 'Nothing here' %></h1>
+  <p><%- message || 'That page doesn&#39;t exist (or it moved).' %></p>
+  <div class="go">
+    <a href="/">Home</a>
+    <a href="/leaderboard">Leaderboard</a>
+    <% if (user) { %><a href="/u/<%= encodeURIComponent(user) %>/profile">Your profile</a><% } %>
+  </div>
+</div>
+</body>
+</html>

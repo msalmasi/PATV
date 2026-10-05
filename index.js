@@ -1183,6 +1183,18 @@ app.post("/register", registerUser);
 // HTTP POST endpoint for logging in.
 app.post("/login", loginUser);
 
+function escHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function notFound(req, res, heading, message) {
+  res.status(404).render("notFound", {
+    user: req.user ? req.user.username : null,
+    heading: heading || null,
+    message: message || null,
+  });
+}
+
 // HTTP POST endpoint for logging out.
 app.post("/logout", (req, res) => {
   clearLogin(res);
@@ -1229,8 +1241,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         og: og.forProfile(req, user)
       });
     } else {
-      clearLogin(res);
-      res.redirect("/");
+      // A profile that doesn't exist is a 404 - it used to log the visitor out (clearLogin).
+      notFound(req, res, "No such profile",
+        "There's no PATV account called <code>" + escHtml(usernameProfile) + "</code>.");
     }
   } catch (error) {
     console.error("Failed to retrieve user data:", error);
@@ -4124,6 +4137,12 @@ app.get("/api/stats/xp", async (req, res) => {
     console.error("XP stats error:", error);
     res.status(500).json({ error: "Failed to fetch XP stats" });
   }
+});
+
+// Anything no route matched: a friendly 404 (keeps the visitor signed in).
+app.use(addUser, (req, res) => {
+  if (req.path.startsWith("/api/")) return res.status(404).json({ error: "not found" });
+  notFound(req, res);
 });
 
 app.listen(port, () => {
