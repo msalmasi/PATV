@@ -181,10 +181,15 @@ const SINGULAR = { kick: "Kick", ban: "Ban", mute: "Mute", mic_block: "Mic block
 // i: 0 = plural count label, 1 = "done to them" label, 2 = one action they took
 const typeName = (t, i = 0) => (i === 2 ? SINGULAR[t] || t : (TYPE_LABEL[t] || [t, t])[i]);
 
+// "camfrog" is Pepe's bucket for history logged before he tracked rooms (and for anything he
+// couldn't place) — say so instead of showing it like a room called "camfrog".
+const GENERAL = "camfrog";
+const roomName = (r) => (r === GENERAL ? "Before rooms were tracked" : r);
+
 function roomBars(rooms, fmtV) {
   const list = Object.entries(rooms || {}).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const max = list.length ? list[0][1] : 0;
-  return list.map(([r, v]) => ({ room: r, value: v, label: fmtV(v), pct: max ? Math.max(2, (v / max) * 100) : 0 }));
+  return list.map(([r, v]) => ({ room: roomName(r), value: v, label: fmtV(v), pct: max ? Math.max(2, (v / max) * 100) : 0 }));
 }
 
 /**
@@ -209,7 +214,7 @@ async function forProfile(camfrogLogin, viewer) {
   const fav = {};
   for (const [r, v] of Object.entries(c.rooms || {})) fav[r] = (fav[r] || 0) + v;
   for (const [r, v] of Object.entries(m.rooms || {})) fav[r] = (fav[r] || 0) + v / 60;
-  const favRoom = Object.entries(fav).sort((a, b) => b[1] - a[1])[0];
+  const favRoom = Object.entries(fav).filter(([r]) => r !== GENERAL).sort((a, b) => b[1] - a[1])[0];
   const peakChat = c.total ? c.hours.indexOf(Math.max(...c.hours)) : null;
   const peakMic = m.secs ? m.hours.indexOf(Math.max(...m.hours)) : null;
   const mod = s.mod || { by: {}, on: {}, by_recent: [], on_recent: [] };
@@ -217,7 +222,7 @@ async function forProfile(camfrogLogin, viewer) {
   const onTotal = Object.values(mod.on || {}).reduce((a, b) => a + b, 0);
   const sorted = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ type: t, label: typeName(t), n }));
   const rows = (list, side) => (list || []).map((e) => ({
-    when: dateOf(e.ts), ago: ago(e.ts), label: typeName(e.type, side === "on" ? 1 : 2), room: e.room,
+    when: dateOf(e.ts), ago: ago(e.ts), label: typeName(e.type, side === "on" ? 1 : 2), room: e.room === GENERAL ? "—" : e.room,
     who: e.who, note: e.note }));
   return {
     empty: false,
