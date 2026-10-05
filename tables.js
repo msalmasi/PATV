@@ -49,6 +49,38 @@ const bool = (v) => !!v;
 const cards = (a, n = 12) => (Array.isArray(a) ? a.slice(0, n).map(String).filter((c) => CARD.test(c)) : []);
 const arr = (a, n) => (Array.isArray(a) ? a.slice(0, n).filter((x) => x && typeof x === "object") : []);
 
+const OUTCOMES = new Set(["win", "lose", "push", "blackjack", "bust", "surrender"]);
+const outcome = (v) => (OUTCOMES.has(String(v)) ? String(v) : null);
+
+// the finished round, kept on the felt until the next deal (or ~30 s after the table closes).
+// Everything in it was already public: Pepe's revealed hand / the hands turned up at showdown.
+function cleanLastHoldem(l) {
+  if (!l || typeof l !== "object") return null;
+  return {
+    hand_no: int(l.hand_no), uncontested: bool(l.uncontested), board: cards(l.board, 5), pot: int(l.pot), rake: int(l.rake),
+    shown: bool(l.uncontested) ? [] : arr(l.shown, 12).map((x) => ({ name: str(x.name), cards: cards(x.cards, 2), hand: str(x.hand) })),
+    winners: arr(l.winners, 12).map((w) => ({ name: str(w.name), amount: int(w.amount), hand: str(w.hand), pot: str(w.pot, 20) })),
+  };
+}
+
+function cleanLastBj(l) {
+  if (!l || typeof l !== "object") return null;
+  const d = l.dealer && typeof l.dealer === "object" ? l.dealer : {};
+  return {
+    round_no: int(l.round_no),
+    dealer: { cards: cards(d.cards, 12), value: int(d.value), bust: bool(d.bust), blackjack: bool(d.blackjack) },
+    players: arr(l.players, 8).map((p) => ({
+      name: str(p.name), net: Math.round(Number(p.net) || 0), total_bet: int(p.total_bet), total_payout: int(p.total_payout),
+      insurance: p.insurance && typeof p.insurance === "object"
+        ? { amount: int(p.insurance.amount), won: bool(p.insurance.won), payout: int(p.insurance.payout) } : null,
+      hands: arr(p.hands, 4).map((h) => ({
+        cards: cards(h.cards, 12), value: int(h.value), bet: int(h.bet), payout: int(h.payout),
+        net: Math.round(Number(h.net) || 0), outcome: outcome(h.outcome), is_bj: bool(h.is_bj), doubled: bool(h.doubled), split: bool(h.split),
+      })),
+    })),
+  };
+}
+
 function siteTime(botTs, botNow, recv) {
   // the bot's clock -> ours: a deadline N seconds after the bot's "now" is N seconds after we got it
   const t = Number(botTs), b = Number(botNow);
@@ -79,7 +111,7 @@ function cleanHoldem(t, botNow, recv) {
     pots: arr(t.pots, 10).map((p) => ({ amount: int(p.amount), players: int(p.players, 0, 20) })),
     current_bet: int(t.current_bet), max_seats: int(t.max_seats, 0, 20), act_secs: int(t.act_secs, 0, 600),
     rake_pct: Number(t.rake_pct) || 0, can_deal: bool(t.can_deal), next_at: siteTime(t.next_at, botNow, recv),
-    turn, result: res, ...cleanMeta(t),
+    turn, result: res, last_round: ["between", "closed"].includes(String(t.phase)) ? cleanLastHoldem(t.last_round) : null, ...cleanMeta(t),
     seats: arr(t.seats, 12).map((s) => ({
       name: str(s.name), stack: int(s.stack), bet: int(s.bet), status: str(s.status, 12), cards_down: bool(s.cards_down),
       button: bool(s.button), blind: s.blind === "SB" || s.blind === "BB" ? s.blind : null, turn: bool(s.turn),
@@ -114,13 +146,16 @@ function cleanBj(t, botNow, recv) {
     dealer: { cards: cards(d.cards, hidden ? 1 : 12), down: hidden ? int(d.down, 0, 1) : 0, value: int(d.value), hidden,
               bust: bool(d.bust), blackjack: bool(d.blackjack) },
     turn, result: res, ...cleanMeta(t),
+    // never while a round is live (Pepe's hole card would be down)
+    last_round: ["betting", "idle", "done", "closed"].includes(String(t.phase)) ? cleanLastBj(t.last_round) : null,
     bet_deadline: siteTime(t.bet_deadline, botNow, recv), ins_deadline: siteTime(t.ins_deadline, botNow, recv),
     seats: arr(t.seats, 8).map((s) => ({
       name: str(s.name), bet: int(s.bet), pending: int(s.pending), insured: bool(s.insured), autobet: bool(s.autobet),
       turn: bool(s.turn), leaving: bool(s.leaving), host: bool(s.host),
       hands: arr(s.hands, 4).map((h) => ({
-        cards: cards(h.cards, 12), value: int(h.value), soft: bool(h.soft), bet: int(h.bet), outcome: h.outcome ? str(h.outcome, 12) : null,
-        is_bj: bool(h.is_bj), doubled: bool(h.doubled), current: bool(h.current),
+        cards: cards(h.cards, 12), value: int(h.value), soft: bool(h.soft), bet: int(h.bet), outcome: outcome(h.outcome),
+        payout: h.payout == null ? null : int(h.payout), is_bj: bool(h.is_bj), doubled: bool(h.doubled), split: bool(h.split),
+        current: bool(h.current),
       })),
     })),
   };
@@ -146,11 +181,17 @@ function cleanSync(b) {
   const recv = Date.now();
   const botNow = Number(b.bot_now) || recv / 1000;
   const tables = arr(b.tables, 4).map((t) => (t.game === "bj" ? cleanBj(t, botNow, recv) : cleanHoldem(t, botNow, recv)));
+  // tables that just closed after a round: their final round lingers on the page until linger_until
+  const closed = arr(b.closed, 4).map((t) => {
+    const c = t.game === "bj" ? cleanBj(Object.assign({}, t, { phase: "closed" }), botNow, recv) : cleanHoldem(t, botNow, recv);
+    return Object.assign(c, { phase: "closed", closed: true, turn: null, can_deal: false,
+                              linger_until: siteTime(t.linger_until, botNow, recv) || recv + 30000 });
+  }).filter((t) => t.last_round && !tables.some((o) => o.id === t.id));
   const cfg = b.config && typeof b.config === "object" ? b.config : {};
   const h = cfg.holdem || {}, j = cfg.bj || {};
   return {
     state: {
-      tables, max_tables: int(b.max_tables || 1, 1, 50),
+      tables, closed, max_tables: int(b.max_tables || 1, 1, 50),
       rooms: arr(b.rooms, 30).map((r) => ({ id: str(r.id, 64), name: str(r.name, 64), holdem: bool(r.holdem), bj: bool(r.bj) })),
       busy: b.busy ? str(b.busy, 40) : null,
       log: arr(b.log, 40).map((l) => ({ ts: int(l.ts), game: l.game === "bj" ? "bj" : "holdem", text: str(l.text, 200) })),
@@ -212,8 +253,9 @@ function buildArgs(b, isAdmin) {
 
 function publicState() {
   const now = Date.now();
-  if (!STATE) return { now, stale: true, updated: null, tables: [], rooms: [], busy: null, log: [], config: null };
-  return Object.assign({ now, updated: RECEIVED, stale: now - RECEIVED > STALE_MS }, STATE);
+  if (!STATE) return { now, stale: true, updated: null, tables: [], closed: [], rooms: [], busy: null, log: [], config: null };
+  return Object.assign({ now, updated: RECEIVED, stale: now - RECEIVED > STALE_MS }, STATE,
+                       { closed: (STATE.closed || []).filter((t) => t.linger_until > now) });
 }
 
 function register(app, { isBotToken, addUser }) {

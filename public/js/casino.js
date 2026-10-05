@@ -13,7 +13,7 @@
   const SUIT = { s: "♠", h: "♥", d: "♦", c: "♣" };
   const SUITN = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
   const RANKN = { A: "Ace", K: "King", Q: "Queen", J: "Jack", T: "10" };
-  const OUT = { blackjack: ["BJ", "gold"], win: ["WIN", "green"], push: ["PUSH", ""], lose: ["LOSS", "red"], bust: ["BUST", "red"] };
+  const OUT = { blackjack: ["BJ", "gold"], win: ["WIN", "green"], push: ["PUSH", ""], lose: ["LOSS", "red"], bust: ["BUST", "red"], surrender: ["SURR", ""] };
 
   let S = null;            // last state
   let curT = null;         // the table drawn in the live view (actions are aimed at its id)
@@ -30,7 +30,17 @@
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const mySeat = (t) => (S && S.me && S.me.seats || []).find((x) => x.table === t.id) || null;
   // which table the live view shows: the page's own table, else the featured one (the main stage)
-  const pick = () => (TABLE ? S.tables.find((t) => t.id === TABLE) || null : S.tables.find((t) => t.featured) || S.tables[0] || null);
+  const lingering = () => (S.closed || []).filter((t) => t.linger_until > now());
+  const pick = () => {
+    const open = TABLE ? S.tables.find((t) => t.id === TABLE) : S.tables.find((t) => t.featured) || S.tables[0];
+    if (open) return open;
+    const c = lingering();                 // a table that just closed: its final round stays up ~30 s
+    return (TABLE ? c.find((t) => t.id === TABLE) : c.find((t) => t.featured) || c[0]) || null;
+  };
+  const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "±") + fmt(Math.abs(n));
+  // one hand's result: outcome badge + what it paid (a split hand gets its own)
+  const outBadge = (h) => (h.outcome && OUT[h.outcome] ? `<span class="tag ${OUT[h.outcome][1]}">${OUT[h.outcome][0]}</span>` : "") +
+    (h.outcome && h.payout != null ? ` <span class="pay">${h.payout ? "paid " + fmt(h.payout) : "−" + fmt(h.bet)}</span>` : "");
 
   function card(c, key, extra) {
     const r = c[0] === "T" ? "10" : c[0];
@@ -73,6 +83,8 @@
       cards = ms.cards.map((c) => card(c, key, s.status === "folded" ? "dim" : "")).join("");
     } else if (s.shown) {
       cards = s.shown.map((c) => card(c, key)).join("");
+    } else if (lastShown(t, s.name)) {
+      cards = lastShown(t, s.name).cards.map((c) => card(c, key, "dim")).join("");
     } else if (s.cards_down) {
       cards = back() + back();
     }
@@ -91,16 +103,34 @@
       (s.bet ? `<span class="bet"><span class="chip"></span>${fmt(s.bet)}</span>` : "") +
       `<div class="nm">${esc(s.name)}</div><div class="st">${fmt(s.stack)}</div>` +
       (cards ? `<div class="hc">${cards}</div>` : "") +
-      (s.hand ? `<div class="hn">${esc(s.hand)}</div>` : "") +
+      (s.hand ? `<div class="hn">${esc(s.hand)}</div>` : !s.shown && lastShown(t, s.name) ? `<div class="hn">${esc(lastShown(t, s.name).hand)}</div>` : "") +
       `<div class="tags">${tags.join("")}</div>${clock(dl, t.act_secs)}</div>`;
   }
 
+  function lastShown(t, name) {
+    const l = t.last_round;
+    return l && (t.phase === "between" || t.closed) ? (l.shown || []).find((x) => x.name === name) || null : null;
+  }
+
   function holdemCenter(t) {
+    const l = (t.phase === "between" || t.closed) ? t.last_round : null;
+    const board = t.board.length ? t.board : l ? l.board : [];
     const slots = [];
-    for (let k = 0; k < 5; k++) slots.push(t.board[k] ? card(t.board[k], `${t.id}:${t.hand_no}:b`) : '<span class="slot" aria-hidden="true"></span>');
+    for (let k = 0; k < 5; k++) slots.push(board[k] ? card(board[k], `${t.id}:${t.hand_no}:b`, l ? "dim" : "") : '<span class="slot" aria-hidden="true"></span>');
     let msg = "";
-    if (t.phase === "between") {
-      if (t.result && t.result.winners.length) {
+    if (l) {
+      // shown hands of players who have since left the table (busted / stood up) stay listed here
+      const seated = new Set(t.seats.map((s) => s.name));
+      const gone = (l.shown || []).filter((x) => !seated.has(x.name) || t.closed);
+      msg = `<div class="result lastr"><span class="tag">Last hand #${l.hand_no}</span> 🏆 ` +
+        l.winners.map((w) => `${esc(w.name)} +${fmt(w.amount)} <span style="color:#ccc">(${esc(w.hand)})</span>`).join(" · ") +
+        (gone.length ? `<div class="shown">${gone.map((x) => `${esc(x.name)} ${x.cards.map((c) => card(c, `${t.id}:${l.hand_no}:x:${x.name}`, "sm")).join("")} <span style="color:#ccc">${esc(x.hand)}</span>`).join(" · ")}</div>` : "") +
+        "</div>";
+    }
+    if (t.closed) {
+      msg += '<div class="msg">This table has closed.</div>';
+    } else if (t.phase === "between") {
+      if (!l && t.result && t.result.winners.length) {
         msg = `<div class="result">🏆 ${t.result.winners.map((w) => `${esc(w.name)} +${fmt(w.amount)} <span style="color:#ccc">(${esc(w.hand)})</span>`).join(" · ")}</div>`;
       }
       if (t.next_at) msg += `<div class="msg">Next hand in <b class="cnt" data-dl="${t.next_at}">…</b></div>`;
@@ -111,7 +141,7 @@
     }
     const pots = t.pots.length > 1 ? `<div class="pots">${t.pots.map((p, k) => `${k ? "side " + k : "main"} ${fmt(p.amount)}`).join(" · ")}</div>` : "";
     return `<div class="ttl">Hold'em ${fmt(t.sb)}/${fmt(t.bb)}${t.high_stakes ? " · High Roller" : ""}${t.hand_no ? " · hand #" + t.hand_no : ""} · ${esc(t.phase)}</div>` +
-      `<div class="board" aria-label="Board">${slots.join("")}</div>` +
+      `<div class="board" aria-label="${l ? "Last hand's board" : "Board"}">${slots.join("")}</div>` +
       (t.pot ? `<div class="pot"><span class="chip"></span>Pot ${fmt(t.pot)}</div>` : "") + pots + msg;
   }
 
@@ -120,11 +150,19 @@
     const ms = mySeat(t);
     const mine = !!ms && ms.seat === i;
     const cls = ["seat", mine ? "me" : "", s.turn ? "turn" : ""].join(" ");
-    const hands = s.hands.map((h, k) => {
-      const o = h.outcome && OUT[h.outcome] ? `<span class="tag ${OUT[h.outcome][1]}">${OUT[h.outcome][0]}</span>` : "";
-      return `<div class="bjh${h.current ? " cur" : ""}"><div class="cards">${h.cards.map((c) => card(c, `${t.id}:${t.round_no}:${i}:${k}`)).join("")}</div>` +
-        `<div class="v">${h.value}${h.soft && h.value < 21 ? " soft" : ""}${h.is_bj ? " · BJ" : ""} · ${fmt(h.bet)}${h.doubled ? " ×2" : ""} ${o}</div></div>`;
-    }).join("");
+    const handHtml = (h, k, n, key, last) => {
+      const lbl = n > 1 ? `<div class="hl">Hand ${k + 1} of ${n}</div>` : "";
+      return `<div class="bjh${h.current ? " cur" : ""}${last ? " last" : ""}" data-outcome="${esc(h.outcome || "")}">${lbl}` +
+        `<div class="cards">${h.cards.map((c) => card(c, key + ":" + k, last ? "dim" : "")).join("")}</div>` +
+        `<div class="v">${h.value}${h.soft && h.value < 21 ? " soft" : ""}${h.is_bj ? " · BJ" : h.value === 21 && h.split ? " · 21" : ""} · ${fmt(h.bet)}${h.doubled ? " (doubled)" : ""} ${outBadge(h)}</div></div>`;
+    };
+    let hands = s.hands.map((h, k) => handHtml(h, k, s.hands.length, `${t.id}:${t.round_no}:${i}`, false)).join("");
+    const lp = !s.hands.length ? lastPlayer(t, s.name) : null;
+    if (lp) {
+      hands = `<div class="hl">Last round</div>` + lp.hands.map((h, k) => handHtml(h, k, lp.hands.length, `${t.id}:L${t.last_round.round_no}:${i}`, true)).join("") +
+        (lp.insurance ? `<div class="v">insurance ${lp.insurance.won ? "paid " + fmt(lp.insurance.payout) : "lost " + fmt(lp.insurance.amount)}</div>` : "") +
+        `<div class="v">${signed(lp.net)}</div>`;
+    }
     const tags = [];
     if (s.insured) tags.push('<span class="tag">insured</span>');
     if (s.autobet) tags.push('<span class="tag">autobet</span>');
@@ -138,12 +176,28 @@
       `<div class="nm">${esc(s.name)}</div>${hands || '<div class="st">no bet yet</div>'}<div class="tags">${tags.join("")}</div>${clock(dl, t.act_secs)}</div>`;
   }
 
+  function lastPlayer(t, name) {
+    return t.last_round ? t.last_round.players.find((p) => p.name === name) || null : null;
+  }
+
   function bjCenter(t) {
-    const d = t.dealer;
-    const dc = d.cards.map((c) => card(c, `${t.id}:${t.round_no}:d`)).join("") + (d.down ? back() : "");
+    const l = t.last_round;
+    // between rounds Pepe's cards come off the felt: show the last round's (dimmed) until the next deal
+    const useLast = !!l && !t.dealer.cards.length;
+    const d = useLast ? Object.assign({ hidden: false, down: 0 }, l.dealer) : t.dealer;
+    const dc = d.cards.map((c) => card(c, useLast ? `${t.id}:L${l.round_no}:d` : `${t.id}:${t.round_no}:d`, useLast ? "dim" : "")).join("") + (d.down ? back() : "");
     let msg = "";
-    if (t.phase === "betting" || t.phase === "idle") {
+    if (t.closed) {
+      msg = '<div class="msg">This table has closed.</div>';
+    } else if (t.phase === "betting" || t.phase === "idle") {
       msg = `<div class="msg">Place your bets · ${fmt(t.min_bet)}–${fmt(t.max_bet)}${t.bet_deadline ? ` · dealing in <b class="cnt" data-dl="${t.bet_deadline}">…</b>` : ""}</div>`;
+    }
+    if (l && (t.closed || t.phase === "betting" || t.phase === "idle")) {
+      // every hand of every player (each split hand separately), incl. players who already left
+      msg = `<div class="result lastr"><span class="tag">Last round ${l.round_no}</span> Pepe ${l.dealer.value}${l.dealer.bust ? " BUST" : l.dealer.blackjack ? " BJ" : ""} — ` +
+        l.players.map((p) => `${esc(p.name)} ` + p.hands.map((h, k) => `${p.hands.length > 1 ? `<span style="color:#ccc">H${k + 1}</span> ` : ""}${h.value} ${OUT[h.outcome] ? OUT[h.outcome][0] : ""}`).join(", ") +
+          ` <b>${signed(p.net)}</b>`).join(" · ") + "</div>" + msg;
+    } else if (t.phase === "betting" || t.phase === "idle") {
       if (t.result) {
         msg = `<div class="result">Round ${t.result.round_no}: Pepe ${t.result.dealer.value}${t.result.dealer.bust ? " BUST" : t.result.dealer.blackjack ? " BJ" : ""} — ` +
           t.result.players.map((p) => `${esc(p.name)} ${p.net > 0 ? "+" : ""}${fmt(p.net)}`).join(" · ") + "</div>" + msg;
@@ -156,7 +210,7 @@
       msg = '<div class="msg">Pepe plays his hand…</div>';
     }
     return `<div class="ttl">Blackjack · round ${t.round_no} · ${t.decks}-deck · pays 3:2</div>` +
-      `<div class="dealer"><div class="cards" aria-label="Pepe's cards">${dc || '<span class="slot"></span><span class="slot"></span>'}</div>` +
+      `<div class="dealer${useLast ? " last" : ""}"><div class="cards" aria-label="${useLast ? "Pepe's cards last round" : "Pepe's cards"}">${dc || '<span class="slot"></span><span class="slot"></span>'}</div>` +
       (d.cards.length ? `<div class="msg">Pepe ${d.hidden ? "shows " : ""}${d.value}${d.bust ? " — BUST" : d.blackjack ? " — BLACKJACK" : ""}</div>` : "") + `</div>` + msg;
   }
 
@@ -192,7 +246,8 @@
         const p = place(n, (i - rot + n) % n, bjMode);
         return h.replace('<div class="seat', `<div style="left:${p.x.toFixed(1)}%;top:${p.y.toFixed(1)}%" class="${p.top ? "top " : ""}seat`);
       }).join("");
-      const notice = !TABLE && FOCUS !== "lobby" && ((FOCUS === "bj") !== bjMode)
+      const notice = t.closed ? `<p class="hint">This table just closed — here's how its last ${bjMode ? "round" : "hand"} ended.</p>` :
+        !TABLE && FOCUS !== "lobby" && ((FOCUS === "bj") !== bjMode)
         ? `<p class="hint">A ${bjMode ? "Blackjack" : "Hold'em"} table is open, and tables run one at a time — this is it. <a href="${bjMode ? "/blackjack" : "/poker"}">Go to its page</a>.</p>` : "";
       el.innerHTML = notice +
         `<div class="felt-wrap${bjMode ? " bjw" : ""}"><div class="felt" role="group" aria-label="${bjMode ? "Blackjack" : "Hold'em"} table in ${esc(t.room_name)}">` +
@@ -201,10 +256,10 @@
         `<p class="info" style="text-align:center;margin:6px 0 0">${t.featured ? '<span class="tag gold">main stage</span> ' : ""}` +
         `${t.home.kind === "room" ? `In Camfrog room <b style="color:#fff">${esc(t.home.room_name || t.room_name)}</b>` : "Web table"} · host ${esc(t.host || "—")} · ${t.seats.length}/${t.max_seats} seats` +
         ` · <a href="/casino/t/${esc(t.id)}">table link</a>` +
-        `${S.stale ? ' · <span style="color:#ff9a9a">Pepe hasn\'t updated for a while</span>' : ""}</p><div id="cz-ctl"></div>${adminCtl(t)}`;
+        `${S.stale ? ' · <span style="color:#ff9a9a">Pepe hasn\'t updated for a while</span>' : ""}</p><div id="cz-ctl"></div>${t.closed ? "" : adminCtl(t)}`;
       sigCtl = "";
     }
-    renderCtl(t);
+    if (!t.closed) renderCtl(t);
   }
 
   // ── controls for the signed-in, seated (or seat-taking) player ──
