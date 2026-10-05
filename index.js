@@ -807,7 +807,10 @@ async function spinnerLook(userId) {
   try {
     const u = (await getQuery("SELECT username, displayname FROM users WHERE userId = ?", [userId]))[0];
     if (!u) return { name: "", display: "", nameCss: "" };
-    return { name: u.username, display: u.displayname || u.username, nameCss: cosmetics.nameStyle(u.username) || "" };
+    // nameStyles() WAITS for the name cache; the sync nameStyle() returned "" on a cold cache (the first
+    // spins after a site restart showed no colour on the stage / OBS wheel)
+    const css = (await cosmetics.nameStyles([u.username]))[u.username] || "";
+    return { name: u.username, display: u.displayname || u.username, nameCss: css };
   } catch (e) {
     return { name: "", display: "", nameCss: "" };
   }
