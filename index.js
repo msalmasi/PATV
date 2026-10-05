@@ -152,10 +152,11 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
+const userstats = require("./userstats");
 app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogPath = req.originalUrl.split("?")[0]; next(); });
 
 let clients = []; // Keep track of connected clients for SSE
@@ -1007,6 +1008,7 @@ require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
+require("./userstats").register(app, { isBotToken });
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
 
@@ -1217,6 +1219,11 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         heistSheet: await gtf.sheetFor(user.camfrogUsername),
         gtf: gtf.LINKS,
         camfrog: user.camfrogUsername || null,
+        // Camfrog activity analytics (userstats.js). "Moderated against" is owner + site admins only.
+        analytics: await userstats.forProfile(user.camfrogUsername, {
+          owner: !!req.user && req.user.username === user.username,
+          admin: !!req.user && req.user.class === "Admin",
+        }),
         og: og.forProfile(req, user)
       });
     } else {

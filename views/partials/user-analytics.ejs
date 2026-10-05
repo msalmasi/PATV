@@ -1,0 +1,192 @@
+<%#
+  Profile → Analytics (userstats.js builds `a`). Chat + mic are public. "Moderated against" (a.mod.on) is
+  only non-null for the profile owner and site admins; the itemised mod-action list and top words likewise.
+%>
+<style>
+  .ua { display: grid; gap: 18px; }
+  .ua-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; }
+  .ua-head h2 { margin: 0; }
+  .ua .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .ua .tile { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 11px 13px; min-width: 0; }
+  .ua .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .ua .tile .v { font-size: 21px; font-weight: bold; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+  .ua .tile .v.sm { font-size: 16px; }
+  .ua .tile .s { font-size: 12px; color: #888; margin-top: 2px; }
+  .ua .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+  .ua .blk { display: grid; gap: 8px; min-width: 0; }
+  .ua .blk-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; font-size: 14px; }
+  .ua .blk-top b { color: #ddd; font-weight: 600; }
+  .ua-bars { position: relative; padding: 0 0 20px 40px; }
+  .ua-chart { display: block; width: 100%; height: 132px; overflow: visible; }
+  .ua-grid { stroke: #232323; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .ua-base { stroke: #3a3a3a; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .ua-hit { fill: transparent; cursor: crosshair; }
+  .ua-hit:hover { fill: rgba(255,255,255,.06); }
+  .ua-yl { position: absolute; left: 0; top: 0; width: 34px; height: 132px; }
+  .ua-yl span { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
+  .ua-xl { position: absolute; left: 40px; right: 0; bottom: 0; height: 16px; }
+  .ua-xl span { position: absolute; transform: translateX(-50%); font-size: 11px; color: #777; white-space: nowrap; }
+  .ua-xl span.end { transform: translateX(-100%); }
+  .ua-hrow { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 0; margin-bottom: 5px; }
+  .ua-hname { font-size: 12px; color: #999; }
+  .ua-cells { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; }
+  .ua-cell { height: 26px; border-radius: 4px; cursor: crosshair; }
+  .ua-cell:hover { outline: 1px solid #ddd; outline-offset: -1px; }
+  .ua-hax { display: grid; grid-template-columns: 40px repeat(4, minmax(0, 1fr)); font-size: 11px; color: #777; }
+  .ua .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+  .ua .rlist { display: grid; gap: 7px; }
+  .ua .rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; font-size: 13px; }
+  .ua .rrow .rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ccc; }
+  .ua .rrow .rv { color: #999; font-variant-numeric: tabular-nums; }
+  .ua .rrow .rb { grid-column: 1 / -1; height: 6px; background: #1a1a1a; border-radius: 999px; overflow: hidden; }
+  .ua .rrow .rb span { display: block; height: 100%; border-radius: 999px; }
+  .ua .words { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ua .words span { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: #151a15; border: 1px solid #243324; color: #b9d8bb; }
+  .ua .words b { color: #6f8f71; font-weight: normal; margin-left: 4px; }
+  .ua .sub { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; margin: 0 0 8px; }
+  .ua .modgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .ua .modbox { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 13px 14px; min-width: 0; }
+  .ua .modbox.private { border-color: #3a2a1a; background: linear-gradient(180deg, #15100b, #0d0d0d); }
+  .ua .modbox .big { font-size: 26px; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .ua .pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .ua .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: #161616; border: 1px solid #2a2a2a; color: #ccc; }
+  .ua .pill b { color: #fff; margin-left: 3px; }
+  .ua .lock { display: inline-block; white-space: nowrap; font-size: 11px; color: #c9a36a; border: 1px solid #4a3820; border-radius: 999px; padding: 1px 8px; margin-left: 6px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
+  .ua table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+  .ua th { text-align: left; color: #777; font-weight: normal; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 0 6px 5px 0; }
+  .ua td { padding: 5px 6px 5px 0; border-top: 1px solid #1c1c1c; color: #ccc; vertical-align: top; overflow-wrap: anywhere; }
+  .ua td.t { color: #888; white-space: nowrap; }
+  .ua td.w, .ua td.room { overflow-wrap: normal; word-break: normal; }
+  .ua td.room { color: #999; }
+  .ua .empty { color: #777; font-size: 13px; }
+  #ua-tip { position: fixed; z-index: 50; pointer-events: none; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px;
+            padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.5); display: none; font-family: Ubuntu, sans-serif; }
+  @media (max-width: 560px) {
+    .ua .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ua-chart, .ua-yl { height: 110px; }
+    .ua-cell { height: 20px; border-radius: 3px; }
+    .ua table .room { display: none; }
+  }
+</style>
+<section class="card ua" id="analytics">
+  <div class="ua-head">
+    <h2>Analytics</h2>
+    <span class="muted">Camfrog activity<% if (a.updated) { %> · updated <%= a.updated %><% } %></span>
+  </div>
+
+  <div class="tiles">
+    <div class="tile"><div class="k">Messages</div><div class="v"><%= a.tiles.messages %></div><div class="s"><%= a.tiles.messages30 %> in the last 30 days</div></div>
+    <div class="tile"><div class="k">Mic time</div><div class="v"><%= a.tiles.micDur %></div><div class="s">longest <%= a.tiles.longest %></div></div>
+    <div class="tile"><div class="k">Mic sessions</div><div class="v"><%= a.tiles.sessions %></div><div class="s">avg <%= a.tiles.avgSession %> each</div></div>
+    <div class="tile"><div class="k">First seen</div><div class="v sm"><%= a.tiles.first %></div><div class="s">by Pepe</div></div>
+    <div class="tile"><div class="k">Last seen</div><div class="v sm"><%= a.tiles.last %></div><div class="s"><%= a.tiles.peakChat ? 'busiest at ' + a.tiles.peakChat : '&nbsp;' %></div></div>
+    <div class="tile"><div class="k">Favourite room</div><div class="v sm"><%= a.tiles.favRoom %></div><div class="s">by messages + mic</div></div>
+  </div>
+
+  <div class="two">
+    <div class="blk">
+      <div class="blk-top"><b><span class="dot" style="background:#4caf50"></span>Messages per day</b><span class="muted">last 90 days</span></div>
+      <% if (a.hasChat) { %><%- a.chatChart %><% } else { %><div class="empty">No chat recorded yet.</div><% } %>
+    </div>
+    <div class="blk">
+      <div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span>Mic time per day</b><span class="muted">last 90 days</span></div>
+      <% if (a.hasMic) { %><%- a.micChart %><% } else { %><div class="empty">Never on the mic yet.</div><% } %>
+    </div>
+  </div>
+
+  <% if (a.hasChat || a.hasMic) { %>
+  <div class="blk">
+    <div class="blk-top"><b>Time of day</b><span class="muted">all time · Pepe's clock<%= a.tz ? ' (' + a.tz + ')' : '' %><%= a.tiles.peakMic ? ' · mic peaks at ' + a.tiles.peakMic : '' %></span></div>
+    <div><%- a.hoursHtml %>
+      <div class="ua-hax"><span></span><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span></div>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (a.chatRooms.length || a.micRooms.length) { %>
+  <div class="two">
+    <div>
+      <div class="sub">Rooms · chat</div>
+      <div class="rlist">
+        <% if (!a.chatRooms.length) { %><div class="empty">—</div><% } %>
+        <% a.chatRooms.forEach((r) => { %>
+          <div class="rrow"><span class="rn" title="<%= r.room %>"><%= r.room %></span><span class="rv"><%= r.label %></span><div class="rb"><span style="width:<%= r.pct.toFixed(1) %>%;background:#4caf50"></span></div></div>
+        <% }) %>
+      </div>
+    </div>
+    <div>
+      <div class="sub">Rooms · mic</div>
+      <div class="rlist">
+        <% if (!a.micRooms.length) { %><div class="empty">—</div><% } %>
+        <% a.micRooms.forEach((r) => { %>
+          <div class="rrow"><span class="rn" title="<%= r.room %>"><%= r.room %></span><span class="rv"><%= r.label %></span><div class="rb"><span style="width:<%= r.pct.toFixed(1) %>%;background:#ffb74d"></span></div></div>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <% if (a.words.length) { %>
+  <div>
+    <div class="sub">Most-used words <span class="lock">🔒 only you<%= a.priv ? ' & admins' : '' %></span></div>
+    <div class="words"><% a.words.forEach(([w, n]) => { %><span><%= w %><b><%= n %></b></span><% }) %></div>
+  </div>
+  <% } %>
+
+  <div>
+    <div class="sub">Moderation</div>
+    <div class="modgrid">
+      <div class="modbox">
+        <div class="muted">Mod actions taken</div>
+        <div class="big"><%= a.mod.byTotal.toLocaleString('en-US') %></div>
+        <% if (a.mod.byCounts.length) { %>
+          <div class="pills"><% a.mod.byCounts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
+        <% } else { %><div class="empty">None that Pepe has seen.</div><% } %>
+        <% if (a.mod.byRecent.length) { %>
+          <table><thead><tr><th>When</th><th>Action</th><th>On</th><th class="room">Room</th></tr></thead><tbody>
+            <% a.mod.byRecent.forEach((e) => { %>
+              <tr><td class="t" title="<%= e.when %>"><%= e.ago %></td><td><%= e.label %><%= e.note ? ' · ' + e.note : '' %></td><td class="w"><%= e.who || '—' %></td><td class="room"><%= e.room %></td></tr>
+            <% }) %>
+          </tbody></table>
+        <% } %>
+      </div>
+      <% if (a.mod.on) { %>
+      <div class="modbox private">
+        <div class="muted">Moderated against <span class="lock">🔒 only you & admins see this</span></div>
+        <div class="big"><%= a.mod.on.total.toLocaleString('en-US') %></div>
+        <% if (a.mod.on.counts.length) { %>
+          <div class="pills"><% a.mod.on.counts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
+          <table><thead><tr><th>When</th><th>What</th><th>By</th><th class="room">Room</th></tr></thead><tbody>
+            <% a.mod.on.recent.forEach((e) => { %>
+              <tr><td class="t" title="<%= e.when %>"><%= e.ago %></td><td><%= e.label %><%= e.note ? ' · ' + e.note : '' %></td><td class="w"><%= e.who || '—' %></td><td class="room"><%= e.room %></td></tr>
+            <% }) %>
+          </tbody></table>
+        <% } else { %><div class="empty">Clean record — nothing on file.</div><% } %>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</section>
+<div id="ua-tip" role="tooltip"></div>
+<script>
+  (function () {
+    var tip = document.getElementById('ua-tip'), root = document.getElementById('analytics');
+    if (!tip || !root) return;
+    function show(e) {
+      var t = e.target.closest && e.target.closest('[data-tip]');
+      if (!t || !root.contains(t)) { tip.style.display = 'none'; return; }
+      tip.textContent = t.getAttribute('data-tip');
+      tip.style.display = 'block';
+      var x = e.clientX + 12, y = e.clientY - 34, w = tip.offsetWidth;
+      if (x + w > window.innerWidth - 8) x = e.clientX - w - 12;
+      tip.style.left = Math.max(8, x) + 'px';
+      tip.style.top = Math.max(8, y) + 'px';
+    }
+    root.addEventListener('pointermove', show);
+    root.addEventListener('pointerdown', show);
+    root.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
+    // the native <title> tooltips double up with ours on desktop — drop them once JS is running
+    root.querySelectorAll('[data-tip] title').forEach(function (n) { n.remove(); });
+    root.querySelectorAll('.ua-cell[title]').forEach(function (n) { n.removeAttribute('title'); });
+  })();
+</script>

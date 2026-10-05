@@ -120,6 +120,14 @@
     <div class="muted">XP comes from chatting, the mic and games. Every level-up pays a PAT bonus.</div>
   </section>
 
+  <% if (typeof analytics !== 'undefined' && analytics && !analytics.empty) { %>
+    <%- include('partials/user-analytics', { a: analytics }) %>
+  <% } else if (typeof analytics !== 'undefined' && analytics && analytics.empty) { %>
+    <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">Pepe hasn't recorded any Camfrog activity for <%= camfrog %> yet — it shows up here after some chat or mic time.</p></section>
+  <% } else if (isMe && !(typeof camfrog !== 'undefined' && camfrog)) { %>
+    <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">No Camfrog name is linked to this account, so there's no chat or mic activity to show. Accounts Pepe makes in Camfrog are linked automatically.</p></section>
+  <% } %>
+
   <section class="card">
     <h2>Grand Theft Frog</h2>
     <div class="gtf">
