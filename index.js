@@ -1009,6 +1009,7 @@ require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
+require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./userstats").register(app, { isBotToken });
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
@@ -3911,27 +3912,7 @@ async function getPokerNowGameStats(pokerNowId) {
   }
 }
 
-// Fetch all active Poker Now games from the database
-app.get("/poker", addUser, async (req, res) => {
-  const username = req.user ? req.user.username : null; // Fallback to null if no user in session
-  const sql =
-  "SELECT username, displayname, twitchDisplayname, discordUsername, avatar, email, points_balance FROM users WHERE username = ?";
-  try {
-    const results = await getQuery(sql, [username]);
-    const user = results[0];
-    const discordUsername = user ? user.discordUsername : null;
-      const games = await getQuery(`
-          SELECT p.pokerNowId, p.url, p.blinds, p.date_created, u.displayname, u.username 
-          FROM poker_now_games p 
-          JOIN users u ON p.userId = u.userId
-          ORDER BY p.date_created DESC
-      `);
-      res.render("activeGames", { games, user: username, discordUsername });
-  } catch (error) {
-      console.error("Failed to load games:", error.message);
-      res.status(500).send("Failed to load games.");
-  }
-});
+// /poker is Pepe's Hold'em table page now (tables.js); it still lists any Discord PokerNow tables.
 
 // Function to clean up old Poker Now games (older than 12 hours)
 async function cleanUpOldGames() {

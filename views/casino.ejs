@@ -1,0 +1,222 @@
+<%- include('layout', { title: title, user: user}) %>
+<style>
+  .cz { max-width: 1040px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; }
+  .cz a { color: #81c784; }
+  .cz h1 { text-align: center; margin: 6px 0 4px; }
+  .cz .sub { text-align: center; color: #9a9; margin: 0 0 14px; }
+  .cz h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 30px 0 10px; line-height: 1.6; }
+  .cz h3 { margin: 16px 0 6px; font-size: 15px; color: #fff; }
+  .cz .info { color: #999; font-size: 13px; line-height: 1.6; }
+  .cz .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; }
+  .cz .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; }
+  .cz .warn { background: #241010; border: 1px solid #7a2f2f; border-radius: 8px; padding: 10px 12px; color: #f2b8b8; font-size: 14px; }
+  .cz code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; font-size: 13px; color: #e8e8e8; }
+  .cz .tabs { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+  .cz .tabs a { background: #1a1a1a; color: #ccc; border: 1px solid #2a2a2a; border-radius: 999px; padding: 6px 14px; text-decoration: none; font-size: 14px; }
+  .cz .tabs a[aria-current=page] { background: #4caf50; border-color: #4caf50; color: #fff; }
+  .cz .status { min-height: 22px; text-align: center; font-size: 14px; color: #cfe8cf; margin: 4px 0 8px; }
+  .cz .status.bad { color: #ff9a9a; }
+
+  /* ── the felt ── */
+  .felt-wrap { position: relative; padding: 92px 76px 104px; }
+  .felt-wrap.bjw { padding-top: 20px; padding-bottom: 120px; }
+  .felt { position: relative; aspect-ratio: 2.05 / 1; border-radius: 999px; background:
+            radial-gradient(ellipse at 50% 40%, #1f7a43 0%, #145c31 55%, #0d4023 100%);
+          box-shadow: inset 0 0 0 10px #4a2c16, inset 0 0 0 12px #2a180b, inset 0 0 60px rgba(0,0,0,.55), 0 14px 40px rgba(0,0,0,.6); }
+  .felt-c { position: absolute; inset: 18% 16%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; }
+  .felt .ttl { color: rgba(255,255,255,.55); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; }
+  .felt .msg { color: #fff; font-size: 15px; text-shadow: 0 1px 2px #000; }
+  .board { display: flex; gap: 6px; justify-content: center; min-height: calc(var(--cw) * 1.4); }
+  .slot { width: var(--cw); height: calc(var(--cw) * 1.4); border-radius: 6px; border: 1px dashed rgba(255,255,255,.22); }
+  .pot { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.45); color: #ffd700; border-radius: 999px; padding: 4px 12px;
+         font-weight: bold; font-variant-numeric: tabular-nums; }
+  .pots { color: rgba(255,255,255,.7); font-size: 12px; }
+  .chip { display: inline-block; width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle, #ffd700 0 35%, #c62828 36% 60%, #fff 61% 70%, #c62828 71%);
+          box-shadow: 0 1px 2px #000; flex: none; }
+
+  .cz { --cw: 42px; }
+  .cd { position: relative; display: inline-flex; flex-direction: column; justify-content: center; align-items: center; width: var(--cw); height: calc(var(--cw) * 1.4);
+        border-radius: 6px; background: linear-gradient(160deg, #fff 0%, #f1f1f1 100%); color: #111; box-shadow: 0 2px 4px rgba(0,0,0,.5); flex: none; font-weight: bold; line-height: 1; }
+  .cd .cr { position: absolute; top: 3px; left: 4px; font-size: calc(var(--cw) * .32); }
+  .cd .cs { font-size: calc(var(--cw) * .55); margin-top: calc(var(--cw) * .18); }
+  .cd.red { color: #c62828; }
+  .cd.back { background: repeating-linear-gradient(45deg, #b71c1c 0 4px, #d32f2f 4px 8px); border: 2px solid #fff; box-sizing: border-box; }
+  .cd.back::after { content: ""; position: absolute; inset: 4px; border: 1px solid rgba(255,255,255,.55); border-radius: 3px; }
+  .cd.sm { --cw: 30px; }
+  .cd.dim { filter: grayscale(.8) brightness(.55); }
+  @media (prefers-reduced-motion: no-preference) {
+    .cd.new { animation: deal .32s ease-out both; }
+    @keyframes deal { from { transform: translateY(-14px) rotate(-6deg); opacity: 0; } to { transform: none; opacity: 1; } }
+    .seat.turn { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { box-shadow: 0 0 0 3px #ffd700, 0 0 22px rgba(255,215,0,.55); } }
+  }
+
+  .seat { position: absolute; transform: translate(-50%, -50%); width: 132px; background: rgba(12,12,12,.92); border: 1px solid #333; border-radius: 10px;
+          padding: 6px 8px 7px; text-align: center; box-shadow: 0 6px 16px rgba(0,0,0,.5); z-index: 2; }
+  .seat.me { border-color: #4caf50; box-shadow: 0 0 0 1px #4caf50, 0 6px 16px rgba(0,0,0,.5); }
+  .seat.turn { border-color: #ffd700; box-shadow: 0 0 0 2px #ffd700; }
+  .seat.winner { border-color: #ffd700; background: #2a2208; }
+  .seat.folded, .seat.waiting { opacity: .62; }
+  .seat .nm { font-weight: bold; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seat .st { font-size: 12px; color: #ffd700; font-variant-numeric: tabular-nums; }
+  .seat .tags { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; min-height: 0; margin-top: 2px; }
+  .tag { font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 4px; background: #333; color: #ddd; text-transform: uppercase; letter-spacing: .03em; }
+  .tag.d { background: #fff; color: #111; border-radius: 50%; width: 16px; height: 16px; padding: 0; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; }
+  .tag.gold { background: #ffd700; color: #111; } .tag.red { background: #c62828; color: #fff; } .tag.green { background: #2e7d32; color: #fff; }
+  .seat .hc { display: flex; gap: 3px; justify-content: center; margin: 5px 0 2px; --cw: 32px; }
+  .seat .hn { font-size: 11px; color: #ffd700; }
+  .seat .bet { position: absolute; left: 50%; transform: translateX(-50%); top: -26px; display: inline-flex; align-items: center; gap: 4px; background: rgba(0,0,0,.7);
+               color: #fff; font-size: 12px; padding: 2px 8px 2px 4px; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .seat.top .bet { top: auto; bottom: -26px; }
+  .tbar { height: 4px; background: #333; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+  .tbar i { display: block; height: 100%; background: #ffd700; width: 100%; transition: width .25s linear; }
+  .tbar.low i { background: #e53935; }
+  .clock { font-variant-numeric: tabular-nums; }
+  .bjh { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px 0; border-radius: 6px; }
+  .bjh.cur { background: rgba(255,215,0,.12); outline: 1px solid rgba(255,215,0,.5); }
+  .bjh .cards { display: flex; justify-content: center; --cw: 32px; }
+  .bjh .cards .cd + .cd { margin-left: -12px; }
+  .bjh .v { font-size: 12px; color: #ddd; }
+  .dealer .cards { display: flex; gap: 6px; justify-content: center; }
+
+  /* ── controls ── */
+  .ctl { background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; margin-top: 12px; }
+  .ctl .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ctl .lbl { color: #999; font-size: 13px; }
+  .cz button.b { min-height: 44px; min-width: 88px; padding: 0 16px; border-radius: 8px; border: 0; font: inherit; font-weight: bold; font-size: 15px; cursor: pointer; color: #fff; background: #3a3a3a; }
+  .cz button.b.go { background: #2e7d32; } .cz button.b.warn { background: #b26a00; } .cz button.b.stop { background: #8e2424; } .cz button.b.gold { background: #c9a400; color: #111; }
+  .cz button.b.ghost { background: transparent; border: 1px solid #444; color: #ccc; }
+  .cz button.b.mini { min-height: 34px; min-width: 0; padding: 0 10px; font-size: 13px; }
+  .cz button.b:disabled { opacity: .45; cursor: not-allowed; }
+  .cz button.b:focus-visible, .cz input:focus-visible, .cz select:focus-visible, .cz .tabs a:focus-visible { outline: 3px solid #ffd700; outline-offset: 2px; }
+  .cz input[type=number], .cz input[type=text], .cz select { background: #0d0d0d; color: #eee; border: 1px solid #3a3a3a; border-radius: 8px; padding: 0 10px; min-height: 44px;
+        font: inherit; font-size: 15px; box-sizing: border-box; max-width: 100%; }
+  .cz input[type=number] { width: 140px; }
+  .cz input[type=range] { flex: 1 1 200px; min-width: 160px; accent-color: #ffd700; height: 32px; }
+  .raise { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #0b0b0b; border: 1px solid #222; border-radius: 10px; padding: 8px; }
+  .mycards { display: flex; gap: 6px; align-items: center; --cw: 46px; }
+
+  /* ── lobby, log ── */
+  .grid2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+  .log { max-height: 280px; overflow-y: auto; font-size: 13px; display: grid; gap: 2px; }
+  .log div { padding: 4px 2px; border-bottom: 1px solid #1a1a1a; color: #ccc; }
+  .log time { color: #666; font-size: 11px; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .acts div { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 2px 6px; padding: 5px 0; border-bottom: 1px solid #1a1a1a; font-size: 13px; }
+  .acts .lab { font-family: monospace; color: #aaa; } .acts .m { grid-column: 2; } .acts .failed .m { color: #ff9a9a; }
+  .tlist { display: grid; gap: 8px; }
+  .trow { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; align-items: center; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; }
+  .trow b { color: #fff; }
+  form.start { display: grid; gap: 10px; }
+  form.start .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .result { background: rgba(0,0,0,.55); border: 1px solid #ffd700; border-radius: 8px; padding: 6px 10px; color: #ffe57a; font-size: 13px; max-width: 100%; }
+  .howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .howto ul { margin: 6px 0; padding-left: 20px; color: #ccc; font-size: 14px; line-height: 1.65; }
+  .howto p { color: #ccc; font-size: 14px; line-height: 1.6; margin: 6px 0; }
+  .seats-list { display: none; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 760px) {
+    .cz { --cw: 34px; }
+    .felt-wrap, .felt-wrap.bjw { padding: 8px 0 0; }
+    .felt { aspect-ratio: auto; min-height: 210px; border-radius: 40px; }
+    .felt-c { position: static; padding: 26px 16px; }
+    .felt .seat { display: none; }
+    .seats-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+    .seats-list .seat { position: relative; transform: none; width: auto; left: auto; top: auto; }
+    .seats-list .seat .bet { position: static; transform: none; display: inline-flex; margin-top: 4px; }
+    .grid2 { grid-template-columns: minmax(0, 1fr); }
+    .cz input[type=number] { width: 120px; }
+    .cz button.b { min-width: 0; flex: 1 1 auto; }
+  }
+</style>
+<div class="cz" id="cz" data-focus="<%= focus %>" data-signed="<%= user ? 1 : 0 %>" data-table="<%= tableId || '' %>">
+  <h1><%= focus === 'holdem' ? "🃏 Texas Hold'em" : focus === 'bj' ? '🂡 Blackjack' : '🎰 Casino tables' %></h1>
+  <p class="sub">Pepe deals in Camfrog — play from chat or right here. Same table, same chips: PAT.</p>
+  <nav class="tabs" aria-label="Casino pages">
+    <a href="/casino"<%- focus === 'lobby' ? ' aria-current="page"' : '' %>>Lobby</a>
+    <a href="/poker"<%- focus === 'holdem' ? ' aria-current="page"' : '' %>>Texas Hold'em</a>
+    <a href="/blackjack"<%- focus === 'bj' ? ' aria-current="page"' : '' %>>Blackjack</a>
+  </nav>
+
+  <% if (!user) { %>
+    <p class="hint">You're watching. <a href="/login">Sign in</a> and link your Camfrog name to take a seat.</p>
+  <% } else if (!me || !me.camfrogUsername) { %>
+    <p class="hint">To play from here, link your Camfrog name: type <code>!verify</code> in a Camfrog room with Pepe. You play as that name — the same seat, balance and rules as in chat. Until then you can watch.</p>
+  <% } else if (me.casino_banned) { %>
+    <p class="warn">You're banned from the casino, so you can watch but not play.</p>
+  <% } else { %>
+    <p class="info" style="text-align:center">Playing as <b style="color:#fff"><%= me.camfrogUsername %></b> · balance <b style="color:#ffd700"><%= Math.round(Number(me.points_balance) || 0).toLocaleString() %> PAT</b> when the page loaded.</p>
+  <% } %>
+
+  <div class="status" id="cz-status" role="status" aria-live="polite"></div>
+  <section id="cz-live" aria-label="Live table"><div class="card"><p class="info" style="text-align:center;margin:0">Loading the table…</p></div></section>
+
+  <div class="grid2">
+    <section aria-labelledby="cz-lobby-h">
+      <h2 id="cz-lobby-h">TABLES</h2>
+      <div id="cz-lobby"></div>
+    </section>
+    <section aria-labelledby="cz-log-h">
+      <h2 id="cz-log-h">TABLE LOG</h2>
+      <div class="card"><div class="log" id="cz-log"><span class="info">Nothing yet.</span></div></div>
+      <div id="cz-acts-wrap" hidden>
+        <h2>YOUR MOVES</h2>
+        <div class="card acts" id="cz-acts"></div>
+      </div>
+    </section>
+  </div>
+
+  <h2 id="how">HOW TO PLAY</h2>
+  <div class="howto">
+    <%
+      const holdemCard = () => { %>
+      <div class="card">
+        <h3>🃏 Texas Hold'em (No-Limit cash game)</h3>
+        <p>In a Camfrog room with Pepe:</p>
+        <ul>
+          <li><code>!holdem start 25/50</code> opens a table (small/big blind; up to 5,000/10,000 — High Rollers can go bigger).</li>
+          <li><code>!sit 2000</code> buys in: 20–200 big blinds. Chips are PAT, 1:1, held by Pepe while you're seated. <code>!sit</code> again tops you up.</li>
+          <li><code>!holdem deal</code> starts a hand once two players have chips; after that the next hand deals itself 15 s after the last.</li>
+          <li>On your turn: <code>!check</code> <code>!call</code> <code>!bet 200</code> <code>!raise 600</code> (raise <i>to</i>) <code>!allin</code> <code>!fold</code>. You have 60 s; if time runs out you check, or fold and sit out after the hand.</li>
+          <li>Your two hole cards come by private message (<code>!cards</code> resends them).</li>
+          <li><code>!stand</code> cashes your chips back to PAT (after the hand if you're in one). <code>!holdem status</code> shows the table; the host or an admin can <code>!holdem end</code> it between hands.</li>
+        </ul>
+        <p>Up to 9 seats. A 2% rake comes off pots that reach a showdown and goes to the casino. A table with no hand running for 5 minutes closes and pays everyone out.</p>
+      </div>
+    <% }; const bjCard = () => { %>
+      <div class="card">
+        <h3>🂡 Blackjack (Pepe is the dealer)</h3>
+        <p>In a Camfrog room with Pepe:</p>
+        <ul>
+          <li><code>!blackjack start</code> (or <code>!bj start</code>) opens a table.</li>
+          <li><code>!bet 500</code> each round: 100–10,000 PAT (High Rollers have no cap). The first betting window is 30 s, then 10 s between rounds; <code>!bj deal</code> deals straight away. A bet placed mid-round is held for the next one.</li>
+          <li>On your turn: <code>!hit</code> <code>!stand</code> <code>!double</code> <code>!split</code>. When Pepe shows an Ace, <code>!insurance</code> costs half your bet and pays 2:1.</li>
+          <li><code>!autobet 500</code> re-bets every round (<code>!autobet off</code> stops). <code>!bj leave</code> leaves; the host or an admin can <code>!bj end</code>.</li>
+        </ul>
+        <p>6-deck shoe shuffled fresh every round, blackjack pays 3:2, Pepe hits soft 17, split up to 4 hands with doubling after a split, no surrender. 30 s per decision (time out = stand; three in a row and you're removed; three rounds without a bet and you're removed). The casino jackpot is the house bank: losing bets go into it and wins are paid from it, so a table only takes bets the jackpot can cover.</p>
+      </div>
+    <% }; %>
+    <% if (focus === 'bj') { bjCard(); holdemCard(); } else { holdemCard(); bjCard(); } %>
+    <div class="card">
+      <h3>🌐 Playing from this page</h3>
+      <ul>
+        <li>Sign in and link your Camfrog name (<code>!verify</code> in a room). You play <i>as</i> that name: same seat, same PAT balance, same limits, fees and timers as typing the commands in chat.</li>
+        <li>Your moves go to Pepe and land in a second or two; the room sees them like any chat move, and Camfrog players' moves show up here.</li>
+        <li>Your hole cards are shown only to you, once you're signed in. Nobody else can fetch them — not other players, not spectators.</li>
+        <li>Closing the tab doesn't stop the clock: the turn timer treats you exactly like an idle chat player.</li>
+        <li>Tables run in one Camfrog room at a time, and one at a time overall: Hold'em and Blackjack can't both be open, and neither can start while another Pepe game (a heist, trivia…) is running.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🎲 Fair dealing</h3>
+      <p>The deck lives only inside Pepe. Every hand (and every blackjack round) is shuffled from a fresh secret seed drawn from the operating system's random generator, and each deal is recorded so it can be audited afterwards. The website never sees cards that haven't been dealt — it only shows what's already on the table.</p>
+      <h3>💬 Discord</h3>
+      <p>Pepe's tables aren't on Discord. The Discord server has its own separate games: <code>!bj 500</code> in the #blackjack channel is a solo hand against the Discord dealer bot (up to 5,000 PAT; the High Roller role lifts that), and PokerNow tables in #poker use <code>/buyin</code> and <code>/cashout</code>.</p>
+      <% if (focus === 'holdem' && pokerNow && pokerNow.length) { %>
+        <p class="info">Discord PokerNow tables from the last 12 hours:</p>
+        <ul><% pokerNow.forEach((g) => { %><li><a href="<%= g.url %>" rel="noopener"><%= g.blinds %></a> — started by <%= g.displayname || g.username %></li><% }) %></ul>
+      <% } %>
+    </div>
+  </div>
+</div>
+<script src="/public/js/casino.js?v=4"></script>

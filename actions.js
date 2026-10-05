@@ -7,6 +7,8 @@
 //
 // Forms post to /act with:
 //   kind   cmd | poll.vote | poll.create | poll.end
+//          (kind "table" — Hold'em/Blackjack seat actions — is queued by tables.js from /api/tables/act
+//          and claimed on its own fast lane, /api/tables/claim; the claim below never hands it out)
 //   cmd    for kind=cmd: market | pool | wager | bounty | stash | loan | lotto
 //   a0..a19  the words, in order (empty ones are skipped). For kind=cmd they're joined into the
 //          command's arguments, e.g. cmd=wager a0=@bob a1=10k a2="Lakers win" a3=judge a4=@carol
@@ -88,10 +90,12 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     await ready;
     const now = Date.now();
-    const rows = await getQuery(`SELECT * FROM pepe_actions WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
+    const rows = await getQuery(`SELECT * FROM pepe_actions WHERE kind != 'table' AND (status = 'pending' OR (status = 'claimed' AND claimed < ?))
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
     for (const a of rows) await runQuery("UPDATE pepe_actions SET status = 'claimed', claimed = ?, updated = ? WHERE id = ?", [now, now, a.id]);
-    res.json({ actions: rows.map((a) => {
+    // tells Pepe to wake his table fast lane (tables.js) when no table is open yet, e.g. a web "start"
+    const tp = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'table' AND status = 'pending'");
+    res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
       return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin };
