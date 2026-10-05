@@ -71,6 +71,10 @@
   .pf .avs-frame.empty { border-style: dashed; }
   .pf .avs-ph { font-size: 64px; opacity: .35; filter: grayscale(.4); }
   .pf .avs-info { min-width: 0; }
+  .pf .avs-regen { margin-top: 10px; }
+  .pf .avs-regen summary { display: inline-block; cursor: pointer; list-style: none; }
+  .pf .avs-regen summary::-webkit-details-marker { display: none; }
+  .pf .avs-regen p { margin: 8px 0; max-width: 60ch; }
   .pf .avs-info h2 { margin-bottom: 6px; }
   .pf .avs-who { font-size: 18px; font-weight: bold; overflow-wrap: anywhere; }
   .pf .avs-who .chip { font-size: 12px; font-weight: normal; vertical-align: 2px; margin-left: 4px; }
@@ -202,6 +206,22 @@
         <% if (isMe) { %><a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Change look</a><% } else { %><a class="btn" href="/cosmetics">🎨 GTF wardrobe</a><% } %>
         <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">🥷 Heist sheet</a><% } %>
       </div>
+      <% if (isMe && av.svg && camfrog) { %>
+        <details class="avs-regen">
+          <summary class="btn">🎲 New avatar…</summary>
+          <p class="muted">Pepe rolls you a brand-new pixel avatar for <b>20,000 PAT</b> (the same as <code>!avatar regen</code> in chat). Your equipped cosmetics stay on; your current face is gone for good.</p>
+          <form method="post" action="/act">
+            <input type="hidden" name="kind" value="cmd">
+            <input type="hidden" name="cmd" value="avatar">
+            <input type="hidden" name="a0" value="regen">
+            <input type="hidden" name="tag" value="avatar">
+            <input type="hidden" name="label" value="New GTF avatar">
+            <input type="hidden" name="back" value="/u/<%= encodeURIComponent(usernameProfile) %>/profile">
+            <button class="btn" type="submit">Yes, roll a new one</button>
+          </form>
+        </details>
+      <% } %>
+      <% if (isMe && typeof avatarActs !== 'undefined') { %><%- include('partials/actions', { acts: avatarActs, msg: avatarMsg }) %><% } %>
     </div>
   </section>
   <% };

@@ -22,7 +22,7 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   status TEXT NOT NULL DEFAULT 'pending', message TEXT, created INTEGER, claimed INTEGER, updated INTEGER)`).catch(() => {});
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
-const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto"]);
+const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar"]);
 
 const clean = (s, n = 300) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 const safeBack = (b) => (/^\/[A-Za-z0-9/_?=&.%-]*$/.test(String(b || "")) && !String(b).startsWith("//") ? String(b) : "/");

@@ -1269,6 +1269,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         // section order + visibility (profilelayout.js)
         layout: L,
         previewVisitor: preview,
+        // the owner's recent "New avatar" requests (website action queue, tag "avatar")
+        avatarActs: isOwner && !preview ? await require("./actions").recentFor(req.user.userId, "avatar", 3) : [],
+        avatarMsg: isOwner && !preview ? String(req.query.msg || "").slice(0, 200) : "",
         og: og.forProfile(req, user)
       });
     } else {
