@@ -1,0 +1,285 @@
+/* Gold wheel page (views/wheel.ejs) - arcade cabinet layout + coin-op slot.
+   Scoped under .aw so it never touches the public/OBS wheel (publicwheel.ejs uses wheel.css). */
+
+.aw {
+  --aw-bg: #0F0F11;
+  --aw-panel: #141419;
+  --aw-panel-2: #1b1b22;
+  --aw-line: #2c2c36;
+  --aw-text: #e9e9ef;
+  --aw-dim: #9a9aab;
+  --aw-cyan: #4AFFEF;
+  --aw-pink: #D42CCA;
+  --aw-gold: #FFC600;
+  --aw-gold-2: #F2AE2E;
+  --aw-red: #ff3b3b;
+  --aw-green: #3CFF8F;
+  --aw-pixel: 'Press Start 2P', monospace;
+  --aw-mono: 'VT323', 'Press Start 2P', monospace;
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  margin: 0 auto;
+  padding: 18px 16px 48px;
+  color: var(--aw-text);
+  font-family: var(--aw-mono);
+  font-size: 20px;
+  line-height: 1.25;
+  position: relative;
+}
+.aw *, .aw *::before, .aw *::after { box-sizing: border-box; }
+
+/* Faint CRT scanlines over the whole cabinet. */
+.aw::before {
+  content: '';
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(255,255,255,.025) 0 1px, transparent 1px 3px);
+  border-radius: 18px;
+  z-index: 0;
+}
+.aw > * { position: relative; z-index: 1; }
+
+.aw-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+         clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.aw :focus-visible { outline: 3px solid var(--aw-cyan); outline-offset: 3px; }
+
+/* ---------- Marquee ---------- */
+.aw-marquee { text-align: center; margin: 4px 0 18px; }
+.aw-marquee .aw-kicker { font-family: var(--aw-pixel); font-size: 11px; letter-spacing: 3px; color: var(--aw-cyan);
+         text-shadow: 0 0 6px var(--aw-cyan); margin: 0 0 14px; }
+.aw-neon { font-family: var(--aw-pixel); font-weight: 400; font-size: clamp(22px, 5vw, 38px); letter-spacing: .3em;
+           margin: 0 0 12px; padding: 0; color: var(--aw-gold); line-height: 1.2; text-transform: none;
+           text-shadow: 0 0 4px #FFD5FF, 0 0 12px #FFD5FF, 0 0 28px var(--aw-pink), 0 0 60px var(--aw-pink); }
+.aw-neon .f-slow { animation: aw-flicker 3s linear infinite; }
+.aw-neon .f-fast { animation: aw-flicker 1.1s linear infinite; }
+@keyframes aw-flicker {
+  0%, 19.9%, 22%, 62.9%, 64%, 64.9%, 70%, 100% { opacity: .99; }
+  20%, 21.9%, 63%, 63.9%, 65%, 69.9% { opacity: .35; }
+}
+.aw-pot { display: inline-flex; align-items: baseline; gap: 12px; padding: 8px 18px; border: 2px solid var(--aw-gold);
+          border-radius: 10px; background: rgba(255,198,0,.06); box-shadow: 0 0 18px rgba(255,198,0,.25), inset 0 0 14px rgba(255,198,0,.12); }
+.aw-pot .lbl { font-family: var(--aw-pixel); font-size: 11px; color: var(--aw-dim); letter-spacing: 2px; }
+.aw-pot .val { font-family: var(--aw-pixel); font-size: clamp(16px, 3.4vw, 24px); color: var(--aw-gold);
+               text-shadow: 0 0 8px var(--aw-gold); }
+
+/* ---------- Stat tiles ---------- */
+.aw-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 22px; }
+.aw-stat { position: relative; background: var(--aw-panel); border: 1px solid var(--aw-line); border-radius: 12px;
+           padding: 10px 12px 12px; min-width: 0; }
+.aw-stat .k { display: block; font-family: var(--aw-pixel); font-size: 9px; letter-spacing: 1.5px; color: var(--aw-dim);
+              margin-bottom: 8px; }
+.aw-stat .v { display: block; font-size: 30px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aw-stat.player .v { color: var(--aw-cyan); text-shadow: 0 0 8px rgba(74,255,239,.6); }
+.aw-stat.bal .v    { color: var(--aw-gold); text-shadow: 0 0 8px rgba(255,198,0,.55); }
+.aw-stat.cost .v   { color: #ff7b7b; text-shadow: 0 0 8px rgba(255,80,80,.45); }
+.aw-stat.spins .v  { color: var(--aw-green); text-shadow: 0 0 8px rgba(60,255,143,.45); }
+
+/* Floating +PAT / -PAT / +XP pops from script.js (they're inserted next to the value). */
+.aw .arcade-animation, .aw .arcade-animation-neg, .aw .arcade-animation-xp {
+  position: absolute; right: 10px; top: 6px; margin: 0; font-family: var(--aw-pixel); font-size: 11px;
+  pointer-events: none; animation: aw-float 2.4s ease-out forwards !important; white-space: nowrap; }
+.aw .arcade-animation     { color: var(--aw-gold); text-shadow: 0 0 6px var(--aw-gold); }
+.aw .arcade-animation-neg { color: var(--aw-red); text-shadow: 0 0 6px var(--aw-red); }
+.aw .arcade-animation-xp  { color: var(--aw-cyan); text-shadow: 0 0 6px var(--aw-cyan); top: -4px; }
+@keyframes aw-float { 0% { opacity: 0; transform: translateY(8px); } 12% { opacity: 1; transform: none; }
+                      75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+
+/* ---------- Main stage: wheel + coin-op ---------- */
+.aw-stage { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 26px; align-items: center; }
+
+.aw-wheel-wrap { display: flex; justify-content: center; min-width: 0; }
+.aw-wheel-frame { position: relative; width: min(540px, 100%); aspect-ratio: 1; padding: 20px; border-radius: 50%;
+                  background: radial-gradient(circle, #1a1220 60%, #0c0a10 100%);
+                  box-shadow: 0 0 0 3px #2a2030, 0 0 40px rgba(212,44,202,.25), inset 0 0 30px rgba(0,0,0,.8);
+                  container-type: inline-size; --r: calc(50cqw + 10px); }
+/* Marquee bulbs around the rim (generated in the view). */
+.aw-bulbs { position: absolute; inset: 0; pointer-events: none; }
+.aw-bulbs i { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%;
+              background: #ffe9a6; box-shadow: 0 0 6px 2px rgba(255,210,90,.75);
+              transform: rotate(var(--a)) translateY(calc(-1 * var(--r))); animation: aw-bulb 1.2s steps(1) infinite; }
+.aw-bulbs i:nth-child(odd) { animation-delay: .6s; }
+@keyframes aw-bulb { 0% { opacity: 1; } 50% { opacity: .25; } }
+.aw-wheel-frame.spinning .aw-bulbs i { animation-duration: .3s; }
+.aw-wheel-frame.won .aw-bulbs i { background: #b7fff0; box-shadow: 0 0 8px 3px rgba(74,255,239,.85); }
+
+.aw .wheel-container { position: relative; width: 100%; height: auto; aspect-ratio: 1; margin: 0; top: 0; text-align: center;
+                       container-type: inline-size; }
+.aw #wheelCanvas { display: block; width: 100%; height: 100%; border: 5px solid var(--aw-gold-2); border-radius: 50%;
+                   box-shadow: 0 0 22px rgba(242,174,46,.35); }
+.aw #arrow { position: absolute; top: 0; left: 50%; transform: translate(-50%, -38%); width: 0; height: 0;
+             border-left: 18px solid transparent; border-right: 18px solid transparent; border-top: 30px solid var(--aw-gold-2);
+             filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); z-index: 100; }
+.aw #centerImage { position: absolute; top: 50%; left: 50%; width: 19%; height: 19%; transform: translate(-50%, -50%);
+                   border-radius: 50%; z-index: 5; box-shadow: 0 0 0 4px #0c0a10, 0 0 14px rgba(255,198,0,.5); background: #0c0a10; }
+.aw #resultContainer { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+                       border-radius: 50%; z-index: 110; font-family: var(--aw-pixel); }
+.aw #resultText { color: var(--aw-gold); font-size: clamp(24px, 12.5cqw, 76px); padding: 10px; text-align: center;
+                  text-shadow: 0 0 10px var(--aw-gold), 0 4px 0 #6b3d00; }
+
+/* ---------- Coin-op panel ---------- */
+.aw-coinop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px;
+             background: linear-gradient(180deg, #1d1720, #121016); border: 2px solid #3a2b3e; border-radius: 16px;
+             padding: 16px 16px 18px; box-shadow: inset 0 0 0 4px #0d0b10, 0 10px 30px rgba(0,0,0,.45); }
+
+/* Credit LED readout */
+.aw-credit { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 6px 12px;
+             background: #070507; border: 2px solid #2b1a1a; border-radius: 6px;
+             font-family: var(--aw-mono); font-size: 30px; line-height: 1; color: #ff3131; letter-spacing: 2px;
+             text-shadow: 0 0 6px rgba(255,49,49,.85); }
+.aw-credit .n { font-variant-numeric: tabular-nums; }
+.aw-credit.tick { animation: aw-credit .5s steps(2) 2; }
+@keyframes aw-credit { 50% { color: #fff; text-shadow: 0 0 12px #ff3131, 0 0 22px #ff3131; } }
+
+/* The coin door: price plate + lit slot. */
+.aw-door { position: relative; width: 100%; padding: 14px 12px 12px; border-radius: 10px; text-align: center;
+           background: linear-gradient(180deg, #2a2a30, #1a1a1f); border: 3px solid #4b4b55;
+           box-shadow: inset 0 2px 0 rgba(255,255,255,.08), inset 0 -3px 0 rgba(0,0,0,.4); }
+.aw-plate { display: grid; gap: 4px; padding: 10px 6px; border-radius: 6px; background: #0b0b0d; border: 2px solid #c8321f;
+            font-family: var(--aw-pixel); color: #e04126; text-shadow: 0 0 6px rgba(224,65,38,.5); }
+.aw-plate .p { font-size: 20px; }
+.aw-plate .u { font-size: 10px; letter-spacing: 3px; }
+.aw-plate .ins { font-size: 9px; letter-spacing: 1px; margin-top: 4px; color: var(--aw-gold); text-shadow: 0 0 6px var(--aw-gold);
+                 animation: aw-blink 1s steps(1) infinite; }
+@keyframes aw-blink { 50% { opacity: 0; } }
+.aw-coinop.busy .aw-plate .ins { animation: none; opacity: .35; }
+
+/* The slot: a horizontal slit with a lit bezel. The drop-clip sits above the slit line so a coin
+   falling through it disappears exactly at the slit. */
+.aw-slot-area { position: relative; height: 64px; margin-top: 8px; }
+.aw-dropclip { position: absolute; left: -40px; right: -40px; top: -260px; bottom: 26px; overflow: hidden; pointer-events: none; z-index: 2; }
+.aw-slot { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); width: 104px; height: 24px; border-radius: 6px;
+           background: linear-gradient(180deg, #5b5b66, #34343c); border: 2px solid #6e6e7a;
+           box-shadow: 0 0 0 3px #1a1a1f, 0 0 16px var(--slot-glow, rgba(255,140,40,.55)); transition: box-shadow .2s; }
+.aw-slot::before { content: ''; position: absolute; left: 12px; right: 12px; top: 8px; height: 5px; border-radius: 3px;
+                   background: var(--slot-light, #ff8a26); box-shadow: 0 0 8px 2px var(--slot-light, #ff8a26);
+                   animation: aw-slotpulse 1.6s ease-in-out infinite; }
+@keyframes aw-slotpulse { 50% { opacity: .55; } }
+.aw-slot.ok   { --slot-light: var(--aw-green); --slot-glow: rgba(60,255,143,.75); }
+.aw-slot.bad  { --slot-light: var(--aw-red);   --slot-glow: rgba(255,59,59,.85); animation: aw-shake .35s linear 1; }
+.aw-slot.ok::before, .aw-slot.bad::before { animation: none; }
+@keyframes aw-shake { 25% { transform: translateX(calc(-50% - 4px)); } 75% { transform: translateX(calc(-50% + 4px)); } }
+
+/* A pixel-ish gold PAT coin, used by the button and the flying coin. */
+.aw-coin { --s: 56px; width: var(--s); height: var(--s); border-radius: 50%; display: grid; place-items: center;
+           background: radial-gradient(circle at 35% 30%, #fff6b0 0 12%, #ffd84a 30%, #f2a90f 68%, #b86f00 100%);
+           box-shadow: inset 0 0 0 calc(var(--s) * .06) #ffe680, inset 0 0 0 calc(var(--s) * .11) #c47f00,
+                       inset 0 -3px 0 calc(var(--s) * .11) #a35f00, 0 3px 0 #7a4600, 0 0 14px rgba(255,198,0,.45);
+           font-family: var(--aw-pixel); font-size: calc(var(--s) * .2); color: #7a4600; text-shadow: 0 1px 0 #ffe98a; }
+.aw-flycoin { position: absolute; left: 0; top: 0; z-index: 30; pointer-events: none; will-change: transform; visibility: hidden; }
+
+/* The coin button itself */
+.aw-coinbtn { appearance: none; -webkit-appearance: none; border: 0; background: none; padding: 0; margin: 0; cursor: pointer;
+              display: grid; justify-items: center; gap: 10px; color: var(--aw-text); font: inherit; }
+.aw-coinbtn .aw-coin { --s: 92px; transition: transform .12s ease, filter .12s ease; }
+.aw-coinbtn:hover .aw-coin { transform: translateY(-3px) rotate(-6deg); filter: brightness(1.08); }
+.aw-coinbtn:active .aw-coin { transform: translateY(2px) scale(.96); }
+.aw-coinbtn .cap { font-family: var(--aw-pixel); font-size: 11px; letter-spacing: 1px; color: var(--aw-gold); text-shadow: 0 0 6px rgba(255,198,0,.6); }
+.aw-coinbtn .sub { font-size: 18px; color: var(--aw-dim); margin-top: -6px; }
+.aw-coinbtn:focus-visible { outline: none; }
+.aw-coinbtn:focus-visible .aw-coin { outline: 3px solid var(--aw-cyan); outline-offset: 5px; }
+.aw-coinbtn.spent .aw-coin { opacity: .25; transform: none; }
+.aw-coinbtn[aria-disabled="true"] { cursor: progress; }
+.aw-coinbtn[aria-disabled="true"]:hover .aw-coin { transform: none; filter: none; }
+
+.aw-status { min-height: 2.6em; width: 100%; text-align: center; font-size: 20px; color: var(--aw-dim); }
+.aw-status.err { color: #ff8080; }
+.aw-status.ok  { color: var(--aw-green); }
+.aw-status.win { color: var(--aw-gold); }
+.aw-status a { color: var(--aw-cyan); }
+
+.aw-tools { display: flex; gap: 8px; width: 100%; }
+.aw-tool { flex: 1; appearance: none; border: 1px solid var(--aw-line); background: var(--aw-panel-2); color: var(--aw-text);
+           border-radius: 8px; padding: 8px 6px; font-family: var(--aw-pixel); font-size: 9px; letter-spacing: 1px; cursor: pointer; }
+.aw-tool:hover { border-color: #4a4a58; background: #23232c; }
+
+/* ---------- Level bar ---------- */
+.aw-level { margin: 26px auto 0; max-width: 640px; text-align: center; }
+.aw-level .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; position: relative; }
+.aw #userLevel { font-family: var(--aw-pixel); font-size: 12px; color: var(--aw-cyan); text-shadow: 0 0 6px var(--aw-pink); }
+.aw .level-info { position: relative; font-size: 20px; color: var(--aw-dim); }
+.aw .level-bar { width: 100%; margin: 0; height: 14px; background: #0b0b0e; border: 2px solid #2d2d38; border-radius: 4px; overflow: hidden; }
+.aw .level-progress { height: 100%; max-width: 100%;
+                      background: repeating-linear-gradient(90deg, var(--aw-cyan) 0 10px, #29d6c8 10px 12px);
+                      box-shadow: 0 0 10px rgba(74,255,239,.6); transition: width .6s ease; }
+
+/* ---------- Boards: prizes + this session ---------- */
+.aw-boards { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; margin-top: 28px; }
+.aw-board { background: var(--aw-panel); border: 1px solid var(--aw-line); border-radius: 12px; padding: 14px 14px 10px; min-width: 0; }
+.aw-board h2 { font-family: var(--aw-pixel); font-size: 12px; font-weight: 400; letter-spacing: 2px; color: var(--aw-gold);
+               margin: 0 0 12px; padding: 0; text-transform: none; }
+.aw-board .note { font-size: 17px; color: var(--aw-dim); margin: 8px 0 2px; }
+.aw-board .note a { color: var(--aw-cyan); }
+.aw-table { width: 100%; border-collapse: collapse; font-size: 20px; }
+.aw-table th { font-family: var(--aw-pixel); font-weight: 400; font-size: 8px; letter-spacing: 1px; color: var(--aw-dim);
+               text-align: left; padding: 0 6px 8px; border-bottom: 1px solid var(--aw-line); }
+.aw-table td { padding: 5px 6px; border-bottom: 1px dashed #24242c; white-space: nowrap; }
+.aw-table tr:last-child td { border-bottom: 0; }
+.aw-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.aw-table .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 8px; vertical-align: 1px; }
+.aw-table tr.jp td { color: var(--aw-gold); text-shadow: 0 0 6px rgba(255,198,0,.5); }
+.aw-table tr.zero td { color: #6f6f7d; }
+.aw-prizes { columns: 1; }
+.aw-log { list-style: none; margin: 0; padding: 0; font-size: 20px; }
+.aw-log li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 2px; border-bottom: 1px dashed #24242c; }
+.aw-log li:last-child { border-bottom: 0; }
+.aw-log .t { color: var(--aw-dim); }
+.aw-log .w { color: var(--aw-gold); }
+.aw-log .z { color: #6f6f7d; }
+.aw-log .jp { color: var(--aw-gold); text-shadow: 0 0 6px var(--aw-gold); }
+.aw-log .empty { color: var(--aw-dim); justify-content: center; border: 0; }
+
+/* ---------- Rules dialog ---------- */
+.aw-dialog { max-width: min(560px, calc(100vw - 32px)); width: 100%; padding: 0; border: 2px solid var(--aw-gold-2); border-radius: 14px;
+             background: #141419; color: var(--aw-text); box-shadow: 0 0 40px rgba(242,174,46,.3); }
+.aw-dialog::backdrop { background: rgba(0,0,0,.65); }
+.aw-dialog .in { padding: 20px 22px 18px; font-family: var(--aw-mono); font-size: 20px; line-height: 1.3; }
+.aw-dialog h2 { font-family: var(--aw-pixel); font-size: 14px; font-weight: 400; color: var(--aw-gold); margin: 0 0 14px; padding: 0;
+                letter-spacing: 2px; text-transform: none; }
+.aw-dialog ul { margin: 0 0 16px; padding-left: 20px; }
+.aw-dialog li { margin: 0 0 8px; }
+.aw-dialog a { color: var(--aw-cyan); }
+.aw-dialog .aw-close { float: right; appearance: none; border: 1px solid var(--aw-line); background: var(--aw-panel-2); color: var(--aw-text);
+                    border-radius: 8px; padding: 6px 12px; font-family: var(--aw-pixel); font-size: 10px; cursor: pointer; }
+
+/* Level-up takeover from script.js */
+.arcade-animation-container { position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%); width: min(500px, calc(100vw - 32px));
+  background: rgba(10,8,16,.94); border: 2px solid var(--aw-gold, #FFC600); padding: 22px; border-radius: 14px; text-align: center;
+  z-index: 1000; color: #fff; display: grid; gap: 18px; font-family: 'Press Start 2P', monospace; animation: aw-pop .45s ease-out forwards; }
+.arcade-animation-level-up { font-size: clamp(14px, 4vw, 22px); color: gold; line-height: 1.5; }
+.arcade-animation-bonus-points { font-size: clamp(11px, 3vw, 15px); color: lightgreen; line-height: 1.6; }
+.arcade-animation-frog-dance { width: 180px; height: auto; margin: 0 auto; }
+@keyframes aw-pop { from { opacity: 0; transform: translate(-50%, -50%) scale(.85); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 900px) {
+  .aw-stage { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .aw-coinop { max-width: 420px; width: 100%; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; align-items: center;
+               justify-items: center; column-gap: 14px; }
+  .aw-credit, .aw-status, .aw-tools { grid-column: 1 / -1; }
+  .aw-boards { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .aw { padding: 12px 12px 36px; font-size: 18px; }
+  .aw-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .aw-stat .v { font-size: 26px; }
+  .aw-wheel-frame { padding: 14px; --r: calc(50cqw + 7px); }
+  .aw-bulbs i { width: 6px; height: 6px; margin: -3px 0 0 -3px; }
+  .aw #arrow { border-left-width: 13px; border-right-width: 13px; border-top-width: 22px; }
+  .aw-coinbtn .aw-coin { --s: 78px; }
+  .aw-table { font-size: 18px; }
+}
+@media (max-width: 380px) {
+  .aw-coinop { grid-template-columns: 1fr; }
+  .aw-pot { padding: 8px 12px; gap: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-neon .f-slow, .aw-neon .f-fast, .aw-bulbs i, .aw-slot::before, .aw-plate .ins, .aw-credit.tick, .aw-slot.bad { animation: none !important; }
+  .aw .arcade-animation, .aw .arcade-animation-neg, .aw .arcade-animation-xp { animation: none !important; }
+  .aw-coinbtn .aw-coin, .aw .level-progress { transition: none; }
+  .arcade-animation-container { animation: none; }
+}

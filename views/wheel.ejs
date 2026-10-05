@@ -1,130 +1,136 @@
-<!-- views/wheel.ejs -->
+<!-- views/wheel.ejs - the gold wheel (logged-in). The public/OBS wheel is publicwheel.ejs. -->
 <%- include('layout', { title: 'Spin the Wheel' , user: user}) %>
-    <link rel="stylesheet" href="/public/css/wheel.css">
-    <!-- Modal -->
-    <div id="rulesModal" class="modal">
-        <div class="modal-content">
-            <div class="infopanel">
-                <span class="close">&times;</span>
-                <h2>Wheel Rules</h2>
-                <p>Welcome to the Spin the Wheel Game! Here are the rules:</p>
-                <ul>
-                    <li>Spin the wheel to win PAT based on where it stops.</li>
-                    <li>Each spin costs 5000 <a href='/info#PAT' class='infolink'>PAT</a>.</li>
-                    <li>Do not close the window until your spin is complete or it won't count and you will need to wait
-                        to spin again.</li>
-                    <li>If you are having issues, refresh the page.</li>
-                    <li>You can only spin one wheel at a time.</li>
-                    <li>You get <strong>10 spins per day for each of your levels</strong>. Want more? Buy
-                        <strong>+100 Daily Gold Spins</strong> in the <a href='/shop' class='infolink'>shop</a>. Your
-                        remaining spins for the day show on the <em>Spins Left</em> panel.</li>
-                    <li>Jackpots occur randomly and can significantly increase your points!</li>
-                </ul>
-            </div>
-        </div>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw1">
+
+<main class="aw" id="wheel">
+    <div class="aw-marquee">
+        <p class="aw-kicker">PATV ARCADE &middot; GOLD WHEEL</p>
+        <h1 class="aw-neon" aria-label="Jackpot"><span class="f-slow">J</span>A<span class="f-fast">C</span>KP<span class="f-slow">O</span><span class="f-fast">T</span></h1>
+        <div class="aw-pot"><span class="lbl">POT</span><span class="val">PAT <span id="jackpotTotal">…</span></span></div>
     </div>
-    <div id="wheel">
-        <div id="arcadeInfo">
-            <div class="arcade-text">Player<br><br><br>
-                <span id="usernameSpan">?</span>
-            </div>
-            <div id="jackpot">
-                <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span
-                        class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span
-                        class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
-            </div>
-            <div class="balance-display">Balance<br><br><br>
-                <span id="userBalance">Loading balance...</span>
 
-            </div>
-            <div class="balance-display">Spins Left<br><br><br>
-                <span id="spinsLeft">…</span>
-            </div>
-        </div>
+    <section class="aw-stats" aria-label="Your stats">
+        <div class="aw-stat player"><span class="k">PLAYER</span><span class="v" id="usernameSpan"><%= user %></span></div>
+        <div class="aw-stat bal"><span class="k">BALANCE</span><span class="v" id="userBalance">…</span></div>
+        <div class="aw-stat cost"><span class="k">COST / SPIN</span><span class="v">5,000</span></div>
+        <div class="aw-stat spins"><span class="k">SPINS LEFT</span><span class="v" id="spinsLeft">…</span></div>
+    </section>
 
-        <div class="wheel-container">
-            <canvas id="wheelCanvas" width="500" height="500"></canvas>
-            <div id="resultContainer">
-                <span id="resultText"></span>
-            </div>
-        </div>
-
-        <br>
-        <div class="wheelPanel">
-            <div id="spinButton">
-                <img id="coinslot" src="/public/coinslot.png"></img>
-                <div class="friendo">
-                    <div id="spinStatus" class="spin-status"></div>
-                    <%- include('friendo') %>
-
+    <section class="aw-stage">
+        <div class="aw-wheel-wrap">
+            <div class="aw-wheel-frame" id="wheelFrame">
+                <div class="aw-bulbs" aria-hidden="true">
+                    <% for (let i = 0; i < 28; i++) { %><i style="--a: <%= (i * 360 / 28).toFixed(2) %>deg"></i><% } %>
+                </div>
+                <div class="wheel-container">
+                    <canvas id="wheelCanvas" width="500" height="500" role="img" aria-label="Prize wheel"></canvas>
+                    <div id="resultContainer" aria-hidden="true">
+                        <span id="resultText"></span>
+                    </div>
                 </div>
             </div>
-            <div class="infoBtn">
-                <button id="infoBtn" class="link-button">ℹ️</button>   
+        </div>
+
+        <div class="aw-coinop" id="coinop">
+            <div class="aw-credit" aria-hidden="true"><span>CREDIT</span><span class="n" id="creditCount">00</span></div>
+
+            <div class="aw-door">
+                <div class="aw-plate">
+                    <span class="p">5000</span>
+                    <span class="u">PAT</span>
+                    <span class="ins">INSERT COIN</span>
+                </div>
+                <div class="aw-slot-area">
+                    <div class="aw-dropclip" id="dropClip"><div class="aw-coin aw-flycoin" id="clipCoin" aria-hidden="true">PAT</div></div>
+                    <div class="aw-slot" id="coinSlot" aria-hidden="true"></div>
+                </div>
             </div>
-            
-            <br>
+
+            <button type="button" class="aw-coinbtn" id="spinButton" aria-describedby="spinStatus">
+                <span class="aw-coin" aria-hidden="true">PAT</span>
+                <span class="cap">INSERT COIN</span>
+                <span class="sub">spin for 5,000 PAT</span>
+            </button>
+
+            <div class="aw-status" id="spinStatus" role="status" aria-live="polite">Press the coin to play.</div>
+
+            <div class="aw-tools">
+                <button type="button" class="aw-tool" id="muteBtn" aria-pressed="false">SOUND ON</button>
+                <button type="button" class="aw-tool" id="rulesBtn" aria-haspopup="dialog">RULES</button>
+            </div>
+
+            <div class="aw-coin aw-flycoin" id="flyCoin" aria-hidden="true">PAT</div>
         </div>
-    </div>
-    <div class="level-display">
-        <div><span id="userLevel">Level <%= level %></span></div>
-        <div class="level-bar">
-            <div class="level-progress" style="width: <%= (xp / xpForNextLevel(level) * 100) %>%;"></div>
+    </section>
+
+    <section class="aw-level level-display" aria-label="Level">
+        <div class="row">
+            <span id="userLevel">Level <%= level %></span>
+            <span class="level-info"><span id="userXP"><%= xp %> / <%= xpForNextLevel(level) %> XP</span></span>
         </div>
-        <div class="level-info">
-            <span id="userXP"><%= xp %> / <%= xpForNextLevel(level) %> XP</span>
+        <div class="level-bar"><div class="level-progress" style="width: <%= Math.min(100, (xp / xpForNextLevel(level) * 100)) %>%;"></div></div>
+    </section>
+
+    <section class="aw-boards">
+        <div class="aw-board">
+            <h2>PRIZE TABLE</h2>
+            <table class="aw-table">
+                <thead><tr><th scope="col">PRIZE (PAT)</th><th scope="col" class="num">ODDS</th></tr></thead>
+                <tbody id="prizeTable"><tr><td colspan="2">Loading…</td></tr></tbody>
+            </table>
+            <p class="note">Prizes grow 1% every two levels (up to level 20).</p>
         </div>
-    </div>
+        <div class="aw-board">
+            <h2>THIS SESSION</h2>
+            <ul class="aw-log" id="spinLog"><li class="empty">No spins yet.</li></ul>
+            <p class="note">Full history: <a href="/history">PAT history</a></p>
+        </div>
+    </section>
 
+    <dialog class="aw-dialog" id="rulesModal" aria-labelledby="rulesTitle">
+        <div class="in">
+            <button type="button" class="aw-close" id="rulesClose">CLOSE</button>
+            <h2 id="rulesTitle">WHEEL RULES</h2>
+            <ul>
+                <li>Each spin costs 5,000 <a href="/info#PAT">PAT</a>. Press the coin to insert it; the wheel decides your prize.</li>
+                <li>You get <strong>10 spins per day for each of your levels</strong>. Want more? Buy <strong>+100 Daily Gold Spins</strong> in the <a href="/shop">shop</a>.</li>
+                <li>Keep this window open until the wheel stops, or the spin won't count and you'll need to wait to spin again.</li>
+                <li>One wheel at a time. If something looks stuck, refresh the page.</li>
+                <li>Land the thin gold slice to roll for a share of the jackpot pot.</li>
+            </ul>
+        </div>
+    </dialog>
+</main>
 
+<script>
+    // Live "spins left today" counter (10/level/day + purchased boosts).
+    // Global so script.js / coinop.js can refresh it right after a spin.
+    window.wheelSpinsLeft = null;
+    function updateSpinsLeft() {
+        var el = document.getElementById('spinsLeft');
+        if (!el) return;
+        fetch('/api/u/<%= user %>/wheel/spins-left', { credentials: 'same-origin' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) { if (d) { window.wheelSpinsLeft = d.left; el.textContent = d.left + ' / ' + d.limit; } })
+            .catch(function () { });
+    }
+    updateSpinsLeft();
+    setInterval(updateSpinsLeft, 8000);
 
-    <script src="/public/jackpotroll.js?v=jproll1"></script>
-    <script src="/public/script.js?v=cap20"></script>
-    <script>
-        // Get the modal
-        var modal = document.getElementById('rulesModal');
-
-        // Get the button that opens the modal
-        var btn = document.getElementById('infoBtn');
-
-        // Get the <span> element that closes the modal
-        var span = document.getElementsByClassName("close")[0];
-
-        // When the user clicks the button, open the modal 
-        btn.onclick = function () {
-            modal.style.display = "block";
-        }
-
-        // When the user clicks on <span> (x), close the modal
-        span.onclick = function () {
-            modal.style.display = "none";
-        }
-
-        // When the user clicks anywhere outside of the modal, close it
-        window.onclick = function (event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-
-        // Check if the user has already visited
-        window.onload = function () {
-            if (!localStorage.getItem('hasVisited')) {
-                modal.style.display = "block";
-                localStorage.setItem('hasVisited', 'true');
-            }
-        }
-
-        // Live "spins left today" counter (10/level/day + purchased boosts).
-        // Exposed as a global so script.js can refresh it right after a spin.
-        function updateSpinsLeft() {
-            var el = document.getElementById('spinsLeft');
-            if (!el) return;
-            fetch('/api/u/<%= user %>/wheel/spins-left', { credentials: 'same-origin' })
-                .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (d) { if (d) el.textContent = d.left + ' / ' + d.limit; })
-                .catch(function () { });
-        }
-        updateSpinsLeft();
-        setInterval(updateSpinsLeft, 8000);
-    </script>
+    // Rules dialog: opens from the RULES button, and once on a player's first visit.
+    (function () {
+        var dlg = document.getElementById('rulesModal');
+        var open = function () { if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', ''); };
+        var close = function () { if (dlg.close) dlg.close(); else dlg.removeAttribute('open'); };
+        document.getElementById('rulesBtn').addEventListener('click', open);
+        document.getElementById('rulesClose').addEventListener('click', close);
+        dlg.addEventListener('click', function (e) { if (e.target === dlg) close(); });
+        var seen = true;
+        try { seen = !!localStorage.getItem('hasVisited'); localStorage.setItem('hasVisited', 'true'); } catch (e) { }
+        if (!seen) window.addEventListener('load', open);
+    })();
+</script>
+<script src="/public/jackpotroll.js?v=jproll1"></script>
+<script src="/public/script.js?v=aw1"></script>
+<script src="/public/js/coinop.js?v=aw1"></script>
