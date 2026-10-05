@@ -299,7 +299,7 @@ function register(app, { isBotToken, addUser }) {
 
   const page = (focus) => async (req, res) => {
     const tableId = req.params && req.params.id && /^[0-9a-f]{6,16}$/.test(req.params.id) ? req.params.id : null;
-    if (req.params && req.params.id && !tableId) return res.redirect("/casino");
+    if (req.params && req.params.id && !tableId) return res.redirect("/tables");
     try {
       let me = null;
       if (req.user && req.user.userId) {
@@ -323,7 +323,8 @@ function register(app, { isBotToken, addUser }) {
       res.status(500).send("Something went wrong.");
     }
   };
-  app.get("/casino", addUser, page("lobby"));
+  // the lobby: /tables (publicaccess.tv/casino exactly is redirected away at the CDN, so links use /tables)
+  app.get(["/tables", "/casino"], addUser, page("lobby"));
   app.get("/casino/t/:id", addUser, page("lobby"));            // one table's own page
   app.get("/poker", addUser, page("holdem"));
   app.get(["/blackjack", "/bj"], addUser, page("bj"));

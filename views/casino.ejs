@@ -133,7 +133,7 @@
   <h1><%= focus === 'holdem' ? "🃏 Texas Hold'em" : focus === 'bj' ? '🂡 Blackjack' : '🎰 Casino tables' %></h1>
   <p class="sub">Pepe deals in Camfrog — play from chat or right here. Same table, same chips: PAT.</p>
   <nav class="tabs" aria-label="Casino pages">
-    <a href="/casino"<%- focus === 'lobby' ? ' aria-current="page"' : '' %>>Lobby</a>
+    <a href="/tables"<%- focus === 'lobby' ? ' aria-current="page"' : '' %>>Lobby</a>
     <a href="/poker"<%- focus === 'holdem' ? ' aria-current="page"' : '' %>>Texas Hold'em</a>
     <a href="/blackjack"<%- focus === 'bj' ? ' aria-current="page"' : '' %>>Blackjack</a>
   </nav>
@@ -219,4 +219,4 @@
     </div>
   </div>
 </div>
-<script src="/public/js/casino.js?v=4"></script>
+<script src="/public/js/casino.js?v=5"></script>

@@ -170,7 +170,7 @@
       sigLive = sig;
       if (TABLE) {
         el.innerHTML = `<div class="card" style="text-align:center"><p style="margin:0 0 6px;color:#fff">This table has closed.</p>` +
-          `<p class="info" style="margin:0"><a href="/casino">Back to the lobby</a>${S.tables.length ? " — another table is open there." : "."}</p></div>`;
+          `<p class="info" style="margin:0"><a href="/tables">Back to the lobby</a>${S.tables.length ? " — another table is open there." : "."}</p></div>`;
         return;
       }
       el.innerHTML = `<div class="card" style="text-align:center"><p style="margin:0 0 6px;color:#fff">No table is open right now.</p>` +
