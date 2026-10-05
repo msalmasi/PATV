@@ -119,7 +119,39 @@
     <div class="stat"><span>🏦 Bank cash</span><b><%= fmt(snap.bank_cash) %></b><em><%= fmt(Math.max(0, snap.nav.bank - snap.bank_cash)) %> lent out</em></div>
     <div class="stat"><span>📈 Market maker cash</span><b><%= fmt(snap.mm_cash) %></b><em><%= fmt(Math.max(0, snap.nav.mm - snap.mm_cash)) %> committed to markets</em></div>
     <div class="stat"><span>🎟️ Lotto pot</span><b class="gold"><%= fmt(snap.lotto_pot) %></b></div>
+    <% if (snap.heist_vault != null) { %><div class="stat"><span>🎰 Casino vault</span><b><%= fmt(snap.heist_vault) %></b><em>what casino heists rob</em></div><% } %>
   </div>
+
+  <!-- ───────── Protocol dividends ───────── -->
+  <h2>PROTOCOL DIVIDENDS</h2>
+  <% const divs = snap.dividends || [];
+     const nowS = Date.now() / 1000;
+     const sumSince = (k, days) => divs.filter((x) => x.vault === k && x.ts >= nowS - days * 86400).reduce((a, x) => a + x.amount, 0);
+     const tsz = snap.targets_size || {}; %>
+  <p class="info">When a vault grows past its target size, the protocol cashes in <b>its own earnings</b> (never its starting
+    capital, never stakers' shares) and pays them to the Federal Reserve, which funds rewards, level-ups and the Bank's insurance.</p>
+  <div class="tbl"><table>
+    <tr><th>Vault</th><th class="r">Value now</th><th class="r">Target</th><th class="r">Paid · 7 days</th><th class="r">Paid · 30 days</th><th class="r">Paid · all</th></tr>
+    <% ['bank', 'house', 'mm'].forEach((k) => { %>
+      <tr><td><%= V[k].icon %> <%= V[k].name %></td>
+          <td class="r"><%= fmt(snap.nav[k]) %></td>
+          <td class="r"><%= tsz[k] == null ? '—' : fmt(tsz[k]) %><%= tsz[k] != null && snap.nav[k] > tsz[k] ? ' ▲' : '' %></td>
+          <td class="r"><%= fmt(sumSince(k, 7)) %></td><td class="r"><%= fmt(sumSince(k, 30)) %></td>
+          <td class="r"><%= fmt(divs.filter((x) => x.vault === k).reduce((a, x) => a + x.amount, 0)) %></td></tr>
+    <% }) %>
+  </table></div>
+  <% if (divs.length) { %>
+    <details style="margin-top:8px"><summary class="info" style="cursor:pointer">Recent payouts (<%= divs.length %>)</summary>
+      <div class="tbl"><table>
+        <tr><th>When (UTC)</th><th>Vault</th><th class="r">PAT to the Reserve</th></tr>
+        <% divs.slice().reverse().slice(0, 30).forEach((x) => { %>
+          <tr><td><%= when(x.ts) %></td><td><%= V[x.vault].icon %> <%= V[x.vault].name %></td><td class="r"><%= fmt(x.amount) %></td></tr>
+        <% }) %>
+      </table></div>
+    </details>
+  <% } else { %>
+    <p class="info">No dividends yet — they start once a vault's value passes its target and the protocol has earnings in it.</p>
+  <% } %>
   <p class="info">Settings: APR ceiling <b><%= amb(s.ceil) %></b> · floor <b><%= amb(s.floor) %></b> · Reserve top-up <b><%= amb(s.topup) %></b> ·
     stakers can own up to <b><%= s.staker_max == null ? '—' : pct(s.staker_max, 0) %></b> of a vault ·
     Auto bands: Bank ≥ <b><%= s.bank_min == null ? '—' : pct(s.bank_min, 0) %></b>, House ≤ <b><%= s.house_max == null ? '—' : pct(s.house_max, 0) %></b>, Market maker ≤ <b><%= s.mm_max == null ? '—' : pct(s.mm_max, 0) %></b>.

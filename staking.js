@@ -73,6 +73,12 @@ function clean(body) {
     targets: pick(body.targets, VAULTS),
     next_epoch: secs(body.next_epoch) || null,
     lotto_pot: num(body.lotto_pot), bank_cash: num(body.bank_cash), mm_cash: num(body.mm_cash),
+    heist_vault: num(body.heist_vault),
+    targets_size: pick(body.targets_size, VAULTS),
+    dividends: (Array.isArray(body.dividends) ? body.dividends : []).slice(-200)
+      .filter((x) => x && VAULTS.includes(x.vault))
+      .map((x) => ({ vault: x.vault, amount: num(x.amount), ts: secs(x.ts) }))
+      .filter((x) => x.ts && x.amount > 0).sort((a, b) => a.ts - b.ts),
     settings: {
       ceil: numOrNull(s.ceil), floor: numOrNull(s.floor), topup: typeof s.topup === "boolean" ? s.topup : numOrNull(s.topup),
       staker_max: numOrNull(s.staker_max), bank_min: numOrNull(s.bank_min), house_max: numOrNull(s.house_max), mm_max: numOrNull(s.mm_max),
