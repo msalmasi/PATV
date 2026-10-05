@@ -138,7 +138,7 @@
   /* ── room + live now ── */
   .hm .main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
   .hm .lr { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; }
-  .hm .lr-feed { display: flex; flex-direction: column; gap: 2px; height: 380px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 #111; padding-right: 4px; }
+  .hm .lr-feed { display: flex; flex-direction: column; gap: 2px; height: 380px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
   .hm .ln { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; padding: 3px 6px; border-radius: 6px; }
   .hm .ln:hover { background: #161616; }
   .hm .ln .w { font-weight: bold; margin-right: 6px; }
@@ -336,12 +336,13 @@
         <div class="lr">
           <div>
             <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat and mic transcripts" tabindex="0"><p class="muted">Loading the room…</p></div>
+            <% if (me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><% } %>
             <div class="ro">Live from Camfrog — read-only (v1). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
           </div>
           <div class="lr-side">
             <div class="box"><h3>Topic</h3><div id="lrTopic" style="font-size:13px;overflow-wrap:anywhere"><%= room.topic || '—' %></div></div>
             <div class="box"><h3>On the mic</h3><div class="chips" id="lrMic"></div></div>
-            <div class="box listen hide" id="lrAudioBox"><h3 style="width:100%">Room audio</h3><button class="btn" type="button" id="lrAudioBtn" aria-pressed="false">🔈 Listen live</button><audio id="lrAudio" preload="none"></audio><span class="muted" id="lrAudioTxt"></span></div>
+            <div id="lrAudioBox"></div>
             <div class="box"><h3>In the room · <span id="lrCount"><%= room.count %></span></h3><div class="chips" id="lrPeople"></div></div>
           </div>
         </div>
@@ -585,6 +586,8 @@
 <% } %>
 
 <% if (me && room) { %>
+<link rel="stylesheet" href="/public/css/room-bridge.css?v=1">
+<script src="/public/js/room-bridge.js?v=1"></script>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
 <script>
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).
@@ -615,17 +618,8 @@
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
     function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
-    // room audio: off by default, your choice remembered on this device
-    var au = document.getElementById('lrAudio'), ab = document.getElementById('lrAudioBtn'), at = document.getElementById('lrAudioTxt'), playing = false;
-    function pref(v) { try { if (v === undefined) return localStorage.getItem('patvRoomAudio') === '1'; localStorage.setItem('patvRoomAudio', v ? '1' : '0'); } catch (e) { return false; } }
-    function audioStop() { if (!playing) return; playing = false; au.pause(); au.removeAttribute('src'); au.load(); ab.textContent = '🔈 Listen live'; ab.setAttribute('aria-pressed', 'false'); at.textContent = ''; }
-    function audioStart() {
-      au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
-      au.play().then(function () { playing = true; ab.textContent = '🔊 Listening — stop'; ab.setAttribute('aria-pressed', 'true'); at.textContent = 'a few seconds behind the room'; })
-        .catch(function () { at.textContent = 'tap to start'; });
-    }
-    ab.addEventListener('click', function () { if (playing) { audioStop(); pref(false); } else { pref(true); audioStart(); } });
-    au.addEventListener('error', function () { if (playing) { audioStop(); at.textContent = 'audio stopped'; } });
+    var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug);
+    var relayHost = document.getElementById('lrRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     function apply(d) {
       var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
@@ -642,8 +636,8 @@
       document.getElementById('lrCount').textContent = r.count;
       document.getElementById('lrLive').className = 'pill ' + (r.live ? 'on' : 'off');
       document.getElementById('lrLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
-      document.getElementById('lrAudioBox').classList.toggle('hide', !r.audio);
-      if (!r.audio) audioStop();
+      roomAudio.update(d);
+      if (roomRelay) roomRelay.update(d);
       var mk = JSON.stringify(d.mic);
       if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', 'Mic is free')); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
       var pk = JSON.stringify(d.members);
@@ -667,7 +661,6 @@
     document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) poll(); });
     var init = JSON.parse(document.getElementById('lrInit').textContent);
     if (init) apply(init);
-    if (init && init.room && init.room.audio && pref()) at.textContent = 'tap Listen live to resume';
     timer = setTimeout(poll, 3000);
   })();
 </script>

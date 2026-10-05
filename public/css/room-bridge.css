@@ -1,0 +1,29 @@
+/* room-bridge.css — the shared room-bridge widgets (public/js/room-bridge.js): room audio player + relay box */
+.rb-hide, .rb-audio.hide, .rb-say.hide, .rb-jump.hide { display: none !important; }
+.rb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.rb-btn { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 6px 10px;
+          font: inherit; font-size: 13px; cursor: pointer; line-height: 1.2; }
+.rb-btn:hover, .rb-btn:focus-visible { border-color: #4caf50; }
+.rb-btn:focus-visible, .rb-vol:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+.rb-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+.rb-audio { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; background: #0d0d0d; border: 1px solid #1f2a20;
+            border-radius: 10px; padding: 6px 8px; font-family: Ubuntu, sans-serif; color: #ccc; }
+.rb-audio.on { border-color: #2f6d3a; }
+.rb-play { width: 34px; height: 30px; padding: 0; background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+.rb-state { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .06em; color: #8a8a8a; min-width: 0; flex: 1 1 90px; }
+.rb-state.live { color: #ff8a80; }
+.rb-state.live::before { content: "● "; }
+.rb-state.wait { color: #ffd54f; }
+.rb-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; width: 24px; }
+.rb-meter i { display: block; width: 3px; height: 2px; background: #4caf50; border-radius: 1px; transition: height .08s linear; }
+.rb-mute { padding: 4px 6px; }
+.rb-vol { width: 84px; accent-color: #4caf50; }
+.rb-jump { font-size: 12px; padding: 4px 8px; color: #ffd54f; border-color: #6b5a20; }
+
+.rb-say { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.rb-say input { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
+.rb-send { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+.rb-mine { color: #8a8a8a; font-size: 12.5px; min-height: 1em; }
+
+@media (prefers-reduced-motion: reduce) { .rb-meter { display: none; } .rb-meter i { transition: none; } }

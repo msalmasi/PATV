@@ -22,7 +22,7 @@
   .rm .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; min-width: 0; }
   .rm h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6; display: flex; justify-content: space-between; gap: 8px; }
   .rm h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #888; font-size: 12px; }
-  .rm .feed { height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 #111; display: flex; flex-direction: column; gap: 2px; padding-right: 4px; scroll-behavior: smooth; }
+  .rm .feed { height: min(62vh, 640px); overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 2px; padding-right: 4px; scroll-behavior: smooth; }
   .rm .line { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; padding: 5px 6px; border-radius: 8px; align-items: start; }
   .rm .line:hover { background: #161616; }
   .rm .line .body { min-width: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -119,11 +119,7 @@
         <% if (!linked) { %>
           <p class="muted" style="margin:0">💬 This room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
         <% } else { %>
-          <form class="say hide" id="rmSay" autocomplete="off">
-            <label class="sr" for="rmSayText">Message to the room</label>
-            <input id="rmSayText" type="text" maxlength="300" placeholder="Say something — Pepe relays it as “🌐 you (web)”" required>
-            <button class="btn" type="submit">Send</button>
-          </form>
+          <div id="rmRelay"></div>
           <div class="ptt hide" id="rmPttBox">
             <button class="btn" type="button" id="rmPtt" aria-pressed="false">🎙 Hold to talk</button>
             <span class="muted" id="rmPttTxt">up to 20 s · Pepe plays it on the mic when it's free</span>
@@ -136,7 +132,7 @@
       <section class="card" aria-labelledby="micH">
         <h2 id="micH">On the mic</h2>
         <div class="mic" id="rmMic"></div>
-        <div class="listen hide" id="rmAudioBox" style="margin-top:10px"><button class="btn" type="button" id="rmAudioBtn" aria-pressed="false">🔈 Listen live</button><audio id="rmAudio" preload="none"></audio><span class="muted" id="rmAudioTxt">room audio, a few seconds behind</span></div>
+        <div id="rmAudioBox" style="margin-top:10px"></div>
       </section>
       <section class="card" aria-labelledby="pplH">
         <h2 id="pplH">In the room <small id="rmPplN"></small></h2>
@@ -153,6 +149,8 @@
       </section>
     </aside>
   </div>
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=1">
+  <script src="/public/js/room-bridge.js?v=1"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -276,16 +274,8 @@
       }
     }
 
-    var au = document.getElementById('rmAudio'), ab = document.getElementById('rmAudioBtn'), at = document.getElementById('rmAudioTxt'), playing = false;
-    function pref(v) { try { if (v === undefined) return localStorage.getItem('patvRoomAudio') === '1'; localStorage.setItem('patvRoomAudio', v ? '1' : '0'); } catch (e) { return false; } }
-    function audioStop() { if (!playing) return; playing = false; au.pause(); au.removeAttribute('src'); au.load(); ab.textContent = '🔈 Listen live'; ab.setAttribute('aria-pressed', 'false'); }
-    function audioStart() {
-      au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
-      au.play().then(function () { playing = true; ab.textContent = '🔊 Listening — stop'; ab.setAttribute('aria-pressed', 'true'); at.textContent = 'room audio, a few seconds behind'; })
-        .catch(function () { at.textContent = 'tap Listen live to start'; });
-    }
-    ab.addEventListener('click', function () { if (playing) { audioStop(); pref(false); } else { pref(true); audioStart(); } });
-    au.addEventListener('error', function () { if (playing) { audioStop(); at.textContent = 'audio stopped'; } });
+    var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug);
+    var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
     function snapClose() { clearTimeout(snapTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
@@ -337,34 +327,23 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') snapClose(); });
 
     // ── talk to the room (relayed by Pepe) ──
-    var compose = document.getElementById('rmCompose'), sayForm = document.getElementById('rmSay'),
+    var compose = document.getElementById('rmCompose'),
         pttBox = document.getElementById('rmPttBox'), mineEl = document.getElementById('rmMine'), lastMine = '';
     function renderCompose(d) {
       var r = d.room;
       compose.classList.toggle('hide', !(r.relay || r.micRelay));
-      if (sayForm) sayForm.classList.toggle('hide', !r.relay);
+      if (roomRelay) roomRelay.update(d);
       if (pttBox) pttBox.classList.toggle('hide', !r.micRelay || !(window.MediaRecorder && navigator.mediaDevices));
       if (mineEl && d.mine) {
         var k = JSON.stringify(d.mine);
         if (k !== lastMine) {
           lastMine = k;
-          var j = d.mine[d.mine.length - 1];
-          mineEl.textContent = !j ? '' : (j.kind === 'clip' ? '🎙 your clip: ' : '💬 your message: ') +
+          var j = d.mine.filter(function (x) { return x.kind === 'clip'; }).pop();
+          mineEl.textContent = !j ? '' : '🎙 your clip: ' +
             (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
         }
       }
     }
-    if (sayForm) sayForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var inp = document.getElementById('rmSayText'), text = inp.value.trim();
-      if (!text) return;
-      var b = sayForm.querySelector('button'); b.disabled = true;
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: text }) })
-        .then(function (r) { return r.json(); })
-        .then(function (d) { if (d.ok) { inp.value = ''; mineEl.textContent = '💬 your message: waiting for Pepe…'; } else mineEl.textContent = '💬 ' + (d.error || 'not sent'); })
-        .catch(function () { mineEl.textContent = '💬 couldn\'t reach the site'; })
-        .then(function () { setTimeout(function () { b.disabled = false; }, 3000); });
-    });
 
     // push-to-talk: hold the button (or click to start, click again to stop); 20 s max
     var ptt = document.getElementById('rmPtt'), rec = null, chunks = [], recAt = 0, recTimer = null;
@@ -404,8 +383,7 @@
     function apply(d, first) {
       renderRoom(d);
       renderCompose(d);
-      document.getElementById('rmAudioBox').classList.toggle('hide', !d.room.audio);
-      if (!d.room.audio) audioStop(); else if (first && pref()) at.textContent = 'tap Listen live to resume';
+      roomAudio.update(d);
       if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
       addFeed(d.feed, first);
       cursor = Math.max(cursor, d.cursor);
