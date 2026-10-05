@@ -39,12 +39,17 @@ const ACCOUNT_KINDS = ["name_color", "profile_border", "avatar_decoration", "pro
 const GTF_KINDS = ["gtf_hat", "gtf_mask", "gtf_outfit", "gtf_prop", "gtf_bg", "gtf_frame"];
 const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_prop: "prop", gtf_bg: "bg", gtf_frame: "frame" };
 const GTF_LAYERS = {
-  gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate"],
-  gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana"],
-  gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier"],
-  gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice"],
-  gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix"],
-  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel"],
+  gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
+            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown"],
+  gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades"],
+  gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
+               "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape"],
+  gtf_prop: ["cigar", "moneybag", "crowbar", "briefcase", "rose", "dice",
+             "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie"],
+  gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
+           "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
+           "lavalamp", "leopard", "redroom", "sakura", "clouds"],
+  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel", "glitter", "rainbow", "chain", "hearts"],
 };
 const LAYER_EMOJI = {
   crown: "👑", tophat: "🎩", cowboy: "🤠", beanie: "🧢", halo: "😇", horns: "😈", party: "🥳", chef: "👨‍🍳", viking: "🪓", pirate: "🏴‍☠️",
@@ -53,13 +58,22 @@ const LAYER_EMOJI = {
   cigar: "🚬", moneybag: "💰", crowbar: "🔧", briefcase: "💼", rose: "🌹", dice: "🎲",
   vault: "🏦", neon: "🌃", city: "🏙️", jail: "🚔", sunset: "🌅", matrix: "💻",
   gold: "🟨", diamond: "💎", flame: "🔥", pixel: "👾",
+  beehive: "👱‍♀️", tiara: "👸", rainbowwig: "🌈", muir: "🧢", bow: "🎀", catears: "🐱", bunny: "🐰", flowercrown: "🌸",
+  lashes: "💄", puphood: "🐶", heartshades: "😍",
+  sequin: "👗", boa: "🪶", harness: "⛓️", collar: "📿", latex: "🖤", sundress: "👗", cardigan: "🧶", pridecape: "🏳️‍🌈",
+  prideflag: "🏳️‍🌈", discoball: "🪩", flamingo: "🦩", fan: "🪭", cuffs: "🔗", crop: "🏇", boba: "🧋", strawberry: "🍓", plushie: "🧸",
+  progress: "🏳️‍🌈", intersex: "🏳️‍🌈", trans: "🏳️‍⚧️", bi: "💗", lesbian: "🧡", pan: "💛", enby: "💜", ace: "🖤", aro: "💚", genderfluid: "🌊",
+  lavalamp: "🫧", leopard: "🐆", redroom: "🟥", sakura: "🌸", clouds: "☁️",
+  glitter: "✨", rainbow: "🌈", chain: "⛓️", hearts: "💖",
 };
-const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix"];
+const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti"];
+const TAGS = CAT.tags || {};
 for (const it of ITEMS) {                                 // catch typos at boot, don't crash
   if (!KINDS.includes(it.kind)) console.error(`[cosmetics] ${it.id}: unknown kind ${it.kind}`);
   if (GTF_LAYERS[it.kind] && !GTF_LAYERS[it.kind].includes((it.style || {}).layer)) console.error(`[cosmetics] ${it.id}: bad layer`);
   if (it.unlock && it.unlock.achievement && Object.keys(ACH_NAME).length && !ACH_NAME[it.unlock.achievement]) console.error(`[cosmetics] ${it.id}: unknown achievement`);
   if (it.kind === "profile_effect" && !EFFECTS.includes((it.style || {}).effect)) console.error(`[cosmetics] ${it.id}: bad effect`);
+  for (const t of it.tags || []) if (!TAGS[t]) console.error(`[cosmetics] ${it.id}: unknown tag ${t}`);
 }
 
 const MARKET_FEE_PCT = 5;            // Pepe takes it on a market sale; shown on the site
@@ -441,7 +455,7 @@ async function pageData(req) {
     seasons[key].items.push({ ...it, r: render(it), sale: onSale(it, now) });
   }
   const d = {
-    now, tab, sort, kinds: CAT.kinds || {}, rarities: CAT.rarities || {}, byKind, seasons: Object.values(seasons).sort((a, b) => a.from - b.from),
+    now, tab, sort, kinds: CAT.kinds || {}, rarities: CAT.rarities || {}, tags: TAGS, byKind, seasonStateOf: seasonState, dayMs, seasons: Object.values(seasons).sort((a, b) => a.from - b.from),
     listings: await marketListings(sort), fee: MARKET_FEE_PCT, listMin: LIST_MIN, showcaseMax: SHOWCASE_MAX,
     user: req.user ? req.user.username : null, me: null, inv: null, badges: [], showcase: [], acts: [], seed: null,
     msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, ACCOUNT_KINDS, GTF_KINDS, counts: {},
@@ -488,7 +502,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/api/cosmetics/catalog", (req, res) => {
     const now = Date.now();
     res.set("Cache-Control", "public, max-age=300");
-    res.json({ rarities: CAT.rarities, kinds: CAT.kinds, market_fee_pct: MARKET_FEE_PCT, list_min: LIST_MIN,
+    res.json({ rarities: CAT.rarities, kinds: CAT.kinds, tags: TAGS, market_fee_pct: MARKET_FEE_PCT, list_min: LIST_MIN,
                items: ITEMS.map((i) => ({ ...i, on_sale: onSale(i, now), season_state: seasonState(i, now) })) });
   });
 

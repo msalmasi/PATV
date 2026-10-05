@@ -45,6 +45,24 @@
       repeating-linear-gradient(90deg, transparent 0 22px, rgba(0,0,0,.85) 22px 34px);
     background-size: 100% 160px, 100% 100%; animation: cx-fall 7s linear infinite; opacity: .45;
   }
+  .cx-fx-hearts {
+    background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath transform='translate(18 26) scale(.9)' d='M8 14s-6-3.6-6-8a3.2 3.2 0 0 1 6-1.6A3.2 3.2 0 0 1 14 6c0 4.4-6 8-6 8z' fill='%23ff6eb4'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath transform='translate(62 58) scale(.6)' d='M8 14s-6-3.6-6-8a3.2 3.2 0 0 1 6-1.6A3.2 3.2 0 0 1 14 6c0 4.4-6 8-6 8z' fill='%23ffb3d9'/%3E%3C/svg%3E"),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath transform='translate(40 70) scale(.75)' d='M8 14s-6-3.6-6-8a3.2 3.2 0 0 1 6-1.6A3.2 3.2 0 0 1 14 6c0 4.4-6 8-6 8z' fill='%23ff2d87'/%3E%3C/svg%3E");
+    background-size: 120px 120px, 200px 200px, 150px 150px; animation: cx-rise 10s linear infinite; opacity: .75;
+  }
+  .cx-fx-disco {
+    background-image: radial-gradient(circle at 20% 30%, rgba(255, 79, 216, .45), transparent 22%), radial-gradient(circle at 70% 60%, rgba(0, 229, 255, .4), transparent 20%),
+      radial-gradient(circle at 45% 80%, rgba(255, 234, 0, .35), transparent 18%), radial-gradient(1.5px 1.5px at 30% 40%, #fff, transparent 70%);
+    background-size: 220px 160px, 260px 200px, 180px 140px, 90px 70px; animation: cx-drift 5s linear infinite, cx-hue 4s linear infinite; opacity: .8;
+  }
+  .cx-fx-pridefetti {
+    background-image: radial-gradient(3px 2px at 12% 18%, #e40303, transparent 70%), radial-gradient(2px 3px at 58% 46%, #ff8c00, transparent 70%),
+      radial-gradient(3px 3px at 34% 74%, #ffed00, transparent 70%), radial-gradient(2px 3px at 80% 22%, #00a83a, transparent 70%),
+      radial-gradient(3px 2px at 22% 52%, #3d7bff, transparent 70%), radial-gradient(3px 3px at 70% 84%, #a64dd9, transparent 70%);
+    background-size: 120px 120px, 200px 200px, 150px 150px, 170px 170px, 140px 140px, 190px 190px; animation: cx-fall 9s linear infinite; opacity: .85;
+  }
   /* avatar decoration */
   .cx-av { position: relative; display: inline-block; line-height: 0; border-radius: 50%; }
   .cx-av .cx-conic { position: absolute; inset: -7px; border-radius: 50%; pointer-events: none;

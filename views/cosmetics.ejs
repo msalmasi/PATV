@@ -18,6 +18,29 @@
     if (s.includes('drop')) out.push('Game drop');
     return out.join(' · ');
   };
+  // What the item is and where it shows (data-driven from the catalog's kinds/tags), plus its set.
+  const kindGroup = (k) => (kinds[k] && kinds[k].group) || (String(k).startsWith('gtf_') ? 'GTF avatar' : 'Profile');
+  const kindSlot = (k) => (kinds[k] && kinds[k].slot) || kindLabel(k);
+  const typeText = (k) => kindGroup(k) + ' · ' + kindSlot(k);
+  const whereText = (k) => kindGroup(k) === 'GTF avatar' ? 'Worn by your Grand Theft Frog pixel avatar (heist sheets, stream overlay)' : 'Shows on your PATV profile' + (k === 'name_color' ? ' and the rankings' : '');
+  const seasonEmoji = (label) => /winter/i.test(label) ? '❄️' : /pride/i.test(label) ? '🏳️‍🌈' : /hallowe/i.test(label) ? '🎃' : '📅';
+  const fmtDay = (ms) => { const d = new Date(ms); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC', ...(d.getUTCFullYear() !== new Date(now).getUTCFullYear() ? { year: 'numeric' } : {}) }); };
+  const itemTags = (it) => (it && Array.isArray(it.tags) ? it.tags : []).filter((t) => tags[t]);
+  const chips = (it) => {
+    if (!it) return;
+    const st = it.season ? (it.seasonState || seasonStateOf(it, now)) : null; %>
+    <div class="cxp-chips">
+      <span class="cxp-chip cxp-chip-type <%= kindGroup(it.kind) === 'GTF avatar' ? 'gtf' : 'prof' %>" title="<%= whereText(it.kind) %>"><%= kindEmoji(it.kind) %> <%= typeText(it.kind) %></span>
+      <% if (it.season) { const lastDay = dayMs(it.season.to) - 86400000; %>
+        <span class="cxp-chip cxp-chip-season <%= st %>" title="<%= it.season.label %> set">
+          <%= seasonEmoji(it.season.label) %> <%= it.season.label %> ·
+          <%= st === 'active' ? 'available until ' + fmtDay(lastDay) : st === 'upcoming' ? 'arrives ' + fmtDay(dayMs(it.season.from)) : 'season ended' %>
+        </span>
+      <% } %>
+      <% itemTags(it).forEach((t) => { %><span class="cxp-chip cxp-chip-tag tag-<%= t %>"><%= tags[t].emoji %> <%= tags[t].label %></span><% }) %>
+    </div>
+<% };
+  const fAttrs = (it) => `data-kind="${it.kind}" data-group="${kindGroup(it.kind)}" data-tags="${itemTags(it).join(' ')}"`;
   const left = (ms) => { const s = Math.max(0, Math.round((ms - now) / 1000)); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
 %>
 <%
@@ -58,9 +81,10 @@
     <% }
   };
   const itemCard = (it) => { %>
-  <div class="cxp-card" style="--rc: <%= RC(it.rarity) %>">
+  <div class="cxp-card" style="--rc: <%= RC(it.rarity) %>" <%- fAttrs(it) %>>
     <% preview(it.r) %>
     <div class="cxp-title"><b><%= it.name %></b><span class="cxp-rar"><%= it.rarity %></span></div>
+    <% chips(it) %>
     <div class="cxp-desc"><%= it.desc %></div>
     <div class="cxp-src"><%= srcText(it) %><% if (it.unlock && it.unlock.achievement) { %>: <a href="/achievements"><%= achName[it.unlock.achievement] || it.unlock.achievement %></a><% } %></div>
     <% if (it.sale) { %>
@@ -90,6 +114,25 @@
       <div class="cxp-muted">🎲 Drops from heists, the arena and bingo — or buy one on the market.</div>
     <% } %>
   </div>
+<% }; %>
+<%
+  const filterBar = () => { %>
+    <div class="cxp-filter" data-filter>
+      <div class="cxp-frow"><span class="cxp-flabel">Type</span>
+        <button type="button" class="on" data-ftype="">All</button>
+        <button type="button" data-ftype="group:Profile">👤 Profile</button>
+        <button type="button" data-ftype="group:GTF avatar">🐸 GTF avatar</button>
+        <select data-fkind aria-label="Filter by slot">
+          <option value="">Any slot</option>
+          <% Object.keys(kinds).forEach((k) => { %><option value="<%= k %>"><%= kindEmoji(k) %> <%= typeText(k) %></option><% }) %>
+        </select>
+      </div>
+      <div class="cxp-frow"><span class="cxp-flabel">Style</span>
+        <button type="button" class="on" data-ftag="">All</button>
+        <% Object.keys(tags).forEach((t) => { %><button type="button" data-ftag="<%= t %>"><%= tags[t].emoji %> <%= tags[t].label %></button><% }) %>
+        <label class="cxp-fhide"><input type="checkbox" data-fhidekink> Hide kink items</label>
+      </div>
+    </div>
 <% }; %>
 <style>
   .cxp { max-width: 1040px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
@@ -157,6 +200,28 @@
   .cxp .badgepick img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
   .cxp .notice { background: #2a1f0d; border: 1px solid #e0a030; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
   .cxp .how p, .cxp .how li { line-height: 1.6; color: #bbb; }
+  .cxp .season.pride { background: linear-gradient(135deg, rgba(228, 3, 3, .16), rgba(255, 237, 0, .08) 30%, rgba(0, 77, 255, .1) 60%, #111 85%); border-color: #5a3a6a; }
+  .cxp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cxp-chip { font-size: 11px; line-height: 1.5; padding: 1px 7px; border-radius: 8px; border: 1px solid #333; color: #ccc; background: #161616; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .cxp-chip-type.prof { border-color: #2f5b7a; color: #8fcaf0; background: #0f1a22; }
+  .cxp-chip-type.gtf { border-color: #2f6b34; color: #9ad69e; background: #0f1a10; }
+  .cxp-chip-season { border-color: #6a4a1a; color: #ffcc80; background: #1d150a; }
+  .cxp-chip-season.upcoming { border-color: #4a4a6a; color: #c5cae9; background: #12121d; }
+  .cxp-chip-season.over { border-color: #444; color: #999; background: #151515; }
+  .cxp-chip-tag { color: #ddd; }
+  .cxp-chip-tag.tag-pride { border-color: #7a4a8a; }
+  .cxp-chip-tag.tag-camp { border-color: #8a3a6a; }
+  .cxp-chip-tag.tag-cute { border-color: #8a5a72; }
+  .cxp-chip-tag.tag-kink { border-color: #5a2a2a; }
+  .cxp-h2where { font-family: Ubuntu, sans-serif; font-size: 12px; color: #888; letter-spacing: 0; text-transform: none; margin-left: 6px; }
+  .cxp-filter { display: grid; gap: 6px; background: #111; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; margin: 12px 0 4px; }
+  .cxp-frow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+  .cxp-flabel { color: #888; min-width: 38px; }
+  .cxp-filter button, .cxp-filter select { background: #161616; color: #ccc; border: 1px solid #2a2a2a; border-radius: 999px; padding: 4px 10px; font-family: inherit; font-size: 13px; cursor: pointer; }
+  .cxp-filter select { border-radius: 8px; max-width: 100%; }
+  .cxp-filter button.on { border-color: #4caf50; color: #fff; background: #1b2e1c; }
+  .cxp-fhide { color: #aaa; display: inline-flex; gap: 5px; align-items: center; margin-left: auto; cursor: pointer; }
+  [data-fhid] { display: none !important; }
   .cxp code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
   @media (max-width: 480px) {
     .cxp .copy { grid-template-columns: 1fr; }
@@ -187,11 +252,12 @@
       <div><b>🏅 Unlocks</b>Achievements and levels 10 / 25 / 50 give free items.</div>
       <div><b>🏪 Trade</b>Sell or buy copies on the market (<%= fee %>% fee).</div>
     </div>
+    <% filterBar() %>
 
     <% seasons.forEach((s) => { %>
-      <section class="season <%= /winter/i.test(s.label) ? 'winter' : '' %>">
+      <section class="season <%= /winter/i.test(s.label) ? 'winter' : /pride/i.test(s.label) ? 'pride' : '' %> cxp-fsec">
         <div class="season-head">
-          <b><%= /winter/i.test(s.label) ? '❄️' : '🎃' %> <%= s.label %></b>
+          <b><%= seasonEmoji(s.label) %> <%= s.label %> <span class="cxp-muted" style="font-size:13px;font-weight:normal">· seasonal set</span></b>
           <% if (s.state === 'active') { %>
             <span class="cxp-muted">Limited — leaves the shop in <span class="cd cx-cd" data-to="<%= s.to %>"><%= left(s.to) %></span></span>
           <% } else { %>
@@ -205,11 +271,14 @@
     <% }) %>
 
     <% Object.keys(byKind).forEach((k) => { const list = byKind[k].filter((it) => !it.season || it.seasonState === 'over'); if (!list.length) return; %>
-      <h2 id="k-<%= k %>"><%= kindEmoji(k) %> <%= kindLabel(k) %></h2>
-      <div class="grid">
-        <% list.forEach((it) => { itemCard(it); }) %>
-      </div>
+      <section class="cxp-fsec">
+        <h2 id="k-<%= k %>"><%= kindEmoji(k) %> <%= kindLabel(k) %> <span class="cxp-h2where"><%= kindGroup(k) === 'GTF avatar' ? 'on your GTF pixel avatar' : 'on your profile' %></span></h2>
+        <div class="grid">
+          <% list.forEach((it) => { itemCard(it); }) %>
+        </div>
+      </section>
     <% }) %>
+    <p class="cxp-muted cxp-fempty" hidden style="text-align:center">Nothing matches those filters.</p>
   <% } %>
 
   <% if (tab === 'market') { %>
@@ -222,12 +291,14 @@
     <% if (!listings.length) { %>
       <p class="cxp-muted" style="text-align:center">Nothing for sale yet. Be the first — list something from My items.</p>
     <% } else { %>
-      <div class="grid">
+      <% filterBar() %>
+      <div class="grid cxp-fsec">
         <% listings.forEach((l) => { const mine = myListings.has(l.id); %>
-          <div class="cxp-card" style="--rc: <%= RC(l.item.rarity) %>">
+          <div class="cxp-card" style="--rc: <%= RC(l.item.rarity) %>" <%- fAttrs(l.item) %>>
             <% preview(l.r) %>
             <div class="cxp-title"><b><%= l.item.name %></b><span class="cxp-rar"><%= l.item.rarity %></span></div>
-            <div class="cxp-src"><%= kindLabel(l.item.kind) %> · listing #<%= l.id %> · by <a href="/u/<%= encodeURIComponent(l.seller || '') %>/profile"><%= l.seller_display || l.seller %></a></div>
+            <% chips(l.item) %>
+            <div class="cxp-src">listing #<%= l.id %> · by <a href="/u/<%= encodeURIComponent(l.seller || '') %>/profile"><%= l.seller_display || l.seller %></a></div>
             <div class="cxp-price"><%= fmt(l.price) %> PAT</div>
             <% if (!me) { %>
               <div class="cxp-muted"><a href="/login">Sign in</a> to buy.</div>
@@ -245,6 +316,7 @@
           </div>
         <% }) %>
       </div>
+      <p class="cxp-muted cxp-fempty" hidden style="text-align:center">Nothing matches those filters.</p>
     <% } %>
   <% } %>
 
@@ -274,6 +346,7 @@
                   <% if (c.equipped) { %><span class="tag eq">equipped</span><% } %>
                   <% if (c.listing_id) { %><span class="tag ls">listed #<%= c.listing_id %> · <%= fmt(c.listing_price) %> PAT</span><% } %>
                 </div>
+                <% chips(c.item) %>
                 <div class="cxp-src">copy #<%= c.inv_id %> · from <%= c.source || '—' %></div>
                 <% if (c.listing_id) { %>
                   <form method="POST" action="/cosmetics/cancel" class="cxp-row">
@@ -350,6 +423,7 @@
         <li><b>Achievements &amp; levels</b> — some items unlock for free when you earn an <a href="/achievements">achievement</a> or reach level 10, 25 or 50. They land in My items automatically.</li>
         <li><b>Seasonal</b> — limited items sell only during their season (Halloween, winter). After that the only way to get one is from another player.</li>
         <li><b>Gifts</b> — buy a new item for a friend from the shop, or give away a copy you own.</li>
+        <li><b>Labels</b> — every card says what it is and where it shows: <b>Profile</b> items (name color, border, banner, effect, avatar decoration) dress up your PATV profile; <b>GTF avatar</b> items (hat, mask, outfit, prop, background, frame) are worn by your Grand Theft Frog pixel avatar. Seasonal items are labelled with their set and when they leave the shop. Style tags (Pride, Drag &amp; camp, Cute, Kink) let you filter the shop — tick <i>Hide kink items</i> if you'd rather not see those. Pride flags are always in the shop; the Pride set is June only.</li>
       </ul>
       <h2>Trading</h2>
       <p>Every item you own is a copy that can change hands. List a copy on the <a href="/cosmetics?tab=market#tabs">market</a> at your price (at least <%= fmt(listMin) %> PAT); it's unequipped and locked while it's listed, and you can cancel any time. When someone buys it Pepe moves the PAT — the seller gets the price minus a <%= fee %>% market fee.</p>
@@ -371,6 +445,51 @@
       });
     }
     if (cds.length) { tick(); setInterval(tick, 1000); }
+    // type / style filters (shop + market)
+    var fb = document.querySelectorAll('[data-filter]');
+    if (fb.length) {
+      var state = { type: '', kind: '', tag: '', hideKink: false };
+      try { state.hideKink = localStorage.getItem('cx-hide-kink') === '1'; } catch (e) { /* private mode */ }
+      var apply = function () {
+        var cards = document.querySelectorAll('.cxp .cxp-card[data-kind]'), shown = 0;
+        cards.forEach(function (c) {
+          var tg = (' ' + (c.getAttribute('data-tags') || '') + ' ');
+          var ok = (!state.type || c.getAttribute('data-group') === state.type) &&
+                   (!state.kind || c.getAttribute('data-kind') === state.kind) &&
+                   (!state.tag || tg.indexOf(' ' + state.tag + ' ') >= 0) &&
+                   !(state.hideKink && tg.indexOf(' kink ') >= 0);
+          if (ok) { c.removeAttribute('data-fhid'); shown++; } else c.setAttribute('data-fhid', '');
+        });
+        document.querySelectorAll('.cxp-fsec').forEach(function (sec) {
+          if (sec.querySelector('.cxp-card[data-kind]:not([data-fhid])') || !sec.querySelector('.cxp-card[data-kind]')) sec.removeAttribute('data-fhid');
+          else sec.setAttribute('data-fhid', '');
+        });
+        document.querySelectorAll('.cxp-fempty').forEach(function (p) { p.hidden = shown > 0 || !cards.length; });
+        fb.forEach(function (bar) {
+          bar.querySelectorAll('[data-ftype]').forEach(function (b) { b.classList.toggle('on', (b.getAttribute('data-ftype') || '').replace('group:', '') === state.type); });
+          bar.querySelectorAll('[data-ftag]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-ftag') === state.tag); });
+          var sel = bar.querySelector('[data-fkind]'); if (sel) sel.value = state.kind;
+          var hk = bar.querySelector('[data-fhidekink]'); if (hk) hk.checked = state.hideKink;
+        });
+      };
+      fb.forEach(function (bar) {
+        bar.addEventListener('click', function (e) {
+          var b = e.target.closest('button'); if (!b) return;
+          if (b.hasAttribute('data-ftype')) { state.type = (b.getAttribute('data-ftype') || '').replace('group:', ''); state.kind = ''; }
+          if (b.hasAttribute('data-ftag')) { state.tag = b.getAttribute('data-ftag') || ''; if (state.tag === 'kink') state.hideKink = false; }
+          apply();
+        });
+        bar.addEventListener('change', function (e) {
+          if (e.target.hasAttribute('data-fkind')) { state.kind = e.target.value; if (state.kind) state.type = ''; }
+          if (e.target.hasAttribute('data-fhidekink')) {
+            state.hideKink = e.target.checked; if (state.hideKink && state.tag === 'kink') state.tag = '';
+            try { localStorage.setItem('cx-hide-kink', state.hideKink ? '1' : '0'); } catch (err) { /* ignore */ }
+          }
+          apply();
+        });
+      });
+      apply();
+    }
     // GTF previews (pixel avatar script; if it's missing the emoji fallback stays)
     var boxes = document.querySelectorAll('.cx-gtf[data-layers]');
     if (!boxes.length) return;

@@ -225,6 +225,80 @@
       for (let x = 2; x <= 8; x++) P(0, x, k);
       for (let x = 3; x <= 7; x++) P(-1, x, h);
       P(0, 5, '#FFFFFF'); P(1, 4, '#FFFFFF'); P(1, 6, '#FFFFFF');   // skull + bones
+    },
+    // ── 1.99c: drag / camp / pride / cute / kink ──
+    beehive(P) {
+      const h = '#FF8FCB', l = '#FFC4E3', d = '#D9579E', band = '#B03A7E';
+      for (let x = 4; x <= 6; x++) P(-2, x, h);
+      for (let x = 3; x <= 7; x++) { P(-1, x, h); P(0, x, h); }
+      for (let x = 2; x <= 8; x++) P(1, x, h);
+      P(-2, 4, l); P(-1, 4, l); P(0, 3, l); P(1, 3, l);             // shine
+      P(0, 7, d); P(1, 8, d); P(-1, 7, d);
+      P(2, 1, d); P(2, 9, d); P(3, 1, h); P(3, 9, h); P(4, 0, d); P(4, 10, d);   // flipped ends
+      for (let x = 2; x <= 8; x++) P(2, x, band);
+      P(2, 3, '#9BE7FF'); P(2, 5, '#FFFFFF'); P(2, 7, '#9BE7FF');  // rhinestone band
+    },
+    tiara(P) {
+      const s = '#E3E9F1', d = '#9AA4B1', p = '#FF4FA3', b = '#7FDBFF', w = '#FFFFFF';
+      for (let x = 2; x <= 8; x++) P(2, x, d);
+      for (const x of [2, 4, 5, 6, 8]) P(1, x, s);
+      P(0, 4, s); P(0, 6, s); P(0, 5, p); P(-1, 5, w);
+      P(2, 3, b); P(2, 5, p); P(2, 7, b);
+      P(0, 1, w); P(-1, 9, w);                                      // twinkles
+    },
+    rainbowwig(P) {
+      const R = ['#E40303', '#FF8C00', '#FFED00', '#008026', '#004DFF', '#750787'];
+      for (let x = 3; x <= 7; x++) P(-2, x, R[0]);
+      for (let x = 2; x <= 8; x++) P(-1, x, R[1]);
+      for (let x = 1; x <= 9; x++) P(0, x, R[2]);
+      for (let x = 0; x <= 10; x++) { P(1, x, R[3]); P(2, x, R[4]); }
+      for (const x of [0, 1, 9, 10]) P(3, x, R[5]);
+      P(4, 0, R[5]); P(4, 10, R[5]); P(5, 0, R[4]); P(5, 10, R[4]);
+      P(-1, 4, '#FFB347'); P(0, 3, '#FFF59D');                      // shine
+    },
+    muir(P) {
+      const k = '#151515', h = '#303030', c = '#C0C4CC', cd = '#7D838C';
+      for (let x = 3; x <= 7; x++) P(-1, x, h);
+      for (let x = 2; x <= 8; x++) { P(0, x, k); P(1, x, x % 2 ? c : cd); }
+      P(0, 3, h); P(-1, 4, '#4A4A4A');
+      P(0, 5, '#E0B84A');                                           // cap badge
+      for (let x = 1; x <= 9; x++) P(2, x, '#0A0A0A');              // short visor
+      P(2, 3, '#262626'); P(2, 4, '#262626');
+    },
+    bow(P) {
+      const p = '#FF6EB4', l = '#FFB3D9', d = '#D81B78';
+      for (const x of [1, 2, 8, 9]) P(-1, x, p);
+      for (const x of [1, 2, 3, 7, 8, 9]) { P(0, x, p); P(2, x, p); }
+      for (const x of [1, 2, 3, 4, 6, 7, 8, 9]) P(1, x, p);
+      P(0, 2, l); P(0, 8, l); P(-1, 2, l); P(-1, 8, l);
+      P(1, 5, d); P(0, 5, d); P(2, 5, d);                           // knot
+      P(1, 4, d); P(1, 6, d);
+    },
+    catears(P) {
+      const o = '#3A3A3A', i = '#FF9EC4';
+      P(-1, 2, o); P(0, 2, o); P(0, 3, o); P(1, 2, o); P(1, 3, i); P(1, 4, o);
+      P(-1, 8, o); P(0, 8, o); P(0, 7, o); P(1, 8, o); P(1, 7, i); P(1, 6, o);
+      for (let x = 2; x <= 8; x++) P(2, x, o);
+      P(2, 3, i); P(2, 7, i);
+    },
+    bunny(P) {
+      const w = '#FAFAFA', s = '#DCDCE4', p = '#FFB3C6';
+      for (const ex of [3, 7]) {
+        P(-2, ex, w);
+        for (let y = -1; y <= 1; y++) { P(y, ex - 1, y === 1 ? s : w); P(y, ex, p); P(y, ex + 1, s); }
+      }
+      for (let x = 2; x <= 8; x++) P(2, x, p);
+      P(2, 5, '#FF6EB4');
+    },
+    flowercrown(P) {
+      const leaf = '#4CAF50', dl = '#2E7D32', mid = '#FFE14D';
+      const fl = { 2: '#FF8FB8', 5: '#B39DDB', 8: '#FFB38A' };
+      for (let x = 1; x <= 9; x++) P(2, x, x % 2 ? leaf : dl);
+      for (const x of [2, 5, 8]) {
+        const c = fl[x];
+        P(0, x, c); P(1, x - 1, c); P(1, x + 1, c); P(2, x, c); P(1, x, mid);
+      }
+      P(2, 0, leaf); P(2, 10, leaf);
     }
   };
 
@@ -281,6 +355,45 @@
       P(11, 5, d);
       P(7, 3, w); P(8, 6, w); P(7, 8, w); P(9, 4, w); P(10, 5, w);
       P(6, 0, d); P(7, 0, r); P(6, 10, d);              // knot tails
+    },
+    lashes(P, f) {                                      // full beat: shadow, lashes, lips, blush
+      const sh = '#B04CE0', sl = '#E0A3FF', k = '#111111';
+      P(3, 2, sh); P(3, 3, sl); P(3, 7, sl); P(3, 8, sh);
+      P(4, 1, k); P(3, 0, k); P(3, 1, k); P(4, 9, k); P(3, 10, k); P(3, 9, k);   // winged lashes
+      for (let y = 6; y <= 10; y++) for (let x = 0; x <= 10; x++) {
+        const c = f.G[y] && f.G[y][x];
+        if (isMouth(c)) P(y, x, c === MOUTH ? '#E0115F' : '#A0003A');
+      }
+      P(6, 2, '#FF8FB8'); P(6, 8, '#FF8FB8');
+      P(7, 9, '#3A1A1A');                               // beauty mark
+    },
+    puphood(P, f) {
+      const k = '#1A1A1A', k2 = '#242424', a = '#1E88E5', m = '#3A3A3A';
+      for (let y = 2; y <= 9; y++) for (let x = 0; x <= 10; x++) {
+        if (!isBody(y, x)) continue;
+        const c = f.G[y][x];
+        if (y >= 4 && y <= 5 && (c === '#ffffff' || c === f.pupilColor)) continue;   // eyes show
+        const edge = !isBody(y, x - 1) || !isBody(y, x + 1) || !isBody(y - 1, x);
+        P(y, x, edge ? '#4A4F58' : (x + y) % 2 ? k : k2);
+      }
+      for (const ex of [2, 7]) { P(3, ex, a); P(3, ex + 1, a); }   // brow trim
+      P(2, 5, a);
+      for (let x = 4; x <= 6; x++) { P(7, x, m); P(9, x, m); }     // muzzle
+      for (let x = 3; x <= 7; x++) P(8, x, m);
+      P(7, 5, '#050505'); P(9, 5, '#050505');
+      P(0, 2, k); P(1, 2, k); P(1, 3, a); P(2, 2, k);              // ears
+      P(0, 8, k); P(1, 8, k); P(1, 7, a); P(2, 8, k);
+    },
+    heartshades(P) {
+      const r = '#FF2D87', l = '#FF8AC4', g = '#FFE0EF';
+      for (const bx of [0, 6]) {
+        P(3, bx + 1, r); P(3, bx + 3, r);
+        for (let x = bx; x <= bx + 4; x++) P(4, x, r);
+        for (let x = bx + 1; x <= bx + 3; x++) P(5, x, r);
+        P(6, bx + 2, r);
+        P(4, bx + 1, g); P(4, bx + 2, l); P(4, bx + 3, l); P(5, bx + 2, l);
+      }
+      P(4, 5, '#C2185B');                               // bridge
     }
   };
 
@@ -328,6 +441,67 @@
       const strap = [[10, 2], [10, 3], [11, 3], [11, 4], [12, 5], [12, 6], [13, 7], [13, 8]];
       strap.forEach(([y, x], i) => P(y, x, i % 2 ? b : s));
       P(9, 1, s); P(9, 2, s);
+    },
+    sequin(P, f) {                                      // strapless sequin gown
+      const a = '#B0157A', b = '#D6249A', w = '#FFFFFF', l = '#FF9BE6';
+      torso(P, (y, x) => {
+        if (y === 10 && x >= 4 && x <= 6) return f.belly;
+        if ((x * 3 + y * 5) % 7 === 0) return w;
+        if ((x * 5 + y * 3) % 6 === 0) return l;
+        return (x <= 2 || x >= 8) ? a : b;
+      });
+    },
+    boa(P, f) {                                         // little black dress + feather boa
+      const dress = '#1C1C24', d2 = '#2C2C3A';
+      torso(P, (y, x) => (y === 10 && x >= 3 && x <= 7) ? f.belly : (x + y) % 5 === 0 ? d2 : dress);
+      const fz = ['#FF6EC7', '#FF9ED8', '#E0479E'];
+      const pts = [[8, 0], [9, 0], [9, 1], [10, 1], [10, 2], [11, 1], [11, 2], [12, 1], [12, 2], [13, 1], [13, 2],
+                   [10, 3], [11, 3], [11, 4], [11, 5], [11, 6], [11, 7], [10, 7],
+                   [8, 10], [9, 10], [9, 9], [10, 9], [10, 8], [11, 9], [11, 8], [12, 9], [12, 8], [13, 9], [13, 8]];
+      pts.forEach(([y, x]) => P(y, x, fz[(x * 2 + y) % 3]));
+    },
+    harness(P, f) {
+      const k = '#121212', s = '#C8CDD5';
+      torso(P, (y, x) => (x >= 4 && x <= 6 ? f.belly : f.body));
+      for (const [y, x] of [[10, 2], [10, 3], [11, 3], [11, 4], [12, 4], [12, 6], [11, 6], [11, 7], [10, 7], [10, 8]]) P(y, x, k);
+      for (let x = 1; x <= 9; x++) P(13, x, k);
+      P(12, 5, s); P(13, 5, s); P(13, 2, s); P(13, 8, s);         // O-ring, buckle, studs
+    },
+    collar(P, f) {
+      const k = '#151515', s = '#D0D5DD';
+      torso(P, (y, x) => (x >= 4 && x <= 6 ? f.belly : f.body));
+      for (let x = 2; x <= 8; x++) P(10, x, k);
+      for (const x of [3, 5, 7]) P(10, x, s);
+      P(11, 4, s); P(11, 6, s); P(12, 5, s);                       // D-ring
+    },
+    latex(P) {                                          // glossy vinyl catsuit
+      const k = '#0A0A0E', h = '#4A4D5C', w = '#C8CEDB', z = '#8A909C';
+      torso(P, () => k);
+      P(10, 3, h); P(11, 2, w); P(12, 2, h); P(13, 2, h);
+      P(11, 8, h); P(12, 8, w); P(13, 8, h);
+      for (let y = 10; y <= 13; y++) P(y, 5, z);
+      P(10, 5, '#EDEDED');                              // zip pull
+    },
+    sundress(P, f) {
+      const d = '#FFD1DC', hem = '#F7A8BE', st = '#FF8FB8', w = '#FFFFFF';
+      torso(P, (y, x) => y === 10 ? (x >= 4 && x <= 6 ? f.belly : f.body) : y === 13 ? hem : ((x + y * 2) % 4 === 0 ? w : d));
+      P(10, 3, st); P(10, 7, st);                       // straps
+      P(11, 5, st);                                     // little bow
+    },
+    cardigan(P) {
+      const c = '#B39DDB', c2 = '#C5B3E6', d = '#9575CD', t = '#FAFAFA';
+      torso(P, (y, x) => (x >= 4 && x <= 6) ? t : (x === 3 || x === 7) ? d : (x + y) % 2 ? c : c2);
+      P(11, 3, '#FFFFFF'); P(13, 3, '#FFFFFF');         // buttons
+      P(12, 2, d);                                      // pocket
+    },
+    pridecape(P) {
+      const R = ['#E40303', '#FF8C00', '#FFED00', '#008026', '#004DFF', '#750787'];
+      const band = (y) => R[Math.min(5, Math.floor((y - 6) * 6 / 8))];
+      for (let y = 6; y <= 13; y++) { P(y, 0, band(y)); P(y, 10, band(y)); }
+      for (let y = 9; y <= 13; y++) { P(y, -1, band(y)); P(y, 11, band(y)); }
+      torso(P, (y, x) => (x <= 1 || x >= 9) ? band(y) : '#F5F5F5');
+      P(10, 2, '#FFD23F'); P(10, 8, '#FFD23F');         // clasps
+      for (const [y, x] of [[11, 4], [11, 6], [12, 4], [12, 5], [12, 6], [13, 5]]) P(y, x, '#E8336B');   // heart on the tee
     }
   };
 
@@ -379,8 +553,117 @@
       for (let y = 10; y <= 12; y++) for (let x = 13; x <= 15; x++) A(y, x, r);
       A(13, 14, '#8E0D17'); A(13, 15, '#8E0D17');                 // shadow
       A(10, 13, rw); A(10, 15, rw); A(11, 14, rw); A(12, 13, rw); A(12, 15, rw);
+    },
+    prideflag(A, P, f) {                                // rainbow flag on a pole, waving
+      const R = ['#E40303', '#FF8C00', '#FFED00', '#008026', '#004DFF', '#750787'];
+      for (let y = 2; y <= 15; y++) A(y, 13, '#D7CCC8');
+      A(1, 13, '#FFD23F');
+      for (let i = 0; i < 6; i++) { A(3 + i, 14, R[i]); A(3 + i, 15, R[i]); A(4 + i, 16, R[i]); }
+      A(11, 13, f.body);                                // hand
+    },
+    discoball(A) {
+      const c = ['#F5F5F5', '#A7AFBA', '#DCE3EA', '#7E8794', '#BFEFFF', '#FFFFFF'];
+      for (let y = 0; y <= 2; y++) A(y, 14, '#8A8F98');  // string
+      const rows = { 3: [13, 15], 4: [12, 16], 5: [12, 16], 6: [12, 16], 7: [13, 15] };
+      for (const y in rows) for (let x = rows[y][0]; x <= rows[y][1]; x++) A(+y, x, c[(x * 3 + y * 2) % c.length]);
+      A(4, 13, '#FFFFFF'); A(3, 13, '#FFFFFF');
+      A(2, 11, '#FFF59D'); A(9, 16, '#FF8BF0'); A(9, 11, '#9BE7FF'); A(1, 16, '#FFFFFF');   // glints
+    },
+    flamingo(A) {
+      const p = '#FF6FAE', d = '#D94C8A', l = '#FF9ECB', k = '#222222';
+      A(5, 14, p); A(5, 15, p); A(5, 16, '#F5F5F5'); A(6, 16, k);  // head + beak
+      A(4, 14, l); A(5, 15, k);                                    // eye
+      A(6, 14, p); A(7, 13, p); A(8, 13, p); A(9, 14, p);         // S-neck
+      for (let x = 14; x <= 16; x++) A(10, x, p);
+      for (let x = 13; x <= 16; x++) A(11, x, p);
+      A(10, 15, d); A(11, 15, d); A(11, 16, d); A(10, 14, l);
+      for (let y = 12; y <= 15; y++) A(y, 15, '#E06A9A');          // leg
+      A(13, 14, '#E06A9A'); A(15, 16, '#E06A9A');
+    },
+    fan(A, P, f) {                                      // folding fan, ready to clack
+      const p = '#FF4FA3', l = '#FFB3D9', r = '#B0126A';
+      for (let x = 12; x <= 16; x++) A(6, x, l);
+      for (let x = 12; x <= 16; x++) A(7, x, p);
+      for (let x = 13; x <= 15; x++) A(8, x, p);
+      A(9, 14, p);
+      A(7, 13, r); A(7, 15, r); A(8, 14, r);            // ribs
+      A(6, 12, '#FFFFFF'); A(6, 16, '#FFFFFF');
+      A(10, 14, '#6A0B3E');                             // pivot
+      A(11, 14, f.body); A(11, 13, f.body);             // hand
+    },
+    cuffs(A) {                                          // fuzzy pink handcuffs
+      const a = '#FF7AC0', b = '#FFB3DE', s = '#C0C4CC';
+      const ring = (cy, cx) => { for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) if (y !== cy || x !== cx) A(y, x, (x + y) % 2 ? a : b); };
+      ring(11, 13); ring(14, 15);
+      A(12, 15, s); A(13, 14, s);                       // chain
+    },
+    crop(A, P, f) {                                     // riding crop
+      const k = '#1A1A1A', h = '#5D2E1A', r = '#B71C1C', sh = '#8B5A3C', s = '#C0C4CC';
+      A(2, 14, k); A(2, 15, k); A(3, 14, k); A(3, 15, '#4A4A4A'); A(1, 15, '#4A4A4A');  // keeper flap
+      A(4, 14, s);                                      // ferrule
+      for (let y = 5; y <= 11; y++) A(y, 14, sh);
+      for (let y = 12; y <= 15; y++) A(y, 14, y % 2 ? r : h);      // wrapped grip
+      A(15, 14, '#C0C4CC');
+      A(12, 13, f.body);                                // hand
+    },
+    boba(A, P, f) {
+      const lid = '#FFFFFF', tea = '#D7A86E', tl = '#E8C79A', pearl = '#3E2723';
+      A(7, 15, '#FF6EB4'); A(8, 14, '#FF6EB4'); A(9, 14, '#FF6EB4');   // straw
+      for (let x = 12; x <= 15; x++) A(10, x, lid);
+      for (let y = 11; y <= 15; y++) for (let x = 12; x <= 15; x++) A(y, x, x === 12 && y <= 13 ? tl : tea);
+      for (const [y, x] of [[14, 12], [14, 14], [15, 13], [15, 15], [13, 15], [15, 12]]) A(y, x, pearl);
+      A(12, 11, f.body);                                // hand
+    },
+    strawberry(A) {
+      const r = '#E53935', l = '#FF7961', g = '#43A047', dg = '#2E7D32', s = '#FFE082';
+      A(9, 14, dg); A(10, 13, g); A(10, 14, dg); A(10, 15, g);
+      for (let x = 12; x <= 16; x++) { A(11, x, r); A(12, x, r); }
+      for (let x = 13; x <= 15; x++) A(13, x, r);
+      A(14, 14, r);
+      A(11, 12, l); A(12, 12, l);
+      A(11, 14, s); A(12, 13, s); A(12, 15, s); A(13, 14, s); A(11, 16, s);
+    },
+    plushie(A) {                                        // bunny plushie
+      const w = '#FFE4EE', s = '#F0AFC8', p = '#FF8FB8', k = '#222222';
+      A(7, 13, w); A(8, 13, w); A(7, 15, w); A(8, 15, w); A(8, 14, null);
+      A(9, 13, p); A(9, 15, p);                         // inner ears
+      for (let x = 13; x <= 15; x++) A(10, x, w);
+      for (let x = 12; x <= 16; x++) { A(11, x, w); A(12, x, w); }
+      A(11, 13, k); A(11, 15, k); A(12, 14, p);         // face
+      for (let y = 13; y <= 15; y++) for (let x = 13; x <= 15; x++) A(y, x, w);
+      A(14, 14, '#FF6EB4');                             // heart patch
+      A(15, 12, s); A(15, 16, s); A(13, 12, s); A(13, 16, s);   // paws
     }
   };
+
+  // Pride flags as backgrounds: horizontal stripes with a gentle wave; progress / intersex-inclusive
+  // add the chevron at the hoist (left edge, the part the frog doesn't cover).
+  const RAINBOW = ['#E40303', '#FF8C00', '#FFED00', '#008026', '#004DFF', '#750787'];
+  const FLAGS = {
+    trans: ['#5BCEFA', '#F5A9B8', '#FFFFFF', '#F5A9B8', '#5BCEFA'],
+    bi: ['#D60270', '#D60270', '#9B4F96', '#0038A8', '#0038A8'],
+    lesbian: ['#D52D00', '#FF9A56', '#FFFFFF', '#D362A4', '#A30262'],
+    pan: ['#FF218C', '#FFD800', '#21B1FF'],
+    enby: ['#FCF434', '#FFFFFF', '#9C59D1', '#2C2C2C'],
+    ace: ['#000000', '#A3A3A3', '#FFFFFF', '#800080'],
+    aro: ['#3DA542', '#A7D379', '#FFFFFF', '#A9A9A9', '#000000'],
+    genderfluid: ['#FF76A4', '#FFFFFF', '#C011D7', '#000000', '#2F3CBE'],
+  };
+  function flagBg(B, stripes) {
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const yy = Math.min(S - 1, Math.max(0, y + Math.round(Math.sin(x * 0.55) * 0.9)));
+      let c = stripes[Math.min(stripes.length - 1, Math.floor(yy * stripes.length / S))];
+      if (Math.cos(x * 0.55) < -0.6) c = darken(c, 0.12);         // fold shading
+      B(y, x, c);
+    }
+  }
+  function chevronBg(B, bands, w) {
+    flagBg(B, RAINBOW);
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+      const b = Math.floor((x + Math.abs(y - 8) * 0.9) / w);
+      if (b < bands.length) B(y, x, bands[b]);
+    }
+  }
 
   const BGS = {
     vault(B) {
@@ -449,6 +732,75 @@
           if (y >= 0) B(y, x, tail[i]);
         }
       }
+    },
+    progress(B) { chevronBg(B, ['#FFFFFF', '#F5A9B8', '#5BCEFA', '#613915', '#000000'], 1.7); },
+    intersex(B) {
+      chevronBg(B, ['#FFDA00', '#FFDA00', '#FFFFFF', '#F5A9B8', '#5BCEFA', '#613915', '#000000'], 1.35);
+      for (const [y, x] of [[6, 1], [7, 0], [7, 2], [8, 0], [8, 2], [9, 1]]) B(y, x, '#7902AA');   // ring
+    },
+    trans(B) { flagBg(B, FLAGS.trans); },
+    bi(B) { flagBg(B, FLAGS.bi); },
+    lesbian(B) { flagBg(B, FLAGS.lesbian); },
+    pan(B) { flagBg(B, FLAGS.pan); },
+    enby(B) { flagBg(B, FLAGS.enby); },
+    ace(B) { flagBg(B, FLAGS.ace); },
+    aro(B) { flagBg(B, FLAGS.aro); },
+    genderfluid(B) { flagBg(B, FLAGS.genderfluid); },
+    lavalamp(B) {                                       // groovy 70s lava blobs
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) B(y, x, mix('#2A0845', '#C2157F', y / (S - 1)));
+      const blobs = [[3, 2, 2.4, '#FF6D00'], [2, 14, 1.9, '#FF4081'], [9, 15, 2.3, '#FFAB00'], [14, 2, 2.5, '#FF4081'],
+                     [15, 13, 1.7, '#FF6D00'], [8, 1, 1.3, '#FFAB00'], [0, 8, 1.4, '#FF6D00']];
+      for (const [cy, cx, r, c] of blobs) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const d = Math.hypot(x - cx, (y - cy) * 0.8);
+        if (d <= r) B(y, x, c);
+      }
+      for (const [cy, cx, r, c] of blobs) B(Math.round(cy - r / 2), Math.round(cx - r / 3), lighten(c, 0.45));   // highlights
+    },
+    leopard(B) {
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) B(y, x, (x * 3 + y * 5) % 11 === 0 ? '#E8BC62' : '#D9A441');
+      for (let cy = 1; cy < S + 2; cy += 5) for (let cx = (cy % 10 === 1 ? 1 : 4); cx < S + 2; cx += 6) {
+        B(cy, cx, '#A0662A'); B(cy, cx + 1, '#A0662A');
+        for (const [y, x] of [[cy - 1, cx], [cy - 1, cx + 1], [cy, cx - 1], [cy + 1, cx], [cy, cx + 2], [cy + 1, cx + 2]]) B(y, x, '#3E2A14');
+      }
+    },
+    redroom(B) {                                        // velvet curtains, red glow
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        let c = x % 4 === 0 ? '#2A0508' : '#3E0A0F';
+        const g = Math.max(0, 1 - Math.hypot(x - 8, y - 1) / 9);
+        if (g > 0) c = mix(c, '#B3202A', g * 0.75);
+        if (y >= 14) c = (x + y) % 2 ? '#140304' : '#260708';
+        B(y, x, c);
+      }
+      const fold = ['#7A0F14', '#A3161D', '#5A0A0E'];
+      for (let y = 0; y < 14; y++) for (const x of [0, 1, 2, 14, 15, 16]) {
+        if ((x === 2 || x === 14) && y > 8) continue;    // tied back
+        B(y, x, fold[x % 3]);
+      }
+      for (let x = 0; x < S; x++) B(0, x, '#A3161D');
+      for (let x = 0; x < S; x++) if (x % 2) B(1, x, '#C9A227');   // gold fringe
+      B(9, 2, '#C9A227'); B(9, 14, '#C9A227');           // tie-backs
+    },
+    sakura(B) {
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) B(y, x, mix('#FFE4EE', '#CDE7FF', y / (S - 1)));
+      for (let y = 15; y < S; y++) for (let x = 0; x < S; x++) B(y, x, (x + y) % 3 ? '#C5E1A5' : '#AED581');
+      const br = '#5D4037';
+      for (const [y, x] of [[3, 0], [3, 1], [2, 2], [2, 3], [1, 4], [1, 5], [0, 6], [2, 1], [4, 0],
+                            [2, 16], [2, 15], [3, 14], [3, 13], [1, 13], [0, 12], [4, 16]]) B(y, x, br);
+      const pk = '#FFB7C5', wt = '#FFF0F4', ct = '#FF8FAB';
+      for (const [y, x] of [[1, 1], [1, 2], [2, 0], [0, 3], [1, 3], [0, 4], [2, 4], [4, 1], [5, 0], [0, 5], [3, 2],
+                            [1, 14], [1, 15], [0, 13], [0, 14], [3, 15], [3, 16], [4, 13], [2, 12], [1, 12], [0, 11]]) B(y, x, (x + y) % 3 ? pk : wt);
+      for (const [y, x] of [[1, 2], [0, 4], [1, 15], [3, 15]]) B(y, x, ct);
+      for (const [y, x] of [[7, 1], [10, 2], [12, 0], [8, 15], [12, 14], [6, 13], [11, 16], [14, 3]]) B(y, x, pk);   // falling petals
+    },
+    clouds(B) {                                         // cotton-candy sky
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++)
+        B(y, x, y < 8 ? mix('#FFC1E3', '#D9C6FF', y / 8) : mix('#D9C6FF', '#B8E2FF', (y - 8) / 8));
+      const puffs = [[3, 2, 1.8], [2, 4, 1.5], [4, 0, 1.3], [2, 13, 1.7], [3, 15, 1.6], [13, 1, 1.6], [14, 3, 1.4], [12, 15, 1.8], [14, 14, 1.5]];
+      for (const [cy, cx, r] of puffs) for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const d = Math.hypot(x - cx, y - cy);
+        if (d <= r) B(y, x, y > cy + 0.4 ? '#F3E5F5' : '#FFFFFF');
+      }
+      B(0, 9, '#FFF59D'); B(7, 1, '#FFFFFF'); B(8, 15, '#FFF59D'); B(10, 13, '#FFFFFF');   // twinkles
     }
   };
 
@@ -490,6 +842,30 @@
       ring((y, x, side) => F(y, x, side === 'top' || side === 'left' ? '#FFFFFF' : '#9A9AA6'));
       for (const [y, x] of [[0, 0], [0, 16], [16, 0], [16, 16]]) F(y, x, null);
       F(1, 1, '#FFFFFF'); F(1, 15, '#C8C8D0'); F(15, 1, '#C8C8D0'); F(15, 15, '#9A9AA6');
+    },
+    glitter(F, isFg) {
+      const c = ['#FFD6F5', '#FF8BF0', '#FFFFFF', '#E1BEE7', '#B388FF', '#FFF59D'];
+      ring((y, x) => F(y, x, c[(x * 7 + y * 3) % c.length]));
+      for (const [y, x] of [[1, 1], [1, 15], [15, 1], [15, 15], [1, 8], [15, 8], [8, 1], [8, 15]]) if (!isFg(y, x)) F(y, x, '#FFFFFF');
+    },
+    rainbow(F) {
+      ring((y, x) => F(y, x, RAINBOW[Math.floor(((x + y) % 12) / 2)]));
+    },
+    chain(F, isFg) {                                    // chain links + studded leather
+      ring((y, x, side) => F(y, x, ['#5F6670', '#C8CDD5', '#9AA0A8'][(side === 'top' || side === 'bottom' ? x : y) % 3]));
+      for (let i = 1; i < S - 1; i++) for (const [y, x] of [[1, i], [S - 2, i], [i, 1], [i, S - 2]]) {
+        if (isFg(y, x)) continue;
+        F(y, x, i % 3 === 0 ? '#E0E4EA' : '#161616');
+      }
+    },
+    hearts(F) {
+      ring((y, x) => F(y, x, (x + y) % 2 ? '#FFB3D9' : '#FF8FC8'));
+      const heart = (y, x) => {
+        for (const [dy, dx] of [[0, 0], [0, 2], [1, 0], [1, 1], [1, 2], [2, 1]]) F(y + dy, x + dx, '#FF2D87');
+        F(y, x, '#FF6FB0');
+      };
+      heart(0, 0); heart(0, 14); heart(14, 0); heart(14, 14);
+      for (const [y, x] of [[0, 8], [16, 8], [8, 0], [8, 16]]) F(y, x, '#FFFFFF');
     }
   };
 
