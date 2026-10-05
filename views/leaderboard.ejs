@@ -42,7 +42,7 @@
   button.lb-tile { cursor: pointer; }
   button.lb-tile:hover { border-color: #4caf50; }
   .lb-tile .k { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
-  .lb-tile .v { display: block; font-size: 20px; font-weight: bold; margin-top: 3px; color: #ffd700; font-variant-numeric: tabular-nums; }
+  .lb-tile .v { display: block; font-size: 20px; font-weight: bold; margin-top: 3px; color: #ffd700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 
   .lb-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
   .lb-tab { appearance: none; border: 1px solid #2b2b2b; background: #151515; color: #bbb; border-radius: 999px; padding: 8px 16px;
@@ -139,6 +139,7 @@
     .lb-pod .val, .lb-pod .p1 .val { font-size: 15px; }
     .lb-pod .sub { font-size: 11px; }
     .lb-tile { min-width: 0; flex: 1 1 140px; }
+    .lb-tile .v { font-size: 17px; }
     .lb-tab { padding: 7px 12px; font-size: 13px; }
     .lb-jp { grid-template-columns: 24px minmax(0, 1fr) auto; }
     .lb-jp .t { grid-column: 2 / -1; text-align: left; margin-top: -6px; }
