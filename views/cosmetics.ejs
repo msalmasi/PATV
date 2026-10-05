@@ -22,7 +22,7 @@
   const kindGroup = (k) => (kinds[k] && kinds[k].group) || (String(k).startsWith('gtf_') ? 'GTF avatar' : 'Profile');
   const kindSlot = (k) => (kinds[k] && kinds[k].slot) || kindLabel(k);
   const typeText = (k) => kindGroup(k) + ' · ' + kindSlot(k);
-  const whereText = (k) => kindGroup(k) === 'GTF avatar' ? 'Worn by your Grand Theft Frog pixel avatar (heist sheets, stream overlay)' : 'Shows on your PATV profile' + (k === 'name_color' ? ' and the rankings' : '');
+  const whereText = (k) => kindGroup(k) === 'GTF avatar' ? 'Worn by your Grand Theft Frogger pixel avatar (heist sheets, stream overlay)' : 'Shows on your PATV profile' + (k === 'name_color' ? ' and the rankings' : '');
   const seasonEmoji = (label) => /winter/i.test(label) ? '❄️' : /pride/i.test(label) ? '🏳️‍🌈' : /hallowe/i.test(label) ? '🎃' : '📅';
   const fmtDay = (ms) => { const d = new Date(ms); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC', ...(d.getUTCFullYear() !== new Date(now).getUTCFullYear() ? { year: 'numeric' } : {}) }); };
   const itemTags = (it) => (it && Array.isArray(it.tags) ? it.tags : []).filter((t) => tags[t]);
@@ -230,7 +230,7 @@
 </style>
 <div class="cxp">
   <h1>🎨 Cosmetics</h1>
-  <p class="sub">Look the part. Name colors, profile banners, borders, effects and avatar decorations for your PATV profile, plus gear for your Grand Theft Frog pixel avatar. Every item is a real copy you own — equip it, gift it, or sell it to another player.</p>
+  <p class="sub">Look the part. Name colors, profile banners, borders, effects and avatar decorations for your PATV profile, plus gear for your Grand Theft Frogger pixel avatar. Every item is a real copy you own — equip it, gift it, or sell it to another player.</p>
 
   <%- include('partials/actions', { acts, msg }) %>
   <% if (me && !me.camfrog) { %>
@@ -419,11 +419,11 @@
       <ul>
         <li><b>Shop</b> — pick an item and hit Buy. Pepe charges the PAT as you, so you need a linked Camfrog name. Prices by rarity:
           <% Object.keys(rarities).forEach((r, i) => { %><%= i ? ' · ' : '' %><span style="color:<%= RC(r) %>"><%= r %> <%= fmt(rarities[r].price) %></span><% }) %>.</li>
-        <li><b>Drops</b> — heists, the arena and bingo can drop items, mostly Grand Theft Frog avatar gear. Rarer drops are rarer.</li>
+        <li><b>Drops</b> — heists, the arena and bingo can drop items, mostly Grand Theft Frogger avatar gear. Rarer drops are rarer.</li>
         <li><b>Achievements &amp; levels</b> — some items unlock for free when you earn an <a href="/achievements">achievement</a> or reach level 10, 25 or 50. They land in My items automatically.</li>
         <li><b>Seasonal</b> — limited items sell only during their season (Halloween, winter). After that the only way to get one is from another player.</li>
         <li><b>Gifts</b> — buy a new item for a friend from the shop, or give away a copy you own.</li>
-        <li><b>Labels</b> — every card says what it is and where it shows: <b>Profile</b> items (name color, border, banner, effect, avatar decoration) dress up your PATV profile; <b>GTF avatar</b> items (hat, mask, outfit, prop, background, frame) are worn by your Grand Theft Frog pixel avatar. Seasonal items are labelled with their set and when they leave the shop. Style tags (Pride, Drag &amp; camp, Cute, Kink) let you filter the shop — tick <i>Hide kink items</i> if you'd rather not see those. Pride flags are always in the shop; the Pride set is June only.</li>
+        <li><b>Labels</b> — every card says what it is and where it shows: <b>Profile</b> items (name color, border, banner, effect, avatar decoration) dress up your PATV profile; <b>GTF avatar</b> items (hat, mask, outfit, prop, background, frame) are worn by your Grand Theft Frogger pixel avatar. Seasonal items are labelled with their set and when they leave the shop. Style tags (Pride, Drag &amp; camp, Cute, Kink) let you filter the shop — tick <i>Hide kink items</i> if you'd rather not see those. Pride flags are always in the shop; the Pride set is June only.</li>
       </ul>
       <h2>Trading</h2>
       <p>Every item you own is a copy that can change hands. List a copy on the <a href="/cosmetics?tab=market#tabs">market</a> at your price (at least <%= fmt(listMin) %> PAT); it's unequipped and locked while it's listed, and you can cancel any time. When someone buys it Pepe moves the PAT — the seller gets the price minus a <%= fee %>% market fee.</p>

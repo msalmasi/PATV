@@ -1,4 +1,4 @@
-// gtf.js — "Grand Theft Frog" (GTF), the crime game that ties Pepe's heists, turf wars and gangs
+// gtf.js — "Grand Theft Frogger" (GTF), the crime game that ties Pepe's heists, turf wars and gangs
 // together. Pepe registers each player's heist sheet here when he publishes it, so a PATV profile
 // can link it; /gtf is the overview page linking the guides and the live boards. The turf map's
 // districts change from season to season, so nothing here names them.

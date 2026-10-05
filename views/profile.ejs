@@ -145,7 +145,7 @@
 
   <% const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null; %>
   <% if (av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))) { %>
-  <section class="card avs" aria-label="Grand Theft Frog avatar">
+  <section class="card avs" aria-label="Grand Theft Frogger avatar">
     <div class="avs-frame<%= av.svg ? '' : ' empty' %>">
       <% if (av.svg) { %><%- av.svg %><% } else { %><span class="avs-ph" aria-hidden="true">🐸</span><% } %>
     </div>
@@ -181,7 +181,7 @@
   <% } %>
 
   <section class="card">
-    <h2>Grand Theft Frog</h2>
+    <h2>Grand Theft Frogger</h2>
     <div class="gtf">
       <div>
         <% if (typeof heistSheet !== 'undefined' && heistSheet) { %>

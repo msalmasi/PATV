@@ -1,5 +1,5 @@
 // cosmetics.js — PATV cosmetics: account looks (name colors, profile borders/banners/effects, avatar
-// decorations) and Grand Theft Frog pixel-avatar layers, plus the badge showcase.
+// decorations) and Grand Theft Frogger pixel-avatar layers, plus the badge showcase.
 //
 // The catalog is cosmetics.json. Every owned item is a COPY (a row in user_cosmetics) so copies can
 // be traded: an owner can equip it, list it on the player market, cancel the listing, or gift it.
@@ -601,7 +601,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/cosmetics", addUser, async (req, res) => {
     try {
       const d = await pageData(req);
-      res.locals.og = require("./og").forPage(req, "PATV Cosmetics", "Name colors, profile banners, borders, effects and Grand Theft Frog avatar gear. Buy, earn, trade.");
+      res.locals.og = require("./og").forPage(req, "PATV Cosmetics", "Name colors, profile banners, borders, effects and Grand Theft Frogger avatar gear. Buy, earn, trade.");
       res.render("cosmetics", d);
     } catch (e) {
       console.error("[cosmetics] page:", e);
