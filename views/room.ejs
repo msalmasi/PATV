@@ -29,6 +29,13 @@
   .rm .line .who { font-weight: bold; margin-right: 6px; }
   .rm .line .when { color: #666; font-size: 11px; margin-left: 4px; white-space: nowrap; }
   .rm .line.pepe { background: #0f1a10; }
+  .rm .line.tx { border-left: 3px solid #4f7fa8; background: #0f141b; }
+  .rm .line.tx .body { font-style: italic; color: #c8d6e5; }
+  .rm .line.tx .who { font-style: normal; }
+  .rm .line.tx .who::before { content: "\1F399  "; }
+  .rm .listen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .rm .listen .btn { padding: 7px 12px; font-size: 13px; background: #181818; border-color: #2b2b2b; cursor: pointer; font-family: inherit; }
+  .rm .hide { display: none !important; }
   .rm .sys { color: #8a8a8a; font-size: 12.5px; padding: 3px 6px 3px 42px; overflow-wrap: anywhere; }
   .rm .sys.topic { color: #c9b46a; }
   .rm .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: #0d0d0d; object-fit: cover; flex: none; overflow: hidden; }
@@ -78,7 +85,7 @@
       <span class="chip">📡 Camfrog</span>
     </div>
   </section>
-  <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
+  <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
 
 <% if (!signedIn) { %>
   <section class="card tease">
@@ -99,6 +106,7 @@
       <section class="card" aria-labelledby="micH">
         <h2 id="micH">On the mic</h2>
         <div class="mic" id="rmMic"></div>
+        <div class="listen hide" id="rmAudioBox" style="margin-top:10px"><button class="btn" type="button" id="rmAudioBtn" aria-pressed="false">🔈 Listen live</button><audio id="rmAudio" preload="none"></audio><span class="muted" id="rmAudioTxt">room audio, a few seconds behind</span></div>
       </section>
       <section class="card" aria-labelledby="pplH">
         <h2 id="pplH">In the room <small id="rmPplN"></small></h2>
@@ -148,12 +156,13 @@
     function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
 
     function item(it) {
-      if (it.k === 'msg') {
-        var row = el('div', 'line' + (it.u && it.u.self ? ' pepe' : ''));
+      if (it.k === 'msg' || it.k === 'tx') {
+        var row = el('div', 'line' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
+        if (it.k === 'tx') row.title = 'Said on the mic (auto-transcribed)';
         row.appendChild(avatar(it.u));
         var b = el('div', 'body');
         b.appendChild(name(it.u));
-        b.appendChild(document.createTextNode(it.text));
+        b.appendChild(document.createTextNode(it.k === 'tx' ? '\u201c' + it.text + '\u201d' : it.text));
         var t = el('time', 'when', hhmm(it.ts)); t.dateTime = new Date(it.ts).toISOString();
         b.appendChild(t);
         row.appendChild(b);
@@ -228,8 +237,20 @@
       }
     }
 
+    var au = document.getElementById('rmAudio'), ab = document.getElementById('rmAudioBtn'), at = document.getElementById('rmAudioTxt'), playing = false;
+    function pref(v) { try { if (v === undefined) return localStorage.getItem('patvRoomAudio') === '1'; localStorage.setItem('patvRoomAudio', v ? '1' : '0'); } catch (e) { return false; } }
+    function audioStop() { if (!playing) return; playing = false; au.pause(); au.removeAttribute('src'); au.load(); ab.textContent = '🔈 Listen live'; ab.setAttribute('aria-pressed', 'false'); }
+    function audioStart() {
+      au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
+      au.play().then(function () { playing = true; ab.textContent = '🔊 Listening — stop'; ab.setAttribute('aria-pressed', 'true'); at.textContent = 'room audio, a few seconds behind'; })
+        .catch(function () { at.textContent = 'tap Listen live to start'; });
+    }
+    ab.addEventListener('click', function () { if (playing) { audioStop(); pref(false); } else { pref(true); audioStart(); } });
+    au.addEventListener('error', function () { if (playing) { audioStop(); at.textContent = 'audio stopped'; } });
     function apply(d, first) {
       renderRoom(d);
+      document.getElementById('rmAudioBox').classList.toggle('hide', !d.room.audio);
+      if (!d.room.audio) audioStop(); else if (first && pref()) at.textContent = 'tap Listen live to resume';
       if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
       addFeed(d.feed, first);
       cursor = Math.max(cursor, d.cursor);

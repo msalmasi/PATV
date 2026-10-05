@@ -1,214 +1,231 @@
-<!-- views/home.ejs -->
+<!-- views/home.ejs — the functional homepage (home.js). Explainers live on /about. -->
 <%- include('layout', { title: 'Public Access Television', user: username }) %>
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const short = (n) => { n = Number(n) || 0; const a = Math.abs(n);
     return a >= 1e9 ? (n / 1e9).toFixed(a >= 1e10 ? 0 : 1) + 'B' : a >= 1e6 ? (n / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M' : a >= 1e4 ? Math.round(n / 1e3) + 'K' : fmt(n); };
-  const room = (rooms || []).find((r) => r.live) || (rooms || [])[0] || null;
+  const ago = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + 'm ago' : s < 172800 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
+  const pic = (a) => (typeof a === 'string' && /^(https?:\/\/|\/)/.test(a) ? a : '/public/img/avatar.png');
   const S0 = S || {};
+  const st = stage || { active: false };
+  const live = !!st.active;
+  const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
   const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
   const nameCss = me ? cosmeticName(me.username) : '';
-  const tables = S0.tables || [];
-  const pic = (a) => (typeof a === 'string' && /^(https?:\/\/|\/)/.test(a) ? a : '/public/img/avatar.png');
-  const cards = [
-    { href: '/rooms' + (room ? '/' + encodeURIComponent(room.slug) : ''), ic: '📡', t: 'Live rooms', d: 'Pepe\'s Camfrog rooms on the web: chat, who\'s in, who\'s on the mic.', s: room ? room.count + ' in ' + room.name : null, c: '#ef5350' },
-    { href: '/markets', ic: '🔮', t: 'Markets', d: 'Trade shares on what happens next. Prices move with every bet.', s: S0.markets ? S0.markets + ' live' : null, c: '#ba68c8' },
-    { href: '/lotto', ic: '🎟️', t: 'Lotto', d: 'Pick 4 + a Pepe Ball. Drawn every Sunday night.', s: S0.lotto ? short(S0.lotto.jackpot) + ' PAT jackpot' : null, c: '#ffd54f' },
-    { href: username ? '/u/' + encodeURIComponent(username) + '/wheel' : '/login', ic: '🎡', t: 'Wheel', d: 'The arcade wheel. Drop a coin, spin for PAT and XP.', s: S0.casinoPot ? short(S0.casinoPot) + ' jackpot' : null, c: '#4fc3f7' },
-    { href: '/tables', ic: '🃏', t: 'Casino tables', d: 'Hold\'em and Blackjack with Pepe dealing — from Camfrog or right here.', s: tables.length ? tables.join(' + ') + ' open' : null, c: '#66bb6a' },
-    { href: '/gtf', ic: '🔫', t: 'Grand Theft Frogger', d: 'Heists, gangs and turf wars. Crack the vault, split the take.', s: null, c: '#ff8a65' },
-    { href: '/bounties', ic: '🎯', t: 'Bounties', d: 'Post a challenge with a pot, chip in, or hunt one down.', s: S0.bounties ? S0.bounties + ' open' : null, c: '#e57373' },
-    { href: '/wagers', ic: '🤝', t: 'Wagers', d: 'Bet a friend head to head, with Pepe holding the money.', s: S0.wagers ? S0.wagers + ' live' : null, c: '#90a4ae' },
-    { href: '/staking', ic: '🏦', t: 'Staking', d: 'Own a slice of the Bank, the House and the Market maker.', s: S0.vaults ? short(S0.vaults.house) + ' in the House' : null, c: '#64b5f6' },
-    { href: '/cosmetics', ic: '🎨', t: 'Cosmetics', d: 'Name colours, frames, banners and GTF avatar gear.', s: null, c: '#f06292' },
-    { href: '/feed', ic: '🎞️', t: 'Clips & snaps', d: 'The best bits from the stream and the rooms.', s: null, c: '#a1887f' },
-    { href: '/economy', ic: '📘', t: 'How PAT works', d: 'The guide: where PAT comes from, where it goes, who holds it.', s: null, c: '#81c784' },
+  const M = mine || {};
+  const wheelHref = me ? '/u/' + encodeURIComponent(me.username) + '/wheel' : '/login';
+  // things to do: compact, action-first; `hot` = something live there now, `fresh` = you haven't tried it
+  const todo = [
+    { href: '/rooms' + (room ? '/' + encodeURIComponent(room.slug) : ''), ic: '📡', t: 'Live rooms', s: room ? room.count + ' in ' + room.name : null, hot: !!(room && room.live) },
+    { href: '/markets', ic: '🔮', t: 'Markets', s: S0.markets ? S0.markets + ' open' : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
+    { href: '/lotto', ic: '🎟️', t: 'Lotto', s: S0.lotto ? short(S0.lotto.jackpot) + ' jackpot' : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
+    { href: wheelHref, ic: '🎡', t: 'Wheel', s: S0.casinoPot ? short(S0.casinoPot) + ' pot' : null },
+    { href: '/tables', ic: '🃏', t: 'Casino tables', s: (S0.tables || []).length ? S0.tables.map((t) => t.game).join(' + ') + ' open' : null, hot: (S0.tables || []).length > 0 },
+    { href: '/gtf', ic: '🔫', t: 'Grand Theft Frogger', s: null },
+    { href: '/bounties', ic: '🎯', t: 'Bounties', s: S0.bounties ? S0.bounties + ' open' : null, hot: S0.bounties > 0 },
+    { href: '/wagers', ic: '🤝', t: 'Wagers', s: S0.wagers ? S0.wagers + ' live' : null },
+    { href: '/staking', ic: '🏦', t: 'Staking', s: S0.vaults ? short(S0.vaults.house) + ' House' : null },
+    { href: '/cosmetics', ic: '🎨', t: 'Cosmetics', s: null },
+    { href: '/feed', ic: '🎞️', t: 'Clips & snaps', s: null },
+    { href: '/rankings', ic: '🏆', t: 'Rankings', s: null },
   ];
 %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+<% if (live) { %>
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="/public/js/video.js" defer></script>
+<% } %>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
 <%- include('partials/cosmetics-css') %>
 <style>
   .hm { --card: #111; --line: #222; --muted: #8a8a8a; --green: #4caf50; --lime: #c6e94f; --gold: #ffd700;
-        max-width: 1180px; margin: 0 auto; padding: 18px 16px 64px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
-        display: grid; gap: 18px; box-sizing: border-box; width: 100%; }
+        max-width: 1400px; margin: 0 auto; padding: 14px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
+        display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
   .hm *, .hm *::before, .hm *::after { box-sizing: border-box; }
   .hm a { color: #81c784; text-decoration: none; }
   .hm a:hover { color: #a5d6a7; }
-  .hm .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }
-  .hm h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); font-family: 'Press Start 2P', monospace; font-size: 11px; line-height: 1.6;
+  .hm .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0; }
+  .hm h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6;
            display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .hm h2 a { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 13px; }
+  .hm h2 a, .hm h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12.5px; color: #81c784; }
   .hm .muted { color: var(--muted); font-size: 13px; }
-
-  /* hero */
-  .hm .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 18px; align-items: stretch;
-              background: radial-gradient(110% 140% at 0% 0%, #17301a 0%, #111 52%), #111; border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
-  .hm .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: var(--lime); }
-  .hm .hero h1 { font-size: clamp(26px, 4.2vw, 40px); line-height: 1.1; margin: 10px 0 10px; }
-  .hm .hero h1 em { font-style: normal; background: linear-gradient(90deg, #4caf50, #c6e94f); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .hm .lead { color: #c9d3c9; font-size: 15.5px; line-height: 1.55; margin: 0 0 16px; max-width: 56ch; }
-  .hm .ctas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
-  .hm .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 14px; font-weight: bold; }
+  .hm .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 14px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; }
   .hm .btn:hover, .hm .btn:focus-visible { border-color: var(--green); }
   .hm .btn.primary { background: var(--green); border-color: var(--green); color: #fff !important; }
-  .hm .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .hm .tile { background: rgba(0,0,0,.35); border: 1px solid #1f2a20; border-radius: 10px; padding: 9px 11px; min-width: 0; color: inherit !important; display: block; }
-  .hm a.tile:hover, .hm a.tile:focus-visible { border-color: #2f5a34; }
-  .hm .tile span { display: block; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hm .tile b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 2px; overflow-wrap: anywhere; }
-  .hm .tile em { display: block; font-style: normal; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hm .gold { color: var(--gold); } .hm .up { color: #81c784; }
+  .hm .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  .hm .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
+  .hm .pill.on { background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; }
+  .hm .pill.off { background: #1c1c1c; border: 1px solid #333; color: #999; }
+  .hm .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: hmPulse 1.6s ease-in-out infinite; }
+  .hm .pill.off .dot { background: #666; animation: none; }
+  @keyframes hmPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
-  /* stream */
-  .hm .tv { display: grid; gap: 8px; align-content: start; min-width: 0; }
-  .hm .tv-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
-  .hm .tv-frame { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #262626; background: #000; aspect-ratio: 16 / 9; }
-  .hm .tv-frame #videoWrapper { position: absolute; inset: 0; display: block; height: auto; }
-  .hm .tv-frame .video-js { width: 100%; height: 100%; }
-  .hm .tv-frame #videoOverlay { position: absolute; inset: 0; display: grid; place-items: center; grid-template-rows: none; grid-template-columns: none; cursor: pointer; }
-  .hm .tv-frame #videoOverlay img { grid-column: auto; grid-row: auto; width: 56px; height: auto; opacity: .9; }
-  .hm .tv-frame #twitch { position: absolute; inset: 0; padding: 0; height: auto; }
-  .hm .tv-frame #twitch iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* ── main stage ── */
+  .hm .stage { border: 1px solid var(--line); border-radius: 16px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #0d0d0f 55%); overflow: hidden; }
+  .hm .stage .bar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 10px 14px; }
+  .hm .stage .bar .ttl { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; color: var(--lime); }
+  .hm .stage .bar .sub { color: #aab3aa; font-size: 13px; }
+  .hm .stage .bar .sp { flex: 1; }
+  .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 0 12px 12px; }
+  .hm .stage.live .stage-body { display: grid; }
+  .hm .stage.live .stage-off { display: none; }
+  .hm .player { position: relative; width: 100%; max-width: calc((100vh - 190px) * 16 / 9); margin: 0 auto; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #262626; }
+  .hm .player #videoWrapper { position: absolute; inset: 0; display: block; height: auto; }
+  .hm .player .video-js { width: 100%; height: 100%; }
+  .hm .player #videoOverlay { position: absolute; inset: 0; display: grid; place-items: center; grid-template-rows: none; grid-template-columns: none; cursor: pointer; z-index: 3; background: rgba(0,0,0,.45); }
+  .hm .player #videoOverlay img { grid-column: auto; grid-row: auto; width: 56px; height: auto; opacity: .9; }
+  .hm .player #twitch { position: absolute; inset: 0; padding: 0; height: auto; }
+  .hm .player #twitch iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
   .hm .hide { display: none !important; }
+  .hm .stage-side { display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .hm .box { background: rgba(0,0,0,.4); border: 1px solid #1f2a20; border-radius: 12px; padding: 10px 12px; min-width: 0; }
+  .hm .box h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .hm a.box { display: block; color: #ddd !important; }
+  .hm a.box:hover { border-color: #2f5a34; }
+  .hm .wheel .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .hm .wheel .res { font-size: 13px; color: #c9d3c9; min-height: 18px; margin-top: 6px; }
+  .hm .wheel .res b { color: var(--gold); }
+  .hm .stage-off { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: 0 12px 12px; }
 
-  /* personal strip */
-  .hm .me { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px 18px; align-items: center; background: linear-gradient(90deg, #121a13, #111 60%); }
+  /* ── you ── */
+  .hm .me { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; background: linear-gradient(90deg, #121a13, #111 60%); }
   .hm .me .pic { display: flex; gap: 8px; align-items: center; }
-  .hm .me .ava { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--green); background: #0d0d0d; display: block; }
-  .hm .me .gtf { width: 64px; height: 64px; border-radius: 10px; overflow: hidden; background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 16px 16px; display: grid; place-items: center; }
-  .hm .me .gtf svg { width: 60px; height: 60px; image-rendering: pixelated; shape-rendering: crispEdges; }
-  .hm .me .who { min-width: 0; display: grid; gap: 6px; }
-  .hm .me .who .nm { font-size: 19px; font-weight: bold; overflow-wrap: anywhere; color: #fff; }
-  .hm .me .row { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; color: #bbb; align-items: baseline; }
-  .hm .me .row b { color: #fff; font-variant-numeric: tabular-nums; }
-  .hm .bar { height: 10px; background: #1c1c1c; border-radius: 999px; overflow: hidden; max-width: 420px; }
-  .hm .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .hm .me .ava { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 3px solid var(--green); background: #0d0d0d; display: block; }
+  .hm .me .gtf { width: 52px; height: 52px; border-radius: 10px; overflow: hidden; background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 14px 14px; display: grid; place-items: center; }
+  .hm .me .gtf svg { width: 48px; height: 48px; image-rendering: pixelated; shape-rendering: crispEdges; }
+  .hm .me .who { min-width: 0; display: grid; gap: 5px; }
+  .hm .me .top { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 13.5px; color: #bbb; }
+  .hm .me .top .nm { font-size: 17px; font-weight: bold; color: #fff; overflow-wrap: anywhere; }
+  .hm .me .top b { color: #fff; font-variant-numeric: tabular-nums; }
+  .hm .lvl { height: 8px; background: #1c1c1c; border-radius: 999px; overflow: hidden; max-width: 380px; }
+  .hm .lvl span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .hm .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .hm .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb !important; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .chip.warm { border-color: #6b5a20; background: #1d1a0f; color: #e8d9a0 !important; }
+  .hm .chip.mic { border-color: #2f6d3a; background: #12301a; color: #c9f2cf !important; }
   .hm .me .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
   .hm .me .acts .btn { padding: 7px 11px; font-size: 13px; }
-  .hm .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 8px 10px; color: #e8d9a0; font-size: 13px; grid-column: 1 / -1; }
 
-  /* live room */
-  .hm .lr { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 14px; }
-  .hm .lr-feed { display: flex; flex-direction: column; gap: 3px; height: 300px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 #111; padding-right: 4px; }
+  /* ── room + live now ── */
+  .hm .main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+  .hm .lr { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; }
+  .hm .lr-feed { display: flex; flex-direction: column; gap: 2px; height: 380px; overflow-y: auto; overscroll-behavior: contain; scrollbar-color: #333 #111; padding-right: 4px; }
   .hm .ln { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; padding: 3px 6px; border-radius: 6px; }
   .hm .ln:hover { background: #161616; }
   .hm .ln .w { font-weight: bold; margin-right: 6px; }
   .hm .ln .t { color: #666; font-size: 11px; margin-left: 4px; }
   .hm .ln.sys { color: #8a8a8a; font-size: 12.5px; }
   .hm .ln.pepe { background: #0f1a10; }
-  .hm .lr-side { display: grid; gap: 10px; align-content: start; min-width: 0; }
-  .hm .lr-box { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px; padding: 10px 12px; min-width: 0; }
-  .hm .lr-box h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-  .hm .chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .hm .chip { font-size: 12px; padding: 3px 9px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hm .chip.mic { border-color: #2f6d3a; background: #12301a; color: #c9f2cf; }
-  .hm .live { display: inline-flex; align-items: center; gap: 6px; font-family: Ubuntu, sans-serif; font-size: 11px; padding: 2px 9px; border-radius: 999px; background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; font-weight: bold; letter-spacing: .06em; vertical-align: 1px; }
-  .hm .live.off { background: #1c1c1c; border-color: #333; color: #999; }
-  .hm .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: hmPulse 1.6s ease-in-out infinite; }
-  .hm .live.off .dot { background: #666; animation: none; }
-  @keyframes hmPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
-  .hm .tease { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; }
-  .hm .tease .big { font-size: 40px; }
+  .hm .ln.tx { border-left: 3px solid #4f7fa8; background: #0f141b; font-style: italic; color: #c8d6e5; }
+  .hm .ln.tx .w { font-style: normal; }
+  .hm .ln.tx .w::before { content: "🎙 "; }
+  .hm .lr-side { display: grid; gap: 8px; align-content: start; min-width: 0; }
   .hm .ro { font-size: 12px; color: #9fb3c8; margin-top: 6px; }
+  .hm .listen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .hm .listen .btn { padding: 6px 10px; font-size: 12.5px; }
+  .hm .tease { display: grid; gap: 10px; justify-items: start; }
+  .hm .now { display: grid; gap: 8px; }
+  .hm .now a.it { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px; padding: 7px 10px; color: #ddd !important; font-size: 13.5px; }
+  .hm .now a.it:hover { border-color: #2f5a34; }
+  .hm .now .q { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .now .v { color: var(--gold); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .hm .top5 { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .hm .top5 li { display: grid; grid-template-columns: 18px 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13.5px; }
+  .hm .top5 .rk { color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .hm .top5 img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: #1c1c1c; display: block; }
+  .hm .top5 .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
+  .hm .top5 .p { color: var(--gold); font-size: 12.5px; white-space: nowrap; }
 
-  /* cards */
-  .hm .games { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
-  .hm .game { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: start; background: var(--card); border: 1px solid var(--line);
-              border-radius: 14px; padding: 14px; color: #e6e6e6 !important; position: relative; overflow: hidden; transition: border-color .15s, transform .15s; }
-  .hm .game::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c); }
-  .hm .game:hover, .hm .game:focus-visible { border-color: var(--c); transform: translateY(-2px); }
-  .hm .game .gi { font-size: 24px; line-height: 1; grid-row: span 3; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #0d0d0d; }
-  .hm .game b { font-size: 15.5px; }
-  .hm .game p { margin: 0; color: #9a9a9a; font-size: 13px; line-height: 1.45; }
-  .hm .game .gs { font-size: 12px; color: var(--c); font-weight: bold; }
-
-  /* top 5 */
-  .hm .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-  .hm .top { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .hm .top li { display: grid; grid-template-columns: 26px 32px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px; padding: 7px 10px; }
-  .hm .top .rk { font-family: 'Press Start 2P', monospace; font-size: 11px; color: var(--muted); text-align: center; }
-  .hm .top li:nth-child(1) .rk { color: #ffd700; } .hm .top li:nth-child(2) .rk { color: #cfd8dc; } .hm .top li:nth-child(3) .rk { color: #d7a46b; }
-  .hm .top img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #1c1c1c; display: block; }
-  .hm .top .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
-  .hm .top .n small { color: var(--muted); margin-left: 6px; }
-  .hm .top .p { font-variant-numeric: tabular-nums; color: var(--gold); font-size: 13.5px; white-space: nowrap; }
-  .hm .about p { color: #bbb; font-size: 14px; line-height: 1.6; margin: 0 0 10px; }
-  .hm .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
+  /* ── things to do ── */
+  .hm .todo { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+  .hm .todo a { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 0 8px; align-items: center; background: #111; border: 1px solid #222; border-radius: 10px; padding: 8px 10px; color: #e6e6e6 !important; font-size: 14px; position: relative; }
+  .hm .todo a:hover, .hm .todo a:focus-visible { border-color: #2f5a34; }
+  .hm .todo .i { font-size: 18px; grid-row: span 2; text-align: center; }
+  .hm .todo b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .todo small { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .todo a.hot { border-color: #3a5a2a; }
+  .hm .todo a.hot small { color: #9ccc65; }
+  .hm .todo .tag { position: absolute; top: -7px; right: 8px; font-size: 10px; padding: 1px 7px; border-radius: 999px; background: #6b5a20; color: #fff3c4; font-weight: bold; }
+  .hm .pitch { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; }
+  .hm .pitch p { margin: 0; color: #c9d3c9; font-size: 14.5px; line-height: 1.5; }
+  .hm .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--muted); justify-content: center; padding-top: 4px; }
   .hm code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
 
-  @media (max-width: 920px) {
-    .hm .hero { grid-template-columns: minmax(0, 1fr); padding: 18px; }
+  @media (max-width: 1100px) {
+    .hm .stage-body { grid-template-columns: minmax(0, 1fr); }
+    .hm .stage-side { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .hm .main { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 760px) {
     .hm .lr { grid-template-columns: minmax(0, 1fr); }
-    .hm .two { grid-template-columns: minmax(0, 1fr); }
     .hm .me { grid-template-columns: auto minmax(0, 1fr); }
     .hm .me .acts { grid-column: 1 / -1; justify-content: flex-start; }
+    .hm .player { max-width: none; }
   }
   @media (max-width: 520px) {
-    .hm { padding: 12px 12px 48px; gap: 14px; }
-    .hm .hero { padding: 16px 14px; border-radius: 14px; }
-    .hm .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .hm .tease { grid-template-columns: minmax(0, 1fr); text-align: center; justify-items: center; }
+    .hm { padding: 10px 10px 44px; gap: 12px; }
     .hm .me .gtf { display: none; }
-    .hm .me .ava { width: 52px; height: 52px; }
-    .hm .games { grid-template-columns: minmax(0, 1fr); }
-    .hm .lr-feed { height: 260px; }
+    .hm .lr-feed { height: 300px; }
+    .hm .todo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .hm .pitch { grid-template-columns: minmax(0, 1fr); }
+    .hm .stage-body, .hm .stage-off { padding: 0 8px 8px; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .hm .dot { animation: none; }
-    .hm .game { transition: none; }
-    .hm .game:hover, .hm .game:focus-visible { transform: none; }
-  }
+  @media (prefers-reduced-motion: reduce) { .hm .dot { animation: none; } }
 </style>
 
 <main class="hm">
-  <!-- ───── hero ───── -->
-  <section class="hero" aria-labelledby="hmTitle">
-    <div>
-      <div class="eyebrow">PUBLIC ACCESS TELEVISION</div>
-      <h1 id="hmTitle">A TV station, a Camfrog crew and <em>a frog who runs the games.</em></h1>
-      <p class="lead">PATV is a community hangout: a live stream, Camfrog rooms where Pepe the frog deals cards, runs heists and DJs, and PAT — the points everyone plays with, here and in the rooms.</p>
-      <div class="ctas">
-        <% if (!me) { %>
-          <a class="btn primary" href="/register">Join PATV</a>
-          <a class="btn" href="/login">Sign in</a>
-        <% } else if (room) { %>
-          <a class="btn primary" href="/rooms/<%= encodeURIComponent(room.slug) %>">📡 Watch <%= room.name %> live</a>
-          <a class="btn" href="/u/<%= encodeURIComponent(me.username) %>/wheel">🎡 Spin the wheel</a>
-        <% } else { %>
-          <a class="btn primary" href="/u/<%= encodeURIComponent(me.username) %>/wheel">🎡 Spin the wheel</a>
-          <a class="btn" href="/markets">🔮 Markets</a>
-        <% } %>
-        <a class="btn" href="/economy">📘 How it works</a>
-      </div>
-      <div class="tiles" aria-label="Live numbers">
-        <% if (room) { %>
-          <a class="tile" href="/rooms/<%= encodeURIComponent(room.slug) %>"><span>In <%= room.name %></span><b class="<%= room.live ? 'up' : '' %>"><%= room.count %></b><em><%= room.live ? 'right now' : 'room offline' %></em></a>
-          <a class="tile" href="/rooms/<%= encodeURIComponent(room.slug) %>"><span>On the mic</span><b><%= room.micCount %></b><em><%= me && room.mic.length ? room.mic.join(', ') : (room.micCount ? 'talking now' : 'mic is free') %></em></a>
-        <% } %>
-        <% if (S0.lotto) { %><a class="tile" href="/lotto" title="<%= fmt(S0.lotto.jackpot) %> PAT"><span>Lotto jackpot</span><b class="gold"><%= short(S0.lotto.jackpot) %></b><em><%= fmt(S0.lotto.sold) %> tickets this week</em></a><% } %>
-        <a class="tile" href="/rankings" title="<%= fmt(S0.casinoPot) %> PAT"><span>Wheel jackpot</span><b class="gold"><%= short(S0.casinoPot) %></b><em>PAT in the pot</em></a>
-        <% if (S0.vaults) { %><a class="tile" href="/staking" title="<%= fmt(S0.vaults.house) %> PAT"><span>House vault</span><b><%= short(S0.vaults.house) %></b><em>banks the casino</em></a><% } %>
-        <a class="tile" href="/markets"><span>Live markets</span><b><%= S0.markets || 0 %></b><em><%= S0.bounties || 0 %> bounties · <%= S0.wagers || 0 %> wagers</em></a>
-      </div>
+  <!-- ───── main stage ───── -->
+  <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">
+    <div class="bar">
+      <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
+      <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
+      <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
+      <span class="sp"></span>
+      <a class="sub" href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch ›</a>
     </div>
-    <div class="tv">
-      <div class="tv-head"><span>📺 On air</span><span><a href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch</a> · <a href="rtmp://stream.publicaccess.tv/live/broadcast">VLC (rtmp)</a></span></div>
-      <div class="tv-frame">
+    <div class="stage-body">
+      <div class="player" id="player">
+        <% if (live) { %>
         <div id="videoWrapper">
-          <div id="videoOverlay" role="button" tabindex="0" aria-label="Unmute the stream">
-            <img src="/public/img/mute-icon.png" alt="" />
-          </div>
+          <div id="videoOverlay" role="button" tabindex="0" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt="" /></div>
           <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline muted>
             <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
           </video-js>
         </div>
+        <% } %>
         <div id="twitch" class="hide"></div>
       </div>
-      <p class="muted" style="margin:0">The stream starts muted — tap it for sound. When we're live on Twitch it switches over by itself.</p>
+      <div class="stage-side" id="stageSide"></div>
+    </div>
+    <div class="stage-off" id="stageOff"></div>
+    <!-- the stage widgets render once and move between the live side panel and the off-air strip -->
+    <div class="hide" id="stageWidgets">
+      <div class="box wheel" id="wheelBox">
+        <h3>🎡 Spin the stage wheel</h3>
+        <% if (me) { %>
+          <div class="row">
+            <button class="btn primary" type="button" id="spinBtn">Spin · 5,000 PAT</button>
+            <span class="muted">PAT <b id="balTxt" style="color:#fff"><%= fmt(me.points_balance) %></b></span>
+          </div>
+          <div class="res" id="spinRes" aria-live="polite"></div>
+        <% } else { %>
+          <p class="muted" style="margin:0"><a href="/login">Sign in</a> to spin the wheel on stream — it spins live in OBS.</p>
+        <% } %>
+      </div>
+      <% if (feat) { %>
+        <a class="box" href="/casino/t/<%= encodeURIComponent(feat.id) %>">
+          <h3>🃏 Featured table</h3>
+          <b><%= feat.game %></b><span class="muted"> · <%= feat.seats.length %> seated<%= feat.room ? ' · ' + feat.room : '' %></span>
+          <div class="muted" style="margin-top:4px">Watch or take a seat ›</div>
+        </a>
+      <% } %>
+      <% if (room) { %>
+        <a class="box" href="/rooms/<%= encodeURIComponent(room.slug) %>">
+          <h3>📡 <%= room.name %></h3>
+          <b><%= room.count %></b><span class="muted"> in the room · <%= room.micCount %> on the mic</span>
+        </a>
+      <% } %>
     </div>
   </section>
 
@@ -217,144 +234,223 @@
   <section class="card me" aria-label="You">
     <div class="pic">
       <a href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your profile"><img class="ava" src="<%= pic(me.avatar) %>" alt=""></a>
-      <% if (gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your GTF avatar"><%- gtf %></a><% } %>
+      <% if (M.gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your GTF avatar"><%- M.gtf %></a><% } %>
     </div>
     <div class="who">
-      <div class="nm"><span class="<%= nameCss ? 'cx-name' : '' %>" style="<%= nameCss %>"><%= me.displayname || me.username %></span></div>
-      <div class="row"><span>💰 <b><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ Level <b><%= me.level %></b></span><span><%= fmt(me.xp) %> / <%= fmt(need) %> XP</span></div>
-      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="XP to the next level"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
+      <div class="top"><span class="nm <%= nameCss ? 'cx-name' : '' %>" style="<%= nameCss %>"><%= me.displayname || me.username %></span>
+        <span>💰 <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ Lv <b><%= me.level %></b> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span></div>
+      <div class="lvl" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="XP to the next level"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
+      <div class="chips">
+        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>/profile">🔗 Link Camfrog: type !verify in a room</a><% } %>
+        <a class="chip <%= M.tickets ? '' : 'warm' %>" href="/lotto">🎟️ <%= M.tickets ? M.tickets + ' lotto ticket' + (M.tickets === 1 ? '' : 's') : 'no lotto tickets yet' %></a>
+        <% if (M.seat) { %><a class="chip mic" href="/casino/t/<%= encodeURIComponent(M.seat.id) %>">🃏 seated at <%= M.seat.game %></a><% } %>
+        <% if (M.bets) { %><a class="chip" href="/markets">🔮 <%= M.bets %> open bet<%= M.bets === 1 ? '' : 's' %></a><% } %>
+        <a class="chip" href="/achievements">🏅 <%= M.badges %> badges</a>
+        <% if (M.pending) { %><span class="chip warm">⏳ <%= M.pending %> waiting for Pepe</span><% } %>
+      </div>
     </div>
     <div class="acts">
-      <a class="btn primary" href="/u/<%= encodeURIComponent(me.username) %>/wheel">🎡 Spin</a>
-      <a class="btn" href="/lotto">🎟️ Lotto</a>
+      <a class="btn primary" href="<%= wheelHref %>">🎡 Arcade wheel</a>
+      <a class="btn" href="/lotto">🎟️ Tickets</a>
       <a class="btn" href="/wallet">👛 Wallet</a>
-      <a class="btn" href="/u/<%= encodeURIComponent(me.username) %>/profile">🐸 Profile</a>
     </div>
-    <% if (!me.camfrogUsername) { %>
-      <div class="hint">🔗 Link your Camfrog name to play from the site and in the rooms with one balance: type <code>!verify</code> in a room with Pepe.</div>
-    <% } %>
+  </section>
+  <% } else { %>
+  <section class="card pitch">
+    <p><b>Public Access TV</b> is a community hangout: a live stream, Camfrog rooms where Pepe the frog runs the games, and PAT — the points everyone plays with. <a href="/about">What's this? ›</a></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/register">Join PATV</a><a class="btn" href="/login">Sign in</a></div>
   </section>
   <% } %>
 
-  <!-- ───── live room ───── -->
-  <% if (room) { %>
-  <section class="card" aria-labelledby="lrH">
-    <h2 id="lrH"><span>📡 <%= room.name %> <span class="live<%= room.live ? '' : ' off' %>" id="lrLive"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
-      <a href="/rooms/<%= encodeURIComponent(room.slug) %>">Open the room ›</a></h2>
-    <% if (me) { %>
-      <div class="lr">
-        <div>
-          <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat" tabindex="0"><p class="muted">Loading the room…</p></div>
-          <div class="ro">Live from Camfrog — read-only (v1). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
+  <!-- ───── room + live now ───── -->
+  <div class="main">
+    <% if (room) { %>
+    <section class="card" aria-labelledby="lrH">
+      <h2 id="lrH"><span>📡 <%= room.name %> <span class="pill <%= room.live ? 'on' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
+        <a href="/rooms/<%= encodeURIComponent(room.slug) %>">Open the room ›</a></h2>
+      <% if (me) { %>
+        <div class="lr">
+          <div>
+            <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat and mic transcripts" tabindex="0"><p class="muted">Loading the room…</p></div>
+            <div class="ro">Live from Camfrog — read-only (v1). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
+          </div>
+          <div class="lr-side">
+            <div class="box"><h3>Topic</h3><div id="lrTopic" style="font-size:13px;overflow-wrap:anywhere"><%= room.topic || '—' %></div></div>
+            <div class="box"><h3>On the mic</h3><div class="chips" id="lrMic"></div></div>
+            <div class="box listen hide" id="lrAudioBox"><h3 style="width:100%">Room audio</h3><button class="btn" type="button" id="lrAudioBtn" aria-pressed="false">🔈 Listen live</button><audio id="lrAudio" preload="none"></audio><span class="muted" id="lrAudioTxt"></span></div>
+            <div class="box"><h3>In the room · <span id="lrCount"><%= room.count %></span></h3><div class="chips" id="lrPeople"></div></div>
+          </div>
         </div>
-        <div class="lr-side">
-          <div class="lr-box"><h3>Topic</h3><div id="lrTopic" style="font-size:13.5px;overflow-wrap:anywhere"><%= room.topic || '—' %></div></div>
-          <div class="lr-box"><h3>On the mic</h3><div class="chips" id="lrMic"></div></div>
-          <div class="lr-box"><h3>In the room · <span id="lrCount"><%= room.count %></span></h3><div class="chips" id="lrPeople"></div></div>
+      <% } else { %>
+        <div class="tease">
+          <b style="font-size:16px">Sign in to watch the room live</b>
+          <p class="muted" style="margin:0"><%= room.count %> in the room<%= room.micCount ? ' · ' + room.micCount + ' on the mic' : '' %>. The chat, what's said on the mic, and who's here stream to PATV members as it happens.</p>
+          <a class="btn primary" href="/login">Sign in</a>
         </div>
-      </div>
-    <% } else { %>
-      <div class="tease">
-        <div class="big" aria-hidden="true">🐸</div>
-        <div>
-          <b style="font-size:17px">Sign in to watch the room live</b>
-          <p class="muted" style="margin:4px 0 0"><%= room.count %> in the room<%= room.micCount ? ' · ' + room.micCount + ' on the mic' : '' %>. The chat, who's here and who's talking stream to PATV members as it happens.</p>
-        </div>
-        <a class="btn primary" href="/login">Sign in</a>
-      </div>
+      <% } %>
+    </section>
     <% } %>
-  </section>
-  <% } %>
+    <aside style="display:grid;gap:14px;align-content:start;min-width:0">
+      <section class="card now" aria-labelledby="nowH">
+        <h2 id="nowH">Live now</h2>
+        <% if (feat) { %><a class="it" href="/casino/t/<%= encodeURIComponent(feat.id) %>"><span>🃏</span><span class="q"><%= feat.game %> table<%= feat.phase ? ' · ' + feat.phase : '' %></span><span class="v"><%= feat.seats.length %> seated</span></a><% } %>
+        <% if (S0.lotto) { %><a class="it" href="/lotto"><span>🎟️</span><span class="q">Lotto — draw <%- S0.lotto.next_at ? 'in <span data-until="' + Number(S0.lotto.next_at) + '">…</span>' : 'Sunday' %></span><span class="v"><%= short(S0.lotto.jackpot) %></span></a><% } %>
+        <% (S0.closing || []).forEach((m) => { %><a class="it" href="/markets/<%= encodeURIComponent(m.id) %>"><span>🔮</span><span class="q"><%= m.q %></span><span class="v" data-until="<%= Number(m.closes) %>">…</span></a><% }) %>
+        <% (S0.topBounties || []).forEach((b) => { %><a class="it" href="/bounties/<%= encodeURIComponent(b.id) %>"><span>🎯</span><span class="q"><%= b.task %></span><span class="v"><%= short(b.pot) %></span></a><% }) %>
+        <% if (!feat && !S0.lotto && !(S0.closing || []).length && !(S0.topBounties || []).length) { %><p class="muted" style="margin:0">Quiet right now.</p><% } %>
+      </section>
+      <section class="card" aria-labelledby="topH">
+        <h2 id="topH">Richest frogs <a href="/rankings">Rankings ›</a></h2>
+        <ol class="top5">
+          <% (S0.top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
+            <li><span class="rk"><%= i + 1 %></span><img src="<%= pic(u.avatar) %>" alt="" loading="lazy">
+              <a class="n" href="/u/<%= encodeURIComponent(u.username) %>/profile"><span class="<%= cs ? 'cx-name' : '' %>" style="<%= cs %>"><%= u.displayname || u.username %></span></a>
+              <span class="p"><%= short(u.points_balance) %></span></li>
+          <% }) %>
+        </ol>
+      </section>
+    </aside>
+  </div>
 
   <!-- ───── things to do ───── -->
-  <section aria-labelledby="gmH">
-    <h2 id="gmH">Things to do <a href="/rankings">Rankings ›</a></h2>
-    <div class="games">
-      <% cards.forEach((c) => { %>
-        <a class="game" href="<%= c.href %>" style="--c: <%= c.c %>">
-          <span class="gi" aria-hidden="true"><%= c.ic %></span>
-          <b><%= c.t %></b>
-          <p><%= c.d %></p>
-          <% if (c.s) { %><span class="gs"><%= c.s %></span><% } %>
+  <section aria-labelledby="tdH">
+    <h2 id="tdH">Things to do <a href="/about">About PATV ›</a></h2>
+    <div class="todo">
+      <% todo.forEach((t) => { %>
+        <a class="<%= t.hot ? 'hot' : '' %>" href="<%= t.href %>">
+          <% if (t.fresh) { %><span class="tag">try it</span><% } %>
+          <span class="i" aria-hidden="true"><%= t.ic %></span><b><%= t.t %></b><small><%= t.s || (t.hot ? 'live now' : 'open ›') %></small>
         </a>
       <% }) %>
     </div>
   </section>
 
-  <!-- ───── top 5 + about ───── -->
-  <div class="two">
-    <section class="card" aria-labelledby="topH">
-      <h2 id="topH">Richest frogs <a href="/rankings">All rankings ›</a></h2>
-      <ol class="top">
-        <% (S0.top || []).forEach((u, i) => { const st = cosmeticName(u.username); %>
-          <li>
-            <span class="rk"><%= i + 1 %></span>
-            <img src="<%= pic(u.avatar) %>" alt="" loading="lazy">
-            <a class="n" href="/u/<%= encodeURIComponent(u.username) %>/profile"><span class="<%= st ? 'cx-name' : '' %>" style="<%= st %>"><%= u.displayname || u.username %></span><small>Lv <%= u.level %></small></a>
-            <span class="p"><%= short(u.points_balance) %> PAT</span>
-          </li>
-        <% }) %>
-      </ol>
-    </section>
-    <section class="card about" aria-labelledby="abH">
-      <h2 id="abH">New here?</h2>
-      <p>Make an account, then say <code>!verify</code> to Pepe in a Camfrog room to link your name — your PAT, level and achievements follow you between the rooms and this site.</p>
-      <p>Pepe answers <code>!help</code> in any room he's in, and everything he can do is on the commands page.</p>
-      <div class="links">
-        <a href="https://pepe.publicaccess.tv" rel="noopener">🐸 Pepe's commands</a>
-        <a href="https://discord.gg/publicaccess" rel="noopener">💬 Discord</a>
-        <a href="https://twitch.tv/publicaccess_ttv" rel="noopener">📺 Twitch</a>
-        <a href="/achievements">🏅 Achievements</a>
-        <a href="/shop">🏪 Prize shop</a>
-        <a href="/info">📄 Info</a>
-      </div>
-      <p class="muted" style="margin-top:12px"><%= fmt(S0.members) %> members and counting.</p>
-    </section>
-  </div>
+  <nav class="foot" aria-label="More">
+    <a href="/about">About PATV</a><a href="/economy">How PAT works</a><a href="https://pepe.publicaccess.tv" rel="noopener">Pepe's commands</a>
+    <a href="https://discord.gg/publicaccess" rel="noopener">Discord</a><a href="/achievements">Achievements</a><a href="/shop">Prize shop</a>
+    <span><%= fmt(S0.members) %> members</span>
+  </nav>
 </main>
 
 <script>
-  // Stream: the HLS player (video.js, /public/js/video.js) by default; the Twitch player while that channel is live.
-  window.addEventListener('load', function () {
-    var ov = document.getElementById('videoOverlay');
-    if (ov) ov.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ov.click(); } });
-    if (!window.Twitch || !document.getElementById('twitch')) return;
-    var tw = new Twitch.Player('twitch', { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
-    function online() {
-      document.getElementById('twitch').classList.remove('hide');
-      document.getElementById('videoWrapper').classList.add('hide');
-      try { var v = window.videojs && videojs.getPlayer('videoElement'); if (v) v.pause(); } catch (e) {}
+  (function () {
+    'use strict';
+    // countdowns (lotto draw, markets closing)
+    function left(t) { var s = Math.max(0, Math.round(t - Date.now() / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : s > 0 ? Math.max(1, Math.ceil(s / 60)) + 'm' : 'now'; }
+    function tick() { document.querySelectorAll('[data-until]').forEach(function (e) { e.textContent = left(Number(e.getAttribute('data-until'))); }); }
+    tick(); setInterval(tick, 30000);
+
+    // stage widgets: in the side panel while on air, in the strip while off air
+    var stageEl = document.getElementById('stage');
+    function placeWidgets() {
+      var isLive = stageEl.classList.contains('live');
+      var dest = document.getElementById(isLive ? 'stageSide' : 'stageOff');
+      ['stageWidgets', isLive ? 'stageOff' : 'stageSide'].forEach(function (id) {
+        var src = document.getElementById(id);
+        while (src.firstElementChild) dest.appendChild(src.firstElementChild);
+      });
     }
-    function offline() {
-      document.getElementById('twitch').classList.add('hide');
-      document.getElementById('videoWrapper').classList.remove('hide');
+    placeWidgets();
+    function goLive(how) {
+      stageEl.classList.remove('off'); stageEl.classList.add('live');
+      document.getElementById('stPill').className = 'pill on';
+      document.getElementById('stPillTxt').textContent = 'ON AIR';
+      document.getElementById('stSub').textContent = how;
+      placeWidgets();
     }
-    tw.addEventListener(Twitch.Player.READY, function () {
-      tw.addEventListener(Twitch.Player.ONLINE, online);
-      tw.addEventListener(Twitch.Player.OFFLINE, offline);
+
+    window.addEventListener('load', function () {
+      var ov = document.getElementById('videoOverlay');
+      if (ov) ov.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ov.click(); } });
+      if (!window.Twitch) return;
+      // Twitch takes over the stage while the channel is live (OBS sends there too)
+      var tw = new Twitch.Player('twitch', { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
+      tw.addEventListener(Twitch.Player.READY, function () {
+        tw.addEventListener(Twitch.Player.ONLINE, function () {
+          document.getElementById('twitch').classList.remove('hide');
+          var vw = document.getElementById('videoWrapper'); if (vw) vw.classList.add('hide');
+          try { var v = window.videojs && videojs.getPlayer('videoElement'); if (v) v.pause(); } catch (e) {}
+          goLive('live on Twitch');
+        });
+        tw.addEventListener(Twitch.Player.OFFLINE, function () {
+          document.getElementById('twitch').classList.add('hide');
+          var vw = document.getElementById('videoWrapper'); if (vw) vw.classList.remove('hide');
+        });
+      });
     });
-  });
+  })();
 </script>
 
-<% if (me && room) { %>
+<% if (me) { %>
 <script>
-  // The live room widget: polls the bridge's JSON (bridge.js) every 3s while the tab is visible.
+  // Spin the OBS wheel on the stage (same API, price and cooldown as the old homepage arcade).
+  (function () {
+    'use strict';
+    var user = <%- JSON.stringify(me.username).replace(/</g, '\\u003c') %>;
+    var btn = document.getElementById('spinBtn'), res = document.getElementById('spinRes');
+    var OFF = 'The wheel isn\'t on the stage right now.';
+    if (!btn) return;
+    function say(x) { res.textContent = ''; if (typeof x === 'string') res.textContent = x; else res.appendChild(x); }
+    function bal() {
+      fetch('/api/u/' + encodeURIComponent(user) + '/balance').then(function (r) { return r.json(); }).then(function (d) {
+        if (d.balance === undefined) return;
+        var t = Number(d.balance).toLocaleString('en-US');
+        document.getElementById('balTxt').textContent = t; var b2 = document.getElementById('balTop'); if (b2) b2.textContent = t;
+      }).catch(function () {});
+    }
+    function onStage() {
+      fetch('/api/g/wheel/listeners').then(function (r) { return r.json(); }).then(function (d) {
+        var n = Number(d.listeners) || 0;
+        btn.disabled = n === 0;
+        if (!n && !res.textContent) say(OFF);
+        else if (n && res.textContent === OFF) say('');
+      }).catch(function () {});
+    }
+    onStage(); setInterval(onStage, 30000);
+    btn.addEventListener('click', function () {
+      btn.disabled = true; say('Spinning on stage…');
+      fetch('/api/g/wheel/spin', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: user }) })
+        .then(function (r) { return r.ok ? r.json() : r.text().then(function (t) { throw new Error((t || 'The wheel is busy.').slice(0, 160)); }); })
+        .then(function (d) {
+          if (!d.spinId) throw new Error('The wheel is busy.');
+          bal();
+          var es = new EventSource('/events?type=results&identifier=' + encodeURIComponent(d.spinId));
+          var done = setTimeout(function () { es.close(); btn.disabled = false; }, 90000);
+          es.onmessage = function (ev) {
+            var r = {}; try { r = JSON.parse(ev.data); } catch (e) {}
+            var s = document.createElement('span');
+            s.appendChild(document.createTextNode('Landed on '));
+            var b = document.createElement('b'); b.textContent = '+' + Number(r.result || 0).toLocaleString('en-US') + ' PAT'; s.appendChild(b);
+            if (r.xp) s.appendChild(document.createTextNode(' and +' + Math.round(r.xp) + ' XP'));
+            if (r.levelUp && r.levelUp.leveledUp) s.appendChild(document.createTextNode(' — level ' + r.levelUp.newLevel + '!'));
+            say(s); bal(); es.close(); clearTimeout(done);
+            setTimeout(function () { btn.disabled = false; }, 2000);
+          };
+          es.onerror = function () { es.close(); clearTimeout(done); btn.disabled = false; };
+        })
+        .catch(function (e) { say(e.message); setTimeout(function () { btn.disabled = false; }, 3000); });
+    });
+  })();
+</script>
+<% } %>
+
+<% if (me && room) { %>
+<script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
+<script>
+  // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).
   (function () {
     'use strict';
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
-    var feed = document.getElementById('lrFeed'), cursor = 0, timer = null, fails = 0, lastP = '', lastM = '';
+    var feed = document.getElementById('lrFeed'), cursor = 0, started = false, timer = null, fails = 0, lastP = '', lastM = '';
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
     function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
-    function nameEl(u) {
-      var n = el('span', 'w', label(u));
-      if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
-      return n;
-    }
+    function nameEl(u) { var n = el('span', 'w', label(u)); if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; } return n; }
     function line(it) {
-      if (it.k === 'msg') {
-        var d = el('div', 'ln' + (it.u && it.u.self ? ' pepe' : ''));
-        d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
+      if (it.k === 'msg' || it.k === 'tx') {
+        var d = el('div', 'ln' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
+        if (it.k === 'tx') d.title = 'Said on the mic (auto-transcribed)';
+        d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
         return d;
       }
       var t = it.k === 'join' ? '→ ' + label(it.u) + ' joined' : it.k === 'leave' ? '← ' + label(it.u) + ' left'
@@ -362,45 +458,61 @@
         : it.k === 'topic' ? '📌 topic: ' + it.text : null;
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
-    function chip(u, cls) { var c = el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)); return c; }
+    function chip(u, cls) { return el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)); }
+    // room audio: off by default, your choice remembered on this device
+    var au = document.getElementById('lrAudio'), ab = document.getElementById('lrAudioBtn'), at = document.getElementById('lrAudioTxt'), playing = false;
+    function pref(v) { try { if (v === undefined) return localStorage.getItem('patvRoomAudio') === '1'; localStorage.setItem('patvRoomAudio', v ? '1' : '0'); } catch (e) { return false; } }
+    function audioStop() { if (!playing) return; playing = false; au.pause(); au.removeAttribute('src'); au.load(); ab.textContent = '🔈 Listen live'; ab.setAttribute('aria-pressed', 'false'); at.textContent = ''; }
+    function audioStart() {
+      au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
+      au.play().then(function () { playing = true; ab.textContent = '🔊 Listening — stop'; ab.setAttribute('aria-pressed', 'true'); at.textContent = 'a few seconds behind the room'; })
+        .catch(function () { at.textContent = 'tap to start'; });
+    }
+    ab.addEventListener('click', function () { if (playing) { audioStop(); pref(false); } else { pref(true); audioStart(); } });
+    au.addEventListener('error', function () { if (playing) { audioStop(); at.textContent = 'audio stopped'; } });
     function apply(d) {
-      var first = !cursor;
-      var near = first || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
-      if (d.cursor < cursor) { cursor = 0; first = true; }
-      if (first) feed.textContent = '';
-      (d.feed || []).slice(-60).forEach(function (it) { var n = line(it); if (n) feed.appendChild(n); });
-      if (first && !feed.childNodes.length) feed.appendChild(el('p', 'muted', 'Quiet right now — lines show up here the moment someone talks.'));
-      if (!first && (d.feed || []).length && feed.firstChild && feed.firstChild.tagName === 'P') feed.removeChild(feed.firstChild);
-      while (feed.childNodes.length > 80) feed.removeChild(feed.firstChild);
+      var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
+      if (started && d.cursor < cursor) { started = false; cursor = 0; }
+      if (!started) feed.textContent = '';
+      (d.feed || []).slice(-80).forEach(function (it) { var n = line(it); if (n) feed.appendChild(n); });
+      if (!started && !feed.childNodes.length) feed.appendChild(el('p', 'muted', 'Quiet right now — lines show up here the moment someone talks.'));
+      if (started && (d.feed || []).length && feed.firstChild && feed.firstChild.tagName === 'P') feed.removeChild(feed.firstChild);
+      while (feed.childNodes.length > 120) feed.removeChild(feed.firstChild);
       if (near) feed.scrollTop = feed.scrollHeight;
-      cursor = Math.max(cursor, d.cursor || 0) || -1;
+      started = true;
+      cursor = Math.max(cursor, d.cursor || 0);
       var r = d.room || {};
       document.getElementById('lrTopic').textContent = r.topic || '—';
       document.getElementById('lrCount').textContent = r.count;
-      document.getElementById('lrLive').classList.toggle('off', !r.live);
+      document.getElementById('lrLive').className = 'pill ' + (r.live ? 'on' : 'off');
       document.getElementById('lrLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
+      document.getElementById('lrAudioBox').classList.toggle('hide', !r.audio);
+      if (!r.audio) audioStop();
       var mk = JSON.stringify(d.mic);
       if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', 'Mic is free')); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
       var pk = JSON.stringify(d.members);
       if (pk !== lastP) {
         lastP = pk; var p = document.getElementById('lrPeople'); p.textContent = '';
         var ms = d.members.filter(function (u) { return !u.self; }).sort(function (a, b) { return (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b)); });
-        ms.slice(0, 24).forEach(function (u) { p.appendChild(chip(u, u.on_mic ? 'mic' : '')); });
-        if (ms.length > 24) p.appendChild(el('span', 'muted', '+' + (ms.length - 24) + ' more'));
+        ms.slice(0, 30).forEach(function (u) { p.appendChild(chip(u, u.on_mic ? 'mic' : '')); });
+        if (ms.length > 30) p.appendChild(el('span', 'muted', '+' + (ms.length - 30) + ' more'));
         if (!ms.length) p.appendChild(el('span', 'muted', 'Just Pepe'));
       }
     }
     function poll() {
       timer = null;
       if (document.hidden) return;
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + Math.max(0, cursor), { credentials: 'same-origin', cache: 'no-store' })
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + cursor, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) { fails = 0; apply(d); })
         .catch(function () { fails++; })
         .then(function () { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(30000, 3000 * Math.pow(2, fails)) : 3000); });
     }
     document.addEventListener('visibilitychange', function () { if (!document.hidden && !timer) poll(); });
-    poll();
+    var init = JSON.parse(document.getElementById('lrInit').textContent);
+    if (init) apply(init);
+    if (init && init.room && init.room.audio && pref()) at.textContent = 'tap Listen live to resume';
+    timer = setTimeout(poll, 3000);
   })();
 </script>
 <% } %>

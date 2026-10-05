@@ -1,0 +1,89 @@
+<%- include('layout', { title: 'About Public Access TV', user: user }) %>
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const S0 = S || {};
+  const games = [
+    ['/rooms' + (room ? '/' + encodeURIComponent(room.slug) : ''), '📡', 'Live rooms', 'The Camfrog rooms Pepe sits in, live on the web for members: the chat, what\'s said on the mic (auto-transcribed), who\'s in the room and who\'s talking.', '#ef5350'],
+    ['/markets', '🔮', 'Markets', 'Prediction markets on whatever the room is arguing about. Buy shares in an outcome; prices move with every bet, and you can sell before it settles.', '#ba68c8'],
+    ['/lotto', '🎟️', 'Lotto', 'Pick 4 numbers and a Pepe Ball. The jackpot rolls over until someone hits it; draws are Sunday night.', '#ffd54f'],
+    [user ? '/u/' + encodeURIComponent(user) + '/wheel' : '/login', '🎡', 'The wheel', 'Spin the arcade wheel for PAT and XP — from your wheel page, or on the main stage where it spins live on stream.', '#4fc3f7'],
+    ['/tables', '🃏', 'Casino tables', 'Texas Hold\'em and Blackjack with Pepe dealing. Camfrog players and web players sit at the same table.', '#66bb6a'],
+    ['/gtf', '🔫', 'Grand Theft Frogger', 'Heists with a crew, gangs, gear and a fight over the map. Crack the vault and split the take.', '#ff8a65'],
+    ['/bounties', '🎯', 'Bounties', 'Post a challenge with a pot ("first to get Pepe to sing"), chip in on someone else\'s, or hunt one down and collect.', '#e57373'],
+    ['/wagers', '🤝', 'Wagers', 'Head-to-head bets between members, with Pepe holding the money and an optional judge.', '#90a4ae'],
+    ['/staking', '🏦', 'Staking', 'Put PAT to work in the protocol\'s vaults — the Bank, the House and the Market maker — and own a slice of what they earn.', '#64b5f6'],
+    ['/cosmetics', '🎨', 'Cosmetics', 'Name colours, profile frames, banners, effects and Grand Theft Frogger avatar gear. Earned, bought or traded.', '#f06292'],
+    ['/feed', '🎞️', 'Clips & snaps', 'The best moments from the stream and the rooms, clipped by members and by Pepe.', '#a1887f'],
+    ['/economy', '📘', 'How PAT works', 'Where PAT comes from, where it goes and who holds it — the whole economy on one page.', '#81c784'],
+  ];
+%>
+<style>
+  .ab { max-width: 1100px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 18px; box-sizing: border-box; width: 100%; }
+  .ab *, .ab *::before, .ab *::after { box-sizing: border-box; }
+  .ab a { color: #81c784; text-decoration: none; }
+  .ab .hero { background: radial-gradient(110% 140% at 0% 0%, #17301a 0%, #111 52%), #111; border: 1px solid #222; border-radius: 18px; padding: 22px; }
+  .ab .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #c6e94f; }
+  .ab h1 { font-size: clamp(26px, 4.2vw, 40px); line-height: 1.1; margin: 10px 0; }
+  .ab h1 em { font-style: normal; background: linear-gradient(90deg, #4caf50, #c6e94f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .ab .lead { color: #c9d3c9; font-size: 16px; line-height: 1.6; margin: 0 0 14px; max-width: 62ch; }
+  .ab h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; line-height: 1.6; }
+  .ab .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 14px; font-weight: bold; }
+  .ab .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; }
+  .ab .ctas { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ab .comm { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .ab .cm { background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; }
+  .ab .cm b { font-size: 16px; display: block; margin: 6px 0 4px; }
+  .ab .cm p { margin: 0; color: #a8a8a8; font-size: 13.5px; line-height: 1.5; }
+  .ab .cm .ic { font-size: 26px; }
+  .ab .games { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .ab .game { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: start; background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px; color: #e6e6e6 !important; position: relative; overflow: hidden; }
+  .ab .game::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--c); }
+  .ab .game:hover, .ab .game:focus-visible { border-color: var(--c); }
+  .ab .game .gi { font-size: 24px; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: #0d0d0d; grid-row: span 2; }
+  .ab .game p { margin: 0; color: #9a9a9a; font-size: 13px; line-height: 1.45; }
+  .ab ol.steps { margin: 0; padding-left: 20px; color: #bbb; line-height: 1.7; font-size: 14.5px; }
+  .ab code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .ab .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 16px 18px; }
+  @media (max-width: 520px) { .ab { padding: 12px 12px 44px; } .ab .hero { padding: 16px 14px; } .ab .games { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<main class="ab">
+  <section class="hero">
+    <div class="eyebrow">PUBLIC ACCESS TELEVISION</div>
+    <h1>A TV station, a Camfrog crew and <em>a frog who runs the games.</em></h1>
+    <p class="lead">PATV is a community: people hanging out on cam in Camfrog rooms, a live stream, events, and Pepe — the frog who deals the cards, runs the heists, DJs, remembers everyone and keeps the score. PAT is the points everyone plays with, in the rooms and here on the site, and the same account works in both.</p>
+    <div class="ctas">
+      <% if (!user) { %><a class="btn primary" href="/register">Join PATV</a><a class="btn" href="/login">Sign in</a><% } else { %><a class="btn primary" href="/">Back to the homepage</a><% } %>
+      <a class="btn" href="https://pepe.publicaccess.tv" rel="noopener">🐸 Pepe's commands</a>
+    </div>
+  </section>
+
+  <section aria-labelledby="cmH">
+    <h2 id="cmH">The community</h2>
+    <div class="comm">
+      <div class="cm"><span class="ic" aria-hidden="true">📹</span><b>Camfrog rooms</b><p>Where it all happens: Pepe's Pad and friends. Video, a shared mic, games in the chat. Members can watch the rooms live on <a href="/rooms">the web</a>.</p></div>
+      <div class="cm"><span class="ic" aria-hidden="true">📺</span><b>Live-streamed events</b><p>Game nights, shows and specials go out live on the main stage and on <a href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch</a> — spin the stage wheel from the homepage while they're on.</p></div>
+      <div class="cm"><span class="ic" aria-hidden="true">🎬</span><b>The Plex server</b><p>A shared movie and TV library for members. Ask in the room or on Discord if you'd like access.</p></div>
+      <div class="cm"><span class="ic" aria-hidden="true">💬</span><b>Discord</b><p>Announcements, clips and the conversation between rooms. <a href="https://discord.gg/publicaccess" rel="noopener">Join the server</a>.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="gmH">
+    <h2 id="gmH">What you can do here</h2>
+    <div class="games">
+      <% games.forEach((g) => { %>
+        <a class="game" href="<%= g[0] %>" style="--c: <%= g[4] %>"><span class="gi" aria-hidden="true"><%= g[1] %></span><b><%= g[2] %></b><p><%= g[3] %></p></a>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="gsH">
+    <h2 id="gsH">Getting started</h2>
+    <ol class="steps">
+      <li><a href="/register">Make an account</a> on publicaccess.tv.</li>
+      <li>In a Camfrog room with Pepe, type <code>!verify</code> to link your Camfrog name — your PAT, level and achievements then follow you between the rooms and the site.</li>
+      <li>Say <code>!help</code> to Pepe, or browse <a href="https://pepe.publicaccess.tv" rel="noopener">everything he can do</a>.</li>
+      <li>Want to stay off the website's live room view? Type <code>!bridge hide</code> (or <code>!incognito on</code>) in the room.</li>
+    </ol>
+    <p style="color:#888;font-size:13px;margin:12px 0 0"><%= fmt(S0.members) %> members and counting.</p>
+  </section>
+</main>

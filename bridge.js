@@ -24,7 +24,9 @@ const cosmetics = require("./cosmetics");
 const FEED_KEEP = 200;
 const STALE_MS = 90 * 1000;              // no sync for this long -> the room shows as offline
 const MAX_EVENTS = 500, MAX_ROOMS = 20, MAX_MEMBERS = 400;
-const FEED_TYPES = new Set(["message", "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
+const TRANSCRIPT = "x.pepe.transcript";      // Pepe's mic transcripts (a PCP extension event)
+const FEED_TYPES = new Set(["message", TRANSCRIPT, "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
+const AUDIO_MAX_LISTENERS = 40, AUDIO_IDLE_MS = 30 * 1000, AUDIO_PRIME = 3;
 
 const ready = (async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS bridge_rooms (
@@ -52,6 +54,7 @@ function cleanUser(u) {
   if (typeof u.on_cam === "boolean") out.on_cam = u.on_cam;
   if (u.on_mic) out.on_mic = true;
   if (u.src === "list" || u.src === "seen" || u.src === "self") out.src = u.src;
+  if (u.unresolved) out.unresolved = true;
   return out;
 }
 
@@ -143,6 +146,12 @@ function feedItem(ev) {
       const u = cleanUser(d.user);
       return u ? { k: "unmic", ts, u, ms: Math.max(0, Math.min(864e5, Number(d.held_ms) || 0)) } : null;
     }
+    case TRANSCRIPT: {
+      const u = cleanUser(d.user);
+      const text = str(d.text, 400);
+      if (!u || !text || u.anon) return null;
+      return { k: "tx", ts, u, text };
+    }
     case "room.update": {
       const t = d.changes && typeof d.changes === "object" ? str(d.changes.topic, 200) : "";
       return t ? { k: "topic", ts, text: t } : null;
@@ -152,9 +161,37 @@ function feedItem(ev) {
   }
 }
 
+// ── the main stage (OBS on air?), reported by Pepe every ~30s ──
+let STAGE = { active: false, unknown: true, at: 0 };
+function stage() {
+  const fresh = Date.now() - STAGE.at < 120 * 1000;
+  return { active: fresh && !!STAGE.active, since: STAGE.since || null, ended: STAGE.ended || null, known: fresh && !STAGE.unknown };
+}
+
+// ── room audio relay: Pepe POSTs ~1s MP3 chunks, we pass them to signed-in listeners. Nothing kept. ──
+const audio = new Map();                 // room id -> {listeners:Set(res), recent:[Buffer], at}
+function audioHub(id) {
+  let a = audio.get(id);
+  if (!a) { a = { listeners: new Set(), recent: [], at: 0 }; audio.set(id, a); }
+  return a;
+}
+function audioClose(id) {
+  const a = audio.get(id);
+  if (!a) return;
+  for (const res of a.listeners) { try { res.end(); } catch (e) { /* gone */ } }
+  audio.delete(id);
+}
+setInterval(() => {
+  for (const [id, a] of audio) if (a.listeners.size && Date.now() - a.at > AUDIO_IDLE_MS && a.at) audioClose(id);
+}, 10 * 1000).unref();
+
 async function ingest(body) {
   await load();
   const now = Date.now();
+  if (body.stage && typeof body.stage === "object") {
+    const g = body.stage, n = (v) => (Number(v) > 0 ? Number(v) * 1000 : null);
+    STAGE = { active: !!g.active, unknown: !!g.unknown, since: n(g.since), ended: n(g.ended), at: now };
+  }
   const touched = new Set();
   for (const id of (Array.isArray(body.closed) ? body.closed : []).slice(0, MAX_ROOMS)) {
     if (typeof id === "string" && rooms.has(id)) await dropRoom(id);
@@ -170,6 +207,9 @@ async function ingest(body) {
     R.count = Math.max(R.members.length, Math.min(5000, Number(s.count) || 0));
     R.listAt = Number(s.list_at) ? Number(s.list_at) * 1000 : null;
     R.joinedAt = Number(s.joined_at) ? Number(s.joined_at) * 1000 : null;
+    R.transcripts = s.transcripts !== false;
+    R.audio = !!s.audio;
+    if (!R.audio) audioClose(R.id);
     R.updated = now;
     touched.add(R);
   }
@@ -178,7 +218,7 @@ async function ingest(body) {
     if (!ev || typeof ev !== "object" || ev.op !== "event" || ev.type === "message.private") continue;
     const ref = cleanRoomRef(ev.scope && ev.scope.room);
     if (!ref) continue;
-    if (ev.type === "room.left") { if (rooms.has(ref.id)) await dropRoom(ref.id); continue; }
+    if (ev.type === "room.left") { if (rooms.has(ref.id)) { audioClose(ref.id); await dropRoom(ref.id); } continue; }
     const R = roomFor(ref);
     if (!R) continue;
     R.updated = now;
@@ -239,7 +279,7 @@ const isLive = (R) => Date.now() - R.updated < STALE_MS;
 async function summary(full) {
   await load();
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
-    slug: R.slug, name: R.name, count: R.count, live: isLive(R), micCount: R.mic.length,
+    slug: R.slug, name: R.name, count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
     mic: full ? R.mic.map((u) => (u.anon ? "someone" : u.display)) : [],
     topic: full ? R.topic : "",
   }));
@@ -250,11 +290,19 @@ async function liveView(R, after) {
   const feed = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP)
     .map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
   return {
-    room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt },
+    room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
+            transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R) },
     members: R.members.map((u) => withPatv(u, L)),
     mic: R.mic.map((u) => withPatv(u, L)),
     feed, cursor,
   };
+}
+
+/** The live view of the busiest live room, for the homepage (signed-in callers only). */
+async function liveFor(slug) {
+  await load();
+  const R = bySlug(slug);
+  return R ? liveView(R, 0) : null;
 }
 
 function bySlug(slug) {
@@ -275,6 +323,38 @@ function register(app, { isBotToken, addUser }) {
       console.error("[bridge] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
     }
+  });
+
+  // Pepe's room audio: {password, room, seq, data: base64 MP3 ("" = heartbeat)} -> {listeners}
+  app.post("/api/bridge/audio", express.json({ limit: "512kb" }), async (req, res) => {
+    const body = req.body || {};
+    if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
+    await load();
+    const R = rooms.get(String(body.room || ""));
+    if (!R || !R.audio) return res.json({ success: true, listeners: 0 });
+    const a = audioHub(R.id);
+    const buf = typeof body.data === "string" && body.data ? Buffer.from(body.data, "base64") : null;
+    if (buf && buf.length) {
+      a.at = Date.now();
+      a.recent.push(buf);
+      if (a.recent.length > AUDIO_PRIME) a.recent.shift();
+      for (const l of a.listeners) { try { l.write(buf); } catch (e) { a.listeners.delete(l); } }
+    }
+    res.json({ success: true, listeners: a.listeners.size });
+  });
+
+  app.get("/rooms/:slug/audio", addUser, async (req, res) => {
+    if (!req.user || !req.user.userId) return res.status(401).send("Sign in to listen.");
+    await load();
+    const R = bySlug(req.params.slug);
+    if (!R || !R.audio || !isLive(R)) return res.status(404).send("This room's audio isn't on.");
+    const a = audioHub(R.id);
+    if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
+    res.status(200).set({ "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Accel-Buffering": "no", Connection: "keep-alive" });
+    res.flushHeaders();
+    for (const b of a.recent) res.write(b);
+    a.listeners.add(res);
+    req.on("close", () => { a.listeners.delete(res); });
   });
 
   app.get("/api/rooms/:slug/live", addUser, async (req, res) => {
@@ -310,4 +390,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, summary, ingest, slugify, _rooms: rooms };
+module.exports = { register, summary, ingest, slugify, stage, liveFor, _rooms: rooms };
