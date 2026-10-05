@@ -14,6 +14,9 @@
 //   /api/cosmetics/inventory  {user}                                -> {items, equipped}
 //   /api/cosmetics/equip      {user, item_id|inv_id|kind, on}       -> {ok}
 //   /api/cosmetics/seed       {camfrog, seed}                       -> {ok}   (GTF avatar seed, for previews)
+//   /api/cosmetics/drop-config {rates: {wheel, wheel_jackpot}, cap}  -> {ok}   (Pepe owns the drop table)
+// grant takes an optional `cap`: an "odrop-" (organic drop) grant is refused with error "daily_cap" once
+// the user already got `cap` organic drops in the last 24h (Pepe's events and the wheel share it).
 // `user` / `from` / `to` are {username} (PATV) or {camfrog} (Camfrog name), case-insensitive.
 // Public: GET /api/cosmetics/catalog, GET /api/cosmetics/equipped/:camfrog
 const fs = require("fs");
@@ -156,6 +159,7 @@ const ready = (async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS cosmetic_transfers (
     idem TEXT PRIMARY KEY, inv_id INTEGER, from_id TEXT, to_id TEXT, listing_id INTEGER, created INTEGER)`);
   await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_drop_config (key TEXT PRIMARY KEY, value REAL, updated INTEGER)");
 })().catch((e) => console.error("[cosmetics] tables:", e));
 
 // ── users ──
@@ -271,6 +275,113 @@ async function grant(userId, itemId, source, idem) {
   if (ins && ins.changes) return { ok: true, inv_id: ins.id, already: false };
   const prev = await getQuery("SELECT id FROM user_cosmetics WHERE idem = ?", [String(idem).slice(0, 200)]);
   return { ok: true, inv_id: prev.length ? prev[0].id : null, already: true };
+}
+
+// ── drops ──
+// Pepe owns the drop table (pepe_cosmetics.py) and rolls every game drop himself. The wheel is settled
+// here, so its two rows (and the daily cap) are pushed to us; these defaults match his until he does.
+const DROP_DEFAULTS = { wheel: 0.0005, wheel_jackpot: 0.25, cap: 3 };
+const DROP_GROUPS = {
+  heist: ["crack", "door", "store", "convoy"],
+  fight: ["arena", "duel", "brawl"],
+  casino: ["blackjack", "holdem", "wheel", "wheel_jackpot", "lotto", "lotto_jackpot", "bingo", "bingo_line"],
+};
+const RARITY_ORDER = ["common", "uncommon", "rare", "epic", "legendary"];
+const DAY_MS = 24 * 3600 * 1000;
+let dropCfg = null, dropCfgAt = 0;
+
+async function dropConfig() {
+  if (dropCfg && Date.now() - dropCfgAt < 60000) return dropCfg;
+  await ready;
+  const cfg = { ...DROP_DEFAULTS };
+  try {
+    for (const r of await getQuery("SELECT key, value FROM cosmetic_drop_config")) {
+      if (r.key in cfg && Number.isFinite(Number(r.value))) cfg[r.key] = Number(r.value);
+    }
+  } catch (e) { /* defaults */ }
+  dropCfg = cfg; dropCfgAt = Date.now();
+  return cfg;
+}
+
+async function setDropConfig(rates, cap) {
+  await ready;
+  const now = Date.now();
+  for (const k of ["wheel", "wheel_jackpot"]) {
+    const v = Number((rates || {})[k]);
+    if (Number.isFinite(v)) {
+      await runQuery(`INSERT INTO cosmetic_drop_config (key, value, updated) VALUES (?, ?, ?)
+                      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`,
+        [k, Math.max(0, Math.min(1, v)), now]);
+    }
+  }
+  const c = Number(cap);
+  if (Number.isFinite(c)) {
+    await runQuery(`INSERT INTO cosmetic_drop_config (key, value, updated) VALUES ('cap', ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`,
+      [Math.max(0, Math.min(50, Math.floor(c))), now]);
+  }
+  dropCfgAt = 0;
+}
+
+/** Same pool rules as Pepe's _cos_pick: drop items only (never shop-only, achievement-only or
+ *  seasonal), weighted; items with drop_events only from matching events (half of that event's drops). */
+function pickDrop(event, minRarity) {
+  let pool = ITEMS.filter((it) => (it.source || []).includes("drop") && Number(it.drop_weight) > 0 && !it.season
+    && !(it.tags || []).includes("kink"));
+  if (minRarity && RARITY_ORDER.includes(minRarity)) {
+    const floor = RARITY_ORDER.indexOf(minRarity);
+    pool = pool.filter((it) => RARITY_ORDER.indexOf(String(it.rarity || "").toLowerCase()) >= floor);
+  }
+  const ev = String(event);
+  const tags = new Set([ev, ev.split("_")[0]]);
+  for (const [g, evs] of Object.entries(DROP_GROUPS)) if (evs.includes(ev)) tags.add(g);
+  const general = pool.filter((it) => !(it.drop_events || []).length);
+  const special = pool.filter((it) => (it.drop_events || []).some((t) => tags.has(t)));
+  pool = special.length && (!general.length || Math.random() < 0.5) ? special : general;
+  if (!pool.length) return null;
+  let r = Math.random() * pool.reduce((a, it) => a + Number(it.drop_weight), 0);
+  for (const it of pool) { r -= Number(it.drop_weight); if (r < 0) return it; }
+  return pool[pool.length - 1];
+}
+
+/** grant(), but an organic drop is refused once the user had `cap` of them in 24h. One statement,
+ *  so two drops landing at once can't both slip under the cap. */
+async function grantCapped(userId, itemId, source, idem, cap) {
+  await ready;
+  const it = BY_ID[itemId];
+  if (!it) return { ok: false, error: "unknown item" };
+  if (!idem) return { ok: false, error: "idem required" };
+  idem = String(idem).slice(0, 200);
+  const ins = await runQuery(
+    `INSERT OR IGNORE INTO user_cosmetics (user_id, item_id, source, acquired, idem, locked)
+     SELECT ?, ?, ?, ?, ?, 0 WHERE (SELECT COUNT(*) FROM user_cosmetics WHERE user_id = ? AND idem LIKE 'odrop-%'
+                                    AND source LIKE 'drop:%' AND acquired > ?) < ?`,
+    [userId, it.id, String(source || "drop").slice(0, 30), Date.now(), idem, userId, Date.now() - DAY_MS, Math.max(0, Math.floor(cap))]);
+  if (ins && ins.changes) return { ok: true, inv_id: ins.id, already: false };
+  const prev = await getQuery("SELECT id FROM user_cosmetics WHERE idem = ?", [idem]);
+  if (prev.length) return { ok: true, inv_id: prev[0].id, already: true };
+  return { ok: false, error: "daily_cap" };
+}
+
+/** Roll a drop for a settled win decided here (the wheel). Returns {id, name, rarity} or null. */
+async function rollDrop(userId, event, key, opts = {}) {
+  try {
+    if (!userId) return null;
+    const cfg = await dropConfig();
+    const chance = Math.max(0, Math.min(1, Number(cfg[event]) || 0));
+    if (!(chance > 0) || Math.random() >= chance) return null;
+    const it = pickDrop(event, opts.minRarity);
+    if (!it) return null;
+    const r = opts.organic
+      ? await grantCapped(userId, it.id, `drop:${event}`, `odrop-${event}-${key}`, cfg.cap)
+      : await grant(userId, it.id, `drop:${event}`, `drop-${event}-${key}`);
+    if (!r.ok || r.already) return null;
+    if (it.kind === "name_color") invalidateNames();
+    return { id: it.id, name: it.name, rarity: it.rarity || null };
+  } catch (e) {
+    console.error("[cosmetics] drop:", e.message);
+    return null;
+  }
 }
 
 /** Free unlocks. {achievement} grants items unlocked by that achievement; {level} grants every
@@ -529,9 +640,17 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/cosmetics/grant", bot(async (b, res) => {
     const u = await resolveUser(b.user);
     if (!u) return res.status(404).json({ ok: false, error: "no such user" });
-    const r = await grant(u.userId, String(b.item || ""), b.source || "drop", b.idem);
+    const cap = Number(b.cap);
+    const r = (Number.isFinite(cap) && cap >= 0 && String(b.idem || "").startsWith("odrop-"))
+      ? await grantCapped(u.userId, String(b.item || ""), b.source || "drop", b.idem, cap)
+      : await grant(u.userId, String(b.item || ""), b.source || "drop", b.idem);
     if (r.ok && !r.already && BY_ID[b.item] && BY_ID[b.item].kind === "name_color") invalidateNames();
     res.status(r.ok ? 200 : 400).json({ ...r, username: u.username, camfrog: u.camfrogUsername || null });
+  }));
+
+  app.post("/api/cosmetics/drop-config", bot(async (b, res) => {
+    await setDropConfig(b.rates, b.cap);
+    res.json({ ok: true, config: await dropConfig() });
   }));
 
   app.post("/api/cosmetics/transfer", bot(async (b, res) => {
@@ -756,6 +875,6 @@ function locals(app) {
 
 module.exports = {
   register, locals, grantUnlocks, syncUnlocks, nameStyles, nameStyle, nameHtml, render, onSale, seasonState,
-  resolveUser, grant, transfer, equip, inventory, equippedFor, profileData, pageData,
+  resolveUser, grant, grantCapped, rollDrop, pickDrop, dropConfig, setDropConfig, transfer, equip, inventory, equippedFor, profileData, pageData,
   catalog: () => ITEMS, byId: (id) => BY_ID[id] || null, ready, MARKET_FEE_PCT, LIST_MIN,
 };

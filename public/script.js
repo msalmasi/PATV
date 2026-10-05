@@ -439,8 +439,10 @@ function settleAndReveal() {
           displayLevelUpAnimation(data.levelUp.levelsGained, data.levelUp.newLevel, data.levelUp.bonusPoints);
         }
         const what = data.grand ? 'GRAND JACKPOT! ' : (data.jackpot ? 'JACKPOT (' + (data.jackpotPct || 0) + '% of the pot)! ' : '');
-        if (won > 0) setSpinStatus(what + 'You won ' + won.toLocaleString() + ' PAT.', 'win');
-        else setSpinStatus('No prize this time. Press the coin to play again.', '');
+        const c = data.cosmetic;   // a rare cosmetic drop (rolled server-side)
+        const found = c && c.name ? ' 🎁 You found a cosmetic: ' + c.name + (c.rarity ? ' (' + String(c.rarity).toUpperCase() + ')' : '') + '! Wear it from Cosmetics → My items.' : '';
+        if (won > 0) setSpinStatus(what + 'You won ' + won.toLocaleString() + ' PAT.' + found, 'win');
+        else setSpinStatus(found ? 'No PAT this time.' + found : 'No prize this time. Press the coin to play again.', found ? 'win' : '');
       } else {
         setSpinStatus((data && data.error) ? 'Could not settle the spin: ' + data.error : 'Could not settle the spin. Refresh the page.', 'err');
       }

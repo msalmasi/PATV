@@ -3708,6 +3708,13 @@ async function settleSpin(spinId) {
   const levelUpInfo = await updateLevel(spin.userId, xp);
   achievements.checkWeb(spin.userId);              // spins / wheel winnings / jackpot achievements
   const out = { result: payout, jackpot: isJackpot, jackpotPct: spin.jackpot_pct || 0, grand, xp, levelUp: levelUpInfo };
+  // 1.99: a settled spin can drop a cosmetic - very rarely (the wheel runs ~850 times a day), the
+  // jackpot slice more often (rare or better). Rates and the shared daily cap come from Pepe's table.
+  // Once per spin: only the call that won the PENDING->SETTLED claim above gets here.
+  const drop = isJackpot
+    ? await cosmetics.rollDrop(spin.userId, "wheel_jackpot", spinId, { minRarity: "rare" })
+    : await cosmetics.rollDrop(spin.userId, "wheel", spinId, { organic: true });
+  if (drop) out.cosmetic = drop;
   sendEvent("results", spinId, out);
   if (spin.type === "public") {
     sendEvent("spin", "watch", Object.assign({ type: "result", spinId, result: payout, jackpot: isJackpot, grand }, await spinnerLook(spin.userId)));
