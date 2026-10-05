@@ -164,9 +164,31 @@ function feedItem(ev) {
 
 // ── the main stage (OBS on air?), reported by Pepe every ~30s ──
 let STAGE = { active: false, unknown: true, at: 0 };
+// ON AIR means the stream is actually playable: the HLS playlist on this server is being rewritten
+// (nginx-rtmp updates it every few seconds while a stream comes in). Where there's no HLS directory
+// (a dev box) Pepe's OBS state is used instead.
+const fs = require("fs");
+const pathMod = require("path");
+const HLS_PLAYLIST = process.env.HLS_PLAYLIST_PATH || "/mnt/hls/broadcast.m3u8";
+let HLS = { live: null, since: null, ended: null };
+function hlsCheck() {
+  fs.stat(HLS_PLAYLIST, (err, st) => {
+    let live;
+    if (err) live = fs.existsSync(pathMod.dirname(HLS_PLAYLIST)) ? false : null;
+    else live = Date.now() - st.mtimeMs < 20 * 1000;
+    if (live && !HLS.live) HLS.since = Date.now();
+    if (live === false && HLS.live) HLS.ended = Date.now();
+    HLS.live = live;
+  });
+}
+hlsCheck();
+setInterval(hlsCheck, 5000).unref();
 function stage() {
   const fresh = Date.now() - STAGE.at < 120 * 1000;
-  return { active: fresh && !!STAGE.active, since: STAGE.since || null, ended: STAGE.ended || null, known: fresh && !STAGE.unknown };
+  if (HLS.live !== null) {
+    return { active: HLS.live, since: HLS.live ? HLS.since : null, ended: HLS.ended || STAGE.ended || null, known: true, source: "hls" };
+  }
+  return { active: fresh && !!STAGE.active, since: STAGE.since || null, ended: STAGE.ended || null, known: fresh && !STAGE.unknown, source: "obs" };
 }
 
 // ── room audio relay: Pepe POSTs ~1s MP3 chunks, we pass them to signed-in listeners. Nothing kept. ──
@@ -376,6 +398,8 @@ function register(app, { isBotToken, addUser }) {
   });
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
+
+  app.get("/api/stage", (req, res) => { res.set("Cache-Control", "no-store"); res.json(stage()); });
 
   app.get("/rooms", addUser, async (req, res) => {
     const list = await summary(!!(req.user && req.user.userId));

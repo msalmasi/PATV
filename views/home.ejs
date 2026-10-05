@@ -9,6 +9,7 @@
   const S0 = S || {};
   const st = stage || { active: false };
   const live = !!st.active;
+  const liveRooms = (rooms || []).filter((r) => r.live);
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
   const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
@@ -32,10 +33,7 @@
   ];
 %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
-<% if (live) { %>
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-<script src="/public/js/video.js" defer></script>
-<% } %>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
@@ -81,6 +79,16 @@
   .hm .player #twitch iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
   .hm .hide { display: none !important; }
   .hm .stage-side { display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .hm .player .reconnect { position: absolute; inset: 0; display: grid; place-items: center; grid-auto-flow: column; gap: 8px; place-content: center;
+                           background: rgba(0,0,0,.72); color: #ddd; font-size: 15px; z-index: 4; }
+  .hm .player .unmute { position: absolute; inset: 0; z-index: 3; background: rgba(0,0,0,.35); border: 0; cursor: pointer; display: grid; place-items: center; }
+  .hm .player .unmute img { width: 56px; height: auto; opacity: .9; }
+  .hm .rooms-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .hm .rooms-mini a { display: flex; justify-content: space-between; gap: 8px; color: #ddd !important; font-size: 13.5px; padding: 3px 0; }
+  .hm .rooms-mini .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .aw-hm .aw-now { width: 100%; font-family: var(--aw-pixel); font-size: 9px; letter-spacing: 1px; color: var(--aw-dim); text-align: center; min-height: 14px; line-height: 1.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .aw-hm .aw-now .who { font-family: Ubuntu, sans-serif; font-size: 15px; letter-spacing: 0; font-weight: bold; color: #fff; }
+  .hm .aw-hm .aw-now .amt { color: var(--aw-gold); }
   .hm .box { background: rgba(0,0,0,.4); border: 1px solid #1f2a20; border-radius: 12px; padding: 10px 12px; min-width: 0; }
   .hm .box h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   .hm a.box { display: block; color: #ddd !important; }
@@ -224,14 +232,9 @@
     </div>
     <div class="stage-body">
       <div class="player" id="player">
-        <% if (live) { %>
-        <div id="videoWrapper">
-          <div id="videoOverlay" role="button" tabindex="0" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt="" /></div>
-          <video-js id="videoElement" class="video-js vjs-default-skin" preload="auto" autoplay controls playsinline muted>
-            <source src="https://publicaccess.tv/hls/broadcast.m3u8" type="application/x-mpegURL">
-          </video-js>
-        </div>
-        <% } %>
+        <div id="videoWrapper"></div>
+        <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
+        <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
         <div id="twitch" class="hide"></div>
       </div>
       <div class="stage-side" id="stageSide"></div>
@@ -256,6 +259,7 @@
               <span class="cap">INSERT COIN</span>
             </button>
           </div>
+          <div class="aw-now" id="stSpin" aria-live="polite"></div>
           <div class="aw-status" id="spinStatus" role="status" aria-live="polite">Spin the wheel on stream · you have <span id="balTxt"><%= fmt(me.points_balance) %></span> PAT</div>
           <div class="aw-tools"><button type="button" class="aw-tool" id="muteBtn" aria-pressed="false">SOUND ON</button><a class="aw-tool" href="<%= wheelHref %>">MY WHEEL</a></div>
           <div class="aw-coin aw-flycoin" id="flyCoin" aria-hidden="true">PAT</div>
@@ -264,6 +268,7 @@
         <div class="aw-coinop">
           <div class="aw-credit" aria-hidden="true"><span>CREDIT</span><span class="n">00</span></div>
           <a class="aw-coinbtn" href="/login"><span class="aw-coin" aria-hidden="true">PAT</span><span class="cap">SIGN IN TO PLAY</span></a>
+          <div class="aw-now" id="stSpin" aria-live="polite"></div>
           <div class="aw-status">Spin the stage wheel live on stream.</div>
         </div>
         <% } %>
@@ -275,11 +280,15 @@
           <div class="muted" style="margin-top:4px">Watch or take a seat ›</div>
         </a>
       <% } %>
-      <% if (room) { %>
-        <a class="box" href="/rooms/<%= encodeURIComponent(room.slug) %>">
-          <h3>📡 <%= room.name %></h3>
-          <b><%= room.count %></b><span class="muted"> in the room · <%= room.micCount %> on the mic</span>
-        </a>
+      <% if (liveRooms.length >= 2) { %>
+        <div class="box">
+          <h3>📡 Live rooms</h3>
+          <ul class="rooms-mini">
+            <% liveRooms.forEach((r) => { %>
+              <li><a href="/rooms/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="muted">👥 <%= r.count %> · 🎙 <%= r.micCount %></span></a></li>
+            <% }) %>
+          </ul>
+        </div>
       <% } %>
     </div>
   </section>
@@ -414,33 +423,99 @@
       });
     }
     placeWidgets();
-    function goLive(how) {
-      stageEl.classList.remove('off'); stageEl.classList.add('live');
-      document.getElementById('stPill').className = 'pill on';
-      document.getElementById('stPillTxt').textContent = 'ON AIR';
-      document.getElementById('stSub').textContent = how;
+    function setPill(on, how) {
+      stageEl.classList.toggle('live', on); stageEl.classList.toggle('off', !on);
+      document.getElementById('stPill').className = 'pill ' + (on ? 'on' : 'off');
+      document.getElementById('stPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
+      if (how) document.getElementById('stSub').textContent = how;
       placeWidgets();
     }
 
+    // ── the HLS player: created on demand, retried every 10 s on any error or stall ──
+    var HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
+    var player = null, retry = null, twitchLive = false, hlsLive = <%= live ? 'true' : 'false' %>;
+    var reconnectEl = document.getElementById('stReconnect'), unmuteEl = document.getElementById('stUnmute');
+    function reconnecting(on) { reconnectEl.classList.toggle('hide', !on); }
+    function scheduleRetry() {
+      reconnecting(true);
+      clearTimeout(retry);
+      retry = setTimeout(function () {
+        if (!player || twitchLive) return;
+        try { player.src({ src: HLS + '?r=' + Date.now(), type: 'application/x-mpegURL' }); player.play().catch(function () {}); } catch (e) {}
+        scheduleRetry();                                   // cleared again by 'playing'
+      }, 10000);
+    }
+    function startPlayer() {
+      if (player || !window.videojs || twitchLive) return;
+      var wrap = document.getElementById('videoWrapper');
+      var v = document.createElement('video-js');
+      v.id = 'videoElement'; v.className = 'video-js vjs-default-skin';
+      v.setAttribute('playsinline', ''); v.setAttribute('controls', ''); v.setAttribute('muted', '');
+      wrap.appendChild(v);
+      player = videojs(v, { muted: true, autoplay: true, liveui: true, fluid: false, preload: 'auto',
+                            html5: { vhs: { overrideNative: true, enableLowInitialPlaylist: true } } });
+      player.src({ src: HLS, type: 'application/x-mpegURL' });
+      player.on('error', scheduleRetry);
+      player.on('stalled', function () { if (!retry) scheduleRetry(); });
+      player.on('playing', function () { clearTimeout(retry); retry = null; reconnecting(false); });
+      player.play().catch(function () {});
+      unmuteEl.classList.remove('hide');
+      reconnecting(true);                                  // until the first frame plays
+    }
+    function stopPlayer() {
+      clearTimeout(retry); retry = null; reconnecting(false); unmuteEl.classList.add('hide');
+      if (player) { try { player.dispose(); } catch (e) {} player = null; }
+    }
+    unmuteEl.addEventListener('click', function () { if (player) { player.muted(false); player.play().catch(function () {}); } unmuteEl.classList.add('hide'); });
+
+    // ON AIR = the playlist is actually being written (checked on the server) or Twitch is live
+    function pollStage() {
+      fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
+        var was = hlsLive; hlsLive = !!g.active;
+        if (hlsLive && !was) { setPill(true, 'live now'); startPlayer(); }
+        if (!hlsLive && was && !twitchLive) { stopPlayer(); setPill(false, 'stream ended just now'); }
+      }).catch(function () {});
+    }
+    setInterval(pollStage, 15000);
+
     window.addEventListener('load', function () {
-      var ov = document.getElementById('videoOverlay');
-      if (ov) ov.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ov.click(); } });
+      if (hlsLive) startPlayer();
       if (!window.Twitch) return;
-      // Twitch takes over the stage while the channel is live (OBS sends there too)
       var tw = new Twitch.Player('twitch', { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
       tw.addEventListener(Twitch.Player.READY, function () {
         tw.addEventListener(Twitch.Player.ONLINE, function () {
+          twitchLive = true; stopPlayer();
           document.getElementById('twitch').classList.remove('hide');
-          var vw = document.getElementById('videoWrapper'); if (vw) vw.classList.add('hide');
-          try { var v = window.videojs && videojs.getPlayer('videoElement'); if (v) v.pause(); } catch (e) {}
-          goLive('live on Twitch');
+          setPill(true, 'live on Twitch');
         });
         tw.addEventListener(Twitch.Player.OFFLINE, function () {
+          twitchLive = false;
           document.getElementById('twitch').classList.add('hide');
-          var vw = document.getElementById('videoWrapper'); if (vw) vw.classList.remove('hide');
+          if (hlsLive) startPlayer(); else setPill(false, 'nothing streaming right now');
         });
       });
     });
+
+    // ── NOW SPINNING / LAST SPIN on the stage wheel, in the spinner's name colour ──
+    function spinLine(sp) {
+      var box = document.getElementById('stSpin');
+      if (!box || !sp || !(sp.display || sp.name)) return;
+      box.textContent = '';
+      box.appendChild(document.createTextNode(sp.state === 'spinning' || sp.type === 'spinning' ? 'NOW SPINNING \u25B8 ' : 'LAST SPIN \u25B8 '));
+      var who = document.createElement('span'); who.className = 'who'; who.textContent = sp.display || sp.name;
+      if (sp.nameCss) who.style.cssText = sp.nameCss;
+      box.appendChild(who);
+      if (sp.result != null && sp.state !== 'spinning' && sp.type !== 'spinning') {
+        var a = document.createElement('span'); a.className = 'amt';
+        a.textContent = ' \u00B7 ' + (Number(sp.result) > 0 ? '+' + Number(sp.result).toLocaleString('en-US') + ' PAT' : 'no prize');
+        box.appendChild(a);
+      }
+    }
+    fetch('/api/g/wheel/last.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) { spinLine(d.spin); }).catch(function () {});
+    try {
+      var watch = new EventSource('/events?type=spin&identifier=watch');
+      watch.onmessage = function (ev) { try { spinLine(JSON.parse(ev.data)); } catch (e) {} };
+    } catch (e) {}
   })();
 </script>
 

@@ -299,6 +299,7 @@ function showSpinner(name, label) {
   const k = strip.querySelector('.k');
   if (k) k.textContent = label || 'NOW SPINNING';
   nameEl.textContent = name || '';
+  nameEl.style.cssText = name ? (window.spinnerCss || '') : '';      // the spinner's equipped name colour
   strip.classList.toggle('show', !!name);
 }
 
@@ -317,7 +318,7 @@ function drawResultOverlay(amount, spinner) {
     banner.style.animation = 'none'; void banner.offsetWidth; banner.style.animation = '';   // replay the pop
   }
   if (tag) tag.textContent = won > 0 ? 'WINNER' : 'NO PRIZE';
-  if (who) who.textContent = spinner || '';
+  if (who) { who.textContent = spinner || ''; who.style.cssText = spinner ? (window.spinnerCss || '') : ''; }
   resultText.textContent = won.toLocaleString();
   resultContainer.style.display = 'flex';
   setFrameState(won > 0 ? 'won' : null);
@@ -350,6 +351,7 @@ function acknowledgeSpin(spinId) {
           console.log("Spin command received:", data);
           const parts = data.message.split(' '); // "public spinid <spinId> from <username>"
           const spinnerName = parts[4];
+          window.spinnerCss = (data.spinner && data.spinner.nameCss) || '';
           const sId = parts[2];
           // targetIndex is the server-chosen winning slice — the wheel animates to it.
           spinWheel(spinnerName, sId, data.targetIndex);

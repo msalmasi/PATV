@@ -801,6 +801,29 @@ app.post("/merge-accounts-discord", async (req, res) => {
   }
 });
 
+// Who's on the public/OBS wheel, with their equipped name colour (cosmetics.nameStyle is a cached
+// lookup) - resolved ONCE here and carried on the events, never per viewer.
+async function spinnerLook(userId) {
+  try {
+    const u = (await getQuery("SELECT username, displayname FROM users WHERE userId = ?", [userId]))[0];
+    if (!u) return { name: "", display: "", nameCss: "" };
+    return { name: u.username, display: u.displayname || u.username, nameCss: cosmetics.nameStyle(u.username) || "" };
+  } catch (e) {
+    return { name: "", display: "", nameCss: "" };
+  }
+}
+
+// The stage wheel's "NOW SPINNING / LAST SPIN" line (homepage): the latest public spin as JSON.
+app.get("/api/g/wheel/last.json", async (req, res) => {
+  try {
+    const r = (await getQuery("SELECT userId, result, payout, timestamp FROM wheel_spins WHERE type = 'public' AND result IN ('PENDING','SETTLED') ORDER BY timestamp DESC LIMIT 1"))[0];
+    if (!r) return res.json({ spin: null });
+    res.json({ spin: Object.assign({ state: r.result === "PENDING" ? "spinning" : "done", result: r.result === "SETTLED" ? Number(r.payout) || 0 : null, at: r.timestamp }, await spinnerLook(r.userId)) });
+  } catch (e) {
+    res.json({ spin: null });
+  }
+});
+
 // HTTP GET endpoint to retrieve the last result.
 app.get("/api/g/wheel/last-result", async (req, res) => {
   const sql = `
@@ -3095,9 +3118,12 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
         sendEvent("spin", spinId, spinData);
     }, 500);
 
+    const look = await spinnerLook(spinDetails[0].userId);
+    sendEvent("spin", "watch", Object.assign({ type: "spinning", spinId }, look));   // homepage stage (not the OBS channel)
     res.json({
       success: true,
       message: `public spinid ${spinId} from ${username}`,
+      spinner: look,
       targetIndex: outcome.segmentIndex,
       display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
     });
@@ -3517,6 +3543,9 @@ async function settleSpin(spinId) {
   achievements.checkWeb(spin.userId);              // spins / wheel winnings / jackpot achievements
   const out = { result: payout, jackpot: isJackpot, jackpotPct: spin.jackpot_pct || 0, grand, xp, levelUp: levelUpInfo };
   sendEvent("results", spinId, out);
+  if (spin.type === "public") {
+    sendEvent("spin", "watch", Object.assign({ type: "result", spinId, result: payout, jackpot: isJackpot, grand }, await spinnerLook(spin.userId)));
+  }
   return { ok: true, ...out };
 }
 
