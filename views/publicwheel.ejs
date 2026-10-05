@@ -1,18 +1,43 @@
-<!-- views/wheel.ejs -->
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/public/css/wheel.css">
-<link rel="stylesheet" type="text/css" href="/public/css/publicwheel.css">
-<div id="wheel">
-  <div id="jackpot">
-    <h1 class="neon" data-text="U"><span class="flicker-slow">J</span>A<span class="flicker-fast">C</span>KP<span class="flicker-slow">O</span><span class="flicker-fast">T</span><br><br> PAT <span id="jackpotTotal">?</span></h1>
-  </div>
-  <div class="wheel-container">
-    <canvas id="wheelCanvas" width="500" height="500"></canvas>
-    <div id="resultContainer">
-        <span id="resultText"></span>
+<!DOCTYPE html>
+<!-- views/publicwheel.ejs - the public wheel at /g/wheel. It's an OBS browser source: transparent
+     background, no controls, scales to whatever size the source is. The gold (logged-in) wheel is wheel.ejs. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PATV Wheel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/public/css/obs-wheel.css?v=ow1">
+</head>
+<body class="ow-body">
+<main class="ow" id="wheel">
+  <header class="ow-marquee">
+    <h1 class="ow-neon" aria-label="Jackpot"><span class="f-slow">J</span>A<span class="f-fast">C</span>KP<span class="f-slow">O</span><span class="f-fast">T</span></h1>
+    <div class="ow-pot"><span class="lbl">POT</span><span class="val">PAT <span id="jackpotTotal">&hellip;</span></span></div>
+  </header>
+
+  <div class="ow-frame" id="wheelFrame">
+    <div class="ow-bulbs" aria-hidden="true">
+      <% for (let i = 0; i < 32; i++) { %><i style="--a: <%= (i * 360 / 32).toFixed(2) %>deg; --k: <%= i % 4 %>"></i><% } %>
+    </div>
+    <div class="wheel-container">
+      <canvas id="wheelCanvas" width="500" height="500"></canvas>
+      <div id="resultContainer">
+        <div class="ow-banner">
+          <span class="ow-tag" id="resultTag">WINNER</span>
+          <span class="ow-who" id="resultWho"></span>
+          <span class="ow-amt"><span id="resultText"></span> <span class="u">PAT</span></span>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-  <script src="/public/jackpotroll.js?v=jproll1"></script>
-    <script src="/public/publicwheel.js?v=cap20"></script>
+  <div class="ow-now" id="nowSpinning"><span class="k">NOW SPINNING</span> <span class="v" id="spinnerName"></span></div>
+</main>
+
+<script src="/public/jackpotroll.js?v=jproll1"></script>
+<script src="/public/publicwheel.js?v=ow1"></script>
+</body>
+</html>

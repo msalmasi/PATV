@@ -1,5 +1,15 @@
+// Public/OBS wheel (views/publicwheel.ejs, /g/wheel). Arcade look in /public/css/obs-wheel.css.
 const canvas = document.getElementById('wheelCanvas');
 const ctx = canvas.getContext('2d');
+const wheelFrame = document.getElementById('wheelFrame');
+
+// Draw at 2x so the wheel stays crisp when OBS scales the source up to 1080p; the drawing code
+// below keeps working in the canvas's 500x500 logical space.
+const LOGICAL = canvas.width;
+const HIDPI = 2;
+canvas.width = LOGICAL * HIDPI;
+canvas.height = LOGICAL * HIDPI;
+ctx.scale(HIDPI, HIDPI);
 
 // Load the audio file at the start of the script
 const tickerSound = new Audio('/public/wheel.ogg');
@@ -12,14 +22,15 @@ document.querySelector('.wheel-container').appendChild(arrow);
 // Center image
 const centerImage = document.createElement('img');
 centerImage.id = 'centerImage';
+centerImage.alt = '';
 document.querySelector('.wheel-container').appendChild(centerImage);
 
 // Set your custom image or GIF URL
 centerImage.src = '/public/img/star.gif';
 
-const wheelRadius = canvas.width / 2;
-const centerX = canvas.width / 2;
-const centerY = canvas.height / 2;
+const wheelRadius = LOGICAL / 2;
+const centerX = LOGICAL / 2;
+const centerY = LOGICAL / 2;
 
 const multiplier = 1.10;   // same as the server's PUBLIC_WHEEL_MULTIPLIER
 
@@ -58,7 +69,7 @@ let isSpinning = false;
 
 // Draws the Wheel
 function drawWheel() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0, 0, LOGICAL, LOGICAL);
 
   const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
   let angleStart = currentAngle;
@@ -71,15 +82,21 @@ function drawWheel() {
     ctx.arc(centerX, centerY, wheelRadius, angleStart, angleEnd);
     ctx.fillStyle = segment.color;
     ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.28)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
     if (!segment.jackpot) {           // the jackpot's label is drawn by drawJackpotGlow
       ctx.save();
       ctx.translate(centerX, centerY);
       ctx.rotate((angleStart + angleEnd) / 2);
       ctx.textAlign = 'right';
+      ctx.font = 'bold 17px Arial';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,.55)';
+      ctx.strokeText(segment.label, wheelRadius - 12, 6);
       ctx.fillStyle = '#fff';
-      ctx.font = '16px Arial';
-      ctx.fillText(segment.label, wheelRadius - 10, 10);
+      ctx.fillText(segment.label, wheelRadius - 12, 6);
       ctx.restore();
     }
 
@@ -87,7 +104,7 @@ function drawWheel() {
   });
   drawJackpotGlow();
 
-  // No center circle, center image replaces it
+  // No centre disc: the slices run to the middle and the star GIF sits on top of them.
 }
 
 // The jackpot slice is a thin sliver (~1 in 3,000 spins) - drawn with a pulsing gold glow and a
@@ -149,6 +166,8 @@ function spinWheel(wheelSpinner, spinId, targetIndex) {
     return;
   }
   isSpinning = true;
+  setFrameState('spinning');
+  showSpinner(wheelSpinner);
 
   const twoPi = 2 * Math.PI;
   const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
@@ -192,7 +211,8 @@ function spinWheel(wheelSpinner, spinId, targetIndex) {
       drawWheel();
       setTimeout(() => {
         isSpinning = false;
-        settleAndReveal(spinId);
+        setFrameState(null);
+        settleAndReveal(spinId, wheelSpinner);
       }, 500);
     }
   }
@@ -234,7 +254,7 @@ setInterval(fetchJackpotTotal, 5000);
 
 // The wheel landed — tell the server (spinId only). It credits the payout it decided at
 // spin time and returns it; we just render the reveal. Nothing here is client-authoritative.
-function settleAndReveal(spinId) {
+function settleAndReveal(spinId, spinner) {
   fetch(`/api/wheel/settle`, {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ spinId: spinId }),
@@ -244,14 +264,18 @@ function settleAndReveal(spinId) {
   .then(data => {
     console.log('Settle response:', data);
     if (data.grand) {
+      setFrameState('jackpot');
       showJackpotRoll(100, Number(data.result) || 0, true, tickerSound);
-      setTimeout(hideJackpotRoll, 45000);
+      clearTimeout(resultTimer);
+      resultTimer = setTimeout(hideResultOverlay, 45000);
     } else if (data.jackpot) {
       // Animate the server's % roll (needle over the roll's bands), then count up the win.
+      setFrameState('jackpot');
       showJackpotRoll(data.jackpotPct || 0, Number(data.result) || 0, false, tickerSound);
-      setTimeout(hideJackpotRoll, 45000);
+      clearTimeout(resultTimer);
+      resultTimer = setTimeout(hideResultOverlay, 45000);
     } else {
-      drawResultOverlay(Number(data.result || 0).toLocaleString());
+      drawResultOverlay(Number(data.result || 0), spinner);
     }
     fetchJackpotTotal();
   })
@@ -260,28 +284,55 @@ function settleAndReveal(spinId) {
   });
 }
 
-// Displays the winning result over the wheel.
-function drawResultOverlay(result) {
-  const resultContainer = document.getElementById('resultContainer');
-  const resultText = document.getElementById('resultText');
-
-  resultContainer.style.display = 'flex'; // Show the container
-  resultContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.65)'; // Semi-transparent background
-
-  resultText.textContent = result; // Set the result text
-  setTimeout(function(){
-    hideResultOverlay();
-  }, 45000);
+// Frame state drives the bulbs: 'spinning' (fast chase), 'won' (flash), 'jackpot' (gold race), null (idle).
+function setFrameState(state) {
+  if (!wheelFrame) return;
+  wheelFrame.classList.remove('spinning', 'won', 'jackpot');
+  if (state) wheelFrame.classList.add(state);
 }
 
-// Hides the winning result over the wheel.
-function hideResultOverlay() {
-  if (typeof hideJackpotRoll === 'function') hideJackpotRoll();
+// "NOW SPINNING <name>" strip under the wheel; it stays up with the result.
+function showSpinner(name, label) {
+  const strip = document.getElementById('nowSpinning');
+  const nameEl = document.getElementById('spinnerName');
+  if (!strip || !nameEl) return;
+  const k = strip.querySelector('.k');
+  if (k) k.textContent = label || 'NOW SPINNING';
+  nameEl.textContent = name || '';
+  strip.classList.toggle('show', !!name);
+}
+
+// Neon winner banner over the wheel. Text only goes in via textContent.
+var resultTimer = null;
+function drawResultOverlay(amount, spinner) {
   const resultContainer = document.getElementById('resultContainer');
   const resultText = document.getElementById('resultText');
+  const banner = resultContainer.querySelector('.ow-banner');
+  const tag = document.getElementById('resultTag');
+  const who = document.getElementById('resultWho');
+  const won = Number(amount) || 0;
 
-  resultContainer.style.display = 'none'; // Show the container
-  resultContainer.style.backgroundColor = 'rgba(0, 0, 0, 0.65)'; // Semi-transparent background
+  if (banner) {
+    banner.classList.toggle('zero', won <= 0);
+    banner.style.animation = 'none'; void banner.offsetWidth; banner.style.animation = '';   // replay the pop
+  }
+  if (tag) tag.textContent = won > 0 ? 'WINNER' : 'NO PRIZE';
+  if (who) who.textContent = spinner || '';
+  resultText.textContent = won.toLocaleString();
+  resultContainer.style.display = 'flex';
+  setFrameState(won > 0 ? 'won' : null);
+  if (spinner) showSpinner(spinner, 'LAST SPIN');
+
+  clearTimeout(resultTimer);
+  resultTimer = setTimeout(hideResultOverlay, 45000);
+}
+
+// Hides the result (banner or jackpot roll) and puts the wheel back to idle.
+function hideResultOverlay() {
+  if (typeof hideJackpotRoll === 'function') hideJackpotRoll();
+  clearTimeout(resultTimer);
+  document.getElementById('resultContainer').style.display = 'none';
+  if (!isSpinning) { setFrameState(null); showSpinner(''); }
 }
 
 function acknowledgeSpin(spinId) {

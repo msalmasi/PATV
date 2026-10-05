@@ -1,125 +1,305 @@
-<%- include('layout', { title: 'Public Access Leaderboard', user: user}) %>
-    <meta charset="UTF-8">
-    <title>Leaderboard</title>
-    <link rel="stylesheet" href="/public/css/leaderboard.css"> <!-- Path to your CSS file -->
-<body>
-    <h1>Leaderboard</h1>
-    <% if (typeof supply !== 'undefined' && supply) { %>
-        <p class="pot-banner" style="cursor:pointer" onclick="showTab('supply')" title="See where it all is">Total PAT supply: <%= supply.total.toLocaleString() %></p>
+<%- include('layout', { title: 'Rankings', user: user }) %>
+<%
+  const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
+  const avs = typeof gtfAvatars !== 'undefined' && gtfAvatars ? gtfAvatars : {};
+  const lvlList = typeof byLevel !== 'undefined' && byLevel ? byLevel : [];
+  const badgeList = typeof byBadges !== 'undefined' && byBadges ? byBadges : [];
+  const need = (lv) => { try { return typeof xpForNextLevel === 'function' ? xpForNextLevel(lv) : 0; } catch (e) { return 0; } };
+  const pctOf = (u) => { const n = need(u.level); return n ? Math.max(0, Math.min(100, (Number(u.xp) || 0) / n * 100)) : 0; };
+  const nameOf = (u) => typeof cosmeticNameHtml === 'function' ? cosmeticNameHtml(u.username, u.displayname || u.username)
+    : String(u.displayname || u.username).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const prof = (u) => '/u/' + encodeURIComponent(u.username) + '/profile';
+  const isMe = (u) => !!user && u.username === user;
+  // metric per board: [big value, unit]
+  const metric = {
+    pat:    (u) => [fmt(u.points_balance), 'PAT'],
+    level:  (u) => ['Lv ' + fmt(u.level), fmt(u.xp) + ' XP'],
+    badges: (u) => [fmt(u.badges), Number(u.badges) === 1 ? 'badge' : 'badges'],
+  };
+  const boards = [
+    { id: 'pat', label: 'PAT', list: users, empty: 'Nobody has any PAT yet.' },
+    { id: 'level', label: 'Level', list: lvlList, empty: 'Nobody has levelled up yet.' },
+    { id: 'badges', label: 'Badges', list: badgeList, empty: 'No badges earned yet.' },
+  ];
+  const pot = typeof currentPot !== 'undefined' ? currentPot : 0;
+  const hasSupply = typeof supply !== 'undefined' && supply;
+%>
+<%- include('partials/cosmetics-css') %>
+<style>
+  .lb { max-width: 980px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; }
+  .lb *, .lb *::before, .lb *::after { box-sizing: border-box; }
+  .lb a { color: #81c784; text-decoration: none; }
+  .lb a:hover { color: #a5d6a7; }
+  .lb .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 16px 18px; min-width: 0; }
+  .lb-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 18px; align-items: center;
+             background: radial-gradient(120% 140% at 0% 0%, #2a2410 0%, #111 55%); }
+  .lb-head h1 { margin: 0; font-family: 'Press Start 2P', monospace; font-size: 20px; line-height: 1.4; color: #ffd700;
+                text-shadow: 0 0 12px rgba(255,215,0,.35); text-transform: none; padding: 0; }
+  .lb-head p { margin: 6px 0 0; color: #999; font-size: 14px; }
+  .lb-tiles { display: flex; flex-wrap: wrap; gap: 10px; }
+  .lb-tile { background: #0d0d0d; border: 1px solid #262626; border-radius: 12px; padding: 10px 14px; min-width: 150px; text-align: left;
+             font: inherit; color: inherit; cursor: default; }
+  button.lb-tile { cursor: pointer; }
+  button.lb-tile:hover { border-color: #4caf50; }
+  .lb-tile .k { display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .lb-tile .v { display: block; font-size: 20px; font-weight: bold; margin-top: 3px; color: #ffd700; font-variant-numeric: tabular-nums; }
+
+  .lb-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .lb-tab { appearance: none; border: 1px solid #2b2b2b; background: #151515; color: #bbb; border-radius: 999px; padding: 8px 16px;
+            font-family: inherit; font-size: 14px; cursor: pointer; }
+  .lb-tab:hover { border-color: #4caf50; color: #fff; }
+  .lb-tab[aria-selected="true"] { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+  .lb-tab:focus-visible, .lb-tile:focus-visible { outline: 3px solid #ffd700; outline-offset: 2px; }
+  .lb-panel[hidden] { display: none !important; }
+  .lb-panel { display: grid; gap: 16px; }
+  .lb h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
+
+  /* podium: 2nd / 1st / 3rd */
+  .lb-pod { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; }
+  .lb-pod .p { position: relative; display: grid; justify-items: center; gap: 6px; text-align: center; padding: 16px 10px 14px;
+               border-radius: 14px; border: 1px solid #262626; background: linear-gradient(180deg, #161616, #0f0f0f); min-width: 0;
+               color: inherit !important; transition: transform .15s, border-color .15s; }
+  .lb-pod a.p:hover { transform: translateY(-2px); }
+  .lb-pod .p1 { order: 2; padding-top: 22px; border-color: #8a7420; background: linear-gradient(180deg, #2a2410, #111 70%);
+                box-shadow: 0 0 24px rgba(255,215,0,.12); }
+  .lb-pod .p2 { order: 1; border-color: #5a5f66; }
+  .lb-pod .p3 { order: 3; border-color: #6b4a2c; }
+  .lb-pod .medal { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); width: 28px; height: 28px; border-radius: 50%;
+                   display: grid; place-items: center; font-family: 'Press Start 2P', monospace; font-size: 11px; color: #111;
+                   box-shadow: 0 2px 0 rgba(0,0,0,.4); }
+  .lb-pod .p1 .medal { background: linear-gradient(180deg, #ffe66b, #e0a800); }
+  .lb-pod .p2 .medal { background: linear-gradient(180deg, #f0f3f6, #9aa3ad); }
+  .lb-pod .p3 .medal { background: linear-gradient(180deg, #f0b27a, #a8642c); }
+  .lb-pod .av { width: 96px; height: 96px; border-radius: 14px; overflow: hidden; background: #0b0b0b; border: 2px solid #2b2b2b;
+                display: grid; place-items: center; }
+  .lb-pod .p1 .av { width: 120px; height: 120px; border-color: #b8961d; }
+  .lb-pod .av svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .lb-pod .av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .lb-pod .nm { font-weight: bold; font-size: 15px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-pod .val { font-size: 20px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.15; }
+  .lb-pod .p1 .val { font-size: 24px; }
+  .lb-pod .sub { font-size: 12px; color: #888; }
+  .lb-pod .me-tag, .lb-row .me-tag { font-size: 10px; letter-spacing: .08em; padding: 1px 6px; border-radius: 999px; background: #4caf50; color: #fff;
+                vertical-align: 2px; margin-left: 4px; font-weight: bold; }
+
+  /* rank table */
+  .lb-list { list-style: none; margin: 0; padding: 0; }
+  .lb-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 150px 130px; gap: 10px; align-items: center;
+            padding: 8px 6px; border-bottom: 1px solid #1c1c1c; font-variant-numeric: tabular-nums; }
+  .lb-row:last-child { border-bottom: 0; }
+  .lb-row.hd { color: #777; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; padding-top: 0; }
+  .lb-row.me { background: rgba(76,175,80,.08); border-radius: 8px; }
+  .lb-row .rk { color: #888; font-weight: bold; text-align: right; padding-right: 4px; }
+  .lb-row .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .lb-row .who img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex: none; background: #0d0d0d; border: 1px solid #2a2a2a; }
+  .lb-row .who a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: #e6e6e6; }
+  .lb-row .who a:hover { color: #fff; text-decoration: underline; }
+  .lb-row .lv { display: grid; gap: 4px; font-size: 13px; color: #ccc; }
+  .lb-row .lv small { color: #777; }
+  .lb-row .bar { height: 5px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
+  .lb-row .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); }
+  .lb-row .amt { text-align: right; font-weight: bold; color: #ffd700; }
+  .lb-row .amt small { color: #777; font-weight: normal; font-size: 11px; }
+  .lb-row.hd .amt { color: #777; font-weight: normal; }
+  .lb .muted { color: #888; font-size: 13px; }
+  .lb .empty { color: #888; text-align: center; padding: 18px 0; }
+
+  /* jackpots + supply */
+  .lb-jp { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 80px; gap: 10px; align-items: center; padding: 8px 4px;
+           border-bottom: 1px solid #1c1c1c; font-variant-numeric: tabular-nums; }
+  .lb-jp:last-child { border-bottom: 0; }
+  .lb-jp .rk { color: #777; text-align: right; }
+  .lb-jp a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .lb-jp .amt { color: #ffd700; font-weight: bold; text-align: right; }
+  .lb-jp .t { color: #888; font-size: 12px; text-align: right; }
+  .lb-sup { display: grid; gap: 10px; }
+  .lb-sup .r { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
+  .lb-sup .r .l { overflow-wrap: anywhere; }
+  .lb-sup .r .a { text-align: right; color: #ffd700; font-weight: bold; }
+  .lb-sup .r .a small { color: #888; font-weight: normal; margin-left: 6px; }
+  .lb-sup .r .bar { grid-column: 1 / -1; height: 6px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
+  .lb-sup .r .bar span { display: block; height: 100%; background: linear-gradient(90deg, #ffd700, #ff9f1c); }
+
+  @media (max-width: 720px) {
+    .lb-row { grid-template-columns: 34px minmax(0, 1fr) auto; }
+    .lb-row .lv { display: none; }
+    .lb-row.lvl-board .lv { display: grid; text-align: right; }
+    .lb-row.lvl-board .lv .bar, .lb-row.lvl-board .amt { display: none; }
+    .lb-head { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 520px) {
+    .lb { padding: 14px 12px 40px; }
+    .lb-head h1 { font-size: 16px; }
+    .lb-pod { gap: 8px; }
+    .lb-pod .p { padding: 14px 4px 10px; }
+    .lb-pod .p1 { padding-top: 18px; }
+    .lb-pod .av { width: 64px; height: 64px; border-radius: 10px; }
+    .lb-pod .p1 .av { width: 80px; height: 80px; }
+    .lb-pod .nm { font-size: 13px; }
+    .lb-pod .val, .lb-pod .p1 .val { font-size: 15px; }
+    .lb-pod .sub { font-size: 11px; }
+    .lb-tile { min-width: 0; flex: 1 1 140px; }
+    .lb-tab { padding: 7px 12px; font-size: 13px; }
+    .lb-jp { grid-template-columns: 24px minmax(0, 1fr) auto; }
+    .lb-jp .t { grid-column: 2 / -1; text-align: left; margin-top: -6px; }
+    .lb .card { padding: 14px 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .lb-pod .p { transition: none; } }
+</style>
+
+<main class="lb">
+  <section class="card lb-head">
+    <div>
+      <h1>Rankings</h1>
+      <p>The richest, highest-levelled and most-decorated frogs on Public Access.</p>
+    </div>
+    <div class="lb-tiles">
+      <% if (hasSupply) { %>
+        <button type="button" class="lb-tile" data-go="supply" title="See where it all is"><span class="k">Total PAT supply</span><span class="v"><%= fmt(supply.total) %></span></button>
+      <% } %>
+      <button type="button" class="lb-tile" data-go="jackpots" title="Recent jackpot winners"><span class="k">Jackpot pot</span><span class="v"><%= fmt(pot) %></span></button>
+    </div>
+  </section>
+
+  <div class="lb-tabs" role="tablist" aria-label="Leaderboards">
+    <% boards.forEach((b, i) => { %>
+      <button type="button" class="lb-tab" role="tab" id="t-<%= b.id %>" aria-controls="p-<%= b.id %>" aria-selected="<%= i === 0 ? 'true' : 'false' %>" data-tab="<%= b.id %>"><%= b.label %></button>
+    <% }) %>
+    <button type="button" class="lb-tab" role="tab" id="t-jackpots" aria-controls="p-jackpots" aria-selected="false" data-tab="jackpots">Jackpots</button>
+    <button type="button" class="lb-tab" role="tab" id="t-supply" aria-controls="p-supply" aria-selected="false" data-tab="supply">PAT supply</button>
+  </div>
+
+  <% boards.forEach((b, bi) => { const list = b.list || []; const m = metric[b.id]; %>
+  <section class="lb-panel" role="tabpanel" id="p-<%= b.id %>" aria-labelledby="t-<%= b.id %>"<%= bi === 0 ? '' : ' hidden' %>>
+    <% if (!list.length) { %>
+      <div class="card"><p class="empty"><%= b.empty %></p></div>
+    <% } else { %>
+      <div class="lb-pod">
+        <% list.slice(0, 3).forEach((u, i) => { const v = m(u); %>
+          <a class="p p<%= i + 1 %>" href="<%= prof(u) %>">
+            <span class="medal" aria-label="Rank <%= i + 1 %>"><%= i + 1 %></span>
+            <span class="av"><% if (avs[u.username]) { %><%- avs[u.username] %><% } else { %><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><% } %></span>
+            <span class="nm"><%- nameOf(u) %><% if (isMe(u)) { %><span class="me-tag">YOU</span><% } %></span>
+            <span class="val"><%= v[0] %></span>
+            <span class="sub"><%= v[1] %><% if (b.id !== 'level') { %> &middot; Lv <%= fmt(u.level) %><% } %></span>
+          </a>
+        <% }) %>
+      </div>
+
+      <% if (list.length > 3) { %>
+      <div class="card">
+        <ol class="lb-list">
+          <li class="lb-row hd<%= b.id === 'level' ? ' lvl-board' : '' %>" aria-hidden="true"><span class="rk">#</span><span>Player</span><span class="lv">Level</span><span class="amt"><%= b.id === 'badges' ? 'Badges' : 'PAT' %></span></li>
+          <% list.slice(3).forEach((u, j) => { const i = j + 3; %>
+            <li class="lb-row<%= b.id === 'level' ? ' lvl-board' : '' %><%= isMe(u) ? ' me' : '' %>">
+              <span class="rk"><%= i + 1 %></span>
+              <span class="who"><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><a href="<%= prof(u) %>"><%- nameOf(u) %></a><% if (isMe(u)) { %><span class="me-tag">YOU</span><% } %></span>
+              <span class="lv"><span>Lv <%= fmt(u.level) %> <small><%= fmt(u.xp) %> XP</small></span><span class="bar"><span style="width: <%= pctOf(u).toFixed(1) %>%"></span></span></span>
+              <% if (b.id === 'badges') { %>
+                <span class="amt"><%= fmt(u.badges) %></span>
+              <% } else { %>
+                <span class="amt"><%= fmt(u.points_balance) %> <small>PAT</small></span>
+              <% } %>
+            </li>
+          <% }) %>
+        </ol>
+      </div>
+      <% } %>
     <% } %>
+  </section>
+  <% }) %>
 
-    <div class="tabs">
-        <button class="tab-btn active" data-tab="points" onclick="showTab('points')">TOP BALANCES</button>
-        <button class="tab-btn" data-tab="jackpots" onclick="showTab('jackpots')">JACKPOTS</button>
-        <button class="tab-btn" data-tab="supply" onclick="showTab('supply')">PAT SUPPLY</button>
+  <section class="lb-panel" role="tabpanel" id="p-jackpots" aria-labelledby="t-jackpots" hidden>
+    <div class="card">
+      <h2>Recent jackpots</h2>
+      <p class="muted" style="margin:-4px 0 12px">Current pot: <b style="color:#ffd700"><%= fmt(pot) %> PAT</b> &middot; land the thin gold slice on the <a href="<%= user ? '/u/' + encodeURIComponent(user) + '/wheel' : '/login' %>">wheel</a> to roll for it.</p>
+      <% if (!jackpots || jackpots.length === 0) { %>
+        <p class="empty">No jackpots have been won yet. Be the first!</p>
+      <% } else { %>
+        <div>
+          <% jackpots.forEach((j, index) => { %>
+            <div class="lb-jp">
+              <span class="rk"><%= index + 1 %></span>
+              <a href="/u/<%= encodeURIComponent(j.username) %>/profile"><%- nameOf(j) %></a>
+              <span class="amt"><%= fmt(j.amount) %> PAT</span>
+              <span class="t jackpot-time" data-ts="<%= j.timestamp %>"><%= j.timestamp %></span>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
     </div>
+  </section>
 
-    <!-- TOP BALANCES TAB -->
-    <div id="tab-points" class="tab-content active">
-        <table>
-            <thead>
-                <tr>
-                    <th>Rank</th>
-                    <th>Username</th>
-                    <th>Points</th>
-                </tr>
-            </thead>
-            <tbody>
-                <% users.forEach((u, index) => { %>
-                    <tr>
-                        <td><%= index + 1 %></td>
-                        <td><a href="/u/<%= u.username %>/profile" class="leaderboardLink"><% const _nc = typeof cosmeticName === 'function' ? cosmeticName(u.username) : ''; if (_nc) { %><span style="<%= _nc %>"><%= u.displayname %></span><% } else { %><%= u.displayname %><% } %></a></td>
-                        <td><%= u.points_balance.toLocaleString() %></td>
-                    </tr>
-                <% }); %>
-            </tbody>
-        </table>
+  <section class="lb-panel" role="tabpanel" id="p-supply" aria-labelledby="t-supply" hidden>
+    <div class="card">
+      <h2>Where all the PAT is</h2>
+      <% if (hasSupply) { %>
+        <p class="muted" style="margin:-4px 0 14px">Total supply: <b style="color:#ffd700"><%= fmt(supply.total) %> PAT</b></p>
+        <div class="lb-sup">
+          <% supply.rows.forEach((r) => { const share = supply.total ? (r.amount / supply.total * 100) : 0; %>
+            <div class="r"><span class="l"><%= r.label %></span><span class="a"><%= fmt(r.amount) %><small><%= share.toFixed(1) %>%</small></span>
+              <span class="bar"><span style="width: <%= Math.max(0, Math.min(100, share)).toFixed(1) %>%"></span></span></div>
+          <% }) %>
+        </div>
+        <p class="muted" style="margin:14px 0 0">PAT is never minted or burned by the games &mdash; it moves between wallets and these pools.
+          <% if (supply.updated) { %>Pepe's pools as of <%= supply.updated %> UTC.<% } else { %>Pepe hasn't reported his pools yet.<% } %>
+          <a href="/economy">How PAT works</a></p>
+      <% } else { %>
+        <p class="empty">Supply data isn't available right now.</p>
+      <% } %>
     </div>
+  </section>
+</main>
 
-    <!-- PAT SUPPLY TAB -->
-    <div id="tab-supply" class="tab-content">
-        <% if (typeof supply !== 'undefined' && supply) { %>
-            <p class="pot-banner">Total PAT supply: <%= supply.total.toLocaleString() %></p>
-            <table>
-                <thead><tr><th>Where it is</th><th>PAT</th><th>Share</th></tr></thead>
-                <tbody>
-                <% supply.rows.forEach((r) => { %>
-                    <tr><td><%= r.label %></td><td><%= r.amount.toLocaleString() %></td>
-                        <td><%= supply.total ? (r.amount / supply.total * 100).toFixed(1) : '0.0' %>%</td></tr>
-                <% }); %>
-                </tbody>
-            </table>
-            <p class="empty-msg">PAT is never minted or burned by the games — it moves between wallets and these pools.
-                <% if (supply.updated) { %>Pepe's pools as of <%= supply.updated %> UTC.<% } else { %>Pepe hasn't reported his pools yet.<% } %></p>
-        <% } else { %>
-            <p class="empty-msg">Supply data isn't available right now.</p>
-        <% } %>
-    </div>
+<script>
+  (function () {
+    var ids = ['pat', 'level', 'badges', 'jackpots', 'supply'];
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.lb-tab'));
+    function show(name, focus) {
+      if (ids.indexOf(name) < 0) name = 'pat';
+      tabs.forEach(function (t) {
+        var on = t.dataset.tab === name;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.tabIndex = on ? 0 : -1;
+        if (on && focus) t.focus();
+      });
+      ids.forEach(function (id) { var p = document.getElementById('p-' + id); if (p) p.hidden = id !== name; });
+      try { localStorage.setItem('rankingsTab', name); } catch (e) { }
+      if (history.replaceState) history.replaceState(null, '', name === 'pat' ? location.pathname : '#' + name);
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener('click', function () { show(t.dataset.tab); });
+      t.addEventListener('keydown', function (e) {
+        var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        show(tabs[(i + d + tabs.length) % tabs.length].dataset.tab, true);
+      });
+    });
+    document.querySelectorAll('[data-go]').forEach(function (b) {
+      b.addEventListener('click', function () { show(b.dataset.go); document.querySelector('.lb-tabs').scrollIntoView({ block: 'nearest' }); });
+    });
 
-    <!-- JACKPOTS TAB -->
-    <div id="tab-jackpots" class="tab-content">
-        <p class="pot-banner">Current Pot: <%= (typeof currentPot !== 'undefined' ? currentPot : 0).toLocaleString() %></p>
-        <% if (!jackpots || jackpots.length === 0) { %>
-            <p class="empty-msg">No jackpots have been won yet. Be the first!</p>
-        <% } else { %>
-            <table>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Winner</th>
-                        <th>Amount</th>
-                        <th>When</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% jackpots.forEach((j, index) => { %>
-                        <tr>
-                            <td><%= index + 1 %></td>
-                            <td><a href="/u/<%= j.username %>/profile" class="leaderboardLink"><%= j.displayname || j.username %></a></td>
-                            <td class="jackpot-amount"><%= (j.amount || 0).toLocaleString() %></td>
-                            <td class="jackpot-time" data-ts="<%= j.timestamp %>"><%= j.timestamp %></td>
-                        </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        <% } %>
-    </div>
+    // relative times for jackpots (SQLite timestamps are UTC "YYYY-MM-DD HH:MM:SS")
+    function relTime(ts) {
+      if (!ts) return '';
+      var d = new Date(String(ts).replace(' ', 'T') + 'Z');
+      if (isNaN(d)) return ts;
+      var s = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (s < 60) return s + 's ago';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      if (s < 2592000) return Math.floor(s / 86400) + 'd ago';
+      return d.toLocaleDateString();
+    }
+    document.querySelectorAll('.jackpot-time').forEach(function (el) { el.textContent = relTime(el.dataset.ts); });
 
-    <script>
-        function showTab(name) {
-            document.querySelectorAll('.tab-content').forEach(function(el) {
-                el.classList.toggle('active', el.id === 'tab-' + name);
-            });
-            document.querySelectorAll('.tab-btn').forEach(function(btn) {
-                btn.classList.toggle('active', btn.dataset.tab === name);
-            });
-            // Remember last tab
-            try { localStorage.setItem('rankingsTab', name); } catch (e) {}
-        }
-
-        // Render relative timestamps for jackpots
-        (function() {
-            function relTime(ts) {
-                if (!ts) return '';
-                // SQLite timestamps are UTC ("YYYY-MM-DD HH:MM:SS")
-                var d = new Date(ts.replace(' ', 'T') + 'Z');
-                if (isNaN(d)) return ts;
-                var secs = Math.floor((Date.now() - d.getTime()) / 1000);
-                if (secs < 60) return secs + 's ago';
-                if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
-                if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
-                if (secs < 2592000) return Math.floor(secs / 86400) + 'd ago';
-                return d.toLocaleDateString();
-            }
-            document.querySelectorAll('.jackpot-time').forEach(function(el) {
-                el.textContent = relTime(el.dataset.ts);
-            });
-            // Restore last-viewed tab
-            try {
-                var saved = localStorage.getItem('rankingsTab');
-                if (saved) showTab(saved);
-            } catch (e) {}
-        })();
-    </script>
+    var start = (location.hash || '').slice(1);
+    if (!start) { try { start = localStorage.getItem('rankingsTab') || ''; } catch (e) { } }
+    // older saved value from the previous page
+    if (start === 'points') start = 'pat';
+    if (start) show(start);
+  })();
+</script>
 </body>
 </html>

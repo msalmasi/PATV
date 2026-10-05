@@ -1109,12 +1109,12 @@ app.post("/api/g/achievement", async (req, res) => {
 app.get("/rankings", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
 
-  const sql = `
-        SELECT username, points_balance, displayname
-        FROM users
-        ORDER BY points_balance DESC
-        LIMIT 100
-    `;
+  const cols = "u.userId, u.username, u.displayname, u.avatar, u.points_balance, u.xp, u.level";
+  const sql = `SELECT ${cols} FROM users u ORDER BY u.points_balance DESC LIMIT 100`;
+  // xp is progress inside the current level, so level first
+  const levelSql = `SELECT ${cols} FROM users u WHERE u.level > 1 OR u.xp > 0 ORDER BY u.level DESC, u.xp DESC LIMIT 100`;
+  const badgeSql = `SELECT ${cols}, COUNT(*) AS badges FROM user_badges ub JOIN users u ON u.userId = ub.userId
+        GROUP BY ub.userId ORDER BY badges DESC, u.level DESC, u.xp DESC LIMIT 100`;
 
   // Recent jackpot winners — match both full ("Jackpot Win") and partial
   // ("Jackpot Win (partial)") payouts. Since 2026-07-19 wins record as partial,
@@ -1130,13 +1130,25 @@ app.get("/rankings", addUser, async (req, res) => {
 
   try {
     const users = await getQuery(sql);
+    const byLevel = await getQuery(levelSql);
+    let byBadges = [];
+    try { byBadges = await getQuery(badgeSql); } catch (e) { console.error("rankings badges:", e.message); }
     const jackpots = await getQuery(jackpotSql);
     // Current jackpot pot total
     const potRow = await getQuery(`SELECT SUM(amount) AS pot FROM jackpot_rakes`);
     const currentPot = (potRow[0] && potRow[0].pot) || 0;
     let supply = null;
     try { supply = await patSupply(); } catch (e) { console.error("supply:", e.message); }
-    res.render("leaderboard", { user: username, users, jackpots, currentPot, supply });
+    // GTF pixel avatars for the podiums (top 3 of each board), rendered server-side like the profile's
+    const gtfAvatars = {};
+    const podium = new Set([users, byLevel, byBadges].flatMap((l) => l.slice(0, 3).map((u) => u.username)));
+    for (const name of podium) {
+      try {
+        const av = userstats.avatarFor(await cosmetics.profileData(name));
+        if (av && av.svg) gtfAvatars[name] = av.svg;
+      } catch (e) { console.error("rankings avatar:", e.message); }
+    }
+    res.render("leaderboard", { user: username, users, byLevel, byBadges, gtfAvatars, jackpots, currentPot, supply, xpForNextLevel });
   } catch (error) {
     console.error("Database error:", error);
     res.status(500).send("Failed to fetch rankings.");

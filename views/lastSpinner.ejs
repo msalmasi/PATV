@@ -2,58 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Refresh every 3s, but only while the site answers: a plain meta refresh that fired during
-         a site restart loaded an error page with no refresh in it, and the OBS source died. -->
+    <!-- OBS text source (/api/g/wheel/last-result once the last public spin settled). Refresh every 3s,
+         but only while the site answers: a plain meta refresh that fired during a site restart
+         loaded an error page with no refresh in it, and the OBS source died. -->
     <script>setInterval(function () { fetch('/healthz', { cache: 'no-store' })
       .then(function (r) { if (r.ok) location.reload(); }).catch(function () {}); }, 3000);</script>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <title>Now Spinning</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    <title>Last Spinner</title>
     <style>
-@import url('https://fonts.googleapis.com/css?family=Lato:400,700');
-
-html {
-}
-
-body {
-    overflow: hidden;
-  font-family: 'Lato', sans-serif;
-  text-transform: uppercase;
-  text-align: center;
-  padding-top: 10px;
-}
-
-h1 {
-  font-size: 4em;
-  font-weight: 100;
-  letter-spacing: 3px;
-  padding-top: 0px;
-  color: #A9A9A9;
-  text-transform: uppercase;
-  margin-bottom: 0px;
-  margin-top: 10px;
-  font-style: italic;
-}
-
-p {
-    margin-top: 0px;
-    margin-bottom: 5px;
-  font-size: 2em;
-  font-weight: 100;
-  color: #A9A9A9;
-  letter-spacing: 1px;
-  font-style: italic;
-/*  animation: bounce 1s ease-in infinite;*/
-}
-
-/*@keyframes bounce {
-  50% {
-     transform: translateY(-10px);
-  }
-}*/
-
-        </style>
-        
-        
+        html, body { margin: 0; background: transparent; overflow: hidden; }
+        body { text-align: center; padding-top: 10px; text-transform: uppercase; }
+        p { margin: 0 0 6px; font-family: 'Press Start 2P', monospace; font-size: 1.6em; letter-spacing: 3px;
+            color: #9a9aab; text-shadow: 0 0 6px rgba(212,44,202,.6); }
+        h1 { margin: 6px 0 0; font-family: 'VT323', monospace; font-weight: 400; font-size: 5em; line-height: 1; letter-spacing: 2px;
+             color: #e9e9ef; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+             text-shadow: 0 0 6px rgba(74,255,239,.6), 0 0 18px rgba(212,44,202,.5); }
+    </style>
 </head>
 <body>
     <p>Last Spinner</p>

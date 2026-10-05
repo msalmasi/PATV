@@ -1,0 +1,126 @@
+/* Public/OBS wheel (views/publicwheel.ejs at /g/wheel) - the arcade look of the gold wheel page,
+   built for an OBS browser source: transparent background, no scrollbars, no controls, and every
+   size is relative to the .ow box (container units) so it scales to any source size. */
+
+html, body.ow-body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent !important; }
+body.ow-body { display: flex; align-items: center; justify-content: center; }
+
+.ow {
+  --ow-cyan: #4AFFEF;
+  --ow-pink: #D42CCA;
+  --ow-gold: #FFC600;
+  --ow-gold-2: #F2AE2E;
+  --ow-pixel: 'Press Start 2P', monospace;
+  --ow-mono: 'VT323', 'Press Start 2P', monospace;
+
+  box-sizing: border-box;
+  /* Marquee + wheel + "now spinning" strip is ~1.25x as tall as it is wide. */
+  width: min(100vw, 77vh);
+  container-type: inline-size;
+  display: flex; flex-direction: column; align-items: center;
+  color: #fff;
+  font-family: var(--ow-pixel);
+  -webkit-font-smoothing: antialiased;
+}
+.ow *, .ow *::before, .ow *::after { box-sizing: border-box; }
+
+/* ---------- Marquee ---------- */
+.ow-marquee { text-align: center; margin: 0 0 2.6cqw; }
+.ow-neon { font-family: var(--ow-pixel); font-weight: 400; font-size: 7.4cqw; letter-spacing: .3em; margin: 0 0 2.2cqw .3em;
+           padding: 0; color: var(--ow-gold); line-height: 1.2;
+           text-shadow: 0 0 .5cqw #FFD5FF, 0 0 1.4cqw #FFD5FF, 0 0 3cqw var(--ow-pink), 0 0 6cqw var(--ow-pink); }
+.ow-neon .f-slow { animation: ow-flicker 3s linear infinite; }
+.ow-neon .f-fast { animation: ow-flicker 1.1s linear infinite; }
+@keyframes ow-flicker {
+  0%, 19.9%, 22%, 62.9%, 64%, 64.9%, 70%, 100% { opacity: .99; }
+  20%, 21.9%, 63%, 63.9%, 65%, 69.9% { opacity: .35; }
+}
+.ow-pot { display: inline-flex; align-items: baseline; gap: 2cqw; padding: 1.4cqw 3cqw; border: .45cqw solid var(--ow-gold);
+          border-radius: 1.8cqw; background: rgba(12,10,16,.72);
+          box-shadow: 0 0 2.4cqw rgba(255,198,0,.45), inset 0 0 1.8cqw rgba(255,198,0,.18); }
+.ow-pot .lbl { font-size: 2cqw; color: #c9c9d6; letter-spacing: .3em; }
+.ow-pot .val { font-size: 4.2cqw; color: var(--ow-gold); text-shadow: 0 0 1cqw var(--ow-gold); white-space: nowrap; }
+
+/* ---------- Wheel frame + marquee bulbs ---------- */
+.ow-frame { position: relative; width: 92cqw; aspect-ratio: 1; padding: 4.6cqw; border-radius: 50%;
+            background: radial-gradient(circle, #1a1220 62%, #0c0a10 100%);
+            box-shadow: 0 0 0 .5cqw #2a2030, 0 0 5cqw rgba(212,44,202,.35), inset 0 0 3cqw rgba(0,0,0,.8);
+            container-type: inline-size; }
+.ow-bulbs { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+/* cqw here = the frame's content box; the bulbs ride the middle of the padding ring. */
+.ow-bulbs i { --T: 1.6s; position: absolute; left: 50%; top: 50%; width: 1.7cqw; height: 1.7cqw; margin: -.85cqw 0 0 -.85cqw;
+              border-radius: 50%; background: #ffe9a6; box-shadow: 0 0 .9cqw .3cqw rgba(255,210,90,.8);
+              transform: rotate(var(--a)) translateY(-52.8cqw);
+              animation: ow-chase var(--T) steps(1) infinite; animation-delay: calc(var(--k) * var(--T) / -4); }
+@keyframes ow-chase { 0% { opacity: 1; } 25% { opacity: .22; } }
+/* Spinning: the chase speeds right up. */
+.ow-frame.spinning .ow-bulbs i { --T: .36s; }
+/* Landed: all bulbs flash cyan together. */
+.ow-frame.won .ow-bulbs i { background: #b7fff0; box-shadow: 0 0 1cqw .4cqw rgba(74,255,239,.9);
+                            animation: ow-flash .5s steps(1) infinite; }
+@keyframes ow-flash { 50% { opacity: .3; } }
+/* Jackpot: gold bulbs racing + the whole frame pulsing gold. */
+.ow-frame.jackpot { animation: ow-jpframe .6s ease-in-out infinite alternate; }
+.ow-frame.jackpot .ow-bulbs i { --T: .24s; background: #fff2a0; box-shadow: 0 0 1.2cqw .5cqw rgba(255,215,0,.95); }
+@keyframes ow-jpframe { from { box-shadow: 0 0 0 .5cqw #5a4310, 0 0 4cqw rgba(255,215,0,.45), inset 0 0 3cqw rgba(0,0,0,.8); }
+                        to   { box-shadow: 0 0 0 .5cqw #ffd700, 0 0 9cqw rgba(255,215,0,.85), inset 0 0 3cqw rgba(0,0,0,.8); } }
+
+/* ---------- The wheel ---------- */
+.ow .wheel-container { position: relative; width: 100%; aspect-ratio: 1; margin: 0; container-type: inline-size; z-index: 1; }
+.ow #wheelCanvas { display: block; width: 100%; height: 100%; border: 1.1cqw solid var(--ow-gold-2); border-radius: 50%;
+                   box-shadow: 0 0 4cqw rgba(242,174,46,.4); }
+.ow #arrow { position: absolute; top: 0; left: 50%; transform: translate(-50%, -38%); width: 0; height: 0;
+             border-left: 3.8cqw solid transparent; border-right: 3.8cqw solid transparent; border-top: 6.4cqw solid var(--ow-gold-2);
+             filter: drop-shadow(0 .4cqw .6cqw rgba(0,0,0,.7)); z-index: 100; }
+/* The star GIF sits straight on the slices (they run to the centre) - no disc behind it. */
+.ow #centerImage { position: absolute; top: 50%; left: 50%; width: 21%; height: 21%; transform: translate(-50%, -50%);
+                   object-fit: contain; z-index: 5; background: none; border: 0; box-shadow: none; pointer-events: none;
+                   filter: drop-shadow(0 0 .8cqw rgba(0,0,0,.6)) drop-shadow(0 0 2cqw rgba(255,198,0,.45)); }
+
+/* ---------- Result / winner banner (cqw = the wheel) ---------- */
+.ow #resultContainer { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+                       z-index: 110; background: none !important; }
+.ow-banner { display: flex; flex-direction: column; align-items: center; gap: 2.2cqw; width: 104%; max-width: 104%;
+             padding: 4cqw 4cqw 4.6cqw; text-align: center;
+             background: linear-gradient(180deg, rgba(26,14,34,.94), rgba(10,8,16,.94));
+             border: .9cqw solid var(--ow-pink); border-radius: 3cqw;
+             box-shadow: 0 0 1.4cqw var(--ow-pink), 0 0 5cqw rgba(212,44,202,.7), inset 0 0 0 .5cqw rgba(74,255,239,.75),
+                         inset 0 0 4cqw rgba(74,255,239,.25);
+             animation: ow-pop .45s cubic-bezier(.2,1.6,.4,1) both; }
+.ow-tag { font-family: var(--ow-pixel); font-size: 5cqw; letter-spacing: .25em; color: var(--ow-cyan);
+          text-shadow: 0 0 .8cqw var(--ow-cyan), 0 0 2.4cqw var(--ow-cyan); animation: ow-blink 1s steps(1) infinite; }
+.ow-who { font-family: var(--ow-mono); font-size: 9cqw; line-height: 1; color: #fff; max-width: 100%;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 1.2cqw rgba(255,255,255,.55); }
+.ow-who:empty { display: none; }
+.ow-amt { font-family: var(--ow-pixel); font-size: 10cqw; line-height: 1.1; color: var(--ow-gold); white-space: nowrap;
+          text-shadow: 0 0 1.2cqw var(--ow-gold), 0 0 3.4cqw rgba(255,198,0,.7), 0 .8cqw 0 #6b3d00; }
+.ow-amt .u { font-size: .42em; letter-spacing: .15em; vertical-align: .5em; }
+.ow #resultText { color: inherit; font-size: inherit; padding: 0; }
+.ow-banner.zero { border-color: #6c6c7a; box-shadow: 0 0 2cqw rgba(0,0,0,.6), inset 0 0 0 .5cqw rgba(255,255,255,.12); }
+.ow-banner.zero .ow-tag { color: #ff7b7b; text-shadow: 0 0 1cqw rgba(255,80,80,.7); animation: none; }
+.ow-banner.zero .ow-amt { color: #9a9aab; text-shadow: none; }
+@keyframes ow-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes ow-blink { 50% { opacity: .35; } }
+
+/* ---------- Now spinning strip ---------- */
+.ow-now { margin-top: 2.8cqw; min-height: 7cqw; display: flex; align-items: baseline; justify-content: center; gap: 2cqw;
+          max-width: 100%; padding: 1cqw 3cqw; border-radius: 1.6cqw; background: rgba(12,10,16,.72);
+          border: .35cqw solid rgba(74,255,239,.6); box-shadow: 0 0 2cqw rgba(74,255,239,.35);
+          visibility: hidden; opacity: 0; transition: opacity .3s; }
+.ow-now.show { visibility: visible; opacity: 1; }
+.ow-now .k { font-family: var(--ow-pixel); font-size: 2.4cqw; letter-spacing: .2em; color: var(--ow-gold); flex: none;
+             text-shadow: 0 0 .8cqw rgba(255,198,0,.7); }
+.ow-now .v { font-family: var(--ow-mono); font-size: 5.4cqw; line-height: 1; color: var(--ow-cyan); min-width: 0;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 0 1cqw rgba(74,255,239,.7); }
+
+/* ---------- Jackpot roll (jackpotroll.js) scaled to the wheel instead of fixed px ---------- */
+.ow #jpRoll .jp-panel { width: 104%; padding: 4cqw 3.4cqw 3.6cqw; border-radius: 3cqw; }
+.ow #jpRoll .jp-title { font-size: 4.2cqw; letter-spacing: .12em; margin-bottom: 4cqw; }
+.ow #jpRoll .jp-meter { height: 10cqw; }
+.ow #jpRoll .jp-band { font-size: 1.8cqw; }
+.ow #jpRoll .jp-pct { font-size: 8cqw; margin-top: 4.4cqw; min-height: 9cqw; }
+.ow #jpRoll .jp-amt { font-size: 4.6cqw; margin-top: 2.6cqw; min-height: 5cqw; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ow-neon .f-slow, .ow-neon .f-fast, .ow-tag, .ow-banner { animation: none !important; }
+}

@@ -113,8 +113,10 @@
 .aw #arrow { position: absolute; top: 0; left: 50%; transform: translate(-50%, -38%); width: 0; height: 0;
              border-left: 18px solid transparent; border-right: 18px solid transparent; border-top: 30px solid var(--aw-gold-2);
              filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); z-index: 100; }
-.aw #centerImage { position: absolute; top: 50%; left: 50%; width: 19%; height: 19%; transform: translate(-50%, -50%);
-                   border-radius: 50%; z-index: 5; box-shadow: 0 0 0 4px #0c0a10, 0 0 14px rgba(255,198,0,.5); background: #0c0a10; }
+/* The star GIF sits straight on the slices (they run to the centre) - no disc behind it. */
+.aw #centerImage { position: absolute; top: 50%; left: 50%; width: 21%; height: 21%; transform: translate(-50%, -50%);
+                   object-fit: contain; z-index: 5; background: none; border: 0; border-radius: 0; box-shadow: none;
+                   filter: drop-shadow(0 0 4px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(255,198,0,.45)); pointer-events: none; }
 .aw #resultContainer { position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
                        border-radius: 50%; z-index: 110; font-family: var(--aw-pixel); }
 .aw #resultText { color: var(--aw-gold); font-size: clamp(24px, 12.5cqw, 76px); padding: 10px; text-align: center;
