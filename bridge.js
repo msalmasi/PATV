@@ -20,6 +20,7 @@
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const cosmetics = require("./cosmetics");
+const relay = require("./bridge-relay");   // web -> room: chat relay, mic clips, cam snapshots (staging test)
 
 const FEED_KEEP = 200;
 const STALE_MS = 90 * 1000;              // no sync for this long -> the room shows as offline
@@ -209,6 +210,9 @@ async function ingest(body) {
     R.joinedAt = Number(s.joined_at) ? Number(s.joined_at) * 1000 : null;
     R.transcripts = s.transcripts !== false;
     R.audio = !!s.audio;
+    R.relay = !!s.relay;
+    R.micRelay = !!s.mic_relay;
+    R.cams = !!s.cams;
     if (!R.audio) audioClose(R.id);
     R.updated = now;
     touched.add(R);
@@ -285,13 +289,15 @@ async function summary(full) {
   }));
 }
 
-async function liveView(R, after) {
+async function liveView(R, after, userId) {
   const L = await links();
   const feed = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP)
     .map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
   return {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
-            transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R) },
+            transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
+            relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R) },
+    mine: userId ? relay.mineFor(userId, R.id) : [],
     members: R.members.map((u) => withPatv(u, L)),
     mic: R.mic.map((u) => withPatv(u, L)),
     feed, cursor,
@@ -317,8 +323,10 @@ function register(app, { isBotToken, addUser }) {
     const body = req.body || {};
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
+      relay.applyAcks(body.acks);
       const r = await ingest(body);
-      res.json({ success: true, ...r });
+      const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
+      res.json({ success: true, ...r, jobs: relay.takeJobs(liveIds) });
     } catch (e) {
       console.error("[bridge] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -364,8 +372,10 @@ function register(app, { isBotToken, addUser }) {
     const R = bySlug(req.params.slug);
     if (!R) return res.status(404).json({ error: "No such room." });
     const after = Math.max(0, Number(req.query.after) || 0);
-    res.json(await liveView(R, after > cursor ? 0 : after));
+    res.json(await liveView(R, after > cursor ? 0 : after, req.user.userId));
   });
+
+  relay.register(app, { isBotToken, addUser, bySlug, isLive });
 
   app.get("/rooms", addUser, async (req, res) => {
     const list = await summary(!!(req.user && req.user.userId));
@@ -382,10 +392,14 @@ function register(app, { isBotToken, addUser }) {
       return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such room",
         message: "That room isn't bridged to PATV right now.", title: "Room not found" });
     }
+    let linked = false;
+    if (signedIn) {
+      try { linked = !!((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername; } catch (e) { linked = false; }
+    }
     res.render("room", {
-      user: req.user ? req.user.username : null, signedIn,
+      user: req.user ? req.user.username : null, signedIn, linked,
       room: { name: R.name, slug: R.slug, count: R.count, live: isLive(R), topic: signedIn ? R.topic : "" },
-      initial: signedIn ? await liveView(R, 0) : null,
+      initial: signedIn ? await liveView(R, 0, req.user.userId) : null,
     });
   });
 }

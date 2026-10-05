@@ -36,6 +36,20 @@
   .rm .listen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .rm .listen .btn { padding: 7px 12px; font-size: 13px; background: #181818; border-color: #2b2b2b; cursor: pointer; font-family: inherit; }
   .rm .hide { display: none !important; }
+  .rm .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .rm .compose { border-top: 1px solid #222; margin-top: 10px; padding-top: 10px; display: grid; gap: 8px; }
+  .rm .say { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .rm .say input { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
+  .rm .say .btn, .rm .ptt .btn { cursor: pointer; font-family: inherit; }
+  .rm .ptt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .rm .ptt .btn[aria-pressed="true"] { background: #b71c1c; border-color: #e53935; }
+  .rm .ic button.cam { background: none; border: 1px solid #2c3a2d; border-radius: 6px; padding: 0 3px; cursor: pointer; font: inherit; line-height: 1.4; }
+  .rm .ic button.cam:hover, .rm .ic button.cam:focus-visible { border-color: #4caf50; background: #12301a; }
+  .rm .snap { position: fixed; z-index: 60; right: 16px; bottom: 16px; width: min(360px, calc(100vw - 32px)); background: #151515; border: 1px solid #333; border-radius: 12px;
+              box-shadow: 0 12px 40px rgba(0,0,0,.6); padding: 10px; display: grid; gap: 8px; }
+  .rm .snap img { width: 100%; border-radius: 8px; background: #000; display: block; }
+  .rm .snap .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; color: #aaa; }
+  .rm .snap button { background: #222; color: #ddd; border: 1px solid #333; border-radius: 6px; padding: 4px 8px; cursor: pointer; font: inherit; font-size: 12px; }
   .rm .sys { color: #8a8a8a; font-size: 12.5px; padding: 3px 6px 3px 42px; overflow-wrap: anywhere; }
   .rm .sys.topic { color: #c9b46a; }
   .rm .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: #0d0d0d; object-fit: cover; flex: none; overflow: hidden; }
@@ -101,6 +115,22 @@
       <h2 id="chatH">Chat <small id="rmStatus" class="status" aria-live="polite"></small></h2>
       <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Room chat"></div>
       <button class="jump" id="rmJump" type="button">New messages ↓</button>
+      <div class="compose hide" id="rmCompose">
+        <% if (!linked) { %>
+          <p class="muted" style="margin:0">💬 This room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
+        <% } else { %>
+          <form class="say hide" id="rmSay" autocomplete="off">
+            <label class="sr" for="rmSayText">Message to the room</label>
+            <input id="rmSayText" type="text" maxlength="300" placeholder="Say something — Pepe relays it as “🌐 you (web)”" required>
+            <button class="btn" type="submit">Send</button>
+          </form>
+          <div class="ptt hide" id="rmPttBox">
+            <button class="btn" type="button" id="rmPtt" aria-pressed="false">🎙 Hold to talk</button>
+            <span class="muted" id="rmPttTxt">up to 20 s · Pepe plays it on the mic when it's free</span>
+          </div>
+          <div class="muted" id="rmMine" aria-live="polite"></div>
+        <% } %>
+      </div>
     </section>
     <aside class="side">
       <section class="card" aria-labelledby="micH">
@@ -212,7 +242,7 @@
           h.appendChild(eq); mic.appendChild(h);
         });
       }
-      var pk = JSON.stringify(d.members);
+      var pk = JSON.stringify(d.members) + (r.cams ? '1' : '0');
       if (pk !== lastPeople) {
         lastPeople = pk;
         var ul = document.getElementById('rmPeople'); ul.textContent = '';
@@ -226,7 +256,16 @@
           if (u.src === 'seen') n.appendChild(el('small', null, 'recently'));
           li.appendChild(n);
           var ic = el('span', 'ic');
-          var cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? 'On cam' : (u.on_cam === false ? 'Off cam' : 'Cam unknown'); ic.appendChild(cam);
+          var cam;
+          if (r.cams && u.on_cam && !u.self && !u.anon && u.login) {
+            cam = el('button', 'cam', '📷'); cam.type = 'button';
+            cam.title = 'Ask Pepe for a snapshot of ' + label(u) + '\'s cam';
+            cam.setAttribute('aria-label', 'Snapshot of ' + label(u) + '\'s cam');
+            (function (who) { cam.addEventListener('click', function () { snapOpen(who); }); })(u);
+          } else {
+            cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? 'On cam' : (u.on_cam === false ? 'Off cam' : 'Cam unknown');
+          }
+          ic.appendChild(cam);
           var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
           li.appendChild(ic); ul.appendChild(li);
         });
@@ -247,8 +286,124 @@
     }
     ab.addEventListener('click', function () { if (playing) { audioStop(); pref(false); } else { pref(true); audioStart(); } });
     au.addEventListener('error', function () { if (playing) { audioStop(); at.textContent = 'audio stopped'; } });
+    // ── cam snapshot popover (click the 📷 of someone on cam) ──
+    var snapEl = null, snapTimer = null, snapWho = null;
+    function snapClose() { clearTimeout(snapTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
+    function snapBox(text) {
+      if (!snapEl) {
+        snapEl = el('div', 'snap'); snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', 'Cam snapshot');
+        document.querySelector('.rm').appendChild(snapEl);
+      }
+      snapEl.textContent = '';
+      var top = el('div', 'row'); top.appendChild(el('b', null, '📷 ' + label(snapWho)));
+      var x = el('button', null, 'Close'); x.type = 'button'; x.addEventListener('click', snapClose); top.appendChild(x);
+      snapEl.appendChild(top);
+      if (text) snapEl.appendChild(el('div', 'muted', text));
+      return snapEl;
+    }
+    function snapShow(s) {
+      var box = snapBox(s.state === 'ok' ? null : (s.status || 'No picture.'));
+      if (s.state === 'ok' && s.img) {
+        var im = el('img'); im.alt = label(snapWho) + '\'s cam'; im.src = s.img; box.appendChild(im);
+      }
+      var row = el('div', 'row');
+      var t = new Date(s.ts || Date.now());
+      row.appendChild(el('span', null, 'taken ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2)));
+      var rf = el('button', null, 'Refresh'); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
+      box.appendChild(row);
+    }
+    function snapPoll(who, n) {
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          if (snapWho !== who) return;
+          if (s.state === 'ok' || s.state === 'refused') return snapShow(s);
+          if (n > 30) return snapBox('Pepe didn\'t get a picture in time — try again in a bit.');
+          snapTimer = setTimeout(function () { snapPoll(who, n + 1); }, 1500);
+        }).catch(function () { snapBox('Couldn\'t reach the site.'); });
+    }
+    function snapOpen(who, refresh) {
+      clearTimeout(snapTimer);
+      snapWho = who;
+      snapBox('Asking Pepe to open ' + label(who) + '\'s cam…');
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: who.login }) })
+        .then(function (r) { return r.json().then(function (d) { return { st: r.status, d: d }; }); })
+        .then(function (x) {
+          if (snapWho !== who) return;
+          if (!x.d.ok) return snapBox(x.d.error || 'Not right now.');
+          snapPoll(who, 0);
+        }).catch(function () { snapBox('Couldn\'t reach the site.'); });
+    }
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') snapClose(); });
+
+    // ── talk to the room (relayed by Pepe) ──
+    var compose = document.getElementById('rmCompose'), sayForm = document.getElementById('rmSay'),
+        pttBox = document.getElementById('rmPttBox'), mineEl = document.getElementById('rmMine'), lastMine = '';
+    function renderCompose(d) {
+      var r = d.room;
+      compose.classList.toggle('hide', !(r.relay || r.micRelay));
+      if (sayForm) sayForm.classList.toggle('hide', !r.relay);
+      if (pttBox) pttBox.classList.toggle('hide', !r.micRelay || !(window.MediaRecorder && navigator.mediaDevices));
+      if (mineEl && d.mine) {
+        var k = JSON.stringify(d.mine);
+        if (k !== lastMine) {
+          lastMine = k;
+          var j = d.mine[d.mine.length - 1];
+          mineEl.textContent = !j ? '' : (j.kind === 'clip' ? '🎙 your clip: ' : '💬 your message: ') +
+            (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
+        }
+      }
+    }
+    if (sayForm) sayForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var inp = document.getElementById('rmSayText'), text = inp.value.trim();
+      if (!text) return;
+      var b = sayForm.querySelector('button'); b.disabled = true;
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: text }) })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (d.ok) { inp.value = ''; mineEl.textContent = '💬 your message: waiting for Pepe…'; } else mineEl.textContent = '💬 ' + (d.error || 'not sent'); })
+        .catch(function () { mineEl.textContent = '💬 couldn\'t reach the site'; })
+        .then(function () { setTimeout(function () { b.disabled = false; }, 3000); });
+    });
+
+    // push-to-talk: hold the button (or click to start, click again to stop); 20 s max
+    var ptt = document.getElementById('rmPtt'), rec = null, chunks = [], recAt = 0, recTimer = null;
+    function pttStop() { if (rec && rec.state === 'recording') rec.stop(); clearTimeout(recTimer); }
+    function pttStart() {
+      if (rec && rec.state === 'recording') return pttStop();
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
+        rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
+        chunks = []; recAt = Date.now();
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = function () {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          ptt.setAttribute('aria-pressed', 'false'); ptt.textContent = '🎙 Hold to talk';
+          var secs = (Date.now() - recAt) / 1000;
+          if (secs < 0.7) { document.getElementById('rmPttTxt').textContent = 'too short — hold the button while you talk'; return; }
+          var blob = new Blob(chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] });
+          document.getElementById('rmPttTxt').textContent = 'sending ' + secs.toFixed(0) + 's…';
+          fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { document.getElementById('rmPttTxt').textContent = d.ok ? 'sent — Pepe plays it when the mic is free' : (d.error || 'not sent'); })
+            .catch(function () { document.getElementById('rmPttTxt').textContent = 'couldn\'t reach the site'; });
+        };
+        rec.start(250);
+        ptt.setAttribute('aria-pressed', 'true'); ptt.textContent = '⏺ Recording — release to send';
+        recTimer = setTimeout(pttStop, 20000);
+      }).catch(function () { document.getElementById('rmPttTxt').textContent = 'the browser didn\'t allow the microphone'; });
+    }
+    if (ptt) {
+      var held = false;
+      ptt.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; pttStart(); });
+      ptt.addEventListener('pointerup', function () { if (held && Date.now() - recAt > 400) pttStop(); held = false; });
+      ptt.addEventListener('pointerleave', function () { if (held) pttStop(); held = false; });
+      ptt.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); pttStart(); } });
+    }
+
     function apply(d, first) {
       renderRoom(d);
+      renderCompose(d);
       document.getElementById('rmAudioBox').classList.toggle('hide', !d.room.audio);
       if (!d.room.audio) audioStop(); else if (first && pref()) at.textContent = 'tap Listen live to resume';
       if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
