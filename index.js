@@ -162,6 +162,9 @@ let clients = []; // Keep track of connected clients for SSE
 
 // Serve static files from the public directory
 app.use("/public", express.static("public"));
+// Cosmetics: res.locals.cosmeticName(username) for name colors on any page, + the profile's equipped items
+const cosmetics = require("./cosmetics");
+cosmetics.locals(app);
 
 // Health check for the deploy pipeline: up, and the database answers.
 app.get("/healthz", (req, res) => {
@@ -1016,6 +1019,7 @@ require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
+cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
 
 const history = require("./history");

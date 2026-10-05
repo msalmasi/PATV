@@ -28,7 +28,7 @@
                 <% users.forEach((u, index) => { %>
                     <tr>
                         <td><%= index + 1 %></td>
-                        <td><a href="/u/<%= u.username %>/profile" class="leaderboardLink"><%= u.displayname %></a></td>
+                        <td><a href="/u/<%= u.username %>/profile" class="leaderboardLink"><% const _nc = typeof cosmeticName === 'function' ? cosmeticName(u.username) : ''; if (_nc) { %><span style="<%= _nc %>"><%= u.displayname %></span><% } else { %><%= u.displayname %><% } %></a></td>
                         <td><%= u.points_balance.toLocaleString() %></td>
                     </tr>
                 <% }); %>

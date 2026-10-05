@@ -1,0 +1,59 @@
+<%# Shared styles for cosmetics (profile + /cosmetics). Classes are prefixed cx-. %>
+<style>
+  @keyframes cx-shift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+  @keyframes cx-pulse { from { filter: brightness(.8); } to { filter: brightness(1.35); } }
+  @keyframes cx-hue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }
+  @keyframes cx-spin { to { transform: rotate(360deg); } }
+  @keyframes cx-twinkle { 0% { opacity: .25; } 50% { opacity: .9; } 100% { opacity: .35; } }
+  @keyframes cx-fall { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 240px, 0 400px, 0 300px; } }
+  @keyframes cx-rise { from { background-position: 0 0, 0 0, 0 0; } to { background-position: 0 -240px, 0 -400px, 0 -300px; } }
+  @keyframes cx-drift { from { background-position: 0 0, 0 0; } to { background-position: 160px 120px, -220px 180px; } }
+
+  .cx-name { display: inline; }
+  /* the hero card: border overlay + effect overlay sit inside it */
+  .cx-host { position: relative; }
+  .cx-host > :not(.cx-frame):not(.cx-fx):not(.cx-banner) { position: relative; z-index: 2; }
+  .cx-frame { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 3; box-sizing: border-box; }
+  .cx-frame-pulse { animation: cx-pulse 2.6s ease-in-out infinite alternate; }
+  .cx-frame-hue { animation: cx-hue 6s linear infinite; }
+  .cx-banner { grid-column: 1 / -1; justify-self: stretch; align-self: start; height: 92px; margin: -18px -20px 0; border-radius: 14px 14px 0 0; position: relative; z-index: 1; }
+  .cx-fx { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; opacity: .85; }
+  .cx-fx-sparkle {
+    background-image:
+      radial-gradient(2px 2px at 12% 22%, #fff, transparent 70%), radial-gradient(1.5px 1.5px at 38% 70%, #ffd700, transparent 70%),
+      radial-gradient(2px 2px at 64% 35%, #fff, transparent 70%), radial-gradient(1.5px 1.5px at 86% 78%, #b3e5fc, transparent 70%),
+      radial-gradient(1px 1px at 52% 12%, #fff, transparent 70%);
+    background-size: 180px 130px; animation: cx-twinkle 2.8s ease-in-out infinite;
+  }
+  .cx-fx-snow {
+    background-image: radial-gradient(2px 2px at 20% 10%, #fff, transparent 70%), radial-gradient(3px 3px at 70% 40%, rgba(255,255,255,.85), transparent 70%),
+      radial-gradient(1.5px 1.5px at 45% 80%, #fff, transparent 70%);
+    background-size: 120px 120px, 200px 200px, 150px 150px; animation: cx-fall 12s linear infinite;
+  }
+  .cx-fx-embers {
+    background-image: radial-gradient(2px 2px at 20% 60%, #ff9100, transparent 70%), radial-gradient(2.5px 2.5px at 70% 30%, #ff3d00, transparent 70%),
+      radial-gradient(1.5px 1.5px at 45% 85%, #ffea00, transparent 70%);
+    background-size: 120px 120px, 200px 200px, 150px 150px; animation: cx-rise 9s linear infinite; opacity: .7;
+  }
+  .cx-fx-confetti {
+    background-image: radial-gradient(3px 2px at 15% 20%, #ff5252, transparent 70%), radial-gradient(2px 3px at 60% 50%, #40c4ff, transparent 70%),
+      radial-gradient(3px 3px at 35% 75%, #ffd740, transparent 70%);
+    background-size: 120px 120px, 200px 200px, 150px 150px; animation: cx-fall 8s linear infinite; opacity: .8;
+  }
+  .cx-fx-matrix {
+    background-image: repeating-linear-gradient(180deg, rgba(0,255,65,.0) 0 18px, rgba(0,255,65,.28) 18px 26px, rgba(0,255,65,0) 26px 40px),
+      repeating-linear-gradient(90deg, transparent 0 22px, rgba(0,0,0,.85) 22px 34px);
+    background-size: 100% 160px, 100% 100%; animation: cx-fall 7s linear infinite; opacity: .45;
+  }
+  /* avatar decoration */
+  .cx-av { position: relative; display: inline-block; line-height: 0; border-radius: 50%; }
+  .cx-av .cx-conic { position: absolute; inset: -7px; border-radius: 50%; pointer-events: none;
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+            mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px)); }
+  .cx-av .cx-conic.cx-spin { animation: cx-spin 6s linear infinite; }
+  .cx-av .cx-emoji { position: absolute; top: -6px; right: -6px; font-size: 22px; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.6)); }
+  .cx-gtf svg { display: block; image-rendering: pixelated; }
+  @media (prefers-reduced-motion: reduce) {
+    .cx-fx, .cx-frame, .cx-av .cx-conic, .cx-name, [style*="cx-shift"] { animation: none !important; }
+  }
+</style>

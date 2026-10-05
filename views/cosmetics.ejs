@@ -1,0 +1,393 @@
+<%- include('layout', { title: 'Cosmetics', user: user }) %>
+<%- include('partials/cosmetics-css') %>
+<%
+  const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
+  const RC = (r) => (rarities[r] && rarities[r].color) || '#bbb';
+  const kindLabel = (k) => (kinds[k] && kinds[k].label) || k;
+  const kindEmoji = (k) => (kinds[k] && kinds[k].emoji) || '🎨';
+  const avSeed = (me && seed) || 7;
+  const myName = me ? me.display : 'Your Name';
+  const myAvatar = me ? me.avatar : '/public/img/avatar.png';
+  const srcText = (it) => {
+    const out = [];
+    const s = it.source || [];
+    if (s.includes('shop')) out.push('Shop');
+    if (s.includes('season') && it.season) out.push(it.season.label);
+    if (s.includes('achievement') && it.unlock && it.unlock.achievement) out.push('Achievement unlock');
+    if (s.includes('level') && it.unlock && it.unlock.level) out.push('Level ' + it.unlock.level);
+    if (s.includes('drop')) out.push('Game drop');
+    return out.join(' · ');
+  };
+  const left = (ms) => { const s = Math.max(0, Math.round((ms - now) / 1000)); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
+%>
+<%
+  // A small profile card showing a combination of account cosmetics (each argument a render object or null).
+  const mini = (o) => { %>
+  <div class="cxp-mini cx-host">
+    <% if (o.banner) { %><div class="cx-banner" style="<%= o.banner.css %>"></div><% } %>
+    <% if (o.effect) { %><div class="cx-fx cx-fx-<%= o.effect.effect %>" aria-hidden="true"></div><% } %>
+    <div class="cxp-mini-body">
+      <span class="cx-av">
+        <% if (o.deco && o.deco.conic) { %><span class="cx-conic<%= o.deco.spin ? ' cx-spin' : '' %>" style="<%= o.deco.conic %>"></span><% } %>
+        <img class="cxp-mini-av" src="<%= myAvatar %>" alt="" onerror="this.src='/public/img/avatar.png'" style="<%= o.deco ? o.deco.ring : '' %>">
+        <% if (o.deco && o.deco.emoji) { %><span class="cx-emoji" style="font-size:15px;top:-5px;right:-7px"><%= o.deco.emoji %></span><% } %>
+      </span>
+      <b class="cxp-mini-name"><% if (o.name) { %><span class="cx-name" style="<%= o.name.css %>"><%= myName %></span><% } else { %><%= myName %><% } %></b>
+    </div>
+    <% if (o.border) { %><div class="cx-frame <%= o.border.cls %>" style="<%= o.border.css %>"></div><% } %>
+  </div>
+<% };
+  const gtfBox = (layers, size) => { %>
+  <span class="cx-gtf cxp-gtf" data-seed="<%= avSeed %>" data-size="<%= size %>" data-layers="<%= JSON.stringify(layers) %>"
+        style="width:<%= size %>px;height:<%= size %>px"><span class="cxp-gtf-fb"><%= Object.values(layers).length ? '' : '🐸' %></span></span>
+<% };
+  const preview = (r) => {
+    if (!r) return;
+    if (r.kind === 'name_color') { %><div class="cxp-prev cxp-prev-name"><span class="cx-name" style="<%= r.css %>"><%= myName %></span></div><% }
+    else if (r.kind === 'profile_border') { mini({ border: r }); }
+    else if (r.kind === 'profile_banner') { mini({ banner: r }); }
+    else if (r.kind === 'profile_effect') { mini({ effect: r }); }
+    else if (r.kind === 'avatar_decoration') { %>
+      <div class="cxp-prev"><span class="cx-av">
+        <% if (r.conic) { %><span class="cx-conic<%= r.spin ? ' cx-spin' : '' %>" style="<%= r.conic %>"></span><% } %>
+        <img class="cxp-av" src="<%= myAvatar %>" alt="" onerror="this.src='/public/img/avatar.png'" style="<%= r.ring %>">
+        <% if (r.emoji) { %><span class="cx-emoji"><%= r.emoji %></span><% } %>
+      </span></div>
+    <% } else if (r.layer) { %>
+      <div class="cxp-prev"><span class="cxp-gtfwrap"><% gtfBox({ [r.opt]: r.layer }, 72) %><span class="cxp-layer-emoji" title="<%= r.layer %>"><%= r.emoji %></span></span></div>
+    <% }
+  };
+  const itemCard = (it) => { %>
+  <div class="cxp-card" style="--rc: <%= RC(it.rarity) %>">
+    <% preview(it.r) %>
+    <div class="cxp-title"><b><%= it.name %></b><span class="cxp-rar"><%= it.rarity %></span></div>
+    <div class="cxp-desc"><%= it.desc %></div>
+    <div class="cxp-src"><%= srcText(it) %><% if (it.unlock && it.unlock.achievement) { %>: <a href="/achievements"><%= achName[it.unlock.achievement] || it.unlock.achievement %></a><% } %></div>
+    <% if (it.sale) { %>
+      <div class="cxp-price"><%= fmt(it.price) %> PAT</div>
+      <% if (me) { %>
+        <form method="POST" action="/cosmetics/act" class="cxp-row">
+          <input type="hidden" name="op" value="buy"><input type="hidden" name="item" value="<%= it.id %>"><input type="hidden" name="tab" value="shop">
+          <button class="cxp-btn primary" type="submit">Buy</button>
+        </form>
+        <details class="cxp-more"><summary>🎁 Gift a new one</summary>
+          <form method="POST" action="/cosmetics/act" class="cxp-row">
+            <input type="hidden" name="op" value="gift"><input type="hidden" name="item" value="<%= it.id %>"><input type="hidden" name="tab" value="shop">
+            <input name="to" placeholder="Camfrog name or username" required maxlength="60" aria-label="Gift to">
+            <button class="cxp-btn" type="submit">Gift</button>
+          </form>
+        </details>
+      <% } else { %><div class="cxp-muted"><a href="/login">Sign in</a> to buy.</div><% } %>
+    <% } else if (it.seasonState === 'upcoming') { %>
+      <div class="cxp-price"><%= fmt(it.price) %> PAT</div><div class="cxp-muted">On sale in <span class="cx-cd" data-to="<%= it.seasonStart %>"><%= left(it.seasonStart) %></span></div>
+    <% } else if (it.seasonState === 'over') { %>
+      <div class="cxp-muted">Season over — find one on the <a href="/cosmetics?tab=market#tabs">market</a>.</div>
+    <% } else if (it.unlock && it.unlock.level) { %>
+      <div class="cxp-muted">🔓 Free at level <%= it.unlock.level %><%= me && me.level >= it.unlock.level ? ' — yours!' : '' %></div>
+    <% } else if (it.unlock && it.unlock.achievement) { %>
+      <div class="cxp-muted">🔓 Free with the achievement</div>
+    <% } else { %>
+      <div class="cxp-muted">🎲 Drops from heists, the arena and bingo — or buy one on the market.</div>
+    <% } %>
+  </div>
+<% }; %>
+<style>
+  .cxp { max-width: 1040px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
+  .cxp *, .cxp *::before, .cxp *::after { box-sizing: border-box; }
+  .cxp a { color: #81c784; text-decoration: none; }
+  .cxp a:hover { color: #a5d6a7; }
+  .cxp h1 { text-align: center; margin: 6px 0 4px; }
+  .cxp .sub { text-align: center; color: #9a9; margin: 0 auto 18px; max-width: 66ch; line-height: 1.5; }
+  .cxp h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; letter-spacing: .06em; margin: 26px 0 10px; line-height: 1.6; }
+  .cxp .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 8px; scroll-margin-top: 80px; }
+  .cxp .tabs a { padding: 8px 14px; border: 1px solid #2a2a2a; border-radius: 999px; background: #161616; font-size: 14px; color: #ccc; }
+  .cxp .tabs a.on { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+  .cxp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+  .cxp-card { background: #111; border: 1px solid #222; border-top: 3px solid var(--rc); border-radius: 10px; padding: 12px; display: grid; gap: 7px; align-content: start; min-width: 0; }
+  .cxp-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .cxp-title b { color: #fff; font-size: 15px; }
+  .cxp-rar { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--rc); border: 1px solid var(--rc); border-radius: 8px; padding: 1px 6px; white-space: nowrap; }
+  .cxp-desc { font-size: 13px; color: #aaa; line-height: 1.4; }
+  .cxp-src { font-size: 11px; color: #777; }
+  .cxp-price { font-size: 18px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; }
+  .cxp-muted { color: #888; font-size: 13px; }
+  .cxp-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; align-items: center; }
+  .cxp-row input { flex: 1 1 120px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 9px; font-family: inherit; }
+  .cxp-btn { background: #181818; color: #ddd; border: 1px solid #2f2f2f; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-family: inherit; font-size: 13px; }
+  .cxp-btn:hover { border-color: #4caf50; }
+  .cxp-btn.primary { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+  .cxp-btn.warn { border-color: #6d3a3a; color: #e57373; }
+  .cxp-more summary { cursor: pointer; font-size: 13px; color: #9a9; }
+  .cxp-more[open] summary { margin-bottom: 6px; }
+  .cxp-prev { min-height: 86px; display: grid; place-items: center; background: #0b0b0b; border: 1px solid #1c1c1c; border-radius: 10px; padding: 8px; }
+  .cxp-prev-name { font-size: 20px; font-weight: bold; text-align: center; }
+  .cxp-av { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d; }
+  .cxp-mini { height: 86px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); border: 1px solid #222; border-radius: 10px; overflow: hidden; }
+  .cxp-mini .cx-banner { position: absolute; top: 0; left: 0; right: 0; height: 34px; margin: 0; border-radius: 10px 10px 0 0; }
+  .cxp-mini-body { display: flex; align-items: center; gap: 10px; padding: 26px 12px 0; }
+  .cxp-mini-av { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #4caf50; background: #0d0d0d; }
+  .cxp-mini-name { font-size: 15px; color: #eee; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .cxp-gtfwrap { position: relative; display: inline-block; }
+  .cxp-gtf { display: inline-grid; place-items: center; background: #151515; border-radius: 8px; font-size: 34px; }
+  .cxp-layer-emoji { position: absolute; right: -10px; bottom: -6px; font-size: 20px; }
+  .cxp .season { background: linear-gradient(135deg, #1d1230, #111 60%); border: 1px solid #3a2a55; border-radius: 12px; padding: 14px; margin: 14px 0; }
+  .cxp .season.winter { background: linear-gradient(135deg, #0f2233, #111 60%); border-color: #26475f; }
+  .cxp .season-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; align-items: baseline; margin-bottom: 10px; }
+  .cxp .season-head b { font-size: 17px; color: #fff; }
+  .cxp .cd { color: #ffd700; font-variant-numeric: tabular-nums; }
+  .cxp .howstrip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 8px; margin: 10px 0 4px; }
+  .cxp .howstrip div { background: #111; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; font-size: 13px; color: #bbb; }
+  .cxp .howstrip b { display: block; color: #fff; margin-bottom: 2px; }
+  .cxp .sortbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: #888; margin-bottom: 10px; }
+  .cxp .sortbar a { padding: 4px 10px; border: 1px solid #2a2a2a; border-radius: 999px; background: #161616; }
+  .cxp .sortbar a.on { border-color: #4caf50; color: #fff; }
+  .cxp .inv { display: grid; gap: 10px; }
+  .cxp .copy { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; background: #111; border: 1px solid #222; border-left: 3px solid var(--rc); border-radius: 10px; padding: 10px; align-items: start; }
+  .cxp .copy .cxp-prev { min-height: 70px; padding: 4px; }
+  .cxp .copy .cxp-mini { height: 70px; }
+  .cxp .copy .cxp-mini-body { padding-top: 18px; }
+  .cxp .copy-meta { display: grid; gap: 6px; min-width: 0; }
+  .cxp .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 8px; border: 1px solid #333; color: #ccc; margin-left: 4px; }
+  .cxp .tag.eq { border-color: #4caf50; color: #81c784; }
+  .cxp .tag.ls { border-color: #e0a030; color: #e0a030; }
+  .cxp .look { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px; }
+  .cxp .badgepick { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 120px), 1fr)); gap: 8px; }
+  .cxp .badgepick label { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px; text-align: center; display: grid; gap: 4px; justify-items: center; cursor: pointer; font-size: 12px; }
+  .cxp .badgepick label:has(input:checked) { border-color: #ffd700; background: #1a1708; }
+  .cxp .badgepick img { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+  .cxp .notice { background: #2a1f0d; border: 1px solid #e0a030; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+  .cxp .how p, .cxp .how li { line-height: 1.6; color: #bbb; }
+  .cxp code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 480px) {
+    .cxp .copy { grid-template-columns: 1fr; }
+    .cxp .look { grid-template-columns: 1fr; justify-items: center; }
+  }
+</style>
+<div class="cxp">
+  <h1>🎨 Cosmetics</h1>
+  <p class="sub">Look the part. Name colors, profile banners, borders, effects and avatar decorations for your PATV profile, plus gear for your Grand Theft Frog pixel avatar. Every item is a real copy you own — equip it, gift it, or sell it to another player.</p>
+
+  <%- include('partials/actions', { acts, msg }) %>
+  <% if (me && !me.camfrog) { %>
+    <div class="notice">Buying and gifting new items runs through Pepe as your Camfrog name — <a href="/u/<%= me.username %>/profile/edit">link your Camfrog name</a> first. Equipping, listing and gifting items you already own work without it.</div>
+  <% } %>
+
+  <nav class="tabs" id="tabs">
+    <a href="/cosmetics?tab=shop#tabs" class="<%= tab === 'shop' ? 'on' : '' %>">🛍️ Shop</a>
+    <a href="/cosmetics?tab=market#tabs" class="<%= tab === 'market' ? 'on' : '' %>">🏪 Market<%= listings.length ? ' (' + listings.length + ')' : '' %></a>
+    <a href="/cosmetics?tab=mine#tabs" class="<%= tab === 'mine' ? 'on' : '' %>">🎒 My items<%= inv ? ' (' + inv.count + ')' : '' %></a>
+    <a href="/cosmetics?tab=showcase#tabs" class="<%= tab === 'showcase' ? 'on' : '' %>">🏅 Showcase</a>
+    <a href="/cosmetics?tab=how#tabs" class="<%= tab === 'how' ? 'on' : '' %>">❓ How it works</a>
+  </nav>
+
+  <% if (tab === 'shop') { %>
+    <div class="howstrip">
+      <div><b>🛍️ Shop</b>Buy with PAT — Pepe charges you.</div>
+      <div><b>🎲 Drops</b>Heists, the arena and bingo can drop GTF gear.</div>
+      <div><b>🏅 Unlocks</b>Achievements and levels 10 / 25 / 50 give free items.</div>
+      <div><b>🏪 Trade</b>Sell or buy copies on the market (<%= fee %>% fee).</div>
+    </div>
+
+    <% seasons.forEach((s) => { %>
+      <section class="season <%= /winter/i.test(s.label) ? 'winter' : '' %>">
+        <div class="season-head">
+          <b><%= /winter/i.test(s.label) ? '❄️' : '🎃' %> <%= s.label %></b>
+          <% if (s.state === 'active') { %>
+            <span class="cxp-muted">Limited — leaves the shop in <span class="cd cx-cd" data-to="<%= s.to %>"><%= left(s.to) %></span></span>
+          <% } else { %>
+            <span class="cxp-muted">Arrives in <span class="cd cx-cd" data-to="<%= s.from %>"><%= left(s.from) %></span></span>
+          <% } %>
+        </div>
+        <div class="grid">
+          <% s.items.forEach((it) => { itemCard({ ...it, seasonState: s.state, seasonStart: s.from }); }) %>
+        </div>
+      </section>
+    <% }) %>
+
+    <% Object.keys(byKind).forEach((k) => { const list = byKind[k].filter((it) => !it.season || it.seasonState === 'over'); if (!list.length) return; %>
+      <h2 id="k-<%= k %>"><%= kindEmoji(k) %> <%= kindLabel(k) %></h2>
+      <div class="grid">
+        <% list.forEach((it) => { itemCard(it); }) %>
+      </div>
+    <% }) %>
+  <% } %>
+
+  <% if (tab === 'market') { %>
+    <p class="cxp-muted">Copies other players are selling. Pepe takes the PAT from you, pays the seller (minus a <%= fee %>% market fee), and moves the item to your inventory. Sell your own from <a href="/cosmetics?tab=mine#tabs">My items</a>.</p>
+    <div class="sortbar">Sort:
+      <a href="/cosmetics?tab=market&sort=newest#tabs" class="<%= sort === 'newest' ? 'on' : '' %>">Newest</a>
+      <a href="/cosmetics?tab=market&sort=price#tabs" class="<%= sort === 'price' ? 'on' : '' %>">Price ↑</a>
+      <a href="/cosmetics?tab=market&sort=price_desc#tabs" class="<%= sort === 'price_desc' ? 'on' : '' %>">Price ↓</a>
+    </div>
+    <% if (!listings.length) { %>
+      <p class="cxp-muted" style="text-align:center">Nothing for sale yet. Be the first — list something from My items.</p>
+    <% } else { %>
+      <div class="grid">
+        <% listings.forEach((l) => { const mine = myListings.has(l.id); %>
+          <div class="cxp-card" style="--rc: <%= RC(l.item.rarity) %>">
+            <% preview(l.r) %>
+            <div class="cxp-title"><b><%= l.item.name %></b><span class="cxp-rar"><%= l.item.rarity %></span></div>
+            <div class="cxp-src"><%= kindLabel(l.item.kind) %> · listing #<%= l.id %> · by <a href="/u/<%= encodeURIComponent(l.seller || '') %>/profile"><%= l.seller_display || l.seller %></a></div>
+            <div class="cxp-price"><%= fmt(l.price) %> PAT</div>
+            <% if (!me) { %>
+              <div class="cxp-muted"><a href="/login">Sign in</a> to buy.</div>
+            <% } else if (mine) { %>
+              <form method="POST" action="/cosmetics/cancel" class="cxp-row">
+                <input type="hidden" name="listing_id" value="<%= l.id %>"><input type="hidden" name="tab" value="market">
+                <button class="cxp-btn warn" type="submit">Cancel my listing</button>
+              </form>
+            <% } else { %>
+              <form method="POST" action="/cosmetics/act" class="cxp-row">
+                <input type="hidden" name="op" value="buylisting"><input type="hidden" name="listing" value="<%= l.id %>"><input type="hidden" name="tab" value="market">
+                <button class="cxp-btn primary" type="submit">Buy for <%= fmt(l.price) %></button>
+              </form>
+            <% } %>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  <% } %>
+
+  <% if (tab === 'mine') { %>
+    <% if (!me) { %>
+      <p class="cxp-muted" style="text-align:center"><a href="/login">Sign in</a> to see your items.</p>
+    <% } else { %>
+      <div class="look">
+        <div>
+          <div class="cxp-muted" style="margin-bottom:6px">Your look right now · <a href="/u/<%= me.username %>/profile">see your profile</a></div>
+          <% mini({ banner: equippedR.profile_banner, border: equippedR.profile_border, effect: equippedR.profile_effect, deco: equippedR.avatar_decoration, name: equippedR.name_color }) %>
+        </div>
+        <% { const L = {}; GTF_KINDS.forEach((k) => { if (equippedR[k]) L[equippedR[k].opt] = equippedR[k].layer; }); gtfBox(L, 96); } %>
+      </div>
+      <% if (!inv.count) { %>
+        <p class="cxp-muted" style="text-align:center;margin-top:18px">No items yet. Grab something from the <a href="/cosmetics?tab=shop#tabs">shop</a>, run a heist for a drop, or level up.</p>
+      <% } %>
+      <% Object.keys(kinds).forEach((k) => { const list = inv.groups[k]; if (!list || !list.length) return; %>
+        <h2><%= kindEmoji(k) %> <%= kindLabel(k) %></h2>
+        <div class="inv">
+          <% list.forEach((c) => { %>
+            <div class="copy" style="--rc: <%= RC(c.rarity) %>">
+              <div><% preview(c.r) %></div>
+              <div class="copy-meta">
+                <div><b style="color:#fff"><%= c.name %></b>
+                  <span class="tag" style="color:<%= RC(c.rarity) %>;border-color:<%= RC(c.rarity) %>"><%= c.rarity %></span>
+                  <% if (c.equipped) { %><span class="tag eq">equipped</span><% } %>
+                  <% if (c.listing_id) { %><span class="tag ls">listed #<%= c.listing_id %> · <%= fmt(c.listing_price) %> PAT</span><% } %>
+                </div>
+                <div class="cxp-src">copy #<%= c.inv_id %> · from <%= c.source || '—' %></div>
+                <% if (c.listing_id) { %>
+                  <form method="POST" action="/cosmetics/cancel" class="cxp-row">
+                    <input type="hidden" name="listing_id" value="<%= c.listing_id %>"><input type="hidden" name="tab" value="mine">
+                    <button class="cxp-btn warn" type="submit">Cancel listing</button>
+                  </form>
+                <% } else { %>
+                  <form method="POST" action="/cosmetics/equip" class="cxp-row">
+                    <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="on" value="<%= c.equipped ? 0 : 1 %>"><input type="hidden" name="tab" value="mine">
+                    <button class="cxp-btn <%= c.equipped ? '' : 'primary' %>" type="submit"><%= c.equipped ? 'Unequip' : 'Equip' %></button>
+                  </form>
+                  <details class="cxp-more"><summary>🏪 List for sale</summary>
+                    <form method="POST" action="/cosmetics/list" class="cxp-row">
+                      <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="tab" value="mine">
+                      <input name="price" inputmode="numeric" placeholder="Price in PAT (min <%= fmt(listMin) %>, e.g. 50k)" required aria-label="Price">
+                      <button class="cxp-btn" type="submit">List</button>
+                    </form>
+                    <div class="cxp-muted" style="font-size:12px;margin-top:4px">You get the price minus <%= fee %>% when it sells. Listing unequips it.</div>
+                  </details>
+                  <details class="cxp-more"><summary>🎁 Gift this copy</summary>
+                    <form method="POST" action="/cosmetics/gift" class="cxp-row">
+                      <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="tab" value="mine">
+                      <input name="to" placeholder="PATV username or Camfrog name" required maxlength="60" aria-label="Gift to">
+                      <button class="cxp-btn" type="submit">Gift</button>
+                    </form>
+                  </details>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% }) %>
+    <% } %>
+  <% } %>
+
+  <% if (tab === 'showcase') { %>
+    <% if (!me) { %>
+      <p class="cxp-muted" style="text-align:center"><a href="/login">Sign in</a> to pick your showcase.</p>
+    <% } else if (!badges.length) { %>
+      <p class="cxp-muted" style="text-align:center">You don't have any badges yet. <a href="/achievements">How to earn them</a></p>
+    <% } else { %>
+      <p class="cxp-muted">Pin up to <%= showcaseMax %> badges to the top of your profile.</p>
+      <form method="POST" action="/cosmetics/showcase" id="showcase">
+        <input type="hidden" name="tab" value="showcase">
+        <div class="badgepick">
+          <% badges.forEach((b) => { %>
+            <label title="<%= b.description %>">
+              <input type="checkbox" name="badges" value="<%= b.badgeId %>" <%= showcase.includes(b.badgeId) ? 'checked' : '' %>>
+              <img src="<%= b.icon %>" alt="" loading="lazy"><span><%= b.name %></span>
+            </label>
+          <% }) %>
+        </div>
+        <p><button class="cxp-btn primary" type="submit">Save showcase</button></p>
+      </form>
+      <script>
+        (function () {
+          var f = document.getElementById('showcase'), max = <%= showcaseMax %>;
+          f.addEventListener('change', function (e) {
+            if (e.target.name !== 'badges') return;
+            if (f.querySelectorAll('input[name=badges]:checked').length > max) e.target.checked = false;
+          });
+        })();
+      </script>
+    <% } %>
+  <% } %>
+
+  <% if (tab === 'how') { %>
+    <section class="how">
+      <h2>Getting items</h2>
+      <ul>
+        <li><b>Shop</b> — pick an item and hit Buy. Pepe charges the PAT as you, so you need a linked Camfrog name. Prices by rarity:
+          <% Object.keys(rarities).forEach((r, i) => { %><%= i ? ' · ' : '' %><span style="color:<%= RC(r) %>"><%= r %> <%= fmt(rarities[r].price) %></span><% }) %>.</li>
+        <li><b>Drops</b> — heists, the arena and bingo can drop items, mostly Grand Theft Frog avatar gear. Rarer drops are rarer.</li>
+        <li><b>Achievements &amp; levels</b> — some items unlock for free when you earn an <a href="/achievements">achievement</a> or reach level 10, 25 or 50. They land in My items automatically.</li>
+        <li><b>Seasonal</b> — limited items sell only during their season (Halloween, winter). After that the only way to get one is from another player.</li>
+        <li><b>Gifts</b> — buy a new item for a friend from the shop, or give away a copy you own.</li>
+      </ul>
+      <h2>Trading</h2>
+      <p>Every item you own is a copy that can change hands. List a copy on the <a href="/cosmetics?tab=market#tabs">market</a> at your price (at least <%= fmt(listMin) %> PAT); it's unequipped and locked while it's listed, and you can cancel any time. When someone buys it Pepe moves the PAT — the seller gets the price minus a <%= fee %>% market fee.</p>
+      <h2>Wearing them</h2>
+      <p>One item per slot. Account cosmetics show on your <% if (me) { %><a href="/u/<%= me.username %>/profile">profile</a><% } else { %>profile<% } %> (name colors also show on the rankings); GTF gear shows on your pixel avatar in heists. In a Camfrog room, <code>!equip</code> works too.</p>
+    </section>
+  <% } %>
+</div>
+<script>
+  (function () {
+    // countdowns
+    var cds = document.querySelectorAll('.cx-cd[data-to]');
+    function tick() {
+      var now = Date.now();
+      cds.forEach(function (el) {
+        var s = Math.max(0, Math.round((+el.getAttribute('data-to') - now) / 1000));
+        var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+        el.textContent = (d ? d + 'd ' : '') + (d || h ? h + 'h ' : '') + m + 'm ' + sec + 's';
+      });
+    }
+    if (cds.length) { tick(); setInterval(tick, 1000); }
+    // GTF previews (pixel avatar script; if it's missing the emoji fallback stays)
+    var boxes = document.querySelectorAll('.cx-gtf[data-layers]');
+    if (!boxes.length) return;
+    function draw() {
+      var f = window.pepeAvatarSVG;
+      if (typeof f !== 'function') return;
+      boxes.forEach(function (el) {
+        try {
+          el.innerHTML = f(+el.getAttribute('data-seed') || 7, +el.getAttribute('data-size') || 72, JSON.parse(el.getAttribute('data-layers') || '{}'));
+        } catch (e) { /* keep the fallback */ }
+      });
+    }
+    var s = document.createElement('script');
+    s.src = '/public/js/avatar.js';
+    s.onload = draw;
+    document.head.appendChild(s);
+  })();
+</script>
+</body>
+</html>

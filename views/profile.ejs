@@ -5,7 +5,13 @@
   const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
   const isMe = username && username == usernameProfile;
   const role = (classh || '').toLowerCase();
+  // equipped cosmetics (cosmetics.js preloads them for this route)
+  const pc = typeof profileCosmetics !== 'undefined' && profileCosmetics ? profileCosmetics : null;
+  const cx = (k) => (pc && pc.equipped && pc.equipped[k] ? pc.equipped[k].r : null);
+  const cxName = cx('name_color'), cxBorder = cx('profile_border'), cxDeco = cx('avatar_decoration'), cxBanner = cx('profile_banner'), cxFx = cx('profile_effect');
+  const cxShow = pc && pc.showcase ? pc.showcase : [];
 %>
+<%- include('partials/cosmetics-css') %>
 <style>
   .pf { max-width: 920px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; }
   .pf a { color: #81c784; text-decoration: none; }
@@ -48,6 +54,11 @@
   .pf .badge img { height: 48px; width: 48px; object-fit: contain; image-rendering: pixelated; }
   .pf .badge span { font-size: 12px; line-height: 1.25; color: #ccc; overflow-wrap: anywhere; }
   .pf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .pf .showcase { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pf .showcase .pin { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border: 1px solid #3a3a1c; border-radius: 10px; padding: 4px 10px 4px 4px; font-size: 12px; color: #e8e2b0; }
+  .pf .showcase img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
+  .pf .gtf-av { display: grid; justify-items: center; gap: 4px; }
+  .pf .gtf-av .cx-gtf { width: 96px; height: 96px; display: grid; place-items: center; background: #0d0d0d; border-radius: 10px; font-size: 40px; }
   @media (max-width: 560px) {
     .pf .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pf .chips, .pf .actions { justify-content: center; }
@@ -55,10 +66,16 @@
   }
 </style>
 <div class="pf">
-  <section class="card hero">
-    <img class="avatar" src="<%= avatar %>" alt="<%= usernameProfile %>'s avatar" onerror="this.src='/public/img/avatar.png'">
+  <section class="card hero cx-host">
+    <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
+    <% if (cxFx) { %><div class="cx-fx cx-fx-<%= cxFx.effect %>" aria-hidden="true"></div><% } %>
+    <span class="cx-av">
+      <% if (cxDeco && cxDeco.conic) { %><span class="cx-conic<%= cxDeco.spin ? ' cx-spin' : '' %>" style="<%= cxDeco.conic %>" aria-hidden="true"></span><% } %>
+      <img class="avatar" src="<%= avatar %>" alt="<%= usernameProfile %>'s avatar" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
+      <% if (cxDeco && cxDeco.emoji) { %><span class="cx-emoji" aria-hidden="true"><%= cxDeco.emoji %></span><% } %>
+    </span>
     <div class="who">
-      <h1><%= displayname || usernameProfile %></h1>
+      <h1><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= displayname || usernameProfile %></span><% } else { %><%= displayname || usernameProfile %><% } %></h1>
       <div class="handle">@<%= usernameProfile %><% if (typeof camfrog !== 'undefined' && camfrog) { %> · 🐸 <%= camfrog %> on Camfrog<% } %></div>
       <div class="chips">
         <span class="chip">Level <%= level %></span>
@@ -66,6 +83,11 @@
         <% if (badges.length) { %><span class="chip">🏅 <%= badges.length %> badge<%= badges.length === 1 ? '' : 's' %></span><% } %>
         <% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %><span class="chip">🥷 <%= heistSheet.cls %></span><% } %>
       </div>
+      <% if (cxShow.length) { %>
+        <div class="showcase" aria-label="Pinned badges">
+          <% cxShow.forEach((b) => { %><span class="pin" title="<%= b.description %>"><img src="<%= b.icon %>" alt=""><%= b.name %></span><% }) %>
+        </div>
+      <% } %>
     </div>
     <div class="actions">
       <% if (isMe) { %>
@@ -73,6 +95,7 @@
         <a class="btn" href="/history">📜 PAT history</a>
         <a class="btn" href="/wallet">👛 Wallet</a>
         <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
+        <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
         <form class="inline" action="/logout" method="POST"><button class="btn ghost" type="submit">Log out</button></form>
       <% } else { %>
         <% if (username) { %><a class="btn primary" href="/u/<%= usernameProfile %>/tip">💸 Tip</a><% } %>
@@ -82,6 +105,7 @@
         <% } %>
       <% } %>
     </div>
+    <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
 
   <section class="stats">
@@ -112,7 +136,24 @@
           </div>
         <% } %>
       </div>
-      <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
+      <% if (pc && pc.seed) { %>
+        <div class="gtf-av">
+          <span class="cx-gtf" data-seed="<%= pc.seed %>" data-size="96" data-layers="<%= JSON.stringify(pc.gtf || {}) %>">🐸</span>
+          <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
+        </div>
+        <script>
+          (function () {
+            var el = document.querySelector('.pf .cx-gtf[data-layers]');
+            var s = document.createElement('script');
+            s.src = '/public/js/avatar.js';
+            s.onload = function () {
+              if (typeof window.pepeAvatarSVG !== 'function') return;
+              try { el.innerHTML = window.pepeAvatarSVG(+el.getAttribute('data-seed') || 1, 96, JSON.parse(el.getAttribute('data-layers') || '{}')); } catch (e) { /* keep the frog */ }
+            };
+            document.head.appendChild(s);
+          })();
+        </script>
+      <% } else if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
     </div>
   </section>
 

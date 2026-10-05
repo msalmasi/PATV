@@ -65,6 +65,8 @@ async function award(who, badgeId, updateLevel, { silent = false } = {}) {
   if (!user) return { ok: false, error: "no such user" };
   const ins = await runQuery("INSERT OR IGNORE INTO user_badges (userId, badgeId) VALUES (?, ?)", [user.userId, badgeId]);
   if (!ins || !ins.changes) return { ok: true, awarded: false, already: true };
+  // cosmetics unlocked by this achievement (idempotent; never blocks the award)
+  require("./cosmetics").grantUnlocks(user.userId, { achievement: badgeId }).catch(() => {});
   if (silent) return { ok: true, awarded: true, silent: true, name: a.name, xp: 0, pat: 0 };
   let levelUp = null;
   if (a.xp && typeof updateLevel === "function") {
