@@ -1,14 +1,19 @@
 <%#
-  Profile → Analytics (userstats.js builds `a`). Chat + mic are public. "Moderated against" (a.mod.on) is
-  only non-null for the profile owner and site admins; the itemised mod-action list and top words likewise.
-  2.00: `L` (profilelayout.js view) can hide panels from visitors (an_*); the owner/admins see them greyed.
-  It only ever hides more: the owner/admin-only panels keep their own rules and aren't toggles.
+  Profile → Analytics (userstats.js builds `a`). `L` (profilelayout.js view) decides what shows:
+    * plain panels (an_*): Public or Hidden — hidden ones render greyed for the owner/admins only
+    * privacy panels — top words (an_words), moderated against (an_modon), the itemised mod-action list
+      (an_modlist), moderation commands (an_modcmds): Public / Only me & admins / Hidden. userstats.js
+      only puts their data in `a` when this viewer may see them (a.words empty, a.mod.on null,
+      a.mod.byRecent empty, no moderation commands), so the template just renders what it's given and tags it.
 %>
 <%
   const LL = typeof L !== 'undefined' && L ? L : null;
   const sub = (id) => !LL || LL.show(id);
   const hc = (id) => (LL && LL.hidden(id) ? ' ua-hid' : '');
   const ht = (id) => (LL && LL.hidden(id) ? '<span class="ua-hidtag">\u{1F441} Hidden from visitors</span>' : '');
+  // "only me & admins" panels: a lock tag (only ever rendered for the owner/admins — visitors don't get the panel)
+  const isPriv = (id) => !!(LL && LL.priv && LL.priv(id) && !LL.hidden(id));
+  const pt = (id) => (isPriv(id) ? '<span class="lock">\u{1F512} Only ' + (LL.owner ? 'you' : 'the owner') + ' &amp; admins can see this</span>' : '');
 %>
 <style>
   .ua { display: grid; gap: 18px; }
@@ -86,6 +91,13 @@
   .ua .ua-hidtag { position: absolute; top: -14px; right: 4px; z-index: 3; font-size: 10.5px; line-height: 1; padding: 3px 8px; border-radius: 999px;
                    background: #1d1a10; border: 1px solid #5a4a1c; color: #e8cf7a; white-space: nowrap; pointer-events: none; letter-spacing: 0; text-transform: none; }
   .ua .modbox.ua-hid { outline-offset: 3px; }
+  .ua .ua-modlist { margin-top: 10px; }
+  .ua .ua-modlist table { margin-top: 0; }
+  .ua .ua-modlist.ua-hid { outline-offset: 3px; margin-top: 22px; padding-top: 4px; }
+  .ua .ua-privnote { margin: 0 0 4px; }
+  /* panel titles with a lock tag: the tag wraps flush-left on narrow screens instead of indented */
+  .ua .sub, .ua .ua-ttl { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+  .ua .sub .lock, .ua .ua-ttl .lock, .ua .ua-privnote .lock { margin-left: 0; }
   #ua-tip { position: fixed; z-index: 50; pointer-events: none; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px;
             padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.5); display: none; font-family: Ubuntu, sans-serif; }
   @media (max-width: 560px) {
@@ -163,7 +175,7 @@
 
   <% if (a.cmds && sub('an_cmds')) { const k = a.cmds; %>
   <div class="blk<%= hc('an_cmds') %>"><%- ht('an_cmds') %>
-    <div class="sub">Commands<% if (k.hasMod) { %> <span class="lock">🔒 moderation & admin commands: only you & admins</span><% } %></div>
+    <div class="sub">Commands<% if (k.hasMod && LL && LL.hidden('an_modcmds')) { %> <span class="lock">👁 moderation & admin commands: hidden from visitors</span><% } else if (k.hasMod && isPriv('an_modcmds')) { %> <span class="lock">🔒 moderation & admin commands: only <%= LL.owner ? 'you' : 'the owner' %> &amp; admins</span><% } %></div>
     <div class="two">
       <div>
         <div class="cmdhead">
@@ -185,14 +197,15 @@
   </div>
   <% } %>
 
-  <% if (a.words.length) { %>
-  <div>
-    <div class="sub">Most-used words <span class="lock">🔒 only you<%= a.priv ? ' & admins' : '' %></span></div>
+  <% if (a.words.length && sub('an_words')) { %>
+  <div class="blk<%= hc('an_words') %>"><%- ht('an_words') %>
+    <div class="sub">Most-used words <%- pt('an_words') %></div>
     <div class="words"><% a.words.forEach(([w, n]) => { %><span><%= w %><b><%= n %></b></span><% }) %></div>
   </div>
   <% } %>
 
-  <% if (sub('an_mod') || a.mod.on) { %>
+  <% const modOn = a.mod.on && sub('an_modon') ? a.mod.on : null; %>
+  <% if (sub('an_mod') || modOn) { %>
   <div>
     <div class="sub">Moderation</div>
     <div class="modgrid">
@@ -203,23 +216,26 @@
         <% if (a.mod.byCounts.length) { %>
           <div class="pills"><% a.mod.byCounts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
         <% } else { %><div class="empty">None that Pepe has seen.</div><% } %>
-        <% if (a.mod.byRecent.length) { %>
+        <% if (a.mod.byRecent.length && sub('an_modlist')) { %>
+          <div class="ua-modlist<%= hc('an_modlist') %>"><%- ht('an_modlist') %>
+          <% if (isPriv('an_modlist')) { %><div class="ua-privnote"><%- pt('an_modlist') %></div><% } %>
           <table><thead><tr><th>When</th><th>Action</th><th>On</th><th class="room">Room</th></tr></thead><tbody>
             <% a.mod.byRecent.forEach((e) => { %>
               <tr><td class="t" title="<%= e.when %>"><%= e.ago %></td><td><%= e.label %><%= e.note ? ' · ' + e.note : '' %></td><td class="w"><%= e.who || '—' %></td><td class="room"><%= e.room %></td></tr>
             <% }) %>
           </tbody></table>
+          </div>
         <% } %>
       </div>
       <% } %>
-      <% if (a.mod.on) { %>
-      <div class="modbox private">
-        <div class="muted">Moderated against <span class="lock">🔒 only you & admins see this</span></div>
-        <div class="big"><%= a.mod.on.total.toLocaleString('en-US') %></div>
-        <% if (a.mod.on.counts.length) { %>
-          <div class="pills"><% a.mod.on.counts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
+      <% if (modOn) { %>
+      <div class="modbox<%= isPriv('an_modon') ? ' private' : '' %><%= hc('an_modon') %>"><%- ht('an_modon') %>
+        <div class="muted ua-ttl">Moderated against <%- pt('an_modon') %></div>
+        <div class="big"><%= modOn.total.toLocaleString('en-US') %></div>
+        <% if (modOn.counts.length) { %>
+          <div class="pills"><% modOn.counts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
           <table><thead><tr><th>When</th><th>What</th><th>By</th><th class="room">Room</th></tr></thead><tbody>
-            <% a.mod.on.recent.forEach((e) => { %>
+            <% modOn.recent.forEach((e) => { %>
               <tr><td class="t" title="<%= e.when %>"><%= e.ago %></td><td><%= e.label %><%= e.note ? ' · ' + e.note : '' %></td><td class="w"><%= e.who || '—' %></td><td class="room"><%= e.room %></td></tr>
             <% }) %>
           </tbody></table>

@@ -5,12 +5,12 @@
 // that changed to POST /api/userstats/sync (bot token). We keep the latest copy per login and render
 // it on /u/:username/profile for the account whose camfrogUsername matches.
 //
-// Privacy:
-//   * chat + mic aggregates: public on the profile
-//   * mod actions TAKEN: the counts are public; the itemised list is for the owner + site admins
-//   * moderation RECEIVED ("moderated against"): owner + site admins only — nobody else sees any of it
-//   * top words: owner + site admins only
-//   * commands: public, except moderation/admin commands (owner + site admins only)
+// Privacy (1.99h): each user picks it on their profile layout (profilelayout.js), default Public.
+//   * chat + mic aggregates, mod-action counts, commands: Public or Hidden
+//   * top words (an_words), moderation RECEIVED / "moderated against" (an_modon), the itemised list of
+//     mod actions taken (an_modlist), moderation/admin commands (an_modcmds): Public, Only me & admins,
+//     or Hidden. forProfile() only includes a panel's data when the viewer may see it.
+//   * top words never exist for !incognito users: the bot doesn't store them (pepe_userstats.py)
 //
 // The sync also carries heist-sheet avatar seeds ({login: seed}) into cosmetic_avatar_seeds (the
 // table cosmetics.js reads), so every player with a sheet gets their GTF avatar on the profile —
@@ -264,7 +264,9 @@ function commandsModel(k, axis, priv) {
 
 /**
  * The view model for the profile's Analytics section, or null when there's nothing to show.
- * viewer: { owner: bool, admin: bool }
+ * viewer: { owner: bool, admin: bool, show?: (panelId) => bool }
+ *   show is profilelayout view().show - whether this viewer may see a panel. Without it (old callers)
+ *   the privacy panels fall back to owner + admins only.
  */
 async function forProfile(camfrogLogin, viewer) {
   if (!camfrogLogin) return null;
@@ -272,7 +274,11 @@ async function forProfile(camfrogLogin, viewer) {
   try { s = await get(camfrogLogin); } catch (e) { console.error("[userstats] get:", e); return null; }
   if (!s) return { empty: true };
   const md = await meta().catch(() => ({}));
-  const priv = !!(viewer && (viewer.owner || viewer.admin));
+  const v = viewer || {};
+  const priv = !!(v.owner || v.admin);
+  const may = typeof v.show === "function" ? (id) => !!v.show(id) : () => priv;
+  const see = { words: may("an_words"), modOn: may("an_modon"), modList: may("an_mod") && may("an_modlist"),
+                modCmds: may("an_cmds") && may("an_modcmds") };
   const c = s.chat || { total: 0, days: {}, hours: Array(24).fill(0), rooms: {} };
   const m = s.mic || { secs: 0, sessions: 0, longest: 0, days: {}, hours: Array(24).fill(0), rooms: {} };
   const today = new Date().toISOString().slice(0, 10);
@@ -311,17 +317,18 @@ async function forProfile(camfrogLogin, viewer) {
     micChart: barChart(axis, Object.fromEntries(Object.entries(m.days || {}).map(([k, v]) => [k, v / 60])),
       { color: "#ffb74d", label: "Mic minutes per day", fmtV: (v) => dur(v * 60), unit: (v) => `${fmt(v)}m` }),
     hasChat: !!c.total, hasMic: !!m.secs,
-    cmds: commandsModel(s.cmds, axis, priv),
+    cmds: commandsModel(s.cmds, axis, see.modCmds),
     chat30: sumDays(c.days, d30), mic30: sumDays(m.days, d30),
     hoursHtml: hourRow("Chat", c.hours, "76,175,80", (v) => `${fmt(v)} msgs`) + hourRow("Mic", m.hours, "255,183,77", (v) => dur(v)),
     chatRooms: roomBars(c.rooms, (v) => `${fmt(v)} msgs`),
     micRooms: roomBars(m.rooms, (v) => dur(v)),
-    words: priv ? Object.entries(c.words || {}).sort((a, b) => b[1] - a[1]).slice(0, 20) : [],
+    // incognito users have no words at all (empty list = the panel isn't rendered)
+    words: see.words ? Object.entries(c.words || {}).sort((a, b) => b[1] - a[1]).slice(0, 20) : [],
     mod: {
       byTotal, byCounts: sorted(mod.by),
-      byRecent: priv ? rows(mod.by_recent, "by") : [],
-      // moderated against: owner + admins ONLY (null = render nothing at all)
-      on: priv ? { total: onTotal, counts: sorted(mod.on), recent: rows(mod.on_recent, "on") } : null,
+      byRecent: see.modList ? rows(mod.by_recent, "by") : [],
+      // moderated against (null = not for this viewer: render nothing at all)
+      on: see.modOn ? { total: onTotal, counts: sorted(mod.on), recent: rows(mod.on_recent, "on") } : null,
     },
     priv,
   };

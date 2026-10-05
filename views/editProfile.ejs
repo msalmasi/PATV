@@ -20,11 +20,16 @@
   const cx = (k) => (pc && pc.equipped && pc.equipped[k] ? pc.equipped[k].r : null);
   const cxName = cx('name_color'), cxBorder = cx('profile_border'), cxDeco = cx('avatar_decoration'), cxBanner = cx('profile_banner'), cxFx = cx('profile_effect');
   const role = (typeof classh !== 'undefined' && classh ? classh : '').toLowerCase();
-  const lay = typeof layout !== 'undefined' && layout ? layout : { order: [], hidden: [] };
+  const lay = typeof layout !== 'undefined' && layout ? layout : { order: [], hidden: [], priv: [] };
   const secs = typeof sections !== 'undefined' ? sections : [];
   const subs = typeof subSections !== 'undefined' ? subSections : {};
+  const privs = typeof privPanels !== 'undefined' && privPanels ? privPanels : [];
   const byId = Object.fromEntries(secs.map((s) => [s.id, s]));
   const isHidden = (id) => lay.hidden.includes(id);
+  // privacy panels: public (default) / private (only me & admins) / hidden
+  const stateOf = (id) => (isHidden(id) ? 'hidden' : (lay.priv || []).includes(id) ? 'private' : 'public');
+  const VIS = [['public', '🌐', 'Public', 'Everyone can see it'], ['private', '🔒', 'Only me & admins', 'You and site admins only'],
+               ['hidden', '🚫', 'Hidden', 'Nobody else; greyed out for you']];
   const camfrogName = typeof camfrogUsername !== 'undefined' && camfrogUsername ? camfrogUsername : '';
 %>
 <%- include('partials/cosmetics-css') %>
@@ -132,7 +137,30 @@
                         border: 1px solid #2a2a2a; background: #141414; cursor: pointer; user-select: none; }
   .pe .lay-subs label:has(input:not(:checked)) { color: #777; border-style: dashed; text-decoration: line-through; }
   .pe .lay-subs input { margin: 0; accent-color: #4caf50; }
-  .pe .lay-item.off .lay-subs { pointer-events: none; }
+  .pe .lay-item.off .lay-subs, .pe .lay-item.off .lay-priv { pointer-events: none; }
+  .pe .lay-item.off .lay-priv { opacity: .5; }
+  /* privacy panels: three-state segmented control */
+  .pe .lay-priv { grid-column: 1 / -1; display: grid; gap: 8px; margin-top: 2px; padding-top: 10px; border-top: 1px solid #1c1c1c; }
+  .pe .lay-priv-h { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; }
+  .pe .lay-priv-h span { text-transform: none; letter-spacing: 0; color: #777; }
+  .pe .pv { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; padding: 9px 10px;
+            border-radius: 9px; background: #111; border: 1px solid #1d1d1d; margin: 0; min-width: 0; }
+  .pe .pv-txt { min-width: 0; }
+  .pe .pv-txt b { display: block; font-size: 14px; color: #e6e6e6; font-weight: 600; }
+  .pe .pv-txt small { display: block; font-size: 12px; color: #888; margin-top: 1px; }
+  .pe .seg { display: inline-grid; grid-template-columns: repeat(3, auto); border: 1px solid #2b2b2b; border-radius: 9px; overflow: hidden; background: #0b0b0b; }
+  .pe .seg label { position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 7px 11px; font-size: 12.5px; color: #999;
+                   cursor: pointer; user-select: none; white-space: nowrap; border-left: 1px solid #2b2b2b; }
+  .pe .seg label:first-child { border-left: 0; }
+  .pe .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .pe .seg label:hover { color: #ddd; background: #151515; }
+  .pe .seg label:has(input:focus-visible) { outline: 2px solid #81c784; outline-offset: -2px; }
+  .pe .seg label.s-public:has(input:checked) { background: #13301a; color: #b9f0c0; }
+  .pe .seg label.s-private:has(input:checked) { background: #2b2210; color: #f0d58a; }
+  .pe .seg label.s-hidden:has(input:checked) { background: #2a1414; color: #f0a8a8; }
+  .pe .pv.is-private { border-color: #3a2f18; }
+  .pe .pv.is-hidden { border-style: dashed; }
+  .pe .pv.is-hidden .pv-txt { opacity: .6; }
   .pe .sw { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: #aaa; user-select: none; white-space: nowrap; }
   .pe .sw input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .pe .sw .tr { width: 38px; height: 22px; border-radius: 999px; background: #2a2a2a; position: relative; transition: background .15s; flex: none; }
@@ -178,6 +206,9 @@
     .pe .lay-item .sw { grid-column: 2; grid-row: 2; justify-self: start; }
     .pe .lay-item .mv { grid-column: 3; grid-row: 2; }
     .pe .lay-subs { margin-top: 6px; }
+    .pe .pv { grid-template-columns: minmax(0, 1fr); }
+    .pe .seg { display: grid; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pe .seg label { justify-content: center; padding: 8px 4px; white-space: normal; text-align: center; line-height: 1.2; font-size: 12px; }
     .pe .avup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pe .conn-row { grid-template-columns: 36px minmax(0, 1fr); }
     .pe .conn-row > .btn, .pe .conn-row > form { grid-column: 1 / -1; }
@@ -275,7 +306,7 @@
 
   <section class="card" id="layout">
     <h2>Profile layout</h2>
-    <p class="lede">Drag sections to reorder them, or use the arrows. Switch one off to hide it from visitors — you'll still see it on your own profile, greyed out.</p>
+    <p class="lede">Drag sections to reorder them, or use the arrows. Everything is public until you change it: switch a section off to hide it from visitors — you'll still see it on your own profile, greyed out.</p>
     <form id="layoutForm" action="/api/u/<%= username %>/update/layout" method="post">
       <div class="lay-fixed">🔒 <span><b style="color:#ccc">Profile header</b> — always first: avatar, name, level, pinned badges</span></div>
       <ol class="lay" id="layList" aria-describedby="layHelp">
@@ -296,6 +327,22 @@
           </div>
           <label class="sw"><input type="checkbox" name="show" value="<%= id %>"<%= off ? '' : ' checked' %> aria-label="Show <%= s.label %> to visitors"><span class="tr" aria-hidden="true"></span><span class="st"><%= off ? 'Hidden' : 'Visible' %></span></label>
           <span class="mv"><button type="button" class="up" aria-label="Move <%= s.label %> up">▲</button><button type="button" class="dn" aria-label="Move <%= s.label %> down">▼</button></span>
+          <% if (id === 'analytics' && privs.length) { %>
+          <div class="lay-priv" role="group" aria-label="Privacy panels">
+            <div class="lay-priv-h">Privacy panels <span>· who can see them</span></div>
+            <% privs.forEach((p) => { const st = stateOf(p.id); %>
+            <fieldset class="pv is-<%= st %>" data-pv="<%= p.id %>">
+              <legend class="sr"><%= p.label %>: who can see it</legend>
+              <div class="pv-txt" aria-hidden="true"><b><%= p.icon %> <%= p.label %></b><small><%= p.desc %></small></div>
+              <div class="seg">
+                <% VIS.forEach(([v, ico, lbl, tip]) => { %>
+                <label class="s-<%= v %>" title="<%= tip %>"><input type="radio" name="vis_<%= p.id %>" value="<%= v %>"<%= st === v ? ' checked' : '' %>><span aria-hidden="true"><%= ico %></span><%= lbl %></label>
+                <% }) %>
+              </div>
+            </fieldset>
+            <% }) %>
+          </div>
+          <% } %>
         </li>
         <% }) %>
       </ol>
@@ -307,7 +354,7 @@
         <button class="btn ghost" type="submit" name="reset" value="1" id="layReset">Reset to default</button>
         <span class="dirty" id="layDirty">Unsaved changes</span>
       </div>
-      <p class="lay-note">Hiding only hides: your private panels (moderated against, top words, moderation commands) are never shown to visitors whatever you pick here.</p>
+      <p class="lay-note">🌐 Public: anyone who opens your profile. 🔒 Only me &amp; admins: you see it tagged “Only you &amp; admins can see this”, visitors don't get it at all. 🚫 Hidden: nobody else sees it; it shows greyed out on your own view. Top words are never recorded while you're <code>!incognito</code>. Use <b>Preview as visitor</b> to check.</p>
     </form>
   </section>
 
@@ -406,7 +453,7 @@
     function items() { return Array.prototype.slice.call(list.children); }
     function snapshot() {
       return items().map(function (li) { return li.getAttribute('data-id'); }).join(',') + '|' +
-        Array.prototype.map.call(list.querySelectorAll('input[type=checkbox]'), function (c) { return c.checked ? 1 : 0; }).join('');
+        Array.prototype.map.call(list.querySelectorAll('input[type=checkbox], input[type=radio]'), function (c) { return c.checked ? 1 : 0; }).join('');
     }
     function refresh(announceLi) {
       var all = items();
@@ -442,6 +489,12 @@
     });
     list.addEventListener('change', function (e) {
       var c = e.target;
+      if (c.type === 'radio') {
+        var fs = c.closest('.pv');
+        if (fs) fs.className = 'pv is-' + c.value;
+        refresh();
+        return;
+      }
       if (c.type !== 'checkbox') return;
       var li = c.closest('.lay-item');
       if (c.closest('.sw')) {

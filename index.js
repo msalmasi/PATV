@@ -1232,7 +1232,12 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
       // ?preview=visitor: the owner sees their page exactly as a signed-out visitor would
       const preview = isOwner && req.query.preview === "visitor";
       let layout = null;
-      try { layout = await profileLayout.get(user.userId); } catch (e) { console.error("profile layout:", e.message); }
+      try { layout = await profileLayout.get(user.userId); } catch (e) {
+        // can't read their choices: fail closed (privacy panels owner/admin-only), never open
+        console.error("profile layout:", e.message);
+        layout = { priv: profileLayout.PRIV_IDS };
+      }
+      const L = profileLayout.view(layout, { owner: isOwner, admin: isAdmin, preview });
       res.render("profile", {
         // Render profile.ejs with user data
         username: username,
@@ -1253,13 +1258,15 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         camfrog: user.camfrogUsername || null,
         // GTF avatar, server-rendered with the equipped cosmetic layers (userstats.js -> avatar.js)
         gtfAvatar: userstats.avatarFor(res.locals.profileCosmetics),
-        // Camfrog activity analytics (userstats.js). "Moderated against" is owner + site admins only.
+        // Camfrog activity analytics (userstats.js). The privacy panels (top words, moderated against,
+        // itemised mod list, mod commands) follow the user's layout: only data this viewer may see is loaded.
         analytics: await userstats.forProfile(user.camfrogUsername, {
           owner: isOwner && !preview,
           admin: isAdmin && !preview,
+          show: L.show,
         }),
-        // section order + visibility (profilelayout.js); hidden only ever hides more
-        layout: profileLayout.view(layout, { owner: isOwner, admin: isAdmin, preview }),
+        // section order + visibility (profilelayout.js)
+        layout: L,
         previewVisitor: preview,
         og: og.forProfile(req, user)
       });
@@ -1746,6 +1753,7 @@ app.get(
             layout,
             sections: profileLayout.SECTIONS,
             subSections: profileLayout.SUBS,
+            privPanels: profileLayout.PRIV,
             errors: errorMessages,
             success: successMessages,
           });

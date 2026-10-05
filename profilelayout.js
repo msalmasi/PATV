@@ -7,9 +7,17 @@
 //
 // Rules:
 //   * the hero card always comes first and can't be hidden
-//   * "hidden" only ever hides MORE: it never reveals anything — the owner/admin-only panels
-//     (moderated against, top words, moderation commands, the itemised mod list) keep their own
-//     privacy rules in userstats.js and aren't listed here
+//   * plain sections / panels are Public or Hidden
+//   * privacy panels (PRIV below: top words, moderated against, the itemised mod-action list,
+//     moderation & admin commands) have three states (1.99h):
+//       public  - everyone sees it (the DEFAULT, like everything else)
+//       private - only the owner and site admins ("Only you & admins can see this")
+//       hidden  - nobody but the owner/admins, and they only see it greyed ("Hidden from visitors")
+//     Stored as {priv: [...ids set to private]} next to hidden; an id missing from both is public, so
+//     layouts saved before 1.99h (no priv list, these ids never in hidden) come out all-public, and
+//     anything they hid stays hidden.
+//   * the server only puts a panel's data in the page when the viewer may see it (userstats.forProfile
+//     takes view().show) - the template never gets data it would have to hide
 //   * the owner (and site admins) still see hidden sections, greyed out with a "Hidden from visitors"
 //     tag; the owner can preview the page as a visitor (?preview=visitor)
 const { runQuery, getQuery } = require("./dbUtils");
@@ -37,17 +45,26 @@ const SUBS = {
     { id: "an_mod", label: "Mod actions taken" },
   ],
 };
+// Privacy panels (all inside Analytics): Public / Only me & admins / Hidden.
+const PRIV = [
+  { id: "an_words", label: "Top words", icon: "💬", desc: "Your most-used words in chat (never recorded while you're !incognito)" },
+  { id: "an_modon", label: "Moderated against", icon: "🛡", desc: "Shows kicks, bans, mutes and strikes others did to you" },
+  { id: "an_modlist", label: "Mod actions taken — itemised", icon: "📋", desc: "Each kick, ban or topic change you made, with who and where (the totals are always shown)" },
+  { id: "an_modcmds", label: "Moderation & admin commands", icon: "🔨", desc: "Your moderation and admin commands in the Commands panel" },
+];
+const STATES = ["public", "private", "hidden"];
 const SECTION_IDS = SECTIONS.map((s) => s.id);
 const SUB_IDS = Object.values(SUBS).flat().map((s) => s.id);
-const ALL_IDS = new Set([...SECTION_IDS, ...SUB_IDS]);
-const DEFAULT = Object.freeze({ order: SECTION_IDS.slice(), hidden: [] });
+const PRIV_IDS = PRIV.map((p) => p.id);
+const ALL_IDS = new Set([...SECTION_IDS, ...SUB_IDS, ...PRIV_IDS]);
+const DEFAULT = Object.freeze({ order: SECTION_IDS.slice(), hidden: [], priv: [] });
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS profile_layout (
   user_id TEXT PRIMARY KEY, layout TEXT NOT NULL, updated INTEGER)`).catch((e) => console.error("[profilelayout] init:", e));
 
 const list = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => String(x).slice(0, 32));
 
-/** Any input -> a valid {order, hidden}. */
+/** Any input -> a valid {order, hidden, priv}. Unknown ids are dropped; hidden beats private. */
 function sanitize(raw) {
   const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const order = [];
@@ -55,14 +72,38 @@ function sanitize(raw) {
   for (const id of SECTION_IDS) if (!order.includes(id)) order.push(id);
   const hidden = [];
   for (const id of list(r.hidden).slice(0, 50)) if (ALL_IDS.has(id) && !hidden.includes(id)) hidden.push(id);
-  return { order, hidden };
+  const priv = [];
+  for (const id of list(r.priv).slice(0, 50)) if (PRIV_IDS.includes(id) && !hidden.includes(id) && !priv.includes(id)) priv.push(id);
+  return { order, hidden, priv };
 }
 
-/** A form post (order[] in DOM order + show[] checkboxes) -> {order, hidden}. */
+/** "public" | "private" | "hidden" for any id (plain ids are never private). */
+function stateOf(layout, id) {
+  const l = layout || DEFAULT;
+  if ((l.hidden || []).includes(id)) return "hidden";
+  if ((l.priv || []).includes(id)) return "private";
+  return "public";
+}
+
+/**
+ * A form post -> {order, hidden, priv}: order[] in DOM order, show[] checkboxes for the plain
+ * sections/panels, and one vis_<id> radio (public|private|hidden) per privacy panel.
+ * Throws (code BAD_STATE) on a state that isn't one of the three, so nothing is saved; a privacy panel
+ * missing from the post is treated like an unticked checkbox: hidden (fails closed).
+ */
 function fromForm(body) {
   const b = body || {};
   const shown = new Set(list(b.show));
-  return sanitize({ order: list(b.order), hidden: [...ALL_IDS].filter((id) => !shown.has(id)) });
+  const hidden = [...SECTION_IDS, ...SUB_IDS].filter((id) => !shown.has(id));
+  const priv = [];
+  for (const id of PRIV_IDS) {
+    const raw = b["vis_" + id];
+    const st = raw == null || raw === "" ? "hidden" : String(Array.isArray(raw) ? raw[raw.length - 1] : raw);
+    if (!STATES.includes(st)) { const e = new Error("bad visibility state"); e.code = "BAD_STATE"; throw e; }
+    if (st === "hidden") hidden.push(id);
+    else if (st === "private") priv.push(id);
+  }
+  return sanitize({ order: list(b.order), hidden, priv });
 }
 
 async function get(userId) {
@@ -91,19 +132,23 @@ async function reset(userId) {
  * What the profile template needs. viewer: { owner, admin, preview } — preview = the owner looking at
  * their page as a visitor would.
  *   order        section ids, in order (hero excluded)
- *   show(id)     render this section / panel at all?
+ *   show(id)     render this section / panel at all? (also decides whether its data is loaded)
  *   hidden(id)   is it hidden from visitors? (rendered greyed for the owner/admins)
+ *   priv(id)     is it "only me & admins"? (rendered with a lock tag for the owner/admins)
  */
 function view(layout, viewer) {
   const l = sanitize(layout);
   const hid = new Set(l.hidden);
+  const prv = new Set(l.priv);
   const v = viewer || {};
   const seesHidden = !v.preview && !!(v.owner || v.admin);
   return {
     order: l.order,
     hidden: (id) => hid.has(id),
-    show: (id) => !hid.has(id) || seesHidden,
+    priv: (id) => prv.has(id),
+    show: (id) => (!hid.has(id) && !prv.has(id)) || seesHidden,
     seesHidden,
+    owner: !v.preview && !!v.owner,
     anyHidden: l.hidden.length > 0,
   };
 }
@@ -132,11 +177,11 @@ function register(app, { addUser }) {
         req.flash("success", "Profile layout saved.");
       }
     } catch (e) {
-      console.error("[profilelayout] save:", e);
+      if (!e || e.code !== "BAD_STATE") console.error("[profilelayout] save:", e);
       req.flash("error", "Couldn't save the layout — nothing changed.");
     }
     res.redirect(back);
   });
 }
 
-module.exports = { SECTIONS, SUBS, SECTION_IDS, SUB_IDS, DEFAULT, sanitize, fromForm, get, save, reset, view, register };
+module.exports = { SECTIONS, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };
