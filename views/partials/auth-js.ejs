@@ -1,0 +1,130 @@
+<%# views/partials/auth-js.ejs - behaviour for the auth pages (see auth-css.ejs); include at the end of the page %>
+<script>
+  // Shared behaviour for every form[data-au-form]: show/hide password, caps-lock hint, inline
+  // checks before sending (the server checks the same things), and one submit only.
+  (function () {
+    var RULES = {
+      checked: function (v, el) { return el.checked ? '' : 'Tick the box to confirm.'; },
+      required: function (v, el) { return v.trim() ? '' : (el.getAttribute('data-required-msg') || 'This field is required.'); },
+      newuser: function (v) {
+        v = v.trim();
+        if (!v) return 'Choose a username.';
+        if (!/^[A-Za-z0-9_.-]{3,24}$/.test(v)) return 'Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.';
+        if (/^[._-]|[._-]$/.test(v)) return "Usernames can't start or end with a dot, dash or underscore.";
+        if (/^cf/i.test(v)) return 'Usernames starting with “CF” are reserved for Camfrog accounts.';
+        return '';
+      },
+      email: function (v) {
+        v = v.trim();
+        if (!v) return 'Enter your email address.';
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? '' : "That doesn't look like an email address.";
+      },
+      newpass: function (v, el) {
+        if (v.length < 8) return 'Use at least 8 characters for your password.';
+        var u = el.form && el.form.querySelector('[name="username"]');
+        if (u && u.value.trim() && v.toLowerCase() === u.value.trim().toLowerCase()) return "Your password can't be your username.";
+        return '';
+      },
+      match: function (v, el) {
+        var other = document.getElementById(el.getAttribute('data-match'));
+        return other && v === other.value ? '' : "Those passwords don't match.";
+      }
+    };
+    function errBox(el) { return document.getElementById(el.id + '-err'); }
+    function setErr(el, msg) {
+      var box = errBox(el);
+      if (box) box.textContent = msg || '';
+      if (msg) el.setAttribute('aria-invalid', 'true'); else el.removeAttribute('aria-invalid');
+    }
+    function check(el) {
+      var rule = el.getAttribute('data-rule');
+      if (!rule || !RULES[rule]) return '';
+      return RULES[rule](el.value || '', el);
+    }
+
+    document.querySelectorAll('form[data-au-form]').forEach(function (form) {
+      form.setAttribute('novalidate', '');
+      var fields = Array.prototype.slice.call(form.querySelectorAll('[data-rule]'));
+      var btn = form.querySelector('button[type="submit"]');
+      var label = btn ? btn.querySelector('.lbl') : null;
+      var idle = label ? label.textContent : '';
+      var sending = false;
+
+      fields.forEach(function (el) {
+        // re-check a field once it's been flagged, as the visitor fixes it
+        el.addEventListener('input', function () {
+          if (el.getAttribute('aria-invalid') === 'true') setErr(el, check(el));
+          var m = form.querySelector('[data-match="' + el.id + '"]');
+          if (m && m.getAttribute('aria-invalid') === 'true') setErr(m, check(m));
+        });
+        el.addEventListener('blur', function () { if (el.value) setErr(el, check(el)); });
+      });
+
+      form.addEventListener('submit', function (e) {
+        if (sending) { e.preventDefault(); return; }
+        var first = null;
+        fields.forEach(function (el) {
+          var msg = check(el);
+          setErr(el, msg);
+          if (msg && !first) first = el;
+        });
+        if (first) { e.preventDefault(); first.focus(); return; }
+        sending = true;
+        if (btn) {
+          btn.disabled = true;
+          btn.setAttribute('aria-busy', 'true');
+          if (label) label.textContent = btn.getAttribute('data-busy') || 'Working…';
+        }
+      });
+      // back/forward cache: a page restored after submitting must be usable again
+      window.addEventListener('pageshow', function (ev) {
+        if (!ev.persisted || !btn) return;
+        sending = false;
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+        if (label) label.textContent = idle;
+      });
+    });
+
+    // show / hide password
+    document.querySelectorAll('.au-pw .eye').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var input = document.getElementById(b.getAttribute('aria-controls'));
+        if (!input) return;
+        var show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        b.setAttribute('aria-pressed', show ? 'true' : 'false');
+        b.textContent = show ? 'Hide' : 'Show';
+        b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      });
+    });
+
+    // caps lock hint on password fields
+    document.querySelectorAll('input[data-caps]').forEach(function (input) {
+      var hint = document.getElementById(input.getAttribute('data-caps'));
+      if (!hint) return;
+      function upd(e) { if (e.getModifierState) hint.hidden = !e.getModifierState('CapsLock'); }
+      input.addEventListener('keydown', upd);
+      input.addEventListener('keyup', upd);
+      input.addEventListener('blur', function () { hint.hidden = true; });
+    });
+
+    // live "8+ characters" hint
+    document.querySelectorAll('[data-meter]').forEach(function (input) {
+      var hint = document.getElementById(input.getAttribute('data-meter'));
+      if (!hint) return;
+      var base = hint.textContent;
+      function upd() {
+        var n = input.value.length;
+        hint.classList.toggle('ok', n >= 8);
+        hint.textContent = n === 0 ? base : (n >= 8 ? 'Length looks good.' : (8 - n) + ' more character' + (8 - n === 1 ? '' : 's') + ' to go.');
+      }
+      input.addEventListener('input', upd);
+    });
+
+    // put the cursor where it's needed: the flagged field, else the first empty one
+    var focusEl = document.querySelector('.au [aria-invalid="true"]') || document.querySelector('.au input[data-autofocus]');
+    if (focusEl && window.matchMedia && window.matchMedia('(min-width: 761px)').matches) focusEl.focus();
+    else if (focusEl && focusEl.getAttribute('aria-invalid') === 'true') focusEl.focus();
+  })();
+</script>

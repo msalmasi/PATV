@@ -391,10 +391,10 @@
 
   <section class="card" id="password">
     <h2>Password</h2>
-    <p class="lede">At least 6 characters.</p>
+    <p class="lede">At least 8 characters. You'll sign in again afterwards.</p>
     <form class="grid2" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
-      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password">New password</label><input type="password" id="password" name="password" required minlength="6" autocomplete="new-password"></div>
-      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password">Confirm password</label><input type="password" id="confirm_password" required minlength="6" autocomplete="new-password"></div>
+      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password">New password</label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password">Confirm password</label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
       <div><button class="btn primary" type="submit">Update password</button> <span class="status err" id="pwStatus" role="status" aria-live="polite"></span></div>
     </form>
   </section>

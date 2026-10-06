@@ -2,6 +2,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { issueLogin, clearLogin } = require('./middleware/loginCookie');
+const guard = require('./middleware/authGuard');
 const sqlite3 = require('sqlite3').verbose()
 const { v4: uuidv4 } = require('uuid');
 const sgMail = require('@sendgrid/mail');
@@ -34,43 +35,98 @@ const db = new sqlite3.Database('./myapp.db', (err) => {
   }
 });
 
+// ---------------------------------------------------------------------------------------------
+// Sign-up and sign-in (views/register.ejs, views/login.ejs)
+// ---------------------------------------------------------------------------------------------
+// Failed sign-ins, three ways: one IP guessing one account, anyone guessing one account, one IP
+// guessing many accounts. A good sign-in clears the IP+account counter.
+const loginPairLimit = guard.limiter({ max: 8, windowMs: 15 * 60 * 1000 });
+const loginNameLimit = guard.limiter({ max: 25, windowMs: 15 * 60 * 1000 });
+const loginIpLimit = guard.limiter({ max: 40, windowMs: 15 * 60 * 1000 });
+// New accounts per IP
+const registerLimit = guard.limiter({ max: 5, windowMs: 60 * 60 * 1000 });
+
+// A real bcrypt hash to compare against when the account doesn't exist, so a wrong username takes
+// as long as a wrong password (no timing hint about which accounts exist).
+let dummyHashP = null;
+function dummyHash() {
+  if (!dummyHashP) dummyHashP = bcrypt.hash(crypto.randomBytes(16).toString("hex"), 12);
+  return dummyHashP;
+}
+
+// Send the visitor back to a form with a message, what they typed (never the password) and the
+// field to point at.
+function backTo(req, res, page, next, msg, form) {
+  req.flash("error", msg);
+  req.flash("authForm", JSON.stringify(form || {}));
+  return res.redirect(page + (next ? "?next=" + encodeURIComponent(next) : ""));
+}
+
 // Function to handle user registration
 async function registerUser(req, res) {
+  const body = req.body || {};
+  const username = String(body.username == null ? "" : body.username).trim();
+  const email = String(body.email == null ? "" : body.email).trim();
+  const password = typeof body.password === "string" ? body.password : "";
+  const confirm = body.confirm_password;
+  const next = guard.safeNext(body.next);
+  const back = (msg, field) => backTo(req, res, "/register", next, msg, { username: username.slice(0, 64), email: email.slice(0, 254), field });
+
+  if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-up refused");
+  const ip = guard.clientIp(req);
+  const wait = registerLimit.blocked(ip);
+  if (wait) return back(`Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
+
+  let problem;
+  if ((problem = guard.checkUsername(username))) return back(problem, "username");
+  if ((problem = guard.checkEmail(email))) return back(problem, "email");
+  if ((problem = guard.checkPassword(password, username))) return back(problem, "password");
+  if (typeof confirm === "string" && confirm !== password) return back("Those passwords don't match.", "confirm_password");
+
   const userId = uuidv4();
-  const { username, password, email } = req.body;
-
-  if (!/\S+@\S+\.\S+/.test(email)) {
-    req.flash('error', 'Invalid email address.');
-    return res.redirect('/register');
-  }
-
   try {
-    const hashedPassword = await bcrypt.hash(password, 12);
-    const sqlCheckUser = "SELECT * FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)";
-    const user = await getQuery(sqlCheckUser, [username, email]);
+    const taken = await getQuery(
+      "SELECT LOWER(username) = LOWER(?) AS u, LOWER(email) = LOWER(?) AS e FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?) LIMIT 5",
+      [username, email, username, email]
+    );
+    if (taken.some((r) => r.u)) return back("That username is taken. Try another one.", "username");
+    if (taken.some((r) => r.e)) return back("That email already has an account. Sign in, or reset your password if you've forgotten it.", "email");
 
-    if (user.length > 0) {
-      req.flash('error', 'Username or email already taken');
-      return res.redirect('/register');
+    const hashedPassword = await bcrypt.hash(password, 12);
+    try {
+      await runQuery(
+        "INSERT INTO users (userId, username, displayname, password, email, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [userId, username, username, hashedPassword, email, 50000, 0, "/public/img/avatar.png"]
+      );
+    } catch (e) {
+      // two sign-ups for the same name at once: the UNIQUE index catches the second
+      if (/UNIQUE/i.test(String(e && e.message))) return back("That username or email was just taken. Try another one.", "username");
+      throw e;
+    }
+    registerLimit.hit(ip);
+    console.log(`[auth] new account ${username} (${userId})`);
+
+    // Best effort: the account exists whether or not these work.
+    try {
+      const token = generateValidationToken();
+      await updateUserWithToken(userId, token);
+      sendVerificationEmail(email, username, token);
+    } catch (e) {
+      console.error("[auth] verification setup failed:", e.message);
+    }
+    try {
+      await awardBadge(userId, "fresh_meat");
+    } catch (e) {
+      console.error("[auth] fresh_meat badge:", e.message);
     }
 
-    const sqlInsertUser = 'INSERT INTO users (userId, username, displayname, password, email, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
-    await runQuery(sqlInsertUser, [userId, username, username, hashedPassword, email, 50000, 0, '/public/img/avatar.png']);
-    
-    const token = generateValidationToken();
-    updateUserWithToken(userId, token);
-    sendVerificationEmail(email, username, token);
-
-    // Award "New User" badge
-    const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
-    await awardBadge(userId, newUserBadgeId);
-
-    req.flash('success', 'Successfully registered! Please login.');
-    res.redirect('/login');
+    // Signed straight in (same 90-day login as a normal sign-in).
+    issueLogin(res, { userId, username, class: "pleb" });
+    req.flash("success", `Welcome to PATV, ${username}! Check your email to verify your address.`);
+    return res.redirect(next || `/u/${encodeURIComponent(username)}/wheel`);
   } catch (error) {
-    console.error(`Server error during registration: ${error}`);
-    req.flash('error', 'Server error');
-    res.redirect('/register');
+    console.error(`[auth] registration error: ${error && error.message}`);
+    return back("Something went wrong creating your account. Please try again.");
   }
 }
 
@@ -112,7 +168,12 @@ async function updateUserWithToken(userId, token) {
 
 // Function to handle email validation
 async function sendVerificationEmail(email, username, token) {
-  const link = `http://publicaccess.tv/verify-email?token=${token}`;
+  // reserved test domains (staging test accounts, example.com, *.invalid) are never emailed
+  if (guard.undeliverable(email)) {
+    console.log('[auth] verification email skipped (reserved test domain)');
+    return;
+  }
+  const link = `https://publicaccess.tv/verify-email?token=${token}`;
   const msg = {
       to: email,
       from: 'no-reply@publicaccess.tv',
@@ -130,42 +191,69 @@ async function sendVerificationEmail(email, username, token) {
 }
 
 
-// Function to handle user login
-function loginUser(req, res) {
-  const { username, password } = req.body;
+// Function to handle user login. Username (any case) or email; never logs the password.
+async function loginUser(req, res) {
+  const body = req.body || {};
+  const ident = String(body.username == null ? "" : body.username).trim().slice(0, 254);
+  const password = typeof body.password === "string" ? body.password : "";
+  const next = guard.safeNext(body.next);
+  const back = (msg, field) => backTo(req, res, "/login", next, msg, { username: ident, field });
 
-  db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
-      if (err) {
-          console.error(err.message);
-          req.flash('error', 'Error logging in user');
-          return res.redirect('/login');
-          return;
-      }
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        req.flash('error', 'Authentication failed');
-        return res.redirect('/login');
-      }
-      // const token = jwt.sign({ userId: user.userId }, process.env.SECRET_KEY, { expiresIn: '1h' });
-      // res.json({ token: token });
-          issueLogin(res, user);   // 90-day sliding login (middleware/loginCookie.js)
-          res.redirect(`/u/${username}/wheel`);  // Redirect to a secure page
-  });
-};
+  if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-in refused");
+  if (!ident) return back("Enter your username or email.", "username");
+  if (!password) return back("Enter your password.", "password");
+
+  const ip = guard.clientIp(req);
+  const who = ident.toLowerCase();
+  const wait = Math.max(loginPairLimit.blocked(ip + "|" + who), loginNameLimit.blocked(who), loginIpLimit.blocked(ip));
+  if (wait) return back(`Too many sign-in attempts. Try again in ${guard.waitText(wait)}, or reset your password.`);
+
+  try {
+    const byEmail = ident.includes("@");
+    const rows = byEmail
+      ? await getQuery("SELECT userId, username, class, password FROM users WHERE LOWER(email) = LOWER(?) LIMIT 5", [ident])
+      : await getQuery("SELECT userId, username, class, password FROM users WHERE LOWER(username) = LOWER(?) ORDER BY (username = ?) DESC LIMIT 5", [ident, ident]);
+    let user = null;
+    for (const r of rows) {
+      if (r.password && (await bcrypt.compare(password, r.password))) { user = r; break; }
+    }
+    if (!rows.length) await bcrypt.compare(password, await dummyHash());
+    if (!user) {
+      loginPairLimit.hit(ip + "|" + who);
+      loginNameLimit.hit(who);
+      loginIpLimit.hit(ip);
+      return back("That username and password don't match. Check caps lock, or reset your password.", "password");
+    }
+    loginPairLimit.reset(ip + "|" + who);
+    issueLogin(res, user);   // 90-day sliding login (middleware/loginCookie.js)
+    return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
+  } catch (err) {
+    console.error("[auth] login error:", err && err.message);
+    return back("Something went wrong signing you in. Please try again.");
+  }
+}
 
 // Update username
 async function updateUsername(req, res) {
-  const { username } = req.body;
+  const username = String((req.body && req.body.username) || '').trim();
   const userId = req.user.userId;
-        // Check if the username or email is already taken
-        db.get(`SELECT * FROM users WHERE username = ?`, [username], async (err, user) => {
+  const editPage = `/u/${encodeURIComponent(req.user.username)}/profile/edit`;
+  if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
+  const problem = guard.checkUsername(username);
+  if (problem) {
+    req.flash('error', problem);
+    return res.redirect(editPage);
+  }
+        // Taken by anyone else, in any letter case (changing the case of your own name is fine)
+        db.get(`SELECT userId FROM users WHERE LOWER(username) = LOWER(?) AND userId != ?`, [username, userId], async (err, user) => {
           if (err) {
               console.error(err.message);
               req.flash('error', 'Error processing request');
-              return res.redirect(`/u/${username}/profile/edit`);
+              return res.redirect(editPage);
           }
           if (user) {
               req.flash('error', 'Username already taken');
-              return res.redirect(`/u/${username}/profile/edit`);
+              return res.redirect(editPage);
           }
           await runQuery('UPDATE users SET username = ? WHERE userId = ?', [username, userId]);
           req.flash('success', 'Username changed.');
@@ -214,13 +302,23 @@ async function updateEmail(req, res) {
 
 // Update password
 async function updatePassword(req, res) {
-  const { password } = req.body;
+  const password = typeof (req.body && req.body.password) === 'string' ? req.body.password : '';
   const userId = req.user.userId;
   const username = req.user.username;
+  const editPage = `/u/${encodeURIComponent(username)}/profile/edit#password`;
+  if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
+  const problem = guard.checkPassword(password, username);
+  if (problem) {
+    req.flash('error', problem);
+    return res.redirect(editPage);
+  }
   const hashedPassword = await bcrypt.hash(password, 12);
   await runQuery('UPDATE users SET password = ? WHERE userId = ?', [hashedPassword, userId]);
-  req.flash('success', 'Password changed.');
-  res.redirect(`/logout`);
+  // Sign out and back in with the new password. (This used to redirect to GET /logout, which
+  // doesn't exist - logout is POST-only - so changing your password ended on a 404.)
+  clearLogin(res);
+  req.flash('success', 'Password changed. Sign in with your new password.');
+  res.redirect('/login');
 };
 
 // Change the avatar

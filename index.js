@@ -32,6 +32,8 @@ const {
 const { createTables, runQuery, getQuery } = require("./dbUtils");
 const authenticateToken = require("./middleware/authenticateToken");
 const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCookie");
+const guard = require("./middleware/authGuard");
+const { moveUserRows } = require("./accountMerge");
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
 const flash = require("connect-flash");
@@ -211,26 +213,62 @@ app.get("/protected", authenticateToken, (req, res) => {
   res.json({ message: "Protected route accessed successfully." });
 });
 
-app.get("/register", addUser, async (req, res) => {
-  const username = req.user ? req.user.username : null; // Fallback to null if no user in session
-  let errorMessages = req.flash("error");
-  let successMessages = req.flash("success");
-  res.render("register", {
-    user: username,
-    errors: errorMessages,
-    success: successMessages,
-  });
+// ── Sign in / register / password reset pages (views/login.ejs, register.ejs, forgotPassword.ejs,
+// resetPassword.ejs; handlers in user.controller.js; helpers in middleware/authGuard.js) ──
+// Everything an auth page renders with: flash messages, what the visitor typed last time (never a
+// password), and a safe "return to" path - ?next= when given, else the page they came from.
+function authView(req, extra) {
+  let form = {};
+  try { form = JSON.parse(req.flash("authForm")[0] || "{}") || {}; } catch (e) { form = {}; }
+  return Object.assign({
+    user: req.user ? req.user.username : null,
+    errors: req.flash("error"),
+    success: req.flash("success"),
+    form,
+    next: guard.safeNext(req.query.next) || guard.refererNext(req) || "",
+  }, extra || {});
+}
+
+app.get("/register", addUser, (req, res) => {
+  if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}/profile`);
+  res.render("register", authView(req));
 });
 
-app.get("/login", (req, res) => {
-  // Retrieve flash messages and pass them to the EJS template
-  let errorMessages = req.flash("error");
-  let successMessages = req.flash("success");
-  res.render("login", {
-    errors: errorMessages,
-    success: successMessages,
-  });
+app.get("/login", addUser, (req, res) => {
+  if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}/profile`);
+  res.render("login", authView(req));
 });
+
+// ── OAuth (Twitch / Discord) sign-in ──
+// `state` ties the callback to the browser that started it: without it, someone could send you a
+// callback link carrying THEIR code and link their Twitch/Discord to your account (or sign you in
+// as them). The start route also remembers where to return to.
+function oauthBegin(req, provider) {
+  const state = crypto.randomBytes(18).toString("hex");
+  req.session.oauth = { provider, state, next: guard.safeNext(req.query.next), at: Date.now() };
+  return state;
+}
+function oauthCheck(req, provider) {
+  const o = req.session && req.session.oauth;
+  if (req.session) delete req.session.oauth;
+  const got = typeof req.query.state === "string" ? req.query.state : "";
+  if (!o || o.provider !== provider || !o.state || got.length !== o.state.length) return null;
+  if (Date.now() - (o.at || 0) > 15 * 60 * 1000) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(got), Buffer.from(o.state))) return null;
+  return o;
+}
+// The session cookie is per host: start on the same host the provider will call back to.
+function oauthHostBounce(req, redirectUri) {
+  try {
+    const cb = new URL(redirectUri);
+    if (cb.host && req.get("host") && cb.host !== req.get("host")) return cb.origin + req.originalUrl;
+  } catch (e) { /* bad config: carry on */ }
+  return null;
+}
+function oauthFail(req, res, msg) {
+  req.flash("error", msg);
+  return res.redirect("/login");
+}
 
 // HTTP GET endpoint for verifying endpoint
 app.get("/verify-email", async (req, res) => {
@@ -270,18 +308,25 @@ app.get("/verify-email", async (req, res) => {
 
 app.get("/auth/twitch", (req, res) => {
   const redirectUri = process.env.TWITCH_AUTH_CALLBACK;
+  if (!redirectUri || !process.env.TWITCH_CLIENT_ID) return oauthFail(req, res, "Twitch sign-in isn't available right now.");
+  const bounce = oauthHostBounce(req, redirectUri);
+  if (bounce) return res.redirect(bounce);
   const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?${querystring.stringify(
     {
       client_id: process.env.TWITCH_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
       scope: "user:read:email user:read:subscriptions",
+      state: oauthBegin(req, "twitch"),
     }
   )}`;
   res.redirect(twitchAuthUrl);
 });
 
 app.get("/auth/twitch/callback", async (req, res) => {
+  if (req.query.error || !req.query.code) return oauthFail(req, res, "Twitch sign-in was cancelled.");
+  const oauth = oauthCheck(req, "twitch");
+  if (!oauth) return oauthFail(req, res, "That Twitch sign-in expired or didn't start here. Please try again.");
   try {
     const code = req.query.code;
     const redirectUri = process.env.TWITCH_AUTH_CALLBACK;
@@ -317,8 +362,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
     );
 
     const twitchUser = userProfileResponse.data.data[0];
-    console.log(userProfileResponse);
-    console.log(twitchUser);
+    if (!twitchUser || !twitchUser.id) throw new Error("no Twitch user in the response");
 
     // Attempt to decode the existing JWT from the cookie
     let currentUser;
@@ -350,7 +394,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
         return res.redirect("/resolve-twitch-conflict"); // Redirect to a page to handle the decision
       } else {
         // No conflict, update current user with Twitch ID
-        bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUser.userId]);
+        const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUser.userId]);
         if (bonus[0].twitchBonus === 0) {
           const badgeId = 'twitch-user'; // Replace with your actual badge ID
           await awardBadge(currentUser.userId, badgeId);
@@ -375,22 +419,21 @@ app.get("/auth/twitch/callback", async (req, res) => {
         currentUser = existingUser[0];
       } else {
         // No user found, check if there is a user with the same email.
-        const existingTwitchEmail = await getQuery(
-          "SELECT * FROM users WHERE email = ?",
+        // (Twitch only reports a verified email address)
+        const existingTwitchEmail = twitchUser.email ? await getQuery(
+          "SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
           [twitchUser.email]
-        );
+        ) : [];
         if (existingTwitchEmail.length > 0) {
-          bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]);
-          console.log(existingTwitchEmail[0]);
-          console.log(bonus[0]);
+          const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]);
           if (bonus[0].twitchBonus === 0) {
             const badgeId = 'twitch-user'; // Replace with your actual badge ID
             await awardBadge(existingTwitchEmail[0].userId, badgeId);
             await awardBonus(existingTwitchEmail[0].userId, "twitch connect", 50000)
           }
           await runQuery(
-            "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE email = ?",
-            [twitchUser.id, twitchUser.display_name, 1, twitchUser.email]
+            "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+            [twitchUser.id, twitchUser.display_name, 1, existingTwitchEmail[0].userId]
           );
           currentUser = existingTwitchEmail[0];
         } else {
@@ -423,7 +466,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
               newUser.points_balance,
             ]
           );
-          bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [newUser.userId]);
+          const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [newUser.userId]);
           if (bonus[0].twitchBonus === 0) {
             const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
             await awardBadge(newUser.userId, newUserBadgeId);
@@ -440,121 +483,143 @@ app.get("/auth/twitch/callback", async (req, res) => {
       }
       // Sign them in (90-day sliding login - see middleware/loginCookie.js)
       issueLogin(res, currentUser);
-      res.redirect("/");
+      res.redirect(oauth.next || "/");
     }
   } catch (error) {
-    console.error("Failed to authenticate with Twitch:", error);
-    res.status(500).send("Authentication failed");
+    console.error("Failed to authenticate with Twitch:", error && error.message);
+    if (!res.headersSent) oauthFail(req, res, "Twitch sign-in didn't work. Please try again.");
   }
 });
 
-app.get("/resolve-twitch-conflict", (req, res) => {
-  // Check if there is a conflict information stored in the session
-  if (!req.session.conflict) {
-    // No conflict data found, redirect to a safe default, e.g., user profile or dashboard
-    return res.redirect("/");
-  }
+// ── Twitch / Discord account conflicts ──
+// Linking a Twitch/Discord that another PATV account already has: the callback stores the details
+// in the session and sends you here to merge that account into yours (or keep them apart).
+const LINKS = {
+  twitch: { label: "Twitch", idCol: "twitchId", nameCol: "twitchDisplayname", id: (c) => c.twitchId, name: (c) => c.twitchDisplayname,
+            bonusCol: "twitchBonus", badge: "twitch-user", bonusType: "twitch connect", otherIdCol: "discordId", otherNameCol: "discordUsername" },
+  discord: { label: "Discord", idCol: "discordId", nameCol: "discordUsername", id: (c) => c.discordId, name: (c) => c.discordUsername,
+             bonusCol: "discordBonus", badge: "discord-user", bonusType: "discord connect", otherIdCol: "twitchId", otherNameCol: "twitchDisplayname" },
+};
 
-  const {
-    existingUserId,
-    existingPAT,
-    currentUserId,
-    currentUserUsername,
-    twitchId,
-    twitchDisplayname,
-  } = req.session.conflict;
-  res.render("resolve-twitch-conflict", {
-    existingUserId: existingUserId,
-    existingPAT: existingPAT,
-    currentUserId: currentUserId,
-    currentUserUsername: currentUserUsername,
-    twitchId: twitchId,
-    twitchDisplayname: twitchDisplayname,
-  });
-});
+// The pending conflict for this provider, only for the signed-in account it was made for.
+function pendingConflict(req, provider) {
+  const c = req.session && req.session.conflict;
+  if (!c || !LINKS[provider].id(c)) return null;
+  if (!req.user || req.user.userId !== c.currentUserId) return null;
+  return c;
+}
 
-// Endpoint to resolve Twitch account conflicts
-app.post("/merge-accounts-twitch", async (req, res) => {
-  const decision = req.body.decision;
-  const {
-    existingUserId,
-    currentUserUsername,
-    currentUserId,
-    twitchId,
-    twitchDisplayname,
-  } = req.session.conflict;
-
-  if (decision === "yes") {
-    // User decided to merge accounts
-    try {
-      // Import points_balance and other necessary data
-      const results = await getQuery("SELECT * FROM users WHERE userId = ?", [
-        existingUserId,
-      ]);
-      const currentResults = await getQuery(
-        "SELECT discordId FROM users WHERE userId = ?",
-        [currentUserId]
-      );
-      const points_balance =
-        results.length > 0 ? results[0].points_balance : 0;
-      const discordId = results.length > 0 ? results[0].discordId : null;
-      const discordUsername =
-        results.length > 0 ? results[0].discordUsername : null;
-      const currentDiscordId =
-        results.length > 0 ? currentResults[0].discordId : null;
-      if (!currentDiscordId) {
-        await runQuery(
-          "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
-          [discordId, discordUsername, currentUserId]
-        );
-      }
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-        [points_balance, currentUserId]
-      );
-      await runQuery(
-        "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
-        [twitchId, twitchDisplayname, currentUserId]
-      );
-      // keep the merged account's PAT history with the balance it brings (else /history can't add up)
-      await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [currentUserId, existingUserId]);
-      await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
-      bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUserId]);
-      if (bonus[0].twitchBonus === 0) {
-        const badgeId = 'twitch-user'; // Replace with your actual badge ID
-        await awardBadge(currentUserId, badgeId);
-        await awardBonus(currentUserId, "twitch connect", 50000)
-      }
-      await runQuery(
-        "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
-        [1, currentUserId]
-      );
-      res.redirect(`/u/${currentUserUsername}/profile/edit`);
-    } catch (error) {
-      console.error("Error merging accounts:", error);
-      res.status(500).send("Failed to merge accounts");
+async function conflictPage(req, res, provider) {
+  const L = LINKS[provider];
+  const c = pendingConflict(req, provider);
+  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/profile/edit` : "/login");
+  try {
+    const other = (await getQuery("SELECT username, displayname, points_balance FROM users WHERE userId = ?", [c.existingUserId]))[0];
+    if (!other) {
+      delete req.session.conflict;
+      req.flash("error", `That ${L.label} account's other PATV account no longer exists. Try linking ${L.label} again.`);
+      return res.redirect(`/u/${encodeURIComponent(req.user.username)}/profile/edit`);
     }
-  } else {
-    // User decided not to merge accounts
-    res.redirect(`/u/${currentUserUsername}/profile/edit`);
+    res.render("resolve-conflict", {
+      user: req.user.username,
+      provider,
+      label: L.label,
+      action: `/merge-accounts-${provider}`,
+      linkedName: L.name(c) || "",
+      currentUsername: req.user.username,
+      otherUsername: other.username,
+      otherPAT: Number(other.points_balance) || 0,
+      errors: req.flash("error"),
+    });
+  } catch (e) {
+    console.error(`[auth] ${provider} conflict page:`, e.message);
+    res.status(500).send("Something went wrong. Please try again.");
   }
-});
+}
+
+async function mergeConflict(req, res, provider) {
+  const L = LINKS[provider];
+  if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
+  const c = pendingConflict(req, provider);
+  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/profile/edit` : "/login");
+  const body = req.body || {};
+  if (body.decision === "yes" && body.confirm !== "1") {
+    req.flash("error", "Tick the box to confirm the merge.");
+    return res.redirect(`/resolve-${provider}-conflict`);
+  }
+  // one decision per conflict: a double-submit or a replay finds nothing pending
+  delete req.session.conflict;
+  const edit = `/u/${encodeURIComponent(req.user.username)}/profile/edit`;
+  if (body.decision !== "yes") {
+    req.flash("success", `Kept separate - your ${L.label} stays linked to the other account.`);
+    return res.redirect(edit);
+  }
+  const fromId = c.existingUserId, toId = c.currentUserId;
+  try {
+    const from = (await getQuery("SELECT * FROM users WHERE userId = ?", [fromId]))[0];
+    const to = (await getQuery(`SELECT ${L.otherIdCol} AS otherId, camfrogUsername FROM users WHERE userId = ?`, [toId]))[0];
+    if (!from || !to || fromId === toId) {
+      req.flash("error", "That account no longer exists - nothing to merge.");
+      return res.redirect(edit);
+    }
+    // the other provider's link and the Camfrog name come along when this account has none
+    if (!to.otherId && from[L.otherIdCol]) {
+      await runQuery(`UPDATE users SET ${L.otherIdCol} = ?, ${L.otherNameCol} = ? WHERE userId = ?`, [from[L.otherIdCol], from[L.otherNameCol], toId]);
+    }
+    if (!to.camfrogUsername && from.camfrogUsername) {
+      await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [fromId]);
+      await runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [from.camfrogUsername, toId]);
+    }
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [Number(from.points_balance) || 0, toId]);
+    await runQuery(`UPDATE users SET ${L.idCol} = ?, ${L.nameCol} = ? WHERE userId = ?`, [L.id(c), L.name(c), toId]);
+    // keep the merged account's PAT history with the balance it brings (else /history can't add up),
+    // and everything else it owned (badges, cosmetics, spins, orders... - accountMerge.js)
+    await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [toId, fromId]);
+    const moved = await moveUserRows(fromId, toId);
+    console.log(`[auth] ${provider} merge ${fromId} -> ${toId}: +${Number(from.points_balance) || 0} PAT, ${JSON.stringify(moved)}`);
+    await runQuery("DELETE FROM users WHERE userId = ?", [fromId]);
+    const bonus = await getQuery(`SELECT ${L.bonusCol} AS b FROM users WHERE userId = ?`, [toId]);
+    if (bonus[0] && bonus[0].b === 0) {
+      try { await awardBadge(toId, L.badge); } catch (e) { /* already has it */ }
+      await awardBonus(toId, L.bonusType, 50000);
+    }
+    await runQuery(`UPDATE users SET ${L.bonusCol} = 1, ${L.bonusCol}_at = CURRENT_TIMESTAMP WHERE userId = ?`, [toId]);
+    req.flash("success", `Accounts merged - ${L.label} is linked here now and ${(Number(from.points_balance) || 0).toLocaleString("en-US")} PAT came with it.`);
+    res.redirect(edit);
+  } catch (error) {
+    console.error(`[auth] ${provider} merge failed:`, error && error.message);
+    req.flash("error", "Merging the accounts failed partway - please ask staff to check your account.");
+    res.redirect(edit);
+  }
+}
+
+app.get("/resolve-twitch-conflict", addUser, (req, res) => conflictPage(req, res, "twitch"));
+app.post("/merge-accounts-twitch", addUser, (req, res) => mergeConflict(req, res, "twitch"));
+app.get("/resolve-discord-conflict", addUser, (req, res) => conflictPage(req, res, "discord"));
+app.post("/merge-accounts-discord", addUser, (req, res) => mergeConflict(req, res, "discord"));
 
 // Endpoint for Discord auth
 app.get("/auth/discord", (req, res) => {
   const redirectUri = process.env.DISCORD_AUTH_CALLBACK;
+  if (!redirectUri || !process.env.DISCORD_CLIENT_ID) return oauthFail(req, res, "Discord sign-in isn't available right now.");
+  const bounce = oauthHostBounce(req, redirectUri);
+  if (bounce) return res.redirect(bounce);
   const discordAuthUrl = `https://discord.com/api/oauth2/authorize?${querystring.stringify(
     {
       client_id: process.env.DISCORD_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
       scope: "identify email",
+      state: oauthBegin(req, "discord"),
     }
   )}`;
   res.redirect(discordAuthUrl);
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
+  if (req.query.error || !req.query.code) return oauthFail(req, res, "Discord sign-in was cancelled.");
+  const oauth = oauthCheck(req, "discord");
+  if (!oauth) return oauthFail(req, res, "That Discord sign-in expired or didn't start here. Please try again.");
   try {
     const code = req.query.code;
     const redirectUri = process.env.DISCORD_AUTH_CALLBACK;
@@ -587,8 +652,10 @@ app.get("/auth/discord/callback", async (req, res) => {
     );
 
     const discordUser = userProfileResponse.data;
-    console.log(userProfileResponse);
-    console.log(discordUser);
+    if (!discordUser || !discordUser.id) throw new Error("no Discord user in the response");
+    // Only trust a Discord email Discord has verified: it's used to find an existing account to sign
+    // in to, so an unverified one would let anyone claim an account by its email.
+    const discordEmail = discordUser.verified && discordUser.email ? discordUser.email : null;
 
     // Attempt to decode the existing JWT from the cookie
     let currentUser;
@@ -617,7 +684,7 @@ app.get("/auth/discord/callback", async (req, res) => {
         };
         return res.redirect("/resolve-discord-conflict");
       } else {
-        bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUser.userId]);
+        const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUser.userId]);
         if (bonus[0].discordBonus === 0) {
           const badgeId = 'discord-user'; // Replace with your actual badge ID
           await awardBadge(currentUser.userId, badgeId);
@@ -639,20 +706,20 @@ app.get("/auth/discord/callback", async (req, res) => {
         currentUser = existingUser[0];
       } else {
         // No user found, check if there is a user with the same email.
-        const existingDiscordEmail = await getQuery(
-          "SELECT * FROM users WHERE email = ?",
-          [discordUser.email]
-        );
+        const existingDiscordEmail = discordEmail ? await getQuery(
+          "SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
+          [discordEmail]
+        ) : [];
         if (existingDiscordEmail.length > 0) {
-          bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]);
+          const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]);
           if (bonus[0].discordBonus === 0) {
             const badgeId = 'discord-user'; // Replace with your actual badge ID
             await awardBadge(existingDiscordEmail[0].userId, badgeId);
             await awardBonus(existingDiscordEmail[0].userId, "discord connect", 50000)
           }
           await runQuery(
-            "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE email = ?",
-            [discordUser.id, discordUser.username, 1, discordUser.email]
+            "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
+            [discordUser.id, discordUser.username, 1, existingDiscordEmail[0].userId]
           );
           currentUser = existingDiscordEmail[0];
         } else {
@@ -664,7 +731,7 @@ app.get("/auth/discord/callback", async (req, res) => {
             userId: uuidv4(),
             username: newUserUsername, // Discord username
             displayname: discordUser.username,
-            email: discordUser.email, // Discord email
+            email: discordEmail, // Discord email (verified only)
             password: hashedPassword,
             avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
             discordId: discordUser.id,
@@ -686,7 +753,7 @@ app.get("/auth/discord/callback", async (req, res) => {
               newUser.points_balance,
             ]
           );
-          bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [newUser.userId]);
+          const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [newUser.userId]);
           if (bonus[0].discordBonus === 0) {
             const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
             await awardBadge(newUser.userId, newUserBadgeId);
@@ -703,101 +770,11 @@ app.get("/auth/discord/callback", async (req, res) => {
       }
       // Sign them in (90-day sliding login - see middleware/loginCookie.js)
       issueLogin(res, currentUser);
-      res.redirect("/");
+      res.redirect(oauth.next || "/");
     }
   } catch (error) {
-    console.error("Failed to authenticate with Discord:", error);
-    res.status(500).send("Authentication failed");
-  }
-});
-
-// Page for resolving Discord conflicts
-app.get("/resolve-discord-conflict", (req, res) => {
-  if (!req.session.conflict) {
-    return res.redirect("/");
-  }
-  const {
-    existingUserId,
-    existingPAT,
-    currentUserId,
-    currentUserUsername,
-    discordId,
-    discordUsername,
-  } = req.session.conflict;
-  res.render("resolve-discord-conflict", {
-    existingUserId,
-    currentUserId,
-    existingPAT,
-    currentUserUsername,
-    discordId,
-    discordUsername,
-  });
-});
-
-// Endpoint to resolve Discord account conflicts
-app.post("/merge-accounts-discord", async (req, res) => {
-  const decision = req.body.decision;
-  const {
-    existingUserId,
-    currentUserId,
-    currentUserUsername,
-    discordId,
-    discordUsername,
-  } = req.session.conflict;
-
-  if (decision === "yes") {
-    try {
-      // Merge logic here
-      const results = await getQuery("SELECT * FROM users WHERE userId = ?", [
-        existingUserId,
-      ]);
-      const currentResults = await getQuery(
-        "SELECT twitchId FROM users WHERE userId = ?",
-        [currentUserId]
-      );
-      console.log(results[0]);
-      const points_balance =
-        results.length > 0 ? results[0].points_balance : 0;
-      const twitchId = results.length > 0 ? results[0].twitchId : null;
-      const twitchDisplayname =
-        results.length > 0 ? results[0].twitchDisplayname : null;
-      const currentTwitchId =
-        results.length > 0 ? currentResults[0].twitchId : null;
-      if (!currentTwitchId) {
-        await runQuery(
-          "UPDATE users SET twitchId = ?, twitchDisplayname = ? WHERE userId = ?",
-          [twitchId, twitchDisplayname, currentUserId]
-        );
-      }
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-        [points_balance, currentUserId]
-      );
-      await runQuery(
-        "UPDATE users SET discordId = ?, discordUsername = ? WHERE userId = ?",
-        [discordId, discordUsername, currentUserId]
-      );
-      // keep the merged account's PAT history with the balance it brings (else /history can't add up)
-      await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [currentUserId, existingUserId]);
-      await runQuery("DELETE FROM users WHERE userId = ?", [existingUserId]);
-      bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUserId]);
-      if (bonus[0].discordBonus === 0) {
-        const badgeId = 'discord-user'; // Replace with your actual badge ID
-        await awardBadge(currentUserId, badgeId);
-        await awardBonus(currentUserId, "discord connect", 50000)
-      }
-      await runQuery(
-        "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
-        [1, currentUserId]
-      );
-      res.redirect(`/u/${currentUserUsername}/profile/edit`);
-    } catch (error) {
-      console.error("Error merging accounts:", error);
-      res.status(500).send("Failed to merge accounts");
-    }
-  } else {
-    // User decided not to merge accounts
-    res.redirect(`/u/${currentUserUsername}/profile/edit`);
+    console.error("Failed to authenticate with Discord:", error && error.message);
+    if (!res.headersSent) oauthFail(req, res, "Discord sign-in didn't work. Please try again.");
   }
 });
 
@@ -859,93 +836,145 @@ app.get("/api/g/wheel/last-result", async (req, res) => {
   }
 });
 
-// HTTP POST endpoint to reset password
-app.post("/reset-password/:token", async (req, res) => {
-  try {
-    const { token } = req.params;
-    const { password, confirm_password } = req.body;
+// ── Forgot / reset password ──
+// The emailed link carries a random token; the database keeps only its SHA-256, with an expiry
+// (ms since epoch). The forgot form always answers the same way, so it can't be used to find out
+// which emails have accounts, and the email goes out in the background (no timing hint either).
+// (This used to call db.get/db.run as if they returned rows - they return the Database - so every
+// reset link "worked", even made-up ones, expired tokens still changed the password, and a bad
+// token reported "Success!" while changing nothing.)
+const RESET_TTL_MS = 60 * 60 * 1000;
+const forgotIpLimit = guard.limiter({ max: 6, windowMs: 60 * 60 * 1000 });
+const forgotEmailLimit = guard.limiter({ max: 3, windowMs: 60 * 60 * 1000 });
+const resetTokenOk = (t) => typeof t === "string" && /^[a-f0-9]{40,64}$/i.test(t);
+const sha256 = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
 
-    if (password !== confirm_password) {
-      req.flash("error", "Passwords do not match.");
-      return res.redirect("back");
-    }
+// Links in emails point at the real site, never at whatever Host header the request carried.
+function siteOrigin(req) {
+  const h = String(req.get("host") || "").toLowerCase();
+  return /^((www|staging)\.)?publicaccess\.tv$/.test(h) ? `https://${h}` : "https://publicaccess.tv";
+}
 
-    const user = await db.get(
-      "SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ?",
-      [token, Date.now()]
-    );
-    if (!user) {
-      req.flash("error", "Password reset token is invalid or has expired.");
-      return res.redirect("back");
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 12);
-    await db.run(
-      "UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE resetPasswordToken = ?",
-      [hashedPassword, token]
-    );
-
-    req.flash("success", "Success! Your password has been changed.");
-    res.redirect("/login");
-  } catch (error) {
-    console.error("Reset Password Error:", error);
-    req.flash("error", "Error resetting password.");
-    res.redirect("back");
+async function sendResetMail(to, resetUrl) {
+  const subject = "Reset your PATV password";
+  const text = `Someone (hopefully you) asked to reset the password for your publicaccess.tv account.\n\n`
+    + `Choose a new password here (the link works for 1 hour):\n${resetUrl}\n\n`
+    + `If you didn't ask for this, ignore this email - your password stays the same.\n`;
+  const html = `<p>Someone (hopefully you) asked to reset the password for your publicaccess.tv account.</p>`
+    + `<p><a href="${resetUrl}">Choose a new password</a> - the link works for 1 hour.</p>`
+    + `<p>If you didn't ask for this, ignore this email - your password stays the same.</p>`;
+  if (process.env.RESEND_API_KEY) {
+    const r = await instanceResend.emails.send({ from: "no-reply@publicaccess.tv", to, subject, text, html });
+    if (r && r.error) throw new Error(r.error.message || "Resend refused the email");
+    return "resend";
   }
+  if (process.env.SENDGRID_API_KEY) {
+    await sgMail.send({ from: "no-reply@publicaccess.tv", to, subject, text, html });
+    return "sendgrid";
+  }
+  throw new Error("no mailer configured");
+}
+
+app.get("/forgot-password", addUser, (req, res) => {
+  res.render("forgotPassword", authView(req));
 });
 
-// HTTP POST endpoint to send a password reset link
 app.post("/forgot-password", async (req, res) => {
-  const { email } = req.body;
-  const token = crypto.randomBytes(20).toString("hex"); // Generate a token
-  const expires = new Date(Date.now() + 3600000); // Token expires in 1 hour
-
+  if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
+  const email = String((req.body && req.body.email) || "").trim();
+  const bad = guard.checkEmail(email);
+  if (bad) {
+    req.flash("error", bad);
+    req.flash("authForm", JSON.stringify({ email: email.slice(0, 254), field: "email" }));
+    return res.redirect("/forgot-password");
+  }
+  const ip = guard.clientIp(req);
+  const wait = forgotIpLimit.blocked(ip);
+  if (wait) {
+    req.flash("error", `Too many reset requests. Try again in ${guard.waitText(wait)}.`);
+    return res.redirect("/forgot-password");
+  }
+  forgotIpLimit.hit(ip);
   try {
-    const user = await db.get("SELECT * FROM users WHERE email = ?", [email]);
-    if (!user) {
-      req.flash("error", "No account with that email address exists.");
+    const key = email.toLowerCase();
+    if (!forgotEmailLimit.blocked(key)) {
+      forgotEmailLimit.hit(key);
+      const rows = await getQuery("SELECT userId FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1", [email]);
+      if (rows.length) {
+        const token = crypto.randomBytes(32).toString("hex");
+        await runQuery("UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE userId = ?",
+                       [sha256(token), Date.now() + RESET_TTL_MS, rows[0].userId]);
+        if (guard.undeliverable(email)) {
+          console.log("[auth] reset email skipped (reserved test domain)");
+        } else {
+          sendResetMail(email, `${siteOrigin(req)}/reset-password/${token}`)
+            .then((via) => console.log(`[auth] reset email sent (${via})`))
+            .catch((e) => console.error("[auth] reset email failed:", e.message));
+        }
+      }
+    }
+  } catch (error) {
+    console.error("[auth] forgot-password error:", error.message);
+  }
+  req.flash("success", "If an account uses that email, a reset link is on its way. It works for 1 hour - check your spam folder too.");
+  req.flash("authForm", JSON.stringify({ sent: true }));
+  res.redirect("/forgot-password");
+});
+
+app.get("/reset-password/:token", addUser, async (req, res) => {
+  const token = req.params.token;
+  try {
+    const ok = resetTokenOk(token) && (await getQuery(
+      "SELECT userId FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ? LIMIT 1", [sha256(token), Date.now()])).length > 0;
+    if (!ok) {
+      req.flash("error", "That reset link is invalid or has expired. Ask for a new one below.");
       return res.redirect("/forgot-password");
     }
-
-    // Store the token and expiration time in the database
-    await db.run(
-      "UPDATE users SET resetPasswordToken = ?, resetPasswordExpires = ? WHERE email = ?",
-      [token, expires, email]
-    );
-
-    // Send email with the reset link
-    const resetUrl = `https://${req.headers.host}/reset-password/${token}`;
-    const msg = {
-      to: email,
-      from: "no-reply@publicaccess.tv",
-      subject: "Password Reset",
-      text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n
-                   Please click on the following link, or paste this into your browser to complete the process:\n\n
-                   ${resetUrl} \n\n
-                   If you did not request this, please ignore this email and your password will remain unchanged.\n`,
-    };
-
-    await instanceResend.emails.send(msg);
-    req.flash(
-      "success",
-      "An e-mail has been sent to " + email + " with further instructions."
-    );
-    res.redirect("/forgot-password");
+    res.set("Referrer-Policy", "no-referrer");   // the token is in this URL
+    res.render("resetPassword", authView(req, { token }));
   } catch (error) {
-    console.error("Forgot Password Error:", error);
-    req.flash("error", "Error resetting password.");
+    console.error("[auth] reset page error:", error.message);
+    req.flash("error", "Something went wrong opening that link. Please try again.");
     res.redirect("/forgot-password");
   }
 });
 
-app.get("/forgot-password", (req, res) => {
-  // Retrieve flash messages and pass them to the EJS template
-  let errorMessages = req.flash("error");
-  let successMessages = req.flash("success");
-  res.render("forgotPassword", {
-    errors: errorMessages,
-    success: successMessages,
-  });
+app.post("/reset-password/:token", async (req, res) => {
+  if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
+  const token = req.params.token;
+  const backHere = (msg, field) => {
+    req.flash("error", msg);
+    req.flash("authForm", JSON.stringify({ field }));
+    return res.redirect(`/reset-password/${encodeURIComponent(token)}`);
+  };
+  const expired = () => {
+    req.flash("error", "That reset link is invalid or has expired. Ask for a new one below.");
+    return res.redirect("/forgot-password");
+  };
+  try {
+    if (!resetTokenOk(token)) return expired();
+    const hash = sha256(token);
+    const rows = await getQuery(
+      "SELECT userId, username FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ? LIMIT 1", [hash, Date.now()]);
+    if (!rows.length) return expired();
+    const password = typeof (req.body && req.body.password) === "string" ? req.body.password : "";
+    const problem = guard.checkPassword(password, rows[0].username);
+    if (problem) return backHere(problem, "password");
+    if (password !== (req.body && req.body.confirm_password)) return backHere("Those passwords don't match.", "confirm_password");
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const r = await runQuery(
+      "UPDATE users SET password = ?, resetPasswordToken = NULL, resetPasswordExpires = NULL WHERE userId = ? AND resetPasswordToken = ? AND resetPasswordExpires > ?",
+      [hashedPassword, rows[0].userId, hash, Date.now()]);
+    if (!r.changes) return expired();
+    console.log(`[auth] password reset for ${rows[0].username}`);
+    clearLogin(res);
+    req.flash("success", "Password changed. Sign in with your new password.");
+    req.flash("authForm", JSON.stringify({ username: rows[0].username }));
+    res.redirect("/login");
+  } catch (error) {
+    console.error("[auth] reset password error:", error.message);
+    backHere("Something went wrong changing your password. Please try again.");
+  }
 });
 
 app.get("/info", addUser, (req, res) => {
@@ -958,31 +987,6 @@ app.get("/info", addUser, (req, res) => {
     errors: errorMessages,
     success: successMessages,
   });
-});
-
-app.get("/reset-password/:token", async (req, res) => {
-  const { token } = req.params;
-  let errorMessages = req.flash("error");
-  let successMessages = req.flash("success");
-  // Optionally, validate the token before rendering the reset form
-  try {
-    const user = await db.get(
-      "SELECT * FROM users WHERE resetPasswordToken = ? AND resetPasswordExpires > ?",
-      [token, new Date()]
-    );
-    if (!user) {
-      req.flash("error", "Password reset token is invalid or has expired.");
-      return res.redirect("/forgot-password");
-    }
-    res.render("resetPassword", {
-      token: token,
-      errors: errorMessages,
-      success: successMessages,
-    });
-  } catch (error) {
-    req.flash("error", "Error accessing reset form.");
-    res.redirect("/forgot-password");
-  }
 });
 
 // ── PAT history: a readable transaction log (history.js). You see your own; admins/staff can
@@ -1207,6 +1211,7 @@ function notFound(req, res, heading, message) {
 
 // HTTP POST endpoint for logging out.
 app.post("/logout", (req, res) => {
+  if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-out refused");
   clearLogin(res);
   res.redirect("/");
 });
@@ -1367,7 +1372,7 @@ app.post('/api/users/twitch/register', async (req, res) => {
         'INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, username, displayname, email, hashedPassword, twitchId, twitchDisplayname, avatar, points_balance]
       );
-      bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [userId]);
+      const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [userId]);
       if (bonus[0].twitchBonus === 0) {
         const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
         await awardBadge(userId, newUserBadgeId);
@@ -1403,7 +1408,7 @@ app.post('/api/users/discord/register', async (req, res) => {
         'INSERT INTO users (userId, username, displayname, email, password, discordId, discordUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, username, displayname, email, hashedPassword, discordId, discordUsername, avatar, points_balance]
       );
-      bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [userId]);
+      const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [userId]);
       if (bonus[0].discordBonus === 0) {
         const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
         await awardBadge(userId, newUserBadgeId);

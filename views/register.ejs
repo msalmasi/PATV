@@ -1,33 +1,75 @@
-<%- include('layout', { title: 'Public Access Registration', user: user}) %>
-<div class="panel">
-    <h2>Register</h2>
-    <form action="/register" method="POST" onsubmit="return validateForm()">
+<%# views/register.ejs - create an account (GET/POST /register: index.js + registerUser in user.controller.js) -%>
+<%- include('layout', { title: 'Create your account · Public Access TV', user: user }) %>
+<%
+  const F = (typeof form !== 'undefined' && form) ? form : {};
+  const errs = (errors || []).filter(Boolean), oks = (success || []).filter(Boolean);
+  const FIELDS = ['username', 'email', 'password', 'confirm_password'];
+  const inline = errs.length && FIELDS.includes(F.field) ? F.field : null;   // server error shown under its field
+  const errFor = (n) => (inline === n ? errs.join(' ') : '');
+  const inv = (n) => (inline === n ? ' aria-invalid="true"' : '');
+  const nextQ = next ? '?next=' + encodeURIComponent(next) : '';
+%>
+<%- include('partials/auth-css') %>
+<main class="au">
+  <section class="au-card" aria-labelledby="au-title">
+    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
+    <h1 id="au-title">Create your account</h1>
+    <p class="sub">Free, and it takes a minute. You start with a PAT wallet to play with.</p>
+    <ul class="au-perks" aria-label="What you get">
+      <li>👛 Wallet &amp; tip jar</li>
+      <li>🎡 Daily wheel</li>
+      <li>🔮 Markets &amp; wagers</li>
+      <li>🃏 Hold'em &amp; blackjack tables</li>
+      <li>🐸 Link Camfrog with <code>!verify</code></li>
+    </ul>
+
+    <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
+    <% if (errs.length && !inline) { %><div class="au-alert err" role="alert"><%= errs.join(' ') %></div><% } %>
+
+    <form action="/register" method="POST" data-au-form>
+      <input type="hidden" name="next" value="<%= next %>">
+      <div class="au-field">
         <label for="username">Username</label>
-        <input type="text" id="username" name="username" required><br>
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required minlength="6"><br>
-        <label for="confirm_password">Confirm Password</label>
-        <input type="password" id="confirm_password" required><br>
+        <input type="text" id="username" name="username" value="<%= F.username || '' %>" required
+               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="24"
+               data-rule="newuser" aria-describedby="username-hint username-err"<%- inv('username') %><% if (!F.username) { %> data-autofocus<% } %>>
+        <div class="au-hint" id="username-hint">3-24 letters, numbers, dots, dashes or underscores. It's your profile address.</div>
+        <div class="au-err" id="username-err" aria-live="polite"><%= errFor('username') %></div>
+      </div>
+      <div class="au-field">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required><br>
-        <button id="login" type="submit">Register</button>
-        <a id="registerlink" href="/login">Login</a>
-        <% if (success != '') { %>
-            <div class="alert alert-success"><br><br><%= success %></div>
-        <% } %>
-        <% if (errors != '') { %>
-            <div class="alert alert-danger"><br><br><%= errors %></div>
-        <% } %>
+        <input type="email" id="email" name="email" value="<%= F.email || '' %>" required
+               autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" inputmode="email"
+               data-rule="email" aria-describedby="email-hint email-err"<%- inv('email') %>>
+        <div class="au-hint" id="email-hint">For verifying your account and password resets. Never shown publicly.</div>
+        <div class="au-err" id="email-err" aria-live="polite"><%= errFor('email') %></div>
+      </div>
+      <div class="au-field">
+        <label for="password">Password</label>
+        <div class="au-pw">
+          <input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"
+                 data-rule="newpass" data-caps="password-caps" data-meter="password-hint"
+                 aria-describedby="password-hint password-caps password-err"<%- inv('password') %><% if (F.username) { %> data-autofocus<% } %>>
+          <button type="button" class="eye" aria-controls="password" aria-pressed="false" aria-label="Show password">Show</button>
+        </div>
+        <div class="au-hint" id="password-hint">At least 8 characters.</div>
+        <div class="au-caps" id="password-caps" hidden>Caps Lock is on.</div>
+        <div class="au-err" id="password-err" aria-live="polite"><%= errFor('password') %></div>
+      </div>
+      <div class="au-field">
+        <label for="confirm_password">Confirm password</label>
+        <div class="au-pw">
+          <input type="password" id="confirm_password" name="confirm_password" required maxlength="72" autocomplete="new-password"
+                 data-rule="match" data-match="password" data-caps="password-caps" aria-describedby="confirm_password-err"<%- inv('confirm_password') %>>
+          <button type="button" class="eye" aria-controls="confirm_password" aria-pressed="false" aria-label="Show password">Show</button>
+        </div>
+        <div class="au-err" id="confirm_password-err" aria-live="polite"><%= errFor('confirm_password') %></div>
+      </div>
+      <button type="submit" class="au-btn" data-busy="Creating your account…"><span class="spin" aria-hidden="true"></span><span class="lbl">Create account</span></button>
     </form>
-</div>
-<script>
-    function validateForm() {
-        var password = document.getElementById("password").value;
-        var confirmPassword = document.getElementById("confirm_password").value;
-        if (password != confirmPassword) {
-            alert("Passwords do not match.");
-            return false;
-        }
-        return true;
-    }
-</script>
+
+    <%- include('partials/auth-oauth', { next: next, verb: 'Sign up' }) %>
+  </section>
+  <p class="au-foot">Already have an account? <a href="/login<%= nextQ %>">Sign in</a></p>
+</main>
+<%- include('partials/auth-js') %>

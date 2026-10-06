@@ -1,0 +1,162 @@
+// authGuard.js - shared helpers for the sign-in / register / password-reset pages.
+//
+//   safeNext(v)        a "return to" path that can only ever point back into this site
+//   sameSite(req)      the site's Origin/Referer CSRF check (same as cosmetics.js / profilelayout.js)
+//   limiter(opts)      a small in-memory fixed-window rate limiter (per process; fine for one VPS)
+//   clientIp(req)      the caller's IP behind Cloudflare / the local proxy
+//   checkUsername / checkPassword / checkEmail   the rules for NEW accounts and NEW passwords
+//   undeliverable(e)   reserved test domains (example.*, *.invalid, *.test, ...) - never emailed
+//
+// Nothing here touches the login cookie (middleware/loginCookie.js) or password hashing.
+
+// ---------------------------------------------------------------------------------------------
+// Return-to paths
+// ---------------------------------------------------------------------------------------------
+const AUTH_PATHS = /^\/(login|register|logout|forgot-password|reset-password|auth\/|verify-email|resolve-|merge-accounts)/i;
+
+/** A local path ("/wallet?tab=x") or null. Never "//host", "/\host", a scheme, or an auth page. */
+function safeNext(v) {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s || s.length > 512) return null;
+  if (s[0] !== "/" || s[1] === "/" || s[1] === "\\") return null;
+  if (/[\\\u0000-\u001f\u007f]/.test(s)) return null;
+  let parsed;
+  try {
+    parsed = new URL(s, "http://local.invalid");
+  } catch (e) {
+    return null;
+  }
+  if (parsed.host !== "local.invalid") return null;
+  if (AUTH_PATHS.test(parsed.pathname)) return null;
+  const out = parsed.pathname + parsed.search + parsed.hash;
+  // "/..//evil.com" normalises to "//evil.com" - a protocol-relative URL - so check again
+  if (out[0] !== "/" || out[1] === "/" || out[1] === "\\") return null;
+  return out;
+}
+
+/** The page the visitor came from (Referer), when it's this site and not an auth page. */
+function refererNext(req) {
+  const ref = req.get("referer");
+  const host = req.get("host");
+  if (!ref || !host) return null;
+  try {
+    const u = new URL(ref);
+    if (u.host !== host) return null;
+    return safeNext(u.pathname + u.search);
+  } catch (e) {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// CSRF: same check as the rest of the site. The login cookie is SameSite=Lax; this is a second
+// check for browsers that send Origin/Referer (they all do on form POSTs).
+// ---------------------------------------------------------------------------------------------
+function sameSite(req) {
+  const host = req.get("host");
+  const src = req.get("origin") || req.get("referer");
+  if (!src || !host) return true;
+  try {
+    return new URL(src).host === host;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rate limiting
+// ---------------------------------------------------------------------------------------------
+function clientIp(req) {
+  const cf = req.get("cf-connecting-ip");
+  if (cf) return cf.trim();
+  const xff = req.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  return (req.socket && req.socket.remoteAddress) || "?";
+}
+
+/**
+ * Fixed-window counter: hit(key) counts one, blocked(key) says whether the key is over `max` in
+ * the current `windowMs`, and how long until it clears. reset(key) forgets it (a good login).
+ */
+function limiter({ max, windowMs }) {
+  const hits = new Map(); // key -> { n, until }
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of hits) if (v.until <= now) hits.delete(k);
+  }, Math.min(windowMs, 10 * 60 * 1000));
+  if (sweep.unref) sweep.unref();
+  return {
+    hit(key) {
+      const now = Date.now();
+      const cur = hits.get(key);
+      if (!cur || cur.until <= now) hits.set(key, { n: 1, until: now + windowMs });
+      else cur.n += 1;
+    },
+    blocked(key) {
+      const cur = hits.get(key);
+      if (!cur || cur.until <= Date.now()) return 0;
+      return cur.n >= max ? Math.max(1, Math.ceil((cur.until - Date.now()) / 1000)) : 0;
+    },
+    reset(key) {
+      hits.delete(key);
+    },
+  };
+}
+
+function waitText(sec) {
+  const m = Math.ceil(sec / 60);
+  return m <= 1 ? "a minute" : `${m} minutes`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rules for new accounts / new passwords
+// ---------------------------------------------------------------------------------------------
+const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
+
+/** null when fine, else a message. */
+function checkUsername(u) {
+  const s = String(u == null ? "" : u).trim();
+  if (!s) return "Choose a username.";
+  if (!USERNAME_RE.test(s)) return "Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.";
+  if (/^[._-]|[._-]$/.test(s)) return "Usernames can't start or end with a dot, dash or underscore.";
+  // "CF..." names are Pepe's automatic Camfrog accounts (see completeCamfrogLink): a real account
+  // named like that could be mistaken for one and merged away.
+  if (/^cf/i.test(s)) return "Usernames starting with “CF” are reserved for Camfrog accounts.";
+  return null;
+}
+
+function checkPassword(p, username) {
+  const s = String(p == null ? "" : p);
+  if (s.length < 8) return "Use at least 8 characters for your password.";
+  if (Buffer.byteLength(s, "utf8") > 72) return "That password is too long (72 bytes max).";
+  if (username && s.toLowerCase() === String(username).trim().toLowerCase()) return "Your password can't be your username.";
+  return null;
+}
+
+function checkEmail(e) {
+  const s = String(e == null ? "" : e).trim();
+  if (!s) return "Enter your email address.";
+  if (s.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return "That doesn't look like an email address.";
+  return null;
+}
+
+/** Reserved / test domains (RFC 2606, RFC 6761): never send mail to these. */
+function undeliverable(email) {
+  const d = String(email || "").trim().toLowerCase().split("@")[1] || "";
+  if (!d) return true;
+  return /(^|\.)(invalid|test|example|localhost|local)$/.test(d) || /^example\.(com|net|org)$/.test(d);
+}
+
+module.exports = {
+  safeNext,
+  refererNext,
+  sameSite,
+  clientIp,
+  limiter,
+  waitText,
+  checkUsername,
+  checkPassword,
+  checkEmail,
+  undeliverable,
+};

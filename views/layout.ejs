@@ -88,7 +88,7 @@
             </div>
             <div class="navbar-right">
                 <% if (typeof user == 'undefined' || !user) { %>
-                    <a href="/login" class="nav-signin">Sign In</a>
+                    <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
                 <% } else { %>
                     <div class="avatar">
                         <a href="/u/<%= user %>/profile" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>

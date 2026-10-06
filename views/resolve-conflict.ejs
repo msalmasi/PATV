@@ -1,0 +1,36 @@
+<%# views/resolve-conflict.ejs - a Twitch/Discord login already belongs to another PATV account: merge it
+    into yours or keep them apart (GET /resolve-{twitch,discord}-conflict, POST /merge-accounts-* in index.js) -%>
+<%- include('layout', { title: label + ' already linked · Public Access TV', user: user }) %>
+<% const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US'); %>
+<%- include('partials/auth-css') %>
+<main class="au">
+  <section class="au-card" aria-labelledby="au-title">
+    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
+    <h1 id="au-title">That <%= label %> is already linked</h1>
+    <p class="sub"><%= label %> <strong><%= linkedName || 'account' %></strong> belongs to another PATV account. You can merge that account into
+      the one you're signed in as, or keep them separate.</p>
+
+    <div class="au-sum">
+      <div><span class="k">Signed in as</span><span class="v"><%= currentUsername %></span></div>
+      <div><span class="k">Other account</span><span class="v"><%= otherUsername %></span></div>
+      <div><span class="k">PAT it brings</span><span class="v" style="color:#ffd700"><%= fmt(otherPAT) %></span></div>
+    </div>
+    <p class="au-hint" style="margin:12px 0 0">Merging moves its PAT, history, badges and cosmetics to <strong><%= currentUsername %></strong>, links
+      <%= label %> here, and deletes <strong><%= otherUsername %></strong>. It can't be undone.</p>
+
+    <% if (errors && errors.length) { %><div class="au-alert err" role="alert"><%= errors.join(' ') %></div><% } %>
+    <form action="<%= action %>" method="POST" data-au-form>
+      <input type="hidden" name="decision" value="yes">
+      <label class="au-check"><input type="checkbox" id="confirm-merge" name="confirm" value="1" required data-rule="checked" aria-describedby="confirm-merge-err">
+        <span>I understand <strong><%= otherUsername %></strong> will be merged and deleted.</span></label>
+      <div class="au-err" id="confirm-merge-err" aria-live="polite"></div>
+      <button type="submit" class="au-btn" data-busy="Merging…"><span class="spin" aria-hidden="true"></span><span class="lbl">Merge accounts</span></button>
+    </form>
+    <form action="<%= action %>" method="POST" style="margin-top:8px" data-au-form>
+      <input type="hidden" name="decision" value="no">
+      <button type="submit" class="au-btn ghost" data-busy="One moment…"><span class="spin" aria-hidden="true"></span><span class="lbl">Keep them separate</span></button>
+    </form>
+  </section>
+  <p class="au-foot"><a href="/u/<%= encodeURIComponent(currentUsername) %>/profile/edit">Back to your profile</a></p>
+</main>
+<%- include('partials/auth-js') %>
