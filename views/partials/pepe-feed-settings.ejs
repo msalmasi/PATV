@@ -24,7 +24,7 @@
       <label>Quiet until<select name="quiet_end"><% hours_.forEach((h) => { %><option value="<%= h %>"<%= s.quiet_end === h ? ' selected' : '' %>><%= hl_(h) %></option><% }) %></select></label>
     </div>
     <label class="pf-sw"><input type="checkbox" name="vision"<%= s.vision ? ' checked' : '' %>>
-      <span>Let him look at pictures in posts<small>One extra AI call per picture. Off: he reads the text, the link preview and that there are pictures.</small></span></label>
+      <span>Let him look at pictures in posts<small>On by default. One extra AI call per picture (about $0.0003). He describes what's in them but never guesses who a person is. Off: he reads the text, the link preview and that there are pictures he can't see.</small></span></label>
     <% if (admin && roomScope) { %>
       <label class="pf-sw"><input type="checkbox" name="admin_lock"<%= s.admin_lock ? ' checked' : '' %>>
         <span>Admin lock<small>The pad owner can see these settings but not change them.</small></span></label>

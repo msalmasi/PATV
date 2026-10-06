@@ -20,7 +20,10 @@
 //   max_depth       his comments within ONE conversation (a top-level comment + its replies) - stops trolls
 //   gap_min         minutes between two auto actions in this scope (mention replies use the global reply_gap_secs)
 //   quiet_start / quiet_end   hours (America/New_York, 0-23, -1 = none) with no auto activity (mentions still answered)
-//   vision          let him look at a post's pictures (an extra model call per picture)
+//   vision          let him look at a post's pictures (an extra model call per picture, ~$0.0003). Default ON
+//                   (1.99cq; was OFF). vision_set = an owner/admin explicitly CHANGED it: only then does a stored
+//                   value override the default. migrateVisionDefault() (once, feed_kv pepe:vision_v1) flips old
+//                   rows that only ever held the old default to ON and keeps real explicit OFFs (seen in the log).
 //   admin_lock      an admin froze these settings: the room owner sees them but can't change them
 // Global caps (feed_kv "pepe:global", admins only) override every scope: enabled (master switch), posts_per_day,
 // comments_per_day (all scopes together), llm_budget_usd (what Pepe reports spending on feed calls per 24 h),
@@ -53,7 +56,7 @@ let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
 
 const SCOPE_DEFAULTS = Object.freeze({ auto: false, posts_per_day: 1, comments_per_day: 10, max_depth: 3, gap_min: 30,
-                                       quiet_start: -1, quiet_end: -1, vision: false, admin_lock: false });
+                                       quiet_start: -1, quiet_end: -1, vision: true, admin_lock: false });
 const SCOPE_LIMITS = { posts_per_day: [0, 20], comments_per_day: [0, 200], max_depth: [1, 20], gap_min: [0, 1440], quiet_start: [-1, 23], quiet_end: [-1, 23] };
 const GLOBAL_DEFAULTS = Object.freeze({ enabled: true, posts_per_day: 6, comments_per_day: 40, llm_budget_usd: 0.5, reply_gap_secs: 20, writes_per_min: 6 });
 const GLOBAL_LIMITS = { posts_per_day: [0, 100], comments_per_day: [0, 1000], llm_budget_usd: [0, 100], reply_gap_secs: [0, 3600], writes_per_min: [1, 60] };
@@ -75,6 +78,7 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS pepe_feed_log_scope ON pepe_feed_log (scope, at)");
       await runQuery("CREATE TABLE IF NOT EXISTS pepe_feed_seen (target TEXT PRIMARY KEY, at INTEGER NOT NULL, outcome TEXT, offers INTEGER NOT NULL DEFAULT 0)");
       await runQuery("CREATE TABLE IF NOT EXISTS pepe_feed_mutes (post_id TEXT PRIMARY KEY, by TEXT, at INTEGER)");
+      await migrateVisionDefault();
     })().catch((e) => { console.error("[pepefeed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -112,7 +116,10 @@ function cleanScope(c) {
   const o = { ...SCOPE_DEFAULTS };
   c = c || {};
   for (const k of Object.keys(SCOPE_LIMITS)) o[k] = clampInt(c[k], SCOPE_LIMITS[k], SCOPE_DEFAULTS[k]);
-  for (const k of ["auto", "vision", "admin_lock"]) if (c[k] != null) o[k] = bool(c[k]);
+  for (const k of ["auto", "admin_lock"]) if (c[k] != null) o[k] = bool(c[k]);
+  // 1.99cq: a stored vision value counts only once someone explicitly changed it (vision_set); old rows saved the
+  // old OFF default on every save, so without the mark they follow today's default (ON)
+  if (c.vision_set && c.vision != null) { o.vision = bool(c.vision); o.vision_set = true; }
   if (c.respond != null) o.respond = bool(c.respond);      // unset = the scope's default (respondDefault)
   return o;
 }
@@ -148,6 +155,33 @@ async function scopeSettings(scope) {
   if (s.respond == null) s.respond = respondDefault(scope);
   return s;
 }
+/**
+ * 1.99cq, once: vision's default went OFF -> ON. Every stored scope row has vision:false written by the old
+ * defaults, so a row is an EXPLICIT off only if its settings log shows vision on at some point (someone turned
+ * it on, then off again). Those keep OFF (vision_set); an ON row is marked explicit too; the rest follow the
+ * new default. -> {on: [scopes switched to the default], kept: [explicit offs kept]}
+ */
+async function migrateVisionDefault() {
+  if ((await store.kvGet("pepe:vision_v1")) === "1") return null;
+  const out = { on: [], kept: [] };
+  const rows = await getQuery("SELECT key, value FROM feed_kv WHERE key LIKE 'pepe:scope:%'");
+  for (const r of rows) {
+    let c;
+    try { c = JSON.parse(r.value || "null"); } catch (e) { c = null; }
+    if (!c || typeof c !== "object" || c.vision_set) continue;
+    const scope = r.key.slice("pepe:scope:".length);
+    if (bool(c.vision)) { c.vision_set = true; }
+    else {
+      const was = (await getQuery(`SELECT 1 FROM pepe_feed_log WHERE action = 'settings' AND scope = ? AND note LIKE '%"vision":true%' LIMIT 1`, [scope]))[0];
+      if (was) { c.vision_set = true; out.kept.push(scope); }
+      else { delete c.vision; out.on.push(scope); }
+    }
+    await store.kvSet(r.key, JSON.stringify(c));
+  }
+  await store.kvSet("pepe:vision_v1", "1");
+  if (out.on.length || out.kept.length) console.log(`[pepefeed] vision default ON: ${out.on.length} scope(s) switched on, ${out.kept.length} explicit off kept`);
+  return out;
+}
 async function globalCaps() { await init(); return cleanGlobal(await readJson("pepe:global")); }
 
 const isAdmin = (u) => !!u && u.class === "Admin";
@@ -169,6 +203,9 @@ async function setScope(user, scope, patch) {
   if (cur.admin_lock && !admin) throw new Refuse(403, "A site admin has locked Pepe's settings for this pad.");
   const p = { ...(patch || {}) };
   if (!admin) delete p.admin_lock;
+  // the settings form sends every field: vision becomes explicit only when it actually CHANGES
+  if (p.vision != null && bool(p.vision) !== cur.vision) p.vision_set = true;
+  else delete p.vision;
   const next = cleanScope({ ...cur, ...p });
   await store.kvSet("pepe:scope:" + scope, JSON.stringify(next));
   await log({ action: "settings", scope, by: user.username, note: JSON.stringify(next).slice(0, 400) });
@@ -327,6 +364,13 @@ async function authorRefusal(userId, scope) {
 async function postScopes(p) {
   if (!p || p.deleted_at || p.hidden_at || p.locked_at || p.author_id === PEPE_ID) return null;
   if (store.effNsfw(p)) return null;
+  // 1.99cq: a crosspost carries the ORIGINAL's words and pictures - so the original must be fine too
+  if (p.crosspost_of) {
+    const o = await store.getRow(p.crosspost_of);
+    if (!o || o.deleted_at || o.hidden_at || store.effNsfw(o)) return null;
+    if ((await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND nsfw = 1 LIMIT 1", [o.id]))[0]) return null;
+    if ((await getQuery("SELECT 1 FROM feed_reports WHERE post_id = ? AND comment_id IS NULL AND resolved_at IS NULL LIMIT 1", [o.id]))[0]) return null;
+  }
   const pl = await getQuery("SELECT * FROM feed_post_rooms WHERE post_id = ?", [p.id]);
   if (pl.some((x) => x.nsfw === 1)) return null;                                        // a room owner's NSFW mark
   if (await isMuted(p.id)) return null;
@@ -342,15 +386,19 @@ async function postScopes(p) {
 }
 
 const SITE = () => process.env.SITE_URL || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
-/** The post as Pepe reads it (no NSFW ever gets here). */
+/** The post as Pepe reads it (no NSFW ever gets here). 1.99cq: a crosspost reads as its original (title, body,
+ *  link, pictures - postScopes already checked the original), with crosspost: {author} saying whose it was. */
 async function postView(p) {
   const A = await store.account(p.author_id);
-  const att = await getQuery("SELECT kind, file, thumb, w, h FROM feed_attachments WHERE post_id = ? AND state = 'ready' ORDER BY sort", [p.id]);
+  const o = p.crosspost_of ? await store.getRow(p.crosspost_of) : null;
+  const src = o && !o.deleted_at && !o.hidden_at ? o : p;
+  const att = await getQuery("SELECT kind, file, thumb, w, h FROM feed_attachments WHERE post_id = ? AND state = 'ready' ORDER BY sort", [src.id]);
   let link = null;
-  try { link = p.link_json ? JSON.parse(p.link_json) : null; } catch (e) { link = null; }
+  try { link = src.link_json ? JSON.parse(src.link_json) : null; } catch (e) { link = null; }
   return {
-    id: p.id, url: SITE() + "/feed/p/" + p.id, title: p.title || "", body: String(p.body || "").slice(0, 2000), created: p.created,
+    id: p.id, url: SITE() + "/feed/p/" + p.id, title: p.title || src.title || "", body: String(src.body || p.body || "").slice(0, 2000), created: p.created,
     author: who(A, p.author_id),
+    crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id) } : null,
     link: link && link.url ? { url: link.url, domain: link.domain || "", title: link.title || "", description: link.description || "", site: link.site || "" } : null,
     images: att.filter((a) => a.kind === "image").slice(0, 4).map((a) => ({ url: SITE() + "/feed/f/" + (a.thumb || a.file), w: a.w, h: a.h })),
     media: { audio: att.filter((a) => a.kind === "audio").length, video: att.filter((a) => a.kind === "video").length },
@@ -681,7 +729,7 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, register, ensureAccount, scopeView, sync, comment, post, skip, setScope, setGlobal, scopeSettings, globalCaps, usage, gate, mentions, quietNow, localHour,
-  isMuted, setMute, adminView, postScopes, findMentions, findThreads, cleanScope, cleanGlobal, respondDefault,
+  isMuted, setMute, adminView, migrateVisionDefault, postView, postScopes, findMentions, findThreads, cleanScope, cleanGlobal, respondDefault,
   SCOPE_DEFAULTS, GLOBAL_DEFAULTS, SCOPE_LIMITS, GLOBAL_LIMITS, KINDS, PEPE_ID, Refuse, _setClock, _writes: writeLog,
   _reset: () => { ACCOUNT = null; },
 };

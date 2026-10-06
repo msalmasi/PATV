@@ -457,3 +457,62 @@ test("communities: Pepe's All-scope posts land in the Camfrog Lounge; a house ro
   assert.equal((await getQuery("SELECT global FROM feed_posts WHERE id = ?", [r.d.id]))[0].global, 0);
   await PF.setScope(U.admin, "", { ...PF.SCOPE_DEFAULTS });
 });
+
+// ───────────────────────────── 1.99cq: vision default ON ─────────────────────────────
+test("vision: ON by default for All, house and owners' pads; old default rows migrate to ON, explicit offs stay OFF", async () => {
+  await resetLimits();
+  assert.equal(PF.SCOPE_DEFAULTS.vision, true);
+  assert.equal(PF.cleanScope(null).vision, true);
+  assert.equal(PF.cleanScope({ vision: false }).vision, true, "an old row's vision:false was just the old default");
+  assert.equal(PF.cleanScope({ vision: false, vision_set: true }).vision, false, "an explicit off holds");
+  // migration: A only ever held the old default -> ON; B was turned on then off (log shows it) -> OFF kept; C is on
+  await store.kvSet("pepe:scope:Mig.A", JSON.stringify({ ...PF.SCOPE_DEFAULTS, vision: false, respond: true }));
+  await store.kvSet("pepe:scope:Mig.B", JSON.stringify({ ...PF.SCOPE_DEFAULTS, vision: false, respond: true }));
+  await store.kvSet("pepe:scope:Mig.C", JSON.stringify({ ...PF.SCOPE_DEFAULTS, vision: true, respond: true }));
+  await runQuery("INSERT INTO pepe_feed_log (at, action, scope, note, by) VALUES (?, 'settings', 'Mig.B', ?, 'plantowner')",
+                 [clock - 5000, JSON.stringify({ ...PF.SCOPE_DEFAULTS, vision: true })]);
+  await runQuery("INSERT INTO pepe_feed_log (at, action, scope, note, by) VALUES (?, 'settings', 'Mig.A', ?, 'plantowner')",
+                 [clock - 4000, JSON.stringify({ ...PF.SCOPE_DEFAULTS, vision: false, respond: true })]);
+  await store.kvSet("pepe:vision_v1", "");
+  const r = await PF.migrateVisionDefault();
+  assert.ok(r.on.includes("Mig.A")); assert.ok(r.kept.includes("Mig.B")); assert.ok(!r.on.includes("Mig.C"));
+  assert.equal((await PF.scopeSettings("Mig.A")).vision, true);
+  assert.equal((await PF.scopeSettings("Mig.B")).vision, false);
+  assert.equal((await PF.scopeSettings("Mig.C")).vision, true);
+  assert.equal(await PF.migrateVisionDefault(), null, "runs once");
+  // owners' pads default ON too; the form re-sending vision:true doesn't make it explicit, unchecking does
+  await store.kvSet("pepe:scope:" + OWNED, "");
+  assert.equal((await PF.scopeSettings(OWNED)).vision, true);
+  await PF.setScope(U.owner, OWNED, { respond: true, vision: true });
+  assert.ok(!(await PF.scopeSettings(OWNED)).vision_set);
+  await PF.setScope(U.owner, OWNED, { respond: true, vision: false });
+  assert.equal((await PF.scopeSettings(OWNED)).vision, false);
+  await PF.setScope(U.owner, OWNED, { respond: true, comments_per_day: 5, vision: false });
+  assert.equal((await PF.scopeSettings(OWNED)).vision, false, "an explicit off survives later saves");
+  // the work items carry it: a mention under All has vision on
+  await PF.setScope(U.admin, "", { ...PF.SCOPE_DEFAULTS });
+  const pid = await mkPost(U.alice, { body: "pepe look at this" });
+  const d = await sync();
+  const m = d.mentions.find((x) => x.target === "p:" + pid);
+  assert.ok(m); assert.equal(m.vision, true);
+  await PF.setScope(U.owner, OWNED, { respond: false, vision: true });
+});
+
+test("vision: a crosspost carries its original's pictures (site media URL) and text; an NSFW original keeps him out", async () => {
+  const orig = await mkPost(U.alice, { title: "Faded", body: "selfie" });
+  await runQuery(`INSERT INTO feed_attachments (id, post_id, owner_id, kind, ct, file, thumb, w, h, state, created) VALUES (?, ?, ?, 'image', 'image/webp', ?, ?, 800, 600, 'ready', ?)`,
+                 ["att_x1", orig, U.alice.userId, "aaaaaaaaaaaaaaaa.webp", "aaaaaaaaaaaaaaaa_t.webp", clock]);
+  const r = await post(`/api/feed/posts/${orig}/crosspost`, U.bob, { community: OTHER });
+  assert.equal(r.status, 200, r.text);
+  const x = await store.getRow(r.d.id);
+  assert.equal(x.crosspost_of, orig);
+  const v = await PF.postView(x);
+  assert.equal(v.images.length, 1);
+  assert.match(v.images[0].url, /\/feed\/f\/aaaaaaaaaaaaaaaa_t\.webp$/, "the site's own re-encoded webp");
+  assert.equal(v.title, "Faded"); assert.equal(v.body, "selfie");
+  assert.equal(v.crosspost.author.username, "alice");
+  assert.ok(await PF.postScopes(x));
+  await runQuery("UPDATE feed_posts SET nsfw_admin = 1 WHERE id = ?", [orig]);
+  assert.equal(await PF.postScopes(x), null, "an NSFW original: the crosspost is off-limits too");
+  await runQuery("UPDATE feed_posts SET nsfw_admin = NULL WHERE id = ?", [orig]);
+});
