@@ -110,6 +110,9 @@ async function findUser(name) {
   // an exact username wins over any other name
   const exact = rows.filter((r) => String(r.username).toLowerCase() === n);
   if (exact.length === 1) return exact[0];
+  // a real account beats Pepe's automatic "CFxxxxxxxx" accounts that share the name
+  const real = rows.filter((r) => !/^CF[a-z0-9]{8}$/.test(String(r.username)));
+  if (real.length === 1) return real[0];
   return rows.length === 1 ? rows[0] : null;
 }
 

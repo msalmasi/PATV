@@ -58,6 +58,8 @@ test.before(async () => {
   await runQuery("CREATE TABLE jackpot_rakes (jackpotId TEXT PRIMARY KEY, spinId TEXT, userId TEXT, amount INTEGER)");
   // the seed's owner match: "plantbaked" is this account's Discord name (as on prod)
   owner = await mkUser(START, { username: "pb", display: "pb", camfrog: "foamy1111", discord: "plantbaked" });
+  // Pepe's automatic account for a Camfrog login "plantbaked" (as on staging): the real account still wins
+  await mkUser(START, { username: "CF2o8n8u2v", display: "plantbaked", camfrog: "plantbaked" });
   admin = await mkUser(START, { username: "boss", class: "Admin" });
   await S.init();
   await S.setConfig({ price_per_min: PRICE, min_minutes: 2, max_minutes: 30, max_concurrent: 6, start_window_min: 10, idle_grace_min: 5,
