@@ -95,6 +95,7 @@
               <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %>Delete</button>
             <% } %>
             <% if (canXpost) { %><button type="button" role="menuitem" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %>Crosspost</button><% } %>
+            <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><a role="menuitem" href="/messages?to=<%= encodeURIComponent(p.author.username) %>"><%- fx.icon('comment') %>Message <%= p.author.display %></a><% } %>
             <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report post</button><% } %>
             <% if (detail_ && typeof pepeMuted !== 'undefined' && !p.author.bot && !p.deleted && (p.mine || staff_ || myRooms.length)) { %>
               <button type="button" role="menuitem" data-act="pepe-mute" data-on="<%= pepeMuted ? '0' : '1' %>" title="Pepe won't answer or comment in this thread"><%- fx.icon(pepeMuted ? 'show' : 'hide') %><%= pepeMuted ? 'Let Pepe back in this thread' : 'Mute Pepe in this thread' %></button>

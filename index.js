@@ -173,6 +173,8 @@ app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogP
 // the nav's inbox bell: unread count for signed-in page views (inbox.js, one indexed COUNT)
 const inbox = require("./inbox");
 app.use(inbox.navCount);
+const messages = require("./messages");             // 1.99cp: direct messages (/messages)
+app.use(messages.navCount);
 // welcome bonus (welcome.js, 1.99bg): a device id for every browser + signed-in activity days
 const welcome = require("./welcome");
 const cookieUserId = (req) => {
@@ -1090,6 +1092,7 @@ require("./pads").register(app);
 require("./feedweb").register(app, { isBotToken, addUser });
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
+messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
@@ -4141,6 +4144,8 @@ app.get("/api/g/wheel/listeners", (req, res) => {
 
 app.get("/events", (req, res) => {
   const { type, identifier } = req.query; // 'type' could be 'spin' or 'results'
+  // 1.99cp: type=dm is the signed-in user's own direct-message stream (messages.js) - never keyed by the URL
+  if (type === "dm") return messages.sse(req, res);
 
   console.log(`[${new Date().toISOString()}] HIT /events endpoint. Type: ${req.query.type}, Identifier: ${req.query.identifier}`);
 

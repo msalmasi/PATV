@@ -86,10 +86,38 @@
     <% }) %>
   </section>
 
+  <%# 1.99cp: reported direct messages - site Admins only (never Staff, never pad owners). The text is NOT on this page:
+      "Read the reported message" fetches that one message, and the read is logged (content_audit_views). %>
+  <% if (isAdmin) { const dmR = typeof dmReports !== 'undefined' ? dmReports : []; %>
+  <section class="fa-card" id="dms">
+    <h2>Reported messages (<%= dmR.length %>)<% const dmUrg = dmR.filter((x) => x.urgent).length; if (dmUrg) { %> <span class="tag nsfw">⚠ <%= dmUrg %> urgent</span><% } %></h2>
+    <p class="mut">Direct messages people reported. Admins only. You can read a reported message (and only that one) - every read is logged below.</p>
+    <% if (!dmR.length) { %><p class="mut">No reported messages.</p><% } %>
+    <% dmR.forEach((g) => { %>
+      <div class="fa-rep fa-dm<%= g.urgent ? ' urgent' : '' %>" data-msg="<%= g.messageId %>" data-user="<%= g.sender %>">
+        <div class="fa-rep-h"><% if (g.urgent) { %><span class="tag nsfw">URGENT</span> <% } %><span class="tag lock">DM</span> from <a href="/u/<%= encodeURIComponent(g.sender) %>/profile"><b>@<%= g.sender %></b></a>
+          <span class="mut">sent <%= g.msgAt ? fx.ago(g.msgAt) : '?' %> ago · <%= g.reports.length %> report<%= g.reports.length === 1 ? '' : 's' %></span></div>
+        <ul>
+          <% g.reports.forEach((r) => { %><li><% if (r.urgent) { %><span class="tag nsfw">urgent</span> <% } %><b><%= r.label %></b> from <%= r.reporter %><%= r.note ? ' — “' + r.note + '”' : '' %> <span class="mut"><%= fx.ago(r.created) %></span></li><% }) %>
+        </ul>
+        <div class="fa-dm-body" hidden></div>
+        <div class="fa-acts">
+          <button type="button" data-dmfa="read">🔒 Read the reported message (logged)</button>
+          <button type="button" data-dmfa="dismiss">Dismiss</button>
+          <button type="button" data-dmfa="false">Dismiss · bad faith</button>
+          <button type="button" class="bad" data-dmfa="remove">Remove message</button>
+          <button type="button" class="bad" data-dmfa="ban">Remove + ban sender…</button>
+          <label class="ck fa-tell"><input type="checkbox" name="tell" checked> Tell the reporter<%= new Set(g.reports.map((r) => r.reporter)).size === 1 ? '' : 's' %> the outcome</label>
+        </div>
+      </div>
+    <% }) %>
+  </section>
+  <% } %>
+
   <% if (isAdmin) { %>
   <section class="fa-card" id="audit">
     <h2>Details access log</h2>
-    <p class="mut">Every time an admin opens the private details (IP, browser, shared accounts) of a post, comment or user. Kept 2 years.</p>
+    <p class="mut">Every time an admin opens the private details (IP, browser, shared accounts) of a post, comment or user, or reads a reported direct message. Kept 2 years.</p>
     <% if (!viewLog.length) { %><p class="mut">No views yet.</p><% } else { %>
       <div class="fa-scroll"><table class="fa-t"><thead><tr><th>When</th><th>Admin</th><th>Looked at</th><th>Whose</th></tr></thead><tbody>
         <% viewLog.forEach((v) => { %><tr><td><%= new Date(v.at).toISOString().slice(0, 16).replace('T', ' ') %></td><td><%= v.admin_name || '?' %></td><td><%= v.target_kind %> <code><%= v.target_id %></code></td><td><%= v.subject || '?' %></td></tr><% }) %>
@@ -189,6 +217,7 @@
 </main>
 <script src="/public/js/feed-safety.js?v=2" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
+<% if (isAdmin) { %><script src="/public/js/dm-admin.js?v=1" defer></script><% } %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 </body>
 </html>

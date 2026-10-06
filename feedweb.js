@@ -356,6 +356,7 @@ function register(app, { addUser, isBotToken }) {
     res.render("feedAdmin", { user: viewer.username, viewer, C: store.config(), D: store.DEFAULTS, reports: await store.reports(), bans: await store.bans(),
                               used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
                               userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [],
+                              dmReports: isAdmin ? await require("./messages").reportQueue().catch((e) => { console.error("[feed] dm reports:", e.message); return []; }) : [],
                               termsPH: terms.placeholders(), termsLive: terms.enforced(),
                               pepe: await require("./pepefeed").adminView().catch((e) => { console.error("[feed] pepe admin view:", e.message); return null; }),
                               PF: require("./pepefeed") });

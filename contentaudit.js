@@ -1,4 +1,4 @@
-// contentaudit.js — abuse metadata on feed posts and comments (1.99cc). ADMIN-ONLY.
+// contentaudit.js — abuse metadata on feed posts and comments (1.99cc) and direct messages (1.99cp). ADMIN-ONLY.
 //
 // What: when a post or comment is created or edited, one row in content_audit with
 //   ip          the client IP (guard.clientAddr: behind nginx on this box, Cloudflare's CF-Connecting-IP,
@@ -105,7 +105,7 @@ async function record(ctx, { kind, id, postId = null, event = "create", user } =
     const born = createdMs(user);
     await runQuery(`INSERT INTO content_audit (kind, target_id, post_id, user_id, event, at, ip, ua, ip_hash, via, lang, country, acct_age_s, linked, session_hash, bot)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                   [kind === "comment" ? "comment" : "post", String(id), postId ? String(postId) : null, user.userId, event === "edit" ? "edit" : "create", t,
+                   [kind === "comment" || kind === "message" ? kind : "post", String(id), postId ? String(postId) : null, user.userId, event === "edit" ? "edit" : "create", t,
                     ctx.ip || null, ctx.ua || null, net ? hmac("ip", net) : null, ctx.via || null, ctx.lang || null, ctx.country || null,
                     born ? Math.max(0, Math.floor((t - born) / 1000)) : null, JSON.stringify(linkedOf(user)), ctx.device ? hmac("dev", ctx.device) : null, ctx.bot ? 1 : 0]);
     return true;
@@ -155,6 +155,12 @@ async function details(viewer, target, { reason = null } = {}) {
     const c = (await getQuery("SELECT author_id, post_id FROM feed_comments WHERE id = ?", [tid]))[0];
     if (!c) { const e = new Error("No such comment."); e.status = 404; throw e; }
     subjectId = c.author_id; postId = c.post_id;
+  } else if (target.message) {
+    // 1.99cp: a direct message - ONLY one that has been reported (messages.js reportDetail); post = its conversation
+    kind = "message"; tid = String(parseInt(target.message, 10) || 0);
+    const r = (await getQuery("SELECT sender_id, conversation_id FROM dm_reports WHERE message_id = ? LIMIT 1", [tid]).catch(() => []))[0];
+    if (!r) { const e = new Error("Only reported messages can be opened."); e.status = 404; throw e; }
+    subjectId = r.sender_id; postId = r.conversation_id;
   } else if (target.user) {
     kind = "user"; tid = String(target.user);
     const u = (await getQuery("SELECT userId FROM users WHERE userId = ?", [tid]))[0];

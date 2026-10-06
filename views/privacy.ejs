@@ -1,7 +1,7 @@
 <%# /privacy — Privacy Policy (1.99cc, terms.js). A template written for PATV, NOT legal advice: have a lawyer review it.
     Every [[PLACEHOLDER]] (class "ph") must be filled in by the site operator. Keep the retention table in step with the code:
     contentaudit.js (RAW_DAYS 90, HASH_DAYS 365, views 730), welcome.js (network keys 90 d), bridge.js (FEED_KEEP 200),
-    media.js (captures 24 h), feedstore.js (deleted_purge_days 7), inbox.js (KEEP_PER_USER 1000), loginCookie.js (90 d). %>
+    media.js (captures 24 h), feedstore.js (deleted_purge_days 7), inbox.js (KEEP_PER_USER 1000), loginCookie.js (90 d), messages.js (DMs kept until deleted; reported-message snapshots with the report). %>
 <%- include('layout', { title: 'Privacy Policy · Public Access TV', user: user }) %>
 <%- include('partials/legal-css') %>
 <% const PH = (s) => '<span class="ph">[[' + s + ']]</span>'; %>
@@ -24,7 +24,7 @@
       <li><a href="#rooms">Camfrog rooms on the website</a></li>
       <li><a href="#safety">Safety data on posts and comments</a></li>
       <li><a href="#use">How we use it</a></li>
-      <li><a href="#see">Who can see what</a></li>
+      <li><a href="#see">Who can see what</a> (and <a href="#messages">direct messages</a>)</li>
       <li><a href="#share">Who we share it with</a></li>
       <li><a href="#cookies">Cookies and local storage</a></li>
       <li><a href="#retention">How long we keep things</a></li>
@@ -48,7 +48,7 @@
     <ul>
       <li><b>Account details:</b> username, display name, email address, password (stored only as a one-way hash), profile picture and profile settings.</li>
       <li><b>Linked identities:</b> your Camfrog name (when you <code>!verify</code>), and your Discord or Twitch account id and display name when you sign in with them. We don't get your Discord or Twitch password.</li>
-      <li><b>Your content:</b> posts, comments, pictures, audio, video, links, votes, follows, reports, messages to Pepe and anything else you submit. Uploaded files are re-encoded and their embedded metadata (camera, GPS location) is removed.</li>
+      <li><b>Your content:</b> posts, comments, pictures, audio, video, links, votes, follows, reports, direct messages to other members, messages to Pepe and anything else you submit. Uploaded files are re-encoded and their embedded metadata (camera, GPS location) is removed.</li>
       <li><b>Activity in PAT features:</b> your PAT balance and ledger, games, bets, markets, wagers, staking, purchases, achievements and cosmetics.</li>
     </ul>
     <h3>We collect automatically</h3>
@@ -68,7 +68,7 @@
 
   <section id="safety">
     <h2>4. Safety data on posts and comments</h2>
-    <p>To fight spam, ban evasion and abuse, every time you <b>create or edit a post or comment</b> we store a separate, private record with:</p>
+    <p>To fight spam, ban evasion and abuse, every time you <b>create or edit a post or comment, or send a direct message</b> we store a separate, private record with:</p>
     <ul>
       <li>your <b>IP address</b> (as passed on by Cloudflare) and a salted one-way <b>hash of your network</b>;</li>
       <li>your browser's <b>user agent</b> and its <b>Accept-Language</b> setting;</li>
@@ -104,8 +104,12 @@
         <tr><td>Reports you make</td><td>Site admins; pad owners for reports on posts in their pad (not child-safety, non-consensual imagery or copyright reports). The person you report isn't told who reported them.</td></tr>
         <tr><td>Safety data on posts and comments (IP, user agent, language, country, hashes)</td><td>Site administrators only, logged</td></tr>
         <tr><td>An author's account age and linked status</td><td>Site admins, and the owner of a pad the post is in</td></tr>
+        <tr><td>Your direct messages</td><td>You and the people in the conversation. A site admin sees one only if it's reported to them (see below)</td></tr>
       </tbody>
     </table></div>
+    <h3 id="messages">Direct messages</h3>
+    <p><b>Direct messages are not end-to-end encrypted.</b> They're sent over HTTPS and stored on our servers like the rest of the site, so don't use them for anything you wouldn't want an administrator to be able to see in an emergency. We don't read them, scan them for advertising or use them to train AI. A site administrator can read a message only when someone in the conversation <b>reports</b> it: then the admin sees that one message (a copy is kept with the report, even if it's later deleted) and its safety record, and <b>every such view is logged</b>. Pad owners never see direct messages or reports about them.</p>
+    <p>If you've linked a Camfrog name, Pepe sends you a Camfrog private message when you get a direct message you haven't read here (on by default, at most once per conversation every 10 minutes). It quotes the start of the message unless you turn previews off, and never quotes someone who has <code>!incognito</code> on. Turn alerts or previews off in your message settings. You decide who can message you (everyone, people you follow, or nobody) and can block anyone.</p>
   </section>
 
   <section id="share">
@@ -147,6 +151,7 @@
         <tr><td>Files of deleted posts</td><td>Purged 7 days after deletion; the post's record may be kept for moderation and legal reasons</td></tr>
         <tr><td>Reports and moderation records</td><td>As long as needed to handle repeat abuse and legal obligations</td></tr>
         <tr><td>Inbox notices</td><td>Your latest 1,000</td></tr>
+        <tr><td>Direct messages</td><td>Until the sender deletes them ("message deleted"). Clearing or deleting a conversation removes it from your view only; the other person keeps their copy. A reported message's copy is kept with the report as a moderation record</td></tr>
         <tr><td>Your account, content and PAT ledger</td><td>Until you delete the content or ask us to close the account; inactive accounts may be archived after notice</td></tr>
         <tr><td>Backups</td><td><%- PH('BACKUP RETENTION PERIOD') %></td></tr>
       </tbody>
@@ -158,7 +163,7 @@
     <ul>
       <li>Edit or delete your posts and comments, and choose which profile panels are public, at any time.</li>
       <li>In Camfrog rooms, <code>!incognito</code> / <code>!bridge hide</code> keep your name off the website.</li>
-      <li>Turn inbox notices on or off in your inbox settings.</li>
+      <li>Turn inbox notices on or off in your inbox settings; choose who can message you, block people and turn Camfrog alerts for messages on or off in your message settings.</li>
       <li>Clear cookies and local storage in your browser (you'll be signed out).</li>
       <li>Depending on where you live, you may have the right to access, correct, delete or export your personal data, to object to or restrict some processing, and to complain to your data-protection authority. Email <%- PH('PRIVACY CONTACT EMAIL') %> from the address on your account and we'll respond within the time the law requires. We may need to keep some data (for example safety records about content that was reported) where the law allows or requires.</li>
     </ul>

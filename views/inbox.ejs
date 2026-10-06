@@ -77,7 +77,7 @@
   <section class="card head">
     <div>
       <h1>🔔 Inbox <% if (inboxUnread) { %><span class="count"><%= inboxUnread %> unread</span><% } %></h1>
-      <div class="muted">Notices from Pepe and the site — stakes, loans, wagers, markets, shop orders, tips.</div>
+      <div class="muted">Notices from Pepe and the site — stakes, loans, wagers, markets, shop orders, tips. Messages from people are in <a href="/messages">💬 Messages<% if (typeof dmUnread !== 'undefined' && dmUnread) { %> (<%= dmUnread %> unread)<% } %></a>.</div>
     </div>
     <form method="post" action="/inbox/read">
       <input type="hidden" name="all" value="1">

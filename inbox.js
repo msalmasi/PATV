@@ -39,6 +39,7 @@ const KINDS = {
   room:        { icon: "🏠", label: "Your pads", link: "/p" },
   feed:        { icon: "📝", label: "Feed posts & comments", link: "/feed" },
   follow:      { icon: "⭐", label: "New posts from people & pads you follow", link: "/feed/following" },
+  dm:          { icon: "💬", label: "Direct messages (a Camfrog alert from Pepe)", link: "/messages" },   // 1.99cp: messages.js; never filed here
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Pepe", link: null },
 };

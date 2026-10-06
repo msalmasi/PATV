@@ -20,6 +20,12 @@ const OWNED = [
   ["profile_layout", "user_id", "unique"],
   ["inbox", "user_id", "unique"],          // unique (user_id, ref): a notice both accounts got stays once
   ["inbox_prefs", "user_id", "unique"],
+  ["conversation_members", "user_id", "unique"],   // 1.99cp: direct messages (messages.js)
+  ["dm_prefs", "user_id", "unique"],
+  ["dm_blocks", "blocker_id", "unique"],
+  ["dm_blocks", "blocked_id", "unique"],
+  ["dm_alerts", "user_id", "unique"],
+  ["messages", "sender_id", "update"],
   ["user_cosmetics", "user_id", "update"],
   ["achievement_feed", "userId", "update"],
   ["blackjack", "userId", "update"],
