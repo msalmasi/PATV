@@ -84,7 +84,11 @@ function register(app, { addUser, isBotToken }) {
   // ── bot-token endpoints (Pepe) ──
   app.post("/api/rooms/owners", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
-    try { res.json({ ok: true, rooms: await rooms.ownersForPepe() }); } catch (e) { fail(res, e); }
+    try {
+      // 1.99br: Pepe's live room_owner % per room flow rides along (shown to owners / admins)
+      if (Array.isArray((req.body || {}).owner_shares)) await royalties.setOwnerShares(req.body.owner_shares).catch(() => {});
+      res.json({ ok: true, rooms: await rooms.ownersForPepe() });
+    } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {
     const b = req.body || {};
@@ -260,7 +264,7 @@ function register(app, { addUser, isBotToken }) {
     }
     const sum = await royalties.summary();
     res.render("roomsAdmin", { user: req.user.username, list, guide: g.rows, front: rooms.frontSetting(), roy: royalties.config(),
-      cats: royalties.catalog(), excludedNote: royalties.EXCLUDED_NOTE, sum,
+      sum,
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });
   app.post("/api/rooms/admin/owner", addUser, needStaff, jsonOnly, async (req, res) => {

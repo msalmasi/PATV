@@ -3,8 +3,9 @@
 // A room owner earns a share of the PAT spent in their room:
 //   stage   stage_pct % of what people PAY for stage time in the room (paid featuring + priced slots),
 //           accrued when the slot settles (mainstage.end, same transaction)
-//   spend   spend_pct % of the PAT spent on Pepe's paid chat commands in the room (!ask, !imagine, ...);
-//           Pepe reports it in batches (POST /api/rooms/royalties/spend, bot token, idempotent refs)
+//   spend   the "room_owner" share of room-specific PAT spent in the room, as Pepe's PAT Routing table
+//           (pepe_routes.py, admin panel) splits it - Pepe reports the SHARE itself, already deposited
+//           in the Federal Reserve (POST /api/rooms/royalties/spend, bot token, idempotent refs)
 // The owner's own spending never earns them anything, house rooms (Pepe's) and unowned rooms accrue
 // nothing. Accruing moves NO money: it's a ledger line. Money moves only at RELEASE.
 //
@@ -22,74 +23,41 @@
 //   royalty_runs     (room_id, owner_user_id, period) -> outcome (released | missed | nothing | unfunded), amount
 //   royalty_config   key/value (admin-tunable on /rooms/admin)
 //
-// Categories (1.99bn). Royalties accrue on ALL room-specific PAT spend in the owner's room, and on
-// nothing that normally goes to the House / stakers / vaults. Pepe tags each reported spend with a
-// category (the command or purchase); CATEGORIES below is the admin table on /rooms/admin: each row
-// on/off + its own rate (blank = the default rate: stage_pct for "stage", spend_pct for the rest).
-// A category Pepe reports that isn't listed counts as "other". EXCLUDED categories never accrue,
-// whatever the table says (casino games, the wheel, lotto, heists, turf, duels, tips, transfers,
-// loans, fines, account-wide purchases) - Pepe doesn't report them either.
-// Where the money comes from: the original spend is routed by Pepe's PAT Routing table as before
-// (most commands -> the Reserve; !say 20% Soho nightclub; song requests / voices -> the nightclub).
-// The royalty is NOT taken out of that spend: it's a ledger line here, paid later by the Reserve
-// (flow room_owner). So for Reserve-routed commands it's effectively a rebate of the Reserve's
-// income; for nightclub-routed ones the Reserve pays it on money it never received. No double-dip:
-// each spend accrues once (unique ref), and a refunded charge is voided (Pepe sends {ref, void}).
+// 1.99br: ONE place configures splits - Pepe's PAT Routing table. Every room flow there (paid chat
+// commands, song requests, per-use voices, DJ shout-outs, !sponsor) keeps its turf / Reserve shares and
+// has a "room_owner" share (default 10%; sponsor 0%). Pepe deposits that share in the Reserve and
+// reports it here as {room, amount: share, base: whole spend, cmd: flow, share: true}; this ledger books
+// exactly that amount for the room's owner and the weekly release pays it back out of the Reserve.
+// FALLBACK: a room with no owner, a house room, the owner paying in their own room (or reports that
+// don't resolve) accrue nothing - the share just stays in the Reserve, where it already is. Website
+// stage time is the one spend Pepe doesn't route: its share is stage_pct here. A refunded charge is
+// voided (Pepe sends {ref, void}); each spend accrues once (unique ref).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
-// [key, group, label, default on]
-const CATEGORIES = [
-  ["stage", "Stage", "Paid stage time (featuring + priced slots)", true],
-  ["ask", "AI commands", "!ask", true],
-  ["roast", "AI commands", "!roast / !camroast", true],
-  ["look", "AI commands", "!look / !see", true],
-  ["chart", "AI commands", "!chart", true],
-  ["web", "AI commands", "!web", true],
-  ["epstein", "AI commands", "!epstein", true],
-  ["imagine", "Media", "!imagine", true],
-  ["video", "Media", "!video", true],
-  ["music", "Media", "!music (AI song)", true],
-  ["say", "Voice", "!say / !speak", true],
-  ["voice", "Voice", "Paid voices (per use)", true],
-  ["micsurcharge", "Voice", "-mic surcharge (spoken reply)", true],
-  ["queue", "Music", "Song requests (!play / !queue)", true],
-  ["shoutout", "Music", "DJ shout-outs (!dj shoutout, charged when spoken)", true],
-  ["snap", "Room", "!snap", true],
-  ["clip", "Room", "!clip / !autoclip", true],
-  ["topic", "Room", "!topic", true],
-  ["camsurcharge", "Room", "-cam surcharge", true],
-  ["remind", "Messages", "!remind", true],
-  ["relay", "Messages", "!relay", true],
-  ["sponsor", "Off by default", "!sponsor (the ad rotates in every room, not just this one)", false],
-  ["other", "Other", "Anything else Pepe reports (a new paid command)", true],
-];
-const CAT = new Map(CATEGORIES.map(([k, g, l, on]) => [k, { key: k, group: g, label: l, on }]));
-const ALIASES = { speak: "say", camroast: "roast", autoclip: "clip", see: "look", play: "queue", "music-queue": "queue", songrequest: "queue", shout: "shoutout", "dj-shoutout": "shoutout" };
-// never royalty-bearing (shown on /rooms/admin as the rule, not toggles)
-const EXCLUDED = ["blackjack", "holdem", "poker", "wheel", "spin", "lotto", "bingo", "wager", "market", "heist", "heist_gear",
-  "turf", "fight", "duel", "brawl", "arena", "showdown", "tip", "transfer", "donate", "loan", "fine", "bounty",
-  "cosmetics", "sheetregen", "avatarregen", "gangcreate", "stake"];
-const EXCLUDED_NOTE = "Casino games (blackjack, hold'em, wheel, lotto, bingo, wagers, markets), heists & turf, duels/brawls, " +
-  "tips & transfers, loans, fines, and account-wide purchases (cosmetics, re-rolls, gangs) - money that goes to the House, " +
-  "stakers or vaults, or isn't the room's.";
+// labels for the flows dashboard (a flow Pepe reports that isn't listed shows its key)
+const FLOW_LABELS = {
+  stage: "Paid stage time (website)", ask: "!ask", roast: "!roast / !camroast", look: "!look / !see", chart: "!chart",
+  web: "!web", epstein: "!epstein", imagine: "!imagine", video: "!video", music: "!music (AI song)", say: "!say / !speak",
+  voice: "Paid voices (per use)", micsurcharge: "-mic surcharge", queue: "Song requests (!play / !queue)",
+  shoutout: "DJ shout-outs", snap: "!snap", clip: "!clip / !autoclip", topic: "!topic", camsurcharge: "-cam surcharge",
+  remind: "!remind", relay: "!relay", sponsor: "!sponsor",
+};
+const ALIASES = { speak: "say", camroast: "roast", autoclip: "clip", see: "look", play: "queue", "music-queue": "queue",
+                  songrequest: "queue", shout: "shoutout", "dj-shoutout": "shoutout" };
 
-/** The category a reported command/purchase belongs to (normalised; unknown -> "other"). */
+/** The flow a reported spend belongs to (normalised; empty -> "other"). */
 function categoryOf(cmd) {
   let c = String(cmd || "").trim().toLowerCase().replace(/^!/, "");
   if (/^voice[:-]/.test(c)) c = "voice";
   c = ALIASES[c] || c;
-  c = c.replace(/[^\w-]/g, "").slice(0, 20);
-  if (!c) return "other";
-  if (EXCLUDED.includes(c) || EXCLUDED.some((x) => c.startsWith(x + "-") || c.startsWith(x + "_"))) return "excluded:" + c;
-  return CAT.has(c) ? c : "other";
+  return c.replace(/[^\w-]/g, "").slice(0, 20) || "other";
 }
+const labelOf = (c) => FLOW_LABELS[c] || (c === "other" ? "Other" : "!" + c);
 
 const DEFAULTS = {
   enabled: true,
-  stage_pct: 20,            // % of paid stage time in the room (the "stage" row's default rate)
-  spend_pct: 10,            // default % for every other category (rows left blank use it)
-  categories: {},           // overrides: { key: { on: bool, pct: number|null } }
+  stage_pct: 20,            // % of paid stage time in the room (website spend - Pepe doesn't route it)
   period_days: 7,
   min_active_days: 3,       // days in the period the room must be active
   active_minutes: 60,       // ...a day counts when the room was bridged live this long
@@ -133,55 +101,27 @@ function cleanConfig(c) {
   return {
     enabled: c.enabled === true || c.enabled === "true" || c.enabled === 1 || c.enabled === "1" || c.enabled === "on",
     stage_pct: Math.round(num(c.stage_pct, 0, 50, DEFAULTS.stage_pct) * 100) / 100,
-    spend_pct: Math.round(num(c.spend_pct, 0, 50, DEFAULTS.spend_pct) * 100) / 100,
     period_days: int(c.period_days, 1, 31, DEFAULTS.period_days),
     min_active_days: int(c.min_active_days, 0, 31, DEFAULTS.min_active_days),
     active_minutes: int(c.active_minutes, 0, 1440, DEFAULTS.active_minutes),
     active_peak: int(c.active_peak, 0, 1000, DEFAULTS.active_peak),
     cap_per_period: int(c.cap_per_period, 0, 1e12, DEFAULTS.cap_per_period),
     keep_periods: int(c.keep_periods, 1, 52, DEFAULTS.keep_periods),
-    categories: cleanCategories(c.categories),
   };
-}
-const truthy = (v) => v === true || v === "true" || v === 1 || v === "1" || v === "on";
-/** { key: { on, pct } } for known categories only; pct null/"" = the default rate. */
-function cleanCategories(cats) {
-  const out = {};
-  if (!cats || typeof cats !== "object") return out;
-  for (const [k, v] of Object.entries(cats)) {
-    if (!CAT.has(k) || !v || typeof v !== "object") continue;
-    const p = v.pct === null || v.pct === undefined || v.pct === "" ? null : Number(v.pct);
-    out[k] = { on: truthy(v.on), pct: p === null || !Number.isFinite(p) ? null : Math.round(Math.min(50, Math.max(0, p)) * 100) / 100 };
-  }
-  return out;
-}
-/** A category's live setting: { on, pct, inherited } (excluded / unknown handled by categoryOf). */
-function rate(cat, C = CONFIG) {
-  if (!cat || String(cat).startsWith("excluded:")) return { on: false, pct: 0, inherited: false };
-  const meta = CAT.get(cat) || CAT.get("other");
-  const o = (C.categories || {})[meta.key];
-  const dflt = meta.key === "stage" ? C.stage_pct : C.spend_pct;
-  const on = o ? !!o.on : meta.on;
-  const inherited = !o || o.pct === null || o.pct === undefined;
-  return { on, pct: on ? (inherited ? dflt : o.pct) : 0, inherited };
-}
-/** The admin table: every category with its live setting. */
-function catalog(C = CONFIG) {
-  return CATEGORIES.map(([key, group, label]) => ({ key, group, label, ...rate(key, C), default_on: CAT.get(key).on }));
 }
 async function loadConfig() {
   const rows = await getQuery("SELECT key, value FROM royalty_config");
   const c = { ...DEFAULTS };
   for (const r of rows) { try { if (r.key in DEFAULTS) c[r.key] = JSON.parse(r.value); } catch (e) { /* skip */ } }
   CONFIG = cleanConfig(c);
+  const sh = rows.find((r) => r.key === "pepe_owner_shares");
+  if (sh) { try { SHARES = JSON.parse(sh.value) || []; } catch (e) { SHARES = []; } }
   return CONFIG;
 }
 async function setConfig(patch, actor) {
   await init();
   patch = patch || {};
-  // the category table merges: a save may carry only the rows it shows
-  const cats = patch.reset_categories ? {} : { ...CONFIG.categories, ...(patch.categories || {}) };
-  const next = cleanConfig({ ...CONFIG, ...patch, categories: cats });
+  const next = cleanConfig({ ...CONFIG, ...patch });
   for (const k of Object.keys(DEFAULTS)) {
     await runQuery("INSERT INTO royalty_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [k, JSON.stringify(next[k])]);
   }
@@ -191,27 +131,43 @@ async function setConfig(patch, actor) {
 }
 const config = () => ({ ...CONFIG });
 
+// Pepe's live room_owner % per room flow (sent with every owner sync) - shown to owners and admins.
+let SHARES = [];
+async function setOwnerShares(list) {
+  if (!Array.isArray(list)) return SHARES;
+  const clean = list.slice(0, 80).filter((x) => x && typeof x === "object" && x.flow)
+    .map((x) => ({ flow: categoryOf(x.flow), label: String(x.label || labelOf(categoryOf(x.flow))).slice(0, 80),
+                   pct: Math.round(Math.min(100, Math.max(0, Number(x.pct) || 0)) * 100) / 100 }));
+  if (JSON.stringify(clean) === JSON.stringify(SHARES)) return SHARES;
+  SHARES = clean;
+  await init();
+  await runQuery("INSERT INTO royalty_config (key, value) VALUES ('pepe_owner_shares', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                 [JSON.stringify(clean)]);
+  return SHARES;
+}
+const ownerShares = () => SHARES.slice();
+
 const periodMs = () => CONFIG.period_days * 86400000;
 const periodOf = (t) => Math.floor((t - EPOCH) / periodMs());
 const periodStart = (p) => EPOCH + p * periodMs();
 
-/** The owner's share for a source (pure). source "stage" | "spend"; spend uses its category's row. */
-function share(source, base, C = CONFIG, category) {
-  const cat = source === "stage" ? "stage" : source === "spend" ? (category || "other") : null;
-  const pct = cat ? rate(cat, C).pct : 0;
+/** The owner's share of website stage time (pure). Room spend arrives as the share itself (Pepe's routing). */
+function share(source, base, C = CONFIG) {
+  const pct = source === "stage" ? C.stage_pct : 0;
   return Math.max(0, Math.floor((Math.max(0, Math.floor(Number(base) || 0)) * pct) / 100));
 }
 
 /** Accrue the owner's share of `base` PAT spent in a room. Safe inside a caller's transaction (it
  *  only reads the rooms cache and writes one row). Returns the amount accrued (0 = nothing). */
-async function accrue({ room_id, source, base, payer, ref, detail, at, category }) {
+async function accrue({ room_id, source, base, payer, ref, detail, at, category, amount: given }) {
   await init();
   if (!CONFIG.enabled || !room_id || !ref) return 0;
   const R = require("./rooms").getCached(room_id);
   if (!R || !R.owner || R.owner_kind !== "user") return 0;            // house / unowned rooms: nothing
   if (payer && payer === R.owner.userId) return 0;                      // your own spending doesn't pay you
   const cat = source === "stage" ? "stage" : (category || "other");
-  const amount = share(source, base, CONFIG, cat);
+  // stage: stage_pct of the price; spend: the room_owner share Pepe's routing already took
+  const amount = source === "spend" ? Math.max(0, Math.floor(Number(given) || 0)) : share(source, base, CONFIG);
   if (amount <= 0) return 0;
   const t = at || now();
   const key = String(ref).slice(0, 160);
@@ -236,8 +192,9 @@ async function voidSpend(ref, room) {
   return !!row;
 }
 
-/** Pepe's batch of room spending: [{room, amount, login, cmd (category), ref, ts}] and voids
- *  [{ref, void: true}] for refunded charges. Returns how many accrued. */
+/** Pepe's batch of room-owner shares: [{room, amount (the share), base (the whole spend), share: true,
+ *  login, cmd (the routing flow), ref, ts}] and voids [{ref, void: true}] for refunded charges.
+ *  Items without share:true (pre-1.99br Pepes reported the whole spend) are ignored. Returns how many accrued. */
 async function spendBatch(items) {
   await init();
   const rooms = require("./rooms");
@@ -249,7 +206,8 @@ async function spendBatch(items) {
     if (it.void) { await voidSpend(it.ref, it.room); continue; }
     const room = String(it.room || "").slice(0, 128), ref = String(it.ref || "").slice(0, 120);
     const amount = Math.floor(Number(it.amount) || 0);
-    if (!room || !ref || amount <= 0 || amount > 1e8) continue;
+    if (!it.share || !room || !ref || amount <= 0 || amount > 1e8) continue;
+    const base = Math.max(amount, Math.floor(Number(it.base) || 0));
     const login = String(it.login || "").trim().toLowerCase().slice(0, 40);
     let payer = null;
     if (login) {
@@ -262,7 +220,7 @@ async function spendBatch(items) {
     }
     const at = Number(it.ts) > 1e12 && Number(it.ts) < now() + 60000 ? Math.floor(Number(it.ts)) : now();
     const category = categoryOf(it.cmd);
-    if (await accrue({ room_id: room, source: "spend", base: amount, payer, ref: "spend:" + ref, at, category,
+    if (await accrue({ room_id: room, source: "spend", base, amount, payer, ref: "spend:" + ref, at, category,
                        detail: `!${String(it.cmd || "command").replace(/[^\w-]/g, "").slice(0, 20)}${login ? " by " + login : ""}` })) n++;
   }
   return n;
@@ -360,7 +318,7 @@ async function status(roomId, ownerId) {
                                  ORDER BY id DESC LIMIT 20`, [roomId, ownerId]);
   const runs = await getQuery("SELECT period, outcome, amount, at FROM royalty_runs WHERE room_id = ? AND owner_user_id = ? ORDER BY period DESC LIMIT 8", [roomId, ownerId]);
   return {
-    config: config(), period: { index: P, start: periodStart(P), end: periodStart(P + 1) },
+    config: config(), owner_shares: ownerShares(), period: { index: P, start: periodStart(P), end: periodStart(P + 1) },
     this_period: { stage: bySrc.stage, spend: bySrc.spend, total: bySrc.stage + bySrc.spend },
     pending: all.accrue - all.release - all.forfeit, paid: all.release, forfeited: all.forfeit, earned: all.accrue,
     active_days: await activeDays(roomId, P), active_days_needed: CONFIG.min_active_days,
@@ -421,10 +379,9 @@ async function summary() {
   });
   const cats = await getQuery(`SELECT COALESCE(category, CASE WHEN source='stage' THEN 'stage' ELSE 'other' END) AS c,
                                       SUM(base) AS b, SUM(amount) AS a FROM royalty_ledger WHERE kind = 'accrue' AND created >= ? GROUP BY c`, [t - W["30d"]]);
-  const byCat = new Map(cats.map((c) => [c.c, c]));
-  const categories = catalog().map((c) => ({ category: c.key, label: c.label, group: c.group, on: c.on, pct: c.pct,
-    base_30d: Number((byCat.get(c.key) || {}).b) || 0, accrued_30d: Number((byCat.get(c.key) || {}).a) || 0 }));
-  return { config: config(), totals, windows, rooms: roomsOut, categories, next_release: periodStart(periodOf(t) + 1), excluded: EXCLUDED_NOTE };
+  const categories = cats.map((c) => ({ category: c.c, label: labelOf(c.c), base_30d: Number(c.b) || 0, accrued_30d: Number(c.a) || 0 }))
+    .sort((a, b) => b.accrued_30d - a.accrued_30d);
+  return { config: config(), owner_shares: ownerShares(), totals, windows, rooms: roomsOut, categories, next_release: periodStart(periodOf(t) + 1) };
 }
 
 let timer = null;
@@ -437,6 +394,6 @@ function start() {
 
 module.exports = {
   init, accrue, spendBatch, voidSpend, releaseTick, status, overview, summary, setConfig, config, share, periodOf, periodStart, activeDays, start,
-  categoryOf, rate, catalog, CATEGORIES, EXCLUDED, EXCLUDED_NOTE, DEFAULTS, EPOCH,
+  categoryOf, labelOf, FLOW_LABELS, setOwnerShares, ownerShares, DEFAULTS, EPOCH,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

@@ -64,7 +64,7 @@ test.before(async () => {
   await S.init();
   await S.setConfig({ price_per_min: PRICE, min_minutes: 2, max_minutes: 30, max_concurrent: 6, start_window_min: 10, idle_grace_min: 5,
                       bookings_per_hour: 50, revenue_vault: "reserve", enabled: true, schedule_days: 14, schedule_per_user: 3, lead_min: 5, queue_max: 10 }, "test");
-  await ROY.setConfig({ enabled: true, stage_pct: 20, spend_pct: 10, period_days: 7, min_active_days: 2, active_minutes: 30, active_peak: 2,
+  await ROY.setConfig({ enabled: true, stage_pct: 20, period_days: 7, min_active_days: 2, active_minutes: 30, active_peak: 2,
                         cap_per_period: 100000, keep_periods: 2 }, "test");
 });
 test.afterEach(clear);
@@ -348,17 +348,18 @@ test("legacy API: book() with no room = a paid take-over of the house room (the 
 });
 
 // ── royalties ──
-test("royalties: shares, the owner's own spend, house rooms, Pepe's spend batches (idempotent)", async () => {
-  assert.equal(ROY.share("stage", 1000), 200); assert.equal(ROY.share("spend", 999), 99); assert.equal(ROY.share("other", 1000), 0);
+test("royalties: stage share, Pepe's routed owner shares (as-is), the owner's own spend, house rooms, idempotent", async () => {
+  assert.equal(ROY.share("stage", 1000), 200); assert.equal(ROY.share("spend", 999), 0, "room spend arrives as the share"); assert.equal(ROY.share("other", 1000), 0);
   const u = await mkUser(START, { camfrog: "spender1" });
   const before = (await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM royalty_ledger WHERE kind = 'accrue' AND source = 'spend'"))[0].t;
   const n1 = await ROY.spendBatch([
-    { room: PLANT, amount: 5000, login: "Spender1", cmd: "imagine", ref: "r-1" },
-    { room: PLANT, amount: 5000, login: "spender1", cmd: "imagine", ref: "r-1" },      // a re-sent batch
-    { room: PLANT, amount: 3000, login: "foamy1111", cmd: "ask", ref: "r-2" },        // the owner himself
-    { room: HOUSE, amount: 3000, login: "spender1", cmd: "ask", ref: "r-3" },         // Pepe's room
-    { room: "unknown-room", amount: 3000, login: "spender1", ref: "r-4" },
-    { room: PLANT, amount: -5, login: "spender1", ref: "r-5" },
+    { room: PLANT, amount: 500, base: 5000, share: true, login: "Spender1", cmd: "imagine", ref: "r-1" },
+    { room: PLANT, amount: 500, base: 5000, share: true, login: "spender1", cmd: "imagine", ref: "r-1" },      // a re-sent batch
+    { room: PLANT, amount: 300, base: 3000, share: true, login: "foamy1111", cmd: "ask", ref: "r-2" },        // the owner himself
+    { room: HOUSE, amount: 300, base: 3000, share: true, login: "spender1", cmd: "ask", ref: "r-3" },         // Pepe's room
+    { room: "unknown-room", amount: 300, share: true, login: "spender1", ref: "r-4" },
+    { room: PLANT, amount: -5, share: true, login: "spender1", ref: "r-5" },
+    { room: PLANT, amount: 5000, login: "spender1", cmd: "ask", ref: "r-6" },                                 // pre-1.99br report: ignored
   ]);
   assert.equal(n1, 1);
   const after = (await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM royalty_ledger WHERE kind = 'accrue' AND source = 'spend'"))[0].t;
@@ -373,7 +374,7 @@ test("royalties: released weekly by the Reserve only when the room was active; c
   await rooms.setOwner("royal_room", "roomowner2", "boss");
   T = Date.UTC(2026, 9, 12, 10, 0, 0);                      // a Monday: start of a period
   const P0 = ROY.periodOf(T);
-  await ROY.spendBatch([{ room: "royal_room", amount: 2000000, login: "someone", ref: "big-1" }]);   // 10% = 200,000
+  await ROY.spendBatch([{ room: "royal_room", amount: 200000, base: 2000000, share: true, login: "someone", ref: "big-1" }]);   // a 10% share
   // active on 2 days (>= 30 min, peak >= 2): one minute bucket at a time
   for (const day of [0, 1]) {
     for (let m = 0; m < 31; m++) await rooms.noteActivity("royal_room", 3, 1, T + day * 86400000 + m * 60000);
@@ -411,49 +412,41 @@ test("royalties: released weekly by the Reserve only when the room was active; c
   T = Date.UTC(2026, 9, 6, 12, 0, 0) + 400 * 86400000;
 });
 
-test("royalties (1.99bn): per-category on/off + rates, excluded casino/tips, voids, summary", async () => {
+test("royalties (1.99br): Pepe's routed room_owner shares booked as-is, flows, voids, owner shares, summary", async () => {
   await rooms.setOwner(PLANT, "foamy1111", "boss");
   assert.equal(ROY.categoryOf("!speak"), "say"); assert.equal(ROY.categoryOf("voice:morgan"), "voice");
-  assert.equal(ROY.categoryOf("play"), "queue"); assert.equal(ROY.categoryOf("shoutout"), "shoutout"); assert.equal(ROY.categoryOf("brandnew"), "other");
-  assert.match(ROY.categoryOf("blackjack-bet"), /^excluded:/); assert.match(ROY.categoryOf("tip"), /^excluded:/);
-  // defaults: stage 20, everything room-specific 10, sponsor off
-  assert.deepEqual(ROY.rate("stage"), { on: true, pct: 20, inherited: true });
-  assert.equal(ROY.rate("queue").pct, 10); assert.equal(ROY.rate("sponsor").on, false);
+  assert.equal(ROY.categoryOf("play"), "queue"); assert.equal(ROY.categoryOf("shoutout"), "shoutout"); assert.equal(ROY.categoryOf(""), "other");
+  assert.equal(ROY.labelOf("shoutout"), "DJ shout-outs"); assert.equal(ROY.labelOf("brandnew"), "!brandnew");
+  assert.equal(ROY.config().spend_pct, undefined, "no website rate for room spend - Pepe's routing decides");
   await mkUser(START, { camfrog: "cats1" });
   const sum0 = await ROY.summary();
   const n = await ROY.spendBatch([
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "queue", ref: "c-1" },        // 10% -> 100
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "speak", ref: "c-2" },        // !say, 10% -> 100
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "sponsor", ref: "c-3" },      // off -> 0
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "blackjack", ref: "c-4" },    // excluded -> 0
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "tip", ref: "c-5" },          // excluded -> 0
+    { room: PLANT, amount: 250, base: 2500, share: true, login: "cats1", cmd: "shoutout", ref: "c-1" },   // Soho 20 / Reserve 70 / owner 10
+    { room: PLANT, amount: 100, base: 1000, share: true, login: "cats1", cmd: "queue", ref: "c-2" },
+    { room: PLANT, amount: 333, base: 1000, share: true, login: "cats1", cmd: "say", ref: "c-3" },        // an admin-set 33.3%: booked as-is
   ]);
-  assert.equal(n, 2);
-  const cat = async (ref) => (await getQuery("SELECT category, amount FROM royalty_ledger WHERE ref = ?", ["spend:" + ref]))[0];
-  assert.deepEqual({ ...(await cat("c-1")) }, { category: "queue", amount: 100 });
-  // the admin table: song requests at 25%, !say off, sponsor on at the default
-  await ROY.setConfig({ categories: { queue: { on: true, pct: 25 }, say: { on: false, pct: null }, sponsor: { on: "on", pct: "" } } }, "boss");
-  assert.deepEqual(ROY.rate("queue"), { on: true, pct: 25, inherited: false });
-  assert.equal(ROY.rate("say").on, false); assert.equal(ROY.rate("sponsor").pct, 10);
-  await ROY.setConfig({ stage_pct: 20 }, "boss");                     // a save without the table keeps it
-  assert.equal(ROY.rate("queue").pct, 25);
+  assert.equal(n, 3);
+  const row = async (ref) => (await getQuery("SELECT category, base, amount FROM royalty_ledger WHERE ref = ?", ["spend:" + ref]))[0];
+  assert.deepEqual({ ...(await row("c-1")) }, { category: "shoutout", base: 2500, amount: 250 });
+  assert.equal((await row("c-3")).amount, 333);
   await ROY.spendBatch([
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "queue", ref: "c-6" },        // 25% -> 250
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "say", ref: "c-7" },          // off
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "sponsor", ref: "c-8" },      // now on -> 100
-    { ref: "c-6", void: true },                                                      // refunded: gone
-    { room: PLANT, amount: 1000, login: "cats1", cmd: "queue", ref: "c-6" },        // a re-sent copy can't come back
+    { ref: "c-2", void: true },                                                                       // refunded: gone
+    { room: PLANT, amount: 100, base: 1000, share: true, login: "cats1", cmd: "queue", ref: "c-2" },  // a re-sent copy can't come back
   ]);
-  assert.equal(await cat("c-6"), undefined); assert.equal(await cat("c-7"), undefined); assert.equal((await cat("c-8")).amount, 100);
+  assert.equal(await row("c-2"), undefined);
+  // Pepe's live shares (owner sync) are kept for the owner / admin pages
+  await ROY.setOwnerShares([{ flow: "shoutout", label: "!dj shoutout", pct: 10 }, { flow: "sponsor", label: "!sponsor", pct: 0 }, null, { nope: 1 }]);
+  assert.deepEqual(ROY.ownerShares(), [{ flow: "shoutout", label: "!dj shoutout", pct: 10 }, { flow: "sponsor", label: "!sponsor", pct: 0 }]);
   const sum = await ROY.summary();
-  assert.equal(sum.windows.today.accrued - sum0.windows.today.accrued, 300);
+  assert.equal(sum.windows.today.accrued - sum0.windows.today.accrued, 583);
+  assert.deepEqual(sum.owner_shares, ROY.ownerShares());
   const hp = sum.rooms.find((r) => r.room_id === PLANT);
   assert.ok(hp && hp.owner === "pb" && hp.pending === hp.earned - hp.paid - hp.expired);
-  assert.equal(sum.categories.find((c) => c.category === "queue").pct, 25);
-  assert.ok(sum.categories.find((c) => c.category === "queue").accrued_30d >= 100);
+  const so = sum.categories.find((c) => c.category === "shoutout");
+  assert.ok(so && so.label === "DJ shout-outs" && so.base_30d >= 2500 && so.accrued_30d >= 250);
   assert.ok(sum.rooms.every((r) => r.room_id !== "-"), "void markers aren't rooms");
-  await ROY.setConfig({ reset_categories: true }, "boss");
-  assert.equal(ROY.rate("queue").pct, 10); assert.equal(ROY.rate("sponsor").on, false);
+  const st = await ROY.status(PLANT, owner.userId);
+  assert.deepEqual(st.owner_shares, ROY.ownerShares());
 });
 
 // ── HTTP: owner routes + Pepe's endpoints ──
@@ -488,6 +481,8 @@ test("HTTP: owner-only routes, Pepe's owner sync + !stage act, front room needs 
     assert.equal(r.status, 403);
     r = await J("/api/rooms/owners", { password: "bot" });
     assert.equal(r.j.rooms.find((x) => x.id === PLANT).owner.camfrog, "foamy1111");
+    r = await J("/api/rooms/owners", { password: "bot", owner_shares: [{ flow: "queue", label: "Music queue (!play)", pct: 15 }] });
+    assert.ok(r.j.ok); assert.deepEqual(ROY.ownerShares(), [{ flow: "queue", label: "Music queue (!play)", pct: 15 }], "Pepe's live shares stored");
     const u = await mkUser();
     const sl = await S.book(u, { room: PLANT, minutes: 5, feature: false });
     r = await J("/api/rooms/stage/act", { password: "bot", room: PLANT, by: "randomguy", verb: "cut" });
@@ -511,7 +506,7 @@ test("HTTP: owner-only routes, Pepe's owner sync + !stage act, front room needs 
     r = await J("/api/stage/cut", { password: "bot" });
     assert.equal(r.j.cut, 1);
     // Pepe's spend batch
-    r = await J("/api/rooms/royalties/spend", { password: "bot", items: [{ room: PLANT, amount: 100, login: "zz", ref: "http-1" }] });
+    r = await J("/api/rooms/royalties/spend", { password: "bot", items: [{ room: PLANT, amount: 100, base: 1000, share: true, login: "zz", ref: "http-1" }] });
     assert.equal(r.j.accrued, 1);
     r = await J("/api/rooms/royalties/summary", { password: "nope" });
     assert.equal(r.status, 403);
