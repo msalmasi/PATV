@@ -1,5 +1,5 @@
 // pepe-feed.js — Pepe's feed settings forms (1.99cg): a room owner's card on /rooms/:slug/feed/mod, and the
-// main feed + site-wide caps on /feed/admin. Same-site JSON fetches; the server checks who may change what.
+// All (site-wide settings) + caps on /feed/admin. Same-site JSON fetches; the server checks who may change what.
 (function () {
   'use strict';
   function api(url, body) {

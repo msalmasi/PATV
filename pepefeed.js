@@ -8,9 +8,12 @@
 // author's automatic upvote, and he never votes - so nothing of his counts in the rankings; users' votes
 // rank his posts like anyone's.
 //
-// Settings, per scope ('' = the main feed, else a room id; feed_kv "pepe:scope:<id>"):
+// Settings, per scope ('' = "All": the site-wide settings admins set, else a room id; feed_kv "pepe:scope:<id>").
+// 1.99ci (communities only): there's no main feed. Every post lives in a community, so Pepe always acts in a room
+// scope; a house-run community (Pepe's rooms, the PATV Lounge) with no settings of its own follows the All
+// settings. His own posts with scope '' go to the PATV Lounge (rooms.LOUNGE_ID). Owners' rooms stay opt-in.
 //   respond         answer mentions ("@pepe", "pepe" as a word, a reply to his post / comment). Default ON for
-//                   the main feed and Pepe's own (house) rooms, OFF elsewhere until the owner turns it on
+//                   All and the house communities (Pepe's rooms, the Lounge), OFF elsewhere until the owner turns it on
 //   auto            take part on his own. Default OFF
 //   posts_per_day   his own posts in this scope per 24 h (auto)
 //   comments_per_day his comments in this scope per 24 h (mentions + auto)
@@ -124,7 +127,7 @@ function cleanGlobal(c) {
   if (c.enabled != null) o.enabled = bool(c.enabled);
   return o;
 }
-/** Mentions are answered by default on the main feed and in Pepe's own (house) rooms. */
+/** Mentions are answered by default under All and in the house communities. */
 function respondDefault(scope) {
   if (!scope) return true;
   const R = rooms.getCached(scope);
@@ -135,7 +138,13 @@ async function readJson(key) {
 }
 async function scopeSettings(scope) {
   await init();
-  const s = cleanScope(await readJson("pepe:scope:" + (scope || "")));
+  const own = await readJson("pepe:scope:" + (scope || ""));
+  // 1.99ci: a house community without settings of its own follows All (the admins' site-wide settings)
+  if (scope && own == null) {
+    const R = rooms.getCached(scope);
+    if (R && R.house) return { ...(await scopeSettings("")), inherited: true };
+  }
+  const s = cleanScope(own);
   if (s.respond == null) s.respond = respondDefault(scope);
   return s;
 }
@@ -143,7 +152,7 @@ async function globalCaps() { await init(); return cleanGlobal(await readJson("p
 
 const isAdmin = (u) => !!u && u.class === "Admin";
 /**
- * Change one scope's settings. The main feed: site Admins. A room: its owner (unless an admin locked it) or an
+ * Change one scope's settings. All (''): site Admins. A room: its owner (unless an admin locked it) or an
  * Admin; only an Admin can set admin_lock. -> the new settings
  */
 async function setScope(user, scope, patch) {
@@ -151,7 +160,7 @@ async function setScope(user, scope, patch) {
   scope = String(scope || "");
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const admin = isAdmin(user);
-  if (!scope) { if (!admin) throw new Refuse(403, "Only site admins set Pepe's main-feed settings."); }
+  if (!scope) { if (!admin) throw new Refuse(403, "Only site admins set Pepe's settings for All."); }
   else {
     if (!(await rooms.get(scope))) throw new Refuse(404, "No such room.");
     if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this room's owner can do that.");
@@ -312,7 +321,7 @@ async function authorRefusal(userId, scope) {
 
 /**
  * Where a post lives, as scopes Pepe could act in: room placements that are live (not removed / pending /
- * hidden) first, then the main feed. null when the post is off-limits everywhere (deleted, hidden, NSFW anywhere,
+ * hidden) - 1.99ci: every post lives in a community, there's no main-feed scope any more. null when the post is off-limits everywhere (deleted, hidden, NSFW anywhere,
  * locked, muted, reported).
  */
 async function postScopes(p) {
@@ -322,8 +331,13 @@ async function postScopes(p) {
   if (pl.some((x) => x.nsfw === 1)) return null;                                        // a room owner's NSFW mark
   if (await isMuted(p.id)) return null;
   if ((await getQuery("SELECT 1 FROM feed_reports WHERE post_id = ? AND comment_id IS NULL AND resolved_at IS NULL LIMIT 1", [p.id]))[0]) return null;
-  const out = pl.filter((x) => !x.removed_at && !x.pending && !x.hidden_at).map((x) => x.room_id);
-  if (p.global) out.push("");
+  // 1.99ci: a house community (Pepe's rooms, the PATV Lounge) with no settings of its own is the All scope ('')
+  const out = [];
+  for (const x of pl.filter((y) => !y.removed_at && !y.pending && !y.hidden_at)) {
+    const R = rooms.getCached(x.room_id);
+    const sc = R && R.house && (await readJson("pepe:scope:" + x.room_id)) == null ? "" : x.room_id;
+    if (!out.includes(sc)) out.push(sc);
+  }
   return out.length ? out : null;
 }
 
@@ -441,7 +455,7 @@ async function findThreads(autoScopes, t = NOW()) {
   return out;
 }
 
-/** Every scope with something switched on (+ the main feed always), with its settings and usage. */
+/** Every scope with something switched on (+ All always), with its settings and usage. */
 async function scopesState(U) {
   const ids = [""];
   for (const r of await rooms.list()) ids.push(r.id);
@@ -450,7 +464,7 @@ async function scopesState(U) {
     const S = await scopeSettings(id);
     if (id && !S.respond && !S.auto) continue;
     const R = id ? rooms.getCached(id) : null;
-    out[id] = { ...S, title: id ? (R ? R.title : id) : "Main feed", slug: R ? R.slug : null, house: !!(R && R.house),
+    out[id] = { ...S, title: id ? (R ? R.title : id) : "All (site-wide)", slug: R ? R.slug : null, house: !!(R && R.house),
                 url: SITE() + (R ? "/rooms/" + encodeURIComponent(R.slug) : "/feed"),
                 quiet: quietNow(S), used: scopeUse(U, id) };
   }
@@ -554,13 +568,14 @@ async function post(b, req = null) {
   const kind = KINDS.includes(b.kind) ? b.kind : "other";
   const refuse = async (st, msg) => { await log({ action: "refused", why: "auto", scope, kind, cost: b.cost, note: msg }); throw new Refuse(st, msg); };
   if (scope && !(await rooms.get(scope))) await refuse(404, "No such room.");
+  // 1.99ci: a post needs a community - his All-scope posts go to the PATV Lounge
   const S = await scopeSettings(scope);
   const no = gate("post", "auto", S, G, await usage(), { scope, cost: b.cost });
   if (no) await refuse(429, no);
   if (writeRate(G)) await refuse(429, "too many writes this minute");
   const title = String(b.title || "").trim(), text = String(b.body || "").trim();
   if (!title && !text) await refuse(400, "Empty post.");
-  const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX), body: text.slice(0, 3000), rooms: scope ? [scope] : [], global: !scope,
+  const p = await store.create(acct.userId, { title: title.slice(0, store.TITLE_MAX), body: text.slice(0, 3000), community: scope || rooms.LOUNGE_ID,
                                               nsfw: false, announce: [] }, {});
   await audit.record(auditCtx(), { kind: "post", id: p.id, postId: p.id, event: "create", user: await store.account(acct.userId) });
   await log({ action: "post", why: "auto", scope, post: p.id, kind, cost: b.cost, note: b.model || null });
@@ -601,7 +616,7 @@ async function adminView() {
   const cids = [...new Set(rows.map((r) => r.comment_id).filter(Boolean))];
   const cdel = new Set();
   if (cids.length) for (const c of await getQuery(`SELECT id FROM feed_comments WHERE deleted_at IS NOT NULL AND id IN (${cids.map(() => "?").join(",")})`, cids)) cdel.add(c.id);
-  const scopeTitle = (s) => (s === "*" ? "global" : !s ? "main feed" : (rooms.getCached(s) || {}).title || s);
+  const scopeTitle = (s) => (s === "*" ? "global" : !s ? "All" : (rooms.getCached(s) || {}).title || s);
   return {
     account: acct, global: await globalCaps(), main: await scopeSettings(""), used: U,
     rooms: Object.entries(await scopesState(U)).filter(([k]) => k).map(([id, s]) => ({ id, ...s })),

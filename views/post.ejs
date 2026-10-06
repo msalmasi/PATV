@@ -3,11 +3,11 @@
 <%
   const signed = !!viewer;
   const cs = typeof csort !== 'undefined' ? csort : 'best';
-  const backRoom = p.rooms.length === 1 && !p.global ? p.rooms[0] : null;
+  const backRoom = p.rooms.length ? p.rooms[0] : null;
 %>
 <main class="fd fd-detail">
   <nav class="crumb" aria-label="Back">
-    <% if (backRoom) { %><a href="/rooms/<%= encodeURIComponent(backRoom.slug) %>#feed"><%- fx.icon('back') %><%= backRoom.title %> feed</a>
+    <% if (backRoom) { %><a href="/feed/c/<%= encodeURIComponent(backRoom.slug) %>"><%- fx.icon('back') %>c/<%= backRoom.slug %></a>
     <% } else { %><a href="/feed"><%- fx.icon('back') %>Feed</a><% } %>
   </nav>
   <%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: true, ctxRoom: null, pepeMuted: typeof pepeMuted !== 'undefined' ? pepeMuted : false }) %>

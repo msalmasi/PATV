@@ -45,7 +45,13 @@ async function mkUser(name, extra = {}) {
   return u;
 }
 const H = (u) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, u ? { "x-test-user": u.userId } : {});
+// 1.99ci: every post lives in exactly one community - tests post to the PATV Lounge unless they pick one
+// (community / rooms set), or send noCommunity: true to test the refusal.
+const LOUNGE = "patv:lounge";
+const withCommunity = (url, body) => (url === "/api/feed/posts" && body && typeof body === "object" && body.community === undefined && !body.rooms && !body.noCommunity
+  ? { ...body, community: LOUNGE } : body);
 async function call(method, url, u, body, headers) {
+  body = withCommunity(url, body);
   const r = await fetch(base + url, { method, headers: headers || H(u), body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual" });
   let d = null;
   try { d = await r.clone().json(); } catch (e) { d = null; }
@@ -196,7 +202,7 @@ test("new-post notices: off by default; on = one inbox notice per post per follo
   await follows.follow(U.dave, "room", ROOM_B, true);
   const p3 = await store.create(U.dave.userId, { title: "mine", rooms: [ROOM_B] }, { awaitNotices: true });
   assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.dave.userId, "follow-post:" + p3.id])).length, 0, "never the author");
-  const nsfw = await store.create(U.dave.userId, { title: "spicy title", nsfw: true }, { awaitNotices: true });
+  const nsfw = await store.create(U.dave.userId, { title: "spicy title", nsfw: true, community: LOUNGE }, { awaitNotices: true });
   const nn = await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.carol.userId, "follow-post:" + nsfw.id]);
   assert.equal(nn.length, 1); assert.ok(!/spicy/.test(nn[0].title + nn[0].body), "an NSFW post's text isn't in the notice");
 });
@@ -209,9 +215,11 @@ test("room announcements: the owner's switch is the gate; the author's per-post 
   await store.setMention(U.owner, ROOM_B, true);
   p = await store.create(U.alice.userId, { title: "unticked", rooms: [ROOM_B], announce: [] });
   assert.equal(await pend(p.id), 0, "author unticked it");
-  p = await store.create(U.alice.userId, { title: "ticked", rooms: [ROOM_B, ROOM_A], announce: [ROOM_B, ROOM_A] });
+  p = await store.create(U.alice.userId, { title: "ticked", community: ROOM_B, announce: [ROOM_B, ROOM_A] });
   const m = await getQuery("SELECT room_id FROM feed_mentions WHERE post_id = ?", [p.id]);
-  assert.deepEqual(m.map((x) => x.room_id), [ROOM_B], "only the room whose owner allows it");
+  assert.deepEqual(m.map((x) => x.room_id), [ROOM_B], "only the post's community (1.99ci: one per post)");
+  p = await store.create(U.alice.userId, { title: "ticked in A", community: ROOM_A, announce: [ROOM_A] });
+  assert.equal(await pend(p.id), 0, "A's owner (the house) hasn't switched announcements on");
   p = await store.create(U.alice.userId, { title: "old page", rooms: [ROOM_B] });
   assert.equal(await pend(p.id), 1, "no announce list (an older page): announced as before");
   // the composer offers the checkbox only for rooms that allow it (on /feed too)
@@ -294,7 +302,7 @@ test("stories seen state: per user per room, only forwards, never ahead of now; 
 
 test("/feed: no Clips & snaps tab (old links redirect), the story strip on top; room filter = that room's thumbnails", async () => {
   let r = await call("GET", "/feed?tab=captures&room=pepefrog-room&kind=clip", U.bob);
-  assert.equal(r.status, 301); assert.equal(r.r.headers.get("location"), "/feed?room=pepefrog-room");
+  assert.equal(r.status, 301); assert.equal(r.r.headers.get("location"), "/feed/c/pepefrog-room", "1.99ci: a community is a path");
   r = await call("GET", "/feed?tab=clips", U.bob);
   assert.equal(r.r.headers.get("location"), "/feed");
   const html = await page("/feed", U.bob);
@@ -334,7 +342,7 @@ test("profile Posts panel: a layout section (public/hidden), the latest posts, N
   const att = "a".repeat(24);
   await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, ct, file, thumb, w, h, bytes, state, created, size_declared, received)
                   VALUES (?, ?, 'image', 'image/webp', ?, ?, 32, 32, 10, 'ready', ?, 10, 10)`, [att, U.alice.userId, out.file, out.thumb, Date.now()]);
-  await store.create(U.alice.userId, { title: "nsfw pic <script>", attachments: [att], nsfw: true });
+  await store.create(U.alice.userId, { title: "nsfw pic <script>", attachments: [att], nsfw: true, community: LOUNGE });
   const s = await web.profileSocial({ userId: U.alice.userId, username: "alice" }, null);
   assert.ok(s.posts.length >= 1 && s.posts.length <= 4);
   const html = await ejs.renderFile(path.join(repo, "views/partials/profile-posts.ejs"), { social: s, usernameProfile: "alice", displayname: "Alice", isMe: false });
@@ -342,7 +350,7 @@ test("profile Posts panel: a layout section (public/hidden), the latest posts, N
   assert.ok(!html.includes(out.thumb) && !html.includes(out.file), "no NSFW picture");
   assert.ok(html.includes("nsfw pic &lt;script&gt;") && !html.includes("<script>"), "escaped");
   // a report-hidden post isn't listed for visitors
-  const hidden = await store.create(U.alice.userId, { title: "hidden by reports" });
+  const hidden = await store.create(U.alice.userId, { title: "hidden by reports", community: LOUNGE });
   await store.adminSet(U.admin, hidden.id, { hidden: true });
   assert.ok(!(await web.profileSocial({ userId: U.alice.userId, username: "alice" }, U.bob)).posts.some((p) => p.id === hidden.id));
 });

@@ -6,7 +6,7 @@
   <span class="fw-counts">
     <span><b data-follower-count-kind="user" data-follower-count-id="<%= usernameProfile %>"><%= S_.counts.followers.toLocaleString('en-US') %></b> follower<%= S_.counts.followers === 1 ? '' : 's' %></span>
     <span><b><%= S_.counts.following.toLocaleString('en-US') %></b> following</span>
-    <% if (S_.self && !previewing) { %><a href="/feed?tab=following">your lists ›</a><% } %>
+    <% if (S_.self && !previewing) { %><a href="/feed/following">your lists ›</a><% } %>
   </span>
   <% if (!S_.self && !previewing) { %><%- include('follow-btn', { kind: 'user', id: usernameProfile, following: S_.following, signed: S_.signed, next: back_ }) %><% } %>
   <% if (!S_.self && !previewing && S_.signed) { %><button type="button" class="pf-report" data-safety="report-user" data-user="<%= usernameProfile %>" title="Report this account to the site admins">⚑ Report user</button><% } %>

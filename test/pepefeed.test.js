@@ -88,7 +88,13 @@ test.beforeEach(async () => {
 });
 
 const H = (u, extra = {}) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, u ? { "x-test-user": u.userId } : {}, extra);
+// 1.99ci: every post lives in exactly one community - tests post to the PATV Lounge (house: follows Pepe's All
+// settings) unless they pick one
+const LOUNGE = "patv:lounge";
+const withCommunity = (url, body) => (url === "/api/feed/posts" && body && typeof body === "object" && body.community === undefined && !body.rooms
+  ? { ...body, community: LOUNGE } : body);
 async function call(method, url, u, body, extra) {
+  body = withCommunity(url, body);
   const r = await fetch(base + url, { method, headers: H(u, extra), body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
   let d = null;
@@ -218,7 +224,7 @@ test("rooms: mentions are answered by default in Pepe's house room, NOT in an ow
   const inOwned = await mkPost(U.alice, { body: "pepe in plant room", rooms: [OWNED], global: false });
   let d = await sync();
   const h = d.mentions.find((x) => x.target === "p:" + inHouse);
-  assert.ok(h); assert.equal(h.scope, HOUSE);
+  assert.ok(h); assert.equal(h.scope, "", "1.99ci: a house community with no settings of its own is the All scope");
   assert.ok(!targets(d).includes("p:" + inOwned), "owner's room: off by default (and marked so it isn't re-scanned)");
   assert.equal((await PF.scopeSettings(OWNED)).respond, false);
   assert.equal((await PF.scopeSettings(HOUSE)).respond, true);
@@ -437,5 +443,17 @@ test("auto threads: fresh eligible posts in auto scopes, never his own or ones h
   d = await sync();
   assert.ok(!d.threads.some((x) => x.target === "a:" + a));
   assert.equal((await bot("/api/pepe/feed/skip", { target: "zz" })).status, 400);
+  await PF.setScope(U.admin, "", { ...PF.SCOPE_DEFAULTS });
+});
+
+// ───────────────────────────── 1.99ci: communities only ─────────────────────────────
+test("communities: Pepe's All-scope posts land in the PATV Lounge; a house room with its own settings is its own scope", async () => {
+  await resetLimits();
+  await PF.setScope(U.admin, "", { auto: true, posts_per_day: 5, gap_min: 0, quiet_start: -1, quiet_end: -1 });
+  const r = await bot("/api/pepe/feed/post", { scope: "", title: "All-scope post", body: "hello everyone", kind: "question", cost: 0.001 });
+  assert.equal(r.status, 200, r.text);
+  const placed = await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [r.d.id]);
+  assert.deepEqual(placed.map((x) => x.room_id), [LOUNGE]);
+  assert.equal((await getQuery("SELECT global FROM feed_posts WHERE id = ?", [r.d.id]))[0].global, 0);
   await PF.setScope(U.admin, "", { ...PF.SCOPE_DEFAULTS });
 });

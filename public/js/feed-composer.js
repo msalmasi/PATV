@@ -4,11 +4,13 @@
 // Composer: chunked uploads, link preview, price, plus (1.99bz)
 //   * the draft (title, text, link, NSFW, destinations, finished uploads) is autosaved per user in
 //     localStorage and restored on the next visit; it's cleared once the post is made
-//   * picking a destination never reloads the page: on /feed the list below switches to that
-//     destination (main feed or the room) in place, the draft stays exactly as it is
-//   * "Pepe announces it in <room>" per room, only for rooms whose owner switched announcements on
-// Page: the room filter, tabs, sort and pager links on /feed (data-swap) swap #fdTop / #fdList in
-// place (fetch + DOMParser) with history entries, so nothing typed in the composer is ever lost.
+//   * (1.99ci) exactly ONE community per post, picked from a searchable list (no main feed, no
+//     multi-select - Crosspost shares a post into other communities); a room page / community view
+//     preselects its own
+//   * "Pepe announces it in <room>" for the picked community, only when its owner switched announcements on
+// Page: the community bar, sort and pager links on /feed, /feed/following and /feed/c/<slug> (data-swap)
+// swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
+// composer is ever lost.
 (function () {
   'use strict';
   if (window.__patvComposer) return;
@@ -30,11 +32,13 @@
   // ── /feed: swap the list in place ──
   var SWAP_IDS = ['fdTop', 'fdList'];
   var swapping = null;
-  function canSwap() { return !!document.getElementById('fdList') && location.pathname === '/feed'; }
+  // 1.99ci: the feed's own addresses: /feed (All), /feed/following, /feed/c/<slug>
+  function feedPath(p) { return p === '/feed' || p === '/feed/following' || /^\/feed\/c\/[^/]+$/.test(p); }
+  function canSwap() { return !!document.getElementById('fdList') && feedPath(location.pathname); }
   function swap(url, push) {
     if (!canSwap()) { location.href = url; return Promise.resolve(); }
     var u = new URL(url, location.href);
-    if (u.origin !== location.origin || u.pathname !== '/feed') { location.href = url; return Promise.resolve(); }
+    if (u.origin !== location.origin || !feedPath(u.pathname)) { location.href = url; return Promise.resolve(); }
     var list = document.getElementById('fdList');
     list.setAttribute('aria-busy', 'true'); list.classList.add('fd-loading');
     var mine = swapping = fetch(u.toString(), { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch-page' } })
@@ -63,6 +67,24 @@
     swap(a.getAttribute('href'), true);
   });
   window.addEventListener('popstate', function () { if (canSwap()) swap(location.href, false); });
+  // 1.99ci: the community bar's search box (the bar is swapped in place, so delegated)
+  document.addEventListener('input', function (ev) {
+    var inp = ev.target;
+    if (!inp.hasAttribute || !inp.hasAttribute('data-cb-search')) return;
+    var menu = inp.closest('.cb-menu'), n = inp.value.trim().toLowerCase(), any = false;
+    menu.querySelectorAll('.cb-it[data-name]').forEach(function (a) { var hit = !n || a.getAttribute('data-name').indexOf(n) >= 0; a.classList.toggle('hide', !hit); any = any || hit; });
+    var none = menu.querySelector('[data-cb-none]'); if (none) none.classList.toggle('hide', any || !n);
+  });
+  document.addEventListener('toggle', function (ev) {
+    var d = ev.target;
+    if (!d.matches || !d.matches('details.cb-pick') || !d.open) return;
+    var s = d.querySelector('[data-cb-search]');
+    if (s && window.matchMedia('(pointer: fine)').matches) setTimeout(function () { s.focus(); }, 0);
+  }, true);
+  document.addEventListener('click', function (ev) {
+    // close the community menu on an outside click / after picking
+    document.querySelectorAll('details.cb-pick[open]').forEach(function (d) { if (!d.contains(ev.target) || ev.target.closest('.cb-it')) d.removeAttribute('open'); });
+  });
 
   // ── the composer ──
   var form = document.getElementById('fcForm');
@@ -71,7 +93,6 @@
   var caps = {}, prices = {};
   try { caps = JSON.parse(form.getAttribute('data-caps')); prices = JSON.parse(form.getAttribute('data-prices')); } catch (e) { /* defaults */ }
   var maxImages = parseInt(form.getAttribute('data-max-images'), 10) || 4;
-  var maxRooms = parseInt(form.getAttribute('data-max-rooms'), 10) || 5;
   var list = document.getElementById('fcFiles');
   var errEl = document.getElementById('fcErr');
   var go = document.getElementById('fcGo');
@@ -95,13 +116,14 @@
   function refreshGo() { go.disabled = busy(); go.textContent = busy() ? 'Uploading…' : 'Post'; cost(); saveSoon(); }
 
   // ── draft (localStorage, a convenience: any failure just means no draft) ──
-  function roomsChecked() { return Array.prototype.slice.call(form.querySelectorAll('input[name=room]:checked')).map(function (x) { return x.value; }); }
+  function picked() { var x = form.querySelector('input[name=community]:checked'); return x ? x.value : ''; }
+  function roomsChecked() { var c = picked(); return c ? [c] : []; }
   function announceOff() { return Array.prototype.slice.call(form.querySelectorAll('input[name=announce]')).filter(function (x) { return !x.checked; }).map(function (x) { return x.value; }); }
   function draft() {
     return {
       v: 1, at: Date.now(), path: location.pathname,
       title: form.elements.title.value, body: form.elements.body.value, link: form.elements.link.value, nsfw: form.elements.nsfw.checked,
-      global: form.elements.global.checked, rooms: roomsChecked(), announceOff: announceOff(),
+      community: picked(), announceOff: announceOff(),
       files: files.filter(function (f) { return (f.state === 'ready' || f.restoring) && f.id; }).map(function (f) { return { id: f.id, kind: f.kind, name: f.name, url: f.url || null }; })
     };
   }
@@ -233,28 +255,53 @@
     });
   });
 
-  // ── destinations: announce checkboxes + (on /feed) the list below follows the destination ──
+  // ── the community picker (1.99ci): one community, searchable; the announce checkbox follows it ──
+  var comm = form.querySelector('.fc-comm');
   function syncAnnounce() {
     var on = roomsChecked();
     form.querySelectorAll('[data-ann-for]').forEach(function (l) { l.classList.toggle('hide', on.indexOf(l.getAttribute('data-ann-for')) < 0); });
   }
-  function destinationChanged() {
-    syncAnnounce();
-    saveSoon();
-    if (!canSwap()) return;
-    var g = form.elements.global.checked;
-    var picked = form.querySelectorAll('input[name=room]:checked');
-    var u = new URL(location.href);
-    u.searchParams.delete('p'); u.searchParams.delete('by'); u.searchParams.delete('tab');
-    if (g && !picked.length) u.searchParams.delete('room');
-    else if (!g && picked.length === 1) u.searchParams.set('room', picked[0].getAttribute('data-slug') || picked[0].value);
-    else return;                      // several destinations: the list stays where it is
-    if (u.toString() !== location.href) swap(u.toString(), true);
+  function showPicked() {
+    if (!comm) return;
+    var x = form.querySelector('input[name=community]:checked');
+    var cur = comm.querySelector('[data-comm-cur]');
+    cur.textContent = '';
+    var b = document.createElement('span'); b.className = 'cbadge sm' + (x ? '' : ' all'); b.setAttribute('aria-hidden', 'true');
+    var t = document.createElement('b');
+    if (x) {
+      b.textContent = x.getAttribute('data-badge') || '';
+      b.style.setProperty('--h', x.getAttribute('data-hue') || '0');
+      t.textContent = x.getAttribute('data-title') || x.value;
+      var sm = document.createElement('small'); sm.textContent = 'c/' + (x.getAttribute('data-slug') || '');
+      cur.appendChild(b); cur.appendChild(t); cur.appendChild(sm);
+      comm.removeAttribute('data-empty');
+    } else {
+      b.textContent = '?'; t.textContent = 'Choose a community';
+      cur.appendChild(b); cur.appendChild(t);
+      comm.setAttribute('data-empty', '');
+    }
+  }
+  var cs = comm ? comm.querySelector('[data-comm-search]') : null;
+  if (cs) {
+    cs.addEventListener('input', function () {
+      var n = cs.value.trim().toLowerCase(), any = false;
+      comm.querySelectorAll('.fc-comm-it').forEach(function (l) { var hit = !n || (l.getAttribute('data-name') || '').indexOf(n) >= 0; l.classList.toggle('hide', !hit); any = any || hit; });
+      var none = comm.querySelector('[data-comm-none]'); if (none) none.classList.toggle('hide', any);
+    });
+    comm.addEventListener('toggle', function () { if (comm.open && window.matchMedia('(pointer: fine)').matches) setTimeout(function () { cs.focus(); }, 0); });
+    document.addEventListener('click', function (ev) { if (comm.open && !comm.contains(ev.target)) comm.open = false; });
+    // Enter in the search box picks the first match instead of submitting the post
+    cs.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      var first = Array.prototype.slice.call(comm.querySelectorAll('.fc-comm-it')).filter(function (l) { return !l.classList.contains('hide'); })[0];
+      if (first) { var r = first.querySelector('input'); r.checked = true; r.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
   }
   form.addEventListener('change', function (ev) {
     var t = ev.target;
-    if (t.name === 'global' || t.name === 'room') destinationChanged();
-    else saveSoon();
+    if (t.name === 'community') { syncAnnounce(); showPicked(); if (comm) comm.open = false; setErr(''); }
+    saveSoon();
   });
 
   // ── restore a saved draft ──
@@ -267,11 +314,11 @@
     if (d.body) form.elements.body.value = String(d.body).slice(0, 5000);
     if (d.link) { form.elements.link.value = String(d.link).slice(0, 2000); linkRow.classList.remove('hide'); }
     form.elements.nsfw.checked = !!d.nsfw;
-    // destinations only on the page the draft was written on (a room page picks its own room)
-    if (d.path === location.pathname && Array.isArray(d.rooms)) {
-      form.elements.global.checked = !!d.global;
-      form.querySelectorAll('input[name=room]').forEach(function (x) { x.checked = d.rooms.indexOf(x.value) >= 0; });
+    // the community: kept unless this page has its own (a room page / community view preselects it)
+    if (d.community && !form.getAttribute('data-home')) {
+      form.querySelectorAll('input[name=community]').forEach(function (x) { x.checked = x.value === d.community; });
     }
+    showPicked();
     if (Array.isArray(d.announceOff)) form.querySelectorAll('input[name=announce]').forEach(function (x) { x.checked = d.announceOff.indexOf(x.value) < 0; });
     syncAnnounce();
     var pending = (Array.isArray(d.files) ? d.files : []).slice(0, 6).filter(function (x) { return x && /^[a-f0-9]{24}$/.test(String(x.id)); });
@@ -301,12 +348,12 @@
     setErr('');
     if (busy()) return setErr('Wait for the uploads to finish.');
     var roomsSel = roomsChecked();
-    if (roomsSel.length > maxRooms) return setErr('Post to at most ' + maxRooms + ' rooms at once.');
+    if (!roomsSel.length) { setErr('Choose a community to post in.'); if (comm) comm.open = true; return; }
     var announce = Array.prototype.slice.call(form.querySelectorAll('input[name=announce]:checked'))
       .map(function (x) { return x.value; }).filter(function (v) { return roomsSel.indexOf(v) >= 0; });
     var body = {
       title: form.elements.title.value, body: form.elements.body.value, link: form.elements.link.value.trim(), nsfw: form.elements.nsfw.checked,
-      global: form.elements.global.checked, rooms: roomsSel, announce: announce,
+      community: roomsSel[0], announce: announce,
       attachments: files.filter(function (f) { return f.state === 'ready'; }).map(function (f) { return f.id; })
     };
     // 1.99cc: the Terms tick box (shown until this account accepted the current version)
@@ -325,7 +372,7 @@
     }).then(function (d) {
       clearTimeout(saveTimer); clearDraft(); restoring = true;     // posted: the draft is done
       errEl.textContent = 'Posted ✔'; errEl.classList.add('ok');
-      // stay on a room page / the feed (the new post shows on top of New); elsewhere open the post
+      // stay on a room page (the new post shows on top of New); elsewhere open the post
       var u = new URL(location.href);
       if (/^\/rooms\//.test(u.pathname)) { u.searchParams.delete('fsort'); u.searchParams.delete('fp'); u.hash = 'feed';
         var target = u.toString();

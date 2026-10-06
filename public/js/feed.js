@@ -120,6 +120,12 @@
       else window.patvSafety.details({ post: id });
       return;
     }
+    if (act === 'crosspost') {
+      // 1.99ci: the crosspost dialog (feed-crosspost.js)
+      if (!signed) return login();
+      if (window.patvCrosspost) window.patvCrosspost.open(id, b.getAttribute('data-title') || '');
+      return;
+    }
     if (act === 'edit') { var art = b.closest('.fp'); art.querySelector('.fp-editf').classList.remove('hide'); return; }
     if (act === 'edit-cancel') { b.closest('.fp-editf').classList.add('hide'); return; }
     if (act === 'delete' || act === 'admin-delete') {

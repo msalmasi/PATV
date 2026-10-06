@@ -1,6 +1,6 @@
 <%#
   Pepe's settings for ONE feed scope (1.99cg, pepefeed.js). Locals: s (pepefeed.scopeView: settings + used + quiet + global),
-  where ("this room" | "the main feed"), url (the POST endpoint), wrap ("settings" for a room: {settings: ...}; "main" for /feed/admin),
+  where ("this room" | "All"), url (the POST endpoint), wrap ("settings" for a room: {settings: ...}; "main" for /feed/admin),
   admin (bool: the viewer is a site Admin), roomScope (bool)
 %><%
   const locked_ = s.admin_lock && !admin;

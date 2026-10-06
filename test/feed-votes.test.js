@@ -88,7 +88,13 @@ test.after(() => { server.close(); });
 test.beforeEach(() => { store._gaps.clear(); store._votes.clear(); });
 
 const H = (u) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, u ? { "x-test-user": u.userId } : {});
+// 1.99ci: every post lives in exactly one community - tests post to the PATV Lounge unless they pick one
+// (community / rooms set), or send noCommunity: true to test the refusal.
+const LOUNGE = "patv:lounge";
+const withCommunity = (url, body) => (url === "/api/feed/posts" && body && typeof body === "object" && body.community === undefined && !body.rooms && !body.noCommunity
+  ? { ...body, community: LOUNGE } : body);
 async function call(method, url, u, body) {
+  body = withCommunity(url, body);
   const r = await fetch(base + url, { method, headers: H(u), body: body === undefined ? undefined : JSON.stringify(body) });
   let d = null;
   try { d = await r.json(); } catch (e) { d = null; }
@@ -96,7 +102,15 @@ async function call(method, url, u, body) {
 }
 const post = (url, u, body) => call("POST", url, u, body);
 const page = async (url, u) => { const r = await fetch(base + url, { headers: u ? { "x-test-user": u.userId } : {} }); return { status: r.status, html: await r.text() }; };
-const mkPost = async (u, body) => { const r = await post("/api/feed/posts", u, body); assert.equal(r.status, 200, JSON.stringify(r.d)); return r.d.id; };
+// 1.99ci: a post is created in ONE community; posts made to several rooms at once (1.99bw-1.99cf) still exist,
+// so a test asking for more rooms gets the first through the API and the others as such legacy placements
+const mkPost = async (u, body) => {
+  const extra = body && Array.isArray(body.rooms) ? body.rooms.slice(1) : [];
+  const r = await post("/api/feed/posts", u, extra.length ? { ...body, rooms: body.rooms.slice(0, 1) } : body);
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  for (const rid of extra) await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, 0)", [r.d.id, rid, Date.now()]);
+  return r.d.id;
+};
 const vote = async (u, id, dir) => { store._gaps.clear(); return post(`/api/feed/posts/${id}/vote`, u, dir === undefined ? {} : { dir }); };
 const row = async (id) => (await getQuery("SELECT * FROM feed_posts WHERE id = ?", [id]))[0];
 const near = (a, b, eps = 1e-4) => assert.ok(Math.abs(a - b) < eps, `${a} ≈ ${b}`);
@@ -411,7 +425,7 @@ test("room owners: pin (max 3, own room only), owner vs non-owner vs admin, audi
 test("room owners: lock comments only on posts that live in their rooms alone; admins anywhere", async () => {
   const slugB = rooms.getCached(ROOM_B).slug;
   const only = await mkPost(U.bob, { body: "room only", rooms: [ROOM_B], global: false });
-  const both = await mkPost(U.bob, { body: "room + main", rooms: [ROOM_B], global: true });
+  const both = await mkPost(U.bob, { body: "room + the Lounge (legacy)", rooms: [ROOM_B, LOUNGE] });
   const two = await mkPost(U.bob, { body: "two rooms", rooms: [ROOM_B, ROOM_C], global: false });
   assert.equal((await mod(U.ownerB, slugB, { op: "lock", post: only })).status, 200);
   assert.equal((await mod(U.ownerB, slugB, { op: "lock", post: both })).status, 403);
@@ -440,14 +454,15 @@ test("room owners: NSFW and hide apply to their room's view only (and the post p
   const nB = (await store.list({ room: ROOM_B, viewer: U.carol, limit: 50 })).posts.find((p) => p.id === id);
   const nC = (await store.list({ room: ROOM_C, viewer: U.carol, limit: 50 })).posts.find((p) => p.id === id);
   const nM = (await store.list({ viewer: U.carol, sort: "new", limit: 50 })).posts.find((p) => p.id === id);
-  assert.deepEqual([nB.nsfw, nC.nsfw, nM.nsfw], [true, false, false]);
+  // 1.99ci: All (like the post page) errs on the safe side - any live community's NSFW mark applies there
+  assert.deepEqual([nB.nsfw, nC.nsfw, nM.nsfw], [true, false, true]);
   assert.equal((await store.get(id, U.carol, { detail: true })).nsfw, true, "the post page errs on the safe side");
   assert.equal((await row(id)).nsfw_admin, null, "the post's own flags are untouched");
   assert.equal((await mod(U.ownerB, slugB, { op: "hide", post: id })).status, 200);
   assert.ok(!(await store.list({ room: ROOM_B, viewer: U.carol, limit: 50 })).posts.some((p) => p.id === id), "hidden in B for visitors");
   assert.ok((await store.list({ room: ROOM_B, viewer: U.ownerB, limit: 50 })).posts.find((p) => p.id === id).roomHidden, "the owner still sees it, marked");
   assert.ok((await store.list({ room: ROOM_C, viewer: U.carol, limit: 50 })).posts.some((p) => p.id === id), "still in C");
-  assert.ok((await store.list({ viewer: U.carol, sort: "new", limit: 50 })).posts.some((p) => p.id === id), "still on the main feed");
+  assert.ok((await store.list({ viewer: U.carol, sort: "new", limit: 50 })).posts.some((p) => p.id === id), "still on All (it's visible in C)");
   assert.equal((await mod(U.ownerB, slugB, { op: "unhide", post: id })).status, 200);
   assert.equal((await mod(U.ownerB, slugB, { op: "unnsfw", post: id })).status, 200);
 });
@@ -458,14 +473,14 @@ test("room owners: approval queue - pending posts are invisible in the room unti
   assert.equal((await mod(U.ownerB, slugB, { op: "settings", settings: { approval: true } })).d.settings.approval, true);
   await runQuery("INSERT OR REPLACE INTO feed_kv (key, value) VALUES ('mention:' || ?, '1')", [ROOM_B]);
   const a = await mkPost(U.carol, { title: "please approve", body: "x", rooms: [ROOM_B], global: false });
-  const b = await mkPost(U.carol, { title: "also main", body: "y", rooms: [ROOM_B], global: true });
+  const b = await mkPost(U.carol, { title: "also pending", body: "y", rooms: [ROOM_B] });
   const own = await mkPost(U.ownerB, { body: "owner posts go straight up", rooms: [ROOM_B], global: false });
   const vis = async (u) => (await store.list({ room: ROOM_B, viewer: u, limit: 100 })).posts.map((p) => p.id);
   assert.ok(!(await vis(U.bob)).includes(a) && !(await vis(null)).includes(a));
   assert.ok((await vis(U.carol)).includes(a), "the author sees their own pending post");
   assert.ok((await vis(U.ownerB)).includes(a));
   assert.ok((await vis(U.bob)).includes(own));
-  assert.ok((await store.list({ viewer: U.bob, sort: "new", limit: 100 })).posts.some((p) => p.id === b), "pending in the room, live on the main feed");
+  assert.ok(!(await store.list({ viewer: U.bob, sort: "new", limit: 100 })).posts.some((p) => p.id === b), "1.99ci: pending in its only community = not on All either");
   assert.equal((await page(`/feed/p/${a}`, U.bob)).status, 404, "not shown anywhere yet: hidden from others");
   assert.equal((await page(`/feed/p/${a}`, U.carol)).status, 200);
   assert.equal((await page(`/feed/p/${a}`, U.ownerB)).status, 200);
@@ -513,7 +528,7 @@ test("room owners: who can post (linked / approved / followers), per-user daily 
   const r = await post("/api/feed/posts", U.lvl, { body: "3", rooms: [ROOM_B], global: false });
   assert.equal(r.status, 429);
   assert.match(r.d.error, /2 posts a day/);
-  assert.equal((await post("/api/feed/posts", U.lvl, { body: "3", global: true })).status, 200, "the main feed isn't limited by the room");
+  assert.equal((await post("/api/feed/posts", U.lvl, { body: "3", rooms: [ROOM_C] })).status, 200, "another community isn't limited by B's rule");
   await mod(U.ownerB, slugB, { op: "settings", settings: { per_day: 0 } });
 });
 
@@ -544,8 +559,8 @@ test("room owners: report queue (reasons + counts), dismiss / hide / remove; com
   const n = await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.evil.userId, "feed-crm:" + cm.d.id]);
   assert.equal(n.length, 1);
   assert.match(n[0].body, /removed by a moderator: x/);
-  const other = await mkPost(U.bob, { body: "main only" });
-  const oc = await post(`/api/feed/posts/${other}/comments`, U.evil, { body: "on main" });
+  const other = await mkPost(U.bob, { body: "in the Lounge only" });
+  const oc = await post(`/api/feed/posts/${other}/comments`, U.evil, { body: "in the Lounge" });
   assert.equal((await post(`/api/feed/comments/${oc.d.id}/delete`, U.ownerB, {})).status, 403, "not on a post outside their rooms");
   // bans: 1 day, 7 days, permanent; only in their room
   for (const [days, u] of [[1, "carol"], [7, "leveled"], [0, "evil"]]) assert.equal((await post("/api/feed/ban", U.ownerB, { user: u, room: slugB, days })).status, 200);
@@ -594,7 +609,7 @@ test("rendering: vote column states, own-post downvote disabled, one menu, escap
   const owner = await page(`/feed/p/${id}`, U.ownerB);
   for (const op of ["pin", "nsfw", "hide"]) assert.ok(owner.html.includes(`data-op="${op}"`), op);
   assert.ok(owner.html.includes('data-act="room-ban"'));
-  assert.ok(!owner.html.includes('data-op="lock"'), "on the main feed too: no lock for the owner");
+  assert.ok(owner.html.includes('data-op="lock"'), "1.99ci: B is its only community, so its owner can lock it");
   const adm = await page(`/feed/p/${id}`, U.admin);
   assert.ok(adm.html.includes('data-act="admin-lock"') && adm.html.includes("Mark NSFW"));
   assert.equal(web.fx.num(999), "999");

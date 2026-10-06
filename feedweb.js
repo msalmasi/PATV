@@ -82,6 +82,10 @@ const ICON_PATHS = {
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   shield: '<path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6Z"/>',
+  xpost: '<path d="M4 8.5h12.5L13 5M20 15.5H7.5L11 19"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6"/><path d="m15 15 5 5"/>',
+  users: '<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19c.6-3.3 2.8-5 5.5-5s4.9 1.7 5.5 5"/><path d="M15.5 5.6a3 3 0 0 1 0 5.8M17.5 14.2c1.6.6 2.6 2.2 3 4.8"/>',
+  door: '<path d="M14 4H6v16h8"/><path d="M10 12h10M17 9l3 3-3 3"/>',
 };
 /** Inline SVG (a fixed string per name - nothing user-supplied goes in). */
 function icon(name, cls = "") {
@@ -107,7 +111,24 @@ function num(n) {
 const SORT_LABELS = { hot: "Hot", new: "New", top: "Top", controversial: "Controversial", rising: "Rising" };
 const WINDOW_LABELS = { hour: "Past hour", day: "Today", week: "This week", month: "This month", year: "This year", all: "All time" };
 const CSORT_LABELS = { best: "Best", top: "Top", new: "New", controversial: "Controversial" };
-const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs, icon, hue, initial, num, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+/**
+ * 1.99ci: a feed address. where: "all" | "following" | a community slug; params: sort, t, p, by (empty
+ * values and the defaults are left out). -> "/feed", "/feed/following", "/feed/c/<slug>?sort=new"
+ */
+function feedUrl(where, params = {}) {
+  const path = !where || where === "all" ? "/feed" : where === "following" ? "/feed/following" : "/feed/c/" + encodeURIComponent(where);
+  const qs = new URLSearchParams();
+  for (const k of ["sort", "t", "p", "by"]) {
+    const v = params[k];
+    if (v === undefined || v === null || v === "" || (k === "sort" && v === "hot") || (k === "p" && Number(v) <= 1)) continue;
+    qs.set(k, String(v));
+  }
+  const s = qs.toString();
+  return path + (s ? "?" + s : "");
+}
+/** A community's badge: the frog for Pepe's (house) rooms, a sofa for the site's own communities, else its initial. */
+const cBadge = (c) => (c && c.community ? "🛋️" : c && c.house ? "🐸" : initial(c && c.title));
+const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
@@ -124,19 +145,27 @@ async function viewerOf(req) {
 const SORTS = new Set(store.SORTS);
 const TOPS = new Set(Object.keys(store.WINDOWS));
 
-/** Everything the composer needs (rooms to pick, limits, what this viewer may do). */
+/**
+ * Everything the composer needs (limits, what this viewer may do) and (1.99ci) the communities they can post
+ * in: exactly one is picked; `roomId` (a room page / a community view) is the default when they may post there.
+ */
 async function composerFor(viewer, roomId) {
   if (!viewer) return null;
   const C = store.config();
   // 1.99bz: announce = the room owner lets Pepe announce new posts there (the author then gets a per-post checkbox)
-  const all = await Promise.all((await rooms.list()).map(async (r) => ({ id: r.id, slug: r.slug, title: r.title, announce: await store.mentionOn(r.id) })));
-  const refusal = await store.postRefusal(viewer, roomId ? [roomId] : [""]);
-  const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, roomId ? [roomId] : [""], { media: true });
+  const list = await store.communities(viewer);
+  const all = await Promise.all(list.filter((r) => r.canPost).map(async (r) => ({ id: r.id, slug: r.slug, title: r.title, followers: r.followers,
+                                                                                community: r.community, house: r.house, announce: await store.mentionOn(r.id) })));
+  const refusal = await store.postRefusal(viewer, []);
+  const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, [], { media: true });
+  const here = roomId ? list.find((r) => r.id === roomId) : null;
   const prices = { post: C.price_post, link: C.price_link, image: C.price_image, audio: C.price_audio, video: C.price_video };
   // 1.99cc: "By posting you agree to the Terms" - and a one-time tick box until this account has accepted the current version
   // 1.99cf: only while the admin switch terms_enforced is on (default off: no line, no tick box)
   const termsNeeded = await terms.needs(viewer.userId).catch(() => false);
-  return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
+  return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all,
+           room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
+           refusal: refusal ? refusal.message : (all.length ? null : "There's no community you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK };
 }
@@ -184,38 +213,74 @@ function register(app, { addUser, isBotToken }) {
   const viewOpts = (req) => ({ host: req.hostname || "publicaccess.tv" });
 
   // ── pages ──
-  app.get("/feed", addUser, async (req, res) => {
+  // 1.99ci URL scheme: /feed = All (every community), /feed/following, /feed/c/<slug> = one community
+  // (its room page /rooms/<slug> stays the room's home: live chat, stage and the same feed). Sort, time
+  // window, page and ?by= stay query strings. The old ?tab= / ?room= links redirect (301).
+  app.get("/feed", addUser, async (req, res, next) => {
+    try {
+      const q = req.query || {};
+      if (q.tab || q.room) {
+        // 1.99bz: no separate "Clips & snaps" tab any more (captures are the story strip); 1.99ci: ?room= and ?tab=following are paths
+        let path = "/feed";
+        if (q.tab === "following") path = "/feed/following";
+        else if (q.room) {
+          const raw = String(q.room).slice(0, 128);
+          const R = (await rooms.get(raw)) || (await require("./roomsweb").resolveRoom(raw));
+          path = "/feed/c/" + encodeURIComponent(R ? R.slug : raw);
+        }
+        const keep = new URLSearchParams();
+        for (const k of ["sort", "t", "p", "by"]) if (q[k] && !(k === "by" && path !== "/feed")) keep.set(k, String(q[k]).slice(0, 64));
+        const qs = keep.toString();
+        return res.redirect(301, path + (qs ? "?" + qs : ""));
+      }
+      await feedPage(req, res, { mode: "all" });
+    } catch (e) { next(e); }
+  });
+  app.get("/feed/following", addUser, (req, res) => feedPage(req, res, { mode: "following" }));
+  app.get("/feed/c/:slug", addUser, async (req, res) => {
+    const raw = String(req.params.slug || "").slice(0, 128);
+    const R = (await rooms.get(raw)) || (await require("./roomsweb").resolveRoom(raw));
+    if (!R) {
+      const viewer = await viewerOf(req);
+      return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "No such community",
+        message: "That community isn't on PATV.", title: "Community not found" });
+    }
+    if (R.slug !== raw) {           // one canonical address per community (a room id or bridge slug redirects)
+      const qs = new URLSearchParams(req.query).toString();
+      return res.redirect(301, "/feed/c/" + encodeURIComponent(R.slug) + (qs ? "?" + qs : ""));
+    }
+    return feedPage(req, res, { mode: "community", room: R });
+  });
+
+  async function feedPage(req, res, { mode, room: R = null }) {
     try {
       await store.init();
-      // 1.99bz: no separate "Clips & snaps" tab any more - captures are the story strip on top of the feed
-      if (req.query.tab === "captures" || req.query.tab === "clips") {
-        const keep = new URLSearchParams();
-        if (req.query.room) keep.set("room", String(req.query.room).slice(0, 128));
-        const qs = keep.toString();
-        return res.redirect(301, "/feed" + (qs ? "?" + qs : ""));
-      }
       const viewer = await viewerOf(req);
-      const tab = req.query.tab === "following" ? "following" : "posts";
       const sort = SORTS.has(req.query.sort) ? req.query.sort : "hot";
       const top = TOPS.has(req.query.t) ? req.query.t : "week";
       const page = Math.max(1, parseInt(req.query.p, 10) || 1);
       const roomList = await rooms.list();
-      let R = null;
-      if (req.query.room && tab === "posts") {
-        const q = String(req.query.room);
-        R = (await rooms.get(q)) || (await require("./roomsweb").resolveRoom(q));
-      }
       let author = null;
-      if (req.query.by && tab === "posts") author = await rooms.findUser(String(req.query.by).slice(0, 60));
+      if (req.query.by && mode === "all") author = await rooms.findUser(String(req.query.by).slice(0, 60));
       let L = { posts: [], more: false };
       let follow = null;
-      if (tab === "following") {
+      if (mode === "following") {
         if (viewer) {
           L = await store.list({ following: viewer.userId, sort, page, top, viewer });
           follow = { ...(await follows.lists(viewer.userId)), prefs: await follows.prefs(viewer.userId) };
         }
       } else {
         L = await store.list({ room: R ? R.id : null, author: !R && author ? author.userId : null, sort, page, top, viewer });
+      }
+      // the community bar: All, Following, then every community (icon, followers, posts)
+      const comms = await store.communities(viewer);
+      let header = null;
+      if (R) {
+        const c = comms.find((x) => x.id === R.id) || { followers: 0, posts: 0 };
+        header = { id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
+                   owner: R.owner ? (R.owner.display || R.owner.username) : null, ownerUser: R.owner ? R.owner.username : null,
+                   followers: c.followers, posts: c.posts, following: viewer ? await follows.isFollowing(viewer.userId, "room", R.id) : false,
+                   roomHref: "/rooms/" + encodeURIComponent(require("./roomsweb").linkSlug(R)), mod: viewer ? await rooms.canManage(viewer, R.id) : false };
       }
       // the story strip: one room's captures as thumbnails, or a circle per room with fresh ones
       const story = {
@@ -226,8 +291,8 @@ function register(app, { addUser, isBotToken }) {
       };
       res.set("X-Robots-Tag", "noindex");
       res.render("feed", {
-        user: viewer ? viewer.username : null, viewer, tab, sort, top, page, room: R, author, story, follow,
-        rooms: roomList, posts: L.posts, more: L.more, fx, embeds, host: viewOpts(req).host,
+        user: viewer ? viewer.username : null, viewer, mode, tab: mode === "following" ? "following" : "posts", sort, top, page, room: R, header, author, story, follow,
+        rooms: roomList, communities: comms, posts: L.posts, more: L.more, fx, embeds, host: viewOpts(req).host,
         authorFollow: author && viewer && author.userId !== viewer.userId ? await follows.isFollowing(viewer.userId, "user", author.userId) : null,
         composer: await composerFor(viewer, R ? R.id : null),
         modRooms: viewer ? new Set((await Promise.all(roomList.map(async (x) => ((await rooms.canManage(viewer, x.id)) ? x.id : null)))).filter(Boolean)) : new Set(),
@@ -236,6 +301,27 @@ function register(app, { addUser, isBotToken }) {
       console.error("[feed] /feed:", e);
       res.status(500).send("Something went wrong.");
     }
+  }
+
+  // 1.99ci: the communities (pickers in the composer and the crosspost dialog): canPost per viewer
+  app.get("/api/feed/communities", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const list = await store.communities(await viewerOf(req));
+      // ?post=<id>: mark where that post (its original, for a crosspost) already is - the crosspost dialog greys those out
+      const here = new Set();
+      if (req.query.post) {
+        let o = await store.getRow(String(req.query.post));
+        if (o && o.crosspost_of) o = await store.getRow(o.crosspost_of);
+        if (o) {
+          const rows = await getQuery(`SELECT pr.room_id FROM feed_post_rooms pr JOIN feed_posts x ON x.id = pr.post_id
+                                       WHERE (x.id = ? OR (x.crosspost_of = ? AND x.deleted_at IS NULL)) AND pr.removed_at IS NULL`, [o.id, o.id]);
+          for (const r of rows) here.add(r.room_id);
+        }
+      }
+      res.json({ ok: true, communities: list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers,
+                                                          posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, house: c.house, here: here.has(c.id) })) });
+    } catch (e) { fail(res, e); }
   });
 
   app.get("/feed/p/:id", addUser, async (req, res) => {
@@ -246,7 +332,7 @@ function register(app, { addUser, isBotToken }) {
       const modRooms = new Set();
       if (p && viewer) for (const r of p.roomsAll) if (await rooms.canManage(viewer, r.id)) modRooms.add(r.id);
       // only waiting for approval / hidden / taken out everywhere it was posted: its author, those rooms' owners and staff
-      const shownSomewhere = p && (p.global || p.roomsAll.some((r) => !r.removed && !r.pending && !r.hidden));
+      const shownSomewhere = p && p.roomsAll.some((r) => !r.removed && !r.pending && !r.hidden);
       if (!p || (p.deleted && !staff) || (p.hidden && !staff && !p.mine) || (!shownSomewhere && !staff && !p.mine && !modRooms.size)) {
         return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "Post not found",
           message: "It was deleted, or it never existed.", title: "Post not found" });
@@ -526,6 +612,16 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id });
     } catch (e) { fail(res, e); }
   });
+  // 1.99ci: crosspost {community, title?} -> a new post in that community embedding this one
+  app.post("/api/feed/posts/:id/crosspost", addUser, guard(false), async (req, res) => {
+    try {
+      if (await termsGate(req)) return termsRefusal(res);
+      const b = req.body || {};
+      const p = await store.crosspost(req.user.userId, String(req.params.id), { community: b.community, title: b.title });
+      await record(req, { kind: "post", id: p.id, postId: p.id, event: "crosspost" });
+      res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id, pending: !!p.pendingApproval, community: p.rooms[0] || (p.roomsAll[0] || null) });
+    } catch (e) { fail(res, e); }
+  });
   const postAct = (path, fn) => app.post("/api/feed/posts/:id/" + path, addUser, guard(false), async (req, res) => {
     try {
       const viewer = await viewerOf(req);
@@ -730,4 +826,11 @@ async function profileSocial(profileUser, reqUser, { show = true } = {}) {
   };
 }
 
-module.exports = { register, roomFeed, botSync, fx, linkify, captures, composerFor, profileSocial };
+/** The homepage's "Hot on PATV" card (1.99ci): the top 5 hot posts across All (no NSFW for signed-out visitors). */
+async function hotMini(reqUser, limit = 5) {
+  await store.init();
+  const viewer = reqUser && reqUser.userId ? await viewerOf({ user: reqUser }) : null;
+  return { posts: await store.hot(viewer, limit), signed: !!viewer };
+}
+
+module.exports = { register, roomFeed, botSync, fx, linkify, captures, composerFor, profileSocial, hotMini };

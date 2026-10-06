@@ -1,0 +1,40 @@
+<%#
+  A post's content (1.99ci: split out of feed-post.ejs so a crosspost can embed its original). Locals: q (a
+  feedstore.decorate row), fx, embeds, host, detail_ (bool), signed (bool), url_ (the post's address, for the
+  NSFW sign-in link)
+%><%
+  const hide_ = q.nsfw && !signed;
+  const link_ = q.link;
+  let player_ = null;
+  if (link_ && link_.embed) { try { player_ = embeds.playerUrl(link_.embed, host); } catch (e) { player_ = null; } }
+%>
+<% if (hide_) { %>
+  <div class="fp-nsfw-gate">This post is marked NSFW. <a href="/login?next=<%= encodeURIComponent(url_) %>">Sign in</a> to see it.</div>
+<% } else { %>
+  <% if (q.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(q.body) %></div><% } %>
+  <% if (q.images.length) { %>
+    <div class="fp-imgs n<%= Math.min(q.images.length, 4) %>">
+      <% q.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="Picture in <%= q.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>></a><% }) %>
+    </div>
+  <% } %>
+  <% q.video.forEach((v) => { %>
+    <div class="fp-video"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video></div>
+  <% }) %>
+  <% q.audio.forEach((a) => { %>
+    <div class="fp-audio"><audio src="<%= fx.fileUrl(a.file) %>" controls preload="none"></audio><span class="mut"><%= a.secs ? fx.fmtSecs(a.secs) : '' %></span></div>
+  <% }) %>
+  <% if (link_) { %>
+    <% if (player_) { %>
+      <div class="fp-embed" data-src="<%= player_ %>">
+        <button type="button" class="fp-play" data-act="embed" aria-label="Play <%= embeds.label(link_.embed) %>">
+          <% if (link_.thumbFile) { %><img src="<%= fx.fileUrl(link_.thumbFile) %>" alt="" loading="lazy"><% } %>
+          <span class="tri">▶</span><span class="lbl"><%= embeds.label(link_.embed) %> · click to play</span>
+        </button>
+      </div>
+    <% } %>
+    <a class="fp-link<%= link_.thumbFile && !player_ ? ' has-img' : '' %>" href="<%= link_.url %>" rel="nofollow noopener noreferrer ugc" target="_blank">
+      <% if (link_.thumbFile && !player_) { %><img src="<%= fx.fileUrl(link_.thumbFile) %>" alt="" loading="lazy"><% } %>
+      <span class="t"><b><%= link_.title || link_.domain %></b><% if (link_.description) { %><span class="d"><%= link_.description %></span><% } %><span class="dom"><%= link_.domain %> ↗</span></span>
+    </a>
+  <% } %>
+<% } %>

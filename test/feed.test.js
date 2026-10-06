@@ -76,7 +76,13 @@ test.after(() => { server.close(); });
 test.beforeEach(() => { store._gaps.clear(); });
 
 const H = (u, extra = {}) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, u ? { "x-test-user": u.userId } : {}, extra);
+// 1.99ci: every post lives in exactly one community - tests post to the PATV Lounge unless they pick one
+// (community / rooms set), or send noCommunity: true to test the refusal.
+const LOUNGE = "patv:lounge";
+const withCommunity = (url, body) => (url === "/api/feed/posts" && body && typeof body === "object" && body.community === undefined && !body.rooms && !body.noCommunity
+  ? { ...body, community: LOUNGE } : body);
 async function call(method, url, u, body, headers) {
+  body = withCommunity(url, body);
   const r = await fetch(base + url, { method, headers: headers || H(u), body: body === undefined ? undefined : JSON.stringify(body) });
   let d = null;
   try { d = await r.json(); } catch (e) { d = null; }
@@ -280,25 +286,33 @@ test("requests without X-Requested-With or from another site are refused", async
 
 // ───────────────────────────── posts, rooms, permissions ─────────────────────────────
 let P1, P2, P3;
-test("posting: text to the main feed and rooms; room filter; room-only posts stay off the main feed", async () => {
+test("posting: one community per post; All shows every community's posts (room-only ones too); community views", async () => {
   const a = await post("/api/feed/posts", U.alice, { title: "Hello frogs", body: "first!", rooms: [ROOM_A], global: true });
   assert.equal(a.status, 200, a.d && a.d.error);
   P1 = a.d.id;
-  const b = await post("/api/feed/posts", U.bob, { body: "plant room only", rooms: [ROOM_B], global: false });
+  const b = await post("/api/feed/posts", U.bob, { body: "plant room only", community: rooms.getCached(ROOM_B).slug });
   assert.equal(b.status, 200, b.d && b.d.error);
   P2 = b.d.id;
-  const c = await post("/api/feed/posts", U.alice, { body: "main feed only" });
+  const c = await post("/api/feed/posts", U.alice, { body: "in the Lounge" });
   P3 = c.d.id;
-  const main = (await store.list({})).posts.map((p) => p.id);
-  assert.ok(main.includes(P1) && main.includes(P3) && !main.includes(P2));
-  const ra = (await store.list({ room: ROOM_A })).posts.map((p) => p.id);
-  assert.deepEqual(ra, [P1]);
-  const rb = (await store.list({ room: ROOM_B })).posts.map((p) => p.id);
-  assert.deepEqual(rb, [P2]);
-  // nowhere to post / nothing to post / unknown room
-  assert.equal((await post("/api/feed/posts", U.alice, { body: "x", global: false })).status, 400);
-  assert.equal((await post("/api/feed/posts", U.alice, {})).status, 400);
+  // 1.99ci bug fix: All used to read p.global = 1, so P2 (posted only to a room) never showed there
+  const all = (await store.list({})).posts.map((p) => p.id);
+  assert.ok(all.includes(P1) && all.includes(P2) && all.includes(P3), "All = every community");
+  assert.deepEqual((await store.list({ room: ROOM_A })).posts.map((p) => p.id), [P1]);
+  assert.deepEqual((await store.list({ room: ROOM_B })).posts.map((p) => p.id), [P2]);
+  assert.deepEqual((await store.list({ room: LOUNGE })).posts.map((p) => p.id), [P3]);
+  assert.equal((await getQuery("SELECT global FROM feed_posts WHERE id = ?", [P1]))[0].global, 0, "the main-feed flag is never set any more");
+  // no community / several / unknown / nothing to post
+  let r = await post("/api/feed/posts", U.alice, { body: "x", noCommunity: true });
+  assert.equal(r.status, 400);
+  assert.match(r.d.error, /Choose a community/);
+  assert.equal((await post("/api/feed/posts", U.alice, { body: "x", global: true, noCommunity: true })).status, 400, "the main feed is gone");
+  r = await post("/api/feed/posts", U.alice, { body: "x", rooms: [ROOM_A, ROOM_B] });
+  assert.equal(r.status, 400);
+  assert.match(r.d.error, /one community.*Crosspost/);
+  assert.equal((await post("/api/feed/posts", U.alice, { noCommunity: true })).status, 400);
   assert.equal((await post("/api/feed/posts", U.alice, { body: "x", rooms: ["Nope.Room"] })).status, 400);
+  assert.equal((await post("/api/feed/posts", U.alice, { body: "x", community: "nope" })).status, 400);
 });
 
 test("posting with files: only my own, ready, unposted uploads; at most 4 pictures", async () => {
@@ -326,8 +340,9 @@ test("posting with files: only my own, ready, unposted uploads; at most 4 pictur
 test("permissions: the room owner removes a post from THEIR room only; author edit/delete; admin delete", async () => {
   // owner of ROOM_B can't touch ROOM_A
   assert.equal((await post(`/api/feed/posts/${P1}/remove-room`, U.owner, { room: ROOM_A })).status, 403);
-  // a cross-posted post: the owner removes it from their room, it stays on the main feed / other room
-  const x = await post("/api/feed/posts", U.carol, { body: "both rooms", rooms: [ROOM_A, ROOM_B] });
+  // a post in two rooms (made before 1.99ci): the owner removes it from their room, it stays in the other and on All
+  const x = await post("/api/feed/posts", U.carol, { body: "both rooms", rooms: [ROOM_A] });
+  await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, 0)", [x.d.id, ROOM_B, Date.now()]);
   assert.equal((await post(`/api/feed/posts/${x.d.id}/remove-room`, U.owner, { room: ROOM_B })).status, 200);
   assert.ok(!(await store.list({ room: ROOM_B })).posts.some((p) => p.id === x.d.id));
   assert.ok((await store.list({ room: ROOM_A })).posts.some((p) => p.id === x.d.id));

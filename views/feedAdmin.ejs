@@ -116,8 +116,8 @@
       </fieldset>
       <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>
-    <h3 class="pf-h">The main feed</h3>
-    <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'the main feed', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
+    <h3 class="pf-h">All (site-wide: Pepe's own communities and the PATV Lounge follow these unless they have their own)</h3>
+    <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
     <h3 class="pf-h">Rooms where he's on</h3>
     <% if (!pepe.rooms.length) { %><p class="mut">None yet - room owners switch him on from their room's feed moderation page (admins can too, and can lock it).</p><% } else { %>
       <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Room</th><th>Mentions</th><th>On his own</th><th>24 h</th><th></th></tr></thead><tbody>

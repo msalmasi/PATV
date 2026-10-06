@@ -7,7 +7,7 @@
 %>
 <link rel="stylesheet" href="/public/css/feed.css?v=4">
 <section class="card rf" id="feed" aria-labelledby="rfH">
-  <h2 id="rfH"><span>📝 <%= room.name %> feed</span><small><a href="/feed?room=<%= encodeURIComponent(room.slug) %>">open in the feed ›</a></small></h2>
+  <h2 id="rfH"><span>📝 <%= room.name %> feed</span><small><a href="/feed/c/<%= encodeURIComponent(F.slug) %>">open in the feed ›</a></small></h2>
   <% if (F.follow) { %>
     <div class="rf-follow"><%- include('follow-btn', { kind: 'room', id: F.room, following: F.follow.following, signed: !!F.viewer, next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
       <span class="fw-counts"><span><b data-follower-count-kind="room" data-follower-count-id="<%= F.room %>"><%= F.follow.followers.toLocaleString('en-US') %></b> follower<%= F.follow.followers === 1 ? '' : 's' %></span></span></div>

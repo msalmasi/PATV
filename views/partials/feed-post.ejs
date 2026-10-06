@@ -1,24 +1,24 @@
 <%#
   One feed post card (1.99bv, redesigned 1.99bx). Locals: p (feedstore.decorate row), fx (feedweb.fx), embeds
   (stageembed), host, viewer (or null), modRooms (Set of room ids the viewer manages), detail (bool), ctxRoom (room id or null)
-  Layout: vote column (up / score / down) | meta line (author · rooms · time), title + flair, body, media, action bar
+  Layout: vote column (up / score / down) | meta line (community · author · time), title + flair, body, media, action bar
   (comments, share, the "more" menu with everything else).
+  1.99ci: a crosspost (p.xpost) shows "crossposted from c/<room> by u/<author>" and embeds the original (or "original
+  removed"); an original shows "crossposted to N communities". Crosspost is in the "more" menu (and the post page's bar).
 %><%
   const signed = !!viewer;
   const staff_ = !!viewer && (viewer.class === 'Admin' || viewer.class === 'Staff');
   const detail_ = typeof detail !== 'undefined' && detail;
   const ctx_ = typeof ctxRoom !== 'undefined' ? ctxRoom : null;
   const mods_ = typeof modRooms !== 'undefined' && modRooms ? modRooms : new Set();
-  const hideMedia = p.nsfw && !signed;
   const myRooms = p.roomsAll.filter((r) => mods_.has(r.id));
-  const link = p.link;
-  let player = null;
-  if (link && link.embed) { try { player = embeds.playerUrl(link.embed, host); } catch (e) { player = null; } }
   const v_ = p.myVote || 0;
   const roomsShown = p.rooms.filter((r) => r.id !== ctx_);
   const url_ = '/feed/p/' + p.id;
   const live_ = p.roomsAll.filter((r) => !r.removed);
-  const lockable = staff_ || (!p.global && live_.length > 0 && live_.every((r) => mods_.has(r.id)));
+  const lockable = staff_ || (live_.length > 0 && live_.every((r) => mods_.has(r.id)));
+  const xp_ = p.xpost || null;
+  const canXpost = signed && !p.deleted && !p.hidden && !(xp_ && xp_.removed);
   // owner menu: the room in view first (room page / ?room= filter), else every room of theirs the post is in
   const ownRooms = ctx_ ? myRooms.filter((r) => r.id === ctx_) : myRooms;
 %>
@@ -40,9 +40,9 @@
       <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>/profile"><%= p.author.display %></a>
       <% } %>
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
-      <% if (roomsShown.length || (p.global && ctx_)) { %>
+      <% if (roomsShown.length) { %>
         <span class="dot" aria-hidden="true">·</span>
-        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/rooms/<%= encodeURIComponent(r.slug) %>#feed"><%= r.title %><%= r.removed ? ' (removed)' : '' %></a><% }) %><% if (p.global && ctx_) { %><%= roomsShown.length ? ', ' : '' %><a class="fp-room" href="/feed">main feed</a><% } %></span>
+        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/feed/c/<%= encodeURIComponent(r.slug) %>" title="c/<%= r.slug %>"><%= r.title %><%= r.removed ? ' (removed)' : '' %></a><% }) %></span>
       <% } %>
       <span class="dot" aria-hidden="true">·</span>
       <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a>
@@ -59,42 +59,33 @@
         <% if (p.locked) { %><span class="tag lock" title="Comments are locked"><%- fx.icon('lock') %> Locked</span><% } %>
       </div>
     <% } %>
+    <% if (xp_) { %>
+      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from) { %><a href="/feed/c/<%= encodeURIComponent(xp_.from.slug) %>">c/<%= xp_.from.slug %></a><% } else { %>a community<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>/profile">u/<%= xp_.author.username %></a><% } %></span></p>
+    <% } %>
     <div class="fp-content<%= p.nsfw ? ' blur' : '' %>">
-      <% if (hideMedia) { %>
-        <div class="fp-nsfw-gate">This post is marked NSFW. <a href="/login?next=<%= encodeURIComponent(url_) %>">Sign in</a> to see it.</div>
-      <% } else { %>
-        <% if (p.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(p.body) %></div><% } %>
-        <% if (p.images.length) { %>
-          <div class="fp-imgs n<%= Math.min(p.images.length, 4) %>">
-            <% p.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="Picture in <%= p.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>></a><% }) %>
+      <% if (xp_) { %>
+        <% if (xp_.post && !(xp_.removed && !staff_)) { const o_ = xp_.post; %>
+          <div class="fp-xbox<%= xp_.removed ? ' is-gone' : '' %>">
+            <% if (xp_.removed) { %><span class="tag warn">Original removed · staff view</span><% } %>
+            <a class="fp-xtitle" href="/feed/p/<%= o_.id %>"><%= o_.title || (o_.link && o_.link.title) || 'View the original post' %></a>
+            <%- include('feed-post-content', { q: Object.assign({}, o_, { nsfw: p.nsfw }), fx, embeds, host, detail_, signed, url_: '/feed/p/' + o_.id }) %>
+            <a class="fp-xorig" href="/feed/p/<%= o_.id %>"><%- fx.icon('comment') %><span><%= fx.num(o_.score) %> points · <%= fx.num(o_.comments) %> comment<%= o_.comments === 1 ? '' : 's' %> on the original</span></a>
           </div>
+        <% } else { %>
+          <div class="fp-xbox is-gone"><p class="fp-xgone"><%- fx.icon('remove') %>The original post was removed.</p></div>
         <% } %>
-        <% p.video.forEach((v) => { %>
-          <div class="fp-video"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video></div>
-        <% }) %>
-        <% p.audio.forEach((a) => { %>
-          <div class="fp-audio"><audio src="<%= fx.fileUrl(a.file) %>" controls preload="none"></audio><span class="mut"><%= a.secs ? fx.fmtSecs(a.secs) : '' %></span></div>
-        <% }) %>
-        <% if (link) { %>
-          <% if (player) { %>
-            <div class="fp-embed" data-src="<%= player %>">
-              <button type="button" class="fp-play" data-act="embed" aria-label="Play <%= embeds.label(link.embed) %>">
-                <% if (link.thumbFile) { %><img src="<%= fx.fileUrl(link.thumbFile) %>" alt="" loading="lazy"><% } %>
-                <span class="tri">▶</span><span class="lbl"><%= embeds.label(link.embed) %> · click to play</span>
-              </button>
-            </div>
-          <% } %>
-          <a class="fp-link<%= link.thumbFile && !player ? ' has-img' : '' %>" href="<%= link.url %>" rel="nofollow noopener noreferrer ugc" target="_blank">
-            <% if (link.thumbFile && !player) { %><img src="<%= fx.fileUrl(link.thumbFile) %>" alt="" loading="lazy"><% } %>
-            <span class="t"><b><%= link.title || link.domain %></b><% if (link.description) { %><span class="d"><%= link.description %></span><% } %><span class="dom"><%= link.domain %> ↗</span></span>
-          </a>
-        <% } %>
+      <% } else { %>
+        <%- include('feed-post-content', { q: p, fx, embeds, host, detail_, signed, url_ }) %>
       <% } %>
-      <% if (p.nsfw && !hideMedia) { %><button type="button" class="fp-reveal" data-act="reveal">NSFW — click to show</button><% } %>
+      <% if (p.nsfw && signed) { %><button type="button" class="fp-reveal" data-act="reveal">NSFW — click to show</button><% } %>
     </div>
+    <% if (p.xcount) { %>
+      <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> communit<%= p.xcount === 1 ? 'y' : 'ies' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="/feed/p/<%= x.id %>">c/<%= x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
+    <% } %>
     <div class="bar fp-bar">
       <a class="act" href="<%= url_ %>#comments"><%- fx.icon('comment') %><span><%= fx.num(p.comments) %><span class="lg"> comment<%= p.comments === 1 ? '' : 's' %></span></span></a>
       <button type="button" class="act" data-act="share" data-url="<%= url_ %>"><%- fx.icon('share') %><span class="lbl">Share</span></button>
+      <% if (detail_ && canXpost) { %><button type="button" class="act" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %><span class="lbl">Crosspost</span></button><% } %>
       <% if (signed) { %>
         <details class="more">
           <summary class="act" aria-label="More actions" title="More"><%- fx.icon('more') %></summary>
@@ -103,6 +94,7 @@
               <button type="button" role="menuitem" data-act="edit"><%- fx.icon('edit') %>Edit</button>
               <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %>Delete</button>
             <% } %>
+            <% if (canXpost) { %><button type="button" role="menuitem" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %>Crosspost</button><% } %>
             <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report post</button><% } %>
             <% if (detail_ && typeof pepeMuted !== 'undefined' && !p.author.bot && !p.deleted && (p.mine || staff_ || myRooms.length)) { %>
               <button type="button" role="menuitem" data-act="pepe-mute" data-on="<%= pepeMuted ? '0' : '1' %>" title="Pepe won't answer or comment in this thread"><%- fx.icon(pepeMuted ? 'show' : 'hide') %><%= pepeMuted ? 'Let Pepe back in this thread' : 'Mute Pepe in this thread' %></button>

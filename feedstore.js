@@ -7,6 +7,11 @@
 //                      global (on the main feed), score (cached upvotes), comments (cached count),
 //                      cost (PAT paid), created, edited, deleted_at, deleted_by, delete_reason,
 //                      hidden_at (auto-hidden by reports, pending review), purged_at
+//                      (1.99ci) crosspost_of: the ORIGINAL post's id when this row is a crosspost (no body/files of
+//                      its own - it embeds the original; its votes and comments are its own). `global` is no
+//                      longer read or written as 1: every post lives in a community (feed_post_rooms); the column
+//                      stays so old rows / links keep working, and the communities_v1 migration gave the old
+//                      main-feed-only posts a home in the PATV Lounge (rooms.LOUNGE_ID).
 //   feed_post_rooms    post_id, room_id (rooms_registry id), removed_at / removed_by (a room owner
 //                      can take a post out of THEIR room without deleting it elsewhere)
 //   feed_attachments   id, post_id (NULL until posted), owner_id, kind image|audio|video|preview,
@@ -33,7 +38,8 @@ const { runQuery, getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
 const terms = require("./terms");
 
-const TITLE_MAX = 140, BODY_MAX = 5000, COMMENT_MAX = 2000, MAX_IMAGES = 4, MAX_ATTACH = 6, MAX_ROOMS = 5;
+// 1.99ci: a post is created in exactly ONE community (Reddit-style); crossposting shares it into others
+const TITLE_MAX = 140, BODY_MAX = 5000, COMMENT_MAX = 2000, MAX_IMAGES = 4, MAX_ATTACH = 6, MAX_ROOMS = 1;
 const PAGE = 20;
 const MAX_PINS = 3;
 const DEFAULTS = Object.freeze({
@@ -122,6 +128,7 @@ function init() {
       await loadConfig();
       await migrateVotes();
       await migrateSafety();
+      await migrateCommunities();
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -190,6 +197,54 @@ async function migrateSafety() {
   await runQuery("CREATE INDEX IF NOT EXISTS user_reports_open ON user_reports (resolved_at, created)");
   await runQuery("CREATE INDEX IF NOT EXISTS user_reports_reporter ON user_reports (reporter_id, created)");
   await runQuery("CREATE INDEX IF NOT EXISTS feed_reports_reporter ON feed_reports (reporter_id, created)");
+}
+
+// ── 1.99ci: communities only + crossposts ──
+/**
+ * What the communities_v1 migration moves: posts flagged main-feed (global = 1) that are visible in NO
+ * community (no placement that isn't removed / pending / hidden) - they were only reachable through the
+ * main feed. -> {posts: [{id, deleted}], live, deleted}
+ */
+async function communitiesPlan() {
+  const rows = await getQuery(`SELECT p.id, p.deleted_at FROM feed_posts p WHERE p.global = 1 AND p.crosspost_of IS NULL
+    AND NOT EXISTS (SELECT 1 FROM feed_post_rooms pr WHERE pr.post_id = p.id AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL)`);
+  return { posts: rows.map((r) => ({ id: r.id, deleted: !!r.deleted_at })), live: rows.filter((r) => !r.deleted_at).length, deleted: rows.filter((r) => r.deleted_at).length };
+}
+/**
+ * Give every main-feed-only post a home in the PATV Lounge. Runs once (feed_kv communities_v1 holds the
+ * result), and each insert is OR IGNORE, so a re-run (or a crash half way) never duplicates or re-adds a
+ * post an owner has since taken out of the Lounge. -> {moved, live, deleted, at} or the stored result
+ */
+async function migrateCommunities() {
+  await addCol("feed_posts", "crosspost_of", "TEXT");
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_posts_xpost ON feed_posts (crosspost_of)");
+  const done = await kvGet("communities_v1");
+  if (done) { try { return JSON.parse(done); } catch (e) { return { moved: 0 }; } }
+  await rooms.init();
+  const lounge = await rooms.get(rooms.LOUNGE_ID);
+  if (!lounge) { console.error("[feed] communities_v1: no Lounge in the room registry - not migrated"); return null; }
+  const plan = await communitiesPlan();
+  for (const p of plan.posts) {
+    await runQuery(`INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending)
+                    SELECT id, ?, created, 0 FROM feed_posts WHERE id = ?`, [lounge.id, p.id]);
+  }
+  const out = { moved: plan.posts.length, live: plan.live, deleted: plan.deleted, room: lounge.id, at: NOW() };
+  await kvSet("communities_v1", JSON.stringify(out));
+  console.log(`[feed] communities_v1: ${out.moved} main-feed-only post(s) moved to ${lounge.id} (${out.live} live, ${out.deleted} deleted)`);
+  return out;
+}
+
+/**
+ * SQL (over `feed_posts p`): the post is visible in at least one of its communities - a placement that
+ * isn't removed, pending approval or hidden by the room's owner, in a room the author isn't feed-banned
+ * from (nor from the whole feed) right now. -> {sql, args}
+ */
+function visibleSql(now = NOW()) {
+  return {
+    sql: `EXISTS (SELECT 1 FROM feed_post_rooms fv WHERE fv.post_id = p.id AND fv.removed_at IS NULL AND fv.pending = 0 AND fv.hidden_at IS NULL
+            AND NOT EXISTS (SELECT 1 FROM feed_bans fb WHERE fb.user_id = p.author_id AND (fb.room_id = '' OR fb.room_id = fv.room_id) AND (fb.until IS NULL OR fb.until > ?)))`,
+    args: [now],
+  };
 }
 
 // Reddit's ranking maths (r2/lib/db/_sorts.pyx), seconds since its epoch
@@ -309,6 +364,12 @@ const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 // and he never gets the author's automatic upvote (his votes count for nothing in the rankings).
 const PEPE_ID = "pepe-bot";
 const isPepe = (u) => !!u && (u.userId === PEPE_ID || u === PEPE_ID);
+/** A community (registered room) by id or slug, or null. */
+async function communityOf(x) {
+  const k = String(x == null ? "" : x).trim().slice(0, 128);
+  if (!k) return null;
+  return (await rooms.get(k)) || (await rooms.bySlug(k.replace(/^c\//i, ""))) || null;
+}
 const ID_RE = /^[A-Za-z0-9]{8,16}$/;
 
 let UCOLS = null;
@@ -336,7 +397,7 @@ function isNewAccount(u, C = CONFIG) {
 }
 
 // ── who may post (the relay's refusal rules + the feed's own) ──
-/** null when `u` may post (in `roomIds`, '' = the main feed), else {status, message}. */
+/** null when `u` may post (in `roomIds`; [] = anywhere: only the account-wide rules), else {status, message}. */
 async function postRefusal(u, roomIds = [], { media = false } = {}) {
   await init();
   const C = CONFIG;
@@ -423,11 +484,24 @@ async function authors(ids) {
 function parseJson(s) { try { return s ? JSON.parse(s) : null; } catch (e) { return null; } }
 const effNsfw = (p) => (p.nsfw_admin === 0 || p.nsfw_admin === 1 ? !!p.nsfw_admin : !!p.nsfw);
 
-/** Decorate post rows: author, rooms, attachments, my vote, flags. */
-async function decorate(rows, viewer, { ctxRoom = null, detail = false } = {}) {
+/**
+ * Decorate post rows: author, rooms, attachments, my vote, flags; (1.99ci) a crosspost's embedded original
+ * (xpost: {id, removed, post|null, from: {slug, title}|null, author}) and every post's live crossposts
+ * (crossposts: [{id, slug, title}], xcount).
+ */
+async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner = false } = {}) {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const q = ids.map(() => "?").join(",");
+  // crossposts: the originals they embed (decorated once, without their own crossposts), and live crossposts of these posts
+  const origIds = [...new Set(rows.map((r) => r.crosspost_of).filter(Boolean))];
+  const [ORIG, XP] = _inner ? [[], []] : await Promise.all([
+    origIds.length ? getQuery(`SELECT * FROM feed_posts WHERE id IN (${origIds.map(() => "?").join(",")})`, origIds) : [],
+    getQuery(`SELECT x.id, x.crosspost_of, pr.room_id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id
+              WHERE x.crosspost_of IN (${q}) AND x.deleted_at IS NULL AND x.hidden_at IS NULL AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL`, ids),
+  ]);
+  const origs = new Map((ORIG.length ? await decorate(ORIG, viewer, { detail, _inner: true }) : []).map((o) => [o.id, o]));
+  const staffV = isStaff(viewer);
   const [A, PR, AT, MV, FW] = await Promise.all([
     authors(rows.map((r) => r.author_id)),
     getQuery(`SELECT post_id, room_id, removed_at, pinned_at, nsfw, hidden_at, pending FROM feed_post_rooms WHERE post_id IN (${q})`, ids),
@@ -444,8 +518,26 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false } = {}) {
                pinned: !!x.pinned_at, nsfw: x.nsfw === 1, hidden: !!x.hidden_at, pending: !!x.pending };
     });
     const ctx = ctxRoom ? roomsOf.find((x) => x.id === ctxRoom) : null;
-    // a room owner's NSFW mark applies in their room's view and on the post page - never on the main feed / other rooms
-    const nsfw = effNsfw(r) || (ctxRoom ? !!(ctx && ctx.nsfw) : (detail && roomsOf.some((x) => x.nsfw && !x.removed)));
+    // a room owner's NSFW mark applies in their room's view; in the aggregate views (All, Following, profiles, the
+    // post page, the homepage) any live community's mark does (1.99ci - before, the main feed ignored them)
+    let nsfw = effNsfw(r) || (ctxRoom ? !!(ctx && ctx.nsfw) : roomsOf.some((x) => x.nsfw && !x.removed));
+    // 1.99ci: a crosspost shows its original - gone for everyone (but staff) once the original is deleted, hidden,
+    // or visible in none of its communities any more ("original removed")
+    let xpost = null;
+    if (r.crosspost_of) {
+      const o = origs.get(r.crosspost_of) || null;
+      const oVisible = !!o && o.roomsAll.some((x) => !x.removed && !x.pending && !x.hidden);
+      const removed = !o || o.deleted || o.hidden || !oVisible;
+      const from = o ? (o.roomsAll.find((x) => !x.removed && !x.pending && !x.hidden) || o.roomsAll[0] || null) : null;
+      xpost = { id: r.crosspost_of, removed, post: removed && !staffV ? null : o,
+                from: from ? { id: from.id, slug: from.slug, title: from.title } : null, author: o ? o.author : null };
+      if (o && o.nsfw) nsfw = true;
+    }
+    const xps = XP.filter((x) => x.crosspost_of === r.id);
+    const crossposts = [...new Map(xps.map((x) => {
+      const R = rooms.getCached(x.room_id);
+      return [x.room_id, { id: x.id, room: x.room_id, slug: R ? R.slug : rooms.slugify(x.room_id), title: R ? R.title : x.room_id }];
+    })).values()];
     const att = AT.filter((a) => a.post_id === r.id).map((a) => ({ id: a.id, kind: a.kind, ct: a.ct, file: a.file, thumb: a.thumb, poster: a.poster,
                                                                  w: a.w, h: a.h, secs: a.secs }));
     const link = parseJson(r.link_json);
@@ -464,8 +556,20 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false } = {}) {
       roomsAll: roomsOf,
       images: att.filter((a) => a.kind === "image"), audio: att.filter((a) => a.kind === "audio"), video: att.filter((a) => a.kind === "video"),
       link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
+      xpost, crossposts, xcount: crossposts.length,
     };
   });
+}
+
+/** A post's thumbnail file (its first picture, a video poster or the link preview; a crosspost: the original's). */
+function thumbOf(p) {
+  const q = p.xpost ? p.xpost.post : p;
+  if (!q) return null;
+  const im = q.images && q.images[0];
+  if (im) return im.thumb || im.file;
+  const v = q.video && q.video[0];
+  if (v && v.poster) return v.poster;
+  return q.link && q.link.thumbFile ? q.link.thumbFile : null;
 }
 
 /** A post row's hot rank (as stored in feed_posts.hot). */
@@ -508,24 +612,37 @@ function rankSpec(sort, t = "all", now = NOW()) {
 }
 
 /**
- * A page of posts. scope: {room: room id} | {author: userId} | {authors: [userIds]} (Following) | the main
- * feed. sort: hot|new|top|controversial|rising; top: the time window for top/controversial.
- * Visible = not deleted, not hidden (staff see hidden ones), and in a room: not removed from it.
+ * A page of posts. scope: {room: room id} (one community) | {author: userId} | {authors: [userIds]} |
+ * {following: userId} | All (no scope). sort: hot|new|top|controversial|rising; top: the time window for
+ * top/controversial. `sfw`: leave NSFW posts out entirely (the homepage for signed-out visitors).
+ *   All (1.99ci): every post visible in at least one community (visibleSql: a placement that isn't removed,
+ *     pending or owner-hidden, by an author not banned there) - one row per post however many communities
+ *     it's in. Staff see every post with a placement that isn't removed. (Until 1.99ci this read
+ *     `p.global = 1`, so posts made only to rooms never showed under "Everywhere".)
+ *   A community: its placements; pending / owner-hidden ones only for the room's owner, admins and the author.
+ * Deleted posts never show; report-hidden ones only to staff.
  */
-async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true } = {}) {
+async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false } = {}) {
   await init();
   const staff = isStaff(viewer);
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
-  const R = rankSpec(sort, top, NOW());
+  const t = NOW();
+  const R = rankSpec(sort, top, t);
   const scope = ["p.deleted_at IS NULL"], sargs = [];
   if (!staff) scope.push("p.hidden_at IS NULL");
   let from = "feed_posts p";
   const jargs = [];
+  const visible = () => {
+    if (staff) scope.push("EXISTS (SELECT 1 FROM feed_post_rooms fv WHERE fv.post_id = p.id AND fv.removed_at IS NULL)");
+    else { const v = visibleSql(t); scope.push(v.sql); sargs.push(...v.args); }
+  };
   if (following) {
-    // 1.99bz: posts by people `following` follows + posts in rooms they follow (one row per post)
+    // 1.99bz: posts by people `following` follows + posts in rooms they follow (one row per post);
+    // 1.99ci: only posts visible in some community (as on All)
     await require("./follows").init();
     const f = require("./follows").feedFilter(following);
     scope.push(f.sql); sargs.push(...f.args);
+    visible();
   } else if (room) {
     from += " JOIN feed_post_rooms pr ON pr.post_id = p.id AND pr.room_id = ?";
     jargs.push(room);
@@ -534,6 +651,9 @@ async function list({ room = null, author = null, following = null, authors: aut
     if (!roomMod) {
       if (viewer && viewer.userId) { scope.push("((pr.pending = 0 AND pr.hidden_at IS NULL) OR p.author_id = ?)"); sargs.push(viewer.userId); }
       else scope.push("pr.pending = 0 AND pr.hidden_at IS NULL");
+      // 1.99ci: an author banned from this room (or the whole feed) drops out of it while the ban lasts
+      scope.push("NOT EXISTS (SELECT 1 FROM feed_bans fb WHERE fb.user_id = p.author_id AND (fb.room_id = '' OR fb.room_id = pr.room_id) AND (fb.until IS NULL OR fb.until > ?))");
+      sargs.push(t);
     }
   } else if (author) {
     scope.push("p.author_id = ?"); sargs.push(author);
@@ -541,8 +661,17 @@ async function list({ room = null, author = null, following = null, authors: aut
     const ids = authorIds.map(String).slice(0, 2000);
     if (!ids.length) return { posts: [], more: false, page: 1, sort: R.sort };
     scope.push(`p.author_id IN (${ids.map(() => "?").join(",")})`); sargs.push(...ids);
+    visible();
   } else {
-    scope.push("p.global = 1");
+    visible();                          // All
+  }
+  if (sfw) {
+    // no NSFW anywhere: the author's / an admin's flag, any live community's mark, or (a crosspost) the original's
+    const flag = (a) => `(CASE WHEN ${a}.nsfw_admin IN (0, 1) THEN ${a}.nsfw_admin ELSE ${a}.nsfw END) = 0`;
+    scope.push(flag("p"));
+    scope.push("NOT EXISTS (SELECT 1 FROM feed_post_rooms fn WHERE fn.post_id = p.id AND fn.nsfw = 1 AND fn.removed_at IS NULL)");
+    scope.push(`(p.crosspost_of IS NULL OR EXISTS (SELECT 1 FROM feed_posts o WHERE o.id = p.crosspost_of AND ${flag("o")}
+                 AND NOT EXISTS (SELECT 1 FROM feed_post_rooms fo WHERE fo.post_id = o.id AND fo.nsfw = 1 AND fo.removed_at IS NULL)))`);
   }
   page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
   // placeholders in text order: select (rising) -> join -> scope -> sort filters
@@ -616,18 +745,19 @@ async function create(userId, input, deps = {}) {
   const linkIn = String(input.link || "").trim();
   const attIds = [...new Set((Array.isArray(input.attachments) ? input.attachments : []).map(String))].slice(0, MAX_ATTACH + 1);
   if (attIds.length > MAX_ATTACH) throw new Refuse(400, `At most ${MAX_ATTACH} files per post.`);
-  // rooms: registered rooms only
+  // 1.99ci: exactly one community (a registered room): `community` (id or slug), or the 1.99bv `rooms` list
+  // with one entry. There's no main feed any more - `global` is ignored. Crossposting shares it elsewhere.
   const roomIds = [];
-  for (const r of (Array.isArray(input.rooms) ? input.rooms : []).slice(0, MAX_ROOMS + 1)) {
-    const R = await rooms.get(String(r)) || await rooms.bySlug(String(r));
-    if (!R) throw new Refuse(400, "One of those rooms isn't on PATV.");
+  const picked = input.community != null && input.community !== "" ? [input.community] : (Array.isArray(input.rooms) ? input.rooms : []);
+  for (const r of picked.slice(0, 6)) {
+    const R = await communityOf(r);
+    if (!R) throw new Refuse(400, "That community isn't on PATV.");
     if (!roomIds.includes(R.id)) roomIds.push(R.id);
   }
-  if (roomIds.length > MAX_ROOMS) throw new Refuse(400, `Post to at most ${MAX_ROOMS} rooms at once.`);
-  const global = input.global === undefined ? true : !!(input.global === true || input.global === 1 || input.global === "1" || input.global === "on");
-  if (!global && !roomIds.length) throw new Refuse(400, "Pick where it goes: the main feed and/or a room.");
+  if (roomIds.length > MAX_ROOMS) throw new Refuse(400, "Post to one community - then use Crosspost to share it in another.");
+  if (!roomIds.length) throw new Refuse(400, "Choose a community to post in.");
   if (!title && !body && !linkIn && !attIds.length) throw new Refuse(400, "Write something, add a link or attach a file.");
-  const refusal = await postRefusal(u, global ? ["", ...roomIds] : roomIds, { media: attIds.length > 0 });
+  const refusal = await postRefusal(u, roomIds, { media: attIds.length > 0 });
   if (refusal) throw new Refuse(refusal.status, refusal.message);
   const rate = await postRate(u);
   if (rate) throw new Refuse(429, rate);
@@ -669,7 +799,7 @@ async function create(userId, input, deps = {}) {
     await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, u.userId, title || null, body || null, link ? link.url : null, link ? JSON.stringify(link) : null,
-                    input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, global ? 1 : 0, cost, t]);
+                    input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t]);
     let i = 0;
     for (const a of atts) {
       const r = await runQuery("UPDATE feed_attachments SET post_id = ?, sort = ? WHERE id = ? AND owner_id = ? AND post_id IS NULL AND state = 'ready'", [id, i++, a.id, u.userId]);
@@ -695,7 +825,7 @@ async function create(userId, input, deps = {}) {
     await refund(u, cost, `${label} refund (not posted)`).catch(() => {});
     throw e;
   }
-  console.log(`[feed] post ${id} by ${u.username} rooms=${roomIds.join(",") || "-"} global=${global ? 1 : 0} files=${atts.length} link=${link ? link.domain : "-"} cost=${cost}`);
+  console.log(`[feed] post ${id} by ${u.username} community=${roomIds.join(",")} files=${atts.length} link=${link ? link.domain : "-"} cost=${cost}`);
   const made = await get(id, u);
   // 1.99bz: followers who asked for it get an inbox notice (default off); never blocks the post
   if (made) {
@@ -703,6 +833,114 @@ async function create(userId, input, deps = {}) {
     if (deps.awaitNotices) await pending;
   }
   return made;
+}
+
+// ── crossposts (1.99ci, Reddit's model) ──
+// A crosspost is its own feed_posts row (crosspost_of = the original) placed in ONE other community: its own
+// title, votes, comments, pins and moderation; it embeds the original's content (files are referenced, never
+// copied). A crosspost of a crosspost points at the original. The target community's rules all apply (who
+// can post, its approval queue, bans, Pepe's refusals, the per-day limit) plus the account's post rate
+// limits and price_post. The original's author gets an inbox notice. Once the original is deleted, hidden or
+// taken out of all its communities, every crosspost shows "original removed" (decorate).
+async function crosspost(userId, origId, input = {}) {
+  await init();
+  const u = await account(userId);
+  if (!u) throw new Refuse(401, "Sign in to crosspost.");
+  let o = await getRow(origId);
+  if (o && o.crosspost_of) o = await getRow(o.crosspost_of);
+  if (!o || o.deleted_at || (o.hidden_at && !isStaff(u))) throw new Refuse(404, "No such post.");
+  const v = visibleSql(NOW());
+  const shown = (await getQuery(`SELECT 1 FROM feed_posts p WHERE p.id = ? AND ${v.sql}`, [o.id, ...v.args]))[0];
+  if (!shown && !isStaff(u)) throw new Refuse(409, "That post isn't visible in any community, so it can't be crossposted.");
+  const R = await communityOf(input.community);
+  if (!R) throw new Refuse(400, "Choose a community to crosspost to.");
+  const here = (await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [o.id, R.id]))[0];
+  if (here) throw new Refuse(409, `That post is already in ${R.title}.`);
+  const dup = (await getQuery(`SELECT x.id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id AND pr.room_id = ? AND pr.removed_at IS NULL
+                               WHERE x.crosspost_of = ? AND x.deleted_at IS NULL LIMIT 1`, [R.id, o.id]))[0];
+  if (dup) throw new Refuse(409, `It's already been crossposted to ${R.title}.`);
+  const refusal = await postRefusal(u, [R.id]);
+  if (refusal) throw new Refuse(refusal.status, refusal.message);
+  const rate = await postRate(u);
+  if (rate) throw new Refuse(429, rate);
+  const why = await roomPostRefusal(u, R.id);
+  if (why) throw new Refuse(why.status, why.message);
+  const pending = (await roomSettings(R.id)).approval && !(await rooms.canManage(u, R.id));
+  const olink = parseJson(o.link_json);
+  const title = cleanLine(input.title, TITLE_MAX) || o.title || cleanLine(o.body, 100) || (olink && cleanLine(olink.title, 100)) || "Crosspost";
+  const cost = CONFIG.price_post;
+  const id = newId();
+  const label = `feed crosspost ${id}`;
+  await chargeFor(u, cost, label);
+  try {
+    const t = NOW();
+    // nsfw: the original's effective flag at the time (the embed also follows the original live, see decorate)
+    await runQuery("INSERT INTO feed_posts (id, author_id, title, nsfw, global, cost, created, crosspost_of) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
+                   [id, u.userId, title, effNsfw(o) ? 1 : 0, cost, t, o.id]);
+    await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, R.id, t, pending ? 1 : 0]);
+    if (!pending) await queueMention(R.id, id);
+    await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
+    await recountPost(id);
+  } catch (e) {
+    await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
+    await runQuery("DELETE FROM feed_post_rooms WHERE post_id = ?", [id]).catch(() => {});
+    await runQuery("DELETE FROM feed_posts WHERE id = ?", [id]).catch(() => {});
+    await refund(u, cost, `${label} refund (not posted)`).catch(() => {});
+    throw e;
+  }
+  console.log(`[feed] crosspost ${id} of ${o.id} by ${u.username} to ${R.id}${pending ? " (pending approval)" : ""}`);
+  if (o.author_id !== u.userId) {
+    await notify(o.author_id, { title: `${u.displayname || u.username} crossposted your post to ${R.title}`,
+                                body: `"${(o.title || o.body || "your post").replace(/\s+/g, " ").slice(0, 80)}"`, link: "/feed/p/" + id, ref: "feed-xp:" + id });
+  }
+  return { ...(await get(id, u)), pendingApproval: pending };
+}
+
+/**
+ * The community list (the /feed community bar, the composer's and the crosspost dialog's pickers): every
+ * registered room with its follower and visible-post counts, and for `viewer` whether they may post there
+ * (the account rules + the owner's who-can-post settings). -> [{id, slug, title, description, house,
+ * community, followers, posts, canPost, refusal}], the Lounge first, then by followers and posts.
+ */
+async function communities(viewer = null) {
+  await init();
+  const list = await rooms.list();
+  if (!list.length) return [];
+  await require("./follows").init();
+  const [F, P] = await Promise.all([
+    getQuery("SELECT target_id, COUNT(*) AS n FROM follows WHERE target_kind = 'room' GROUP BY target_id"),
+    getQuery(`SELECT pr.room_id, COUNT(DISTINCT p.id) AS n FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
+              WHERE p.deleted_at IS NULL AND p.hidden_at IS NULL AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL
+              GROUP BY pr.room_id`),
+  ]);
+  const fm = new Map(F.map((r) => [r.target_id, r.n])), pm = new Map(P.map((r) => [r.room_id, r.n]));
+  const u = viewer && viewer.userId ? await account(viewer.userId) : null;
+  const base = u ? await postRefusal(u, []) : { message: "Sign in to post." };
+  const out = [];
+  for (const R of list) {
+    let refusal = base ? base.message : null;
+    if (!refusal) {
+      const r1 = (await postRefusal(u, [R.id])) || (await roomPostRefusal(u, R.id));
+      refusal = r1 ? r1.message : null;
+    }
+    out.push({ id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
+               followers: fm.get(R.id) || 0, posts: pm.get(R.id) || 0, canPost: !refusal, refusal });
+  }
+  return out.sort((a, b) => (b.id === rooms.LOUNGE_ID) - (a.id === rooms.LOUNGE_ID) || b.followers - a.followers || b.posts - a.posts || a.title.localeCompare(b.title));
+}
+
+/** The homepage's "Hot on PATV": the top `limit` hot posts across All. Signed-out visitors never get NSFW ones. */
+async function hot(viewer = null, limit = 5) {
+  const signed = !!(viewer && viewer.userId);
+  const L = await list({ sort: "hot", viewer: signed ? viewer : null, limit: Math.min(20, Math.max(1, limit)), sfw: !signed, pins: false });
+  return L.posts.map((p) => {
+    const R = p.rooms[0] || null;
+    const q = p.xpost && p.xpost.post ? p.xpost.post : p;
+    return { id: p.id, url: "/feed/p/" + p.id, title: p.title || q.title || (q.link && q.link.title) || cleanLine(q.body, 90) || "(no title)",
+             community: R ? { slug: R.slug, title: R.title } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
+             thumb: p.nsfw ? null : thumbOf(p), crosspost: !!p.xpost, created: p.created,
+             kind: q.video && q.video.length ? "video" : q.images && q.images.length ? "image" : q.audio && q.audio.length ? "audio" : q.link ? "link" : "text" };
+  });
 }
 
 /** Author edit: title, body, nsfw. (Files, link and rooms stay - delete and repost to change those.) */
@@ -713,7 +951,7 @@ async function edit(user, id, patch) {
   const title = patch.title != null ? cleanLine(patch.title, TITLE_MAX) : r.title;
   const body = patch.body != null ? cleanText(patch.body, BODY_MAX) : r.body;
   const nsfw = patch.nsfw != null ? (patch.nsfw === true || patch.nsfw === 1 || patch.nsfw === "1" || patch.nsfw === "on" ? 1 : 0) : r.nsfw;
-  if (!title && !body && !r.link_url && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
+  if (!title && !body && !r.link_url && !r.crosspost_of && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
     throw new Refuse(400, "A post can't be empty.");
   }
   await runQuery("UPDATE feed_posts SET title = ?, body = ?, nsfw = ?, edited = ? WHERE id = ?", [title || null, body || null, nsfw, NOW(), id]);
@@ -1392,7 +1630,7 @@ async function sweep(media) {
 // Room-scoped (only the room in question changes): pin (max 3), room NSFW mark, hide in the room pending
 // review, approve / reject a pending post, remove / restore, the room's report queue, bans, settings and
 // approved posters. Post-wide (comments are shared by every place a post shows): lock comments - an owner
-// only when the post lives in rooms they manage and NOT on the main feed; removing a comment on a post
+// only when every community the post lives in is theirs; removing a comment on a post
 // in their room (as in 1.99bw), with an optional reason in the author's inbox. Every action -> room_events.
 const WHO = Object.freeze(["everyone", "linked", "followers", "approved"]);
 const ROOM_DEFAULTS = Object.freeze({ who: "everyone", approval: false, per_day: 0 });
@@ -1434,12 +1672,12 @@ async function roomPostRefusal(u, roomId) {
   }
   return null;
 }
-/** Lock / unlock: staff anywhere; a room owner only if every place the post shows is a room they manage. */
+/** Lock / unlock: staff anywhere; a room owner only if every community the post shows in is one they manage. */
 async function canLock(user, postId) {
   if (!user || !user.userId) return false;
   if (isStaff(user)) return true;
   const p = await getRow(postId);
-  if (!p || p.global) return false;
+  if (!p) return false;
   const placed = await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [postId]);
   if (!placed.length) return false;
   for (const r of placed) if (!(await rooms.canManage(user, r.room_id))) return false;
@@ -1506,7 +1744,7 @@ async function roomMod(user, roomId, op, a = {}) {
     case "restore": { await restoreToRoom(user, a.post, roomId); return { ok: true }; }
     case "lock": case "unlock": {
       await needPlace();
-      if (!(await canLock(user, a.post))) throw new Refuse(403, "This post is on the main feed or in other rooms too - only an admin can lock it.");
+      if (!(await canLock(user, a.post))) throw new Refuse(403, "This post is in other communities too - only an admin can lock it.");
       await runQuery("UPDATE feed_posts SET locked_at = ?, locked_by = ? WHERE id = ?", [op === "lock" ? t : null, op === "lock" ? who : null, a.post]);
       await log(op, a.post); return { ok: true };
     }
@@ -1597,7 +1835,8 @@ async function roomAudit(roomId, limit = 100) {
 module.exports = {
   roomMod, roomSettings, roomPostRefusal, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, account, isNewAccount, usedBytes,
-  list, get, getRow, decorate, canModerate, create, edit, remove, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
+  list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, communities, hot, thumbOf, visibleSql, communityOf,
+  communitiesPlan, migrateCommunities, kvGet, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
   hotRank, controversy, wilson, rankSpec, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,

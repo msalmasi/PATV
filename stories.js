@@ -113,8 +113,8 @@ function roomInfo(roomId) {
   if (R) { try { slug = require("./roomsweb").linkSlug(R); } catch (e) { /* registry slug */ } }
   return {
     id: roomId, title: R ? R.title : roomId,
-    href: R ? "/rooms/" + encodeURIComponent(slug) : "/feed?room=" + encodeURIComponent(roomId),
-    feed: "/feed?room=" + encodeURIComponent(R ? R.slug : roomId),
+    href: R ? "/rooms/" + encodeURIComponent(slug) : "/feed/c/" + encodeURIComponent(roomId),
+    feed: "/feed/c/" + encodeURIComponent(R ? R.slug : roomId),
   };
 }
 

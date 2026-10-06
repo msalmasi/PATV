@@ -12,7 +12,7 @@
 <main class="fd fd-admin fd-rmod" data-slug="<%= slug %>">
   <nav class="crumb" aria-label="Back"><a href="/rooms/<%= encodeURIComponent(slug) %>#feed"><%- fx.icon('back') %><%= room.title %></a></nav>
   <h1 class="rm-h"><%- fx.icon('shield') %><span>Feed moderation</span></h1>
-  <p class="sub">Your tools for <b><%= room.title %></b>'s feed. They only change this room: a post that's also on the main feed or in other rooms stays there.</p>
+  <p class="sub">Your tools for <b><%= room.title %></b>'s feed. They only change this room: a post that's also in other communities stays there, and a crosspost of it is that community's to moderate.</p>
 
   <section class="fa-card" id="queue">
     <h2>Waiting for approval <span class="n"><%= pending.length %></span></h2>

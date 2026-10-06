@@ -29,7 +29,14 @@ const SEEDS = [
   { room_id: "PepeFrog.Room", title: "Pepe's Pad", owner: "house" },
   { room_id: "PepeBeta.Room", title: "PepeLab", owner: "house" },
   { room_id: "plant_based_chatting", title: "Houseplants", owner: { match: "foamy1111" } },   // 1.99bn: his Camfrog LOGIN (account pb), not the display name "plantbaked"
+  // 1.99ci: the site's own general community (no Camfrog room behind it): every feed post lives in a
+  // community, and the old main-feed-only posts moved here. Ids starting "patv:" are site-only communities.
+  { room_id: "patv:lounge", title: "PATV Lounge", owner: "house",
+    description: "The general PATV community: anything that isn't about one room. Old main-feed posts live here." },
 ];
+const LOUNGE_ID = "patv:lounge";
+/** A site-only community (no Camfrog room behind it). */
+const isCommunityOnly = (roomId) => String(roomId || "").startsWith("patv:");
 const MAX_SLOTS_DEFAULT = 4;     // owners can set 1..this many user slots (stage_config.max_slots_per_room)
 
 const CTRL = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
@@ -152,6 +159,7 @@ async function seed() {
     const row = (await getQuery("SELECT * FROM rooms_registry WHERE room_id = ?", [s.room_id]))[0];
     if (!row) continue;
     if (!row.title) await runQuery("UPDATE rooms_registry SET title = ? WHERE room_id = ?", [s.title, s.room_id]);
+    if (s.description && !row.description) await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, s.room_id]);
     if (s.owner === "house") {
       await runQuery("UPDATE rooms_registry SET owner_kind = 'house', owner_user_id = NULL, title = COALESCE(title, ?) WHERE room_id = ?", [s.title, s.room_id]);
       await kvSet("seeded:" + s.room_id, "house");
@@ -178,6 +186,7 @@ function view(r) {
     owner: r.owner_kind === "user" && r.owner_user_id ? { userId: r.owner_user_id, username: r.owner_username || null,
       display: r.owner_display || r.owner_username || null, camfrog: r.owner_camfrog || null } : null,
     house: r.owner_kind === "house",
+    community: isCommunityOnly(r.room_id),          // 1.99ci: a site-only community (no Camfrog room)
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
   };
 }
@@ -374,5 +383,5 @@ function hasRoute(app, path) {
 module.exports = {
   init, get, bySlug, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
   setOwner, addRoom, setFront, frontRoom, frontSetting, noteActivity, activity, ownersForPepe, notify, findUser, event,
-  hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS,
+  hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
 };

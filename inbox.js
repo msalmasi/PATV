@@ -38,7 +38,7 @@ const KINDS = {
   stage:       { icon: "📺", label: "Stage & streaming", link: "/stage" },
   room:        { icon: "🏠", label: "Your rooms", link: "/rooms" },
   feed:        { icon: "📝", label: "Feed posts & comments", link: "/feed" },
-  follow:      { icon: "⭐", label: "New posts from people & rooms you follow", link: "/feed?tab=following" },
+  follow:      { icon: "⭐", label: "New posts from people & rooms you follow", link: "/feed/following" },
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Pepe", link: null },
 };

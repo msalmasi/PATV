@@ -1,0 +1,22 @@
+<%#
+  Hot on PATV (1.99ci): the homepage's mini feed. Locals: hot (feedweb.hotMini: {posts, signed}), fx (feedweb.fx)
+%>
+<section class="card hh" aria-labelledby="hhH">
+  <h2 id="hhH"><span>🔥 Hot on PATV</span><a href="/feed">View all ›</a></h2>
+  <% if (!hot.posts.length) { %>
+    <p class="muted" style="margin:0;font-size:13.5px">Nothing posted yet. <a href="/feed">Start the conversation ›</a></p>
+  <% } else { %>
+    <ol class="hh-list">
+      <% hot.posts.forEach((h) => { %>
+        <li><a class="hh-it" href="<%= h.url %>">
+          <span class="hh-th<%= h.thumb ? '' : ' ph' %>"<% if (h.thumb) { %> style="background-image:url('<%= fx.fileUrl(h.thumb) %>')"<% } %> aria-hidden="true"><% if (!h.thumb) { %><%= h.nsfw ? '🔞' : h.kind === 'link' ? '🔗' : h.kind === 'audio' ? '🔊' : h.kind === 'video' ? '🎬' : '📝' %><% } %></span>
+          <span class="hh-t">
+            <span class="hh-c"><%= h.community ? 'c/' + h.community.slug : '' %><%= h.crosspost ? ' · crosspost' : '' %></span>
+            <b><%= h.title %></b><% if (h.nsfw) { %> <span class="hh-n">NSFW</span><% } %>
+            <span class="hh-m"><span title="Score">▲ <%= fx.num(h.score) %></span><span>💬 <%= fx.num(h.comments) %></span><span><%= fx.ago(h.created) %></span></span>
+          </span>
+        </a></li>
+      <% }) %>
+    </ol>
+  <% } %>
+</section>
