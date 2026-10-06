@@ -28,7 +28,7 @@ const HOUSE_ROOM = process.env.STAGE_DEFAULT_ROOM || (STAGING ? "PepeBeta.Room" 
 const SEEDS = [
   { room_id: "PepeFrog.Room", title: "Pepe's Pad", owner: "house" },
   { room_id: "PepeBeta.Room", title: "PepeLab", owner: "house" },
-  { room_id: "plant_based_chatting", title: "Houseplants", owner: { match: "plantbaked" } },
+  { room_id: "plant_based_chatting", title: "Houseplants", owner: { match: "foamy1111" } },   // 1.99bn: his Camfrog LOGIN (account pb), not the display name "plantbaked"
 ];
 const MAX_SLOTS_DEFAULT = 4;     // owners can set 1..this many user slots (stage_config.max_slots_per_room)
 
@@ -107,13 +107,29 @@ async function findUser(name) {
   const names = ["username", "displayname", "camfrogUsername", "discordUsername", "twitchDisplayname"].filter((c) => C.has(c));
   const rows = await getQuery(`SELECT userId, username, ${ucol(C, "displayname")} AS displayname, ${ucol(C, "camfrogUsername")} AS camfrogUsername
     FROM users WHERE ${names.map((c) => `LOWER(COALESCE(${c},'')) = ?`).join(" OR ")}`, names.map(() => n));
+  const isAuto = (r) => /^CF[a-z0-9]{8}$/.test(String(r.username));
+  // 1.99bn: an automatic account whose Camfrog "login" is really ANOTHER account's display / Discord /
+  // Twitch name is never picked (Pepe once made foamy1111's display name "plantbaked" into a login of
+  // its own). It's dropped before anything else is weighed.
+  const other = ["displayname", "discordUsername", "twitchDisplayname"].filter((c) => C.has(c));
+  const kept = [];
+  for (const r of rows) {
+    const cf = String(r.camfrogUsername || "").toLowerCase();
+    if (cf && isAuto(r) && other.length) {
+      const clash = await getQuery(`SELECT 1 FROM users WHERE userId != ? AND camfrogUsername IS NOT NULL AND LOWER(camfrogUsername) != ?
+                                    AND (${other.map((c) => `LOWER(COALESCE(${c},'')) = ?`).join(" OR ")}) LIMIT 1`,
+                                   [r.userId, cf, ...other.map(() => cf)]);
+      if (clash.length) continue;
+    }
+    kept.push(r);
+  }
   // an exact username wins over any other name
-  const exact = rows.filter((r) => String(r.username).toLowerCase() === n);
+  const exact = kept.filter((r) => String(r.username).toLowerCase() === n);
   if (exact.length === 1) return exact[0];
   // a real account beats Pepe's automatic "CFxxxxxxxx" accounts that share the name
-  const real = rows.filter((r) => !/^CF[a-z0-9]{8}$/.test(String(r.username)));
+  const real = kept.filter((r) => !isAuto(r));
   if (real.length === 1) return real[0];
-  return rows.length === 1 ? rows[0] : null;
+  return kept.length === 1 ? kept[0] : null;
 }
 
 async function ensureRow(roomId, title) {

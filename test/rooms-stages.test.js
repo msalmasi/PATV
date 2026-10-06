@@ -118,6 +118,20 @@ test("seeds: Pepe's Pad is the house's, Houseplants is plantbaked's (matched by 
   assert.equal(forPepe.find((r) => r.id === HOUSE).owner_kind, "house");
 });
 
+test("owner match (1.99bn): an automatic account whose Camfrog login is someone's display name is never picked", async () => {
+  // "plantbaked" matches pb (Discord) and CF2o8n8u2v (its Camfrog login = pb's Discord name): pb, always
+  assert.equal((await rooms.findUser("plantbaked")).userId, owner.userId);
+  assert.equal((await rooms.findUser("foamy1111")).userId, owner.userId, "the seed's Camfrog login");
+  // even with no real account sharing the typed name, the display-name ghost isn't chosen
+  const real = await mkUser(START, { username: "realguy", display: "zz_display", camfrog: "realguy_login" });
+  const ghost = await mkUser(START, { username: "CFabcdefgh", display: "zz_display", camfrog: "zz_display" });
+  assert.equal((await rooms.findUser("zz_display")).userId, real.userId);
+  assert.ok(ghost);
+  // an ordinary automatic account (its login is nobody else's name) is still found
+  const auto = await mkUser(START, { username: "CFqqqqqqqq", display: "lonely", camfrog: "lonely" });
+  assert.equal((await rooms.findUser("lonely")).userId, auto.userId);
+});
+
 test("owner settings: slot count / price / approval clamped; page fields cleaned; banner must be https", async () => {
   const R = await rooms.setStage(PLANT, { slot_count: 99, slot_price: 5000, approval: "on" }, "pb", { maxSlots: 4, maxPrice: PRICE });
   assert.equal(R.slot_count, 4); assert.equal(R.slot_price, PRICE); assert.equal(R.approval, true);
@@ -397,6 +411,51 @@ test("royalties: released weekly by the Reserve only when the room was active; c
   T = Date.UTC(2026, 9, 6, 12, 0, 0) + 400 * 86400000;
 });
 
+test("royalties (1.99bn): per-category on/off + rates, excluded casino/tips, voids, summary", async () => {
+  await rooms.setOwner(PLANT, "foamy1111", "boss");
+  assert.equal(ROY.categoryOf("!speak"), "say"); assert.equal(ROY.categoryOf("voice:morgan"), "voice");
+  assert.equal(ROY.categoryOf("play"), "queue"); assert.equal(ROY.categoryOf("shoutout"), "shoutout"); assert.equal(ROY.categoryOf("brandnew"), "other");
+  assert.match(ROY.categoryOf("blackjack-bet"), /^excluded:/); assert.match(ROY.categoryOf("tip"), /^excluded:/);
+  // defaults: stage 20, everything room-specific 10, sponsor off
+  assert.deepEqual(ROY.rate("stage"), { on: true, pct: 20, inherited: true });
+  assert.equal(ROY.rate("queue").pct, 10); assert.equal(ROY.rate("sponsor").on, false);
+  await mkUser(START, { camfrog: "cats1" });
+  const sum0 = await ROY.summary();
+  const n = await ROY.spendBatch([
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "queue", ref: "c-1" },        // 10% -> 100
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "speak", ref: "c-2" },        // !say, 10% -> 100
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "sponsor", ref: "c-3" },      // off -> 0
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "blackjack", ref: "c-4" },    // excluded -> 0
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "tip", ref: "c-5" },          // excluded -> 0
+  ]);
+  assert.equal(n, 2);
+  const cat = async (ref) => (await getQuery("SELECT category, amount FROM royalty_ledger WHERE ref = ?", ["spend:" + ref]))[0];
+  assert.deepEqual({ ...(await cat("c-1")) }, { category: "queue", amount: 100 });
+  // the admin table: song requests at 25%, !say off, sponsor on at the default
+  await ROY.setConfig({ categories: { queue: { on: true, pct: 25 }, say: { on: false, pct: null }, sponsor: { on: "on", pct: "" } } }, "boss");
+  assert.deepEqual(ROY.rate("queue"), { on: true, pct: 25, inherited: false });
+  assert.equal(ROY.rate("say").on, false); assert.equal(ROY.rate("sponsor").pct, 10);
+  await ROY.setConfig({ stage_pct: 20 }, "boss");                     // a save without the table keeps it
+  assert.equal(ROY.rate("queue").pct, 25);
+  await ROY.spendBatch([
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "queue", ref: "c-6" },        // 25% -> 250
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "say", ref: "c-7" },          // off
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "sponsor", ref: "c-8" },      // now on -> 100
+    { ref: "c-6", void: true },                                                      // refunded: gone
+    { room: PLANT, amount: 1000, login: "cats1", cmd: "queue", ref: "c-6" },        // a re-sent copy can't come back
+  ]);
+  assert.equal(await cat("c-6"), undefined); assert.equal(await cat("c-7"), undefined); assert.equal((await cat("c-8")).amount, 100);
+  const sum = await ROY.summary();
+  assert.equal(sum.windows.today.accrued - sum0.windows.today.accrued, 300);
+  const hp = sum.rooms.find((r) => r.room_id === PLANT);
+  assert.ok(hp && hp.owner === "pb" && hp.pending === hp.earned - hp.paid - hp.expired);
+  assert.equal(sum.categories.find((c) => c.category === "queue").pct, 25);
+  assert.ok(sum.categories.find((c) => c.category === "queue").accrued_30d >= 100);
+  assert.ok(sum.rooms.every((r) => r.room_id !== "-"), "void markers aren't rooms");
+  await ROY.setConfig({ reset_categories: true }, "boss");
+  assert.equal(ROY.rate("queue").pct, 10); assert.equal(ROY.rate("sponsor").on, false);
+});
+
 // ── HTTP: owner routes + Pepe's endpoints ──
 test("HTTP: owner-only routes, Pepe's owner sync + !stage act, front room needs staff", async () => {
   const express = require("express");
@@ -454,6 +513,10 @@ test("HTTP: owner-only routes, Pepe's owner sync + !stage act, front room needs 
     // Pepe's spend batch
     r = await J("/api/rooms/royalties/spend", { password: "bot", items: [{ room: PLANT, amount: 100, login: "zz", ref: "http-1" }] });
     assert.equal(r.j.accrued, 1);
+    r = await J("/api/rooms/royalties/summary", { password: "nope" });
+    assert.equal(r.status, 403);
+    r = await J("/api/rooms/royalties/summary", { password: "bot" });
+    assert.equal(r.status, 200); assert.ok(r.j.ok && r.j.totals && r.j.windows["7d"] && Array.isArray(r.j.categories));
     await rooms.setStage(PLANT, { slot_count: 1 }, "pb", { maxSlots: 4, maxPrice: PRICE });
   } finally { srv.close(); }
 });

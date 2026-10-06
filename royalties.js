@@ -17,17 +17,79 @@
 // over; anything still unpaid keep_periods periods after it was earned is forfeited (stays in the
 // Reserve). If the Reserve can't cover it, the release is retried on the next tick.
 //
-//   royalty_ledger   id, room_id, owner_user_id, kind (accrue | release | forfeit), source, base,
+//   royalty_ledger   id, room_id, owner_user_id, kind (accrue | release | forfeit), source, category, base,
 //                    amount (>= 0), period, ref (unique: idempotency), created, detail
 //   royalty_runs     (room_id, owner_user_id, period) -> outcome (released | missed | nothing | unfunded), amount
 //   royalty_config   key/value (admin-tunable on /rooms/admin)
+//
+// Categories (1.99bn). Royalties accrue on ALL room-specific PAT spend in the owner's room, and on
+// nothing that normally goes to the House / stakers / vaults. Pepe tags each reported spend with a
+// category (the command or purchase); CATEGORIES below is the admin table on /rooms/admin: each row
+// on/off + its own rate (blank = the default rate: stage_pct for "stage", spend_pct for the rest).
+// A category Pepe reports that isn't listed counts as "other". EXCLUDED categories never accrue,
+// whatever the table says (casino games, the wheel, lotto, heists, turf, duels, tips, transfers,
+// loans, fines, account-wide purchases) - Pepe doesn't report them either.
+// Where the money comes from: the original spend is routed by Pepe's PAT Routing table as before
+// (most commands -> the Reserve; !say 20% Soho nightclub; song requests / voices -> the nightclub).
+// The royalty is NOT taken out of that spend: it's a ledger line here, paid later by the Reserve
+// (flow room_owner). So for Reserve-routed commands it's effectively a rebate of the Reserve's
+// income; for nightclub-routed ones the Reserve pays it on money it never received. No double-dip:
+// each spend accrues once (unique ref), and a refunded charge is voided (Pepe sends {ref, void}).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
+// [key, group, label, default on]
+const CATEGORIES = [
+  ["stage", "Stage", "Paid stage time (featuring + priced slots)", true],
+  ["ask", "AI commands", "!ask", true],
+  ["roast", "AI commands", "!roast / !camroast", true],
+  ["look", "AI commands", "!look / !see", true],
+  ["chart", "AI commands", "!chart", true],
+  ["web", "AI commands", "!web", true],
+  ["epstein", "AI commands", "!epstein", true],
+  ["imagine", "Media", "!imagine", true],
+  ["video", "Media", "!video", true],
+  ["music", "Media", "!music (AI song)", true],
+  ["say", "Voice", "!say / !speak", true],
+  ["voice", "Voice", "Paid voices (per use)", true],
+  ["micsurcharge", "Voice", "-mic surcharge (spoken reply)", true],
+  ["queue", "Music", "Song requests (!play / !queue)", true],
+  ["shoutout", "Music", "DJ shout-outs (!dj shoutout, charged when spoken)", true],
+  ["snap", "Room", "!snap", true],
+  ["clip", "Room", "!clip / !autoclip", true],
+  ["topic", "Room", "!topic", true],
+  ["camsurcharge", "Room", "-cam surcharge", true],
+  ["remind", "Messages", "!remind", true],
+  ["relay", "Messages", "!relay", true],
+  ["sponsor", "Off by default", "!sponsor (the ad rotates in every room, not just this one)", false],
+  ["other", "Other", "Anything else Pepe reports (a new paid command)", true],
+];
+const CAT = new Map(CATEGORIES.map(([k, g, l, on]) => [k, { key: k, group: g, label: l, on }]));
+const ALIASES = { speak: "say", camroast: "roast", autoclip: "clip", see: "look", play: "queue", "music-queue": "queue", songrequest: "queue", shout: "shoutout", "dj-shoutout": "shoutout" };
+// never royalty-bearing (shown on /rooms/admin as the rule, not toggles)
+const EXCLUDED = ["blackjack", "holdem", "poker", "wheel", "spin", "lotto", "bingo", "wager", "market", "heist", "heist_gear",
+  "turf", "fight", "duel", "brawl", "arena", "showdown", "tip", "transfer", "donate", "loan", "fine", "bounty",
+  "cosmetics", "sheetregen", "avatarregen", "gangcreate", "stake"];
+const EXCLUDED_NOTE = "Casino games (blackjack, hold'em, wheel, lotto, bingo, wagers, markets), heists & turf, duels/brawls, " +
+  "tips & transfers, loans, fines, and account-wide purchases (cosmetics, re-rolls, gangs) - money that goes to the House, " +
+  "stakers or vaults, or isn't the room's.";
+
+/** The category a reported command/purchase belongs to (normalised; unknown -> "other"). */
+function categoryOf(cmd) {
+  let c = String(cmd || "").trim().toLowerCase().replace(/^!/, "");
+  if (/^voice[:-]/.test(c)) c = "voice";
+  c = ALIASES[c] || c;
+  c = c.replace(/[^\w-]/g, "").slice(0, 20);
+  if (!c) return "other";
+  if (EXCLUDED.includes(c) || EXCLUDED.some((x) => c.startsWith(x + "-") || c.startsWith(x + "_"))) return "excluded:" + c;
+  return CAT.has(c) ? c : "other";
+}
+
 const DEFAULTS = {
   enabled: true,
-  stage_pct: 20,            // % of paid stage time in the room
-  spend_pct: 10,            // % of Pepe's paid chat commands used in the room
+  stage_pct: 20,            // % of paid stage time in the room (the "stage" row's default rate)
+  spend_pct: 10,            // default % for every other category (rows left blank use it)
+  categories: {},           // overrides: { key: { on: bool, pct: number|null } }
   period_days: 7,
   min_active_days: 3,       // days in the period the room must be active
   active_minutes: 60,       // ...a day counts when the room was bridged live this long
@@ -54,6 +116,10 @@ function init() {
         room_id TEXT NOT NULL, owner_user_id TEXT NOT NULL, period INTEGER NOT NULL, outcome TEXT NOT NULL, amount INTEGER, at INTEGER,
         PRIMARY KEY (room_id, owner_user_id, period))`);
       await runQuery("CREATE TABLE IF NOT EXISTS royalty_config (key TEXT PRIMARY KEY, value TEXT)");
+      // 1.99bn: the spend category of each accrual (older rows: "stage" / the !command in detail)
+      const cols = (await getQuery("SELECT name FROM pragma_table_info('royalty_ledger')")).map((c) => c.name);
+      if (!cols.includes("category")) await runQuery("ALTER TABLE royalty_ledger ADD COLUMN category TEXT");
+      await runQuery("CREATE INDEX IF NOT EXISTS royalty_ledger_created ON royalty_ledger (kind, created)");
       await loadConfig();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -74,7 +140,34 @@ function cleanConfig(c) {
     active_peak: int(c.active_peak, 0, 1000, DEFAULTS.active_peak),
     cap_per_period: int(c.cap_per_period, 0, 1e12, DEFAULTS.cap_per_period),
     keep_periods: int(c.keep_periods, 1, 52, DEFAULTS.keep_periods),
+    categories: cleanCategories(c.categories),
   };
+}
+const truthy = (v) => v === true || v === "true" || v === 1 || v === "1" || v === "on";
+/** { key: { on, pct } } for known categories only; pct null/"" = the default rate. */
+function cleanCategories(cats) {
+  const out = {};
+  if (!cats || typeof cats !== "object") return out;
+  for (const [k, v] of Object.entries(cats)) {
+    if (!CAT.has(k) || !v || typeof v !== "object") continue;
+    const p = v.pct === null || v.pct === undefined || v.pct === "" ? null : Number(v.pct);
+    out[k] = { on: truthy(v.on), pct: p === null || !Number.isFinite(p) ? null : Math.round(Math.min(50, Math.max(0, p)) * 100) / 100 };
+  }
+  return out;
+}
+/** A category's live setting: { on, pct, inherited } (excluded / unknown handled by categoryOf). */
+function rate(cat, C = CONFIG) {
+  if (!cat || String(cat).startsWith("excluded:")) return { on: false, pct: 0, inherited: false };
+  const meta = CAT.get(cat) || CAT.get("other");
+  const o = (C.categories || {})[meta.key];
+  const dflt = meta.key === "stage" ? C.stage_pct : C.spend_pct;
+  const on = o ? !!o.on : meta.on;
+  const inherited = !o || o.pct === null || o.pct === undefined;
+  return { on, pct: on ? (inherited ? dflt : o.pct) : 0, inherited };
+}
+/** The admin table: every category with its live setting. */
+function catalog(C = CONFIG) {
+  return CATEGORIES.map(([key, group, label]) => ({ key, group, label, ...rate(key, C), default_on: CAT.get(key).on }));
 }
 async function loadConfig() {
   const rows = await getQuery("SELECT key, value FROM royalty_config");
@@ -85,7 +178,10 @@ async function loadConfig() {
 }
 async function setConfig(patch, actor) {
   await init();
-  const next = cleanConfig({ ...CONFIG, ...(patch || {}) });
+  patch = patch || {};
+  // the category table merges: a save may carry only the rows it shows
+  const cats = patch.reset_categories ? {} : { ...CONFIG.categories, ...(patch.categories || {}) };
+  const next = cleanConfig({ ...CONFIG, ...patch, categories: cats });
   for (const k of Object.keys(DEFAULTS)) {
     await runQuery("INSERT INTO royalty_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [k, JSON.stringify(next[k])]);
   }
@@ -99,31 +195,49 @@ const periodMs = () => CONFIG.period_days * 86400000;
 const periodOf = (t) => Math.floor((t - EPOCH) / periodMs());
 const periodStart = (p) => EPOCH + p * periodMs();
 
-/** The owner's share for a source (pure). */
-function share(source, base, C = CONFIG) {
-  const pct = source === "stage" ? C.stage_pct : source === "spend" ? C.spend_pct : 0;
+/** The owner's share for a source (pure). source "stage" | "spend"; spend uses its category's row. */
+function share(source, base, C = CONFIG, category) {
+  const cat = source === "stage" ? "stage" : source === "spend" ? (category || "other") : null;
+  const pct = cat ? rate(cat, C).pct : 0;
   return Math.max(0, Math.floor((Math.max(0, Math.floor(Number(base) || 0)) * pct) / 100));
 }
 
 /** Accrue the owner's share of `base` PAT spent in a room. Safe inside a caller's transaction (it
  *  only reads the rooms cache and writes one row). Returns the amount accrued (0 = nothing). */
-async function accrue({ room_id, source, base, payer, ref, detail, at }) {
+async function accrue({ room_id, source, base, payer, ref, detail, at, category }) {
   await init();
   if (!CONFIG.enabled || !room_id || !ref) return 0;
   const R = require("./rooms").getCached(room_id);
   if (!R || !R.owner || R.owner_kind !== "user") return 0;            // house / unowned rooms: nothing
   if (payer && payer === R.owner.userId) return 0;                      // your own spending doesn't pay you
-  const amount = share(source, base);
+  const cat = source === "stage" ? "stage" : (category || "other");
+  const amount = share(source, base, CONFIG, cat);
   if (amount <= 0) return 0;
   const t = at || now();
-  const r = await runQuery(`INSERT OR IGNORE INTO royalty_ledger (room_id, owner_user_id, kind, source, base, amount, period, ref, created, detail)
-                            VALUES (?, ?, 'accrue', ?, ?, ?, ?, ?, ?, ?)`,
-                           [room_id, R.owner.userId, source, Math.floor(Number(base) || 0), amount, periodOf(t), String(ref).slice(0, 160), t,
+  const key = String(ref).slice(0, 160);
+  if (key.startsWith("spend:") && (await getQuery("SELECT 1 FROM royalty_ledger WHERE ref = ?", ["void:" + key.slice(6)])).length) return 0;
+  const r = await runQuery(`INSERT OR IGNORE INTO royalty_ledger (room_id, owner_user_id, kind, source, category, base, amount, period, ref, created, detail)
+                            VALUES (?, ?, 'accrue', ?, ?, ?, ?, ?, ?, ?, ?)`,
+                           [room_id, R.owner.userId, source, cat, Math.floor(Number(base) || 0), amount, periodOf(t), key, t,
                             detail ? String(detail).slice(0, 200) : null]);
   return r && r.changes ? amount : 0;
 }
 
-/** Pepe's batch of chat-command spending: [{room, amount, login, cmd, ref}]. Returns how many accrued. */
+/** A refunded charge: drop its accrual (and remember the ref, so a re-sent copy can't accrue it again).
+ *  Already released? The pending balance goes down instead (it nets against the next accruals). */
+async function voidSpend(ref, room) {
+  const key = String(ref || "").slice(0, 120);
+  if (!key) return false;
+  const row = (await getQuery("SELECT id, room_id, owner_user_id FROM royalty_ledger WHERE ref = ? AND kind = 'accrue'", ["spend:" + key]))[0];
+  if (row) await runQuery("DELETE FROM royalty_ledger WHERE id = ?", [row.id]);
+  await runQuery(`INSERT OR IGNORE INTO royalty_ledger (room_id, owner_user_id, kind, source, amount, period, ref, created, detail)
+                  VALUES (?, ?, 'void', 'refund', 0, ?, ?, ?, 'charge refunded')`,
+                 [row ? row.room_id : String(room || "-").slice(0, 128), row ? row.owner_user_id : "-", periodOf(now()), "void:" + key, now()]);
+  return !!row;
+}
+
+/** Pepe's batch of room spending: [{room, amount, login, cmd (category), ref, ts}] and voids
+ *  [{ref, void: true}] for refunded charges. Returns how many accrued. */
 async function spendBatch(items) {
   await init();
   const rooms = require("./rooms");
@@ -132,6 +246,7 @@ async function spendBatch(items) {
   const payers = new Map();
   for (const it of (Array.isArray(items) ? items : []).slice(0, 500)) {
     if (!it || typeof it !== "object") continue;
+    if (it.void) { await voidSpend(it.ref, it.room); continue; }
     const room = String(it.room || "").slice(0, 128), ref = String(it.ref || "").slice(0, 120);
     const amount = Math.floor(Number(it.amount) || 0);
     if (!room || !ref || amount <= 0 || amount > 1e8) continue;
@@ -146,7 +261,8 @@ async function spendBatch(items) {
       payer = payers.get(login);
     }
     const at = Number(it.ts) > 1e12 && Number(it.ts) < now() + 60000 ? Math.floor(Number(it.ts)) : now();
-    if (await accrue({ room_id: room, source: "spend", base: amount, payer, ref: "spend:" + ref, at,
+    const category = categoryOf(it.cmd);
+    if (await accrue({ room_id: room, source: "spend", base: amount, payer, ref: "spend:" + ref, at, category,
                        detail: `!${String(it.cmd || "command").replace(/[^\w-]/g, "").slice(0, 20)}${login ? " by " + login : ""}` })) n++;
   }
   return n;
@@ -257,7 +373,58 @@ async function overview() {
   await init();
   return getQuery(`SELECT room_id, owner_user_id, SUM(CASE WHEN kind='accrue' THEN amount ELSE 0 END) AS earned,
                    SUM(CASE WHEN kind='release' THEN amount ELSE 0 END) AS paid, SUM(CASE WHEN kind='forfeit' THEN amount ELSE 0 END) AS forfeited
-                   FROM royalty_ledger GROUP BY room_id, owner_user_id ORDER BY earned DESC LIMIT 100`);
+                   FROM royalty_ledger WHERE kind IN ('accrue','release','forfeit') GROUP BY room_id, owner_user_id ORDER BY earned DESC LIMIT 100`);
+}
+
+/** The flows dashboard (Pepe's admin vault-flows card + /rooms/admin): accrued / paid / expired over
+ *  rolling windows, pending, per room + owner, per category, and royalties' share of what the website
+ *  paid out of the Reserve (reserve_claims; Pepe adds the share of ALL Reserve outflows from his ledger). */
+async function summary() {
+  await init();
+  const t = now();
+  const W = { today: 86400000, "7d": 7 * 86400000, "30d": 30 * 86400000 };
+  const windows = {};
+  for (const [k, ms] of Object.entries(W)) {
+    const r = (await getQuery(`SELECT COALESCE(SUM(CASE WHEN kind='accrue' THEN amount END),0) AS accrued,
+                                      COALESCE(SUM(CASE WHEN kind='accrue' THEN base END),0) AS base,
+                                      COALESCE(SUM(CASE WHEN kind='release' THEN amount END),0) AS paid,
+                                      COALESCE(SUM(CASE WHEN kind='forfeit' THEN amount END),0) AS expired
+                               FROM royalty_ledger WHERE created >= ?`, [t - ms]))[0] || {};
+    let claims = { total: 0, roy: 0 };
+    try {
+      claims = (await getQuery(`SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount END),0) AS total,
+                                       COALESCE(SUM(CASE WHEN flow = 'room_owner' THEN amount END),0) AS roy
+                                FROM reserve_claims WHERE created >= ?`, [new Date(t - ms).toISOString().replace("T", " ").slice(0, 19)]))[0] || claims;
+    } catch (e) { /* no reserve_claims table yet */ }
+    windows[k] = { accrued: Number(r.accrued) || 0, base: Number(r.base) || 0, paid: Number(r.paid) || 0, expired: Number(r.expired) || 0,
+                   website_reserve_out: Number(claims.total) || 0,
+                   website_share_pct: claims.total ? Math.round((10000 * claims.roy) / claims.total) / 100 : 0 };
+  }
+  const tot = (await getQuery(`SELECT COALESCE(SUM(CASE WHEN kind='accrue' THEN amount END),0) AS earned,
+                                      COALESCE(SUM(CASE WHEN kind='release' THEN amount END),0) AS paid,
+                                      COALESCE(SUM(CASE WHEN kind='forfeit' THEN amount END),0) AS expired FROM royalty_ledger`))[0] || {};
+  const totals = { earned: Number(tot.earned) || 0, paid: Number(tot.paid) || 0, expired: Number(tot.expired) || 0 };
+  totals.pending = totals.earned - totals.paid - totals.expired;
+  const per = await getQuery(`SELECT l.room_id, l.owner_user_id, u.username AS owner,
+      SUM(CASE WHEN kind='accrue' THEN amount ELSE 0 END) AS earned, SUM(CASE WHEN kind='release' THEN amount ELSE 0 END) AS paid,
+      SUM(CASE WHEN kind='forfeit' THEN amount ELSE 0 END) AS expired,
+      SUM(CASE WHEN kind='accrue' AND created >= ? THEN amount ELSE 0 END) AS accrued_7d,
+      SUM(CASE WHEN kind='accrue' AND created >= ? THEN amount ELSE 0 END) AS accrued_30d
+    FROM royalty_ledger l LEFT JOIN users u ON u.userId = l.owner_user_id
+    WHERE kind IN ('accrue','release','forfeit') GROUP BY l.room_id, l.owner_user_id ORDER BY earned DESC LIMIT 100`, [t - W["7d"], t - W["30d"]]);
+  const rooms = require("./rooms");
+  const roomsOut = per.map((r) => {
+    const R = rooms.getCached(r.room_id);
+    const earned = Number(r.earned) || 0, paid = Number(r.paid) || 0, expired = Number(r.expired) || 0;
+    return { room_id: r.room_id, title: (R && R.title) || r.room_id, owner: r.owner || r.owner_user_id, earned, paid, expired,
+             pending: earned - paid - expired, accrued_7d: Number(r.accrued_7d) || 0, accrued_30d: Number(r.accrued_30d) || 0 };
+  });
+  const cats = await getQuery(`SELECT COALESCE(category, CASE WHEN source='stage' THEN 'stage' ELSE 'other' END) AS c,
+                                      SUM(base) AS b, SUM(amount) AS a FROM royalty_ledger WHERE kind = 'accrue' AND created >= ? GROUP BY c`, [t - W["30d"]]);
+  const byCat = new Map(cats.map((c) => [c.c, c]));
+  const categories = catalog().map((c) => ({ category: c.key, label: c.label, group: c.group, on: c.on, pct: c.pct,
+    base_30d: Number((byCat.get(c.key) || {}).b) || 0, accrued_30d: Number((byCat.get(c.key) || {}).a) || 0 }));
+  return { config: config(), totals, windows, rooms: roomsOut, categories, next_release: periodStart(periodOf(t) + 1), excluded: EXCLUDED_NOTE };
 }
 
 let timer = null;
@@ -269,6 +436,7 @@ function start() {
 }
 
 module.exports = {
-  init, accrue, spendBatch, releaseTick, status, overview, setConfig, config, share, periodOf, periodStart, activeDays, start, DEFAULTS, EPOCH,
+  init, accrue, spendBatch, voidSpend, releaseTick, status, overview, summary, setConfig, config, share, periodOf, periodStart, activeDays, start,
+  categoryOf, rate, catalog, CATEGORIES, EXCLUDED, EXCLUDED_NOTE, DEFAULTS, EPOCH,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

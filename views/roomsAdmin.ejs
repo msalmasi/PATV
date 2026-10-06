@@ -46,20 +46,47 @@
     <h2 id="royT">Room-owner royalties</h2>
     <form id="royForm" class="settings">
       <label class="chk"><input type="checkbox" name="enabled" <%= roy.enabled ? 'checked' : '' %>> Royalties on</label>
-      <label>% of paid stage time<input type="number" name="stage_pct" min="0" max="50" step="0.5" value="<%= roy.stage_pct %>"></label>
-      <label>% of Pepe command spend<input type="number" name="spend_pct" min="0" max="50" step="0.5" value="<%= roy.spend_pct %>"></label>
+      <label>Default % for stage time<input type="number" name="stage_pct" min="0" max="50" step="0.5" value="<%= roy.stage_pct %>"></label>
+      <label>Default % for room spend<input type="number" name="spend_pct" min="0" max="50" step="0.5" value="<%= roy.spend_pct %>"></label>
       <label>Payout period (days)<input type="number" name="period_days" min="1" max="31" value="<%= roy.period_days %>"></label>
       <label>Active days needed<input type="number" name="min_active_days" min="0" max="31" value="<%= roy.min_active_days %>"></label>
       <label>Active day = minutes live ≥<input type="number" name="active_minutes" min="0" max="1440" value="<%= roy.active_minutes %>"></label>
       <label>…and peak people ≥<input type="number" name="active_peak" min="0" value="<%= roy.active_peak %>"></label>
       <label>Cap per payout (PAT)<input type="number" name="cap_per_period" min="0" value="<%= roy.cap_per_period %>"></label>
       <label>Expire unpaid after (periods)<input type="number" name="keep_periods" min="1" max="52" value="<%= roy.keep_periods %>"></label>
-      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><span class="msg" id="royMsg" role="status"></span></div>
+      <div style="grid-column: 1 / -1">
+        <h3 id="catT" style="margin:8px 0 4px">What earns royalties</h3>
+        <p class="muted" style="margin:0 0 6px">Room-specific PAT spent in an owned room, by category. A blank rate uses the default above. Pepe reports each spend with its category; a new paid command he reports counts as <b>Other</b>.</p>
+        <div class="tblwrap"><table aria-labelledby="catT"><thead><tr><th>Category</th><th>Group</th><th>On</th><th class="num">Rate %</th><th class="num">Spend 30d</th><th class="num">Royalty 30d</th></tr></thead><tbody>
+          <% const cs = new Map(((sum && sum.categories) || []).map((c) => [c.category, c])); %>
+          <% cats.forEach((c) => { const o = (roy.categories || {})[c.key]; const st = cs.get(c.key) || {}; %>
+          <tr class="catRow" data-key="<%= c.key %>">
+            <td><b><%= c.label %></b><br><span class="muted"><%= c.key %></span></td>
+            <td class="muted"><%= c.group %></td>
+            <td><input type="checkbox" class="catOn" <%= c.on ? 'checked' : '' %> aria-label="<%= c.label %> earns royalties"></td>
+            <td class="num"><input type="number" class="catPct" min="0" max="50" step="0.5" style="width:80px;margin:0" value="<%= o && o.pct !== null && o.pct !== undefined ? o.pct : '' %>" placeholder="<%= c.key === 'stage' ? roy.stage_pct : roy.spend_pct %>" aria-label="<%= c.label %> rate"></td>
+            <td class="num"><%= fmt(st.base_30d) %></td><td class="num"><%= fmt(st.accrued_30d) %></td>
+          </tr>
+          <% }) %>
+        </tbody></table></div>
+        <p class="muted">Never earns royalties, whatever the table says: <%= excludedNote %></p>
+      </div>
+      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><button type="button" class="btn" id="catReset">Reset table to defaults</button><span class="msg" id="royMsg" role="status"></span></div>
     </form>
-    <p class="muted">Accruing moves no money. Payouts come out of the Federal Reserve (Pepe's routing flow <code>room_owner</code>), skipped and retried if it can't cover them. Changing the period length re-buckets future periods.</p>
-    <div class="tblwrap"><table><thead><tr><th>Room</th><th>Owner</th><th class="num">Earned</th><th class="num">Paid</th><th class="num">Expired</th></tr></thead><tbody>
-      <% if (!overview.length) { %><tr><td colspan="5" class="muted">Nothing earned yet.</td></tr><% } %>
-      <% overview.forEach((o) => { %><tr><td><%= o.title %></td><td><%= o.owner %></td><td class="num"><%= fmt(o.earned) %></td><td class="num"><%= fmt(o.paid) %></td><td class="num"><%= fmt(o.forfeited) %></td></tr><% }) %>
+    <p class="muted">Accruing moves no money: it's a ledger line. Payouts come out of the Federal Reserve (Pepe's routing flow <code>room_owner</code>), skipped and retried if it can't cover them. The original spend is still routed by Pepe's PAT Routing table as before, so for Reserve-routed commands a royalty is a rebate of Reserve income; for song requests and voices (routed to the nightclub) the Reserve pays it on money it didn't receive. A refunded charge voids its royalty. Changing the period length re-buckets future periods.</p>
+
+    <h3 id="flowT">Royalty flows</h3>
+    <% const T = (sum && sum.totals) || {}; const Wn = (sum && sum.windows) || {}; %>
+    <p>Pending <b><%= fmt(T.pending) %></b> · paid out by the Fed <b><%= fmt(T.paid) %></b> · expired <%= fmt(T.expired) %> · earned all-time <%= fmt(T.earned) %><% if (sum && sum.next_release) { %> · next release <%= new Date(sum.next_release).toISOString().slice(0, 16).replace('T', ' ') %> UTC<% } %></p>
+    <div class="tblwrap"><table aria-labelledby="flowT"><thead><tr><th>Window</th><th class="num">Accrued</th><th class="num">On spend of</th><th class="num">Paid (Fed)</th><th class="num">Expired</th><th class="num">Website Reserve payouts</th><th class="num">Royalty share</th></tr></thead><tbody>
+      <% [['today', 'Last 24h'], ['7d', '7 days'], ['30d', '30 days']].forEach(([k, label]) => { const w = Wn[k] || {}; %>
+      <tr><td><%= label %></td><td class="num"><%= fmt(w.accrued) %></td><td class="num"><%= fmt(w.base) %></td><td class="num"><%= fmt(w.paid) %></td><td class="num"><%= fmt(w.expired) %></td><td class="num"><%= fmt(w.website_reserve_out) %></td><td class="num"><%= w.website_reserve_out ? w.website_share_pct + '%' : '—' %></td></tr>
+      <% }) %>
+    </tbody></table></div>
+    <p class="muted">The share of ALL Reserve outflows (Pepe's own payouts included) is on Pepe's admin panel under Vault flows.</p>
+    <div class="tblwrap"><table><thead><tr><th>Room</th><th>Owner</th><th class="num">7d</th><th class="num">30d</th><th class="num">Pending</th><th class="num">Paid</th><th class="num">Expired</th></tr></thead><tbody>
+      <% const rr = (sum && sum.rooms) || []; if (!rr.length) { %><tr><td colspan="7" class="muted">Nothing earned yet.</td></tr><% } %>
+      <% rr.forEach((o) => { %><tr><td><%= o.title %></td><td><%= o.owner %></td><td class="num"><%= fmt(o.accrued_7d) %></td><td class="num"><%= fmt(o.accrued_30d) %></td><td class="num"><%= fmt(o.pending) %></td><td class="num"><%= fmt(o.paid) %></td><td class="num"><%= fmt(o.expired) %></td></tr><% }) %>
     </tbody></table></div>
   </section>
 </main>
@@ -85,9 +112,23 @@
     e.preventDefault();
     post('/api/rooms/admin/add', formJson(e.target)).then(function (j) { if (!j.ok) document.getElementById('addMsg').textContent = j.error || 'Not added.'; else location.reload(); });
   });
+  function catTable() {
+    var out = {};
+    document.querySelectorAll('.catRow').forEach(function (tr) {
+      var p = tr.querySelector('.catPct').value;
+      out[tr.getAttribute('data-key')] = { on: tr.querySelector('.catOn').checked, pct: p === '' ? null : Number(p) };
+    });
+    return out;
+  }
   document.getElementById('royForm').addEventListener('submit', function (e) {
     e.preventDefault();
-    post('/api/rooms/admin/royalties', formJson(e.target)).then(function (j) { document.getElementById('royMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+    var body = formJson(e.target);
+    body.categories = catTable();
+    post('/api/rooms/admin/royalties', body).then(function (j) { document.getElementById('royMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+  });
+  document.getElementById('catReset').addEventListener('click', function () {
+    if (!confirm('Reset every category to its default (on/off and the default rate)?')) return;
+    post('/api/rooms/admin/royalties', { reset_categories: true }).then(function (j) { if (j.ok) location.reload(); else document.getElementById('royMsg').textContent = j.error || 'Not reset.'; });
   });
 })();
 </script>

@@ -91,6 +91,11 @@ function register(app, { addUser, isBotToken }) {
     if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
     try { res.json({ ok: true, accrued: await royalties.spendBatch(b.items) }); } catch (e) { fail(res, e); }
   });
+  // 1.99bn: the royalty flows summary for Pepe's admin vault-flows card
+  app.post("/api/rooms/royalties/summary", async (req, res) => {
+    if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    try { res.json({ ok: true, ...(await royalties.summary()) }); } catch (e) { fail(res, e); }
+  });
   // An owner's (or a Pepe admin's) "!stage ..." in their room. Pepe says who typed it; we check that
   // Camfrog name is this room's owner (or Pepe vouches they're one of his admins).
   app.post("/api/rooms/stage/act", async (req, res) => {
@@ -253,7 +258,9 @@ function register(app, { addUser, isBotToken }) {
         names.set(o.owner_user_id, u ? u.username : o.owner_user_id);
       }
     }
+    const sum = await royalties.summary();
     res.render("roomsAdmin", { user: req.user.username, list, guide: g.rows, front: rooms.frontSetting(), roy: royalties.config(),
+      cats: royalties.catalog(), excludedNote: royalties.EXCLUDED_NOTE, sum,
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });
   app.post("/api/rooms/admin/owner", addUser, needStaff, jsonOnly, async (req, res) => {
@@ -264,6 +271,9 @@ function register(app, { addUser, isBotToken }) {
   });
   app.post("/api/rooms/front", addUser, needStaff, jsonOnly, async (req, res) => {
     try { res.json({ ok: true, front: await rooms.setFront((req.body || {}).room, actor(req)) }); } catch (e) { fail(res, e); }
+  });
+  app.get("/api/rooms/admin/royalties/summary", addUser, needStaff, async (req, res) => {
+    try { res.json({ ok: true, ...(await royalties.summary()) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/admin/royalties", addUser, needStaff, jsonOnly, async (req, res) => {
     try { res.json({ ok: true, config: await royalties.setConfig(req.body || {}, actor(req)) }); } catch (e) { fail(res, e); }
