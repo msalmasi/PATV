@@ -350,7 +350,8 @@ function acknowledgeSpin(spinId) {
       if (data.success) {
           console.log("Spin command received:", data);
           const parts = data.message.split(' '); // "public spinid <spinId> from <username>"
-          const spinnerName = parts[4];
+          // the PATV display name (the username in the message is e.g. "CFxxxxxxxx" for Pepe's accounts)
+          const spinnerName = (data.spinner && data.spinner.display) || parts[4];
           window.spinnerCss = (data.spinner && data.spinner.nameCss) || '';
           const sId = parts[2];
           // targetIndex is the server-chosen winning slice — the wheel animates to it.

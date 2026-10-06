@@ -274,7 +274,7 @@
     <div class="grid2">
       <form class="field" id="displaynameForm" action="/api/u/<%= username %>/update/displayname" method="post">
         <label class="lbl" for="displayname">Display name</label>
-        <div class="row"><input type="text" id="displayname" name="displayname" value="<%= displayname %>" required><button class="btn primary" type="submit">Save</button></div>
+        <div class="row"><input type="text" id="displayname" name="displayname" value="<%= displayname %>" maxlength="32" required><button class="btn primary" type="submit">Save</button></div>
       </form>
       <form class="field" id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
         <label class="lbl" for="username">Username</label>

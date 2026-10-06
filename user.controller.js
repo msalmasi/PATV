@@ -11,6 +11,7 @@ const { createTables, runQuery, getQuery } = require('./dbUtils');
 const funding = require('./funding');
 const { moveUserRows, copyCamfrogBadges } = require('./accountMerge');
 const inbox = require('./inbox');
+const displaynames = require('./displaynames');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
@@ -106,6 +107,7 @@ async function registerUser(req, res) {
     }
     registerLimit.hit(ip);
     console.log(`[auth] new account ${username} (${userId})`);
+    await displaynames.markNewAccount(userId).catch(() => {});   // displayname = username, automatic
 
     // Best effort: the account exists whether or not these work.
     try {
@@ -264,12 +266,14 @@ async function updateUsername(req, res) {
 };
 
 // Update displayname
+// A name typed here is the user's own (never replaced automatically). Cleaned and capped at
+// displaynames.MAX_LEN; an empty one goes back to the automatic name.
 async function updateDisplayname(req, res) {
-  const { displayname } = req.body;
+  const { displayname } = req.body || {};
   const userId = req.user.userId;
   const username = req.user.username;
-  await runQuery('UPDATE users SET displayname = ? WHERE userId = ?', [displayname, userId]);
-  req.flash('success', 'Displayname changed.');
+  const r = await displaynames.setByUser(userId, displayname);
+  req.flash('success', r && r.auto ? 'Display name reset to ' + r.displayname + '.' : 'Displayname changed.');
   res.redirect(`/u/${username}/profile/edit`);
 };
 

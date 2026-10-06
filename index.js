@@ -34,6 +34,8 @@ const authenticateToken = require("./middleware/authenticateToken");
 const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCookie");
 const guard = require("./middleware/authGuard");
 const { moveUserRows } = require("./accountMerge");
+const displaynames = require("./displaynames");
+setTimeout(() => displaynames.ready().catch((e) => console.error("[displaynames] schema:", e.message)), 2000);
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
 const flash = require("connect-flash");
@@ -448,7 +450,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           const newUser = {
             userId: uuidv4(),
             username: newUserUsername,
-            displayname: twitchUser.display_name,
+            displayname: displaynames.usable(twitchUser.display_name) || newUserUsername,
             email: twitchUser.email,
             password: hashedPassword,
             twitchId: twitchUser.id,
@@ -470,6 +472,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
               newUser.points_balance,
             ]
           );
+          await displaynames.markNewAccount(newUser.userId).catch(() => {});
           const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [newUser.userId]);
           if (bonus[0].twitchBonus === 0) {
             const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
@@ -734,7 +737,8 @@ app.get("/auth/discord/callback", async (req, res) => {
           const newUser = {
             userId: uuidv4(),
             username: newUserUsername, // Discord username
-            displayname: discordUser.username,
+            // the Discord display ("global") name, else their Discord username, else ours
+            displayname: displaynames.usable(discordUser.global_name) || displaynames.usable(discordUser.username) || newUserUsername,
             email: discordEmail, // Discord email (verified only)
             password: hashedPassword,
             avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
@@ -757,6 +761,7 @@ app.get("/auth/discord/callback", async (req, res) => {
               newUser.points_balance,
             ]
           );
+          await displaynames.markNewAccount(newUser.userId).catch(() => {});
           const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [newUser.userId]);
           if (bonus[0].discordBonus === 0) {
             const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
@@ -1368,7 +1373,8 @@ app.post('/api/users/twitch/register', async (req, res) => {
     if (!isPlatformBot((req.body || {}).botToken)) {
       return res.status(403).json({ error: "unauthorized" });
     }
-    const { username, displayname, email, twitchId, profileImage, twitchDisplayname, avatar } = req.body;
+    const { username, email, twitchId, profileImage, twitchDisplayname, avatar } = req.body;
+    const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(twitchDisplayname) || username;
     const points_balance = 0;
     const userId = uuidv4();
 
@@ -1379,6 +1385,7 @@ app.post('/api/users/twitch/register', async (req, res) => {
         'INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, username, displayname, email, hashedPassword, twitchId, twitchDisplayname, avatar, points_balance]
       );
+      await displaynames.markNewAccount(userId).catch(() => {});
       const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [userId]);
       if (bonus[0].twitchBonus === 0) {
         const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
@@ -1404,7 +1411,8 @@ app.post('/api/users/discord/register', async (req, res) => {
     if (!isPlatformBot((req.body || {}).botToken)) {
       return res.status(403).json({ error: "unauthorized" });
     }
-    const { username, displayname, email, discordId, profileImage, discordUsername, avatar } = req.body;
+    const { username, email, discordId, profileImage, discordUsername, avatar } = req.body;
+    const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(discordUsername) || username;
     const points_balance = 0;
     const userId = uuidv4();
   
@@ -1415,6 +1423,7 @@ app.post('/api/users/discord/register', async (req, res) => {
         'INSERT INTO users (userId, username, displayname, email, password, discordId, discordUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [userId, username, displayname, email, hashedPassword, discordId, discordUsername, avatar, points_balance]
       );
+      await displaynames.markNewAccount(userId).catch(() => {});
       const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [userId]);
       if (bonus[0].discordBonus === 0) {
         const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
@@ -2159,7 +2168,10 @@ app.post('/api/users/camfrog/register', async (req, res) => {
   if (!isBotToken((req.body || {}).botToken)) {
     return res.status(403).json({ error: 'forbidden' });
   }
-  const { username, displayname, email, password, camfrogUsername, avatar, points_balance } = req.body;
+  const { username, email, password, camfrogUsername, avatar, points_balance } = req.body;
+  // Pepe's Camfrog display name for them (markup stripped), else their Camfrog login - never the
+  // random CF account name.
+  const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(camfrogUsername, true) || username;
   const userId = uuidv4();
 
   try {
@@ -2167,6 +2179,7 @@ app.post('/api/users/camfrog/register', async (req, res) => {
       'INSERT INTO users (userId, username, displayname, email, password, camfrogUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       [userId, username, displayname, email, password, camfrogUsername, avatar, 0]
     );
+    await displaynames.markNewAccount(userId).catch(() => {});
     // 1.63: the welcome PAT comes out of a vault ("new_account" payout row), never minted.
     const welcome = Math.max(0, Math.floor(Number(points_balance) || 5000));
     const funded = await funding.fundPayout(userId, welcome, "new_account", "Welcome PAT");
@@ -2178,6 +2191,15 @@ app.post('/api/users/camfrog/register', async (req, res) => {
     console.error('Error creating Camfrog user:', error.message);
     res.status(500).json({ error: 'Failed to create new user' });
   }
+});
+
+// Pepe's Camfrog display names (1.99az): [{login, display}] from his room user lists, batched and
+// only when they change. Refreshes AUTOMATIC display names only - never one a user chose.
+app.post("/api/users/camfrog/displaynames", async (req, res) => {
+  const body = req.body || {};
+  if (!isBotToken(body.password)) return res.status(403).json({ error: "unauthorized" });
+  try { res.json(Object.assign({ ok: true }, await displaynames.applyCamfrogNames(body.names))); }
+  catch (e) { console.error("[displaynames] camfrog sync:", e.message); res.status(500).json({ error: "failed" }); }
 });
 
 // ─── Prize store ──────────────────────────────────────────────────────────────────────────────
@@ -4126,7 +4148,7 @@ app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 15;
     const rows = await getQuery(
-      `SELECT username, points_balance, xp, level FROM users WHERE points_balance > 0 ORDER BY points_balance DESC LIMIT ?`,
+      `SELECT username, displayname, points_balance, xp, level FROM users WHERE points_balance > 0 ORDER BY points_balance DESC LIMIT ?`,
       [limit]
     );
     res.json(rows);
@@ -4341,7 +4363,7 @@ app.get("/api/stats/xp", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 15;
     const rows = await getQuery(
-      `SELECT username, xp, level FROM users WHERE xp > 0 ORDER BY xp DESC LIMIT ?`,
+      `SELECT username, displayname, xp, level FROM users WHERE xp > 0 ORDER BY xp DESC LIMIT ?`,
       [limit]
     );
     res.json(rows);
