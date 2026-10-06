@@ -1,0 +1,246 @@
+<%- include('layout', { title: room.name + ' — room analytics', user: user }) %>
+<%#
+  /rooms/:slug/analytics (roomstats.js builds `a`; null for visitors, who get a sign-in prompt like
+  the live room page). Everything here is aggregate or opt-in public: !incognito users are never sent
+  by name, people who hide Analytics on their profile are folded into "+N keep their activity private",
+  moderation is counts only.
+%>
+<style>
+  .ra { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
+  .ra *, .ra *::before, .ra *::after { box-sizing: border-box; }
+  .ra a { color: #81c784; text-decoration: none; }
+  .ra a:hover { color: #a5d6a7; }
+  .ra .crumb { font-size: 13px; color: #888; overflow-wrap: anywhere; }
+  .ra .hero { background: radial-gradient(120% 160% at 0% 0%, #17301a 0%, #111 55%); border: 1px solid #222; border-radius: 14px; padding: 16px 18px; display: grid; gap: 8px; min-width: 0; }
+  .ra .hero h1 { margin: 0; font-size: 26px; line-height: 1.2; overflow-wrap: anywhere; }
+  .ra .hero .sub { color: #aaa; font-size: 13px; line-height: 1.5; }
+  .ra .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ra .tab { font-size: 12px; padding: 4px 11px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb !important; white-space: nowrap; }
+  .ra .tab.on { background: #1f3a22; border-color: #4caf50; color: #e8f5e9 !important; }
+  .ra .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; min-width: 0; display: grid; gap: 12px; align-content: start; }
+  .ra h2 { margin: 0; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; }
+  .ra h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #888; font-size: 12px; }
+  .ra .muted { color: #888; font-size: 12px; }
+  .ra .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .ra .tile { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 11px 13px; min-width: 0; }
+  .ra .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .ra .tile .v { font-size: 21px; font-weight: bold; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+  .ra .tile .v.sm { font-size: 15px; }
+  .ra .tile .s { font-size: 12px; color: #888; margin-top: 2px; }
+  .ra .up { color: #81c784; } .ra .down { color: #ef9a9a; }
+  .ra .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .ra .blk { display: grid; gap: 8px; min-width: 0; }
+  .ra .blk-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; font-size: 14px; }
+  .ra .blk-top b { color: #ddd; font-weight: 600; }
+  .ra .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+  .ua-bars { position: relative; padding: 0 0 20px 40px; }
+  .ua-chart { display: block; width: 100%; height: 132px; overflow: visible; }
+  .ua-grid { stroke: #232323; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .ua-base { stroke: #3a3a3a; stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .ua-hit { fill: transparent; cursor: crosshair; }
+  .ua-hit:hover { fill: rgba(255,255,255,.06); }
+  .ua-yl { position: absolute; left: 0; top: 0; width: 34px; height: 132px; }
+  .ua-yl span { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; color: #777; font-variant-numeric: tabular-nums; }
+  .ua-xl { position: absolute; left: 40px; right: 0; bottom: 0; height: 16px; }
+  .ua-xl span { position: absolute; transform: translateX(-50%); font-size: 11px; color: #777; white-space: nowrap; }
+  .ua-xl span.end { transform: translateX(-100%); }
+  .ra-hrow { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; margin-bottom: 3px; }
+  .ra-hname { font-size: 11px; color: #999; }
+  .ra-cells { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; }
+  .ra-cell { height: 18px; border-radius: 3px; cursor: crosshair; }
+  .ra-cell:hover { outline: 1px solid #ddd; outline-offset: -1px; }
+  .ra-hax { display: grid; grid-template-columns: 36px repeat(4, minmax(0, 1fr)); font-size: 11px; color: #777; }
+  .ra .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #aaa; }
+  .ra table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ra th { text-align: left; color: #777; font-weight: normal; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 0 8px 6px 0; white-space: nowrap; }
+  .ra td { padding: 6px 8px 6px 0; border-top: 1px solid #1c1c1c; color: #ccc; vertical-align: top; font-variant-numeric: tabular-nums; }
+  .ra td.n { color: #777; width: 26px; }
+  .ra td.who { overflow-wrap: anywhere; color: #e6e6e6; }
+  .ra .num { text-align: right; }
+  .ra .privnote { font-size: 12px; color: #c9a36a; }
+  .ra .bars { display: grid; gap: 7px; }
+  .ra .brow { display: grid; grid-template-columns: minmax(80px, 150px) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+  .ra .brow .bn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
+  .ra .brow .bb { height: 8px; background: #1a1a1a; border-radius: 999px; overflow: hidden; }
+  .ra .brow .bb span { display: block; height: 100%; border-radius: 999px; }
+  .ra .brow .bv { color: #999; white-space: nowrap; font-size: 12px; }
+  .ra .catbar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; gap: 2px; background: #111; }
+  .ra .catbar span { display: block; height: 100%; min-width: 3px; }
+  .ra .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ra .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: #161616; border: 1px solid #2a2a2a; color: #ccc; }
+  .ra .pill b { color: #fff; margin-left: 3px; }
+  .ra .topics { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+  .ra .topics span { padding: 3px 11px; border-radius: 999px; background: #151a15; border: 1px solid #243324; color: #c8e6c9; line-height: 1.4; }
+  .ra .know { display: grid; gap: 12px; }
+  .ra .know p { margin: 0; line-height: 1.55; color: #ddd; }
+  .ra .know ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #ccc; font-size: 14px; line-height: 1.45; }
+  .ra .ksub { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; margin: 0 0 6px; }
+  .ra .vibe { display: inline-block; font-size: 13px; padding: 4px 12px; border-radius: 999px; background: #1a1630; border: 1px solid #3a3260; color: #d1c4e9; }
+  .ra .hist { display: grid; gap: 6px; font-size: 13px; }
+  .ra .hist div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; color: #bbb; }
+  .ra .hist b { color: #888; font-weight: normal; }
+  .ra .empty { color: #777; font-size: 13px; }
+  .ra .gate { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 28px 18px; text-align: center; color: #bbb; line-height: 1.6; }
+  .ra .gate a { display: inline-block; margin-top: 10px; border: 1px solid #2e4d2b; border-radius: 8px; padding: 8px 16px; }
+  #ra-tip { position: fixed; z-index: 50; pointer-events: none; background: #1d1d1d; color: #eee; border: 1px solid #333; border-radius: 6px;
+            padding: 4px 8px; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0,0,0,.5); display: none; font-family: Ubuntu, sans-serif; }
+  @media (max-width: 760px) { .ra .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) {
+    .ra { padding: 14px 16px 48px; }
+    .ra .hero h1 { font-size: 22px; }
+    .ua-chart, .ua-yl { height: 110px; }
+    .ra-cell { height: 14px; border-radius: 2px; }
+    .ra-cells { gap: 1px; }
+    .ra .hide-sm { display: none; }
+    .ra .brow { grid-template-columns: minmax(70px, 110px) minmax(0, 1fr) auto; }
+    .ra .hist div { grid-template-columns: 76px minmax(0, 1fr); }
+  }
+</style>
+<main class="ra" id="ra">
+  <div class="crumb"><a href="/rooms">Live rooms</a> › <% if (room.bridged) { %><a href="/rooms/<%= encodeURIComponent(room.slug) %>"><%= room.name %></a><% } else { %><%= room.name %><% } %> › Analytics</div>
+  <section class="hero">
+    <h1>📈 <%= room.name %></h1>
+    <div class="sub">What happens in this Camfrog room, from what Pepe sees sitting in it<% if (a && a.updated) { %> · updated <%= a.updated %><% } %><% if (a && a.tz) { %> · times in <%= a.tz %><% } %>.</div>
+    <div class="tabs">
+      <% if (room.bridged) { %><a class="tab" href="/rooms/<%= encodeURIComponent(room.slug) %>">💬 Live room</a><% } %>
+      <span class="tab on">📈 Analytics</span>
+    </div>
+  </section>
+
+<% if (!a) { %>
+  <div class="gate">🔒 Room analytics are for signed-in members, like the live room view.<br><a href="/login">Sign in</a></div>
+<% } else { %>
+  <section class="card" aria-label="Summary">
+    <div class="tiles">
+      <div class="tile"><div class="k">Messages · 30d</div><div class="v"><%= a.tiles.msgs30 %></div><div class="s"><% if (a.tiles.msgsTrend != null) { %><span class="<%= a.tiles.msgsTrend >= 0 ? 'up' : 'down' %>"><%= a.tiles.msgsTrend >= 0 ? '▲' : '▼' %> <%= Math.abs(a.tiles.msgsTrend) %>%</span> on the month before<% } else { %>public chat<% } %></div></div>
+      <div class="tile"><div class="k">Visitors · 30d</div><div class="v"><%= a.tiles.uniq30 %></div><div class="s">~<%= a.tiles.avgVisitors %> a day · <%= a.tiles.uniq90 %> in 90d</div></div>
+      <div class="tile"><div class="k">New vs returning</div><div class="v"><%= a.tiles.new30 %> <span class="muted">/ <%= a.tiles.returning30 %></span></div><div class="s">first-timers / regulars back, 30d</div></div>
+      <div class="tile"><div class="k">Typical size</div><div class="v"><%= a.tiles.typical %></div><div class="s"><%= a.tiles.typicalNote %><% if (a.tiles.peakSize) { %> · peak <%= a.tiles.peakSize %><% } %></div></div>
+      <div class="tile"><div class="k">Mic time · 30d</div><div class="v"><%= a.tiles.mic30 %></div><div class="s">on the mic in this room</div></div>
+      <div class="tile"><div class="k">Commands · 30d</div><div class="v"><%= a.tiles.cmds30 %></div><div class="s">typed to Pepe here</div></div>
+      <div class="tile"><div class="k">Busiest</div><div class="v sm"><%= a.tiles.peak %></div><div class="s">by messages</div></div>
+      <div class="tile"><div class="k">Tracked since</div><div class="v sm"><%= a.tiles.first %></div><div class="s">last activity <%= a.tiles.last %></div></div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="raKnow">
+    <h2 id="raKnow"><span>🧠 What people talk about</span><small><%= a.know.at ? "Pepe's notes from " + a.know.at : "no notes yet" %></small></h2>
+    <% if (!a.know.has) { %>
+      <div class="empty">Pepe hasn't summarised this room yet — he reads the room a few times a day once it's been chatty.</div>
+    <% } else { %>
+    <div class="know">
+      <% if (a.know.summary) { %><p><%= a.know.summary %></p><% } %>
+      <% if (a.know.vibe) { %><div><span class="vibe">✨ <%= a.know.vibe %></span></div><% } %>
+      <% if (a.know.topics.length) { %>
+      <div><p class="ksub">Recurring topics</p><div class="topics"><% a.know.topics.forEach((t) => { %><span style="font-size:<%= t.size %>em"><%= t.t %></span><% }) %></div></div>
+      <% } %>
+      <div class="two">
+        <% if (a.know.jokes.length) { %><div><p class="ksub">Running jokes</p><ul><% a.know.jokes.forEach((j) => { %><li><%= j %></li><% }) %></ul></div><% } %>
+        <% if (a.know.events.length) { %><div><p class="ksub">Notable moments</p><ul><% a.know.events.forEach((j) => { %><li><%= j %></li><% }) %></ul></div><% } %>
+        <% if (a.know.rules.length) { %><div><p class="ksub">House norms</p><ul><% a.know.rules.forEach((j) => { %><li><%= j %></li><% }) %></ul></div><% } %>
+      </div>
+      <% if (a.changes.length || a.history.length > 1) { %>
+      <div class="two">
+        <% if (a.changes.length) { %><div><p class="ksub">How it's changing</p><ul><% a.changes.forEach((c) => { %><li><%= c %></li><% }) %></ul></div><% } %>
+        <% if (a.history.length > 1) { %><div><p class="ksub">Topics over time</p><div class="hist"><% a.history.forEach((h) => { %><div><b><%= h.when %></b><span><%= h.topics.join(' · ') %></span></div><% }) %></div></div><% } %>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+  </section>
+
+  <section class="card" aria-labelledby="raAct">
+    <h2 id="raAct"><span>📊 Activity</span><small>last 90 days</small></h2>
+    <div class="two">
+      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#4caf50"></span>Messages per day</b></div>
+        <% if (a.hasMsgs) { %><%- a.msgChart %><% } else { %><div class="empty">No chat recorded yet.</div><% } %></div>
+      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span>Mic time per day</b></div>
+        <% if (a.hasMic) { %><%- a.micChart %><% } else { %><div class="empty">Nobody on the mic yet.</div><% } %></div>
+    </div>
+    <div class="blk"><div class="blk-top"><b>Unique visitors per day</b>
+      <span class="legend"><span><span class="dot" style="background:#26c6da"></span>new</span><span><span class="dot" style="background:#5c6bc0"></span>returning</span></span></div>
+      <%- a.visitorsChart %></div>
+  </section>
+
+  <section class="card" aria-labelledby="raHeat">
+    <h2 id="raHeat"><span>🗓 When it's busy</span><small>hour of the week</small></h2>
+    <div class="two">
+      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#4caf50"></span>Chat</b></div>
+        <div><%- a.heatChat %><div class="ra-hax" aria-hidden="true"><span></span><span>00</span><span>06</span><span>12</span><span>18</span></div></div></div>
+      <% if (a.hasHeatMic) { %>
+      <div class="blk"><div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span>Mic</b></div>
+        <div><%- a.heatMic %><div class="ra-hax" aria-hidden="true"><span></span><span>00</span><span>06</span><span>12</span><span>18</span></div></div></div>
+      <% } %>
+    </div>
+  </section>
+
+  <div class="two">
+    <section class="card" aria-labelledby="raRegs">
+      <h2 id="raRegs"><span>👥 Regulars</span><small>by days here, chat and mic</small></h2>
+      <% if (a.regulars.length) { %>
+      <table><thead><tr><th></th><th>Who</th><th class="num">Days 30d</th><th class="num">Msgs 30d</th><th class="num hide-sm">Mic 30d</th><th class="num hide-sm">Last seen</th></tr></thead><tbody>
+        <% a.regulars.forEach((r) => { %><tr><td class="n"><%= r.rank %></td><td class="who"><% if (r.href) { %><a href="<%= r.href %>"><%= r.name %></a><% } else { %><%= r.name %><% } %></td><td class="num"><%= r.d30 %></td><td class="num"><%= r.m30 %></td><td class="num hide-sm"><%= r.mic30 %></td><td class="num hide-sm"><%= r.last %></td></tr><% }) %>
+      </tbody></table>
+      <% } else { %><div class="empty">No regulars yet.</div><% } %>
+      <% if (a.regularsHidden) { %><div class="privnote">🔒 +<%= a.regularsHidden %> regular<%= a.regularsHidden === 1 ? '' : 's' %> keep their activity private.</div><% } %>
+    </section>
+    <section class="card" aria-labelledby="raMic">
+      <h2 id="raMic"><span>🎙 Mic leaderboard</span><small>last 90 days</small></h2>
+      <% if (a.mic.length) { %>
+      <div class="bars"><% a.mic.forEach((m) => { %>
+        <div class="brow"><span class="bn"><%= m.rank %>. <% if (m.href) { %><a href="<%= m.href %>"><%= m.name %></a><% } else { %><%= m.name %><% } %></span><span class="bb"><span style="width:<%= m.pct.toFixed(1) %>%;background:#ffb74d"></span></span><span class="bv"><%= m.dur %></span></div>
+      <% }) %></div>
+      <% } else { %><div class="empty">Nobody on the mic yet.</div><% } %>
+      <% if (a.micHidden) { %><div class="privnote">🔒 +<%= a.micHidden %> keep their activity private.</div><% } %>
+    </section>
+  </div>
+
+  <div class="two">
+    <section class="card" aria-labelledby="raCmd">
+      <h2 id="raCmd"><span>⌨️ Commands here</span><small>since tracking began</small></h2>
+      <% if (a.cmds.length) { %>
+      <div class="catbar" role="img" aria-label="Commands by category"><% a.cats.forEach((c) => { %><span style="width:<%= c.pct.toFixed(1) %>%;background:<%= c.color %>" title="<%= c.label %>: <%= c.n %>"></span><% }) %></div>
+      <div class="legend"><% a.cats.forEach((c) => { %><span><span class="dot" style="background:<%= c.color %>"></span><%= c.label %> <b><%= c.n %></b></span><% }) %></div>
+      <div class="bars"><% a.cmds.forEach((c) => { %>
+        <div class="brow"><span class="bn"><code><%= c.cmd %></code></span><span class="bb"><span style="width:<%= c.pct.toFixed(1) %>%;background:<%= c.color %>"></span></span><span class="bv"><%= c.n %></span></div>
+      <% }) %></div>
+      <% } else { %><div class="empty">No commands yet.</div><% } %>
+    </section>
+    <section class="card" aria-labelledby="raGames">
+      <h2 id="raGames"><span>🎲 Games &amp; moderation</span><small>30d · 90d</small></h2>
+      <% if (a.games.length) { %>
+      <table><thead><tr><th>Game</th><th class="num">30 days</th><th class="num">90 days</th></tr></thead><tbody>
+        <% a.games.forEach((g) => { %><tr><td><span class="dot" style="background:<%= g.color %>"></span><%= g.label %></td><td class="num"><%= g.d30 %></td><td class="num"><%= g.d90 %></td></tr><% }) %>
+      </tbody></table>
+      <div class="muted">Game commands played in this room (a hand, a spin, a heist move).</div>
+      <% } else { %><div class="empty">No games played here yet.</div><% } %>
+      <p class="ksub" style="margin-top:6px">Moderation · 90 days · <%= a.modTotal %></p>
+      <% if (a.mod.length) { %><div class="pills"><% a.mod.forEach((m) => { %><span class="pill"><%= m.label %><b><%= m.n %></b></span><% }) %></div>
+      <% } else { %><div class="empty">Quiet — nothing on file.</div><% } %>
+      <div class="muted">Totals only — who did what is never shown here.</div>
+    </section>
+  </div>
+<% } %>
+</main>
+<div id="ra-tip" role="tooltip"></div>
+<script>
+  (function () {
+    var tip = document.getElementById('ra-tip'), root = document.getElementById('ra');
+    if (!tip || !root) return;
+    function show(e) {
+      var t = e.target.closest && e.target.closest('[data-tip]');
+      if (!t || !root.contains(t)) { tip.style.display = 'none'; return; }
+      tip.textContent = t.getAttribute('data-tip');
+      tip.style.display = 'block';
+      var x = e.clientX + 12, y = e.clientY - 34, w = tip.offsetWidth;
+      if (x + w > window.innerWidth - 8) x = e.clientX - w - 12;
+      tip.style.left = Math.max(8, x) + 'px';
+      tip.style.top = Math.max(8, y) + 'px';
+    }
+    root.addEventListener('pointermove', show);
+    root.addEventListener('pointerdown', show);
+    root.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
+    root.querySelectorAll('[data-tip] title').forEach(function (n) { n.remove(); });
+    root.querySelectorAll('.ra-cell[title]').forEach(function (n) { n.removeAttribute('title'); });
+  })();
+</script>

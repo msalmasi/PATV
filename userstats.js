@@ -403,4 +403,6 @@ function register(app, { isBotToken }) {
   });
 }
 
-module.exports = { register, forProfile, get, clean, avatarFor };
+module.exports = { register, forProfile, get, clean, avatarFor,
+  // shared chart/format helpers (roomstats.js renders room analytics with the same look)
+  _render: { esc, fmt, dur, ago, dateOf, niceMax, dayLabel, dayAxis, barChart } };

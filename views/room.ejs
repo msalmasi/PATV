@@ -128,6 +128,7 @@
     <div class="meta">
       <span class="chip" id="rmCount">👥 <%= room.count %> in the room</span>
       <span class="chip">📡 Camfrog</span>
+      <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Analytics</a><% } %>
     </div>
   </section>
   <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
