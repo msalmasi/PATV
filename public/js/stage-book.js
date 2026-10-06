@@ -39,12 +39,28 @@
     var o = $('room').selectedOptions[0];
     return o ? Number(o.getAttribute('data-price')) || 0 : 0;
   }
+  // "Use my Twitch channel" (only rendered for a signed-in user with a connected Twitch account)
+  var twOffered = false;
+  function twNoteOn(on) { if ($('twNote')) $('twNote').classList.toggle('hide', !on); }
+  if ($('twChip')) {
+    twNoteOn(false);
+    $('twChip').addEventListener('click', function () {
+      $('embed').value = $('twChip').getAttribute('data-url'); twNoteOn(true); $('embed').focus();
+    });
+    $('embed').addEventListener('input', function () { twNoteOn($('embed').value === $('twChip').getAttribute('data-url')); });
+  }
   function formCalc() {
     var o = $('room').selectedOptions[0], sp = o ? Number(o.getAttribute('data-price')) || 0 : 0;
     $('slotPriceTxt').textContent = sp ? fmt(sp) + ' PAT / live min in this room' : 'free in this room';
     $('holdAmt').textContent = fmt((Number(mins.value) || 0) * price());
     var w = radio('when'), embed = radio('mode') === 'embed';
     show('embedFld', embed); show('atFld', w === 'later');
+    if ($('twSug')) {
+      show('twSug', embed);
+      // the first time they pick "A video link", an empty field gets their own Twitch channel; after that
+      // it's theirs - clearing it doesn't bring it back (the chip does)
+      if (embed && !twOffered) { twOffered = true; if (!$('embed').value.trim()) { $('embed').value = $('twChip').getAttribute('data-url'); twNoteOn(true); } }
+    }
     $('bookBtn').textContent = w === 'later' ? '📅 Book this time' : w === 'queue' ? '⏳ Join the queue' : (embed ? '▶ Put it on now' : '🎥 Go live now');
   }
   mins.addEventListener('input', function () { minsR.value = mins.value; formCalc(); });

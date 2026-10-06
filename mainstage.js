@@ -1122,9 +1122,12 @@ function register(app, { addUser, isBotToken, noTimers }) {
   // the "Go live" hub: pick a room, book now / later / join the queue, stream or embed
   const bookPage = async (req, res) => {
     await init();
-    let me = null;
+    let me = null, twitchUrl = null;
     if (req.user && req.user.userId) {
-      me = (await getQuery("SELECT userId, username, displayname, points_balance, class FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+      me = (await getQuery("SELECT userId, username, displayname, points_balance, class, twitchId, twitchDisplayname FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+      // the link field suggests the signed-in user's OWN connected Twitch channel (server-rendered, no API)
+      twitchUrl = embeds.twitchChannelUrl(me);
+      if (me) { delete me.twitchId; delete me.twitchDisplayname; }
     }
     const all = await rooms.list();
     const want = String(req.query.room || "");
@@ -1134,7 +1137,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: isStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
                                                         owner: r.owner ? r.owner.display || r.owner.username : null })),
-                              pick: pick ? pick.id : null });
+                              pick: pick ? pick.id : null, twitchUrl });
   };
   app.get("/stage", addUser, bookPage);
   app.get("/stage/book", addUser, bookPage);

@@ -110,4 +110,16 @@ function label(e) {
   return c.t === "vod" ? "Twitch VOD" : "Twitch: " + c.id;
 }
 
-module.exports = { parse, clean, playerUrl, label, EmbedError };
+/** The signed-in user's own Twitch channel link, for the "Use my Twitch channel" suggestion on the
+ *  link field - or null. Only a connected account (twitchId) counts. Twitch OAuth stores display_name
+ *  (twitchDisplayname), which is the login with different capitals for ASCII names; a localized display
+ *  name (e.g. CJK) isn't a login, so there's no suggestion for it. The result is always something
+ *  parse() accepts as a channel, and it still goes through parse() when they submit. */
+function twitchChannelUrl(user) {
+  if (!user || !user.twitchId) return null;
+  const login = String(user.twitchDisplayname || "").trim();
+  if (!TW_LOGIN.test(login) || TW_RESERVED.has(login.toLowerCase())) return null;
+  return "https://twitch.tv/" + login.toLowerCase();
+}
+
+module.exports = { parse, clean, playerUrl, label, twitchChannelUrl, EmbedError };
