@@ -1,26 +1,36 @@
 # Paid Main Stage slots (mainstage.js) - nginx-rtmp side. Goes inside `rtmp { server { ... } }` in
 # /etc/nginx/nginx.conf. Back up nginx.conf first, `nginx -t`, then `systemctl reload nginx`.
 #
-# Every publish asks the site (POST /api/stage/rtmp, answered only from loopback):
-#   on_publish      2xx = allow as-is (Pepe's "broadcast" on prod), 3xx = allow and RENAME the stream
-#                   to the slot's public name (Location header), so a user's key never becomes the
-#                   HLS filename; anything else = refused
-#   on_update       every notify_update_timeout: the billing heartbeat; a non-2xx answer drops the
-#                   publisher (how an admin cut / ended slot is kicked). notify_update_strict stays
-#                   OFF (the default) so the site being down for a deploy never drops a stream.
-#   on_publish_done the publisher left: billing pauses.
-# The site's per-request access log is off for these applications because nginx-rtmp's default
-# format includes the stream name = the secret key.
+# Two applications per site, both asking the site (POST /api/stage/rtmp, answered only from loopback):
+#   INGEST (no HLS)  users publish here with their slot key (OBS), the browser relay with its HMAC
+#                    key. on_publish: a valid key gets a 3xx to rtmp://127.0.0.1/<HLS app>/<slot
+#                    name>, which makes nginx PUSH the stream there - the key never becomes an HLS
+#                    filename (a plain local rename doesn't work: the HLS module opens its files
+#                    before the notify module renames). Anything else = refused.
+#   HLS app          Pepe's "broadcast" (prod) + the pushes of open slots, from loopback only.
+#   on_update        every notify_update_timeout: the billing heartbeat; a non-2xx answer drops the
+#                    publisher (how an admin cut / ended slot is kicked). notify_update_strict stays
+#                    OFF (the default) so the site being down for a deploy never drops a stream.
+#   on_publish_done  the publisher left: billing pauses.
+# access_log is off: nginx-rtmp's default access log format includes the stream name = the key.
+# Each application needs its own hls_path.
 
-# STAGING test application (staging site on :3100). nginx-rtmp needs its own hls_path, so it
-# writes to /mnt/hls/staging (served as /hls/staging/stg-<id>.m3u8); never accepts Pepe's key.
-        application live_staging {
+# ── STAGING (live on the VPS since 1.99al; site on :3100) ──
+        application stage_staging {
             live on;
             access_log off;
             drop_idle_publisher 15s;
             on_publish http://127.0.0.1:3100/api/stage/rtmp;
             on_update http://127.0.0.1:3100/api/stage/rtmp;
             on_publish_done http://127.0.0.1:3100/api/stage/rtmp;
+            notify_update_timeout 10s;
+        }
+
+        application live_staging {
+            live on;
+            access_log off;
+            on_publish http://127.0.0.1:3100/api/stage/rtmp;
+            on_update http://127.0.0.1:3100/api/stage/rtmp;
             notify_update_timeout 10s;
             hls on;
             hls_type live;
@@ -29,12 +39,10 @@
             hls_path /mnt/hls/staging;
         }
 
-# PROD: the existing `live` application gains the same three callbacks pointing at :3000 - only
-# AFTER the site version with /api/stage/rtmp is live on prod (before that the callback 404s and
-# nginx would refuse Pepe's own stream). Pepe's key keeps working (STAGE_PEPE_KEYS, default
-# "broadcast"); every other unknown name is refused from then on.
+# ── PROD (site on :3000) - only AFTER the site version with /api/stage/rtmp is live on prod ──
+# 1) add the ingest application (users get rtmp://stream.publicaccess.tv/stage):
 #
-#        application live {
+#        application stage {
 #            live on;
 #            access_log off;
 #            drop_idle_publisher 15s;
@@ -42,9 +50,24 @@
 #            on_update http://127.0.0.1:3000/api/stage/rtmp;
 #            on_publish_done http://127.0.0.1:3000/api/stage/rtmp;
 #            notify_update_timeout 10s;
+#        }
+#
+# 2) (optional, closes today's open publishing) the existing `live` application gains callbacks,
+#    so only Pepe's key and site-approved slot pushes get in:
+#
+#        application live {
+#            live on;
+#            access_log off;
+#            on_publish http://127.0.0.1:3000/api/stage/rtmp;
+#            on_update http://127.0.0.1:3000/api/stage/rtmp;
+#            notify_update_timeout 10s;
 #            hls on;
 #            hls_type live;
 #            hls_fragment 1s;
 #            hls_playlist_length 4s;
 #            hls_path /mnt/hls;
 #        }
+#
+#    Caveat: with on_publish on `live`, Pepe's OBS can only (re)connect while the prod site
+#    answers - an OBS reconnect during a deploy restart is refused until the site is back (OBS
+#    retries). Slots work with step 1 alone; `live` then just stays open to anyone, as today.
