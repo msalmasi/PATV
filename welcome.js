@@ -421,5 +421,5 @@ function start() {
   setTimeout(() => sweep(), 60000).unref();
 }
 
-module.exports = { enroll, touch, middleware, check, sweep, payout, connectBonus, backfill, adminView, status, progress,
+module.exports = { start, enroll, touch, middleware, check, sweep, payout, connectBonus, backfill, adminView, status, progress,
   setConfig, config, normEmail, normIp, hash, duplicateOf, ready, DEFAULTS, useConnectAward: (fn) => { connectAward = fn; }, _reset: () => { touched.clear(); cfg = Object.assign({}, DEFAULTS); } };

@@ -199,3 +199,12 @@ test("helpers: email + IP normalisation", () => {
   assert.strictEqual(welcome.normIp("::ffff:203.0.113.9"), "203.0.113.9");
   assert.strictEqual(welcome.normIp("127.0.0.1"), null);
 });
+
+test("index.js wiring: everything it calls is exported", () => {
+  for (const fn of ["start", "middleware", "enroll", "connectBonus", "adminView", "setConfig", "payout", "status"]) {
+    assert.strictEqual(typeof welcome[fn], "function", fn);
+  }
+  const src = require("fs").readFileSync(path.join(repo, "index.js"), "utf8") + require("fs").readFileSync(path.join(repo, "user.controller.js"), "utf8")
+    + require("fs").readFileSync(path.join(repo, "wallet.js"), "utf8");
+  for (const m of src.matchAll(/welcome\.([a-zA-Z]+)\(/g)) assert.strictEqual(typeof welcome[m[1]], "function", "welcome." + m[1]);
+});
