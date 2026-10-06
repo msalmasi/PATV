@@ -114,7 +114,7 @@ async function backup(dir) {
     if (!apply) {
       const pend = await getQuery("SELECT userId FROM stale_notice WHERE state = 'pending'").catch(() => []);
       const p = await stale.plan(Object.assign({ now, bot }, opts));
-      const meta = (await stale.noticeMeta()) || {};
+      const meta = ((await getQuery("SELECT 1 FROM sqlite_master WHERE name = 'stale_meta'")).length && (await stale.noticeMeta())) || {};
       const sel = meta.tiers || stale.DEFAULT_TIERS;
       const tierOf = new Map(p.rows.map((r) => [r.f.userId, r.tier]));
       const back = pend.filter((x) => !sel.includes(tierOf.get(x.userId)) && tierOf.get(x.userId) !== "archived");
@@ -209,23 +209,26 @@ async function backup(dir) {
     console.log(`exported ${out.length} non-active account(s) to ${args.export} (no email addresses)`);
   }
 
+  // a warning window is running: only accounts that were warned, are still pending, and still qualify
+  // (read-only: the notice tables exist only once a run was started)
+  let todo = sel;
+  const meta = (await getQuery("SELECT 1 FROM sqlite_master WHERE name = 'stale_meta'")).length ? await stale.noticeMeta() : null;
+  if (meta && meta.apply_on && !args["ignore-notice"]) {
+    const pend = new Set((await getQuery("SELECT userId FROM stale_notice WHERE state = 'pending'")).map((x) => x.userId));
+    todo = sel.filter((r) => pend.has(r.f.userId));
+    console.log(`warning window ${meta.run_id} (archive on ${meta.apply_on}, purge from ${meta.purge_on}): ${todo.length} of ${sel.length} selected account(s) were warned and are still pending, ` +
+                `${fmt(todo.reduce((t, r) => t + Math.max(0, Math.floor(r.f.balance)), 0))} PAT`);
+    if (apply && now < Date.parse(meta.apply_on + "T00:00:00Z") && !args["force-early"]) {
+      console.error(`the warning window runs until ${meta.apply_on} - not archiving before then (--force-early to override)`); process.exit(2);
+    }
+  }
+
   if (!apply) { console.log("\nDRY RUN - nothing written. Re-run with --apply to archive the selected tiers."); process.exit(0); }
 
   const b = await backup(args["backup-dir"]);
   console.log(`backup: ${b.file} (${fmt(b.size)} bytes)`);
   if (!(await stale.ensure())) throw new Error("could not add the archive column");
   const runId = "stale-" + new Date(now).toISOString().slice(0, 10) + "-" + Math.random().toString(36).slice(2, 8);
-  // a warning window is running: only accounts that were warned, are still pending, and still qualify
-  let todo = sel;
-  const meta = await stale.noticeMeta();
-  if (meta && meta.apply_on && !args["ignore-notice"]) {
-    if (now < Date.parse(meta.apply_on + "T00:00:00Z") && !args["force-early"]) {
-      console.error(`the warning window runs until ${meta.apply_on} - not archiving before then (--force-early to override)`); process.exit(2);
-    }
-    const pend = new Set((await getQuery("SELECT userId FROM stale_notice WHERE state = 'pending'")).map((x) => x.userId));
-    todo = sel.filter((r) => pend.has(r.f.userId));
-    console.log(`warning window ${meta.run_id}: ${todo.length} of ${sel.length} selected account(s) were warned and are still pending`);
-  }
   const limit = Number(args.limit) || todo.length;
   let n = 0, pat = 0;
   for (const r of todo.slice(0, limit)) {
