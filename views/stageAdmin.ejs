@@ -1,0 +1,58 @@
+<%- include('layout', { title: 'Stage admin', user: user }) %>
+<!-- views/stageAdmin.ejs — paid Main Stage slots: settings, open slots (cut), bans, booking log. -->
+<link rel="stylesheet" href="/public/css/stage.css?v=1">
+<% const C = state.config; %>
+<main class="sb" id="sa">
+  <div class="sb-head">
+    <h1>📺 Stage admin</h1>
+    <p class="lede">Paid Main Stage slots. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a></p>
+  </div>
+
+  <section class="sb-card" aria-labelledby="openT">
+    <h2 id="openT">On the stage now</h2>
+    <div class="row"><button type="button" class="btn danger" id="cutAll">✂ Cut everything to Pepe</button></div>
+    <div class="tblwrap"><table><thead><tr><th>Who</th><th>Status</th><th class="num">Live</th><th class="num">Charged / held</th><th>Booked</th><th></th></tr></thead>
+      <tbody id="openRows"></tbody></table></div>
+  </section>
+
+  <section class="sb-card" aria-labelledby="setT">
+    <h2 id="setT">Settings</h2>
+    <form id="cfg" class="settings">
+      <label class="chk"><input type="checkbox" name="enabled" <%= C.enabled ? 'checked' : '' %>> Booking open</label>
+      <label>Price (PAT / live minute)<input type="number" name="price_per_min" min="1" value="<%= C.price_per_min %>"></label>
+      <label>Min minutes<input type="number" name="min_minutes" min="1" value="<%= C.min_minutes %>"></label>
+      <label>Max minutes<input type="number" name="max_minutes" min="1" value="<%= C.max_minutes %>"></label>
+      <label>Max slots at once<input type="number" name="max_concurrent" min="0" max="8" value="<%= C.max_concurrent %>"></label>
+      <label>Go-live window (min)<input type="number" name="start_window_min" min="1" value="<%= C.start_window_min %>"></label>
+      <label>Off-air grace (min)<input type="number" name="idle_grace_min" min="1" value="<%= C.idle_grace_min %>"></label>
+      <label>Bookings / user / hour<input type="number" name="bookings_per_hour" min="1" value="<%= C.bookings_per_hour %>"></label>
+      <label>Revenue goes to<select name="revenue_vault">
+        <option value="reserve" <%= C.revenue_vault === 'reserve' ? 'selected' : '' %>>Federal Reserve</option>
+        <option value="jackpot" <%= C.revenue_vault === 'jackpot' ? 'selected' : '' %>>Casino jackpot</option></select></label>
+      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save settings</button><span class="msg" id="cfgMsg" role="status"></span></div>
+    </form>
+    <p class="muted">Max slots at once = 1 today; the stage shows every live slot as a tab, so raising it later just works. A slot keeps the price it was booked at.</p>
+  </section>
+
+  <section class="sb-card" aria-labelledby="banT">
+    <h2 id="banT">Banned from booking</h2>
+    <form id="banForm" class="row"><input type="text" name="username" placeholder="username" required aria-label="Username to ban">
+      <input type="text" name="reason" placeholder="reason (optional)" aria-label="Reason"><button type="submit" class="btn danger">Ban</button></form>
+    <div class="tblwrap"><table><thead><tr><th>User</th><th>Reason</th><th>By</th><th>When</th><th></th></tr></thead><tbody id="banRows"></tbody></table></div>
+  </section>
+
+  <section class="sb-card" aria-labelledby="logT">
+    <h2 id="logT">Booking log</h2>
+    <div class="tblwrap"><table><thead><tr><th>Booked</th><th>Who</th><th class="num">Max</th><th class="num">Live</th><th class="num">Held</th><th class="num">Charged</th><th class="num">Refunded</th><th>Ended</th></tr></thead>
+      <tbody id="logRows"></tbody></table></div>
+  </section>
+
+  <section class="sb-card" aria-labelledby="evT">
+    <h2 id="evT">Recent events</h2>
+    <div class="tblwrap"><table><thead><tr><th>When</th><th>What</th><th>By</th><th>Detail</th></tr></thead><tbody id="evRows"></tbody></table></div>
+  </section>
+</main>
+<script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/stage-admin.js?v=1" defer></script>
+</body>
+</html>

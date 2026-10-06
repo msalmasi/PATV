@@ -118,7 +118,8 @@ function register(app, { addUser, xpForNextLevel }) {
           "SELECT username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?",
           [username]))[0] || null;
       }
-      const [S, rooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
+      const [S, rooms, top, slots] = await Promise.all([stats(), bridge.summary(!!me), topFrogs(),
+        require("./mainstage").publicSlots().catch(() => [])]);
       // the room panel = the STAGE ROOM (the room the main stage shows, Pepe's active room) when it's
       // bridged; otherwise the first live room, as before
       const stage = bridge.stage();
@@ -133,6 +134,8 @@ function register(app, { addUser, xpForNextLevel }) {
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top,
         roomOnStage: !!(onStage && room === onStage), stageAdmin,
+        // 1.99al: paid stage slots live now + whether this viewer can cut them
+        slots, staff: !!(req.user && (req.user.class === "Admin" || req.user.class === "Staff")),
         // kept for anything that still reads the old locals
         displayname: me ? me.displayname : null, classh: me ? me.class : null, level: me ? me.level : null,
         xp: me ? Math.round(me.xp) : null, avatar: me ? me.avatar : null, email: me ? me.email : null,

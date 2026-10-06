@@ -998,6 +998,8 @@ require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");
 gtf.register(app, { isBotToken, addUser });
 require("./bounties").register(app, { isBotToken, addUser });
+// 1.99al: paid Main Stage slots (book, RTMP key / browser relay, per-minute billing, admin cut)
+require("./mainstage").register(app, { isBotToken, addUser });
 // 1.91: link previews — every page knows its absolute URL; og.js draws the preview images
 og.register(app);
 // 1.90: one action queue for everything started on the site, plus the new game pages

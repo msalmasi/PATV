@@ -431,7 +431,13 @@ function register(app, { isBotToken, addUser }) {
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
 
-  app.get("/api/stage", (req, res) => { res.set("Cache-Control", "no-store"); res.json(stage()); });
+  app.get("/api/stage", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    // 1.99al: paid stage slots live right now (mainstage.js) ride along with Pepe's stream state
+    let slots = [];
+    try { slots = await require("./mainstage").publicSlots(); } catch (e) { slots = []; }
+    res.json({ ...stage(), slots });
+  });
 
   // Move the main stage to another of Pepe's rooms (site Admins). JSON only (a cross-site form can't
   // send it). Pepe re-checks the room and his BUSY rules and answers through the action.

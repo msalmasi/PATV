@@ -1,0 +1,121 @@
+<%- include('layout', { title: 'Book the Main Stage', user: user }) %>
+<!-- views/stageBook.ejs — paid Main Stage slots (mainstage.js). The live status + browser streaming
+     run in /public/js/stage-book.js. -->
+<link rel="stylesheet" href="/public/css/stage.css?v=1">
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+%>
+<main class="sb" id="sb" data-price="<%= C.price_per_min %>" data-min="<%= C.min_minutes %>" data-max="<%= C.max_minutes %>"
+      data-rtmp="<%= rtmpServer %>" data-signed="<%= me ? 1 : 0 %>">
+  <div class="sb-head">
+    <h1>📺 Book the Main Stage</h1>
+    <p class="lede">Take over the PATV main stage on publicaccess.tv. Stream from OBS or straight from your browser. You only pay for the minutes you're actually live.</p>
+  </div>
+
+  <section class="sb-card how" aria-labelledby="howT">
+    <h2 id="howT">How it works</h2>
+    <div class="facts">
+      <div class="fact"><span class="k">Price</span><span class="v"><%= fmt(C.price_per_min) %> <small>PAT / live minute</small></span></div>
+      <div class="fact"><span class="k">Slot length</span><span class="v"><%= C.min_minutes %>–<%= C.max_minutes %> <small>minutes</small></span></div>
+      <div class="fact"><span class="k">Go live within</span><span class="v"><%= C.start_window_min %> <small>minutes</small></span></div>
+    </div>
+    <ol class="steps">
+      <li><b>Pick your max length.</b> The PAT for all of it is held when you book.</li>
+      <li><b>Go live</b> with the stream key (OBS, Streamlabs…) or from this page with your camera or screen.</li>
+      <li><b>You're billed per started minute you're live.</b> When you end, run out of time, or get cut, the rest of the hold comes straight back. Never go live and you get it all back.</li>
+    </ol>
+    <p class="muted">Viewers can still flip to Pepe's stream while you're on. Admins can cut a slot back to Pepe at any time (the unused PAT is refunded). Keep it within the site rules.</p>
+  </section>
+
+  <% if (!C.enabled || C.max_concurrent < 1) { %>
+    <section class="sb-card"><p class="note">Stage booking is closed right now.</p></section>
+  <% } %>
+
+  <% if (!me) { %>
+    <section class="sb-card"><p class="note"><a href="/login">Sign in</a> to book the stage.</p></section>
+  <% } else { %>
+    <!-- booking form (hidden while you have an open slot) -->
+    <section class="sb-card hide" id="bookCard" aria-labelledby="bookT">
+      <h2 id="bookT">Book a slot</h2>
+      <form id="bookForm" class="book">
+        <label for="mins">Max length</label>
+        <div class="mins">
+          <input type="range" id="minsR" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= Math.min(C.max_minutes, Math.max(C.min_minutes, 15)) %>" aria-label="Max minutes">
+          <span class="num"><input type="number" id="mins" name="minutes" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= Math.min(C.max_minutes, Math.max(C.min_minutes, 15)) %>" inputmode="numeric"> min</span>
+        </div>
+        <div class="hold">Hold: <b id="holdAmt">–</b> PAT <span class="muted">· you have <b id="bal"><%= fmt(me.points_balance) %></b></span></div>
+        <button type="submit" class="btn primary" id="bookBtn">Hold PAT &amp; book</button>
+        <p class="msg" id="bookMsg" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="sb-card hide" id="busyCard"><p class="note" id="busyMsg"></p></section>
+
+    <!-- your slot -->
+    <section class="sb-card hide" id="slotCard" aria-labelledby="slotT">
+      <div class="slot-top">
+        <h2 id="slotT">Your slot</h2>
+        <span class="state" id="slotState">–</span>
+      </div>
+      <div class="facts">
+        <div class="fact"><span class="k">Live</span><span class="v" id="liveTime">0:00</span></div>
+        <div class="fact"><span class="k">Charged so far</span><span class="v" id="charged">0</span></div>
+        <div class="fact"><span class="k">Held</span><span class="v" id="held">0</span></div>
+        <div class="fact"><span class="k" id="leftK">Time left</span><span class="v" id="leftV">–</span></div>
+      </div>
+      <p class="muted" id="slotNote"></p>
+      <div class="row"><button type="button" class="btn danger" id="endBtn">End my slot now</button>
+        <a class="btn" href="/" target="_blank" rel="noopener">Watch the stage ↗</a></div>
+
+      <div class="tabs" role="tablist" aria-label="How to stream">
+        <button type="button" role="tab" id="tabObs" aria-selected="true" aria-controls="paneObs">Stream from OBS</button>
+        <button type="button" role="tab" id="tabWeb" aria-selected="false" aria-controls="paneWeb">Go live from browser</button>
+      </div>
+
+      <div class="pane" id="paneObs" role="tabpanel" aria-labelledby="tabObs">
+        <p>In OBS: <b>Settings → Stream → Service: Custom</b>, then paste these. Start streaming and you're on the stage within a few seconds.</p>
+        <label class="kv">Server
+          <span class="copyrow"><input type="text" readonly id="rtmpUrl" value="<%= rtmpServer %>"><button type="button" class="btn" data-copy="rtmpUrl">Copy</button></span></label>
+        <label class="kv">Stream key
+          <span class="copyrow"><input type="password" readonly id="rtmpKey" value="" autocomplete="off"><button type="button" class="btn" id="showKey">Show</button><button type="button" class="btn" data-copy="rtmpKey">Copy</button></span></label>
+        <p class="muted" id="keyNote">Your key works only for this slot and stops working when it ends. It's shown on this page only - don't share it.</p>
+        <p class="muted">Recommended: 1280×720 or 1920×1080, 30 fps, x264 2500–4500 kbps, keyframe interval 2 s, AAC 128 kbps.</p>
+      </div>
+
+      <div class="pane hide" id="paneWeb" role="tabpanel" aria-labelledby="tabWeb">
+        <div class="web">
+          <div class="preview"><video id="pv" muted playsinline autoplay></video><span class="pv-empty" id="pvEmpty">Pick a source to preview</span>
+            <span class="onair hide" id="onAir"><span class="dot" aria-hidden="true"></span> LIVE</span></div>
+          <div class="ctl">
+            <fieldset class="src"><legend>Source</legend>
+              <label><input type="radio" name="src" value="camera" checked> Camera + mic</label>
+              <label><input type="radio" name="src" value="screen"> Screen (+ mic)</label>
+            </fieldset>
+            <div class="row">
+              <button type="button" class="btn" id="pvBtn">Preview</button>
+              <button type="button" class="btn primary" id="goBtn">Go live</button>
+              <button type="button" class="btn danger hide" id="stopBtn">Stop</button>
+            </div>
+            <div class="row">
+              <button type="button" class="btn" id="micBtn" aria-pressed="true" disabled>🎤 Mic on</button>
+              <button type="button" class="btn" id="camBtn" aria-pressed="true" disabled>🎥 Video on</button>
+            </div>
+            <div class="rate"><span>Upload</span> <b id="kbps">0</b> kbps <span class="meter"><span id="kbpsBar"></span></span></div>
+            <p class="msg" id="webMsg" role="status" aria-live="polite"></p>
+            <p class="muted">Keep this tab open while you're live. Stopping the browser stream doesn't end your slot - use <b>End my slot</b> for that (or it ends by itself after <%= C.idle_grace_min %> minutes off air).</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sb-card hide" id="doneCard" aria-labelledby="doneT">
+      <h2 id="doneT">Your last slot</h2>
+      <p id="doneTxt"></p>
+      <button type="button" class="btn primary" id="againBtn">Book another slot</button>
+    </section>
+  <% } %>
+  <% if (staff) { %><p class="muted center"><a href="/stage/admin">Stage admin ›</a></p><% } %>
+</main>
+<script src="/public/js/stage-book.js?v=1" defer></script>
+</body>
+</html>

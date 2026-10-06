@@ -8,7 +8,8 @@
   const pic = (a) => (typeof a === 'string' && /^(https?:\/\/|\/)/.test(a) ? a : '/public/img/avatar.png');
   const S0 = S || {};
   const st = stage || { active: false };
-  const live = !!st.active;
+  const paid = Array.isArray(slots) ? slots : [];
+  const live = !!st.active || paid.length > 0;
   const liveRooms = (rooms || []).filter((r) => r.live);
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
@@ -35,7 +36,7 @@
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
-<script src="/public/js/stage-player.js?v=1"></script>
+<script src="/public/js/stage-player.js?v=2"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
 <%- include('partials/cosmetics-css') %>
@@ -223,6 +224,20 @@
     .hm .pitch { grid-template-columns: minmax(0, 1fr); }
     .hm .stage-body, .hm .stage-off { padding: 0 8px 8px; }
   }
+  /* paid stage slots (1.99al): which stream the stage shows */
+  .hm .stabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; align-items: center; }
+  .hm .stabs:empty { display: none; }
+  .hm .stab { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 11px; border-radius: 999px; border: 1px solid #2b2b2b;
+              background: #141414; color: #cfd8cf; font: inherit; font-size: 13px; cursor: pointer; min-width: 0; }
+  .hm .stab span.n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
+  .hm .stab[aria-selected="true"] { border-color: var(--lime); background: #1b2a12; color: #fff; }
+  .hm .stab:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+  .hm .stab .dot { flex: none; }
+  .hm .stab.off .dot { background: #666; animation: none; }
+  .hm .stabs .adm { display: inline-flex; gap: 6px; margin-left: auto; }
+  .hm .stabs .adm button { padding: 5px 10px; border-radius: 8px; border: 1px solid #5a2222; background: #2a1010; color: #ffb4b4; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
+  .hm .stabs .adm button:hover { border-color: #ff5252; }
+  @media (max-width: 520px) { .hm .stabs { padding: 0 10px 8px; } .hm .stabs .adm { margin-left: 0; } }
   @media (prefers-reduced-motion: reduce) { .hm .dot { animation: none; } }
 </style>
 
@@ -235,6 +250,7 @@
       <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
       <span class="sub" id="stRoom"<% if (!st.room) { %> hidden<% } %>>📡 <% if (st.room && st.room.slug) { %><a href="/rooms/<%= encodeURIComponent(st.room.slug) %>"><%= st.room.name %></a><% } else if (st.room) { %><%= st.room.name %><% } %></span>
       <span class="sp"></span>
+      <a class="sub" href="/stage/book">Book the stage ›</a>
       <a class="sub" href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch ›</a>
     </div>
     <% if (stageAdmin) { %>
@@ -249,6 +265,7 @@
       <span id="stAdminMsg" aria-live="polite"><%= (stageAdmin.rooms || []).length ? '' : 'Pepe hasn\'t reported his rooms yet.' %></span>
     </form>
     <% } %>
+    <div class="stabs" id="stTabs" role="tablist" aria-label="Stage streams"></div>
     <div class="stage-body">
       <div class="player" id="player">
         <div id="videoWrapper"></div>
@@ -452,26 +469,83 @@
     }
 
     // ── the HLS player (public/js/stage-player.js): created on demand, retried every 10 s on any error or stall ──
-    var twitchLive = false, hlsLive = <%= live ? 'true' : 'false' %>;
-    var stagePlayer = PATVStage.player({ wrap: document.getElementById('videoWrapper'), id: 'videoElement',
+    // Pepe's stream, and any PAID slots live right now (mainstage.js). During a paid slot the stage
+    // shows it; the tabs flip to Pepe's stream (which keeps running as always) and back.
+    var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
+    var slots = <%- JSON.stringify(paid.map(function (x) { return { id: x.id, display: x.display, nameCss: x.nameCss, hls: x.hls }; })).replace(/</g, '\\u003c') %>;
+    var STAFF = <%= staff ? 'true' : 'false' %>;
+    var view = slots.length ? 'slot:' + slots[0].id : 'pepe';
+    var twitchLive = false, hlsLive = <%= st.active ? 'true' : 'false' %>;
+    function curSlot() {
+      if (view.indexOf('slot:') !== 0) return null;
+      var id = view.slice(5);
+      for (var i = 0; i < slots.length; i++) if (slots[i].id === id) return slots[i];
+      return null;
+    }
+    function src() { var s = curSlot(); return s ? s.hls : PEPE_HLS; }
+    function anyLive() { return hlsLive || twitchLive || slots.length > 0; }
+    var stagePlayer = PATVStage.player({ wrap: document.getElementById('videoWrapper'), id: 'videoElement', src: src(),
       reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute') });
-    function startPlayer() { if (!twitchLive) stagePlayer.start(); }
+    function startPlayer() { if (twitchLive && !curSlot()) return; stagePlayer.setSrc(src()); stagePlayer.start(); }
     function stopPlayer() { stagePlayer.stop(); }
+    var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    // what the stage shows right now: a paid slot (HLS), or Pepe (Twitch when it's live there, else HLS)
+    function show() {
+      var s = curSlot(), tw = document.getElementById('twitch');
+      if (s) { tw.classList.add('hide'); startPlayer(); setPill(true, null); }
+      else if (twitchLive) { stopPlayer(); tw.classList.remove('hide'); setPill(true, 'live on Twitch'); }
+      else if (hlsLive) { tw.classList.add('hide'); startPlayer(); setPill(true, null); }
+      else { tw.classList.add('hide'); stopPlayer(); setPill(anyLive(), anyLive() ? "Pepe's stream is off air right now" : 'nothing streaming right now'); }
+      renderTabs();
+    }
+    function renderTabs() {
+      var box = document.getElementById('stTabs');
+      if (!slots.length) { box.innerHTML = ''; return; }
+      var h = '';
+      slots.forEach(function (s) {
+        h += '<button type="button" class="stab" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '">' +
+             '<span class="dot" aria-hidden="true"></span><span class="n' + (s.nameCss ? ' cx-name' : '') + '" style="' + esc(s.nameCss || '') + '">' + esc(s.display) + '</span> is live</button>';
+      });
+      h += '<button type="button" class="stab' + (hlsLive || twitchLive ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
+           '<span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (hlsLive || twitchLive ? '' : ' (off air)') + '</button>';
+      var s = curSlot();
+      if (STAFF && s) h += '<span class="adm"><button type="button" data-cut="' + esc(s.id) + '">✂ Cut to Pepe</button><button type="button" data-cut="' + esc(s.id) + '" data-ban="1">Cut + ban</button></span>';
+      box.innerHTML = h;
+    }
+    document.getElementById('stTabs').addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      if (b.hasAttribute('data-v')) { view = b.getAttribute('data-v'); show(); return; }
+      if (b.hasAttribute('data-cut')) {
+        var ban = b.hasAttribute('data-ban');
+        if (!confirm(ban ? 'Cut this slot to Pepe AND ban them from booking?' : 'Cut this slot to Pepe? The unused PAT is refunded.')) return;
+        b.disabled = true;
+        fetch('/api/stage/admin/cut', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.getAttribute('data-cut'), ban: ban }) })
+          .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || 'Could not cut it.'); pollStage(); })
+          .catch(function () { alert('Could not reach the server.'); b.disabled = false; });
+      }
+    });
 
     // ON AIR = the playlist is actually being written (checked on the server) or Twitch is live
     function pollStage() {
       fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
-        var was = hlsLive; hlsLive = !!g.active;
+        var was = hlsLive, hadSlots = slots.length, cur = curSlot();
+        hlsLive = !!g.active;
         var rl = document.getElementById('stRoom');
         if (rl) {
           rl.hidden = !g.room; rl.textContent = g.room ? '📡 ' : '';
           if (g.room) { var x = document.createElement(g.room.slug ? 'a' : 'span'); x.textContent = g.room.name; if (g.room.slug) x.href = '/rooms/' + encodeURIComponent(g.room.slug); rl.appendChild(x); }
         }
-        if (hlsLive && !was) { setPill(true, 'live now'); startPlayer(); }
-        if (!hlsLive && was && !twitchLive) { stopPlayer(); setPill(false, 'stream ended just now'); }
+        slots = Array.isArray(g.slots) ? g.slots : [];
+        if (cur && !curSlot()) view = slots.length ? 'slot:' + slots[0].id : 'pepe';   // that slot ended / was cut
+        else if (!hadSlots && slots.length && view === 'pepe') view = 'slot:' + slots[0].id;   // a paid slot just went live
+        if (hlsLive !== was || slots.length !== hadSlots || view !== (cur ? 'slot:' + cur.id : 'pepe') || (curSlot() && stagePlayer.src() !== src())) {
+          show();
+          if (!anyLive() && (was || hadSlots)) setPill(false, 'stream ended just now');
+        } else renderTabs();
       }).catch(function () {});
     }
-    setInterval(pollStage, 15000);
+    setInterval(pollStage, 10000);
 
     // admin: move the stage to another of Pepe's rooms (queued for Pepe; he checks it's safe)
     var adm = document.getElementById('stAdmin');
@@ -500,20 +574,12 @@
     }
 
     window.addEventListener('load', function () {
-      if (hlsLive) startPlayer();
+      show();
       if (!window.Twitch) return;
       var tw = new Twitch.Player('twitch', { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
       tw.addEventListener(Twitch.Player.READY, function () {
-        tw.addEventListener(Twitch.Player.ONLINE, function () {
-          twitchLive = true; stopPlayer();
-          document.getElementById('twitch').classList.remove('hide');
-          setPill(true, 'live on Twitch');
-        });
-        tw.addEventListener(Twitch.Player.OFFLINE, function () {
-          twitchLive = false;
-          document.getElementById('twitch').classList.add('hide');
-          if (hlsLive) startPlayer(); else setPill(false, 'nothing streaming right now');
-        });
+        tw.addEventListener(Twitch.Player.ONLINE, function () { twitchLive = true; show(); });
+        tw.addEventListener(Twitch.Player.OFFLINE, function () { twitchLive = false; show(); });
       });
     });
 

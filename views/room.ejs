@@ -89,6 +89,15 @@
   .rm .stage .off-air { display: grid; place-items: center; text-align: center; gap: 6px; min-height: 120px; color: #9aa59a; font-size: 14px; }
   .rm .stage.is-off .player { display: none; }
   .rm .stage.is-on .off-air { display: none; }
+  /* paid stage slots (mainstage.js): which stream the stage shows */
+  .rm .stabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+  .rm .stabs:empty { display: none; }
+  .rm .stab { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 11px; border-radius: 999px; border: 1px solid #2b2b2b;
+              background: #141414; color: #cfd8cf; font: inherit; font-size: 13px; cursor: pointer; min-width: 0; }
+  .rm .stab .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
+  .rm .stab[aria-selected="true"] { border-color: #c6e94f; background: #1b2a12; color: #fff; }
+  .rm .stab:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
+  .rm .stab.off .dot { background: #666; animation: none; }
   @media (max-width: 860px) {
     .rm .grid { grid-template-columns: minmax(0, 1fr); }
     .rm .feed { height: 58vh; }
@@ -116,10 +125,11 @@
 <% if (onStage) { const st = stage || {}; %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-  <script src="/public/js/stage-player.js?v=1"></script>
+  <script src="/public/js/stage-player.js?v=2"></script>
   <section class="card stage <%= st.active ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
     <h2 id="rmStageH"><span>📺 This room is on the main stage</span>
       <span class="live<%= st.active ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= st.active ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
+    <div class="stabs" id="rmTabs" role="tablist" aria-label="Stage streams"></div>
     <div class="player">
       <div class="wrap" id="rmVideo"></div>
       <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
@@ -131,24 +141,52 @@
   (function () {
     'use strict';
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
-    var box = document.getElementById('rmStage'), on = <%= st.active ? 'true' : 'false' %>;
+    var box = document.getElementById('rmStage'), pepeOn = <%= st.active ? 'true' : 'false' %>, on = pepeOn;
+    var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
+    // paid stage slots live now (mainstage.js): the stage shows the paid stream, a tab flips to Pepe's
+    var slots = [], view = 'pepe', loaded = false;
     var p = PATVStage.player({ wrap: document.getElementById('rmVideo'), reconnect: document.getElementById('rmStReconnect'),
                                unmute: document.getElementById('rmStUnmute') });
-    function set(active) {
-      on = active;
+    var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    function cur() { for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
+    function set() {
+      var s = cur();
+      on = !!s || pepeOn;
       box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
       document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');
       document.getElementById('rmStPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
-      if (on) p.start(); else p.stop();
+      p.setSrc(s ? s.hls : PEPE_HLS);
+      if (on && loaded) p.start(); else if (!on) p.stop();
+      var tabs = document.getElementById('rmTabs'), h = '';
+      if (slots.length) {
+        slots.forEach(function (x) {
+          h += '<button type="button" class="stab" role="tab" data-v="slot:' + esc(x.id) + '" aria-selected="' + (view === 'slot:' + x.id) + '"><span class="dot" aria-hidden="true"></span>' +
+               '<span class="n' + (x.nameCss ? ' cx-name' : '') + '" style="' + esc(x.nameCss || '') + '">' + esc(x.display) + '</span> is live</button>';
+        });
+        h += '<button type="button" class="stab' + (pepeOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '"><span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (pepeOn ? '' : ' (off air)') + '</button>';
+      }
+      tabs.innerHTML = h;
     }
+    document.getElementById('rmTabs').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-v]');
+      if (b) { view = b.getAttribute('data-v'); set(); }
+    });
     // the stage can move to another room (an admin, or !activeroom): then this page drops the player
-    var iv = setInterval(function () {
-      fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
+    var iv = null;
+    function poll() {
+      return fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
         if (!g.room || g.room.slug !== slug) { clearInterval(iv); p.stop(); box.remove(); return; }
-        if (!!g.active !== on) set(!!g.active);
+        var had = slots.length, was = cur();
+        pepeOn = !!g.active;
+        slots = Array.isArray(g.slots) ? g.slots : [];
+        if (was && !cur()) view = slots.length ? 'slot:' + slots[0].id : 'pepe';
+        else if (!had && slots.length && view === 'pepe') view = 'slot:' + slots[0].id;
+        set();
       }).catch(function () {});
-    }, 15000);
-    window.addEventListener('load', function () { if (on) p.start(); });
+    }
+    iv = setInterval(poll, 10000);
+    poll();
+    window.addEventListener('load', function () { loaded = true; if (on) p.start(); });
   })();
   </script>
 <% } %>

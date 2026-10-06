@@ -8,6 +8,7 @@
 //     src        the playlist (default https://publicaccess.tv/hls/broadcast.m3u8)
 //     id         optional id for the <video-js> element
 //   p.start() / p.stop() / p.running()
+//   p.setSrc(url) switch playlists (restarts the player if it's running) / p.src() the current one
 //
 // Resilient on purpose: any error or stall shows "reconnecting" and re-points the player at the
 // playlist every 10 s (cache-busted) until a frame plays again. Needs video.js (vjs.zencdn.net 8.x).
@@ -54,7 +55,12 @@
         o.unmute.classList.add('hide');
       });
     }
-    return { start: start, stop: stop, running: function () { return !!p; } };
+    function setSrc(url) {
+      if (!url || url === SRC) return;
+      SRC = url;
+      if (p) { stop(); start(); }
+    }
+    return { start: start, stop: stop, running: function () { return !!p; }, setSrc: setSrc, src: function () { return SRC; } };
   }
   window.PATVStage = { player: player };
 })();

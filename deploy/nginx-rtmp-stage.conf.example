@@ -1,0 +1,50 @@
+# Paid Main Stage slots (mainstage.js) - nginx-rtmp side. Goes inside `rtmp { server { ... } }` in
+# /etc/nginx/nginx.conf. Back up nginx.conf first, `nginx -t`, then `systemctl reload nginx`.
+#
+# Every publish asks the site (POST /api/stage/rtmp, answered only from loopback):
+#   on_publish      2xx = allow as-is (Pepe's "broadcast" on prod), 3xx = allow and RENAME the stream
+#                   to the slot's public name (Location header), so a user's key never becomes the
+#                   HLS filename; anything else = refused
+#   on_update       every notify_update_timeout: the billing heartbeat; a non-2xx answer drops the
+#                   publisher (how an admin cut / ended slot is kicked). notify_update_strict stays
+#                   OFF (the default) so the site being down for a deploy never drops a stream.
+#   on_publish_done the publisher left: billing pauses.
+# The site's per-request access log is off for these applications because nginx-rtmp's default
+# format includes the stream name = the secret key.
+
+# STAGING test application (staging site on :3100). Writes into the same HLS directory as prod,
+# under stg-<id> names; the staging site never accepts Pepe's key here.
+        application live_staging {
+            live on;
+            access_log off;
+            drop_idle_publisher 15s;
+            on_publish http://127.0.0.1:3100/api/stage/rtmp;
+            on_update http://127.0.0.1:3100/api/stage/rtmp;
+            on_publish_done http://127.0.0.1:3100/api/stage/rtmp;
+            notify_update_timeout 10s;
+            hls on;
+            hls_type live;
+            hls_fragment 1s;
+            hls_playlist_length 4s;
+            hls_path /mnt/hls;
+        }
+
+# PROD: the existing `live` application gains the same three callbacks pointing at :3000 - only
+# AFTER the site version with /api/stage/rtmp is live on prod (before that the callback 404s and
+# nginx would refuse Pepe's own stream). Pepe's key keeps working (STAGE_PEPE_KEYS, default
+# "broadcast"); every other unknown name is refused from then on.
+#
+#        application live {
+#            live on;
+#            access_log off;
+#            drop_idle_publisher 15s;
+#            on_publish http://127.0.0.1:3000/api/stage/rtmp;
+#            on_update http://127.0.0.1:3000/api/stage/rtmp;
+#            on_publish_done http://127.0.0.1:3000/api/stage/rtmp;
+#            notify_update_timeout 10s;
+#            hls on;
+#            hls_type live;
+#            hls_fragment 1s;
+#            hls_playlist_length 4s;
+#            hls_path /mnt/hls;
+#        }
