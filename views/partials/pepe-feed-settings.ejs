@@ -14,7 +14,7 @@
     <label class="pf-sw"><input type="checkbox" name="respond"<%= s.respond ? ' checked' : '' %>>
       <span>Answer when someone mentions Pepe<small>"@pepe", "pepe" as a word, or a reply to one of his posts or comments. Always within the limits below.</small></span></label>
     <label class="pf-sw"><input type="checkbox" name="auto"<%= s.auto ? ' checked' : '' %>>
-      <span>Let Pepe take part on his own<small>He comments on fresh posts now and then and makes the odd post of his own: a room recap, a fun question, a DJ-set recap, a take on a real headline, the day's snaps.</small></span></label>
+      <span>Let Pepe take part on his own<small>He comments on fresh posts now and then and makes the odd post of his own: a Camfrog room recap, a fun question, a DJ-set recap, a take on a real headline, the day's snaps.</small></span></label>
     <div class="pf-limits">
       <label>His posts per day<input type="number" name="posts_per_day" min="0" max="20" value="<%= s.posts_per_day %>"></label>
       <label>His comments per day<input type="number" name="comments_per_day" min="0" max="200" value="<%= s.comments_per_day %>"></label>
@@ -27,7 +27,7 @@
       <span>Let him look at pictures in posts<small>One extra AI call per picture. Off: he reads the text, the link preview and that there are pictures.</small></span></label>
     <% if (admin && roomScope) { %>
       <label class="pf-sw"><input type="checkbox" name="admin_lock"<%= s.admin_lock ? ' checked' : '' %>>
-        <span>Admin lock<small>The room owner can see these settings but not change them.</small></span></label>
+        <span>Admin lock<small>The pad owner can see these settings but not change them.</small></span></label>
     <% } %>
   </fieldset>
   <div class="pf-use" aria-label="The last 24 hours">

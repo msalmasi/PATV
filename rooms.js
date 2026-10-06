@@ -33,9 +33,11 @@ const SEEDS = [
   // 1.99ci: the site's own general community (no Camfrog room behind it): every feed post lives in a
   // community, and the old main-feed-only posts moved here. Ids starting "patv:" are site-only communities.
   { room_id: "patv:lounge", title: "PATV Lounge", owner: "house",
-    description: "The general PATV community: anything that isn't about one room. Old main-feed posts live here." },
+    description: "The general PATV pad: anything that isn't about one Camfrog room. Old main-feed posts live here." },
 ];
 const LOUNGE_ID = "patv:lounge";
+// 1.99ck: the 1.99ci Lounge text ("community"), swapped for the pad wording at start unless an admin edited it
+const OLD_SEED_DESC = ["The general PATV community: anything that isn't about one room. Old main-feed posts live here."];
 /** A site-only community (no Camfrog room behind it). */
 const isCommunityOnly = (roomId) => String(roomId || "").startsWith("patv:");
 const MAX_SLOTS_DEFAULT = 4;     // owners can set 1..this many user slots (stage_config.max_slots_per_room)
@@ -162,6 +164,8 @@ async function seed() {
     if (!row) continue;
     if (!row.title) await runQuery("UPDATE rooms_registry SET title = ? WHERE room_id = ?", [s.title, s.room_id]);
     if (s.description && !row.description) await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, s.room_id]);
+    // 1.99ck: the Lounge's 1.99ci seed text said "community" - swap it for the pad wording (an edited description is left alone)
+    else if (s.description && OLD_SEED_DESC.includes(row.description)) await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, s.room_id]);
     if (s.owner === "house") {
       await runQuery("UPDATE rooms_registry SET owner_kind = 'house', owner_user_id = NULL, title = COALESCE(title, ?) WHERE room_id = ?", [s.title, s.room_id]);
       await kvSet("seeded:" + s.room_id, "house");
@@ -203,6 +207,8 @@ async function get(roomId) { await init(); maybeRefresh(); return view(CACHE.byI
 async function bySlug(slug) { await init(); return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
 async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].map(view).sort((a, b) => a.title.localeCompare(b.title)); }
 function getCached(roomId) { return view(CACHE.byId.get(String(roomId || ""))); }
+/** 1.99ck: a pad by slug from the cache, synchronously (pads.js autolinks p/<slug> while rendering). */
+function bySlugCached(slug) { return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
 function listCached() { return [...CACHE.byId.values()].map(view); }
 
 /** Stage settings for a room (defaults when it isn't registered - mainstage.js reads this). */
@@ -460,7 +466,7 @@ function hasRoute(app, path) {
 }
 
 module.exports = {
-  init, get, bySlug, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
+  init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
   setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,

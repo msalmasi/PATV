@@ -30,7 +30,7 @@
     if (op === 'member-remove') { mod({ op: op, userId: b.getAttribute('data-user') }).then(reload, oops); return; }
     var body = { op: op, post: post, comment: comment };
     if (op === 'reject') { var r = window.prompt('Reject this post? Reason (optional, the author is told):', ''); if (r === null) return; body.reason = r; }
-    if (op === 'remove' && !window.confirm('Take this post out of your room? (It stays anywhere else it was posted.)')) return;
+    if (op === 'remove' && !window.confirm('Take this post out of your pad? (It stays anywhere else it was posted.)')) return;
     b.disabled = true;
     mod(body).then(reload, function (e) { b.disabled = false; oops(e); });
   });

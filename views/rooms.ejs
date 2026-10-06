@@ -1,5 +1,5 @@
-<%- include('layout', { title: 'Channel guide', user: user }) %>
-<!-- views/rooms.ejs — the channel guide (1.99bi): every room as a channel, what's on its stage now and
+<%- include('layout', { title: 'Pad Guide', user: user }) %>
+<!-- views/rooms.ejs — the Pad Guide (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99bx: a whole card (and a whole schedule row) opens its room - a stretched link on a.t / a.rl. -->
 <%
@@ -42,6 +42,7 @@
   .cg .ch .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .cg .ch .top a.t { font-size: 17px; font-weight: bold; color: #fff !important; overflow-wrap: anywhere; }
   .cg .ch .sub { font-size: 12.5px; color: #9aa59a; display: flex; gap: 4px 10px; flex-wrap: wrap; }
+  .cg .ch .padref { color: #9ccc9f; font-weight: bold; }
   .cg .ch .sub .own { color: #e8d9a0; }
   .cg .slotrow { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 13.5px; }
   .cg .slotrow .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; padding-top: 3px; }
@@ -84,16 +85,16 @@
 </style>
 <main class="cg">
   <div>
-    <h1>📡 Channel guide</h1>
-    <p class="lead">Every PATV room is a channel: its Camfrog chat live on the web, Pepe's stream, and a stage anyone can stream to.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the rooms' chat.<% } %></p>
+    <h1>📡 Pad Guide</h1>
+    <p class="lead">Every PATV pad (p/<i>name</i>) has a feed, a stage anyone can stream to, and Pepe's stream — and most are backed by a Camfrog room whose chat is live on the web.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the Camfrog rooms' chat.<% } %></p>
   </div>
 
   <section class="cta" aria-label="Go live">
     <div>
       <b class="big">🎥 Your show, on PATV</b>
-      <span class="muted" style="font-size:14px;color:#d9c9c3">Every room has stage slots you can stream to — and one featured stream that leads the room (and the front page).</span>
+      <span class="muted" style="font-size:14px;color:#d9c9c3">Every pad has stage slots you can stream to — and one featured stream that leads the pad (and the front page).</span>
       <ol>
-        <li>Pick a room and a slot: <b>now</b>, <b>later</b>, or join the <b>queue</b>.</li>
+        <li>Pick a pad and a slot: <b>now</b>, <b>later</b>, or join the <b>queue</b>.</li>
         <li>Stream from <b>OBS</b>, straight from your <b>browser</b>, or drop a <b>YouTube / Twitch</b> link.</li>
         <li>Want the spotlight? <b>Get featured</b> — pay per live minute, unused PAT comes back.</li>
       </ol>
@@ -103,35 +104,36 @@
 
   <div class="pepe" role="status">
     <span class="pill <%= pepeOn ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%= pepeOn ? 'ON AIR' : 'OFF AIR' %></span>
-    <span><b>🐸 Pepe's stream</b> plays on the stage of every room he's in<%= rows.some((r) => r.pepe_here) ? ' (🐸 below)' : '' %>.</span>
+    <span><b>🐸 Pepe's stream</b> plays on the stage of every pad whose Camfrog room he's in<%= rows.some((r) => r.pepe_here) ? ' (🐸 below)' : '' %>.</span>
     <a href="/" style="margin-left:auto">Front page ›</a>
   </div>
 
   <% if (owned && owned.length) { %>
     <section aria-labelledby="ownH">
-      <h2 id="ownH">Your rooms <small>you own these</small></h2>
-      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/rooms/<%= encodeURIComponent(r.slug) %>/manage">⚙️ <%= r.title %></a><% }) %></div>
+      <h2 id="ownH">Your pads <small>you own these</small></h2>
+      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/manage">⚙️ <%= r.title %></a><% }) %></div>
     </section>
   <% } %>
 
   <section aria-labelledby="chH">
-    <h2 id="chH">Channels <small><%= rows.filter((r) => r.live).length %> live · <%= rows.length %> rooms<% if (staff) { %> · <a href="/rooms/admin">Rooms admin ›</a><% } %></small></h2>
+    <h2 id="chH">Pads <small><%= rows.filter((r) => r.live).length %> live · <%= rows.length %> pad<%= rows.length === 1 ? '' : 's' %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
     <% if (!rows.length) { %>
-      <div class="empty">No rooms yet.</div>
+      <div class="empty">No pads yet.</div>
     <% } else { %>
     <div class="grid">
       <% rows.forEach((r) => { const liveNow = r.now.filter((s) => s.live); %>
         <article class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %>" aria-label="<%= r.title %>">
           <div class="top">
-            <a class="t" href="/rooms/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
-            <span class="pill <%= r.live ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span>
-            <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this room's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
+            <a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
+            <% if (r.site_only) { %><span class="pill off" title="A pad on the website only - no Camfrog room behind it">🛋️ SITE PAD</span><% } else { %><span class="pill <%= r.live ? 'on' : 'off' %>" title="The pad's Camfrog room"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
+            <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
           </div>
           <div class="sub">
-            <% if (r.bridged) { %><span>👥 <%= r.count %></span><span>🎙 <%= r.micCount %></span><% } %>
-            <% if (r.house) { %><span class="own">🐸 Pepe's room</span><% } else if (r.owner) { %><span class="own">👑 <%= r.owner %></span><% } %>
+            <span class="padref">p/<%= r.slug %></span>
+            <% if (r.bridged) { %><span title="In the Camfrog room">👥 <%= r.count %></span><span>🎙 <%= r.micCount %></span><% } %>
+            <% if (r.house) { %><span class="own" title="Run by Pepe">🐸 House pad</span><% } else if (r.owner) { %><span class="own">👑 <%= r.owner %></span><% } %>
             <span>🎬 <%= r.now.length %>/<%= r.slot_count %> slots</span>
-            <% if (r.pepe_here) { %><span title="Pepe is in this room - his stream is on its stage">🐸 Pepe's here</span><% } %>
+            <% if (r.pepe_here) { %><span title="Pepe is in this pad's Camfrog room - his stream is on its stage">🐸 Pepe's here</span><% } %>
           </div>
           <% if (r.topic || r.description) { %><div class="muted" style="overflow-wrap:anywhere"><%= (r.description || r.topic).slice(0, 140) %></div><% } %>
           <div class="slotrow"><span class="k now">Now</span>
@@ -147,7 +149,7 @@
             </ul>
           </div>
           <div class="acts">
-            <a class="btn" href="/rooms/<%= encodeURIComponent(r.slug) %>">▶ Watch</a>
+            <a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>">▶ Open pad</a>
             <a class="btn red" href="/stage?room=<%= encodeURIComponent(r.slug) %>">🎥 Go live here</a>
           </div>
         </article>
@@ -157,14 +159,14 @@
   </section>
 
   <section aria-labelledby="scH">
-    <h2 id="scH">Schedule <small>booked slots, all rooms · your local time</small></h2>
+    <h2 id="scH">Schedule <small>booked slots, all pads · your local time</small></h2>
     <% if (!sched.length) { %>
       <div class="empty">Nothing booked yet. <a href="/stage">Book the first slot ›</a></div>
     <% } else { %>
       <ul class="sched">
         <% sched.slice(0, 30).forEach((n) => { %>
           <li><time data-ts="<%= n.start_at %>" data-long="1"><%= new Date(n.start_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>
-            <span class="w"><b><%= n.display %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/rooms/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
+            <span class="w"><b><%= n.display %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
         <% }) %>
       </ul>
     <% } %>

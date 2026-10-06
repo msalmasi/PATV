@@ -8,7 +8,7 @@
 //     multi-select - Crosspost shares a post into other communities); a room page / community view
 //     preselects its own
 //   * "Pepe announces it in <room>" for the picked community, only when its owner switched announcements on
-// Page: the community bar, sort and pager links on /feed, /feed/following and /feed/c/<slug> (data-swap)
+// Page: the pad bar, sort and pager links on /feed and /feed/following (data-swap)
 // swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
 // composer is ever lost.
 (function () {
@@ -32,8 +32,8 @@
   // ── /feed: swap the list in place ──
   var SWAP_IDS = ['fdTop', 'fdList'];
   var swapping = null;
-  // 1.99ci: the feed's own addresses: /feed (All), /feed/following, /feed/c/<slug>
-  function feedPath(p) { return p === '/feed' || p === '/feed/following' || /^\/feed\/c\/[^/]+$/.test(p); }
+  // the feed's own addresses: /feed (All), /feed/following (1.99ck: one pad's feed is its pad page /p/<slug>)
+  function feedPath(p) { return p === '/feed' || p === '/feed/following'; }
   function canSwap() { return !!document.getElementById('fdList') && feedPath(location.pathname); }
   function swap(url, push) {
     if (!canSwap()) { location.href = url; return Promise.resolve(); }
@@ -272,11 +272,11 @@
       b.textContent = x.getAttribute('data-badge') || '';
       b.style.setProperty('--h', x.getAttribute('data-hue') || '0');
       t.textContent = x.getAttribute('data-title') || x.value;
-      var sm = document.createElement('small'); sm.textContent = 'c/' + (x.getAttribute('data-slug') || '');
+      var sm = document.createElement('small'); sm.textContent = 'p/' + (x.getAttribute('data-slug') || '');
       cur.appendChild(b); cur.appendChild(t); cur.appendChild(sm);
       comm.removeAttribute('data-empty');
     } else {
-      b.textContent = '?'; t.textContent = 'Choose a community';
+      b.textContent = '?'; t.textContent = 'Choose a pad';
       cur.appendChild(b); cur.appendChild(t);
       comm.setAttribute('data-empty', '');
     }
@@ -348,7 +348,7 @@
     setErr('');
     if (busy()) return setErr('Wait for the uploads to finish.');
     var roomsSel = roomsChecked();
-    if (!roomsSel.length) { setErr('Choose a community to post in.'); if (comm) comm.open = true; return; }
+    if (!roomsSel.length) { setErr('Choose a pad to post in.'); if (comm) comm.open = true; return; }
     var announce = Array.prototype.slice.call(form.querySelectorAll('input[name=announce]:checked'))
       .map(function (x) { return x.value; }).filter(function (v) { return roomsSel.indexOf(v) >= 0; });
     var body = {
@@ -372,9 +372,9 @@
     }).then(function (d) {
       clearTimeout(saveTimer); clearDraft(); restoring = true;     // posted: the draft is done
       errEl.textContent = 'Posted ✔'; errEl.classList.add('ok');
-      // stay on a room page (the new post shows on top of New); elsewhere open the post
+      // stay on a pad page (the new post shows on top of New); elsewhere open the post
       var u = new URL(location.href);
-      if (/^\/rooms\//.test(u.pathname)) { u.searchParams.delete('fsort'); u.searchParams.delete('fp'); u.hash = 'feed';
+      if (/^\/p\/[^/]+\/?$/.test(u.pathname)) { ['fsort', 'fp', 'sort', 'p', 't', 'ft'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = 'feed';
         var target = u.toString();
         if (target.split('#')[0] === location.href.split('#')[0]) { location.hash = 'feed'; location.reload(); } else location.href = target; }
       else location.href = d.url;

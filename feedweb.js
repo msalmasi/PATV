@@ -24,6 +24,8 @@ const SITE = () => process.env.SITE_URL || (STAGING ? "https://staging.publicacc
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]);
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
+// 1.99ck: the plain-text parts also get p/<slug> pad links (pads.js; known pads only, never inside a URL)
+const padText = (t) => require("./pads").padRefs(esc(t));
 function linkify(text) {
   const s = String(text == null ? "" : text);
   let out = "", last = 0, m;
@@ -32,14 +34,14 @@ function linkify(text) {
     let url = m[0];
     const trail = url.match(/[).,;:!?\]}]+$/);        // "see (https://x.y/z)." - keep the punctuation outside
     if (trail) url = url.slice(0, -trail[0].length);
-    out += esc(s.slice(last, m.index));
+    out += padText(s.slice(last, m.index));
     let ok = false;
     try { const u = new URL(url); ok = u.protocol === "http:" || u.protocol === "https:"; } catch (e) { ok = false; }
     out += ok ? `<a href="${esc(url)}" rel="nofollow noopener noreferrer ugc" target="_blank">${esc(url.length > 80 ? url.slice(0, 77) + "…" : url)}</a>` : esc(url);
     last = m.index + url.length;
     URL_RE.lastIndex = last;
   }
-  return out + esc(s.slice(last));
+  return out + padText(s.slice(last));
 }
 const body = (text) => linkify(text).replace(/\n/g, "<br>");
 function ago(ms, now = Date.now()) {
@@ -112,11 +114,12 @@ const SORT_LABELS = { hot: "Hot", new: "New", top: "Top", controversial: "Contro
 const WINDOW_LABELS = { hour: "Past hour", day: "Today", week: "This week", month: "This month", year: "This year", all: "All time" };
 const CSORT_LABELS = { best: "Best", top: "Top", new: "New", controversial: "Controversial" };
 /**
- * 1.99ci: a feed address. where: "all" | "following" | a community slug; params: sort, t, p, by (empty
- * values and the defaults are left out). -> "/feed", "/feed/following", "/feed/c/<slug>?sort=new"
+ * 1.99ci: a feed address. where: "all" | "following" | a pad slug; params: sort, t, p, by (empty
+ * values and the defaults are left out). -> "/feed", "/feed/following", "/p/<slug>?sort=new" (1.99ck: a pad's
+ * feed lives on its pad page)
  */
 function feedUrl(where, params = {}) {
-  const path = !where || where === "all" ? "/feed" : where === "following" ? "/feed/following" : "/feed/c/" + encodeURIComponent(where);
+  const path = !where || where === "all" ? "/feed" : where === "following" ? "/feed/following" : "/p/" + encodeURIComponent(where);
   const qs = new URLSearchParams();
   for (const k of ["sort", "t", "p", "by"]) {
     const v = params[k];
@@ -165,7 +168,7 @@ async function composerFor(viewer, roomId) {
   const termsNeeded = await terms.needs(viewer.userId).catch(() => false);
   return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all,
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
-           refusal: refusal ? refusal.message : (all.length ? null : "There's no community you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
+           refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK };
 }
@@ -213,9 +216,9 @@ function register(app, { addUser, isBotToken }) {
   const viewOpts = (req) => ({ host: req.hostname || "publicaccess.tv" });
 
   // ── pages ──
-  // 1.99ci URL scheme: /feed = All (every community), /feed/following, /feed/c/<slug> = one community
-  // (its room page /rooms/<slug> stays the room's home: live chat, stage and the same feed). Sort, time
-  // window, page and ?by= stay query strings. The old ?tab= / ?room= links redirect (301).
+  // URL scheme: /feed = All (every pad), /feed/following; one pad's feed is on its pad page /p/<slug>
+  // (1.99ck; the old /feed/c/<slug> 301s there - pads.js). Sort, time window, page and ?by= stay query
+  // strings. The old ?tab= / ?room= links redirect (301).
   app.get("/feed", addUser, async (req, res, next) => {
     try {
       const q = req.query || {};
@@ -226,7 +229,7 @@ function register(app, { addUser, isBotToken }) {
         else if (q.room) {
           const raw = String(q.room).slice(0, 128);
           const R = (await rooms.get(raw)) || (await require("./roomsweb").resolveRoom(raw));
-          path = "/feed/c/" + encodeURIComponent(R ? R.slug : raw);
+          path = R ? require("./pads").padHref(R) : "/p/" + encodeURIComponent(raw);
         }
         const keep = new URLSearchParams();
         for (const k of ["sort", "t", "p", "by"]) if (q[k] && !(k === "by" && path !== "/feed")) keep.set(k, String(q[k]).slice(0, 64));
@@ -237,20 +240,6 @@ function register(app, { addUser, isBotToken }) {
     } catch (e) { next(e); }
   });
   app.get("/feed/following", addUser, (req, res) => feedPage(req, res, { mode: "following" }));
-  app.get("/feed/c/:slug", addUser, async (req, res) => {
-    const raw = String(req.params.slug || "").slice(0, 128);
-    const R = (await rooms.get(raw)) || (await require("./roomsweb").resolveRoom(raw));
-    if (!R) {
-      const viewer = await viewerOf(req);
-      return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "No such community",
-        message: "That community isn't on PATV.", title: "Community not found" });
-    }
-    if (R.slug !== raw) {           // one canonical address per community (a room id or bridge slug redirects)
-      const qs = new URLSearchParams(req.query).toString();
-      return res.redirect(301, "/feed/c/" + encodeURIComponent(R.slug) + (qs ? "?" + qs : ""));
-    }
-    return feedPage(req, res, { mode: "community", room: R });
-  });
 
   async function feedPage(req, res, { mode, room: R = null }) {
     try {
@@ -280,7 +269,7 @@ function register(app, { addUser, isBotToken }) {
         header = { id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
                    owner: R.owner ? (R.owner.display || R.owner.username) : null, ownerUser: R.owner ? R.owner.username : null,
                    followers: c.followers, posts: c.posts, following: viewer ? await follows.isFollowing(viewer.userId, "room", R.id) : false,
-                   roomHref: "/rooms/" + encodeURIComponent(require("./roomsweb").linkSlug(R)), mod: viewer ? await rooms.canManage(viewer, R.id) : false };
+                   roomHref: require("./pads").padHref(R), mod: viewer ? await rooms.canManage(viewer, R.id) : false };
       }
       // the story strip: one room's captures as thumbnails, or a circle per room with fresh ones
       const story = {
@@ -691,20 +680,20 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/rooms/:slug/feed/mod", addUser, guard(false), async (req, res) => {
     try {
       const R = await roomOf(req.params.slug);
-      if (!R) return res.status(404).json({ ok: false, error: "No such room." });
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       const b = req.body || {};
       res.json(await store.roomMod(await viewerOf(req), R.id, String(b.op || ""), { post: b.post ? String(b.post) : null, comment: b.comment || null,
                                                                                   reason: b.reason, settings: b.settings, user: b.user, userId: b.userId }));
     } catch (e) { fail(res, e); }
   });
-  app.get("/rooms/:slug/feed/mod", addUser, async (req, res) => {
+  app.get("/p/:slug/mod", addUser, async (req, res) => {
     try {
       const viewer = await viewerOf(req);
       const R = await roomOf(req.params.slug);
-      if (!R) return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "No such room", message: "That room isn't on PATV.", title: "No such room" });
+      if (!R) return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "No such pad", message: "That pad isn't on PATV.", title: "Pad not found" });
       if (!viewer) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
       if (!(await rooms.canManage(viewer, R.id))) {
-        return res.status(403).render("notFound", { user: viewer.username, heading: "Not your room", message: "Only this room's owner (and site admins) can moderate its feed.", title: "Not your room" });
+        return res.status(403).render("notFound", { user: viewer.username, heading: "Not your pad", message: "Only this pad's owner (and site admins) can moderate it.", title: "Not your pad" });
       }
       await store.init();
       res.set("X-Robots-Tag", "noindex");
@@ -766,7 +755,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const b = req.body || {};
       let roomId = "";
-      if (b.room) { const R = await require("./roomsweb").resolveRoom(String(b.room)); if (!R) return res.status(404).json({ ok: false, error: "No such room." }); roomId = R.id; }
+      if (b.room) { const R = await require("./roomsweb").resolveRoom(String(b.room)); if (!R) return res.status(404).json({ ok: false, error: "No such pad." }); roomId = R.id; }
       res.json({ ok: true, ban: await store.ban(await viewerOf(req), String(b.user || ""), { room: roomId, reason: b.reason, days: b.days }) });
     } catch (e) { fail(res, e); }
   });
@@ -774,7 +763,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const b = req.body || {};
       let roomId = "";
-      if (b.room) { const R = await require("./roomsweb").resolveRoom(String(b.room)); if (!R) return res.status(404).json({ ok: false, error: "No such room." }); roomId = R.id; }
+      if (b.room) { const R = await require("./roomsweb").resolveRoom(String(b.room)); if (!R) return res.status(404).json({ ok: false, error: "No such pad." }); roomId = R.id; }
       await store.unban(await viewerOf(req), String(b.userId || ""), roomId);
       res.json({ ok: true });
     } catch (e) { fail(res, e); }
@@ -783,7 +772,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/rooms/:slug/feed/mention", addUser, guard(false), async (req, res) => {
     try {
       const R = await require("./roomsweb").resolveRoom(req.params.slug);
-      if (!R) return res.status(404).json({ ok: false, error: "No such room." });
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       res.json({ ok: true, on: await store.setMention(await viewerOf(req), R.id, !!(req.body || {}).on) });
     } catch (e) { fail(res, e); }
   });

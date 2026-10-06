@@ -3,7 +3,7 @@
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const S0 = S || {};
   const games = [
-    ['/rooms' + (room ? '/' + encodeURIComponent(room.slug) : ''), '📡', 'Live rooms', 'The Camfrog rooms Pepe sits in, live on the web for members: the chat, what\'s said on the mic (auto-transcribed), who\'s in the room and who\'s talking.', '#ef5350'],
+    ['/p' + (room ? '/' + encodeURIComponent(room.slug) : ''), '📡', 'Live pads', 'The Camfrog rooms Pepe sits in, live on the web for members: the chat, what\'s said on the mic (auto-transcribed), who\'s in the room and who\'s talking.', '#ef5350'],
     ['/markets', '🔮', 'Markets', 'Prediction markets on whatever the room is arguing about. Buy shares in an outcome; prices move with every bet, and you can sell before it settles.', '#ba68c8'],
     ['/lotto', '🎟️', 'Lotto', 'Pick 4 numbers and a Pepe Ball. The jackpot rolls over until someone hits it; draws are Sunday night.', '#ffd54f'],
     [user ? '/u/' + encodeURIComponent(user) + '/wheel' : '/login', '🎡', 'The wheel', 'Spin the arcade wheel for PAT and XP — from your wheel page, or on the main stage where it spins live on stream.', '#4fc3f7'],
@@ -13,7 +13,7 @@
     ['/wagers', '🤝', 'Wagers', 'Head-to-head bets between members, with Pepe holding the money and an optional judge.', '#90a4ae'],
     ['/staking', '🏦', 'Staking', 'Put PAT to work in the protocol\'s vaults — the Bank, the House and the Market maker — and own a slice of what they earn.', '#64b5f6'],
     ['/cosmetics', '🎨', 'Cosmetics', 'Name colours, profile frames, banners, effects and Grand Theft Frogger avatar gear. Earned, bought or traded.', '#f06292'],
-    ['/feed', '📝', 'Feed & stories', 'Posts from the community, and Pepe\'s snaps and clips from the rooms as stories.', '#a1887f'],
+    ['/feed', '📝', 'Feed & stories', 'Posts from the community, and Pepe\'s snaps and clips from the pads as stories.', '#a1887f'],
     ['/economy', '📘', 'How PAT works', 'Where PAT comes from, where it goes and who holds it — the whole economy on one page.', '#81c784'],
   ];
 %>
@@ -60,7 +60,7 @@
   <section aria-labelledby="cmH">
     <h2 id="cmH">The community</h2>
     <div class="comm">
-      <div class="cm"><span class="ic" aria-hidden="true">📹</span><b>Camfrog rooms</b><p>Where it all happens: Pepe's Pad and friends. Video, a shared mic, games in the chat. Members can watch the rooms live on <a href="/rooms">the web</a>.</p></div>
+      <div class="cm"><span class="ic" aria-hidden="true">📹</span><b>Camfrog rooms</b><p>Where it all happens: Pepe's Pad and friends. Video, a shared mic, games in the chat. Members can watch the rooms live on <a href="/p">the web</a>.</p></div>
       <div class="cm"><span class="ic" aria-hidden="true">📺</span><b>Live-streamed events</b><p>Game nights, shows and specials go out live on the main stage and on <a href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch</a> — spin the stage wheel from the homepage while they're on.</p></div>
       <div class="cm"><span class="ic" aria-hidden="true">🎬</span><b>The Plex server</b><p>A shared movie and TV library for members. Ask in the room or on Discord if you'd like access.</p></div>
       <div class="cm"><span class="ic" aria-hidden="true">💬</span><b>Discord</b><p>Announcements, clips and the conversation between rooms. <a href="https://discord.gg/publicaccess" rel="noopener">Join the server</a>.</p></div>

@@ -14,8 +14,8 @@
 // Kept: per room the latest snapshot + the last FEED_KEEP feed items (chat lines, joins/leaves, mic,
 // topic changes), in memory, mirrored to SQLite so a restart doesn't blank the page.
 // Pages (signed-in only — a room's chat is semi-private):
-//   GET /rooms                 bridged rooms (counts only for visitors)
-//   GET /rooms/:slug           the live room view
+//   GET /p                     the Pad Guide (was /rooms; pads.js 301s the old addresses)
+//   GET /p/:slug               the pad page, with its Camfrog room live when one backs it
 //   GET /api/rooms/:slug/live?after=<cursor>   JSON the page polls (~1.5s)
 // Pepe's window room (1.99aj): the Camfrog room Pepe's OBS stream is showing = his active room
 // (`!activeroom`). Pepe reports it with the stage state and the site shows it as information only.
@@ -473,7 +473,7 @@ function register(app, { isBotToken, addUser }) {
     res.json({ success: true, listeners: a.listeners.size });
   });
 
-  app.get("/rooms/:slug/audio", addUser, async (req, res) => {
+  app.get("/p/:slug/audio", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.status(401).send("Sign in to listen.");
     await load();
     const R = bySlug(req.params.slug);
@@ -520,49 +520,69 @@ function register(app, { isBotToken, addUser }) {
     res.json({ ...stage(), slots, front, pepe_here: here !== false });
   });
 
-  // 1.99bi: the channel guide - every room, what's on its stage now and what's booked next
-  app.get("/rooms", addUser, async (req, res) => {
+  // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pad Guide at /p
+  app.get("/p", addUser, async (req, res) => {
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
     const g = await require("./roomsweb").guideRows(signedIn);
-    res.locals.og = { title: "Channel guide — Public Access TV", description: "Every PATV room, what's on its stage now and what's on next. Camfrog rooms live on the web.",
-                      image: res.locals.ogBase + "/og/page.png?t=Channel%20guide", url: res.locals.ogBase + "/rooms" };
+    res.locals.og = { title: "Pad Guide — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its Camfrog room live on the web.",
+                      image: res.locals.ogBase + "/og/page.png?t=Pad%20Guide", url: res.locals.ogBase + "/p" };
     let owned = [];
     if (signedIn) { try { owned = await reg.ownedBy(req.user.userId); } catch (e) { owned = []; } }
     res.render("rooms", { user: req.user ? req.user.username : null, rows: g.rows, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
   });
 
-  app.get("/rooms/:slug", addUser, async (req, res) => {
+  // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header
+  // (follow, owner, p/<slug>), the stage + schedule, the live Camfrog room when one backs it (chat, people,
+  // mic, DJ booth) and the pad's feed. Any of a pad's slugs works; a room id redirects to the slug.
+  app.get("/p/:slug", addUser, async (req, res) => {
     await load();
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
-    let R = bySlug(req.params.slug);
-    const info = R ? await reg.get(R.id) : await require("./roomsweb").resolveRoom(req.params.slug);
+    const pads = require("./pads");
+    const raw = String(req.params.slug || "").slice(0, 128);
+    let R = bySlug(raw);
+    let info = R ? await reg.get(R.id) : await require("./roomsweb").resolveRoom(raw);
+    if (!R && !info) {
+      // an old /feed/c/<room id> or /feed?room=<room id>: the registry id itself -> its pad address
+      const byId = await reg.get(raw);
+      if (byId) return res.redirect(301, pads.padHref(byId) + pads.qsOf(req));
+    }
     if (!R && info) {
-      // a registered room Pepe isn't bridging right now: its page and stage still work
+      // a registered pad Pepe isn't bridging right now (or a site-only pad): its page, stage and feed still work
       R = rooms.get(info.id) || { id: info.id, name: info.title, slug: info.slug, topic: "", members: [], mic: [], count: 0, updated: 0, feed: [], offline: true };
     }
     if (!R) {
-      return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such room",
-        message: "That room isn't bridged to PATV right now.", title: "Room not found" });
+      return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such pad",
+        message: "There's no pad at p/" + raw.toLowerCase() + ".", title: "Pad not found" });
     }
     let linked = false;
     if (signedIn) {
       try { linked = !!((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername; } catch (e) { linked = false; }
     }
+    const siteOnly = !!(info && info.community) || reg.isCommunityOnly(R.id);
+    const slug = info ? pads.padSlug(info) : R.slug;
+    const title = (info && info.title) || R.name;
+    res.locals.og = { title: `p/${slug} — ${title} on PATV`, description: (info && info.description) || `${title}: a pad on Public Access TV.`,
+                      image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent(("p/" + slug).slice(0, 60)), url: res.locals.ogBase + "/p/" + encodeURIComponent(slug) };
+    const manage = await reg.canManage(req.user, R.id);
+    // the feed's sort / window / page: ?sort= &t= &p= (the feed's own names, so /feed links and old
+    // /feed/c/<slug>?sort=... addresses carry over) or the older ?fsort= &ft= &fp=
+    const q = req.query || {};
+    const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p };
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked,
-      room: { id: R.id, name: (info && info.title) || R.name, slug: R.slug, count: R.count, live: !R.offline && isLive(R), topic: signedIn ? R.topic : "",
-              bridged: !R.offline, description: info ? info.description : "", banner: info ? info.banner : "",
+      room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: signedIn ? R.topic : "",
+              bridged: !R.offline, siteOnly, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
-              house: !!(info && info.house) },
+              house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
       initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId) : null,
       pepeHere: pepeIn(R.id), stage: stage(),
       roomStage: await require("./mainstage").roomStage(R.id, req.user),
-      manage: await reg.canManage(req.user, R.id),
-      schedule: await require("./mainstage").roomSchedule(R.id, req.user, await reg.canManage(req.user, R.id)).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
-      analytics: reg.hasRoute(app, "/rooms/:slug/analytics"),
-      feed: await require("./feedweb").roomFeed(R.id, req.user, req.query).catch((e) => { console.error("[feed] room feed:", e.message); return null; }),
+      manage,
+      schedule: await require("./mainstage").roomSchedule(R.id, req.user, manage).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
+      analytics: reg.hasRoute(app, "/p/:slug/analytics"),
+      feed: await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; }),
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });
   });

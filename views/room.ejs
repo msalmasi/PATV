@@ -1,5 +1,8 @@
-<%- include('layout', { title: room.name + ' — live on PATV', user: user }) %>
-<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false; %>
+<%- include('layout', { title: 'p/' + room.slug + ' — ' + room.name, user: user }) %>
+<%# The pad page (1.99ck, /p/<slug>; was /rooms/<slug> + /feed/c/<slug>): header, stage + schedule, the live
+    Camfrog room behind the pad when there is one (chat, people, mic, DJ booth), then the pad's feed. A
+    site-only pad (the PATV Lounge) has no Camfrog room: no live section, no "not bridged" note. %>
+<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null; %>
 <style>
   .rm { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
   .rm *, .rm *::before, .rm *::after { box-sizing: border-box; }
@@ -130,6 +133,9 @@
   .rm .desc { color: #bbb; font-size: 14px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
   .rm .meta a.chip { color: #b9d8bb; }
   .rm .meta .chip.own { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
+  .rm .padref { font-size: 14px; color: #9ccc9f; font-weight: bold; letter-spacing: .02em; }
+  .rm .meta { align-items: center; }
+  .rm .meta .fw-btn { font-size: 12px; padding: 3px 12px; }
   @media (max-width: 860px) {
     .rm .grid { grid-template-columns: minmax(0, 1fr); }
     .rm .feed { height: 58vh; }
@@ -141,25 +147,29 @@
   }
 </style>
 <main class="rm">
-  <div class="crumb"><a href="/rooms">Channel guide</a> › <%= room.name %></div>
+  <div class="crumb"><a href="/p">Pad Guide</a> › p/<%= room.slug %></div>
   <% if (room.banner) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
   <section class="hero" aria-labelledby="rmTitle">
     <h1 id="rmTitle"><%= room.name %>
-      <span class="live<%= room.live ? '' : ' off' %>" id="rmLive"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span>
+      <% if (!siteOnly_) { %><span class="live<%= room.live ? '' : ' off' %>" id="rmLive" title="Is the Camfrog room live?"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span><% } %>
     </h1>
+    <div class="padref">p/<%= room.slug %></div>
     <div class="topic" id="rmTopic"><%= room.topic %></div>
     <% if (room.description) { %><div class="desc"><%= room.description %></div><% } %>
     <div class="meta">
-      <span class="chip" id="rmCount">👥 <%= room.count %> in the room</span>
-      <span class="chip">📡 Camfrog</span>
-      <% if (room.house) { %><span class="chip own">🐸 Pepe's room</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Owner: <%= room.owner %></a><% } %>
-      <% if (pepeHere_ === true) { %><span class="chip" title="Pepe is in this room, so his stream is part of its stage">🐸 Pepe is here</span><% } %>
-      <% if (manage_) { %><a class="chip own" href="/rooms/<%= encodeURIComponent(room.slug) %>/manage">⚙️ Manage room</a><% } %>
-      <% if (typeof feed !== 'undefined' && feed) { %><a class="chip" href="#feed">📝 Room feed<%= feed.posts.length ? ' · ' + (feed.more ? feed.posts.length + '+' : feed.posts.length) : '' %></a><% } %>
-      <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Analytics</a><% } %>
+      <% if (feed_ && feed_.follow) { %><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: 'Follow this pad' }) %>
+        <span class="chip" title="Follow this pad to get its posts on your Following feed"><b data-follower-count-kind="room" data-follower-count-id="<%= feed_.room %>"><%= feed_.follow.followers.toLocaleString('en-US') %></b> follower<%= feed_.follow.followers === 1 ? '' : 's' %></span><% } %>
+      <% if (siteOnly_) { %><span class="chip" title="This pad lives on the website only - no Camfrog room behind it">🛋️ Site-only pad</span>
+      <% } else { %><% if (bridged_) { %><span class="chip" id="rmCount">👥 <%= room.count %> in the Camfrog room</span><% } %>
+      <span class="chip" title="This pad is backed by a Camfrog room">📡 Camfrog room<%= room.camfrogName && room.camfrogName !== room.name ? ': ' + room.camfrogName : '' %></span><% } %>
+      <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Pad owner: <%= room.owner %></a><% } %>
+      <% if (pepeHere_ === true && !siteOnly_) { %><span class="chip" title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %>
+      <% if (manage_) { %><a class="chip own" href="/p/<%= encodeURIComponent(room.slug) %>/manage">⚙️ Manage pad</a><% } %>
+      <% if (feed_) { %><a class="chip" href="#feed">📝 Feed<%= feed_.posts.length ? ' · ' + (feed_.more ? feed_.posts.length + '+' : feed_.posts.length) : '' %></a><% } %>
+      <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Pad analytics</a><% } %>
     </div>
   </section>
-  <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
+  <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <b>Live from the Camfrog room — read-only (v1).</b> What the Camfrog room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div><% } %>
 
 <% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0;
      const fmtT = (ms) => new Date(ms).toISOString(); %>
@@ -213,16 +223,16 @@
   </script>
 <% } %>
 <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_, manage: manage_ }) %><% } %>
-<% if (!bridged_) { %>
-  <section class="card"><p class="muted" style="margin:0">📡 Pepe isn't bridging this room to the website right now, so there's no live chat here — the stage above still works. Join the room on Camfrog to hang out.</p></section>
+<% if (!bridged_ && !siteOnly_) { %>
+  <section class="card"><p class="muted" style="margin:0">📡 Pepe isn't bridging this pad's Camfrog room to the website right now, so there's no live chat here — the stage and the feed still work. Join the Camfrog room to hang out.</p></section>
 <% } %>
 
-<% if (!bridged_) { %>
+<% if (!bridged_ || siteOnly_) { %>
 <% } else if (!signedIn) { %>
   <section class="card tease">
     <div class="big" aria-hidden="true">🐸</div>
-    <h2 style="justify-content:center">Sign in to watch the room live</h2>
-    <p class="muted">The live chat, the people in the room and who's on the mic are for signed-in PATV members.</p>
+    <h2 style="justify-content:center">Sign in to watch the Camfrog room live</h2>
+    <p class="muted">The Camfrog room's live chat, who's in it and who's on the mic are for signed-in PATV members.</p>
     <a class="btn" href="/login">Sign in</a>
     <p class="muted">No account? <a href="/register">Make one</a> — then link your Camfrog name with <code>!verify</code>.</p>
   </section>
@@ -231,11 +241,11 @@
   <div class="grid">
     <section class="card" aria-labelledby="chatH">
       <h2 id="chatH">Chat <small id="rmStatus" class="status" aria-live="polite"></small></h2>
-      <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Room chat"></div>
+      <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Camfrog room chat"></div>
       <button class="jump" id="rmJump" type="button">New messages ↓</button>
       <div class="compose hide" id="rmCompose">
         <% if (!linked) { %>
-          <p class="muted" style="margin:0">💬 This room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
+          <p class="muted" style="margin:0">💬 This Camfrog room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
         <% } else { %>
           <div id="rmRelay"></div>
           <div id="rmPtt"></div>
@@ -249,12 +259,12 @@
         <div id="rmAudioBox" style="margin-top:10px"></div>
       </section>
       <section class="card" aria-labelledby="pplH">
-        <h2 id="pplH">In the room <small id="rmPplN"></small></h2>
+        <h2 id="pplH">In the Camfrog room <small id="rmPplN"></small></h2>
         <ul class="people" id="rmPeople"></ul>
         <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
       </section>
       <section class="card join" aria-labelledby="joinH">
-        <h2 id="joinH">Join on Camfrog</h2>
+        <h2 id="joinH">Join the Camfrog room</h2>
         <ol>
           <li>Open Camfrog (<a href="https://www.camfrog.com/" rel="noopener">get it here</a>) and sign in.</li>
           <li>Open the <b>Room List</b> and search for <b><%= room.name %></b>.</li>
@@ -264,7 +274,7 @@
     </aside>
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
-  <script src="/public/js/room-bridge.js?v=4"></script>
+  <script src="/public/js/room-bridge.js?v=5"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -337,7 +347,7 @@
     function renderRoom(d) {
       var r = d.room;
       document.getElementById('rmTopic').textContent = r.topic || '';
-      document.getElementById('rmCount').textContent = '👥 ' + r.count + ' in the room';
+      document.getElementById('rmCount').textContent = '👥 ' + r.count + ' in the Camfrog room';
       var live = document.getElementById('rmLive');
       live.classList.toggle('off', !r.live);
       document.getElementById('rmLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';

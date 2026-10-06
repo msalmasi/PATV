@@ -15,7 +15,7 @@
     ['Reports (anti-abuse)', [['reports_per_hour', 'Reports per hour per account (posts + comments + users)'], ['new_account_reports_per_hour', 'New accounts: reports per hour'],
                               ['reports_per_day', 'Reports per day per account'], ['false_reports_pause', 'Pause reporting after this many bad-faith reports in 30 days']]],
     ['Prices (PAT, 0 = free; to the Federal Reserve)', [['price_post', 'Every post'], ['price_link', 'Per link'], ['price_image', 'Per picture'], ['price_audio', 'Per audio file'], ['price_video', 'Per video']]],
-    ['Pepe', [['mention_gap_min', 'Room mentions: at most one per room every (minutes)']]],
+    ['Pepe', [['mention_gap_min', 'Camfrog room mentions: at most one per Camfrog room every (minutes)']]],
     ['Voting & ranking', [['hot_decay_secs', 'Hot: seconds of age worth one order of magnitude of score (Reddit 45000 = 12.5 h)'],
                           ['downvote_min_level', 'Downvotes count from a linked Camfrog name OR this level'],
                           ['votes_per_min', 'Vote changes per minute per account'], ['votes_per_hour', 'Vote changes per hour per account']]],
@@ -48,7 +48,7 @@
             </div>
             <ul>
               <% g.reports.forEach((r) => { %>
-                <li><% if (r.urgent) { %><span class="tag nsfw">urgent</span> <% } else if (r.adminOnly) { %><span class="tag lock" title="Never shown to room owners">admin-only</span> <% } %><b><%= r.label %></b> from <%= r.reporter || '?' %><%= r.note ? ' — “' + r.note + '”' : '' %> <span class="mut"><%= fx.ago(r.created) %></span></li>
+                <li><% if (r.urgent) { %><span class="tag nsfw">urgent</span> <% } else if (r.adminOnly) { %><span class="tag lock" title="Never shown to pad owners">admin-only</span> <% } %><b><%= r.label %></b> from <%= r.reporter || '?' %><%= r.note ? ' — “' + r.note + '”' : '' %> <span class="mut"><%= fx.ago(r.created) %></span></li>
               <% }) %>
             </ul>
             <div class="fa-acts">
@@ -104,7 +104,7 @@
     <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe on the feed</h2>
     <p class="sub">Account <a href="/u/<%= encodeURIComponent(pepe.account.username) %>/profile"><%= pepe.account.username %></a> · last 24 h: <b><%= U.posts %></b> posts, <b><%= U.comments %></b> comments, <b>$<%= Number(U.cost || 0).toFixed(4) %></b> of $<%= Number(G.llm_budget_usd).toFixed(2) %> LLM budget</p>
     <% if (!isAdmin) { %><p class="mut">Only site Admins can change these.</p><% } %>
-    <h3 class="pf-h">Site-wide caps (win over every room)</h3>
+    <h3 class="pf-h">Site-wide caps (win over every pad)</h3>
     <form class="pf-form fa-cfg" data-url="/api/feed/admin/pepe" data-wrap="global">
       <fieldset<%= isAdmin ? '' : ' disabled' %>>
         <label class="ck"><input type="checkbox" name="enabled"<%= G.enabled ? ' checked' : '' %>> Pepe is on (off = he never posts, comments or answers anywhere)</label>
@@ -116,13 +116,13 @@
       </fieldset>
       <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>
-    <h3 class="pf-h">All (site-wide: Pepe's own communities and the PATV Lounge follow these unless they have their own)</h3>
+    <h3 class="pf-h">All (site-wide: Pepe's own pads and the PATV Lounge follow these unless they have their own)</h3>
     <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
-    <h3 class="pf-h">Rooms where he's on</h3>
-    <% if (!pepe.rooms.length) { %><p class="mut">None yet - room owners switch him on from their room's feed moderation page (admins can too, and can lock it).</p><% } else { %>
-      <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Room</th><th>Mentions</th><th>On his own</th><th>24 h</th><th></th></tr></thead><tbody>
+    <h3 class="pf-h">Pads where he's on</h3>
+    <% if (!pepe.rooms.length) { %><p class="mut">None yet - pad owners switch him on from their pad's reports &amp; settings page (admins can too, and can lock it).</p><% } else { %>
+      <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Pad</th><th>Mentions</th><th>On his own</th><th>24 h</th><th></th></tr></thead><tbody>
         <% pepe.rooms.forEach((r) => { %><tr><td><%= r.title %><%= r.house ? " (Pepe's)" : '' %><%= r.admin_lock ? ' 🔒' : '' %></td><td><%= r.respond ? 'on' : 'off' %></td><td><%= r.auto ? 'on' : 'off' %></td>
-          <td><%= r.used.posts %>p · <%= r.used.comments %>c</td><td><% if (r.slug) { %><a href="/rooms/<%= encodeURIComponent(r.slug) %>/feed/mod#pepe">Settings ›</a><% } %></td></tr><% }) %>
+          <td><%= r.used.posts %>p · <%= r.used.comments %>c</td><td><% if (r.slug) { %><a href="/p/<%= encodeURIComponent(r.slug) %>/mod#pepe">Settings ›</a><% } %></td></tr><% }) %>
       </tbody></table></div>
     <% } %>
     <h3 class="pf-h">What he did</h3>
@@ -189,6 +189,6 @@
 </main>
 <script src="/public/js/feed-safety.js?v=2" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
-<script src="/public/js/pepe-feed.js?v=1" defer></script>
+<script src="/public/js/pepe-feed.js?v=7" defer></script>
 </body>
 </html>

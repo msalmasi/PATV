@@ -88,7 +88,7 @@
     var box = document.createElement('div');
     box.className = 'sv-ask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Sign in to see stories');
     box.innerHTML = '<div class="sv-ask-card"><div class="sv-ask-ic" aria-hidden="true">📸</div><h2>Stories are for PATV members</h2>' +
-      '<p>These are Pepe\'s webcam captures from the rooms, so you need to be signed in to watch them.</p>' +
+      '<p>These are Pepe\'s webcam captures from the pads\' Camfrog rooms, so you need to be signed in to watch them.</p>' +
       '<div class="sv-ask-btns"><a class="sv-btn primary" href="#">Sign in</a><a class="sv-btn" href="/register">Join PATV</a><button type="button" class="sv-btn ghost">Not now</button></div></div>';
     box.querySelector('a.primary').setAttribute('href', '/login?next=' + encodeURIComponent(next || (location.pathname + location.search)));
     var close = function () { box.remove(); document.removeEventListener('keydown', onKey); };
@@ -124,8 +124,8 @@
     var live = el('div', 'sv-live'); live.setAttribute('aria-live', 'polite'); live.className = 'sv-sr';
     var hint = el('div', 'sv-hint', 'Tap → next · tap ← back · hold to pause · swipe ↓ to close');
     frame.appendChild(bars); frame.appendChild(head); frame.appendChild(stage); frame.appendChild(foot); frame.appendChild(hint);
-    var prevRoom = el('button', 'sv-side sv-prev'); prevRoom.type = 'button'; prevRoom.setAttribute('aria-label', 'Previous room'); prevRoom.textContent = '‹';
-    var nextRoom = el('button', 'sv-side sv-next'); nextRoom.type = 'button'; nextRoom.setAttribute('aria-label', 'Next room'); nextRoom.textContent = '›';
+    var prevRoom = el('button', 'sv-side sv-prev'); prevRoom.type = 'button'; prevRoom.setAttribute('aria-label', 'Previous pad'); prevRoom.textContent = '‹';
+    var nextRoom = el('button', 'sv-side sv-next'); nextRoom.type = 'button'; nextRoom.setAttribute('aria-label', 'Next pad'); nextRoom.textContent = '›';
     root.appendChild(prevRoom); root.appendChild(frame); root.appendChild(nextRoom); root.appendChild(live);
     return { root: root, frame: frame, bars: bars, room: room, who: who, when: when, mute: mute, pause: pause, x: x, stage: stage, foot: foot,
              live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom };
@@ -229,7 +229,7 @@
       if (it.kind === 'audio') {
         var card = el('div', 'sv-audio-card');
         card.appendChild(el('div', 'sv-audio-ic', '🔊'));
-        card.appendChild(el('div', 'sv-audio-t', 'Room audio from ' + R.title));
+        card.appendChild(el('div', 'sv-audio-t', 'Camfrog room audio from ' + R.title));
         var wave = el('div', 'sv-wave'); for (var w = 0; w < 24; w++) { var s = el('i'); s.style.animationDelay = (w * 53 % 700) + 'ms'; wave.appendChild(s); } card.appendChild(wave);
         V.stage.appendChild(card);
       }

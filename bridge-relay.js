@@ -87,7 +87,7 @@ function cleanCmds(raw) {
 /** "!commands" - answered by the site, from the room's menu. */
 function commandsText(cmds) {
   const list = Object.keys(cmds || {}).sort();
-  if (!list.length) return "Commands from the website aren't on in this room.";
+  if (!list.length) return "Commands from the website aren't on in this Camfrog room.";
   const paid = list.filter((c) => cmds[c] > 0).map((c) => `${c} (${cmds[c].toLocaleString("en-US")} PAT)`);
   return `You can run ${list.length} commands here as your Camfrog name - same permissions and prices as in the room: ` +
     list.join(" ") + (paid.length ? `. Paid: ${paid.join(", ")} (admins free).` : ".");
@@ -207,8 +207,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   };
   const roomFor = (req, res, flag) => {
     const R = bySlug(req.params.slug);
-    if (!R || !isLive(R)) { res.status(404).json({ ok: false, error: "That room isn't live right now." }); return null; }
-    if (!R[flag]) { res.status(403).json({ ok: false, error: "That isn't switched on in this room." }); return null; }
+    if (!R || !isLive(R)) { res.status(404).json({ ok: false, error: "That Camfrog room isn't live right now." }); return null; }
+    if (!R[flag]) { res.status(403).json({ ok: false, error: "That isn't switched on in this Camfrog room." }); return null; }
     return R;
   };
 
@@ -219,7 +219,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!R) return;
     const text = clean((req.body || {}).text, SAY_MAX);
     if (text.startsWith("!")) return runCmd(req, res, u, R, text);
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     if (!text) return res.status(400).json({ ok: false, error: "Type something first." });
     const lim = limited("say|" + u.userId, 3000, 5, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
@@ -234,8 +234,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const c = cmdName(text);
     const cmds = R.cmds || {};
     if (c === "!commands") return res.json({ ok: true, local: true, reply: commandsText(cmds), cmds });
-    if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this room." });
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe \u2014 commands run as that name." });
+    if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this Camfrog room." });
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe \u2014 commands run as that name." });
     if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
       return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
     }
@@ -268,7 +268,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "micRelay");
     if (!R) return;
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
     const secs = Number(req.get("x-clip-secs")) || 0;
     if (!buf || buf.length < 500) return res.status(400).json({ ok: false, error: "That recording is empty." });
@@ -376,7 +376,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "cams");
     if (!R) return;
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     const sid = String((req.body || {}).sid || "").slice(0, 40);
     let s = null, login = "";
     for (const [k, v] of snaps) if (sid && v.sid === sid && k.startsWith(R.id + "|")) { s = v; login = k.slice(R.id.length + 1); break; }

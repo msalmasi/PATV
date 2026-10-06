@@ -89,7 +89,9 @@ test.before(async () => {
   app.set("views", path.join(repo, "views"));
   app.set("view engine", "ejs");
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  require(path.join(repo, "pads")).register(app);                 // 1.99ck: old addresses 301 to /p/...
   web.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  require(path.join(repo, "bridge")).register(app, { addUser, isBotToken: (t) => t === "bot" });   // the pad page
   terms.register(app, { addUser });
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
@@ -234,7 +236,7 @@ test("room owners: author's account age + linked status in their queue, never ne
   assert.deepEqual(Object.keys(g.authorInfo).sort(), ["ageDays", "linked"]);
   assert.ok(g.authorInfo.ageDays > 100);
   assert.deepEqual(g.authorInfo.linked, { camfrog: true, discord: true, twitch: false });
-  const page = (await get(`/rooms/${ROOM}/feed/mod`, U.owner)).text;
+  const page = (await get(`/p/${ROOM}/mod`, U.owner)).text;
   assert.match(page, /months old/);
   assert.doesNotMatch(page, /View details/, "no admin details button for owners");
 });

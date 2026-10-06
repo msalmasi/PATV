@@ -364,12 +364,15 @@ const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 // and he never gets the author's automatic upvote (his votes count for nothing in the rankings).
 const PEPE_ID = "pepe-bot";
 const isPepe = (u) => !!u && (u.userId === PEPE_ID || u === PEPE_ID);
-/** A community (registered room) by id or slug, or null. */
+/** A pad (registered room) by id, slug, "p/<slug>" (or the older "c/<slug>"), or null. */
 async function communityOf(x) {
   const k = String(x == null ? "" : x).trim().slice(0, 128);
   if (!k) return null;
-  return (await rooms.get(k)) || (await rooms.bySlug(k.replace(/^c\//i, ""))) || null;
+  const s = k.replace(/^[cp]\//i, "");
+  return (await rooms.get(k)) || (await rooms.bySlug(s)) || (await require("./roomsweb").resolveRoom(s).catch(() => null)) || null;
 }
+/** 1.99ck: the slug a pad's links and p/<slug> labels use (pads.js). */
+const padSlugOf = (R, roomId) => (R ? require("./pads").padSlug(R) : rooms.slugify(roomId));
 const ID_RE = /^[A-Za-z0-9]{8,16}$/;
 
 let UCOLS = null;
@@ -427,10 +430,10 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
     }
   }
   if (C.require_link_to_post && !u.camfrogUsername && !isStaff(u) && !isPepe(u)) {
-    return { status: 403, message: "Link your Camfrog name first: type !verify in a room with Pepe." };
+    return { status: 403, message: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." };
   }
   if (media && !isStaff(u) && !isPepe(u) && !u.camfrogUsername && (Number(u.level) || 0) < C.media_min_level) {
-    return { status: 403, message: `Uploading pictures, audio and video needs a linked Camfrog name (type !verify in a room with Pepe) or level ${C.media_min_level}.` };
+    return { status: 403, message: `Uploading pictures, audio and video needs a linked Camfrog name (type !verify in a Camfrog room with Pepe) or level ${C.media_min_level}.` };
   }
   return null;
 }
@@ -514,7 +517,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   return rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id).map((x) => {
       const R = rooms.getCached(x.room_id);
-      return { id: x.room_id, slug: R ? R.slug : rooms.slugify(x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null,
+      return { id: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null,
                pinned: !!x.pinned_at, nsfw: x.nsfw === 1, hidden: !!x.hidden_at, pending: !!x.pending };
     });
     const ctx = ctxRoom ? roomsOf.find((x) => x.id === ctxRoom) : null;
@@ -536,7 +539,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     const xps = XP.filter((x) => x.crosspost_of === r.id);
     const crossposts = [...new Map(xps.map((x) => {
       const R = rooms.getCached(x.room_id);
-      return [x.room_id, { id: x.id, room: x.room_id, slug: R ? R.slug : rooms.slugify(x.room_id), title: R ? R.title : x.room_id }];
+      return [x.room_id, { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id }];
     })).values()];
     const att = AT.filter((a) => a.post_id === r.id).map((a) => ({ id: a.id, kind: a.kind, ct: a.ct, file: a.file, thumb: a.thumb, poster: a.poster,
                                                                  w: a.w, h: a.h, secs: a.secs }));
@@ -751,11 +754,11 @@ async function create(userId, input, deps = {}) {
   const picked = input.community != null && input.community !== "" ? [input.community] : (Array.isArray(input.rooms) ? input.rooms : []);
   for (const r of picked.slice(0, 6)) {
     const R = await communityOf(r);
-    if (!R) throw new Refuse(400, "That community isn't on PATV.");
+    if (!R) throw new Refuse(400, "That pad isn't on PATV.");
     if (!roomIds.includes(R.id)) roomIds.push(R.id);
   }
-  if (roomIds.length > MAX_ROOMS) throw new Refuse(400, "Post to one community - then use Crosspost to share it in another.");
-  if (!roomIds.length) throw new Refuse(400, "Choose a community to post in.");
+  if (roomIds.length > MAX_ROOMS) throw new Refuse(400, "Post to one pad - then use Crosspost to share it in another.");
+  if (!roomIds.length) throw new Refuse(400, "Choose a pad to post in.");
   if (!title && !body && !linkIn && !attIds.length) throw new Refuse(400, "Write something, add a link or attach a file.");
   const refusal = await postRefusal(u, roomIds, { media: attIds.length > 0 });
   if (refusal) throw new Refuse(refusal.status, refusal.message);
@@ -851,9 +854,9 @@ async function crosspost(userId, origId, input = {}) {
   if (!o || o.deleted_at || (o.hidden_at && !isStaff(u))) throw new Refuse(404, "No such post.");
   const v = visibleSql(NOW());
   const shown = (await getQuery(`SELECT 1 FROM feed_posts p WHERE p.id = ? AND ${v.sql}`, [o.id, ...v.args]))[0];
-  if (!shown && !isStaff(u)) throw new Refuse(409, "That post isn't visible in any community, so it can't be crossposted.");
+  if (!shown && !isStaff(u)) throw new Refuse(409, "That post isn't visible in any pad, so it can't be crossposted.");
   const R = await communityOf(input.community);
-  if (!R) throw new Refuse(400, "Choose a community to crosspost to.");
+  if (!R) throw new Refuse(400, "Choose a pad to crosspost to.");
   const here = (await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [o.id, R.id]))[0];
   if (here) throw new Refuse(409, `That post is already in ${R.title}.`);
   const dup = (await getQuery(`SELECT x.id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id AND pr.room_id = ? AND pr.removed_at IS NULL
@@ -923,7 +926,7 @@ async function communities(viewer = null) {
       const r1 = (await postRefusal(u, [R.id])) || (await roomPostRefusal(u, R.id));
       refusal = r1 ? r1.message : null;
     }
-    out.push({ id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
+    out.push({ id: R.id, slug: padSlugOf(R, R.id), title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
                followers: fm.get(R.id) || 0, posts: pm.get(R.id) || 0, canPost: !refusal, refusal });
   }
   return out.sort((a, b) => (b.id === rooms.LOUNGE_ID) - (a.id === rooms.LOUNGE_ID) || b.followers - a.followers || b.posts - a.posts || a.title.localeCompare(b.title));
@@ -980,8 +983,8 @@ async function remove(user, id, reason) {
 async function removeFromRoom(user, id, roomId) {
   const p = await get(id, user);
   if (!p) throw new Refuse(404, "No such post.");
-  if (!p.roomsAll.find((r) => r.id === roomId)) throw new Refuse(404, "That post isn't in that room.");
-  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this room's owner can do that.");
+  if (!p.roomsAll.find((r) => r.id === roomId)) throw new Refuse(404, "That post isn't in that pad.");
+  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner can do that.");
   await runQuery("UPDATE feed_post_rooms SET removed_at = ?, removed_by = ? WHERE post_id = ? AND room_id = ? AND removed_at IS NULL",
                  [NOW(), user.username, id, roomId]);
   await runQuery("DELETE FROM feed_mentions WHERE post_id = ? AND room_id = ? AND sent_at IS NULL", [id, roomId]);
@@ -989,7 +992,7 @@ async function removeFromRoom(user, id, roomId) {
   return true;
 }
 async function restoreToRoom(user, id, roomId) {
-  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this room's owner can do that.");
+  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner can do that.");
   await runQuery("UPDATE feed_post_rooms SET removed_at = NULL, removed_by = NULL WHERE post_id = ? AND room_id = ?", [id, roomId]);
   await rooms.event(roomId, "feed-restore", user.username, id);
   return true;
@@ -1249,7 +1252,7 @@ const HINTS = {
   csam: "Any sexual content involving someone under 18. It's hidden at once and goes straight to the site admins.",
   ncii: "Intimate pictures or video of someone shared without their consent. Admins only.",
   violence: "Threats, incitement or glorifying violence against someone.",
-  impersonation: "Pretending to be another person, a room or PATV staff.",
+  impersonation: "Pretending to be another person, a pad or PATV staff.",
   copyright: "Your work posted without permission. Admins only - see the Terms for a full notice.",
   personal: "Someone's address, phone, real name, workplace or other private info.",
   nsfw: "Adult content that isn't marked NSFW.",
@@ -1513,7 +1516,7 @@ async function userReportAction(user, { userId, action, tell = true, days = 0, r
 // ── feed bans (site staff: whole feed or a room; room owners: their room) ──
 async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
   const roomId = String(room || "");
-  if (roomId ? !(await rooms.canManage(user, roomId)) : !isStaff(user)) throw new Refuse(403, roomId ? "Only this room's owner can do that." : "Admins only.");
+  if (roomId ? !(await rooms.canManage(user, roomId)) : !isStaff(user)) throw new Refuse(403, roomId ? "Only this pad's owner can do that." : "Admins only.");
   const u = await rooms.findUser(target);
   if (!u) throw new Refuse(404, `No single PATV account named "${String(target).slice(0, 40)}".`);
   const until = Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
@@ -1553,7 +1556,7 @@ async function setRestricted(list) {
 
 async function mentionOn(roomId) { await init(); return (await kvGet("mention:" + roomId)) === "1"; }
 async function setMention(user, roomId, on) {
-  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this room's owner can do that.");
+  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner can do that.");
   await init();
   await kvSet("mention:" + roomId, on ? "1" : "0");
   await rooms.event(roomId, "feed-mention", user.username, on ? "on" : "off");
@@ -1584,15 +1587,15 @@ async function takeMentions(site) {
     if (!live.length) continue;
     await kvSet("mention_at:" + roomId, t);
     const R = rooms.getCached(roomId);
-    const slug = R ? R.slug : rooms.slugify(roomId);
+    const slug = padSlugOf(R, roomId);
     const first = live[0];
     const A = await account(first.author_id);
     const name = A ? (A.displayname || A.username) : "someone";
     const nsfw = effNsfw(first);
     const what = nsfw ? "(NSFW)" : cleanLine(first.title || first.body || "", 70);
     const text = live.length === 1
-      ? `📌 New post on the room feed by ${"{author}"}: ${what ? what + " — " : ""}${site}/feed/p/${first.post_id}`
-      : `📌 ${live.length} new posts on the room feed — ${site}/rooms/${encodeURIComponent(slug)}#feed`;
+      ? `📌 New post on p/${slug} by ${"{author}"}: ${what ? what + " — " : ""}${site}/feed/p/${first.post_id}`
+      : `📌 ${live.length} new posts on p/${slug} — ${site}/p/${encodeURIComponent(slug)}#feed`;
     out.push({ room: roomId, text, author: name, author_login: A && A.camfrogUsername ? String(A.camfrogUsername).toLowerCase() : null, post: first.post_id, count: live.length });
   }
   return out;
@@ -1659,12 +1662,12 @@ async function roomPostRefusal(u, roomId) {
   const S = await roomSettings(roomId);
   const R = rooms.getCached(roomId);
   const name = R ? R.title : roomId;
-  if (S.who === "linked" && !u.camfrogUsername) return { status: 403, message: `${name} takes posts from linked Camfrog accounts - type !verify in a room with Pepe.` };
+  if (S.who === "linked" && !u.camfrogUsername) return { status: 403, message: `${name} takes posts from linked Camfrog accounts - type !verify in a Camfrog room with Pepe.` };
   if (S.who === "followers") {
     const ok = followerCheck ? await followerCheck(u.userId, roomId) : false;
     if (!ok && !(await isRoomMember(u.userId, roomId))) return { status: 403, message: `Only ${name}'s followers can post there.` };
   }
-  if (S.who === "approved" && !(await isRoomMember(u.userId, roomId))) return { status: 403, message: `Only approved posters can post in ${name} - ask the room owner.` };
+  if (S.who === "approved" && !(await isRoomMember(u.userId, roomId))) return { status: 403, message: `Only approved posters can post in ${name} - ask the pad owner.` };
   if (S.per_day > 0) {
     const n = (await getQuery(`SELECT COUNT(*) AS n FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
                                 WHERE pr.room_id = ? AND p.author_id = ? AND p.created > ?`, [roomId, u.userId, NOW() - 86400e3]))[0].n;
@@ -1694,11 +1697,11 @@ async function roomMod(user, roomId, op, a = {}) {
   await init();
   roomId = String(roomId || "");
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this room's owner can do that.");
+  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner can do that.");
   const t = NOW(), who = user.username;
   const needPlace = async () => {
     const pl = await placement(a.post, roomId);
-    if (!pl) throw new Refuse(404, "That post isn't in this room.");
+    if (!pl) throw new Refuse(404, "That post isn't in this pad.");
     return pl;
   };
   const log = (what, detail) => rooms.event(roomId, "feed-" + what, who, detail);
@@ -1744,7 +1747,7 @@ async function roomMod(user, roomId, op, a = {}) {
     case "restore": { await restoreToRoom(user, a.post, roomId); return { ok: true }; }
     case "lock": case "unlock": {
       await needPlace();
-      if (!(await canLock(user, a.post))) throw new Refuse(403, "This post is in other communities too - only an admin can lock it.");
+      if (!(await canLock(user, a.post))) throw new Refuse(403, "This post is in other pads too - only an admin can lock it.");
       await runQuery("UPDATE feed_posts SET locked_at = ?, locked_by = ? WHERE id = ?", [op === "lock" ? t : null, op === "lock" ? who : null, a.post]);
       await log(op, a.post); return { ok: true };
     }

@@ -162,11 +162,11 @@ async function setScope(user, scope, patch) {
   const admin = isAdmin(user);
   if (!scope) { if (!admin) throw new Refuse(403, "Only site admins set Pepe's settings for All."); }
   else {
-    if (!(await rooms.get(scope))) throw new Refuse(404, "No such room.");
-    if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this room's owner can do that.");
+    if (!(await rooms.get(scope))) throw new Refuse(404, "No such pad.");
+    if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this pad's owner can do that.");
   }
   const cur = cleanScope(await readJson("pepe:scope:" + scope));
-  if (cur.admin_lock && !admin) throw new Refuse(403, "A site admin has locked Pepe's settings for this room.");
+  if (cur.admin_lock && !admin) throw new Refuse(403, "A site admin has locked Pepe's settings for this pad.");
   const p = { ...(patch || {}) };
   if (!admin) delete p.admin_lock;
   const next = cleanScope({ ...cur, ...p });
@@ -291,7 +291,7 @@ async function setMute(user, postId, on) {
   if (!ok) for (const x of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [r.id])) {
     if (await rooms.canManage(user, x.room_id)) { ok = true; break; }
   }
-  if (!ok) throw new Refuse(403, "Only the post's author, its rooms' owners and admins can do that.");
+  if (!ok) throw new Refuse(403, "Only the post's author, its pads' owners and admins can do that.");
   if (on) await runQuery("INSERT OR REPLACE INTO pepe_feed_mutes (post_id, by, at) VALUES (?, ?, ?)", [r.id, user.username, NOW()]);
   else await runQuery("DELETE FROM pepe_feed_mutes WHERE post_id = ?", [r.id]);
   await log({ action: on ? "mute" : "unmute", post: r.id, by: user.username });
@@ -465,7 +465,7 @@ async function scopesState(U) {
     if (id && !S.respond && !S.auto) continue;
     const R = id ? rooms.getCached(id) : null;
     out[id] = { ...S, title: id ? (R ? R.title : id) : "All (site-wide)", slug: R ? R.slug : null, house: !!(R && R.house),
-                url: SITE() + (R ? "/rooms/" + encodeURIComponent(R.slug) : "/feed"),
+                url: SITE() + (R ? "/p/" + encodeURIComponent(R.slug) : "/feed"),
                 quiet: quietNow(S), used: scopeUse(U, id) };
   }
   return out;
@@ -567,7 +567,7 @@ async function post(b, req = null) {
   const scope = String(b.scope || "");
   const kind = KINDS.includes(b.kind) ? b.kind : "other";
   const refuse = async (st, msg) => { await log({ action: "refused", why: "auto", scope, kind, cost: b.cost, note: msg }); throw new Refuse(st, msg); };
-  if (scope && !(await rooms.get(scope))) await refuse(404, "No such room.");
+  if (scope && !(await rooms.get(scope))) await refuse(404, "No such pad.");
   // 1.99ci: a post needs a community - his All-scope posts go to the PATV Lounge
   const S = await scopeSettings(scope);
   const no = gate("post", "auto", S, G, await usage(), { scope, cost: b.cost });
@@ -660,7 +660,7 @@ function register(app, { addUser, isBotToken }) {
   app.post("/api/rooms/:slug/feed/pepe", addUser, guard, async (req, res) => {
     try {
       const R = (await rooms.get(String(req.params.slug))) || (await require("./roomsweb").resolveRoom(String(req.params.slug)));
-      if (!R) return res.status(404).json({ ok: false, error: "No such room." });
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       res.json({ ok: true, settings: await setScope(await viewer(req), R.id, (req.body || {}).settings) });
     } catch (e) { fail(res, e); }
   });

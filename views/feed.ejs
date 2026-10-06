@@ -1,9 +1,9 @@
-<%- include('layout', { title: mode === 'following' ? 'Following — feed' : room ? 'c/' + room.slug + ' — ' + room.title + ' — feed' : 'All — feed', user: user}) %>
+<%- include('layout', { title: mode === 'following' ? 'Following — feed' : room ? 'p/' + room.slug + ' — ' + room.title + ' — feed' : 'All — feed', user: user}) %>
 <link rel="stylesheet" href="/public/css/feed.css?v=4">
 <link rel="stylesheet" href="/public/css/stories.css?v=1">
 <%
-  // 1.99ci: the feed is community-based (Reddit's model). The bar on top picks WHICH communities you're
-  // reading: All (every community), Following, or one community (/feed/c/<slug>, with its header). Pepe's
+  // 1.99ci: the feed is pad-based (Reddit's model). The bar on top picks WHICH pads you're reading: All
+  // (every pad), Following, or one pad (1.99ck: that's the pad's own page, /p/<slug>). Pepe's
   // clips & snaps are the story strip. The bar, sort and pager swap #fdTop / #fdList in place
   // (public/js/feed-composer.js) so the composer's draft is never lost.
   const where = mode === 'following' ? 'following' : room ? room.slug : 'all';
@@ -16,25 +16,25 @@
 %>
 <main class="fd">
   <div id="fdTop">
-    <nav class="cb" aria-label="Choose a community">
+    <nav class="cb" aria-label="Choose a pad">
       <details class="cb-pick">
-        <summary aria-label="Community: <%= curLabel %>. Change community">
-          <span class="cb-k">Community</span>
+        <summary aria-label="Pad: <%= curLabel %>. Change pad">
+          <span class="cb-k">Pad</span>
           <span class="cb-cur"><% if (room) { %><span class="cbadge" style="--h:<%= fx.hue(room.slug) %>" aria-hidden="true"><%= fx.cBadge(header || room) %></span><% } else { %><span class="cbadge all" aria-hidden="true"><%= mode === 'following' ? '⭐' : '🌐' %></span><% } %><b><%= curLabel %></b></span>
           <%- fx.icon('chevron', 'chev') %>
         </summary>
         <div class="cb-menu" role="menu">
-          <label class="cb-search"><%- fx.icon('search') %><input type="search" placeholder="Search communities" aria-label="Search communities" data-cb-search autocomplete="off"></label>
-          <a data-swap role="menuitem" class="cb-it<%= where === 'all' ? ' on' : '' %>" href="<%= q({ where: 'all', p: '' }) %>"><span class="cbadge all" aria-hidden="true">🌐</span><span class="t"><b>All</b><small>Every community</small></span></a>
-          <a data-swap role="menuitem" class="cb-it<%= where === 'following' ? ' on' : '' %>" href="<%= q({ where: 'following', p: '', by: '' }) %>"><span class="cbadge all" aria-hidden="true">⭐</span><span class="t"><b>Following</b><small>People &amp; communities you follow</small></span></a>
+          <label class="cb-search"><%- fx.icon('search') %><input type="search" placeholder="Search pads" aria-label="Search pads" data-cb-search autocomplete="off"></label>
+          <a data-swap role="menuitem" class="cb-it<%= where === 'all' ? ' on' : '' %>" href="<%= q({ where: 'all', p: '' }) %>"><span class="cbadge all" aria-hidden="true">🌐</span><span class="t"><b>All</b><small>Every pad</small></span></a>
+          <a data-swap role="menuitem" class="cb-it<%= where === 'following' ? ' on' : '' %>" href="<%= q({ where: 'following', p: '', by: '' }) %>"><span class="cbadge all" aria-hidden="true">⭐</span><span class="t"><b>Following</b><small>People &amp; pads you follow</small></span></a>
           <div class="cb-sep" role="separator"></div>
           <% comms.forEach((c) => { %>
             <a data-swap role="menuitem" class="cb-it<%= room && room.id === c.id ? ' on' : '' %>" data-name="<%= (c.title + ' ' + c.slug).toLowerCase() %>" href="<%= q({ where: c.slug, p: '', by: '' }) %>">
               <span class="cbadge" style="--h:<%= fx.hue(c.slug) %>" aria-hidden="true"><%= fx.cBadge(c) %></span>
-              <span class="t"><b><%= c.title %></b><small>c/<%= c.slug %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small></span>
+              <span class="t"><b><%= c.title %></b><small>p/<%= c.slug %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small></span>
             </a>
           <% }) %>
-          <p class="cb-none hide" data-cb-none>No community matches.</p>
+          <p class="cb-none hide" data-cb-none>No pad matches.</p>
         </div>
       </details>
       <div class="cb-chips" aria-label="Quick picks">
@@ -45,23 +45,9 @@
       </div>
     </nav>
 
-    <% if (header) { %>
-      <section class="ch" aria-labelledby="chT">
-        <span class="cbadge lg" style="--h:<%= fx.hue(header.slug) %>" aria-hidden="true"><%= fx.cBadge(header) %></span>
-        <div class="ch-main">
-          <h1 id="chT"><%= header.title %> <small>c/<%= header.slug %></small></h1>
-          <% if (header.description) { %><p class="ch-desc"><%= header.description %></p><% } %>
-          <p class="ch-meta"><span><%- fx.icon('users') %><b data-follower-count-kind="room" data-follower-count-id="<%= header.id %>"><%= fx.num(header.followers) %></b> follower<%= header.followers === 1 ? '' : 's' %></span><span><b><%= fx.num(header.posts) %></b> post<%= header.posts === 1 ? '' : 's' %></span><% if (header.owner) { %><span>owner <a href="/u/<%= encodeURIComponent(header.ownerUser) %>/profile"><%= header.owner %></a></span><% } else if (header.house) { %><span>run by PATV</span><% } %></p>
-        </div>
-        <div class="ch-acts">
-          <%- include('partials/follow-btn', { kind: 'room', id: header.id, following: header.following, signed: !!viewer, next: here }) %>
-          <a class="ch-go" href="<%= header.roomHref %>"><%- fx.icon('door') %><span><%= header.community ? 'Community page' : 'Go to room' %></span></a>
-          <% if (header.mod) { %><a class="ch-go" href="/rooms/<%= encodeURIComponent(header.slug) %>/feed/mod"><%- fx.icon('shield') %><span>Moderate</span></a><% } %>
-        </div>
-      </section>
-    <% } else { %>
+    <% { %>
       <h1 class="fd-h"><%= mode === 'following' ? 'Following' : 'All' %></h1>
-      <p class="sub"><%= mode === 'following' ? 'Posts from the people and communities you follow.' : 'Posts from every PATV community, and Pepe\'s snaps & clips from the rooms.' %></p>
+      <p class="sub"><%= mode === 'following' ? 'Posts from the people and pads you follow.' : 'Posts from every PATV pad, and Pepe\'s snaps & clips from the Camfrog rooms.' %></p>
     <% } %>
     <%- include('partials/story-strip', { story, heading: room ? '📸 Fresh from ' + room.title : '📸 Stories', next: here }) %>
     <% if (author && mode === 'all') { %><p class="sub">Posts by <b><%= author.displayname || author.username %></b><% if (authorFollow !== null) { %> <%- include('partials/follow-btn', { kind: 'user', id: author.username, following: authorFollow, signed: true, next: here, small: true }) %><% } %> · <a data-swap href="<%= q({ by: '' }) %>">show everyone</a></p><% } %>
@@ -71,12 +57,12 @@
     <%- include('partials/feed-composer', { composer: composer, next: here }) %>
     <div id="fdList">
       <% if (mode === 'following' && !viewer) { %>
-        <p class="login">⭐ Follow communities and people to get a feed of just their posts. <a href="/login?next=<%= encodeURIComponent(here) %>">Sign in</a> to see yours.</p>
+        <p class="login">⭐ Follow pads and people to get a feed of just their posts. <a href="/login?next=<%= encodeURIComponent(here) %>">Sign in</a> to see yours.</p>
       <% } else { %>
         <% if (mode === 'following') { %><%- include('partials/following-panel', { follow, here }) %><% } %>
         <%- include('partials/feed-sort', { fx, sort, top, swap: true, href: (s, t) => q({ sort: s, t: t || '', p: '' }) }) %>
         <% if (!posts.length) { %>
-          <p class="empty"><%= page > 1 ? 'No more posts.' : mode === 'following' ? ((follow && (follow.rooms.length || follow.people.length)) ? 'Nothing new from the people and communities you follow.' : 'You don\'t follow anyone yet — tap “+ Follow” on a community, a profile or a post\'s author.') : room ? 'Nothing posted in ' + room.title + ' yet — be the first.' : 'Nothing posted yet — be the first.' %></p>
+          <p class="empty"><%= page > 1 ? 'No more posts.' : mode === 'following' ? ((follow && (follow.rooms.length || follow.people.length)) ? 'Nothing new from the people and pads you follow.' : 'You don\'t follow anyone yet — tap “+ Follow” on a pad, a profile or a post\'s author.') : room ? 'Nothing posted in ' + room.title + ' yet — be the first.' : 'Nothing posted yet — be the first.' %></p>
         <% } else { %>
           <div class="fd-list">
             <% posts.forEach((p) => { %><%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: room ? room.id : null }) %><% }) %>
@@ -90,7 +76,7 @@
     </div>
   </div>
 </main>
-<script src="/public/js/stories.js?v=1" defer></script>
+<script src="/public/js/stories.js?v=2" defer></script>
 <%- include('partials/feed-js', { viewer }) %>
 </body>
 </html>

@@ -220,7 +220,7 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in to see the DJ." });
     const R = bySlug(req.params.slug);
-    if (!R) return res.status(404).json({ error: "No such room." });
+    if (!R) return res.status(404).json({ error: "No such pad." });
     WATCH.set(R.id, Date.now());
     res.json(await panelFor(R, await viewer(req)));
   });
@@ -229,11 +229,11 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
     if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") return res.status(400).json({ ok: false, error: "Bad request." });
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = bySlug(req.params.slug);
-    if (!R) return res.status(404).json({ ok: false, error: "No such room." });
+    if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
     const room = djRoom(R.id);
-    if (!room) return res.status(409).json({ ok: false, error: "The music isn't on in this room right now." });
+    if (!room) return res.status(409).json({ ok: false, error: "The music isn't on in this pad right now." });
     const me = await viewer(req);
-    if (!me || !me.camfrog) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
+    if (!me || !me.camfrog) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
     const b = req.body || {};
     const verb = String(b.verb || "");
     const who = Object.prototype.hasOwnProperty.call(VERBS, verb) ? VERBS[verb] : null;

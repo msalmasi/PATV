@@ -1,5 +1,5 @@
-// roomsweb.js — the pages and APIs around room ownership (1.99bi): the channel guide (/rooms), the
-// owner's room dashboard (/rooms/:slug/manage), the rooms admin (/rooms/admin), the homepage's front
+// roomsweb.js — the pages and APIs around pad (room) ownership (1.99bi): the Pad Guide (/p, was /rooms), the
+// owner's dashboard (/p/:slug/manage), the pads admin (/pads/admin), the homepage's front
 // room, and the bot-token endpoints Pepe uses (owners sync, owner !stage commands, royalty spend).
 // Data lives in rooms.js (registry), mainstage.js (stages) and royalties.js.
 "use strict";
@@ -31,7 +31,7 @@ function linkSlug(R) {
   return R.slug;
 }
 
-/** Channel guide rows: every registered or bridged room with what's on now and next. */
+/** Pad Guide rows: every registered or bridged room (pad) with what's on now and next. */
 async function guideRows(signedIn) {
   await rooms.init();
   const B = bridge();
@@ -58,6 +58,7 @@ async function guideRows(signedIn) {
       featured: slots.now.find((s) => s.featured && s.live) || null,
       // 1.99cj: Pepe is IN the room (his stream is on its stage) - not "his Camfrog window shows it"
       pepe_here: B.pepeIn ? B.pepeIn(id) === true : false,
+      site_only: rooms.isCommunityOnly(id),      // 1.99ck: a pad with no Camfrog room (the PATV Lounge)
     });
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)
@@ -77,8 +78,8 @@ function register(app, { addUser, isBotToken }) {
   const actor = (req) => (req.user && req.user.username) || "?";
   const manageable = async (req, res) => {
     const R = await resolveRoom(req.params.slug);
-    if (!R) { res.status(404).json({ ok: false, error: "No such room." }); return null; }
-    if (!(await rooms.canManage(req.user, R.id))) { res.status(403).json({ ok: false, error: "Only this room's owner can do that." }); return null; }
+    if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }
+    if (!(await rooms.canManage(req.user, R.id))) { res.status(403).json({ ok: false, error: "Only this pad's owner can do that." }); return null; }
     return R;
   };
 
@@ -111,10 +112,10 @@ function register(app, { addUser, isBotToken }) {
     if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
     try {
       const R = await rooms.get(String(b.room || ""));
-      if (!R) return res.json({ ok: false, message: "this room isn't on PATV yet" });
+      if (!R) return res.json({ ok: false, message: "this room has no pad on PATV yet" });
       const by = String(b.by || "").trim().toLowerCase();
       const owner = !!(R.owner && R.owner.camfrog && String(R.owner.camfrog).toLowerCase() === by);
-      if (!owner && !b.admin) return res.json({ ok: false, message: "only this room's owner (or an admin) can run its stage" });
+      if (!owner && !b.admin) return res.json({ ok: false, message: "only this pad's owner (or an admin) can run its stage" });
       const who = "pepe:" + by.slice(0, 40);
       const verb = String(b.verb || "status").toLowerCase();
       const arg = String(b.arg || "").trim();
@@ -142,14 +143,14 @@ function register(app, { addUser, isBotToken }) {
       }
       if (verb === "feature") {
         const s = pick();
-        if (!s) return res.json({ ok: false, message: open.length ? `which one? ${list()}` : "no open slots in this room" });
+        if (!s) return res.json({ ok: false, message: open.length ? `which one? ${list()}` : "no open slots on this pad's stage" });
         await stage.featureByOwner(s.id, who);
         return res.json({ ok: true, message: `${s.displayname || s.username} is featured in ${R.title}` });
       }
       if (verb === "unfeature") {
         const s = open.find((x) => x.featured);
         if (!s) return res.json({ ok: false, message: "nobody is featured" });
-        const r = await stage.unfeature(s.id, who, "the room owner unfeatured it");
+        const r = await stage.unfeature(s.id, who, "the pad owner unfeatured it");
         return res.json({ ok: true, message: `${s.displayname || s.username} isn't featured any more` + (r && r.refund ? ` (${r.refund.toLocaleString("en-US")} PAT refunded)` : "") });
       }
       if (verb === "slots") {
@@ -170,7 +171,7 @@ function register(app, { addUser, isBotToken }) {
     res.set("Cache-Control", "no-store");
     try {
       const R = await resolveRoom(req.params.slug);
-      if (!R) return res.status(404).json({ ok: false, error: "No such room." });
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
       const st = await stage.roomStage(R.id, req.user);
       const manage = await rooms.canManage(req.user, R.id);
       res.json({ ok: true, ...st, pepe: bridge().stage(), pepe_here: bridge().pepeIn(R.id) !== false, manage, schedule: await stage.roomSchedule(R.id, req.user, manage) });
@@ -178,12 +179,12 @@ function register(app, { addUser, isBotToken }) {
   });
 
   // ── owner dashboard ──
-  app.get("/rooms/:slug/manage", addUser, async (req, res) => {
+  app.get("/p/:slug/manage", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
     const R = await resolveRoom(req.params.slug);
-    if (!R) return res.status(404).render("notFound", { user: req.user.username, heading: "No such room", message: "That room isn't on PATV.", title: "Room not found" });
+    if (!R) return res.status(404).render("notFound", { user: req.user.username, heading: "No such pad", message: "That pad isn't on PATV.", title: "Pad not found" });
     if (!(await rooms.canManage(req.user, R.id))) {
-      return res.status(403).render("notFound", { user: req.user.username, heading: "Not your room", message: "Only this room's owner (and site admins) can manage it.", title: "Not your room" });
+      return res.status(403).render("notFound", { user: req.user.username, heading: "Not your pad", message: "Only this pad's owner (and site admins) can manage it.", title: "Not your pad" });
     }
     const st = await stage.ownerState(R.id);
     const roy = R.owner ? await royalties.status(R.id, R.owner.userId) : null;
@@ -193,7 +194,7 @@ function register(app, { addUser, isBotToken }) {
     res.render("roomManage", {
       user: req.user.username, room: R, slug: linkSlug(R), st, roy, C,
       bridge: B ? { live: Date.now() - B.updated < 90000, relay: !!B.relay, mic: !!B.micRelay, cams: !!B.cams, audio: !!B.audio, transcripts: B.transcripts !== false } : null,
-      staff: rooms.isStaff(req.user), analytics: rooms.hasRoute(app, "/rooms/:slug/analytics"),
+      staff: rooms.isStaff(req.user), analytics: rooms.hasRoute(app, "/p/:slug/analytics"),
       events: await getQuery("SELECT ts, what, actor, detail FROM room_events WHERE room_id = ? ORDER BY ts DESC LIMIT 20", [R.id]),
     });
   });
@@ -255,7 +256,7 @@ function register(app, { addUser, isBotToken }) {
   });
 
   // ── admin ──
-  app.get("/rooms/admin", addUser, async (req, res) => {
+  app.get("/pads/admin", addUser, async (req, res) => {
     if (!rooms.isStaff(req.user)) return res.redirect("/login");
     const list = await rooms.list();
     const g = await guideRows(true);

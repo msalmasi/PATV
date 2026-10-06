@@ -96,7 +96,7 @@ test("room page: the Schedule card - local-time markup, Book a slot, Manage for 
   const pub = await renderRoom({ schedule: await S.roomSchedule(PLANT, stranger, false), manage: false });
   assert.match(pub, /id="rmSched"/);
   assert.match(pub, /href="\/stage\?room=plant_based_chatting">Book a slot/);
-  assert.doesNotMatch(pub, /\/rooms\/plant_based_chatting\/manage">⚙️ Manage/);
+  assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/manage">⚙️ Manage/);
   assert.match(pub, /Alice Live/); assert.match(pub, /Bob Booked/); assert.match(pub, /Dave Queued/);
   assert.match(pub, /★ Featured/); assert.match(pub, /Ordinary slot/); assert.match(pub, /▶ YouTube/); assert.match(pub, /🎥 Stream/);
   assert.match(pub, /<time data-ts="\d+" data-min="15" datetime="2026-10-06T14:00:00.000Z">2026-10-06 14:00 UTC<\/time>/);
@@ -105,7 +105,7 @@ test("room page: the Schedule card - local-time markup, Book a slot, Manage for 
   assert.doesNotMatch(pub, /class="upnext"/, "the old up-next list gives way to the schedule");
 
   const own = await renderRoom({ schedule: await S.roomSchedule(PLANT, owner, true), manage: true });
-  assert.match(own, /\/rooms\/plant_based_chatting\/manage">⚙️ Manage · 1 to approve/);
+  assert.match(own, /\/p\/plant_based_chatting\/manage">⚙️ Manage · 1 to approve/);
   assert.match(own, /Carol Pending/); assert.match(own, /Waiting for the owner/);
 
   // names / titles are escaped
@@ -149,13 +149,16 @@ test("/stage: camera + mic pickers and Switch camera in the browser pane; the pr
   assert.match(bridge, /recSession\.before\(\)/, "the iOS audio-session handling is still there");
 });
 
-test("channel guide: each card and schedule row is a stretched link to its room", async () => {
+test("Pad Guide: each card and schedule row is a stretched link to its pad page", async () => {
   const html = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), {
     user: null, signedIn: false, staff: false, owned: [], pepe: { active: false },
     rows: [{ id: PLANT, slug: PLANT, title: "Houseplants", live: true, bridged: true, count: 3, micCount: 1, slot_count: 1, house: false, owner: "pb",
              now: [], next: [{ display: "pb", start_at: T + 3600000, minutes: 15, featured: true, title: null }] }] });
-  assert.match(html, /<a class="t" href="\/rooms\/plant_based_chatting">Houseplants<\/a>/);
-  assert.match(html, /<a class="rl" href="\/rooms\/plant_based_chatting">Houseplants<\/a>/);
+  assert.match(html, /<a class="t" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
+  assert.match(html, /<a class="rl" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
+  assert.match(html, /<h1>📡 Pad Guide<\/h1>/);
+  assert.match(html, /<span class="padref">p\/plant_based_chatting<\/span>/);
+  assert.doesNotMatch(html, /Channel guide|>Channels /, "no 'channel' copy left");
   assert.match(html, /\.cg \.ch a\.t::after, \.cg \.sched a\.rl::after \{ content: ""; position: absolute; inset: 0;/);
   assert.match(html, /\.cg \.ch a:not\(\.t\), \.cg \.ch button/, "inner buttons sit above the stretched link");
   assert.match(html, /href="\/stage\?room=plant_based_chatting">🎥 Go live here/);

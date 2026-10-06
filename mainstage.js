@@ -333,7 +333,7 @@ async function book(user, opts = {}) {
   if (!C.enabled || C.max_concurrent < 1) throw new Refuse(403, "Stage booking is closed right now.");
   const roomId = String(opts.room || rooms.HOUSE_ROOM);
   const R = await rooms.get(roomId);
-  if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such room.");
+  if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such pad.");
   const RS = R || (await rooms.stageSettings(roomId));
   const minutes = Math.floor(Number(opts.minutes));
   if (!Number.isFinite(minutes) || minutes < C.min_minutes || minutes > C.max_minutes) {
@@ -370,17 +370,17 @@ async function book(user, opts = {}) {
       const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
       if (all[0].n >= C.max_concurrent) throw new Refuse(409, "The stage is taken right now - try again when the current slot ends.");
       if (open.length + overlapping(fut, startAt, until).length >= RS.slot_count) {
-        throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this room are taken right now - join the queue.`
+        throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken right now - join the queue.`
                                                 : "The stage is taken right now - try again when the current slot ends.");
       }
-      if (feature && open.some((s) => s.featured)) throw new Refuse(409, "Someone is featured in this room right now - book an ordinary slot, or join the queue.");
+      if (feature && open.some((s) => s.featured)) throw new Refuse(409, "Someone is featured in this pad right now - book an ordinary slot, or join the queue.");
       if (feature && overlapping(fut.filter((s) => s.featured), startAt, until).length) throw new Refuse(409, "A featured slot is booked soon - pick a later time.");
     } else {
       const mine = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE userId = ? AND status IN ${FUTURE}`, [user.userId]);
       if (mine[0].n >= C.schedule_per_user) throw new Refuse(429, `You can hold ${C.schedule_per_user} upcoming bookings at once.`);
       const clash = overlapping(open.concat(fut), startAt, until);
       if (clash.some((s) => s.userId === user.userId)) throw new Refuse(409, "You already have a booking then.");
-      if (clash.length >= RS.slot_count) throw new Refuse(409, "Every slot in this room is booked then - pick another time.");
+      if (clash.length >= RS.slot_count) throw new Refuse(409, "Every slot in this pad is booked then - pick another time.");
       if (feature && clash.some((s) => s.featured)) throw new Refuse(409, "Someone is already featured then - pick another time or book an ordinary slot.");
     }
     const recent = await getQuery("SELECT COUNT(*) AS n FROM stage_slots WHERE userId = ? AND created > ?", [user.userId, t - 3600 * 1000]);
@@ -410,8 +410,8 @@ async function book(user, opts = {}) {
               `${feature ? "featured " : ""}${minutes} min, held ${hold}${mode === "embed" ? ", " + embeds.label(embed) : ""}${scheduled ? ", starts " + new Date(startAt).toISOString() : ""}`, roomId);
   if (needsApproval && RS.owner) {
     rooms.notify(RS.owner.userId, { kind: "stage", title: `${user.username || "Someone"} asked for a stage slot in ${RS.title}`,
-      body: `${minutes} min${feature ? ", featured" : ""} on ${new Date(startAt).toUTCString()}. Approve or deny it on your room page.`,
-      link: `/rooms/${encodeURIComponent(RS.slug)}/manage`, ref: "stage-req:" + out.id }).catch(() => {});
+      body: `${minutes} min${feature ? ", featured" : ""} on ${new Date(startAt).toUTCString()}. Approve or deny it on your pad page.`,
+      link: `/p/${encodeURIComponent(RS.slug)}/manage`, ref: "stage-req:" + out.id }).catch(() => {});
   }
   const slot = await getSlot(out.id);
   return { slot: view(slot), key, rtmp: key ? { server: RTMP_PUBLIC, key } : null };
@@ -492,8 +492,8 @@ async function featureByOwner(slotId, actor) {
   for (const o of others) await unfeature(o.id, actor, "the owner featured another slot");
   await runQuery("UPDATE stage_slots SET featured = 1, feature_by = 'owner' WHERE id = ? AND settled = 0", [s.id]);
   pubCache.clear();
-  await event(s.id, "featured", actor, "by the room owner", s.room_id);
-  rooms.notify(s.userId, { kind: "stage", title: "You're featured on the stage", body: "The room owner featured your slot - it's the room's main stream now.",
+  await event(s.id, "featured", actor, "by the pad owner", s.room_id);
+  rooms.notify(s.userId, { kind: "stage", title: "You're featured on the stage", body: "The pad owner featured your slot - it's the pad's main stream now.",
     link: "/stage", ref: "featured:" + s.id + ":" + now(), pm: false }).catch(() => {});
   return { ok: true };
 }
@@ -505,7 +505,7 @@ async function upgrade(user, slotId, minutes) {
   const s0 = await getSlot(slotId);
   if (!s0 || s0.userId !== user.userId || s0.settled || !["waiting", "active"].includes(s0.status)) throw new Refuse(404, "That isn't your open slot.");
   if (s0.featured) throw new Refuse(409, "You're already featured.");
-  if (s0.price_per_min > 0) throw new Refuse(409, "This room charges for slots - book a featured slot instead.");
+  if (s0.price_per_min > 0) throw new Refuse(409, "This pad charges for slots - book a featured slot instead.");
   const left = Math.max(1, s0.max_minutes - billedMinutes(s0.live_ms));
   const m = Math.min(left, Math.max(1, Math.floor(Number(minutes) || left)));
   const hold = m * C.price_per_min;
@@ -513,7 +513,7 @@ async function upgrade(user, slotId, minutes) {
     const s = (await getQuery("SELECT * FROM stage_slots WHERE id = ? AND settled = 0", [s0.id]))[0];
     if (!s || s.featured) throw new Refuse(409, "Someone is featured already.");
     const f = await getQuery(`SELECT 1 FROM stage_slots WHERE room_id = ? AND featured = 1 AND status IN ${OPEN}`, [s.room_id]);
-    if (f.length) throw new Refuse(409, "Someone is featured in this room right now.");
+    if (f.length) throw new Refuse(409, "Someone is featured in this pad right now.");
     const paid = await runQuery("UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?", [hold, user.userId, hold]);
     if (!paid.changes) throw new Refuse(402, `Featuring for ${m} min holds ${hold.toLocaleString("en-US")} PAT - you don't have enough.`);
     await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
@@ -559,7 +559,7 @@ async function joinQueue(user, opts = {}) {
   const C = CONFIG;
   const roomId = String(opts.room || rooms.HOUSE_ROOM);
   const R = await rooms.get(roomId);
-  if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such room.");
+  if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such pad.");
   const minutes = Math.floor(Number(opts.minutes));
   if (!Number.isFinite(minutes) || minutes < C.min_minutes || minutes > C.max_minutes) throw new Refuse(400, `Pick between ${C.min_minutes} and ${C.max_minutes} minutes.`);
   if (await isBanned(user.userId, roomId)) throw new Refuse(403, "You can't book the stage.");
@@ -1061,7 +1061,7 @@ async function roomBan(roomId, who, reason, actor) {
   if (!u) u = await rooms.findUser(w);
   if (!u) throw new Refuse(404, "No such user.");
   const RS = await rooms.stageSettings(roomId);
-  if (RS.owner && RS.owner.userId === u.userId) throw new Refuse(400, "That's the room's owner.");
+  if (RS.owner && RS.owner.userId === u.userId) throw new Refuse(400, "That's the pad's owner.");
   await runQuery("INSERT OR REPLACE INTO stage_room_bans (room_id, userId, username, reason, by, at) VALUES (?, ?, ?, ?, ?, ?)",
                  [roomId, u.userId, u.username, String(reason || "").slice(0, 200), actor || null, now()]);
   await event(null, "room_ban", actor, u.username + (reason ? ": " + reason : ""), roomId);
@@ -1162,7 +1162,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     const all = await rooms.list();
     const want = String(req.query.room || "");
     const pick = all.find((r) => r.slug === want || r.id === want) || all.find((r) => r.id === rooms.HOUSE_ROOM) || all[0] || null;
-    res.locals.og = { title: "Go live on PATV", description: "Stream to a room's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Get featured on the main stage.",
+    res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Get featured on the main stage.",
                       image: res.locals.ogBase + "/og/page.png?t=Go%20live%20on%20PATV", url: res.locals.ogBase + "/stage" };
     res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: isStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
@@ -1189,7 +1189,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const b = req.body || {};
       const R = await roomOf(b.room);
-      if (b.room && !R) throw new Refuse(404, "No such room.");
+      if (b.room && !R) throw new Refuse(404, "No such pad.");
       res.set("Cache-Control", "no-store");
       res.json({ ok: true, ...(await book(req.user, { ...b, room: R ? R.id : undefined })) });
     } catch (e) { fail(res, e); }
@@ -1198,7 +1198,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const b = req.body || {};
       const R = await roomOf(b.room);
-      if (!R) throw new Refuse(404, "No such room.");
+      if (!R) throw new Refuse(404, "No such pad.");
       res.json({ ok: true, ...(await joinQueue(req.user, { ...b, room: R.id })) });
     } catch (e) { fail(res, e); }
   });
@@ -1226,21 +1226,21 @@ function register(app, { addUser, isBotToken, noTimers }) {
   app.post("/api/stage/slots/:id/feature", addUser, needUser, async (req, res) => {
     try {
       const s = await getSlot(req.params.id);
-      if (!(await manages(req, s))) throw new Refuse(403, "Only the room's owner can feature slots.");
+      if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can feature slots.");
       res.json({ ok: true, ...(await featureByOwner(s.id, actor(req))) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/slots/:id/unfeature", addUser, needUser, async (req, res) => {
     try {
       const s = await getSlot(req.params.id);
-      if (!(await manages(req, s))) throw new Refuse(403, "Only the room's owner can do that.");
-      res.json({ ok: true, done: await unfeature(s.id, actor(req), "the room owner unfeatured it") });
+      if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can do that.");
+      res.json({ ok: true, done: await unfeature(s.id, actor(req), "the pad owner unfeatured it") });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/slots/:id/cut", addUser, needUser, async (req, res) => {
     try {
       const s = await getSlot(req.params.id);
-      if (!(await manages(req, s))) throw new Refuse(403, "Only the room's owner can cut slots.");
+      if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can cut slots.");
       const r = await end(s.id, "cut", actor(req));
       const b = req.body || {};
       if (b.ban) await roomBan(s.room_id, s.username, b.reason || "cut from the stage", actor(req));
@@ -1252,14 +1252,14 @@ function register(app, { addUser, isBotToken, noTimers }) {
   app.post("/api/stage/slots/:id/approve", addUser, needUser, async (req, res) => {
     try {
       const s = await getSlot(req.params.id);
-      if (!(await manages(req, s))) throw new Refuse(403, "Only the room's owner can approve.");
+      if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can approve.");
       res.json({ ok: await approve(s.id, actor(req)) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/slots/:id/deny", addUser, needUser, async (req, res) => {
     try {
       const s = await getSlot(req.params.id);
-      if (!(await manages(req, s))) throw new Refuse(403, "Only the room's owner can deny.");
+      if (!(await manages(req, s))) throw new Refuse(403, "Only this pad's owner can deny.");
       res.json({ ok: true, settled: await deny(s.id, actor(req), (req.body || {}).reason) });
     } catch (e) { fail(res, e); }
   });

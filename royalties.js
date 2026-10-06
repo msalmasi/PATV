@@ -276,17 +276,17 @@ async function releaseTick() {
       await setRun("missed", 0);
       require("./rooms").notify(owner, { kind: "room", title: `Royalties for ${title} carried over`,
         body: `${title} was active on ${days} of the ${CONFIG.min_active_days} days needed last period, so ${pending.toLocaleString("en-US")} PAT waits for a busier one (unpaid royalties expire after ${CONFIG.keep_periods} periods).`,
-        link: R ? `/rooms/${encodeURIComponent(R.slug)}/manage#royalties` : "/inbox", ref: `roy-miss:${room}:${P}`, pm: false }).catch(() => {});
+        link: R ? `/p/${encodeURIComponent(R.slug)}/manage#royalties` : "/inbox", ref: `roy-miss:${room}:${P}`, pm: false }).catch(() => {});
       out.push({ room, owner, outcome: "missed", days });
       continue;
     }
     const amount = CONFIG.cap_per_period > 0 ? Math.min(pending, CONFIG.cap_per_period) : pending;
-    const paid = await funding.fundPayout(owner, amount, "room_owner", `room owner royalties: ${title}`);
+    const paid = await funding.fundPayout(owner, amount, "room_owner", `pad owner royalties: ${title}`);
     if (!paid) {
       if (!run) {
         require("./rooms").notify(owner, { kind: "room", title: `Royalties for ${title} are delayed`,
           body: `The Federal Reserve can't cover ${amount.toLocaleString("en-US")} PAT right now - it's paid as soon as it can.`,
-          link: R ? `/rooms/${encodeURIComponent(R.slug)}/manage#royalties` : "/inbox", ref: `roy-late:${room}:${P}`, pm: false }).catch(() => {});
+          link: R ? `/p/${encodeURIComponent(R.slug)}/manage#royalties` : "/inbox", ref: `roy-late:${room}:${P}`, pm: false }).catch(() => {});
       }
       await setRun("unfunded", amount);
       out.push({ room, owner, outcome: "unfunded", amount });
@@ -296,9 +296,9 @@ async function releaseTick() {
                     VALUES (?, ?, 'release', 'reserve', ?, ?, ?, ?, ?)`,
                    [room, owner, amount, P, `release:${room}:${owner}:${P}`, t, `${days} active days`]);
     await setRun("released", amount);
-    require("./rooms").notify(owner, { kind: "room", title: `+${amount.toLocaleString("en-US")} PAT room royalties for ${title}`,
+    require("./rooms").notify(owner, { kind: "room", title: `+${amount.toLocaleString("en-US")} PAT pad owner royalties for ${title}`,
       body: `Paid by the Federal Reserve for last period (${days} active days).` + (pending > amount ? ` ${(pending - amount).toLocaleString("en-US")} PAT over the cap waits for the next release.` : ""),
-      link: R ? `/rooms/${encodeURIComponent(R.slug)}/manage#royalties` : "/wallet", ref: `roy-paid:${room}:${P}` }).catch(() => {});
+      link: R ? `/p/${encodeURIComponent(R.slug)}/manage#royalties` : "/wallet", ref: `roy-paid:${room}:${P}` }).catch(() => {});
     out.push({ room, owner, outcome: "released", amount });
   }
   return out;

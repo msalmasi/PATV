@@ -5,7 +5,7 @@
 <main class="sb" id="sa">
   <div class="sb-head">
     <h1>📺 Stage admin</h1>
-    <p class="lede">Room stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a></p>
+    <p class="lede">Pad stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a></p>
   </div>
 
   <section class="sb-card" aria-labelledby="openT">
@@ -23,11 +23,11 @@
       <label>Min minutes<input type="number" name="min_minutes" min="1" value="<%= C.min_minutes %>"></label>
       <label>Max minutes<input type="number" name="max_minutes" min="1" value="<%= C.max_minutes %>"></label>
       <label>User streams at once, site-wide<input type="number" name="max_concurrent" min="0" max="32" value="<%= C.max_concurrent %>"></label>
-      <label>Most slots an owner can give a room<input type="number" name="max_slots_per_room" min="1" max="8" value="<%= C.max_slots_per_room %>"></label>
+      <label>Most slots an owner can give a pad<input type="number" name="max_slots_per_room" min="1" max="8" value="<%= C.max_slots_per_room %>"></label>
       <label>Book ahead up to (days)<input type="number" name="schedule_days" min="0" max="60" value="<%= C.schedule_days %>"></label>
       <label>Upcoming bookings per user<input type="number" name="schedule_per_user" min="0" max="20" value="<%= C.schedule_per_user %>"></label>
       <label>Key works before start (min)<input type="number" name="lead_min" min="0" max="30" value="<%= C.lead_min %>"></label>
-      <label>Queue length per room<input type="number" name="queue_max" min="0" max="50" value="<%= C.queue_max %>"></label>
+      <label>Queue length per pad<input type="number" name="queue_max" min="0" max="50" value="<%= C.queue_max %>"></label>
       <label>Go-live window (min)<input type="number" name="start_window_min" min="1" value="<%= C.start_window_min %>"></label>
       <label>Off-air grace (min)<input type="number" name="idle_grace_min" min="1" value="<%= C.idle_grace_min %>"></label>
       <label>Bookings / user / hour<input type="number" name="bookings_per_hour" min="1" value="<%= C.bookings_per_hour %>"></label>
@@ -36,7 +36,7 @@
         <option value="jackpot" <%= C.revenue_vault === 'jackpot' ? 'selected' : '' %>>Casino jackpot</option></select></label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save settings</button><span class="msg" id="cfgMsg" role="status"></span></div>
     </form>
-    <p class="muted">1.99bi: every room has its own stage. Room owners set their room's slot count (up to the cap above) and an optional price for ordinary slots (at most the featured price); featuring is paid at the featured price, or free when the owner features someone. A slot keeps the price it was booked at. Owners: <a href="/rooms/admin">Rooms admin ›</a></p>
+    <p class="muted">1.99bi: every pad has its own stage. Pad owners set their pad's slot count (up to the cap above) and an optional price for ordinary slots (at most the featured price); featuring is paid at the featured price, or free when the owner features someone. A slot keeps the price it was booked at. Owners: <a href="/pads/admin">Pads admin ›</a></p>
   </section>
 
   <section class="sb-card" aria-labelledby="banT">

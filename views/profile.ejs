@@ -195,7 +195,7 @@
       <h2>GTF avatar</h2>
       <div class="avs-who"><%= displayname || usernameProfile %><% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %> <span class="chip">🥷 <%= heistSheet.cls %></span><% } %></div>
       <% if (!av.svg) { %>
-        <p class="muted" style="margin:6px 0 0">No GTF avatar yet — <code>!sheet</code> in a room with Pepe rolls one<%= isMe ? '' : ' for them' %>.</p>
+        <p class="muted" style="margin:6px 0 0">No GTF avatar yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one<%= isMe ? '' : ' for them' %>.</p>
       <% } %>
       <% if (av.items.length) { %>
         <ul class="avs-items">
@@ -246,7 +246,7 @@
         <% if (typeof heistSheet !== 'undefined' && heistSheet) { %>
           <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= heistSheet.url %>">Heist sheet</a><%= heistSheet.cls ? ' · ' + heistSheet.cls : '' %></div>
         <% } else { %>
-          <div class="muted" style="margin-bottom:8px">No heist sheet yet — <code>!sheet</code> in a room with Pepe rolls one.</div>
+          <div class="muted" style="margin-bottom:8px">No heist sheet yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one.</div>
         <% } %>
         <% if (typeof gtf !== 'undefined' && gtf) { %>
           <div class="links">

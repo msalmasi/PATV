@@ -59,7 +59,7 @@
 <% }; %>
 <div class="pl">
   <h1>Polls</h1>
-  <p class="sub">Pepe runs one poll at a time across the rooms. Vote here or in chat — voting again moves your vote.</p>
+  <p class="sub">Pepe runs one poll at a time across the Camfrog rooms. Vote here or in chat — voting again moves your vote.</p>
 
   <%- include('partials/actions', { acts, msg }) %>
 
@@ -87,7 +87,7 @@
     <% if (linked) { %>
       <form class="create" method="post" action="/act" id="pl-create">
         <b>Start a poll</b>
-        <span class="info">Only one poll runs at a time across all the rooms. Give it at least 2 options.</span>
+        <span class="info">Only one poll runs at a time across all the Camfrog rooms. Give it at least 2 options.</span>
         <input type="hidden" name="kind" value="poll.create">
         <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
         <input type="text" name="a0" maxlength="200" placeholder="Question" required>

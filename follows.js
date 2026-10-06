@@ -54,8 +54,8 @@ async function resolve(kind, id) {
   const raw = String(id || "").slice(0, 128);
   if (!KINDS.has(kind) || !raw) return null;
   if (kind === "room") {
-    const R = (await rooms.get(raw)) || (await rooms.bySlug(raw));
-    return R ? { kind, id: R.id, label: R.title, href: "/rooms/" + encodeURIComponent(R.slug) } : null;
+    const R = (await rooms.get(raw)) || (await rooms.bySlug(raw.replace(/^p\//i, "")));
+    return R ? { kind, id: R.id, label: R.title, href: require("./pads").padHref(R) } : null;
   }
   const C = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
   const u = (await getQuery(`SELECT userId, username, ${C.has("displayname") ? "displayname" : "NULL AS displayname"},
@@ -69,12 +69,12 @@ async function follow(user, kind, id, on = true) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in to follow.");
   const T = await resolve(kind, id);
-  if (!T) throw new Refuse(404, kind === "room" ? "No such room." : "No such person.");
+  if (!T) throw new Refuse(404, kind === "room" ? "No such pad." : "No such person.");
   if (kind === "user" && T.id === user.userId) throw new Refuse(400, "You can't follow yourself.");
   if (burst("f|" + user.userId + "|" + kind + "|" + T.id, 700)) throw new Refuse(429, "Easy there.");
   if (on) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM follows WHERE follower = ?", [user.userId]))[0].n;
-    if (n >= MAX_FOLLOWS) throw new Refuse(429, `You can follow up to ${MAX_FOLLOWS} rooms and people.`);
+    if (n >= MAX_FOLLOWS) throw new Refuse(429, `You can follow up to ${MAX_FOLLOWS} pads and people.`);
     await runQuery("INSERT OR IGNORE INTO follows (follower, target_kind, target_id, created_at) VALUES (?, ?, ?, ?)", [user.userId, kind, T.id, NOW()]);
   } else {
     await runQuery("DELETE FROM follows WHERE follower = ? AND target_kind = ? AND target_id = ?", [user.userId, kind, T.id]);
@@ -171,7 +171,7 @@ async function notifyNewPost(post, authorName) {
     if (!rows.length) return 0;
     const inbox = require("./inbox");
     const what = post.nsfw ? "an NSFW post" : (post.title || post.body || (post.link && post.link.title) || "a new post").replace(/\s+/g, " ").slice(0, 80);
-    const where = (post.rooms || []).length ? " in " + post.rooms.map((r) => r.title).slice(0, 2).join(", ") : "";
+    const where = (post.rooms || []).length ? " in " + post.rooms.map((r) => (r.slug ? "p/" + r.slug : r.title)).slice(0, 2).join(", ") : "";
     let n = 0;
     for (const r of rows) {
       const ok = await inbox.addSafe(r.follower, { kind: "follow", title: `${authorName} posted${where}`, body: post.nsfw ? what : `"${what}"`,

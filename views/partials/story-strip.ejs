@@ -14,7 +14,7 @@
 %>
 <% if (showRooms || showCaps) { %>
 <link rel="stylesheet" href="/public/css/stories.css?v=1">
-<section class="ss" aria-label="Stories: Pepe's captures from the rooms, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
+<section class="ss" aria-label="Stories: Pepe's captures from the pads' Camfrog rooms, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
   <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
   <div class="ss-row" role="list">
     <% (S.rooms || []).forEach((r) => { %>
@@ -36,5 +36,5 @@
   </div>
 </section>
 <% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=1" defer></script>
+<script src="/public/js/stories.js?v=2" defer></script>
 <% } %>

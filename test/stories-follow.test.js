@@ -95,7 +95,9 @@ test.before(async () => {
   app.set("views", path.join(repo, "views"));
   app.set("view engine", "ejs");
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  require(path.join(repo, "pads")).register(app);                 // 1.99ck: old addresses 301 to /p/...
   web.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  require(path.join(repo, "bridge")).register(app, { addUser, isBotToken: (t) => t === "bot" });   // the pad page
   follows.register(app, { addUser });
   stories.register(app, { addUser });
   server = app.listen(0);
@@ -197,7 +199,7 @@ test("new-post notices: off by default; on = one inbox notice per post per follo
   assert.equal(n.length, 1, "followed person AND room: still one notice");
   assert.equal(n[0].kind, "follow");
   assert.equal(n[0].link, "/feed/p/" + p2.id);
-  assert.match(n[0].title, /dave posted in Houseplants/);
+  assert.match(n[0].title, /dave posted in p\/plant-based-chatting/);
   await follows.setPrefs(U.dave, { notify: true });
   await follows.follow(U.dave, "room", ROOM_B, true);
   const p3 = await store.create(U.dave.userId, { title: "mine", rooms: [ROOM_B] }, { awaitNotices: true });
@@ -226,7 +228,7 @@ test("room announcements: the owner's switch is the gate; the author's per-post 
   const html = await page("/feed", U.alice);
   assert.match(html, /data-ann-for="plant_based_chatting"/);
   assert.ok(!/data-ann-for="PepeFrog.Room"/.test(html));
-  assert.match(html, /Pepe announces it in Houseplants/);
+  assert.match(html, /Pepe announces it in the Camfrog room/);
   assert.match(html, /accept="[^"]*image\/heic[^"]*\.heic/);
   await store.setMention(U.owner, ROOM_B, false);
   assert.ok(!(await page("/feed", U.alice)).includes("data-ann-for"));
@@ -248,7 +250,7 @@ test("stories: a room's last 24 h of captures, oldest first; old, deleted and fi
   assert.equal(A.items[1].kind, "clip"); assert.equal(A.items[1].src, "/media/aa000002/raw");
   assert.equal(B.items[0].kind, "audio"); assert.equal(B.cover, null);
   assert.equal(S[0].id, ROOM_B, "newest first (both unseen)");
-  assert.equal(A.href, "/rooms/pepefrog-room");
+  assert.equal(A.href, "/p/pepefrog-room");
   // the room feed strip uses the same source
   const caps = await web.captures(ROOM_A, 24);
   assert.deepEqual(caps.map((c) => c.id), ["aa000002", "aa000001"]);
@@ -302,14 +304,14 @@ test("stories seen state: per user per room, only forwards, never ahead of now; 
 
 test("/feed: no Clips & snaps tab (old links redirect), the story strip on top; room filter = that room's thumbnails", async () => {
   let r = await call("GET", "/feed?tab=captures&room=pepefrog-room&kind=clip", U.bob);
-  assert.equal(r.status, 301); assert.equal(r.r.headers.get("location"), "/feed/c/pepefrog-room", "1.99ci: a community is a path");
+  assert.equal(r.status, 301); assert.equal(r.r.headers.get("location"), "/p/pepefrog-room", "1.99ck: a pad is its own page");
   r = await call("GET", "/feed?tab=clips", U.bob);
   assert.equal(r.r.headers.get("location"), "/feed");
   const html = await page("/feed", U.bob);
   assert.ok(!/Clips &amp; snaps/.test(html) && !html.includes("tab=captures"));
   assert.match(html, /class="ss-c[^"]*" data-story-room="PepeFrog.Room"/);
   assert.ok(html.includes('id="fdTop"') && html.includes('id="fdList"') && html.includes("data-swap"));
-  const room = await page("/feed?room=pepefrog-room", U.bob);
+  const room = await page("/p/pepefrog-room", U.bob);
   assert.match(room, /class="ss-t k-photo" href="\/media\/aa000001" data-story-room="PepeFrog.Room" data-story-item="aa000001"/);
   assert.ok(!room.includes("aa000004"), "the file-less capture isn't in the strip");
   // room page section: strip + follow button + follower count
@@ -317,13 +319,14 @@ test("/feed: no Clips & snaps tab (old links redirect), the story strip on top; 
   const part = await ejs.renderFile(path.join(repo, "views/partials/room-feed.ejs"), { feed: F, fx: web.fx, embeds: require(path.join(repo, "stageembed")), host: "test",
                                                                                   room: { name: "Pepe's Pad", slug: "pepefrog-room" } });
   assert.match(part, /data-story-item="aa000001"/);
-  assert.match(part, /data-follow-kind="room" data-follow-id="PepeFrog.Room"/);
+  assert.match(room, /data-follow-kind="room" data-follow-id="PepeFrog.Room"/, "1.99ck: Follow this pad sits in the pad header");
   assert.match(part, /feed-composer\.js/);
   const Fout = await web.roomFeed(ROOM_A, null, {});
   const partOut = await ejs.renderFile(path.join(repo, "views/partials/room-feed.ejs"), { feed: Fout, fx: web.fx, embeds: require(path.join(repo, "stageembed")), host: "test",
                                                                                      room: { name: "Pepe's Pad", slug: "pepefrog-room" } });
   assert.ok(!partOut.includes("/media/aa000001") && partOut.includes('data-story-room="PepeFrog.Room"'), "visitors: the circle, no pictures");
-  assert.match(partOut, /href="\/login\?next=/, "visitors' Follow button is a sign-in link");
+  const roomOut = await page("/p/pepefrog-room", null);
+  assert.match(roomOut, /class="fw-btn" href="\/login\?next=%2Fp%2Fpepefrog-room"/, "visitors' Follow button is a sign-in link");
 });
 
 // ───────────────────────────── profile Posts panel ─────────────────────────────

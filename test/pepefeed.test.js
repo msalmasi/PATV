@@ -424,10 +424,10 @@ test("render: Pepe's comment and post show his avatar + the 🤖 Pepe badge; the
   html = (await call("GET", "/feed/admin", U.admin)).text;
   assert.ok(html.includes("Pepe on the feed"));
   assert.ok(html.includes(`/feed/p/${pid}#c-${r.d.id}`), "the log links to his comment");
-  html = (await call("GET", `/rooms/${OWNED}/feed/mod`, U.owner)).text;
-  assert.ok(html.includes("Pepe in this room") && html.includes('name="respond"'));
+  html = (await call("GET", `/p/${OWNED}/mod`, U.owner)).text;
+  assert.ok(html.includes("Pepe on this pad's feed") && html.includes('name="respond"'));
   assert.ok(!html.includes('name="admin_lock"'), "owners don't get the lock");
-  html = (await call("GET", `/rooms/${OWNED}/feed/mod`, U.admin)).text;
+  html = (await call("GET", `/p/${OWNED}/mod`, U.admin)).text;
   assert.ok(html.includes('name="admin_lock"'));
   await PF.setScope(U.admin, "", { ...PF.SCOPE_DEFAULTS });
 });

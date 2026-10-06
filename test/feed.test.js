@@ -68,7 +68,9 @@ test.before(async () => {
   app.set("views", path.join(repo, "views"));
   app.set("view engine", "ejs");
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  require(path.join(repo, "pads")).register(app);                 // 1.99ck: old addresses 301 to /p/...
   web.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  require(path.join(repo, "bridge")).register(app, { addUser, isBotToken: (t) => t === "bot" });   // the pad page
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
 });
@@ -305,11 +307,11 @@ test("posting: one community per post; All shows every community's posts (room-o
   // no community / several / unknown / nothing to post
   let r = await post("/api/feed/posts", U.alice, { body: "x", noCommunity: true });
   assert.equal(r.status, 400);
-  assert.match(r.d.error, /Choose a community/);
+  assert.match(r.d.error, /Choose a pad/);
   assert.equal((await post("/api/feed/posts", U.alice, { body: "x", global: true, noCommunity: true })).status, 400, "the main feed is gone");
   r = await post("/api/feed/posts", U.alice, { body: "x", rooms: [ROOM_A, ROOM_B] });
   assert.equal(r.status, 400);
-  assert.match(r.d.error, /one community.*Crosspost/);
+  assert.match(r.d.error, /one pad.*Crosspost/);
   assert.equal((await post("/api/feed/posts", U.alice, { noCommunity: true })).status, 400);
   assert.equal((await post("/api/feed/posts", U.alice, { body: "x", rooms: ["Nope.Room"] })).status, 400);
   assert.equal((await post("/api/feed/posts", U.alice, { body: "x", community: "nope" })).status, 400);
@@ -558,7 +560,7 @@ test("Pepe mentions: off by default; the owner's switch; one line per room per g
   const m = (await web.botSync({ feed_mentions: true })).feed_mentions;
   assert.equal(m.length, 1);
   assert.equal(m[0].room, ROOM_B);
-  assert.match(m[0].text, /2 new posts on the room feed/);
+  assert.match(m[0].text, /^📌 2 new posts on p\/plant-based-chatting — https?:\/\/\S+\/p\/plant-based-chatting#feed$/);
   assert.equal(m[0].author_login, "bobcf");
   assert.equal((await web.botSync({ feed_mentions: true })).feed_mentions.length, 0, "handed out once");
   store._gaps.clear();
@@ -568,7 +570,7 @@ test("Pepe mentions: off by default; the owner's switch; one line per room per g
   const m2 = (await web.botSync({ feed_mentions: true })).feed_mentions;
   store._setClock(() => Date.now());
   assert.equal(m2.length, 1);
-  assert.match(m2[0].text, /^📌 New post on the room feed by \{author\}: third — http/);
+  assert.match(m2[0].text, /^📌 New post on p\/plant-based-chatting by \{author\}: third — http/);
   void a;
 });
 
@@ -594,7 +596,7 @@ test("pages render: /feed, room filter, captures tab, the room section, post det
     assert.equal(r.status, 200, q);
   }
   const html = await (await fetch(base + "/feed?room=pepefrog-room", { headers: { "x-test-user": U.bob.userId } })).text();
-  assert.ok(html.includes("Fresh from"), "the room's captures strip");
+  assert.ok(html.includes("Fresh captures"), "the pad's captures strip (the ?room= filter is the pad page now)");
   assert.ok(html.includes("Hello frogs"));
   assert.ok(!html.includes("plant room only"), "another room's post isn't in this room's filter");
   // signed out: posts yes, capture pictures no (1.99bz: the room's story circle, which asks them to sign in)

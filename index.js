@@ -1085,6 +1085,8 @@ app.get("/info", addUser, (req, res) => {
 // look anyone up by username or Camfrog name. ──
 // Clips & snaps (moved off Netlify) and prediction markets. The feed (1.99bv, feedweb.js) owns /feed:
 // user posts to the main feed and to rooms, plus these captures.
+// 1.99ck: "pads" (p/<slug>) - the 301s from the old /rooms/..., /feed/c/<slug> addresses come first
+require("./pads").register(app);
 require("./feedweb").register(app, { isBotToken, addUser });
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
@@ -1108,13 +1110,13 @@ require("./staking").register(app, { isBotToken, addUser });
 inbox.register(app, { isBotToken, addUser });
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./userstats").register(app, { isBotToken });
-require("./roomstats").register(app, { isBotToken, addUser });   // /rooms/:slug/analytics (before bridge: it adds the rooms pages' analytics links)
+require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
 require("./pepecontrol").register(app, { isBotToken, addUser });   // admin-only Pepe control panel (homepage) + VM supervisor poll/ack
-// 1.99bi: room owners + per-room stages + royalties (registered before bridge.js: /rooms/admin before /rooms/:slug)
+// 1.99bi: room owners + per-room stages + royalties (pad owner dashboard /p/:slug/manage, /pads/admin)
 require("./roomsweb").register(app, { isBotToken, addUser });
 require("./royalties").start();
 const bridge = require("./bridge");
-bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /rooms, /api/bridge/sync
+bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /p (Pad Guide), /p/:slug (pad page), /api/bridge/sync
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API

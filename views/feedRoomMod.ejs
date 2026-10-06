@@ -1,18 +1,18 @@
-<%- include('layout', { title: room.title + ' — feed moderation', user: user}) %>
+<%- include('layout', { title: room.title + ' — Pad reports & settings', user: user}) %>
 <link rel="stylesheet" href="/public/css/feed.css?v=4">
 <%#
   A room owner's feed tools (1.99bx): approval queue, reports, settings, approved posters, bans, audit log.
   Locals: viewer, room, fx, embeds, host, reports (feedstore.roomReports), pending, settings, members, bans, audit, WHO
 %>
 <%
-  const whoLabel = { everyone: 'Everyone signed in', linked: 'Linked Camfrog accounts', followers: 'Followers of the room', approved: 'Approved posters only' };
+  const whoLabel = { everyone: 'Everyone signed in', linked: 'Linked Camfrog accounts', followers: 'Followers of the pad', approved: 'Approved posters only' };
   const dt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
   const slug = room.slug;
 %>
 <main class="fd fd-admin fd-rmod" data-slug="<%= slug %>">
-  <nav class="crumb" aria-label="Back"><a href="/rooms/<%= encodeURIComponent(slug) %>#feed"><%- fx.icon('back') %><%= room.title %></a></nav>
-  <h1 class="rm-h"><%- fx.icon('shield') %><span>Feed moderation</span></h1>
-  <p class="sub">Your tools for <b><%= room.title %></b>'s feed. They only change this room: a post that's also in other communities stays there, and a crosspost of it is that community's to moderate.</p>
+  <nav class="crumb" aria-label="Back"><a href="/p/<%= encodeURIComponent(slug) %>#feed"><%- fx.icon('back') %><%= room.title %></a></nav>
+  <h1 class="rm-h"><%- fx.icon('shield') %><span>Pad reports &amp; settings</span></h1>
+  <p class="sub">Your tools for <b><%= room.title %></b>'s feed. They only change this pad: a post that's also in other pads stays there, and a crosspost of it is that pad's to moderate.</p>
 
   <section class="fa-card" id="queue">
     <h2>Waiting for approval <span class="n"><%= pending.length %></span></h2>
@@ -33,14 +33,14 @@
 
   <section class="fa-card" id="reports">
     <h2>Reports <span class="n"><%= reports.length %></span></h2>
-    <% if (!reports.length) { %><p class="mut">No open reports on posts in this room.</p><% } %>
+    <% if (!reports.length) { %><p class="mut">No open reports on posts in this pad.</p><% } %>
     <% reports.forEach((g) => { const p = g.post; %>
       <div class="rm-item" data-post="<%= p.id %>"<% if (g.commentId) { %> data-comment="<%= g.commentId %>"<% } %>>
         <div class="rm-what">
           <% if (g.comment) { %>
             <span class="tag warn">Comment</span> <b><%= (g.comment.body || '').slice(0, 160) %></b><span class="mut">by <%= g.comment.username || '?' %> · on "<%= (p.title || p.body || '').slice(0, 60) %>"</span>
           <% } else { %>
-            <span class="tag warn">Post</span> <b><%= p.title || (p.body || '').slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in the room' : '' %></span>
+            <span class="tag warn">Post</span> <b><%= p.title || (p.body || '').slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in this pad' : '' %></span>
           <% } %>
           <a href="/feed/p/<%= p.id %><%= g.commentId ? '#c-' + g.commentId : '' %>">Open ›</a>
           <% const ai_ = g.authorInfo; if (ai_) { const d_ = ai_.ageDays; %>
@@ -59,7 +59,7 @@
             <button type="button" class="bad" data-op="cdelete"><%- fx.icon('trash') %>Remove comment</button>
           <% } else { %>
             <% if (!p.roomHidden) { %><button type="button" data-op="hide"><%- fx.icon('hide') %>Hide pending review</button><% } else { %><button type="button" data-op="unhide"><%- fx.icon('show') %>Unhide</button><% } %>
-            <button type="button" class="bad" data-op="remove"><%- fx.icon('remove') %>Remove from the room</button>
+            <button type="button" class="bad" data-op="remove"><%- fx.icon('remove') %>Remove from the pad</button>
           <% } %>
         </div>
       </div>
@@ -71,18 +71,18 @@
     <form class="fa-cfg" id="rmSettings">
       <label><span>Who can post here</span>
         <select name="who"><% WHO.forEach((w) => { %><option value="<%= w %>"<%= settings.who === w ? ' selected' : '' %>><%= whoLabel[w] %></option><% }) %></select></label>
-      <label class="ck"><input type="checkbox" name="approval"<%= settings.approval ? ' checked' : '' %>> Posts need my approval before they show in the room</label>
-      <label><span>Posts per person per day in this room (0 = no room limit)</span><input type="number" name="per_day" min="0" max="1000" value="<%= settings.per_day %>"></label>
-      <p class="fc-note">"Followers" counts the room's followers once Following is live; until then it works like the approved posters below. You and site admins can always post.</p>
+      <label class="ck"><input type="checkbox" name="approval"<%= settings.approval ? ' checked' : '' %>> Posts need my approval before they show in the pad</label>
+      <label><span>Posts per person per day in this pad (0 = no pad limit)</span><input type="number" name="per_day" min="0" max="1000" value="<%= settings.per_day %>"></label>
+      <p class="fc-note">"Followers" counts the pad's followers once Following is live; until then it works like the approved posters below. You and site admins can always post.</p>
       <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save settings</button></div>
     </form>
   </section>
 
   <%# 1.99cg: Pepe in this room's feed (pepefeed.js) %>
   <section class="fa-card pf-card" id="pepe">
-    <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe in this room</h2>
+    <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe on this pad's feed</h2>
     <p class="sub">Pepe can answer people who mention him in <%= room.title %>'s feed, and take part on his own. His posts and comments carry a 🤖 Pepe badge; you can delete them like anyone's, and "Mute Pepe in this thread" is in a post's ⋯ menu.</p>
-    <%- include('partials/pepe-feed-settings', { s: pepe, where: 'this room', url: '/api/rooms/' + encodeURIComponent(slug) + '/feed/pepe', wrap: 'settings', admin: viewer.class === 'Admin', roomScope: true }) %>
+    <%- include('partials/pepe-feed-settings', { s: pepe, where: 'this pad', url: '/api/rooms/' + encodeURIComponent(slug) + '/feed/pepe', wrap: 'settings', admin: viewer.class === 'Admin', roomScope: true }) %>
   </section>
 
   <section class="fa-card" id="members">
@@ -99,7 +99,7 @@
   </section>
 
   <section class="fa-card" id="bans">
-    <h2>Banned from this room's feed <span class="n"><%= bans.length %></span></h2>
+    <h2>Banned from this pad's feed <span class="n"><%= bans.length %></span></h2>
     <form class="fa-inline" id="rmBan">
       <input name="user" placeholder="username or Camfrog name" required aria-label="User">
       <select name="days" aria-label="How long"><option value="1">1 day</option><option value="7">7 days</option><option value="0">Permanently</option></select>
@@ -124,6 +124,6 @@
   </section>
 </main>
 <script src="/public/js/feed-roommod.js?v=1" defer></script>
-<script src="/public/js/pepe-feed.js?v=1" defer></script>
+<script src="/public/js/pepe-feed.js?v=7" defer></script>
 </body>
 </html>

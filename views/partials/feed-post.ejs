@@ -1,10 +1,10 @@
 <%#
   One feed post card (1.99bv, redesigned 1.99bx). Locals: p (feedstore.decorate row), fx (feedweb.fx), embeds
   (stageembed), host, viewer (or null), modRooms (Set of room ids the viewer manages), detail (bool), ctxRoom (room id or null)
-  Layout: vote column (up / score / down) | meta line (community · author · time), title + flair, body, media, action bar
+  Layout: vote column (up / score / down) | meta line (pad · author · time), title + flair, body, media, action bar
   (comments, share, the "more" menu with everything else).
-  1.99ci: a crosspost (p.xpost) shows "crossposted from c/<room> by u/<author>" and embeds the original (or "original
-  removed"); an original shows "crossposted to N communities". Crosspost is in the "more" menu (and the post page's bar).
+  1.99ci: a crosspost (p.xpost) shows "Crossposted from p/<slug> by u/<author>" and embeds the original (or "original
+  removed"); an original shows "Crossposted to N pads". Crosspost is in the "more" menu (and the post page's bar).
 %><%
   const signed = !!viewer;
   const staff_ = !!viewer && (viewer.class === 'Admin' || viewer.class === 'Staff');
@@ -30,7 +30,7 @@
   </div>
   <div class="fp-main">
     <div class="fp-meta">
-      <% if (p.pinned) { %><span class="fp-pin" title="Pinned by the room owner"><%- fx.icon('pin') %>Pinned</span><span class="dot" aria-hidden="true">·</span><% } %>
+      <% if (p.pinned) { %><span class="fp-pin" title="Pinned by the pad owner"><%- fx.icon('pin') %>Pinned</span><span class="dot" aria-hidden="true">·</span><% } %>
       <% if (p.author.bot) { %>
         <%# 1.99cg: Pepe's own posts - his avatar and the bot badge instead of a name (pepefeed.js) %>
         <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22" aria-hidden="true">
@@ -42,7 +42,7 @@
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length) { %>
         <span class="dot" aria-hidden="true">·</span>
-        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/feed/c/<%= encodeURIComponent(r.slug) %>" title="c/<%= r.slug %>"><%= r.title %><%= r.removed ? ' (removed)' : '' %></a><% }) %></span>
+        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>" title="<%= r.title %>">p/<%= r.slug %><%= r.removed ? ' (removed)' : '' %></a><% }) %></span>
       <% } %>
       <span class="dot" aria-hidden="true">·</span>
       <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a>
@@ -54,13 +54,13 @@
         <% if (p.nsfw) { %><span class="tag nsfw">NSFW</span><% } %>
         <% if (p.hidden) { %><span class="tag warn" title="Hidden after reports - an admin will review it">Hidden · in review</span><% } %>
         <% if (p.deleted) { %><span class="tag warn">Deleted<%= p.deleteReason ? ': ' + p.deleteReason : '' %></span><% } %>
-        <% if (p.pending) { %><span class="tag pend" title="The room owner reviews posts before they show here">Awaiting approval</span><% } %>
-        <% if (p.roomHidden) { %><span class="tag warn" title="Hidden in this room by its owner">Hidden in room</span><% } %>
+        <% if (p.pending) { %><span class="tag pend" title="The pad owner reviews posts before they show here">Awaiting approval</span><% } %>
+        <% if (p.roomHidden) { %><span class="tag warn" title="Hidden in this pad by its owner">Hidden in this pad</span><% } %>
         <% if (p.locked) { %><span class="tag lock" title="Comments are locked"><%- fx.icon('lock') %> Locked</span><% } %>
       </div>
     <% } %>
     <% if (xp_) { %>
-      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from) { %><a href="/feed/c/<%= encodeURIComponent(xp_.from.slug) %>">c/<%= xp_.from.slug %></a><% } else { %>a community<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>/profile">u/<%= xp_.author.username %></a><% } %></span></p>
+      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from) { %><a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>/profile">u/<%= xp_.author.username %></a><% } %></span></p>
     <% } %>
     <div class="fp-content<%= p.nsfw ? ' blur' : '' %>">
       <% if (xp_) { %>
@@ -80,7 +80,7 @@
       <% if (p.nsfw && signed) { %><button type="button" class="fp-reveal" data-act="reveal">NSFW — click to show</button><% } %>
     </div>
     <% if (p.xcount) { %>
-      <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> communit<%= p.xcount === 1 ? 'y' : 'ies' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="/feed/p/<%= x.id %>">c/<%= x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
+      <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> pad<%= p.xcount === 1 ? '' : 's' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="/feed/p/<%= x.id %>">p/<%= x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
     <% } %>
     <div class="bar fp-bar">
       <a class="act" href="<%= url_ %>#comments"><%- fx.icon('comment') %><span><%= fx.num(p.comments) %><span class="lg"> comment<%= p.comments === 1 ? '' : 's' %></span></span></a>
@@ -105,14 +105,14 @@
                 <button type="button" role="menuitem" data-act="rmod" data-op="approve"<%- q_ %>><%- fx.icon('check') %>Approve</button>
                 <button type="button" role="menuitem" class="danger" data-act="rmod" data-op="reject"<%- q_ %>><%- fx.icon('x') %>Reject</button>
               <% } %>
-              <% if (!r.removed && !r.pending) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= r.pinned ? 'unpin' : 'pin' %>"<%- q_ %>><%- fx.icon('pin') %><%= r.pinned ? 'Unpin' : 'Pin to the room' %></button><% } %>
+              <% if (!r.removed && !r.pending) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= r.pinned ? 'unpin' : 'pin' %>"<%- q_ %>><%- fx.icon('pin') %><%= r.pinned ? 'Unpin' : 'Pin to the pad' %></button><% } %>
               <% if (lockable && !staff_) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= p.locked ? 'unlock' : 'lock' %>"<%- q_ %>><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%= p.locked ? 'Unlock comments' : 'Lock comments' %></button><% } %>
-              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.nsfw ? 'unnsfw' : 'nsfw' %>"<%- q_ %>><%- fx.icon('nsfw') %><%= r.nsfw ? 'Unmark NSFW here' : 'Mark NSFW in this room' %></button>
-              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.hidden ? 'unhide' : 'hide' %>"<%- q_ %>><%- fx.icon(r.hidden ? 'show' : 'hide') %><%= r.hidden ? 'Unhide in room' : 'Hide in room (review)' %></button>
-              <% if (r.removed) { %><button type="button" role="menuitem" data-act="restore-room" data-room="<%= r.id %>"><%- fx.icon('restore') %>Put back in the room</button>
-              <% } else { %><button type="button" role="menuitem" class="danger" data-act="remove-room" data-room="<%= r.id %>"><%- fx.icon('remove') %>Remove from the room</button><% } %>
-              <% if (!p.mine) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= p.author.username %>"<%- q_ %>><%- fx.icon('shield') %>Ban <%= p.author.display %> from the room</button><% } %>
-              <a role="menuitem" href="/rooms/<%= encodeURIComponent(r.slug) %>/feed/mod"><%- fx.icon('flag') %>Room reports &amp; settings</a>
+              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.nsfw ? 'unnsfw' : 'nsfw' %>"<%- q_ %>><%- fx.icon('nsfw') %><%= r.nsfw ? 'Unmark NSFW here' : 'Mark NSFW in this pad' %></button>
+              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.hidden ? 'unhide' : 'hide' %>"<%- q_ %>><%- fx.icon(r.hidden ? 'show' : 'hide') %><%= r.hidden ? 'Unhide in this pad' : 'Hide in this pad (review)' %></button>
+              <% if (r.removed) { %><button type="button" role="menuitem" data-act="restore-room" data-room="<%= r.id %>"><%- fx.icon('restore') %>Put back in the pad</button>
+              <% } else { %><button type="button" role="menuitem" class="danger" data-act="remove-room" data-room="<%= r.id %>"><%- fx.icon('remove') %>Remove from the pad</button><% } %>
+              <% if (!p.mine) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= p.author.username %>"<%- q_ %>><%- fx.icon('shield') %>Ban <%= p.author.display %> from this pad</button><% } %>
+              <a role="menuitem" href="/p/<%= encodeURIComponent(r.slug) %>/mod"><%- fx.icon('flag') %>Pad reports &amp; settings</a>
             <% }) %>
             <% if (staff_) { %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span>Admin</span></div>

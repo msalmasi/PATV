@@ -293,7 +293,7 @@ test("approval: requests wait for the owner; deny refunds; not approved in time 
     const r1 = await S.book(a, { room: PLANT, minutes: 5, feature: true, start_at: T + 3 * 3600000 });
     assert.equal(r1.slot.status, "requested"); assert.equal(await balance(a.userId), START - 500);
     const note = await getQuery("SELECT title, link FROM inbox WHERE user_id = ? AND title LIKE '%asked for a stage slot%'", [owner.userId]);
-    assert.equal(note.length, 1); assert.match(note[0].link, /\/rooms\/plant-based-chatting\/manage$/);
+    assert.equal(note.length, 1); assert.match(note[0].link, /^\/p\/plant-based-chatting\/manage$/);
     await S.deny(r1.slot.id, "pb", "full that night");
     assert.equal(await balance(a.userId), START);
     const r2 = await S.book(b, { room: PLANT, minutes: 5, feature: false, start_at: T + 2 * 3600000 });
@@ -408,7 +408,7 @@ test("royalties: released weekly by the Reserve only when the room was active; c
   assert.equal(st.forfeited, 100000); assert.equal(st.pending, 0);
   assert.equal(st.earned, st.paid + st.forfeited + st.pending, "the ledger always balances");
   const notes = (await getQuery("SELECT title FROM inbox WHERE user_id = ?", [o2.userId])).map((x) => x.title);
-  assert.ok(notes.some((t) => /\+100,000 PAT room royalties/.test(t))); assert.ok(notes.some((t) => /carried over/.test(t)));
+  assert.ok(notes.some((t) => /\+100,000 PAT pad owner royalties/.test(t))); assert.ok(notes.some((t) => /carried over/.test(t)));
   T = Date.UTC(2026, 9, 6, 12, 0, 0) + 400 * 86400000;
 });
 

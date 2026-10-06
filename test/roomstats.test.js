@@ -1,5 +1,5 @@
 // Offline tests for room analytics (1.99be): Pepe's POST /api/roomstats/sync (bot token, sanitised,
-// removals), /rooms/:slug/analytics (signed-in only like the live room page; visitors get the sign-in
+// removals), /p/:slug/analytics (was /rooms/...) (signed-in only like the live room page; visitors get the sign-in
 // prompt and no data), privacy (people who hide Analytics on their profile aren't named, moderation is
 // counts only, moderation commands never listed), slugs shared with bridged rooms, and the links from
 // /rooms and the live room page.
@@ -95,7 +95,7 @@ test("sync stores sanitised rooms", async () => {
 });
 
 test("visitors get the sign-in prompt and no data", async () => {
-  const r = await get("/rooms/drama-central/analytics");
+  const r = await get("/p/drama-central/analytics");
   assert.equal(r.status, 200);
   const html = await r.text();
   assert.match(html, /for signed-in members/);
@@ -103,7 +103,7 @@ test("visitors get the sign-in prompt and no data", async () => {
 });
 
 test("signed-in members see the analytics, privacy respected", async () => {
-  const r = await get("/rooms/drama-central/analytics", "u3");
+  const r = await get("/p/drama-central/analytics", "u3");
   assert.equal(r.status, 200);
   const html = await r.text();
   assert.match(html, /football/);
@@ -124,23 +124,23 @@ test("signed-in members see the analytics, privacy respected", async () => {
 });
 
 test("slug for a non-bridged room comes from its name; bridged rooms share the live page slug", async () => {
-  let r = await get("/rooms/pepes-pad/analytics", "u3");
+  let r = await get("/p/pepes-pad/analytics", "u3");
   assert.equal(r.status, 200);
   await bridge.ingest({ rooms: [{ room: { id: "PepeFrog.Room", name: "Pepe's Pad" }, members: [], count: 3 }], events: [] });
-  r = await get("/rooms/pepes-pad", "u3");
+  r = await get("/p/pepes-pad", "u3");
   assert.equal(r.status, 200);
   const html = await r.text();
-  assert.match(html, /href="\/rooms\/pepes-pad\/analytics"/, "the live room page links its analytics");
-  const a = await (await get("/rooms/pepes-pad/analytics", "u3")).text();
-  assert.match(a, /Live room/, "analytics links back to the live room");
-  const list = await (await get("/rooms")).text();
-  assert.match(list, /href="\/rooms\/drama-central\/analytics"/);
-  assert.match(list, /href="\/rooms\/pepes-pad\/analytics"/);
+  assert.match(html, /href="\/p\/pepes-pad\/analytics"/, "the pad page links its analytics");
+  const a = await (await get("/p/pepes-pad/analytics", "u3")).text();
+  assert.match(a, /Pad page/, "analytics links back to the pad page");
+  const list = await (await get("/p")).text();
+  assert.match(list, /href="\/p\/drama-central\/analytics"/);
+  assert.match(list, /href="\/p\/pepes-pad\/analytics"/);
 });
 
 test("unknown rooms 404, removed rooms disappear", async () => {
-  assert.equal((await get("/rooms/nope/analytics", "u3")).status, 404);
+  assert.equal((await get("/p/nope/analytics", "u3")).status, 404);
   const r = await sync({ rooms: [], remove: ["DRAMA_CENTRAL"] });
   assert.equal((await r.json()).removed, 1);
-  assert.equal((await get("/rooms/drama-central/analytics", "u3")).status, 404);
+  assert.equal((await get("/p/drama-central/analytics", "u3")).status, 404);
 });

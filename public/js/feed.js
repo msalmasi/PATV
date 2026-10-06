@@ -136,7 +136,7 @@
       return;
     }
     if (act === 'remove-room' || act === 'restore-room') {
-      if (act === 'remove-room' && !window.confirm('Take this post out of your room\'s feed? (It stays anywhere else it was posted.)')) return;
+      if (act === 'remove-room' && !window.confirm('Take this post out of your pad? (It stays anywhere else it was posted.)')) return;
       api('/api/feed/posts/' + id + '/' + act, { room: b.getAttribute('data-room') }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
@@ -154,17 +154,17 @@
     // room owners: their room only (the server checks the owner per room)
     if (act === 'rmod') {
       var op = b.getAttribute('data-op'), body = { op: op, post: id };
-      if (op === 'reject') { var rs = window.prompt('Reject this post for your room? Reason (optional, the author is told):', ''); if (rs === null) return; body.reason = rs; }
+      if (op === 'reject') { var rs = window.prompt('Reject this post for your pad? Reason (optional, the author is told):', ''); if (rs === null) return; body.reason = rs; }
       api('/api/rooms/' + encodeURIComponent(b.getAttribute('data-slug')) + '/feed/mod', body).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
     if (act === 'room-ban') {
-      var d = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting and commenting in this room.\nHow long? 1 = a day, 7 = a week, 0 = permanently', '1');
+      var d = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting and commenting in this pad.\nHow long? 1 = a day, 7 = a week, 0 = permanently', '1');
       if (d === null) return;
       var days = parseInt(d, 10); if (!(days >= 0)) { alert('Type a number of days (0 = permanently).'); return; }
       var reason = window.prompt('Reason (optional):', '') || '';
       api('/api/feed/ban', { user: b.getAttribute('data-user'), room: b.getAttribute('data-slug'), days: days, reason: reason })
-        .then(function () { alert('Banned from the room' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
+        .then(function () { alert('Banned from this pad' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
       return;
     }
     if (act === 'reply') {

@@ -7,7 +7,7 @@
 %>
 <main class="fd fd-detail">
   <nav class="crumb" aria-label="Back">
-    <% if (backRoom) { %><a href="/feed/c/<%= encodeURIComponent(backRoom.slug) %>"><%- fx.icon('back') %>c/<%= backRoom.slug %></a>
+    <% if (backRoom) { %><a href="/p/<%= encodeURIComponent(backRoom.slug) %>"><%- fx.icon('back') %>p/<%= backRoom.slug %></a>
     <% } else { %><a href="/feed"><%- fx.icon('back') %>Feed</a><% } %>
   </nav>
   <%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: true, ctxRoom: null, pepeMuted: typeof pepeMuted !== 'undefined' ? pepeMuted : false }) %>

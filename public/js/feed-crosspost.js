@@ -36,12 +36,12 @@
     var f = el('form', 'xp-f');
     f.setAttribute('novalidate', '');
     var h = el('h2', null, 'Crosspost'); h.id = 'xpH';
-    var sub = el('p', 'xp-sub', 'Share this post in another community. It links back to the original; votes and comments there are its own, and that community\'s rules apply.');
-    var l1 = el('div', 'xp-l', 'Community');
+    var sub = el('p', 'xp-sub', 'Share this post in another pad. It links back to the original; votes and comments there are its own, and that pad\'s rules apply.');
+    var l1 = el('div', 'xp-l', 'Pad');
     var sw = el('label', 'cb-search');
-    var si = el('input'); si.type = 'search'; si.placeholder = 'Search communities'; si.setAttribute('aria-label', 'Search communities'); si.autocomplete = 'off';
+    var si = el('input'); si.type = 'search'; si.placeholder = 'Search pads'; si.setAttribute('aria-label', 'Search pads'); si.autocomplete = 'off';
     sw.appendChild(si);
-    var list = el('div', 'xp-list'); list.setAttribute('role', 'radiogroup'); list.setAttribute('aria-label', 'Communities');
+    var list = el('div', 'xp-list'); list.setAttribute('role', 'radiogroup'); list.setAttribute('aria-label', 'Pads');
     var l2 = el('label', 'xp-l', 'Title '); l2.appendChild(el('small', null, '(optional - leave it to keep the original\'s)'));
     var ti = el('input', 'xp-title'); ti.name = 'title'; ti.maxLength = 140; ti.autocomplete = 'off';
     l2.htmlFor = ti.id = 'xpTitle';
@@ -83,20 +83,20 @@
       else usable++;
       var t = el('span', 't');
       t.appendChild(el('b', null, c.title));
-      t.appendChild(el('small', null, 'c/' + c.slug + (c.here ? ' · already there' : !c.canPost ? ' · ' + (c.refusal || 'you can\'t post here') : ' · ' + c.followers + ' follower' + (c.followers === 1 ? '' : 's'))));
+      t.appendChild(el('small', null, 'p/' + c.slug + (c.here ? ' · already there' : !c.canPost ? ' · ' + (c.refusal || 'you can\'t post here') : ' · ' + c.followers + ' follower' + (c.followers === 1 ? '' : 's'))));
       it.appendChild(r); it.appendChild(badge(c)); it.appendChild(t);
       L.appendChild(it);
     });
-    L.appendChild(el('p', 'cb-none xp-none hide', 'No community matches.'));
+    L.appendChild(el('p', 'cb-none xp-none hide', 'No pad matches.'));
     // usable ones first, greyed-out ones after
     Array.prototype.slice.call(L.querySelectorAll('.xp-it.off')).forEach(function (x) { L.insertBefore(x, L.querySelector('.xp-none')); });
-    if (!usable) state.err.textContent = 'There\'s no other community you can crosspost this to right now.';
+    if (!usable) state.err.textContent = 'There\'s no other pad you can crosspost this to right now.';
   }
   function submit(ev) {
     ev.preventDefault();
     var pick = state.list.querySelector('input[name=community]:checked');
     state.err.classList.remove('ok');
-    if (!pick) { state.err.textContent = 'Choose a community.'; return; }
+    if (!pick) { state.err.textContent = 'Choose a pad.'; return; }
     state.err.textContent = '';
     state.go.disabled = true; state.go.textContent = 'Crossposting…';
     var body = { community: pick.value, title: state.ti.value.trim() };
@@ -110,7 +110,7 @@
       });
     }).then(function (d) {
       state.err.classList.add('ok');
-      state.err.textContent = d.pending ? 'Sent - it shows once the community\'s owner approves it.' : 'Crossposted ✔';
+      state.err.textContent = d.pending ? 'Sent - it shows once the pad\'s owner approves it.' : 'Crossposted ✔';
       setTimeout(function () { location.href = d.url; }, d.pending ? 1400 : 300);
     }).catch(function (e) {
       state.err.textContent = e.message;
@@ -127,7 +127,7 @@
       state.si.value = ''; state.err.textContent = ''; state.err.classList.remove('ok');
       state.go.disabled = false; state.go.textContent = 'Crosspost';
       state.list.textContent = '';
-      state.list.appendChild(el('p', 'mut', 'Loading communities…'));
+      state.list.appendChild(el('p', 'mut', 'Loading pads…'));
       if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
       api('/api/feed/communities?post=' + encodeURIComponent(postId)).then(function (d) { fill(d.communities || []); filter(); })
         .catch(function (e) { state.list.textContent = ''; state.err.textContent = e.message; });

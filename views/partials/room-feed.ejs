@@ -1,31 +1,30 @@
 <%#
-  The room page's Feed section (1.99bv; sort bar + owner tools 1.99ca). Locals: feed (feedweb.roomFeed), fx, embeds, host, room (the page's room view)
+  The pad page's Feed section (1.99bv; sort bar + owner tools 1.99ca; 1.99ck: the pad page /p/<slug> is the
+  pad's feed view - Follow sits in the pad header). Locals: feed (feedweb.roomFeed), fx, embeds, host, room
+  (the page's pad view)
 %><%
   const F = feed;
   const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
   const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
+  const here_ = '/p/' + encodeURIComponent(room.slug);
 %>
 <link rel="stylesheet" href="/public/css/feed.css?v=4">
 <section class="card rf" id="feed" aria-labelledby="rfH">
-  <h2 id="rfH"><span>📝 <%= room.name %> feed</span><small><a href="/feed/c/<%= encodeURIComponent(F.slug) %>">open in the feed ›</a></small></h2>
-  <% if (F.follow) { %>
-    <div class="rf-follow"><%- include('follow-btn', { kind: 'room', id: F.room, following: F.follow.following, signed: !!F.viewer, next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
-      <span class="fw-counts"><span><b data-follower-count-kind="room" data-follower-count-id="<%= F.room %>"><%= F.follow.followers.toLocaleString('en-US') %></b> follower<%= F.follow.followers === 1 ? '' : 's' %></span></span></div>
-  <% } %>
-  <%# 1.99bz: Pepe's fresh captures from this room - tap one for the story viewer %>
-  <%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer }, heading: '📸 Fresh captures', next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
+  <h2 id="rfH"><span>📝 p/<%= room.slug %> feed</span><small><a href="/feed">All pads ›</a></small></h2>
+  <%# 1.99bz: Pepe's fresh captures from this pad's Camfrog room - tap one for the story viewer %>
+  <%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer }, heading: '📸 Fresh captures', next: here_ + '#feed' }) %>
   <% if (F.mod.owner || F.mod.admin) { %>
-    <a class="rf-modlink" href="/rooms/<%= encodeURIComponent(F.slug) %>/feed/mod"><%- fx.icon('shield') %><span>Moderate this feed</span><% if (F.queue) { %><span class="rf-n"><%= F.queue %></span><% } %></a>
+    <a class="rf-modlink" href="<%= here_ %>/mod"><%- fx.icon('shield') %><span>Moderate this pad</span><% if (F.queue) { %><span class="rf-n"><%= F.queue %></span><% } %></a>
   <% } %>
-  <% if (F.mention !== null) { %>
-    <label class="rf-mention" title="Room owners: Pepe posts a short line in the Camfrog room when someone posts here (at most one every few minutes)">
-      <input type="checkbox" id="rfMention" data-slug="<%= room.slug %>"<%= F.mention ? ' checked' : '' %>> 🐸 Pepe announces new posts in the room
+  <% if (F.mention !== null && !room.siteOnly) { %>
+    <label class="rf-mention" title="Pad owners: Pepe posts a short line in the Camfrog room when someone posts here (at most one every few minutes)">
+      <input type="checkbox" id="rfMention" data-slug="<%= room.slug %>"<%= F.mention ? ' checked' : '' %>> 🐸 Pepe announces new posts in the Camfrog room
     </label>
   <% } %>
-  <%- include('feed-composer', { composer: F.composer, next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
-  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort the room feed' }) %>
+  <%- include('feed-composer', { composer: F.composer, next: here_ + '#feed' }) %>
+  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed' }) %>
   <% if (!F.posts.length) { %>
-    <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this room yet.' %></p>
+    <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this pad yet. Be the first!' %></p>
   <% } else { %>
     <div class="fd-list">
       <% F.posts.forEach((p) => { %><%- include('feed-post', { p, fx, embeds, host, viewer: F.viewer, modRooms: mods, detail: false, ctxRoom: F.room }) %><% }) %>

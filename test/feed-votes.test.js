@@ -412,11 +412,11 @@ test("room owners: pin (max 3, own room only), owner vs non-owner vs admin, audi
   const html = await ejs.renderFile(path.join(repo, "views/partials/room-feed.ejs"), { feed: F, fx: web.fx, embeds: require(path.join(repo, "stageembed")), host: "test",
                                                                                   room: { name: "Plant room", slug: slugB } });
   assert.match(html, /class="fp-pin"/);
-  assert.ok(!html.includes("Moderate this feed"), "a visitor gets no owner tools");
+  assert.ok(!html.includes("Moderate this pad"), "a visitor gets no owner tools");
   const Fo = await web.roomFeed(ROOM_B, U.ownerB, {});
   const ho = await ejs.renderFile(path.join(repo, "views/partials/room-feed.ejs"), { feed: Fo, fx: web.fx, embeds: require(path.join(repo, "stageembed")), host: "test",
                                                                                   room: { name: "Plant room", slug: slugB } });
-  assert.ok(ho.includes("Moderate this feed") && ho.includes('data-op="unpin"') && ho.includes('data-op="lock"'));
+  assert.ok(ho.includes("Moderate this pad") && ho.includes('data-op="unpin"') && ho.includes('data-op="lock"'));
   const audit = await store.roomAudit(ROOM_B);
   assert.deepEqual(audit.slice(0, 3).map((a) => [a.what, a.actor]), [["feed-pin", "plantowner"], ["feed-unpin", "plantowner"], ["feed-pin", "plantowner"]]);
   assert.ok(!(await store.roomAudit(ROOM_C)).some((a) => a.actor === "plantowner"));
@@ -574,14 +574,14 @@ test("room owners: report queue (reasons + counts), dismiss / hide / remove; com
   assert.equal((await post("/api/feed/posts", U.evil, { body: "x", rooms: [ROOM_B], global: false })).status, 200);
   for (const u of ["carol", "leveled"]) await post("/api/feed/unban", U.ownerB, { userId: "u_" + u, room: slugB });
   // the page: owner + admin yes, others no; everything escaped
-  assert.equal((await page(`/rooms/${slugB}/feed/mod`, U.ownerB)).status, 200);
-  assert.equal((await page(`/rooms/${slugB}/feed/mod`, U.admin)).status, 200);
-  assert.equal((await page(`/rooms/${slugB}/feed/mod`, U.ownerC)).status, 403);
-  assert.equal((await page(`/rooms/${slugB}/feed/mod`, U.bob)).status, 403);
-  const anon = await fetch(`${base}/rooms/${slugB}/feed/mod`, { redirect: "manual" });
+  assert.equal((await page(`/p/${slugB}/mod`, U.ownerB)).status, 200);
+  assert.equal((await page(`/p/${slugB}/mod`, U.admin)).status, 200);
+  assert.equal((await page(`/p/${slugB}/mod`, U.ownerC)).status, 403);
+  assert.equal((await page(`/p/${slugB}/mod`, U.bob)).status, 403);
+  const anon = await fetch(`${base}/p/${slugB}/mod`, { redirect: "manual" });
   assert.equal(anon.status, 302);
   assert.match(anon.headers.get("location"), /^\/login\?next=/);
-  const mp = await page(`/rooms/${slugC}/feed/mod`, U.ownerC);
+  const mp = await page(`/p/${slugC}/mod`, U.ownerC);
   assert.ok(mp.html.includes("Reports") && mp.html.includes("Audit log") && mp.html.includes("&lt;b&gt;bad&lt;/b&gt;"));
   assert.ok(!mp.html.includes("<b>bad</b>"));
   const audit = (await store.roomAudit(ROOM_B)).map((a) => a.what);

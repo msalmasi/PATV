@@ -51,7 +51,7 @@
   }
   function formCalc() {
     var o = $('room').selectedOptions[0], sp = o ? Number(o.getAttribute('data-price')) || 0 : 0;
-    $('slotPriceTxt').textContent = sp ? fmt(sp) + ' PAT / live min in this room' : 'free in this room';
+    $('slotPriceTxt').textContent = sp ? fmt(sp) + ' PAT / live min in this pad' : 'free in this pad';
     $('holdAmt').textContent = fmt((Number(mins.value) || 0) * price());
     var w = radio('when'), embed = radio('mode') === 'embed';
     show('embedFld', embed); show('atFld', w === 'later');
@@ -103,7 +103,7 @@
         return;
       }
       if (w === 'queue') $('bookMsg').textContent = 'You\'re #' + j.position + ' in the queue - we\'ll tell you (inbox + Pepe) when you\'re up.';
-      else if (j.slot && (j.slot.status === 'requested')) $('bookMsg').textContent = 'Requested - the room\'s owner approves it. Your hold comes back if they don\'t.';
+      else if (j.slot && (j.slot.status === 'requested')) $('bookMsg').textContent = 'Requested - the pad\'s owner approves it. Your hold comes back if they don\'t.';
       else if (j.slot && j.slot.status === 'scheduled') $('bookMsg').textContent = 'Booked for ' + when(j.slot.start_at) + '. Your key works from a few minutes before.';
       else $('bookMsg').textContent = '';
       if (j.key && j.slot) { try { sessionStorage.setItem(KEY_STORE + j.slot.id, j.key); } catch (x) {} }
@@ -113,8 +113,8 @@
 
   // ── status ──
   var REASONS = { owner_ended: 'you ended it', time_up: 'your time ran out', never_live: "it never went live, so you got everything back",
-    idle: 'the stream was off air too long', cut: 'it was cut back to Pepe', banned: 'an admin or the room owner cut it', deadline: 'it reached its deadline',
-    restart: 'it timed out while the site restarted', cancelled: 'you cancelled it', denied: 'the room owner declined it', not_approved: "it wasn't approved in time",
+    idle: 'the stream was off air too long', cut: 'it was cut back to Pepe', banned: 'an admin or the pad owner cut it', deadline: 'it reached its deadline',
+    restart: 'it timed out while the site restarted', cancelled: 'you cancelled it', denied: 'the pad owner declined it', not_approved: "it wasn't approved in time",
     no_room: 'no slot was free at its start' };
   function render(d) {
     if (d.balance != null) $('bal').textContent = fmt(d.balance);
@@ -131,7 +131,7 @@
       if (R.free < 1 && !whenTouched && radio('when') === 'now') { setRadio('when', 'queue'); formCalc(); }
       $('queueTxt').textContent = R.queue.length ? R.queue.length + ' waiting' : 'next free slot';
     }
-    if (d.banned) $('roomInfo').textContent = 'You can\'t book this room\'s stage.';
+    if (d.banned) $('roomInfo').textContent = 'You can\'t book this pad\'s stage.';
     var list = d.slots || [];
     var s = list.find ? list.find(function (x) { return x.status === 'waiting' || x.status === 'active'; }) : null;
     show('slotCard', !!s);
@@ -162,7 +162,7 @@
     if (!s) return;
     $('slotRoom').textContent = roomTitle(s.room_id);
     var o = roomOpt(s.room_id);
-    $('watchLink').href = o ? '/rooms/' + encodeURIComponent(o.value) : '/';
+    $('watchLink').href = o ? '/p/' + encodeURIComponent(o.value) : '/';
     var embed = s.mode === 'embed';
     show('streamPanes', !embed); show('embedNote', embed);
     var st = $('slotState');

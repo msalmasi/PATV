@@ -62,8 +62,8 @@
     var act = b.getAttribute('data-act');
     if (act) {
       var ban = b.hasAttribute('data-ban');
-      var ask = { feature: 'Feature this slot? It becomes the room\'s main stream.', unfeature: 'Stop featuring it? A paid feature is refunded for the unused minutes.',
-                  cut: ban ? 'Cut this slot AND ban them from this room\'s stage?' : 'End this slot? Anything unused is refunded.', approve: null, deny: 'Decline this booking? Their hold is refunded.' }[act];
+      var ask = { feature: 'Feature this slot? It becomes the pad\'s main stream.', unfeature: 'Stop featuring it? A paid feature is refunded for the unused minutes.',
+                  cut: ban ? 'Cut this slot AND ban them from this pad\'s stage?' : 'End this slot? Anything unused is refunded.', approve: null, deny: 'Decline this booking? Their hold is refunded.' }[act];
       if (ask && !confirm(ask)) return;
       var body = { ban: ban };
       if (act === 'deny') { var why = prompt('A reason for them (optional):', ''); if (why === null) return; body.reason = why; }

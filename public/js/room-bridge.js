@@ -118,7 +118,7 @@
     function start() {
       clearInterval(waitTimer); startedAt = 0;
       au.preload = 'auto';
-      au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
+      au.src = '/p/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
       au.load();
       wireMeter();
       if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
@@ -201,7 +201,7 @@
   // here, for you only; public answers land in the room feed.
   function relay(host, slug) {
     var form = el('form', 'rb-say hide'); form.setAttribute('autocomplete', 'off');
-    var lab = el('label', 'rb-sr', 'Message or !command to the room'); lab.htmlFor = 'rbSay' + slug;
+    var lab = el('label', 'rb-sr', 'Message or !command to the Camfrog room'); lab.htmlFor = 'rbSay' + slug;
     var wrap = el('div', 'rb-say-in');
     var inp = el('input'); inp.id = 'rbSay' + slug; inp.type = 'text'; inp.maxLength = 300; inp.required = true;
     inp.placeholder = 'Say something — Pepe relays it as “🌐 you (web)”';

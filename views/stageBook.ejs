@@ -12,22 +12,22 @@
       data-rtmp="<%= rtmpServer %>" data-signed="<%= me ? 1 : 0 %>" data-lead="<%= C.lead_min %>" data-days="<%= C.schedule_days %>">
   <div class="sb-head">
     <h1>🎥 Go live on PATV</h1>
-    <p class="lede">Every room has a stage. Stream to it from OBS or your browser, or put a YouTube / Twitch video on it. Viewers flip between the room's streams and Pepe's — and the <b>featured</b> stream leads the room and the front page.</p>
+    <p class="lede">Every pad has a stage. Stream to it from OBS or your browser, or put a YouTube / Twitch video on it. Viewers flip between the pad's streams and Pepe's — and the <b>featured</b> stream leads the pad and the front page.</p>
   </div>
 
   <section class="sb-card how" aria-labelledby="howT">
     <h2 id="howT">How it works</h2>
     <div class="facts">
-      <div class="fact"><span class="k">Ordinary slot</span><span class="v" id="factSlot"><%= sel && sel.slot_price ? fmt(sel.slot_price) : 'Free' %> <small><%= sel && sel.slot_price ? 'PAT / live min' : 'in most rooms' %></small></span></div>
+      <div class="fact"><span class="k">Ordinary slot</span><span class="v" id="factSlot"><%= sel && sel.slot_price ? fmt(sel.slot_price) : 'Free' %> <small><%= sel && sel.slot_price ? 'PAT / live min' : 'in most pads' %></small></span></div>
       <div class="fact"><span class="k">Get featured</span><span class="v"><%= fmt(C.price_per_min) %> <small>PAT / live minute</small></span></div>
       <div class="fact"><span class="k">Slot length</span><span class="v"><%= C.min_minutes %>–<%= C.max_minutes %> <small>minutes</small></span></div>
     </div>
     <ol class="steps">
-      <li><b>Pick a room</b> and a slot: go on <b>now</b>, <b>book a time</b> (up to <%= C.schedule_days %> days ahead), or <b>join the queue</b> when every slot is taken.</li>
+      <li><b>Pick a pad</b> and a slot: go on <b>now</b>, <b>book a time</b> (up to <%= C.schedule_days %> days ahead), or <b>join the queue</b> when every slot is taken.</li>
       <li><b>Stream</b> with the key (OBS, Streamlabs…), straight from this page with your camera or screen, or paste a <b>YouTube / Twitch link</b>.</li>
-      <li><b>Featured</b> = the room's main stream. The owner can feature anyone for free; if nobody is featured you can feature yourself — PAT is held up front, you pay per started minute live, the rest comes straight back.</li>
+      <li><b>Featured</b> = the pad's main stream. The owner can feature anyone for free; if nobody is featured you can feature yourself — PAT is held up front, you pay per started minute live, the rest comes straight back.</li>
     </ol>
-    <p class="muted">Room owners set how many slots their room has, can feature, cut or ban, and may require approval for bookings. Admins can cut any slot (unused PAT is refunded). Keep it within the site rules.</p>
+    <p class="muted">Pad owners set how many slots their pad has, can feature, cut or ban, and may require approval for bookings. Admins can cut any slot (unused PAT is refunded). Keep it within the site rules.</p>
   </section>
 
   <% if (!C.enabled || C.max_concurrent < 1) { %>
@@ -123,16 +123,16 @@
     <section class="sb-card" id="bookCard" aria-labelledby="bookT">
       <h2 id="bookT">Book a slot</h2>
       <form id="bookForm" class="book2" autocomplete="off">
-        <label class="fld">Room
+        <label class="fld">Pad
           <select id="room" name="room">
-            <% (rooms || []).forEach((r) => { %><option value="<%= r.slug %>" data-id="<%= r.id %>" data-title="<%= r.title %>" data-price="<%= r.slot_price %>" data-slots="<%= r.slot_count %>" data-approval="<%= r.approval ? 1 : 0 %>"<%= sel && sel.id === r.id ? ' selected' : '' %>><%= r.title %><%= r.house ? " (Pepe's room)" : r.owner ? ' — ' + r.owner : '' %></option><% }) %>
+            <% (rooms || []).forEach((r) => { %><option value="<%= r.slug %>" data-id="<%= r.id %>" data-title="<%= r.title %>" data-price="<%= r.slot_price %>" data-slots="<%= r.slot_count %>" data-approval="<%= r.approval ? 1 : 0 %>"<%= sel && sel.id === r.id ? ' selected' : '' %>><%= r.title %><%= r.house ? " (house pad)" : r.owner ? ' — ' + r.owner : '' %></option><% }) %>
           </select>
         </label>
         <p class="roominfo muted" id="roomInfo" aria-live="polite"></p>
 
         <fieldset class="choice" id="kindSet"><legend>Slot</legend>
           <label><input type="radio" name="kind" value="slot" checked> <span><b>Ordinary slot</b><small id="slotPriceTxt">free</small></span></label>
-          <label><input type="radio" name="kind" value="feature"> <span><b>★ Featured</b><small><%= fmt(C.price_per_min) %> PAT / live min · leads the room + front page</small></span></label>
+          <label><input type="radio" name="kind" value="feature"> <span><b>★ Featured</b><small><%= fmt(C.price_per_min) %> PAT / live min · leads the pad + front page</small></span></label>
         </fieldset>
 
         <fieldset class="choice" id="srcSet"><legend>What you're putting on</legend>
@@ -148,7 +148,7 @@
           <span class="muted" id="twNote">From your connected Twitch — edit or clear it to use another link.</span>
         </div>
         <% } %>
-        <label class="fld">Title <span class="muted">(optional, shows in the channel guide)</span>
+        <label class="fld">Title <span class="muted">(optional, shows in the Pad Guide)</span>
           <input type="text" id="title" name="title" maxlength="80" placeholder="What's on?">
         </label>
 
@@ -173,7 +173,7 @@
       </form>
     </section>
   <% } %>
-  <p class="muted center"><a href="/rooms">Channel guide ›</a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/rooms/admin">Rooms admin ›</a><% } %></p>
+  <p class="muted center"><a href="/p">Pad Guide ›</a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
 <script src="/public/js/stage-book.js?v=4" defer></script>
 </body>

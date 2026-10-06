@@ -110,8 +110,8 @@
         var act = b.getAttribute('data-act');
         if (!act) return;
         var ban = b.hasAttribute('data-ban');
-        var q = act === 'cut' ? (ban ? 'Cut this slot AND ban them from this room\'s stage?' : 'Cut this slot? Unused PAT is refunded.')
-              : act === 'unfeature' ? 'Stop featuring this slot? A paid feature is refunded for the unused minutes.' : 'Feature this slot? It becomes the room\'s main stream.';
+        var q = act === 'cut' ? (ban ? 'Cut this slot AND ban them from this pad\'s stage?' : 'Cut this slot? Unused PAT is refunded.')
+              : act === 'unfeature' ? 'Stop featuring this slot? A paid feature is refunded for the unused minutes.' : 'Feature this slot? It becomes the pad\'s main stream.';
         if (!confirm(q)) return;
         b.disabled = true;
         fetch('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-id')) + '/' + act, { method: 'POST', credentials: 'same-origin',

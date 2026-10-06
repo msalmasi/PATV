@@ -4,7 +4,7 @@
 // messages / mic / commands / visitors, hour-of-week activity, regulars, commands and games in the
 // room, aggregate moderation, recurring topics from periodic summaries) and pushes the rooms that
 // changed to POST /api/roomstats/sync (bot token): {rooms: [...], remove: [room ids], tz, days}.
-// We keep the latest copy per room and render /rooms/:slug/analytics.
+// We keep the latest copy per room and render /p/:slug/analytics (the pad's analytics, 1.99ck).
 //
 // Pages follow the live room page's rule (bridge.js): signed-in only — visitors get the page shell
 // with a sign-in prompt and no data. The slug is the bridged room's slug when the room is bridged,
@@ -359,26 +359,26 @@ function register(app, { isBotToken, addUser }) {
   });
 
   // Registered BEFORE bridge.js's pages: hand the room list / room page their analytics links.
-  app.get("/rooms", async (req, res, next) => {
+  app.get("/p", async (req, res, next) => {
     try { res.locals.roomAnalyticsList = await listing(); } catch (e) { res.locals.roomAnalyticsList = []; }
     next();
   });
-  app.get("/rooms/:slug", async (req, res, next) => {
+  app.get("/p/:slug", async (req, res, next) => {
     try {
       const r = await bySlug(req.params.slug);
-      res.locals.roomAnalytics = r ? `/rooms/${encodeURIComponent(String(req.params.slug).toLowerCase())}/analytics` : null;
+      res.locals.roomAnalytics = r ? `/p/${encodeURIComponent(String(req.params.slug).toLowerCase())}/analytics` : null;
     } catch (e) { res.locals.roomAnalytics = null; }
     next();
   });
 
-  app.get("/rooms/:slug/analytics", addUser, async (req, res) => {
+  app.get("/p/:slug/analytics", addUser, async (req, res) => {
     const user = req.user ? req.user.username : null;
     const signedIn = !!(req.user && req.user.userId);
     let r = null;
     try { r = await bySlug(req.params.slug); } catch (e) { r = null; }
     if (!r) {
-      return res.status(404).render("notFound", { user, heading: "No analytics for that room",
-        message: "Pepe hasn't sent analytics for that room (yet).", title: "Room not found" });
+      return res.status(404).render("notFound", { user, heading: "No analytics for that pad",
+        message: "Pepe hasn't sent analytics for that pad's Camfrog room (yet).", title: "Pad not found" });
     }
     const slug = String(req.params.slug).toLowerCase();
     res.set("Cache-Control", "private, no-store");

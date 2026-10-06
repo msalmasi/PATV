@@ -1,4 +1,4 @@
-<%- include('layout', { title: room.name + ' — room analytics', user: user }) %>
+<%- include('layout', { title: room.name + ' — Pad analytics', user: user }) %>
 <%#
   /rooms/:slug/analytics (roomstats.js builds `a`; null for visitors, who get a sign-in prompt like
   the live room page). Everything here is aggregate or opt-in public: !incognito users are never sent
@@ -97,18 +97,18 @@
   }
 </style>
 <main class="ra" id="ra">
-  <div class="crumb"><a href="/rooms">Live rooms</a> › <% if (room.bridged) { %><a href="/rooms/<%= encodeURIComponent(room.slug) %>"><%= room.name %></a><% } else { %><%= room.name %><% } %> › Analytics</div>
+  <div class="crumb"><a href="/p">Pad Guide</a> › <% if (room.bridged) { %><a href="/p/<%= encodeURIComponent(room.slug) %>"><%= room.name %></a><% } else { %><%= room.name %><% } %> › Analytics</div>
   <section class="hero">
     <h1>📈 <%= room.name %></h1>
     <div class="sub">What happens in this Camfrog room, from what Pepe sees sitting in it<% if (a && a.updated) { %> · updated <%= a.updated %><% } %><% if (a && a.tz) { %> · times in <%= a.tz %><% } %>.</div>
     <div class="tabs">
-      <% if (room.bridged) { %><a class="tab" href="/rooms/<%= encodeURIComponent(room.slug) %>">💬 Live room</a><% } %>
-      <span class="tab on">📈 Analytics</span>
+      <% if (room.bridged) { %><a class="tab" href="/p/<%= encodeURIComponent(room.slug) %>">💬 Pad page</a><% } %>
+      <span class="tab on">📈 Pad analytics</span>
     </div>
   </section>
 
 <% if (!a) { %>
-  <div class="gate">🔒 Room analytics are for signed-in members, like the live room view.<br><a href="/login">Sign in</a></div>
+  <div class="gate">🔒 Pad analytics are for signed-in members, like the live Camfrog room chat.<br><a href="/login">Sign in</a></div>
 <% } else { %>
   <section class="card" aria-label="Summary">
     <div class="tiles">
@@ -116,7 +116,7 @@
       <div class="tile"><div class="k">Visitors · 30d</div><div class="v"><%= a.tiles.uniq30 %></div><div class="s">~<%= a.tiles.avgVisitors %> a day · <%= a.tiles.uniq90 %> in 90d</div></div>
       <div class="tile"><div class="k">New vs returning</div><div class="v"><%= a.tiles.new30 %> <span class="muted">/ <%= a.tiles.returning30 %></span></div><div class="s">first-timers / regulars back, 30d</div></div>
       <div class="tile"><div class="k">Typical size</div><div class="v"><%= a.tiles.typical %></div><div class="s"><%= a.tiles.typicalNote %><% if (a.tiles.peakSize) { %> · peak <%= a.tiles.peakSize %><% } %></div></div>
-      <div class="tile"><div class="k">Mic time · 30d</div><div class="v"><%= a.tiles.mic30 %></div><div class="s">on the mic in this room</div></div>
+      <div class="tile"><div class="k">Mic time · 30d</div><div class="v"><%= a.tiles.mic30 %></div><div class="s">on the mic in the Camfrog room</div></div>
       <div class="tile"><div class="k">Commands · 30d</div><div class="v"><%= a.tiles.cmds30 %></div><div class="s">typed to Pepe here</div></div>
       <div class="tile"><div class="k">Busiest</div><div class="v sm"><%= a.tiles.peak %></div><div class="s">by messages</div></div>
       <div class="tile"><div class="k">Tracked since</div><div class="v sm"><%= a.tiles.first %></div><div class="s">last activity <%= a.tiles.last %></div></div>
@@ -126,7 +126,7 @@
   <section class="card" aria-labelledby="raKnow">
     <h2 id="raKnow"><span>🧠 What people talk about</span><small><%= a.know.at ? "Pepe's notes from " + a.know.at : "no notes yet" %></small></h2>
     <% if (!a.know.has) { %>
-      <div class="empty">Pepe hasn't summarised this room yet — he reads the room a few times a day once it's been chatty.</div>
+      <div class="empty">Pepe hasn't summarised this Camfrog room yet — he reads the room a few times a day once it's been chatty.</div>
     <% } else { %>
     <div class="know">
       <% if (a.know.summary) { %><p><%= a.know.summary %></p><% } %>
@@ -212,7 +212,7 @@
       <table><thead><tr><th>Game</th><th class="num">30 days</th><th class="num">90 days</th></tr></thead><tbody>
         <% a.games.forEach((g) => { %><tr><td><span class="dot" style="background:<%= g.color %>"></span><%= g.label %></td><td class="num"><%= g.d30 %></td><td class="num"><%= g.d90 %></td></tr><% }) %>
       </tbody></table>
-      <div class="muted">Game commands played in this room (a hand, a spin, a heist move).</div>
+      <div class="muted">Game commands played in the Camfrog room (a hand, a spin, a heist move).</div>
       <% } else { %><div class="empty">No games played here yet.</div><% } %>
       <p class="ksub" style="margin-top:6px">Moderation · 90 days · <%= a.modTotal %></p>
       <% if (a.mod.length) { %><div class="pills"><% a.mod.forEach((m) => { %><span class="pill"><%= m.label %><b><%= m.n %></b></span><% }) %></div>

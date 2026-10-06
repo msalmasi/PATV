@@ -70,7 +70,7 @@
   <% if (!user) { %>
     <p class="empty"><a href="/login" style="color:#81c784">Sign in</a> to start a market.</p>
   <% } else if (!linked) { %>
-    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a room) to start markets from here — you create it as that name.</p>
+    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a Camfrog room) to start markets from here — you create it as that name.</p>
   <% } else { %>
     <form class="newmk" method="post" action="/act">
       <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="market">

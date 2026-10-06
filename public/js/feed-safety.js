@@ -135,7 +135,7 @@
       form.appendChild(el('label', { cls: 'nt', 'for': 'sfmNote', text: 'Anything to add? (optional)' }));
       var note = el('textarea', { id: 'sfmNote', name: 'note', maxlength: '300', rows: '3', placeholder: 'Links, context, who it targets…' });
       form.appendChild(note);
-      form.appendChild(el('p', { cls: 'mut', text: (isUser ? 'Site admins' : 'Site admins (and, for posts in a room, that room\'s owner - except child-safety, non-consensual imagery and copyright reports)') + ' will see your report. The person you report isn\'t told who reported them.' }));
+      form.appendChild(el('p', { cls: 'mut', text: (isUser ? 'Site admins' : 'Site admins (and, for posts in a pad, that pad\'s owner - except child-safety, non-consensual imagery and copyright reports)') + ' will see your report. The person you report isn\'t told who reported them.' }));
       m.body.appendChild(form);
       fs.addEventListener('change', function () {
         var v = form.querySelector('input[name=reason]:checked');

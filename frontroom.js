@@ -98,7 +98,7 @@ function decide(state, ranked, cfg, now, { force = false } = {}) {
   if (!top) return { state: st, switched: null };                         // nothing live: keep what we have
   if (force) return pick(top, "re-evaluated by an admin");
   const cur = st.id ? ranked.find((r) => r.id === st.id) : null;
-  if (!cur) return pick(top, st.id ? "the featured room is no longer live" : "first pick");
+  if (!cur) return pick(top, st.id ? "the featured pad is no longer live" : "first pick");
   st.score = cur.score; st.parts = cur.parts;
   // the best OTHER room, and whether it clearly leads this time
   const other = ranked.find((r) => r.id !== cur.id) || null;

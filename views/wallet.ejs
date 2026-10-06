@@ -259,7 +259,7 @@
         <span class="info"><a href="/u/<%= encodeURIComponent(user) %>/profile">Link your Camfrog name</a> (<code>!verify</code>) to borrow from the Federal Reserve.</span>
       <% } else if (ml.state === 'nodata') { %>
         <span class="name">🏦 Your borrow limit</span>
-        <span class="info">Pepe hasn't sent your limit yet — <code>!loan reserve</code> in a room shows it.</span>
+        <span class="info">Pepe hasn't sent your limit yet — <code>!loan reserve</code> in a Camfrog room shows it.</span>
       <% } else if (ml.state === 'ok') { %>
         <span class="name">🏦 Federal Reserve — you can borrow up to <b class="lim">PAT <%= fmt(ml.limit) %></b> instantly</span>
         <span class="info"><%= pct(reserve.rate_week) %> a week (pro rata), for up to <%= reserve.max_days %> days. One Reserve loan open at a time.</span>
@@ -328,7 +328,7 @@
           <label>Into <select name="a0"><option value="casino">💰 Casino vault (what casino heists rob)</option><option value="lotto">🎟️ Lotto pot (the jackpot)</option><option value="house">🎰 House (the bankroll)</option></select></label>
           <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="Amount, e.g. 25k" required aria-label="Amount">
           <button type="submit">Donate</button>
-          <span class="info">A gift, not a stake — it's gone from your wallet and Pepe thanks you in the room. Same as <code>!donate lotto 25k</code>.</span>
+          <span class="info">A gift, not a stake — it's gone from your wallet and Pepe thanks you in the Camfrog room. Same as <code>!donate lotto 25k</code>.</span>
         </form>
       </div>
     <% } %>

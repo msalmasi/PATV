@@ -1,4 +1,4 @@
-<%# /rooms: links to each room's analytics (roomstats.js sets res.locals.roomAnalyticsList). %>
+<%# /p (the Pad Guide): links to each pad's analytics (roomstats.js sets res.locals.roomAnalyticsList). %>
 <% const _ral = typeof roomAnalyticsList !== 'undefined' && Array.isArray(roomAnalyticsList) ? roomAnalyticsList : []; %>
 <% if (_ral.length) { %>
 <style>
@@ -9,7 +9,7 @@
   .ral .lst a:hover { border-color: #4caf50; }
 </style>
 <section class="ral" aria-labelledby="ralH">
-  <h2 id="ralH">📈 Room analytics</h2>
-  <div class="lst"><% _ral.forEach((r) => { %><a href="/rooms/<%= encodeURIComponent(r.slug) %>/analytics"><%= r.name %></a><% }) %></div>
+  <h2 id="ralH">📈 Pad analytics</h2>
+  <div class="lst"><% _ral.forEach((r) => { %><a href="/p/<%= encodeURIComponent(r.slug) %>/analytics"><%= r.name %></a><% }) %></div>
 </section>
 <% } %>

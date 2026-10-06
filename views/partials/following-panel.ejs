@@ -4,13 +4,13 @@
   ({rooms, people, followers, prefs} from follows.lists + prefs), here
 %><% const F_ = follow || { rooms: [], people: [], followers: [], prefs: { notify: false } }; %>
 <section class="fl" aria-label="Who you follow">
-  <label class="fl-notify"><input type="checkbox" data-follow-notify<%= F_.prefs.notify ? ' checked' : '' %>> 🔔 Tell me in my inbox when someone I follow posts (or someone posts in a room I follow)</label>
+  <label class="fl-notify"><input type="checkbox" data-follow-notify<%= F_.prefs.notify ? ' checked' : '' %>> 🔔 Tell me in my inbox when someone I follow posts (or someone posts in a pad I follow)</label>
   <details class="fl-lists">
     <summary>Following <b><%= F_.rooms.length + F_.people.length %></b> · Followers <b><%= F_.followers.length %></b> <span class="mut">(only you see these lists)</span></summary>
     <div class="fl-cols">
       <div>
-        <h3>📡 Rooms</h3>
-        <% if (!F_.rooms.length) { %><p class="mut">None yet — “+ Follow” is on every room's feed.</p><% } %>
+        <h3>📡 Pads</h3>
+        <% if (!F_.rooms.length) { %><p class="mut">None yet — “+ Follow” is on every pad's page.</p><% } %>
         <ul><% F_.rooms.forEach((r) => { %><li><a href="<%= r.href %>"><%= r.label %></a> <%- include('follow-btn', { kind: 'room', id: r.id, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
       </div>
       <div>

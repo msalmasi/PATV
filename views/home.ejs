@@ -20,8 +20,8 @@
   const wheelHref = me ? '/u/' + encodeURIComponent(me.username) + '/wheel' : '/login';
   // things to do: compact, action-first; `hot` = something live there now, `fresh` = you haven't tried it
   const todo = [
-    { href: '/rooms', ic: '📡', t: 'Channel guide', s: room ? room.count + ' in ' + room.name : null, hot: !!(room && room.live) },
-    { href: '/stage', ic: '🎥', t: 'Go live', s: 'stream to a room', hot: paid.length > 0 },
+    { href: '/p', ic: '📡', t: 'Pad Guide', s: room ? room.count + ' in ' + room.name : null, hot: !!(room && room.live) },
+    { href: '/stage', ic: '🎥', t: 'Go live', s: 'stream to a pad', hot: paid.length > 0 },
     { href: '/markets', ic: '🔮', t: 'Markets', s: S0.markets ? S0.markets + ' open' : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
     { href: '/lotto', ic: '🎟️', t: 'Lotto', s: S0.lotto ? short(S0.lotto.jackpot) + ' jackpot' : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
     { href: wheelHref, ic: '🎡', t: 'Wheel', s: S0.casinoPot ? short(S0.casinoPot) + ' pot' : null },
@@ -287,31 +287,31 @@
 </style>
 
 <main class="hm">
-  <% if (typeof story !== 'undefined' && story && story.rooms.length) { %><div class="hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the rooms', next: '/' }) %></div><% } %>
+  <% if (typeof story !== 'undefined' && story && story.rooms.length) { %><div class="hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the pads', next: '/' }) %></div><% } %>
   <!-- ───── main stage ───── -->
   <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">
     <div class="bar">
       <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
       <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
       <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
-      <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/rooms/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><% } %>
+      <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><% } %>
       <span class="sp"></span>
       <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a>
       <a class="golive-btn ghost" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) + '&feature=1' : '?feature=1' %>">★ Get featured</a>
-      <a class="sub" href="/rooms">Guide ›</a>
+      <a class="sub" href="/p">Guide ›</a>
       <a class="sub" href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch ›</a>
     </div>
     <% if (stageAdmin) { %>
     <form class="stage-admin" id="stAdmin" autocomplete="off">
       <span class="tag">Admin</span>
-      <label for="stRoomSel">Front page room</label>
+      <label for="stRoomSel">Front-page pad</label>
       <select id="stRoomSel">
-        <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (most active room, switches at most every <%= stageAdmin.status && stageAdmin.status.cfg ? stageAdmin.status.cfg.hold_min : 30 %> min)</option>
+        <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (most active pad, switches at most every <%= stageAdmin.status && stageAdmin.status.cfg ? stageAdmin.status.cfg.hold_min : 30 %> min)</option>
         <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.front === r.id ? ' selected' : '' %>><%= r.title %><%= r.title !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
       </select>
       <button type="submit" class="btn">Feature on the homepage</button>
       <span id="stAdminMsg" aria-live="polite">Doesn't move Pepe (<code>!activeroom</code> is his).</span>
-      <a href="/rooms/admin" style="margin-left:auto">Rooms admin ›</a>
+      <a href="/pads/admin" style="margin-left:auto">Pads admin ›</a>
       <%- include('partials/front-pick', { fp: stageAdmin.status, open: false }) %>
     </form>
     <% } %>
@@ -372,7 +372,7 @@
           <h3>📡 On now</h3>
           <ul class="rooms-mini">
             <% liveRooms.forEach((r) => { %>
-              <li><a href="/rooms/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="muted">👥 <%= r.count %> · 🎙 <%= r.micCount %></span></a></li>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="muted">👥 <%= r.count %> · 🎙 <%= r.micCount %></span></a></li>
             <% }) %>
           </ul>
         </div>
@@ -382,13 +382,13 @@
     <div class="box golive golive-wide" id="stageShow">
       <div class="gl-txt">
         <h3>🎥 Your show on PATV</h3>
-        <p><b>Anyone can go live.</b> Stream to a room's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
+        <p><b>Anyone can go live.</b> Stream to a pad's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
       </div>
       <ul>
-        <li>Ordinary slots are <b>free</b> in most rooms<%= paid.length ? '' : ' — book one now or for later' %>.</li>
+        <li>Ordinary slots are <b>free</b> in most pads<%= paid.length ? '' : ' — book one now or for later' %>.</li>
         <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
       </ul>
-      <div class="row"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a><a class="btn" href="/rooms" style="padding:6px 10px;font-size:13px">Channel guide</a></div>
+      <div class="row"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a><a class="btn" href="/p" style="padding:6px 10px;font-size:13px">Pad Guide</a></div>
     </div>
   </section>
 
@@ -404,7 +404,7 @@
         <span>💰 <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ Lv <b><%= me.level %></b> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span></div>
       <div class="lvl" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="XP to the next level"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
       <div class="chips">
-        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>/profile">🔗 Link Camfrog: type !verify in a room</a><% } %>
+        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>/profile">🔗 Link Camfrog: type !verify in a Camfrog room</a><% } %>
         <a class="chip <%= M.tickets ? '' : 'warm' %>" href="/lotto">🎟️ <%= M.tickets ? M.tickets + ' lotto ticket' + (M.tickets === 1 ? '' : 's') : 'no lotto tickets yet' %></a>
         <% if (M.seat) { %><a class="chip mic" href="/casino/t/<%= encodeURIComponent(M.seat.id) %>">🃏 seated at <%= M.seat.game %></a><% } %>
         <% if (M.bets) { %><a class="chip" href="/markets">🔮 <%= M.bets %> open bet<%= M.bets === 1 ? '' : 's' %></a><% } %>
@@ -430,7 +430,7 @@
     <% if (room) { %>
     <section class="card" aria-labelledby="lrH">
       <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'on' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
-        <a href="/rooms/<%= encodeURIComponent(room.slug) %>">Open the room ›</a></h2>
+        <a href="/p/<%= encodeURIComponent(room.slug) %>">Open the pad ›</a></h2>
       <% if (me) { %>
         <div class="lr">
           <div>
@@ -448,7 +448,7 @@
       <% } else { %>
         <div class="tease">
           <b style="font-size:16px">Sign in to watch the room live</b>
-          <p class="muted" style="margin:0"><%= room.count %> in the room<%= room.micCount ? ' · ' + room.micCount + ' on the mic' : '' %>. The chat, what's said on the mic, and who's here stream to PATV members as it happens.</p>
+          <p class="muted" style="margin:0"><%= room.count %> in the Camfrog room<%= room.micCount ? ' · ' + room.micCount + ' on the mic' : '' %>. The chat, what's said on the mic, and who's here stream to PATV members as it happens.</p>
           <a class="btn primary" href="/login">Sign in</a>
         </div>
       <% } %>
@@ -650,7 +650,7 @@
 
 <% if (me && room) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
-<script src="/public/js/room-bridge.js?v=4"></script>
+<script src="/public/js/room-bridge.js?v=5"></script>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
 <script>
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).

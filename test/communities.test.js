@@ -93,7 +93,9 @@ test.before(async () => {
   app.set("views", path.join(repo, "views"));
   app.set("view engine", "ejs");
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
+  require(path.join(repo, "pads")).register(app);                 // 1.99ck: the old addresses 301 to /p/...
   web.register(app, { addUser, isBotToken: (x) => x === "bot" });
+  require(path.join(repo, "bridge")).register(app, { addUser, isBotToken: (x) => x === "bot" });   // the pad page /p/<slug>
   follows.register && follows.register(app, { addUser });
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
@@ -195,7 +197,7 @@ test("All: every community's posts (room-only ones too), once each; per-room rem
 test("posting: exactly one community, by id or slug; the composer's picker = the communities you may post in", async () => {
   let r = await post("/api/feed/posts", U.alice, { body: "nowhere" });
   assert.equal(r.status, 400);
-  assert.match(r.d.error, /Choose a community/);
+  assert.match(r.d.error, /Choose a pad/);
   r = await post("/api/feed/posts", U.alice, { body: "main", global: true });
   assert.equal(r.status, 400, "no main feed");
   r = await post("/api/feed/posts", U.alice, { body: "two", rooms: [ROOM_B, ROOM_C] });
@@ -210,12 +212,15 @@ test("posting: exactly one community, by id or slug; the composer's picker = the
   assert.equal((await post("/api/feed/posts", U.lvl, { body: "x", community: ROOM_B })).status, 403);
   const html = (await page("/feed", U.lvl)).text;
   assert.ok(html.includes('name="community"') && !html.includes('name="global"') && !html.includes("Main feed"));
-  assert.ok(html.includes("Choose a community") && !html.includes(`value="${ROOM_B}"`));
-  // on a community view (and a room page) the community is preselected; one you can't post in says why
-  const onC = (await page("/feed/c/" + slug(ROOM_C), U.alice)).text;
+  assert.ok(html.includes("Choose a pad") && !html.includes(`value="${ROOM_B}"`));
+  // posting by "p/<slug>" works too (1.99ck)
+  const byP = await mkPost(U.alice, { body: "by p/ ref", community: "p/" + slug(ROOM_C) });
+  assert.deepEqual((await store.get(byP)).rooms.map((x) => x.id), [ROOM_C]);
+  // on a pad page the pad is preselected; one you can't post in says why
+  const onC = (await page("/p/" + slug(ROOM_C), U.alice)).text;
   assert.match(onC, new RegExp(`value="${ROOM_C.replace(".", "\\.")}"[^>]*checked`));
-  const onB = (await page("/feed/c/" + slug(ROOM_B), U.lvl)).text;
-  assert.match(onB, /✋ Houseplants takes posts from linked Camfrog accounts.*You can still pick another community/);
+  const onB = (await page("/p/" + slug(ROOM_B), U.lvl)).text;
+  assert.match(onB, /✋ Houseplants takes posts from linked Camfrog accounts.*You can still pick another pad/);
   const F = await web.roomFeed(ROOM_C, U.alice, {});
   assert.equal(F.composer.room, ROOM_C);
   await mod(U.ownerB, slug(ROOM_B), { op: "settings", settings: { who: "everyone" } });
@@ -255,11 +260,11 @@ test("crosspost: a new post in the target linking the original; files referenced
   assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.alice.userId, "feed-xp:" + x])).length, 1);
   // pages: the crosspost card + "crossposted to"
   const px = (await page(`/feed/p/${x}`, U.carol)).text;
-  assert.match(px, /Crossposted from <a href="\/feed\/c\/plant-based-chatting">c\/plant-based-chatting<\/a> by <a href="\/u\/alice\/profile">u\/alice<\/a>/);
+  assert.match(px, /Crossposted from <a href="\/p\/plant-based-chatting">p\/plant-based-chatting<\/a> by <a href="\/u\/alice\/profile">u\/alice<\/a>/);
   assert.ok(px.includes(`/feed/f/${file}`) && px.includes('class="fp-xbox"'));
   assert.ok(px.includes('data-act="crosspost"'), "the post page has a Crosspost button");
   const po = (await page(`/feed/p/${orig}`, U.carol)).text;
-  assert.match(po, /Crossposted to 1 community:/);
+  assert.match(po, /Crossposted to 1 pad:/);
   const all = (await page("/feed?sort=new", U.carol)).text;
   assert.ok(all.includes('data-act="crosspost"') && all.includes("Crossposted from"));
   // a crosspost of a crosspost points at the original; the same community twice / where it already is: refused
@@ -339,49 +344,107 @@ test("crosspost rules: the target's who-can-post, approval queue, bans and rate 
 });
 
 // ───────────────────────────── URLs ─────────────────────────────
-test("URL scheme: /feed (All), /feed/following, /feed/c/<slug>; old ?room= / ?tab= links redirect; the community bar + header", async () => {
+test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?room= / ?tab= / /feed/c/ links redirect; the pad bar", async () => {
   let r = await page("/feed?room=" + slug(ROOM_B) + "&sort=new&p=2", U.bob);
   assert.equal(r.status, 301);
-  assert.equal(r.location, "/feed/c/plant-based-chatting?sort=new&p=2");
+  assert.equal(r.location, "/p/plant-based-chatting?sort=new&p=2");
   r = await page("/feed?room=" + encodeURIComponent(ROOM_B), U.bob);
-  assert.equal(r.location, "/feed/c/plant-based-chatting", "a room id works too");
+  assert.equal(r.location, "/p/plant-based-chatting", "a room id works too");
   r = await page("/feed?tab=following&sort=top&t=day", U.bob);
   assert.equal(r.location, "/feed/following?sort=top&t=day");
   r = await page("/feed?tab=captures&room=" + slug(ROOM_A), U.bob);
-  assert.equal(r.location, "/feed/c/pepefrog-room");
-  r = await page("/feed/c/" + encodeURIComponent(ROOM_B), U.bob);
+  assert.equal(r.location, "/p/pepefrog-room");
+  r = await page("/feed/c/plant-based-chatting?sort=new&p=2", U.bob);
   assert.equal(r.status, 301);
-  assert.equal(r.location, "/feed/c/plant-based-chatting", "one canonical address");
-  assert.equal((await page("/feed/c/no-such-room", U.bob)).status, 404);
-  // All: the bar says Community: All; no "Everywhere"
+  assert.equal(r.location, "/p/plant-based-chatting?sort=new&p=2", "the old pad feed address keeps its query");
+  r = await page("/feed/c/" + encodeURIComponent(ROOM_B), U.bob);
+  assert.equal(r.location, "/p/" + encodeURIComponent(ROOM_B));
+  r = await page(r.location + "?sort=top", U.bob);
+  assert.equal(r.status, 301);
+  assert.equal(r.location, "/p/plant-based-chatting?sort=top", "a room id ends on the pad's slug");
+  assert.equal((await page("/p/no-such-room", U.bob)).status, 404);
+  // All: the bar says Pad: All; no "Everywhere"
   const all = (await page("/feed", U.bob)).text;
   assert.ok(!all.includes("Everywhere"));
-  assert.match(all, /<span class="cb-k">Community<\/span>[\s\S]*?<b>All<\/b>/);
+  assert.match(all, /<span class="cb-k">Pad<\/span>[\s\S]*?<b>All<\/b>/);
   assert.match(all, /class="cb-chip on" href="\/feed" aria-current="page">🌐 All/);
-  assert.ok(all.includes('href="/feed/following"') && all.includes('href="/feed/c/patv-lounge"') && all.includes('href="/feed/c/plant-based-chatting"'));
-  assert.match(all, /c\/plant-based-chatting · \d+ followers? · \d+ posts?/);
-  // a community: its header (name, description, follow, Go to room), the list is that community's
+  assert.ok(all.includes('href="/feed/following"') && all.includes('href="/p/patv-lounge"') && all.includes('href="/p/plant-based-chatting"'));
+  assert.match(all, /p\/plant-based-chatting · \d+ followers? · \d+ posts?/);
+  assert.ok(!/communit/i.test(all.replace(/name="community"|data-comm[\w-]*|fc-comm[\w-]*|\/api\/feed\/communities/g, "")), "no 'community' copy left on /feed");
+  // a pad page: its header (name, p/<slug>, description, follow, owner) and that pad's feed, sorted by ?sort=
   await rooms.setPage(ROOM_B, { description: "Plants <b>and</b> chat" }, "test");
-  const cb = (await page("/feed/c/plant-based-chatting?sort=new", U.bob)).text;
-  assert.match(cb, /<h1 id="chT">Houseplants <small>c\/plant-based-chatting<\/small><\/h1>/);
-  assert.ok(cb.includes("Plants &lt;b&gt;and&lt;/b&gt; chat"));
-  assert.match(cb, /data-follow-kind="room" data-follow-id="plant_based_chatting"/);
-  assert.match(cb, /href="\/rooms\/plant-based-chatting"[^>]*>.*Go to room/);
-  assert.match(cb, /class="cb-chip on" href="\/feed\/c\/plant-based-chatting\?sort=new" aria-current="page">/);
-  assert.ok(cb.includes("legacyRoom04") || cb.includes("legacy legacyRoom04"));
-  const lounge = (await page("/feed/c/patv-lounge", U.bob)).text;
-  assert.ok(lounge.includes("Community page") && lounge.includes("PATV Lounge"));
-  // sort links keep the community; Following has its own path
-  assert.ok(cb.includes('href="/feed/c/plant-based-chatting?sort=top&amp;t=week"'));
+  const pb = (await page("/p/plant-based-chatting?sort=new", U.bob)).text;
+  assert.match(pb, /<h1 id="rmTitle">Houseplants/);
+  assert.ok(pb.includes('<div class="padref">p/plant-based-chatting</div>'));
+  assert.ok(pb.includes("Plants &lt;b&gt;and&lt;/b&gt; chat"));
+  assert.match(pb, /title="Follow this pad" class="fw-btn[^"]*" data-follow-kind="room" data-follow-id="plant_based_chatting"/);
+  assert.match(pb, /👑 Pad owner: /);
+  assert.ok(pb.includes("📡 Camfrog room") && pb.includes("legacyRoom04"));
+  assert.ok(pb.includes('href="/p">Pad Guide</a>'));
+  // the PATV Lounge: a pad with no Camfrog room - no live / Camfrog sections
+  const lounge = (await page("/p/patv-lounge", U.bob)).text;
+  assert.ok(lounge.includes("PATV Lounge") && lounge.includes("🛋️ Site-only pad"));
+  assert.ok(!lounge.includes("Camfrog room —") && !lounge.includes("isn't bridging") && !lounge.includes('id="rmFeed"'));
+  // sort links on /feed keep the view; a pad in the bar opens its pad page; Following has its own path
+  assert.ok(all.includes('href="/feed?sort=top&amp;t=week"'));
   const fol = (await page("/feed/following", U.bob)).text;
   assert.match(fol, /class="cb-chip on" href="\/feed\/following" aria-current="page">⭐ Following/);
   assert.equal(web.fx.feedUrl("all", { sort: "hot", p: 1 }), "/feed");
-  assert.equal(web.fx.feedUrl("x y", { sort: "new", p: 3 }), "/feed/c/x%20y?sort=new&p=3");
-  // the room page's feed section links to its community view
+  assert.equal(web.fx.feedUrl("x y", { sort: "new", p: 3 }), "/p/x%20y?sort=new&p=3");
+  // the pad page's feed section: p/<slug> heading, a link back to All, moderation at /p/<slug>/mod
   const F = await web.roomFeed(ROOM_B, U.bob, {});
   const part = await ejs.renderFile(path.join(repo, "views/partials/room-feed.ejs"), { feed: F, fx: web.fx, embeds: require(path.join(repo, "stageembed")), host: "test",
                                                                                   room: { name: "Houseplants", slug: "plant-based-chatting" } });
-  assert.ok(part.includes('href="/feed/c/plant-based-chatting">open in the feed'));
+  assert.ok(part.includes("📝 p/plant-based-chatting feed") && part.includes('href="/feed">All pads'));
+});
+
+test("redirects (1.99ck): every old room / community address 301s to its /p/ address with the query kept", async () => {
+  const cases = [
+    ["/rooms", "/p"],
+    ["/rooms?x=1", "/p?x=1"],
+    ["/pads", "/p"],
+    ["/rooms/admin", "/pads/admin"],
+    ["/rooms/plant-based-chatting", "/p/plant-based-chatting"],
+    ["/rooms/plant-based-chatting?fsort=top&ft=day#feed", "/p/plant-based-chatting?fsort=top&ft=day"],
+    ["/rooms/plant-based-chatting/manage", "/p/plant-based-chatting/manage"],
+    ["/rooms/plant-based-chatting/manage?tab=royalties", "/p/plant-based-chatting/manage?tab=royalties"],
+    ["/rooms/plant-based-chatting/feed/mod", "/p/plant-based-chatting/mod"],
+    ["/rooms/plant-based-chatting/feed/mod?x=y", "/p/plant-based-chatting/mod?x=y"],
+    ["/rooms/plant-based-chatting/analytics?days=7", "/p/plant-based-chatting/analytics?days=7"],
+    ["/rooms/plant-based-chatting/audio?t=123", "/p/plant-based-chatting/audio?t=123"],
+    ["/feed/c/plant-based-chatting", "/p/plant-based-chatting"],
+    ["/feed/c/plant-based-chatting?sort=top&t=month&p=3", "/p/plant-based-chatting?sort=top&t=month&p=3"],
+    ["/feed?room=plant-based-chatting&sort=top&t=day", "/p/plant-based-chatting?sort=top&t=day"],
+  ];
+  for (const [from, to] of cases) {
+    const r = await page(from, U.bob);
+    assert.equal(r.status, 301, from);
+    assert.equal(r.location, to, from);
+  }
+  // signed out too, and the post permalink /feed/p/<id> is NOT a pad address
+  assert.equal((await page("/rooms/patv-lounge", null)).location, "/p/patv-lounge");
+  const id = await mkPost(U.alice, { body: "permalink", community: LOUNGE });
+  assert.equal((await page("/feed/p/" + id, U.bob)).status, 200);
+});
+
+test("p/<slug> autolinks (1.99ck): known pads in post and comment text link to /p/<slug>; unknown ones, URLs and words stay text", async () => {
+  const pads = require(path.join(repo, "pads"));
+  const known = (s) => (["houseplants", "drama-central"].includes(s) ? { slug: s } : null);
+  assert.equal(pads.padRefs("see p/houseplants!", known), 'see <a class="pad-ref" href="/p/houseplants">p/houseplants</a>!');
+  assert.equal(pads.padRefs("p/drama-central and p/nope", known), '<a class="pad-ref" href="/p/drama-central">p/drama-central</a> and p/nope');
+  assert.equal(pads.padRefs("(P/Houseplants)", known), '(<a class="pad-ref" href="/p/houseplants">p/houseplants</a>)');
+  assert.equal(pads.padRefs("x.com/p/houseplants or ap/houseplants or p/houseplants/x", known), "x.com/p/houseplants or ap/houseplants or p/houseplants/x");
+  // through the real renderer: escaping first, URLs untouched, the registry decides what's a pad
+  const out = web.fx.body('hi p/plant-based-chatting & <b>p/patv-lounge</b> https://e.x/p/patv-lounge p/not-a-pad');
+  assert.ok(out.includes('<a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a> &amp; &lt;b&gt;<a class="pad-ref" href="/p/patv-lounge">p/patv-lounge</a>&lt;/b&gt;'), out);
+  assert.ok(out.includes('<a href="https://e.x/p/patv-lounge" rel="nofollow noopener noreferrer ugc" target="_blank">https://e.x/p/patv-lounge</a>'), out);
+  assert.ok(out.endsWith(" p/not-a-pad"), out);
+  // on a page: a post body and a comment body
+  const id = await mkPost(U.alice, { body: "cross-pad shoutout to p/plant-based-chatting", community: LOUNGE });
+  assert.equal((await post(`/api/feed/posts/${id}/comments`, U.bob, { body: "agreed, p/patv-lounge rules" })).status, 200);
+  const html = (await page("/feed/p/" + id, U.bob)).text;
+  assert.ok(html.includes('shoutout to <a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a>'));
+  assert.ok(html.includes('agreed, <a class="pad-ref" href="/p/patv-lounge">p/patv-lounge</a> rules'));
 });
 
 // ───────────────────────────── homepage mini feed ─────────────────────────────
@@ -399,7 +462,7 @@ test("Hot on PATV: the top 5 hot posts across All; signed-out visitors never see
   const html = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: out, fx: web.fx });
   assert.ok(html.includes("🔥 Hot on PATV") && html.includes('href="/feed">View all'));
   assert.equal((html.match(/class="hh-it"/g) || []).length, 5);
-  assert.match(html, /c\/patv-lounge|c\/plant-based-chatting/);
+  assert.match(html, /p\/patv-lounge|p\/plant-based-chatting/);
   assert.ok(!html.includes("hot 5") && html.includes("hot 4"));
   const empty = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: { posts: [], signed: false }, fx: web.fx });
   assert.match(empty, /Nothing posted yet/);

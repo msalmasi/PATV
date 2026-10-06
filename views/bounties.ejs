@@ -55,7 +55,7 @@
   <% if (!user) { %>
     <p class="empty"><a href="/login" style="color:#81c784">Sign in</a> to post a bounty.</p>
   <% } else if (typeof linked === 'undefined' || !linked) { %>
-    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a room) to post bounties from here.</p>
+    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a Camfrog room) to post bounties from here.</p>
   <% } else { %>
     <form class="newbt" method="post" action="/act">
       <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="bounty">

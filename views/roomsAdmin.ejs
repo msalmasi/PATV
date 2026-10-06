@@ -1,24 +1,24 @@
-<%- include('layout', { title: 'Rooms admin', user: user }) %>
+<%- include('layout', { title: 'Pads admin', user: user }) %>
 <!-- views/roomsAdmin.ejs — site staff (1.99bi): room owners, the homepage's featured room, royalty
      rates. Stage money settings stay on /stage/admin. -->
 <link rel="stylesheet" href="/public/css/stage.css?v=2">
 <% const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
 <main class="sb" id="ra">
   <div class="sb-head">
-    <h1>🏠 Rooms admin</h1>
-    <p class="lede">Who owns each room, which room the homepage features, and room-owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/rooms">Channel guide ›</a></p>
+    <h1>🏠 Pads admin</h1>
+    <p class="lede">Who owns each pad, which pad the homepage features, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pad Guide ›</a></p>
   </div>
 
   <section class="sb-card" aria-labelledby="frontT">
-    <h2 id="frontT">Homepage room</h2>
+    <h2 id="frontT">Front-page pad</h2>
     <form id="frontForm" class="row">
-      <select name="room" aria-label="Homepage room" style="max-width:100%;min-width:0">
-        <option value="auto"<%= front === 'auto' ? ' selected' : '' %>>Automatic (most active room, switches at most every <%= fp && fp.cfg ? fp.cfg.hold_min : 30 %> min)</option>
+      <select name="room" aria-label="Front-page pad" style="max-width:100%;min-width:0">
+        <option value="auto"<%= front === 'auto' ? ' selected' : '' %>>Automatic (most active pad, switches at most every <%= fp && fp.cfg ? fp.cfg.hold_min : 30 %> min)</option>
         <% list.forEach((r) => { %><option value="<%= r.id %>"<%= front === r.id ? ' selected' : '' %>><%= r.title %> (<%= r.id %>)</option><% }) %>
       </select>
       <button type="submit" class="btn primary">Save</button><span class="msg" id="frontMsg" role="status"></span>
     </form>
-    <p class="muted">The homepage shows this room's stage (its featured stream, else Pepe's - Pepe's stream is on the stage of every room he's in) and its live chat. Picking a room pins it. It does <b>not</b> move Pepe — <code>!activeroom</code> stays his window/mic setting in chat, and the automatic pick ignores it.</p>
+    <p class="muted">The homepage shows this pad's stage (its featured stream, else Pepe's - Pepe's stream is on the stage of every pad whose Camfrog room he's in) and its live chat. Picking a pad pins it. It does <b>not</b> move Pepe — <code>!activeroom</code> stays his window/mic setting in chat, and the automatic pick ignores it.</p>
     <%- include('partials/front-pick', { fp, open: true }) %>
     <% const FC = (fp && fp.cfg) || { w: {} }; %>
     <h3 id="fcT">Automatic pick tuning</h3>
@@ -32,34 +32,34 @@
       <label>Weight: unique chatter<input type="number" name="w_chatters" min="0" max="100" step="0.05" value="<%= FC.w.chatters %>"></label>
       <label>Weight: chat line<input type="number" name="w_lines" min="0" max="100" step="0.05" value="<%= FC.w.lines %>"></label>
       <label>Weight: mic minute<input type="number" name="w_mic" min="0" max="100" step="0.05" value="<%= FC.w.mic %>"></label>
-      <label>Weight: person in the room<input type="number" name="w_people" min="0" max="100" step="0.05" value="<%= FC.w.people %>"></label>
+      <label>Weight: person in the Camfrog room<input type="number" name="w_people" min="0" max="100" step="0.05" value="<%= FC.w.people %>"></label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save tuning</button><span class="msg" id="fcMsg" role="status"></span></div>
     </form>
   </section>
 
   <section class="sb-card" aria-labelledby="ownT">
-    <h2 id="ownT">Rooms &amp; owners</h2>
-    <div class="tblwrap"><table><thead><tr><th>Room</th><th>Owner</th><th>Stage</th><th>Now</th><th></th></tr></thead><tbody>
+    <h2 id="ownT">Pads &amp; owners</h2>
+    <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Owner</th><th>Stage</th><th>Now</th><th></th></tr></thead><tbody>
       <% list.forEach((r) => { const g = guide.find((x) => x.id === r.id) || {}; %>
         <tr>
-          <td><a href="/rooms/<%= encodeURIComponent(g.slug || r.slug) %>"><b><%= r.title %></b></a><br><span class="muted"><%= r.id %></span></td>
+          <td><a href="/p/<%= encodeURIComponent(g.slug || r.slug) %>"><b><%= r.title %></b></a><br><span class="muted"><%= r.id %></span></td>
           <td><form class="row ownForm" data-room="<%= r.id %>" style="margin:0">
               <input type="text" name="owner" value="<%= r.house ? 'house' : r.owner ? r.owner.username : '' %>" placeholder="username, Camfrog name, house, or empty" aria-label="Owner of <%= r.title %>">
               <button type="submit" class="btn">Set</button></form>
               <span class="muted"><%= r.house ? "🐸 Pepe / site admins" : r.owner ? '👑 ' + (r.owner.display || r.owner.username) + (r.owner.camfrog ? ' · CF ' + r.owner.camfrog : '') : 'no owner' %></span></td>
           <td><%= r.slot_count %> slot<%= r.slot_count === 1 ? '' : 's' %> · <%= r.slot_price ? fmt(r.slot_price) + ' PAT/min' : 'free' %><%= r.approval ? ' · approval' : '' %></td>
           <td><%= g.live ? '● live' : (g.bridged ? 'bridged' : '—') %><%= g.count ? ' · 👥 ' + g.count : '' %><%= (g.now || []).length ? ' · 📺 ' + g.now.length : '' %></td>
-          <td><a class="btn" href="/rooms/<%= encodeURIComponent(g.slug || r.slug) %>/manage">Manage</a></td>
+          <td><a class="btn" href="/p/<%= encodeURIComponent(g.slug || r.slug) %>/manage">Manage</a></td>
         </tr>
       <% }) %>
     </tbody></table></div>
-    <form id="addForm" class="row"><input type="text" name="room" placeholder="Camfrog room id (e.g. plant_based_chatting)" required aria-label="Room id">
-      <input type="text" name="title" placeholder="title" aria-label="Title"><button type="submit" class="btn">Add room</button><span class="msg" id="addMsg" role="status"></span></form>
-    <p class="muted">Rooms Pepe bridges are added automatically (no owner). Owner = one PATV account (matched by username, display name or Camfrog/Discord/Twitch name); <code>house</code> = Pepe's (site admins run it, no royalties). Owners sync to Pepe within ~2 minutes for chat <code>!stage</code> commands.</p>
+    <form id="addForm" class="row"><input type="text" name="room" placeholder="Camfrog room id (e.g. plant_based_chatting)" required aria-label="Camfrog room id">
+      <input type="text" name="title" placeholder="title" aria-label="Title"><button type="submit" class="btn">Add pad</button><span class="msg" id="addMsg" role="status"></span></form>
+    <p class="muted">Pads for the Camfrog rooms Pepe bridges are added automatically (no owner). Owner = one PATV account (matched by username, display name or Camfrog/Discord/Twitch name); <code>house</code> = Pepe's (site admins run it, no royalties). Owners sync to Pepe within ~2 minutes for chat <code>!stage</code> commands.</p>
   </section>
 
   <section class="sb-card" aria-labelledby="royT">
-    <h2 id="royT">Room-owner royalties</h2>
+    <h2 id="royT">Pad owner royalties</h2>
     <form id="royForm" class="settings">
       <label class="chk"><input type="checkbox" name="enabled" <%= roy.enabled ? 'checked' : '' %>> Royalties on</label>
       <label>% of paid stage time<input type="number" name="stage_pct" min="0" max="50" step="0.5" value="<%= roy.stage_pct %>"></label>
@@ -71,7 +71,7 @@
       <label>Expire unpaid after (periods)<input type="number" name="keep_periods" min="1" max="52" value="<%= roy.keep_periods %>"></label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><span class="msg" id="royMsg" role="status"></span></div>
     </form>
-    <p class="muted"><b>What owners earn on room spending is set in one place: Pepe's PAT Routing table</b> (Pepe's admin panel). Every room flow there (paid commands, song requests, per-use voices, DJ shout-outs, !sponsor) keeps its turf / Reserve shares and sends a <code>room_owner</code> share (default 10%, sponsor 0%) to the owner of the room it was spent in. That share is deposited in the Federal Reserve and booked here; the weekly release above pays it back out of the Reserve (payout flow <code>room_owner</code>). A room with no owner, a house room, or the owner paying in their own room: nothing is booked and the share stays in the Reserve. Website stage time is the one spend Pepe doesn't route - its share is the % above. A refunded charge voids its royalty. Changing the period length re-buckets future periods.</p>
+    <p class="muted"><b>What owners earn on pad spending is set in one place: Pepe's PAT Routing table</b> (Pepe's admin panel). Every pad flow there (paid commands, song requests, per-use voices, DJ shout-outs, !sponsor) keeps its turf / Reserve shares and sends a <code>room_owner</code> share (default 10%, sponsor 0%) to the owner of the pad it was spent in. That share is deposited in the Federal Reserve and booked here; the weekly release above pays it back out of the Reserve (payout flow <code>room_owner</code>). A pad with no owner, a house pad, or the owner paying in their own pad: nothing is booked and the share stays in the Reserve. Website stage time is the one spend Pepe doesn't route - its share is the % above. A refunded charge voids its royalty. Changing the period length re-buckets future periods.</p>
     <% const osh = (sum && sum.owner_shares) || []; if (osh.length) { %><p class="muted">Pepe's current room_owner shares: <%= osh.map((x) => x.label + ' ' + x.pct + '%').join(' · ') %>.</p><% } %>
 
     <h3 id="flowT">Royalty flows</h3>
@@ -87,7 +87,7 @@
       <% const fc = (sum && sum.categories) || []; if (!fc.length) { %><tr><td colspan="4" class="muted">Nothing booked in 30 days.</td></tr><% } %>
       <% fc.forEach((c) => { %><tr><td><%= c.label %></td><td class="num"><%= fmt(c.base_30d) %></td><td class="num"><%= fmt(c.accrued_30d) %></td><td class="num"><%= c.base_30d ? (Math.round(10000 * c.accrued_30d / c.base_30d) / 100) + '%' : '—' %></td></tr><% }) %>
     </tbody></table></div>
-    <div class="tblwrap"><table><thead><tr><th>Room</th><th>Owner</th><th class="num">7d</th><th class="num">30d</th><th class="num">Pending</th><th class="num">Paid</th><th class="num">Expired</th></tr></thead><tbody>
+    <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Owner</th><th class="num">7d</th><th class="num">30d</th><th class="num">Pending</th><th class="num">Paid</th><th class="num">Expired</th></tr></thead><tbody>
       <% const rr = (sum && sum.rooms) || []; if (!rr.length) { %><tr><td colspan="7" class="muted">Nothing earned yet.</td></tr><% } %>
       <% rr.forEach((o) => { %><tr><td><%= o.title %></td><td><%= o.owner %></td><td class="num"><%= fmt(o.accrued_7d) %></td><td class="num"><%= fmt(o.accrued_30d) %></td><td class="num"><%= fmt(o.pending) %></td><td class="num"><%= fmt(o.paid) %></td><td class="num"><%= fmt(o.expired) %></td></tr><% }) %>
     </tbody></table></div>
