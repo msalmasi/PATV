@@ -40,9 +40,7 @@
   .rm .compose { border-top: 1px solid #222; margin-top: 10px; padding-top: 10px; display: grid; gap: 8px; }
   .rm .say { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
   .rm .say input { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
-  .rm .say .btn, .rm .ptt .btn { cursor: pointer; font-family: inherit; }
-  .rm .ptt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .rm .ptt .btn[aria-pressed="true"] { background: #b71c1c; border-color: #e53935; }
+  .rm .say .btn { cursor: pointer; font-family: inherit; }
   .rm .ic button.cam { background: none; border: 1px solid #2c3a2d; border-radius: 6px; padding: 0 3px; cursor: pointer; font: inherit; line-height: 1.4; }
   .rm .ic button.cam:hover, .rm .ic button.cam:focus-visible { border-color: #4caf50; background: #12301a; }
   .rm .snap { position: fixed; z-index: 60; right: 16px; bottom: 16px; width: min(360px, calc(100vw - 32px)); background: #151515; border: 1px solid #333; border-radius: 12px;
@@ -77,6 +75,20 @@
   .rm .status { font-size: 12px; color: #777; }
   .rm .status.err { color: #e57373; }
   .cx-name { font-weight: bold; }
+  /* the main stage, when this is the stage room (public/js/stage-player.js) */
+  .rm .stage { background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #0d0d0f 55%); }
+  .rm .stage h2 { align-items: center; color: #c6e94f; }
+  .rm .stage h2 .live { white-space: nowrap; flex: none; }
+  .rm .stage .player { position: relative; width: 100%; max-width: calc((100vh - 200px) * 16 / 9); margin: 0 auto; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #262626; }
+  .rm .stage .player .wrap { position: absolute; inset: 0; }
+  .rm .stage .player .video-js { width: 100%; height: 100%; }
+  .rm .stage .player .reconnect { position: absolute; inset: 0; display: grid; grid-auto-flow: column; gap: 8px; place-content: center; align-items: center;
+                                  background: rgba(0,0,0,.72); color: #ddd; font-size: 15px; z-index: 4; }
+  .rm .stage .player .unmute { position: absolute; inset: 0; z-index: 3; background: rgba(0,0,0,.35); border: 0; cursor: pointer; display: grid; place-items: center; }
+  .rm .stage .player .unmute img { width: 56px; height: auto; opacity: .9; }
+  .rm .stage .off-air { display: grid; place-items: center; text-align: center; gap: 6px; min-height: 120px; color: #9aa59a; font-size: 14px; }
+  .rm .stage.is-off .player { display: none; }
+  .rm .stage.is-on .off-air { display: none; }
   @media (max-width: 860px) {
     .rm .grid { grid-template-columns: minmax(0, 1fr); }
     .rm .feed { height: 58vh; }
@@ -101,6 +113,46 @@
   </section>
   <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
 
+<% if (onStage) { const st = stage || {}; %>
+  <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
+  <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
+  <script src="/public/js/stage-player.js?v=1"></script>
+  <section class="card stage <%= st.active ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
+    <h2 id="rmStageH"><span>📺 This room is on the main stage</span>
+      <span class="live<%= st.active ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= st.active ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
+    <div class="player">
+      <div class="wrap" id="rmVideo"></div>
+      <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
+      <button type="button" class="unmute hide" id="rmStUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
+    </div>
+    <div class="off-air"><span>The stream is off air right now — it plays here the moment it's back.</span><a href="/">Main stage ›</a></div>
+  </section>
+  <script>
+  (function () {
+    'use strict';
+    var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
+    var box = document.getElementById('rmStage'), on = <%= st.active ? 'true' : 'false' %>;
+    var p = PATVStage.player({ wrap: document.getElementById('rmVideo'), reconnect: document.getElementById('rmStReconnect'),
+                               unmute: document.getElementById('rmStUnmute') });
+    function set(active) {
+      on = active;
+      box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
+      document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');
+      document.getElementById('rmStPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
+      if (on) p.start(); else p.stop();
+    }
+    // the stage can move to another room (an admin, or !activeroom): then this page drops the player
+    var iv = setInterval(function () {
+      fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
+        if (!g.room || g.room.slug !== slug) { clearInterval(iv); p.stop(); box.remove(); return; }
+        if (!!g.active !== on) set(!!g.active);
+      }).catch(function () {});
+    }, 15000);
+    window.addEventListener('load', function () { if (on) p.start(); });
+  })();
+  </script>
+<% } %>
+
 <% if (!signedIn) { %>
   <section class="card tease">
     <div class="big" aria-hidden="true">🐸</div>
@@ -120,11 +172,7 @@
           <p class="muted" style="margin:0">💬 This room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
         <% } else { %>
           <div id="rmRelay"></div>
-          <div class="ptt hide" id="rmPttBox">
-            <button class="btn" type="button" id="rmPtt" aria-pressed="false">🎙 Hold to talk</button>
-            <span class="muted" id="rmPttTxt">up to 20 s · Pepe plays it on the mic when it's free</span>
-          </div>
-          <div class="muted" id="rmMine" aria-live="polite"></div>
+          <div id="rmPtt"></div>
         <% } %>
       </div>
     </section>
@@ -149,8 +197,8 @@
       </section>
     </aside>
   </div>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=1">
-  <script src="/public/js/room-bridge.js?v=1"></script>
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=2">
+  <script src="/public/js/room-bridge.js?v=2"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -326,58 +374,14 @@
     }
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') snapClose(); });
 
-    // ── talk to the room (relayed by Pepe) ──
+    // ── talk to the room (relayed by Pepe): text relay + hold-to-talk clips (public/js/room-bridge.js) ──
     var compose = document.getElementById('rmCompose'),
-        pttBox = document.getElementById('rmPttBox'), mineEl = document.getElementById('rmMine'), lastMine = '';
+        pttHost = document.getElementById('rmPtt'), roomPtt = pttHost ? PATVRoom.ptt(pttHost, slug) : null;
     function renderCompose(d) {
       var r = d.room;
       compose.classList.toggle('hide', !(r.relay || r.micRelay));
       if (roomRelay) roomRelay.update(d);
-      if (pttBox) pttBox.classList.toggle('hide', !r.micRelay || !(window.MediaRecorder && navigator.mediaDevices));
-      if (mineEl && d.mine) {
-        var k = JSON.stringify(d.mine);
-        if (k !== lastMine) {
-          lastMine = k;
-          var j = d.mine.filter(function (x) { return x.kind === 'clip'; }).pop();
-          mineEl.textContent = !j ? '' : '🎙 your clip: ' +
-            (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
-        }
-      }
-    }
-
-    // push-to-talk: hold the button (or click to start, click again to stop); 20 s max
-    var ptt = document.getElementById('rmPtt'), rec = null, chunks = [], recAt = 0, recTimer = null;
-    function pttStop() { if (rec && rec.state === 'recording') rec.stop(); clearTimeout(recTimer); }
-    function pttStart() {
-      if (rec && rec.state === 'recording') return pttStop();
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
-        var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
-        rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
-        chunks = []; recAt = Date.now();
-        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-        rec.onstop = function () {
-          stream.getTracks().forEach(function (t) { t.stop(); });
-          ptt.setAttribute('aria-pressed', 'false'); ptt.textContent = '🎙 Hold to talk';
-          var secs = (Date.now() - recAt) / 1000;
-          if (secs < 0.7) { document.getElementById('rmPttTxt').textContent = 'too short — hold the button while you talk'; return; }
-          var blob = new Blob(chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] });
-          document.getElementById('rmPttTxt').textContent = 'sending ' + secs.toFixed(0) + 's…';
-          fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
-            .then(function (r) { return r.json(); })
-            .then(function (d) { document.getElementById('rmPttTxt').textContent = d.ok ? 'sent — Pepe plays it when the mic is free' : (d.error || 'not sent'); })
-            .catch(function () { document.getElementById('rmPttTxt').textContent = 'couldn\'t reach the site'; });
-        };
-        rec.start(250);
-        ptt.setAttribute('aria-pressed', 'true'); ptt.textContent = '⏺ Recording — release to send';
-        recTimer = setTimeout(pttStop, 20000);
-      }).catch(function () { document.getElementById('rmPttTxt').textContent = 'the browser didn\'t allow the microphone'; });
-    }
-    if (ptt) {
-      var held = false;
-      ptt.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; pttStart(); });
-      ptt.addEventListener('pointerup', function () { if (held && Date.now() - recAt > 400) pttStop(); held = false; });
-      ptt.addEventListener('pointerleave', function () { if (held) pttStop(); held = false; });
-      ptt.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); pttStart(); } });
+      if (roomPtt) roomPtt.update(d);
     }
 
     function apply(d, first) {

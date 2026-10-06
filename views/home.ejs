@@ -35,6 +35,7 @@
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
+<script src="/public/js/stage-player.js?v=1"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
 <%- include('partials/cosmetics-css') %>
@@ -67,6 +68,11 @@
   .hm .stage .bar .ttl { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; color: var(--lime); }
   .hm .stage .bar .sub { color: #aab3aa; font-size: 13px; }
   .hm .stage .bar .sp { flex: 1; }
+  .hm .stage .bar .sub a { color: #c6e94f !important; }
+  .hm .stage-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 0 14px 10px; font-size: 13px; color: #aab3aa; }
+  .hm .stage-admin select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; min-width: 0; max-width: 100%; }
+  .hm .stage-admin .btn { padding: 6px 12px; font-size: 13px; }
+  .hm .stage-admin .tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #ffb74d; border: 1px solid #6b5a20; border-radius: 999px; padding: 1px 7px; }
   .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 0 12px 12px; }
   .hm .stage.live .stage-body { display: grid; }
   .hm .stage.live .stage-off { display: none; }
@@ -227,9 +233,22 @@
       <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
       <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
       <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
+      <span class="sub" id="stRoom"<% if (!st.room) { %> hidden<% } %>>📡 <% if (st.room && st.room.slug) { %><a href="/rooms/<%= encodeURIComponent(st.room.slug) %>"><%= st.room.name %></a><% } else if (st.room) { %><%= st.room.name %><% } %></span>
       <span class="sp"></span>
       <a class="sub" href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch ›</a>
     </div>
+    <% if (stageAdmin) { %>
+    <form class="stage-admin" id="stAdmin" autocomplete="off">
+      <span class="tag">Admin</span>
+      <label for="stRoomSel">Stage room</label>
+      <select id="stRoomSel">
+        <option value="auto"<%= stageAdmin.pinned ? '' : ' selected' %>>Follow the open Camfrog tab (auto)</option>
+        <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.pinned && stageAdmin.room === r.id ? ' selected' : '' %>><%= r.name %><%= r.name !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
+      </select>
+      <button type="submit" class="btn"<%= (stageAdmin.rooms || []).length ? '' : ' disabled' %>>Put on stage</button>
+      <span id="stAdminMsg" aria-live="polite"><%= (stageAdmin.rooms || []).length ? '' : 'Pepe hasn\'t reported his rooms yet.' %></span>
+    </form>
+    <% } %>
     <div class="stage-body">
       <div class="player" id="player">
         <div id="videoWrapper"></div>
@@ -330,13 +349,13 @@
   <div class="main">
     <% if (room) { %>
     <section class="card" aria-labelledby="lrH">
-      <h2 id="lrH"><span>📡 <%= room.name %> <span class="pill <%= room.live ? 'on' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
+      <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'on' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
         <a href="/rooms/<%= encodeURIComponent(room.slug) %>">Open the room ›</a></h2>
       <% if (me) { %>
         <div class="lr">
           <div>
             <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat and mic transcripts" tabindex="0"><p class="muted">Loading the room…</p></div>
-            <% if (me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><% } %>
+            <% if (me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><div id="lrPtt" style="margin-top:6px;display:grid;gap:4px"></div><% } %>
             <div class="ro">Live from Camfrog — read-only (v1). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
           </div>
           <div class="lr-side">
@@ -432,52 +451,53 @@
       placeWidgets();
     }
 
-    // ── the HLS player: created on demand, retried every 10 s on any error or stall ──
-    var HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
-    var player = null, retry = null, twitchLive = false, hlsLive = <%= live ? 'true' : 'false' %>;
-    var reconnectEl = document.getElementById('stReconnect'), unmuteEl = document.getElementById('stUnmute');
-    function reconnecting(on) { reconnectEl.classList.toggle('hide', !on); }
-    function scheduleRetry() {
-      reconnecting(true);
-      clearTimeout(retry);
-      retry = setTimeout(function () {
-        if (!player || twitchLive) return;
-        try { player.src({ src: HLS + '?r=' + Date.now(), type: 'application/x-mpegURL' }); player.play().catch(function () {}); } catch (e) {}
-        scheduleRetry();                                   // cleared again by 'playing'
-      }, 10000);
-    }
-    function startPlayer() {
-      if (player || !window.videojs || twitchLive) return;
-      var wrap = document.getElementById('videoWrapper');
-      var v = document.createElement('video-js');
-      v.id = 'videoElement'; v.className = 'video-js vjs-default-skin';
-      v.setAttribute('playsinline', ''); v.setAttribute('controls', ''); v.setAttribute('muted', '');
-      wrap.appendChild(v);
-      player = videojs(v, { muted: true, autoplay: true, liveui: true, fluid: false, preload: 'auto',
-                            html5: { vhs: { overrideNative: true, enableLowInitialPlaylist: true } } });
-      player.src({ src: HLS, type: 'application/x-mpegURL' });
-      player.on('error', scheduleRetry);
-      player.on('stalled', function () { if (!retry) scheduleRetry(); });
-      player.on('playing', function () { clearTimeout(retry); retry = null; reconnecting(false); });
-      player.play().catch(function () {});
-      unmuteEl.classList.remove('hide');
-      reconnecting(true);                                  // until the first frame plays
-    }
-    function stopPlayer() {
-      clearTimeout(retry); retry = null; reconnecting(false); unmuteEl.classList.add('hide');
-      if (player) { try { player.dispose(); } catch (e) {} player = null; }
-    }
-    unmuteEl.addEventListener('click', function () { if (player) { player.muted(false); player.play().catch(function () {}); } unmuteEl.classList.add('hide'); });
+    // ── the HLS player (public/js/stage-player.js): created on demand, retried every 10 s on any error or stall ──
+    var twitchLive = false, hlsLive = <%= live ? 'true' : 'false' %>;
+    var stagePlayer = PATVStage.player({ wrap: document.getElementById('videoWrapper'), id: 'videoElement',
+      reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute') });
+    function startPlayer() { if (!twitchLive) stagePlayer.start(); }
+    function stopPlayer() { stagePlayer.stop(); }
 
     // ON AIR = the playlist is actually being written (checked on the server) or Twitch is live
     function pollStage() {
       fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
         var was = hlsLive; hlsLive = !!g.active;
+        var rl = document.getElementById('stRoom');
+        if (rl) {
+          rl.hidden = !g.room; rl.textContent = g.room ? '📡 ' : '';
+          if (g.room) { var x = document.createElement(g.room.slug ? 'a' : 'span'); x.textContent = g.room.name; if (g.room.slug) x.href = '/rooms/' + encodeURIComponent(g.room.slug); rl.appendChild(x); }
+        }
         if (hlsLive && !was) { setPill(true, 'live now'); startPlayer(); }
         if (!hlsLive && was && !twitchLive) { stopPlayer(); setPill(false, 'stream ended just now'); }
       }).catch(function () {});
     }
     setInterval(pollStage, 15000);
+
+    // admin: move the stage to another of Pepe's rooms (queued for Pepe; he checks it's safe)
+    var adm = document.getElementById('stAdmin');
+    if (adm) {
+      var admMsg = document.getElementById('stAdminMsg'), admBtn = adm.querySelector('button');
+      adm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        admBtn.disabled = true; admMsg.textContent = 'Sending to Pepe…';
+        fetch('/api/stage/room', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+                                   body: JSON.stringify({ room: document.getElementById('stRoomSel').value }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d.ok) { admMsg.textContent = d.error || 'Not sent.'; admBtn.disabled = false; return; }
+            var tries = 0;
+            (function check() {
+              fetch('/api/stage/room/' + d.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (a) {
+                if (a.status === 'done') { admMsg.textContent = '✓ ' + (a.message || 'Done'); setTimeout(function () { location.reload(); }, 1500); return; }
+                if (a.status === 'failed') { admMsg.textContent = '✗ ' + (a.message || 'Pepe refused'); admBtn.disabled = false; return; }
+                if (++tries > 30) { admMsg.textContent = 'Pepe hasn\'t answered yet — is he online?'; admBtn.disabled = false; return; }
+                admMsg.textContent = 'Waiting for Pepe…'; setTimeout(check, 2000);
+              }).catch(function () { admMsg.textContent = 'Couldn\'t reach the site.'; admBtn.disabled = false; });
+            })();
+          })
+          .catch(function () { admMsg.textContent = 'Couldn\'t reach the site.'; admBtn.disabled = false; });
+      });
+    }
 
     window.addEventListener('load', function () {
       if (hlsLive) startPlayer();
@@ -586,8 +606,8 @@
 <% } %>
 
 <% if (me && room) { %>
-<link rel="stylesheet" href="/public/css/room-bridge.css?v=1">
-<script src="/public/js/room-bridge.js?v=1"></script>
+<link rel="stylesheet" href="/public/css/room-bridge.css?v=2">
+<script src="/public/js/room-bridge.js?v=2"></script>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
 <script>
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).
@@ -620,6 +640,7 @@
     function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
     var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug);
     var relayHost = document.getElementById('lrRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
+    var pttHost = document.getElementById('lrPtt'), roomPtt = pttHost ? PATVRoom.ptt(pttHost, slug) : null;
     function apply(d) {
       var near = !started || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 60;
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
@@ -638,6 +659,7 @@
       document.getElementById('lrLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
       roomAudio.update(d);
       if (roomRelay) roomRelay.update(d);
+      if (roomPtt) roomPtt.update(d);
       var mk = JSON.stringify(d.mic);
       if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', 'Mic is free')); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
       var pk = JSON.stringify(d.members);

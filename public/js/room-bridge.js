@@ -3,7 +3,9 @@
 //   PATVRoom.audio(el, slug)   mini player for the room's live audio (play/pause, volume + mute,
 //                              live / buffering state, jump to live, level meter)
 //   PATVRoom.relay(el, slug)   the "say something" box (Pepe relays it into the room as "🌐 you (web)")
-// Both are driven by the live view JSON: call .update(d) with each poll result.
+//   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip (20 s max) Pepe plays on the room's mic when
+//                              it's free; shown only while the room's bridge_mic switch is on
+// All are driven by the live view JSON: call .update(d) with each poll result.
 // Everything user-visible goes in via textContent.
 (function () {
   'use strict';
@@ -158,5 +160,60 @@
     };
   }
 
-  window.PATVRoom = { audio: audio, relay: relay };
+  // ── push-to-talk clip: hold the button (or click to start, click again to stop); 20 s max ──
+  function ptt(host, slug) {
+    var box = el('div', 'rb-ptt hide');
+    var btn = el('button', 'rb-btn rb-talk', '🎙 Hold to talk'); btn.type = 'button'; btn.setAttribute('aria-pressed', 'false');
+    var txt = el('span', 'rb-ptt-txt', 'up to 20 s · Pepe plays it on the mic when it\'s free');
+    txt.setAttribute('aria-live', 'polite');
+    var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
+    box.appendChild(btn); box.appendChild(txt);
+    host.appendChild(box); host.appendChild(mine);
+    var can = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    var rec = null, chunks = [], recAt = 0, recTimer = null, held = false, last = '';
+    function stop() { if (rec && rec.state === 'recording') rec.stop(); clearTimeout(recTimer); }
+    function start() {
+      if (rec && rec.state === 'recording') return stop();
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+        var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
+        rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
+        chunks = []; recAt = Date.now();
+        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = function () {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          btn.setAttribute('aria-pressed', 'false'); btn.textContent = '🎙 Hold to talk';
+          var secs = (Date.now() - recAt) / 1000;
+          if (secs < 0.7) { txt.textContent = 'too short — hold the button while you talk'; return; }
+          var blob = new Blob(chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] });
+          txt.textContent = 'sending ' + secs.toFixed(0) + 's…';
+          fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
+            .then(function (r) { return r.json(); })
+            .then(function (d) { txt.textContent = d.ok ? 'sent — Pepe plays it when the mic is free' : (d.error || 'not sent'); })
+            .catch(function () { txt.textContent = 'couldn\'t reach the site'; });
+        };
+        rec.start(250);
+        btn.setAttribute('aria-pressed', 'true'); btn.textContent = '⏺ Recording — release to send';
+        recTimer = setTimeout(stop, 20000);
+      }).catch(function () { txt.textContent = 'the browser didn\'t allow the microphone'; });
+    }
+    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; start(); });
+    btn.addEventListener('pointerup', function () { if (held && Date.now() - recAt > 400) stop(); held = false; });
+    btn.addEventListener('pointerleave', function () { if (held) stop(); held = false; });
+    btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); start(); } });
+    return {
+      update: function (d) {
+        var on = !!(d && d.room && d.room.micRelay) && can;
+        box.classList.toggle('hide', !on);
+        if (!on) stop();
+        var js = (d && d.mine) || [], k = JSON.stringify(js);
+        if (k === last) return;
+        last = k;
+        var j = js.filter(function (x) { return x.kind === 'clip'; }).pop();
+        mine.textContent = !j ? '' : '🎙 your clip: ' +
+          (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
+      },
+    };
+  }
+
+  window.PATVRoom = { audio: audio, relay: relay, ptt: ptt };
 })();

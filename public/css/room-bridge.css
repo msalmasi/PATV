@@ -1,5 +1,5 @@
 /* room-bridge.css — the shared room-bridge widgets (public/js/room-bridge.js): room audio player + relay box */
-.rb-hide, .rb-audio.hide, .rb-say.hide, .rb-jump.hide { display: none !important; }
+.rb-hide, .rb-audio.hide, .rb-say.hide, .rb-jump.hide, .rb-ptt.hide { display: none !important; }
 .rb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .rb-btn { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 6px 10px;
           font: inherit; font-size: 13px; cursor: pointer; line-height: 1.2; }
@@ -24,6 +24,10 @@
 .rb-say { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .rb-say input { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 9px 10px; font: inherit; font-size: 14px; min-width: 0; }
 .rb-send { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+.rb-ptt { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rb-talk { padding: 8px 14px; font-weight: bold; touch-action: none; user-select: none; -webkit-user-select: none; }
+.rb-talk[aria-pressed="true"] { background: #b71c1c; border-color: #e53935; color: #fff; }
+.rb-ptt-txt { color: #8a8a8a; font-size: 12.5px; min-width: 0; }
 .rb-mine { color: #8a8a8a; font-size: 12.5px; min-height: 1em; }
 
 @media (prefers-reduced-motion: reduce) { .rb-meter { display: none; } .rb-meter i { transition: none; } }

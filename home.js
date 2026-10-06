@@ -119,14 +119,20 @@ function register(app, { addUser, xpForNextLevel }) {
           [username]))[0] || null;
       }
       const [S, rooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
-      const room = rooms.find((r) => r.live) || rooms[0] || null;
+      // the room panel = the STAGE ROOM (the room the main stage shows, Pepe's active room) when it's
+      // bridged; otherwise the first live room, as before
+      const stage = bridge.stage();
+      const onStage = stage.room && stage.room.slug ? rooms.find((r) => r.slug === stage.room.slug) || null : null;
+      const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
+      const stageAdmin = me && me.class === "Admin" ? bridge.stageAdmin() : null;
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       const roomLive = me && room ? await bridge.liveFor(room.slug) : null;
       res.locals.og = { title: "Public Access TV", description: "Live streams, Pepe the frog, Camfrog rooms live on the web, PAT games, markets and more.",
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
-        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage: bridge.stage(), top,
+        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top,
+        roomOnStage: !!(onStage && room === onStage), stageAdmin,
         // kept for anything that still reads the old locals
         displayname: me ? me.displayname : null, classh: me ? me.class : null, level: me ? me.level : null,
         xp: me ? Math.round(me.xp) : null, avatar: me ? me.avatar : null, email: me ? me.email : null,
