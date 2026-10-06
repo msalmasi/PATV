@@ -20,13 +20,17 @@ const CF_GLOB = "CF[a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0-9][a-z0
 
 // Camfrog display names can carry <...> markup; strip it, plus control / zero-width / bidi
 // characters, collapse whitespace and cap the length (by code point, never splitting a pair).
-function clean(name) {
+function strip(name) {
   if (name == null) return "";
-  let s = String(name)
+  return String(name)
     .replace(/<[^>]*>/g, "")
     .replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁩﻿]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function clean(name) {
+  let s = strip(name);
   const cps = Array.from(s);
   if (cps.length > MAX_LEN) s = cps.slice(0, MAX_LEN).join("").trim();
   return s;
@@ -186,18 +190,125 @@ async function applyCamfrogNames(list) {
 
 // A user typed a display name on their profile: it becomes theirs (auto = 0). An empty one hands
 // the account back to the automatic name.
+// Same rules as Pepe's !displayname (validate(), but a long name is cut rather than refused).
+// Returns { displayname, auto } or { error } (nothing written), or null for an unknown account.
 async function setByUser(userId, name) {
   await ready();
-  const c = clean(name);
-  if (c) {
-    await runQuery("UPDATE users SET displayname = ?, displayname_auto = 0 WHERE userId = ?", [c, userId]);
-    return { displayname: c, auto: false };
-  }
-  const r = (await getQuery("SELECT username, camfrogUsername, discordUsername, twitchDisplayname FROM users WHERE userId = ?", [userId]))[0];
+  const r = (await getQuery("SELECT username, displayname, camfrogUsername, discordUsername, twitchDisplayname FROM users WHERE userId = ?", [userId]))[0];
   if (!r) return null;
-  const pick = pickAuto({ discordName: r.discordUsername, twitchName: r.twitchDisplayname, camfrogUsername: r.camfrogUsername, username: r.username });
-  await runQuery("UPDATE users SET displayname = ?, displayname_auto = 1 WHERE userId = ?", [pick.name, userId]);
-  return { displayname: pick.name, auto: true };
+  let next, auto;
+  if (clean(name)) {
+    const v = validate(name, { truncate: true });
+    if (!v.ok) return { error: v.error };
+    next = v.name; auto = false;
+  } else {
+    next = pickAuto({ discordName: r.discordUsername, twitchName: r.twitchDisplayname, camfrogUsername: r.camfrogUsername, username: r.username }).name;
+    auto = true;
+  }
+  await runQuery("UPDATE users SET displayname = ?, displayname_auto = ? WHERE userId = ?", [next, auto ? 1 : 0, userId]);
+  if (r.displayname !== next) {
+    await logChange({ userId, oldName: r.displayname, newName: next, auto, via: "web", actor: r.username }).catch(() => {});
+  }
+  return { displayname: next, auto };
+}
+
+// ── validation (shared by the profile edit page and Pepe's !displayname) ───────────────────────
+// The rules: strip() (markup, control / zero-width / bidi characters, whitespace collapsed),
+// something must be left, at most MAX_LEN characters, and not a random "CF" + 8 name (the Camfrog
+// sync treats those as junk and would replace it). There is no uniqueness rule: display names are
+// labels, accounts are told apart by username.
+//   truncate: true  = the profile page (a long name is cut to MAX_LEN, as it always was)
+//   truncate: false = refuse it with the reason (chat, where nobody would see it got cut)
+// Returns { ok: true, name } or { ok: false, error }.
+function validate(name, { truncate = false } = {}) {
+  const raw = name == null ? "" : String(name);
+  const full = strip(raw);
+  if (!full) {
+    return { ok: false, error: raw.trim() ? "nothing is left once markup and invisible characters are removed" : "the name is empty" };
+  }
+  if (!truncate && Array.from(full).length > MAX_LEN) {
+    return { ok: false, error: `too long - ${MAX_LEN} characters at most` };
+  }
+  const c = clean(full);
+  if (isCfRandom(c)) return { ok: false, error: "that looks like an automatic CF account name - pick something else" };
+  return { ok: true, name: c };
+}
+
+// ── changes from Camfrog (Pepe's !displayname) ──────────────────────────────────────────────────
+// One self-change per RATE_LIMIT_MS (counting profile-page changes too; admins aren't limited and
+// don't use up the user's change). Every change is written to displayname_log.
+const RATE_LIMIT_MS = 60 * 60 * 1000;
+
+let logReadyP = null;
+function logReady() {
+  if (!logReadyP) {
+    logReadyP = runQuery(
+      `CREATE TABLE IF NOT EXISTS displayname_log (
+         id INTEGER PRIMARY KEY AUTOINCREMENT, userId TEXT NOT NULL, old_name TEXT, new_name TEXT,
+         auto INTEGER NOT NULL DEFAULT 0, via TEXT NOT NULL, actor TEXT, by_admin INTEGER NOT NULL DEFAULT 0,
+         at INTEGER NOT NULL)`
+    ).then(() => runQuery("CREATE INDEX IF NOT EXISTS idx_displayname_log_user ON displayname_log (userId, at)"))
+      .catch((e) => { logReadyP = null; throw e; });
+  }
+  return logReadyP;
+}
+
+async function logChange({ userId, oldName, newName, auto, via, actor, byAdmin, at }) {
+  await logReady();
+  await runQuery(
+    "INSERT INTO displayname_log (userId, old_name, new_name, auto, via, actor, by_admin, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [userId, oldName == null ? null : String(oldName), newName, auto ? 1 : 0, via, actor || null, byAdmin ? 1 : 0, at || Date.now()]
+  );
+}
+
+// The account linked to a Camfrog login (a real account ahead of a leftover random CF one).
+async function findByCamfrog(login) {
+  const l = String(login || "").trim().toLowerCase();
+  if (!l) return null;
+  const rows = await getQuery(
+    `SELECT userId, username, displayname, displayname_auto, camfrogUsername, discordUsername, twitchDisplayname
+       FROM users WHERE LOWER(camfrogUsername) = ? ORDER BY (username GLOB '${CF_GLOB}') ASC, rowid ASC LIMIT 1`, [l]);
+  return rows[0] || null;
+}
+
+// action "get" | "set" | "reset" for the account linked to a Camfrog login. camfrogDisplay: the
+// Camfrog display name Pepe sees for them (the best automatic name on a reset). Returns
+// { status, body } for the route.
+async function camfrogChange({ login, action = "get", name, actor, admin = false, camfrogDisplay, now = Date.now() } = {}) {
+  await ready();
+  await logReady();
+  const u = await findByCamfrog(login);
+  if (!u) return { status: 404, body: { ok: false, error: "no publicaccess.tv account is linked to that Camfrog name" } };
+  const current = { ok: true, username: u.username, displayname: u.displayname || "", auto: !!u.displayname_auto };
+  if (action === "get") return { status: 200, body: current };
+
+  let next, auto;
+  if (action === "reset") {
+    next = pickAuto({ camfrogDisplay, discordName: u.discordUsername, twitchName: u.twitchDisplayname,
+                      camfrogUsername: u.camfrogUsername, username: u.username }).name;
+    auto = true;
+  } else if (action === "set") {
+    const v = validate(name, { truncate: false });
+    if (!v.ok) return { status: 400, body: { ok: false, error: v.error } };
+    next = v.name; auto = false;
+  } else {
+    return { status: 400, body: { ok: false, error: "unknown action" } };
+  }
+  if (u.displayname === next && !!u.displayname_auto === auto) {
+    return { status: 200, body: Object.assign(current, { unchanged: true }) };
+  }
+  if (!admin) {
+    const last = (await getQuery(
+      "SELECT at FROM displayname_log WHERE userId = ? AND by_admin = 0 ORDER BY at DESC LIMIT 1", [u.userId]))[0];
+    if (last && now - last.at < RATE_LIMIT_MS) {
+      const mins = Math.max(1, Math.ceil((RATE_LIMIT_MS - (now - last.at)) / 60000));
+      return { status: 429, body: { ok: false, error: `display names can change once an hour - try again in ${mins} min`, retryMin: mins } };
+    }
+  }
+  await runQuery("UPDATE users SET displayname = ?, displayname_auto = ? WHERE userId = ?", [next, auto ? 1 : 0, u.userId]);
+  await logChange({ userId: u.userId, oldName: u.displayname, newName: next, auto, via: "camfrog", actor, byAdmin: admin, at: now });
+  console.log(`[displaynames] ${actor || "?"} ${admin ? "(admin) " : ""}set ${u.username}: ${JSON.stringify(u.displayname)} -> ${JSON.stringify(next)}${auto ? " (auto)" : ""}`);
+  return { status: 200, body: { ok: true, username: u.username, displayname: next, auto, old: u.displayname || "" } };
 }
 
 // After an INSERT INTO users: mark the account's name automatic (and fill it if it came in empty).
@@ -211,4 +322,5 @@ async function markNewAccount(userId) {
   await runQuery("UPDATE users SET displayname = ?, displayname_auto = 1 WHERE userId = ?", [name, userId]);
 }
 
-module.exports = { clean, isCfRandom, usable, pickAuto, needsAuto, ready, backfill, applyCamfrogNames, setByUser, markNewAccount, MAX_LEN, MAX_BATCH };
+module.exports = { clean, isCfRandom, usable, pickAuto, needsAuto, ready, backfill, applyCamfrogNames, setByUser, markNewAccount,
+  validate, logChange, findByCamfrog, camfrogChange, MAX_LEN, MAX_BATCH, RATE_LIMIT_MS };

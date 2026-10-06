@@ -2202,6 +2202,26 @@ app.post("/api/users/camfrog/displaynames", async (req, res) => {
   catch (e) { console.error("[displaynames] camfrog sync:", e.message); res.status(500).json({ error: "failed" }); }
 });
 
+// Pepe's !displayname (1.99bc): a Camfrog user reads / sets / resets the display name of the PATV
+// account linked to their Camfrog login. {login, action: get|set|reset, name, actor, admin,
+// camfrogDisplay}. Same rules as the profile page (displaynames.validate), one self-change an hour,
+// every change in displayname_log. A set name is the user's own (displayname_auto = 0).
+app.post("/api/users/camfrog/displayname", async (req, res) => {
+  const body = req.body || {};
+  if (!isBotToken(body.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+  try {
+    const r = await displaynames.camfrogChange({
+      login: body.login, action: String(body.action || "get"), name: body.name,
+      actor: body.actor ? String(body.actor).slice(0, 64) : null, admin: body.admin === true,
+      camfrogDisplay: body.camfrogDisplay,
+    });
+    res.status(r.status).json(r.body);
+  } catch (e) {
+    console.error("[displaynames] camfrog set:", e.message);
+    res.status(500).json({ ok: false, error: "failed" });
+  }
+});
+
 // ─── Prize store ──────────────────────────────────────────────────────────────────────────────
 // The shop (official prize store + user marketplace) lives in shop.js: the purchase path for the
 // website (/shop), the Discord bot (/chatshop) and Pepe (/api/shop/camfrog/buy), listings, orders,

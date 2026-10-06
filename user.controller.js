@@ -266,14 +266,16 @@ async function updateUsername(req, res) {
 };
 
 // Update displayname
-// A name typed here is the user's own (never replaced automatically). Cleaned and capped at
-// displaynames.MAX_LEN; an empty one goes back to the automatic name.
+// A name typed here is the user's own (never replaced automatically). displaynames.validate() rules
+// (shared with Pepe's !displayname), capped at displaynames.MAX_LEN; an empty one goes back to the
+// automatic name.
 async function updateDisplayname(req, res) {
   const { displayname } = req.body || {};
   const userId = req.user.userId;
   const username = req.user.username;
   const r = await displaynames.setByUser(userId, displayname);
-  req.flash('success', r && r.auto ? 'Display name reset to ' + r.displayname + '.' : 'Displayname changed.');
+  if (r && r.error) req.flash('error', 'Display name not changed: ' + r.error + '.');
+  else req.flash('success', r && r.auto ? 'Display name reset to ' + r.displayname + '.' : 'Displayname changed.');
   res.redirect(`/u/${username}/profile/edit`);
 };
 
