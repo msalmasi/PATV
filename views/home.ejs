@@ -562,7 +562,20 @@
             var tries = 0;
             (function check() {
               fetch('/api/stage/room/' + d.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (a) {
-                if (a.status === 'done') { admMsg.textContent = '✓ ' + (a.message || 'Done'); setTimeout(function () { location.reload(); }, 1500); return; }
+                if (a.status === 'done') {
+                  // Pepe answered; his stage report reaches the site a few seconds later - wait for it so
+                  // the reload shows the new room (it used to reload too early and look unchanged)
+                  admMsg.textContent = '✓ ' + (a.message || 'Done') + ' — updating the stage…';
+                  var want = document.getElementById('stRoomSel').value, waited = 0;
+                  (function settle() {
+                    fetch('/api/stage/room/' + d.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (b) {
+                      var moved = b && (want === 'auto' ? b.pinned === false : b.stageRoomId === want);
+                      if (moved || (waited += 1000) > 15000) { location.reload(); return; }
+                      setTimeout(settle, 1000);
+                    }).catch(function () { location.reload(); });
+                  })();
+                  return;
+                }
                 if (a.status === 'failed') { admMsg.textContent = '✗ ' + (a.message || 'Pepe refused'); admBtn.disabled = false; return; }
                 if (++tries > 30) { admMsg.textContent = 'Pepe hasn\'t answered yet — is he online?'; admBtn.disabled = false; return; }
                 admMsg.textContent = 'Waiting for Pepe…'; setTimeout(check, 2000);

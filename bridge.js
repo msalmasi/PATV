@@ -475,7 +475,8 @@ function register(app, { isBotToken, addUser }) {
     const a = (await getQuery("SELECT status, message FROM pepe_actions WHERE id = ? AND user_id = ? AND kind = 'stage.room'",
       [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
     if (!a) return res.status(404).json({ ok: false, error: "No such action." });
-    res.json({ ok: true, status: a.status, message: a.message || "", stage: stage() });
+    const A = stageAdmin();
+    res.json({ ok: true, status: a.status, message: a.message || "", stage: stage(), stageRoomId: A.room, pinned: A.pinned });
   });
 
   app.get("/rooms", addUser, async (req, res) => {
