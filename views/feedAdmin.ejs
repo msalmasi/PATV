@@ -1,0 +1,82 @@
+<%- include('layout', { title: 'Feed admin', user: user}) %>
+<link rel="stylesheet" href="/public/css/feed.css?v=1">
+<%
+  const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
+  const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');
+  const F = [
+    ['Uploads', [['max_image_mb', 'Picture size cap (MB)'], ['max_audio_mb', 'Audio size cap (MB)'], ['max_video_mb', 'Video size cap (MB)'],
+                 ['max_audio_secs', 'Audio length cap (seconds)'], ['max_video_secs', 'Video length cap (seconds)']]],
+    ['Storage', [['user_quota_mb', 'Space per user (MB)'], ['global_quota_gb', 'Space for the whole feed (GB)'], ['min_free_gb', 'Refuse uploads below this much free disk (GB)'],
+                 ['deleted_purge_days', 'Delete files of removed posts after (days)']]],
+    ['Who can post', [['media_min_level', 'Uploads: linked Camfrog name OR at least this level'], ['new_account_hours', 'An unlinked account is "new" for (hours)'],
+                      ['new_account_posts_per_day', 'New accounts: posts per day']]],
+    ['Rate limits', [['posts_per_hour', 'Posts per hour'], ['posts_per_day', 'Posts per day'], ['comments_per_hour', 'Comments per hour'],
+                     ['uploads_per_hour', 'Uploads per hour'], ['upload_mb_per_day', 'Upload MB per day'], ['report_hide_threshold', 'Hide a post after this many reports (pending review)']]],
+    ['Prices (PAT, 0 = free; to the Federal Reserve)', [['price_post', 'Every post'], ['price_link', 'Per link'], ['price_image', 'Per picture'], ['price_audio', 'Per audio file'], ['price_video', 'Per video']]],
+    ['Pepe', [['mention_gap_min', 'Room mentions: at most one per room every (minutes)']]],
+  ];
+%>
+<main class="fd fd-admin">
+  <div class="crumb"><a href="/admin/panel">Admin</a> › Feed</div>
+  <h1>Feed admin</h1>
+  <p class="sub">Storage: <b><%= mb(used) %></b> used of <%= C.global_quota_gb %> GB · disk free <b><%= gb(free) %></b> · files in <code><%= dir %></code></p>
+
+  <section class="fa-card">
+    <h2>Reports (<%= reports.length %>)</h2>
+    <% if (!reports.length) { %><p class="mut">Nothing reported. 🎉</p><% } %>
+    <% reports.forEach((x) => { const p = x.post; %>
+      <div class="fa-rep" data-id="<%= p.id %>">
+        <div class="fa-rep-h">
+          <a href="/feed/p/<%= p.id %>"><b><%= p.title || (p.body || '').slice(0, 80) || '(no text)' %></b></a>
+          <span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.hidden ? ' · HIDDEN pending review' : '' %><%= p.deleted ? ' · deleted' : '' %><%= p.nsfw ? ' · NSFW' : '' %></span>
+        </div>
+        <ul>
+          <% x.reports.forEach((r) => { %>
+            <li><b><%= r.label %></b> from <%= r.reporter || '?' %><%= r.comment ? ' — on a comment by ' + (r.comment.username || '?') + ': “' + String(r.comment.body || '').slice(0, 120) + '”' : '' %><%= r.note ? ' — ' + r.note : '' %> <span class="mut"><%= fx.ago(r.created) %></span></li>
+          <% }) %>
+        </ul>
+        <div class="fa-acts">
+          <button type="button" data-fa="keep">Keep (dismiss)</button>
+          <% if (!p.deleted) { %><button type="button" data-fa="delete" class="bad">Delete post</button><% } %>
+          <button type="button" data-fa="nsfw"><%= p.nsfw ? 'Unmark NSFW' : 'Mark NSFW' %></button>
+          <button type="button" data-fa="ban" data-user="<%= p.author.username %>" class="bad">Ban author from the feed…</button>
+        </div>
+      </div>
+    <% }) %>
+  </section>
+
+  <section class="fa-card">
+    <h2>Feed bans</h2>
+    <form id="faBan" class="fa-inline">
+      <input name="user" placeholder="username or Camfrog name" required aria-label="User">
+      <input name="days" type="number" min="0" max="3650" placeholder="days (0 = forever)" aria-label="Days">
+      <input name="reason" placeholder="reason" maxlength="200" aria-label="Reason">
+      <button type="submit" class="btn-s">Ban from the whole feed</button>
+    </form>
+    <% if (!bans.length) { %><p class="mut">Nobody is banned.</p><% } else { %>
+      <table class="fa-t"><thead><tr><th>User</th><th>Where</th><th>Until</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody>
+        <% bans.forEach((b) => { const R = roomsById.get(b.room_id); %>
+          <tr><td><%= b.username %></td><td><%= b.room_id ? (R ? R.title : b.room_id) : 'whole feed' %></td><td><%= b.until ? new Date(b.until).toISOString().slice(0, 10) : 'forever' %></td>
+              <td><%= b.reason || '' %></td><td><%= b.by %></td><td><button type="button" data-fa="unban" data-uid="<%= b.user_id %>" data-room="<%= R ? R.slug : '' %>">Lift</button></td></tr>
+        <% }) %>
+      </tbody></table>
+    <% } %>
+  </section>
+
+  <section class="fa-card">
+    <h2>Settings</h2>
+    <form id="faCfg" class="fa-cfg">
+      <label class="ck"><input type="checkbox" name="enabled"<%= C.enabled ? ' checked' : '' %>> Posting is on (off = only staff can post)</label>
+      <label class="ck"><input type="checkbox" name="require_link_to_post"<%= C.require_link_to_post ? ' checked' : '' %>> Text posts and comments need a linked Camfrog name too</label>
+      <% F.forEach(([h, rows]) => { %>
+        <fieldset><legend><%= h %></legend>
+          <% rows.forEach(([k, l]) => { %><label><span><%= l %></span><input type="number" name="<%= k %>" value="<%= C[k] %>" min="0" placeholder="<%= D[k] %>"></label><% }) %>
+        </fieldset>
+      <% }) %>
+      <div><button type="submit" class="btn-s">Save settings</button> <span class="fc-err" id="faMsg" role="status"></span></div>
+    </form>
+  </section>
+</main>
+<script src="/public/js/feed-admin.js?v=1" defer></script>
+</body>
+</html>

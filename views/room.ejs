@@ -155,6 +155,7 @@
       <% if (room.house) { %><span class="chip own">🐸 Pepe's room</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Owner: <%= room.owner %></a><% } %>
       <% if (pepeHere_) { %><span class="chip" title="Pepe's own stream is showing this room right now">🎥 Pepe's window is here</span><% } %>
       <% if (manage_) { %><a class="chip own" href="/rooms/<%= encodeURIComponent(room.slug) %>/manage">⚙️ Manage room</a><% } %>
+      <% if (typeof feed !== 'undefined' && feed) { %><a class="chip" href="#feed">📝 Room feed<%= feed.posts.length ? ' · ' + (feed.more ? feed.posts.length + '+' : feed.posts.length) : '' %></a><% } %>
       <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Analytics</a><% } %>
     </div>
   </section>
@@ -539,4 +540,5 @@
   })();
   </script>
 <% } %>
+<% if (typeof feed !== 'undefined' && feed) { %><%- include('partials/room-feed', { feed, fx, embeds, host, room }) %><% } %>
 </main>

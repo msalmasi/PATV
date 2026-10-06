@@ -1,57 +1,73 @@
-<%- include('layout', { title: 'Clips & Snaps', user: user}) %>
-<style>
-  .fd { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-  .fd h1 { text-align: center; margin-bottom: 4px; }
-  .fd .sub { text-align: center; color: #9a9; margin: 0 0 18px; }
-  .fd .filters { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
-  .fd .filters a { padding: 5px 11px; border: 1px solid #333; border-radius: 14px; color: #ccc; text-decoration: none; font-size: 13px; }
-  .fd .filters a.on { border-color: #4caf50; color: #fff; background: #1b2b1b; }
-  .fd .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-  .fd .card { background: #111; border: 1px solid #222; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
-  .fd .media { background: #000; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center; }
-  .fd .media img, .fd .media video { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .fd .media audio { width: 92%; }
-  .fd .meta { padding: 9px 11px; font-size: 13px; color: #ccc; display: grid; gap: 3px; }
-  .fd .meta b { color: #fff; }
-  .fd .meta .mut { color: #888; }
-  .fd .meta a { color: #81c784; text-decoration: none; }
-  .fd .empty, .fd .login { text-align: center; color: #888; margin-top: 40px; }
-  .fd .login a { color: #81c784; }
-</style>
-<div class="fd">
-  <h1>Clips &amp; Snaps</h1>
-  <p class="sub">Everything Pepe has captured in the rooms that hasn't expired yet. Newest first.</p>
-  <% if (needLogin) { %>
-    <p class="login">These are webcam captures, so the feed is for PATV members. <a href="/login">Sign in</a> to see it.</p>
+<%- include('layout', { title: room ? room.title + ' — feed' : 'Feed', user: user}) %>
+<link rel="stylesheet" href="/public/css/feed.css?v=1">
+<%
+  const base = { tab: tab === 'captures' ? 'captures' : '', room: room ? room.slug : '', sort: tab === 'posts' ? sort : '', t: sort === 'top' ? top : '', by: author ? author.username : '', kind: tab === 'captures' ? (kind || '') : '' };
+  const q = (o) => { const x = Object.assign({}, base, o); Object.keys(x).forEach((k) => { if (!x[k]) delete x[k]; }); const s = new URLSearchParams(x).toString(); return '/feed' + (s ? '?' + s : ''); };
+%>
+<main class="fd">
+  <h1>Feed</h1>
+  <p class="sub"><%= room ? 'Posts in ' + room.title + ', and what Pepe captured there.' : 'Posts from the PATV community and Pepe\'s clips & snaps from the rooms.' %></p>
+  <nav class="fd-tabs" aria-label="Feed sections">
+    <a class="<%= tab === 'posts' ? 'on' : '' %>" href="<%= q({ tab: '', kind: '' }) %>">📝 Posts</a>
+    <a class="<%= tab === 'captures' ? 'on' : '' %>" href="<%= q({ tab: 'captures', sort: '', t: '' }) %>">🎞️ Clips &amp; snaps</a>
+  </nav>
+  <div class="fd-filters" aria-label="Rooms">
+    <a class="<%= !room ? 'on' : '' %>" href="<%= q({ room: '' }) %>">Everywhere</a>
+    <% rooms.forEach((r) => { %><a class="<%= room && room.id === r.id ? 'on' : '' %>" href="<%= q({ room: r.slug }) %>">📡 <%= r.title %></a><% }) %>
+    <% if (tab === 'captures') { capRooms.filter((c) => !rooms.some((r) => r.id === c)).forEach((c) => { %><a class="<%= room && room.id === c ? 'on' : '' %>" href="<%= q({ room: c }) %>"><%= c %></a><% }) } %>
+  </div>
+  <% if (author) { %><p class="sub">Posts by <b><%= author.displayname || author.username %></b> · <a href="<%= q({ by: '' }) %>">show everyone</a></p><% } %>
+
+  <% if (tab === 'posts') { %>
+    <div class="fd-col">
+      <%- include('partials/feed-composer', { composer: composer, next: q({}) }) %>
+      <div class="fd-sort" aria-label="Sort">
+        <a class="<%= sort === 'hot' ? 'on' : '' %>" href="<%= q({ sort: 'hot', t: '', p: '' }) %>">🔥 Hot</a>
+        <a class="<%= sort === 'new' ? 'on' : '' %>" href="<%= q({ sort: 'new', t: '', p: '' }) %>">🆕 New</a>
+        <a class="<%= sort === 'top' ? 'on' : '' %>" href="<%= q({ sort: 'top', p: '' }) %>">🏆 Top</a>
+        <% if (sort === 'top') { ['day', 'week', 'month', 'all'].forEach((w) => { %><a class="sm<%= top === w ? ' on' : '' %>" href="<%= q({ sort: 'top', t: w, p: '' }) %>"><%= w === 'all' ? 'all time' : 'this ' + w %></a><% }) } %>
+      </div>
+      <% if (room && caps.length) { %>
+        <section class="fd-caps" aria-label="Latest captures">
+          <h2>📸 Fresh from <%= room.title %> <a href="<%= q({ tab: 'captures' }) %>">all ›</a></h2>
+          <div class="strip"><% caps.forEach((c) => { %><a href="/media/<%= c.id %>" class="cap k-<%= c.kind %>"><% if (c.kind === 'photo') { %><img src="/media/<%= c.id %>/raw" alt="Snap of <%= c.subject %>" loading="lazy"><% } else { %><span class="ic"><%= c.kind === 'clip' ? '📹' : '🔊' %></span><% } %><span class="who"><%= c.subject || 'someone' %></span></a><% }) %></div>
+        </section>
+      <% } %>
+      <% if (!posts.length) { %>
+        <p class="empty"><%= page > 1 ? 'No more posts.' : 'Nothing posted here yet — be the first.' %></p>
+      <% } else { %>
+        <div class="fd-list">
+          <% posts.forEach((p) => { %><%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: room ? room.id : null }) %><% }) %>
+        </div>
+      <% } %>
+      <nav class="fd-pager">
+        <% if (page > 1) { %><a href="<%= q({ p: page - 1 }) %>">‹ Newer</a><% } %>
+        <% if (more) { %><a href="<%= q({ p: page + 1 }) %>">Older ›</a><% } %>
+      </nav>
+    </div>
+  <% } else if (!viewer) { %>
+    <p class="login">These are webcam captures, so they're for PATV members. <a href="/login?next=/feed%3Ftab%3Dcaptures">Sign in</a> to see them.</p>
   <% } else { %>
-    <% const q = (o) => '/feed?' + new URLSearchParams(Object.assign({ kind: kind || '', room: room || '' }, o)).toString(); %>
-    <div class="filters">
+    <div class="fd-filters">
       <a class="<%= !kind ? 'on' : '' %>" href="<%= q({ kind: '' }) %>">Everything</a>
       <a class="<%= kind === 'clip' ? 'on' : '' %>" href="<%= q({ kind: 'clip' }) %>">📹 Clips</a>
       <a class="<%= kind === 'photo' ? 'on' : '' %>" href="<%= q({ kind: 'photo' }) %>">📸 Snaps</a>
       <a class="<%= kind === 'audio' ? 'on' : '' %>" href="<%= q({ kind: 'audio' }) %>">🔊 Audio</a>
-      <% rooms.forEach((r) => { %>
-        <a class="<%= room === r ? 'on' : '' %>" href="<%= q({ room: room === r ? '' : r }) %>"><%= r %></a>
-      <% }) %>
     </div>
-    <% if (!items.length) { %>
+    <% if (!caps.length) { %>
       <p class="empty">Nothing here right now. Captures expire, so check back after the next !snap or !clip.</p>
     <% } else { %>
       <div class="grid">
-        <% items.forEach((it) => { const src = '/media/' + it.id + '/raw'; %>
+        <% caps.forEach((it) => { const src = '/media/' + it.id + '/raw'; %>
           <div class="card">
             <div class="media">
-              <% if (it.kind === 'clip') { %>
-                <video src="<%= src %>" controls playsinline preload="metadata" muted></video>
-              <% } else if (it.kind === 'audio') { %>
-                <audio src="<%= src %>" controls preload="none"></audio>
-              <% } else { %>
-                <a href="/media/<%= it.id %>"><img src="<%= src %>" alt="Snap of <%= it.subject %>" loading="lazy"></a>
-              <% } %>
+              <% if (it.kind === 'clip') { %><video src="<%= src %>" controls playsinline preload="metadata" muted></video>
+              <% } else if (it.kind === 'audio') { %><audio src="<%= src %>" controls preload="none"></audio>
+              <% } else { %><a href="/media/<%= it.id %>"><img src="<%= src %>" alt="Snap of <%= it.subject %>" loading="lazy"></a><% } %>
             </div>
             <div class="meta">
               <div><b><%= it.subject || 'someone' %></b> <span class="mut">· <%= it.room || 'a room' %></span></div>
-              <div class="mut">by <%= it.by_user || '?' %><%= it.secs ? ' · ' + Math.round(it.secs) + 's' : '' %> · expires in <%= it.ttl %></div>
+              <div class="mut">by <%= it.by_user || '?' %><%= it.secs ? ' · ' + Math.round(it.secs) + 's' : '' %> · <%= fx.ago(it.created) %></div>
               <div><a href="/media/<%= it.id %>">Open ›</a></div>
             </div>
           </div>
@@ -59,6 +75,7 @@
       </div>
     <% } %>
   <% } %>
-</div>
+</main>
+<%- include('partials/feed-js', { viewer }) %>
 </body>
 </html>

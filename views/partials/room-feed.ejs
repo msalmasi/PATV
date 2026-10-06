@@ -1,0 +1,40 @@
+<%#
+  The room page's Feed section (1.99bv). Locals: feed (feedweb.roomFeed), fx, embeds, host, room (the page's room view)
+%><%
+  const F = feed;
+  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, fp: '' }, o); Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
+  const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
+%>
+<link rel="stylesheet" href="/public/css/feed.css?v=1">
+<section class="card rf" id="feed" aria-labelledby="rfH">
+  <h2 id="rfH"><span>📝 <%= room.name %> feed</span><small><a href="/feed?room=<%= encodeURIComponent(room.slug) %>">open in the feed ›</a></small></h2>
+  <% if (F.mention !== null) { %>
+    <label class="rf-mention" title="Room owners: Pepe posts a short line in the Camfrog room when someone posts here (at most one every few minutes)">
+      <input type="checkbox" id="rfMention" data-slug="<%= room.slug %>"<%= F.mention ? ' checked' : '' %>> 🐸 Pepe announces new posts in the room
+    </label>
+  <% } %>
+  <%- include('feed-composer', { composer: F.composer, next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
+  <% if (F.caps.length) { %>
+    <div class="fd-caps">
+      <h3>📸 Fresh captures <a href="/feed?tab=captures&room=<%= encodeURIComponent(room.slug) %>">all ›</a></h3>
+      <div class="strip"><% F.caps.forEach((c) => { %><a href="/media/<%= c.id %>" class="cap k-<%= c.kind %>"><% if (c.kind === 'photo') { %><img src="/media/<%= c.id %>/raw" alt="Snap of <%= c.subject %>" loading="lazy"><% } else { %><span class="ic"><%= c.kind === 'clip' ? '📹' : '🔊' %></span><% } %><span class="who"><%= c.subject || 'someone' %></span></a><% }) %></div>
+    </div>
+  <% } %>
+  <div class="fd-sort" aria-label="Sort the room feed">
+    <a class="<%= F.sort === 'new' ? 'on' : '' %>" href="<%= fq({ fsort: '' }) %>">🆕 New</a>
+    <a class="<%= F.sort === 'hot' ? 'on' : '' %>" href="<%= fq({ fsort: 'hot' }) %>">🔥 Hot</a>
+    <a class="<%= F.sort === 'top' ? 'on' : '' %>" href="<%= fq({ fsort: 'top' }) %>">🏆 Top</a>
+  </div>
+  <% if (!F.posts.length) { %>
+    <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this room yet.' %></p>
+  <% } else { %>
+    <div class="fd-list">
+      <% F.posts.forEach((p) => { %><%- include('feed-post', { p, fx, embeds, host, viewer: F.viewer, modRooms: mods, detail: false, ctxRoom: F.room }) %><% }) %>
+    </div>
+  <% } %>
+  <nav class="fd-pager">
+    <% if (F.page > 1) { %><a href="<%= fq({ fp: F.page - 1 }) %>">‹ Newer</a><% } %>
+    <% if (F.more) { %><a href="<%= fq({ fp: F.page + 1 }) %>">Older ›</a><% } %>
+  </nav>
+</section>
+<%- include('feed-js', { viewer: F.viewer }) %>

@@ -1,0 +1,43 @@
+<%#
+  The post composer (1.99bv). Locals: composer (feedweb.composerFor or null when signed out), next (return path)
+%><% const cp = composer; %>
+<% if (!cp) { %>
+  <div class="fc fc-out">✍️ <a href="/login?next=<%= encodeURIComponent(next) %>">Sign in</a> to post to the feed — text, links, pictures, audio or video.</div>
+<% } else if (cp.refusal) { %>
+  <div class="fc fc-out">✍️ <%= cp.refusal %></div>
+<% } else { %>
+  <form class="fc" id="fcForm" novalidate data-chunk="<%= cp.chunk %>" data-caps="<%= JSON.stringify(cp.caps) %>" data-prices="<%= JSON.stringify(cp.prices) %>" data-max-images="<%= cp.maxImages %>" data-max-rooms="<%= cp.maxRooms %>">
+    <div class="fc-row">
+      <input name="title" maxlength="140" placeholder="Title (optional)" aria-label="Title" autocomplete="off">
+    </div>
+    <textarea name="body" maxlength="5000" rows="3" placeholder="<%= cp.room ? 'Post something to this room…' : 'What\'s going on?' %>" aria-label="Text"></textarea>
+    <div class="fc-link hide" id="fcLinkRow">
+      <input name="link" type="url" inputmode="url" placeholder="https://… (YouTube and Twitch links play right here)" aria-label="Link" autocomplete="off">
+      <div class="fc-pv" id="fcPv" aria-live="polite"></div>
+    </div>
+    <ul class="fc-files" id="fcFiles" aria-live="polite"></ul>
+    <div class="fc-tools">
+      <button type="button" class="fc-tool" data-tool="link" aria-label="Add a link">🔗 Link</button>
+      <% if (!cp.mediaRefusal) { %>
+        <label class="fc-tool">🖼 Picture<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif" multiple data-kind="image" hidden></label>
+        <label class="fc-tool">🔊 Audio<input type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac" data-kind="audio" hidden></label>
+        <label class="fc-tool">🎬 Video<input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" data-kind="video" hidden></label>
+      <% } %>
+      <label class="fc-tool ck" title="Blurred until someone clicks it"><input type="checkbox" name="nsfw"> 🔞 NSFW</label>
+    </div>
+    <% if (cp.mediaRefusal) { %><p class="fc-note">📎 <%= cp.mediaRefusal %></p><% } %>
+    <fieldset class="fc-where">
+      <legend>Post to</legend>
+      <label class="fc-dest"><input type="checkbox" name="global"<%= cp.room ? '' : ' checked' %>> 🌐 Main feed</label>
+      <% cp.rooms.forEach((r) => { %>
+        <label class="fc-dest"><input type="checkbox" name="room" value="<%= r.id %>"<%= cp.room === r.id ? ' checked' : '' %>> 📡 <%= r.title %></label>
+      <% }) %>
+    </fieldset>
+    <div class="fc-send">
+      <span class="fc-cost mut" id="fcCost"><%= cp.paid ? '' : 'Posting is free.' %></span>
+      <span class="fc-err" id="fcErr" role="alert"></span>
+      <button type="submit" class="btn-s" id="fcGo">Post</button>
+    </div>
+    <p class="fc-note">Pictures up to <%= cp.caps.image %> MB, audio up to <%= cp.caps.audio %> MB (<%= Math.round(cp.caps.audioSecs / 60) %> min), video up to <%= cp.caps.video %> MB (<%= Math.round(cp.caps.videoSecs / 60) %> min). Files are re-encoded and their metadata (camera, GPS location) is removed.</p>
+  </form>
+<% } %>

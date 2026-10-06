@@ -87,7 +87,10 @@ function register(app, { addUser, isBotToken }) {
     try {
       // 1.99br: Pepe's live room_owner % per room flow rides along (shown to owners / admins)
       if (Array.isArray((req.body || {}).owner_shares)) await royalties.setOwnerShares(req.body.owner_shares).catch(() => {});
-      res.json({ ok: true, rooms: await rooms.ownersForPepe() });
+      // 1.99bv: Pepe's relay refusals (restricted logins) in, the room feed mentions out
+      let feed = {};
+      try { feed = await require("./feedweb").botSync(req.body || {}); } catch (e) { console.error("[rooms] feed sync:", e.message); }
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

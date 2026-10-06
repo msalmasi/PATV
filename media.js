@@ -107,24 +107,7 @@ function register(app, { isBotToken, addUser }) {
     res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null });
   });
 
-  // The feed — signed-in PATV users only (these are webcam captures)
-  app.get("/feed", addUser, async (req, res) => {
-    res.set("X-Robots-Tag", "noindex");
-    const user = req.user ? req.user.username : null;
-    if (!user) return res.render("feed", { user, items: [], kind: null, room: null, rooms: [], needLogin: true });
-    await ready;
-    const kind = KINDS.has(req.query.kind) ? req.query.kind : null;
-    const room = req.query.room ? String(req.query.room) : null;
-    const where = ["deleted = 0", "expires > ?"];
-    const params = [Date.now()];
-    if (kind) { where.push("kind = ?"); params.push(kind); }
-    if (room) { where.push("room = ?"); params.push(room); }
-    const items = (await getQuery(`SELECT * FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT 120`, params))
-      .map((r) => ({ ...r, ttl: ttlText(r.expires - Date.now()) }));
-    const rooms = (await getQuery("SELECT DISTINCT room FROM media WHERE deleted = 0 AND expires > ? AND room != ''", [Date.now()]))
-      .map((r) => r.room);
-    res.render("feed", { user, items, kind, room, rooms, needLogin: false });
-  });
+  // The /feed page (posts + these captures) lives in feedweb.js since 1.99bv.
 
   // Expired files go away even if nobody opens them
   setInterval(async () => {

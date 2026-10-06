@@ -1082,7 +1082,9 @@ app.get("/info", addUser, (req, res) => {
 
 // ── PAT history: a readable transaction log (history.js). You see your own; admins/staff can
 // look anyone up by username or Camfrog name. ──
-// Clips & snaps (moved off Netlify) and prediction markets
+// Clips & snaps (moved off Netlify) and prediction markets. The feed (1.99bv, feedweb.js) owns /feed:
+// user posts to the main feed and to rooms, plus these captures.
+require("./feedweb").register(app, { isBotToken, addUser });
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");

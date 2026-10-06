@@ -1,0 +1,91 @@
+<%#
+  One feed post card (1.99bv). Locals: p (feedstore.decorate row), fx (feedweb.fx), embeds (stageembed),
+  host, viewer (or null), modRooms (Set of room ids the viewer manages), detail (bool), ctxRoom (room id or null)
+%><%
+  const signed = !!viewer;
+  const staff_ = !!viewer && (viewer.class === 'Admin' || viewer.class === 'Staff');
+  const detail_ = typeof detail !== 'undefined' && detail;
+  const ctx_ = typeof ctxRoom !== 'undefined' ? ctxRoom : null;
+  const mods_ = typeof modRooms !== 'undefined' && modRooms ? modRooms : new Set();
+  const hideMedia = p.nsfw && !signed;
+  const myRooms = p.roomsAll.filter((r) => mods_.has(r.id));
+  const link = p.link;
+  let player = null;
+  if (link && link.embed) { try { player = embeds.playerUrl(link.embed, host); } catch (e) { player = null; } }
+%>
+<article class="fp<%= p.nsfw ? ' is-nsfw' : '' %><%= p.hidden ? ' is-hidden' : '' %>" id="p-<%= p.id %>" data-id="<%= p.id %>">
+  <div class="fp-vote">
+    <button type="button" class="fp-up<%= p.voted ? ' on' : '' %>" data-act="vote" aria-pressed="<%= p.voted ? 'true' : 'false' %>" aria-label="Upvote"<%= signed ? '' : ' data-login="1"' %>>▲</button>
+    <span class="fp-score" aria-label="score"><%= p.score %></span>
+  </div>
+  <div class="fp-main">
+    <div class="fp-head">
+      <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>/profile"><%= p.author.display %></a>
+      <span class="mut">· <a class="mut" href="/feed/p/<%= p.id %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a></span>
+      <% if (p.edited) { %><span class="mut" title="edited <%= new Date(p.edited).toUTCString() %>">· edited</span><% } %>
+      <% p.rooms.forEach((r) => { if (r.id === ctx_) return; %><a class="fp-chip<%= r.removed ? ' off' : '' %>" href="/rooms/<%= encodeURIComponent(r.slug) %>#feed">📡 <%= r.title %><%= r.removed ? ' (removed)' : '' %></a><% }) %>
+      <% if (p.global && ctx_) { %><span class="fp-chip">🌐 main feed</span><% } %>
+      <% if (p.nsfw) { %><span class="fp-tag nsfw">NSFW</span><% } %>
+      <% if (p.hidden) { %><span class="fp-tag warn" title="Hidden after reports - an admin will review it">hidden · in review</span><% } %>
+      <% if (p.deleted) { %><span class="fp-tag warn">deleted<%= p.deleteReason ? ': ' + p.deleteReason : '' %></span><% } %>
+    </div>
+    <% if (p.title) { %><h3 class="fp-title"><a href="/feed/p/<%= p.id %>"><%= p.title %></a></h3><% } %>
+    <div class="fp-content<%= p.nsfw ? ' blur' : '' %>">
+      <% if (hideMedia) { %>
+        <div class="fp-nsfw-gate">🔞 This post is marked NSFW. <a href="/login?next=<%= encodeURIComponent('/feed/p/' + p.id) %>">Sign in</a> to see it.</div>
+      <% } else { %>
+        <% if (p.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(p.body) %></div><% } %>
+        <% if (p.images.length) { %>
+          <div class="fp-imgs n<%= Math.min(p.images.length, 4) %>">
+            <% p.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="Picture in <%= p.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>></a><% }) %>
+          </div>
+        <% } %>
+        <% p.video.forEach((v) => { %>
+          <div class="fp-video"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video></div>
+        <% }) %>
+        <% p.audio.forEach((a) => { %>
+          <div class="fp-audio"><span aria-hidden="true">🔊</span><audio src="<%= fx.fileUrl(a.file) %>" controls preload="none"></audio><span class="mut"><%= a.secs ? fx.fmtSecs(a.secs) : '' %></span></div>
+        <% }) %>
+        <% if (link) { %>
+          <% if (player) { %>
+            <div class="fp-embed" data-src="<%= player %>">
+              <button type="button" class="fp-play" data-act="embed" aria-label="Play <%= embeds.label(link.embed) %>">
+                <% if (link.thumbFile) { %><img src="<%= fx.fileUrl(link.thumbFile) %>" alt="" loading="lazy"><% } %>
+                <span class="tri">▶</span><span class="lbl"><%= embeds.label(link.embed) %> · click to play</span>
+              </button>
+            </div>
+          <% } %>
+          <a class="fp-link<%= link.thumbFile && !player ? ' has-img' : '' %>" href="<%= link.url %>" rel="nofollow noopener noreferrer ugc" target="_blank">
+            <% if (link.thumbFile && !player) { %><img src="<%= fx.fileUrl(link.thumbFile) %>" alt="" loading="lazy"><% } %>
+            <span class="t"><b><%= link.title || link.domain %></b><% if (link.description) { %><span class="d"><%= link.description %></span><% } %><span class="dom">🔗 <%= link.domain %></span></span>
+          </a>
+        <% } %>
+      <% } %>
+      <% if (p.nsfw && !hideMedia) { %><button type="button" class="fp-reveal" data-act="reveal">🔞 NSFW — click to show</button><% } %>
+    </div>
+    <div class="fp-foot">
+      <a href="/feed/p/<%= p.id %>#comments">💬 <%= p.comments %> comment<%= p.comments === 1 ? '' : 's' %></a>
+      <button type="button" data-act="share" data-url="/feed/p/<%= p.id %>">🔗 Share</button>
+      <% if (signed && !p.mine) { %><button type="button" data-act="report">⚑ Report</button><% } %>
+      <% if (p.mine && !p.deleted) { %><button type="button" data-act="edit">✏️ Edit</button><button type="button" data-act="delete">🗑 Delete</button><% } %>
+      <% myRooms.forEach((r) => { %>
+        <% if (r.removed) { %><button type="button" class="own" data-act="restore-room" data-room="<%= r.id %>">↩ Put back in <%= r.title %></button>
+        <% } else { %><button type="button" class="own" data-act="remove-room" data-room="<%= r.id %>">✂ Remove from <%= r.title %></button><% } %>
+      <% }) %>
+      <% if (staff_) { %>
+        <button type="button" class="adm" data-act="admin-nsfw" data-on="<%= p.nsfw ? '0' : '1' %>"><%= p.nsfw ? 'Unmark NSFW' : 'Mark NSFW' %></button>
+        <button type="button" class="adm" data-act="admin-hide" data-on="<%= p.hidden ? '0' : '1' %>"><%= p.hidden ? 'Unhide' : 'Hide' %></button>
+        <% if (!p.mine && !p.deleted) { %><button type="button" class="adm" data-act="admin-delete">Delete</button><% } %>
+      <% } %>
+      <% if (p.cost) { %><span class="mut">· <%= Number(p.cost).toLocaleString('en-US') %> PAT</span><% } %>
+    </div>
+    <% if (p.mine) { %>
+      <form class="fp-editf hide" data-act="edit-save">
+        <input name="title" maxlength="140" value="<%= p.title %>" placeholder="Title (optional)" aria-label="Title">
+        <textarea name="body" maxlength="5000" rows="4" aria-label="Text"><%= p.body %></textarea>
+        <label class="ck"><input type="checkbox" name="nsfw"<%= p.nsfwAuthor ? ' checked' : '' %>> NSFW</label>
+        <div><button type="submit" class="btn-s">Save</button> <button type="button" class="btn-g" data-act="edit-cancel">Cancel</button></div>
+      </form>
+    <% } %>
+  </div>
+</article>

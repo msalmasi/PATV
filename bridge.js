@@ -517,6 +517,8 @@ function register(app, { isBotToken, addUser }) {
       roomStage: await require("./mainstage").roomStage(R.id, req.user),
       manage: await reg.canManage(req.user, R.id),
       analytics: reg.hasRoute(app, "/rooms/:slug/analytics"),
+      feed: await require("./feedweb").roomFeed(R.id, req.user, req.query).catch((e) => { console.error("[feed] room feed:", e.message); return null; }),
+      fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });
   });
 }
