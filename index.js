@@ -219,11 +219,12 @@ app.get("/protected", authenticateToken, (req, res) => {
 // password), and a safe "return to" path - ?next= when given, else the page they came from.
 function authView(req, extra) {
   let form = {};
-  try { form = JSON.parse(req.flash("authForm")[0] || "{}") || {}; } catch (e) { form = {}; }
+  // the newest one wins (two posts without a page view in between leave two)
+  try { form = JSON.parse(req.flash("authForm").slice(-1)[0] || "{}") || {}; } catch (e) { form = {}; }
   return Object.assign({
     user: req.user ? req.user.username : null,
-    errors: req.flash("error"),
-    success: req.flash("success"),
+    errors: [...new Set(req.flash("error"))],   // repeated posts shouldn't stack the same message
+    success: [...new Set(req.flash("success"))],
     form,
     next: guard.safeNext(req.query.next) || guard.refererNext(req) || "",
   }, extra || {});
