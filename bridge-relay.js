@@ -38,6 +38,13 @@ const queueAction = (...a) => require("./actions").queue(...a);   // lazy: actio
 
 const SAY_MAX = 300, CLIP_MAX_BYTES = 600 * 1024, CLIP_MAX_SECS = 30;
 const JOB_TTL = 3 * 60 * 1000, CLAIM_RETRY = 45 * 1000;
+// A clip can wait minutes for the room's mic (Pepe 1.99bk waits up to 4 min in a busy room), so an
+// unfinished clip job is kept CLIP_TTL; any finished job JOB_TTL after it finished.
+const CLIP_TTL = 8 * 60 * 1000;
+// Pepe's progress acks for a clip (1.99bk): state "queued" | "waiting" | "playing" keep the job open;
+// an ack without one is final ("done"). Acks can arrive in one batch or out of order - never step back.
+const PROGRESS = { queued: 1, waiting: 2, playing: 3 };
+const stateRank = (s) => (s === "done" ? 9 : PROGRESS[s] || 0);
 const SNAP_TTL = 2 * 60 * 1000, SNAP_TARGET_GAP = 20 * 1000, SNAP_VIEWER_GAP = 10 * 1000;
 const FRAME_TTL = 5 * 60 * 1000;                                   // a queued save waits this long for Pepe
 const SAVE_GAP = 20 * 1000, SAVE_BURST = 3, SAVE_WINDOW = 10 * 60 * 1000;  // = Pepe's own limit (pepe_relay.py)
@@ -113,13 +120,16 @@ function limited(key, gap, burst, windowMs) {
   return null;
 }
 
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, j] of jobs) if (now - j.at > JOB_TTL) jobs.delete(id);
+function sweep(now) {
+  for (const [id, j] of jobs) {
+    const open = j.state !== "done";
+    if (open ? now - j.at > (j.kind === "clip" ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
+  }
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
   for (const [k, f] of frames) if (now - f.ts > FRAME_TTL) frames.delete(k);
   for (const [k, q] of hits) if (!q.length || now - q[q.length - 1] > 15 * 60 * 1000) hits.delete(k);
-}, 15 * 1000).unref();
+}
+setInterval(() => sweep(Date.now()), 15 * 1000).unref();
 
 const clean = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, " ")
   .replace(/<[^<>]{0,60}>/g, "").replace(/\s+/g, " ").trim().slice(0, n);
@@ -165,8 +175,11 @@ function applyAcks(acks) {
       if (j.result) j.result.replies = (j.result.replies || []).concat(replies).slice(-CMD_MAX_REPLIES);
       continue;
     }
-    j.state = "done";
+    const st = j.kind === "clip" && PROGRESS[a.state] ? a.state : "done";
+    if (stateRank(st) < stateRank(j.state)) continue;          // an older step arriving late
+    j.state = st;
     j.result = { ok: !!a.ok, msg: clean(a.msg, 200) };
+    if (st === "done") j.doneAt = Date.now();
     if (j.kind === "cmd") {
       j.result.replies = replies;
       cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
@@ -418,4 +431,4 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, cleanCmds, commandsText, CMD_DENY, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };
+module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, cleanCmds, commandsText, CMD_DENY, _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

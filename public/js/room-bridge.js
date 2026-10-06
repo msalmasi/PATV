@@ -6,6 +6,10 @@
 //                              a "!" line is a command Pepe runs as your Camfrog name (autocomplete + your private answers)
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip (20 s max) Pepe plays on the room's mic when
 //                              it's free; shown only while the room's bridge_mic switch is on
+//   PATVRoom.clipStatus(job)   the clip line's text for a clip job's state (queued / waiting for the mic /
+//                              playing / played / couldn't get the mic) - also used by the tests
+// The player and push-to-talk share the page's audio session - see "the page's audio session" below
+// for how iOS Safari's play-and-record switch is handled (1.99bk).
 // All are driven by the live view JSON: call .update(d) with each poll result.
 // Everything user-visible goes in via textContent.
 (function () {
@@ -13,6 +17,44 @@
   var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, String(v)); } catch (e) { return null; } return null; }
+
+  // ── the page's audio session: room player + push-to-talk (1.99bk) ──
+  // iOS Safari: getUserMedia switches the page's audio session to play-and-record. Anything routed
+  // through Web Audio (the player used to feed the <audio> element into an AudioContext for its
+  // level meter) gets ducked / moved to the earpiece, and that AudioContext KEEPS the route after
+  // the mic stops - so the room went quiet on the first press, stayed quiet, and the next press
+  // flipped it the other way ("louder"). The fix, all of it known to behave on iOS 17/18 Safari:
+  //   * on iOS the room audio is a plain <audio> element - never createMediaElementSource (no
+  //     meter there; the volume slider is hidden too: iOS makes element.volume read-only, the
+  //     hardware buttons set it). Media elements follow the session back to playback by themselves.
+  //   * everywhere else ONE AudioContext per page (ctx()) feeds the meter, resumed after a clip
+  //   * the Audio Session API (navigator.audioSession, Safari 17+): 'play-and-record' just before
+  //     the mic opens, 'playback' (room playing) / 'auto' right after - an explicit hand-back
+  //   * every mic track is stopped and the stream dropped the moment a clip ends, in the very
+  //     gesture that ended it (pointerup) - iOS holds play-and-record while any track is live, and
+  //     only lets the paused room player resume from a user gesture
+  //   * volume + mute live in the player's own variables (what the user set - saved only from the
+  //     slider / mute button) and are re-applied after each clip; nothing is read back from the
+  //     element (that's how a toggle went the wrong way) and no temporary value is ever saved
+  // Desktop / Android: same player as before; a clip only adds the track release + context resume.
+  var IOS = /iP(hone|ad|od)/.test(navigator.userAgent || '') ||
+    (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var shared = { ctx: null, players: [] };
+  function ctx() {
+    if (!shared.ctx && AC && !IOS) { try { shared.ctx = new AC(); } catch (e) { shared.ctx = null; } }
+    return shared.ctx;
+  }
+  function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) { /* no Audio Session API */ } }
+  var recSession = {
+    before: function () { setSession('play-and-record'); },
+    after: function () {
+      setSession(shared.players.some(function (p) { return p.wantsPlay(); }) ? 'playback' : 'auto');
+      var c = shared.ctx;
+      if (c && c.state !== 'running' && c.state !== 'closed') { try { c.resume(); } catch (e) { /* resumes on the next play */ } }
+      shared.players.forEach(function (p) { try { p.afterRec(); } catch (e) { /* one player can't break another */ } });
+    },
+  };
 
   // ── room audio mini player ──
   function audio(host, slug) {
@@ -25,21 +67,27 @@
     var mute = el('button', 'rb-btn rb-mute', '🔊'); mute.type = 'button'; mute.setAttribute('aria-label', 'Mute');
     var vol = el('input', 'rb-vol'); vol.type = 'range'; vol.min = '0'; vol.max = '100'; vol.step = '5'; vol.setAttribute('aria-label', 'Volume');
     var jump = el('button', 'rb-btn rb-jump hide', 'Jump to live'); jump.type = 'button';
-    var au = el('audio'); au.preload = 'none';
+    var au = el('audio'); au.preload = 'none'; au.setAttribute('playsinline', '');
+    if (IOS) { meter.style.display = 'none'; vol.style.display = 'none'; }
     [play, state, meter, mute, vol, jump, au].forEach(function (x) { box.appendChild(x); });
     host.appendChild(box);
 
-    var playing = false, startedAt = 0, actx = null, analyser = null, raf = null, available = false;
+    var playing = false, startedAt = 0, analyser = null, raf = null, available = false;
     var v0 = Number(store('patvRoomVol')); vol.value = isFinite(v0) && store('patvRoomVol') !== null ? Math.max(0, Math.min(100, v0)) : 80;
-    au.volume = vol.value / 100;
-    au.muted = store('patvRoomMuted') === '1';
+    // What the USER set. The only source of truth for volume / mute - see the session notes above.
+    var userVol = vol.value / 100, userMuted = store('patvRoomMuted') === '1';
+    function applyVolume() {
+      au.muted = userMuted;
+      if (!IOS) { try { au.volume = userVol; } catch (e) { /* read-only */ } }
+    }
+    applyVolume();
     function paint() {
       play.textContent = playing ? '❚❚' : '▶';
       play.setAttribute('aria-label', playing ? 'Pause room audio' : 'Listen live');
       play.setAttribute('aria-pressed', playing ? 'true' : 'false');
-      mute.textContent = au.muted || au.volume === 0 ? '🔇' : '🔊';
-      mute.setAttribute('aria-label', au.muted ? 'Unmute' : 'Mute');
-      mute.setAttribute('aria-pressed', au.muted ? 'true' : 'false');
+      mute.textContent = userMuted || (!IOS && userVol === 0) ? '🔇' : '🔊';
+      mute.setAttribute('aria-label', userMuted ? 'Unmute' : 'Mute');
+      mute.setAttribute('aria-pressed', userMuted ? 'true' : 'false');
       box.classList.toggle('on', playing);
     }
     function setState(t, cls) { state.textContent = t; state.className = 'rb-state' + (cls ? ' ' + cls : ''); }
@@ -54,13 +102,12 @@
       raf = requestAnimationFrame(meterLoop);
     }
     function wireMeter() {
-      if (reduce || analyser) return;
+      if (reduce || analyser || IOS) return;          // never on iOS (see the session notes)
       try {
-        var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-        actx = actx || new AC();
-        var src = actx.createMediaElementSource(au);       // same-origin stream, so no CORS issue
-        analyser = actx.createAnalyser(); analyser.fftSize = 64;
-        src.connect(analyser); analyser.connect(actx.destination);
+        var c = ctx(); if (!c) return;
+        var src = c.createMediaElementSource(au);       // same-origin stream, so no CORS issue
+        analyser = c.createAnalyser(); analyser.fftSize = 64;
+        src.connect(analyser); analyser.connect(c.destination);
       } catch (e) { analyser = null; }
     }
     // The room arrives in ~1 s pieces in real time, so playing the moment the first bytes land means
@@ -69,12 +116,13 @@
     var CUSHION = 2.5, waitTimer = null;
     function ahead() { var b = au.buffered; return b.length ? b.end(b.length - 1) - au.currentTime : 0; }
     function start() {
-      clearInterval(waitTimer);
+      clearInterval(waitTimer); startedAt = 0;
       au.preload = 'auto';
       au.src = '/rooms/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
       au.load();
       wireMeter();
-      if (actx && actx.state === 'suspended') actx.resume();
+      if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
+      applyVolume();
       playing = true; paint(); store('patvRoomAudio', 1);
       setState('connecting…', 'wait');
       var t0 = Date.now(), lastGot = 0, grewAt = Date.now();
@@ -98,8 +146,12 @@
       jump.classList.add('hide'); paint(); setState(msg || 'Room audio', '');
     }
     play.addEventListener('click', function () { if (playing) { stop(); store('patvRoomAudio', 0); } else start(); });
-    mute.addEventListener('click', function () { au.muted = !au.muted; store('patvRoomMuted', au.muted ? 1 : 0); paint(); });
-    vol.addEventListener('input', function () { au.volume = vol.value / 100; if (au.volume > 0 && au.muted) au.muted = false; store('patvRoomVol', vol.value); paint(); });
+    mute.addEventListener('click', function () { userMuted = !userMuted; store('patvRoomMuted', userMuted ? 1 : 0); applyVolume(); paint(); });
+    vol.addEventListener('input', function () {
+      userVol = vol.value / 100;
+      if (userVol > 0 && userMuted) { userMuted = false; store('patvRoomMuted', 0); }
+      store('patvRoomVol', vol.value); applyVolume(); paint();
+    });
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
     au.addEventListener('waiting', function () { if (playing) setState('LIVE · buffering…', 'wait'); });
     au.addEventListener('playing', function () { setState('LIVE', 'live'); });
@@ -111,10 +163,24 @@
       if (behind >= 6 && state.textContent === 'LIVE') setState('LIVE · catching up…', 'wait');
     }, 2000);
     paint();
+    shared.players.push({
+      wantsPlay: function () { return playing; },
+      // after a clip (runs inside the gesture that ended it): the user's own volume / mute again, and
+      // if the system paused the room meanwhile, play it again - a gesture is what iOS needs for that
+      afterRec: function () {
+        applyVolume(); paint();
+        if (playing && startedAt && au.paused) {          // (still cushioning: start() plays it)
+          au.play().then(function () { setState('LIVE', 'live'); })
+            .catch(function () { setState('tap ▶ to resume', ''); playing = false; paint(); });
+        }
+      },
+    });
     box.rbDebug = function () {                 // for diagnosing "I can't hear it" from the console
       var lvl = null;
       if (analyser) { var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d); lvl = Math.max.apply(null, d); }
-      return { ctx: actx ? actx.state : null, meter: !!analyser, level: lvl, t: au.currentTime, ahead: ahead(), muted: au.muted, volume: au.volume };
+      var sess = null; try { sess = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) { sess = null; }
+      return { ios: IOS, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
+        ahead: ahead(), paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
     };
     return {
       update: function (d) {
@@ -241,7 +307,23 @@
     };
   }
 
-  // ── push-to-talk clip: hold the button (or click to start, click again to stop); 20 s max ──
+  // ── push-to-talk clip: hold the button (or tap to start, tap again to send); 20 s max ──
+  // What the clip line says for the user's latest clip job (mineFor). Pepe (1.99bk) acks the steps:
+  // queued -> waiting (someone else holds the mic) -> playing -> done: "played", or not ok with
+  // "couldn't get the mic ..." after a patient wait. Older Pepes ack once ("queued ...") then again
+  // when it plays / is dropped - those messages still read right.
+  function clipStatus(j) {
+    if (!j) return '';
+    var s = j.state, m = String(j.msg || '');
+    if (s === 'pending' || s === 'claimed') return 'sent — waiting for Pepe…';
+    if (s === 'queued') return 'queued for the mic…';
+    if (s === 'waiting') return 'waiting for the mic…';
+    if (s === 'playing') return 'playing on the mic now';
+    if (j.ok) return m === 'played' ? 'played' : (m || 'sent');
+    if (/couldn.t get the mic|stayed busy|dropped/i.test(m)) return 'couldn’t get the mic, try again';
+    return 'not sent — ' + (m || 'refused');
+  }
+
   function ptt(host, slug) {
     var box = el('div', 'rb-ptt hide');
     var btn = el('button', 'rb-btn rb-talk', '🎙 Hold to talk'); btn.type = 'button'; btn.setAttribute('aria-pressed', 'false');
@@ -251,36 +333,82 @@
     box.appendChild(btn); box.appendChild(txt);
     host.appendChild(box); host.appendChild(mine);
     var can = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-    var rec = null, chunks = [], recAt = 0, recTimer = null, held = false, last = '';
-    function stop() { if (rec && rec.state === 'recording') rec.stop(); clearTimeout(recTimer); }
+    var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
+    var opening = false, pressAt = 0, upAt = 0, tapMode = false;
+    function idle() { btn.setAttribute('aria-pressed', 'false'); btn.textContent = '🎙 Hold to talk'; }
+    // Every mic track stopped and the stream dropped (iOS keeps the page in play-and-record while any
+    // track is alive), then the room player gets its playback session + the user's volume back.
+    function release() {
+      var s = stream; stream = null;
+      if (s) s.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { /* already ended */ } });
+      recSession.after();
+    }
+    // Called from the gesture that ends the clip (pointerup / tap / key), so the release - and the room
+    // player's resume - happen inside that gesture instead of later in MediaRecorder's onstop.
+    function stop() {
+      clearTimeout(recTimer);
+      if (rec && rec.state === 'recording') { try { rec.stop(); } catch (e) { /* onstop still runs */ } }
+      if (stream) release();
+    }
+    function send(chunks, mimeType, secs) {
+      if (secs < 0.7) { txt.textContent = 'too short — hold the button while you talk'; return; }
+      var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
+      txt.textContent = 'sending ' + secs.toFixed(0) + 's…';
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { txt.textContent = d.ok ? 'sent — Pepe plays it when the mic is free' : (d.error || 'not sent'); })
+        .catch(function () { txt.textContent = 'couldn\'t reach the site'; });
+    }
     function start() {
       if (rec && rec.state === 'recording') return stop();
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      if (opening) return;                       // a second press while the browser is still opening the mic
+      opening = true; pressAt = Date.now();
+      recSession.before();
+      txt.textContent = 'opening the microphone…';
+      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (s) {
+        opening = false;
+        stream = s;
+        // The press already ended while the browser opened the mic (first-time permission prompt, a
+        // slow device). A HOLD that's over is not a recording - let the mic go at once. (Before
+        // 1.99bk this recorded on for 20 s with the room ducked; the next press "fixed" it.)
+        if ((upAt && upAt - pressAt > 400) || document.hidden || box.classList.contains('hide')) {
+          release();
+          txt.textContent = upAt ? 'keep holding until it says Recording, then talk' : 'up to 20 s · Pepe plays it on the mic when it\'s free';
+          return;
+        }
         var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
-        rec = new MediaRecorder(stream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
-        chunks = []; recAt = Date.now();
-        rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-        rec.onstop = function () {
-          stream.getTracks().forEach(function (t) { t.stop(); });
-          btn.setAttribute('aria-pressed', 'false'); btn.textContent = '🎙 Hold to talk';
-          var secs = (Date.now() - recAt) / 1000;
-          if (secs < 0.7) { txt.textContent = 'too short — hold the button while you talk'; return; }
-          var blob = new Blob(chunks, { type: (rec.mimeType || 'audio/webm').split(';')[0] });
-          txt.textContent = 'sending ' + secs.toFixed(0) + 's…';
-          fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
-            .then(function (r) { return r.json(); })
-            .then(function (d) { txt.textContent = d.ok ? 'sent — Pepe plays it when the mic is free' : (d.error || 'not sent'); })
-            .catch(function () { txt.textContent = 'couldn\'t reach the site'; });
+        var r, chunks = [], t0 = Date.now();
+        try { r = new MediaRecorder(s, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined); }
+        catch (e) { release(); txt.textContent = 'this browser can\'t record a clip'; return; }
+        rec = r; recAt = t0;
+        r.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        r.onstop = function () {
+          if (stream === s) release();           // stopped some other way (track ended, page hidden)
+          idle();
+          send(chunks, r.mimeType, (Date.now() - t0) / 1000);
         };
-        rec.start(250);
-        btn.setAttribute('aria-pressed', 'true'); btn.textContent = '⏺ Recording — release to send';
+        r.start(250);
+        tapMode = !!upAt;                        // a quick tap started it: tap again to send
+        btn.setAttribute('aria-pressed', 'true');
+        btn.textContent = tapMode ? '⏺ Recording — tap to send' : '⏺ Recording — release to send';
+        txt.textContent = 'recording…';
         recTimer = setTimeout(stop, 20000);
-      }).catch(function () { txt.textContent = 'the browser didn\'t allow the microphone'; });
+      }).catch(function () { opening = false; release(); txt.textContent = 'the browser didn\'t allow the microphone'; });
     }
-    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; start(); });
-    btn.addEventListener('pointerup', function () { if (held && Date.now() - recAt > 400) stop(); held = false; });
-    btn.addEventListener('pointerleave', function () { if (held) stop(); held = false; });
-    btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); start(); } });
+    function up() {
+      if (!held) return;
+      held = false; upAt = Date.now();
+      if (!rec || rec.state !== 'recording' || tapMode) return;
+      if (Date.now() - recAt > 400) stop();
+      else { tapMode = true; btn.textContent = '⏺ Recording — tap to send'; }
+    }
+    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; upAt = 0; start(); });
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointercancel', up);
+    btn.addEventListener('pointerleave', up);
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });   // iOS / Android long-press menu
+    btn.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); upAt = 1; start(); } });
+    document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); });
     return {
       update: function (d) {
         var on = !!(d && d.room && d.room.micRelay) && can;
@@ -290,11 +418,10 @@
         if (k === last) return;
         last = k;
         var j = js.filter(function (x) { return x.kind === 'clip'; }).pop();
-        mine.textContent = !j ? '' : '🎙 your clip: ' +
-          (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
+        mine.textContent = j ? '🎙 your clip: ' + clipStatus(j) : '';
       },
     };
   }
 
-  window.PATVRoom = { audio: audio, relay: relay, ptt: ptt };
+  window.PATVRoom = { audio: audio, relay: relay, ptt: ptt, clipStatus: clipStatus, _ios: IOS };
 })();
