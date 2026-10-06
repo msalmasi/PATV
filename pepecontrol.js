@@ -14,6 +14,14 @@
 // within 2 minutes or it expires, 3 commands per 10 minutes (all admins together), and an audit
 // log (admin, salted IP hash, command, time, result) shown in the panel. Kinds and modes are a
 // fixed list; the VM runs nothing else.
+//
+// "Pepe's look" (1.99bv): costume / persona / persona voice / costume-persona link / reset. These
+// need Pepe RUNNING, so unlike restarts they go through his normal website-action queue
+// (actions.js, kind "pepe.look", run by camfrog-bot pepe_webact._webact_look as the admin chat
+// command - !costume, !persona, !persona voice|link, !avatar reset - attributed to the admin). The
+// panel shows his reply. Guards: Admin class + CSRF (no step-up password: cosmetic only), values
+// checked against the lists Pepe himself reports in the heartbeat (status.pepe.look), refused while
+// Pepe is offline, 20 per minute per admin, every change and its result in the audit log.
 "use strict";
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
@@ -34,11 +42,17 @@ const ACTIVE = ["pending", "claimed", "accepted", "running", "waiting"];
 const TERMINAL = new Set(["done", "failed", "expired", "superseded"]);
 const ACK_STATES = new Set(["accepted", "running", "waiting", "done", "failed", "superseded"]);
 
+// Pepe's look: verb -> the chat command it runs (shown in the panel + audit log)
+const LOOK_VERBS = { costume: "!costume", persona: "!persona", voice: "!persona voice", link: "!persona link", reset: "!avatar reset" };
+const LOOK_RATE = { max: 20, windowMs: 60 * 1000 };
+const LIVE_MS = 150 * 1000;               // Pepe's own live-file age (the VM forwards it while < 120 s) + slack
+
 let now = () => Date.now();
 function _setClock(fn) { now = fn; }
 
 // Wrong passwords: 5 per 15 minutes per admin, then locked out for the rest of the window.
 const pwFails = guard.limiter({ max: 5, windowMs: 15 * 60 * 1000 });
+const lookHits = guard.limiter(LOOK_RATE);
 const nonces = new Map();                 // nonce -> { user, exp }
 
 function secret() { return process.env.PEPE_CONTROL_SECRET || process.env.SECRET_KEY || ""; }
@@ -89,6 +103,8 @@ async function init() {
     id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, userId TEXT, username TEXT, ip_hash TEXT,
     action TEXT NOT NULL, cmd_id TEXT, result TEXT)`);
   await runQuery("CREATE TABLE IF NOT EXISTS pepe_control_status (id INTEGER PRIMARY KEY CHECK (id = 1), at INTEGER NOT NULL, data TEXT)");
+  // 1.99bv: Pepe's last reported costume/persona lists, so the look controls still show (disabled) while he's offline
+  await runQuery("CREATE TABLE IF NOT EXISTS pepe_control_lastlook (id INTEGER PRIMARY KEY CHECK (id = 1), at INTEGER NOT NULL, data TEXT)");
 }
 let ready = null;
 const ensure = () => (ready = ready || init().catch((e) => { ready = null; throw e; }));
@@ -210,10 +226,97 @@ async function heartbeat(data) {
   let s = JSON.stringify(data && typeof data === "object" ? data : {});
   if (s.length > MAX_STATUS_BYTES) throw fail(413, "status too large");
   await runQuery("INSERT INTO pepe_control_status (id, at, data) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET at = excluded.at, data = excluded.data", [now(), s]);
+  const lk = data && data.pepe && data.pepe.look;
+  if (lk && typeof lk === "object" && (Array.isArray(lk.costumes) || Array.isArray(lk.personas))) {
+    const lists = JSON.stringify({ costumes: Array.isArray(lk.costumes) ? lk.costumes : [], personas: Array.isArray(lk.personas) ? lk.personas : [] });
+    await runQuery("INSERT INTO pepe_control_lastlook (id, at, data) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET at = excluded.at, data = excluded.data", [now(), lists]);
+  }
   return { ok: true };
 }
 
 const parse = (s) => { try { return JSON.parse(s); } catch (e) { return null; } };
+
+/** Pepe's reported look, or null when he isn't up (VM offline, Pepe not running, or his live file stale). */
+function lookFrom(st, t) {
+  if (!st || t - st.at >= ONLINE_MS) return null;
+  const d = parse(st.data) || {}, p = d.pepe || {};
+  if (!p.running || !p.live_ts || !p.look || typeof p.look !== "object") return null;
+  if (t / 1000 - Number(p.live_ts) > LIVE_MS / 1000) return null;
+  return p.look;
+}
+async function currentLook() {
+  const st = (await getQuery("SELECT at, data FROM pepe_control_status WHERE id = 1"))[0] || null;
+  return lookFrom(st, now());
+}
+const idSet = (list) => new Set((Array.isArray(list) ? list : []).map((x) => (x && x.id ? String(x.id) : "")).filter(Boolean));
+const lookLabel = (verb, value) => LOOK_VERBS[verb] + (value ? " " + value : "");
+const actions = () => require("./actions");      // lazy: actions.js opens its table on load
+
+/** An admin changes Pepe's look: queued for Pepe as a "pepe.look" website action. */
+async function lookRequest(user, { verb, value }, ip) {
+  await ensure();
+  if (!user || user.class !== "Admin") throw fail(403, "Admins only.");
+  if (typeof verb !== "string" || !Object.prototype.hasOwnProperty.call(LOOK_VERBS, verb)) throw fail(400, "Unknown look control.");
+  const v = String(value == null ? "" : value).trim().toLowerCase().slice(0, 40);
+  const look = await currentLook();
+  if (!look) {
+    await audit(user, ip, "denied", null, lookLabel(verb, v) + ": Pepe offline");
+    throw fail(409, "Pepe offline - his look can only be changed while he's running.");
+  }
+  let ok;
+  if (verb === "costume") ok = v === "off" || idSet(look.costumes).has(v);
+  else if (verb === "persona") ok = v === "off" || idSet(look.personas).has(v);
+  else if (verb === "voice" || verb === "link") ok = v === "on" || v === "off";
+  else ok = v === "";
+  if (!ok) throw fail(400, "Pepe doesn't have that one.");
+  const who = userKey(user);
+  if (lookHits.blocked(who)) {
+    await audit(user, ip, "denied", null, lookLabel(verb, v) + ": rate limit (" + LOOK_RATE.max + " per minute)");
+    throw fail(429, "Slow down - at most " + LOOK_RATE.max + " look changes a minute.");
+  }
+  lookHits.hit(who);
+  const label = lookLabel(verb, v);
+  let id;
+  try {
+    id = await actions().queue(user.userId, { kind: "pepe.look", args: v ? [verb, v] : [verb], tag: "pepe-look", label });
+  } catch (e) {
+    if (e && e.message === "busy") throw fail(429, "You already have a few things waiting for Pepe - give him a moment.");
+    throw e;
+  }
+  await audit(user, ip, "look", "a" + id, label + " (sent to Pepe)");
+  return { id, label, status: "pending" };
+}
+
+/** Finished look actions get their result (Pepe's reply) in the audit log, once each. */
+async function auditLookResults() {
+  let rows;
+  try {
+    rows = await getQuery(`SELECT a.id, a.user_id, a.username, a.label, a.status, a.message FROM pepe_actions a
+      WHERE a.kind = 'pepe.look' AND a.status IN ('done','failed') AND a.created > ?
+      AND NOT EXISTS (SELECT 1 FROM pepe_control_audit c WHERE c.action = 'look-result' AND c.cmd_id = 'a' || a.id)
+      ORDER BY a.id LIMIT 20`, [Date.now() - 86400 * 1000]);
+  } catch (e) { return; }                            // no pepe_actions table yet
+  for (const r of rows) {
+    await audit({ userId: r.user_id, username: r.username }, null, "look-result", "a" + r.id,
+      (r.status === "done" ? "done: " : "failed: ") + (r.label || "look") + (r.message ? " - " + r.message : ""));
+  }
+}
+
+async function recentLooks(limit = 8) {
+  try {
+    return await getQuery(`SELECT id, username, label, status, message, created, updated FROM pepe_actions
+      WHERE kind = 'pepe.look' ORDER BY id DESC LIMIT ?`, [limit]);
+  } catch (e) { return []; }
+}
+
+/** One look action's state for the panel (any admin may see any; pepe.look rows only). */
+async function lookResult(id) {
+  await auditLookResults();
+  const r = (await getQuery("SELECT id, username, label, status, message, created, updated FROM pepe_actions WHERE id = ? AND kind = 'pepe.look'",
+    [parseInt(id, 10) || 0]))[0];
+  if (!r) throw fail(404, "No such change.");
+  return r;
+}
 
 /** Everything the panel shows. Admin only (the route checks). */
 async function view() {
@@ -222,8 +325,9 @@ async function view() {
   const t = now();
   const st = (await getQuery("SELECT at, data FROM pepe_control_status WHERE id = 1"))[0] || null;
   const cmds = await getQuery("SELECT id, kind, mode, username, created_at, claimed_at, finished_at, status, detail FROM pepe_control_cmds ORDER BY created_at DESC LIMIT 10");
-  const log = await getQuery("SELECT at, username, ip_hash, action, cmd_id, result FROM pepe_control_audit ORDER BY id DESC LIMIT 30");
   const recent = (await getQuery("SELECT COUNT(*) AS n FROM pepe_control_cmds WHERE created_at > ?", [t - RATE_WINDOW_MS]))[0].n;
+  await auditLookResults();
+  const log = await getQuery("SELECT at, username, ip_hash, action, cmd_id, result FROM pepe_control_audit ORDER BY id DESC LIMIT 30");
   return {
     now: t,
     online: !!(st && t - st.at < ONLINE_MS),
@@ -235,6 +339,9 @@ async function view() {
     audit: log,
     rate: { used: recent, max: RATE_MAX, window_min: RATE_WINDOW_MS / 60000 },
     kinds: KINDS, modes: MODES,
+    look: lookFrom(st, t),
+    look_known: parse(((await getQuery("SELECT data FROM pepe_control_lastlook WHERE id = 1"))[0] || {}).data || "null"),
+    looks: await recentLooks(),
   };
 }
 
@@ -271,6 +378,16 @@ function register(app, { isBotToken, addUser }) {
     } catch (e) { if (!e.status) console.error("[pepecontrol] command:", e.message); send(res, e); }
   });
 
+  // Pepe's look (1.99bv): admin + CSRF, no step-up password (cosmetic), through Pepe's action queue
+  app.post("/api/pepe/control/look", noStore, addUser, admin, csrf, async (req, res) => {
+    const b = req.body || {};
+    try { res.json({ ok: true, action: await lookRequest(req.user, { verb: b.verb, value: b.value }, guard.clientIp(req)) }); }
+    catch (e) { if (!e.status) console.error("[pepecontrol] look:", e.message); send(res, e); }
+  });
+  app.get("/api/pepe/control/look/:id", noStore, addUser, admin, async (req, res) => {
+    try { res.json({ ok: true, action: await lookResult(req.params.id) }); } catch (e) { send(res, e); }
+  });
+
   // ── the VM supervisor (bot token; it only ever calls out) ──
   app.get("/api/pepe/control/pending", noStore, bot, async (req, res) => {
     try { res.json({ command: await claim() }); } catch (e) { console.error("[pepecontrol] claim:", e.message); send(res, e); }
@@ -285,4 +402,4 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { register, request, claim, ack, heartbeat, view, csrfToken, csrfOk, issueNonce, ipHash, init, expireStale,
-  KINDS, MODES, PICKUP_MS, RATE_MAX, _setClock };
+  lookRequest, lookResult, lookFrom, KINDS, MODES, LOOK_VERBS, PICKUP_MS, RATE_MAX, _setClock };

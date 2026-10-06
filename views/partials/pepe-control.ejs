@@ -44,6 +44,33 @@
   .pc .pc-log td, .pc .pc-log th { text-align: left; padding: 5px 6px; border-top: 1px solid var(--pc-line); vertical-align: top; }
   .pc .pc-log th { color: var(--pc-muted); font-weight: normal; }
   .pc .pc-logwrap { overflow-x: auto; max-height: 260px; overflow-y: auto; }
+  /* Pepe's look (1.99bv) */
+  .pc .pl { border: 1px solid var(--pc-line); border-radius: 12px; padding: 12px; display: grid; gap: 12px; background: #0e1210; min-width: 0; }
+  .pc .pl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .pc .pl-head h3 { margin: 0; }
+  .pc .pl-off { font-size: 12px; font-weight: bold; color: var(--pc-bad); border: 1px solid #7a2222; border-radius: 999px; padding: 2px 9px; }
+  .pc .pl-now { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pc .pl-chip { font-size: 12.5px; padding: 4px 9px; border-radius: 999px; background: #121614; border: 1px solid var(--pc-line); color: #ccc; }
+  .pc .pl-chip b { color: var(--pc-muted); font-weight: normal; margin-right: 4px; }
+  .pc .pl-chip.on { border-color: #2e6b31; color: #b9f6ca; }
+  .pc .pl-lab { font-size: 11px; color: var(--pc-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .pc .pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 8px; }
+  .pc .pl-c { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 4px 7px; font-size: 11.5px; font-weight: normal; line-height: 1.2; min-width: 0; text-align: center; }
+  .pc .pl-c .pl-img { width: 60px; height: 60px; display: grid; place-items: center; background: radial-gradient(circle at 50% 45%, #1f3324, #121614 70%); border-radius: 8px; color: var(--pc-muted); font-size: 22px; }
+  .pc .pl-c img { width: 60px; height: 60px; image-rendering: pixelated; display: block; }
+  .pc .pl-c span.n { overflow-wrap: anywhere; }
+  .pc .pl-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pc .pl-p { font-size: 12.5px; font-weight: normal; padding: 6px 10px; }
+  .pc .pl-p small { color: var(--pc-muted); margin-left: 4px; }
+  .pc button[aria-pressed=true] { border-color: var(--pc-ok); background: #1d2a21; color: #fff; box-shadow: inset 0 0 0 1px var(--pc-ok); }
+  .pc .pl-tog { font-size: 13px; font-weight: normal; }
+  .pc .pl-hist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 12.5px; }
+  .pc .pl-hist li { border-top: 1px solid var(--pc-line); padding-top: 4px; overflow-wrap: anywhere; }
+  .pc .pl-hist .st-failed { color: #ffb4b4; } .pc .pl-hist .st-done { color: #b9f6ca; } .pc .pl-hist .st-run { color: #ffe0a3; }
+  @media (max-width: 560px) {
+    .pc .pl-grid { grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); }
+    .pc .pl-c .pl-img, .pc .pl-c img { width: 50px; height: 50px; }
+  }
   @media (max-width: 560px) {
     .pc .pc-log thead { display: none; }
     .pc .pc-log tr { display: grid; grid-template-columns: 1fr auto; border-top: 1px solid var(--pc-line); padding: 4px 0; }
@@ -77,6 +104,20 @@
       <div class="pc-msg" id="pcMsg" hidden role="status"></div>
       <div class="pc-muted" id="pcRate"></div>
     </div>
+    <section class="pl" id="plBox" aria-labelledby="plTitle">
+      <div class="pl-head"><h3 id="plTitle">Pepe's look</h3><span class="pl-off" id="plOff" hidden>Pepe offline</span></div>
+      <div class="pl-now" id="plNow" aria-live="polite"><span class="pl-chip">loading…</span></div>
+      <div><div class="pl-lab" id="plCosLab">Costume</div><div class="pl-grid" id="plCostumes" role="group" aria-labelledby="plCosLab"></div></div>
+      <div><div class="pl-lab" id="plPerLab">Persona</div><div class="pl-row" id="plPersonas" role="group" aria-labelledby="plPerLab"></div></div>
+      <div class="pl-row">
+        <button type="button" class="pl-tog" id="plVoice" aria-pressed="false">Persona voice</button>
+        <button type="button" class="pl-tog" id="plLink" aria-pressed="false">Costume ↔ persona linked</button>
+        <button type="button" class="pl-tog" id="plReset">Reset to default</button>
+      </div>
+      <div class="pc-msg" id="plMsg" hidden role="status"></div>
+      <div class="pc-muted">Each change runs the admin chat command through Pepe as you (<code>!costume</code>, <code>!persona</code>, <code>!avatar reset</code>). No password needed; it's logged below.</div>
+      <div><div class="pl-lab">Recent look changes</div><ul class="pl-hist" id="plHist"></ul></div>
+    </section>
     <div>
       <h3>Audit log</h3>
       <div class="pc-logwrap"><table class="pc-log"><thead><tr><th>When</th><th>Admin</th><th>Event</th><th>IP hash</th></tr></thead><tbody id="pcLog"></tbody></table></div>
@@ -149,7 +190,111 @@
       tb.appendChild(tr);
     });
     if (!(d.audit || []).length) { var tr = el('tr'); var td = el('td', 'pc-muted', 'Nothing yet.'); td.colSpan = 4; tr.appendChild(td); tb.appendChild(tr); }
+    renderLook(d);
   }
+
+  // ── Pepe's look (1.99bv): goes through Pepe's website-action queue, no password ──
+  var look = null, lookBusy = false, lookSig = '';
+  function chip(k, v, on) { var c = el('span', 'pl-chip' + (on ? ' on' : '')); c.appendChild(el('b', null, k)); c.appendChild(document.createTextNode(v)); return c; }
+  function cosName(c) { return String(c.desc || c.id).split(' — ')[0].replace(/^the /, '').slice(0, 26); }
+  function thumb(id, fallback) {
+    var w = el('span', 'pl-img'), i = document.createElement('img');
+    i.alt = ''; i.loading = 'lazy'; i.width = 60; i.height = 60; i.src = '/public/img/pepe-looks/' + encodeURIComponent(id) + '.png';
+    i.addEventListener('error', function () { w.textContent = fallback; });
+    w.appendChild(i); return w;
+  }
+  function lookBtns() { return box.querySelectorAll('#plBox button'); }
+  function renderLook(d) {
+    look = d.look || null;
+    var off = !look;
+    $('plOff').hidden = !off;
+    var now = $('plNow'); now.textContent = '';
+    if (off) {
+      now.appendChild(chip('', 'Pepe offline — his look can be changed while he is running.'));
+    } else {
+      var cos = (look.costumes || []).find(function (c) { return c.id === look.costume; });
+      now.appendChild(chip('Costume', look.costume ? (cos ? cosName(cos) : look.costume) : 'none', !!look.costume));
+      now.appendChild(chip('Persona', look.persona_name || look.persona || 'Pepe', look.persona && look.persona !== 'pepe'));
+      now.appendChild(chip('Voice', !look.persona_voice ? 'persona voices off' : (look.voice || 'room default'), !!look.voice));
+      now.appendChild(chip('Link', look.follow_costume ? 'costume ↔ persona' : 'unlinked', !!look.follow_costume));
+      if (look.dj) now.appendChild(chip('Auto', 'DJ headphones', true));
+      if (look.balaclava) now.appendChild(chip('Auto', 'heist balaclava', true));
+      if (look.bottleservice) now.appendChild(chip('Auto', 'bottle service', true));
+      if (look.game_look) now.appendChild(chip('Game look', look.game_look, true));
+      if (look.overlay_clients != null) now.appendChild(chip('OBS overlay', look.overlay_clients ? look.overlay_clients + ' connected' : 'not connected', look.overlay_clients > 0));
+    }
+    // costume + persona pickers: rebuilt only when Pepe's lists change (keeps focus between polls)
+    var lists = look || d.look_known || {};       // offline: his last known lists, shown disabled
+    var sig = JSON.stringify([lists.costumes, lists.personas]);
+    if (sig !== lookSig) {
+      lookSig = sig;
+      var g = $('plCostumes'); g.textContent = '';
+      var none = el('button', 'pl-c'); none.type = 'button'; none.setAttribute('data-verb', 'costume'); none.setAttribute('data-value', 'off');
+      none.appendChild(thumb('pepe', '🐸')); none.appendChild(el('span', 'n', 'No costume')); none.title = 'Plain Pepe (!costume off)';
+      g.appendChild(none);
+      (lists.costumes || []).forEach(function (c) {
+        var b = el('button', 'pl-c'); b.type = 'button'; b.setAttribute('data-verb', 'costume'); b.setAttribute('data-value', c.id);
+        b.title = c.desc || c.id; b.appendChild(thumb(c.id, cosName(c).charAt(0).toUpperCase())); b.appendChild(el('span', 'n', cosName(c)));
+        g.appendChild(b);
+      });
+      var pr = $('plPersonas'); pr.textContent = '';
+      (lists.personas || [{ id: 'pepe', name: 'Pepe' }]).forEach(function (p) {
+        var b = el('button', 'pl-p'); b.type = 'button'; b.setAttribute('data-verb', 'persona'); b.setAttribute('data-value', p.id);
+        b.textContent = p.id === 'pepe' ? 'Plain Pepe' : (p.name || p.id);
+        if (p.voice) b.appendChild(el('small', null, 'voice'));
+        b.title = p.costume ? 'Linked costume: ' + p.costume : 'No costume of its own';
+        pr.appendChild(b);
+      });
+    }
+    box.querySelectorAll('#plCostumes .pl-c').forEach(function (b) {
+      var v = b.getAttribute('data-value');
+      b.setAttribute('aria-pressed', String(!!look && (v === 'off' ? !look.costume : look.costume === v)));
+    });
+    box.querySelectorAll('#plPersonas .pl-p').forEach(function (b) { b.setAttribute('aria-pressed', String(!!look && (look.persona || 'pepe') === b.getAttribute('data-value'))); });
+    $('plVoice').setAttribute('aria-pressed', String(!!(look && look.persona_voice)));
+    $('plVoice').textContent = 'Persona voice: ' + (look ? (look.persona_voice ? 'on' : 'off') : '—');
+    $('plLink').setAttribute('aria-pressed', String(!!(look && look.follow_costume)));
+    $('plLink').textContent = 'Costume ↔ persona link: ' + (look ? (look.follow_costume ? 'on' : 'off') : '—');
+    lookBtns().forEach(function (b) { b.disabled = off || lookBusy; });
+    var h = $('plHist'); h.textContent = '';
+    (d.looks || []).forEach(function (a) {
+      var li = el('li'), st = a.status === 'done' ? 'done' : a.status === 'failed' ? 'failed' : 'run';
+      li.appendChild(el('span', 'pc-muted', when(a.created) + ' · ' + (a.username || '?') + ' · '));
+      li.appendChild(el('code', null, a.label || 'look'));
+      li.appendChild(el('span', 'st-' + st, ' — ' + (st === 'run' ? 'waiting for Pepe' : (a.message || a.status))));
+      h.appendChild(li);
+    });
+    if (!(d.looks || []).length) h.appendChild(el('li', 'pc-muted', 'Nothing yet.'));
+  }
+  function lmsg(text, cls) { var m = $('plMsg'); if (!text) { m.hidden = true; return; } m.hidden = false; m.className = 'pc-msg ' + (cls || ''); m.textContent = text; }
+  function lookSend(verb, value) {
+    if (lookBusy || !look) return;
+    lookBusy = true; lookBtns().forEach(function (b) { b.disabled = true; });
+    var what = verb === 'reset' ? 'Reset to default' : verb + ' ' + value;
+    lmsg('Sending to Pepe: ' + what + '…', 'run');
+    var tries = 0;
+    function done(text, cls) { lookBusy = false; lmsg(text, cls); clearTimeout(timer); load(); }
+    function poll(id) {
+      api('/api/pepe/control/look/' + id).then(function (j) {
+        var a = j.action;
+        if (a.status === 'done') return done('Pepe: ' + (a.message || 'done'), 'ok');
+        if (a.status === 'failed') return done('Pepe: ' + (a.message || 'that did not work'), 'err');
+        if (++tries > 30) return done('Still waiting for Pepe — the result will show under Recent look changes.', 'run');
+        lmsg((a.status === 'claimed' ? 'Pepe is on it: ' : 'Waiting for Pepe to pick it up: ') + a.label + '…', 'run');
+        setTimeout(function () { poll(id); }, 2000);
+      }).catch(function (e) { done(e.message, 'err'); });
+    }
+    api('/api/pepe/control/look', { verb: verb, value: value || '' })
+      .then(function (j) { lmsg('Sent to Pepe: ' + j.action.label + ' — waiting for his answer…', 'run'); poll(j.action.id); })
+      .catch(function (e) { done(e.message, 'err'); });
+  }
+  $('plBox').addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('button[data-verb]');
+    if (b && !b.disabled) lookSend(b.getAttribute('data-verb'), b.getAttribute('data-value'));
+  });
+  $('plVoice').addEventListener('click', function () { if (look) lookSend('voice', look.persona_voice ? 'off' : 'on'); });
+  $('plLink').addEventListener('click', function () { if (look) lookSend('link', look.follow_costume ? 'off' : 'on'); });
+  $('plReset').addEventListener('click', function () { if (look && window.confirm('Reset Pepe\'s look? Costume off, plain Pepe persona, stuck accessories cleared.')) lookSend('reset', ''); });
   function load() {
     timer = null;
     return api('/api/pepe/control/status').then(render).catch(function (e) { $('pcSum').textContent = 'status unavailable: ' + e.message; })
