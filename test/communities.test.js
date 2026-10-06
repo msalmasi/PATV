@@ -6,6 +6,8 @@
 //   - crossposts: the target's rules (who can post, approval, bans, rate limits), duplicates, a crosspost of a
 //     crosspost, separate votes / comments, "crossposted to N", "original removed", the target owner's removal,
 //     files referenced (never copied)
+//   - 1.99ct multi-pad crossposts: one per pad, per-pad rules with partial success, the cap, duplicates, rate
+//     limits per crosspost, price per crosspost, one combined notice, the old single-pad API
 //   - the URL scheme (/feed, /feed/following, /feed/c/<slug>) and the old ?room= / ?tab= redirects
 //   - the homepage mini feed: hot order, NSFW never shown to signed-out visitors
 //   NODE_PATH=G:/PATV/node_modules node --test test/communities.test.js
@@ -476,4 +478,189 @@ test("Hot on PATV: the top 5 hot posts across All; signed-out visitors never see
   assert.ok(!html.includes("hot 5") && html.includes("hot 4"));
   const empty = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: { posts: [], signed: false }, fx: web.fx });
   assert.match(empty, /Nothing posted yet/);
+});
+
+// ───────────────────────────── 1.99ct: crosspost to several pads at once ─────────────────────────────
+const X1 = "Xp.One", X2 = "Xp.Two", X3 = "Xp.Three", X4 = "Xp.Four", X5 = "Xp.Five";
+async function xpPads() {
+  for (const [id, t] of [[X1, "Xp One"], [X2, "Xp Two"], [X3, "Xp Three"], [X4, "Xp Four"], [X5, "Xp Five"]]) {
+    if (!rooms.getCached(id)) await rooms.addRoom(id, t, "test");
+  }
+}
+const xrows = async (orig) => getQuery(`SELECT p.id, p.author_id, p.title, pr.room_id, pr.pending FROM feed_posts p JOIN feed_post_rooms pr ON pr.post_id = p.id
+                                        WHERE p.crosspost_of = ? ORDER BY p.created, p.id`, [orig]);
+const xnotices = async (u) => getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref LIKE 'feed-xp:%' ORDER BY id", [u.userId]);
+
+test("multi-pad crosspost: one crosspost per pad (own votes + comments), the new title on all, ONE combined notice", async () => {
+  await xpPads();
+  const orig = await mkPost(U.alice, { title: "Multi original", body: "m", community: ROOM_B });
+  const before = (await xnotices(U.alice)).length;
+  const r = await xpost(U.bob, orig, { pads: [slug(ROOM_C), LOUNGE, "p/" + slug(X1)], title: "Look at this" });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.deepEqual([r.d.created, r.d.pending, r.d.refused], [3, 0, 0]);
+  assert.deepEqual(r.d.results.map((x) => [x.pad.id, x.status]), [[ROOM_C, "created"], [LOUNGE, "created"], [X1, "created"]]);
+  for (const x of r.d.results) assert.equal(x.url, "/feed/p/" + x.id);
+  const rows = await xrows(orig);
+  assert.deepEqual(rows.map((x) => x.room_id).sort(), [ROOM_C, LOUNGE, X1].sort());
+  assert.equal(new Set(rows.map((x) => x.id)).size, 3, "three separate posts");
+  assert.ok(rows.every((x) => x.author_id === U.bob.userId && x.title === "Look at this" && !x.pending));
+  // Reddit's model: each crosspost has its own votes and comments
+  const [a, b] = r.d.results.map((x) => x.id);
+  assert.equal((await post(`/api/feed/posts/${a}/vote`, U.carol, { dir: 1 })).status, 200);
+  assert.equal((await post(`/api/feed/posts/${a}/comments`, U.carol, { body: "nice" })).status, 200);
+  const A = await store.get(a, U.carol), B = await store.get(b, U.carol);
+  assert.deepEqual([A.score, A.comments, B.score, B.comments], [2, 1, 1, 0]);
+  assert.equal((await store.get(orig, U.carol)).xcount, 3);
+  // one notice for the whole action, naming every pad
+  const N = (await xnotices(U.alice)).slice(before);
+  assert.equal(N.length, 1, "one combined notice, not one per pad");
+  assert.equal(N[0].title, `bob crossposted your post to p/${slug(ROOM_C)}, p/camfrog-lounge, p/${slug(X1)}`);
+  // the dialog's list knows the cap and where it now is
+  const cl = await call("GET", `/api/feed/communities?post=${orig}`, U.carol);
+  assert.equal(cl.d.crosspostMax, 5);
+  const here = Object.fromEntries(cl.d.communities.map((c) => [c.id, c.here]));
+  assert.deepEqual([here[ROOM_B], here[ROOM_C], here[LOUNGE], here[X1], here[X2]], [true, true, true, true, false]);
+  // the dialog script: checkboxes, the summary, the results
+  const js = fs.readFileSync(path.join(repo, "public/js/feed-crosspost.js"), "utf8");
+  assert.ok(js.includes("r.type = 'checkbox'") && js.includes("' selected'") && js.includes("pads: on.map"));
+  assert.ok(fs.readFileSync(path.join(repo, "views/partials/feed-js.ejs"), "utf8").includes("feed-crosspost.js?v=4"), "cache-buster bumped");
+});
+
+test("multi-pad crosspost: each pad's rules on their own (approval, who-can-post, bans, Pepe) - partial success; duplicates refused", async () => {
+  await xpPads();
+  const orig = await mkPost(U.alice, { title: "Rules per pad", body: "r", community: ROOM_B });
+  await mod(U.ownerC, slug(ROOM_C), { op: "settings", settings: { approval: true } });
+  await mod(U.admin, slug(X2), { op: "settings", settings: { who: "approved" } });
+  await post("/api/feed/ban", U.admin, { user: "bob", room: slug(X3), days: 1 });
+  await runQuery("INSERT OR REPLACE INTO feed_restricted (login, room_id, reason, until) VALUES (?, ?, ?, NULL)", ["bobcf", X4, "you were kicked here"]);
+  const before = (await xnotices(U.alice)).length;
+  let r = await xpost(U.bob, orig, { pads: [ROOM_C, X2, X3, X4, LOUNGE] });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  const by = Object.fromEntries(r.d.results.map((x) => [x.pad.id, x]));
+  assert.equal(by[ROOM_C].status, "pending", "C's approval queue");
+  assert.equal(by[X2].status, "refused");
+  assert.match(by[X2].error, /approved posters/);
+  assert.equal(by[X3].status, "refused");
+  assert.match(by[X3].error, /can't post in Xp Three/);
+  assert.equal(by[X4].status, "refused");
+  assert.match(by[X4].error, /Pepe says: you were kicked here/);
+  assert.equal(by[LOUNGE].status, "created");
+  assert.deepEqual([r.d.created, r.d.pending, r.d.refused], [1, 1, 3]);
+  assert.deepEqual((await xrows(orig)).map((x) => [x.room_id, x.pending]).sort(), [[LOUNGE, 0], [ROOM_C, 1]].sort());
+  assert.ok((await store.roomPending(ROOM_C, U.ownerC)).some((p) => p.id === by[ROOM_C].id));
+  const N = (await xnotices(U.alice)).slice(before);
+  assert.equal(N.length, 1);
+  assert.match(N[0].title, new RegExp(`to p/${slug(ROOM_C)}, p/camfrog-lounge$`), "the notice names only the pads it went to");
+  // duplicates: where the original is, where it's already crossposted (by anyone, pending too), and the same pad twice in one list
+  r = await xpost(U.carol, orig, { pads: [ROOM_B, LOUNGE, ROOM_C, X1, "p/" + slug(X1)] });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.d.results.map((x) => [x.pad.id, x.status]), [[ROOM_B, "refused"], [LOUNGE, "refused"], [ROOM_C, "refused"], [X1, "created"]]);
+  assert.match(r.d.results[0].error, /already in/);
+  assert.match(r.d.results[1].error, /already been crossposted/);
+  assert.equal((await xrows(orig)).filter((x) => x.room_id === X1).length, 1, "X1 named twice -> one crosspost");
+  // an unknown pad is a per-pad refusal; nothing creatable -> no notice
+  const mid = (await xnotices(U.alice)).length;
+  r = await xpost(U.carol, orig, { pads: ["p/no-such-pad", X1] });
+  assert.deepEqual(r.d.results.map((x) => x.status), ["refused", "refused"]);
+  assert.equal(r.d.results[0].pad, null);
+  assert.equal((await xnotices(U.alice)).length, mid, "nothing made, no notice");
+  // the author crossposting their own post: no notice to themselves
+  r = await xpost(U.alice, orig, { pads: [X5] });
+  assert.equal(r.d.created, 1);
+  assert.equal((await xnotices(U.alice)).length, mid);
+  // tidy up
+  await mod(U.ownerC, slug(ROOM_C), { op: "settings", settings: { approval: false } });
+  await mod(U.admin, slug(X2), { op: "settings", settings: { who: "everyone" } });
+  await post("/api/feed/unban", U.admin, { userId: U.bob.userId, room: slug(X3) });
+  await runQuery("DELETE FROM feed_restricted WHERE login = 'bobcf'");
+});
+
+test("multi-pad crosspost: the per-action cap (admin-tunable) - over it, nothing is made", async () => {
+  await xpPads();
+  const orig = await mkPost(U.alice, { title: "Cap", body: "c", community: ROOM_B });
+  let r = await xpost(U.bob, orig, { pads: [ROOM_C, LOUNGE, X1, X2, X3, X4] });
+  assert.equal(r.status, 400);
+  assert.match(r.d.error, /at most 5 pads at a time/);
+  assert.equal((await xrows(orig)).length, 0, "all or nothing on the cap");
+  await store.setConfig({ crosspost_max_pads: 2 }, "test");
+  assert.equal((await call("GET", `/api/feed/communities?post=${orig}`, U.bob)).d.crosspostMax, 2);
+  r = await xpost(U.bob, orig, { pads: [ROOM_C, LOUNGE, X1] });
+  assert.equal(r.status, 400);
+  assert.match(r.d.error, /at most 2 pads/);
+  assert.equal((await xpost(U.bob, orig, { pads: [ROOM_C, LOUNGE] })).d.created, 2);
+  await store.setConfig({ crosspost_max_pads: 999 }, "test");
+  assert.equal(store.config().crosspost_max_pads, 25, "clamped to 1-25");
+  await store.setConfig({ crosspost_max_pads: 5 }, "test");
+  assert.equal((await xpost(U.bob, orig, { pads: [] })).status, 400);
+  assert.equal((await xpost(null, orig, { pads: [X1] })).status, 401);
+  // the admin page has the field
+  const html = (await page("/feed/admin", U.admin)).text;
+  assert.ok(html.includes('name="crosspost_max_pads"'));
+});
+
+test("multi-pad crosspost: every crosspost counts against the post rate limits; a burst of 5 fits or is refused as a whole", async () => {
+  await xpPads();
+  const dave = await mkUser("dave", { camfrog: "davecf" });
+  const orig = await mkPost(U.alice, { title: "Rate", body: "r", community: ROOM_B });
+  await store.setConfig({ posts_per_hour: 3 }, "test");
+  await mkPost(dave, { body: "my own", community: LOUNGE });                  // 1 of 3 used
+  let r = await xpost(dave, orig, { pads: [ROOM_C, LOUNGE, X1] });
+  assert.equal(r.status, 429);
+  assert.match(r.d.error, /you can post 2 more times right now - pick at most 2 pads/);
+  assert.equal((await xrows(orig)).length, 0, "refused as a whole");
+  r = await xpost(dave, orig, { pads: [ROOM_C, LOUNGE] });
+  assert.equal(r.d.created, 2);
+  r = await xpost(dave, orig, { pads: [X1] });
+  assert.equal(r.status, 429);
+  assert.match(r.d.error, /posted a lot this hour/);
+  // the burst gap applies once per action: 5 pads in one go is fine, a second action right after is not
+  await store.setConfig({ posts_per_hour: 1000, post_gap_secs: 3600 }, "test");
+  const orig2 = await mkPost(U.alice, { title: "Burst", body: "b", community: ROOM_B });
+  r = await xpost(U.carol, orig2, { pads: [ROOM_C, LOUNGE, X1, X2, X3] });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(r.d.created, 5);
+  r = await xpost(U.carol, orig2, { pads: [X4] });
+  assert.equal(r.status, 429);
+  assert.match(r.d.error, /Slow down/);
+  await store.setConfig({ post_gap_secs: 0 }, "test");
+});
+
+test("multi-pad crosspost: price_post is charged once per crosspost created (refused pads cost nothing)", async () => {
+  await xpPads();
+  const erin = await mkUser("erin", { camfrog: "erincf", balance: 25 });
+  const orig = await mkPost(U.alice, { title: "Priced", body: "p", community: ROOM_B });
+  await store.setConfig({ price_post: 10 }, "test");
+  const r = await xpost(erin, orig, { pads: [ROOM_B, ROOM_C, LOUNGE, X1] });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.deepEqual(r.d.results.map((x) => x.status), ["refused", "created", "created", "refused"]);
+  assert.match(r.d.results[0].error, /already in/);
+  assert.match(r.d.results[3].error, /costs 10 PAT - you don't have enough/);
+  const bal = (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [erin.userId]))[0].b;
+  assert.equal(bal, 5, "two crossposts x 10 PAT");
+  const tx = await getQuery("SELECT type, points FROM transactions WHERE userId = ? ORDER BY type", [erin.userId]);
+  assert.deepEqual(tx.map((t) => t.points), [-10, -10]);
+  assert.ok(tx.every((t) => t.type.startsWith("feed crosspost ")));
+  assert.equal((await xrows(orig)).filter((x) => x.room_id === X1).length, 0, "the unpaid one wasn't made");
+  await store.setConfig({ price_post: 0 }, "test");
+});
+
+test("multi-pad crosspost: the old single-pad API still works the old way", async () => {
+  await xpPads();
+  const orig = await mkPost(U.alice, { title: "Old API", body: "o", community: ROOM_B });
+  const before = (await xnotices(U.alice)).length;
+  let r = await xpost(U.bob, orig, { community: slug(X1), title: "single" });
+  assert.equal(r.status, 200);
+  assert.ok(r.d.id && r.d.url === "/feed/p/" + r.d.id && r.d.pending === false && r.d.community && !("results" in r.d));
+  assert.equal(r.d.community.id, X1);
+  assert.equal((await store.getRow(r.d.id)).title, "single");
+  assert.equal((await xnotices(U.alice)).length, before + 1);
+  r = await xpost(U.carol, orig, { community: X1 });
+  assert.equal(r.status, 409, "refusals are still HTTP errors");
+  assert.match(r.d.error, /already been crossposted to Xp One/);
+  assert.equal((await xpost(U.carol, orig, {})).status, 400);
+  assert.equal((await xpost(U.carol, orig, { community: "p/no-such-pad" })).status, 400);
+  // {communities: [...]} is an alias of {pads: [...]}
+  r = await xpost(U.carol, orig, { communities: [X2] });
+  assert.equal(r.status, 200);
+  assert.equal(r.d.created, 1);
 });

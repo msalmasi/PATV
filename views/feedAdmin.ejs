@@ -1,5 +1,5 @@
 <%- include('layout', { title: 'Feed admin', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=6">
+<link rel="stylesheet" href="/public/css/feed.css?v=7">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
   const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');
@@ -11,7 +11,8 @@
     ['Who can post', [['media_min_level', 'Uploads: linked Camfrog name OR at least this level'], ['new_account_hours', 'An unlinked account is "new" for (hours)'],
                       ['new_account_posts_per_day', 'New accounts: posts per day']]],
     ['Rate limits', [['posts_per_hour', 'Posts per hour'], ['posts_per_day', 'Posts per day'], ['comments_per_hour', 'Comments per hour'],
-                     ['uploads_per_hour', 'Uploads per hour'], ['upload_mb_per_day', 'Upload MB per day'], ['report_hide_threshold', 'Hide a post after this many reports (pending review)']]],
+                     ['uploads_per_hour', 'Uploads per hour'], ['upload_mb_per_day', 'Upload MB per day'], ['report_hide_threshold', 'Hide a post after this many reports (pending review)'],
+                     ['crosspost_max_pads', 'Crosspost: pads per action (1-25; each one counts as a post)']]],
     ['Reports (anti-abuse)', [['reports_per_hour', 'Reports per hour per account (posts + comments + users)'], ['new_account_reports_per_hour', 'New accounts: reports per hour'],
                               ['reports_per_day', 'Reports per day per account'], ['false_reports_pause', 'Pause reporting after this many bad-faith reports in 30 days']]],
     ['Prices (PAT, 0 = free; to the Federal Reserve)', [['price_post', 'Every post'], ['price_link', 'Per link'], ['price_image', 'Per picture'], ['price_audio', 'Per audio file'], ['price_video', 'Per video']]],

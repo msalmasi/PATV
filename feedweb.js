@@ -310,7 +310,7 @@ function register(app, { addUser, isBotToken }) {
           for (const r of rows) here.add(r.room_id);
         }
       }
-      res.json({ ok: true, communities: list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers,
+      res.json({ ok: true, crosspostMax: store.config().crosspost_max_pads, communities: list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers,
                                                           posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, platform: c.platform, house: c.house, here: here.has(c.id) })) });
     } catch (e) { fail(res, e); }
   });
@@ -605,10 +605,18 @@ function register(app, { addUser, isBotToken }) {
     } catch (e) { fail(res, e); }
   });
   // 1.99ci: crosspost {community, title?} -> a new post in that community embedding this one
+  // 1.99ct: {pads: [...], title?} (or communities: [...]) -> one crosspost per pad, each pad checked on its own:
+  //         {ok, results: [{community, pad, status: created|pending|refused, id?, url?, error?}], created, pending, refused}
   app.post("/api/feed/posts/:id/crosspost", addUser, guard(false), async (req, res) => {
     try {
       if (await termsGate(req)) return termsRefusal(res);
       const b = req.body || {};
+      const many = b.pads !== undefined ? b.pads : b.communities;
+      if (many !== undefined) {
+        const r = await store.crosspostMany(req.user.userId, String(req.params.id), { pads: many, title: b.title });
+        for (const x of r.results) if (x.id) await record(req, { kind: "post", id: x.id, postId: x.id, event: "crosspost" });
+        return res.json({ ok: true, ...r });
+      }
       const p = await store.crosspost(req.user.userId, String(req.params.id), { community: b.community, title: b.title });
       await record(req, { kind: "post", id: p.id, postId: p.id, event: "crosspost" });
       res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id, pending: !!p.pendingApproval, community: p.rooms[0] || (p.roomsAll[0] || null) });

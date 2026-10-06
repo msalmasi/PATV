@@ -63,6 +63,7 @@ const DEFAULTS = Object.freeze({
   votes_per_min: 30, votes_per_hour: 300,   // vote changes per account (posts + comments together)
   // reports (1.99cc): per reporter, posts + comments + users together; bad-faith reports pause reporting
   reports_per_hour: 20, reports_per_day: 60, new_account_reports_per_hour: 5, false_reports_pause: 3,
+  crosspost_max_pads: 5,              // 1.99ct: pads one Crosspost action may target (each one counts as a post)
 });
 const INT_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "number");
 const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1, 500], max_audio_secs: [10, 3600], max_video_secs: [5, 1800],
@@ -72,7 +73,8 @@ const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1
   price_post: [0, 1e9], price_link: [0, 1e9], price_image: [0, 1e9], price_audio: [0, 1e9], price_video: [0, 1e9], mention_gap_min: [1, 1440],
   post_gap_secs: [0, 3600], comment_gap_secs: [0, 600],
   hot_decay_secs: [3600, 1000000], downvote_min_level: [0, 100], votes_per_min: [1, 1000], votes_per_hour: [1, 20000],
-  reports_per_hour: [1, 1000], reports_per_day: [1, 10000], new_account_reports_per_hour: [0, 1000], false_reports_pause: [1, 100] };
+  reports_per_hour: [1, 1000], reports_per_day: [1, 10000], new_account_reports_per_hour: [0, 1000], false_reports_pause: [1, 100],
+  crosspost_max_pads: [1, 25] };
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
@@ -448,16 +450,29 @@ function burst(key, ms) {
   if (gaps.size > 5000) for (const [k, v] of gaps) if (t - v > 3600e3) gaps.delete(k);
   return 0;
 }
-async function postRate(u) {
+/** 1.99ct: how many more posts `u` may make right now under the count limits -> {left, why} (`why`: the
+ *  binding limit's message, for when it's 0). Staff and Pepe: Infinity. The burst gap isn't counted here. */
+async function postBudget(u) {
   const C = CONFIG, t = NOW();
-  if (isStaff(u) || isPepe(u)) return null;          // Pepe: pepefeed.js's caps instead
+  if (isStaff(u) || isPepe(u)) return { left: Infinity, why: null };   // Pepe: pepefeed.js's caps instead
   const n = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM feed_posts WHERE author_id = ? AND created > ?", [u.userId, t - ms]))[0].n;
-  if (isNewAccount(u) && (await n(86400e3)) >= C.new_account_posts_per_day) {
-    return `New accounts can post ${C.new_account_posts_per_day} time${C.new_account_posts_per_day === 1 ? "" : "s"} a day - link your Camfrog name (!verify) to lift that.`;
+  const day = await n(86400e3), hour = await n(3600e3);
+  const caps = [];
+  if (isNewAccount(u)) {
+    caps.push([C.new_account_posts_per_day - day,
+      `New accounts can post ${C.new_account_posts_per_day} time${C.new_account_posts_per_day === 1 ? "" : "s"} a day - link your Camfrog name (!verify) to lift that.`]);
   }
-  if ((await n(3600e3)) >= C.posts_per_hour) return "You've posted a lot this hour - try again later.";
-  if ((await n(86400e3)) >= C.posts_per_day) return "You've hit today's post limit.";
-  const g = burst("post|" + u.userId, C.post_gap_secs * 1000);
+  caps.push([C.posts_per_hour - hour, "You've posted a lot this hour - try again later."]);
+  caps.push([C.posts_per_day - day, "You've hit today's post limit."]);
+  let best = caps[0];
+  for (const c of caps) if (Math.max(0, c[0]) < Math.max(0, best[0])) best = c;
+  return { left: Math.max(0, best[0]), why: best[1] };
+}
+async function postRate(u) {
+  if (isStaff(u) || isPepe(u)) return null;
+  const b = await postBudget(u);
+  if (b.left <= 0) return b.why;
+  const g = burst("post|" + u.userId, CONFIG.post_gap_secs * 1000);
   if (g) return `Slow down - try again in ${g}s.`;
   return null;
 }
@@ -838,39 +853,38 @@ async function create(userId, input, deps = {}) {
   return made;
 }
 
-// ── crossposts (1.99ci, Reddit's model) ──
-// A crosspost is its own feed_posts row (crosspost_of = the original) placed in ONE other community: its own
+// ── crossposts (1.99ci, Reddit's model; 1.99ct: several pads per action) ──
+// A crosspost is its own feed_posts row (crosspost_of = the original) placed in ONE other pad: its own
 // title, votes, comments, pins and moderation; it embeds the original's content (files are referenced, never
-// copied). A crosspost of a crosspost points at the original. The target community's rules all apply (who
+// copied). A crosspost of a crosspost points at the original. The target pad's rules all apply (who
 // can post, its approval queue, bans, Pepe's refusals, the per-day limit) plus the account's post rate
 // limits and price_post. The original's author gets an inbox notice. Once the original is deleted, hidden or
-// taken out of all its communities, every crosspost shows "original removed" (decorate).
-async function crosspost(userId, origId, input = {}) {
-  await init();
-  const u = await account(userId);
-  if (!u) throw new Refuse(401, "Sign in to crosspost.");
+// taken out of all its pads, every crosspost shows "original removed" (decorate).
+// 1.99ct: one action may target up to crosspost_max_pads pads; one crosspost row per pad, each pad checked on
+// its own (partial success), price_post charged per crosspost created, every crosspost counts against the
+// post rate limits (a selection bigger than what's left is refused as a whole, saying how many are left), and
+// the original's author gets ONE combined notice ("crossposted your post to p/a, p/b").
+async function crosspostOriginal(u, origId) {
   let o = await getRow(origId);
   if (o && o.crosspost_of) o = await getRow(o.crosspost_of);
   if (!o || o.deleted_at || (o.hidden_at && !isStaff(u))) throw new Refuse(404, "No such post.");
   const v = visibleSql(NOW());
   const shown = (await getQuery(`SELECT 1 FROM feed_posts p WHERE p.id = ? AND ${v.sql}`, [o.id, ...v.args]))[0];
   if (!shown && !isStaff(u)) throw new Refuse(409, "That post isn't visible in any pad, so it can't be crossposted.");
-  const R = await communityOf(input.community);
-  if (!R) throw new Refuse(400, "Choose a pad to crosspost to.");
+  return o;
+}
+/** null when `u` may crosspost `o` into pad R, else {status, message} (the rate limits are checked per action). */
+async function crosspostRefusal(u, o, R) {
   const here = (await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [o.id, R.id]))[0];
-  if (here) throw new Refuse(409, `That post is already in ${R.title}.`);
+  if (here) return { status: 409, message: `That post is already in ${R.title}.` };
   const dup = (await getQuery(`SELECT x.id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id AND pr.room_id = ? AND pr.removed_at IS NULL
                                WHERE x.crosspost_of = ? AND x.deleted_at IS NULL LIMIT 1`, [R.id, o.id]))[0];
-  if (dup) throw new Refuse(409, `It's already been crossposted to ${R.title}.`);
-  const refusal = await postRefusal(u, [R.id]);
-  if (refusal) throw new Refuse(refusal.status, refusal.message);
-  const rate = await postRate(u);
-  if (rate) throw new Refuse(429, rate);
-  const why = await roomPostRefusal(u, R.id);
-  if (why) throw new Refuse(why.status, why.message);
+  if (dup) return { status: 409, message: `It's already been crossposted to ${R.title}.` };
+  return (await postRefusal(u, [R.id])) || (await roomPostRefusal(u, R.id));
+}
+/** One crosspost row in pad R (charged; rolled back + refunded on failure). -> {id, pending} */
+async function crosspostOne(u, o, R, title) {
   const pending = (await roomSettings(R.id)).approval && !(await rooms.canManage(u, R.id));
-  const olink = parseJson(o.link_json);
-  const title = cleanLine(input.title, TITLE_MAX) || o.title || cleanLine(o.body, 100) || (olink && cleanLine(olink.title, 100)) || "Crosspost";
   const cost = CONFIG.price_post;
   const id = newId();
   const label = `feed crosspost ${id}`;
@@ -892,11 +906,76 @@ async function crosspost(userId, origId, input = {}) {
     throw e;
   }
   console.log(`[feed] crosspost ${id} of ${o.id} by ${u.username} to ${R.id}${pending ? " (pending approval)" : ""}`);
-  if (o.author_id !== u.userId) {
-    await notify(o.author_id, { title: `${u.displayname || u.username} crossposted your post to ${R.title}`,
-                                body: `"${(o.title || o.body || "your post").replace(/\s+/g, " ").slice(0, 80)}"`, link: "/feed/p/" + id, ref: "feed-xp:" + id });
+  return { id, pending };
+}
+/**
+ * 1.99ct: crosspost `origId` into several pads. input: {pads: [id|slug|p/slug, ...], title?}.
+ * Whole-action refusals throw (sign in, no such post, no pads, over the cap, the account can't post at all,
+ * the rate limits); per-pad refusals come back in the results.
+ * -> {original, title, results: [{community, pad: {id, slug, title}|null, status: created|pending|refused,
+ *     id?, url?, error?, code?}], created, pending, refused}
+ */
+async function crosspostMany(userId, origId, input = {}) {
+  await init();
+  const u = await account(userId);
+  if (!u) throw new Refuse(401, "Sign in to crosspost.");
+  const o = await crosspostOriginal(u, origId);
+  const list = input.pads !== undefined ? input.pads : input.communities;
+  const raw = Array.isArray(list) ? list : list != null ? [list] : [];
+  const asked = [...new Set(raw.map((x) => String(x == null ? "" : x).trim().slice(0, 128)).filter(Boolean))];
+  if (!asked.length) throw new Refuse(400, "Choose a pad to crosspost to.");
+  const cap = CONFIG.crosspost_max_pads;
+  if (asked.length > cap) throw new Refuse(400, `You can crosspost to at most ${cap} pad${cap === 1 ? "" : "s"} at a time.`);
+  const acct = await postRefusal(u, []);
+  if (acct) throw new Refuse(acct.status, acct.message);
+  const results = [], go = [], seen = new Set();
+  for (const k of asked) {
+    const R = await communityOf(k);
+    if (!R) { results.push({ community: k, pad: null, status: "refused", code: 400, error: `No such pad: ${k}.` }); continue; }
+    if (seen.has(R.id)) continue;                                        // the same pad named twice (id + slug)
+    seen.add(R.id);
+    const res = { community: k, pad: { id: R.id, slug: padSlugOf(R, R.id), title: R.title } };
+    const why = await crosspostRefusal(u, o, R);
+    if (why) Object.assign(res, { status: "refused", code: why.status, error: why.message });
+    else go.push([res, R]);
+    results.push(res);
   }
-  return { ...(await get(id, u)), pendingApproval: pending };
+  if (go.length && !isStaff(u) && !isPepe(u)) {
+    // every crosspost is a post: the whole selection must fit what's left of the limits, or none is made
+    const b = await postBudget(u);
+    if (b.left <= 0) throw new Refuse(429, b.why);
+    if (b.left < go.length) {
+      throw new Refuse(429, `Each crosspost counts as a post, and you can post ${b.left} more time${b.left === 1 ? "" : "s"} right now - pick at most ${b.left} pad${b.left === 1 ? "" : "s"}.`);
+    }
+    const g = burst("post|" + u.userId, CONFIG.post_gap_secs * 1000);
+    if (g) throw new Refuse(429, `Slow down - try again in ${g}s.`);
+  }
+  const olink = parseJson(o.link_json);
+  const title = cleanLine(input.title, TITLE_MAX) || o.title || cleanLine(o.body, 100) || (olink && cleanLine(olink.title, 100)) || "Crosspost";
+  for (const [res, R] of go) {
+    try {
+      const made = await crosspostOne(u, o, R, title);
+      Object.assign(res, { status: made.pending ? "pending" : "created", id: made.id, url: "/feed/p/" + made.id });
+    } catch (e) {
+      if (!e.refuse) console.error(`[feed] crosspost ${o.id} -> ${R.id}:`, e);
+      Object.assign(res, { status: "refused", code: e.refuse ? e.status : 500, error: e.refuse ? e.message : "Something went wrong - it wasn't posted." });
+    }
+  }
+  const made = results.filter((r) => r.status === "created" || r.status === "pending");
+  if (made.length && o.author_id !== u.userId) {
+    const where = made.map((r) => "p/" + r.pad.slug).join(", ");
+    await notify(o.author_id, { title: `${u.displayname || u.username} crossposted your post to ${where}`,
+                                body: `"${(o.title || o.body || "your post").replace(/\s+/g, " ").slice(0, 80)}"`, link: made[0].url, ref: "feed-xp:" + made[0].id });
+  }
+  return { original: o.id, title, results, created: results.filter((r) => r.status === "created").length,
+           pending: results.filter((r) => r.status === "pending").length, refused: results.filter((r) => r.status === "refused").length };
+}
+/** The 1.99ci single-pad crosspost ({community, title?}): refusals throw; -> the new post + pendingApproval. */
+async function crosspost(userId, origId, input = {}) {
+  const r = await crosspostMany(userId, origId, { pads: [input.community], title: input.title });
+  const x = r.results[0];
+  if (!x || x.status === "refused") throw new Refuse(x ? x.code : 400, x ? x.error : "Choose a pad to crosspost to.");
+  return { ...(await get(x.id, await account(userId))), pendingApproval: x.status === "pending" };
 }
 
 /**
@@ -1837,8 +1916,8 @@ async function roomAudit(roomId, limit = 100) {
 
 module.exports = {
   roomMod, roomSettings, roomPostRefusal, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
-  init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, account, isNewAccount, usedBytes,
-  list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, communities, hot, thumbOf, visibleSql, communityOf,
+  init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, postBudget, account, isNewAccount, usedBytes,
+  list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, crosspostMany, communities, hot, thumbOf, visibleSql, communityOf,
   communitiesPlan, migrateCommunities, kvGet, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
   hotRank, controversy, wilson, rankSpec, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
   downCounts, HOT_EPOCH, _votes: voteLog,
