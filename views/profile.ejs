@@ -127,6 +127,7 @@
         <% if (badges.length) { %><span class="chip">🏅 <%= badges.length %> badge<%= badges.length === 1 ? '' : 's' %></span><% } %>
         <% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %><span class="chip">🥷 <%= heistSheet.cls %></span><% } %>
       </div>
+      <% if (typeof social !== 'undefined' && social) { %><%- include('partials/profile-follow', { social, usernameProfile, previewing }) %><% } %>
       <% if (cxShow.length) { %>
         <div class="showcase" aria-label="Pinned badges">
           <% cxShow.forEach((b) => { %><span class="pin" title="<%= b.description %>"><img src="<%= b.icon %>" alt=""><%= b.name %></span><% }) %>
@@ -168,6 +169,7 @@
       stats: true, level: true, gtf: true, badges: true,
       avatar: !!(av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))),
       analytics: !!hasAnalytics,
+      posts: !!(typeof social !== 'undefined' && social && (social.posts.length || isMe)),
     };
     const SEC = {};
     SEC.stats = function () { %>
@@ -256,6 +258,9 @@
       <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
     </div>
   </section>
+  <% };
+    SEC.posts = function () { %>
+  <%- include('partials/profile-posts', { social, usernameProfile, displayname, isMe }) %>
   <% };
     SEC.badges = function () { %>
   <section class="card">

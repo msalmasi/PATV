@@ -11,7 +11,7 @@
 //   3. Size caps per kind (admin-settable; default image 10 MB, audio 25 MB, video 100 MB), checked
 //      on open (declared size) and on every chunk (actual bytes).
 //   4. Nothing a user sent is ever served. Every file is RE-ENCODED:
-//        image -> webp (sharp; EXIF/GPS/XMP/ICC dropped, orientation applied, <= 2048 px, plus a
+//        image -> webp (sharp; HEIC/HEIF first decoded by libheif's heif-convert; EXIF/GPS/XMP/ICC dropped, orientation applied, <= 2048 px, plus a
 //                 640 px thumbnail; animated GIF/WebP stay animated, <= 200 frames)
 //        audio -> m4a (AAC 128k), ffmpeg, all metadata/chapters/cover art dropped, duration cap
 //        video -> mp4 (H.264 High 4.0 yuv420p <= 720p, AAC, +faststart), metadata dropped, duration
@@ -96,10 +96,13 @@ function sniff(buf) {
   // ISO base media (mp4 / mov / m4a / avif / heic)
   if (ascii(4, 4) === "ftyp") {
     const brand = ascii(8, 4).toLowerCase();
-    if (brand === "avif" || brand === "avis") return { kind: "image", fmt: "avif" };
-    if (["heic", "heix", "hevc", "hevx", "mif1", "msf1", "heim", "heis"].includes(brand)) {
-      return { bad: "HEIC photos aren't supported yet - export it as JPEG (most phones: Settings > Camera > Most Compatible)." };
-    }
+    // compatible brands (the rest of the ftyp box, inside this first chunk)
+    const boxLen = b.readUInt32BE(0);
+    const compat = [];
+    for (let o = 16; o + 4 <= Math.min(boxLen, b.length, 256); o += 4) compat.push(ascii(o, 4).toLowerCase());
+    if (brand === "avif" || brand === "avis" || ((brand === "mif1" || brand === "msf1") && compat.includes("avif"))) return { kind: "image", fmt: "avif" };
+    // 1.99bz: HEIC / HEIF (iPhone photos) - decoded with libheif's heif-convert, then re-encoded like any picture
+    if (["heic", "heix", "hevc", "hevx", "mif1", "msf1", "heim", "heis"].includes(brand)) return { kind: "image", fmt: "heic" };
     if (brand === "m4a " || brand === "m4b " || brand === "m4p ") return { kind: "audio", fmt: "m4a", ffmt: "mov" };
     return { kind: "av", fmt: "mp4", ffmt: "mov" };          // ffprobe decides audio-only vs video
   }
@@ -109,7 +112,7 @@ function sniff(buf) {
   if (ascii(0, 3) === "ID3") return { kind: "audio", fmt: "mp3", ffmt: "mp3" };
   if (b[0] === 0xff && (b[1] & 0xf6) === 0xf0) return { kind: "audio", fmt: "aac", ffmt: "aac" };     // ADTS (layer bits 00)
   if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return { kind: "audio", fmt: "mp3", ffmt: "mp3" };     // MPEG audio frame sync
-  return { bad: "That file type isn't supported. Images: JPEG, PNG, GIF, WebP, AVIF. Audio: MP3, M4A/AAC, OGG, WAV, FLAC. Video: MP4, MOV, WebM." };
+  return { bad: "That file type isn't supported. Images: JPEG, PNG, GIF, WebP, AVIF, HEIC. Audio: MP3, M4A/AAC, OGG, WAV, FLAC. Video: MP4, MOV, WebM." };
 }
 
 // ── ffmpeg / ffprobe ──
@@ -156,7 +159,50 @@ async function probe(file, ffmt) {
 class MediaError extends Error { constructor(m, status) { super(m); this.status = status || 400; this.refuse = true; } }
 
 // ── processors: input file -> outputs in DIR. Return {kind, ct, files: [{name, role}], w, h, secs, bytes} ──
+/**
+ * HEIC/HEIF -> a temporary PNG with libheif's heif-convert (sharp's prebuilt libvips has libheif with
+ * the AV1 decoder only - no HEVC - and the VPS's ffmpeg 4.2 has no HEIF demuxer). libheif applies the
+ * container's rotation/mirror (irot/imir) while decoding; the PNG it writes has no EXIF, and sharp
+ * re-encodes it to webp anyway. The decoder runs niced, in the ffmpeg job queue, with a 60 s timeout and
+ * (Linux) a 2 GB address-space cap; the picture's size is checked with heif-info before decoding.
+ * Everything heif-convert writes (iPhone portraits also get a "-depth" image) is in a private temp dir
+ * that is removed afterwards.
+ */
+const HEIF_TIMEOUT_MS = 60 * 1000;
+async function heicToPng(input) {
+  const work = fs.mkdtempSync(path.join(dir(), "tmp", "heic-"));
+  const release = await slot();
+  try {
+    const capped = (cmd, args) => (process.platform === "linux" && !process.env.FEED_NO_PRLIMIT
+      ? run("prlimit", ["--as=2147483648", "--", bin(cmd), ...args], { timeoutMs: HEIF_TIMEOUT_MS })
+      : run(bin(cmd), args, { timeoutMs: HEIF_TIMEOUT_MS }));
+    let info;
+    try { info = await capped("heif-info", [input]); } catch (e) {
+      if (e && e.code === "ENOENT") throw new MediaError("HEIC photos can't be converted right now - export it as JPEG.");
+      throw new MediaError("That HEIC photo couldn't be read.");
+    }
+    const m = /image:\s*(\d+)x(\d+)/.exec(info.out || "");
+    if (!m) throw new MediaError("That HEIC photo couldn't be read.");
+    if (Number(m[1]) * Number(m[2]) > MAX_INPUT_PIXELS) throw new MediaError("That photo is too big.");
+    const out = path.join(work, "out.png");
+    try { await capped("heif-convert", [input, out]); } catch (e) {
+      if (e && e.code === "ENOENT") throw new MediaError("HEIC photos can't be converted right now - export it as JPEG.");
+      console.error("[feed] heif-convert:", e.message, e.stderr || "");
+      throw new MediaError("That HEIC photo couldn't be converted.");
+    }
+    if (!fs.existsSync(out)) throw new MediaError("That HEIC photo couldn't be converted.");
+    return { png: out, cleanup: () => { try { fs.rmSync(work, { recursive: true, force: true }); } catch (e) { /* gone */ } } };
+  } catch (e) {
+    try { fs.rmSync(work, { recursive: true, force: true }); } catch (_) { /* gone */ }
+    throw e;
+  } finally { release(); }
+}
+
 async function processImage(input, fmt) {
+  if (fmt === "heic") {
+    const h = await heicToPng(input);
+    try { return await processImage(h.png, "png"); } finally { h.cleanup(); }
+  }
   const sharp = require("sharp");
   const base = crypto.randomBytes(16).toString("hex");
   const sub = path.join(dir(), base.slice(0, 2));
@@ -287,5 +333,5 @@ function sweepTmp(now = Date.now()) {
   return n;
 }
 
-module.exports = { sniff, probe, processImage, processAv, processPreviewImage, filePath, dir, _setDir, diskFreeBytes, removeFiles, tmpPath,
+module.exports = { sniff, probe, processImage, heicToPng, processAv, processPreviewImage, filePath, dir, _setDir, diskFreeBytes, removeFiles, tmpPath,
                    sweepTmp, MediaError, fmtSecs, CHUNK, CHUNK_MAX, FILE_RE, ORPHAN_TTL, TMP_TTL };

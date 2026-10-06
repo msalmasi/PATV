@@ -1,0 +1,28 @@
+<%#
+  The Following tab's own panel (1.99bz): the inbox-notice switch and the viewer's OWN lists (who they
+  follow, who follows them) - only ever rendered for the signed-in user themselves. Locals: follow
+  ({rooms, people, followers, prefs} from follows.lists + prefs), here
+%><% const F_ = follow || { rooms: [], people: [], followers: [], prefs: { notify: false } }; %>
+<section class="fl" aria-label="Who you follow">
+  <label class="fl-notify"><input type="checkbox" data-follow-notify<%= F_.prefs.notify ? ' checked' : '' %>> 🔔 Tell me in my inbox when someone I follow posts (or someone posts in a room I follow)</label>
+  <details class="fl-lists">
+    <summary>Following <b><%= F_.rooms.length + F_.people.length %></b> · Followers <b><%= F_.followers.length %></b> <span class="mut">(only you see these lists)</span></summary>
+    <div class="fl-cols">
+      <div>
+        <h3>📡 Rooms</h3>
+        <% if (!F_.rooms.length) { %><p class="mut">None yet — “+ Follow” is on every room's feed.</p><% } %>
+        <ul><% F_.rooms.forEach((r) => { %><li><a href="<%= r.href %>"><%= r.label %></a> <%- include('follow-btn', { kind: 'room', id: r.id, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
+      </div>
+      <div>
+        <h3>👤 People</h3>
+        <% if (!F_.people.length) { %><p class="mut">None yet — “+ Follow” is on profiles and next to post authors.</p><% } %>
+        <ul><% F_.people.forEach((u) => { %><li><a href="<%= u.href %>"><%= u.label %></a> <%- include('follow-btn', { kind: 'user', id: u.username, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
+      </div>
+      <div>
+        <h3>💚 Your followers</h3>
+        <% if (!F_.followers.length) { %><p class="mut">Nobody yet.</p><% } %>
+        <ul><% F_.followers.forEach((u) => { %><li><a href="<%= u.href %>"><%= u.label %></a></li><% }) %></ul>
+      </div>
+    </div>
+  </details>
+</section>

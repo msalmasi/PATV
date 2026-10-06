@@ -51,14 +51,11 @@ function ago(ms, now = Date.now()) {
 const fileUrl = (name) => (name && media.FILE_RE.test(name) ? "/feed/f/" + name : null);
 const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs };
 
-// ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was ──
-async function captures(roomId, limit = 12) {
-  try {
-    const where = ["deleted = 0", "expires > ?"], args = [Date.now()];
-    if (roomId) { where.push("room = ?"); args.push(roomId); }
-    return await getQuery(`SELECT id, kind, subject, by_user, room, created, expires, secs FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT ?`, [...args, limit]);
-  } catch (e) { return []; }
-}
+// ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
+// 1.99bz: stories.js owns them (privacy: anonymous subjects, missing files skipped) ──
+const stories = require("./stories");
+const follows = require("./follows");
+async function captures(roomId, limit = 12) { return stories.captures(roomId, limit, { windowMs: stories.WINDOW_MS }); }
 
 async function viewerOf(req) {
   if (!req.user || !req.user.userId) return null;
@@ -72,11 +69,12 @@ const TOPS = new Set(["day", "week", "month", "all"]);
 async function composerFor(viewer, roomId) {
   if (!viewer) return null;
   const C = store.config();
-  const all = (await rooms.list()).map((r) => ({ id: r.id, slug: r.slug, title: r.title }));
+  // 1.99bz: announce = the room owner lets Pepe announce new posts there (the author then gets a per-post checkbox)
+  const all = await Promise.all((await rooms.list()).map(async (r) => ({ id: r.id, slug: r.slug, title: r.title, announce: await store.mentionOn(r.id) })));
   const refusal = await store.postRefusal(viewer, roomId ? [roomId] : [""]);
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, roomId ? [roomId] : [""], { media: true });
   const prices = { post: C.price_post, link: C.price_link, image: C.price_image, audio: C.price_audio, video: C.price_video };
-  return { rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
+  return { user: viewer.username, rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK };
 }
@@ -91,7 +89,10 @@ async function roomFeed(roomId, reqUser, query = {}) {
   const mod = viewer ? { admin: store.isStaff(viewer), owner: await rooms.canManage(viewer, roomId) } : { admin: false, owner: false };
   return {
     room: roomId, sort, page, posts: L.posts, more: L.more, viewer, mod,
-    caps: viewer ? await captures(roomId, 8) : [],
+    caps: viewer ? await captures(roomId, 24) : [],
+    // 1.99bz: signed-out viewers get the room's story circle (sign-in prompt), never the pictures
+    storyRooms: viewer ? [] : await stories.forViewer(null, { room: roomId }),
+    follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
     mention: mod.owner ? await store.mentionOn(roomId) : null,
   };
@@ -121,33 +122,49 @@ function register(app, { addUser, isBotToken }) {
   app.get("/feed", addUser, async (req, res) => {
     try {
       await store.init();
+      // 1.99bz: no separate "Clips & snaps" tab any more - captures are the story strip on top of the feed
+      if (req.query.tab === "captures" || req.query.tab === "clips") {
+        const keep = new URLSearchParams();
+        if (req.query.room) keep.set("room", String(req.query.room).slice(0, 128));
+        const qs = keep.toString();
+        return res.redirect(301, "/feed" + (qs ? "?" + qs : ""));
+      }
       const viewer = await viewerOf(req);
-      const tab = req.query.tab === "captures" ? "captures" : "posts";
+      const tab = req.query.tab === "following" ? "following" : "posts";
       const sort = SORTS.has(req.query.sort) ? req.query.sort : "hot";
       const top = TOPS.has(req.query.t) ? req.query.t : "week";
       const page = Math.max(1, parseInt(req.query.p, 10) || 1);
       const roomList = await rooms.list();
       let R = null;
-      if (req.query.room) {
+      if (req.query.room && tab === "posts") {
         const q = String(req.query.room);
         R = (await rooms.get(q)) || (await require("./roomsweb").resolveRoom(q));
       }
       let author = null;
-      if (req.query.by) author = await rooms.findUser(String(req.query.by).slice(0, 60));
-      let L = { posts: [], more: false }, caps = [], capRooms = [];
-      if (tab === "posts") {
+      if (req.query.by && tab === "posts") author = await rooms.findUser(String(req.query.by).slice(0, 60));
+      let L = { posts: [], more: false };
+      let follow = null;
+      if (tab === "following") {
+        if (viewer) {
+          L = await store.list({ following: viewer.userId, sort, page, top, viewer });
+          follow = { ...(await follows.lists(viewer.userId)), prefs: await follows.prefs(viewer.userId) };
+        }
+      } else {
         L = await store.list({ room: R ? R.id : null, author: !R && author ? author.userId : null, sort, page, top, viewer });
-        if (viewer && R) caps = await captures(R.id, 8);
-      } else if (viewer) {
-        const kind = ["photo", "clip", "audio"].includes(req.query.kind) ? req.query.kind : null;
-        caps = (await captures(R ? R.id : null, 120)).filter((c) => !kind || c.kind === kind);
-        try { capRooms = (await getQuery("SELECT DISTINCT room FROM media WHERE deleted = 0 AND expires > ? AND room != ''", [Date.now()])).map((r) => r.room); } catch (e) { capRooms = []; }
       }
+      // the story strip: one room's captures as thumbnails, or a circle per room with fresh ones
+      const story = {
+        room: R ? R.id : null,
+        caps: viewer && R ? await captures(R.id, 24) : [],
+        rooms: viewer && R ? [] : await stories.forViewer(viewer, { room: R ? R.id : null }),
+        signed: !!viewer,
+      };
       res.set("X-Robots-Tag", "noindex");
       res.render("feed", {
-        user: viewer ? viewer.username : null, viewer, tab, sort, top, page, room: R, author, kind: req.query.kind || null,
-        rooms: roomList, posts: L.posts, more: L.more, caps, capRooms, fx, embeds, host: viewOpts(req).host,
-        composer: tab === "posts" ? await composerFor(viewer, R ? R.id : null) : null,
+        user: viewer ? viewer.username : null, viewer, tab, sort, top, page, room: R, author, story, follow,
+        rooms: roomList, posts: L.posts, more: L.more, fx, embeds, host: viewOpts(req).host,
+        authorFollow: author && viewer && author.userId !== viewer.userId ? await follows.isFollowing(viewer.userId, "user", author.userId) : null,
+        composer: await composerFor(viewer, R ? R.id : null),
         modRooms: viewer ? new Set((await Promise.all(roomList.map(async (x) => ((await rooms.canManage(viewer, x.id)) ? x.id : null)))).filter(Boolean)) : new Set(),
       });
     } catch (e) {
@@ -502,4 +519,22 @@ async function botSync(body) {
   return out;
 }
 
-module.exports = { register, roomFeed, botSync, fx, linkify, captures, composerFor };
+/**
+ * The profile's Posts panel + follow chip (1.99bz). profileUser: {userId, username}; reqUser: the
+ * session user or null. The panel itself obeys the profile layout (section "posts"); the posts are the
+ * same ones /feed?by=<username> lists (deleted / report-hidden ones left out for everyone but staff).
+ */
+async function profileSocial(profileUser, reqUser, { show = true } = {}) {
+  await store.init();
+  const viewer = reqUser && reqUser.userId ? await viewerOf({ user: reqUser }) : null;
+  const L = show ? await store.list({ author: profileUser.userId, sort: "new", page: 1, viewer, limit: 4 }) : { posts: [], more: false };
+  const c = await follows.counts("user", profileUser.userId);
+  return {
+    posts: L.posts, more: L.more, counts: c,
+    self: !!(viewer && viewer.userId === profileUser.userId),
+    following: viewer && viewer.userId !== profileUser.userId ? await follows.isFollowing(viewer.userId, "user", profileUser.userId) : false,
+    signed: !!viewer,
+  };
+}
+
+module.exports = { register, roomFeed, botSync, fx, linkify, captures, composerFor, profileSocial };

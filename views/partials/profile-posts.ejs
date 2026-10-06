@@ -1,0 +1,50 @@
+<%#
+  The profile's Posts panel (1.99bz; layout section "posts" - Public / Hidden like the other sections).
+  Compact cards of the latest posts; the full list is /feed?by=<username>. NSFW posts never show their
+  picture here (signed-out visitors get no NSFW media anywhere; signed-in ones open the post to see it).
+  Locals: social (feedweb.profileSocial), usernameProfile, displayname, isMe
+%><%
+  const P_ = social || { posts: [], more: false };
+  const ago_ = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 3600 ? Math.max(1, Math.floor(s / 60)) + 'm' : s < 86400 ? Math.floor(s / 3600) + 'h' : s < 30 * 86400 ? Math.floor(s / 86400) + 'd' : new Date(ms).toISOString().slice(0, 10); };
+  const fu_ = (n) => (n && /^[a-f0-9]{32}(?:_t|_p)?\.(webp|m4a|mp4)$/.test(n) ? '/feed/f/' + n : null);
+  const byUrl = '/feed?by=' + encodeURIComponent(usernameProfile);
+%>
+<section class="card pp" aria-labelledby="ppH">
+  <h2 id="ppH">Posts <a class="pp-all" href="<%= byUrl %>">All posts ›</a></h2>
+  <% if (!P_.posts.length) { %>
+    <p class="muted" style="margin:0"><%= isMe ? 'You haven\'t posted on the feed yet.' : 'No posts yet.' %> <% if (isMe) { %><a href="/feed">Write your first post ›</a><% } %></p>
+  <% } else { %>
+    <ul class="pp-list">
+      <% P_.posts.forEach((p) => {
+           const im = !p.nsfw && (p.images[0] || null);
+           const th = im ? fu_(im.thumb || im.file) : (!p.nsfw && p.video[0] ? fu_(p.video[0].poster) : (!p.nsfw && p.link && p.link.thumbFile ? fu_(p.link.thumbFile) : null));
+           const text = (p.title || p.body || (p.link && (p.link.title || p.link.domain)) || '').replace(/\s+/g, ' ').slice(0, 160);
+      %>
+        <li class="pp-item">
+          <a class="pp-a" href="/feed/p/<%= p.id %>">
+            <span class="pp-th<%= th ? '' : ' none' %>"><% if (th) { %><img src="<%= th %>" alt="" loading="lazy"><% } else { %><%= p.nsfw ? '🔞' : p.audio.length ? '🔊' : p.video.length ? '🎬' : p.link ? '🔗' : '📝' %><% } %></span>
+            <span class="pp-t">
+              <span class="pp-x"><% if (p.nsfw) { %><span class="pp-tag">NSFW</span> <% } %><%= text || 'A post' %></span>
+              <span class="pp-m">▲ <%= p.score %> · 💬 <%= p.comments %> · <%= ago_(p.created) %><% p.rooms.slice(0, 2).forEach((r) => { %> · 📡 <%= r.title %><% }) %></span>
+            </span>
+          </a>
+        </li>
+      <% }) %>
+    </ul>
+    <% if (P_.more) { %><a class="btn" href="<%= byUrl %>">See all of <%= displayname || usernameProfile %>'s posts →</a><% } %>
+  <% } %>
+</section>
+<style>
+  .pf .pp h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .pf .pp .pp-all { font-family: Ubuntu, sans-serif; font-size: 12px; letter-spacing: 0; text-transform: none; }
+  .pf .pp-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+  .pf .pp-a { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px; border-radius: 10px; background: #0d0d0d;
+              border: 1px solid #1f1f1f; color: #ddd !important; }
+  .pf .pp-a:hover { border-color: #2f4f2f; }
+  .pf .pp-th { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; background: #181818; display: grid; place-items: center; font-size: 24px; }
+  .pf .pp-th img { width: 100%; height: 100%; object-fit: cover; }
+  .pf .pp-t { display: grid; gap: 4px; min-width: 0; }
+  .pf .pp-x { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; overflow-wrap: anywhere; }
+  .pf .pp-m { font-size: 12px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pf .pp-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #4a1a1a; color: #f2b8b8; vertical-align: 1px; }
+</style>

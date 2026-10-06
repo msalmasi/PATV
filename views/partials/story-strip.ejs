@@ -1,0 +1,40 @@
+<%#
+  The story strip (1.99bz; public/js/stories.js opens the viewer). Locals: story =
+    { rooms: stories.forViewer() rows (circles, one per room), caps: one room's captures (thumbnails),
+      room: room id for the thumbnails, signed: bool }, heading (optional), next (sign-in return path)
+  Circles: unseen rooms first, then the newest. Signed-out visitors get the circles without pictures and
+  a sign-in prompt instead of the viewer. Thumbnails keep their /media/<id> link as the no-JS fallback.
+%><%
+  const S = story || { rooms: [], caps: [], signed: false };
+  const ttl_ = typeof heading !== 'undefined' && heading ? heading : null;
+  const next_ = typeof next !== 'undefined' && next ? next : '/';
+  const mono = (t) => String(t || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '📡';
+  const kindIc = { photo: '📸', clip: '📹', audio: '🔊' };
+  const showRooms = (S.rooms || []).length > 0, showCaps = (S.caps || []).length > 0;
+%>
+<% if (showRooms || showCaps) { %>
+<link rel="stylesheet" href="/public/css/stories.css?v=1">
+<section class="ss" aria-label="Stories: Pepe's captures from the rooms, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
+  <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
+  <div class="ss-row" role="list">
+    <% (S.rooms || []).forEach((r) => { %>
+      <button type="button" role="listitem" class="ss-c<%= r.unseen ? ' unseen' : ' seen' %>" data-story-room="<%= r.id %>" data-latest="<%= r.latest %>"
+              aria-label="<%= r.title %>: <%= r.count %> capture<%= r.count === 1 ? '' : 's' %><%= r.unseen ? ', new' : '' %>">
+        <span class="ss-ring"><span class="ss-av"><% if (S.signed && r.cover) { %><img src="<%= r.cover %>" alt="" loading="lazy" onerror="this.remove()"><% } %><span class="ss-mono" aria-hidden="true"><%= mono(r.title) %></span></span></span>
+        <span class="ss-n"><%= r.title %></span>
+        <span class="ss-k" aria-hidden="true"><%= r.count %></span>
+      </button>
+    <% }) %>
+    <% (S.caps || []).forEach((c) => { %>
+      <a role="listitem" class="ss-t k-<%= c.kind %>" href="<%= c.page %>" data-story-room="<%= S.room %>" data-story-item="<%= c.id %>"
+         aria-label="<%= c.kind === 'photo' ? 'Snap' : c.kind === 'clip' ? 'Clip' : 'Audio' %> of <%= c.subject || 'someone' %>">
+        <% if (c.kind === 'photo') { %><img src="<%= c.src %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
+        <span class="ic" aria-hidden="true"><%= kindIc[c.kind] %></span>
+        <span class="who"><%= c.subject || 'someone' %></span>
+      </a>
+    <% }) %>
+  </div>
+</section>
+<% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
+<script src="/public/js/stories.js?v=1" defer></script>
+<% } %>

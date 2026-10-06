@@ -21,6 +21,7 @@
   <div class="fp-main">
     <div class="fp-head">
       <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>/profile"><%= p.author.display %></a>
+      <% if (signed && !p.mine && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <span class="mut">· <a class="mut" href="/feed/p/<%= p.id %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a></span>
       <% if (p.edited) { %><span class="mut" title="edited <%= new Date(p.edited).toUTCString() %>">· edited</span><% } %>
       <% p.rooms.forEach((r) => { if (r.id === ctx_) return; %><a class="fp-chip<%= r.removed ? ' off' : '' %>" href="/rooms/<%= encodeURIComponent(r.slug) %>#feed">📡 <%= r.title %><%= r.removed ? ' (removed)' : '' %></a><% }) %>

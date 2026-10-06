@@ -138,10 +138,13 @@ function register(app, { addUser, xpForNextLevel }) {
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       const roomLive = me && room ? await bridge.liveFor(room.slug) : null;
+      // 1.99bz: the story strip (a circle per room with captures from the last 24 h); visitors get the circles only
+      const storyRooms = await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
       res.locals.og = { title: "Public Access TV", description: "Live streams, Pepe the frog, Camfrog rooms live on the web, PAT games, markets and more.",
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top,
+        story: { rooms: storyRooms, caps: [], room: null, signed: !!me },
         roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, featuredPrice: require("./mainstage").config().price_per_min,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),

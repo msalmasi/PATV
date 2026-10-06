@@ -1085,6 +1085,8 @@ app.get("/info", addUser, (req, res) => {
 // Clips & snaps (moved off Netlify) and prediction markets. The feed (1.99bv, feedweb.js) owns /feed:
 // user posts to the main feed and to rooms, plus these captures.
 require("./feedweb").register(app, { isBotToken, addUser });
+require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
+require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");
@@ -1371,6 +1373,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         }),
         // section order + visibility (profilelayout.js)
         layout: L,
+        // 1.99bz: the Posts panel (layout section "posts") + follower counts and the Follow button
+        social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts") })
+          .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
         // the owner's recent "New avatar" requests (website action queue, tag "avatar")
         avatarActs: isOwner && !preview ? await require("./actions").recentFor(req.user.userId, "avatar", 3) : [],

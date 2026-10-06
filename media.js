@@ -10,13 +10,23 @@ const path = require("path");
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const DIR = path.join(__dirname, "media");
+const DIR = process.env.MEDIA_DIR ? path.resolve(process.env.MEDIA_DIR) : path.join(__dirname, "media");   // MEDIA_DIR: tests
 try { fs.mkdirSync(DIR, { recursive: true }); } catch (e) { /* exists */ }
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS media (
   id TEXT PRIMARY KEY, kind TEXT NOT NULL, ct TEXT NOT NULL, file TEXT NOT NULL, bytes INTEGER,
   secs REAL, subject TEXT, by_user TEXT, room TEXT, created INTEGER, expires INTEGER,
-  deleted INTEGER DEFAULT 0)`).catch(() => {});
+  deleted INTEGER DEFAULT 0)`)
+  // 1.99bz: Pepe may flag a capture's subject as private (!incognito / !bridge hide) - the site then
+  // never names them (stories, strips, the capture page)
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN anon INTEGER DEFAULT 0").catch(() => {}))
+  .catch(() => {});
+
+/** Is this capture's file still on disk? (A row can outlive its file: a staging DB refreshed from prod,
+ *  a file removed by hand. Such rows would render as broken images, so lists skip them.) */
+function fileExists(row) {
+  return !!(row && typeof row.file === "string" && /^[A-Za-z0-9]+\.(jpg|mp4|m4a)$/.test(row.file) && fs.existsSync(path.join(DIR, row.file)));
+}
 
 const TYPES = { "image/jpeg": ".jpg", "video/mp4": ".mp4", "audio/mp4": ".m4a" };
 const KINDS = new Set(["photo", "clip", "audio"]);
@@ -61,10 +71,11 @@ function register(app, { isBotToken, addUser }) {
     try {
       await ready;
       fs.writeFileSync(path.join(DIR, file), buf);
-      await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-        [id, kind, ct, file, buf.length, Number(b.secs) || 0, String(b.subject || "").slice(0, 60),
-         String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires]);
+      const anon = b.anon === true || b.anon === 1 || b.anon === "1";
+      await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        [id, kind, ct, file, buf.length, Number(b.secs) || 0, anon ? "" : String(b.subject || "").slice(0, 60),
+         String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires, anon ? 1 : 0]);
       res.json({ success: true, id, expires, url: `/media/${id}` });
     } catch (e) {
       console.error("[media] upload:", e);
@@ -120,4 +131,4 @@ function register(app, { isBotToken, addUser }) {
   }, 5 * 60 * 1000).unref();
 }
 
-module.exports = { register };
+module.exports = { register, fileExists, DIR, ready };

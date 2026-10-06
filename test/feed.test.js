@@ -17,6 +17,7 @@ process.chdir(tmp);
 delete process.env.STAGING;
 process.env.SECRET_KEY = "test-secret";
 process.env.FEED_DIR = path.join(tmp, "feedfiles");
+process.env.MEDIA_DIR = path.join(tmp, "mediafiles");
 const express = require("express");
 const sharp = require("sharp");
 const ejs = require("ejs");
@@ -47,7 +48,7 @@ test.before(async () => {
                   points_balance INTEGER DEFAULT 0, camfrogUsername TEXT, discordUsername TEXT, twitchDisplayname TEXT, discordId TEXT, twitchId TEXT,
                   level INTEGER DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, casino_banned INTEGER DEFAULT 0)`);
   await runQuery("CREATE TABLE transactions (transactionId TEXT PRIMARY KEY, userId TEXT, type TEXT, points INTEGER, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)");
-  await runQuery(`CREATE TABLE media (id TEXT PRIMARY KEY, kind TEXT NOT NULL, ct TEXT NOT NULL, file TEXT NOT NULL, bytes INTEGER, secs REAL, subject TEXT,
+  await runQuery(`CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, kind TEXT NOT NULL, ct TEXT NOT NULL, file TEXT NOT NULL, bytes INTEGER, secs REAL, subject TEXT,
                   by_user TEXT, room TEXT, created INTEGER, expires INTEGER, deleted INTEGER DEFAULT 0)`);
   U.owner = await mkUser("plantowner", { camfrog: "foamy1111" });
   U.admin = await mkUser("boss", { class: "Admin", camfrog: "bossfrog" });
@@ -133,7 +134,7 @@ test("sniff: real types by magic bytes; HTML/SVG/XML/PDF/ZIP/EXE/playlists refus
     const r = media.sniff(Buffer.from(bad, "latin1"));
     assert.ok(r.bad, "refused: " + JSON.stringify(bad.slice(0, 20)));
   }
-  assert.ok(media.sniff(Buffer.from("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00", "latin1")).bad, "HEIC is refused with a hint");
+  assert.equal(media.sniff(Buffer.from("\x00\x00\x00\x18ftypheic\x00\x00\x00\x00", "latin1")).fmt, "heic", "HEIC is a picture (1.99bz: converted with heif-convert)");
 });
 
 // ───────────────────────────── re-encoding ─────────────────────────────
@@ -569,6 +570,8 @@ test("rendering: every user string is escaped; links get rel=nofollow noopener u
 test("pages render: /feed, room filter, captures tab, the room section, post detail at any sort", async () => {
   await runQuery("INSERT INTO media (id, kind, ct, file, room, subject, created, expires) VALUES ('abcd1234', 'photo', 'image/jpeg', 'x.jpg', ?, 'froggy', ?, ?)",
                  [ROOM_A, Date.now(), Date.now() + 3600e3]);
+  fs.mkdirSync(process.env.MEDIA_DIR, { recursive: true });
+  fs.writeFileSync(path.join(process.env.MEDIA_DIR, "x.jpg"), await sharp({ create: { width: 4, height: 4, channels: 3, background: "#f00" } }).jpeg().toBuffer());
   for (const q of ["", "?sort=new", "?sort=top&t=all", "?room=pepefrog-room", "?room=PepeFrog.Room&sort=hot", "?tab=captures", "?by=alice"]) {
     const r = await fetch(base + "/feed" + q, { headers: { "x-test-user": U.bob.userId } });
     assert.equal(r.status, 200, q);
@@ -577,9 +580,9 @@ test("pages render: /feed, room filter, captures tab, the room section, post det
   assert.ok(html.includes("Fresh from"), "the room's captures strip");
   assert.ok(html.includes("Hello frogs"));
   assert.ok(!html.includes("plant room only"), "another room's post isn't in this room's filter");
-  // signed out: posts yes, captures no
+  // signed out: posts yes, capture pictures no (1.99bz: the room's story circle, which asks them to sign in)
   const out = await (await fetch(base + "/feed?room=pepefrog-room")).text();
-  assert.ok(out.includes("Hello frogs") && !out.includes("Fresh from"));
+  assert.ok(out.includes("Hello frogs") && !out.includes("/media/abcd1234") && !out.includes("froggy"));
   // the room page section (rendered the way bridge.js does)
   const F = await web.roomFeed(ROOM_A, U.bob, {});
   const part = await ejs.renderFile(path.join(repo, "views/partials/room-feed.ejs"), { feed: F, fx: web.fx, embeds: require(path.join(repo, "stageembed")), host: "test",

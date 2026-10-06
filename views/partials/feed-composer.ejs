@@ -6,7 +6,7 @@
 <% } else if (cp.refusal) { %>
   <div class="fc fc-out">✍️ <%= cp.refusal %></div>
 <% } else { %>
-  <form class="fc" id="fcForm" novalidate data-chunk="<%= cp.chunk %>" data-caps="<%= JSON.stringify(cp.caps) %>" data-prices="<%= JSON.stringify(cp.prices) %>" data-max-images="<%= cp.maxImages %>" data-max-rooms="<%= cp.maxRooms %>">
+  <form class="fc" id="fcForm" novalidate data-user="<%= cp.user %>" data-chunk="<%= cp.chunk %>" data-caps="<%= JSON.stringify(cp.caps) %>" data-prices="<%= JSON.stringify(cp.prices) %>" data-max-images="<%= cp.maxImages %>" data-max-rooms="<%= cp.maxRooms %>">
     <div class="fc-row">
       <input name="title" maxlength="140" placeholder="Title (optional)" aria-label="Title" autocomplete="off">
     </div>
@@ -19,7 +19,7 @@
     <div class="fc-tools">
       <button type="button" class="fc-tool" data-tool="link" aria-label="Add a link">🔗 Link</button>
       <% if (!cp.mediaRefusal) { %>
-        <label class="fc-tool">🖼 Picture<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif" multiple data-kind="image" hidden></label>
+        <label class="fc-tool">🖼 Picture<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple data-kind="image" hidden></label>
         <label class="fc-tool">🔊 Audio<input type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac" data-kind="audio" hidden></label>
         <label class="fc-tool">🎬 Video<input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" data-kind="video" hidden></label>
       <% } %>
@@ -30,14 +30,21 @@
       <legend>Post to</legend>
       <label class="fc-dest"><input type="checkbox" name="global"<%= cp.room ? '' : ' checked' %>> 🌐 Main feed</label>
       <% cp.rooms.forEach((r) => { %>
-        <label class="fc-dest"><input type="checkbox" name="room" value="<%= r.id %>"<%= cp.room === r.id ? ' checked' : '' %>> 📡 <%= r.title %></label>
+        <label class="fc-dest"><input type="checkbox" name="room" value="<%= r.id %>" data-slug="<%= r.slug %>"<%= cp.room === r.id ? ' checked' : '' %>> 📡 <%= r.title %></label>
       <% }) %>
+      <% const ann = cp.rooms.filter((r) => r.announce); if (ann.length) { %>
+        <div class="fc-anns">
+          <% ann.forEach((r) => { %>
+            <label class="fc-ann<%= cp.room === r.id ? '' : ' hide' %>" data-ann-for="<%= r.id %>" title="This room's owner lets Pepe post a short line in the Camfrog room about new posts (at most one every few minutes)"><input type="checkbox" name="announce" value="<%= r.id %>" checked> 🐸📣 Pepe announces it in <%= r.title %></label>
+          <% }) %>
+        </div>
+      <% } %>
     </fieldset>
     <div class="fc-send">
       <span class="fc-cost mut" id="fcCost"><%= cp.paid ? '' : 'Posting is free.' %></span>
       <span class="fc-err" id="fcErr" role="alert"></span>
       <button type="submit" class="btn-s" id="fcGo">Post</button>
     </div>
-    <p class="fc-note">Pictures up to <%= cp.caps.image %> MB, audio up to <%= cp.caps.audio %> MB (<%= Math.round(cp.caps.audioSecs / 60) %> min), video up to <%= cp.caps.video %> MB (<%= Math.round(cp.caps.videoSecs / 60) %> min). Files are re-encoded and their metadata (camera, GPS location) is removed.</p>
+    <p class="fc-note">Pictures up to <%= cp.caps.image %> MB, audio up to <%= cp.caps.audio %> MB (<%= Math.round(cp.caps.audioSecs / 60) %> min), video up to <%= cp.caps.video %> MB (<%= Math.round(cp.caps.videoSecs / 60) %> min). Files are re-encoded and their metadata (camera, GPS location) is removed. iPhone HEIC photos are fine. Your draft is kept on this device until you post it.</p>
   </form>
 <% } %>

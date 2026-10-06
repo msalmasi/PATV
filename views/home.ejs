@@ -30,7 +30,7 @@
     { href: '/wagers', ic: '🤝', t: 'Wagers', s: S0.wagers ? S0.wagers + ' live' : null },
     { href: '/staking', ic: '🏦', t: 'Staking', s: S0.vaults ? short(S0.vaults.house) + ' House' : null },
     { href: '/cosmetics', ic: '🎨', t: 'Cosmetics', s: null },
-    { href: '/feed', ic: '🎞️', t: 'Clips & snaps', s: null },
+    { href: '/feed', ic: '📝', t: 'Feed & stories', s: null },
     { href: '/rankings', ic: '🏆', t: 'Rankings', s: null },
   ];
 %>
@@ -275,6 +275,7 @@
 </style>
 
 <main class="hm">
+  <% if (typeof story !== 'undefined' && story && story.rooms.length) { %><div class="hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the rooms', next: '/' }) %></div><% } %>
   <!-- ───── main stage ───── -->
   <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">
     <div class="bar">

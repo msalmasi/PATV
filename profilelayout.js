@@ -29,6 +29,7 @@ const SECTIONS = [
   { id: "analytics", label: "Analytics", desc: "Camfrog chat, mic and command activity", icon: "📈" },
   { id: "gtf", label: "Grand Theft Frogger", desc: "Heist sheet and GTF links", icon: "🥷" },
   { id: "badges", label: "Badges", desc: "Every badge you've earned", icon: "🏅" },
+  { id: "posts", label: "Posts", desc: "Your latest feed posts (1.99bz)", icon: "📝" },
 ];
 // Panels inside a section that can be hidden on their own (not reordered).
 const SUBS = {

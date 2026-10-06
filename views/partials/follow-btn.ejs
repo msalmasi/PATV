@@ -1,0 +1,4 @@
+<%#
+  A Follow / Following button (1.99bz, public/js/follow.js). Locals: kind ('user' | 'room'), id (username or
+  room id), following (bool), signed (bool), next (sign-in return path), small (bool, optional)
+%><% const sm_ = typeof small !== 'undefined' && small ? ' sm' : ''; %><% if (signed) { %><button type="button" class="fw-btn<%= sm_ %><%= following ? ' on' : '' %>" data-follow-kind="<%= kind %>" data-follow-id="<%= id %>" aria-pressed="<%= following ? 'true' : 'false' %>"><span class="fw-l"><%= following ? 'Following' : '+ Follow' %></span></button><% } else { %><a class="fw-btn<%= sm_ %>" href="/login?next=<%= encodeURIComponent(next || '/') %>">+ Follow</a><% } %>

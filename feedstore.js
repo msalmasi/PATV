@@ -266,11 +266,13 @@ async function decorate(rows, viewer) {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const q = ids.map(() => "?").join(",");
-  const [A, PR, AT, MV] = await Promise.all([
+  const [A, PR, AT, MV, FW] = await Promise.all([
     authors(rows.map((r) => r.author_id)),
     getQuery(`SELECT post_id, room_id, removed_at FROM feed_post_rooms WHERE post_id IN (${q})`, ids),
     getQuery(`SELECT * FROM feed_attachments WHERE post_id IN (${q}) AND state = 'ready' ORDER BY sort, created`, ids),
     viewer && viewer.userId ? getQuery(`SELECT post_id, value FROM feed_votes WHERE user_id = ? AND post_id IN (${q})`, [viewer.userId, ...ids]) : [],
+    // 1.99bz: which of these authors the viewer follows (the author chip's Follow button)
+    viewer && viewer.userId ? require("./follows").followedAmong(viewer.userId, "user", rows.map((r) => r.author_id)) : new Set(),
   ]);
   const staff = isStaff(viewer);
   return rows.map((r) => {
@@ -286,6 +288,7 @@ async function decorate(rows, viewer) {
       nsfw: effNsfw(r), nsfwAuthor: !!r.nsfw, nsfwAdmin: r.nsfw_admin, global: !!r.global, cost: r.cost,
       deleted: !!r.deleted_at, hidden: !!r.hidden_at, deleteReason: r.delete_reason || null,
       author: A.get(r.author_id) || { userId: r.author_id, username: "[gone]", display: "[deleted account]" },
+      followingAuthor: FW.has(r.author_id),
       mine: !!(viewer && viewer.userId === r.author_id),
       voted: !!MV.find((v) => v.post_id === r.id && v.value > 0),
       rooms: roomsOf.filter((x) => !x.removed || staff),
@@ -305,13 +308,18 @@ function hotScore(p, t = NOW()) {
  * A page of posts. scope: {room: room id} | {global: true} | {author: userId}. sort new|top|hot.
  * Visible = not deleted, not hidden (staff see hidden ones), and in a room: not removed from it.
  */
-async function list({ room = null, author = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE } = {}) {
+async function list({ room = null, author = null, following = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE } = {}) {
   await init();
   const staff = isStaff(viewer);
   const where = ["p.deleted_at IS NULL"], args = [];
   if (!staff) where.push("p.hidden_at IS NULL");
   let from = "feed_posts p";
-  if (room) {
+  if (following) {
+    // 1.99bz: posts by people `following` follows + posts in rooms they follow (one row per post)
+    await require("./follows").init();
+    const f = require("./follows").feedFilter(following);
+    where.push(f.sql); args.push(...f.args);
+  } else if (room) {
     from += " JOIN feed_post_rooms pr ON pr.post_id = p.id AND pr.room_id = ?";
     args.push(room);
     if (!staff) where.push("pr.removed_at IS NULL");
@@ -455,9 +463,12 @@ async function create(userId, input, deps = {}) {
       if (!r.changes) throw new Refuse(409, "A file was used twice.");
     }
     if (previewAtt) await runQuery("UPDATE feed_attachments SET post_id = ?, sort = 99 WHERE id = ? AND post_id IS NULL AND owner_id = ?", [id, previewAtt.id, u.userId]);
+    // 1.99bz: Pepe announces the post in a room when the room's OWNER has announcements on (the gate)
+    // AND the author left "announce in <room>" ticked. No announce list (older pages) = every such room.
+    const announce = Array.isArray(input.announce) ? new Set(input.announce.map(String)) : null;
     for (const rid of roomIds) {
       await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created) VALUES (?, ?, ?)", [id, rid, t]);
-      await queueMention(rid, id);
+      if (!announce || announce.has(rid) || [...announce].some((x) => (rooms.getCached(rid) || {}).slug === x)) await queueMention(rid, id);
     }
   } catch (e) {
     await runQuery("UPDATE feed_attachments SET post_id = NULL WHERE post_id = ?", [id]).catch(() => {});
@@ -467,7 +478,13 @@ async function create(userId, input, deps = {}) {
     throw e;
   }
   console.log(`[feed] post ${id} by ${u.username} rooms=${roomIds.join(",") || "-"} global=${global ? 1 : 0} files=${atts.length} link=${link ? link.domain : "-"} cost=${cost}`);
-  return get(id, u);
+  const made = await get(id, u);
+  // 1.99bz: followers who asked for it get an inbox notice (default off); never blocks the post
+  if (made) {
+    const pending = require("./follows").notifyNewPost(made, u.displayname || u.username);
+    if (deps.awaitNotices) await pending;
+  }
+  return made;
 }
 
 /** Author edit: title, body, nsfw. (Files, link and rooms stay - delete and repost to change those.) */
