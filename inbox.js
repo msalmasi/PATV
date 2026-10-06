@@ -16,10 +16,13 @@
 // Routes
 //   POST /api/inbox/push   bot token. {camfrog, kind, title, body, link, ref, created}
 //                          -> {ok, stored: "user"|"pending", pm} (pm: may Pepe PM them for this kind)
-//   GET  /inbox            the owner's inbox (paginated, ?kind= filter), prefs
+//   GET  /inbox            301 -> /messages/notices, query string kept (1.99cu: notices are the pinned "🔔 Notices"
+//                          item of the one /messages inbox, rendered by public/js/messages.js from feed() below)
+//   GET  /api/inbox/notices  JSON: one page of notices (?kind= &page=) + per-category counts (same-site fetch only)
 //   GET  /inbox/open/:id   mark one read and go to its link
-//   POST /inbox/read       {id} or {all: 1}  (same-site form post)
-//   POST /inbox/prefs      pm_<kind> checkboxes
+//   POST /inbox/read       {id} or {all: 1}  (same-site form post; JSON answer for X-Requested-With: fetch)
+//   POST /inbox/prefs      pm_<kind> checkboxes (form post)
+//   POST /api/inbox/prefs  JSON {pm: {<kind>: true|false}} - only the kinds given change (the /messages ⚙ dialog)
 // res.locals.inboxUnread (navCount middleware) feeds the 🔔 in the nav: one indexed COUNT per page view.
 const jwt = require("jsonwebtoken");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -43,6 +46,7 @@ const KINDS = {
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Pepe", link: null },
 };
+const NOTICES = "/messages/notices";  // where the notices are shown (the 🔔 Notices item of /messages)
 const PAGE = 25;
 const KEEP_PER_USER = 1000;          // oldest beyond this are pruned
 const PENDING_KEEP_MS = 30 * 86400000;
@@ -191,6 +195,41 @@ async function list(userId, { page = 1, kind = null } = {}) {
   return { rows, total, page: p, pages, kind: k, counts };
 }
 
+/** Categories for the page, in display order: [{key, icon, label}]. */
+function kindList() {
+  return Object.keys(KINDS).map((k) => ({ key: k, icon: KINDS[k].icon, label: KINDS[k].label }));
+}
+
+/** Everything the Notices pane needs, as JSON (plain text only - the page puts it in with textContent). */
+async function feed(userId, { page = 1, kind = null } = {}) {
+  const L = await list(userId, { page, kind });
+  return {
+    items: L.rows.map((n) => ({ id: n.id, kind: kindOf(n.kind), title: n.title, body: n.body || "", link: !!safeLink(n.link),
+                                created: n.created, unread: !n.read_at })),
+    page: L.page, pages: L.pages, total: L.total, kind: L.kind,
+    counts: L.counts.map((c) => ({ kind: c.kind, n: c.n, unread: c.unread || 0 })),
+    unread: await unreadCount(userId), latest: await latest(userId),
+  };
+}
+
+/** The newest notice ({title, created}) or null - the pinned 🔔 Notices item's preview line. */
+async function latest(userId) {
+  if (!userId) return null;
+  await ready;
+  return (await getQuery("SELECT title, created FROM inbox WHERE user_id = ? ORDER BY id DESC LIMIT 1", [userId]))[0] || null;
+}
+
+/** Set the Camfrog-PM switch for the given categories only ({kind: true = PM me}). Unknown kinds are ignored. */
+async function setPrefs(userId, pm) {
+  await ready;
+  for (const k of Object.keys(pm || {})) {
+    if (!Object.prototype.hasOwnProperty.call(KINDS, k)) continue;
+    await runQuery(`INSERT INTO inbox_prefs (user_id, kind, pm_off) VALUES (?, ?, ?)
+                    ON CONFLICT(user_id, kind) DO UPDATE SET pm_off = excluded.pm_off`, [userId, k, pm[k] ? 0 : 1]);
+  }
+  return prefs(userId);
+}
+
 /** Mark one (id) or all read — only the owner's rows. Returns rows changed. */
 async function markRead(userId, id) {
   await ready;
@@ -243,41 +282,40 @@ function register(app, { isBotToken, addUser }) {
     }
   });
 
-  app.get("/inbox", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
+  // 1.99cu: the notices are a pane of /messages now. Old links (nav bookmarks, Pepe's PMs, emails) keep working.
+  app.get("/inbox", (req, res) => {
+    const q = req.originalUrl.indexOf("?");
+    res.redirect(301, NOTICES + (q >= 0 ? req.originalUrl.slice(q) : ""));
+  });
+
+  // one page of notices for the Notices pane (same-site fetch only, like the /api/messages calls)
+  app.get("/api/inbox/notices", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!sameSite(req) || req.get("x-requested-with") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     try {
-      const me = (await getQuery("SELECT username, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
-      if (!me) return res.redirect("/login");
-      if (me.camfrogUsername) await attachPendingSafe(req.user.userId, me.camfrogUsername);
-      const L = await list(req.user.userId, { page: req.query.page, kind: String(req.query.kind || "") || null });
-      const unread = await unreadCount(req.user.userId);
-      res.render("inbox", {
-        title: unread ? `Inbox (${unread})` : "Inbox", user: req.user.username, inboxUnread: unread,
-        items: L.rows, page: L.page, pages: L.pages, total: L.total, kind: L.kind, counts: L.counts,
-        KINDS, prefs: await prefs(req.user.userId), camfrog: me.camfrogUsername || null,
-        msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null,
-      });
+      res.json({ ok: true, ...(await feed(req.user.userId, { page: req.query.page, kind: String(req.query.kind || "") || null })) });
     } catch (e) {
-      console.error("[inbox] page:", e.message);
-      res.status(500).send("Couldn't load your inbox.");
+      console.error("[inbox] notices:", e.message);
+      res.status(500).json({ ok: false, error: "Couldn't load your notices." });
     }
   });
 
   // open a notice: mark it read, then follow its link (only ever a local path)
   app.get("/inbox/open/:id", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.redirect("/login?next=/inbox");
+    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(NOTICES));
     const n = await getOwn(req.user.userId, req.params.id).catch(() => null);
-    if (!n) return res.redirect("/inbox");
+    if (!n) return res.redirect(NOTICES);
     await markRead(req.user.userId, n.id).catch(() => {});
-    res.redirect(safeLink(n.link) || "/inbox");
+    res.redirect(safeLink(n.link) || NOTICES);
   });
 
   const back = (b) => {
-    const s = String(b || "");
-    return /^\/inbox(\?[A-Za-z0-9=&_%-]*)?$/.test(s) ? s : "/inbox";
+    const s = String(b || "").replace(/^\/inbox(?=\?|$)/, NOTICES);
+    return /^\/messages\/notices(\?[A-Za-z0-9=&_%-]*)?$/.test(s) ? s : NOTICES;
   };
   app.post("/inbox/read", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.redirect("/login?next=/inbox");
+    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(NOTICES));
     if (!sameSite(req)) return res.status(403).send("Cross-site request refused");
     const b = req.body || {};
     const n = await markRead(req.user.userId, b.all ? "all" : b.id).catch(() => 0);
@@ -286,23 +324,35 @@ function register(app, { isBotToken, addUser }) {
   });
 
   app.post("/inbox/prefs", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.redirect("/login?next=/inbox");
+    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(NOTICES));
     if (!sameSite(req)) return res.status(403).send("Cross-site request refused");
-    await ready;
     const b = req.body || {};
     try {
-      for (const k of Object.keys(KINDS)) {
-        const off = b["pm_" + k] ? 0 : 1;
-        await runQuery(`INSERT INTO inbox_prefs (user_id, kind, pm_off) VALUES (?, ?, ?)
-                        ON CONFLICT(user_id, kind) DO UPDATE SET pm_off = excluded.pm_off`, [req.user.userId, k, off]);
-      }
-      res.redirect("/inbox?msg=" + encodeURIComponent("Saved — Pepe will only PM you in Camfrog for the ticked categories."));
+      const pm = {};
+      for (const k of Object.keys(KINDS)) pm[k] = !!b["pm_" + k];
+      await setPrefs(req.user.userId, pm);
+      res.redirect(NOTICES + "?msg=" + encodeURIComponent("Saved — Pepe will only PM you in Camfrog for the ticked categories."));
     } catch (e) {
       console.error("[inbox] prefs:", e.message);
-      res.redirect("/inbox?msg=" + encodeURIComponent("Couldn't save that — try again."));
+      res.redirect(NOTICES + "?msg=" + encodeURIComponent("Couldn't save that — try again."));
+    }
+  });
+
+  // the /messages ⚙ dialog: JSON, only the categories it sends change
+  app.post("/api/inbox/prefs", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!sameSite(req) || req.get("x-requested-with") !== "fetch" || !req.is("application/json")) return res.status(403).json({ ok: false, error: "Bad request." });
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    const pm = req.body && req.body.pm;
+    if (!pm || typeof pm !== "object" || Array.isArray(pm)) return res.status(400).json({ ok: false, error: "Nothing to save." });
+    try {
+      res.json({ ok: true, prefs: await setPrefs(req.user.userId, pm) });
+    } catch (e) {
+      console.error("[inbox] prefs:", e.message);
+      res.status(500).json({ ok: false, error: "Couldn't save that - try again." });
     }
   });
 }
 
-module.exports = { register, add, addSafe, addForCamfrog, attachPending, attachPendingSafe, pmAllowed, prefs,
-                   unreadCount, list, markRead, navCount, safeLink, KINDS, ready };
+module.exports = { register, add, addSafe, addForCamfrog, attachPending, attachPendingSafe, pmAllowed, prefs, setPrefs,
+                   unreadCount, list, feed, latest, kindList, markRead, navCount, safeLink, KINDS, NOTICES, ready };

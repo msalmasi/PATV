@@ -755,16 +755,24 @@ function register(app, { isBotToken, addUser }) {
     try {
       const me = await account(req.user.userId);
       if (!me) return res.redirect("/login");
+      const inbox = require("./inbox");
+      if (me.camfrogUsername) await inbox.attachPendingSafe(me.userId, me.camfrogUsername);   // notices Pepe filed before the link
       const convs = await list(me.userId);
-      const open = req.params.id && ID_RE.test(req.params.id) && (await membership(req.params.id, me.userId)) ? req.params.id : null;
-      const to = !open && req.query.to ? String(req.query.to).slice(0, 64) : null;
+      const notices = req.path === "/messages/notices";
+      const open = !notices && req.params.id && ID_RE.test(req.params.id) && (await membership(req.params.id, me.userId)) ? req.params.id : null;
+      const to = !notices && !open && req.query.to ? String(req.query.to).slice(0, 64) : null;
       const unread = await unreadTotal(me.userId);
+      // 1.99cu: the notices (inbox.js) are the pinned "🔔 Notices" item of this page; their first page comes with the boot data
+      const nt = await inbox.feed(me.userId, notices ? { page: req.query.page, kind: String(req.query.kind || "") || null } : {});
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
       res.render("messages", {
-        title: unread ? `Messages (${unread})` : "Messages", user: me.username, dmUnread: unread,
+        title: notices ? (nt.unread ? `Notices (${nt.unread})` : "Notices") : (unread ? `Messages (${unread})` : "Messages"),
+        user: me.username, dmUnread: unread, inboxUnread: nt.unread,
         boot: { me: { username: me.username, display: display(me), camfrog: !!me.camfrogUsername, isNew: isNewAccount(me) },
-                conversations: convs, open, to, prefs: await prefs(me.userId), blocks: await blockList(me.userId), maxLen: LIMITS.max_len,
-                reasons: reasons().menu, levelOk: LIMITS.level_ok },
+                conversations: convs, open, to, view: notices ? "notices" : null, prefs: await prefs(me.userId), blocks: await blockList(me.userId),
+                maxLen: LIMITS.max_len, reasons: reasons().menu, levelOk: LIMITS.level_ok,
+                notices: Object.assign(nt, { kinds: inbox.kindList(), pm: await inbox.prefs(me.userId),
+                                             msg: notices && req.query.msg ? String(req.query.msg).slice(0, 200) : null }) },
       });
     } catch (e) {
       console.error("[dm] page:", e && e.message);
@@ -773,10 +781,15 @@ function register(app, { isBotToken, addUser }) {
   };
   app.get("/messages", addUser, page);
   app.get("/messages/c/:id", addUser, page);
+  app.get("/messages/notices", addUser, page);           // 1.99cu: the pinned 🔔 Notices item (GET /inbox 301s here)
   app.get("/messages/new", addUser, (req, res) => res.redirect("/messages" + (req.query.to ? "?to=" + encodeURIComponent(String(req.query.to).slice(0, 64)) : "")));
 
   app.get("/api/messages/conversations", addUser, guard(false), async (req, res) => {
-    try { res.json({ ok: true, conversations: await list(req.user.userId), unread: await unreadTotal(req.user.userId) }); } catch (e) { fail(res, e); }
+    try {
+      const inbox = require("./inbox");            // + the pinned 🔔 Notices item, so the page's poll keeps it fresh too
+      res.json({ ok: true, conversations: await list(req.user.userId), unread: await unreadTotal(req.user.userId),
+                 notices: { unread: await inbox.unreadCount(req.user.userId), latest: await inbox.latest(req.user.userId) } });
+    } catch (e) { fail(res, e); }
   });
   app.get("/api/messages/check", addUser, guard(false), async (req, res) => {
     try { res.json({ ok: true, ...(await check(req.user, String(req.query.to || ""))) }); } catch (e) { fail(res, e); }

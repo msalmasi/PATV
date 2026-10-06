@@ -58,9 +58,12 @@ async function push(body, token = "bot-token") {
   const r = await fetch(base + "/api/inbox/push", { method: "POST", headers: H(null), body: JSON.stringify(Object.assign({ password: token }, body)) });
   return { status: r.status, d: await r.json() };
 }
-async function page(u, q = "") {
-  const r = await fetch(base + "/inbox" + q, { headers: H(u), redirect: "manual" });
-  return { status: r.status, html: await r.text(), loc: r.headers.get("location") };
+// 1.99cu: the notices are a pane of /messages, rendered in the page from this JSON (GET /inbox 301s there)
+async function notices(u, q = "", extra) {
+  const r = await fetch(base + "/api/inbox/notices" + q, { headers: Object.assign(H(u, { "x-requested-with": "fetch" }), extra || {}) });
+  let d = null;
+  try { d = await r.json(); } catch (e) { d = null; }
+  return { status: r.status, d };
 }
 async function form(p, u, fields, extra) {
   return fetch(base + p, { method: "POST", redirect: "manual",
@@ -132,20 +135,37 @@ test("pending notices also attach when an auto (CF…) account is merged on link
   assert.equal((await rows("cf1")).length, 0);
 });
 
-test("only the owner sees their inbox; signed-out goes to login", async () => {
-  const anon = await page(null);
-  assert.equal(anon.status, 302);
-  assert.match(anon.loc, /^\/login\?next=/);
+test("GET /inbox 301s to /messages/notices, keeping the query string", async () => {
+  for (const [from, to] of [["/inbox", "/messages/notices"], ["/inbox?kind=tip&page=2", "/messages/notices?kind=tip&page=2"],
+                            ["/inbox?msg=Saved%20%E2%80%94%20ok", "/messages/notices?msg=Saved%20%E2%80%94%20ok"]]) {
+    const r = await fetch(base + from, { headers: H("u1"), redirect: "manual" });
+    assert.equal(r.status, 301, from);
+    assert.equal(r.headers.get("location"), to, from);
+  }
+  const anon = await fetch(base + "/inbox?kind=loan", { redirect: "manual" });     // signed out too (the page then asks to sign in)
+  assert.equal(anon.status, 301);
+  assert.equal(anon.headers.get("location"), "/messages/notices?kind=loan");
+});
+
+test("only the owner sees their notices; the JSON is same-site fetch only and plain text", async () => {
+  assert.equal((await notices(null)).status, 401);
+  assert.equal((await fetch(base + "/api/inbox/notices", { headers: H("u1") })).status, 403, "not a fetch");
+  assert.equal((await notices("u1", "", { origin: "https://evil.example" })).status, 403, "cross-site");
   await push({ camfrog: "bobcf", kind: "market", title: "<script>alert('x')</script> judge", body: "<img src=x onerror=1>", ref: "m:1" });
-  const a = await page("u1");
+  const a = await notices("u1");
   assert.equal(a.status, 200);
-  assert.match(a.html, /Stake done: PAT 100,000/);
-  assert.doesNotMatch(a.html, /judge/);
-  const b = await page("u2");
-  assert.doesNotMatch(b.html, /Stake done/);
-  assert.match(b.html, /&lt;script&gt;alert\(&#39;x&#39;\)&lt;\/script&gt; judge/);
-  assert.doesNotMatch(b.html, /<script>alert/);
-  assert.doesNotMatch(b.html, /<img src=x/);
+  assert.ok(a.d.items.some((n) => n.title === "Stake done: PAT 100,000"));
+  assert.ok(!a.d.items.some((n) => /judge/.test(n.title)));
+  const b = await notices("u2");
+  assert.ok(!b.d.items.some((n) => /Stake done/.test(n.title)));
+  // stored and served as the plain text it is (the page puts it in with textContent, never as HTML)
+  const x = b.d.items.find((n) => /judge/.test(n.title));
+  assert.equal(x.title, "<script>alert('x')</script> judge");
+  assert.equal(x.body, "<img src=x onerror=1>");
+  assert.equal(x.unread, true);
+  assert.equal(typeof x.link, "boolean", "links aren't handed out - the page opens /inbox/open/:id");
+  assert.equal(b.d.unread, (await rows("u2")).filter((r) => !r.read_at).length);
+  assert.equal(b.d.latest.title, x.title);
 });
 
 test("mark read: one, someone else's (refused), and all", async () => {
@@ -154,7 +174,7 @@ test("mark read: one, someone else's (refused), and all", async () => {
   assert.equal(r1.status, 302);
   assert.equal((await rows("u2"))[0].read_at, null, "alice can't mark bob's notice read");
   const open = await fetch(base + "/inbox/open/" + bobs[0].id, { headers: H("u1"), redirect: "manual" });
-  assert.equal(open.headers.get("location"), "/inbox");
+  assert.equal(open.headers.get("location"), "/messages/notices");
   assert.equal((await rows("u2"))[0].read_at, null, "nor open it");
 
   const a = await rows("u1");
@@ -164,12 +184,15 @@ test("mark read: one, someone else's (refused), and all", async () => {
   assert.equal(d2.changed, 1);
   assert.equal(d2.unread, a.length - 1);
   const o = await fetch(base + "/inbox/open/" + a[1].id, { headers: H("u1"), redirect: "manual" });
-  assert.equal(o.headers.get("location"), "/inbox", "a notice without a safe link opens the inbox");
-  const r3 = await form("/inbox/read", "u1", { all: "1", back: "/inbox?page=1" });
-  assert.equal(r3.headers.get("location"), "/inbox?page=1");
+  assert.equal(o.headers.get("location"), "/messages/notices", "a notice without a safe link opens the notices");
+  const r3 = await form("/inbox/read", "u1", { all: "1", back: "/messages/notices?page=1" });
+  assert.equal(r3.headers.get("location"), "/messages/notices?page=1");
   assert.equal((await rows("u1")).filter((x) => !x.read_at).length, 0);
+  assert.equal((await notices("u1")).d.unread, 0, "the count the page shows follows");
+  const old = await form("/inbox/read", "u1", { all: "1", back: "/inbox?kind=tip" });           // an old page's form
+  assert.equal(old.headers.get("location"), "/messages/notices?kind=tip");
   const bad = await form("/inbox/read", "u1", { all: "1", back: "https://evil.example/" });
-  assert.equal(bad.headers.get("location"), "/inbox");
+  assert.equal(bad.headers.get("location"), "/messages/notices");
   const xs = await form("/inbox/read", "u2", { all: "1" }, { origin: "https://evil.example" });
   assert.equal(xs.status, 403);
 });
@@ -185,10 +208,30 @@ test("opening a notice marks it read and follows its local link", async () => {
 test("prefs: unticked categories make the push answer pm:false", async () => {
   const r = await form("/inbox/prefs", "u2", { pm_staking: "1", pm_loan: "1" });          // everything else off
   assert.equal(r.status, 302);
+  assert.match(r.headers.get("location"), /^\/messages\/notices\?msg=Saved/);
   assert.equal((await push({ camfrog: "bobcf", kind: "market", body: "x", ref: "p:1" })).d.pm, false);
   assert.equal((await push({ camfrog: "bobcf", kind: "loan", body: "x", ref: "p:2" })).d.pm, true);
   assert.equal(await inbox.pmAllowed("u2", "shop"), false);
   assert.equal(await inbox.pmAllowed("u1", "shop"), true, "defaults to on");
+});
+
+test("JSON prefs (the /messages ⚙ dialog): only the categories sent change; fetch + same-site only", async () => {
+  const P = (body, extra) => fetch(base + "/api/inbox/prefs", { method: "POST", headers: Object.assign(H("u1", { "x-requested-with": "fetch" }), extra || {}),
+                                                              body: JSON.stringify(body) });
+  assert.equal(await inbox.pmAllowed("u1", "tip"), true);
+  const r = await P({ pm: { tip: false, bogus: false } });
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.equal(d.prefs.tip.pm, false);
+  assert.equal(d.prefs.loan.pm, true, "untouched");
+  assert.equal(d.prefs.bogus, undefined);
+  assert.equal(await inbox.pmAllowed("u1", "tip"), false);
+  assert.equal(await inbox.pmAllowed("u1", "dm"), true, "not sent, not changed (the DM alerts switch owns it)");
+  assert.equal((await P({ pm: { tip: true } }, { origin: "https://evil.example" })).status, 403);
+  assert.equal((await fetch(base + "/api/inbox/prefs", { method: "POST", headers: H("u1"), body: JSON.stringify({ pm: { tip: true } }) })).status, 403, "not a fetch");
+  assert.equal((await P({ pm: "x" })).status, 400);
+  assert.equal((await P({ pm: { tip: true } })).status, 200);
+  assert.equal(await inbox.pmAllowed("u1", "tip"), true);
 });
 
 test("nav bell: unread count for a signed-in page view, nothing for API calls or signed-out", async () => {
@@ -205,17 +248,27 @@ test("nav bell: unread count for a signed-in page view, nothing for API calls or
 
 test("pagination and the category filter", async () => {
   for (let i = 0; i < 30; i++) await inbox.add("u3", { kind: i % 2 ? "tip" : "shop", title: `n${i}`, ref: "pg" + i });
-  const p1 = await page("u3");
-  assert.match(p1.html, /Page 1 of 2/);
-  assert.match(p1.html, /Older →/);
-  const p2 = await page("u3", "?page=2");
-  assert.match(p2.html, /Page 2 of 2/);
-  const tips = await page("u3", "?kind=tip");
-  assert.doesNotMatch(tips.html, /Page 1 of/);
-  assert.doesNotMatch(tips.html, />n0</);
-  assert.match(tips.html, />n1</);
-  const empty = await page("u3", "?kind=bounty");
-  assert.match(empty.html, /Nothing here in Bounties/);
+  const p1 = (await notices("u3")).d;
+  assert.equal(p1.page, 1);
+  assert.equal(p1.pages, 2);
+  assert.equal(p1.items.length, 25);
+  assert.equal(p1.items[0].title, "n29", "newest first");
+  assert.equal(p1.unread, (await rows("u3")).filter((r) => !r.read_at).length);
+  assert.deepEqual(p1.counts.filter((c) => c.kind === "shop" || c.kind === "tip").map((c) => [c.kind, c.n, c.unread]).sort(),
+                   [["shop", 15, 15], ["tip", 15, 15]]);
+  const p2 = (await notices("u3", "?page=2")).d;
+  assert.equal(p2.page, 2);
+  assert.equal(p2.items.length, p1.total - 25);
+  const tips = (await notices("u3", "?kind=tip")).d;
+  assert.equal(tips.pages, 1);
+  assert.equal(tips.kind, "tip");
+  assert.ok(tips.items.every((n) => n.kind === "tip"));
+  assert.ok(!tips.items.some((n) => n.title === "n0"));
+  assert.ok(tips.items.some((n) => n.title === "n1"));
+  const empty = (await notices("u3", "?kind=bounty")).d;
+  assert.equal(empty.items.length, 0);
+  assert.equal(empty.kind, "bounty");
+  assert.equal((await notices("u3", "?kind=nonsense")).d.kind, null, "an unknown category shows all");
 });
 
 test("the site's own notices: shop order updates land in the inbox and the PM honours the inbox switch", async () => {

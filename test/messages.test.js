@@ -80,6 +80,7 @@ test.before(async () => {
   app.get("/probe", (req, res) => res.json({ dm: res.locals.dmUnread || 0 }));
   app.get("/events", addUser, (req, res) => (req.query.type === "dm" ? dm.sse(req, res) : res.status(404).end()));
   dm.register(app, { isBotToken: (t) => t === "bot", addUser });
+  inbox.register(app, { isBotToken: (t) => t === "bot", addUser });      // 1.99cu: the 🔔 Notices pane lives in /messages
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
 });
@@ -487,4 +488,68 @@ test("the page: signed-out redirect, the E2E notice, escaped boot data; the nav 
   const probe = await (await fetch(base + "/probe", { headers: { cookie: "jwt=" + jwt.sign({ userId: U.alice.userId }, "test-secret") } })).json();
   assert.equal(probe.dm, await dm.unreadTotal(U.alice.userId));
   assert.ok(probe.dm > 0);
+});
+
+test("one inbox: the 🔔 Notices item is pinned in /messages, /messages/notices opens it in the page, counts + mark read", async () => {
+  const u = await mkUser("noticer", { camfrog: "noticercf" });
+  await inbox.add(u.userId, { kind: "loan", title: "Loan repaid </script><script>alert(1)</script>", body: "<img src=x onerror=1>", link: "/wallet", ref: "nt:1" });
+  await inbox.add(u.userId, { kind: "tip", title: "bob tipped you PAT 500", ref: "nt:2" });
+  await inbox.add(u.userId, { kind: "tip", title: "carol tipped you PAT 50", ref: "nt:3" });
+  await inbox.addForCamfrog("noticercf", { kind: "lotto", title: "You won the lotto", ref: "nt:4" });
+  const page = async (p) => {
+    const r = await fetch(base + p, { headers: { "x-test-user": u.userId } });
+    const html = await r.text();
+    const boot = html.match(/<script type="application\/json" id="dmBoot">([\s\S]*?)<\/script>/)[1];
+    return { r, html, boot, B: JSON.parse(boot) };
+  };
+  // /messages: no tab toggle any more - the pinned item with its unread count, server-rendered
+  const m = await page("/messages");
+  assert.equal(m.r.status, 200);
+  assert.doesNotMatch(m.html, /dm-tabs|aria-label="Inbox sections"/, "the fake Notices | Messages tabs are gone");
+  assert.match(m.html, /id="dmNotices" href="\/messages\/notices"/);
+  assert.match(m.html, /id="dmPinBd" aria-label="4 unread">4</, "the pinned item's unread badge (incl. the pending notice attached on open)");
+  assert.match(m.html, /<a href="\/messages\/notices" id="navBell"[^>]*aria-label="Notices, 4 unread">[\s\S]{0,80}?nav-badge">4</, "the nav 🔔 opens the same page");
+  assert.match(m.html, /<a href="\/messages" id="navDm"/, "the nav 💬 opens /messages");
+  assert.equal(m.B.view, null);
+  assert.equal(m.B.notices.unread, 4);
+  assert.equal(m.B.notices.latest.title, "You won the lotto");
+  // /messages/notices: the pane is selected, its first page in the boot data; hostile text can't escape the JSON block
+  const n = await page("/messages/notices");
+  assert.equal(n.r.status, 200);
+  assert.equal(n.B.view, "notices");
+  assert.match(n.html, /<title>Notices \(4\)<\/title>/);
+  assert.match(n.html, /<main class="dm" id="dm" data-view="chat">/, "phones open straight on the notices screen");
+  assert.match(n.html, /id="dmNt" aria-labelledby="dmNtT">/, "the pane isn't hidden");
+  assert.doesNotMatch(n.boot, /<\/script>|<script|<img/i);
+  assert.equal(n.B.notices.items.length, 4);
+  const loan = n.B.notices.items.find((x) => x.kind === "loan");
+  assert.equal(loan.title, "Loan repaid </script><script>alert(1)</script>", "plain text, for textContent");
+  assert.equal(loan.body, "<img src=x onerror=1>");
+  assert.equal(loan.link, true);
+  assert.ok(n.B.notices.kinds.some((k) => k.key === "tip" && k.icon && k.label));
+  assert.equal(n.B.notices.pm.tip.pm, true, "the PM switches for the ⚙ dialog");
+  assert.deepEqual(n.B.notices.counts.find((c) => c.kind === "tip"), { kind: "tip", n: 2, unread: 2 });
+  // ?kind= / ?page= / ?msg= (what an old /inbox?... link 301s to) pick the filter
+  const f = await page("/messages/notices?kind=tip&msg=Saved");
+  assert.equal(f.B.notices.kind, "tip");
+  assert.equal(f.B.notices.items.length, 2);
+  assert.equal(f.B.notices.msg, "Saved");
+  assert.equal((await page("/messages?kind=tip")).B.notices.kind, null, "only the notices view filters");
+  // the conversations poll carries the pinned item's count
+  assert.equal((await get("/api/messages/conversations", u)).d.notices.unread, 4);
+  // mark read (the pane's buttons: POST /inbox/read as a fetch) - one, then all
+  const r1 = await fetch(base + "/inbox/read", { method: "POST", headers: H(u), body: JSON.stringify({ id: loan.id }) });
+  assert.deepEqual(await r1.json(), { ok: true, changed: 1, unread: 3 });
+  assert.equal((await get("/api/messages/conversations", u)).d.notices.unread, 3);
+  assert.equal((await page("/messages/notices")).B.notices.items.find((x) => x.id === loan.id).unread, false);
+  const r2 = await fetch(base + "/inbox/read", { method: "POST", headers: H(u), body: JSON.stringify({ all: 1 }) });
+  assert.equal((await r2.json()).unread, 0);
+  const after = await page("/messages");
+  assert.equal(after.B.notices.unread, 0);
+  assert.match(after.html, /id="dmPinBd" hidden/);
+  assert.doesNotMatch(after.html, /id="navBell"[^>]*>[\s\S]{0,80}?nav-badge/, "no 🔔 badge once all are read");
+  // the old address still lands here
+  const old = await fetch(base + "/inbox?kind=tip", { headers: { "x-test-user": u.userId }, redirect: "manual" });
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get("location"), "/messages/notices?kind=tip");
 });

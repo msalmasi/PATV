@@ -1,6 +1,8 @@
 // messages.js — the /messages page (1.99cp): conversation list + chat, live over /events?type=dm with a fallback poll.
+// 1.99cu: + the pinned "🔔 Notices" item: selecting it (/messages/notices) shows the notices (inbox.js) in the right-hand
+// pane - categories, mark read, and the per-category Camfrog PM switches live in the ⚙ dialog.
 // Server text goes in with textContent; the only innerHTML is a message's `html`, which the server built by escaping
-// the text and adding safe links (messages.js render()).
+// the text and adding safe links (messages.js render()). Notices are text only, always textContent.
 (function () {
   'use strict';
   var bootEl = document.getElementById('dmBoot');
@@ -18,7 +20,13 @@
     msgs: [],              // messages of the open conversation, oldest first
     more: false, loadingOld: false, readTimer: null, sending: false,
     prefs: B.prefs || {}, blocks: B.blocks || [],
+    view: null,            // 'notices' while the 🔔 Notices pane is open
+    nt: B.notices || {},   // the notices page shown: items, counts, page/pages, kind, unread, latest, kinds, pm
+    ntLoading: 0,
   };
+  var KIND = {};
+  (S.nt.kinds || []).forEach(function (k) { KIND[k.key] = k; });
+  function kindOf(k) { return KIND[k] || KIND.system || { key: 'system', icon: '🐸', label: 'Pepe' }; }
 
   // ── helpers ──
   function api(url, body, method) {
@@ -76,7 +84,36 @@
       else { if (b) b.remove(); a.classList.remove('has'); }
       a.setAttribute('aria-label', 'Messages' + (n ? ', ' + n + ' unread' : ''));
     }
-    document.title = n ? 'Messages (' + n + ')' : 'Messages';
+    setTitle();
+  }
+  function setTitle() {
+    var n = S.view === 'notices' ? (S.nt.unread || 0) : unreadSum();
+    var t = S.view === 'notices' ? 'Notices' : 'Messages';
+    document.title = n ? t + ' (' + n + ')' : t;
+  }
+  // the layout's 🔔 and the pinned Notices item
+  function setBell(n) {
+    S.nt.unread = n;
+    var a = document.getElementById('navBell');
+    if (a) {
+      var b = a.querySelector('.nav-badge');
+      if (n > 0) { if (!b) { b = el('span', { cls: 'nav-badge' }); a.appendChild(b); } b.textContent = n > 99 ? '99+' : String(n); a.classList.add('has'); }
+      else { if (b) b.remove(); a.classList.remove('has'); }
+      a.setAttribute('aria-label', 'Notices' + (n ? ', ' + n + ' unread' : ''));
+    }
+    renderPin();
+    setTitle();
+  }
+  function renderPin() {
+    var a = $('dmNotices'), n = S.nt.unread || 0, L = S.nt.latest;
+    a.classList.toggle('on', S.view === 'notices');
+    a.classList.toggle('unread', n > 0);
+    if (S.view === 'notices') a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    $('dmPinSn').textContent = L ? L.title : 'From Pepe and the site';
+    $('dmPinTm').textContent = L ? shortWhen(L.created) : '';
+    var bd = $('dmPinBd');
+    bd.hidden = !n; bd.textContent = n > 99 ? '99+' : String(n); bd.setAttribute('aria-label', n + ' unread');
+    var all = $('dmNtAll'); if (all) all.disabled = !n;
   }
 
   // ── the list ──
@@ -101,12 +138,21 @@
   }
   function convById(id) { for (var i = 0; i < S.convs.length; i++) if (S.convs[i].id === id) return S.convs[i]; return null; }
   function loadList() {
-    return api('/api/messages/conversations').then(function (d) { S.convs = d.conversations || []; renderList(); }).catch(function () {});
+    return api('/api/messages/conversations').then(function (d) {
+      S.convs = d.conversations || []; renderList();
+      if (d.notices) {
+        var before = S.nt.unread || 0, newer = (d.notices.latest && d.notices.latest.created) !== (S.nt.latest && S.nt.latest.created);
+        S.nt.latest = d.notices.latest; setBell(d.notices.unread || 0);
+        // a new notice arrived while the pane is open: refresh the page being looked at (quietly)
+        if (S.view === 'notices' && (newer || (d.notices.unread || 0) > before)) loadNotices(S.nt.kind, S.nt.page, false, true);
+      }
+    }).catch(function () {});
   }
 
   // ── the chat ──
   function showChat(on) {
-    $('dmNone').hidden = on;
+    if (on && S.view === 'notices') { S.view = null; $('dmNt').hidden = true; renderPin(); }
+    $('dmNone').hidden = on || S.view === 'notices';
     $('dmHead').hidden = !on; scrollEl.hidden = !on; form.hidden = !on;
   }
   function renderHead() {
@@ -228,9 +274,140 @@
   }
   function closeChat(push) {
     S.open = null; S.draft = null; S.head = null; S.msgs = [];
-    showChat(false); setView('list'); renderList();
+    S.view = null; $('dmNt').hidden = true;
+    showChat(false); setView('list'); renderList(); renderPin(); setTitle();
     if (push) history.pushState({}, '', '/messages');
   }
+
+  // ── the 🔔 Notices pane ──
+  function ntUrl(kind, page) {
+    var q = [];
+    if (kind) q.push('kind=' + encodeURIComponent(kind));
+    if (page > 1) q.push('page=' + page);
+    return '/messages/notices' + (q.length ? '?' + q.join('&') : '');
+  }
+  function openNotices(push, kind, page) {
+    S.open = null; S.draft = null; S.head = null; S.msgs = [];
+    showChat(false);
+    S.view = 'notices';
+    $('dmNone').hidden = true; $('dmNt').hidden = false;
+    setView('chat'); renderList(); renderPin(); setTitle();
+    kind = kind || null; page = page || 1;
+    if (push) history.pushState({ nt: 1 }, '', ntUrl(kind, page));
+    // the boot data already holds the page asked for: no round trip
+    if (S.nt.items && (S.nt.kind || null) === kind && (S.nt.page || 1) === page && !S.ntStale) renderNotices();
+    else loadNotices(kind, page, false);
+    S.ntStale = true;          // after the first show, re-fetch when coming back to it
+  }
+  function loadNotices(kind, page, push, quiet) {
+    var seq = ++S.ntLoading;
+    if (!quiet) $('dmNtScroll').setAttribute('aria-busy', 'true');
+    return api('/api/inbox/notices?' + (kind ? 'kind=' + encodeURIComponent(kind) + '&' : '') + 'page=' + (page || 1)).then(function (d) {
+      if (seq !== S.ntLoading) return;
+      var keep = { kinds: S.nt.kinds, pm: S.nt.pm };
+      S.nt = d; S.nt.kinds = keep.kinds; S.nt.pm = keep.pm;
+      if (push) history.pushState({ nt: 1 }, '', ntUrl(d.kind, d.page));
+      renderNotices(); setBell(d.unread || 0);
+      if (!quiet) $('dmNtScroll').scrollTop = 0;
+    }).catch(function (e) { showNtMsg(e.message || "Couldn't load your notices."); })
+      .then(function () { if (seq === S.ntLoading) $('dmNtScroll').removeAttribute('aria-busy'); });
+  }
+  function showNtMsg(s) { var m = $('dmNtMsg'); m.textContent = s || ''; m.hidden = !s; }
+  function longWhen(ms) { return new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+  function renderNotices() {
+    var N = S.nt, kind = N.kind || null;
+    if (N.msg) { showNtMsg(N.msg); N.msg = null; }
+    // category chips: All + the categories that have notices, with their unread counts
+    var chips = $('dmNtChips'); chips.textContent = '';
+    var counts = N.counts || [];
+    if (counts.length) {
+      var unreadOf = {}; counts.forEach(function (c) { unreadOf[c.kind] = c.unread || 0; });
+      var mk = function (k, label) {
+        var a = el('a', { cls: 'dm-chip' + ((k || null) === kind ? ' on' : ''), href: ntUrl(k, 1), 'data-kind': k || '' }, [label]);
+        if (k && unreadOf[k]) a.appendChild(el('span', { cls: 'n', text: String(unreadOf[k]) }));
+        if ((k || null) === kind) a.setAttribute('aria-current', 'true');
+        return a;
+      };
+      chips.appendChild(mk(null, 'All'));
+      (N.kinds || []).forEach(function (k) { if (unreadOf[k.key] !== undefined) chips.appendChild(mk(k.key, k.icon + ' ' + k.label)); });
+    }
+    $('dmNtSub').textContent = (N.unread ? N.unread + ' unread · ' : '') + 'From Pepe and the site';
+    // the list
+    var ul = $('dmNtList'); ul.textContent = '';
+    (N.items || []).forEach(function (n) {
+      var k = kindOf(n.kind);
+      var tt = el('div', { cls: 'tt' });
+      if (n.unread) tt.appendChild(el('span', { cls: 'vh', text: 'Unread: ' }));
+      tt.appendChild(document.createTextNode(n.title));
+      var acts = el('div', { cls: 'acts' }, [
+        n.link ? el('a', { cls: 'open', href: '/inbox/open/' + encodeURIComponent(n.id), text: 'Open →' }) : null,
+        n.unread ? el('button', { type: 'button', cls: 'mark', 'data-read': String(n.id), text: 'Mark read' }) : null]);
+      ul.appendChild(el('li', { cls: 'dm-n' + (n.unread ? ' unread' : ''), 'data-id': String(n.id) }, [
+        el('div', { cls: 'ic', 'aria-hidden': 'true', text: k.icon }),
+        el('div', { cls: 'tx' }, [tt, n.body ? el('div', { cls: 'bdy', text: n.body }) : null,
+          el('div', { cls: 'meta' }, [el('span', { cls: 'cat', text: k.label }),
+            el('time', { datetime: new Date(n.created).toISOString(), text: longWhen(n.created) })])]),
+        acts]));
+    });
+    // empty
+    var em = $('dmNtEmpty'); em.textContent = '';
+    em.hidden = (N.items || []).length > 0;
+    if (em.hidden === false) {
+      em.appendChild(el('div', { cls: 'big', 'aria-hidden': 'true', text: '📭' }));
+      em.appendChild(el('p', null, [el('b', { text: kind ? 'Nothing here in ' + kindOf(kind).label + '.' : 'No notices yet.' })]));
+      var p = el('p', { text: 'When Pepe executes a stake, a loan gets paid, you\'re picked to judge a wager, an order ships or someone tips you, it shows up here.' });
+      if (!me.camfrog) {
+        p.appendChild(document.createTextNode(' '));
+        p.appendChild(el('a', { href: '/u/' + encodeURIComponent(me.username) + '/profile/edit', text: 'Link your Camfrog name' }));
+        p.appendChild(document.createTextNode(' to get Pepe\'s notices too.'));
+      }
+      em.appendChild(p);
+    }
+    // pager
+    var pg = $('dmNtPager'); pg.textContent = '';
+    pg.hidden = !(N.pages > 1);
+    if (N.pages > 1) {
+      var prev = el('button', { type: 'button', cls: 'dm-btn', 'data-page': String(N.page - 1), text: '← Newer' });
+      var next = el('button', { type: 'button', cls: 'dm-btn', 'data-page': String(N.page + 1), text: 'Older →' });
+      prev.disabled = N.page <= 1; next.disabled = N.page >= N.pages;
+      pg.append(prev, el('span', { text: 'Page ' + N.page + ' of ' + N.pages + ' · ' + N.total + ' notices' }), next);
+    }
+    renderPin();
+  }
+  function noticeRead(id) {
+    var body = id === 'all' ? { all: 1 } : { id: id };
+    return api('/inbox/read', body).then(function (d) {
+      (S.nt.items || []).forEach(function (n) { if (id === 'all' || n.id === id) n.unread = false; });
+      (S.nt.counts || []).forEach(function (c) {
+        if (id === 'all') c.unread = 0;
+        else if (d.changed) { var it = (S.nt.items || []).filter(function (n) { return n.id === id; })[0]; if (it && it.kind === c.kind && c.unread) c.unread--; }
+      });
+      setBell(typeof d.unread === 'number' ? d.unread : 0);
+      renderNotices();
+    }).catch(function (e) { showNtMsg(e.message); });
+  }
+  $('dmNotices').addEventListener('click', function (e) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
+    e.preventDefault();
+    openNotices(true, null, 1);
+  });
+  $('dmNtBack').addEventListener('click', function () { closeChat(true); });
+  $('dmNtChips').addEventListener('click', function (e) {
+    var a = e.target.closest('a[data-kind]');
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;
+    e.preventDefault();
+    showNtMsg('');
+    loadNotices(a.getAttribute('data-kind') || null, 1, true);
+  });
+  $('dmNtPager').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-page]');
+    if (b && !b.disabled) loadNotices(S.nt.kind, parseInt(b.getAttribute('data-page'), 10), true);
+  });
+  $('dmNtList').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-read]');
+    if (b) { b.disabled = true; noticeRead(parseInt(b.getAttribute('data-read'), 10)); }
+  });
+  $('dmNtAll').addEventListener('click', function () { if (S.nt.unread) noticeRead('all'); });
 
   function loadOlder() {
     if (!S.open || !S.more || S.loadingOld || !S.msgs.length) return;
@@ -439,6 +616,15 @@
     setForm.alerts.disabled = !linked; setForm.nopreview.disabled = !linked || !setForm.alerts.checked;
     $('dmSetCf').textContent = linked ? 'At most one alert per conversation every 10 minutes, and only in a Camfrog room where you are. Never sent while you\'re reading it here.'
                                       : 'Link your Camfrog name first (type !verify in a Camfrog room with Pepe) to get alerts there.';
+    // notices: one Camfrog-PM switch per category (direct messages are the "Camfrog alerts" switch above)
+    var np = $('dmNtPrefs'); np.textContent = '';
+    var PM = S.nt.pm || {};
+    (S.nt.kinds || []).forEach(function (k) {
+      if (k.key === 'dm') return;
+      var cb = el('input', { type: 'checkbox', name: 'pm_' + k.key, 'data-pm': k.key });
+      cb.checked = !PM[k.key] || PM[k.key].pm !== false;
+      np.appendChild(el('label', null, [cb, ' ' + k.icon + ' ' + k.label]));
+    });
     var ul = $('dmBlocks'); ul.textContent = '';
     if (!S.blocks.length) ul.appendChild(el('li', { cls: 'mut', text: 'Nobody.' }));
     S.blocks.forEach(function (b) {
@@ -460,8 +646,13 @@
     var who = (setForm.querySelector('input[name=who]:checked') || {}).value || 'everyone';
     var body = { who: who };
     if (me.camfrog) { body.alerts = setForm.alerts.checked; body.preview = !setForm.nopreview.checked; }
+    var pm = {};
+    setForm.querySelectorAll('input[data-pm]').forEach(function (c) { pm[c.getAttribute('data-pm')] = c.checked; });
     api('/api/messages/prefs', body).then(function (d) {
-      S.prefs = d.prefs; $('dmSetMsg').style.color = '#a5d6a7'; $('dmSetMsg').textContent = 'Saved ✔';
+      S.prefs = d.prefs;
+      return api('/api/inbox/prefs', { pm: pm });
+    }).then(function (d) {
+      S.nt.pm = d.prefs; $('dmSetMsg').style.color = '#a5d6a7'; $('dmSetMsg').textContent = 'Saved ✔';
       setTimeout(function () { setDlg.close(); }, 700);
     }).catch(function (x) { $('dmSetMsg').style.color = ''; $('dmSetMsg').textContent = x.message; });
   });
@@ -469,13 +660,15 @@
   // ── routing ──
   function route() {
     var m = location.pathname.match(/^\/messages\/c\/([a-f0-9]{16})$/);
-    var to = new URLSearchParams(location.search).get('to');
-    if (m) openConv(m[1], false);
+    var qs = new URLSearchParams(location.search), to = qs.get('to');
+    if (/^\/messages\/notices\/?$/.test(location.pathname)) openNotices(false, qs.get('kind') || null, parseInt(qs.get('page'), 10) || 1);
+    else if (m) openConv(m[1], false);
     else if (to) openNew(to, false);
     else closeChat(false);
   }
   renderList();
-  if (B.open) openConv(B.open, false);
+  if (B.view === 'notices') openNotices(false, S.nt.kind || null, S.nt.page || 1);
+  else if (B.open) openConv(B.open, false);
   else if (B.to) openNew(B.to, false);
-  else { showChat(false); setView('list'); }
+  else { showChat(false); setView('list'); renderPin(); }
 })();

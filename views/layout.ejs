@@ -92,7 +92,8 @@
                     <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
                 <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; const _dm = (typeof dmUnread !== 'undefined' && dmUnread > 0) ? dmUnread : 0; %>
                     <a href="/messages" id="navDm" class="nav-bell<%= _dm ? ' has' : '' %>" title="Messages<%= _dm ? ' (' + _dm + ' unread)' : '' %>" aria-label="Messages<%= _dm ? ', ' + _dm + ' unread' : '' %>"><span aria-hidden="true">💬</span><% if (_dm) { %><span class="nav-badge"><%= _dm > 99 ? '99+' : _dm %></span><% } %></a>
-                    <a href="/inbox" class="nav-bell<%= _ib ? ' has' : '' %>" title="Inbox<%= _ib ? ' (' + _ib + ' unread)' : '' %>" aria-label="Inbox<%= _ib ? ', ' + _ib + ' unread' : '' %>"><span aria-hidden="true">🔔</span><% if (_ib) { %><span class="nav-badge"><%= _ib > 99 ? '99+' : _ib %></span><% } %></a>
+                    <%# 1.99cu: both open the one inbox at /messages - 💬 the conversations, 🔔 its pinned Notices item %>
+                    <a href="/messages/notices" id="navBell" class="nav-bell<%= _ib ? ' has' : '' %>" title="Notices<%= _ib ? ' (' + _ib + ' unread)' : '' %>" aria-label="Notices<%= _ib ? ', ' + _ib + ' unread' : '' %>"><span aria-hidden="true">🔔</span><% if (_ib) { %><span class="nav-badge"><%= _ib > 99 ? '99+' : _ib %></span><% } %></a>
                     <div class="avatar">
                         <a href="/u/<%= user %>/profile" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>
                     </div>
@@ -202,7 +203,7 @@
             It hadn't been used in a while, so it was due to be archived on <%= staleNotice.apply_on %>
             <% if (staleNotice.balance > 0) { %>with its <%= Number(staleNotice.balance).toLocaleString('en-US') %> PAT going back to the Federal Reserve<% } %>.
             You're active again, so nothing happens - there's nothing you need to do.
-            <a href="/inbox">Inbox</a>
+            <a href="/messages/notices">Notices</a>
             <button type="button" aria-label="Dismiss" onclick="this.parentNode.remove()">×</button>
         </div>
         <style>

@@ -1,31 +1,40 @@
-<%# views/messages.ejs — direct messages (messages.js, 1.99cp). The shell only: public/js/messages.js renders the
-    conversation list and the chat from `boot` (JSON, below) and the JSON API, with live updates over /events?type=dm. %>
+<%# views/messages.ejs — the one inbox (messages.js, 1.99cp; notices merged in 1.99cu). The shell only: public/js/messages.js
+    renders the conversation list, the chat and the 🔔 Notices pane (inbox.js) from `boot` (JSON, below) and the JSON APIs,
+    with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=1">
-<main class="dm" id="dm" data-view="<%= boot.open || boot.to ? 'chat' : 'list' %>">
+<link rel="stylesheet" href="/public/css/messages.css?v=2">
+<% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
+<main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="Conversations">
     <div class="dm-sh">
       <h1>Messages</h1>
       <button type="button" class="dm-ib" id="dmNewBtn" title="New message" aria-label="New message"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/></svg></button>
-      <button type="button" class="dm-ib" id="dmGearBtn" title="Message settings" aria-label="Message settings"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
+      <button type="button" class="dm-ib" id="dmGearBtn" title="Settings" aria-label="Message and notice settings"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
     </div>
-    <nav class="dm-tabs" aria-label="Inbox sections">
-      <a href="/inbox"><span aria-hidden="true">🔔</span> Notices</a>
-      <a href="/messages" class="on" aria-current="page"><span aria-hidden="true">💬</span> Messages</a>
-    </nav>
     <form class="dm-find" id="dmFind" hidden autocomplete="off">
       <label for="dmFindIn" class="vh">Username to message</label>
       <input id="dmFindIn" name="to" placeholder="Message someone: their username" maxlength="64" spellcheck="false" autocapitalize="off">
       <button type="submit">Go</button>
       <div class="dm-find-msg" id="dmFindMsg" role="status"></div>
     </form>
-    <ul class="dm-list" id="dmList"></ul>
-    <p class="dm-empty" id="dmListEmpty" hidden>No conversations yet. Press <b>✎</b> to message someone, or use <b>Message</b> on a profile.</p>
+    <div class="dm-pinned">
+      <a class="dm-it dm-pin<%= _ntOn ? ' on' : '' %><%= _ntN ? ' unread' : '' %>" id="dmNotices" href="/messages/notices"<%- _ntOn ? ' aria-current="true"' : '' %>>
+        <span class="av av-bell" aria-hidden="true">🔔</span>
+        <span class="nm">Notices</span>
+        <span class="tm" id="dmPinTm"></span>
+        <span class="sn" id="dmPinSn"><%= _nt.latest ? _nt.latest.title : 'From Pepe and the site' %></span>
+        <span class="bd" id="dmPinBd"<%- _ntN ? '' : ' hidden' %> aria-label="<%= _ntN %> unread"><%= _ntN > 99 ? '99+' : _ntN %></span>
+      </a>
+    </div>
+    <div class="dm-lscroll">
+      <ul class="dm-list" id="dmList" aria-label="Direct messages"></ul>
+      <p class="dm-empty" id="dmListEmpty" hidden>No conversations yet. Press <b>✎</b> to message someone, or use <b>Message</b> on a profile.</p>
+    </div>
     <p class="dm-e2e"><span aria-hidden="true">🔓</span> Messages aren't end-to-end encrypted. Site admins can read a message only if it's reported to them. <a href="/privacy#messages">Privacy</a></p>
   </aside>
 
   <section class="dm-chat" id="dmChat" aria-label="Chat">
-    <div class="dm-none" id="dmNone">
+    <div class="dm-none" id="dmNone"<%- _ntOn ? ' hidden' : '' %>>
       <div class="big" aria-hidden="true">💬</div>
       <p>Pick a conversation, or press <b>✎</b> to start one.</p>
     </div>
@@ -57,11 +66,28 @@
       </div>
       <div class="dm-hint"><span><b>Enter</b> sends · <b>Shift+Enter</b> new line</span><span id="dmErr" class="dm-err" role="alert"></span></div>
     </form>
+
+    <%# the 🔔 Notices pane (inbox.js): filled by public/js/messages.js from boot.notices and /api/inbox/notices %>
+    <section class="dm-nt" id="dmNt" aria-labelledby="dmNtT"<%- _ntOn ? '' : ' hidden' %>>
+      <header class="dm-ch">
+        <button type="button" class="dm-back" id="dmNtBack" aria-label="Back to conversations"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
+        <span class="av av-l av-bell" aria-hidden="true">🔔</span>
+        <div class="dm-who"><h2 class="dm-name" id="dmNtT">Notices</h2><span class="dm-handle" id="dmNtSub">From Pepe and the site</span></div>
+        <button type="button" class="dm-btn" id="dmNtAll"<%- _ntN ? '' : ' disabled' %>>✓ Mark all read</button>
+      </header>
+      <nav class="dm-chips" id="dmNtChips" aria-label="Filter notices by category"></nav>
+      <div class="dm-nt-msg" id="dmNtMsg" role="status" hidden></div>
+      <div class="dm-nt-scroll" id="dmNtScroll">
+        <ul class="dm-nt-list" id="dmNtList"></ul>
+        <div class="dm-nt-empty" id="dmNtEmpty" hidden></div>
+        <div class="dm-nt-pager" id="dmNtPager" hidden></div>
+      </div>
+    </section>
   </section>
 
   <dialog class="dm-dlg" id="dmSettings" aria-labelledby="dmSetT">
     <form method="dialog" id="dmSetForm">
-      <h2 id="dmSetT">Message settings</h2>
+      <h2 id="dmSetT">Settings</h2>
       <fieldset>
         <legend>Who can message me</legend>
         <label class="rd"><input type="radio" name="who" value="everyone"> Everyone <span class="mut">(new accounts only if you follow them)</span></label>
@@ -69,10 +95,16 @@
         <label class="rd"><input type="radio" name="who" value="nobody"> Nobody <span class="mut">(people you write to can still reply)</span></label>
       </fieldset>
       <fieldset>
-        <legend>Camfrog alerts</legend>
+        <legend>Camfrog alerts for messages</legend>
         <label class="ck"><input type="checkbox" name="alerts"> Pepe PMs me in Camfrog when I get a message I haven't read on the site</label>
         <label class="ck sub"><input type="checkbox" name="nopreview"> Alert without preview (who it's from, not what it says)</label>
         <p class="mut" id="dmSetCf">At most one alert per conversation every 10 minutes, and only in a room where you are.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Camfrog PMs for notices</legend>
+        <p class="mut" style="margin:2px 0 6px">Every notice always lands in 🔔 Notices. Untick a category and Pepe stops PMing you about it in Camfrog (he only PMs you in a room you're in).</p>
+        <div class="dm-ntprefs" id="dmNtPrefs"></div>
+        <p class="mut" style="margin:6px 0 0">Shop emails and PMs also follow your <a href="/shop/seller#notify">shop settings</a>.</p>
       </fieldset>
       <fieldset>
         <legend>Blocked</legend>
@@ -93,7 +125,8 @@
     </form>
   </dialog>
 </main>
+<script>document.body.classList.add('dm-page');   /* messages.css: the page is one viewport-high app screen, no footer */</script>
 <script type="application/json" id="dmBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-<script src="/public/js/messages.js?v=1" defer></script>
+<script src="/public/js/messages.js?v=2" defer></script>
 </body>
 </html>
