@@ -73,4 +73,29 @@ async function copyCamfrogBadges(fromId, toId) {
   return (r && r.changes) || 0;
 }
 
-module.exports = { moveUserRows, copyCamfrogBadges, OWNED };
+/** 1.99bs: one PATV account per Camfrog login. Racing find_or_create_user calls in Pepe used to make
+ *  several "CF…" accounts for one login (27 copies merged 2026-10-06); a unique index on the normalised
+ *  login makes a second one impossible. If duplicates exist the index can't be built - it says which
+ *  logins, and the register route's own check-first still holds. Returns true when the index exists. */
+async function ensureCamfrogUnique() {
+  try {
+    await runQuery(`CREATE UNIQUE INDEX IF NOT EXISTS users_camfrog_login ON users (lower(trim(camfrogUsername)))
+                    WHERE camfrogUsername IS NOT NULL AND trim(camfrogUsername) != ''`);
+    return true;
+  } catch (e) {
+    const d = await getQuery(`SELECT lower(trim(camfrogUsername)) AS l, COUNT(*) AS n FROM users
+      WHERE camfrogUsername IS NOT NULL AND trim(camfrogUsername) != '' GROUP BY l HAVING n > 1 LIMIT 20`).catch(() => []);
+    console.error(`[accounts] unique Camfrog login index not built (${e.message}); duplicate logins: ${d.map((x) => x.l + " x" + x.n).join(", ") || "?"}`);
+    return false;
+  }
+}
+
+/** The account already on this Camfrog login (normalised), or null. */
+async function accountForLogin(login) {
+  const l = String(login || "").trim().toLowerCase();
+  if (!l) return null;
+  return (await getQuery(`SELECT userId, username, displayname, camfrogUsername, points_balance FROM users
+                          WHERE lower(trim(camfrogUsername)) = ? LIMIT 1`, [l]))[0] || null;
+}
+
+module.exports = { moveUserRows, copyCamfrogBadges, ensureCamfrogUnique, accountForLogin, OWNED };

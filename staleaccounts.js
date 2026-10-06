@@ -14,8 +14,14 @@
 //      domain, empty), <= lowMax actions and nothing earned, unseen for dormantDays
 //   G  ownerless ghost: an auto account with no Camfrog login, or whose "login" is another PATV account's
 //      "CFxxxxxxxx" name (made before 1.99az), with no own activity - reclaimed regardless of age
-//   A2 made by the Twitch/Discord bot (placeholder email), no own activity, dormant - NOT selected by
-//      default: the person can still sign in with Twitch/Discord, which restores it
+//   A2 made by the Twitch/Discord bot (placeholder email) - 1.99bs (admin decision 2026-10-06), selected
+//      by default: every bot-made account EXCEPT one with real activity (more than the low-activity
+//      threshold, tips, purchases or a linked Camfrog login) AND a balance >= botKeepMin (100,000 PAT).
+//      So dust under 100k and anything with no real activity go, whatever the balance - unless it was
+//      active (own action / raffle / level-up, not the creation bonus) within tierADays. Signing in with
+//      Twitch/Discord, or the bots looking the person up again, restores it.
+//   A2M a bot-made account like A2 whose Twitch/Discord name IS another account's username or Camfrog
+//      login: proposed for a merge into that account instead - never selected
 //   M  duplicate: a second account on the same Camfrog login (or one of Pepe's aliases of it) - MERGED
 //      into the primary (the real account, else the oldest) with mergeDuplicate(), never reclaimed
 //   D  dormant (unseen for dormantDays) but real: has history, tips, purchases, a linked identity or
@@ -51,7 +57,12 @@ const { runQuery, getQuery } = require("./dbUtils");
 const DAY = 86400000;
 const CF_RANDOM = /^CF[a-z0-9]{8}$/;
 const CF_RANDOM_LOGIN = /^cf[a-z0-9]{8}$/;
-const DEFAULTS = { tierADays: 90, dormantDays: 180, lowMax: 3, lowDays: 2, graceDays: 60, welcomeDays: 90 };
+const DEFAULTS = { tierADays: 90, dormantDays: 180, lowMax: 3, lowDays: 2, graceDays: 60, welcomeDays: 90, botKeepMin: 100000 };
+// The tiers an apply / a notice run selects unless told otherwise (A2 joined in 1.99bs).
+const DEFAULT_TIERS = ["A", "B", "C", "G", "A2"];
+// System-ish accounts that are never classified: the Twitch channel's own account, and the Twitch
+// chatter that won 2,674 raffles (its balance went to pb, admin decision 2026-10-06).
+const SYSTEM_USERNAMES = new Set(["wheel_of_misfortune", "publicaccess_ttv"]);
 
 // Badges every account gets without doing anything.
 const AUTO_BADGES = new Set(["fresh_meat", "twitch-user", "discord-user", "cf_linked"]);
@@ -64,6 +75,8 @@ const ACTIVE_CREDIT = /^(beg|pictionary-win|camfrog-trivia|trivia-payout|store s
 // passive credits that still mean "was in a room / on the site" (raffles need chat, mic hours need the
 // mic, level-ups need XP)
 const PRESENCE_CREDIT = /(raffle|mic-hourly|moan-bonus|level|achievement|channelpoints|connect|welcome)/i;
+// ...of which these come with the account itself (a bot-made account gets them the moment it exists)
+const CREATION_CREDIT = /(connect|welcome)/i;
 const TIP = /^tip (sent|received)$/i;
 const PURCHASE = /^(purchase of |cosmetic-buy|market-buy|market-stake|sponsor|stage slot hold)/i;
 const RESTORE_GUARD = /^stale-(reclaim|restore)$/i;
@@ -189,16 +202,23 @@ function botFacts(bot) {
 async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.welcomeDays } = {}) {
   // read-only: works on a database that has never had the archive column (dry runs write nothing)
   const arch = (await hasColumn("users", "archived_at")) ? "archived_at" : "NULL AS archived_at";
+  const hasNames = (await hasColumn("users", "twitchDisplayname")) && (await hasColumn("users", "discordUsername"));
   const users = await getQuery(`SELECT userId, username, class, email, isEmailVerified, discordId, twitchId, camfrogUsername,
-    points_balance, created_at, ${arch} FROM users`);
+    ${hasNames ? "twitchDisplayname, discordUsername," : ""} points_balance, created_at, ${arch} FROM users`);
   const F = new Map();
   for (const u of users) {
+    const email = emailCategory(u.email);
     F.set(u.userId, {
       userId: u.userId, username: u.username, isCF: CF_RANDOM.test(u.username || ""), admin: /admin|staff|mod/i.test(u.class || ""),
-      email: emailCategory(u.email), verified: !!u.isEmailVerified, discord: !!u.discordId, twitch: !!u.twitchId,
+      email, verified: !!u.isEmailVerified, discord: !!u.discordId, twitch: !!u.twitchId,
       login: String(u.camfrogUsername || "").trim().toLowerCase(), balance: Number(u.points_balance) || 0,
       created: ms(u.created_at), archived: u.archived_at != null,
-      activeN: 0, activeDays: new Set(), lastActive: 0, lastPresence: 0, tips: 0, purchases: 0, passiveIn: 0,
+      system: SYSTEM_USERNAMES.has(String(u.username || "").toLowerCase()),
+      // made by the Twitch/Discord bot: the bots send a random string as the "email"
+      botMade: !CF_RANDOM.test(u.username || "") && !!(u.discordId || u.twitchId) && (email === "no-at" || email === "empty"),
+      platNames: [u.twitchDisplayname, u.discordUsername].map((x) => String(x || "").trim().toLowerCase()).filter(Boolean),
+      idMatch: null,
+      activeN: 0, activeDays: new Set(), lastActive: 0, lastPresence: 0, lastSignal: 0, tips: 0, purchases: 0, passiveIn: 0,
       badges: 0, cosmetics: 0, roles: [], holds: new Set(), cfSeen: 0, cpRefs: 0, dupOf: null, dupWhy: null, ghost: false,
     });
   }
@@ -217,7 +237,11 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     if (PURCHASE.test(type)) f.purchases++;
     const active = (p < 0 && !SYSTEM_DEBIT.test(type)) || (p > 0 && ACTIVE_CREDIT.test(type));
     if (active) { f.activeN++; f.activeDays.add(String(t.timestamp || "").slice(0, 10)); if (when > f.lastActive) f.lastActive = when; }
-    else if (p > 0) { f.passiveIn += p; if (PRESENCE_CREDIT.test(type) && when > f.lastPresence) f.lastPresence = when; }
+    else if (p > 0) {
+      f.passiveIn += p;
+      if (PRESENCE_CREDIT.test(type) && when > f.lastPresence) f.lastPresence = when;
+      if (PRESENCE_CREDIT.test(type) && !CREATION_CREDIT.test(type) && when > f.lastSignal) f.lastSignal = when;
+    }
   }
   const each = async (table, col, sql, fn) => {
     if (!(await tableExists(table)) || (col && !(await hasColumn(table, col)))) return;
@@ -292,6 +316,20 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
   for (const f of F.values()) {
     f.ghost = f.isCF && (!f.login || (CF_RANDOM_LOGIN.test(f.login) && (usernames.has(f.login) || !f.cfSeen)));
   }
+  // a bot-made account whose Twitch/Discord name is another account's username or Camfrog login:
+  // probably the same person (merge proposal, A2M)
+  const byName = new Map();
+  for (const f of F.values()) {
+    if (f.botMade) continue;
+    for (const k of [String(f.username || "").toLowerCase(), f.login]) if (k && !byName.has(k)) byName.set(k, f);
+  }
+  for (const f of F.values()) {
+    if (!f.botMade) continue;
+    for (const n of f.platNames) {
+      const o = byName.get(n);
+      if (o && o.userId !== f.userId) { f.idMatch = o.username; break; }
+    }
+  }
   return [...F.values()].map((f) => Object.assign(f, { activeDays: f.activeDays.size }));
 }
 
@@ -301,6 +339,7 @@ function classify(f, o = {}, now = Date.now()) {
   if (f.archived) return { tier: "archived", why: "already archived" };
   const ex = [];
   if (f.admin) ex.push("admin/staff");
+  if (f.system) ex.push("system account");
   if (f.roles && f.roles.length) ex.push("role: " + f.roles.join(","));
   for (const h of f.holds) ex.push(h);
   if (f.balance < 0) ex.push("negative balance");
@@ -312,16 +351,25 @@ function classify(f, o = {}, now = Date.now()) {
   const linked = f.discord || f.twitch;
   if (f.ghost && f.activeN === 0 && !earned && !linked) return { tier: "G", why: `ownerless ghost (${f.login ? "its login is a PATV account name, never seen in Camfrog" : "no Camfrog login"})` };
   if (f.isCF && !linked && !earned && f.activeN === 0 && idle >= o.tierADays) return { tier: "A", why: `no own activity, unseen ${Math.floor(idle)}d` };
-  if (idle < o.dormantDays) return { tier: "active", why: `seen ${Math.floor(idle)}d ago` };
   const low = f.activeN <= o.lowMax && f.activeDays <= o.lowDays;
+  // 1.99bs: accounts the Twitch/Discord bot made. Kept only with real activity AND a significant
+  // balance; the rest go (A2) once they've been quiet for tierADays - "quiet" counting their own
+  // actions, raffles, level-ups and Camfrog sightings, but not the bonus the account was born with.
+  if (f.botMade) {
+    const real = !low || f.tips > 0 || f.purchases > 0 || !!f.login;
+    if (!(real && f.balance >= o.botKeepMin)) {
+      const quiet = (now - Math.max(f.lastActive, f.lastSignal, f.cfSeen)) / DAY;
+      const what = `${f.twitch ? "Twitch" : "Discord"}-bot account, ${real ? "under " + o.botKeepMin.toLocaleString("en-US") + " PAT" : "no real activity"}`;
+      if (quiet < o.tierADays) return { tier: "active", why: `${what}, but active ${Math.floor(quiet)}d ago` };
+      if (f.idMatch) return { tier: "A2M", why: `${what}; its ${f.twitch ? "Twitch" : "Discord"} name is ${f.idMatch}'s - merge proposal` };
+      const lastAny = Math.max(f.lastActive, f.lastSignal, f.cfSeen);
+      return { tier: "A2", why: `${what}, ${lastAny ? "quiet " + Math.floor(quiet) + "d" : "never active"}` };
+    }
+  }
+  if (idle < o.dormantDays) return { tier: "active", why: `seen ${Math.floor(idle)}d ago` };
   if (f.isCF && !linked && !earned && low) return { tier: "B", why: `${f.activeN} action(s), unseen ${Math.floor(idle)}d` };
   if (!f.isCF && !linked && !f.login && !earned && low && (JUNK_EMAIL.has(f.email) || !f.verified)) {
     return { tier: "C", why: `${f.email}${f.verified ? "" : "/unverified"} email, no link, ${f.activeN} action(s), unseen ${Math.floor(idle)}d` };
-  }
-  // made by the Twitch/Discord bot (placeholder email, the platform id is the only identity), never did
-  // anything itself. Kept apart from A: the person CAN come back by signing in with Twitch/Discord.
-  if (!f.isCF && linked && !f.login && f.email === "no-at" && f.activeN === 0 && !earned) {
-    return { tier: "A2", why: `${f.twitch ? "Twitch" : "Discord"}-bot auto account, no own activity, unseen ${Math.floor(idle)}d` };
   }
   return { tier: "D", why: `dormant ${Math.floor(idle)}d, real (${[linked && "linked", f.login && "camfrog", earned && "earned/tips/purchases", f.activeN > o.lowMax && f.activeN + " actions"].filter(Boolean).join(", ") || "history"})` };
 }
@@ -381,6 +429,10 @@ async function archiveOne(userId, { runId, tier, why, graceDays = DEFAULTS.grace
                       restored_at = NULL, restored_via = NULL, restore_tx = NULL, restore_claim = NULL, snapshot = excluded.snapshot`,
                    [userId, runId, tier, String(why || "").slice(0, 300), now, bal, amt, txId, claimId,
                     tier === "A" ? now + graceDays * DAY : null, snap]);
+    if (await tableExists("stale_notice")) {
+      await runQuery("UPDATE stale_notice SET state = 'archived' WHERE userId = ? AND state = 'pending'", [userId]);
+      notice.delete(userId);
+    }
     return { userId, reclaimed: amt };
   });
 }
@@ -409,12 +461,14 @@ async function restore(userId, via = "manual") {
   });
 }
 
-/** For sign-in / lookup paths: restore when the row (or id) is archived. Never throws. */
+/** For sign-in / lookup paths: restore when the row (or id) is archived, and clear a pending
+ *  archive notice (1.99bs). Never throws. */
 async function touch(rowOrId, via) {
   try {
     const row = typeof rowOrId === "string" ? null : rowOrId;
     const id = row ? row.userId : rowOrId;
     if (!id) return null;
+    if (notice.get(id) === "pending") await clearNotice(id, via);
     if (row && "archived_at" in row && row.archived_at == null) return null;
     if (!row || !("archived_at" in row)) {
       if (!(await ensure())) return null;
@@ -429,7 +483,8 @@ async function touch(rowOrId, via) {
 const PURGE_TABLES = [["user_badges", "userId"], ["user_badge_showcase", "user_id"], ["user_cosmetics", "user_id"],
   ["user_cosmetic_equips", "user_id"], ["inbox", "user_id"], ["inbox_prefs", "user_id"], ["profile_layout", "user_id"],
   ["shop_prefs", "user_id"], ["welcome_bonus", "userId"], ["welcome_keys", "userId"], ["welcome_activity", "userId"],
-  ["tipjar_seen", "userId"], ["pending_camfrog_links", "userId"], ["achievement_feed", "userId"], ["user_roles", "userId"]];
+  ["tipjar_seen", "userId"], ["pending_camfrog_links", "userId"], ["achievement_feed", "userId"], ["user_roles", "userId"],
+  ["stale_notice", "userId"]];
 
 /** Hard-delete tier A accounts whose grace period is over and which are still archived and empty. */
 async function purge({ now = Date.now(), dryRun = true, bot = null } = {}) {
@@ -454,29 +509,235 @@ async function purge({ now = Date.now(), dryRun = true, bot = null } = {}) {
   return out;
 }
 
-/** Merge a duplicate account into its primary: balance, XP, history and owned rows move, the copy goes. */
+// The welcome-class credits a copy got when it was created (the primary got its own): the
+// "Balance carried over" ledger-correction, Welcome PAT, a connect bonus, the Lv 1 reward.
+const DUP_MINT = /^(ledger-correction|welcome pat|welcome|new.account|.*connect|level-up reward \(lv 1\))$/i;
+const DUP_MINT_WINDOW = 10 * 60000;
+
+/** How much of a duplicate copy's balance is its duplicate welcome mint (-> Reserve), and the rest (-> primary). */
+async function dupSplit(dupId) {
+  const d = (await getQuery("SELECT points_balance, created_at FROM users WHERE userId = ?", [dupId]))[0];
+  if (!d) return null;
+  const created = ms(d.created_at);
+  const hasBw = await tableExists("bonus_winners");
+  const txs = await getQuery(`SELECT ${hasBw ? "COALESCE(b.type, t.type)" : "t.type"} AS type, t.points, t.timestamp FROM transactions t
+    ${hasBw ? "LEFT JOIN bonus_winners b ON b.transactionId = t.transactionId" : ""} WHERE t.userId = ?`, [dupId]);
+  const mint = txs.filter((t) => t.points > 0 && DUP_MINT.test(t.type || "") && Math.abs(ms(t.timestamp) - created) <= DUP_MINT_WINDOW)
+                  .reduce((s, t) => s + Number(t.points), 0);
+  const bal = Number(d.points_balance) || 0;
+  const toReserve = Math.max(0, Math.min(Math.floor(bal), mint));
+  return { balance: bal, toReserve, toMain: bal - toReserve };
+}
+
+/**
+ * Merge a duplicate account into its primary (1.99bs, admin decision 2026-10-06): the copy's duplicate
+ * welcome mint goes to the Federal Reserve ("stale-reclaim" + a negative stale_reclaim claim); the rest
+ * of its balance, its XP, history and owned rows move to the primary; the copy goes. No level-up
+ * rewards fire (levelup records are carried over, the primary's own win).
+ */
 async function mergeDuplicate(dupId, primaryId) {
   if (!dupId || !primaryId || dupId === primaryId) return null;
   const { moveUserRows } = require("./accountMerge");
   return tx(async () => {
-    const d = (await getQuery("SELECT userId, username, points_balance, xp, level FROM users WHERE userId = ?", [dupId]))[0];
+    const d = (await getQuery("SELECT userId, username, camfrogUsername, points_balance, xp, level FROM users WHERE userId = ?", [dupId]))[0];
     const p = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [primaryId]))[0];
     if (!d || !p) return null;
-    const bal = Number(d.points_balance) || 0, xp = Number(d.xp) || 0;
+    const { balance: bal, toReserve, toMain } = await dupSplit(dupId);
+    const xp = Number(d.xp) || 0;
+    if (toMain < 0) return null;
+    await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [dupId]);   // never resolved again, even mid-merge
+    if (toReserve > 0) {
+      const note = `duplicate welcome mint of ${d.username} -> Federal Reserve (copy merged into ${p.username})`;
+      await runQuery("INSERT INTO transactions (transactionId, userId, type, points, note) VALUES (?, ?, 'stale-reclaim', ?, ?)", [uuidv4(), dupId, -toReserve, note]);
+      await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, 'stale_reclaim', ?, ?, ?)",
+                     [uuidv4(), dupId, `duplicate welcome mint (${d.username} merged into ${p.username})`, -toReserve]);
+    }
     await runQuery("UPDATE users SET points_balance = points_balance + ?, xp = xp + ?, level = MAX(COALESCE(level, 0), ?) WHERE userId = ?",
-                   [bal, xp, Number(d.level) || 0, primaryId]);
+                   [toMain, xp, Number(d.level) || 0, primaryId]);
+    await runQuery("UPDATE users SET points_balance = 0, xp = 0 WHERE userId = ?", [dupId]);
     await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [primaryId, dupId]);
     if (await hasColumn("transactions", "counterparty")) await runQuery("UPDATE transactions SET counterparty = ? WHERE counterparty = ?", [primaryId, dupId]);
     const moved = await moveUserRows(dupId, primaryId);
-    if (bal) await runQuery("INSERT INTO transactions (transactionId, userId, type, points, note) VALUES (?, ?, ?, ?, ?)",
-                            [uuidv4(), primaryId, "account merge", 0, `duplicate ${d.username} merged (${bal} PAT, ${xp} XP)`]).catch(() => {});
+    for (const t of ["levelup_rewards", "levelup_milestones"]) {
+      if (!(await hasColumn(t, "userId"))) continue;
+      await runQuery(`UPDATE OR IGNORE ${t} SET userId = ? WHERE userId = ?`, [primaryId, dupId]);
+      await runQuery(`DELETE FROM ${t} WHERE userId = ?`, [dupId]);
+    }
+    await runQuery("INSERT INTO transactions (transactionId, userId, type, points, note) VALUES (?, ?, ?, ?, ?)",
+                   [uuidv4(), primaryId, "account merge", 0, `duplicate ${d.username} merged (${toMain} PAT here, ${toReserve} PAT duplicate welcome mint to the Reserve, ${xp} XP)`]);
     await runQuery("DELETE FROM users WHERE userId = ?", [dupId]);
-    return { dup: d.username, into: p.username, balance: bal, xp, moved };
+    return { dup: d.username, into: p.username, balance: bal, toMain, toReserve, xp, moved };
   });
+}
+
+// ── the warning window (1.99bs) ──────────────────────────────────────────────────────────────────
+// A notice run marks every account in the selected tiers "pending" in stale_notice, with the planned
+// apply date (and the purge date, apply + graceDays). Each one gets an inbox notice; Camfrog logins
+// get a PM from Pepe when he next sees them (GET /api/stale/notice-logins, POST /api/stale/seen).
+// ANY sign of life clears it: touch() (sign-in, Discord/Twitch/Camfrog lookups, linking the name),
+// a signed-in page view (noticeMiddleware - which also shows the one-time banner), Pepe seeing the
+// login, and refreshNotice() (re-classifies: whoever left the selected tiers - a tip, a spin... - is
+// cleared). The apply only archives rows still pending AND still in a selected tier.
+const notice = new Map();         // userId -> "pending" | "kept" (cleared, banner not shown yet)
+let noticeReadyP = null;
+function ensureNotice() {
+  if (noticeReadyP) return noticeReadyP;
+  noticeReadyP = (async () => {
+    if (!(await tableExists("users"))) { noticeReadyP = null; return false; }
+    await runQuery(`CREATE TABLE IF NOT EXISTS stale_notice (
+      userId TEXT PRIMARY KEY, run_id TEXT NOT NULL, tier TEXT, balance REAL, login TEXT, username TEXT,
+      noticed_at INTEGER NOT NULL, apply_on TEXT, state TEXT NOT NULL DEFAULT 'pending',
+      cleared_at INTEGER, cleared_via TEXT, banner_at INTEGER)`);
+    await runQuery("CREATE INDEX IF NOT EXISTS stale_notice_state ON stale_notice (state)");
+    await runQuery("CREATE TABLE IF NOT EXISTS stale_meta (k TEXT PRIMARY KEY, v TEXT)");
+    notice.clear();
+    for (const r of await getQuery("SELECT userId, state, banner_at FROM stale_notice WHERE state = 'pending' OR banner_at IS NULL")) {
+      notice.set(r.userId, r.state === "pending" ? "pending" : "kept");
+    }
+    return true;
+  })().catch((e) => { noticeReadyP = null; console.error("[stale] notice setup:", e.message); return false; });
+  return noticeReadyP;
+}
+
+/** Re-read the pending set (a notice run is started by migrate-stale-accounts.js, another process). */
+function reloadNotice() { noticeReadyP = null; return ensureNotice(); }
+
+let noticeTimers = null;
+/** In the web process: reload the pending set every 10 min; re-classify pending accounts once a day. */
+function startNoticeTimers({ reloadMs = 10 * 60000, refreshMs = 24 * 3600000, firstRefreshMs = 15 * 60000 } = {}) {
+  if (noticeTimers) return;
+  const refresh = async () => {
+    try {
+      await reloadNotice();
+      if ([...notice.values()].includes("pending")) {
+        const r = await refreshNotice();
+        if (r.cleared) console.log(`[stale] notice refresh: ${r.cleared} of ${r.checked} pending account(s) active again`);
+      }
+    } catch (e) { console.error("[stale] notice refresh:", e.message); }
+  };
+  noticeTimers = [setInterval(() => reloadNotice().catch(() => {}), reloadMs), setInterval(refresh, refreshMs), setTimeout(refresh, firstRefreshMs)];
+  for (const t of noticeTimers) if (t.unref) t.unref();
+}
+
+async function noticeMeta() {
+  if (!(await ensureNotice())) return null;
+  const r = (await getQuery("SELECT v FROM stale_meta WHERE k = 'notice'"))[0];
+  return r ? safeJson(r.v, null) : null;
+}
+
+/**
+ * Start (or extend) a notice run: rows = plan rows ({f, tier, why}) to warn. Idempotent per account
+ * (an account already pending keeps its first notice). addInbox(userId, notice) is inbox.addSafe.
+ */
+async function startNotice(rows, { runId, applyOn, purgeOn, now = Date.now(), tiers = DEFAULT_TIERS, addInbox = null } = {}) {
+  await ensureNotice();
+  const meta = { run_id: runId, started_at: now, apply_on: applyOn, purge_on: purgeOn, tiers };
+  await runQuery("INSERT INTO stale_meta (k, v) VALUES ('notice', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", [JSON.stringify(meta)]);
+  let added = 0;
+  for (const r of rows) {
+    const f = r.f;
+    const x = await runQuery(`INSERT OR IGNORE INTO stale_notice (userId, run_id, tier, balance, login, username, noticed_at, apply_on)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, [f.userId, runId, r.tier, Math.floor(f.balance), f.login || null, f.username, now, applyOn]);
+    if (!x.changes) continue;
+    added++;
+    notice.set(f.userId, "pending");
+    if (addInbox) {
+      await addInbox(f.userId, {
+        kind: "system", ref: `stale-notice:${runId}`, created: now, link: "/history",
+        title: "Your account is due to be archived",
+        body: `This account hasn't been used in a while, so on ${applyOn} it will be archived and its ${Math.floor(f.balance).toLocaleString("en-US")} PAT ` +
+              "returned to the Federal Reserve. To keep it, just use it before then: sign in, link your Camfrog name, or be active " +
+              "in a Camfrog room, on Twitch or on Discord. Even after archiving, signing in brings the account and its PAT back.",
+      });
+    }
+  }
+  return { added, meta };
+}
+
+/** Clear a pending notice (any activity). Returns true when it was pending. Never throws. */
+async function clearNotice(userId, via) {
+  try {
+    if (!userId || notice.get(userId) !== "pending") return false;
+    if (!(await ensureNotice())) return false;
+    const r = await runQuery("UPDATE stale_notice SET state = 'cleared', cleared_at = ?, cleared_via = ? WHERE userId = ? AND state = 'pending'",
+                             [Date.now(), String(via || "activity").slice(0, 40), userId]);
+    notice.set(userId, "kept");
+    if (r.changes) console.log(`[stale] notice cleared for ${userId} (${via})`);
+    return !!r.changes;
+  } catch (e) { console.error("[stale] clearNotice:", e.message); return false; }
+}
+
+/** Pepe: the Camfrog logins still pending (he PMs them when he sees them). */
+async function pendingLogins() {
+  if (!(await ensureNotice())) return { logins: [] };
+  const meta = await noticeMeta();
+  const rows = await getQuery("SELECT login, balance FROM stale_notice WHERE state = 'pending' AND login IS NOT NULL AND login != ''");
+  return { apply_on: meta && meta.apply_on, logins: rows.map((r) => ({ login: r.login, balance: Math.floor(r.balance || 0) })) };
+}
+
+/** Pepe saw this Camfrog login: clear every pending notice on it. */
+async function seenLogin(login, via = "seen in Camfrog") {
+  const l = String(login || "").trim().toLowerCase();
+  if (!l || !(await ensureNotice())) return 0;
+  let n = 0;
+  for (const r of await getQuery("SELECT userId FROM stale_notice WHERE state = 'pending' AND login = ?", [l])) if (await clearNotice(r.userId, via)) n++;
+  return n;
+}
+
+/** Re-classify everyone; a pending account that left the selected tiers (activity) is cleared. */
+async function refreshNotice({ now = Date.now(), bot = null, opts = {} } = {}) {
+  if (!(await ensureNotice())) return { checked: 0, cleared: 0 };
+  const meta = (await noticeMeta()) || {};
+  const tiers = meta.tiers || DEFAULT_TIERS;
+  const pend = await getQuery("SELECT userId FROM stale_notice WHERE state = 'pending'");
+  if (!pend.length) return { checked: 0, cleared: 0 };
+  const p = await plan(Object.assign({ now, bot, supply: { total: 1, wallets: 1 } }, opts));
+  const tierOf = new Map(p.rows.map((r) => [r.f.userId, r.tier]));
+  let cleared = 0;
+  for (const { userId } of pend) {
+    const t = tierOf.get(userId);
+    if (t === "archived") continue;
+    if (!t || !tiers.includes(t)) if (await clearNotice(userId, t ? `activity (now ${t})` : "account gone")) cleared++;
+  }
+  return { checked: pend.length, cleared };
+}
+
+/** Admin card: the dates, and counts by state and tier. */
+async function noticeSummary() {
+  if (!(await ensureNotice())) return null;
+  const meta = await noticeMeta();
+  const rows = await getQuery("SELECT state, tier, COUNT(*) AS n, SUM(balance) AS pat FROM stale_notice GROUP BY state, tier");
+  const vias = await getQuery("SELECT cleared_via AS via, COUNT(*) AS n FROM stale_notice WHERE state = 'cleared' GROUP BY cleared_via ORDER BY n DESC LIMIT 8");
+  let archived = null;
+  if (await tableExists("account_archive")) {
+    archived = (await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(reclaimed), 0) AS pat FROM account_archive WHERE restored_at IS NULL AND purged_at IS NULL"))[0];
+  }
+  return { meta, rows: rows.map((r) => ({ state: r.state, tier: r.tier, n: r.n, pat: Math.floor(r.pat || 0) })), vias, archived };
+}
+
+/**
+ * Express middleware: a signed-in page view is activity - a pending notice is cleared - and the account
+ * sees a one-time banner (res.locals.staleNotice) saying it was due to be archived and is now kept.
+ */
+function noticeMiddleware(getUserId) {
+  return (req, res, next) => {
+    if (!notice.size || req.method !== "GET" || /^\/(api|public|og|uploads)\b|^\/healthz/.test(req.path)) return next();
+    const uid = getUserId(req);
+    if (!uid || !notice.has(uid)) return next();
+    (async () => {
+      const was = notice.get(uid);
+      if (was === "pending") await clearNotice(uid, "site visit");
+      const r = (await getQuery("SELECT apply_on, balance, cleared_via FROM stale_notice WHERE userId = ?", [uid]))[0];
+      if (r) res.locals.staleNotice = { apply_on: r.apply_on, balance: Math.floor(r.balance || 0), via: r.cleared_via };
+      await runQuery("UPDATE stale_notice SET banner_at = ? WHERE userId = ? AND banner_at IS NULL", [Date.now(), uid]);
+      notice.delete(uid);
+    })().catch((e) => console.error("[stale] notice banner:", e.message)).then(() => next());
+  };
 }
 
 /** SQL condition for "shown on leaderboards / counted as a member" ("1 = 1" until the column exists). */
 const LIVE = (alias) => (columnReady ? `${alias ? alias + "." : ""}archived_at IS NULL` : "1 = 1");
 
-module.exports = { DEFAULTS, CF_RANDOM, emailCategory, ms, ensure, gather, classify, plan, supply, botFacts,
-  archiveOne, restore, touch, purge, mergeDuplicate, LIVE, PURGE_TABLES };
+module.exports = { DEFAULTS, DEFAULT_TIERS, CF_RANDOM, emailCategory, ms, ensure, gather, classify, plan, supply, botFacts,
+  archiveOne, restore, touch, purge, mergeDuplicate, dupSplit, LIVE, PURGE_TABLES,
+  ensureNotice, reloadNotice, startNoticeTimers, noticeMeta, startNotice, clearNotice, pendingLogins, seenLogin, refreshNotice, noticeSummary, noticeMiddleware };

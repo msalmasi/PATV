@@ -64,7 +64,10 @@ var clientSayHello = cooldown(client, client.say, 5000);
 let currentRaffleParticipants = new Set();
 let raffleTimeout;
 
-const blacklist = [""];
+// Chatters who never enter the raffle (lowercase Twitch names). Wheel_of_Misfortune won 2,674 raffles
+// (32M PAT) as a chat regular nobody plays as; its balance went to pb (admin decision 2026-10-06).
+const blacklist = ["wheel_of_misfortune"];
+const raffleBlocked = (name) => blacklist.includes(String(name || "").trim().toLowerCase());
 let userCooldownArray = [];
 let globalCooldownArray = [];
 var ucd = new Object();
@@ -584,6 +587,7 @@ async function onChatMessage(twitchUser) {
   const displayName = twitchUser["display-name"];
   const profileImage = twitchUser["profile_image_url"] || null;
   if (twitchId == undefined) return;
+  if (raffleBlocked(displayName) || raffleBlocked(twitchUser.username)) return;
   try {
     // Ensure that the user exists in your backend using findOrCreateTwitchUser
     const user = await findOrCreateTwitchUser(

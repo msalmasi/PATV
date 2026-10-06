@@ -69,6 +69,36 @@
     })();
     </script>
 
+    <div class="panel" id="stale-admin">
+        <h3>Stale-account cleanup</h3>
+        <p style="font-size:13px;color:#aaa;line-height:1.5">Accounts nobody has used (auto Camfrog accounts with no activity, junk web sign-ups, ownerless ghosts, Twitch/Discord-bot accounts without real activity and 100k+ PAT) are warned first, then archived: their PAT goes back to the Federal Reserve and signing in brings it back. Any activity in the warning window (sign-in, a site visit, Camfrog, Twitch, Discord, linking) clears the warning. Empty tier-A accounts are deleted after the purge date. Run by <code>migrate-stale-accounts.js</code> on the server (dry run by default).</p>
+        <p id="stale-dates" style="font-size:14px;color:#eee">Loading…</p>
+        <div style="overflow-x:auto"><table id="stale-counts" style="width:100%;font-size:12px;border-collapse:collapse"></table></div>
+        <p id="stale-vias" style="font-size:12px;color:#aaa"></p>
+    </div>
+    <script>
+    (function () {
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+        const n = (x) => Number(x || 0).toLocaleString('en-US');
+        fetch('/api/admin/stale').then((r) => r.status === 403 ? null : r.json()).then((d) => {
+            const dates = document.getElementById('stale-dates');
+            if (!d) { dates.textContent = 'Admins only.'; return; }
+            const m = d.meta;
+            if (!m) { dates.textContent = 'No warning window started yet.'; return; }
+            dates.innerHTML = 'Warning window <b>' + esc(m.run_id) + '</b> started ' + esc(new Date(m.started_at).toISOString().slice(0, 10))
+                + ' · <b>archive on ' + esc(m.apply_on) + '</b> · <b>purge from ' + esc(m.purge_on) + '</b> (empty tier-A accounts) · tiers ' + esc((m.tiers || []).join('+'))
+                + (d.archived ? ' · archived now: ' + n(d.archived.n) + ' (' + n(d.archived.pat) + ' PAT in the Reserve)' : '');
+            const by = {};
+            for (const r of d.rows || []) { const t = by[r.tier] || (by[r.tier] = {}); t[r.state] = r; }
+            const states = ['pending', 'cleared', 'archived'];
+            document.getElementById('stale-counts').innerHTML = '<tr><th align="left">Tier</th>' + states.map((s) => '<th align="right">' + s + '</th>').join('') + '</tr>'
+                + Object.keys(by).sort().map((t) => '<tr style="border-top:1px solid #333"><td>' + esc(t) + '</td>'
+                + states.map((s) => '<td align="right">' + (by[t][s] ? n(by[t][s].n) + ' <small>(' + n(by[t][s].pat) + ' PAT)</small>' : '-') + '</td>').join('') + '</tr>').join('');
+            document.getElementById('stale-vias').textContent = (d.vias || []).length ? 'Cleared by: ' + d.vias.map((v) => (v.via || '?') + ' ' + v.n).join(' · ') : '';
+        }).catch(() => {});
+    })();
+    </script>
+
     <div class="panel">
         <h3>Create Redemption Code</h3>
     <form id="redemption-codes" action="/api/admin/redemption-codes" method="post">

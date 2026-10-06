@@ -169,6 +169,23 @@
                 });
             })();
         </script>
+        <% if (typeof staleNotice !== 'undefined' && staleNotice) { %>
+        <div class="stale-banner" role="status">
+            <strong>Welcome back - your account is staying.</strong>
+            It hadn't been used in a while, so it was due to be archived on <%= staleNotice.apply_on %>
+            <% if (staleNotice.balance > 0) { %>with its <%= Number(staleNotice.balance).toLocaleString('en-US') %> PAT going back to the Federal Reserve<% } %>.
+            You're active again, so nothing happens - there's nothing you need to do.
+            <a href="/inbox">Inbox</a>
+            <button type="button" aria-label="Dismiss" onclick="this.parentNode.remove()">×</button>
+        </div>
+        <style>
+            .stale-banner { margin: 10px 20px 0; padding: 10px 40px 10px 14px; border-radius: 8px; background: #1f2b22; border: 1px solid #3CC47C;
+                            color: #ddd; font-size: 14px; line-height: 1.5; position: relative; }
+            .stale-banner a { color: #3CC47C; margin-left: 6px; }
+            .stale-banner button { position: absolute; top: 6px; right: 8px; background: none; border: 0; color: #aaa; font-size: 20px; cursor: pointer; }
+            @media (max-width: 600px) { .stale-banner { margin: 8px 16px 0; } }
+        </style>
+        <% } %>
     </header>
 
 </body>

@@ -37,6 +37,9 @@ const { moveUserRows } = require("./accountMerge");
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
 stale.ensure();
+stale.ensureNotice();                                // 1.99bs: the archive warning window
+stale.startNoticeTimers();
+setTimeout(() => require("./accountMerge").ensureCamfrogUnique(), 3000);   // 1.99bs: one account per Camfrog login
 setTimeout(() => displaynames.ready().catch((e) => console.error("[displaynames] schema:", e.message)), 2000);
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
@@ -170,12 +173,15 @@ const inbox = require("./inbox");
 app.use(inbox.navCount);
 // welcome bonus (welcome.js, 1.99bg): a device id for every browser + signed-in activity days
 const welcome = require("./welcome");
-app.use(welcome.middleware((req) => {
+const cookieUserId = (req) => {
   const token = req.cookies && req.cookies.jwt;
   if (!token || !process.env.SECRET_KEY) return null;
   try { return (require("jsonwebtoken").verify(token, process.env.SECRET_KEY) || {}).userId || null; } catch (e) { return null; }
-}));
+};
+app.use(welcome.middleware(cookieUserId));
 welcome.start();
+// 1.99bs: an account warned it'll be archived - a signed-in page view keeps it, with a one-time banner
+app.use(stale.noticeMiddleware(cookieUserId));
 
 let clients = []; // Keep track of connected clients for SSE
 
@@ -239,6 +245,24 @@ app.post("/api/admin/welcome/config", addUser, async (req, res) => {
     console.log(`[welcome] config set by ${a.username}: ${JSON.stringify(c)}`);
     res.json({ ok: true, config: c });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Stale-account cleanup (1.99bs): the warning window's dates and counts for the admin panel card.
+app.get("/api/admin/stale", addUser, async (req, res) => {
+  try {
+    if (!(await welcomeAdmin(req))) return res.status(403).json({ error: "admins only" });
+    res.json(await stale.noticeSummary());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+// Pepe: the Camfrog logins still warned (he PMs them when he sees them), and "I saw this login"
+// (they're active again: the warning is cleared).
+app.get("/api/stale/notice-logins", async (req, res) => {
+  if (!isBotToken(req.query.password)) return res.status(403).json({ error: "unauthorized" });
+  try { res.json(await stale.pendingLogins()); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/stale/seen", async (req, res) => {
+  const b = req.body || {};
+  if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
+  try { res.json({ ok: true, cleared: await stale.seenLogin(b.login, "seen in Camfrog") }); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 app.post("/api/admin/welcome/pay", addUser, async (req, res) => {
   try {
@@ -1435,6 +1459,9 @@ app.post('/api/users/twitch/register', async (req, res) => {
     const userId = uuidv4();
 
     try {
+      // 1.99bs: racing chat messages could register one Twitch id twice - hand back the account instead
+      const had = twitchId ? (await getQuery("SELECT userId, username, displayname, points_balance FROM users WHERE twitchId = ? LIMIT 1", [String(twitchId)]))[0] : null;
+      if (had) return res.json({ user: had, existing: true });
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
       await runQuery(
@@ -1471,8 +1498,11 @@ app.post('/api/users/discord/register', async (req, res) => {
     const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(discordUsername) || username;
     const points_balance = 0;
     const userId = uuidv4();
-  
+
     try {
+      // 1.99bs: racing messages could register one Discord id twice - hand back the account instead
+      const had = discordId ? (await getQuery("SELECT userId, username, displayname, points_balance FROM users WHERE discordId = ? LIMIT 1", [String(discordId)]))[0] : null;
+      if (had) return res.json({ user: had, existing: true });
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
       await runQuery(
@@ -2232,12 +2262,26 @@ app.post('/api/users/camfrog/register', async (req, res) => {
   // random CF account name.
   const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(camfrogUsername, true) || username;
   const userId = uuidv4();
+  // 1.99bs: one account per Camfrog login. Two racing calls used to make two "CF…" accounts; now the
+  // second gets the first's account back (check first, and the unique index catches a true race).
+  const { accountForLogin } = require("./accountMerge");
+  const existing = async () => {
+    const u = await accountForLogin(camfrogUsername);
+    return u ? res.json({ user: { userId: u.userId, username: u.username, displayname: u.displayname, camfrogUsername: u.camfrogUsername,
+                                   points_balance: u.points_balance }, existing: true }) : null;
+  };
 
   try {
-    await runQuery(
-      'INSERT INTO users (userId, username, displayname, email, password, camfrogUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, username, displayname, email, password, camfrogUsername, avatar, 0]
-    );
+    if (await existing()) return;
+    try {
+      await runQuery(
+        'INSERT INTO users (userId, username, displayname, email, password, camfrogUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, username, displayname, email, password, camfrogUsername, avatar, 0]
+      );
+    } catch (e) {
+      if (/UNIQUE/i.test(e.message) && await existing()) return;
+      throw e;
+    }
     await displaynames.markNewAccount(userId).catch(() => {});
     // 1.99bg: no welcome cash at sign-up (it was farmable with alts). The welcome bonus vests once
     // the account has really been used, once per person - welcome.js. `identity` is Pepe's alias

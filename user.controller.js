@@ -434,6 +434,8 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     const mergedLevel = Math.max(me[0]?.level || 1, auto.level || 1);
 
     console.log(`[CF-MERGE] Merging auto account ${auto.userId} into ${userId}: +PAT ${auto.points_balance}, +XP ${auto.xp}`);
+    // 1.99bs: the login is unique (users_camfrog_login) - free it on the auto account first
+    for (const a of autoAccounts) await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [a.userId]);
 
     await runQuery(
       `UPDATE users SET
