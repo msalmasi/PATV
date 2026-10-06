@@ -1,5 +1,5 @@
-<%- include('layout', { title: 'Pad Guide', user: user }) %>
-<!-- views/rooms.ejs — the Pad Guide (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
+<%- include('layout', { title: 'Pads', user: user }) %>
+<!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99bx: a whole card (and a whole schedule row) opens its room - a stretched link on a.t / a.rl. -->
 <%
@@ -85,7 +85,7 @@
 </style>
 <main class="cg">
   <div>
-    <h1>📡 Pad Guide</h1>
+    <h1>📡 Pads</h1>
     <p class="lead">Every PATV pad (p/<i>name</i>) has a feed, a stage anyone can stream to, and Pepe's stream — and most are backed by a Camfrog room whose chat is live on the web.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the Camfrog rooms' chat.<% } %></p>
   </div>
 

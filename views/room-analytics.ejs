@@ -97,7 +97,7 @@
   }
 </style>
 <main class="ra" id="ra">
-  <div class="crumb"><a href="/p">Pad Guide</a> › <% if (room.bridged) { %><a href="/p/<%= encodeURIComponent(room.slug) %>"><%= room.name %></a><% } else { %><%= room.name %><% } %> › Analytics</div>
+  <div class="crumb"><a href="/p">Pads</a> › <% if (room.bridged) { %><a href="/p/<%= encodeURIComponent(room.slug) %>"><%= room.name %></a><% } else { %><%= room.name %><% } %> › Analytics</div>
   <section class="hero">
     <h1>📈 <%= room.name %></h1>
     <div class="sub">What happens in this Camfrog room, from what Pepe sees sitting in it<% if (a && a.updated) { %> · updated <%= a.updated %><% } %><% if (a && a.tz) { %> · times in <%= a.tz %><% } %>.</div>

@@ -149,14 +149,14 @@ test("/stage: camera + mic pickers and Switch camera in the browser pane; the pr
   assert.match(bridge, /recSession\.before\(\)/, "the iOS audio-session handling is still there");
 });
 
-test("Pad Guide: each card and schedule row is a stretched link to its pad page", async () => {
+test("Pads: each card and schedule row is a stretched link to its pad page", async () => {
   const html = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), {
     user: null, signedIn: false, staff: false, owned: [], pepe: { active: false },
     rows: [{ id: PLANT, slug: PLANT, title: "Houseplants", live: true, bridged: true, count: 3, micCount: 1, slot_count: 1, house: false, owner: "pb",
              now: [], next: [{ display: "pb", start_at: T + 3600000, minutes: 15, featured: true, title: null }] }] });
   assert.match(html, /<a class="t" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
   assert.match(html, /<a class="rl" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
-  assert.match(html, /<h1>📡 Pad Guide<\/h1>/);
+  assert.match(html, /<h1>📡 Pads<\/h1>/);
   assert.match(html, /<span class="padref">p\/plant_based_chatting<\/span>/);
   assert.doesNotMatch(html, /Channel guide|>Channels /, "no 'channel' copy left");
   assert.match(html, /\.cg \.ch a\.t::after, \.cg \.sched a\.rl::after \{ content: ""; position: absolute; inset: 0;/);

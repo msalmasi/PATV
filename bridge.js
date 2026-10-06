@@ -14,7 +14,7 @@
 // Kept: per room the latest snapshot + the last FEED_KEEP feed items (chat lines, joins/leaves, mic,
 // topic changes), in memory, mirrored to SQLite so a restart doesn't blank the page.
 // Pages (signed-in only — a room's chat is semi-private):
-//   GET /p                     the Pad Guide (was /rooms; pads.js 301s the old addresses)
+//   GET /p                     the Pads (was /rooms; pads.js 301s the old addresses)
 //   GET /p/:slug               the pad page, with its Camfrog room live when one backs it
 //   GET /api/rooms/:slug/live?after=<cursor>   JSON the page polls (~1.5s)
 // Pepe's window room (1.99aj): the Camfrog room Pepe's OBS stream is showing = his active room
@@ -520,12 +520,12 @@ function register(app, { isBotToken, addUser }) {
     res.json({ ...stage(), slots, front, pepe_here: here !== false });
   });
 
-  // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pad Guide at /p
+  // 1.99bi: the guide - every room, what's on its stage now and what's booked next. 1.99ck: the Pads at /p
   app.get("/p", addUser, async (req, res) => {
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
     const g = await require("./roomsweb").guideRows(signedIn);
-    res.locals.og = { title: "Pad Guide — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its Camfrog room live on the web.",
+    res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its Camfrog room live on the web.",
                       image: res.locals.ogBase + "/og/page.png?t=Pad%20Guide", url: res.locals.ogBase + "/p" };
     let owned = [];
     if (signedIn) { try { owned = await reg.ownedBy(req.user.userId); } catch (e) { owned = []; } }

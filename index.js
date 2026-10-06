@@ -1116,7 +1116,7 @@ require("./pepecontrol").register(app, { isBotToken, addUser });   // admin-only
 require("./roomsweb").register(app, { isBotToken, addUser });
 require("./royalties").start();
 const bridge = require("./bridge");
-bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /p (Pad Guide), /p/:slug (pad page), /api/bridge/sync
+bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /p (Pads), /p/:slug (pad page), /api/bridge/sync
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API

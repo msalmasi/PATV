@@ -1,4 +1,4 @@
-// roomsweb.js — the pages and APIs around pad (room) ownership (1.99bi): the Pad Guide (/p, was /rooms), the
+// roomsweb.js — the pages and APIs around pad (room) ownership (1.99bi): the Pads (/p, was /rooms), the
 // owner's dashboard (/p/:slug/manage), the pads admin (/pads/admin), the homepage's front
 // room, and the bot-token endpoints Pepe uses (owners sync, owner !stage commands, royalty spend).
 // Data lives in rooms.js (registry), mainstage.js (stages) and royalties.js.
@@ -31,7 +31,7 @@ function linkSlug(R) {
   return R.slug;
 }
 
-/** Pad Guide rows: every registered or bridged room (pad) with what's on now and next. */
+/** Pads rows: every registered or bridged room (pad) with what's on now and next. */
 async function guideRows(signedIn) {
   await rooms.init();
   const B = bridge();

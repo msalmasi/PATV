@@ -380,7 +380,7 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   assert.match(pb, /title="Follow this pad" class="fw-btn[^"]*" data-follow-kind="room" data-follow-id="plant_based_chatting"/);
   assert.match(pb, /👑 Pad owner: /);
   assert.ok(pb.includes("📡 Camfrog room") && pb.includes("legacyRoom04"));
-  assert.ok(pb.includes('href="/p">Pad Guide</a>'));
+  assert.ok(pb.includes('href="/p">Pads</a>'));
   // the PATV Lounge: a pad with no Camfrog room - no live / Camfrog sections
   const lounge = (await page("/p/patv-lounge", U.bob)).text;
   assert.ok(lounge.includes("PATV Lounge") && lounge.includes("🛋️ Site-only pad"));
