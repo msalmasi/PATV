@@ -1,0 +1,99 @@
+/* room-mod.css — the pad page's Manage panel + its dialogs (public/js/room-mod.js, 1.99co) */
+.pm[hidden], .pm .hide, .pm-dlg .hide { display: none !important; }
+.pm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.pm { border-color: #5a4a1a !important; background: linear-gradient(180deg, #17140b 0%, #111 120px) !important; }
+.pm h2 { align-items: center; flex-wrap: wrap; }
+.pm-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.pm-badge { font-family: Ubuntu, sans-serif; font-size: 11px; letter-spacing: 0; text-transform: none; padding: 1px 8px; border-radius: 999px;
+            border: 1px solid #333; background: #1a1a1a; color: #bbb; white-space: nowrap; }
+.pm-badge.role { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
+.pm-badge.red { border-color: #7a2222; background: #2a1010; color: #ffb4b4; }
+.pm-badge.own { border-color: #2f6b3a; background: #12301a; color: #c8efcf; }
+.pm-badge.warn { border-color: #6b3a1a; background: #24160c; color: #f4c08a; }
+.pm-body { display: grid; gap: 12px; }
+.pm-body.pm-off .pm-sec:not(.pm-settings) .pm-btn:not(.keep) { opacity: .5; }
+.pm-sec { display: grid; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid #222; min-width: 0; }
+.pm-k { font-size: 11px; color: #9a9a9a; text-transform: uppercase; letter-spacing: .08em; }
+.pm-note { margin: 0; font-size: 13px; color: #cfd8cf; background: #12161d; border: 1px solid #2a3442; border-radius: 8px; padding: 7px 10px; overflow-wrap: anywhere; }
+.pm-note.warn { background: #24160c; border-color: #6b3a1a; color: #f4c08a; }
+.pm-note.ok { background: #0f1a10; border-color: #2f6b3a; color: #b9e8c0; }
+.pm-note.bad { background: #2a1010; border-color: #7a2222; color: #ffb4b4; }
+.pm > .pm-note { margin-bottom: 10px; }
+.pm-hint { margin: 0; font-size: 12px; color: #7d7d7d; line-height: 1.45; }
+.pm-btn { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 11px;
+          border-radius: 8px; border: 1px solid #2f2f2f; background: #1a1a1a; color: #e2e2e2 !important; font: inherit; font-size: 13px;
+          cursor: pointer; text-decoration: none; line-height: 1.2; white-space: nowrap; }
+.pm-btn:hover, .pm-btn:focus-visible { border-color: #c6a83f; color: #fff !important; }
+.pm-btn:focus-visible, .pm-dlg input:focus-visible, .pm-dlg select:focus-visible, .pm textarea:focus-visible, .pm input:focus-visible, .pm select:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+.pm-btn[disabled] { opacity: .45; cursor: not-allowed; }
+.pm-btn.go { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
+.pm-btn.danger { border-color: #5a2222; background: #221010; color: #ffcdcd !important; }
+.pm-btn.danger.go { background: #c62828; border-color: #e53935; color: #fff !important; }
+.pm-btn.chip { min-height: 28px; padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+.pm-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pm-topic-cur { font-size: 14px; color: #e6e6e6; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 7px 10px; overflow-wrap: anywhere; }
+.pm-topic-form { display: grid; gap: 6px; }
+.pm textarea, .pm input[type=text], .pm-dlg input, .pm-dlg select, .pm select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px;
+          padding: 8px 10px; font: inherit; font-size: 14px; min-width: 0; width: 100%; box-sizing: border-box; }
+.pm textarea { resize: vertical; min-height: 56px; }
+.pm-count { font-size: 11.5px; color: #777; text-align: right; }
+.pm-preview { display: grid; gap: 3px; }
+.pm-topic-line { color: #c9b46a; font-size: 12.5px; background: #0d0d0d; border: 1px dashed #3a3420; border-radius: 6px; padding: 5px 8px; overflow-wrap: anywhere; }
+.pm-find { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.pm-set-grid { display: grid; gap: 6px; }
+.pm-set { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; align-items: center; font-size: 13px; color: #ccc; }
+.pm-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.pm-results:empty { display: none; }
+.pm-res { background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 6px 8px; font-size: 12.5px; color: #bbb; overflow-wrap: anywhere; }
+.pm-res.ok { border-color: #2f6b3a; } .pm-res.bad { border-color: #7a2222; }
+.pm-res-h { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; }
+.pm-res-t { font-family: ui-monospace, Consolas, monospace; color: #e8d9a0; min-width: 0; }
+.pm-res-s { color: #8a8a8a; } .pm-res.bad .pm-res-s { color: #ff8a80; } .pm-res.ok .pm-res-s { color: #9be3a6; }
+.pm-res-r { color: #ddd; margin-top: 3px; }
+
+/* the roster's manage button (views/room.ejs) */
+.rm .people li.pm-can { cursor: pointer; }
+.rm .people li.pm-can:hover { background: #1b1910; }
+.rm .people .pm-mg { appearance: none; background: none; border: 1px solid #3a3420; color: #e8d9a0; border-radius: 6px; padding: 0 6px; font: inherit; font-size: 13px;
+                     line-height: 1.4; cursor: pointer; margin-left: 2px; }
+.rm .people .pm-mg:hover, .rm .people .pm-mg:focus-visible { border-color: #c6a83f; background: #1d1a0f; }
+
+/* dialogs (appended to <body>, outside .rm) */
+.pm-dlg { padding: 0; border: 1px solid #3a3420; border-radius: 14px; background: #131313; color: #e6e6e6; width: min(520px, calc(100vw - 32px));
+          max-height: calc(100vh - 48px); font-family: Ubuntu, sans-serif; box-shadow: 0 18px 60px rgba(0,0,0,.7); }
+.pm-dlg::backdrop { background: rgba(0, 0, 0, .62); }
+.pm-dlg-in { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: calc(100vh - 48px); }
+.pm-dlg-h { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 14px 16px 10px; border-bottom: 1px solid #242424; }
+.pm-dlg-h h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; min-width: 0; }
+.pm-dlg-h .pm-x { grid-column: 2; grid-row: 1; min-height: 30px; padding: 2px 10px; font-size: 18px; }
+.pm-who { grid-column: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; color: #999; }
+.pm-login { font-family: ui-monospace, Consolas, monospace; }
+.pm-dlg-b { overflow-y: auto; padding: 12px 16px 16px; display: grid; gap: 12px; align-content: start; }
+.pm-menu { display: grid; gap: 12px; }
+.pm-grp { display: grid; gap: 6px; }
+.pm-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-hist .pm-hlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 180px; overflow-y: auto; font-size: 12.5px; }
+.pm-hlist li { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 8px; align-items: baseline; color: #bbb; }
+.pm-hlist time { color: #888; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pm-hlist b { color: #f4c08a; text-transform: capitalize; white-space: nowrap; }
+.pm-hlist span { overflow-wrap: anywhere; min-width: 0; }
+.pm-cform { display: grid; gap: 8px; }
+.pm-q { margin: 0; font-size: 15px; color: #fff; }
+.pm-lab { font-size: 12.5px; color: #aaa; }
+.pm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pm-cmd { display: grid; gap: 3px; }
+.pm-cmd code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: #0b0b0b; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px 8px; color: #e8d9a0; overflow-wrap: anywhere; }
+.pm-out:empty { display: none; }
+.pm-blist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pm-blist li { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 7px 9px; }
+.pm-blist li.done { opacity: .55; }
+.pm-bwho { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; font-size: 13px; }
+.pm-bwho b { overflow-wrap: anywhere; }
+.pm-bwho small { color: #888; width: 100%; }
+
+@media (max-width: 520px) {
+  .pm-dlg { width: 100vw; max-width: 100vw; max-height: 92vh; margin: auto 0 0; border-radius: 14px 14px 0 0; }
+  .pm-dlg-in { max-height: 92vh; }
+  .pm-acts .pm-btn { flex: 1 1 calc(50% - 6px); }
+  .pm-set { grid-template-columns: minmax(0, 1fr) 110px; }
+}

@@ -303,6 +303,7 @@ async function ingest(body) {
     R.micRelay = !!s.mic_relay;
     R.cams = !!s.cams;
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
+    R.mod = require("./padmod").cleanModCaps(s.mod);   // 1.99co: Manage-panel caps per watching mod login ({} = none)
     if (!R.audio) audioClose(R.id);
     RA.micSample(R.id, R.mic, now);
     R.updated = now;
@@ -409,7 +410,7 @@ async function summary(full) {
   }));
 }
 
-async function liveView(R, after, userId) {
+async function liveView(R, after, userId, login) {
   const L = await links();
   const feed = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP)
     .map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
@@ -420,6 +421,8 @@ async function liveView(R, after, userId) {
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
             cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null },
     mine: userId ? relay.mineFor(userId, R.id) : [],
+    // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
+    mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
     members: R.members.map((u) => withPatv(u, L)),
     mic: R.mic.map((u) => withPatv(u, L)),
     feed, cursor,
@@ -448,7 +451,8 @@ function register(app, { isBotToken, addUser }) {
       relay.applyAcks(body.acks);
       const r = await ingest(body);
       const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
-      res.json({ success: true, ...r, jobs: relay.takeJobs(liveIds) });
+      // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)
+      res.json({ success: true, ...r, jobs: relay.takeJobs(liveIds), viewers: require("./padmod").viewersFor(liveIds) });
     } catch (e) {
       console.error("[bridge] sync:", e);
       res.status(500).json({ success: false, error: "sync failed" });
@@ -494,10 +498,14 @@ function register(app, { isBotToken, addUser }) {
     const R = bySlug(req.params.slug);
     if (!R) return res.status(404).json({ error: "No such room." });
     const after = Math.max(0, Number(req.query.after) || 0);
-    res.json(await liveView(R, after > cursor ? 0 : after, req.user.userId));
+    const pm = require("./padmod");
+    const login = await pm.linkedLogin(req.user.userId);
+    if (login) pm.noteViewer(R.id, login);
+    res.json(await liveView(R, after > cursor ? 0 : after, req.user.userId, login));
   });
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
+  require("./padmod").register(app, { addUser, bySlug, isLive });     // 1.99co: the pad Manage panel
 
   // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
@@ -562,9 +570,11 @@ function register(app, { isBotToken, addUser }) {
       return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such pad",
         message: "There's no pad at p/" + raw.toLowerCase() + ".", title: "Pad not found" });
     }
-    let linked = false;
+    let linked = false, login = null;
     if (signedIn) {
-      try { linked = !!((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername; } catch (e) { linked = false; }
+      try { login = ((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername || null; } catch (e) { login = null; }
+      linked = !!login;
+      if (login && !R.offline) require("./padmod").noteViewer(R.id, login);
     }
     const platform = (info && info.platform) || reg.platformOf(R.id);    // 1.99x: camfrog | site | twitch | discord
     const siteOnly = platform !== "camfrog";
@@ -583,7 +593,8 @@ function register(app, { isBotToken, addUser }) {
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
-      initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId) : null,
+      initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId, login) : null,
+      dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
       pepeHere: pepeIn(R.id), stage: stage(),
       roomStage: await require("./mainstage").roomStage(R.id, req.user),
       manage,

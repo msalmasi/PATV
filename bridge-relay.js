@@ -157,6 +157,10 @@ function takeJobs(liveRoomIds) {
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
     if (j.kind === "say" || j.kind === "cmd") base.text = j.text;
+    // 1.99co: a pad Manage-panel action (padmod.js) - the site-built line plus what Pepe re-checks / logs
+    if (j.kind === "cmd" && j.gui) { base.gui = j.gui; if (j.reason) base.reason = j.reason; }
+    if (j.kind === "cmd" && j.setting) base.setting = j.setting;
+    if (j.kind === "modinfo") base.target = j.target || "";
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
     out.push(base);
@@ -184,6 +188,7 @@ function applyAcks(acks) {
       j.result.replies = replies;
       cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
     }
+    if (j.kind === "modinfo") j.result.info = require("./padmod").cleanInfo(a.info);
     j.data = null;
   }
 }
@@ -192,7 +197,7 @@ function applyAcks(acks) {
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
-    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap") continue;
+    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "modinfo" || j.gui || j.setting) continue;   // panel jobs: padmod.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
     out.push(o);
@@ -431,4 +436,6 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, cleanCmds, commandsText, CMD_DENY, _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };
+module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, cleanCmds, commandsText, CMD_DENY,
+  newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
+  _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

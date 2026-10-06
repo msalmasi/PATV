@@ -3,7 +3,7 @@
     Camfrog room behind the pad when there is one (chat, people, mic, DJ booth), then the pad's feed. A
     site pad (the Camfrog Lounge) has no Camfrog room: no live section, no "not bridged" note. 1.99x: the header
     shows the pad's platform badge (🐸 Camfrog Pad / 🌐 Site Pad). %>
-<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null; %>
+<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null, dms_ = typeof dms !== 'undefined' && !!dms; %>
 <%# 1.99x: the platform badge (pads.js padBadge via fx or app.locals; a plain fallback when rendered bare) %>
 <% const padBadge_ = typeof fx !== 'undefined' && fx && fx.padBadge ? fx.padBadge : typeof padBadge === 'function' ? padBadge
      : (p) => '<span class="pad-plat pp-' + p + '">' + (p === 'site' ? '🌐 Site Pad' : '🐸 Camfrog Pad') + '</span>'; %>
@@ -257,6 +257,8 @@
       </div>
     </section>
     <aside class="side">
+      <%# 1.99co: the Manage panel - filled and shown by public/js/room-mod.js only when Pepe says this viewer moderates the room %>
+      <section class="card pm" id="rmMod" hidden></section>
       <section class="card" aria-labelledby="micH">
         <h2 id="micH">On the mic</h2>
         <div class="mic" id="rmMic"></div>
@@ -279,6 +281,8 @@
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
   <script src="/public/js/room-bridge.js?v=5"></script>
+  <link rel="stylesheet" href="/public/css/room-mod.css?v=1">
+  <script src="/public/js/room-mod.js?v=1"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -287,6 +291,7 @@
     var data = JSON.parse(document.getElementById('rmInit').textContent);
     var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
     var cursor = 0, timer = null, fails = 0, lastPeople = '', lastMic = '';
+    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %> }) : null;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -368,7 +373,7 @@
           h.appendChild(eq); mic.appendChild(h);
         });
       }
-      var pk = JSON.stringify(d.members) + (r.cams ? '1' : '0');
+      var pk = JSON.stringify(d.members) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (pk !== lastPeople) {
         lastPeople = pk;
         var ul = document.getElementById('rmPeople'); ul.textContent = '';
@@ -393,6 +398,19 @@
           }
           ic.appendChild(cam);
           var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
+          // 1.99co: moderators (Pepe says so) manage someone by clicking them (or their ⋯ button)
+          if (roomMod && roomMod.active() && !u.self && !u.anon && u.login) {
+            var mg = el('button', 'pm-mg', '⋯'); mg.type = 'button';
+            mg.title = 'Manage ' + label(u); mg.setAttribute('aria-label', 'Manage ' + label(u));
+            ic.appendChild(mg);
+            li.classList.add('pm-can');
+            (function (who) {
+              li.addEventListener('click', function (e) {
+                if (e.target.closest('a') || (e.target.closest('button') && !e.target.closest('.pm-mg'))) return;
+                roomMod.open(who);
+              });
+            })(u);
+          }
           li.appendChild(ic); ul.appendChild(li);
         });
         document.getElementById('rmPplN').textContent = d.members.length ? '(' + d.members.length + ')' : '';
@@ -529,6 +547,7 @@
     }
 
     function apply(d, first) {
+      if (roomMod) roomMod.update(d);          // before the people list: it adds the manage buttons
       renderRoom(d);
       renderCompose(d);
       roomAudio.update(d);
