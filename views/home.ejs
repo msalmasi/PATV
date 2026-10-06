@@ -95,9 +95,9 @@
   .hm .rooms-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .hm .rooms-mini a { display: flex; justify-content: space-between; gap: 8px; color: #ddd !important; font-size: 13.5px; padding: 3px 0; }
   .hm .rooms-mini .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hm .aw-hm .aw-now { width: 100%; font-family: var(--aw-pixel); font-size: 9px; letter-spacing: 1px; color: var(--aw-dim); text-align: center; min-height: 14px; line-height: 1.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .aw-hm .aw-now { width: 100%; font-family: var(--aw-pixel); font-size: 9px; letter-spacing: 1px; color: var(--aw-dim); text-align: center; min-height: 14px; line-height: 1.6; overflow-wrap: anywhere; }
   .hm .aw-hm .aw-now .who { font-family: Ubuntu, sans-serif; font-size: 15px; letter-spacing: 0; font-weight: bold; color: #fff; }
-  .hm .aw-hm .aw-now .amt { color: var(--aw-gold); }
+  .hm .aw-hm .aw-now .amt { color: var(--aw-gold); display: block; white-space: nowrap; }
   .hm .box { background: rgba(0,0,0,.4); border: 1px solid #1f2a20; border-radius: 12px; padding: 10px 12px; min-width: 0; }
   .hm .box h3 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   .hm a.box { display: block; color: #ddd !important; }
@@ -556,7 +556,7 @@
       box.appendChild(who);
       if (sp.result != null && sp.state !== 'spinning' && sp.type !== 'spinning') {
         var a = document.createElement('span'); a.className = 'amt';
-        a.textContent = ' \u00B7 ' + (Number(sp.result) > 0 ? '+' + Number(sp.result).toLocaleString('en-US') + ' PAT' : 'no prize');
+        a.textContent = (Number(sp.result) > 0 ? '+' + Number(sp.result).toLocaleString('en-US') + ' PAT' : 'no prize');
         box.appendChild(a);
       }
     }
