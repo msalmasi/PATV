@@ -21,7 +21,7 @@
       body: body === undefined ? undefined : JSON.stringify(body)
     }).then(function (r) {
       return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }).then(function (d) {
-        if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status));
+        if (!r.ok || d.ok === false) { var e = new Error(d.error || ('HTTP ' + r.status)); e.code = d.code; throw e; }
         return d;
       });
     });
@@ -309,8 +309,20 @@
       global: form.elements.global.checked, rooms: roomsSel, announce: announce,
       attachments: files.filter(function (f) { return f.state === 'ready'; }).map(function (f) { return f.id; })
     };
+    // 1.99cc: the Terms tick box (shown until this account accepted the current version)
+    var tk = form.elements.acceptTerms;
+    if (tk && !tk.checked) { setErr('Tick the box to accept the Terms of Service first.'); tk.focus(); return; }
+    if (tk && tk.checked) body.acceptTerms = true;
     go.disabled = true; go.textContent = 'Posting…';
-    api('/api/feed/posts', body).then(function (d) {
+    api('/api/feed/posts', body).catch(function (e) {
+      // not accepted yet (a page from before the change): ask once, then post again
+      if (e.code !== 'terms' || !window.patvSafety) throw e;
+      return window.patvSafety.termsAsk().then(function (yes) {
+        if (!yes) throw new Error('You need to accept the Terms of Service to post.');
+        body.acceptTerms = true;
+        return api('/api/feed/posts', body);
+      });
+    }).then(function (d) {
       clearTimeout(saveTimer); clearDraft(); restoring = true;     // posted: the draft is done
       errEl.textContent = 'Posted ✔'; errEl.classList.add('ok');
       // stay on a room page / the feed (the new post shows on top of New); elsewhere open the post

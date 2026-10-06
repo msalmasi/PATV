@@ -19,6 +19,7 @@
       <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="Wrote the post">OP</span><% } %>
       <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>
       <% if (c.edited) { %><span class="fp-ed">(edited)</span><% } %>
+      <% if (c.hidden) { %><span class="tag warn" title="Hidden by an urgent report - only admins see it">Hidden · urgent review</span><% } %>
     </div>
   <% } %>
   <span class="rail" aria-hidden="true"></span>
@@ -37,7 +38,8 @@
           <div class="menu" role="menu">
             <% if (c.mine) { %><button type="button" role="menuitem" data-act="cedit"><%- fx.icon('edit') %>Edit</button><% } %>
             <% if (canDel) { %><button type="button" role="menuitem" class="danger" data-act="cdelete"><%- fx.icon('trash') %>Delete</button><% } %>
-            <% if (!c.mine) { %><button type="button" role="menuitem" data-act="creport"><%- fx.icon('flag') %>Report</button><% } %>
+            <% if (!c.mine) { %><button type="button" role="menuitem" data-act="creport"><%- fx.icon('flag') %>Report comment</button><% } %>
+            <% if (viewer && viewer.class === 'Admin') { %><button type="button" role="menuitem" data-act="cdetails"><%- fx.icon('shield') %>Details (admin)</button><% } %>
           </div>
         </details>
       <% } %>

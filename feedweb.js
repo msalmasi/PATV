@@ -14,6 +14,8 @@ const media = require("./feedmedia");
 const lp = require("./linkpreview");
 const rooms = require("./rooms");
 const embeds = require("./stageembed");
+const audit = require("./contentaudit");
+const terms = require("./terms");
 
 const STAGING = !!process.env.STAGING;
 const SITE = () => process.env.SITE_URL || (STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv");
@@ -131,7 +133,9 @@ async function composerFor(viewer, roomId) {
   const refusal = await store.postRefusal(viewer, roomId ? [roomId] : [""]);
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, roomId ? [roomId] : [""], { media: true });
   const prices = { post: C.price_post, link: C.price_link, image: C.price_image, audio: C.price_audio, video: C.price_video };
-  return { user: viewer.username, rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
+  // 1.99cc: "By posting you agree to the Terms" - and a one-time tick box until this account has accepted the current version
+  const termsNeeded = await terms.needs(viewer.userId).catch(() => false);
+  return { user: viewer.username, terms: { needed: termsNeeded, version: terms.VERSION }, rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK };
 }
@@ -254,7 +258,7 @@ function register(app, { addUser, isBotToken }) {
                         url: res.locals.ogBase + "/feed/p/" + p.id };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
       res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
-                           reasons: store.REASONS, staff });
+                           reasons: store.REASONS, staff, termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false });
     } catch (e) {
       console.error("[feed] post page:", e);
       res.status(500).send("Something went wrong.");
@@ -268,8 +272,11 @@ function register(app, { addUser, isBotToken }) {
     let used = 0, free = Infinity;
     try { used = await store.usedBytes(null); free = media.diskFreeBytes(); } catch (e) { /* shown as unknown */ }
     res.set("X-Robots-Tag", "noindex");
+    const isAdmin = audit.isAdmin(viewer);
+    res.set("Cache-Control", "no-store");
     res.render("feedAdmin", { user: viewer.username, viewer, C: store.config(), D: store.DEFAULTS, reports: await store.reports(), bans: await store.bans(),
-                              used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])) });
+                              used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
+                              userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [] });
   });
 
   // ── files ──
@@ -492,9 +499,23 @@ function register(app, { addUser, isBotToken }) {
   };
 
   // ── posts ──
+  // 1.99cc: the Terms gate (428 + code "terms" until accepted; {acceptTerms: true} accepts and goes on) and the
+  // admin-only abuse record (contentaudit.js) of every create / edit. Neither ever shows in a response.
+  const termsGate = async (req) => {
+    if (!(await terms.needs(req.user.userId))) return false;
+    if ((req.body || {}).acceptTerms === true) { await terms.accept(req.user.userId); return false; }
+    return true;
+  };
+  const termsRefusal = (res) => res.status(428).json({ ok: false, code: "terms", error: "Please read and accept the Terms of Service first.", url: "/terms", version: terms.VERSION });
+  const record = async (req, what) => {
+    const u = await store.account(req.user.userId).catch(() => null);
+    await audit.record(audit.fromRequest(req), { ...what, user: u });
+  };
   app.post("/api/feed/posts", addUser, guard(false), async (req, res) => {
     try {
+      if (await termsGate(req)) return termsRefusal(res);
       const p = await store.create(req.user.userId, req.body || {}, { preview: previewDep });
+      await record(req, { kind: "post", id: p.id, postId: p.id, event: "create" });
       res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id });
     } catch (e) { fail(res, e); }
   });
@@ -504,7 +525,14 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: true, ...(await fn(viewer, String(req.params.id), req.body || {})) });
     } catch (e) { fail(res, e); }
   });
-  postAct("edit", async (v, id, b) => { await store.edit(v, id, b); return {}; });
+  app.post("/api/feed/posts/:id/edit", addUser, guard(false), async (req, res) => {
+    try {
+      const id = String(req.params.id);
+      await store.edit(await viewerOf(req), id, req.body || {});
+      await record(req, { kind: "post", id, postId: id, event: "edit" });
+      res.json({ ok: true });
+    } catch (e) { fail(res, e); }
+  });
   postAct("delete", async (v, id, b) => { await store.remove(v, id, b.reason); return {}; });
   // {dir: 1 | -1 | 0} sets the vote; {} toggles the upvote and {on} sets it (the 1.99bw API)
   postAct("vote", async (v, id, b) => store.vote(v, id, b.dir, b.on === undefined ? undefined : !!b.on));
@@ -519,12 +547,37 @@ function register(app, { addUser, isBotToken }) {
     return {};
   });
   postAct("report", async (v, id, b) => store.report(v, { post: id, comment: b.comment || null, reason: b.reason, note: b.note }));
-  postAct("comments", async (v, id, b) => store.comment(v, id, { body: b.body, parent: b.parent }));
+  app.post("/api/feed/posts/:id/comments", addUser, guard(false), async (req, res) => {
+    try {
+      if (await termsGate(req)) return termsRefusal(res);
+      const b = req.body || {}, postId = String(req.params.id);
+      const r = await store.comment(await viewerOf(req), postId, { body: b.body, parent: b.parent });
+      await record(req, { kind: "comment", id: r.id, postId, event: "create" });
+      res.json({ ok: true, ...r });
+    } catch (e) { fail(res, e); }
+  });
+  // 1.99cc: the report modal's reasons (public: labels + hints only)
+  app.get("/api/feed/report-reasons", (req, res) => {
+    res.set("Cache-Control", "public, max-age=300");
+    res.json({ ok: true, post: store.reportMenu(false), user: store.reportMenu(true) });
+  });
+  // 1.99cc: report an account (the profile's "Report user")
+  app.post("/api/users/:username/report", addUser, guard(false), async (req, res) => {
+    try {
+      const b = req.body || {};
+      res.json({ ok: true, ...(await store.reportUser(await viewerOf(req), { username: req.params.username, reason: b.reason, note: b.note })) });
+    } catch (e) { fail(res, e); }
+  });
   app.post("/api/feed/comments/:id/vote", addUser, guard(false), async (req, res) => {
     try { res.json({ ok: true, ...(await store.voteComment(await viewerOf(req), req.params.id, (req.body || {}).dir)) }); } catch (e) { fail(res, e); }
   });
   app.post("/api/feed/comments/:id/edit", addUser, guard(false), async (req, res) => {
-    try { await store.editComment(await viewerOf(req), req.params.id, (req.body || {}).body); res.json({ ok: true }); } catch (e) { fail(res, e); }
+    try {
+      await store.editComment(await viewerOf(req), req.params.id, (req.body || {}).body);
+      const c = (await getQuery("SELECT post_id FROM feed_comments WHERE id = ?", [String(req.params.id)]))[0];
+      await record(req, { kind: "comment", id: String(req.params.id), postId: c ? c.post_id : null, event: "edit" });
+      res.json({ ok: true });
+    } catch (e) { fail(res, e); }
   });
   app.post("/api/feed/comments/:id/delete", addUser, guard(false), async (req, res) => {
     try { await store.removeComment(await viewerOf(req), req.params.id, (req.body || {}).reason); res.json({ ok: true }); } catch (e) { fail(res, e); }
@@ -569,6 +622,38 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: true, config: await store.setConfig(req.body || {}, v.username) });
     } catch (e) { fail(res, e); }
   });
+  // 1.99cc: the abuse details panel (site Admins only; every view is logged in content_audit_views first)
+  app.get("/api/feed/admin/details", addUser, async (req, res) => {
+    res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
+    if (!sameSite(req) || req.get("X-Requested-With") !== "fetch") return res.status(403).json({ ok: false, error: "Bad request." });
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    try {
+      const v = await viewerOf(req);
+      if (!audit.isAdmin(v)) return res.status(403).json({ ok: false, error: "Admins only." });
+      const q = req.query || {};
+      const target = q.post ? { post: String(q.post).slice(0, 32) } : q.comment ? { comment: String(q.comment).slice(0, 32) } : q.user ? { user: String(q.user).slice(0, 64) } : {};
+      res.json({ ok: true, details: await audit.details(v, target, { reason: q.why }) });
+    } catch (e) {
+      const st = e && e.status && e.status < 500 ? e.status : 500;
+      if (st === 500) console.error("[feed] details:", e && e.message);
+      res.status(st).json({ ok: false, error: st === 500 ? "Something went wrong." : e.message });
+    }
+  });
+  // 1.99cc: an admin outcome on a report target: dismiss | false | remove | ban (+ tell the reporters, default on)
+  app.post("/api/feed/admin/report-action", addUser, guard(false), async (req, res) => {
+    try {
+      const b = req.body || {};
+      res.json(await store.reportAction(await viewerOf(req), { post: String(b.post || ""), comment: b.comment ? String(b.comment) : null, action: String(b.action || ""),
+                                                              tell: b.notify !== false, days: Number(b.days) || 0, reason: b.reason }));
+    } catch (e) { fail(res, e); }
+  });
+  app.post("/api/feed/admin/user-report-action", addUser, guard(false), async (req, res) => {
+    try {
+      const b = req.body || {};
+      res.json(await store.userReportAction(await viewerOf(req), { userId: String(b.userId || ""), action: String(b.action || ""), tell: b.notify !== false,
+                                                                  days: Number(b.days) || 0, reason: b.reason }));
+    } catch (e) { fail(res, e); }
+  });
   app.post("/api/feed/admin/resolve", addUser, guard(false), async (req, res) => {
     try { await store.resolveReports(await viewerOf(req), String((req.body || {}).post || ""), (req.body || {}).action); res.json({ ok: true }); } catch (e) { fail(res, e); }
   });
@@ -604,6 +689,7 @@ function register(app, { addUser, isBotToken }) {
     .catch((e) => console.error("[feed] sweep:", e.message));
   setTimeout(sweep, 60e3).unref();
   setInterval(sweep, 30 * 60e3).unref();
+  audit.start();            // 1.99cc: the daily retention job (raw IPs / user agents nulled after 90 days)
   // uploads stuck in "processing" after a restart: fail them (the browser shows the error)
   store.init().then(() => runQuery("UPDATE feed_attachments SET state = 'failed', error = 'The server restarted while processing - upload it again.' WHERE state = 'processing'"))
     .catch(() => {});

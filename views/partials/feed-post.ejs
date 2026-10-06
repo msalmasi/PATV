@@ -97,7 +97,7 @@
               <button type="button" role="menuitem" data-act="edit"><%- fx.icon('edit') %>Edit</button>
               <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %>Delete</button>
             <% } %>
-            <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report</button><% } %>
+            <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report post</button><% } %>
             <% ownRooms.forEach((r) => { const q_ = ' data-room="' + r.id + '" data-slug="' + r.slug + '"'; %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%= r.title %></span></div>
               <% if (r.pending) { %>
@@ -119,6 +119,7 @@
               <button type="button" role="menuitem" data-act="admin-hide" data-on="<%= p.hidden ? '0' : '1' %>"><%- fx.icon(p.hidden ? 'show' : 'hide') %><%= p.hidden ? 'Unhide everywhere' : 'Hide everywhere' %></button>
               <button type="button" role="menuitem" data-act="admin-lock" data-on="<%= p.locked ? '0' : '1' %>"><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%= p.locked ? 'Unlock comments' : 'Lock comments' %></button>
               <% if (!p.mine && !p.deleted) { %><button type="button" role="menuitem" class="danger" data-act="admin-delete"><%- fx.icon('trash') %>Delete for everyone</button><% } %>
+              <% if (viewer.class === 'Admin') { %><button type="button" role="menuitem" data-act="details"><%- fx.icon('shield') %>Details (admin)</button><% } %>
             <% } %>
           </div>
         </details>

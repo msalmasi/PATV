@@ -15,7 +15,7 @@
       body: body === undefined ? undefined : JSON.stringify(body)
     }).then(function (r) {
       return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }).then(function (d) {
-        if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status));
+        if (!r.ok || d.ok === false) { var e = new Error(d.error || ('HTTP ' + r.status)); e.code = d.code; throw e; }
         return d;
       });
     });
@@ -105,9 +105,19 @@
       return;
     }
     if (act === 'report' || act === 'creport') {
+      // 1.99cc: the report modal (feed-safety.js); the old prompt() flow only if that script didn't load
+      var tgt = { post: id };
+      if (act === 'creport') { tgt.comment = b.closest('.cm').getAttribute('data-id'); tgt.post = document.querySelector('.fp').getAttribute('data-id'); }
+      if (window.patvSafety) { window.patvSafety.report(tgt); return; }
       var r = askReason(); if (!r) return;
-      if (act === 'creport') { r.comment = b.closest('.cm').getAttribute('data-id'); id = document.querySelector('.fp').getAttribute('data-id'); }
-      api('/api/feed/posts/' + id + '/report', r).then(function (d) { alert(d.already ? 'You already reported this.' : 'Thanks - an admin will take a look.'); }).catch(function (e) { alert(e.message); });
+      if (tgt.comment) r.comment = tgt.comment;
+      api('/api/feed/posts/' + tgt.post + '/report', r).then(function (d) { alert(d.already ? 'You already reported this.' : 'Thanks - an admin will take a look.'); }).catch(function (e) { alert(e.message); });
+      return;
+    }
+    if (act === 'details' || act === 'cdetails') {
+      if (!window.patvSafety) return;
+      if (act === 'cdetails') window.patvSafety.details({ comment: b.closest('.cm').getAttribute('data-id') });
+      else window.patvSafety.details({ post: id });
       return;
     }
     if (act === 'edit') { var art = b.closest('.fp'); art.querySelector('.fp-editf').classList.remove('hide'); return; }
@@ -209,7 +219,16 @@
     if (btn) btn.disabled = true;
     if (act === 'comment') {
       var body = { body: f.elements.body.value, parent: f.getAttribute('data-parent') || null };
-      api('/api/feed/posts/' + f.getAttribute('data-post') + '/comments', body).then(function (d) {
+      var curl = '/api/feed/posts/' + f.getAttribute('data-post') + '/comments';
+      // 1.99cc: not accepted the current Terms yet -> ask once, then send again with acceptTerms
+      api(curl, body).catch(function (e) {
+        if (e.code !== 'terms' || !window.patvSafety) throw e;
+        return window.patvSafety.termsAsk().then(function (yes) {
+          if (!yes) throw new Error('You need to accept the Terms of Service to comment.');
+          body.acceptTerms = true;
+          return api(curl, body);
+        });
+      }).then(function (d) {
         location.hash = 'c-' + d.id; location.reload();
       }).catch(fail);
     } else if (act === 'cedit-save') {

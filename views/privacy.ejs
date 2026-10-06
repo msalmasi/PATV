@@ -1,0 +1,191 @@
+<%# /privacy — Privacy Policy (1.99cc, terms.js). A template written for PATV, NOT legal advice: have a lawyer review it.
+    Every [[PLACEHOLDER]] (class "ph") must be filled in by the site operator. Keep the retention table in step with the code:
+    contentaudit.js (RAW_DAYS 90, HASH_DAYS 365, views 730), welcome.js (network keys 90 d), bridge.js (FEED_KEEP 200),
+    media.js (captures 24 h), feedstore.js (deleted_purge_days 7), inbox.js (KEEP_PER_USER 1000), loginCookie.js (90 d). %>
+<%- include('layout', { title: 'Privacy Policy · Public Access TV', user: user }) %>
+<%- include('partials/legal-css') %>
+<% const PH = (s) => '<span class="ph">[[' + s + ']]</span>'; %>
+<main class="lg" id="privacy">
+  <header class="hero">
+    <div class="eyebrow">PUBLICACCESS.TV</div>
+    <h1>Privacy Policy</h1>
+    <div class="updated">Last updated <%= UPDATED %></div>
+    <p class="lead">What PATV collects, why, who can see it, how long we keep it and what you can do about it. The short version: we collect what we need to run a community site and keep it safe, we don't sell your data, there are no ads or third-party trackers, and the private abuse data on posts is admin-only and deleted on a schedule.</p>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <b>Contents</b>
+    <ol>
+      <li><a href="#who">Who's responsible</a></li>
+      <li><a href="#collect">What we collect</a></li>
+      <li><a href="#rooms">Camfrog rooms on the website</a></li>
+      <li><a href="#safety">Safety data on posts and comments</a></li>
+      <li><a href="#use">How we use it</a></li>
+      <li><a href="#see">Who can see what</a></li>
+      <li><a href="#share">Who we share it with</a></li>
+      <li><a href="#cookies">Cookies and local storage</a></li>
+      <li><a href="#retention">How long we keep things</a></li>
+      <li><a href="#choices">Your choices and rights</a></li>
+      <li><a href="#children">Children</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#transfers">Where data is stored</a></li>
+      <li><a href="#changes">Changes</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ol>
+  </nav>
+
+  <section id="who">
+    <h2>1. Who's responsible</h2>
+    <p>PATV (publicaccess.tv, the Pepe bot and our Discord and Twitch bots) is run by <%- PH('OPERATOR LEGAL NAME') %>, who is responsible for your personal data. Contact: <%- PH('PRIVACY CONTACT EMAIL') %>. This policy goes with our <a href="/terms">Terms of Service</a>.</p>
+  </section>
+
+  <section id="collect">
+    <h2>2. What we collect</h2>
+    <h3>You give us</h3>
+    <ul>
+      <li><b>Account details:</b> username, display name, email address, password (stored only as a one-way hash), profile picture and profile settings.</li>
+      <li><b>Linked identities:</b> your Camfrog name (when you <code>!verify</code>), and your Discord or Twitch account id and display name when you sign in with them. We don't get your Discord or Twitch password.</li>
+      <li><b>Your content:</b> posts, comments, pictures, audio, video, links, votes, follows, reports, messages to Pepe and anything else you submit. Uploaded files are re-encoded and their embedded metadata (camera, GPS location) is removed.</li>
+      <li><b>Activity in PAT features:</b> your PAT balance and ledger, games, bets, markets, wagers, staking, purchases, achievements and cosmetics.</li>
+    </ul>
+    <h3>We collect automatically</h3>
+    <ul>
+      <li><b>Safety data when you post or comment</b> — see <a href="#safety">section 4</a>.</li>
+      <li><b>Anti-abuse keys for the welcome bonus:</b> to stop one person claiming it many times we keep salted, one-way hashes (never the raw values) of the network you use, a random browser id, and your linked identities, plus the days you were active. Network hashes are dropped after 90 days.</li>
+      <li><b>Technical data:</b> like every website, our servers and Cloudflare (which sits in front of the site) process your IP address, browser type and the pages you request in order to deliver them and stop attacks. Short-lived server logs may contain this.</li>
+      <li><b>Camfrog activity:</b> Pepe counts public activity in the rooms he's in (chat, mic time, commands, moderation) per Camfrog name; it powers profile stats, achievements and leaderboards.</li>
+    </ul>
+  </section>
+
+  <section id="rooms">
+    <h2>3. Camfrog rooms on the website</h2>
+    <p>Pepe sits in public Camfrog rooms and mirrors them to the website for members: <b>public room chat</b>, who's in the room, who's on the mic, and <b>what's said on the mic, transcribed automatically</b> by speech-recognition software. Transcripts can be wrong. Private messages are never shown. If you type <code>!incognito</code> or <code>!bridge hide</code> in the room, you appear as "someone". Room owners can switch the mirror, the audio and the transcripts off for their room. Pepe's snaps and clips of a room (<code>!snap</code>, <code>!clip</code>) are shown as stories to signed-in members and expire after 24 hours by default.</p>
+    <p>Things you say to Pepe, in rooms or on the site, are processed by automated systems — including AI language and speech models that we run ourselves or that service providers run for us — to produce his replies.</p>
+  </section>
+
+  <section id="safety">
+    <h2>4. Safety data on posts and comments</h2>
+    <p>To fight spam, ban evasion and abuse, every time you <b>create or edit a post or comment</b> we store a separate, private record with:</p>
+    <ul>
+      <li>your <b>IP address</b> (as passed on by Cloudflare) and a salted one-way <b>hash of your network</b>;</li>
+      <li>your browser's <b>user agent</b> and its <b>Accept-Language</b> setting;</li>
+      <li>a <b>country</b>, taken from Cloudflare's country header — we don't look IPs up anywhere else;</li>
+      <li>your <b>account's age</b> at the time and <b>whether Camfrog, Discord or Twitch is linked</b>;</li>
+      <li>a salted one-way <b>hash of your browser id</b> (the <code>patv_dev</code> cookie), which tells us when several accounts post from the same browser.</li>
+    </ul>
+    <p><b>Who sees it:</b> only PATV site administrators, when reviewing a report or investigating abuse. They can see other accounts that posted from the same network or browser in the last 90 days, and your recent posting and report history. <b>Every time an admin opens this data it is logged.</b> Room owners never see it — they only see an account's age and whether it's linked. It's never shown on public pages or APIs.</p>
+    <p><b>How long:</b> the raw IP address and user agent are deleted automatically after <b>90 days</b>. The rest of the record (hashes, language, country, account age, linked status) is deleted after <b>365 days</b>, so repeat abuse can still be matched after the IP itself is gone. The admin access log is kept for 2 years.</p>
+    <p><b>Why (legal basis, where it applies):</b> our legitimate interest in keeping the service and its users safe, and complying with the law (for example reporting child sexual abuse material).</p>
+  </section>
+
+  <section id="use">
+    <h2>5. How we use it</h2>
+    <ul>
+      <li>To run the service: your account, sign-in, posts, rooms, PAT features, notifications and your inbox.</li>
+      <li>To keep it safe and fair: moderation, reports, rate limits, detecting spam, ban evasion, multi-accounting and cheating.</li>
+      <li>To communicate with you: account emails (verification, password resets) and inbox notices. No marketing email.</li>
+      <li>To fix bugs and improve the service, using aggregate or minimal data.</li>
+      <li>To comply with the law and respond to valid legal requests.</li>
+    </ul>
+    <p>We don't sell or rent personal data, we don't use it for advertising, and we don't run third-party analytics or ad trackers.</p>
+  </section>
+
+  <section id="see">
+    <h2>6. Who can see what</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Information</th><th>Who sees it</th></tr></thead>
+      <tbody>
+        <tr><td>Username, display name, avatar, level, badges, public profile panels, posts and comments (not NSFW)</td><td>Anyone, including visitors who aren't signed in</td></tr>
+        <tr><td>NSFW posts, mirrored room chat and mic transcripts, stories</td><td>Signed-in members</td></tr>
+        <tr><td>Profile panels you've made private, your PAT history, your inbox, your email address</td><td>You (and site admins / staff where needed to run the service)</td></tr>
+        <tr><td>Reports you make</td><td>Site admins; room owners for reports on posts in their room (not child-safety, non-consensual imagery or copyright reports). The person you report isn't told who reported them.</td></tr>
+        <tr><td>Safety data on posts and comments (IP, user agent, language, country, hashes)</td><td>Site administrators only, logged</td></tr>
+        <tr><td>An author's account age and linked status</td><td>Site admins, and the owner of a room the post is in</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="share">
+    <h2>7. Who we share it with</h2>
+    <ul>
+      <li><b>Service providers</b> who help us run PATV, only for that purpose: our hosting provider, Cloudflare (network and security), an email delivery provider, and providers of AI models where used. <%- PH('LIST OF SERVICE PROVIDERS, if required in your jurisdiction') %></li>
+      <li><b>Camfrog, Discord and Twitch</b>, when you link them or sign in with them, under their own privacy policies. Things Pepe says in a room are visible to that room.</li>
+      <li><b>Embedded players:</b> YouTube (privacy-enhanced mode) and Twitch players only load when you click play, and then those companies receive your IP address and their own cookies apply. The site's fonts are loaded from Google Fonts.</li>
+      <li><b>Authorities:</b> when the law requires it, to protect someone's safety, or to report child sexual abuse material to <%- PH('CSAM REPORTING BODY, e.g. NCMEC / national hotline') %> — in which case we may share the content and the safety data we hold about it.</li>
+      <li><b>If PATV changes hands</b>, data may transfer to the new operator under this policy.</li>
+    </ul>
+  </section>
+
+  <section id="cookies">
+    <h2>8. Cookies and local storage</h2>
+    <p>We only use what the site needs. No advertising or tracking cookies.</p>
+    <div class="tw"><table>
+      <thead><tr><th>Name</th><th>What it's for</th><th>How long</th></tr></thead>
+      <tbody>
+        <tr><td><code>jwt</code> (cookie)</td><td>Keeps you signed in</td><td>90 days, renewed while you use the site</td></tr>
+        <tr><td><code>connect.sid</code> (cookie)</td><td>One-time messages between pages (for example "Welcome!" after sign-up)</td><td>Until you close the browser</td></tr>
+        <tr><td><code>patv_dev</code> (cookie)</td><td>A random browser id used only for anti-abuse (welcome-bonus fairness and the hashed browser id in post safety data)</td><td>2 years</td></tr>
+        <tr><td>Local storage on your device</td><td>Your preferences: showing NSFW without blur, unsent post drafts, muted stories, the DJ booth open or closed, your camera and microphone choice for streaming, the last rankings tab, cosmetic display options, and whether you've seen the intro. These never leave your browser.</td><td>Until you clear them</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="retention">
+    <h2>9. How long we keep things</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Data</th><th>Kept for</th></tr></thead>
+      <tbody>
+        <tr><td>Raw IP address and user agent on posts and comments</td><td>90 days, then deleted automatically (daily)</td></tr>
+        <tr><td>Rest of the post / comment safety record (hashes, language, country, account age, linked status)</td><td>365 days</td></tr>
+        <tr><td>Log of admin views of safety data</td><td>2 years</td></tr>
+        <tr><td>Welcome-bonus network hashes</td><td>90 days</td></tr>
+        <tr><td>Mirrored room chat and transcripts on the website</td><td>The latest 200 items per room</td></tr>
+        <tr><td>Pepe's snaps and clips (stories)</td><td>24 hours by default</td></tr>
+        <tr><td>Files of deleted posts</td><td>Purged 7 days after deletion; the post's record may be kept for moderation and legal reasons</td></tr>
+        <tr><td>Reports and moderation records</td><td>As long as needed to handle repeat abuse and legal obligations</td></tr>
+        <tr><td>Inbox notices</td><td>Your latest 1,000</td></tr>
+        <tr><td>Your account, content and PAT ledger</td><td>Until you delete the content or ask us to close the account; inactive accounts may be archived after notice</td></tr>
+        <tr><td>Backups</td><td><%- PH('BACKUP RETENTION PERIOD') %></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="choices">
+    <h2>10. Your choices and rights</h2>
+    <ul>
+      <li>Edit or delete your posts and comments, and choose which profile panels are public, at any time.</li>
+      <li>In Camfrog rooms, <code>!incognito</code> / <code>!bridge hide</code> keep your name off the website.</li>
+      <li>Turn inbox notices on or off in your inbox settings.</li>
+      <li>Clear cookies and local storage in your browser (you'll be signed out).</li>
+      <li>Depending on where you live, you may have the right to access, correct, delete or export your personal data, to object to or restrict some processing, and to complain to your data-protection authority. Email <%- PH('PRIVACY CONTACT EMAIL') %> from the address on your account and we'll respond within the time the law requires. We may need to keep some data (for example safety records about content that was reported) where the law allows or requires.</li>
+    </ul>
+  </section>
+
+  <section id="children">
+    <h2>11. Children</h2>
+    <p>PATV is for adults (18+). We don't knowingly collect data from anyone under 18; if we learn we have, we close the account and delete the data, except where we must keep it to report abuse.</p>
+  </section>
+
+  <section id="security">
+    <h2>12. Security</h2>
+    <p>Passwords are hashed, the site is served over HTTPS, sign-in cookies can't be read by page scripts, the most sensitive data is limited to administrators with every view logged, and identity keys are stored as salted hashes. No system is perfectly secure; if a breach affects you we'll tell you as the law requires.</p>
+  </section>
+
+  <section id="transfers">
+    <h2>13. Where data is stored</h2>
+    <p>Our servers are in <%- PH('HOSTING COUNTRY / REGION') %>, and service providers such as Cloudflare may process data in other countries. Where the law requires, we use appropriate safeguards for these transfers.</p>
+  </section>
+
+  <section id="changes">
+    <h2>14. Changes</h2>
+    <p>We'll update this policy when what we do changes. The "Last updated" date at the top shows the latest version; for significant changes we'll also give notice on the site.</p>
+  </section>
+
+  <section id="contact">
+    <h2>15. Contact</h2>
+    <p>Privacy questions and requests: <%- PH('PRIVACY CONTACT EMAIL') %>. Everything else: <%- PH('CONTACT EMAIL') %>.</p>
+    <p class="note">Version <%= VERSION %>. <a href="/terms">Terms of Service</a> · <a href="/about">About PATV</a></p>
+  </section>
+</main>
+</body>
+</html>

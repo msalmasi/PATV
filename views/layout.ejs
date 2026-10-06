@@ -156,6 +156,32 @@
                 .nav-burger .nav-pop { position: fixed; top: 58px; left: 10px; right: 10px; min-width: 0; max-height: calc(100vh - 80px); overflow-y: auto; }
             }
         </style>
+        <style>
+            /* 1.99cc: the site footer (Terms / Privacy on every page). Built here, moved to the end of <body> below. */
+            .site-foot { margin: 40px 0 0; padding: 18px 16px 26px; border-top: 1px solid #222; color: #777; font: 13px/1.6 Ubuntu, sans-serif; text-align: center; }
+            .site-foot nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 4px; }
+            .site-foot a { color: #9a9a9a; text-decoration: none; }
+            .site-foot a:hover, .site-foot a:focus-visible { color: #fff; text-decoration: underline; }
+        </style>
+        <template id="siteFootTpl">
+            <footer class="site-foot" role="contentinfo">
+                <nav aria-label="Site policies">
+                    <a href="/terms">Terms of Service</a>
+                    <a href="/privacy">Privacy Policy</a>
+                    <a href="/terms#reporting">Report abuse &amp; copyright</a>
+                    <a href="/about">About PATV</a>
+                    <a href="/economy">How PAT works</a>
+                </nav>
+                <div>publicaccess.tv · PAT is a points system with no cash value · 18+</div>
+            </footer>
+        </template>
+        <script>
+            // Put the footer after the page's own content (pages include this layout first).
+            document.addEventListener('DOMContentLoaded', function () {
+                var t = document.getElementById('siteFootTpl');
+                if (t && t.content && !document.querySelector('.site-foot')) document.body.appendChild(t.content.cloneNode(true));
+            });
+        </script>
         <script>
             // Highlight the page you're on; close an open menu when clicking elsewhere.
             (function () {

@@ -28,6 +28,7 @@ const rooms = require(path.join(repo, "rooms"));
 const store = require(path.join(repo, "feedstore"));
 const fmedia = require(path.join(repo, "feedmedia"));
 const web = require(path.join(repo, "feedweb"));
+require(path.join(repo, "terms"))._setRequired(false);   // 1.99cc: the Terms gate has its own tests (tos-reports.test.js)
 const follows = require(path.join(repo, "follows"));
 const stories = require(path.join(repo, "stories"));
 const layout = require(path.join(repo, "profilelayout"));

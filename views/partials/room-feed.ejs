@@ -5,7 +5,7 @@
   const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
   const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=2">
+<link rel="stylesheet" href="/public/css/feed.css?v=3">
 <section class="card rf" id="feed" aria-labelledby="rfH">
   <h2 id="rfH"><span>📝 <%= room.name %> feed</span><small><a href="/feed?room=<%= encodeURIComponent(room.slug) %>">open in the feed ›</a></small></h2>
   <% if (F.follow) { %>

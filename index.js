@@ -203,6 +203,7 @@ app.get("/healthz", (req, res) => {
 
 // Homepage (home.js): live stats, the live Camfrog room, games, top 5, personal strip
 require("./home").register(app, { addUser, xpForNextLevel });
+require("./terms").register(app, { addUser });   // 1.99cc: /terms, /privacy, POST /api/terms/accept
 
 // Admin Panel Endpoint
 app.get("/admin/panel", addUser, (req, res) => {

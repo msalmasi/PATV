@@ -37,5 +37,27 @@
       var days = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting on the feed for how many days? (0 = forever)', '7');
       if (days !== null) api('/api/feed/ban', { user: b.getAttribute('data-user'), days: days, reason: 'reported post' }).then(done, oops);
     } else if (act === 'unban') api('/api/feed/unban', { userId: b.getAttribute('data-uid'), room: b.getAttribute('data-room') || '' }).then(done, oops);
+    // 1.99cc: outcomes on a report target (post / comment) or a reported account; "tell" = inbox notice to the reporters
+    else if (/^[ru]-/.test(act)) {
+      var tgt = b.closest('.fa-tgt');
+      var tell = tgt.querySelector('input[name=tell]');
+      var what = act.slice(2), body = { action: what, notify: !tell || tell.checked };
+      if (what === 'remove' || what === 'ban') {
+        var r = window.prompt((what === 'ban' ? 'Remove it and ban ' + tgt.getAttribute('data-user') + ' from the feed.\n' : 'Remove it.\n') + 'Reason (the author is told):', '');
+        if (r === null) return;
+        body.reason = r;
+      }
+      if (what === 'ban') {
+        var d = window.prompt('Ban for how many days? (0 = forever)', '7');
+        if (d === null) return;
+        body.days = parseInt(d, 10) || 0;
+      }
+      if (what === 'false' && !window.confirm('Dismiss as made in bad faith? It counts against the reporter(s); enough of these pause their reporting.')) return;
+      b.disabled = true;
+      var url;
+      if (act[0] === 'r') { body.post = tgt.getAttribute('data-post'); body.comment = tgt.getAttribute('data-comment') || null; url = '/api/feed/admin/report-action'; }
+      else { body.userId = tgt.getAttribute('data-uid'); url = '/api/feed/admin/user-report-action'; }
+      api(url, body).then(done, function (e) { b.disabled = false; oops(e); });
+    }
   });
 })();

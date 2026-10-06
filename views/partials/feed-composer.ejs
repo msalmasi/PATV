@@ -40,6 +40,11 @@
         </div>
       <% } %>
     </fieldset>
+    <% if (cp.terms && cp.terms.needed) { %>
+      <label class="fc-terms ck"><input type="checkbox" name="acceptTerms" required> I've read and agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> (I'm 18+). You'll only be asked once.</label>
+    <% } else { %>
+      <p class="fc-terms">By posting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>.</p>
+    <% } %>
     <div class="fc-send">
       <span class="fc-cost mut" id="fcCost"><%= cp.paid ? '' : 'Posting is free.' %></span>
       <span class="fc-err" id="fcErr" role="alert"></span>

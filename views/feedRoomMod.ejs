@@ -1,5 +1,5 @@
 <%- include('layout', { title: room.title + ' — feed moderation', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=2">
+<link rel="stylesheet" href="/public/css/feed.css?v=3">
 <%#
   A room owner's feed tools (1.99bx): approval queue, reports, settings, approved posters, bans, audit log.
   Locals: viewer, room, fx, embeds, host, reports (feedstore.roomReports), pending, settings, members, bans, audit, WHO
@@ -43,6 +43,13 @@
             <span class="tag warn">Post</span> <b><%= p.title || (p.body || '').slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in the room' : '' %></span>
           <% } %>
           <a href="/feed/p/<%= p.id %><%= g.commentId ? '#c-' + g.commentId : '' %>">Open ›</a>
+          <% const ai_ = g.authorInfo; if (ai_) { const d_ = ai_.ageDays; %>
+            <%# 1.99cc: owners see the author's account age + linked identities only (no IPs - those are site-admin-only) %>
+            <span class="rm-who" title="The author's account - age and linked identities">
+              <span>account <%= d_ == null ? 'age unknown' : d_ < 1 ? 'under a day old' : d_ < 60 ? d_ + ' day' + (d_ === 1 ? '' : 's') + ' old' : Math.round(d_ / 30) + ' months old' %></span>
+              <% ['camfrog', 'discord', 'twitch'].forEach((k) => { %><span class="<%= ai_.linked[k] ? 'y' : '' %>"><%= ai_.linked[k] ? '✓' : '✗' %> <%= k %></span><% }) %>
+            </span>
+          <% } %>
         </div>
         <div class="rm-reasons"><b><%= g.count %> report<%= g.count === 1 ? '' : 's' %>:</b> <%= Object.entries(g.reasons).map(([k, n]) => k + (n > 1 ? ' ×' + n : '')).join(', ') %>
           <% if (g.notes.length) { %><ul><% g.notes.forEach((n) => { %><li>"<%= n %>"</li><% }) %></ul><% } %></div>

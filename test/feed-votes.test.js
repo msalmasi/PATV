@@ -22,6 +22,7 @@ const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const rooms = require(path.join(repo, "rooms"));
 const store = require(path.join(repo, "feedstore"));
 const web = require(path.join(repo, "feedweb"));
+require(path.join(repo, "terms"))._setRequired(false);   // 1.99cc: the Terms gate has its own tests (tos-reports.test.js)
 
 const ROOM_A = "PepeFrog.Room", ROOM_B = "plant_based_chatting", ROOM_C = "Side.Room";
 let base, server, U = {}, OLD = null;

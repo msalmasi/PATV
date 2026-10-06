@@ -27,6 +27,7 @@ const store = require(path.join(repo, "feedstore"));
 const media = require(path.join(repo, "feedmedia"));
 const lp = require(path.join(repo, "linkpreview"));
 const web = require(path.join(repo, "feedweb"));
+require(path.join(repo, "terms"))._setRequired(false);   // 1.99cc: the Terms gate has its own tests (tos-reports.test.js)
 
 const ROOM_A = "PepeFrog.Room", ROOM_B = "plant_based_chatting";
 let base, server, U = {};

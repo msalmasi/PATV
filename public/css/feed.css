@@ -367,3 +367,20 @@ textarea { resize: vertical; }
 .rf > *, .fp-audio { min-width: 0; }
 .fp-audio audio { min-width: 0; width: 100%; }
 .fd, .fd-col { min-width: 0; }   /* the layout body is a grid: let the page shrink to the phone */
+
+/* 1.99cc: Terms line on the composer, report targets + urgent reports on /feed/admin, owner author info */
+.fc-terms { font-size: 12.5px; color: #9a9a9a; margin: 2px 0 0; line-height: 1.45; }
+.fc-terms a { color: #81c784; }
+label.fc-terms { display: flex; gap: 8px; align-items: flex-start; color: #ddd; background: #1c2a1e; border: 1px solid #2f5a32; border-radius: 8px; padding: 8px 10px; }
+label.fc-terms input { margin-top: 2px; accent-color: #4caf50; }
+.fa-rep.urgent { border-left: 3px solid #e53935; padding-left: 10px; background: linear-gradient(90deg, rgba(229,57,53,.08), transparent 40%); }
+.fa-rep-h { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+.fa-tgt { border-top: 1px dashed #26262c; margin-top: 8px; padding-top: 8px; }
+.fa-rep > .fa-tgt:first-of-type { border-top: 0; margin-top: 4px; padding-top: 0; }
+.fa-tgt-h { font-size: 13.5px; color: #ccc; overflow-wrap: anywhere; }
+.fa-tell { font-size: 12.5px; color: #aaa; gap: 6px; align-items: center; margin-left: 4px; }
+.fa-scroll { overflow-x: auto; }
+.fa-scroll .fa-t { min-width: 520px; }
+.rm-who { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; font-size: 11.5px; }
+.rm-who span { border: 1px solid #33333b; border-radius: 999px; padding: 0 7px; color: #bbb; }
+.rm-who span.y { border-color: #2f5a32; color: #b8f0bf; }

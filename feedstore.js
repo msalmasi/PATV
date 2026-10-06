@@ -53,6 +53,8 @@ const DEFAULTS = Object.freeze({
   hot_decay_secs: 45000,              // Hot: seconds of age that cost one order of magnitude of score (Reddit: 45000 = 12.5 h)
   downvote_min_level: 2,              // a downvote counts from a linked Camfrog name OR at least this level (anti-brigade)
   votes_per_min: 30, votes_per_hour: 300,   // vote changes per account (posts + comments together)
+  // reports (1.99cc): per reporter, posts + comments + users together; bad-faith reports pause reporting
+  reports_per_hour: 20, reports_per_day: 60, new_account_reports_per_hour: 5, false_reports_pause: 3,
 });
 const INT_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "number");
 const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1, 500], max_audio_secs: [10, 3600], max_video_secs: [5, 1800],
@@ -61,7 +63,8 @@ const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1
   uploads_per_hour: [1, 1000], upload_mb_per_day: [10, 100000], report_hide_threshold: [1, 100], deleted_purge_days: [0, 365],
   price_post: [0, 1e9], price_link: [0, 1e9], price_image: [0, 1e9], price_audio: [0, 1e9], price_video: [0, 1e9], mention_gap_min: [1, 1440],
   post_gap_secs: [0, 3600], comment_gap_secs: [0, 600],
-  hot_decay_secs: [3600, 1000000], downvote_min_level: [0, 100], votes_per_min: [1, 1000], votes_per_hour: [1, 20000] };
+  hot_decay_secs: [3600, 1000000], downvote_min_level: [0, 100], votes_per_min: [1, 1000], votes_per_hour: [1, 20000],
+  reports_per_hour: [1, 1000], reports_per_day: [1, 10000], new_account_reports_per_hour: [0, 1000], false_reports_pause: [1, 100] };
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
@@ -116,6 +119,7 @@ function init() {
       await runQuery("CREATE TABLE IF NOT EXISTS feed_kv (key TEXT PRIMARY KEY, value TEXT)");
       await loadConfig();
       await migrateVotes();
+      await migrateSafety();
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -172,6 +176,18 @@ async function migrateVotes() {
   } else if ((await kvGet("hot_decay")) !== String(CONFIG.hot_decay_secs)) {
     await rehotAll();
   }
+}
+
+// ── 1.99cc: reports v2 (user reports, comments hidden by an urgent report, outcome notices) ──
+async function migrateSafety() {
+  await addCol("feed_comments", "hidden_at", "INTEGER");
+  await addCol("feed_reports", "notified_at", "INTEGER");
+  await runQuery(`CREATE TABLE IF NOT EXISTS user_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, target_id TEXT NOT NULL, reporter_id TEXT NOT NULL, reason TEXT, note TEXT, created INTEGER NOT NULL,
+    resolved_at INTEGER, resolved_by TEXT, action TEXT, notified_at INTEGER)`);
+  await runQuery("CREATE INDEX IF NOT EXISTS user_reports_open ON user_reports (resolved_at, created)");
+  await runQuery("CREATE INDEX IF NOT EXISTS user_reports_reporter ON user_reports (reporter_id, created)");
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_reports_reporter ON feed_reports (reporter_id, created)");
 }
 
 // Reddit's ranking maths (r2/lib/db/_sorts.pyx), seconds since its epoch
@@ -819,7 +835,7 @@ async function vote(user, id, dir, on) {
 /** Vote on a comment (same rules). -> {vote, score, ups, downs, counted} */
 async function voteComment(user, cid, dir) {
   const c = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [String(cid || "")]))[0];
-  if (!c || c.deleted_at) throw new Refuse(404, "No such comment.");
+  if (!c || c.deleted_at || c.hidden_at) throw new Refuse(404, "No such comment.");
   const p = await getRow(c.post_id);
   if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
   const u = await voter(user);
@@ -848,10 +864,13 @@ async function comments(postId, viewer, sort = "best") {
   const mine = viewer && viewer.userId
     ? new Map((await getQuery("SELECT comment_id, value FROM feed_comment_votes WHERE post_id = ? AND user_id = ?", [postId, viewer.userId])).map((v) => [v.comment_id, v.value > 0 ? 1 : -1]))
     : new Map();
-  const all = rows.map((c) => ({ id: c.id, parent: c.parent_id, body: c.deleted_at ? "" : c.body, deleted: !!c.deleted_at, created: c.created, edited: c.edited,
-    author: c.deleted_at ? null : A.get(c.author_id) || { username: "[gone]", display: "[deleted account]" },
+  // 1.99cc: a comment hidden by an urgent report is gone for everyone but staff (it shows to them, tagged)
+  const staff = isStaff(viewer);
+  const gone = (c) => !!c.deleted_at || (!!c.hidden_at && !staff);
+  const all = rows.map((c) => ({ id: c.id, parent: c.parent_id, body: gone(c) ? "" : c.body, deleted: gone(c), hidden: !!c.hidden_at && staff, created: c.created, edited: c.edited,
+    author: gone(c) ? null : A.get(c.author_id) || { username: "[gone]", display: "[deleted account]" },
     ups: c.ups || 0, downs: c.downs || 0, score: c.score || 0, myVote: mine.get(c.id) || 0,
-    mine: !!(viewer && viewer.userId === c.author_id && !c.deleted_at), replies: [] }));
+    mine: !!(viewer && viewer.userId === c.author_id && !gone(c)), replies: [] }));
   const top = [], byId = new Map(all.map((c) => [c.id, c]));
   for (const c of all) {
     if (c.parent && byId.has(c.parent)) byId.get(c.parent).replies.push(c);
@@ -883,7 +902,7 @@ async function comment(user, postId, { body, parent } = {}) {
   let par = null;
   if (parent) {
     par = (await getQuery("SELECT * FROM feed_comments WHERE id = ? AND post_id = ?", [String(parent), postId]))[0];
-    if (!par || par.deleted_at) throw new Refuse(404, "That comment is gone.");
+    if (!par || par.deleted_at || par.hidden_at) throw new Refuse(404, "That comment is gone.");
     if (par.parent_id) par = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [par.parent_id]))[0] || par;   // replies stay one level deep
   }
   const id = newId(10);
@@ -913,7 +932,7 @@ async function recount(postId) {
 }
 async function editComment(user, id, body) {
   const c = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [String(id)]))[0];
-  if (!c || c.deleted_at) throw new Refuse(404, "No such comment.");
+  if (!c || c.deleted_at || c.hidden_at) throw new Refuse(404, "No such comment.");
   if (!user || user.userId !== c.author_id) throw new Refuse(403, "Only the author can edit a comment.");
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "A comment can't be empty.");
@@ -948,21 +967,103 @@ async function removeComment(user, id, reason) {
   return true;
 }
 
-// ── reports ──
-const REASONS = { spam: "Spam", abuse: "Harassment or hate", nsfw: "Unmarked NSFW", illegal: "Illegal content", personal: "Personal info / doxxing", other: "Something else" };
+// ── reports (1.99cc: reasons v2, the report modal, rate limits, the urgent path, user reports, outcomes) ──
+// OFFERED is the modal's menu, in order. ADMIN_ONLY reasons never reach a room owner's queue (legal /
+// safety calls are the site's). URGENT: ONE report hides the post / comment at once (unless the reporter
+// is paused or banned - then it still pings) and every admin gets an urgent inbox notice, every time.
+const REASONS = {
+  spam: "Spam", harassment: "Harassment or bullying", hate: "Hate", csam: "Sexual content involving a minor",
+  ncii: "Non-consensual intimate imagery", violence: "Violence or threats", impersonation: "Impersonation",
+  copyright: "Copyright infringement", personal: "Personal info / doxxing", nsfw: "Unmarked NSFW", other: "Something else",
+  abuse: "Harassment or hate", illegal: "Illegal content",          // 1.99bw keys: still accepted, labelled
+};
+const HINTS = {
+  spam: "Ads, scams, repeated junk or fake engagement.",
+  harassment: "Targeting, insulting or ganging up on someone.",
+  hate: "Attacks on people for who they are (race, religion, gender, sexuality, disability...).",
+  csam: "Any sexual content involving someone under 18. It's hidden at once and goes straight to the site admins.",
+  ncii: "Intimate pictures or video of someone shared without their consent. Admins only.",
+  violence: "Threats, incitement or glorifying violence against someone.",
+  impersonation: "Pretending to be another person, a room or PATV staff.",
+  copyright: "Your work posted without permission. Admins only - see the Terms for a full notice.",
+  personal: "Someone's address, phone, real name, workplace or other private info.",
+  nsfw: "Adult content that isn't marked NSFW.",
+  other: "Something else that breaks the Terms - tell us in the note.",
+};
+const OFFERED = Object.freeze(["spam", "harassment", "hate", "csam", "ncii", "violence", "impersonation", "copyright", "personal", "nsfw", "other"]);
+const USER_OFFERED = Object.freeze(["spam", "harassment", "hate", "csam", "violence", "impersonation", "personal", "other"]);
+const ADMIN_ONLY = Object.freeze(["csam", "ncii", "copyright", "illegal"]);
+const URGENT = Object.freeze(["csam"]);
+/** The modal's menu: [{key, label, hint, adminOnly, urgent}] (posts + comments, or users). */
+const reportMenu = (forUser = false) => (forUser ? USER_OFFERED : OFFERED).map((k) => ({ key: k, label: REASONS[k], hint: HINTS[k] || "",
+  adminOnly: ADMIN_ONLY.includes(k), urgent: URGENT.includes(k) }));
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+/**
+ * Who may report, how often. -> {u, trusted}. trusted = false: the reporter is paused (false_reports_pause
+ * bad-faith reports in 30 days) or feed-banned - only an urgent report still goes through, and it doesn't hide.
+ */
+async function reportGate(user, reason) {
+  if (!user || !user.userId) throw new Refuse(401, "Sign in to report.");
+  const u = await account(user.userId);
+  if (!u) throw new Refuse(401, "Sign in to report.");
+  if (u.archived_at) throw new Refuse(403, "This account is archived.");
+  const g = burst("report|" + u.userId, 3000);
+  if (g) throw new Refuse(429, `Slow down - try again in ${g}s.`);
+  if (isStaff(u)) return { u, trusted: true };
+  const t = NOW(), C = CONFIG;
+  const urgent = URGENT.includes(reason);
+  const cnt = async (since, extra = "") => (await getQuery(`SELECT (SELECT COUNT(*) FROM feed_reports WHERE reporter_id = ?1 AND created > ?2 ${extra})
+                                                           + (SELECT COUNT(*) FROM user_reports WHERE reporter_id = ?1 AND created > ?2 ${extra}) AS n`, [u.userId, since]))[0].n;
+  const paused = (await cnt(t - 30 * 86400e3, "AND action = 'false'")) >= C.false_reports_pause;
+  const banned = !!(await getQuery("SELECT 1 FROM feed_bans WHERE user_id = ? AND room_id = '' AND (until IS NULL OR until > ?)", [u.userId, t]))[0];
+  if ((paused || banned) && !urgent) {
+    throw new Refuse(403, paused ? "Your reports are paused for a while - several recent ones were found to be made in bad faith." : "You can't report on the feed right now.");
+  }
+  const perHour = Math.max(urgent ? 1 : 0, isNewAccount(u) ? C.new_account_reports_per_hour : C.reports_per_hour);
+  if ((await cnt(t - 3600e3)) >= perHour) throw new Refuse(429, "You've sent a lot of reports this hour - try again later.");
+  if ((await cnt(t - 86400e3)) >= C.reports_per_day) throw new Refuse(429, "You've hit today's report limit.");
+  return { u, trusted: !(paused || banned) };
+}
+
+async function admins() { return getQuery("SELECT userId FROM users WHERE class = 'Admin'"); }
+/** The urgent path: an inbox notice to EVERY admin for EVERY such report (ref = the report id). */
+async function urgentNotice(what, reportId, hidden) {
+  for (const a of await admins()) {
+    await notify(a.userId, { kind: "admin", title: `URGENT: ${what} reported as sexual content involving a minor`,
+                            body: `${hidden ? "It's hidden from everyone but admins until you review it." : "The reporter's reports are paused, so it was NOT hidden - review it now."} Review it on the feed admin page. Don't download or share it; follow the CSAM procedure.`,
+                            link: "/feed/admin#urgent", ref: "feed-urgent:" + reportId });
+  }
+}
+
+/** Report a post or a comment (1.99bw API; reasons v2). -> {ok, already?, urgent?} */
 async function report(user, { post, comment: cid, reason, note } = {}) {
   if (!user || !user.userId) throw new Refuse(401, "Sign in to report.");
   const p = await getRow(post);
   if (!p || p.deleted_at) throw new Refuse(404, "No such post.");
-  if (cid && !(await getQuery("SELECT 1 FROM feed_comments WHERE id = ? AND post_id = ?", [String(cid), p.id])).length) throw new Refuse(404, "No such comment.");
-  const why = Object.prototype.hasOwnProperty.call(REASONS, reason) ? reason : "other";
-  const g = burst("report|" + user.userId, 3000);
-  if (g) throw new Refuse(429, `Slow down - try again in ${g}s.`);
+  let c = null;
+  if (cid) {
+    c = (await getQuery("SELECT id, author_id, deleted_at, hidden_at FROM feed_comments WHERE id = ? AND post_id = ?", [String(cid), p.id]))[0];
+    if (!c || c.deleted_at) throw new Refuse(404, "No such comment.");
+  }
+  if (user.userId === (c ? c.author_id : p.author_id)) throw new Refuse(400, `You can't report your own ${c ? "comment" : "post"}.`);
+  const why = has(REASONS, reason) ? reason : "other";
+  const { trusted } = await reportGate(user, why);
   const r = await runQuery("INSERT OR IGNORE INTO feed_reports (post_id, comment_id, reporter_id, reason, note, created) VALUES (?, ?, ?, ?, ?, ?)",
-                           [p.id, cid ? String(cid) : null, user.userId, why, cleanLine(note, 300) || null, NOW()]);
+                           [p.id, c ? c.id : null, user.userId, why, cleanLine(note, 300) || null, NOW()]);
   if (!r.changes) return { ok: true, already: true };
+  if (URGENT.includes(why)) {
+    if (trusted) {
+      if (c) await runQuery("UPDATE feed_comments SET hidden_at = ? WHERE id = ? AND hidden_at IS NULL", [NOW(), c.id]);
+      else await runQuery("UPDATE feed_posts SET hidden_at = ? WHERE id = ? AND hidden_at IS NULL", [NOW(), p.id]);
+      await runQuery("DELETE FROM feed_mentions WHERE post_id = ? AND sent_at IS NULL", [p.id]);
+    }
+    console.error(`[feed] URGENT report #${r.id || "?"} (${why}) on ${c ? "comment " + c.id + " of " : ""}post ${p.id}${trusted ? " - hidden pending review" : " - reporter paused, not hidden"}`);
+    await urgentNotice(c ? "A comment" : "A post", r.id || `${p.id}:${c ? c.id : ""}:${user.userId}`, trusted);
+    return { ok: true, urgent: true };
+  }
   // enough distinct, established reporters -> hidden until an admin looks
-  if (!cid && !p.hidden_at) {
+  if (!c && !p.hidden_at) {
     const reps = await getQuery("SELECT reporter_id FROM feed_reports WHERE post_id = ? AND comment_id IS NULL AND resolved_at IS NULL", [p.id]);
     let n = 0;
     for (const x of reps) if (!isNewAccount(await account(x.reporter_id))) n++;
@@ -974,12 +1075,45 @@ async function report(user, { post, comment: cid, reason, note } = {}) {
   // tell the admins once per post
   const open = (await getQuery("SELECT COUNT(*) AS n FROM feed_reports WHERE post_id = ? AND resolved_at IS NULL", [p.id]))[0].n;
   if (open === 1) {
-    for (const a of await getQuery("SELECT userId FROM users WHERE class = 'Admin'")) {
-      await notify(a.userId, { kind: "admin", title: "A feed post was reported", body: `${REASONS[why]}: "${(p.title || p.body || "").slice(0, 80)}"`, link: "/feed/admin", ref: "feed-rep:" + p.id + ":" + p.created });
+    for (const a of await admins()) {
+      await notify(a.userId, { kind: "admin", title: `A feed ${c ? "comment" : "post"} was reported`, body: `${REASONS[why]}: "${(p.title || p.body || "").slice(0, 80)}"`, link: "/feed/admin", ref: "feed-rep:" + p.id + ":" + p.created });
     }
   }
   return { ok: true };
 }
+
+/** Report an account (profile "Report user"). -> {ok, already?, urgent?} */
+async function reportUser(user, { username, reason, note } = {}) {
+  if (!user || !user.userId) throw new Refuse(401, "Sign in to report.");
+  await init();
+  const target = (await getQuery("SELECT userId, username FROM users WHERE LOWER(username) = LOWER(?) LIMIT 2", [String(username || "").trim().slice(0, 64)]));
+  if (target.length !== 1) throw new Refuse(404, "No such user.");
+  const T = target[0];
+  if (T.userId === user.userId) throw new Refuse(400, "You can't report yourself.");
+  const why = has(REASONS, reason) ? reason : "other";
+  await reportGate(user, why);
+  const dup = (await getQuery("SELECT id FROM user_reports WHERE target_id = ? AND reporter_id = ? AND resolved_at IS NULL", [T.userId, user.userId]))[0];
+  if (dup) return { ok: true, already: true };
+  const r = await runQuery("INSERT INTO user_reports (target_id, reporter_id, reason, note, created) VALUES (?, ?, ?, ?, ?)",
+                           [T.userId, user.userId, why, cleanLine(note, 300) || null, NOW()]);
+  if (URGENT.includes(why)) {
+    console.error(`[feed] URGENT user report #${r.id} (${why})`);
+    for (const a of await admins()) {
+      await notify(a.userId, { kind: "admin", title: "URGENT: an account was reported for sexual content involving a minor",
+                              body: `Account: ${T.username}. Review it on the feed admin page now.`, link: "/feed/admin#users", ref: "user-urgent:" + r.id });
+    }
+    return { ok: true, urgent: true };
+  }
+  const open = (await getQuery("SELECT COUNT(*) AS n FROM user_reports WHERE target_id = ? AND resolved_at IS NULL", [T.userId]))[0].n;
+  if (open === 1) {
+    for (const a of await admins()) {
+      await notify(a.userId, { kind: "admin", title: "An account was reported", body: `${REASONS[why]}: ${T.username}`, link: "/feed/admin#users", ref: "user-rep:" + T.userId + ":" + r.id });
+    }
+  }
+  return { ok: true };
+}
+
+/** The admin queue: open reports grouped per post, urgent groups first. Shape (1.99bw): [{post, reports, urgent}] */
 async function reports({ open = true } = {}) {
   await init();
   const rows = await getQuery(`SELECT r.*, u.username AS reporter FROM feed_reports r LEFT JOIN users u ON u.userId = r.reporter_id
@@ -991,13 +1125,124 @@ async function reports({ open = true } = {}) {
   }
   const posts = await decorate(await getQuery(`SELECT * FROM feed_posts WHERE id IN (${[...byPost.keys()].map(() => "?").join(",") || "''"})`, [...byPost.keys()]), { class: "Admin", userId: "_" });
   const cmts = rows.filter((r) => r.comment_id).map((r) => r.comment_id);
-  const C = cmts.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id WHERE c.id IN (${cmts.map(() => "?").join(",")})`, cmts) : [];
-  return posts.map((p) => ({ post: p, reports: byPost.get(p.id).map((r) => ({ ...r, label: REASONS[r.reason] || r.reason, comment: r.comment_id ? C.find((c) => c.id === r.comment_id) || null : null })) }));
+  const C = cmts.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, c.hidden_at, c.author_id, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id
+                                          WHERE c.id IN (${cmts.map(() => "?").join(",")})`, cmts) : [];
+  return posts.map((p) => {
+    const reps = byPost.get(p.id).map((r) => ({ ...r, label: REASONS[r.reason] || r.reason, urgent: URGENT.includes(r.reason), adminOnly: ADMIN_ONLY.includes(r.reason),
+                                                comment: r.comment_id ? C.find((c) => c.id === r.comment_id) || null : null }));
+    // per target (the post itself, each reported comment): the admin acts on one target at a time
+    const targets = new Map();
+    for (const r of reps) {
+      const k = r.comment_id || "";
+      if (!targets.has(k)) targets.set(k, { comment: r.comment, commentId: r.comment_id || null, reports: [], urgent: false });
+      const g = targets.get(k);
+      g.reports.push(r);
+      g.urgent = g.urgent || r.urgent;
+    }
+    return { post: p, reports: reps, urgent: reps.some((r) => r.urgent), targets: [...targets.values()].sort((a, b) => (b.urgent - a.urgent) || ((a.commentId ? 1 : 0) - (b.commentId ? 1 : 0))) };
+  }).sort((a, b) => (b.urgent - a.urgent));
 }
 async function resolveReports(user, postId, action) {
   if (!isStaff(user)) throw new Refuse(403, "Admins only.");
   await runQuery("UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE post_id = ? AND resolved_at IS NULL", [NOW(), user.username, cleanLine(action, 20) || "dismissed", postId]);
   return true;
+}
+
+const ACTIONS = Object.freeze(["dismiss", "false", "remove", "ban"]);
+/** Tell each reporter once what happened (never who / why beyond the outcome). */
+async function tellReporters(rows, what, outcome) {
+  const told = new Set();
+  for (const r of rows) {
+    if (told.has(r.reporter_id)) continue;
+    told.add(r.reporter_id);
+    const label = REASONS[r.reason] || r.reason;
+    const body = outcome === "removed"
+      ? `We removed the ${what} you reported (${label}). Thanks for helping keep PATV safe.`
+      : `We reviewed the ${what} you reported (${label}) and it doesn't break the Terms, so it stays up. Thanks for flagging it.`;
+    await notify(r.reporter_id, { kind: "feed", title: "Update on your report", body, link: "/terms", ref: "feed-repout:" + (r.table || "p") + r.id });
+  }
+}
+
+/**
+ * Admin outcome on the open reports about one post (comment null) or one comment.
+ * action: dismiss | false (dismiss as bad faith: counts against the reporters) | remove | ban (remove + feed ban).
+ * tell (default true): each reporter gets an inbox notice of the outcome. -> {ok, resolved, notified}
+ */
+async function reportAction(user, { post, comment = null, action, tell = true, days = 0, reason = "" } = {}) {
+  if (!isStaff(user)) throw new Refuse(403, "Admins only.");
+  if (!ACTIONS.includes(action)) throw new Refuse(400, "Unknown action.");
+  const p = await getRow(post);
+  if (!p) throw new Refuse(404, "No such post.");
+  let c = null;
+  if (comment) {
+    c = (await getQuery("SELECT * FROM feed_comments WHERE id = ? AND post_id = ?", [String(comment), p.id]))[0];
+    if (!c) throw new Refuse(404, "No such comment.");
+  }
+  const open = await getQuery(`SELECT * FROM feed_reports WHERE post_id = ? AND ${c ? "comment_id = ?" : "comment_id IS NULL"} AND resolved_at IS NULL`, c ? [p.id, c.id] : [p.id]);
+  const why = cleanLine(reason, 200);
+  if (action === "dismiss" || action === "false") {
+    if (c && c.hidden_at) await runQuery("UPDATE feed_comments SET hidden_at = NULL WHERE id = ?", [c.id]);
+    if (!c && p.hidden_at) await runQuery("UPDATE feed_posts SET hidden_at = NULL WHERE id = ?", [p.id]);
+  } else {
+    if (c) { if (!c.deleted_at) await removeComment(user, c.id, why || "removed after a report"); }
+    else if (!p.deleted_at) await remove(user, p.id, why || "removed after a report");
+    if (action === "ban") {
+      const A = (await getQuery("SELECT username FROM users WHERE userId = ?", [c ? c.author_id : p.author_id]))[0];
+      if (A) await ban(user, A.username, { room: "", reason: why || "reported content", days });
+    }
+  }
+  const act = action === "dismiss" ? "dismissed" : action === "false" ? "false" : action === "ban" ? "banned" : "removed";
+  if (open.length) {
+    await runQuery(`UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE id IN (${open.map(() => "?").join(",")})`,
+                   [NOW(), user.username, act, ...open.map((r) => r.id)]);
+  }
+  let notified = 0;
+  if (tell && open.length) {
+    await tellReporters(open, c ? "comment" : "post", action === "remove" || action === "ban" ? "removed" : "kept");
+    await runQuery(`UPDATE feed_reports SET notified_at = ? WHERE id IN (${open.map(() => "?").join(",")})`, [NOW(), ...open.map((r) => r.id)]);
+    notified = new Set(open.map((r) => r.reporter_id)).size;
+  }
+  console.log(`[feed] reports on ${c ? "comment " + c.id + " of " : ""}post ${p.id}: ${act} by ${user.username} (${open.length} report${open.length === 1 ? "" : "s"})`);
+  return { ok: true, resolved: open.length, notified };
+}
+
+/** Open account reports, grouped per account. */
+async function userReports() {
+  await init();
+  const rows = await getQuery(`SELECT r.*, u.username AS reporter, t.username AS target FROM user_reports r LEFT JOIN users u ON u.userId = r.reporter_id
+                               LEFT JOIN users t ON t.userId = r.target_id WHERE r.resolved_at IS NULL ORDER BY r.id DESC LIMIT 300`);
+  const by = new Map();
+  for (const r of rows) {
+    if (!by.has(r.target_id)) by.set(r.target_id, { userId: r.target_id, username: r.target || "[gone]", reports: [], urgent: false });
+    const g = by.get(r.target_id);
+    g.reports.push({ ...r, label: REASONS[r.reason] || r.reason, urgent: URGENT.includes(r.reason) });
+    g.urgent = g.urgent || URGENT.includes(r.reason);
+  }
+  return [...by.values()].sort((a, b) => (b.urgent - a.urgent) || b.reports.length - a.reports.length);
+}
+/** Admin outcome on an account's open reports. action: dismiss | false | ban. */
+async function userReportAction(user, { userId, action, tell = true, days = 0, reason = "" } = {}) {
+  if (!isStaff(user)) throw new Refuse(403, "Admins only.");
+  if (!["dismiss", "false", "ban"].includes(action)) throw new Refuse(400, "Unknown action.");
+  const T = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [String(userId || "")]))[0];
+  if (!T) throw new Refuse(404, "No such user.");
+  const open = await getQuery("SELECT * FROM user_reports WHERE target_id = ? AND resolved_at IS NULL", [T.userId]);
+  if (action === "ban") await ban(user, T.username, { room: "", reason: cleanLine(reason, 200) || "reported account", days });
+  const act = action === "dismiss" ? "dismissed" : action === "false" ? "false" : "banned";
+  if (open.length) await runQuery(`UPDATE user_reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE id IN (${open.map(() => "?").join(",")})`, [NOW(), user.username, act, ...open.map((r) => r.id)]);
+  if (tell && open.length) {
+    const told = new Set();
+    for (const r of open) {
+      if (told.has(r.reporter_id)) continue;
+      told.add(r.reporter_id);
+      await notify(r.reporter_id, { kind: "feed", title: "Update on your report",
+        body: action === "ban" ? `We took action on the account you reported (${REASONS[r.reason] || r.reason}). Thanks for helping keep PATV safe.`
+                               : `We reviewed the account you reported (${REASONS[r.reason] || r.reason}) and didn't find a breach of the Terms. Thanks for flagging it.`,
+        link: "/terms", ref: "user-repout:" + r.id });
+    }
+    await runQuery(`UPDATE user_reports SET notified_at = ? WHERE id IN (${open.map(() => "?").join(",")})`, [NOW(), ...open.map((r) => r.id)]);
+  }
+  return { ok: true, resolved: open.length };
 }
 
 // ── feed bans (site staff: whole feed or a room; room owners: their room) ──
@@ -1274,7 +1519,10 @@ async function roomReports(roomId) {
       JOIN feed_post_rooms pr ON pr.post_id = r.post_id AND pr.room_id = ? AND pr.removed_at IS NULL
       JOIN feed_posts p ON p.id = r.post_id AND p.deleted_at IS NULL
       LEFT JOIN feed_room_report_done d ON d.room_id = pr.room_id AND d.post_id = r.post_id AND d.comment_id = COALESCE(r.comment_id, '')
-      WHERE r.resolved_at IS NULL AND (d.at IS NULL OR r.created > d.at) ORDER BY r.created DESC LIMIT 500`, [roomId]);
+      WHERE r.resolved_at IS NULL AND (d.at IS NULL OR r.created > d.at)
+        AND r.reason NOT IN (${ADMIN_ONLY.map(() => "?").join(",")})
+        AND NOT EXISTS (SELECT 1 FROM feed_reports x WHERE x.post_id = r.post_id AND x.resolved_at IS NULL AND x.reason IN (${URGENT.map(() => "?").join(",")}))
+      ORDER BY r.created DESC LIMIT 500`, [roomId, ...ADMIN_ONLY, ...URGENT]);
   const groups = new Map();
   for (const r of rows) {
     const k = r.post_id + "|" + (r.comment_id || "");
@@ -1290,9 +1538,18 @@ async function roomReports(roomId) {
   const posts = new Map((await decorate(await getQuery(`SELECT * FROM feed_posts WHERE id IN (${list.map(() => "?").join(",") || "''"})`, list.map((g) => g.postId)),
                                         { class: "Admin", userId: "_" }, { ctxRoom: roomId })).map((p) => [p.id, p]));
   const cids = list.filter((g) => g.commentId).map((g) => g.commentId);
-  const C = cids.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id WHERE c.id IN (${cids.map(() => "?").join(",")})`, cids) : [];
-  return list.filter((g) => posts.has(g.postId)).map((g) => ({ ...g, post: posts.get(g.postId), comment: g.commentId ? C.find((c) => c.id === g.commentId) || null : null }))
-    .filter((g) => !g.comment || !g.comment.deleted_at).sort((a, b) => b.count - a.count || b.last - a.last);
+  const C = cids.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, c.hidden_at, c.author_id, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id WHERE c.id IN (${cids.map(() => "?").join(",")})`, cids) : [];
+  const out = list.filter((g) => posts.has(g.postId)).map((g) => ({ ...g, post: posts.get(g.postId), comment: g.commentId ? C.find((c) => c.id === g.commentId) || null : null }))
+    .filter((g) => !g.comment || (!g.comment.deleted_at && !g.comment.hidden_at)).sort((a, b) => b.count - a.count || b.last - a.last);
+  // 1.99cc: owners see the author's account age + which identities are linked - never network data (contentaudit.ownerInfo)
+  const audit = require("./contentaudit");
+  const info = new Map();
+  for (const g of out) {
+    const uid = g.comment ? g.comment.author_id : g.post.author.userId;
+    if (!info.has(uid)) info.set(uid, await audit.ownerInfo(uid).catch(() => null));
+    g.authorInfo = info.get(uid);
+  }
+  return out;
 }
 /** Posts waiting for approval in a room (oldest first). */
 async function roomPending(roomId, viewer) {
@@ -1317,6 +1574,7 @@ module.exports = {
   hotRank, controversy, wilson, rankSpec, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
+  reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,
   setRestricted, mentionOn, setMention, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
 };

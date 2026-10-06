@@ -1,0 +1,182 @@
+<%# /terms — Terms of Service (1.99cc, terms.js). A template written for PATV, NOT legal advice: have a lawyer review it.
+    Every [[PLACEHOLDER]] (class "ph") must be filled in by the site operator before this is relied on. %>
+<%- include('layout', { title: 'Terms of Service · Public Access TV', user: user }) %>
+<%- include('partials/legal-css') %>
+<% const PH = (s) => '<span class="ph">[[' + s + ']]</span>'; %>
+<main class="lg" id="terms">
+  <header class="hero">
+    <div class="eyebrow">PUBLICACCESS.TV</div>
+    <h1>Terms of Service</h1>
+    <div class="updated">Last updated <%= UPDATED %></div>
+    <p class="lead">The rules for using publicaccess.tv ("PATV"), Pepe the bot and everything attached to them. Please read them: by creating an account, signing in or posting, you agree to them. They work together with our <a href="/privacy">Privacy Policy</a>.</p>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <b>Contents</b>
+    <ol>
+      <li><a href="#who">Who we are</a></li>
+      <li><a href="#eligibility">Eligibility (18+)</a></li>
+      <li><a href="#accounts">Your account and its security</a></li>
+      <li><a href="#linked">Camfrog, Discord and Twitch</a></li>
+      <li><a href="#content">Your content</a></li>
+      <li><a href="#rules">What isn't allowed</a></li>
+      <li><a href="#nsfw">Adult (NSFW) content</a></li>
+      <li><a href="#pepe">Pepe and automated features</a></li>
+      <li><a href="#pat">PAT and virtual items</a></li>
+      <li><a href="#rooms">Room owners</a></li>
+      <li><a href="#moderation">Moderation and appeals</a></li>
+      <li><a href="#reporting">Reporting and copyright notices</a></li>
+      <li><a href="#termination">Ending your use of PATV</a></li>
+      <li><a href="#disclaimers">Disclaimers</a></li>
+      <li><a href="#liability">Limitation of liability</a></li>
+      <li><a href="#indemnity">Indemnity</a></li>
+      <li><a href="#changes">Changes to these terms</a></li>
+      <li><a href="#law">Governing law</a></li>
+      <li><a href="#contact">Contact</a></li>
+    </ol>
+  </nav>
+
+  <section id="who">
+    <h2>1. Who we are</h2>
+    <p>PATV is a community website and set of chat bots built around live Camfrog video chat rooms. It is run by <%- PH('OPERATOR LEGAL NAME') %> ("we", "us"). In these terms "the service" means the website at publicaccess.tv and its sub-sites, the Pepe bot in Camfrog rooms, our Discord and Twitch bots, and the APIs behind them.</p>
+  </section>
+
+  <section id="eligibility">
+    <h2>2. Eligibility (18+)</h2>
+    <p>The service is for adults. You must be <b>at least 18 years old</b> (or the age of majority where you live, if that's higher) to create an account or use the service. The rooms and feed can contain mature conversation and, where marked, adult content. If we learn an account belongs to someone under 18 we will close it.</p>
+    <p>You can't use the service if we've previously banned you, or if the law where you are forbids it.</p>
+  </section>
+
+  <section id="accounts">
+    <h2>3. Your account and its security</h2>
+    <ul>
+      <li>Give accurate sign-up details and keep your email address current — it's how you get back into your account.</li>
+      <li>You're responsible for what happens under your account. Keep your password private, use one you don't use anywhere else, and tell us at <%- PH('CONTACT EMAIL') %> if you think someone else has access.</li>
+      <li>One person, one main account. Extra accounts made to dodge a ban, farm bonuses, inflate votes or reports, or win PAT games against yourself aren't allowed. Bot accounts need our permission.</li>
+      <li>Usernames that impersonate someone, a room or PATV staff, or that are hateful or sexual, may be changed or removed.</li>
+      <li>We may archive accounts that have been inactive for a long time; we tell you first in your inbox and on the site where we can.</li>
+    </ul>
+  </section>
+
+  <section id="linked">
+    <h2>4. Camfrog, Discord and Twitch</h2>
+    <p>You can link a Camfrog name (by typing <code>!verify</code> to Pepe), a Discord account or a Twitch account. Linking lets the service treat them as you — for PAT, games, posts and moderation. Those services are run by other companies under their own terms and privacy policies; we aren't responsible for them, and you must follow their rules too. Using PATV doesn't change anything about your relationship with them.</p>
+  </section>
+
+  <section id="content">
+    <h2>5. Your content</h2>
+    <h3>You own it</h3>
+    <p>"Your content" is anything you post or send through the service: feed posts, comments, pictures, audio, video, links, profile details, chat and mic audio in rooms the service mirrors, and so on. You keep whatever rights you have in it.</p>
+    <h3>The licence you give us</h3>
+    <p>So we can run the service, you give us a worldwide, non-exclusive, royalty-free licence to host, store, copy, re-encode (for example resizing pictures or converting video), display, transcribe, translate, distribute and show your content on and through the service, and to let other users see and share it as the service allows (for example a post's share link). This licence is only for operating, promoting and improving the service. It ends when you delete the content or your account, except where (a) others have already re-shared it inside the service, (b) we need to keep it for moderation, safety, legal or backup reasons for a limited time, or (c) the law requires us to keep it.</p>
+    <h3>You're responsible for it</h3>
+    <ul>
+      <li>You confirm you have the rights and permissions needed to post it — including the consent of anyone recognisable in a picture, video or recording.</li>
+      <li>You're responsible for your content and the consequences of posting it. We don't endorse what users post and don't check everything before it appears.</li>
+      <li>Public Camfrog room activity (public chat, who is in the room, who's on the mic, and what is said on the mic, which is automatically transcribed) can be shown on the website to members. Anything you say publicly in a room Pepe sits in may appear there. Private messages are never shown.</li>
+    </ul>
+  </section>
+
+  <section id="rules">
+    <h2>6. What isn't allowed</h2>
+    <p>Don't post, send, stream or link to anything, or behave in any way, that:</p>
+    <ul>
+      <li><b>is illegal</b> where you are or where we are, or promotes or helps someone commit a crime;</li>
+      <li><b>sexualises minors in any way</b> — child sexual abuse material (CSAM) and any sexual content involving someone under 18, real or simulated. <b>Zero tolerance:</b> it is removed, the account is banned permanently, and we report it to the relevant authorities (such as <%- PH('CSAM REPORTING BODY, e.g. NCMEC / national hotline') %>) with the information we hold;</li>
+      <li><b>is intimate imagery of someone shared without their consent</b> (including "revenge porn", hidden-camera content and sexual deepfakes of real people), or threatens to share it;</li>
+      <li><b>harasses or bullies</b> someone — targeted insults, pile-ons, unwanted sexual comments, stalking, or continuing after being asked to stop;</li>
+      <li><b>doxxes</b> someone — posts or threatens to post private information such as a home address, phone number, workplace, real name (when not public), or identity documents;</li>
+      <li><b>threatens or incites violence</b>, or glorifies violent extremism or self-harm;</li>
+      <li><b>attacks people for who they are</b> — race, ethnicity, national origin, religion, caste, sex, gender identity, sexual orientation, disability or serious illness;</li>
+      <li><b>is spam</b> — unsolicited ads, scams, phishing, chain posts, repeated junk, fake engagement, or vote / report manipulation;</li>
+      <li><b>impersonates</b> another person, a room, a brand or PATV staff, or misleads people about who you are in a harmful way;</li>
+      <li><b>infringes someone's rights</b> — copyright, trademark, privacy or publicity rights — for example uploading music, film or streams you don't have permission to share;</li>
+      <li><b>contains malware</b> or tries to break, overload, scrape at scale, probe or get around the security, rate limits or moderation of the service, or to access accounts or data that aren't yours;</li>
+      <li><b>is adult content that isn't marked NSFW</b> (see below);</li>
+      <li>uses PAT, games, markets or wagers to cheat, launder value, or exploit a bug — report bugs instead.</li>
+    </ul>
+  </section>
+
+  <section id="nsfw">
+    <h2>7. Adult (NSFW) content</h2>
+    <p>Legal adult content is allowed on the feed <b>only when it's marked NSFW</b> (the 🔞 box when you post) and only where the room it's posted to allows it. Marked posts are blurred and hidden from visitors who aren't signed in. Admins and room owners may mark, unmark or remove posts. Everyone shown in adult content must be an adult who consented to it being made and shared. Never post adult content in a profile picture, username or room listing.</p>
+  </section>
+
+  <section id="pepe">
+    <h2>8. Pepe and automated features</h2>
+    <p>Pepe is an automated bot. His replies, voices, DJ picks, summaries, transcripts and pictures are generated by software, including AI models, and can be wrong, odd or offensive — don't rely on them for anything important, and they aren't statements by us. Mic transcripts are automatic and may mis-hear people. Pepe's room snaps and clips (<code>!snap</code>, <code>!clip</code>) capture what's publicly visible in a room at that moment; people can opt out of being shown by name with <code>!incognito</code> or <code>!bridge hide</code>.</p>
+  </section>
+
+  <section id="pat">
+    <h2>9. PAT and virtual items</h2>
+    <ul>
+      <li><b>PAT is a virtual points system for fun inside PATV. It has no cash value.</b> PAT and anything bought with it (cosmetics, items, stakes, market shares, lottery tickets and so on) are not money, currency, securities, deposits or property, and can't be redeemed, exchanged or cashed out for money, goods or anything of value outside the service, by us or anyone else.</li>
+      <li>You get a limited, personal, revocable licence to use PAT and virtual items within the service. You don't own them. Selling, buying or trading PAT, items or accounts for real money or anything outside PATV is not allowed.</li>
+      <li>PAT games, markets, wagers, staking and vaults are entertainment. Balances, odds, prices, rewards and rules can change, and we may adjust, reverse, reset or remove PAT or items — for example to fix a bug or an error, undo cheating or abuse, keep the economy balanced, or when an account is archived or closed. No refunds or compensation are owed for PAT or virtual items.</li>
+      <li>PAT may be shown with numbers, charts or words borrowed from finance ("staking", "vaults", "markets", "returns"). These describe game mechanics only and are not financial products or advice.</li>
+      <li><b>Looking ahead:</b> we may explore other ways for PAT to work in the future. Nothing on the service is a promise or an offer about that. If anything ever changes the nature of PAT, it will come with new terms that you'd be asked to accept separately; until then this section applies in full.</li>
+    </ul>
+  </section>
+
+  <section id="rooms">
+    <h2>10. Room owners</h2>
+    <p>Some rooms have owners who can moderate their room's feed: approve, hide, pin, mark NSFW, remove posts from their room, lock comments and ban people from posting there. Room owners must follow these terms, use those tools in good faith, and must not use them to harass people or to hide content that should be reported to us. Owners don't see the private information described in our Privacy Policy. Site admins can review or reverse any room-level action.</p>
+  </section>
+
+  <section id="moderation">
+    <h2>11. Moderation and appeals</h2>
+    <p>We, our admins and room owners may (but don't have to) review, label, hide, remove or restrict content and accounts, at any time, when we believe it breaks these terms, puts someone at risk, or exposes the service to legal trouble. Depending on how serious it is we may warn you, remove content, limit posting, reporting or PAT features, ban you from a room or the whole feed, or close your account. Automated limits (rate limits, new-account limits, auto-hiding after several reports) apply too.</p>
+    <p><b>Appeals:</b> if you think we got it wrong, email <%- PH('APPEALS CONTACT EMAIL') %> from the address on your account within 30 days, with your username, what was actioned and why you think it should be reconsidered. A different admin from the one who acted will look at it where possible. We'll tell you the outcome. Decisions about CSAM and other illegal content are not reversed.</p>
+  </section>
+
+  <section id="reporting">
+    <h2>12. Reporting and copyright notices</h2>
+    <h3>Reporting content or people</h3>
+    <p>Use <b>Report</b> in the ⋯ menu on any post or comment, or <b>Report user</b> on a profile. Pick the closest reason and add a note if it helps. Reports of sexual content involving a minor hide the content immediately and go straight to the site admins. Reports about posts in a room also go to that room's owner, except legal and safety categories (child safety, non-consensual imagery, copyright), which only site admins see. You'll get an inbox update when we've acted on your report. Making reports in bad faith can pause your ability to report.</p>
+    <p>For urgent safety issues or anything you can't report on the site, email <%- PH('ABUSE CONTACT EMAIL') %>. If someone is in immediate danger, contact your local emergency services first.</p>
+    <h3>Copyright (DMCA) notices</h3>
+    <p>We respect copyright and respond to valid notices. If you believe content on PATV infringes your copyright, send a notice to our designated agent:</p>
+    <p>Copyright agent: <%- PH('DMCA AGENT NAME') %><br>Postal address: <%- PH('DMCA AGENT POSTAL ADDRESS') %><br>Email: <%- PH('COPYRIGHT CONTACT EMAIL') %></p>
+    <p>Your notice should include: (1) your physical or electronic signature; (2) the work you say is infringed; (3) the link(s) to the material on PATV; (4) your name, address, phone number and email; (5) a statement that you have a good-faith belief the use isn't authorised by the owner, its agent or the law; and (6) a statement, under penalty of perjury, that the notice is accurate and that you're the owner or authorised to act for them. Misrepresenting that material is infringing can make you liable for damages.</p>
+    <p>If your content was removed after a notice and you believe that was a mistake, you can send a counter-notice to the same address with: your signature; the material removed and where it appeared; a statement under penalty of perjury that you believe in good faith it was removed by mistake or misidentification; your name, address and phone number; and your consent to the jurisdiction of <%- PH('COUNTER-NOTICE JURISDICTION / COURT') %> and to accept service from the person who sent the notice. We close the accounts of repeat infringers in appropriate circumstances.</p>
+  </section>
+
+  <section id="termination">
+    <h2>13. Ending your use of PATV</h2>
+    <p>You can stop using the service at any time, and you can ask us to delete your account by emailing <%- PH('CONTACT EMAIL') %> from the address on it. We may suspend or end your access, or close your account, if you break these terms, if we're required to by law, if your account has been inactive for a long time, or if we stop offering the service. When an account ends, its PAT and virtual items end with it. Sections that by their nature should survive (for example 5, 9, 14–18) continue to apply.</p>
+  </section>
+
+  <section id="disclaimers">
+    <h2>14. Disclaimers</h2>
+    <p class="caps">The service is provided "as is" and "as available", without warranties of any kind, express or implied, including warranties of merchantability, fitness for a particular purpose, title and non-infringement, to the fullest extent the law allows. We don't promise the service will be uninterrupted, secure, error-free or that content (including anything from users, rooms, Pepe or AI models) is accurate. Live rooms and streams are not under our control, and you use them at your own risk.</p>
+  </section>
+
+  <section id="liability">
+    <h2>15. Limitation of liability</h2>
+    <p class="caps">To the fullest extent the law allows, we and the people who run, build and moderate PATV won't be liable for any indirect, incidental, special, consequential, exemplary or punitive damages, or for lost profits, data, goodwill or virtual items, arising from or related to the service or these terms, however caused. Our total liability for any claim relating to the service is limited to the greater of (a) the amount you paid us in real money for the service in the 12 months before the claim, or (b) <%- PH('LIABILITY CAP AMOUNT') %>.</p>
+    <p>Some places don't allow these exclusions or limits, so some of them may not apply to you. Nothing in these terms limits liability that can't be limited by law.</p>
+  </section>
+
+  <section id="indemnity">
+    <h2>16. Indemnity</h2>
+    <p>If you break these terms or the law through the service, or your content infringes someone's rights, and someone makes a claim against us because of it, you agree to cover the reasonable losses and costs (including legal fees) that result, to the extent the law allows.</p>
+  </section>
+
+  <section id="changes">
+    <h2>17. Changes to these terms</h2>
+    <p>We may update these terms as PATV changes or the law requires. The "Last updated" date at the top will change, and for material changes we'll give notice on the site — the next time you post, you'll be asked to accept the new version. If you keep using the service after a change takes effect, the new terms apply. If you don't agree, stop using the service and you can ask us to close your account.</p>
+  </section>
+
+  <section id="law">
+    <h2>18. Governing law</h2>
+    <p>These terms are governed by the laws of <%- PH('GOVERNING LAW JURISDICTION') %>, without regard to conflict-of-law rules. Disputes will be handled in the courts of <%- PH('VENUE / COURTS') %>, unless the law where you live gives you the right to bring a claim locally. If any part of these terms can't be enforced, the rest still applies. If we don't enforce a part straight away, we haven't waived it. These terms (with the Privacy Policy and any rules shown where you use a feature) are the whole agreement between you and us about the service.</p>
+  </section>
+
+  <section id="contact">
+    <h2>19. Contact</h2>
+    <p>Questions about these terms: <%- PH('CONTACT EMAIL') %>. Abuse and safety: <%- PH('ABUSE CONTACT EMAIL') %>. Copyright: see <a href="#reporting">section 12</a>. Privacy: see the <a href="/privacy">Privacy Policy</a>.</p>
+    <p class="note">Version <%= VERSION %>. <a href="/privacy">Privacy Policy</a> · <a href="/about">About PATV</a></p>
+  </section>
+</main>
+</body>
+</html>
