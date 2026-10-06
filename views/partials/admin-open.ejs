@@ -1,0 +1,8 @@
+<%#
+  views/partials/admin-open.ejs - the admin shell (1.99cv): site layout + admin.css + sidebar, then opens the
+  content column. Close it with partials/admin-close. Params: title, user, section, admIsAdmin.
+%><%- include('../layout', { title: title, user: user }) %>
+<link rel="stylesheet" href="/public/css/admin.css?v=1">
+<div class="adm" data-section="<%= section %>">
+<%- include('admin-nav', { section: section, admIsAdmin: typeof admIsAdmin !== 'undefined' ? admIsAdmin : false }) %>
+<div class="adm-main" id="admMain">

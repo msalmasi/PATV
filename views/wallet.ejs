@@ -360,7 +360,7 @@
 
   <!-- ───────── Admin ───────── -->
   <% if (admin) { %>
-    <h2>ADMIN · RESERVE REQUESTS</h2>
+    <h2 id="admin-requests">ADMIN · RESERVE REQUESTS</h2>
     <% if (!admin.pending.length) { %><p class="info">No pending loan requests.</p><% } %>
     <div class="grid">
       <% admin.pending.forEach((r) => { %>
@@ -389,7 +389,7 @@
       <% }) %>
     </div>
 
-    <h2>ADMIN · RESERVE BOOK</h2>
+    <h2 id="admin-book">ADMIN · RESERVE BOOK</h2>
     <% if (reserve) { %>
       <div class="stats">
         <div class="stat"><span>Outstanding</span><b class="gold"><%= fmt(reserve.book) %></b></div>
@@ -417,7 +417,7 @@
       </form>
     </div>
 
-    <h2>ADMIN · ALL STASHES</h2>
+    <h2 id="admin-stashes">ADMIN · ALL STASHES</h2>
     <% if (!admin.stashes.length) { %><p class="info">No stashes.</p><% } else { %>
       <div class="tbl"><table>
         <tr><th>Stash</th><th class="r">Balance</th><th class="r">In vaults</th><th>Holdings</th><th>Members</th></tr>

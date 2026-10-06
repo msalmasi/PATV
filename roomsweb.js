@@ -271,7 +271,7 @@ function register(app, { addUser, isBotToken }) {
     }
     const sum = await royalties.summary();
     const fp = await rooms.frontStatus().catch(() => null);
-    res.render("roomsAdmin", { user: req.user.username, list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
+    res.render("roomsAdmin", { user: req.user.username, isAdmin: req.user.class === "Admin", list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
       sum,
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });

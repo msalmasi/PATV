@@ -1,4 +1,4 @@
-<%- include('layout', { title: 'Stage admin', user: user }) %>
+<%- include('partials/admin-open', { title: 'Stage admin', user: user, section: 'stage', admIsAdmin: !!(typeof isAdmin !== 'undefined' && isAdmin) }) %>
 <!-- views/stageAdmin.ejs — paid Main Stage slots: settings, open slots (cut), bans, booking log. -->
 <link rel="stylesheet" href="/public/css/stage.css?v=5">
 <% const C = state.config; %>
@@ -8,14 +8,14 @@
     <p class="lede">Pad stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a></p>
   </div>
 
-  <section class="sb-card" aria-labelledby="openT">
+  <section class="sb-card" id="open" aria-labelledby="openT">
     <h2 id="openT">On the stage now</h2>
     <div class="row"><button type="button" class="btn danger" id="cutAll">✂ Cut everything to Pepe</button></div>
     <div class="tblwrap"><table><thead><tr><th>Who</th><th>Status</th><th class="num">Live</th><th class="num">Charged / held</th><th>Booked</th><th></th></tr></thead>
       <tbody id="openRows"></tbody></table></div>
   </section>
 
-  <section class="sb-card" aria-labelledby="setT">
+  <section class="sb-card" id="settings" aria-labelledby="setT">
     <h2 id="setT">Settings</h2>
     <form id="cfg" class="settings">
       <label class="chk"><input type="checkbox" name="enabled" <%= C.enabled ? 'checked' : '' %>> Booking open</label>
@@ -26,11 +26,13 @@
       <label>Most slots an owner can give a pad<input type="number" name="max_slots_per_room" min="1" max="8" value="<%= C.max_slots_per_room %>"></label>
       <label>Book ahead up to (days)<input type="number" name="schedule_days" min="0" max="60" value="<%= C.schedule_days %>"></label>
       <label>Upcoming bookings per user<input type="number" name="schedule_per_user" min="0" max="20" value="<%= C.schedule_per_user %>"></label>
+      <details class="adm-adv" style="grid-column: 1 / -1"><summary>Advanced: scheduling, queue and timing</summary><div class="adm-adv-body settings">
       <label>Key works before start (min)<input type="number" name="lead_min" min="0" max="30" value="<%= C.lead_min %>"></label>
       <label>Queue length per pad<input type="number" name="queue_max" min="0" max="50" value="<%= C.queue_max %>"></label>
       <label>Go-live window (min)<input type="number" name="start_window_min" min="1" value="<%= C.start_window_min %>"></label>
       <label>Off-air grace (min)<input type="number" name="idle_grace_min" min="1" value="<%= C.idle_grace_min %>"></label>
       <label>Bookings / user / hour<input type="number" name="bookings_per_hour" min="1" value="<%= C.bookings_per_hour %>"></label>
+      </div></details>
       <label>Revenue goes to<select name="revenue_vault">
         <option value="reserve" <%= C.revenue_vault === 'reserve' ? 'selected' : '' %>>Federal Reserve</option>
         <option value="jackpot" <%= C.revenue_vault === 'jackpot' ? 'selected' : '' %>>Casino jackpot</option></select></label>
@@ -39,25 +41,26 @@
     <p class="muted">1.99bi: every pad has its own stage. Pad owners set their pad's slot count (up to the cap above) and an optional price for ordinary slots (at most the featured price); featuring is paid at the featured price, or free when the owner features someone. A slot keeps the price it was booked at. Owners: <a href="/pads/admin">Pads admin ›</a></p>
   </section>
 
-  <section class="sb-card" aria-labelledby="banT">
+  <section class="sb-card" id="bans" aria-labelledby="banT">
     <h2 id="banT">Banned from booking</h2>
     <form id="banForm" class="row"><input type="text" name="username" placeholder="username" required aria-label="Username to ban">
       <input type="text" name="reason" placeholder="reason (optional)" aria-label="Reason"><button type="submit" class="btn danger">Ban</button></form>
     <div class="tblwrap"><table><thead><tr><th>User</th><th>Reason</th><th>By</th><th>When</th><th></th></tr></thead><tbody id="banRows"></tbody></table></div>
   </section>
 
-  <section class="sb-card" aria-labelledby="logT">
+  <section class="sb-card" id="log" aria-labelledby="logT">
     <h2 id="logT">Booking log</h2>
     <div class="tblwrap"><table><thead><tr><th>Booked</th><th>Who</th><th class="num">Max</th><th class="num">Live</th><th class="num">Held</th><th class="num">Charged</th><th class="num">Refunded</th><th>Ended</th></tr></thead>
       <tbody id="logRows"></tbody></table></div>
   </section>
 
-  <section class="sb-card" aria-labelledby="evT">
+  <section class="sb-card" id="events" aria-labelledby="evT">
     <h2 id="evT">Recent events</h2>
     <div class="tblwrap"><table><thead><tr><th>When</th><th>What</th><th>By</th><th>Detail</th></tr></thead><tbody id="evRows"></tbody></table></div>
   </section>
 </main>
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/stage-admin.js?v=1" defer></script>
+<%- include('partials/admin-close') %>
 </body>
 </html>

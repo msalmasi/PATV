@@ -1,0 +1,37 @@
+<%- include('../partials/admin-open', { title, user, section: 'system', admIsAdmin: isAdmin }) %>
+<%
+  const S = sys || {};
+  const dur = (sec) => { sec = Math.max(0, Math.round(sec || 0)); const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60); return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm'; };
+  const gb = (b) => b == null ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB';
+  const mb = (b) => b == null ? 'unknown' : (b / 1024 ** 2).toFixed(1) + ' MB';
+%>
+<div class="adm-head">
+  <h1>System</h1>
+  <p>This website's health. Deploys are a git push (staging first, then promote); the server checks itself and rolls back a bad deploy.</p>
+</div>
+
+<section class="adm-card" id="health" aria-labelledby="healthT">
+  <h2 id="healthT">Health <span class="adm-pill <%= S.db ? 'ok' : 'bad' %>"><%= S.db ? 'ok' : 'database error' %></span></h2>
+  <div class="adm-kv">
+    <div><b>Environment</b><span><%= S.env %></span></div>
+    <div><b>Site version</b><span><%= S.sha ? S.sha : 'unknown' %></span></div>
+    <div><b>Up for</b><span><%= dur(S.uptime) %></span></div>
+    <div><b>Started</b><span><%= S.started ? new Date(S.started).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '?' %></span></div>
+    <div><b>Node</b><span><%= S.node %></span></div>
+    <div><b>Database</b><span><%= S.db ? 'answering' : 'NOT answering' %></span></div>
+  </div>
+  <p class="adm-help" style="margin-top:10px">The deploy pipeline's own check is <a href="/healthz">/healthz</a>.</p>
+</section>
+
+<section class="adm-card" id="storage" aria-labelledby="storT">
+  <h2 id="storT">Storage</h2>
+  <div class="adm-kv">
+    <div><b>Feed uploads</b><span><%= mb(S.feedUsed) %></span></div>
+    <div><b>Disk free</b><span><%= gb(S.disk && S.disk.free) %></span></div>
+    <div><b>Uploads stop below</b><span><%= S.disk ? S.disk.minFreeGb + ' GB free' : '?' %></span></div>
+  </div>
+  <p class="adm-help" style="margin-top:10px">Upload caps and quotas: <a href="/feed/admin#settings">Feed › Settings</a>.</p>
+</section>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

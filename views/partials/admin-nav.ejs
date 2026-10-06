@@ -1,0 +1,43 @@
+<%#
+  views/partials/admin-nav.ejs - the admin area's sections (1.99cv). Sidebar on desktop, a top bar on phones.
+  Params: section (the current key), admIsAdmin (bool: badges "admin only" pages for Staff; nothing is hidden).
+  Sub-links are anchors on that section's page; old anchors on /feed/admin (#urgent #users #dms #audit #pepe) are kept.
+%><%
+  const _sec = typeof section !== 'undefined' ? section : '';
+  const _adm = typeof admIsAdmin !== 'undefined' ? !!admIsAdmin : false;
+  const NAV = [
+    ['overview', '/admin', '🧭', 'Overview', []],
+    ['users', '/admin/users', '👥', 'Users & Accounts', [['#roles', 'Roles & classes'], ['#xp', 'XP'], ['#welcome-admin', 'Welcome bonus', 1], ['#stale-admin', 'Stale cleanup', 1], ['#merges', 'Merges']]],
+    ['economy', '/admin/economy', '🏦', 'Economy', [['#reserve', 'Reserve & flows', 1], ['#loans', 'Loans & credit', 1], ['#grants', 'PAT grants'], ['#codes', 'Redemption codes'], ['#royalties', 'Royalties'], ['#shop', 'Prize shop'], ['#elsewhere', "On Pepe's panel"]]],
+    ['pads', '/pads/admin', '🏠', 'Pads', [['#front', 'Front-page pad'], ['#owners', 'Pads & owners'], ['#royalties', 'Owner royalties']]],
+    ['feed', '/feed/admin', '🛡️', 'Feed & Trust and Safety', [['#urgent', 'Reports'], ['#users', 'Reported users'], ['#dms', 'Reported DMs', 1], ['#audit', 'Access log', 1], ['#bans', 'Feed bans'], ['#settings', 'Settings & Terms'], ['#pepe', 'Pepe on the feed']]],
+    ['stage', '/stage/admin', '📺', 'Stage & Stream', [['#open', 'On stage now'], ['#settings', 'Settings'], ['#bans', 'Booking bans'], ['#log', 'Booking log'], ['#events', 'Events']]],
+    ['bridge', '/admin/bridge', '🌉', 'Bridge', [['#cmdlog', 'Web command log', 1]]],
+    ['pepe', '/admin/pepe', '🐸', 'Pepe', [['#control', 'Control panel', 1], ['#feed', 'Feed settings']]],
+    ['games', '/admin/games', '🎰', 'Games', [['#wheel', 'Wheel spin'], ['#jackpot', 'Jackpot'], ['#casino', 'Casino bans']]],
+    ['cosmetics', '/admin/cosmetics', '🏅', 'Cosmetics & Achievements', [['#badges', 'Badges'], ['#catalogs', 'Catalogs']]],
+    ['system', '/admin/system', '⚙️', 'System', [['#health', 'Health'], ['#storage', 'Storage']]],
+  ];
+  const _cur = NAV.find((n) => n[0] === _sec);
+%>
+<nav class="adm-side" aria-label="Admin sections">
+  <div class="adm-brand"><a href="/admin">🛠️ Admin</a><span class="adm-role"><%= _adm ? 'Admin' : 'Staff' %></span></div>
+  <ul class="adm-nav">
+    <% NAV.forEach((n) => { const on = n[0] === _sec; %>
+      <li class="<%= on ? 'on' : '' %>">
+        <a href="<%= n[1] %>"<%- on ? ' aria-current="page"' : '' %>><span class="ic" aria-hidden="true"><%= n[2] %></span><span class="lb"><%= n[3] %></span></a>
+        <% if (on && n[4].length) { %>
+          <ul class="adm-sub">
+            <% n[4].forEach((s) => { if (s[2] && !_adm) return; %><li><a href="<%= s[0] %>"><%= s[1] %></a></li><% }) %>
+          </ul>
+        <% } %>
+      </li>
+    <% }) %>
+  </ul>
+  <div class="adm-side-foot"><a href="/shop/admin">Prize shop admin ›</a><a href="/">Back to the site ›</a></div>
+</nav>
+<% if (_cur && _cur[4].length) { %>
+<nav class="adm-subbar" aria-label="<%= _cur[3] %> sections">
+  <% _cur[4].forEach((s) => { if (s[2] && !_adm) return; %><a href="<%= s[0] %>"><%= s[1] %></a><% }) %>
+</nav>
+<% } %>

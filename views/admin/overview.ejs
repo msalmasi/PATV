@@ -1,0 +1,90 @@
+<%- include('../partials/admin-open', { title, user, section: 'overview', admIsAdmin: isAdmin }) %>
+<%
+  const fmt = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
+  const ago = (t) => { if (!t) return 'never'; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 90 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + 'm ago' : s < 172800 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
+  const O = ov || {};
+  const P = O.pepe, R = O.reserve, L = O.loans, Rep = O.reports, S = O.stage, St = O.stale;
+  const adminOnly = '<span class="adm-pill admin">admins</span>';
+%>
+<div class="adm-head">
+  <h1>Overview</h1>
+  <p>Welcome, <%= user %>. What needs attention across PATV, and where to change it. Every section is in the admin menu.</p>
+</div>
+<% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
+<% if (success && success.length) { %><div class="adm-flash ok" role="status"><%= success %></div><% } %>
+
+<section class="adm-tiles" aria-label="Key numbers">
+  <% if (isAdmin) { %>
+    <% const pState = !P || !P.known ? 'off' : !P.online ? 'bad' : (!P.running || P.hung) ? 'warn' : 'ok'; %>
+    <a class="adm-tile <%= pState %>" href="/admin/pepe" id="tilePepe">
+      <span class="k"><span class="adm-dot <%= pState === 'off' ? '' : pState %>" aria-hidden="true"></span>Pepe</span>
+      <span class="v"><%= !P || !P.known ? 'Unknown' : !P.online ? 'Offline' : !P.running ? 'Not running' : P.hung ? 'Hung?' : 'Online' %></span>
+      <span class="s"><%= P && P.version ? 'v' + P.version : 'version ?' %><%= P && P.sha ? ' (' + P.sha + ')' : '' %><%= P && P.env === 'staging' ? ' · STAGING' : '' %> · heartbeat <%= P && P.known ? ago(P.at) : 'never' %></span>
+    </a>
+    <a class="adm-tile <%= R && R.balance !== null ? 'ok' : 'warn' %>" href="/admin/economy#reserve" id="tileReserve">
+      <span class="k">🏦 Federal Reserve</span>
+      <span class="v"><%= R && R.balance !== null ? fmt(R.balance) : '—' %> <small>PAT</small></span>
+      <span class="s"><% if (R) { %>Today: <%= fmt(R.todayTotal) %> PAT paid out by the site<%= R.today.length ? ' (' + R.today.slice(0, 3).map((f) => f.flow + ' ' + fmt(f.t)).join(', ') + ')' : '' %> · synced <%= ago(R.syncedAt) %><% } else { %>No Reserve data<% } %></span>
+    </a>
+    <a class="adm-tile <%= L && L.pending ? 'warn' : 'ok' %>" href="/wallet#admin-requests" id="tileLoans">
+      <span class="k">🤝 Loan requests</span>
+      <span class="v"><%= L && L.known ? L.pending : '—' %> <small>pending</small></span>
+      <span class="s"><% if (L && L.known) { %><%= L.reserveOpen %> Reserve loans open<%= L.book != null ? ' · book ' + fmt(L.book) + ' PAT' : '' %><%= L.enabled === false ? ' · lending CLOSED' : '' %><% } else { %>No loan data from Pepe yet<% } %></span>
+    </a>
+  <% } %>
+  <% const repTotal = Rep ? Rep.posts + Rep.users + (Rep.dms || 0) : null, repUrg = Rep ? Rep.postsUrgent + Rep.usersUrgent + (Rep.dmsUrgent || 0) : 0; %>
+  <a class="adm-tile <%= repUrg ? 'bad' : repTotal ? 'warn' : 'ok' %>" href="/feed/admin#urgent" id="tileReports">
+    <span class="k">🛡️ Open reports</span>
+    <span class="v"><%= repTotal === null ? '—' : repTotal %><% if (repUrg) { %> <small><%= repUrg %> urgent</small><% } %></span>
+    <span class="s"><% if (Rep) { %><%= Rep.posts %> posts/comments · <%= Rep.users %> accounts<%= Rep.dms !== null ? ' · ' + Rep.dms + ' DMs' : '' %><% } else { %>Couldn't count them<% } %></span>
+  </a>
+  <a class="adm-tile <%= S && (S.pepeLive || S.userLive) ? 'ok' : 'off' %>" href="/stage/admin#open" id="tileStage">
+    <span class="k"><span class="adm-dot <%= S && (S.pepeLive || S.userLive) ? 'ok' : '' %>" aria-hidden="true"></span>Stage</span>
+    <span class="v"><%= !S ? '—' : (S.pepeLive || S.userLive) ? 'Live' : 'Off air' %></span>
+    <span class="s"><% if (S) { %>Pepe's stream <%= S.pepeLive === null ? 'unknown' : S.pepeLive ? 'on air' : 'off' %> · <%= S.userLive %> user stream<%= S.userLive === 1 ? '' : 's' %> live · <%= S.upcoming %> booked<% } %></span>
+  </a>
+  <% if (isAdmin) { %>
+    <% const d = St && St.started ? St.daysLeft : null; %>
+    <a class="adm-tile <%= d !== null && d <= 7 ? 'warn' : '' %>" href="/admin/users#stale-admin" id="tileStale">
+      <span class="k">🧹 Stale cleanup</span>
+      <span class="v"><%= !St ? '—' : !St.started ? 'Not started' : d > 0 ? d + ' days' : d === 0 ? 'Today' : 'Due' %></span>
+      <span class="s"><% if (St && St.started) { %>Archive on <%= St.applyOn %> · <%= fmt(St.pending) %> still warned (<%= fmt(St.pendingPat) %> PAT) · purge from <%= St.purgeOn %><% } else { %>No warning window yet<% } %></span>
+    </a>
+  <% } %>
+</section>
+
+<section class="adm-card" id="alerts" aria-labelledby="alertsT">
+  <h2 id="alertsT">Alerts <span class="adm-pill <%= O.alerts && O.alerts.length ? 'bad' : 'ok' %>"><%= O.alerts ? O.alerts.length : 0 %></span></h2>
+  <% if (!O.alerts || !O.alerts.length) { %><p class="adm-help">Nothing needs you right now. ✔</p><% } else { %>
+    <ul class="adm-alerts">
+      <% O.alerts.forEach((a) => { %><li class="<%= a.level %>"><a href="<%= a.href %>"><%= a.level === 'bad' ? '⛔' : a.level === 'warn' ? '⚠️' : 'ℹ️' %> <%= a.text %></a></li><% }) %>
+    </ul>
+  <% } %>
+  <% if (!isAdmin) { %><p class="adm-help" style="margin-top:10px">Pepe, the Reserve, loans and the stale-account cleanup are for site Admins and aren't shown to Staff.</p><% } %>
+</section>
+
+<section class="adm-card" aria-labelledby="whereT">
+  <h2 id="whereT">Where things are</h2>
+  <div class="adm-kv">
+    <div><b>Users &amp; Accounts</b><span><a href="/admin/users#roles">Roles</a> · <a href="/admin/users#xp">XP</a> · <a href="/admin/users#welcome-admin">Welcome bonus</a> · <a href="/admin/users#stale-admin">Stale cleanup</a></span></div>
+    <div><b>Economy</b><span><a href="/admin/economy#reserve">Reserve</a> · <a href="/admin/economy#loans">Loans</a> · <a href="/admin/economy#grants">Grants</a> · <a href="/admin/economy#codes">Codes</a> · <a href="/admin/economy#royalties">Royalties</a></span></div>
+    <div><b>Pads</b><span><a href="/pads/admin#front">Front-page pad</a> · <a href="/pads/admin#owners">Owners</a> · <a href="/pads/admin#royalties">Royalties</a></span></div>
+    <div><b>Feed &amp; Trust and Safety</b><span><a href="/feed/admin#urgent">Reports</a> · <a href="/feed/admin#bans">Bans</a> · <a href="/feed/admin#settings">Settings &amp; Terms</a></span></div>
+    <div><b>Stage &amp; Stream</b><span><a href="/stage/admin#open">On stage</a> · <a href="/stage/admin#settings">Settings</a> · <a href="/stage/admin#log">Log</a></span></div>
+    <div><b>Pepe</b><span><a href="/admin/pepe#control">Control panel</a> · <a href="/feed/admin#pepe">On the feed</a> · <a href="/admin/bridge">Bridge log</a></span></div>
+    <div><b>Games &amp; shop</b><span><a href="/admin/games">Wheel &amp; jackpot</a> · <a href="/shop/admin">Prize shop</a> · <a href="/admin/manage-prizes">Official prizes</a></span></div>
+    <div><b>System</b><span><a href="/admin/system">Health &amp; storage</a></span></div>
+  </div>
+</section>
+<script>
+  // Old links to the one long /admin/panel page: its anchors now live on section pages.
+  (function () {
+    var map = { '#welcome-admin': '/admin/users#welcome-admin', '#stale-admin': '/admin/users#stale-admin', '#badges': '/admin/cosmetics#badges',
+                '#redemption-codes': '/admin/economy#codes', '#manualSpinForm': '/admin/games#wheel', '#jackpotForm': '/admin/games#jackpot',
+                '#pointsTransferForm': '/admin/economy#grants', '#xpTransferForm': '/admin/users#xp', '#classEditForm': '/admin/users#roles', '#classListForm': '/admin/users#roles' };
+    if (map[location.hash]) location.replace(map[location.hash]);
+  })();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

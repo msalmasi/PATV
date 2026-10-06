@@ -1278,7 +1278,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
   // ── admin ──
   app.get("/stage/admin", addUser, async (req, res) => {
     if (!isStaff(req.user)) return res.redirect("/login");
-    res.render("stageAdmin", { user: req.user.username, state: await adminState() });
+    res.render("stageAdmin", { user: req.user.username, isAdmin: req.user.class === "Admin", state: await adminState() });
   });
   app.get("/api/stage/admin/state", addUser, needStaff, async (req, res) => {
     try { res.set("Cache-Control", "no-store"); res.json({ ok: true, ...(await adminState()) }); } catch (e) { fail(res, e); }

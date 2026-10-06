@@ -207,27 +207,9 @@ app.get("/healthz", (req, res) => {
 require("./home").register(app, { addUser, xpForNextLevel });
 require("./terms").register(app, { addUser });   // 1.99cc: /terms, /privacy, POST /api/terms/accept
 
-// Admin Panel Endpoint
-app.get("/admin/panel", addUser, (req, res) => {
-  console.log(req.user);
-  const userType = req.user ? req.user.class : null;
-  const username = req.user ? req.user.username : null;
-  if (userType === "Admin" || userType === "Staff") {
-    let errorMessages = req.flash("error");
-    let successMessages = req.flash("success");
-    res.render("adminPanel", {
-      user: username,
-      errors: errorMessages,
-      success: successMessages,
-    });
-  } else {
-    req.flash(
-      "error",
-      "Access denied. You must be an admin or staff to access this page."
-    );
-    return res.redirect("/login");
-  }
-});
+// The admin area (adminweb.js, 1.99cu): /admin Overview + section pages in one shell; /admin/panel -> /admin.
+// Same gate as the old /admin/panel: Admin or Staff, else a flash + /login.
+require("./adminweb").register(app, { addUser });
 
 // Welcome bonus admin (welcome.js, 1.99bg): settings, the last decisions, "pay anyway". Admins only.
 async function welcomeAdmin(req) {

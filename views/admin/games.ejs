@@ -1,0 +1,36 @@
+<%- include('../partials/admin-open', { title, user, section: 'games', admIsAdmin: isAdmin }) %>
+<div class="adm-head">
+  <h1>Games</h1>
+  <p>The wheel and its jackpot. Hold'em, blackjack and the chat games run in Pepe; their settings are his.</p>
+</div>
+
+<div class="adm-cols">
+  <section class="adm-card" id="wheel" aria-labelledby="wheelT">
+    <h2 id="wheelT">Manual wheel spin</h2>
+    <p class="adm-help">Spins the public wheel for a member, as if they'd spun it. Only one spin runs at a time.</p>
+    <form id="manualSpinForm" class="adm-form" action="/api/g/wheel/jackpot" method="POST">
+      <label for="spinUsername">Username<input type="text" id="spinUsername" name="username" required autocomplete="off"></label>
+      <div class="adm-actions"><button id="spin" type="submit">Spin the wheel</button><span id="spinStatus" class="adm-msg" role="status"></span></div>
+    </form>
+    <p class="adm-help" style="margin-top:10px"><a href="/u/<%= encodeURIComponent(user) %>/wheel">Watch the wheel ›</a></p>
+  </section>
+
+  <section class="adm-card" id="jackpot" aria-labelledby="jackpotT">
+    <h2 id="jackpotT">Jackpot top-up</h2>
+    <p class="adm-help">Adds an amount to the casino jackpot pot (a jackpot rake row in your name).</p>
+    <form id="jackpotForm" class="adm-form" action="/api/g/wheel/jackpot" method="POST">
+      <label for="jackpotAmount">Amount (PAT)<input type="number" id="jackpotAmount" name="amount" required></label>
+      <div class="adm-actions"><button type="submit">Update jackpot</button><span id="jackpotStatus" class="adm-msg" role="status"></span></div>
+    </form>
+  </section>
+</div>
+
+<section class="adm-card" id="casino" aria-labelledby="casinoT">
+  <h2 id="casinoT">Casino bans</h2>
+  <p class="adm-help">One flag blocks a member from all casino play (the web wheel and blackjack, the chat games, Discord). Pepe sets and lists it from his admin panel / chat; the site only enforces it.</p>
+  <div class="adm-actions"><a class="adm-btn ghost" href="/casino">Casino lobby ›</a><a class="adm-btn ghost" href="/lotto">Lotto ›</a></div>
+</section>
+<script src="/public/js/admin-panel.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

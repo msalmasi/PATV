@@ -1,4 +1,4 @@
-<%- include('layout', { title: 'Feed admin', user: user}) %>
+<%- include('partials/admin-open', { title: 'Feed admin', user: user, section: 'feed', admIsAdmin: isAdmin }) %>
 <link rel="stylesheet" href="/public/css/feed.css?v=7">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
@@ -23,8 +23,8 @@
   ];
 %>
 <main class="fd fd-admin">
-  <div class="crumb"><a href="/admin/panel">Admin</a> › Feed</div>
-  <h1>Feed admin</h1>
+  <div class="crumb"><a href="/admin">Admin</a> › Feed</div>
+  <h1>Feed &amp; Trust and Safety</h1>
   <p class="sub">Storage: <b><%= mb(used) %></b> used of <%= C.global_quota_gb %> GB · disk free <b><%= gb(free) %></b> · files in <code><%= dir %></code></p>
 
   <%# 1.99cc: one block per post, one row of actions per reported target (the post itself, each reported comment). Urgent first. %>
@@ -168,7 +168,7 @@
   </section>
   <% } %>
 
-  <section class="fa-card">
+  <section class="fa-card" id="bans">
     <h2>Feed bans</h2>
     <form id="faBan" class="fa-inline">
       <input name="user" placeholder="username or Camfrog name" required aria-label="User">
@@ -177,16 +177,16 @@
       <button type="submit" class="btn-s">Ban from the whole feed</button>
     </form>
     <% if (!bans.length) { %><p class="mut">Nobody is banned.</p><% } else { %>
-      <table class="fa-t"><thead><tr><th>User</th><th>Where</th><th>Until</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody>
+      <div class="fa-scroll"><table class="fa-t" aria-label="Feed bans"><thead><tr><th>User</th><th>Where</th><th>Until</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody>
         <% bans.forEach((b) => { const R = roomsById.get(b.room_id); %>
           <tr><td><%= b.username %></td><td><%= b.room_id ? (R ? R.title : b.room_id) : 'whole feed' %></td><td><%= b.until ? new Date(b.until).toISOString().slice(0, 10) : 'forever' %></td>
               <td><%= b.reason || '' %></td><td><%= b.by %></td><td><button type="button" data-fa="unban" data-uid="<%= b.user_id %>" data-room="<%= R ? R.slug : '' %>">Lift</button></td></tr>
         <% }) %>
-      </tbody></table>
+      </tbody></table></div>
     <% } %>
   </section>
 
-  <section class="fa-card">
+  <section class="fa-card" id="settings">
     <h2>Settings</h2>
     <form id="faCfg" class="fa-cfg">
       <label class="ck"><input type="checkbox" name="enabled"<%= C.enabled ? ' checked' : '' %>> Posting is on (off = only staff can post)</label>
@@ -207,10 +207,13 @@
           <p class="mut">No placeholders left: the switch can go on.</p>
         <% } %>
       </fieldset>
+      <%# 1.99cv: the numeric groups fold away (one collapsible block each); the form still saves them all at once %>
       <% F.forEach(([h, rows]) => { %>
-        <fieldset><legend><%= h %></legend>
+        <details class="adm-adv"><summary><%= h %> <span class="mut">(<%= rows.length %>)</span></summary><div class="adm-adv-body">
+        <fieldset>
           <% rows.forEach(([k, l]) => { %><label><span><%= l %></span><input type="number" name="<%= k %>" value="<%= C[k] %>" min="0" placeholder="<%= D[k] %>"></label><% }) %>
         </fieldset>
+        </div></details>
       <% }) %>
       <div><button type="submit" class="btn-s">Save settings</button> <span class="fc-err" id="faMsg" role="status"></span></div>
     </form>
@@ -220,5 +223,6 @@
 <script src="/public/js/feed-admin.js?v=2" defer></script>
 <% if (isAdmin) { %><script src="/public/js/dm-admin.js?v=1" defer></script><% } %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
+<%- include('partials/admin-close') %>
 </body>
 </html>

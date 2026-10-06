@@ -1,0 +1,25 @@
+<%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
+<div class="adm-head">
+  <h1>Pepe</h1>
+  <p>Restart Pepe or Camfrog on his VM, change his look, and see what he's doing. The same panel is still at the bottom of the homepage for admins.</p>
+</div>
+
+<section class="adm-card" id="control" aria-labelledby="ctlT">
+  <h2 id="ctlT">Control panel <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Status from the VM supervisor's heartbeat. Restarts need your account password; look changes run Pepe's admin chat commands as you. Everything is logged.</p>
+  <% if (isAdmin) { %>
+    <%- include('../partials/pepe-control', { me }) %>
+    <script>(function () { var d = document.getElementById('pepeCtl'); if (d) d.open = true; })();</script>
+  <% } else { %>
+    <p class="adm-help">Admins only.</p>
+  <% } %>
+</section>
+
+<section class="adm-card" id="feed" aria-labelledby="pfT">
+  <h2 id="pfT">Pepe on the feed</h2>
+  <p class="adm-help">His site-wide caps, his All-feed settings, the pads he's switched on in, and every post and comment he made are on the feed admin page.</p>
+  <div class="adm-actions"><a class="adm-btn ghost" href="/feed/admin#pepe">Pepe's feed settings ›</a><a class="adm-btn ghost" href="/admin/bridge">Bridge command log ›</a></div>
+</section>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

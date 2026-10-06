@@ -1,0 +1,92 @@
+<%- include('../partials/admin-open', { title, user, section: 'users', admIsAdmin: isAdmin }) %>
+<div class="adm-head">
+  <h1>Users &amp; Accounts</h1>
+  <p>Roles and classes, XP, the welcome bonus and the stale-account cleanup. Each card saves on its own.</p>
+</div>
+<% if (errors && errors.length) { %><div class="adm-flash err" role="alert"><%= errors %></div><% } %>
+
+<div class="adm-cols">
+  <section class="adm-card" id="roles" aria-labelledby="rolesT">
+    <h2 id="rolesT">Assign a class</h2>
+    <p class="adm-help">Sets an account's class (role). <b>Admin</b> and <b>Staff</b> open the admin area; only Admins see Pepe, the Reserve, loans, DM reports and the stale cleanup.</p>
+    <form id="classEditForm" class="adm-form" action="/api/u/username/class/update" method="POST">
+      <label for="userClassUsername">Username<input type="text" id="userClassUsername" name="username" required autocomplete="off"></label>
+      <label for="userClass">Class<select name="class" id="userClass" required><option value="">Select a class…</option></select></label>
+      <div class="adm-actions"><button type="submit">Set class</button><span id="classEditStatus" class="adm-msg" role="status"></span></div>
+    </form>
+  </section>
+
+  <section class="adm-card" id="classes" aria-labelledby="classesT">
+    <h2 id="classesT">Manage classes</h2>
+    <p class="adm-help">The list of classes the picker offers.</p>
+    <ul class="adm-tags" id="classList" aria-label="Current classes"></ul>
+    <details class="adm-adv">
+      <summary>Add or remove a class</summary>
+      <div class="adm-adv-body">
+        <form id="classListForm" class="adm-form" action="/api/classes/edit" method="POST">
+          <label for="classAction">Action<select name="action" id="classAction" required><option value="add">Add</option><option value="remove">Remove</option></select></label>
+          <label for="className">Class name<input type="text" id="className" name="className" required></label>
+          <div class="adm-actions"><button type="submit">Save</button><span id="classListStatus" class="adm-msg" role="status"></span></div>
+        </form>
+      </div>
+    </details>
+  </section>
+
+  <section class="adm-card" id="xp" aria-labelledby="xpT">
+    <h2 id="xpT">Add XP</h2>
+    <p class="adm-help">Adds XP to an account. <b>Known issue:</b> the server has no <code>/api/admin/update-level</code> route, so this fails - it did on the old admin page too. Kept as it was until it gets a real endpoint.</p>
+    <form id="xpTransferForm" class="adm-form" action="/api/admin/update-level" method="POST">
+      <label for="xpUsername">Username<input type="text" id="xpUsername" name="username" required autocomplete="off"></label>
+      <label for="xpAmount">XP<input type="number" id="xpAmount" name="xp" required></label>
+      <div class="adm-actions"><button type="submit">Add XP</button><span id="xpStatus" class="adm-msg" role="status"></span></div>
+    </form>
+  </section>
+
+  <section class="adm-card" id="merges" aria-labelledby="mergesT">
+    <h2 id="mergesT">Account merges</h2>
+    <p class="adm-help">Merges happen on their own: linking a Camfrog name (<code>!verify</code>) folds Pepe's auto-made account into the real one, and a Twitch/Discord sign-in that belongs to another account offers the member a merge. Duplicate and alt merges by hand are a server script (dry run first), not a button here.</p>
+  </section>
+</div>
+
+<section class="adm-card" id="welcome-admin" aria-labelledby="welcomeT">
+  <h2 id="welcomeT">Welcome bonus <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">New accounts start at 0. The bonus vests after real play (level, active days, account age) and is paid once per person from the Federal Reserve. An account that matches one that already got it (Camfrog identity, Discord, Twitch, email, browser, or too many from one network) is marked duplicate - you can still pay it. Connect bonuses: once per Discord/Twitch id, held until the welcome vests.</p>
+  <p id="welcome-stats" class="adm-help" style="color:#ddd">Loading…</p>
+  <form id="welcome-config" class="adm-form">
+    <label>On<select name="enabled"><option value="1">yes</option><option value="0">no (pending ones wait)</option></select></label>
+    <label>Amount (PAT)<input type="number" name="amount" min="0" step="1000"></label>
+    <label>Connect bonus (PAT)<input type="number" name="connect_amount" min="0" step="1000"></label>
+    <details class="adm-adv" style="grid-column:1/-1">
+      <summary>Advanced: vesting and duplicate limits</summary>
+      <div class="adm-adv-body adm-form">
+        <label>Min level<input type="number" name="min_level" min="0"></label>
+        <label>Active days<input type="number" name="min_days" min="0"></label>
+        <label>Min account age (h)<input type="number" name="min_age_hours" min="0"></label>
+        <label>Per network<input type="number" name="ip_max" min="0"></label>
+        <label>…per days<input type="number" name="ip_window_days" min="1"></label>
+        <label>Expire after (days)<input type="number" name="expire_days" min="1"></label>
+      </div>
+    </details>
+    <div class="adm-actions"><button type="submit">Save welcome bonus</button><span id="welcomeMsg" class="adm-msg" role="status"></span></div>
+  </form>
+  <h3>Latest decisions</h3>
+  <div class="adm-tbl"><table aria-label="Welcome bonus decisions" data-filter>
+    <thead><tr><th>Account</th><th>State</th><th>Why</th><th>When (UTC)</th><th></th></tr></thead>
+    <tbody id="welcome-recent"></tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="stale-admin" aria-labelledby="staleT">
+  <h2 id="staleT">Stale-account cleanup <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Accounts nobody has used (auto Camfrog accounts with no activity, junk web sign-ups, ownerless ghosts, Twitch/Discord-bot accounts without real activity and 100k+ PAT) are warned first, then archived: their PAT goes back to the Federal Reserve and signing in brings it back. Any activity in the warning window (sign-in, a site visit, Camfrog, Twitch, Discord, linking) clears the warning. Empty tier-A accounts are deleted after the purge date. Run by <code>migrate-stale-accounts.js</code> on the server (dry run by default).</p>
+  <p id="stale-dates" style="font-size:14px;margin:0">Loading…</p>
+  <div class="adm-tbl"><table aria-label="Stale accounts by tier">
+    <thead><tr><th>Tier</th><th class="num">Pending</th><th class="num">Cleared</th><th class="num">Archived</th></tr></thead>
+    <tbody id="stale-counts"></tbody>
+  </table></div>
+  <p id="stale-vias" class="adm-help" style="margin-top:8px"></p>
+</section>
+<script src="/public/js/admin-panel.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

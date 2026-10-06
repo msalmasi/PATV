@@ -1,0 +1,117 @@
+<%- include('../partials/admin-open', { title, user, section: 'economy', admIsAdmin: isAdmin }) %>
+<%
+  const fmt = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
+  const ago = (t) => { if (!t) return 'never'; const s = Math.max(0, Math.round((Date.now() - t) / 1000)); return s < 90 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + 'm ago' : s < 172800 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
+  const R = reserve, L = loans, T = (roy && roy.totals) || {};
+%>
+<div class="adm-head">
+  <h1>Economy</h1>
+  <p>The Federal Reserve and what the site pays out of it, loans, PAT grants, redemption codes, pad royalties and the prize shop. Rewards the site pays are funded from a vault, never minted.</p>
+</div>
+
+<section class="adm-card" id="reserve" aria-labelledby="reserveT">
+  <h2 id="reserveT">Federal Reserve &amp; today's flows <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">The Reserve lives in Pepe; he syncs its balance here. Site payouts from it (level-ups, welcome and connect bonuses, codes…) are booked as claims that Pepe settles by draining his Reserve. If a vault can't cover a payout, it's skipped.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!R) { %><p class="adm-help">Couldn't read the Reserve numbers.</p><% } else { %>
+    <div class="adm-kv">
+      <div><b>Balance (from Pepe)</b><span><%= R.balance === null ? 'never synced' : fmt(R.balance) + ' PAT' %></span></div>
+      <div><b>Last sync</b><span><%= ago(R.syncedAt) %></span></div>
+      <div><b>Unsettled site claims</b><span><%= fmt(R.unsettled) %> PAT</span></div>
+      <div><b>Paid out today (UTC)</b><span><%= fmt(R.todayTotal) %> PAT</span></div>
+      <% if (R.jackpot !== null) { %><div><b>Casino jackpot</b><span><%= fmt(R.jackpot) %> PAT</span></div><% } %>
+    </div>
+    <div class="adm-tbl"><table aria-label="Reserve payouts today by flow">
+      <thead><tr><th>Flow (today, UTC)</th><th class="num">Payouts</th><th class="num">PAT</th></tr></thead>
+      <tbody>
+        <% if (!R.today.length) { %><tr><td colspan="3" class="empty">No Reserve payouts today.</td></tr><% } %>
+        <% R.today.forEach((f) => { %><tr><td><code><%= f.flow %></code></td><td class="num"><%= fmt(f.n) %></td><td class="num"><%= fmt(f.t) %></td></tr><% }) %>
+      </tbody>
+    </table></div>
+  <% } %>
+</section>
+
+<section class="adm-card" id="loans" aria-labelledby="loansT">
+  <h2 id="loansT">Loans &amp; credit <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Reserve loan requests are approved or declined on the wallet page (its admin sections show each requester's live credit score). Pepe sends the loan book; rates and limits are his.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!L || !L.known) { %><p class="adm-help">No loan data from Pepe yet.</p><% } else { %>
+    <div class="adm-kv">
+      <div><b>Pending requests</b><span><%= L.pending %><%= L.pending && isFinite(L.oldest) ? ' · oldest ' + ago(L.oldest * (L.oldest < 1e12 ? 1000 : 1)) : '' %></span></div>
+      <div><b>Open Reserve loans</b><span><%= L.reserveOpen %></span></div>
+      <div><b>Outstanding book</b><span><%= L.book == null ? '—' : fmt(L.book) + ' PAT' %></span></div>
+      <div><b>Room left</b><span><%= L.room == null ? '—' : fmt(L.room) + ' PAT' %></span></div>
+      <div><b>Reserve lending</b><span><%= L.enabled === null ? '—' : L.enabled ? 'open' : 'closed' %></span></div>
+      <div><b>Synced</b><span><%= ago(L.updated) %></span></div>
+    </div>
+  <% } %>
+  <div class="adm-actions" style="margin-top:10px">
+    <a class="adm-btn ghost" href="/wallet#admin-requests">Loan requests ›</a>
+    <a class="adm-btn ghost" href="/wallet#admin-book">Reserve book ›</a>
+    <a class="adm-btn ghost" href="/wallet#admin-stashes">All stashes ›</a>
+  </div>
+</section>
+
+<div class="adm-cols">
+  <section class="adm-card" id="grants" aria-labelledby="grantsT">
+    <h2 id="grantsT">PAT grant</h2>
+    <p class="adm-help">Adds PAT straight to an account's balance as a "staff transfer" in their history (the old "Points panel"). It doesn't come out of the Reserve.</p>
+    <form id="pointsTransferForm" class="adm-form" action="/api/admin/transfer/username" method="POST">
+      <label for="pointsUsername">Username<input type="text" id="pointsUsername" name="username" required autocomplete="off"></label>
+      <label for="pointsAmount">Amount (PAT)<input type="number" id="pointsAmount" name="amount" required></label>
+      <div class="adm-actions"><button type="submit">Grant PAT</button><span id="transferStatus" class="adm-msg" role="status"></span></div>
+    </form>
+  </section>
+
+  <section class="adm-card" id="codes" aria-labelledby="codesT">
+    <h2 id="codesT">Redemption codes</h2>
+    <p class="adm-help">Codes members redeem for PAT (paid through the <code>redeem_codes</code> flow). Click a code to see who used it.</p>
+    <form id="redemption-codes" class="adm-form" action="/api/admin/redemption-codes" method="post">
+      <label for="code">Code<input type="text" id="code" name="code" required autocomplete="off"></label>
+      <label for="points">PAT value<input type="number" id="points" name="points" required></label>
+      <label for="uses_allowed">Uses<input type="number" id="uses_allowed" name="uses_allowed" required></label>
+      <label for="expiration_date">Expires<input type="date" id="expiration_date" name="expiration_date"></label>
+      <div class="adm-actions"><button type="submit">Save code</button><span id="codeStatus" class="adm-msg" role="status"></span></div>
+    </form>
+    <h3>Existing codes</h3>
+    <div id="redemptionCodesList" class="adm-chips"></div>
+  </section>
+</div>
+
+<section class="adm-card" id="royalties" aria-labelledby="royT">
+  <h2 id="royT">Pad owner royalties</h2>
+  <p class="adm-help">What pad owners earn on spending in their pads. Rates and payout rules are set on <a href="/pads/admin#royalties">Pads › Owner royalties</a>.</p>
+  <div class="adm-kv">
+    <div><b>Pending</b><span><%= fmt(T.pending) %> PAT</span></div>
+    <div><b>Paid out by the Fed</b><span><%= fmt(T.paid) %> PAT</span></div>
+    <div><b>Expired</b><span><%= fmt(T.expired) %> PAT</span></div>
+    <div><b>Earned all-time</b><span><%= fmt(T.earned) %> PAT</span></div>
+    <% if (roy && roy.next_release) { %><div><b>Next release</b><span><%= new Date(roy.next_release).toISOString().slice(0, 16).replace('T', ' ') %> UTC</span></div><% } %>
+  </div>
+</section>
+
+<section class="adm-card" id="shop" aria-labelledby="shopT">
+  <h2 id="shopT">Prize shop</h2>
+  <p class="adm-help">Member listings, orders, disputes and the shop's fee settings have their own admin page; official (site) prizes have the older manager.</p>
+  <div class="adm-kv">
+    <div><b>Listings awaiting review</b><span><%= shop ? shop.review : '—' %></span></div>
+    <div><b>Disputed orders</b><span><%= shop ? shop.disputes : '—' %></span></div>
+  </div>
+  <div class="adm-actions" style="margin-top:10px">
+    <a class="adm-btn ghost" href="/shop/admin">Prize shop admin ›</a>
+    <a class="adm-btn ghost" href="/admin/manage-prizes">Official prizes ›</a>
+  </div>
+</section>
+
+<section class="adm-card" id="elsewhere" aria-labelledby="elseT">
+  <h2 id="elseT">On Pepe's admin panel, not here</h2>
+  <p class="adm-help">These are Pepe's and are changed from his own admin panel (or chat commands), not from the website:</p>
+  <ul class="adm-list">
+    <li><b>PAT Routing</b> - which vault each flow pays from / into, including the pad-owner share.</li>
+    <li><b>Automint</b> and <b>vaults</b> (vault flows, the share of all Reserve outflows).</li>
+    <li><b>Reserve top-ups</b> and the Reserve loan rate and limits.</li>
+    <li><b>Casino bans</b> (the site only stores the flag Pepe sets).</li>
+  </ul>
+</section>
+<script src="/public/js/admin-panel.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

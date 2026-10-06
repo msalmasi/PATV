@@ -1,0 +1,34 @@
+<%- include('../partials/admin-open', { title, user, section: 'cosmetics', admIsAdmin: isAdmin }) %>
+<div class="adm-head">
+  <h1>Cosmetics &amp; Achievements</h1>
+  <p>Badges you hand out by hand. The achievements (with their pixel badges) and the cosmetics shop are catalog files in the repo, earned and bought automatically.</p>
+</div>
+
+<section class="adm-card" id="badges" aria-labelledby="badgesT">
+  <h2 id="badgesT">Badges</h2>
+  <p class="adm-help">Click a badge to see who has it.</p>
+  <div id="badgesList" class="adm-chips"></div>
+  <details class="adm-adv" id="badge-new">
+    <summary>Create a badge</summary>
+    <div class="adm-adv-body">
+      <form id="badges" class="adm-form" action="/api/badges/add" method="post">
+        <label for="name">Badge name<input type="text" id="name" name="name" required></label>
+        <label for="points">Points<input type="number" id="points" name="points" required></label>
+        <label for="icon">Icon URL<input type="text" id="icon" name="icon"></label>
+        <label for="requirement">Requirement<input type="text" id="requirement" name="requirement" required></label>
+        <label for="description" style="grid-column:1/-1">Description<textarea id="description" name="description" required></textarea></label>
+        <div class="adm-actions"><button type="submit">Create badge</button><span id="badgeStatus" class="adm-msg" role="status"></span></div>
+      </form>
+    </div>
+  </details>
+</section>
+
+<section class="adm-card" id="catalogs" aria-labelledby="catT">
+  <h2 id="catT">Catalogs</h2>
+  <p class="adm-help">Achievements come from <code>achievements.json</code> and cosmetics from <code>cosmetics.json</code>; a change is a deploy, not a setting.</p>
+  <div class="adm-actions"><a class="adm-btn ghost" href="/achievements">Achievements ›</a><a class="adm-btn ghost" href="/cosmetics">Cosmetics shop ›</a></div>
+</section>
+<script src="/public/js/admin-panel.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

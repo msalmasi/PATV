@@ -1,4 +1,4 @@
-<%- include('layout', { title: 'Pads admin', user: user }) %>
+<%- include('partials/admin-open', { title: 'Pads admin', user: user, section: 'pads', admIsAdmin: !!(typeof isAdmin !== 'undefined' && isAdmin) }) %>
 <!-- views/roomsAdmin.ejs — site staff (1.99bi): room owners, the homepage's featured room, royalty
      rates. Stage money settings stay on /stage/admin. -->
 <link rel="stylesheet" href="/public/css/stage.css?v=5">
@@ -9,7 +9,7 @@
     <p class="lede">Who owns each pad, which pad the homepage features, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pads ›</a></p>
   </div>
 
-  <section class="sb-card" aria-labelledby="frontT">
+  <section class="sb-card" id="front" aria-labelledby="frontT">
     <h2 id="frontT">Front-page pad</h2>
     <form id="frontForm" class="row">
       <select name="room" aria-label="Front-page pad" style="max-width:100%;min-width:0">
@@ -21,7 +21,7 @@
     <p class="muted">The homepage shows this pad's stage (its featured stream, else Pepe's - Pepe's stream is on the stage of every pad whose Camfrog room he's in) and its live chat. Picking a pad pins it. It does <b>not</b> move Pepe — <code>!activeroom</code> stays his window/mic setting in chat, and the automatic pick ignores it.</p>
     <%- include('partials/front-pick', { fp, open: true }) %>
     <% const FC = (fp && fp.cfg) || { w: {} }; %>
-    <h3 id="fcT">Automatic pick tuning</h3>
+    <details class="adm-adv" id="front-tuning"><summary id="fcT">Advanced: automatic pick tuning</summary><div class="adm-adv-body">
     <form id="fcForm" class="settings" aria-labelledby="fcT">
       <label>Hold a pick at least (min)<input type="number" name="hold_min" min="0" max="1440" step="1" value="<%= FC.hold_min %>"></label>
       <label>Switch when another scores ≥ (×)<input type="number" name="lead_ratio" min="1" max="10" step="0.05" value="<%= FC.lead_ratio %>"></label>
@@ -35,9 +35,10 @@
       <label>Weight: person in the Camfrog room<input type="number" name="w_people" min="0" max="100" step="0.05" value="<%= FC.w.people %>"></label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save tuning</button><span class="msg" id="fcMsg" role="status"></span></div>
     </form>
+    </div></details>
   </section>
 
-  <section class="sb-card" aria-labelledby="ownT">
+  <section class="sb-card" id="owners" aria-labelledby="ownT">
     <h2 id="ownT">Pads &amp; owners</h2>
     <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Owner</th><th>Stage</th><th>Now</th><th></th></tr></thead><tbody>
       <% list.forEach((r) => { const g = guide.find((x) => x.id === r.id) || {}; %>
@@ -58,7 +59,7 @@
     <p class="muted">Pads for the Camfrog rooms Pepe bridges are added automatically (no owner). Owner = one PATV account (matched by username, display name or Camfrog/Discord/Twitch name); <code>house</code> = Pepe's (site admins run it, no royalties). Owners sync to Pepe within ~2 minutes for chat <code>!stage</code> commands.</p>
   </section>
 
-  <section class="sb-card" aria-labelledby="royT">
+  <section class="sb-card" id="royalties" aria-labelledby="royT">
     <h2 id="royT">Pad owner royalties</h2>
     <form id="royForm" class="settings">
       <label class="chk"><input type="checkbox" name="enabled" <%= roy.enabled ? 'checked' : '' %>> Royalties on</label>
@@ -71,7 +72,9 @@
       <label>Expire unpaid after (periods)<input type="number" name="keep_periods" min="1" max="52" value="<%= roy.keep_periods %>"></label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><span class="msg" id="royMsg" role="status"></span></div>
     </form>
+    <details class="adm-adv"><summary>How owner royalties are booked and paid</summary><div class="adm-adv-body">
     <p class="muted"><b>What owners earn on pad spending is set in one place: Pepe's PAT Routing table</b> (Pepe's admin panel). Every pad flow there (paid commands, song requests, per-use voices, DJ shout-outs, !sponsor) keeps its turf / Reserve shares and sends a <code>room_owner</code> share (default 10%, sponsor 0%) to the owner of the pad it was spent in. That share is deposited in the Federal Reserve and booked here; the weekly release above pays it back out of the Reserve (payout flow <code>room_owner</code>). A pad with no owner, a house pad, or the owner paying in their own pad: nothing is booked and the share stays in the Reserve. Website stage time is the one spend Pepe doesn't route - its share is the % above. A refunded charge voids its royalty. Changing the period length re-buckets future periods.</p>
+    </div></details>
     <% const osh = (sum && sum.owner_shares) || []; if (osh.length) { %><p class="muted">Pepe's current room_owner shares: <%= osh.map((x) => x.label + ' ' + x.pct + '%').join(' · ') %>.</p><% } %>
 
     <h3 id="flowT">Royalty flows</h3>
@@ -125,5 +128,6 @@
   });
 })();
 </script>
+<%- include('partials/admin-close') %>
 </body>
 </html>
