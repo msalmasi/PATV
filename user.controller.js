@@ -572,7 +572,28 @@ function xpForNextLevel(currentLevel) {
 };
 
 // Update Levels
-async function updateLevel(userId, additionalXp) {
+// Level-ups are serialised per user: updateLevel reads xp/level, awaits the reward payouts, then
+// writes back - two concurrent calls for one user (e.g. an achievement + a spin in the same second)
+// both saw the old values, BOTH paid the level-up reward and one overwrote the other's XP
+// (CFi00snkcl got "Level-up reward (Lv 4)" twice at 23:23:17 on 2026-10-05).
+const _levelLocks = new Map();
+function updateLevel(userId, additionalXp) {
+  const prev = _levelLocks.get(userId) || Promise.resolve();
+  const run = prev.catch(() => {}).then(() => _updateLevelLocked(userId, additionalXp));
+  const tail = run.catch(() => {});
+  _levelLocks.set(userId, tail);
+  tail.then(() => { if (_levelLocks.get(userId) === tail) _levelLocks.delete(userId); });
+  return run;
+}
+
+// Each (user, level) reward is paid at most once, ever - recorded before paying, so a retry, a
+// second code path or a restart can't pay a level twice.
+const _levelRewardsReady = runQuery(`CREATE TABLE IF NOT EXISTS levelup_rewards (
+  userId TEXT NOT NULL, level INTEGER NOT NULL, amount INTEGER NOT NULL, paid INTEGER NOT NULL DEFAULT 0,
+  created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (userId, level))`).catch((e) => console.error("[levelup] table:", e.message));
+
+async function _updateLevelLocked(userId, additionalXp) {
+  await _levelRewardsReady;
   const userDetails = await getQuery("SELECT xp, level FROM users WHERE userId = ?", [userId]);
   if (userDetails.length === 0) {
     console.error("User not found");
@@ -594,8 +615,15 @@ async function updateLevel(userId, additionalXp) {
     // Reserve) - never minted; skipped when it can't cover it. (It was 10 x the XP for the level,
     // ~10k x level^2 - ~17M for a single level at 41 - and created from nothing.)
     const pointsReward = LEVELUP_REWARD_PER_LEVEL * level;
-    if (await funding.fundPayout(userId, pointsReward, "levelup", `Level-up reward (Lv ${level})`)) {
-      totalBonusPoints += pointsReward;
+    const claim = await runQuery("INSERT OR IGNORE INTO levelup_rewards (userId, level, amount) VALUES (?, ?, ?)",
+                                 [userId, level, pointsReward]);
+    if (claim && claim.changes) {
+      if (await funding.fundPayout(userId, pointsReward, "levelup", `Level-up reward (Lv ${level})`)) {
+        totalBonusPoints += pointsReward;
+        await runQuery("UPDATE levelup_rewards SET paid = 1 WHERE userId = ? AND level = ?", [userId, level]);
+      }
+    } else {
+      console.log(`[levelup] ${userId} already had the Lv ${level} reward - not paying it again`);
     }
   }
 
