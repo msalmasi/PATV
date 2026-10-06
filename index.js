@@ -35,6 +35,8 @@ const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCook
 const guard = require("./middleware/authGuard");
 const { moveUserRows } = require("./accountMerge");
 const displaynames = require("./displaynames");
+const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
+stale.ensure();
 setTimeout(() => displaynames.ready().catch((e) => console.error("[displaynames] schema:", e.message)), 2000);
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
@@ -530,6 +532,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           currentUser = newUser;
         }
       }
+      await stale.touch(currentUser.userId, "twitch sign-in");   // 1.99bm: an archived account comes back
       // Sign them in (90-day sliding login - see middleware/loginCookie.js)
       issueLogin(res, currentUser);
       res.redirect(oauth.next || "/");
@@ -820,6 +823,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           currentUser = newUser;
         }
       }
+      await stale.touch(currentUser.userId, "discord sign-in");   // 1.99bm: an archived account comes back
       // Sign them in (90-day sliding login - see middleware/loginCookie.js)
       issueLogin(res, currentUser);
       res.redirect(oauth.next || "/");
@@ -1171,11 +1175,11 @@ app.get("/rankings", addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
 
   const cols = "u.userId, u.username, u.displayname, u.avatar, u.points_balance, u.xp, u.level";
-  const sql = `SELECT ${cols} FROM users u ORDER BY u.points_balance DESC LIMIT 100`;
+  const sql = `SELECT ${cols} FROM users u WHERE ${stale.LIVE("u")} ORDER BY u.points_balance DESC LIMIT 100`;
   // xp is progress inside the current level, so level first
-  const levelSql = `SELECT ${cols} FROM users u WHERE u.level > 1 OR u.xp > 0 ORDER BY u.level DESC, u.xp DESC LIMIT 100`;
+  const levelSql = `SELECT ${cols} FROM users u WHERE (u.level > 1 OR u.xp > 0) AND ${stale.LIVE("u")} ORDER BY u.level DESC, u.xp DESC LIMIT 100`;
   const badgeSql = `SELECT ${cols}, COUNT(*) AS badges FROM user_badges ub JOIN users u ON u.userId = ub.userId
-        GROUP BY ub.userId ORDER BY badges DESC, u.level DESC, u.xp DESC LIMIT 100`;
+        WHERE ${stale.LIVE("u")} GROUP BY ub.userId ORDER BY badges DESC, u.level DESC, u.xp DESC LIMIT 100`;
 
   // Recent jackpot winners — match both full ("Jackpot Win") and partial
   // ("Jackpot Win (partial)") payouts. Since 2026-07-19 wins record as partial,
@@ -1238,7 +1242,8 @@ app.post("/api/stats/supply", async (req, res) => {
 });
 async function patSupply() {
   await supplyReady;
-  const w = await getQuery("SELECT COALESCE(SUM(points_balance), 0) AS w, COUNT(*) AS n FROM users");
+  // every wallet counts toward supply (an archived one keeps only sub-1 PAT dust); the label counts live accounts
+  const w = await getQuery(`SELECT COALESCE(SUM(points_balance), 0) AS w, SUM(CASE WHEN ${stale.LIVE()} THEN 1 ELSE 0 END) AS n FROM users`);
   const j = await getQuery("SELECT COALESCE(SUM(amount), 0) AS j FROM jackpot_rakes");
   const snap = await getQuery("SELECT pools, updated_at FROM supply_snapshot WHERE id = 1");
   let pools = [];
@@ -1352,11 +1357,12 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
 app.get('/api/users/discord/:discordId', async (req, res) => {
     const { discordId } = req.params;
     try {
-      const user = await getQuery('SELECT * FROM users WHERE discordId = ?', [discordId]);
+      let user = await getQuery('SELECT * FROM users WHERE discordId = ?', [discordId]);
 
       if (user.length === 0) {
         return res.status(404).json({ message: "User not found" });
       }
+      if (await stale.touch(user[0], "discord")) user = await getQuery('SELECT * FROM users WHERE discordId = ?', [discordId]);
 
       res.json({ user: user[0] });
 
@@ -1369,10 +1375,11 @@ app.get('/api/users/discord/:discordId', async (req, res) => {
 app.get('/api/users/twitch/:twitchId', async (req, res) => {
     const { twitchId } = req.params;
     try {
-      const user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
+      let user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
       if (user.length === 0) {
         return res.status(404).json({ message: "User not found" });
       }
+      if (await stale.touch(user[0], "twitch")) user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
 
       res.json({ user: user[0] });
 
@@ -2123,10 +2130,13 @@ app.post("/api/users/zero-balance", async (req, res) => {
 app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   const { camfrogUsername } = req.params;
   try {
-    const results = await getQuery(
-      "SELECT userId, username, displayname, camfrogUsername, discordId, discordUsername, points_balance, xp, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
-      [camfrogUsername]
-    );
+    const sql = "SELECT userId, username, displayname, camfrogUsername, discordId, discordUsername, points_balance, xp, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?)";
+    let results = await getQuery(sql, [camfrogUsername]);
+    // Pepe looks a login up when the person is active in a room again: an archived account comes back
+    // with its balance (1.99bm)
+    let restored = false;
+    for (const r of results) if (await stale.touch(r.userId, "camfrog")) restored = true;
+    if (restored) results = await getQuery(sql, [camfrogUsername]);
     if (results.length > 0) {
       // roles: what they own from the store (Pepe reads "high roller" for uncapped blackjack)
       res.json({ user: { ...results[0], roles: await userRoles(results[0].userId) } });
@@ -2397,7 +2407,7 @@ app.get("/api/classes", async (req, res) => {
 // HTTP GET endpoint to get top balances (JSON)
 app.get("/api/rankings/top", async (req, res) => {
   const limit = parseInt(req.query.limit) || 5;
-  const sql = `SELECT username, displayname, points_balance FROM users ORDER BY points_balance DESC LIMIT ?`;
+  const sql = `SELECT username, displayname, points_balance FROM users WHERE ${stale.LIVE()} ORDER BY points_balance DESC LIMIT ?`;
   try {
     const users = await getQuery(sql, [limit]);
     res.json({ users });
@@ -4218,7 +4228,7 @@ app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 15;
     const rows = await getQuery(
-      `SELECT username, displayname, points_balance, xp, level FROM users WHERE points_balance > 0 ORDER BY points_balance DESC LIMIT ?`,
+      `SELECT username, displayname, points_balance, xp, level FROM users WHERE points_balance > 0 AND ${stale.LIVE()} ORDER BY points_balance DESC LIMIT ?`,
       [limit]
     );
     res.json(rows);
@@ -4433,7 +4443,7 @@ app.get("/api/stats/xp", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 15;
     const rows = await getQuery(
-      `SELECT username, displayname, xp, level FROM users WHERE xp > 0 ORDER BY xp DESC LIMIT ?`,
+      `SELECT username, displayname, xp, level FROM users WHERE xp > 0 AND ${stale.LIVE()} ORDER BY xp DESC LIMIT ?`,
       [limit]
     );
     res.json(rows);

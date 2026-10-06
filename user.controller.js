@@ -230,6 +230,7 @@ async function loginUser(req, res) {
       return back("That username and password don't match. Check caps lock, or reset your password.", "password");
     }
     loginPairLimit.reset(ip + "|" + who);
+    await require("./staleaccounts").touch(user.userId, "sign-in");   // 1.99bm: an archived account comes back
     issueLogin(res, user);   // 90-day sliding login (middleware/loginCookie.js)
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
@@ -397,6 +398,10 @@ async function updateTwitchId(req, res) {
 // Assumes ownership has been verified (via chat code).
 async function completeCamfrogLink(userId, camfrogUsername) {
   const cfLower = camfrogUsername.toLowerCase().trim();
+  // 1.99bm: an archived account on this name gets its balance back first, so the merge below carries it
+  for (const r of await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId])) {
+    await require("./staleaccounts").touch(r.userId, "camfrog link");
+  }
 
   // Case 1: existing CF auto-account
   const autoAccounts = await getQuery(

@@ -11,6 +11,7 @@ const bridge = require("./bridge");
 const staking = require("./staking");
 const cosmetics = require("./cosmetics");
 const userstats = require("./userstats");
+const stale = require("./staleaccounts");
 
 const STATS_TTL = 15 * 1000;
 let statsCache = null, statsAt = 0, statsLoading = null;
@@ -60,9 +61,9 @@ async function loadStats() {
   out.tables = tables.map((t) => ({ id: t.id, game: t.game === "bj" ? "Blackjack" : "Hold'em", featured: !!t.featured, phase: t.phase || "",
     room: t.room_name || t.room || "", seats: (t.seats || []).filter((x) => x && x.name).map((x) => String(x.name)) }));
   out.featured = out.tables.find((t) => t.featured) || out.tables[0] || null;
-  const u = await one("SELECT COUNT(*) AS n FROM users");
+  const u = await one(`SELECT COUNT(*) AS n FROM users WHERE ${stale.LIVE()}`);
   out.members = u ? u.n : 0;
-  out.top = await many("SELECT username, displayname, avatar, points_balance, level FROM users ORDER BY points_balance DESC LIMIT 5");
+  out.top = await many(`SELECT username, displayname, avatar, points_balance, level FROM users WHERE ${stale.LIVE()} ORDER BY points_balance DESC LIMIT 5`);
   return out;
 }
 
@@ -71,7 +72,7 @@ async function loadStats() {
 let topCache = null, topAt = 0;
 async function topFrogs() {
   if (topCache && Date.now() - topAt < 60 * 1000) return topCache;
-  const rows = await many("SELECT username, displayname, avatar, points_balance, level FROM users ORDER BY points_balance DESC LIMIT 5");
+  const rows = await many(`SELECT username, displayname, avatar, points_balance, level FROM users WHERE ${stale.LIVE()} ORDER BY points_balance DESC LIMIT 5`);
   for (const r of rows) {
     try { const av = userstats.avatarFor(await cosmetics.profileData(r.username)); r.gtf = av && av.svg ? av.svg : null; } catch (e) { r.gtf = null; }
   }

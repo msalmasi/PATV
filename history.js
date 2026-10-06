@@ -127,6 +127,8 @@ const RULES = [
   [/^Refund$/i, "admin", "↩️", () => `Refund`],
   [/^ledger-correction$/i, "admin", "📒", () => `Balance carried over from before the full history (merges, resets, older records)`],
   [/^balance-zeroed$/i, "admin", "🔀", () => `Balance moved out (account merge)`],
+  [/^stale-reclaim$/i, "admin", "🗄️", () => `Inactive account archived - balance held by the Federal Reserve (signing in gives it back)`],
+  [/^stale-restore$/i, "admin", "🗄️", () => `Welcome back - archived balance returned from the Federal Reserve`],
 ];
 
 // A rule's optional 5th field is the word that joins the counterparty on ("vs", "to", "from";
