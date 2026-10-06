@@ -108,6 +108,12 @@
           <% } %>
           <span>APR 7 days</span><b class="<%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= apr(a[7]) %></b>
           <span>APR 30 days</span><b class="<%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= apr(a[30]) %></b>
+          <% const sf = (snap.so_far || {})[k]; if (a[7] == null && sf) { %>
+            <span>Return so far</span><b class="<%= sf.r >= 0 ? 'up' : 'down' %>"><%= (sf.r >= 0 ? '+' : '') + pct(sf.r, 2) %> <small>in <%= sf.days %> d (APR once there's 7 days of history)</small></b>
+          <% } %>
+          <% if (k === 'mm' && snap.mm_book) { %>
+            <span>Seeds in markets</span><b><%= fmt(snap.mm_book.seeds) %> <small>marked at <%= fmt(snap.mm_book.value) %></small></b>
+          <% } %>
           <% if (k === 'auto') { %>
             <span>Target split</span><b><%= ['bank', 'house', 'mm'].map((t) => V[t].icon + ' ' + pct(snap.targets[t], 0)).join(' ') %></b>
           <% } %>

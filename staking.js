@@ -49,6 +49,15 @@ function cleanFlows(f) {
 function clean(body) {
   const apr = {};
   for (const v of ALL) { const a = (body.apr || {})[v] || {}; apr[v] = { 7: numOrNull(a["7"]), 30: numOrNull(a["30"]) }; }
+  // 1.99by: while a vault has less history than the APR window Pepe sends null, plus the plain return
+  // so far ({r, days}, not annualised) for the page to show instead
+  const so_far = {};
+  for (const v of ALL) {
+    const x = (body.so_far || {})[v];
+    so_far[v] = x && Number.isFinite(Number(x.r)) && Number.isFinite(Number(x.days)) ? { r: Number(x.r), days: Number(x.days) } : null;
+  }
+  const mb = body.mm_book || null;
+  const mm_book = mb ? { seeds: num(mb.seeds), value: num(mb.value) } : null;
   const s = body.settings || {};
   const positions = {};
   Object.entries(body.positions && typeof body.positions === "object" ? body.positions : {}).slice(0, 5000).forEach(([id, p]) => {
@@ -70,6 +79,8 @@ function clean(body) {
     auto_nav: num(body.auto_nav),
     staked: pick(body.staked, VAULTS),
     apr,
+    so_far,
+    mm_book,
     targets: pick(body.targets, VAULTS),
     next_epoch: secs(body.next_epoch) || null,
     lotto_pot: num(body.lotto_pot), bank_cash: num(body.bank_cash), mm_cash: num(body.mm_cash),

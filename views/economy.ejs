@@ -300,6 +300,9 @@
         <p>Puts up the starting money (the "seed") for every new prediction market, then takes that market's 2% trading fees
           and whatever's left when it settles.</p>
         <p><b>Risk:</b> a market can lose at most its seed.</p>
+        <p>Its value counts each open market at what it expects back when it settles (the pot minus the winning
+          shares, weighted by the market's own odds), not at the seed, so a one-sided market shows its coming loss
+          straight away instead of at settlement.</p>
       </div>
       <div class="card">
         <h3>🤖 Auto <span class="new">DEFAULT</span></h3>
