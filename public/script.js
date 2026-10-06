@@ -436,7 +436,7 @@ function settleAndReveal() {
         displayPointsReward(won.toLocaleString());
         displayXPReward(data.xp || 0);
         if (data.levelUp && data.levelUp.leveledUp) {
-          displayLevelUpAnimation(data.levelUp.levelsGained, data.levelUp.newLevel, data.levelUp.bonusPoints);
+          displayLevelUpAnimation(data.levelUp.levelsGained, data.levelUp.newLevel, data.levelUp.bonusPoints, data.levelUp.milestones);
         }
         const what = data.grand ? 'GRAND JACKPOT! ' : (data.jackpot ? 'JACKPOT (' + (data.jackpotPct || 0) + '% of the pot)! ' : '');
         const c = data.cosmetic;   // a rare cosmetic drop (rolled server-side)
@@ -456,7 +456,7 @@ function settleAndReveal() {
 }
 
 // Function to display level-up animation
-function displayLevelUpAnimation(levelsGained, newLevel, bonusPoints) {
+function displayLevelUpAnimation(levelsGained, newLevel, bonusPoints, milestones) {
   const animationContainer = document.createElement('div');
   animationContainer.className = 'arcade-animation-container';
   animationContainer.id = 'animationContainer';
@@ -468,7 +468,9 @@ function displayLevelUpAnimation(levelsGained, newLevel, bonusPoints) {
 
   const bonusPointsDiv = document.createElement('div');
   bonusPointsDiv.className = 'arcade-animation-bonus-points';
-  bonusPointsDiv.textContent = `You received a PAT ${bonusPoints} level up bonus!`;
+  const ms = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : 0;
+  bonusPointsDiv.textContent = (bonusPoints > 0 ? `You received ${Number(bonusPoints).toLocaleString()} PAT!` : '') +
+    (ms ? ` Level ${ms} milestone: new cosmetic unlocked!` : '');
 
   const frogDanceImg = document.createElement('img');
   frogDanceImg.className = 'arcade-animation-frog-dance';

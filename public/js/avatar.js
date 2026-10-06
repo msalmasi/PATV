@@ -309,6 +309,18 @@
       P(-1, 5, d);                                    // pinched crown
       P(0, 2, l); P(-1, 3, l);                        // highlight
       P(1, 7, s);                                     // silver concho
+    },
+    // ── 1.99ax: level milestones ──
+    lotus(P) {                                        // Lv 45: a pink lotus on a lily-pad brim
+      const pad = '#2E7D32', padl = '#43A047', p1 = '#FF9EC4', p2 = '#FF6FAE', p3 = '#FFD1E3', g = '#FFD54F', sp = '#FFF59D';
+      for (let x = 0; x <= 10; x++) P(2, x, x % 3 === 1 ? padl : pad);   // lily-pad brim
+      P(2, 5, '#1B5E20');                             // the pad's notch
+      for (let x = 1; x <= 9; x++) P(1, x, x === 1 || x === 9 ? p2 : (x === 4 || x === 6) ? p2 : p1);
+      P(0, 2, p1); P(0, 3, p3); P(0, 4, p2); P(0, 5, g); P(0, 6, p2); P(0, 7, p3); P(0, 8, p1);
+      P(-1, 2, p3); P(-1, 4, p1); P(-1, 5, p1); P(-1, 6, p1); P(-1, 8, p3);
+      P(-2, 5, p3);
+      P(1, 5, g);                                     // golden heart
+      P(-2, 1, sp); P(-1, 10, sp);                    // sparkles
     }
   };
 
@@ -833,6 +845,27 @@
       B(14, 8, '#C9A100'); B(15, 8, '#E0B84A'); B(16, 8, '#C9A100');  // $
       for (const [y, x] of [[1, 1], [1, 15], [16, 1]]) B(y, x, '#8A8F98');   // nails
       B(16, 14, '#C9AE7A'); B(16, 15, '#5D4037');                      // curled corner
+    },
+    lilypond(B) {                                     // 1.99ax, Lv 20: moonlit lily pond
+      for (let y = 0; y < 8; y++) for (let x = 0; x < S; x++) B(y, x, mix('#0D1B3E', '#1E4E6B', y / 7));
+      for (let y = 8; y < S; y++) for (let x = 0; x < S; x++)
+        B(y, x, (x * 3 + y * 7) % 13 === 0 ? '#1F6F78' : mix('#0F4C5C', '#08303A', (y - 8) / 8));
+      for (let x = 0; x < S; x++) B(8, x, '#2A7F8A');                 // waterline
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++)         // moon + its reflection
+        if (Math.hypot(x - 13, y - 3) <= 2.2) B(y, x, '#FFF6C9');
+      B(2, 12, '#F2E6A6'); B(4, 14, '#F2E6A6'); B(3, 13, '#F2E6A6');   // craters
+      for (const x of [12, 13, 14]) B(10, x, '#C9D8B0');
+      B(12, 13, '#C9D8B0'); B(12, 12, '#7FA79A'); B(12, 14, '#7FA79A');
+      for (const [y, x] of [[1, 2], [4, 5], [2, 8], [5, 1], [0, 15]]) B(y, x, '#FFFFFF');   // stars
+      const pad = (cy, cx, r) => {
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+          const d = Math.hypot(x - cx, (y - cy) * 1.6);
+          if (d <= r) B(y, x, d > r - 0.9 ? '#2E7D32' : '#43A047');
+        }
+        B(cy, Math.round(cx + r - 0.5), '#0F4C5C');                   // notch
+      };
+      pad(13, 2.5, 2.6); pad(15, 13.5, 2.4); pad(10, 6, 1.6);
+      B(12, 2, '#FF8FB8'); B(12, 3, '#FFD1E3'); B(11, 2, '#FFB3D1');  // a bloom on the big pad
     }
   };
 
@@ -903,6 +936,15 @@
       ring((y, x) => F(y, x, ['#8D6E3F', '#C8A165', '#E0C48C'][(x + y) % 3]));
       for (const [y, x] of [[15, 7], [15, 8], [15, 9], [16, 7], [16, 8], [16, 9]]) F(y, x, '#6B4F2A');
       F(15, 8, '#8D6E3F');
+    },
+    laurel(F, isFg) {                                 // 1.99ax, Lv 35: a laurel wreath tied with gold
+      const d = '#1B5E20', g = '#43A047', l = '#81C784', au = '#FFD54F', au2 = '#C9A100';
+      ring((y, x, side) => { const i = side === 'top' || side === 'bottom' ? x : y; F(y, x, i % 2 ? d : g); });
+      for (let i = 1; i < S - 1; i += 2) for (const [y, x] of [[1, i], [S - 2, i], [i, 1], [i, S - 2]]) if (!isFg(y, x)) F(y, x, l);   // leaves
+      for (const [y, x] of [[0, 0], [0, 16], [16, 0], [16, 16]]) F(y, x, au);
+      for (const [y, x] of [[16, 7], [16, 9], [15, 7], [15, 9]]) F(y, x, au);
+      F(16, 8, au2); F(15, 8, au2);                    // the knot
+      F(0, 8, au);                                     // a gold berry up top
     }
   };
 

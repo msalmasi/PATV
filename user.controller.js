@@ -586,11 +586,51 @@ function updateLevel(userId, additionalXp) {
   return run;
 }
 
+// Level-up rewards (1.99ax, "option E"): every level pays LEVELUP_BASE_REWARD; a level that's a
+// multiple of LEVELUP_MILESTONE_EVERY also pays a milestone bonus of LEVELUP_MILESTONE_UNIT x (L / 5)
+// (Lv 5 = 250k, Lv 10 = 500k, Lv 25 = 1.25M, Lv 50 = 2.5M) and unlocks that milestone's level
+// cosmetics (cosmetics.json, unlock.level). Everything is paid OUT of the vault the "levelup" payout
+// row names (the Federal Reserve) - never minted. No settings table covers these, so they're
+// constants: change them here (a cap can come later if the Reserve drains too fast).
+//   base:      skipped when the Reserve can't cover it (as before).
+//   milestone: kept as OWED when the Reserve can't cover it, and retried on that user's later XP
+//              awards until it's paid. The cosmetics are granted either way.
+const LEVELUP_BASE_REWARD = 25000;
+const LEVELUP_MILESTONE_EVERY = 5;
+const LEVELUP_MILESTONE_UNIT = 250000;
+const milestoneReward = (level) =>
+  (level > 0 && level % LEVELUP_MILESTONE_EVERY === 0) ? LEVELUP_MILESTONE_UNIT * (level / LEVELUP_MILESTONE_EVERY) : 0;
+const levelReward = (level) => LEVELUP_BASE_REWARD + milestoneReward(level);
+
 // Each (user, level) reward is paid at most once, ever - recorded before paying, so a retry, a
-// second code path or a restart can't pay a level twice.
-const _levelRewardsReady = runQuery(`CREATE TABLE IF NOT EXISTS levelup_rewards (
-  userId TEXT NOT NULL, level INTEGER NOT NULL, amount INTEGER NOT NULL, paid INTEGER NOT NULL DEFAULT 0,
-  created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (userId, level))`).catch((e) => console.error("[levelup] table:", e.message));
+// second code path or a restart can't pay a level twice. Milestones have their own record.
+const _levelRewardsReady = (async () => {
+  await runQuery(`CREATE TABLE IF NOT EXISTS levelup_rewards (
+    userId TEXT NOT NULL, level INTEGER NOT NULL, amount INTEGER NOT NULL, paid INTEGER NOT NULL DEFAULT 0,
+    created DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (userId, level))`);
+  await runQuery(`CREATE TABLE IF NOT EXISTS levelup_milestones (
+    userId TEXT NOT NULL, level INTEGER NOT NULL, amount INTEGER NOT NULL, paid INTEGER NOT NULL DEFAULT 0,
+    created DATETIME DEFAULT CURRENT_TIMESTAMP, paid_at DATETIME, PRIMARY KEY (userId, level))`);
+})().catch((e) => console.error("[levelup] tables:", e.message));
+
+/** Pay this user's owed milestone bonuses (oldest first) while the Reserve covers them. The row is
+ *  flipped to paid before the payout and flipped back if the Reserve can't cover it. */
+async function _payOwedMilestones(userId) {
+  let total = 0;
+  const owed = await getQuery("SELECT level, amount FROM levelup_milestones WHERE userId = ? AND paid = 0 ORDER BY level", [userId]);
+  for (const m of owed) {
+    const take = await runQuery("UPDATE levelup_milestones SET paid = 1, paid_at = CURRENT_TIMESTAMP WHERE userId = ? AND level = ? AND paid = 0",
+                                [userId, m.level]);
+    if (!take || !take.changes) continue;
+    if (await funding.fundPayout(userId, m.amount, "levelup", `Level ${m.level} milestone`)) {
+      total += m.amount;
+    } else {
+      await runQuery("UPDATE levelup_milestones SET paid = 0, paid_at = NULL WHERE userId = ? AND level = ?", [userId, m.level]);
+      break;                                            // the Reserve is short - try again next time
+    }
+  }
+  return total;
+}
 
 async function _updateLevelLocked(userId, additionalXp) {
   await _levelRewardsReady;
@@ -601,33 +641,39 @@ async function _updateLevelLocked(userId, additionalXp) {
   }
 
   let { xp, level } = userDetails[0];
-  let originalLevel = level;
   xp += additionalXp;
 
   let totalBonusPoints = 0;
   let levelsGained = 0;
+  const milestones = [];
 
   while (xp >= xpForNextLevel(level)) {
     xp -= xpForNextLevel(level);
     level++;
     levelsGained++;
-    // 1.63: 50,000 x the new level, paid OUT of the vault the "levelup" payout row names (the
-    // Reserve) - never minted; skipped when it can't cover it. (It was 10 x the XP for the level,
-    // ~10k x level^2 - ~17M for a single level at 41 - and created from nothing.)
-    const pointsReward = LEVELUP_REWARD_PER_LEVEL * level;
+    // (1.63 made level-ups come out of the Reserve instead of being minted; 1.99ax: option E amounts.)
     const claim = await runQuery("INSERT OR IGNORE INTO levelup_rewards (userId, level, amount) VALUES (?, ?, ?)",
-                                 [userId, level, pointsReward]);
+                                 [userId, level, LEVELUP_BASE_REWARD]);
     if (claim && claim.changes) {
-      if (await funding.fundPayout(userId, pointsReward, "levelup", `Level-up reward (Lv ${level})`)) {
-        totalBonusPoints += pointsReward;
+      if (await funding.fundPayout(userId, LEVELUP_BASE_REWARD, "levelup", `Level-up reward (Lv ${level})`)) {
+        totalBonusPoints += LEVELUP_BASE_REWARD;
         await runQuery("UPDATE levelup_rewards SET paid = 1 WHERE userId = ? AND level = ?", [userId, level]);
       }
     } else {
       console.log(`[levelup] ${userId} already had the Lv ${level} reward - not paying it again`);
     }
+    const bonus = milestoneReward(level);
+    if (bonus > 0) {
+      const m = await runQuery("INSERT OR IGNORE INTO levelup_milestones (userId, level, amount) VALUES (?, ?, ?)",
+                               [userId, level, bonus]);
+      if (m && m.changes) milestones.push(level);       // paid just below (or owed)
+    }
   }
 
   await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [xp, level, userId]);
+  // new milestones + any still owed from when the Reserve couldn't cover them
+  const milestonePaid = await _payOwedMilestones(userId).catch((e) => { console.error("[levelup] milestone:", e.message); return 0; });
+  totalBonusPoints += milestonePaid;
   if (levelsGained > 0) require("./achievements").checkWeb(userId);   // level achievements
   if (levelsGained > 0) require("./cosmetics").grantUnlocks(userId, { level }).catch(() => {});   // level-unlock cosmetics
   console.log(`User ${userId} is now level ${level} with ${xp} XP.`);
@@ -636,7 +682,9 @@ async function _updateLevelLocked(userId, additionalXp) {
     leveledUp: levelsGained > 0,
     newLevel: level,
     levelsGained: levelsGained,
-    bonusPoints: totalBonusPoints
+    bonusPoints: totalBonusPoints,
+    milestones,
+    milestonePoints: milestonePaid,
   };
 };
 
@@ -680,7 +728,6 @@ async function awardBadge(userId, badgeId) {
 };
 
 // Function to Award Bonus PAT
-const LEVELUP_REWARD_PER_LEVEL = 50000;
 
 async function awardBonus(userId, type, amount) {
   if (!userId || !amount || !type) {
@@ -739,6 +786,10 @@ module.exports = {
   awardBadge,
   xpForNextLevel,
   updateLevel,
+  levelReward,
+  milestoneReward,
+  LEVELUP_BASE_REWARD,
+  LEVELUP_MILESTONE_UNIT,
   awardBonus,
   generateUniqueUsername
 };

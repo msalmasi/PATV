@@ -181,7 +181,7 @@
   <section class="card lvl">
     <div class="lvl-top"><b>Level <%= level %></b><span class="muted"><%= fmt(xp) %> / <%= fmt(need) %> XP · <%= fmt(need - xp) %> to go</span></div>
     <div class="bar" role="progressbar" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
-    <div class="muted">XP comes from chatting, the mic and games. Every level-up pays a PAT bonus.</div>
+    <div class="muted">XP comes from chatting, the mic and games. Every level-up pays 25,000 PAT; every 5th level is a milestone with a bigger bonus and a cosmetic.</div>
   </section>
   <% };
     SEC.avatar = function () { %>

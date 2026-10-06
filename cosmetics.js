@@ -43,7 +43,7 @@ const GTF_KINDS = ["gtf_hat", "gtf_mask", "gtf_outfit", "gtf_prop", "gtf_bg", "g
 const GTF_OPT = { gtf_hat: "hat", gtf_mask: "mask", gtf_outfit: "outfit", gtf_prop: "prop", gtf_bg: "bg", gtf_frame: "frame" };
 const GTF_LAYERS = {
   gtf_hat: ["crown", "tophat", "cowboy", "beanie", "halo", "horns", "party", "chef", "viking", "pirate",
-            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat"],
+            "beehive", "tiara", "rainbowwig", "muir", "bow", "catears", "bunny", "flowercrown", "bountyhat", "lotus"],
   gtf_mask: ["balaclava", "domino", "sunglasses", "monocle", "eyepatch", "bandana", "lashes", "puphood", "heartshades"],
   gtf_outfit: ["suit", "hoodie", "prison", "tuxedo", "goldchain", "bandolier",
                "sequin", "boa", "harness", "collar", "latex", "sundress", "cardigan", "pridecape"],
@@ -51,8 +51,8 @@ const GTF_LAYERS = {
              "prideflag", "discoball", "flamingo", "fan", "cuffs", "crop", "boba", "strawberry", "plushie", "sheriffstar"],
   gtf_bg: ["vault", "neon", "city", "jail", "sunset", "matrix",
            "progress", "intersex", "trans", "bi", "lesbian", "pan", "enby", "ace", "aro", "genderfluid",
-           "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted"],
-  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel", "glitter", "rainbow", "chain", "hearts", "rope"],
+           "lavalamp", "leopard", "redroom", "sakura", "clouds", "wanted", "lilypond"],
+  gtf_frame: ["gold", "diamond", "flame", "neon", "pixel", "glitter", "rainbow", "chain", "hearts", "rope", "laurel"],
 };
 const LAYER_EMOJI = {
   crown: "👑", tophat: "🎩", cowboy: "🤠", beanie: "🧢", halo: "😇", horns: "😈", party: "🥳", chef: "👨‍🍳", viking: "🪓", pirate: "🏴‍☠️",
@@ -69,6 +69,7 @@ const LAYER_EMOJI = {
   lavalamp: "🫧", leopard: "🐆", redroom: "🟥", sakura: "🌸", clouds: "☁️",
   glitter: "✨", rainbow: "🌈", chain: "⛓️", hearts: "💖",
   bountyhat: "🤠", sheriffstar: "⭐", wanted: "📜", rope: "🪢",
+  lotus: "🪷", lilypond: "🌙", laurel: "🌿",
 };
 const EFFECTS = ["sparkle", "snow", "embers", "confetti", "matrix", "hearts", "disco", "pridefetti"];
 const TAGS = CAT.tags || {};
@@ -417,6 +418,29 @@ async function syncUnlocks(userId) {
   if (lv.length) got.push(...await grantUnlocks(userId, { level: Number(lv[0].level) || 0 }));
   return [...new Set(got)];
 }
+
+/** 1.99ax: quiet catch-up of level-unlock cosmetics for everyone already at or past their level (the
+ *  level milestones every 5 levels added new ones). Runs once per set of level items - adding one
+ *  runs it again - and grant() is idempotent per user + item, so a re-run only adds what's missing.
+ *  Nothing is taken away and no PAT is paid. Returns {users, granted}. */
+async function backfillLevelUnlocks({ force } = {}) {
+  await ready;
+  const lvItems = ITEMS.filter((it) => it.unlock && it.unlock.level);
+  if (!lvItems.length) return { users: 0, granted: 0 };
+  const sig = require("crypto").createHash("sha1")
+    .update(lvItems.map((it) => `${it.id}@${it.unlock.level}`).sort().join(",")).digest("hex").slice(0, 16);
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_meta (k TEXT PRIMARY KEY, v TEXT)");
+  const done = await getQuery("SELECT v FROM cosmetic_meta WHERE k = 'level_backfill'");
+  if (!force && done.length && done[0].v === sig) return { users: 0, granted: 0, skipped: true };
+  const minLv = Math.min(...lvItems.map((it) => it.unlock.level));
+  const users = await getQuery("SELECT userId, level FROM users WHERE level >= ?", [minLv]);
+  let granted = 0;
+  for (const u of users) granted += (await grantUnlocks(u.userId, { level: Number(u.level) || 0 })).length;
+  await runQuery("INSERT INTO cosmetic_meta (k, v) VALUES ('level_backfill', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", [sig]);
+  console.log(`[cosmetics] level backfill: ${granted} item(s) for ${users.length} user(s) at Lv ${minLv}+`);
+  return { users: users.length, granted };
+}
+setTimeout(() => backfillLevelUnlocks().catch((e) => console.error("[cosmetics] level backfill:", e.message)), 15000).unref();
 
 /** Equip (on) or unequip one copy. */
 async function equip(userId, invId, on) {
@@ -874,7 +898,7 @@ function locals(app) {
 }
 
 module.exports = {
-  register, locals, grantUnlocks, syncUnlocks, nameStyles, nameStyle, nameHtml, render, onSale, seasonState,
+  register, locals, grantUnlocks, syncUnlocks, backfillLevelUnlocks, nameStyles, nameStyle, nameHtml, render, onSale, seasonState,
   resolveUser, grant, grantCapped, rollDrop, pickDrop, dropConfig, setDropConfig, transfer, equip, inventory, equippedFor, profileData, pageData,
   catalog: () => ITEMS, byId: (id) => BY_ID[id] || null, ready, MARKET_FEE_PCT, LIST_MIN,
 };
