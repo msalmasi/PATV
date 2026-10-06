@@ -76,7 +76,7 @@
   .hm .stage-admin select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; min-width: 0; max-width: 100%; }
   .hm .stage-admin .btn { padding: 6px 12px; font-size: 13px; }
   .hm .stage-admin .tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #ffb74d; border: 1px solid #6b5a20; border-radius: 999px; padding: 1px 7px; }
-  .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 0 12px 12px; }
+  .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 0 12px 12px; align-items: start; }
   .hm .stage.live .stage-body { display: grid; }
   .hm .stage.live .stage-off { display: none; }
   .hm .player { position: relative; width: 100%; max-width: calc((100vh - 190px) * 16 / 9); margin: 0 auto; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #262626; }
@@ -256,6 +256,16 @@
   .hm .golive p { margin: 0; color: #c9d3c9; font-size: 13.5px; line-height: 1.5; }
   .hm .golive .row { display: flex; flex-wrap: wrap; gap: 6px; }
   .hm .golive ul { margin: 0; padding-left: 18px; color: #aab3aa; font-size: 12.5px; line-height: 1.55; }
+  .hm .golive-wide { margin: 0 12px 12px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 8px 22px; align-items: center; padding: 12px 16px; }
+  .hm .golive-wide .gl-txt { display: grid; gap: 4px; min-width: 0; }
+  .hm .golive-wide h3 { margin: 0; }
+  .hm .golive-wide .row { justify-content: flex-end; }
+  @media (max-width: 1100px) {
+    .hm .golive-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .hm .golive-wide .row { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+  @media (max-width: 760px) { .hm .golive-wide { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 520px) { .hm .golive-wide { margin: 0 8px 8px; padding: 10px 12px; } }
   .hm .stage .bar .room-on { color: #fff; font-weight: bold; }
   .hm .guide-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .hm .guide-mini a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; color: #ddd !important; font-size: 13px; }
@@ -343,15 +353,6 @@
           <div class="muted" style="margin-top:4px">Watch or take a seat ›</div>
         </a>
       <% } %>
-      <div class="box golive">
-        <h3>🎥 Your show on PATV</h3>
-        <p><b>Anyone can go live.</b> Stream to a room's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
-        <ul>
-          <li>Ordinary slots are <b>free</b> in most rooms<%= paid.length ? '' : ' — book one now or for later' %>.</li>
-          <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
-        </ul>
-        <div class="row"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a><a class="btn" href="/rooms" style="padding:6px 10px;font-size:13px">Channel guide</a></div>
-      </div>
       <% if (liveRooms.length >= 2) { %>
         <div class="box">
           <h3>📡 On now</h3>
@@ -362,6 +363,18 @@
           </ul>
         </div>
       <% } %>
+    </div>
+    <!-- 1.99bk: the Go live pitch is a full-width strip under the stage (on and off air), not a side card -->
+    <div class="box golive golive-wide" id="stageShow">
+      <div class="gl-txt">
+        <h3>🎥 Your show on PATV</h3>
+        <p><b>Anyone can go live.</b> Stream to a room's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
+      </div>
+      <ul>
+        <li>Ordinary slots are <b>free</b> in most rooms<%= paid.length ? '' : ' — book one now or for later' %>.</li>
+        <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
+      </ul>
+      <div class="row"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a><a class="btn" href="/rooms" style="padding:6px 10px;font-size:13px">Channel guide</a></div>
     </div>
   </section>
 
