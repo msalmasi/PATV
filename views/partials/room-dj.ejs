@@ -145,11 +145,12 @@
           <p class="hint" id="rdjReqHint"></p>
         </div>
         <div class="tool" id="rdjVibeBox">
-          <h3>Talk to the DJ</h3>
+          <h3 id="rdjVibeTitle">Talk to the DJ</h3>
+          <div class="vote hide" id="rdjVibeVote" aria-live="polite"></div>
           <form id="rdjVibe" autocomplete="off">
             <label class="sr" for="rdjVibeQ">What you want to hear</label>
             <input type="text" id="rdjVibeQ" maxlength="140" placeholder="90s hip hop, something chill… (like !dj vibe)">
-            <button class="b go" type="submit">🎧 Send <small>free</small></button>
+            <button class="b go" type="submit" id="rdjVibeSend">🎧 Send <small>free</small></button>
           </form>
           <p class="hint" id="rdjVibeHint"></p>
         </div>

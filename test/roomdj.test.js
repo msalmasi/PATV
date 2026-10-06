@@ -91,13 +91,13 @@ test("panel: signed in only; inactive for a room without music; no admin lists i
   const v = (await get("/api/rooms/pepes-pad/dj", "u1")).d;
   assert.equal(v.active, true);
   assert.equal(v.room.price.queue, 2500, "the room's chat price");
-  assert.deepEqual(v.me, { linked: true, djAdmin: false, musicAdmin: false });
+  assert.deepEqual(v.me, { linked: true, djAdmin: false, musicAdmin: false, vibeVoted: false });
   assert.ok(!JSON.stringify(v).includes("bossfrog"), "admin logins never reach a browser");
   assert.equal(v.state.queue[0].who, "Bob");
   const unl = (await get("/api/rooms/pepes-pad/dj", "u2")).d;
-  assert.deepEqual(unl.me, { linked: false, djAdmin: false, musicAdmin: false });
+  assert.deepEqual(unl.me, { linked: false, djAdmin: false, musicAdmin: false, vibeVoted: false });
   const boss = (await get("/api/rooms/pepes-pad/dj", "u3")).d;
-  assert.deepEqual(boss.me, { linked: true, djAdmin: true, musicAdmin: true }, "case-insensitive login match");
+  assert.deepEqual(boss.me, { linked: true, djAdmin: true, musicAdmin: true, vibeVoted: false }, "case-insensitive login match");
 });
 
 test("panel goes inactive when Pepe stops syncing", async () => {
@@ -199,6 +199,33 @@ test("DJ patter (1.99bl): shout-outs for anyone, patter switches for admins, san
   assert.equal((await post("/api/rooms/pepes-pad/dj", { verb: "dj.patter.joins.off" }, "u3")).d.ok, true, "an admin may switch patter");
   await runQuery("UPDATE pepe_actions SET status = 'done'");
   await post("/api/dj/sync", SYNC);
+});
+
+test("vibe votes (1.99bz): live count on the panel, voters stay server-side, vibe.yes is anyone's", async () => {
+  const sync = JSON.parse(JSON.stringify(SYNC));
+  sync.state.dj.vote = { text: "90s hip hop‮", by: "someone", have: 2, need: 4, until: Date.now() + 90000,
+                         voters: ["viewer1", "ghostfrog", "<script>"] };
+  await post("/api/dj/sync", sync);
+  const v = (await get("/api/rooms/pepes-pad/dj", "u1")).d;
+  assert.deepEqual(Object.keys(v.state.dj.vote).sort(), ["by", "have", "need", "text", "until"], "no voter list in the panel");
+  assert.equal(v.state.dj.vote.text, "90s hip hop", "bidi stripped");
+  assert.equal(v.state.dj.vote.by, "someone", "an incognito proposer stays 'someone'");
+  assert.equal(v.state.dj.vote.have, 2);
+  assert.ok(!JSON.stringify(v).includes("ghostfrog"), "other voters' logins never reach a browser");
+  assert.equal(v.me.vibeVoted, true, "Viewer1 (case-insensitive) already voted");
+  assert.equal((await get("/api/rooms/pepes-pad/dj", "u3")).d.me.vibeVoted, false, "BossFrog hasn't");
+  const a = await post("/api/rooms/pepes-pad/dj", { verb: "vibe.yes", text: "ignored" }, "u1");
+  assert.equal(a.d.ok, true, "anyone linked may vote (Pepe refuses a double vote by login, like chat)");
+  const row = (await getQuery("SELECT * FROM pepe_actions WHERE id = ?", [a.d.id]))[0];
+  assert.deepEqual(JSON.parse(row.args), [R.id, "vibe.yes"]);
+  assert.match(row.label, /vote for the vibe/);
+  assert.equal(row.camfrog, "Viewer1", "counted by the linked Camfrog login");
+  assert.equal((await post("/api/rooms/pepes-pad/dj", { verb: "vibe.yes" }, "u2")).status, 403, "unlinked can't vote");
+  await runQuery("UPDATE pepe_actions SET status = 'done'");
+  await post("/api/dj/sync", SYNC);
+  const after = (await get("/api/rooms/pepes-pad/dj", "u1")).d;
+  assert.equal(after.state.dj.vote, undefined, "vote gone once Pepe stops reporting it");
+  assert.equal(after.me.vibeVoted, false);
 });
 
 test("homepage helper: now playing for a music room only", () => {

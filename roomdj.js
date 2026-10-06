@@ -2,7 +2,7 @@
 //
 // Pepe (pepe_roomdj.py) pushes the DJ state for the bridged rooms that actually hear his music:
 //   POST /api/dj/sync    {password, rooms: [{id, name, queue, play, pause, talk, patter, price: {queue, shoutout}}],
-//                         state: {connected, at, now, queue[], dj: {on, vibe, genre}, drop, votes, max_pending,
+//                         state: {connected, at, now, queue[], dj: {on, vibe, genre, vote}, drop, votes, max_pending,
 //                                 shoutouts: [{to, by, msg, ded}]},
 //                         admins: {dj: [logins], music: [logins]}}      -> {ok, watching: [room ids]}
 //   POST /api/dj/result  {password, id, results: [{n, title, artist, album, art}]}   (a website !find's list)
@@ -28,6 +28,7 @@ const MAX_ROOMS = 20, MAX_QUEUE = 12, MAX_RESULTS = 10, MAX_ADMINS = 200;
 // admin-only buttons (and their requests) away from everyone else.
 const VERBS = {
   find: "all", pick: "all", skip: "all", pause: "all", resume: "all", play: "all", remove: "all", vibe: "all",
+  "vibe.yes": "all",   // 1.99bz: vote for the open vibe proposal (an admin's settles it)
   "dj.on": "dj", "dj.off": "dj", "dj.next": "dj", "dj.talk.on": "dj", "dj.talk.off": "dj", "dj.vibe.clear": "dj", "dj.clear": "dj",
   // 1.99bk DJ patter: paid shout-outs for anyone (Pepe holds the PAT, takes it when he says it)
   shoutout: "all",
@@ -38,7 +39,7 @@ const TEXT_VERBS = { find: 100, pick: 3, vibe: 140, shoutout: 170 };
 const LABELS = {
   find: (t) => "🔎 search: " + t, pick: (t) => "➕ queue #" + t, skip: () => "⏭️ skip", pause: () => "⏸️ pause",
   resume: () => "▶️ resume", play: () => "▶️ start the music", remove: () => "🗑️ remove my last request",
-  vibe: (t) => "🎧 vibe: " + t, "dj.on": () => "🎧 Auto-DJ on", "dj.off": () => "🎧 Auto-DJ off", "dj.next": () => "🎧 Pepe picks next",
+  vibe: (t) => "🎧 vibe: " + t, "vibe.yes": () => "🎧 vote for the vibe", "dj.on": () => "🎧 Auto-DJ on", "dj.off": () => "🎧 Auto-DJ off", "dj.next": () => "🎧 Pepe picks next",
   "dj.talk.on": () => "🎙️ DJ talk on", "dj.talk.off": () => "🎙️ DJ talk off", "dj.vibe.clear": () => "🎧 clear the vibe bias",
   "dj.clear": () => "🧼 reset the DJ session",
   shoutout: (t) => "📣 shout-out: " + t,
@@ -80,6 +81,12 @@ function cleanState(s) {
   out.dj = { on: !!dj.on, clear: !!dj.clear, hold: !!dj.hold };
   if (dj.vibe && dj.vibe.text) out.dj.vibe = { text: str(dj.vibe.text, 140), by: str(dj.vibe.by, 40) || "someone", until: int(dj.vibe.until) };
   if (dj.genre) out.dj.genre = str(dj.genre, 80);
+  // 1.99bz: an open vibe vote (the same rules as the skip/pause votes, counted by Camfrog login).
+  // Its voters' logins are kept server-side only (ingest) - a viewer only learns whether THEY voted.
+  if (dj.vote && typeof dj.vote === "object" && str(dj.vote.text, 140)) {
+    out.dj.vote = { text: str(dj.vote.text, 140), by: str(dj.vote.by, 40) || "someone",
+                    have: int(dj.vote.have, 0, 999), need: int(dj.vote.need, 1, 99) || 4, until: int(dj.vote.until) };
+  }
   if (s.drop && s.drop.text) out.drop = { text: str(s.drop.text, 300), ts: int(s.drop.ts) };
   const v = s.votes || {};
   out.votes = { start: int(v.start, 1, 20) || 4, stop: int(v.stop, 1, 20) || 2 };
@@ -106,7 +113,7 @@ function cleanRoom(r) {
 }
 
 // ── state ──
-const S = { at: 0, state: null, rooms: new Map(), admins: { dj: new Set(), music: new Set() } };
+const S = { at: 0, state: null, rooms: new Map(), admins: { dj: new Set(), music: new Set() }, vibeVoters: new Set() };
 const WATCH = new Map();             // room id -> last poll
 const RESULTS = new Map();           // action id -> {results, at}
 
@@ -114,6 +121,8 @@ function ingest(body) {
   const rooms = (Array.isArray(body.rooms) ? body.rooms : []).slice(0, MAX_ROOMS).map(cleanRoom).filter(Boolean);
   S.rooms = new Map(rooms.map((r) => [r.id, r]));
   S.state = rooms.length ? cleanState(body.state) : null;
+  const vv = S.state && S.state.dj.vote && body.state.dj && body.state.dj.vote && body.state.dj.vote.voters;
+  S.vibeVoters = new Set((Array.isArray(vv) ? vv : []).slice(0, 200).map((x) => String(x).toLowerCase()).filter((x) => LOGIN_RE.test(x)));
   const ad = body.admins || {};
   const set = (a) => new Set((Array.isArray(a) ? a : []).slice(0, MAX_ADMINS).map((x) => String(x).toLowerCase()).filter((x) => LOGIN_RE.test(x)));
   S.admins = { dj: set(ad.dj), music: set(ad.music) };
@@ -170,7 +179,8 @@ async function panelFor(R, me) {
     active: true, age: Math.max(0, Date.now() - S.at),   // the page runs the progress bar on from here
     room: { queue: room.queue, play: room.play, pause: room.pause, talk: room.talk, patter: room.patter, price: room.price },
     state: st,
-    me: { linked: !!(me && me.camfrog), djAdmin: !!(me && me.djAdmin), musicAdmin: !!(me && me.musicAdmin) },
+    me: { linked: !!(me && me.camfrog), djAdmin: !!(me && me.djAdmin), musicAdmin: !!(me && me.musicAdmin),
+          vibeVoted: !!(me && me.camfrog && st && st.dj.vote && S.vibeVoters.has(me.camfrog)) },
     acts: acts.map((a) => ({ id: a.id, label: a.label, status: a.status, message: a.message || "" })),
   };
 }

@@ -132,6 +132,11 @@
       var v = el('div', 'v'); v.appendChild(el('q', null, d.vibe.text)); v.appendChild(document.createTextNode(' — asked by ' + d.vibe.by));
       row('The vibe right now', v);
     }
+    if (d.vote) {
+      var vv = el('div', 'v'); vv.appendChild(el('q', null, d.vote.text));
+      vv.appendChild(document.createTextNode(' — ' + d.vote.have + '/' + d.vote.need + ' votes (proposed by ' + d.vote.by + ')'));
+      row('Vibe vote open', vv);
+    }
     if (d.genre) row('Leaning into', d.genre);
     var pt = P.room && P.room.patter;
     if (d.on && pt && pt.on && P.room.talk) {
@@ -200,8 +205,25 @@
     $('rdjReqHint').textContent = me.musicAdmin ? 'Admins queue for free.'
       : 'Queuing costs ' + pat(r.price.queue) + ' (like !find + !pick) · up to ' + s.maxPending + ' of your songs waiting at once.';
     $('rdjVibeBox').classList.toggle('hide', !d.on);
-    $('rdjVibeHint').textContent = me.djAdmin ? 'As an admin this sets the DJ\'s genre bias (!dj vibe).'
-      : 'Free · steers Pepe\'s picks for the next ~45 minutes · one request every 2 minutes.';
+    // 1.99bz: listeners vote on the vibe (same rules as the skip/pause votes, counted by Camfrog
+    // login together with chat's !dj vibe yes); admins still set it directly.
+    var vt = d.vote, vbox = $('rdjVibeVote');
+    $('rdjVibeTitle').textContent = me.djAdmin ? 'Set the vibe' : (vt ? 'Vote for this vibe' : 'Propose a vibe');
+    vbox.textContent = '';
+    vbox.classList.toggle('hide', !vt);
+    if (vt) {
+      var vl = el('p', 'ro'); vl.appendChild(el('q', null, vt.text));
+      vl.appendChild(document.createTextNode(' — proposed by ' + vt.by + ' · ' + vt.have + '/' + vt.need + ' votes'));
+      vbox.appendChild(vl);
+      if (me.vibeVoted && !me.djAdmin) vbox.appendChild(el('p', 'hint', '✓ You voted — it needs ' + Math.max(0, vt.need - vt.have) + ' more.'));
+      else vbox.appendChild(btn(me.djAdmin ? '✅ Pass it now' : '🎧 Vote for this vibe', vt.have + '/' + vt.need, 'vibe.yes', { go: true }));
+    }
+    $('rdjVibe').classList.toggle('hide', !!vt && !me.djAdmin);   // one open vote at a time
+    $('rdjVibeSend').firstChild.nodeValue = me.djAdmin ? '🎧 Set ' : '🎧 Propose ';
+    var need = (vt && vt.need) || s.votes.start;
+    $('rdjVibeHint').textContent = me.djAdmin ? 'As an admin this sets the DJ\'s genre bias directly (!dj vibe) and cancels an open vote.'
+      : vt ? 'Like !dj vibe yes in the room · a vote runs out 90 s after the last vote · a new proposal can start once this one passes or runs out.'
+      : 'Free · the room votes on it: ' + need + ' votes (yours counts) like !dj vibe · steers Pepe\'s picks for ~45 minutes if it passes.';
     var pt = r.patter, soOk = s.connected && d.on && r.talk && pt && pt.on;
     $('rdjSoBox').classList.toggle('hide', !soOk);
     $('rdjSoHint').textContent = (me.djAdmin ? 'Admins shout out for free.' : pat(r.price.shoutout) + ' — held when you ask, only taken when Pepe says it (refunded after 30 min if he doesn\'t).') +
