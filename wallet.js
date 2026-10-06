@@ -45,8 +45,43 @@ function cleanLoans(body) {
     by: r.by ? str(r.by, 60) : null, loan: r.loan == null ? null : parseInt(r.loan, 10) || null, deny_why: r.deny_why ? str(r.deny_why, 300) : null,
   })).filter((r) => r.id);
   const rv = body.reserve || {};
-  const reserve = { rate_week: num(rv.rate_week), max_days: num(rv.max_days), enabled: !!rv.enabled, book: Math.floor(num(rv.book)), room: Math.floor(num(rv.room)) };
+  const reserve = { rate_week: num(rv.rate_week), max_days: num(rv.max_days), enabled: !!rv.enabled, book: Math.floor(num(rv.book)), room: Math.floor(num(rv.room)),
+    base: Math.floor(num(rv.base)), per_level: Math.floor(num(rv.per_level)), max_auto: Math.floor(num(rv.max_auto)),
+    max_open: Math.floor(num(rv.max_open)), min: Math.floor(num(rv.min)), limits: {} };
+  // per-borrower limit factors (1.99aw); anyone not listed has no Reserve history
+  const lim = rv.limits && typeof rv.limits === "object" && !Array.isArray(rv.limits) ? rv.limits : {};
+  for (const k of Object.keys(lim).slice(0, 5000)) {
+    const f = lim[k] || {};
+    reserve.limits[low(k).slice(0, 60)] = { repaid: Math.floor(num(f.repaid)), lates: Math.floor(num(f.lates)), open: Math.floor(num(f.open)),
+      late: !!f.late, reason: f.reason ? str(f.reason, 200) : null };
+  }
   return { loans, requests, reserve };
+}
+
+// A user's instant Federal Reserve borrow limit - Pepe's _rloan_limit (pepe_loan.py), applied to the
+// factors he syncs plus the user's level from our own users table (the number his level lookup reads).
+//   limit = min(max instant, (base + per level x level) x min(2, 1 + 0.25 x repaid) x 0.5^lates, room), to the 100 below
+// Zero with a reason while late on any loan, holding an open Reserve loan, or lending is switched off.
+function reserveLimit(reserve, camfrog, level) {
+  if (!camfrog) return { state: "nolink" };
+  if (!reserve || !reserve.base) return { state: "nodata" };
+  if (!reserve.enabled) return { state: "blocked", limit: 0, reason: "Reserve lending is paused right now" };
+  const f = (reserve.limits || {})[low(camfrog)] || { repaid: 0, lates: 0, open: 0, late: false, reason: null };
+  if (f.reason) return { state: "blocked", limit: 0, reason: f.reason };
+  const lv = Math.max(0, Math.floor(num(level)));
+  const levelBonus = reserve.per_level * lv;
+  const mult = Math.min(2, 1 + 0.25 * f.repaid);
+  const penalty = Math.pow(0.5, f.lates);
+  const raw = Math.floor((reserve.base + levelBonus) * mult * penalty);
+  const room = Math.max(0, reserve.room);
+  const limit = Math.max(0, Math.floor(Math.floor(Math.min(reserve.max_auto, (reserve.base + levelBonus) * mult * penalty, room)) / 100) * 100);
+  const capped = raw > reserve.max_auto && reserve.max_auto <= room ? "max" : raw > room ? "room" : null;
+  const b = { level: lv, base: reserve.base, levelBonus, repaid: f.repaid, mult, lates: f.lates, penalty, raw, maxAuto: reserve.max_auto, room, capped };
+  if (limit < Math.max(1, reserve.min || 0)) {
+    return { state: "blocked", limit, breakdown: b,
+      reason: room < Math.max(1, reserve.min || 0) ? "the Reserve is fully lent out right now - try again later" : "your limit is below the smallest Reserve loan" };
+  }
+  return { state: "ok", limit, breakdown: b };
 }
 
 async function save(key, data) {
@@ -94,7 +129,7 @@ function register(app, { isBotToken, addUser }) {
     const msg = req.query.msg ? String(req.query.msg).slice(0, 200) : null;
     if (!req.user || !req.user.userId) return res.render("wallet", { user: null, signedIn: false, msg });
     try {
-      const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance FROM users WHERE userId = ?", [req.user.userId]))[0];
+      const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance, level FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!u) return res.render("wallet", { user: req.user.username, signedIn: false, msg });
       const camfrog = u.camfrogUsername || null;
       const me = camfrog ? low(camfrog) : null;
@@ -152,7 +187,8 @@ function register(app, { isBotToken, addUser }) {
       res.render("wallet", {
         user: u.username, signedIn: true, msg, camfrog, isAdmin, now: Date.now() / 1000,
         bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
-        borrowed, lent, loanHistory, myRequests, reserve: ln.reserve || null, positions, admin,
+        borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, admin,
+        myLimit: reserveLimit(ln.reserve || null, camfrog, u.level), // only ever the signed-in user's own
         acts: await actions.recentFor(req.user.userId, "wallet"),
       });
     } catch (e) {
@@ -162,4 +198,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, cleanStashes, cleanLoans };
+module.exports = { register, cleanStashes, cleanLoans, reserveLimit };

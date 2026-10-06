@@ -1,6 +1,6 @@
 <%- include('layout', { title: 'Wallet', user: user}) %>
 <style>
-  .wl { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
+  .wl { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
   .wl a { color: #81c784; }
   .wl h1 { text-align: center; margin-bottom: 4px; }
   .wl h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 30px 0 10px; line-height: 1.6; }
@@ -51,6 +51,10 @@
   .wl .spark svg { display: block; width: 100%; height: 70px; }
   .wl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
   .wl .login { text-align: center; margin: 60px 0; }
+  .wl .card.limit .name { font-size: 15px; line-height: 1.5; }
+  .wl .card.limit b.lim { color: #ffd700; white-space: nowrap; }
+  .wl table.bd td { padding: 5px 10px; }
+  .wl table.bd td:first-child { overflow-wrap: anywhere; }
 </style>
 <div class="wl">
 <% if (!signedIn) { %>
@@ -209,17 +213,50 @@
       <div class="stat"><span>Max term</span><b><%= reserve.max_days %> days</b></div>
       <div class="stat"><span>Lending</span><b class="<%= reserve.enabled ? 'green' : 'red' %>"><%= reserve.enabled ? 'open' : 'closed' %></b></div>
     </div>
+    <% const ml = myLimit || { state: 'nodata' }; const bd = ml.breakdown; %>
+    <div class="card limit<%= ml.state === 'ok' ? ' own' : '' %>" style="margin-top:12px">
+      <% if (ml.state === 'nolink') { %>
+        <span class="name">🏦 Your borrow limit</span>
+        <span class="info"><a href="/u/<%= encodeURIComponent(user) %>/profile">Link your Camfrog name</a> (<code>!verify</code>) to borrow from the Federal Reserve.</span>
+      <% } else if (ml.state === 'nodata') { %>
+        <span class="name">🏦 Your borrow limit</span>
+        <span class="info">Pepe hasn't sent your limit yet — <code>!loan reserve</code> in a room shows it.</span>
+      <% } else if (ml.state === 'ok') { %>
+        <span class="name">🏦 Federal Reserve — you can borrow up to <b class="lim">PAT <%= fmt(ml.limit) %></b> instantly</span>
+        <span class="info"><%= pct(reserve.rate_week) %> a week (pro rata), for up to <%= reserve.max_days %> days. One Reserve loan open at a time.</span>
+      <% } else { %>
+        <span class="name">🏦 No instant Reserve loan right now</span>
+        <span class="info down"><%= ml.reason.charAt(0).toUpperCase() + ml.reason.slice(1) %>.</span>
+        <span class="info"><%= pct(reserve.rate_week) %> a week (pro rata), for up to <%= reserve.max_days %> days.</span>
+      <% } %>
+      <% if (bd) { %>
+        <div class="tbl"><table class="bd">
+          <tr><td>Base</td><td class="r"><%= fmt(bd.base) %></td></tr>
+          <tr><td>Level <%= bd.level %> bonus (<%= fmt(reserve.per_level) %> a level)</td><td class="r">+ <%= fmt(bd.levelBonus) %></td></tr>
+          <tr><td>Reserve loans repaid: <%= bd.repaid %> (+25% each, up to 2×)</td><td class="r">× <%= +bd.mult.toFixed(2) %></td></tr>
+          <tr><td>Went late: <%= bd.lates %> (halves it each time)</td><td class="r <%= bd.lates ? 'down' : '' %>">× <%= +bd.penalty.toFixed(4) %></td></tr>
+          <tr><td>Cap: <%= bd.capped === 'room' ? 'what the Reserve has left to lend' : 'biggest instant loan' %></td><td class="r"><%= fmt(bd.capped === 'room' ? bd.room : bd.maxAuto) %></td></tr>
+          <tr class="tot"><td>Your instant limit<%= bd.capped ? ' (capped)' : '' %></td><td class="r"><%= fmt(ml.limit) %></td></tr>
+        </table></div>
+      <% } %>
+    </div>
     <% if (canAct && reserve.enabled) { %>
       <div class="forms">
+        <% if (ml.state === 'ok' || ml.state === 'nodata') { %>
         <form method="post" action="/act"><%- hidden('loan') %>
           <b>🏦 Borrow from the Reserve</b>
           <input type="hidden" name="a0" value="reserve">
-          <input type="number" name="a1" min="1" step="1" placeholder="Amount (PAT)" required>
+          <% if (ml.state === 'ok') { %>
+            <input type="number" name="a1" min="<%= Math.min(reserve.min || 1, ml.limit) %>" max="<%= ml.limit %>" step="1" value="<%= ml.limit %>" placeholder="Amount (PAT)" aria-label="Amount (PAT)" required>
+          <% } else { %>
+            <input type="number" name="a1" min="1" step="1" placeholder="Amount (PAT)" required>
+          <% } %>
           <label>Term <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%= d %> day<%= d === 1 ? '' : 's' %></option><% }) %></select></label>
           <button type="submit">Borrow</button>
-          <span class="info">Instant up to your limit (grows with level and repayments); anything above is sent to the admins. Interest <%= pct(reserve.rate_week) %> per week.</span>
+          <span class="info"><%= ml.state === 'ok' ? 'Up to PAT ' + fmt(ml.limit) + ', paid out at once.' : 'Instant up to your limit (grows with level and repayments).' %> Interest <%= pct(reserve.rate_week) %> per week. Need more? <a href="#reserve-request">Request a bigger loan ›</a></span>
         </form>
-        <form method="post" action="/act"><%- hidden('loan') %>
+        <% } %>
+        <form method="post" action="/act" id="reserve-request"><%- hidden('loan') %>
           <b>📝 Ask the admins for a bigger loan</b>
           <input type="hidden" name="a0" value="request">
           <input type="number" name="a1" min="1" step="1" placeholder="Amount (PAT)" required>
