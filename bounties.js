@@ -15,7 +15,43 @@ const actionsReady = runQuery(`CREATE TABLE IF NOT EXISTS bounty_actions (
   username TEXT NOT NULL, camfrog TEXT, kind TEXT NOT NULL, amount INTEGER, note TEXT, hunters TEXT,
   site_admin INTEGER DEFAULT 0, status TEXT NOT NULL DEFAULT 'pending', message TEXT,
   created INTEGER, claimed INTEGER, updated INTEGER)`).catch(() => {});
+// 1.99bl: claims carry evidence (a note + http(s) links - the site has no user uploads) and Pepe's
+// check of his logs; the creator (or an admin, for disputed ones) can reject a claim, the hunter can
+// dispute a rejection (or a claim the creator sat on for 12 h) to the admins.
+const evidenceCol = actionsReady.then(() => runQuery("ALTER TABLE bounty_actions ADD COLUMN evidence TEXT")).catch(() => {});
 const ADD_MIN = 100;
+const DISPUTE_AFTER_S = 12 * 3600;
+const CHECK_STATES = ["verified", "creator", "admin", "no_match", "manual"];
+
+// Only plain http(s) links survive (no javascript:/data: etc.), at most 3, 300 chars each.
+function cleanLink(u) {
+  const s = String(u || "").trim().slice(0, 300);
+  if (!/^https?:\/\/[^\s<>"']+$/i.test(s)) return null;
+  try { const x = new URL(s); return (x.protocol === "http:" || x.protocol === "https:") ? x.href : null; } catch (e) { return null; }
+}
+
+// One claim from Pepe's snapshot, cleaned for storage.
+function cleanClaim(c) {
+  const ev = c.evidence && typeof c.evidence === "object" ? c.evidence : null;
+  const ck = c.check && typeof c.check === "object" ? c.check : null;
+  return {
+    nick: String(c.nick || "").slice(0, 60), ts: Number(c.ts) || 0, note: String(c.note || "").slice(0, 160),
+    evidence: ev ? { text: String(ev.text || "").slice(0, 160), links: [].concat(ev.links || []).map(cleanLink).filter(Boolean).slice(0, 3) } : null,
+    check: ck && CHECK_STATES.includes(ck.state) ? { state: ck.state, how: ck.how === "semantic" ? "semantic" : (ck.how ? "exact" : null),
+      lines: [].concat(ck.lines || []).slice(0, 4).map((l) => String(l).slice(0, 240)), why: String(ck.why || "").slice(0, 200) } : null,
+    rejected: c.rejected ? { by: String(c.rejected.by || "").slice(0, 60), why: String(c.rejected.why || "").slice(0, 160) } : null,
+    disputed: !!c.disputed,
+  };
+}
+
+// What the viewer may do with one claim on an open bounty.
+function claimPerms(b, c, { mine, creator, admin, now }) {
+  const open = b.status === "open";
+  return {
+    reject: open && (creator || admin) && !mine && !(c.disputed && !admin) && !(c.rejected && !c.disputed),
+    dispute: open && mine && !c.disputed && (!!c.rejected || (now - (c.ts || now)) >= DISPUTE_AFTER_S),
+  };
+}
 const RECLAIM_MS = 2 * 60 * 1000;
 const KEEP_DAYS = 60;
 
@@ -57,9 +93,11 @@ function register(app, { isBotToken, addUser }) {
           room: String(b.room || "").slice(0, 80), status: String(b.status || "open").slice(0, 20),
           created: Number(b.created) || 0, deadline: Number(b.deadline) || 0,
           pot: (b.pot || []).slice(0, 500).map((c) => ({ nick: String(c.nick || "").slice(0, 60), amount: Math.floor(Number(c.amount) || 0) })),
-          claims: (b.claims || []).slice(0, 200).map((c) => ({ nick: String(c.nick || "").slice(0, 60), ts: Number(c.ts) || 0, note: String(c.note || "").slice(0, 160) })),
+          claims: (b.claims || []).slice(0, 200).map(cleanClaim),
           hunters: (b.hunters || []).slice(0, 50).map((h) => String(h).slice(0, 60)),
           resolved: Number(b.resolved) || null,
+          verify: b.verify && b.verify.text ? { text: String(b.verify.text).slice(0, 300), action: String(b.verify.action || "").slice(0, 20) } : null,
+          auto: !!b.auto,
         };
         await runQuery(`INSERT INTO bounties (id, data, status, deadline, updated) VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
@@ -79,7 +117,7 @@ function register(app, { isBotToken, addUser }) {
     const id = parseInt(String(req.params.id).replace(/^bt/i, ""), 10);
     const kind = String(req.params.kind);
     const back = (msg) => res.redirect(`/bounties/${id}?msg=${encodeURIComponent(msg)}`);
-    if (!["add", "claim", "resolve", "cancel"].includes(kind)) return res.status(404).send("Not found");
+    if (!["add", "claim", "resolve", "cancel", "reject", "dispute"].includes(kind)) return res.status(404).send("Not found");
     if (!req.user || !req.user.userId) return res.redirect("/login");
     try {
       await ready; await actionsReady;
@@ -92,7 +130,8 @@ function register(app, { isBotToken, addUser }) {
       const me = [u.camfrogUsername, u.username];
       const creator = me.some((k) => same(k, b.creator));
       const body = req.body || {};
-      let amount = null, note = null, hunters = null, ok = "";
+      let amount = null, note = null, hunters = null, evidence = null, ok = "";
+      const myClaim = (b.claims || []).find((c) => me.some((k) => same(k, c.nick)));
       if (kind === "add") {
         if (b.deadline * 1000 < Date.now()) return back("That bounty has expired.");
         amount = Math.floor(Number(String(body.amount || "").replace(/[, ]/g, "")) || 0);
@@ -103,7 +142,28 @@ function register(app, { isBotToken, addUser }) {
         if (b.deadline * 1000 < Date.now()) return back("That bounty has expired.");
         if (creator) return back("You can't claim your own bounty.");
         note = String(body.note || "").trim().slice(0, 160);
-        ok = "Sent to Pepe: your claim. The poster picks who gets paid.";
+        const raw = String(body.evidence || "").trim();
+        if (raw) {
+          evidence = cleanLink(raw);
+          if (!evidence) return back("Evidence has to be a link (http:// or https://) — a clip, a snap, a screenshot.");
+        }
+        ok = b.verify ? "Sent to Pepe: your claim. He'll check his logs and reply here."
+                      : "Sent to Pepe: your claim. The poster picks who gets paid.";
+      } else if (kind === "reject") {
+        if (!creator && u.class !== "Admin") return back(`Only ${b.creator} (or an admin) can reject a claim.`);
+        const c = (b.claims || []).find((x) => x.nick === String(body.hunter || ""));
+        if (!c) return back("That person hasn't claimed it.");
+        if (c.disputed && u.class !== "Admin") return back("That claim is with the admins now.");
+        hunters = JSON.stringify([c.nick]);
+        note = String(body.note || "").trim().slice(0, 160);
+        ok = `Sent to Pepe: rejecting ${c.nick}'s claim.`;
+      } else if (kind === "dispute") {
+        if (!myClaim) return back("You haven't claimed it.");
+        if (myClaim.disputed) return back("Your claim is already with the admins.");
+        if (!myClaim.rejected && Date.now() / 1000 - (myClaim.ts || 0) < DISPUTE_AFTER_S)
+          return back(`Give ${b.creator} a chance first — you can dispute once they reject it, or 12 hours after you claimed.`);
+        note = String(body.note || "").trim().slice(0, 160);
+        ok = "Sent to Pepe: your dispute goes to the admins.";
       } else {
         if (!creator && u.class !== "Admin") return back(`Only ${b.creator} (or an admin) can do that.`);
         if (kind === "resolve") {
@@ -117,9 +177,10 @@ function register(app, { isBotToken, addUser }) {
       }
       const open = await getQuery("SELECT COUNT(*) AS n FROM bounty_actions WHERE user_id = ? AND status IN ('pending','claimed')", [req.user.userId]);
       if (open[0].n >= 5) return back("You already have actions waiting — give Pepe a moment.");
-      await runQuery(`INSERT INTO bounty_actions (bounty_id, user_id, username, camfrog, kind, amount, note, hunters, site_admin, status, created, updated)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-        [id, req.user.userId, u.username, u.camfrogUsername || null, kind, amount, note, hunters,
+      await evidenceCol;
+      await runQuery(`INSERT INTO bounty_actions (bounty_id, user_id, username, camfrog, kind, amount, note, hunters, evidence, site_admin, status, created, updated)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+        [id, req.user.userId, u.username, u.camfrogUsername || null, kind, amount, note, hunters, evidence,
          u.class === "Admin" ? 1 : 0, Date.now(), Date.now()]);
       back(ok);
     } catch (e) {
@@ -131,7 +192,7 @@ function register(app, { isBotToken, addUser }) {
   // Pepe takes the pending actions (and any claimed ones he never answered)
   app.post("/api/bounties/actions/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
-    await actionsReady;
+    await actionsReady; await evidenceCol;
     const now = Date.now();
     const rows = await getQuery(`SELECT * FROM bounty_actions WHERE status = 'pending' OR (status = 'claimed' AND claimed < ?)
                                  ORDER BY id LIMIT 20`, [now - RECLAIM_MS]);
@@ -140,7 +201,7 @@ function register(app, { isBotToken, addUser }) {
       let hunters = [];
       try { hunters = JSON.parse(a.hunters || "[]"); } catch (e) { hunters = []; }
       return { id: a.id, bounty_id: a.bounty_id, username: a.username, camfrog: a.camfrog, kind: a.kind,
-               amount: a.amount, note: a.note, hunters, site_admin: !!a.site_admin };
+               amount: a.amount, note: a.note, hunters, evidence: a.evidence || null, site_admin: !!a.site_admin };
     }) });
   });
 
@@ -189,8 +250,11 @@ function register(app, { isBotToken, addUser }) {
       }
     }
     res.locals.og = require("./og").forBounty(req, JSON.parse(rows[0].data));
-    res.render("bounty", { ...base, b: view(JSON.parse(rows[0].data), me) });
+    const bv = view(JSON.parse(rows[0].data), me);
+    const ctx = { creator: bv.mineCreator, admin: base.isAdmin, now: base.now };
+    bv.claims = bv.claims.map((c) => ({ ...c, perms: claimPerms(bv, c, { ...ctx, mine: !!me && me.some((k) => same(k, c.nick)) }) }));
+    res.render("bounty", { ...base, b: bv });
   });
 }
 
-module.exports = { register, view };
+module.exports = { register, view, cleanLink, cleanClaim, claimPerms };

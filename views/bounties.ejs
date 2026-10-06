@@ -20,6 +20,7 @@
   .bt form.newbt label { display: grid; gap: 4px; font-size: 13px; color: #bbb; min-width: 0; }
   .bt form.newbt .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
   .bt form.newbt input, .bt form.newbt select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+  .bt .vline { font-size: 12px; color: #8fc3ff; overflow-wrap: anywhere; }
   .bt form.newbt button { background: #e0a030; color: #111; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; justify-self: start; }
 </style>
 <%
@@ -29,6 +30,9 @@
       <span class="ref"><%= b.ref %> · posted by <%= b.creator %></span>
       <span class="task"><%= b.task %></span>
       <span class="pot"><%= b.total.toLocaleString() %> PAT</span>
+      <% const vchk = (b.claims || []).filter((c) => c.check && ['verified', 'creator', 'admin'].includes(c.check.state)).length;
+         const vev = (b.claims || []).filter((c) => c.evidence && (c.evidence.links || []).length).length; %>
+      <% if (b.verify || vev || b.auto) { %><span class="vline"><%= b.verify ? '🔎 Pepe verifies' : '' %><%= b.auto ? ' · paid on Pepe’s check' : (vchk ? ' · ' + vchk + ' matching claim' + (vchk === 1 ? '' : 's') : '') %><%= vev ? ' · 🔗 ' + vev + ' with evidence' : '' %></span><% } %>
       <span class="info">
         <% if (b.status === 'open') { %><%= b.claims.length %> claim<%= b.claims.length === 1 ? '' : 's' %> · <%= b.backers.length %> backer<%= b.backers.length === 1 ? '' : 's' %> · ends in <%= left(b.deadline) %>
         <% } else if (b.status === 'resolved') { %>paid to <%= (b.hunters || []).join(', ') %>

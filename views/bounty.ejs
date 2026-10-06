@@ -22,6 +22,29 @@
   .bt form.owner button { background: #e0a030; color: #111; }
   .bt button.danger { background: #5a2a2a; color: #f2b8b8; }
   .bt label { cursor: pointer; }
+  .bt input[type=url] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
+  .bt .verify { background: #0f1620; border: 1px solid #2a4a6a; border-radius: 8px; padding: 10px 12px; margin: 12px 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+  .bt .verify b { color: #8fc3ff; }
+  .bt .claims { display: grid; gap: 10px; }
+  .bt .claim { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+  .bt .claim.won { border-color: #4caf50; }
+  .bt .claim .top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; justify-content: space-between; }
+  .bt .claim .who { font-weight: bold; color: #fff; overflow-wrap: anywhere; }
+  .bt .claim .note { color: #ccc; font-size: 14px; overflow-wrap: anywhere; }
+  .bt .ev { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+  .bt .ev a { display: inline-block; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #0d0d0d; border: 1px solid #333; border-radius: 6px; padding: 3px 8px; font-size: 13px; }
+  .bt .chk { border-left: 3px solid #555; padding: 6px 10px; background: #0d0d0d; border-radius: 0 6px 6px 0; font-size: 13px; color: #bbb; display: grid; gap: 3px; min-width: 0; }
+  .bt .chk .st { font-weight: bold; }
+  .bt .chk.verified { border-color: #4caf50; } .bt .chk.verified .st { color: #81c784; }
+  .bt .chk.creator { border-color: #e0a030; } .bt .chk.creator .st { color: #e0a030; }
+  .bt .chk.admin { border-color: #c06060; } .bt .chk.admin .st { color: #f2b8b8; }
+  .bt .chk.no_match .st { color: #aaa; }
+  .bt .chk .ln { font-family: monospace; font-size: 12px; color: #ddd; overflow-wrap: anywhere; }
+  .bt .flag { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid #5a2a2a; color: #f2b8b8; white-space: nowrap; }
+  .bt .flag.disp { border-color: #2a4a6a; color: #8fc3ff; }
+  .bt form.mini { background: transparent; border: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bt form.mini input[type=text] { flex: 1 1 180px; width: auto; min-width: 0; }
+  .bt form.mini button { padding: 6px 12px; font-size: 13px; }
 </style>
 <%
   const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
@@ -42,6 +65,12 @@
          : b.status === 'cancelled' ? 'Cancelled — everyone who chipped in was refunded'
          : b.status === 'expired' ? 'Expired unpaid — everyone who chipped in was refunded' : b.status %>
     </div>
+    <% if (b.verify) { %>
+      <div class="verify">🔎 <b>Pepe verifies this one:</b> <%= b.verify.text %>.
+        <span class="info">Claim it and he checks his room logs (public chat, mic, mod log) for you. A clear match pays out on its own; anything less goes to <%= b.creator %>.</span></div>
+    <% } else { %>
+      <div class="verify" style="border-color:#333;background:#111">✋ <b style="color:#ccc">Manual bounty:</b> <span class="info"><%= b.creator %> checks the claims and picks who gets paid.</span></div>
+    <% } %>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
 
     <% if (open) { %>
@@ -56,9 +85,10 @@
           <% if (!b.mineCreator) { %>
             <form method="post" action="/bounties/<%= b.id %>/claim">
               <b>🙋 <%= b.mineClaim ? 'Update your claim' : 'Claim it' %></b>
-              <input type="text" name="note" maxlength="160" placeholder="Proof or a note for <%= b.creator %> (optional)" value="<%= b.mineClaim ? b.mineClaim.note : '' %>">
+              <input type="text" name="note" maxlength="160" placeholder="A note for <%= b.creator %> (optional)" value="<%= b.mineClaim ? b.mineClaim.note : '' %>">
+              <input type="url" name="evidence" maxlength="300" pattern="https?://.+" placeholder="Evidence link: clip, snap, screenshot (optional)">
               <button type="submit"><%= b.mineClaim ? 'Update claim' : 'I did it' %></button>
-              <span class="info"><%= b.creator %> decides who gets paid.</span>
+              <span class="info"><%= b.verify ? 'Pepe checks his logs first; ' + b.creator + ' decides anything he can’t confirm.' : b.creator + ' decides who gets paid.' %> Links only, no uploads.</span>
             </form>
           <% } %>
           <% if (b.mineCreator || isAdmin) { %>
@@ -90,21 +120,51 @@
         <tr><th>Action</th><th>Details</th><th>Status</th></tr>
         <% actions.forEach((a) => { %>
           <tr><td><%= a.kind %></td>
-              <td><%= a.kind === 'add' ? Number(a.amount).toLocaleString() + ' PAT' : a.kind === 'claim' ? (a.note || '') : a.kind === 'resolve' ? JSON.parse(a.hunters || '[]').join(', ') : '' %></td>
+              <td><%= a.kind === 'add' ? Number(a.amount).toLocaleString() + ' PAT' : a.kind === 'claim' ? [a.note, a.evidence].filter(Boolean).join(' · ') : a.kind === 'dispute' ? (a.note || '') : (a.kind === 'resolve' || a.kind === 'reject') ? JSON.parse(a.hunters || '[]').join(', ') + (a.kind === 'reject' && a.note ? ': ' + a.note : '') : '' %></td>
               <td><%= a.status === 'done' ? '✅ ' + (a.message || 'done') : a.status === 'failed' ? '❌ ' + (a.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
         <% }) %>
       </table></div>
       <% if (actions.some((a) => a.status === 'pending' || a.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
     <% } %>
 
-    <h3>Claims</h3>
-    <div class="tbl"><table>
-      <tr><th>Hunter</th><th>Note</th><th class="r">When (UTC)</th></tr>
-      <% b.claims.forEach((c) => { %>
-        <tr><td><%= (b.hunters || []).includes(c.nick) ? '🏆 ' : '' %><%= c.nick %></td><td><%= c.note %></td><td class="r"><%= when(c.ts) %></td></tr>
+    <h3>Claims &amp; evidence</h3>
+    <div class="claims">
+      <% const ST = { verified: '✅ Verified by Pepe', creator: '⏳ Looks right, waiting for ' + b.creator, admin: '⚖️ Needs an admin', no_match: '🔍 Pepe couldn’t confirm it from his logs', manual: '' };
+         b.claims.forEach((c) => { const won = (b.hunters || []).includes(c.nick); const ev = c.evidence || {}; const ck = c.check; const p = c.perms || {}; %>
+        <div class="claim<%= won ? ' won' : '' %>">
+          <div class="top">
+            <span class="who"><%= won ? '🏆 ' : '' %><%= c.nick %></span>
+            <span class="info"><%= when(c.ts) %> UTC
+              <% if (c.rejected) { %> <span class="flag">rejected<%= c.rejected.by ? ' by ' + c.rejected.by : '' %></span><% } %>
+              <% if (c.disputed) { %> <span class="flag disp">disputed: admins</span><% } %></span>
+          </div>
+          <% if (c.note) { %><div class="note"><%= c.note %></div><% } %>
+          <% if ((ev.links || []).length) { %><div class="ev"><% ev.links.forEach((u) => { %><a href="<%= u %>" target="_blank" rel="nofollow noopener noreferrer ugc">🔗 <%= u.replace(/^https?:\/\//, '') %></a><% }) %></div><% } %>
+          <% if (ck && ck.state !== 'manual') { %>
+            <div class="chk <%= ck.state %>">
+              <span class="st"><%= ST[ck.state] %><%= ck.how === 'semantic' ? ' (matched by meaning)' : '' %></span>
+              <% (ck.lines || []).forEach((l) => { %><span class="ln"><%= l %></span><% }) %>
+              <% if (ck.why) { %><span><%= ck.why %></span><% } %>
+            </div>
+          <% } %>
+          <% if (c.rejected && c.rejected.why) { %><div class="info">Rejected: <%= c.rejected.why %></div><% } %>
+          <% if (user && p.reject) { %>
+            <form class="mini" method="post" action="/bounties/<%= b.id %>/reject">
+              <input type="hidden" name="hunter" value="<%= c.nick %>">
+              <input type="text" name="note" maxlength="160" placeholder="Why (optional)">
+              <button class="danger" type="submit">Reject claim<%= b.mineCreator ? '' : ' (admin)' %></button>
+            </form>
+          <% } %>
+          <% if (user && p.dispute) { %>
+            <form class="mini" method="post" action="/bounties/<%= b.id %>/dispute">
+              <input type="text" name="note" maxlength="160" placeholder="Why it should count">
+              <button type="submit">Dispute: ask an admin</button>
+            </form>
+          <% } %>
+        </div>
       <% }) %>
-      <% if (!b.claims.length) { %><tr><td colspan="3" style="color:#888">No claims yet.</td></tr><% } %>
-    </table></div>
+      <% if (!b.claims.length) { %><p class="info">No claims yet.</p><% } %>
+    </div>
 
     <h3>The pot</h3>
     <div class="tbl"><table>
