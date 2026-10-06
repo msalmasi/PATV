@@ -92,6 +92,24 @@ function register(app, { isBotToken, addUser }) {
     res.json({ success: true, existed: rows.length > 0 });
   });
 
+  // Mark existing captures private (Pepe, 1.99cb: the subject or requester went !incognito /
+  // bridge-hidden after the capture was posted). items: [{id, subject: bool, by: bool}] - subject
+  // blanks the name and sets anon (never named in stories / strips / the feed), by blanks the requester.
+  app.post("/api/media/anon", async (req, res) => {
+    if (!botAuthed(req, isBotToken)) return res.status(403).json({ success: false, error: "unauthorized" });
+    const items = Array.isArray((req.body || {}).items) ? req.body.items.slice(0, 200) : [];
+    await ready;
+    let marked = 0;
+    for (const it of items) {
+      const id = String((it && it.id) || "");
+      if (!/^[a-f0-9]{8,32}$/i.test(id) || !(it.subject || it.by)) continue;
+      if (it.subject) await runQuery("UPDATE media SET anon = 1, subject = '' WHERE id = ?", [id]);
+      if (it.by) await runQuery("UPDATE media SET by_user = 'someone' WHERE id = ?", [id]);
+      marked++;
+    }
+    res.json({ success: true, marked });
+  });
+
   async function live(id) {
     await ready;
     const rows = await getQuery("SELECT * FROM media WHERE id = ? AND deleted = 0", [id]);
