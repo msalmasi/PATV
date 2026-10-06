@@ -39,7 +39,9 @@
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
 <script src="/public/js/stage-player.js?v=3"></script>
-<script src="/public/js/stage-room.js?v=2"></script>
+<script src="/public/js/stage-room.js?v=3"></script>
+<link rel="stylesheet" href="/public/css/stagecap.css?v=1">
+<script src="/public/js/stage-capture.js?v=1"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
 <%- include('partials/cosmetics-css') %>
@@ -326,6 +328,7 @@
       </div>
       <div class="stage-side" id="stageSide"></div>
     </div>
+    <div class="stcap hide" id="stCap" aria-label="Snap or clip this stream"></div>
     <div class="stage-off" id="stageOff"></div>
     <!-- the stage widgets render once and move between the live side panel and the off-air strip -->
     <div class="hide" id="stageWidgets">
@@ -537,10 +540,15 @@
     // ── the stage (public/js/stage-room.js): the FRONT ROOM's stage - its featured slot by default, else
     // Pepe's stream (Twitch when it's live there, else HLS); tabs switch between every live stream.
     var initSlots = <%- JSON.stringify(paid).replace(/</g, '\\u003c') %>;
+    // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js) - it goes to the FRONT pad's story
+    var frontSlug = <%- JSON.stringify(frontInfo ? frontInfo.slug : '').replace(/</g, '\\u003c') %>;
+    var stCap = PATVStage.capture({ host: document.getElementById('stCap'), room: function () { return frontSlug; } });
     PATVStage.switcher({
       tabs: document.getElementById('stTabs'), wrap: document.getElementById('videoWrapper'),
       reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute'),
       embedHost: document.getElementById('stEmbed'), twitchHost: document.getElementById('twitch'),
+      onShow: function (sel) { stCap.update(frontSlug ? sel : null); },
+      onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
       api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, manage: <%= staff ? 'true' : 'false' %>,
       onAir: function (on, sub) { setPill(on, sub || (on ? 'live now' : 'nothing streaming right now')); }
     });

@@ -16,8 +16,9 @@
 //   * a capture whose subject Pepe flagged private (media.anon: !incognito / !bridge hide), or whose
 //     linked PATV account hides its Analytics or Rooms panel (the room-analytics rule, roomstats.js),
 //     is shown as "someone" - the same for the "taken by" name
-//   * captures carry no NSFW flag (they're Pepe's own room captures, not uploads); feed posts' NSFW
-//     rules don't apply here
+//   * Pepe's cam captures carry no NSFW flag (they're his own room captures, not uploads); feed posts'
+//     NSFW rules don't apply here. 1.99cr: STAGE captures (stagecap.js, source "stage") of a slot its
+//     streamer marked NSFW are nsfw: blurred behind a tap in the viewer, never a story cover
 //   * rows whose file is gone are skipped (they used to render as broken images)
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
@@ -86,6 +87,8 @@ async function clean(rows) {
     id: r.id, kind: r.kind === "clip" || r.kind === "audio" ? r.kind : "photo", src: "/media/" + encodeURIComponent(r.id) + "/raw",
     page: "/media/" + encodeURIComponent(r.id), subject: name(r.subject, r.anon), by: name(r.by_user, false),
     room: r.room || "", created: Number(r.created) || 0, expires: Number(r.expires) || 0, secs: Number(r.secs) || 0,
+    // 1.99cr: stage captures (stagecap.js) read "📺 Stage snap/clip of <stream> by <user>"; NSFW comes from the slot
+    source: r.source === "stage" ? "stage" : "cam", nsfw: !!Number(r.nsfw || 0),
   }));
 }
 
@@ -98,7 +101,8 @@ async function captures(roomId, limit = 12, { windowMs = null } = {}) {
     const where = ["deleted = 0", "expires > ?"], args = [t];
     if (windowMs) { where.push("created > ?"); args.push(t - windowMs); }
     if (roomId) { where.push("room = ?"); args.push(roomId); }
-    const rows = await getQuery(`SELECT id, kind, file, subject, by_user, room, created, expires, secs, ${C.has("anon") ? "anon" : "0 AS anon"}
+    const opt = (c, d) => (C.has(c) ? c : `${d} AS ${c}`);
+    const rows = await getQuery(`SELECT id, kind, file, subject, by_user, room, created, expires, secs, ${opt("anon", "0")}, ${opt("source", "NULL")}, ${opt("nsfw", "0")}
                                  FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT ?`, [...args, Math.min(MAX_ITEMS, limit)]);
     return await clean(rows);
   } catch (e) {
@@ -145,7 +149,7 @@ async function forViewer(viewer, { room = null } = {}) {
     list.sort((a, b) => a.created - b.created);
     const latest = list[list.length - 1].created;
     const upto = seen.get(rid) || 0;
-    const cover = [...list].reverse().find((c) => c.kind === "photo");
+    const cover = [...list].reverse().find((c) => c.kind === "photo" && !c.nsfw);
     const base = { ...roomInfo(rid), latest, count: list.length, unseen: latest > upto };
     if (signed) out.push({ ...base, seen: upto, cover: cover ? cover.src : null, items: list.map(({ room: _r, ...x }) => x) });
     else out.push({ ...base, unseen: true, cover: null });

@@ -13,8 +13,8 @@
   const showRooms = (S.rooms || []).length > 0, showCaps = (S.caps || []).length > 0;
 %>
 <% if (showRooms || showCaps) { %>
-<link rel="stylesheet" href="/public/css/stories.css?v=1">
-<section class="ss" aria-label="Stories: Pepe's captures from the pads' Camfrog rooms, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
+<link rel="stylesheet" href="/public/css/stories.css?v=2">
+<section class="ss" aria-label="Stories: snaps and clips from the pads' Camfrog rooms and stages, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
   <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
   <div class="ss-row" role="list">
     <% (S.rooms || []).forEach((r) => { %>
@@ -27,14 +27,14 @@
     <% }) %>
     <% (S.caps || []).forEach((c) => { %>
       <a role="listitem" class="ss-t k-<%= c.kind %>" href="<%= c.page %>" data-story-room="<%= S.room %>" data-story-item="<%= c.id %>"
-         aria-label="<%= c.kind === 'photo' ? 'Snap' : c.kind === 'clip' ? 'Clip' : 'Audio' %> of <%= c.subject || 'someone' %>">
-        <% if (c.kind === 'photo') { %><img src="<%= c.src %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
-        <span class="ic" aria-hidden="true"><%= kindIc[c.kind] %></span>
+         aria-label="<%= c.source === 'stage' ? 'Stage ' + (c.kind === 'clip' ? 'clip' : 'snap') : (c.kind === 'photo' ? 'Snap' : c.kind === 'clip' ? 'Clip' : 'Audio') %> of <%= c.subject || 'someone' %><%= c.nsfw ? ' (NSFW)' : '' %>">
+        <% if (c.kind === 'photo' && !c.nsfw) { %><img src="<%= c.src %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
+        <span class="ic" aria-hidden="true"><%= c.nsfw ? '🔞' : c.source === 'stage' ? '📺' : kindIc[c.kind] %></span>
         <span class="who"><%= c.subject || 'someone' %></span>
       </a>
     <% }) %>
   </div>
 </section>
 <% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=2" defer></script>
+<script src="/public/js/stories.js?v=3" defer></script>
 <% } %>

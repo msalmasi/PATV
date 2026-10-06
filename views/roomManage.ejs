@@ -2,7 +2,7 @@
 <!-- views/roomManage.ejs — a room owner's dashboard (1.99bi): the room's stage (slots, featuring, cuts,
      approvals, queue, bans), its stage settings, its page, its website-bridge switches and royalties.
      Live parts are drawn by /public/js/room-manage.js from /api/rooms/:slug/owner-state. -->
-<link rel="stylesheet" href="/public/css/stage.css?v=2">
+<link rel="stylesheet" href="/public/css/stage.css?v=5">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);

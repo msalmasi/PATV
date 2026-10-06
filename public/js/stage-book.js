@@ -184,12 +184,31 @@
     // "feature me": a free slot, nobody featured in the room
     var canFeat = !s.featured && !s.price_per_min && roomState && roomState.room.id === s.room_id && !roomState.featured;
     show('featBtn', !!canFeat);
+    // 1.99cr: may viewers snap / clip this stream, is it NSFW (not while a change is on its way)
+    show('capOpts', !embed);
+    if (!capBusy) { $('capAllow').checked = s.capture !== false; $('capNsfw').checked = !!s.nsfw; }
     var k = null;
     try { k = sessionStorage.getItem(KEY_STORE + s.id); } catch (e) {}
     $('rtmpKey').value = k || '';
     $('keyNote').textContent = k ? 'Your key works only for this slot and stops working when it ends. Don\'t share it.'
       : 'This tab doesn\'t have your key - press "New key" for a fresh one (the old one stops working), or go live from the browser.';
   }
+  var capBusy = false;
+  function capSave() {
+    if (!slot) return;
+    capBusy = true;
+    fetch('/api/stage/slots/' + encodeURIComponent(slot.id) + '/capture', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+      body: JSON.stringify({ allow: $('capAllow').checked, nsfw: $('capNsfw').checked }) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        capBusy = false;
+        $('slotMsg').textContent = j.ok ? (j.capture ? 'Viewers can snap and clip your stream' : 'Snaps and clips of your stream are off') + (j.nsfw ? ' · marked NSFW.' : '.') : (j.error || 'Could not change that.');
+        refresh();
+      }).catch(function () { capBusy = false; $('slotMsg').textContent = 'Could not reach the site.'; });
+  }
+  $('capAllow').addEventListener('change', capSave);
+  $('capNsfw').addEventListener('change', capSave);
   function refresh() {
     return fetch('/api/stage/me?room=' + encodeURIComponent($('room').value), { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
       if (j && j.ok) render(j);

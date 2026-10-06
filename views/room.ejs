@@ -180,7 +180,9 @@
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
   <script src="/public/js/stage-player.js?v=3"></script>
-  <script src="/public/js/stage-room.js?v=2"></script>
+  <script src="/public/js/stage-room.js?v=3"></script>
+  <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
+  <script src="/public/js/stage-capture.js?v=1"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
     <h2 id="rmStageH"><span>📺 <%= room.name %> stage</span>
       <span class="live<%= live ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
@@ -191,6 +193,7 @@
       <button type="button" class="unmute hide" id="rmStUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
       <div class="embed hide" id="rmEmbed"></div>
     </div>
+    <div class="stcap hide" id="rmCap" aria-label="Snap or clip this stream"></div>
     <div class="off-air"><span id="rmOffTxt">Nothing on this stage right now — be the first: go live here.</span></div>
     <div class="stage-foot">
       <span id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span>
@@ -212,10 +215,13 @@
       var d = new Date(Number(t.getAttribute('data-ts')));
       t.textContent = d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     });
+    var padSlug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
+    // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js; cut on the server, saved to this pad's story)
+    var cap = PATVStage.capture({ host: document.getElementById('rmCap'), room: function () { return padSlug; } });
     PATVStage.switcher({
       tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'),
       reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
-      api: '/api/stage?room=' + encodeURIComponent(<%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>),
+      api: '/api/stage?room=' + encodeURIComponent(padSlug), onShow: function (sel) { cap.update(sel); },
       slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, manage: <%= manage_ ? 'true' : 'false' %>,
       onAir: function (on) {
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);

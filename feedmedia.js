@@ -334,4 +334,5 @@ function sweepTmp(now = Date.now()) {
 }
 
 module.exports = { sniff, probe, processImage, heicToPng, processAv, processPreviewImage, filePath, dir, _setDir, diskFreeBytes, removeFiles, tmpPath,
-                   sweepTmp, MediaError, fmtSecs, CHUNK, CHUNK_MAX, FILE_RE, ORPHAN_TTL, TMP_TTL };
+                   sweepTmp, MediaError, fmtSecs, CHUNK, CHUNK_MAX, FILE_RE, ORPHAN_TTL, TMP_TTL,
+                   slot, run, bin };   // 1.99cr: stagecap.js shares this ffmpeg job queue (FFMPEG_JOBS at a time, niced, timeouts)

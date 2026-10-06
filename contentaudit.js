@@ -105,7 +105,8 @@ async function record(ctx, { kind, id, postId = null, event = "create", user } =
     const born = createdMs(user);
     await runQuery(`INSERT INTO content_audit (kind, target_id, post_id, user_id, event, at, ip, ua, ip_hash, via, lang, country, acct_age_s, linked, session_hash, bot)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                   [kind === "comment" || kind === "message" ? kind : "post", String(id), postId ? String(postId) : null, user.userId, event === "edit" ? "edit" : "create", t,
+                   // kind "capture" (1.99cr): a stage snap / clip (stagecap.js)
+                   [kind === "comment" || kind === "message" || kind === "capture" ? kind : "post", String(id), postId ? String(postId) : null, user.userId, event === "edit" ? "edit" : "create", t,
                     ctx.ip || null, ctx.ua || null, net ? hmac("ip", net) : null, ctx.via || null, ctx.lang || null, ctx.country || null,
                     born ? Math.max(0, Math.floor((t - born) / 1000)) : null, JSON.stringify(linkedOf(user)), ctx.device ? hmac("dev", ctx.device) : null, ctx.bot ? 1 : 0]);
     return true;

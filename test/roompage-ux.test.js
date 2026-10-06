@@ -140,7 +140,7 @@ test("/stage: camera + mic pickers and Switch camera in the browser pane; the pr
     C: { price_per_min: 0, min_minutes: 2, max_minutes: 30, lead_min: 5, schedule_days: 14, enabled: true, max_concurrent: 6, idle_grace_min: 5 },
     rtmpServer: "rtmp://example/stage", balance: 0, twitchUrl: null, staff: false });
   for (const id of ["camSel", "micSel", "flipBtn", "devNote", "camFld"]) assert.match(html, new RegExp('id="' + id + '"'));
-  assert.match(html, /stage-book\.js\?v=4/);
+  assert.match(html, /stage-book\.js\?v=5/);
   const js = fs.readFileSync(path.join(repo, "public", "js", "stage-book.js"), "utf8");
   assert.match(js, /captureStream/); assert.match(js, /createMediaStreamDestination/); assert.match(js, /enumerateDevices/);
   assert.match(js, /facingMode/); assert.match(js, /devicechange/); assert.match(js, /new Worker/);

@@ -2,7 +2,7 @@
 <!-- views/stageBook.ejs — the "Go live" hub (1.99bi): book a slot on a room's stage (now, later, or the
      queue), stream from OBS / the browser or put a YouTube / Twitch link on, get featured. Live status +
      browser streaming run in /public/js/stage-book.js; data from mainstage.js. -->
-<link rel="stylesheet" href="/public/css/stage.css?v=4">
+<link rel="stylesheet" href="/public/css/stage.css?v=5">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const defMin = Math.min(C.max_minutes, Math.max(C.min_minutes, 15));
@@ -55,6 +55,12 @@
         <a class="btn" id="watchLink" href="/" target="_blank" rel="noopener">Watch the stage ↗</a>
         <button type="button" class="btn gold hide" id="featBtn">★ Feature me</button>
       </div>
+      <!-- 1.99cr: viewers' 📸 Snap / 🎬 Clip of this stream (stagecap.js) -->
+      <fieldset class="capopts" id="capOpts">
+        <legend>Snaps &amp; clips</legend>
+        <label><input type="checkbox" id="capAllow" checked> Viewers may snap and clip my stream (saved to the pad's story)</label>
+        <label><input type="checkbox" id="capNsfw"> My stream is NSFW (18+) - snaps and clips of it are marked NSFW</label>
+      </fieldset>
       <p class="msg" id="slotMsg" role="status" aria-live="polite"></p>
 
       <div id="streamPanes">
@@ -175,6 +181,6 @@
   <% } %>
   <p class="muted center"><a href="/p">Pads ›</a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=4" defer></script>
+<script src="/public/js/stage-book.js?v=5" defer></script>
 </body>
 </html>

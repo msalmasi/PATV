@@ -1,33 +1,60 @@
-<%- include('layout', { title: item ? ((item.kind === 'clip' ? 'Clip' : item.kind === 'audio' ? 'Audio' : 'Snap') + ' of ' + (item.subject || 'someone')) : 'Expired', user: user}) %>
+<% const stage_ = !!(item && item.source === 'stage'); const what_ = item ? (stage_ ? (item.kind === 'clip' ? 'Stage clip' : 'Stage snap') : (item.kind === 'clip' ? 'Clip' : item.kind === 'audio' ? 'Audio' : 'Snap')) : ''; %>
+<%- include('layout', { title: item ? what_ + ' of ' + (item.subject || 'someone') : 'Expired', user: user}) %>
 <style>
   .md { max-width: 900px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; text-align: center; }
-  .md .stage { background: #000; border-radius: 10px; overflow: hidden; margin: 18px 0 12px; }
+  .md .stage { position: relative; background: #000; border-radius: 10px; overflow: hidden; margin: 18px 0 12px; }
   .md .stage img, .md .stage video { width: 100%; max-height: 75vh; object-fit: contain; display: block; }
   .md .stage audio { width: 94%; margin: 28px 0; }
+  .md .stage.nsfw img, .md .stage.nsfw video { filter: blur(28px); }
+  .md .stage .gate { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; background: rgba(0,0,0,.45); color: #fff; font-size: 15px; }
+  .md .stage .gate button { justify-self: center; padding: 8px 16px; border-radius: 8px; border: 1px solid #e57373; background: #2a1010; color: #ffcdd2; font: inherit; font-weight: bold; cursor: pointer; }
+  .md .stage:not(.nsfw) .gate { display: none; }
   .md .meta { color: #ccc; font-size: 14px; line-height: 1.7; }
   .md .meta b { color: #fff; }
   .md .mut { color: #888; }
   .md a { color: #81c784; }
+  .md .tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #2a3442; color: #9fb3c8; margin-right: 6px; }
+  .md .tag.x { border-color: #5a2222; color: #ffb4b4; }
+  .md .del { margin-top: 10px; padding: 6px 12px; border-radius: 8px; border: 1px solid #5a2222; background: #2a1010; color: #ffb4b4; font: inherit; font-size: 13px; cursor: pointer; }
 </style>
 <div class="md">
   <% if (!item) { %>
     <h1><%= gone === 410 ? 'This capture has expired' : 'Not found' %></h1>
     <p class="mut">Snaps and clips only live for a while. <a href="/feed">See what's on the feed</a>.</p>
-  <% } else { const src = '/media/' + item.id + '/raw'; %>
-    <div class="stage">
+  <% } else { const src = '/media/' + item.id + '/raw'; const nsfw_ = !!item.nsfw; %>
+    <div class="stage<%= nsfw_ ? ' nsfw' : '' %>" id="mdStage">
       <% if (item.kind === 'clip') { %>
         <video src="<%= src %>" controls playsinline preload="metadata"></video>
       <% } else if (item.kind === 'audio') { %>
         <audio src="<%= src %>" controls preload="metadata"></audio>
       <% } else { %>
-        <img src="<%= src %>" alt="Snap of <%= item.subject %>">
+        <img src="<%= src %>" alt="<%= what_ %> of <%= item.subject || 'someone' %>">
       <% } %>
+      <div class="gate"><span>🔞 Marked NSFW by the streamer</span><button type="button" id="mdReveal">Show it (18+)</button></div>
     </div>
     <div class="meta">
-      <div><b><%= item.subject || 'someone' %></b> in <b><%= item.room || 'a room' %></b><%= item.secs ? ' · ' + Math.round(item.secs) + 's' : '' %></div>
-      <div class="mut">Captured by <%= item.by_user || '?' %> · <%= new Date(item.created).toUTCString() %> · expires in <%= item.ttl %></div>
-      <div><a href="/feed">More clips &amp; snaps ›</a></div>
+      <div><% if (stage_) { %><span class="tag">📺 Stage <%= item.kind === 'clip' ? 'clip' : 'snap' %></span><% } %><% if (nsfw_) { %><span class="tag x">NSFW</span><% } %>
+        <b><%= item.subject || 'someone' %></b> <%= stage_ ? 'on the stage of' : 'in' %> <% if (typeof pad !== 'undefined' && pad) { %><a href="<%= pad.href %>"><b><%= pad.title %></b></a><% } else { %><b><%= item.room || 'a room' %></b><% } %><%= item.secs ? ' · ' + Math.round(item.secs) + 's' : '' %></div>
+      <div class="mut"><%= stage_ ? (item.kind === 'clip' ? 'Clipped' : 'Snapped') : 'Captured' %> by <%= item.by_user || '?' %> · <%= new Date(item.created).toUTCString() %> · expires in <%= item.ttl %></div>
+      <div><% if (stage_) { %><a href="/stage/captures">More stage snaps &amp; clips ›</a> · <% } %><a href="/feed">More clips &amp; snaps ›</a></div>
+      <% if (typeof canDelete !== 'undefined' && canDelete) { %><button type="button" class="del" id="mdDel" data-id="<%= item.id %>">🗑 Delete this capture</button><% } %>
     </div>
+    <script>
+    (function () {
+      var r = document.getElementById('mdReveal');
+      if (r) r.addEventListener('click', function () { document.getElementById('mdStage').classList.remove('nsfw'); });
+      var d = document.getElementById('mdDel');
+      if (d) d.addEventListener('click', function () {
+        if (!confirm('Delete this capture for everyone? This can\'t be undone.')) return;
+        d.disabled = true;
+        fetch('/api/stage/captures/media/' + encodeURIComponent(d.getAttribute('data-id')) + '/delete', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
+          .then(function (x) { return x.json(); })
+          .then(function (j) { if (j.ok) location.href = '/stage/captures'; else { alert(j.error || 'Could not delete it.'); d.disabled = false; } })
+          .catch(function () { alert('Could not reach the site.'); d.disabled = false; });
+      });
+    })();
+    </script>
   <% } %>
 </div>
 </body>

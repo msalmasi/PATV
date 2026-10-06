@@ -88,7 +88,7 @@
     var box = document.createElement('div');
     box.className = 'sv-ask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Sign in to see stories');
     box.innerHTML = '<div class="sv-ask-card"><div class="sv-ask-ic" aria-hidden="true">📸</div><h2>Stories are for PATV members</h2>' +
-      '<p>These are Pepe\'s webcam captures from the pads\' Camfrog rooms, so you need to be signed in to watch them.</p>' +
+      '<p>These are snaps and clips from the pads\' Camfrog rooms and stages, so you need to be signed in to watch them.</p>' +
       '<div class="sv-ask-btns"><a class="sv-btn primary" href="#">Sign in</a><a class="sv-btn" href="/register">Join PATV</a><button type="button" class="sv-btn ghost">Not now</button></div></div>';
     box.querySelector('a.primary').setAttribute('href', '/login?next=' + encodeURIComponent(next || (location.pathname + location.search)));
     var close = function () { box.remove(); document.removeEventListener('keydown', onKey); };
@@ -191,8 +191,10 @@
       return f;
     });
     V.room.textContent = R.title; V.room.href = R.href;
-    var what = it.kind === 'photo' ? '📸 Snap' : it.kind === 'clip' ? '📹 Clip' : '🔊 Audio';
-    V.who.textContent = what + ' of ' + (it.subject || 'someone') + (it.by ? ' · by ' + it.by : '');
+    // 1.99cr: stage captures (a stream on the pad's stage, not a Camfrog cam) say so
+    var what = it.source === 'stage' ? (it.kind === 'clip' ? '📺 Stage clip' : '📺 Stage snap')
+             : it.kind === 'photo' ? '📸 Snap' : it.kind === 'clip' ? '📹 Clip' : '🔊 Audio';
+    V.who.textContent = what + ' of ' + (it.subject || 'someone') + (it.by ? (it.source === 'stage' ? ' by ' : ' · by ') + it.by : '') + (it.nsfw ? ' · NSFW' : '');
     V.when.textContent = ago(it.created);
     V.when.title = new Date(it.created).toLocaleString();
     V.prevRoom.disabled = ri === 0; V.nextRoom.disabled = ri === rooms.length - 1;
@@ -206,7 +208,21 @@
     // media
     V.stage.innerHTML = '';
     V.stage.classList.remove('gone');
+    // 1.99cr: an NSFW stage capture waits, blurred, until the viewer chooses to see it (once per viewer session)
+    V.gated = !!(it.nsfw && !V.nsfwOk);
+    V.stage.classList.toggle('nsfw', V.gated);
     var spin = el('div', 'sv-spin'); spin.setAttribute('aria-hidden', 'true'); V.stage.appendChild(spin);
+    if (V.gated) {
+      var gate = el('div', 'sv-nsfw');
+      gate.appendChild(el('span', null, '🔞 Marked NSFW by the streamer'));
+      var show18 = el('button', 'sv-btn primary', 'Show it (18+)'); show18.type = 'button';
+      show18.addEventListener('click', function () {
+        V.nsfwOk = true; V.gated = false; V.stage.classList.remove('nsfw'); gate.remove();
+        if (!V.media) { V.waiting = !!V.stage.querySelector('.sv-spin'); V.last = performance.now(); } else play();
+      });
+      gate.appendChild(show18);
+      V.stage.appendChild(gate);
+    }
     var failed = function () {
       if (V.ri !== ri || V.ii !== ii) return;
       V.stage.classList.add('gone');
@@ -216,9 +232,9 @@
     };
     if (it.kind === 'photo') {
       var img = new Image();
-      img.alt = 'Snap of ' + (it.subject || 'someone') + ' in ' + R.title;
+      img.alt = what.replace(/^\S+ /, '') + ' of ' + (it.subject || 'someone') + ' in ' + R.title;
       img.className = 'sv-img'; img.decoding = 'async';
-      img.onload = function () { if (V.ri !== ri || V.ii !== ii) return; spin.remove(); V.waiting = false; V.last = performance.now(); };
+      img.onload = function () { if (V.ri !== ri || V.ii !== ii) return; spin.remove(); V.waiting = !!V.gated; V.last = performance.now(); };
       img.onerror = failed;
       img.src = it.src;
       V.stage.appendChild(img);
@@ -242,7 +258,7 @@
       V.media = m;
       V.stage.appendChild(m);
       if (it.secs > 0) V.dur = it.secs * 1000;
-      play();
+      if (!V.gated) play();
     }
     markSeen(R, it);
     // preload the next photo
@@ -253,7 +269,7 @@
   }
 
   function play() {
-    var m = V.media; if (!m) return;
+    var m = V.media; if (!m || V.gated) return;
     var p = m.play();
     if (p && p.catch) p.catch(function () {
       // autoplay with sound refused: play muted and say so

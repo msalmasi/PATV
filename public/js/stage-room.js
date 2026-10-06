@@ -7,6 +7,8 @@
 //     slots: [...], pepeOn: bool, manage: bool,                first render (server-side data)
 //     pepeHere: bool                                           Pepe is IN this room (default true)
 //     onAir(on, sub)                                           the page's ON AIR pill / subtitle
+//     onShow(sel)                                              (1.99cr) what's selected, for the Snap / Clip
+//                                                              bar (stage-capture.js): null | {stream, label, embed, capture, nsfw}
 //   })
 // Default view: the room's FEATURED slot when it's live, else Pepe's stream. Viewers switch freely.
 // 1.99cj: Pepe's stream (his broadcast, HLS or the Twitch mirror) is part of EVERY room's stage that
@@ -77,6 +79,15 @@
         o.onAir && o.onAir(any, any ? (pepeHere ? "Pepe's stream is off air - pick a stream above" : 'pick a stream above') : 'nothing streaming right now');
       }
       renderTabs();
+      if (o.onShow) o.onShow(selection());
+    }
+    // 1.99cr: what's on screen, for the Snap / Clip bar (stage-capture.js). Pepe's stream is captured from
+    // his HLS on the server even while the page shows the Twitch mirror, so it counts while HLS is on air.
+    function selection() {
+      var s = cur();
+      if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
+      if (pepeHere && pepeOn) return { stream: 'pepe', label: "Pepe's stream", embed: false, capture: true, nsfw: false };
+      return null;
     }
     function renderTabs() {
       var box = o.tabs;
@@ -146,7 +157,7 @@
       }
     });
     if (loaded) show(); else renderTabs();
-    return { poll: poll, show: show, view: function () { return view; } };
+    return { poll: poll, show: show, view: function () { return view; }, selection: selection };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.switcher = switcher;

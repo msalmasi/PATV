@@ -925,6 +925,8 @@ function view(s, t = now()) {
     room_id: s.room_id || rooms.HOUSE_ROOM, kind: s.kind || "feature", featured: !!s.featured, feature_by: s.feature_by || null,
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
     bill_base_seconds: Math.floor((s.bill_base_ms || 0) / 1000),
+    // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
+    capture: !s.capture_off && !isEmbed(s), nsfw: !!s.nsfw,
   };
 }
 // What a stage shows: the slots live right now in a room (cached briefly; pages poll it).
@@ -942,6 +944,7 @@ async function publicSlots(roomId) {
       id: s.id, username: s.username, display: s.displayname || s.username, nameCss: nameStyle(s.username) || "",
       hls: e ? null : `${HLS_BASE}/${s.stream}.m3u8`, embed: e, since: s.went_live, room_id: s.room_id,
       featured: !!s.featured, feature_by: s.feature_by || null, title: s.title || null, mode: s.mode || "stream",
+      capture: !e && !s.capture_off, nsfw: !!s.nsfw,     // 1.99cr: the stage's Snap / Clip buttons (stagecap.js)
     };
   }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.since || 0) - (b.since || 0));
   pubCache.set(k, { at: Date.now(), list });

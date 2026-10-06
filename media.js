@@ -20,12 +20,20 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS media (
   // 1.99bz: Pepe may flag a capture's subject as private (!incognito / !bridge hide) - the site then
   // never names them (stories, strips, the capture page)
   .then(() => runQuery("ALTER TABLE media ADD COLUMN anon INTEGER DEFAULT 0").catch(() => {}))
+  // 1.99cr: stage captures (stagecap.js): source "stage" (NULL = Pepe's cam capture), the stream ("pepe" |
+  // "slot:<id>"), NSFW (from the slot), who took it (account id) and the slot (its streamer may delete it).
+  // Their files are webp (snaps) / mp4 (clips), written by stagecap.js itself - never uploaded here.
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN source TEXT").catch(() => {}))
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN stream TEXT").catch(() => {}))
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN nsfw INTEGER DEFAULT 0").catch(() => {}))
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN by_user_id TEXT").catch(() => {}))
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN slot_id TEXT").catch(() => {}))
   .catch(() => {});
 
 /** Is this capture's file still on disk? (A row can outlive its file: a staging DB refreshed from prod,
  *  a file removed by hand. Such rows would render as broken images, so lists skip them.) */
 function fileExists(row) {
-  return !!(row && typeof row.file === "string" && /^[A-Za-z0-9]+\.(jpg|mp4|m4a)$/.test(row.file) && fs.existsSync(path.join(DIR, row.file)));
+  return !!(row && typeof row.file === "string" && /^[A-Za-z0-9]+\.(jpg|mp4|m4a|webp)$/.test(row.file) && fs.existsSync(path.join(DIR, row.file)));
 }
 
 const TYPES = { "image/jpeg": ".jpg", "video/mp4": ".mp4", "audio/mp4": ".m4a" };
@@ -124,6 +132,7 @@ function register(app, { isBotToken, addUser }) {
     if (gone) return res.status(gone).send(gone === 410 ? "This capture has expired." : "Not found.");
     res.set("X-Robots-Tag", "noindex");
     res.set("Cache-Control", `private, max-age=${Math.max(0, Math.min(300, Math.floor((row.expires - Date.now()) / 1000)))}`);
+    res.set("X-Content-Type-Options", "nosniff");
     res.type(row.ct);
     res.sendFile(path.join(DIR, row.file), { acceptRanges: true });
   });
@@ -133,7 +142,14 @@ function register(app, { isBotToken, addUser }) {
     const { row, gone } = await live(req.params.id);
     res.set("X-Robots-Tag", "noindex");
     if (gone) return res.status(gone).render("media", { user: req.user ? req.user.username : null, item: null, gone });
-    res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null });
+    // 1.99cr: the pad it belongs to (a link, not the raw room id) and whether this viewer may delete it
+    let pad = null, canDelete = false;
+    try {
+      const R = row.room ? require("./rooms").getCached(row.room) : null;
+      if (R) pad = { title: R.title, href: require("./pads").padHref(R) };
+    } catch (e) { pad = null; }
+    try { canDelete = !!(req.user && req.user.userId) && (await require("./stagecap").canDelete(req.user, row)); } catch (e) { canDelete = false; }
+    res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null, pad, canDelete });
   });
 
   // The /feed page (posts + these captures) lives in feedweb.js since 1.99bv.

@@ -1,0 +1,32 @@
+/* stagecap.css - the stage's Snap / Clip bar and its preview dialog (public/js/stage-capture.js, 1.99cr) */
+.stcap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 10px 0 0; font: 13px Ubuntu, sans-serif; color: #aab3aa; min-width: 0; }
+.stcap.hide, .stcap:empty { display: none; }
+.stcap-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 13px; border-radius: 999px; border: 1px solid #3c5a2a; background: #16220f;
+             color: #e3f5c8; font: inherit; font-size: 13.5px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+.stcap-btn:hover:not(:disabled) { background: #1f3214; border-color: #c6e94f; }
+.stcap-btn:disabled { opacity: .55; cursor: default; }
+.stcap-btn:focus-visible, .stcap-secs:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
+.stcap-clip { display: inline-flex; align-items: center; gap: 4px; }
+.stcap-secs { padding: 6px 6px; border-radius: 8px; border: 1px solid #2b2b2b; background: #141414; color: #cfd8cf; font: inherit; font-size: 12.5px; }
+.stcap-price { color: #8a948a; font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+.stcap-note { color: #8a948a; font-size: 12.5px; }
+.stcap-nsfw { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid #5a2222; color: #ffb4b4; font-size: 12px; }
+.stcap-toast { flex-basis: 100%; color: #ffcc80; font-size: 13px; }
+.stcap-dlg { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,.72); display: grid; place-items: center; padding: 16px; }
+.stcap-card { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: #121212; border: 1px solid #2a2a2a; border-radius: 14px;
+              padding: 14px; display: grid; gap: 10px; font: 14px Ubuntu, sans-serif; color: #ddd; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.stcap-h { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.stcap-h b { color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.stcap-x { margin-left: auto; background: none; border: 0; color: #aaa; font-size: 20px; cursor: pointer; padding: 0 4px; }
+.stcap-media { background: #000; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; display: grid; place-items: center; }
+.stcap-media img, .stcap-media video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.stcap-info { margin: 0; color: #aab3aa; font-size: 13px; line-height: 1.5; }
+.stcap-info b { color: #ffd54f; }
+.stcap-msg { margin: 0; min-height: 1.2em; color: #c6e94f; font-size: 13.5px; }
+.stcap-msg a { color: #81c784; }
+.stcap-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.stcap-save, .stcap-discard { padding: 9px 16px; border-radius: 8px; font: inherit; font-weight: bold; cursor: pointer; }
+.stcap-save { border: 1px solid #4caf50; background: #4caf50; color: #fff; }
+.stcap-discard { border: 1px solid #333; background: #1a1a1a; color: #ddd; }
+.stcap-save:disabled, .stcap-discard:disabled { opacity: .6; cursor: default; }
+@media (max-width: 520px) { .stcap-price { flex-basis: 100%; } .stcap-card { padding: 12px; } }
