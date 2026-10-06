@@ -165,9 +165,16 @@ function view(r) {
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
   };
 }
-async function get(roomId) { await init(); return view(CACHE.byId.get(String(roomId || ""))); }
+// the cache also refreshes itself once a minute (a row changed outside this process, e.g. a cleanup)
+let refreshing = null;
+function maybeRefresh() {
+  if (Date.now() - CACHE.at > 60 * 1000 && !refreshing) {
+    refreshing = loadCache().catch((e) => console.error("[rooms] refresh:", e.message)).finally(() => { refreshing = null; });
+  }
+}
+async function get(roomId) { await init(); maybeRefresh(); return view(CACHE.byId.get(String(roomId || ""))); }
 async function bySlug(slug) { await init(); return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
-async function list() { await init(); return [...CACHE.byId.values()].map(view).sort((a, b) => a.title.localeCompare(b.title)); }
+async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].map(view).sort((a, b) => a.title.localeCompare(b.title)); }
 function getCached(roomId) { return view(CACHE.byId.get(String(roomId || ""))); }
 function listCached() { return [...CACHE.byId.values()].map(view); }
 
