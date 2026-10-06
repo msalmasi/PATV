@@ -14,16 +14,23 @@
 //          command's arguments, e.g. cmd=wager a0=@bob a1=10k a2="Lakers win" a3=judge a4=@carol
 //   back   the page to return to (a local path)
 //   tag    which page's activity list this belongs to (defaults to the first part of `back`)
+//   idem   (1.99bj) a one-time key per submission, added to every /act form by views/partials/actions.ejs;
+//          the same key twice is one submission (refused here, and Pepe journals it too)
 const { runQuery, getQuery } = require("./dbUtils");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL, username TEXT NOT NULL, camfrog TEXT,
   site_admin INTEGER DEFAULT 0, kind TEXT NOT NULL, args TEXT NOT NULL, tag TEXT, label TEXT,
-  status TEXT NOT NULL DEFAULT 'pending', message TEXT, created INTEGER, claimed INTEGER, updated INTEGER)`).catch(() => {});
+  status TEXT NOT NULL DEFAULT 'pending', message TEXT, created INTEGER, claimed INTEGER, updated INTEGER)`).catch(() => {})
+  // 1.99bj: a one-time key per form submission (idempotency). An existing table gets the column; the
+  // unique index makes a second row with the same (user, key) impossible, even for two racing posts.
+  .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN idem TEXT").catch(() => {}))
+  .then(() => runQuery("CREATE UNIQUE INDEX IF NOT EXISTS pepe_actions_idem ON pepe_actions (user_id, idem)").catch(() => {}));
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
 const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "donate"]);
 
+const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const clean = (s, n = 300) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 const safeBack = (b) => (/^\/[A-Za-z0-9/_?=&.%-]*$/.test(String(b || "")) && !String(b).startsWith("//") ? String(b) : "/");
 
@@ -34,8 +41,11 @@ async function recentFor(userId, tag, limit = 8) {
   return getQuery("SELECT * FROM pepe_actions WHERE user_id = ? AND tag = ? ORDER BY id DESC LIMIT ?", [userId, tag, limit]);
 }
 
-/** Store one action for a user (also used by other modules). Returns the new id or throws. */
-async function queue(userId, { kind, args, tag, label }) {
+/** Store one action for a user (also used by other modules). Returns the new id or throws
+ *  ("busy", "no account", "duplicate"). 1.99bj: `idem` is the form's one-time key - the same key twice
+ *  is the same submission (a double click, a resubmitted page) and is refused; and with `dedupe` (the
+ *  /act forms) an identical action (same kind + words) still waiting for Pepe isn't queued again. */
+async function queue(userId, { kind, args, tag, label, idem, dedupe }) {
   await ready;
   const u = (await getQuery("SELECT username, camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   if (!u) throw new Error("no account");
@@ -45,10 +55,26 @@ async function queue(userId, { kind, args, tag, label }) {
     const open = await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE user_id = ? AND status IN ('pending','claimed') AND kind != 'notify'", [userId]);
     if (open[0].n >= 6) throw new Error("busy");
   }
-  const r = await runQuery(`INSERT INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
-    [userId, u.username, u.camfrogUsername || null, u.class === "Admin" ? 1 : 0, kind, JSON.stringify(args),
-     tag || null, clean(label, 200) || null, Date.now(), Date.now()]);
+  const key = IDEM_RE.test(String(idem || "")) ? String(idem) : null;
+  if (key) {
+    const seen = await getQuery("SELECT id FROM pepe_actions WHERE user_id = ? AND idem = ?", [userId, key]);
+    if (seen.length) throw Object.assign(new Error("duplicate"), { actionId: seen[0].id });
+  }
+  if (dedupe && kind !== "notify") {
+    const same = await getQuery(`SELECT id FROM pepe_actions WHERE user_id = ? AND kind = ? AND args = ?
+                                 AND status IN ('pending','claimed') LIMIT 1`, [userId, kind, JSON.stringify(args)]);
+    if (same.length) throw Object.assign(new Error("duplicate"), { actionId: same[0].id });
+  }
+  let r;
+  try {
+    r = await runQuery(`INSERT INTO pepe_actions (user_id, username, camfrog, site_admin, kind, args, tag, label, status, created, updated, idem)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+      [userId, u.username, u.camfrogUsername || null, u.class === "Admin" ? 1 : 0, kind, JSON.stringify(args),
+       tag || null, clean(label, 200) || null, Date.now(), Date.now(), key]);
+  } catch (e) {
+    if (key && /UNIQUE/i.test(String(e && e.message))) throw new Error("duplicate");   // lost a race with its twin
+    throw e;
+  }
   return r && (r.id || r.lastID);   // dbUtils.runQuery resolves {id, changes}
 }
 
@@ -77,10 +103,11 @@ function register(app, { isBotToken, addUser }) {
     const tag = clean(b.tag, 40) || back.split(/[/?]/)[1] || "home";
     const label = clean(b.label || (kind === "cmd" ? "!" + args.join(" ") : kind + " " + words.join(" ")), 200);
     try {
-      await queue(req.user.userId, { kind, args, tag, label });
+      await queue(req.user.userId, { kind, args, tag, label, idem: b.idem, dedupe: true });
       go("Sent to Pepe — the result shows below in a few seconds.");
     } catch (e) {
-      go(e.message === "busy" ? "You already have a few things waiting — give Pepe a moment."
+      go(e.message === "duplicate" ? "Already sent — that one is with Pepe, so it wasn't sent twice. The result shows below."
+        : e.message === "busy" ? "You already have a few things waiting — give Pepe a moment."
         : e.message === "no account" ? "Couldn't find your account." : "Something went wrong — nothing was sent.");
     }
   });
@@ -98,7 +125,7 @@ function register(app, { isBotToken, addUser }) {
     res.json({ tablePending: tp[0] ? tp[0].n : 0, actions: rows.map((a) => {
       let args = [];
       try { args = JSON.parse(a.args); } catch (e) { args = []; }
-      return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin };
+      return { id: a.id, kind: a.kind, args, username: a.username, camfrog: a.camfrog, site_admin: !!a.site_admin, idem: a.idem || null };
     }) });
   });
 

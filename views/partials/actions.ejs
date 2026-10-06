@@ -1,4 +1,57 @@
 <%# Recent website actions for this page. Pass { acts, msg }. Auto-refreshes while any are waiting. %>
+<%# 1.99bj: every form that posts to /act gets a one-time key (idem) and can only be sent once per page
+    load - a double click or an impatient second press is one action, not two (actions.js refuses a
+    repeated key, Pepe journals it too). %>
+<script>
+(function () {
+  if (window.__actIdem) return;
+  window.__actIdem = true;
+  function key() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, ""); } catch (e) {}
+    var s = "";
+    for (var i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
+    return s;
+  }
+  function tag(f) {
+    if (!f || f.getAttribute("action") !== "/act") return null;
+    var el = f.querySelector('input[name="idem"]');
+    if (!el) {
+      el = document.createElement("input");
+      el.type = "hidden";
+      el.name = "idem";
+      el.value = key();
+      f.appendChild(el);
+    }
+    return el;
+  }
+  function tagAll() { Array.prototype.forEach.call(document.querySelectorAll('form[action="/act"]'), tag); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tagAll); else tagAll();
+  // bubble phase, so a form's own onsubmit (e.g. a confirm() that was cancelled) has already had its say
+  document.addEventListener("submit", function (e) {
+    var f = e.target;
+    if (!tag(f) || e.defaultPrevented) return;
+    if (f.getAttribute("data-act-sent")) { e.preventDefault(); return; }
+    f.setAttribute("data-act-sent", "1");
+    // next tick: a button disabled DURING the submit event would drop its own name=value from the post
+    setTimeout(function () {
+      Array.prototype.forEach.call(f.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]'), function (b) {
+        b.disabled = true;
+        b.setAttribute("aria-busy", "true");
+      });
+    }, 0);
+  });
+  // back-button (bfcache) restore: the page is usable again, with fresh keys
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) return;
+    Array.prototype.forEach.call(document.querySelectorAll('form[action="/act"]'), function (f) {
+      f.removeAttribute("data-act-sent");
+      var el = tag(f);
+      if (el) el.value = key();
+      Array.prototype.forEach.call(f.querySelectorAll("[aria-busy]"), function (b) { b.disabled = false; b.removeAttribute("aria-busy"); });
+    });
+  });
+})();
+</script>
 <% if (typeof msg !== 'undefined' && msg) { %><p class="act-notice"><%= msg %></p><% } %>
 <% if (typeof acts !== 'undefined' && acts && acts.length) { %>
   <div class="act-box">
