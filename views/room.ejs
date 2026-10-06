@@ -48,6 +48,16 @@
   .rm .snap img { width: 100%; border-radius: 8px; background: #000; display: block; }
   .rm .snap .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12.5px; color: #aaa; }
   .rm .snap button { background: #222; color: #ddd; border: 1px solid #333; border-radius: 6px; padding: 4px 8px; cursor: pointer; font: inherit; font-size: 12px; }
+  .rm .snap .acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+  .rm .snap button.save { background: #12301a; border-color: #2f6b3a; color: #d7f5dc; font-weight: bold; }
+  .rm .snap button.save:hover, .rm .snap button.save:focus-visible { border-color: #4caf50; }
+  .rm .snap button.save:disabled { opacity: .55; cursor: default; }
+  .rm .snap a.dl { color: #9cc7a3; text-decoration: none; white-space: nowrap; }
+  .rm .snap a.dl:hover, .rm .snap a.dl:focus-visible { text-decoration: underline; }
+  .rm .snap .res { font-size: 12.5px; color: #aaa; overflow-wrap: anywhere; }
+  .rm .snap .res.ok { color: #9be3a6; }
+  .rm .snap .res.bad { color: #e6a07a; }
+  .rm .snap .res a { color: #8fd19a; font-weight: bold; }
   .rm .sys { color: #8a8a8a; font-size: 12.5px; padding: 3px 6px 3px 42px; overflow-wrap: anywhere; }
   .rm .sys.topic { color: #c9b46a; }
   .rm .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: #0d0d0d; object-fit: cover; flex: none; overflow: hidden; }
@@ -382,7 +392,7 @@
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
-    function snapClose() { clearTimeout(snapTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
+    function snapClose() { clearTimeout(snapTimer); clearTimeout(saveTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
     function snapBox(text) {
       if (!snapEl) {
         snapEl = el('div', 'snap'); snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', 'Cam snapshot');
@@ -405,6 +415,52 @@
       row.appendChild(el('span', null, 'taken ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2)));
       var rf = el('button', null, 'Refresh'); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
       box.appendChild(row);
+      // Save snap (1.99ap): only when the !snap rules let this viewer snap them (the server decides;
+      // `save` is null otherwise, and then there's no Download either).
+      if (s.state === 'ok' && s.img && s.save) snapSaveRow(box, s);
+    }
+    var saveTimer = null;
+    function snapSaveRow(box, s) {
+      var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res');
+      res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
+      var sv = el('button', 'save', '💾 Save snap' + (s.save.cost ? ' · ' + Number(s.save.cost).toLocaleString() + ' PAT' : ''));
+      sv.type = 'button';
+      sv.title = 'Post this frame to the feed as a !snap by you' + (s.save.cost ? ' (' + Number(s.save.cost).toLocaleString() + ' PAT, like !snap)' : '');
+      var dl = el('a', 'dl', '⬇ Download');
+      var t = new Date(s.ts || Date.now());
+      dl.href = s.img;
+      dl.download = 'snap-' + String(who.login || 'cam').replace(/[^A-Za-z0-9._-]+/g, '_') + '-' + t.getFullYear() + ('0' + (t.getMonth() + 1)).slice(-2) + ('0' + t.getDate()).slice(-2)
+        + '-' + ('0' + t.getHours()).slice(-2) + ('0' + t.getMinutes()).slice(-2) + ('0' + t.getSeconds()).slice(-2) + '.jpg';
+      acts.appendChild(sv); acts.appendChild(dl);
+      box.appendChild(acts); box.appendChild(res);
+      function say(text, cls, href) {
+        res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text;
+        if (href) { var a = el('a', null, 'Open it on the feed ›'); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }
+      }
+      function watch(id, n) {
+        clearTimeout(saveTimer);
+        fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/save/' + encodeURIComponent(id), { credentials: 'same-origin', cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (a) {
+            if (snapWho !== who || !res.isConnected) return;
+            if (a.status === 'done') { sv.textContent = '💾 Saved'; return say('Saved as your snap.', 'ok', a.url || null); }
+            if (a.status === 'failed') { sv.disabled = false; return say(a.message ? a.message.charAt(0).toUpperCase() + a.message.slice(1) + '.' : 'Pepe couldn\'t save it.', 'bad'); }
+            if (n > 40) { return say('Pepe hasn\'t answered yet — check the feed in a minute.', null); }
+            saveTimer = setTimeout(function () { watch(id, n + 1); }, 1500);
+          }).catch(function () { if (res.isConnected) say('Couldn\'t reach the site.', 'bad'); sv.disabled = false; });
+      }
+      sv.addEventListener('click', function () {
+        sv.disabled = true; say('Sending to Pepe…');
+        fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/save', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ sid: s.save.sid }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (snapWho !== who || !res.isConnected) return;
+            if (!d.ok) { sv.disabled = false; return say(d.error || 'Not right now.', 'bad'); }
+            say('Pepe is saving it…'); watch(d.id, 0);
+          }).catch(function () { sv.disabled = false; say('Couldn\'t reach the site.', 'bad'); });
+      });
+      if (s.save.id) { sv.disabled = true; say('Checking your save…'); watch(s.save.id, 0); }
     }
     function snapPoll(who, n) {
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
@@ -417,7 +473,7 @@
         }).catch(function () { snapBox('Couldn\'t reach the site.'); });
     }
     function snapOpen(who, refresh) {
-      clearTimeout(snapTimer);
+      clearTimeout(snapTimer); clearTimeout(saveTimer);
       snapWho = who;
       snapBox('Asking Pepe to open ' + label(who) + '\'s cam…');
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: who.login }) })

@@ -49,7 +49,7 @@ async function queue(userId, { kind, args, tag, label }) {
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     [userId, u.username, u.camfrogUsername || null, u.class === "Admin" ? 1 : 0, kind, JSON.stringify(args),
      tag || null, clean(label, 200) || null, Date.now(), Date.now()]);
-  return r && r.lastID;
+  return r && (r.id || r.lastID);   // dbUtils.runQuery resolves {id, changes}
 }
 
 function register(app, { isBotToken, addUser }) {

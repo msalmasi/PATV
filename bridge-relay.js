@@ -11,16 +11,29 @@
 // dropped; cam frames are kept in memory for SNAP_TTL and never written anywhere. Each request is
 // logged (account, kind, target — never the text, audio or image) for abuse tracing; Pepe also logs
 // every relay to his mod log. Pepe re-checks every rule (moderation state, rate limits, switches).
+//
+// Save snap (1.99ap): the snapshot popover can turn the frame it shows into a real !snap. The browser
+// only names the frame (its in-memory sid); the site checks that this account asked for that
+// snapshot and that it hasn't expired, copies the frame aside (FRAME_TTL, memory only) and queues a
+// website action ("snap.save", actions.js) that Pepe runs as the viewer's linked Camfrog name: the
+// same !snap rules, price, routing, /feed post and expiry as in chat. Pepe fetches the frame by id
+// (/api/bridge/snapframe, bot token, checked against the account) - image bytes are never accepted
+// from a browser. Pepe says with each snapshot whether the !snap rules let THIS viewer save it (on /
+// admins-only / opted out); Save and Download only show when they do.
 const express = require("express");
 const crypto = require("crypto");
 const { getQuery } = require("./dbUtils");
+const queueAction = (...a) => require("./actions").queue(...a);   // lazy: actions.js opens its table on load
 
 const SAY_MAX = 300, CLIP_MAX_BYTES = 600 * 1024, CLIP_MAX_SECS = 30;
 const JOB_TTL = 3 * 60 * 1000, CLAIM_RETRY = 45 * 1000;
 const SNAP_TTL = 2 * 60 * 1000, SNAP_TARGET_GAP = 20 * 1000, SNAP_VIEWER_GAP = 10 * 1000;
+const FRAME_TTL = 5 * 60 * 1000;                                   // a queued save waits this long for Pepe
+const SAVE_GAP = 20 * 1000, SAVE_BURST = 3, SAVE_WINDOW = 10 * 60 * 1000;  // = Pepe's own limit (pepe_relay.py)
 
 const jobs = new Map();          // id -> {id, kind, roomId, userId, username, camfrog, text, data, mime, secs, target, state, at, claimed, tries, result}
-const snaps = new Map();         // `${roomId}|${login}` -> {ts, ok, status, img: Buffer}
+const snaps = new Map();         // `${roomId}|${login}` -> {sid, ts, ok, status, img: Buffer, viewers: Set(userId), rule, okFor: Map(userId -> price), cost, saves: Map(userId -> action id)}
+const frames = new Map();        // frame id -> {img, userId, username, roomId, login, ts}   (frames queued for a save)
 const hits = new Map();          // `${kind}|${userId}` -> [timestamps]
 
 function limited(key, gap, burst, windowMs) {
@@ -37,6 +50,7 @@ setInterval(() => {
   const now = Date.now();
   for (const [id, j] of jobs) if (now - j.at > JOB_TTL) jobs.delete(id);
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
+  for (const [k, f] of frames) if (now - f.ts > FRAME_TTL) frames.delete(k);
   for (const [k, q] of hits) if (!q.length || now - q[q.length - 1] > 15 * 60 * 1000) hits.delete(k);
 }, 15 * 1000).unref();
 
@@ -153,11 +167,23 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
     const key = R.id + "|" + login;
     const cached = snaps.get(key);
-    if (cached && Date.now() - cached.ts < SNAP_TARGET_GAP) return res.json({ ok: true, cached: true });
-    for (const j of jobs.values()) if (j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done") return res.json({ ok: true, pending: true });
+    // Whoever asks shares the frame they're shown - and only they may save it (Save snap, 1.99ap).
+    // Pepe judged the save rule for whoever's request opened the cam; another viewer riding on that
+    // frame gets Save only where the room lets everyone !snap.
+    if (cached && Date.now() - cached.ts < SNAP_TARGET_GAP) {
+      if (cached.viewers) cached.viewers.add(u.userId);
+      return res.json({ ok: true, cached: true });
+    }
+    for (const j of jobs.values()) {
+      if (j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done") {
+        if (j.viewers) j.viewers.add(u.userId);
+        return res.json({ ok: true, pending: true });
+      }
+    }
     const lim = limited("snap|" + u.userId, SNAP_VIEWER_GAP, 6, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
-    const j = newJob({ kind: "snap", roomId: R.id, userId: u.userId, username: u.username, target: login });
+    const j = newJob({ kind: "snap", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername || "",
+      target: login, viewers: new Set([u.userId]) });
     console.log(`[bridge-relay] snap room=${R.id} viewer=${u.username} target=${login} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });
@@ -174,12 +200,19 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       img = Buffer.from(b.data, "base64");
       if (img.length > 400 * 1024 || img[0] !== 0xff || img[1] !== 0xd8) img = null;      // JPEG only, small
     }
-    snaps.set(roomId + "|" + login, { ts: Date.now(), ok: !!img, status: clean(b.status, 120), img });
+    // The save rule Pepe sent for the viewer whose request opened the cam (older Pepes send none:
+    // then nobody gets Save).
+    const rule = ["on", "admins", "no"].includes(b.save) ? b.save : null;
+    const cost = Math.max(0, parseInt(b.cost, 10) || 0);
+    const okFor = new Map();
+    if (img && j && rule && rule !== "no" && b.viewer_ok) okFor.set(j.userId, cost);
+    snaps.set(roomId + "|" + login, { sid: "f" + crypto.randomBytes(9).toString("hex"), ts: Date.now(), ok: !!img, status: clean(b.status, 120), img,
+      viewers: new Set(j && j.viewers ? j.viewers : []), rule, okFor, cost, saves: new Map() });
     if (j) { j.state = "done"; j.result = { ok: !!img, msg: clean(b.status, 120) }; }
     res.json({ ok: true });
   });
 
-  app.get("/api/rooms/:slug/snap/:login", addUser, (req, res) => {
+  app.get("/api/rooms/:slug/snap/:login", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
     const R = bySlug(req.params.slug);
@@ -188,10 +221,79 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const s = snaps.get(R.id + "|" + login);
     const pending = [...jobs.values()].some((j) => j.kind === "snap" && j.roomId === R.id && j.target === login && j.state !== "done");
     if (s && (!pending || Date.now() - s.ts < SNAP_TARGET_GAP)) {
-      return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
+      let save = null;
+      if (s.ok && s.img && saveRight(s, req.user.userId) !== null) {
+        const u = await me(req);
+        if (u && u.camfrogUsername) save = { sid: s.sid, cost: saveRight(s, req.user.userId), until: s.ts + SNAP_TTL, id: s.saves.get(req.user.userId) || null };
+      }
+      return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save,
+        img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
     }
     res.json({ state: pending ? "pending" : "none" });
   });
+
+  // -- Save snap (1.99ap) --
+  // JSON + X-Requested-With only (a cross-site form can't send it). The browser names the frame; the
+  // server checks it's one this account was shown and that it's still fresh, then queues the action.
+  app.post("/api/rooms/:slug/snap/save", addUser, express.json({ limit: "4kb" }), async (req, res) => {
+    if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") return res.status(400).json({ ok: false, error: "Bad request." });
+    const u = await me(req);
+    if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
+    const R = roomFor(req, res, "cams");
+    if (!R) return;
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
+    const sid = String((req.body || {}).sid || "").slice(0, 40);
+    let s = null, login = "";
+    for (const [k, v] of snaps) if (sid && v.sid === sid && k.startsWith(R.id + "|")) { s = v; login = k.slice(R.id.length + 1); break; }
+    if (!s || !s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return res.status(410).json({ ok: false, error: "That snapshot expired — take a fresh one." });
+    if (!s.viewers || !s.viewers.has(u.userId)) return res.status(403).json({ ok: false, error: "That isn't a snapshot you asked for." });
+    if (saveRight(s, u.userId) === null) return res.status(403).json({ ok: false, error: "Snaps of them aren't allowed here." });
+    const prev = s.saves.get(u.userId);
+    if (prev) {
+      const a = (await getQuery("SELECT status FROM pepe_actions WHERE id = ? AND user_id = ?", [prev, u.userId]))[0];
+      if (a && a.status !== "failed") return res.json({ ok: true, id: prev, again: true });   // one save per frame
+    }
+    const lim = limited("savesnap|" + u.userId, SAVE_GAP, SAVE_BURST, SAVE_WINDOW);
+    if (lim) return res.status(429).json({ ok: false, error: lim });
+    const fid = "f" + crypto.randomBytes(12).toString("hex");
+    frames.set(fid, { img: s.img, userId: u.userId, username: u.username, roomId: R.id, login, ts: Date.now() });
+    try {
+      const id = await queueAction(u.userId, { kind: "snap.save", args: [R.id, login, fid], tag: "snap", label: "!snap " + login });
+      s.saves.set(u.userId, id);
+      console.log(`[bridge-relay] save-snap room=${R.id} viewer=${u.username} camfrog=${u.camfrogUsername} target=${login} action=${id}`);
+      res.json({ ok: true, id });
+    } catch (e) {
+      frames.delete(fid);
+      res.status(e.message === "busy" ? 429 : 500).json({ ok: false, error: e.message === "busy" ? "You already have a few things waiting — give Pepe a moment." : "Something went wrong — nothing was sent." });
+    }
+  });
+
+  app.get("/api/rooms/:slug/snap/save/:id", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
+    const a = (await getQuery("SELECT status, message FROM pepe_actions WHERE id = ? AND user_id = ? AND kind = 'snap.save'",
+      [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
+    if (!a) return res.status(404).json({ ok: false, error: "No such save." });
+    const msg = a.message || "";
+    const m = msg.match(/\/media\/([a-f0-9]{8,32})\b/i);
+    res.json({ ok: true, status: a.status, message: msg, url: a.status === "done" && m ? "/media/" + m[1] : null });
+  });
+
+  // Pepe fetches a queued frame (bot token), checked against the account the save was queued for.
+  app.post("/api/bridge/snapframe", express.json({ limit: "4kb" }), (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false });
+    const f = frames.get(String(b.id || ""));
+    if (!f || Date.now() - f.ts > FRAME_TTL || String(b.user || "") !== f.username) return res.status(404).json({ ok: false });
+    res.json({ ok: true, room: f.roomId, target: f.login, data: f.img.toString("base64") });
+  });
 }
 
-module.exports = { register, takeJobs, applyAcks, mineFor, _jobs: jobs, _snaps: snaps };
+/** The price this viewer would pay to save snapshot `s`, or null if the !snap rules say no. */
+function saveRight(s, userId) {
+  if (!s || !s.rule || s.rule === "no") return null;
+  if (s.okFor && s.okFor.has(userId)) return s.okFor.get(userId);
+  return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
+}
+
+module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, _jobs: jobs, _snaps: snaps, _frames: frames };
