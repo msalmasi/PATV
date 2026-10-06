@@ -1065,6 +1065,9 @@ require("./tables").register(app, { isBotToken, addUser });   // /casino /poker 
 require("./userstats").register(app, { isBotToken });
 require("./roomstats").register(app, { isBotToken, addUser });   // /rooms/:slug/analytics (before bridge: it adds the rooms pages' analytics links)
 require("./pepecontrol").register(app, { isBotToken, addUser });   // admin-only Pepe control panel (homepage) + VM supervisor poll/ack
+// 1.99ba: room owners + per-room stages + royalties (registered before bridge.js: /rooms/admin before /rooms/:slug)
+require("./roomsweb").register(app, { isBotToken, addUser });
+require("./royalties").start();
 const bridge = require("./bridge");
 bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /rooms, /api/bridge/sync
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)

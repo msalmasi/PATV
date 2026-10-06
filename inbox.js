@@ -35,6 +35,8 @@ const KINDS = {
   lotto:       { icon: "🎟️", label: "Lotto", link: "/lotto" },
   tip:         { icon: "💸", label: "Tips", link: "/history" },
   achievement: { icon: "🏅", label: "Achievements", link: "/achievements" },
+  stage:       { icon: "📺", label: "Stage & streaming", link: "/stage" },
+  room:        { icon: "🏠", label: "Your rooms", link: "/rooms" },
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Pepe", link: null },
 };
