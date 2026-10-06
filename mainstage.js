@@ -36,7 +36,8 @@ const STAGING = !!process.env.STAGING;
 const RTMP_APP = process.env.STAGE_RTMP_APP || (STAGING ? "live_staging" : "live");
 const RTMP_PUBLIC = process.env.STAGE_RTMP_URL || `rtmp://stream.publicaccess.tv/${RTMP_APP}`;
 const RTMP_LOCAL = process.env.STAGE_RTMP_LOCAL || `rtmp://127.0.0.1/${RTMP_APP}`;
-const HLS_BASE = String(process.env.STAGE_HLS_BASE || "https://publicaccess.tv/hls").replace(/\/+$/, "");
+// nginx-rtmp wants a distinct hls_path per application: the staging app writes to /mnt/hls/staging
+const HLS_BASE = String(process.env.STAGE_HLS_BASE || ("https://publicaccess.tv/hls" + (STAGING ? "/staging" : ""))).replace(/\/+$/, "");
 const STREAM_PREFIX = STAGING ? "stg-" : "stage-";
 // Pepe's OBS key(s): let through untouched, and only on the prod application (the staging app
 // writes into the same HLS directory, so it must never accept "broadcast").
