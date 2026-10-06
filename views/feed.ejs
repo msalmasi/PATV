@@ -31,7 +31,7 @@
           <% comms.forEach((c) => { %>
             <a data-swap role="menuitem" class="cb-it<%= room && room.id === c.id ? ' on' : '' %>" data-name="<%= (c.title + ' ' + c.slug).toLowerCase() %>" href="<%= q({ where: c.slug, p: '', by: '' }) %>">
               <span class="cbadge" style="--h:<%= fx.hue(c.slug) %>" aria-hidden="true"><%= fx.cBadge(c) %></span>
-              <span class="t"><b><%= c.title %></b><small>p/<%= c.slug %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small></span>
+              <span class="t"><b><%= c.title %> <%- fx.padBadge(c) %></b><small>p/<%= c.slug %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small></span>
             </a>
           <% }) %>
           <p class="cb-none hide" data-cb-none>No pad matches.</p>

@@ -117,15 +117,25 @@
 
   <section aria-labelledby="chH">
     <h2 id="chH">Pads <small><%= rows.filter((r) => r.live).length %> live · <%= rows.length %> pad<%= rows.length === 1 ? '' : 's' %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
+    <%# 1.99x: filter by platform - All / Camfrog / Site (Twitch / Discord appear once a pad has them) %>
+    <% const plat_ = typeof platform !== 'undefined' ? platform : '', counts_ = typeof counts !== 'undefined' ? counts : {}, PL_ = typeof PAD_PLATFORMS !== 'undefined' ? PAD_PLATFORMS : { camfrog: { icon: '🐸', label: 'Camfrog Pad' }, site: { icon: '🌐', label: 'Site Pad' } };
+       const padBadge_ = typeof padBadge === 'function' ? padBadge : (p) => '<span class="pad-plat pp-' + p + '">' + (PL_[p] ? PL_[p].icon + ' ' + PL_[p].label : p) + '</span>'; %>
+    <nav class="pad-filter" aria-label="Filter pads by platform">
+      <a href="/p"<%- plat_ ? '' : ' class="on" aria-current="page"' %>>All <small><%= typeof allCount !== 'undefined' ? allCount : rows.length %></small></a>
+      <% Object.keys(PL_).filter((k) => k === 'camfrog' || k === 'site' || counts_[k] || plat_ === k).forEach((k) => { %>
+        <a href="/p?platform=<%= k %>"<%- plat_ === k ? ' class="on" aria-current="page"' : '' %>><%= PL_[k].icon %> <%= PL_[k].label.replace(/ Pad$/, '') %> <small><%= counts_[k] || 0 %></small></a>
+      <% }) %>
+    </nav>
     <% if (!rows.length) { %>
-      <div class="empty">No pads yet.</div>
+      <div class="empty"><%= plat_ ? 'No pads on that platform yet.' : 'No pads yet.' %></div>
     <% } else { %>
     <div class="grid">
       <% rows.forEach((r) => { const liveNow = r.now.filter((s) => s.live); %>
         <article class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %>" aria-label="<%= r.title %>">
           <div class="top">
             <a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
-            <% if (r.site_only) { %><span class="pill off" title="A pad on the website only - no Camfrog room behind it">🛋️ SITE PAD</span><% } else { %><span class="pill <%= r.live ? 'on' : 'off' %>" title="The pad's Camfrog room"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
+            <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
+            <% if (!r.site_only) { %><span class="pill <%= r.live ? 'on' : 'off' %>" title="The pad's Camfrog room"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
             <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
           </div>
           <div class="sub">

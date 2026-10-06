@@ -529,7 +529,13 @@ function register(app, { isBotToken, addUser }) {
                       image: res.locals.ogBase + "/og/page.png?t=Pad%20Guide", url: res.locals.ogBase + "/p" };
     let owned = [];
     if (signedIn) { try { owned = await reg.ownedBy(req.user.userId); } catch (e) { owned = []; } }
-    res.render("rooms", { user: req.user ? req.user.username : null, rows: g.rows, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
+    // 1.99x: ?platform=camfrog|site (|twitch|discord) narrows the list; the counts are for the filter chips
+    const counts = {};
+    for (const r of g.rows) counts[r.platform] = (counts[r.platform] || 0) + 1;
+    const want = String((req.query && req.query.platform) || "").toLowerCase();
+    const platform = reg.PLATFORMS.includes(want) ? want : "";
+    const rows = platform ? g.rows.filter((r) => r.platform === platform) : g.rows;
+    res.render("rooms", { padBadge: require("./pads").padBadge, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
   });
 
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header
@@ -560,7 +566,8 @@ function register(app, { isBotToken, addUser }) {
     if (signedIn) {
       try { linked = !!((await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || {}).camfrogUsername; } catch (e) { linked = false; }
     }
-    const siteOnly = !!(info && info.community) || reg.isCommunityOnly(R.id);
+    const platform = (info && info.platform) || reg.platformOf(R.id);    // 1.99x: camfrog | site | twitch | discord
+    const siteOnly = platform !== "camfrog";
     const slug = info ? pads.padSlug(info) : R.slug;
     const title = (info && info.title) || R.name;
     res.locals.og = { title: `p/${slug} — ${title} on PATV`, description: (info && info.description) || `${title}: a pad on Public Access TV.`,
@@ -573,7 +580,7 @@ function register(app, { isBotToken, addUser }) {
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked,
       room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: signedIn ? R.topic : "",
-              bridged: !R.offline, siteOnly, description: info ? info.description : "", banner: info ? info.banner : "",
+              bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
       initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId) : null,

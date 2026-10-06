@@ -671,3 +671,16 @@ height: 1.5rem;
 ::-webkit-scrollbar-thumb:hover { background: #3f6b45; background-clip: padding-box; }
 ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* 1.99x: a pad's platform badge (pads.js padBadge): Camfrog / Site now, Twitch / Discord ready */
+.pad-plat { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: bold;
+            line-height: 1.5; white-space: nowrap; vertical-align: middle; border: 1px solid #2f4a2f; background: #0f1a10; color: #a5d6a7; letter-spacing: .02em; }
+.pad-plat.sm { padding: 0 5px; font-size: 10.5px; gap: 0; }
+.pad-plat.pp-camfrog { border-color: #2f4a2f; background: #0f1a10; color: #a5d6a7; }
+.pad-plat.pp-site { border-color: #29425e; background: #0e1621; color: #9fc6ee; }
+.pad-plat.pp-twitch { border-color: #4b2d7a; background: #170f24; color: #c9b0ff; }
+.pad-plat.pp-discord { border-color: #3a4598; background: #11142a; color: #b6bdfa; }
+.pad-filter { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; font-size: 13px; }
+.pad-filter a { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; border: 1px solid #2b2b2b; background: #151515; color: #ccc !important; text-decoration: none; }
+.pad-filter a.on { border-color: #4caf50; background: #12301a; color: #fff !important; }
+.pad-filter a small { color: #888; }

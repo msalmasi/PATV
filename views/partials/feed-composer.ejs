@@ -37,7 +37,7 @@
           <label class="cb-search"><%- fx.icon('search') %><input type="search" placeholder="Search pads" aria-label="Search pads" data-comm-search autocomplete="off"></label>
           <% cp.rooms.forEach((r) => { %>
             <label class="fc-comm-it" data-name="<%= (r.title + ' ' + r.slug).toLowerCase() %>"><input type="radio" name="community" value="<%= r.id %>" data-slug="<%= r.slug %>" data-title="<%= r.title %>" data-badge="<%= fx.cBadge(r) %>" data-hue="<%= fx.hue(r.slug) %>"<%= cp.room === r.id ? ' checked' : '' %>>
-              <span class="cbadge sm" style="--h:<%= fx.hue(r.slug) %>" aria-hidden="true"><%= fx.cBadge(r) %></span><span class="t"><b><%= r.title %></b><small>p/<%= r.slug %> · <%= fx.num(r.followers) %> follower<%= r.followers === 1 ? '' : 's' %></small></span></label>
+              <span class="cbadge sm" style="--h:<%= fx.hue(r.slug) %>" aria-hidden="true"><%= fx.cBadge(r) %></span><span class="t"><b><%= r.title %></b><small><%- fx.padBadge(r, { compact: true }) %> p/<%= r.slug %> · <%= fx.num(r.followers) %> follower<%= r.followers === 1 ? '' : 's' %></small></span></label>
           <% }) %>
           <p class="cb-none hide" data-comm-none>No pad matches.</p>
         </div>

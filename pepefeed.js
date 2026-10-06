@@ -10,8 +10,8 @@
 //
 // Settings, per scope ('' = "All": the site-wide settings admins set, else a room id; feed_kv "pepe:scope:<id>").
 // 1.99ci (communities only): there's no main feed. Every post lives in a community, so Pepe always acts in a room
-// scope; a house-run community (Pepe's rooms, the PATV Lounge) with no settings of its own follows the All
-// settings. His own posts with scope '' go to the PATV Lounge (rooms.LOUNGE_ID). Owners' rooms stay opt-in.
+// scope; a house-run community (Pepe's rooms, the Camfrog Lounge) with no settings of its own follows the All
+// settings. His own posts with scope '' go to the Camfrog Lounge (rooms.LOUNGE_ID). Owners' rooms stay opt-in.
 //   respond         answer mentions ("@pepe", "pepe" as a word, a reply to his post / comment). Default ON for
 //                   All and the house communities (Pepe's rooms, the Lounge), OFF elsewhere until the owner turns it on
 //   auto            take part on his own. Default OFF
@@ -331,7 +331,7 @@ async function postScopes(p) {
   if (pl.some((x) => x.nsfw === 1)) return null;                                        // a room owner's NSFW mark
   if (await isMuted(p.id)) return null;
   if ((await getQuery("SELECT 1 FROM feed_reports WHERE post_id = ? AND comment_id IS NULL AND resolved_at IS NULL LIMIT 1", [p.id]))[0]) return null;
-  // 1.99ci: a house community (Pepe's rooms, the PATV Lounge) with no settings of its own is the All scope ('')
+  // 1.99ci: a house community (Pepe's rooms, the Camfrog Lounge) with no settings of its own is the All scope ('')
   const out = [];
   for (const x of pl.filter((y) => !y.removed_at && !y.pending && !y.hidden_at)) {
     const R = rooms.getCached(x.room_id);
@@ -568,7 +568,7 @@ async function post(b, req = null) {
   const kind = KINDS.includes(b.kind) ? b.kind : "other";
   const refuse = async (st, msg) => { await log({ action: "refused", why: "auto", scope, kind, cost: b.cost, note: msg }); throw new Refuse(st, msg); };
   if (scope && !(await rooms.get(scope))) await refuse(404, "No such pad.");
-  // 1.99ci: a post needs a community - his All-scope posts go to the PATV Lounge
+  // 1.99ci: a post needs a community - his All-scope posts go to the Camfrog Lounge
   const S = await scopeSettings(scope);
   const no = gate("post", "auto", S, G, await usage(), { scope, cost: b.cost });
   if (no) await refuse(429, no);

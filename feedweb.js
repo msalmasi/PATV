@@ -131,7 +131,9 @@ function feedUrl(where, params = {}) {
 }
 /** A community's badge: the frog for Pepe's (house) rooms, a sofa for the site's own communities, else its initial. */
 const cBadge = (c) => (c && c.community ? "🛋️" : c && c.house ? "🐸" : initial(c && c.title));
-const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+/** 1.99x: a pad's platform badge html ("🐸 Camfrog Pad" / "🌐 Site Pad"; compact = the icon only) - pads.js */
+const padBadge = (c, opts) => require("./pads").padBadge(c, opts);
+const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
@@ -158,7 +160,7 @@ async function composerFor(viewer, roomId) {
   // 1.99bz: announce = the room owner lets Pepe announce new posts there (the author then gets a per-post checkbox)
   const list = await store.communities(viewer);
   const all = await Promise.all(list.filter((r) => r.canPost).map(async (r) => ({ id: r.id, slug: r.slug, title: r.title, followers: r.followers,
-                                                                                community: r.community, house: r.house, announce: await store.mentionOn(r.id) })));
+                                                                                community: r.community, platform: r.platform, house: r.house, announce: await store.mentionOn(r.id) })));
   const refusal = await store.postRefusal(viewer, []);
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, [], { media: true });
   const here = roomId ? list.find((r) => r.id === roomId) : null;
@@ -266,7 +268,7 @@ function register(app, { addUser, isBotToken }) {
       let header = null;
       if (R) {
         const c = comms.find((x) => x.id === R.id) || { followers: 0, posts: 0 };
-        header = { id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
+        header = { id: R.id, slug: R.slug, title: R.title, description: R.description || "", house: !!R.house, community: !!R.community, platform: R.platform || rooms.platformOf(R.id),
                    owner: R.owner ? (R.owner.display || R.owner.username) : null, ownerUser: R.owner ? R.owner.username : null,
                    followers: c.followers, posts: c.posts, following: viewer ? await follows.isFollowing(viewer.userId, "room", R.id) : false,
                    roomHref: require("./pads").padHref(R), mod: viewer ? await rooms.canManage(viewer, R.id) : false };
@@ -309,7 +311,7 @@ function register(app, { addUser, isBotToken }) {
         }
       }
       res.json({ ok: true, communities: list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers,
-                                                          posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, house: c.house, here: here.has(c.id) })) });
+                                                          posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, platform: c.platform, house: c.house, here: here.has(c.id) })) });
     } catch (e) { fail(res, e); }
   });
 

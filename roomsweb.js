@@ -58,7 +58,8 @@ async function guideRows(signedIn) {
       featured: slots.now.find((s) => s.featured && s.live) || null,
       // 1.99cj: Pepe is IN the room (his stream is on its stage) - not "his Camfrog window shows it"
       pepe_here: B.pepeIn ? B.pepeIn(id) === true : false,
-      site_only: rooms.isCommunityOnly(id),      // 1.99ck: a pad with no Camfrog room (the PATV Lounge)
+      platform: rooms.platformOf(id),            // 1.99x: camfrog | site | twitch | discord (a bridged-only room is camfrog)
+      site_only: rooms.isCommunityOnly(id),      // 1.99ck: a pad with no Camfrog room (the Camfrog Lounge)
     });
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)

@@ -45,7 +45,7 @@ async function mkUser(name, extra = {}) {
   return u;
 }
 const H = (u) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, u ? { "x-test-user": u.userId } : {});
-// 1.99ci: every post lives in exactly one community - tests post to the PATV Lounge unless they pick one
+// 1.99ci: every post lives in exactly one community - tests post to the Camfrog Lounge unless they pick one
 // (community / rooms set), or send noCommunity: true to test the refusal.
 const LOUNGE = "patv:lounge";
 const withCommunity = (url, body) => (url === "/api/feed/posts" && body && typeof body === "object" && body.community === undefined && !body.rooms && !body.noCommunity

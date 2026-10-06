@@ -98,7 +98,7 @@
   </section>
   <% } %>
 
-  <%# 1.99cg: Pepe on the feed - main-feed settings, global caps, where he's on, every action he took (pepefeed.js) %>
+  <%# 1.99cg: Pepe on the feed - the All settings, global caps, where he's on, every action he took (pepefeed.js) %>
   <% if (pepe) { const G = pepe.global, U = pepe.used; %>
   <section class="fa-card pf-card" id="pepe">
     <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe on the feed</h2>
@@ -116,7 +116,7 @@
       </fieldset>
       <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>
-    <h3 class="pf-h">All (site-wide: Pepe's own pads and the PATV Lounge follow these unless they have their own)</h3>
+    <h3 class="pf-h">All (site-wide: Pepe's own pads and the Camfrog Lounge follow these unless they have their own)</h3>
     <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
     <h3 class="pf-h">Pads where he's on</h3>
     <% if (!pepe.rooms.length) { %><p class="mut">None yet - pad owners switch him on from their pad's reports &amp; settings page (admins can too, and can lock it).</p><% } else { %>

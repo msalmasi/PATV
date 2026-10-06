@@ -1,7 +1,7 @@
 // Offline tests for 1.99ci: communities only + crossposts + the community bar + "Hot on PATV".
 //   - the All query (was "Everywhere"): room-only posts show; per-room removals / owner hides / pending / bans;
 //     one row per post; NSFW; report-hidden
-//   - the communities_v1 migration: main-feed-only posts move to the PATV Lounge, counted, run once
+//   - the communities_v1 migration: main-feed-only posts move to the Camfrog Lounge, counted, run once
 //   - creating a post needs exactly one community; the composer's picker honours who-can-post
 //   - crossposts: the target's rules (who can post, approval, bans, rate limits), duplicates, a crosspost of a
 //     crosspost, separate votes / comments, "crossposted to N", "original removed", the target owner's removal,
@@ -120,10 +120,10 @@ const allIds = async (viewer, extra = {}) => (await store.list({ sort: "new", vi
 const slug = (id) => rooms.getCached(id).slug;
 
 // ───────────────────────────── migration ─────────────────────────────
-test("communities_v1: main-feed-only posts move to the PATV Lounge (counted), others stay; runs once, idempotent", async () => {
+test("communities_v1: main-feed-only posts move to the Camfrog Lounge (counted), others stay; runs once, idempotent", async () => {
   const R = await rooms.get(LOUNGE);
   assert.ok(R && R.house && R.community, "the Lounge is a house-run, site-only community");
-  assert.equal(R.slug, "patv-lounge");
+  assert.equal(R.slug, "camfrog-lounge");
   const done = JSON.parse(await store.kvGet("communities_v1"));
   assert.deepEqual([done.moved, done.live, done.deleted, done.room], [3, 2, 1, LOUNGE]);
   const inLounge = async (id) => !!(await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [id, LOUNGE]))[0];
@@ -260,7 +260,7 @@ test("crosspost: a new post in the target linking the original; files referenced
   assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.alice.userId, "feed-xp:" + x])).length, 1);
   // pages: the crosspost card + "crossposted to"
   const px = (await page(`/feed/p/${x}`, U.carol)).text;
-  assert.match(px, /Crossposted from <a href="\/p\/plant-based-chatting">p\/plant-based-chatting<\/a> by <a href="\/u\/alice\/profile">u\/alice<\/a>/);
+  assert.match(px, /Crossposted from <span class="pad-plat pp-camfrog sm" title="A Camfrog Pad[^"]*">🐸<\/span> <a href="\/p\/plant-based-chatting">p\/plant-based-chatting<\/a> by <a href="\/u\/alice\/profile">u\/alice<\/a>/);
   assert.ok(px.includes(`/feed/f/${file}`) && px.includes('class="fp-xbox"'));
   assert.ok(px.includes('data-act="crosspost"'), "the post page has a Crosspost button");
   const po = (await page(`/feed/p/${orig}`, U.carol)).text;
@@ -368,7 +368,7 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   assert.ok(!all.includes("Everywhere"));
   assert.match(all, /<span class="cb-k">Pad<\/span>[\s\S]*?<b>All<\/b>/);
   assert.match(all, /class="cb-chip on" href="\/feed" aria-current="page">🌐 All/);
-  assert.ok(all.includes('href="/feed/following"') && all.includes('href="/p/patv-lounge"') && all.includes('href="/p/plant-based-chatting"'));
+  assert.ok(all.includes('href="/feed/following"') && all.includes('href="/p/camfrog-lounge"') && all.includes('href="/p/plant-based-chatting"'));
   assert.match(all, /p\/plant-based-chatting · \d+ followers? · \d+ posts?/);
   assert.ok(!/communit/i.test(all.replace(/name="community"|data-comm[\w-]*|fc-comm[\w-]*|\/api\/feed\/communities/g, "")), "no 'community' copy left on /feed");
   // a pad page: its header (name, p/<slug>, description, follow, owner) and that pad's feed, sorted by ?sort=
@@ -380,10 +380,19 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   assert.match(pb, /title="Follow this pad" class="fw-btn[^"]*" data-follow-kind="room" data-follow-id="plant_based_chatting"/);
   assert.match(pb, /👑 Pad owner: /);
   assert.ok(pb.includes("📡 Camfrog room") && pb.includes("legacyRoom04"));
+  assert.ok(pb.includes("🐸 Camfrog Pad"), "1.99x: a Camfrog-backed pad wears the Camfrog badge");
   assert.ok(pb.includes('href="/p">Pads</a>'));
-  // the PATV Lounge: a pad with no Camfrog room - no live / Camfrog sections
-  const lounge = (await page("/p/patv-lounge", U.bob)).text;
-  assert.ok(lounge.includes("PATV Lounge") && lounge.includes("🛋️ Site-only pad"));
+  // the Camfrog Lounge (1.99x; a SITE pad): no Camfrog room - no live / Camfrog sections
+  const lounge = (await page("/p/camfrog-lounge", U.bob)).text;
+  assert.ok(lounge.includes("Camfrog Lounge") && lounge.includes("🌐 Site Pad") && !lounge.includes("Site-only pad"));
+  // 1.99x: the Pads list - every card wears its platform badge; ?platform= filters (All / Camfrog / Site)
+  const padsAll = (await page("/p", U.bob)).text;
+  assert.ok(padsAll.includes('aria-label="Filter pads by platform"') && padsAll.includes('href="/p?platform=site"') && padsAll.includes('href="/p?platform=camfrog"'));
+  assert.ok(padsAll.includes("Camfrog Lounge") && padsAll.includes("Houseplants") && padsAll.includes("🌐 Site Pad") && padsAll.includes("🐸 Camfrog Pad"));
+  const padsSite = (await page("/p?platform=site", U.bob)).text;
+  assert.ok(padsSite.includes("Camfrog Lounge") && !padsSite.includes(">Houseplants<"), "site filter: only site pads");
+  const padsCf = (await page("/p?platform=camfrog", U.bob)).text;
+  assert.ok(padsCf.includes(">Houseplants<") && !padsCf.includes(">Camfrog Lounge<"), "camfrog filter: only Camfrog pads");
   assert.ok(!lounge.includes("Camfrog room —") && !lounge.includes("isn't bridging") && !lounge.includes('id="rmFeed"'));
   // sort links on /feed keep the view; a pad in the bar opens its pad page; Following has its own path
   assert.ok(all.includes('href="/feed?sort=top&amp;t=week"'));
@@ -422,7 +431,7 @@ test("redirects (1.99ck): every old room / community address 301s to its /p/ add
     assert.equal(r.location, to, from);
   }
   // signed out too, and the post permalink /feed/p/<id> is NOT a pad address
-  assert.equal((await page("/rooms/patv-lounge", null)).location, "/p/patv-lounge");
+  assert.equal((await page("/rooms/patv-lounge", null)).location, "/p/camfrog-lounge", "1.99x: a retired slug goes straight to the current one");
   const id = await mkPost(U.alice, { body: "permalink", community: LOUNGE });
   assert.equal((await page("/feed/p/" + id, U.bob)).status, 200);
 });
@@ -436,7 +445,7 @@ test("p/<slug> autolinks (1.99ck): known pads in post and comment text link to /
   assert.equal(pads.padRefs("x.com/p/houseplants or ap/houseplants or p/houseplants/x", known), "x.com/p/houseplants or ap/houseplants or p/houseplants/x");
   // through the real renderer: escaping first, URLs untouched, the registry decides what's a pad
   const out = web.fx.body('hi p/plant-based-chatting & <b>p/patv-lounge</b> https://e.x/p/patv-lounge p/not-a-pad');
-  assert.ok(out.includes('<a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a> &amp; &lt;b&gt;<a class="pad-ref" href="/p/patv-lounge">p/patv-lounge</a>&lt;/b&gt;'), out);
+  assert.ok(out.includes('<a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a> &amp; &lt;b&gt;<a class="pad-ref" href="/p/camfrog-lounge">p/patv-lounge</a>&lt;/b&gt;'), out);
   assert.ok(out.includes('<a href="https://e.x/p/patv-lounge" rel="nofollow noopener noreferrer ugc" target="_blank">https://e.x/p/patv-lounge</a>'), out);
   assert.ok(out.endsWith(" p/not-a-pad"), out);
   // on a page: a post body and a comment body
@@ -444,7 +453,7 @@ test("p/<slug> autolinks (1.99ck): known pads in post and comment text link to /
   assert.equal((await post(`/api/feed/posts/${id}/comments`, U.bob, { body: "agreed, p/patv-lounge rules" })).status, 200);
   const html = (await page("/feed/p/" + id, U.bob)).text;
   assert.ok(html.includes('shoutout to <a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a>'));
-  assert.ok(html.includes('agreed, <a class="pad-ref" href="/p/patv-lounge">p/patv-lounge</a> rules'));
+  assert.ok(html.includes('agreed, <a class="pad-ref" href="/p/camfrog-lounge">p/patv-lounge</a> rules'));
 });
 
 // ───────────────────────────── homepage mini feed ─────────────────────────────
@@ -462,7 +471,8 @@ test("Hot on PATV: the top 5 hot posts across All; signed-out visitors never see
   const html = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: out, fx: web.fx });
   assert.ok(html.includes("🔥 Hot on PATV") && html.includes('href="/feed">View all'));
   assert.equal((html.match(/class="hh-it"/g) || []).length, 5);
-  assert.match(html, /p\/patv-lounge|p\/plant-based-chatting/);
+  assert.match(html, /p\/camfrog-lounge|p\/plant-based-chatting/);
+  assert.match(html, /class="pad-plat pp-(site|camfrog) sm"/, "1.99x: each hot post shows its pad's platform badge");
   assert.ok(!html.includes("hot 5") && html.includes("hot 4"));
   const empty = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: { posts: [], signed: false }, fx: web.fx });
   assert.match(empty, /Nothing posted yet/);

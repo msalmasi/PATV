@@ -88,7 +88,7 @@ test.beforeEach(async () => {
 });
 
 const H = (u, extra = {}) => Object.assign({ "content-type": "application/json", "x-requested-with": "fetch" }, u ? { "x-test-user": u.userId } : {}, extra);
-// 1.99ci: every post lives in exactly one community - tests post to the PATV Lounge (house: follows Pepe's All
+// 1.99ci: every post lives in exactly one community - tests post to the Camfrog Lounge (house: follows Pepe's All
 // settings) unless they pick one
 const LOUNGE = "patv:lounge";
 const withCommunity = (url, body) => (url === "/api/feed/posts" && body && typeof body === "object" && body.community === undefined && !body.rooms
@@ -447,7 +447,7 @@ test("auto threads: fresh eligible posts in auto scopes, never his own or ones h
 });
 
 // ───────────────────────────── 1.99ci: communities only ─────────────────────────────
-test("communities: Pepe's All-scope posts land in the PATV Lounge; a house room with its own settings is its own scope", async () => {
+test("communities: Pepe's All-scope posts land in the Camfrog Lounge; a house room with its own settings is its own scope", async () => {
   await resetLimits();
   await PF.setScope(U.admin, "", { auto: true, posts_per_day: 5, gap_min: 0, quiet_start: -1, quiet_end: -1 });
   const r = await bot("/api/pepe/feed/post", { scope: "", title: "All-scope post", body: "hello everyone", kind: "question", cost: 0.001 });

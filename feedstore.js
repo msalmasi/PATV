@@ -11,7 +11,7 @@
 //                      its own - it embeds the original; its votes and comments are its own). `global` is no
 //                      longer read or written as 1: every post lives in a community (feed_post_rooms); the column
 //                      stays so old rows / links keep working, and the communities_v1 migration gave the old
-//                      main-feed-only posts a home in the PATV Lounge (rooms.LOUNGE_ID).
+//                      main-feed-only posts a home in the Camfrog Lounge (rooms.LOUNGE_ID).
 //   feed_post_rooms    post_id, room_id (rooms_registry id), removed_at / removed_by (a room owner
 //                      can take a post out of THEIR room without deleting it elsewhere)
 //   feed_attachments   id, post_id (NULL until posted), owner_id, kind image|audio|video|preview,
@@ -211,7 +211,7 @@ async function communitiesPlan() {
   return { posts: rows.map((r) => ({ id: r.id, deleted: !!r.deleted_at })), live: rows.filter((r) => !r.deleted_at).length, deleted: rows.filter((r) => r.deleted_at).length };
 }
 /**
- * Give every main-feed-only post a home in the PATV Lounge. Runs once (feed_kv communities_v1 holds the
+ * Give every main-feed-only post a home in the Camfrog Lounge. Runs once (feed_kv communities_v1 holds the
  * result), and each insert is OR IGNORE, so a re-run (or a crash half way) never duplicates or re-adds a
  * post an owner has since taken out of the Lounge. -> {moved, live, deleted, at} or the stored result
  */
@@ -926,7 +926,7 @@ async function communities(viewer = null) {
       const r1 = (await postRefusal(u, [R.id])) || (await roomPostRefusal(u, R.id));
       refusal = r1 ? r1.message : null;
     }
-    out.push({ id: R.id, slug: padSlugOf(R, R.id), title: R.title, description: R.description || "", house: !!R.house, community: !!R.community,
+    out.push({ id: R.id, slug: padSlugOf(R, R.id), title: R.title, description: R.description || "", house: !!R.house, community: !!R.community, platform: R.platform || rooms.platformOf(R.id),
                followers: fm.get(R.id) || 0, posts: pm.get(R.id) || 0, canPost: !refusal, refusal });
   }
   return out.sort((a, b) => (b.id === rooms.LOUNGE_ID) - (a.id === rooms.LOUNGE_ID) || b.followers - a.followers || b.posts - a.posts || a.title.localeCompare(b.title));
@@ -940,7 +940,7 @@ async function hot(viewer = null, limit = 5) {
     const R = p.rooms[0] || null;
     const q = p.xpost && p.xpost.post ? p.xpost.post : p;
     return { id: p.id, url: "/feed/p/" + p.id, title: p.title || q.title || (q.link && q.link.title) || cleanLine(q.body, 90) || "(no title)",
-             community: R ? { slug: R.slug, title: R.title } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
+             community: R ? { slug: R.slug, title: R.title, platform: R.id ? rooms.platformOf(R.id) : undefined } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
              thumb: p.nsfw ? null : thumbOf(p), crosspost: !!p.xpost, created: p.created,
              kind: q.video && q.video.length ? "video" : q.images && q.images.length ? "image" : q.audio && q.audio.length ? "audio" : q.link ? "link" : "text" };
   });

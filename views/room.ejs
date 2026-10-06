@@ -1,8 +1,12 @@
 <%- include('layout', { title: 'p/' + room.slug + ' — ' + room.name, user: user }) %>
 <%# The pad page (1.99ck, /p/<slug>; was /rooms/<slug> + /feed/c/<slug>): header, stage + schedule, the live
     Camfrog room behind the pad when there is one (chat, people, mic, DJ booth), then the pad's feed. A
-    site-only pad (the PATV Lounge) has no Camfrog room: no live section, no "not bridged" note. %>
+    site pad (the Camfrog Lounge) has no Camfrog room: no live section, no "not bridged" note. 1.99x: the header
+    shows the pad's platform badge (🐸 Camfrog Pad / 🌐 Site Pad). %>
 <% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null; %>
+<%# 1.99x: the platform badge (pads.js padBadge via fx or app.locals; a plain fallback when rendered bare) %>
+<% const padBadge_ = typeof fx !== 'undefined' && fx && fx.padBadge ? fx.padBadge : typeof padBadge === 'function' ? padBadge
+     : (p) => '<span class="pad-plat pp-' + p + '">' + (p === 'site' ? '🌐 Site Pad' : '🐸 Camfrog Pad') + '</span>'; %>
 <style>
   .rm { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
   .rm *, .rm *::before, .rm *::after { box-sizing: border-box; }
@@ -159,8 +163,8 @@
     <div class="meta">
       <% if (feed_ && feed_.follow) { %><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: 'Follow this pad' }) %>
         <span class="chip" title="Follow this pad to get its posts on your Following feed"><b data-follower-count-kind="room" data-follower-count-id="<%= feed_.room %>"><%= feed_.follow.followers.toLocaleString('en-US') %></b> follower<%= feed_.follow.followers === 1 ? '' : 's' %></span><% } %>
-      <% if (siteOnly_) { %><span class="chip" title="This pad lives on the website only - no Camfrog room behind it">🛋️ Site-only pad</span>
-      <% } else { %><% if (bridged_) { %><span class="chip" id="rmCount">👥 <%= room.count %> in the Camfrog room</span><% } %>
+      <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
+      <% if (!siteOnly_) { %><% if (bridged_) { %><span class="chip" id="rmCount">👥 <%= room.count %> in the Camfrog room</span><% } %>
       <span class="chip" title="This pad is backed by a Camfrog room">📡 Camfrog room<%= room.camfrogName && room.camfrogName !== room.name ? ': ' + room.camfrogName : '' %></span><% } %>
       <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Pad owner: <%= room.owner %></a><% } %>
       <% if (pepeHere_ === true && !siteOnly_) { %><span class="chip" title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %>

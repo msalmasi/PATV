@@ -60,7 +60,7 @@
       </div>
     <% } %>
     <% if (xp_) { %>
-      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from) { %><a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>/profile">u/<%= xp_.author.username %></a><% } %></span></p>
+      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>/profile">u/<%= xp_.author.username %></a><% } %></span></p>
     <% } %>
     <div class="fp-content<%= p.nsfw ? ' blur' : '' %>">
       <% if (xp_) { %>

@@ -5,8 +5,9 @@
 //                    banner, owner_kind ('house' = Pepe / the site | 'user' | 'none'), owner_user_id,
 //                    slot_count (user stage slots, default 1), approval (scheduled bookings need the
 //                    owner's OK), slot_price (PAT / live minute for a NON-featured slot, default 0 =
-//                    free), created, updated
-//   rooms_kv         small settings: front_room ("auto" | room id), seeded:<room id>,
+//                    free), platform ('camfrog' | 'site' | 'twitch' | 'discord': where the pad comes
+//                    from, 1.99x; derived from the id for older rows), created, updated
+//   rooms_kv         small settings: front_room ("auto" | room id), seeded:<room id>, lounge_camfrog_v1,
 //                    front_auto (the automatic pick + when it was made, JSON), front_cfg (its tunables, JSON)
 //   room_events      owner/admin actions per room (audit trail shown on the manage page)
 //   room_activity    room_id, day (UTC yyyy-mm-dd), minutes bridged live, peak people, chat lines -
@@ -30,16 +31,39 @@ const SEEDS = [
   { room_id: "PepeFrog.Room", title: "Pepe's Pad", owner: "house" },
   { room_id: "PepeBeta.Room", title: "PepeLab", owner: "house" },
   { room_id: "plant_based_chatting", title: "Houseplants", owner: { match: "foamy1111" } },   // 1.99bn: his Camfrog LOGIN (account pb), not the display name "plantbaked"
-  // 1.99ci: the site's own general community (no Camfrog room behind it): every feed post lives in a
-  // community, and the old main-feed-only posts moved here. Ids starting "patv:" are site-only communities.
-  { room_id: "patv:lounge", title: "PATV Lounge", owner: "house",
-    description: "The general PATV pad: anything that isn't about one Camfrog room. Old main-feed posts live here." },
+  // 1.99ci: the site's own general pad (no Camfrog room behind it). Ids starting "patv:" are site pads.
+  // 1.99x: "Camfrog Lounge" (was "PATV Lounge", slug patv-lounge) - the id stays patv:lounge so its posts,
+  // settings and follows stay put. It's a SITE pad (the site made it) despite the name.
+  { room_id: "patv:lounge", title: "Camfrog Lounge", slug: "camfrog-lounge", owner: "house",
+    description: "The general Camfrog pad: hang out, share anything, talk about any room or none." },
 ];
 const LOUNGE_ID = "patv:lounge";
-// 1.99ck: the 1.99ci Lounge text ("community"), swapped for the pad wording at start unless an admin edited it
-const OLD_SEED_DESC = ["The general PATV community: anything that isn't about one room. Old main-feed posts live here."];
-/** A site-only community (no Camfrog room behind it). */
-const isCommunityOnly = (roomId) => String(roomId || "").startsWith("patv:");
+// 1.99x: the Lounge's earlier seeded title / slug / descriptions - swapped at start (once, rooms_kv
+// lounge_camfrog_v1) only while a field still holds one of these, so an admin's edit is never overwritten
+const OLD_LOUNGE_TITLE = "PATV Lounge";
+const OLD_LOUNGE_SLUG = "patv-lounge";
+const OLD_SEED_DESC = [
+  "The general PATV community: anything that isn't about one room. Old main-feed posts live here.",     // 1.99ci
+  "The general PATV pad: anything that isn't about one Camfrog room. Old main-feed posts live here.",   // 1.99ck
+];
+
+// ── platforms (1.99x): where a pad comes from. Camfrog pads are backed by a Camfrog room; site pads were
+// made by the site itself (patv:<x>). Twitch / Discord pads are valid values, not used yet. ──
+const PLATFORMS = ["camfrog", "site", "twitch", "discord"];
+/** The platform an id implies (rows without one yet): patv: -> site, twitch: / discord: -> those, else camfrog. */
+function platformFromId(roomId) {
+  const m = /^(patv|twitch|discord):/i.exec(String(roomId || ""));
+  if (!m) return "camfrog";
+  return m[1].toLowerCase() === "patv" ? "site" : m[1].toLowerCase();
+}
+const cleanPlatform = (p, roomId) => (PLATFORMS.includes(String(p || "").toLowerCase()) ? String(p).toLowerCase() : platformFromId(roomId));
+/** A pad's platform: the registry's when it's registered, else what its id implies. */
+function platformOf(roomId) {
+  const r = CACHE.byId.get(String(roomId || ""));
+  return cleanPlatform(r && r.platform, roomId);
+}
+/** A pad with no Camfrog room behind it (any platform but camfrog). Kept for the 1.99ci callers. */
+const isCommunityOnly = (roomId) => platformOf(roomId) !== "camfrog";
 const MAX_SLOTS_DEFAULT = 4;     // owners can set 1..this many user slots (stage_config.max_slots_per_room)
 
 const CTRL = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
@@ -58,6 +82,11 @@ function init() {
         slot_count INTEGER NOT NULL DEFAULT 1, approval INTEGER NOT NULL DEFAULT 0, slot_price INTEGER NOT NULL DEFAULT 0,
         created INTEGER, updated INTEGER)`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS rooms_registry_slug ON rooms_registry (slug)");
+      // 1.99x: the platform column, derived once for rows that predate it (patv: -> site, else camfrog)
+      const cols = new Set((await getQuery("PRAGMA table_info(rooms_registry)")).map((c) => c.name));
+      if (!cols.has("platform")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN platform TEXT");
+      await runQuery(`UPDATE rooms_registry SET platform = CASE WHEN room_id LIKE 'patv:%' THEN 'site' WHEN room_id LIKE 'twitch:%' THEN 'twitch'
+                      WHEN room_id LIKE 'discord:%' THEN 'discord' ELSE 'camfrog' END WHERE platform IS NULL OR platform = ''`);
       await runQuery("CREATE INDEX IF NOT EXISTS rooms_registry_owner ON rooms_registry (owner_user_id)");
       await runQuery("CREATE TABLE IF NOT EXISTS rooms_kv (key TEXT PRIMARY KEY, value TEXT)");
       await runQuery("CREATE TABLE IF NOT EXISTS room_events (room_id TEXT, ts INTEGER, what TEXT, actor TEXT, detail TEXT)");
@@ -66,6 +95,7 @@ function init() {
         room_id TEXT NOT NULL, day TEXT NOT NULL, minutes INTEGER NOT NULL DEFAULT 0, peak INTEGER NOT NULL DEFAULT 0,
         lines INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (room_id, day))`);
       await seed();
+      await migrateLounge();
       await loadCache();
       await loadAuto();
     })().catch((e) => { console.error("[rooms] init:", e.message); ready = null; throw e; });
@@ -143,23 +173,53 @@ async function findUser(name) {
   return kept.length === 1 ? kept[0] : null;
 }
 
-async function ensureRow(roomId, title) {
+async function ensureRow(roomId, title, wantSlug = null, platform = null) {
   const id = str(roomId, 128);
   if (!ROOM_ID_RE.test(id)) return null;
   const have = (await getQuery("SELECT room_id FROM rooms_registry WHERE room_id = ?", [id]))[0];
   if (have) return id;
-  let slug = slugify(id);
-  for (let i = 2; (await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ?", [slug])).length; i++) slug = slugify(id) + "-" + i;
+  const base = wantSlug ? slugify(wantSlug) : slugify(id);
+  let slug = base;
+  for (let i = 2; (await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ?", [slug])).length; i++) slug = base + "-" + i;
   const t = Date.now();
-  await runQuery(`INSERT OR IGNORE INTO rooms_registry (room_id, slug, title, owner_kind, created, updated) VALUES (?, ?, ?, 'none', ?, ?)`,
-                 [id, slug, str(title, 60) || null, t, t]);
+  await runQuery(`INSERT OR IGNORE INTO rooms_registry (room_id, slug, title, owner_kind, platform, created, updated) VALUES (?, ?, ?, 'none', ?, ?, ?)`,
+                 [id, slug, str(title, 60) || null, cleanPlatform(platform, id), t, t]);
   return id;
+}
+
+/**
+ * 1.99x: "PATV Lounge" -> "Camfrog Lounge" on installs seeded before the rename. Runs once (rooms_kv
+ * lounge_camfrog_v1); each field changes only while it still holds the old seeded value, so an admin's
+ * title, description or slug is left alone. The id (patv:lounge) never changes. -> {title, description, slug}
+ */
+async function migrateLounge() {
+  const out = { title: false, description: false, slug: false };
+  if (await kvGet("lounge_camfrog_v1")) return out;
+  const s = SEEDS.find((x) => x.room_id === LOUNGE_ID);
+  const row = (await getQuery("SELECT * FROM rooms_registry WHERE room_id = ?", [LOUNGE_ID]))[0];
+  if (row && s) {
+    if (row.title === OLD_LOUNGE_TITLE) {
+      await runQuery("UPDATE rooms_registry SET title = ? WHERE room_id = ?", [s.title, LOUNGE_ID]); out.title = true;
+    }
+    if (OLD_SEED_DESC.includes(row.description)) {
+      await runQuery("UPDATE rooms_registry SET description = ? WHERE room_id = ?", [s.description, LOUNGE_ID]); out.description = true;
+    }
+    if (row.slug === OLD_LOUNGE_SLUG && !(await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ?", [s.slug])).length) {
+      await runQuery("UPDATE rooms_registry SET slug = ? WHERE room_id = ?", [s.slug, LOUNGE_ID]); out.slug = true;
+    }
+    if (out.title || out.description || out.slug) {
+      await event(LOUNGE_ID, "page", "migration", "Camfrog Lounge rename: " + Object.keys(out).filter((k) => out[k]).join(", "));
+      console.log("[rooms] lounge_camfrog_v1: " + JSON.stringify(out));
+    }
+  }
+  await kvSet("lounge_camfrog_v1", JSON.stringify({ at: Date.now(), ...out }));
+  return out;
 }
 
 async function seed() {
   for (const s of SEEDS) {
     if (await kvGet("seeded:" + s.room_id)) continue;
-    await ensureRow(s.room_id, s.title);
+    await ensureRow(s.room_id, s.title, s.slug || null);
     const row = (await getQuery("SELECT * FROM rooms_registry WHERE room_id = ?", [s.room_id]))[0];
     if (!row) continue;
     if (!row.title) await runQuery("UPDATE rooms_registry SET title = ? WHERE room_id = ?", [s.title, s.room_id]);
@@ -192,7 +252,8 @@ function view(r) {
     owner: r.owner_kind === "user" && r.owner_user_id ? { userId: r.owner_user_id, username: r.owner_username || null,
       display: r.owner_display || r.owner_username || null, camfrog: r.owner_camfrog || null } : null,
     house: r.owner_kind === "house",
-    community: isCommunityOnly(r.room_id),          // 1.99ci: a site-only community (no Camfrog room)
+    platform: cleanPlatform(r.platform, r.room_id),                  // 1.99x: camfrog | site | twitch | discord
+    community: cleanPlatform(r.platform, r.room_id) !== "camfrog",   // 1.99ci: no Camfrog room behind it
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
   };
 }
@@ -470,4 +531,5 @@ module.exports = {
   setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
+  PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
 };

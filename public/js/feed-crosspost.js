@@ -28,6 +28,14 @@
     b.textContent = c.community ? '🛋️' : c.house ? '🐸' : (String(c.title || '?').replace(/^[^A-Za-z0-9]+/, '').charAt(0) || '?').toUpperCase();
     return b;
   }
+  // 1.99x: the pad's platform badge (same look as pads.js padBadge, compact)
+  var PLAT = { camfrog: ['🐸', 'Camfrog Pad'], site: ['🌐', 'Site Pad'], twitch: ['🟣', 'Twitch Pad'], discord: ['💬', 'Discord Pad'] };
+  function platBadge(c) {
+    var p = PLAT[c.platform] ? c.platform : (c.community ? 'site' : 'camfrog');
+    var b = el('span', 'pad-plat sm pp-' + p, PLAT[p][0]);
+    b.title = PLAT[p][1];
+    return b;
+  }
 
   var dlg = null, state = null;
   function build() {
@@ -83,7 +91,8 @@
       else usable++;
       var t = el('span', 't');
       t.appendChild(el('b', null, c.title));
-      t.appendChild(el('small', null, 'p/' + c.slug + (c.here ? ' · already there' : !c.canPost ? ' · ' + (c.refusal || 'you can\'t post here') : ' · ' + c.followers + ' follower' + (c.followers === 1 ? '' : 's'))));
+      var sm = el('small'); sm.appendChild(platBadge(c)); t.appendChild(sm);
+      sm.appendChild(document.createTextNode(' p/' + c.slug + (c.here ? ' · already there' : !c.canPost ? ' · ' + (c.refusal || 'you can\'t post here') : ' · ' + c.followers + ' follower' + (c.followers === 1 ? '' : 's'))));
       it.appendChild(r); it.appendChild(badge(c)); it.appendChild(t);
       L.appendChild(it);
     });
