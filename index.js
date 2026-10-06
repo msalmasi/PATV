@@ -1022,6 +1022,7 @@ require("./tables").register(app, { isBotToken, addUser });   // /casino /poker 
 require("./userstats").register(app, { isBotToken });
 const bridge = require("./bridge");
 bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (read-only v1): /rooms, /api/bridge/sync
+require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));

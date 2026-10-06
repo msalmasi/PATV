@@ -210,6 +210,7 @@
     <p class="muted">No account? <a href="/register">Make one</a> — then link your Camfrog name with <code>!verify</code>.</p>
   </section>
 <% } else { %>
+  <%- include('partials/room-dj', { slug: room.slug, linked: linked }) %>
   <div class="grid">
     <section class="card" aria-labelledby="chatH">
       <h2 id="chatH">Chat <small id="rmStatus" class="status" aria-live="polite"></small></h2>

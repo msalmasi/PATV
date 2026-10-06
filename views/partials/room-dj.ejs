@@ -1,0 +1,121 @@
+<%# The room page's DJ panel (1.99ba, roomdj.js + public/js/room-dj.js). Pass { slug, linked }.
+    Hidden until Pepe reports music in this room; filled and refreshed by the script. %>
+<style>
+  .rdj { display: grid; gap: 12px; background: radial-gradient(120% 160% at 100% 0%, #1d1430 0%, #111 55%); }
+  .rdj.hide { display: none !important; }
+  .rdj h2 { align-items: center; color: #d9a7ff !important; }
+  .rdj h2 .pill { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12px; padding: 2px 9px; border-radius: 999px;
+                  border: 1px solid #4a3566; background: #1d1430; color: #e3c8ff; white-space: nowrap; }
+  .rdj h2 .pill.off { border-color: #333; background: #1a1a1a; color: #999; }
+  .rdj .top { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .rdj .now { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; align-items: center; min-width: 0; }
+  .rdj .art { width: 84px; height: 84px; border-radius: 10px; background: #1b1b1b center / cover no-repeat; display: grid; place-items: center; font-size: 30px; border: 1px solid #2a2a2a; overflow: hidden; }
+  .rdj .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rdj .t { font-size: 17px; font-weight: bold; line-height: 1.3; overflow-wrap: anywhere; }
+  .rdj .a { color: #bbb; font-size: 14px; overflow-wrap: anywhere; }
+  .rdj .by { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .rdj .tag { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; background: #181818; color: #ccc; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .rdj .tag.user { border-color: #2f6b3a; background: #12301a; color: #bdf0c6; }
+  .rdj .tag.dj { border-color: #5b3f80; background: #22173a; color: #e3c8ff; }
+  .rdj .tag.gone { border-color: #6b3a2f; background: #301812; color: #f0c4bd; }
+  .rdj .bar { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 12px; color: #999; font-variant-numeric: tabular-nums; }
+  .rdj .track { height: 6px; background: #262626; border-radius: 999px; overflow: hidden; }
+  .rdj .fill { height: 100%; width: 0; background: linear-gradient(90deg, #8e5bd8, #c792ff); border-radius: 999px; }
+  .rdj .paused .fill { background: #666; }
+  .rdj .booth { background: #0e0e12; border: 1px solid #262033; border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; font-size: 13.5px; min-width: 0; }
+  .rdj .booth .k { color: #9a8fb0; font-size: 12px; }
+  .rdj .booth .v { overflow-wrap: anywhere; }
+  .rdj .booth q { color: #e8dcf7; font-style: italic; }
+  .rdj .ctrls { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rdj button.b { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #e6e6e6;
+                  font: inherit; font-size: 13px; cursor: pointer; min-height: 36px; }
+  .rdj button.b:hover:not(:disabled), .rdj button.b:focus-visible { border-color: #8e5bd8; background: #1f1730; }
+  .rdj button.b:disabled { opacity: .5; cursor: default; }
+  .rdj button.b.go { background: #2a1a45; border-color: #6c45a8; color: #f1e6ff; font-weight: bold; }
+  .rdj button.b small { color: #aaa; font-weight: normal; }
+  .rdj button.b.go small { color: #d6c2f2; }
+  .rdj .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+  .rdj h3 { margin: 0 0 8px; font-size: 12px; color: #9a8fb0; text-transform: uppercase; letter-spacing: .08em; font-weight: normal; }
+  .rdj ol.q { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 360px; overflow-y: auto; }
+  .rdj ol.q li { display: grid; grid-template-columns: 22px 36px minmax(0, 1fr); gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; font-size: 13.5px; }
+  .rdj ol.q li:hover { background: #161616; }
+  .rdj ol.q .n { color: #777; text-align: right; font-variant-numeric: tabular-nums; }
+  .rdj ol.q .art { width: 36px; height: 36px; border-radius: 6px; font-size: 15px; }
+  .rdj ol.q .nm { min-width: 0; }
+  .rdj ol.q .nm b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
+  .rdj ol.q .nm span { color: #999; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rdj ol.q li.removed b { text-decoration: line-through; color: #888; }
+  .rdj form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 0; align-items: center; }
+  .rdj input[type=text] { margin: 0; box-sizing: border-box; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; min-width: 0; min-height: 36px; }
+  .rdj input[type=text]:focus-visible { outline: 2px solid #8e5bd8; outline-offset: 1px; }
+  .rdj .tools { display: grid; gap: 12px; min-width: 0; }
+  .rdj .tool { display: grid; gap: 6px; }
+  .rdj .hint { color: #8a8a8a; font-size: 12px; margin: 0; }
+  .rdj .res { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .rdj .res li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; background: #141414; font-size: 13.5px; }
+  .rdj .res .art { width: 36px; height: 36px; border-radius: 6px; font-size: 15px; }
+  .rdj .res .nm { min-width: 0; }
+  .rdj .res .nm b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: normal; }
+  .rdj .res .nm span { color: #999; font-size: 12px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rdj .say { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #141414; border: 1px solid #262626; overflow-wrap: anywhere; }
+  .rdj .say:empty { display: none; }
+  .rdj .say.ok { border-color: #2f6b3a; color: #c9f2d0; }
+  .rdj .say.bad { border-color: #6b3a2f; color: #f0c4bd; }
+  .rdj .admin { border-top: 1px dashed #2a2a2a; padding-top: 10px; }
+  .rdj .mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
+  .rdj .mine li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 6px; color: #bbb; }
+  .rdj .mine .m { grid-column: 2; color: #e0e0e0; overflow-wrap: anywhere; }
+  .rdj .mine .failed .m { color: #e6a07a; }
+  .rdj .ro { margin: 0; color: #aaa; font-size: 13px; }
+  @media (max-width: 860px) {
+    .rdj .top, .rdj .cols { grid-template-columns: minmax(0, 1fr); }
+    .rdj .now { grid-template-columns: 64px minmax(0, 1fr); }
+    .rdj .now > .art { width: 64px; height: 64px; }
+  }
+</style>
+<section class="card rdj hide" id="rdj" aria-labelledby="rdjH" data-slug="<%= slug %>" data-linked="<%= linked ? '1' : '' %>">
+  <h2 id="rdjH"><span>🎧 DJ booth</span> <span class="pill off" id="rdjPill">Auto-DJ off</span></h2>
+  <div class="top">
+    <div class="now" id="rdjNow"></div>
+    <div class="booth" id="rdjBooth"></div>
+  </div>
+  <div class="ctrls" id="rdjCtrls" role="group" aria-label="Music controls"></div>
+  <div class="cols">
+    <div>
+      <h3 id="rdjQH">Up next</h3>
+      <ol class="q" id="rdjQueue" aria-labelledby="rdjQH"></ol>
+    </div>
+    <div class="tools" id="rdjTools">
+      <% if (!linked) { %>
+        <p class="ro">🔗 You're watching read-only. To request songs and talk to the DJ, <b>link your Camfrog name</b>: type <code>!verify</code> in a room with Pepe. Requests cost the same PAT as in the room.</p>
+      <% } else { %>
+        <div class="tool" id="rdjReqBox">
+          <h3>Request a song</h3>
+          <form id="rdjFind" autocomplete="off">
+            <label class="sr" for="rdjFindQ">Song to search for</label>
+            <input type="text" id="rdjFindQ" maxlength="100" placeholder="Song or artist (like !find)">
+            <button class="b" type="submit">🔎 Search</button>
+          </form>
+          <ul class="res" id="rdjRes" aria-live="polite"></ul>
+          <p class="hint" id="rdjReqHint"></p>
+        </div>
+        <div class="tool" id="rdjVibeBox">
+          <h3>Talk to the DJ</h3>
+          <form id="rdjVibe" autocomplete="off">
+            <label class="sr" for="rdjVibeQ">What you want to hear</label>
+            <input type="text" id="rdjVibeQ" maxlength="140" placeholder="90s hip hop, something chill… (like !dj vibe)">
+            <button class="b go" type="submit">🎧 Send <small>free</small></button>
+          </form>
+          <p class="hint" id="rdjVibeHint"></p>
+        </div>
+        <div class="tool admin hide" id="rdjAdmin">
+          <h3>DJ controls (admins)</h3>
+          <div class="ctrls" id="rdjAdminBtns"></div>
+        </div>
+        <div class="say" id="rdjSay" role="status" aria-live="polite"></div>
+        <ul class="mine" id="rdjMine" aria-label="Your recent DJ requests"></ul>
+      <% } %>
+    </div>
+  </div>
+</section>
+<script src="/public/js/room-dj.js?v=1" defer></script>
