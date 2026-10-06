@@ -354,10 +354,28 @@
           li.appendChild(ic); ul.appendChild(li);
         });
         document.getElementById('rmPplN').textContent = d.members.length ? '(' + d.members.length + ')' : '';
-        document.getElementById('rmListNote').textContent = r.listAt
-          ? 'From the room\'s participant list, checked ' + hhmm(r.listAt) + '. "recently" = seen in the last 45 minutes.'
-          : 'People Pepe has seen arrive or talk; the full list updates while this room is Pepe\'s active window.';
       }
+      // every render, not only when the people change: "checked 3 min ago" has to keep counting
+      var note = listNote(r), noteEl = document.getElementById('rmListNote');
+      if (noteEl.textContent !== note) noteEl.textContent = note;
+    }
+
+    // How far the roster can be trusted. Pepe re-reads each room's participant list every minute or
+    // so; when he can't (the list is stale), he only keeps people seen arriving / talking / on the
+    // mic within seenTtl and drops the rest - so say which of the two the list on screen is.
+    function mins(ms) { var m = Math.max(0, Math.round(ms / 60000)); return m < 120 ? m + ' min' : Math.round(m / 60) + ' h'; }
+    function listNote(r) {
+      var ttl = mins(r.seenTtl || 15 * 60000), staleAfter = r.listStaleAfter || 10 * 60000;
+      var age = r.listAt ? Date.now() - r.listAt : null;
+      var fresh = age != null && age < staleAfter && r.listFresh !== false;
+      if (fresh) {
+        return 'From the room\'s participant list, checked ' + (age < 60000 ? 'just now' : mins(age) + ' ago')
+          + ' (' + hhmm(r.listAt) + '). "recently" = arrived or active since that check.';
+      }
+      if (age != null) {
+        return 'List not checked for ' + mins(age) + ' — showing people active in the last ' + ttl + '.';
+      }
+      return 'Pepe can\'t read this room\'s participant list right now — showing people seen arriving or active in the last ' + ttl + '.';
     }
 
     var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug);

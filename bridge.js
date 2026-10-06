@@ -113,7 +113,8 @@ function load() {
 }
 
 async function persistRoom(R) {
-  const snap = { topic: R.topic, members: R.members, mic: R.mic, count: R.count, listAt: R.listAt, joinedAt: R.joinedAt };
+  const snap = { topic: R.topic, members: R.members, mic: R.mic, count: R.count, listAt: R.listAt, joinedAt: R.joinedAt,
+                 listFresh: R.listFresh, seenTtl: R.seenTtl, listStaleAfter: R.listStaleAfter };
   await runQuery(`INSERT INTO bridge_rooms (id, slug, name, snap, updated) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, name = excluded.name, snap = excluded.snap, updated = excluded.updated`,
     [R.id, R.slug, R.name, JSON.stringify(snap), R.updated]);
@@ -253,6 +254,11 @@ async function ingest(body) {
     R.mic = (Array.isArray(s.mic) ? s.mic : []).slice(0, 20).map(cleanUser).filter(Boolean);
     R.count = Math.max(R.members.length, Math.min(5000, Number(s.count) || 0));
     R.listAt = Number(s.list_at) ? Number(s.list_at) * 1000 : null;
+    // how much the roster can be trusted: a fresh participant-list read, or (stale / never read)
+    // only people seen arriving / talking / on the mic within seenTtl - Pepe prunes the rest
+    R.listFresh = typeof s.list_fresh === "boolean" ? s.list_fresh : null;
+    R.seenTtl = Number(s.seen_ttl) > 0 ? Math.min(6 * 3600, Number(s.seen_ttl)) * 1000 : null;
+    R.listStaleAfter = Number(s.list_stale_after) > 0 ? Math.min(6 * 3600, Number(s.list_stale_after)) * 1000 : null;
     R.joinedAt = Number(s.joined_at) ? Number(s.joined_at) * 1000 : null;
     R.transcripts = s.transcripts !== false;
     R.audio = !!s.audio;
@@ -349,6 +355,7 @@ async function liveView(R, after, userId) {
     .map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
   return {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
+            listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
             transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R) },
     mine: userId ? relay.mineFor(userId, R.id) : [],
