@@ -103,7 +103,7 @@
 
   <div class="pepe" role="status">
     <span class="pill <%= pepeOn ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%= pepeOn ? 'ON AIR' : 'OFF AIR' %></span>
-    <span><b>🐸 Pepe's stream</b> plays on every room's stage<%= pepe && pepe.room ? ' — his window shows ' : '' %><% if (pepe && pepe.room) { %><% if (pepe.room.slug) { %><a href="/rooms/<%= encodeURIComponent(pepe.room.slug) %>"><%= pepe.room.name %></a><% } else { %><%= pepe.room.name %><% } %><% } %>.</span>
+    <span><b>🐸 Pepe's stream</b> plays on the stage of every room he's in<%= rows.some((r) => r.pepe_here) ? ' (🐸 below)' : '' %>.</span>
     <a href="/" style="margin-left:auto">Front page ›</a>
   </div>
 
@@ -131,12 +131,12 @@
             <% if (r.bridged) { %><span>👥 <%= r.count %></span><span>🎙 <%= r.micCount %></span><% } %>
             <% if (r.house) { %><span class="own">🐸 Pepe's room</span><% } else if (r.owner) { %><span class="own">👑 <%= r.owner %></span><% } %>
             <span>🎬 <%= r.now.length %>/<%= r.slot_count %> slots</span>
-            <% if (r.pepe_here) { %><span>🎥 Pepe's window</span><% } %>
+            <% if (r.pepe_here) { %><span title="Pepe is in this room - his stream is on its stage">🐸 Pepe's here</span><% } %>
           </div>
           <% if (r.topic || r.description) { %><div class="muted" style="overflow-wrap:anywhere"><%= (r.description || r.topic).slice(0, 140) %></div><% } %>
           <div class="slotrow"><span class="k now">Now</span>
             <ul>
-              <% if (!r.now.length) { %><li class="muted">🐸 Pepe's stream<%= pepeOn ? '' : ' (off air)' %> — slot open</li><% } %>
+              <% if (!r.now.length) { %><li class="muted"><%= r.pepe_here ? "🐸 Pepe's stream" + (pepeOn ? '' : ' (off air)') + ' — slot open' : 'Slot open' %></li><% } %>
               <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="featured">★</span> ' : '' %><b><%= s.display %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%= s.mode === 'embed' ? (s.embed_label || 'video') : (s.live ? '● live' : 'starting…') %></span></li><% }) %>
             </ul>
           </div>

@@ -5,9 +5,12 @@
 //     tabs, wrap, reconnect, unmute, embedHost, twitchHost?,   elements (see home.ejs / room.ejs)
 //     api: '/api/stage' | '/api/stage?room=<slug>',            what to poll (every 10 s)
 //     slots: [...], pepeOn: bool, manage: bool,                first render (server-side data)
+//     pepeHere: bool                                           Pepe is IN this room (default true)
 //     onAir(on, sub)                                           the page's ON AIR pill / subtitle
 //   })
 // Default view: the room's FEATURED slot when it's live, else Pepe's stream. Viewers switch freely.
+// 1.99cj: Pepe's stream (his broadcast, HLS or the Twitch mirror) is part of EVERY room's stage that
+// Pepe is in - the API's pepe_here - whichever room his Camfrog window shows. Not in the room: no tab.
 // HLS slots play in the shared video.js player (stage-player.js); embed slots (YouTube / Twitch) are
 // rendered only with the official players, from {p,t,id} re-checked here (never a raw URL).
 // manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot.
@@ -29,7 +32,7 @@
 
   function switcher(o) {
     var slots = Array.isArray(o.slots) ? o.slots : [];
-    var pepeOn = !!o.pepeOn, twitchLive = false, chosen = false;
+    var pepeOn = !!o.pepeOn, pepeHere = o.pepeHere !== false, twitchLive = false, chosen = false;
     var view = 'pepe';
     var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
     var embedFor = null, loaded = document.readyState === 'complete';
@@ -61,17 +64,17 @@
         setEmbed(null); if (tw) tw.classList.add('hide');
         player.setSrc(s.hls); if (loaded) player.start();
         o.onAir && o.onAir(true, s.title || null);
-      } else if (twitchLive && tw) {
+      } else if (twitchLive && tw && pepeHere) {
         setEmbed(null); player.stop(); tw.classList.remove('hide');
         o.onAir && o.onAir(true, 'live on Twitch');
-      } else if (pepeOn) {
+      } else if (pepeOn && pepeHere) {
         setEmbed(null); if (tw) tw.classList.add('hide');
         player.setSrc(PEPE_HLS); if (loaded) player.start();
         o.onAir && o.onAir(true, null);
       } else {
         setEmbed(null); if (tw) tw.classList.add('hide'); player.stop();
         var any = slots.length > 0;
-        o.onAir && o.onAir(any, any ? "Pepe's stream is off air - pick a stream above" : 'nothing streaming right now');
+        o.onAir && o.onAir(any, any ? (pepeHere ? "Pepe's stream is off air - pick a stream above" : 'pick a stream above') : 'nothing streaming right now');
       }
       renderTabs();
     }
@@ -88,7 +91,7 @@
              (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') + '</button>';
       });
       var pOn = pepeOn || twitchLive;
-      h += '<button type="button" class="stab' + (pOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
+      if (pepeHere) h += '<button type="button" class="stab' + (pOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
            '<span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (pOn ? '' : ' (off air)') + '</button>';
       var s = cur();
       if (o.manage && s) {
@@ -121,6 +124,7 @@
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         var was = cur(), wasF = featured();
         pepeOn = !!g.active;
+        if (typeof g.pepe_here === 'boolean') pepeHere = g.pepe_here;
         slots = Array.isArray(g.slots) ? g.slots : [];
         var f = featured();
         if (was && !cur()) pickDefault();                                           // that slot ended / was cut

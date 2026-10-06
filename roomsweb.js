@@ -56,7 +56,8 @@ async function guideRows(signedIn) {
       topic: b ? b.topic : "", description: r ? r.description : "",
       slot_count: r ? r.slot_count : 1, now: slots.now, next: slots.next.slice(0, 4),
       featured: slots.now.find((s) => s.featured && s.live) || null,
-      pepe_here: !!(pepe.room && pepe.room.slug && b && pepe.room.slug === b.slug),
+      // 1.99cj: Pepe is IN the room (his stream is on its stage) - not "his Camfrog window shows it"
+      pepe_here: B.pepeIn ? B.pepeIn(id) === true : false,
     });
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)
@@ -172,7 +173,7 @@ function register(app, { addUser, isBotToken }) {
       if (!R) return res.status(404).json({ ok: false, error: "No such room." });
       const st = await stage.roomStage(R.id, req.user);
       const manage = await rooms.canManage(req.user, R.id);
-      res.json({ ok: true, ...st, pepe: bridge().stage(), manage, schedule: await stage.roomSchedule(R.id, req.user, manage) });
+      res.json({ ok: true, ...st, pepe: bridge().stage(), pepe_here: bridge().pepeIn(R.id) !== false, manage, schedule: await stage.roomSchedule(R.id, req.user, manage) });
     } catch (e) { fail(res, e); }
   });
 
@@ -267,7 +268,8 @@ function register(app, { addUser, isBotToken }) {
       }
     }
     const sum = await royalties.summary();
-    res.render("roomsAdmin", { user: req.user.username, list, guide: g.rows, front: rooms.frontSetting(), roy: royalties.config(),
+    const fp = await rooms.frontStatus().catch(() => null);
+    res.render("roomsAdmin", { user: req.user.username, list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
       sum,
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });
@@ -279,6 +281,20 @@ function register(app, { addUser, isBotToken }) {
   });
   app.post("/api/rooms/front", addUser, needStaff, jsonOnly, async (req, res) => {
     try { res.json({ ok: true, front: await rooms.setFront((req.body || {}).room, actor(req)) }); } catch (e) { fail(res, e); }
+  });
+  // 1.99cj: the automatic pick - its state + score breakdown, "Re-evaluate now", and its tunables
+  app.get("/api/rooms/front/status", addUser, needStaff, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try { res.json({ ok: true, ...(await rooms.frontStatus()) }); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/rooms/front/reevaluate", addUser, needStaff, jsonOnly, async (req, res) => {
+    try {
+      await rooms.frontReevaluate(await bridge().summary(false), actor(req));
+      res.json({ ok: true, ...(await rooms.frontStatus()) });
+    } catch (e) { fail(res, e); }
+  });
+  app.post("/api/rooms/front/config", addUser, needStaff, jsonOnly, async (req, res) => {
+    try { res.json({ ok: true, cfg: await rooms.setFrontCfg(req.body || {}, actor(req)) }); } catch (e) { fail(res, e); }
   });
   app.get("/api/rooms/admin/royalties/summary", addUser, needStaff, async (req, res) => {
     try { res.json({ ok: true, ...(await royalties.summary()) }); } catch (e) { fail(res, e); }

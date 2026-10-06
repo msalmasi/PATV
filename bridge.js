@@ -25,6 +25,7 @@ const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const cosmetics = require("./cosmetics");
 const relay = require("./bridge-relay");   // web -> room: chat relay, mic clips, cam snapshots (staging test)
+const RA = require("./roomactivity");      // 1.99cj: rolling per-room activity (people only) for the homepage pick
 
 const FEED_KEEP = 200;
 const STALE_MS = 90 * 1000;              // no sync for this long -> the room shows as offline
@@ -103,6 +104,7 @@ function load() {
         R.updated = Number(r.updated) || 0;
         const feed = await getQuery("SELECT c, data FROM bridge_feed WHERE room_id = ? ORDER BY c DESC LIMIT ?", [r.id, FEED_KEEP]);
         R.feed = feed.reverse().map((f) => { try { return Object.assign(JSON.parse(f.data), { c: f.c }); } catch (e) { return null; } }).filter(Boolean);
+        replayActivity(R);
       }
       const m = await getQuery("SELECT MAX(c) AS c FROM bridge_feed");
       cursor = Math.max(cursor, Number(m[0] && m[0].c) || 0);
@@ -119,8 +121,20 @@ async function persistRoom(R) {
     [R.id, R.slug, R.name, JSON.stringify(snap), R.updated]);
 }
 
+// 1.99cj: after a restart, the persisted feed refills the activity tally (roomactivity.js)
+function replayActivity(R) {
+  const since = Date.now() - 90 * 60 * 1000;
+  for (const it of R.feed) {
+    if (!it || !it.u || !(it.ts > since)) continue;
+    if (it.k === "msg") RA.line(R.id, it.u, it.ts);
+    else if (it.k === "tx" || it.k === "mic") RA.spoke(R.id, it.u, it.ts);
+    else if (it.k === "unmic") RA.micHeld(R.id, it.u, it.ms, it.ts);
+  }
+}
+
 async function dropRoom(id) {
   rooms.delete(id);
+  RA.drop(id);
   await runQuery("DELETE FROM bridge_rooms WHERE id = ?", [id]);
   await runQuery("DELETE FROM bridge_feed WHERE room_id = ?", [id]);
 }
@@ -198,10 +212,27 @@ function stageRoom() {
   return { name: (R && R.name) || STAGE.roomName || STAGE.room, slug: R ? R.slug : null, pinned: !!STAGE.pinned };
 }
 /** Admin-only extras: the rooms Pepe is in (what the stage can move to) and the current room id. */
-/** {id} of Pepe's window room when it's known (for the front room's "auto" choice). */
+/** {id} of Pepe's window room when it's known - admin / information only (1.99cj: the homepage's
+ *  front room no longer reads it). */
 function stageRoomRef() {
   if (!STAGE.room || Date.now() - STAGE.at > STAGE_ROOM_FRESH) return null;
   return { id: STAGE.room };
+}
+/** 1.99cj: is Pepe IN this room (so his stage - his broadcast - belongs on its stage)? true when the
+ *  room is in the list of rooms Pepe reports being in, or he's bridging it live right now; false when
+ *  we know where he is and it isn't here; null when we don't know (Pepe silent: no fresh report and
+ *  no live bridged room) - callers then show his stream as before rather than hide it on a guess.
+ *  This is about PRESENCE, never about which room his Camfrog window shows (`!activeroom`). */
+function pepeIn(roomId) {
+  const id = String(roomId || "");
+  const fresh = Date.now() - STAGE.at < STAGE_ROOM_FRESH;
+  if (fresh && (STAGE.rooms || []).some((r) => r.id === id)) return true;
+  if (fresh && STAGE.room === id) return true;
+  const R = rooms.get(id);
+  if (R && isLive(R)) return true;
+  const anyLive = [...rooms.values()].some(isLive);
+  if ((fresh && (STAGE.rooms || []).length) || anyLive) return false;
+  return null;
 }
 function stageAdmin() {
   const fresh = Date.now() - STAGE.at < STAGE_ROOM_FRESH;
@@ -233,6 +264,7 @@ setInterval(() => {
   for (const [id, a] of audio) if (a.listeners.size && Date.now() - a.at > AUDIO_IDLE_MS && a.at) audioClose(id);
 }, 10 * 1000).unref();
 
+let lastFrontTick = 0;
 async function ingest(body) {
   await load();
   const now = Date.now();
@@ -272,6 +304,7 @@ async function ingest(body) {
     R.cams = !!s.cams;
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     if (!R.audio) audioClose(R.id);
+    RA.micSample(R.id, R.mic, now);
     R.updated = now;
     touched.add(R);
   }
@@ -299,6 +332,8 @@ async function ingest(body) {
     if (it.k === "tx" && it.id && R.feed.some((x) => x.k === "tx" && x.id === it.id)) continue;   // one line per mic-up
     it.c = ++cursor;
     if (it.k === "msg" || it.k === "tx") lines.set(R.id, (lines.get(R.id) || 0) + 1);
+    if (it.k === "msg") RA.line(R.id, it.u, now);
+    else if (it.k === "tx" || it.k === "mic") RA.spoke(R.id, it.u, now);
     R.feed.push(it);
     if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
     newItems.push([R.id, it]);
@@ -321,6 +356,12 @@ async function ingest(body) {
       await reg.noteActivity(R.id, R.count, lines.get(R.id) || 0, now);
     }
   } catch (e) { console.error("[bridge] rooms:", e.message); }
+  // 1.99cj: the homepage's automatic room pick is evaluated on Pepe's syncs too (not only when someone
+  // loads the homepage), so its "N checks in a row" rule runs on a steady clock. Never blocks the sync.
+  if (now - lastFrontTick >= 60 * 1000) {
+    lastFrontTick = now;
+    summary(false).then((s) => require("./rooms").frontRoom(s)).catch((e) => console.error("[bridge] front room:", e.message));
+  }
   return { rooms: touched.size, items: newItems.length };
 }
 
@@ -362,6 +403,7 @@ async function summary(full) {
   await load();
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
     id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
+    people: RA.people(R.count, R.members),
     mic: full ? R.mic.map((u) => (u.anon ? "someone" : u.display)) : [],
     topic: full ? R.topic : "",
   }));
@@ -461,19 +503,21 @@ function register(app, { isBotToken, addUser }) {
   // room's live user slots (mainstage.js). Old clients that send no room get the front room.
   app.get("/api/stage", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    let slots = [], front = null;
+    let slots = [], front = null, roomId = null;
     try {
       const reg = require("./rooms");
       const web = require("./roomsweb");
       let R = req.query.room ? await web.resolveRoom(String(req.query.room)) : null;
       if (!R) {
-        const f = await reg.frontRoom(await summary(false), stageRoomRef());
+        const f = await reg.frontRoom(await summary(false));
         R = await reg.get(f.id);
         if (R) front = { id: R.id, slug: web.linkSlug(R), title: R.title, pinned: f.pinned };
       }
-      if (R) slots = await require("./mainstage").publicSlots(R.id);
+      if (R) { roomId = R.id; slots = await require("./mainstage").publicSlots(R.id); }
     } catch (e) { slots = []; }
-    res.json({ ...stage(), slots, front });
+    // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
+    const here = roomId ? pepeIn(roomId) : null;
+    res.json({ ...stage(), slots, front, pepe_here: here !== false });
   });
 
   // 1.99bi: the channel guide - every room, what's on its stage now and what's booked next
@@ -513,7 +557,7 @@ function register(app, { isBotToken, addUser }) {
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house) },
       initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId) : null,
-      pepeHere: !!(STAGE.room === R.id && Date.now() - STAGE.at < STAGE_ROOM_FRESH), stage: stage(),
+      pepeHere: pepeIn(R.id), stage: stage(),
       roomStage: await require("./mainstage").roomStage(R.id, req.user),
       manage: await reg.canManage(req.user, R.id),
       schedule: await require("./mainstage").roomSchedule(R.id, req.user, await reg.canManage(req.user, R.id)).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
@@ -524,4 +568,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, liveFor, bySlug, _rooms: rooms };
+module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, liveFor, bySlug, _rooms: rooms };

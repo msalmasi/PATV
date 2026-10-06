@@ -9,7 +9,8 @@
   const S0 = S || {};
   const st = stage || { active: false };
   const paid = Array.isArray(slots) ? slots : [];
-  const live = !!st.active || paid.length > 0;
+  const pepeHere_ = typeof pepeHere === 'undefined' ? true : pepeHere !== false;   // 1.99cj: Pepe is in the featured room
+  const live = (!!st.active && pepeHere_) || paid.length > 0;
   const liveRooms = (rooms || []).filter((r) => r.live);
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
@@ -38,7 +39,7 @@
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
 <script src="/public/js/stage-player.js?v=3"></script>
-<script src="/public/js/stage-room.js?v=1"></script>
+<script src="/public/js/stage-room.js?v=2"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
 <%- include('partials/cosmetics-css') %>
@@ -305,12 +306,13 @@
       <span class="tag">Admin</span>
       <label for="stRoomSel">Front page room</label>
       <select id="stRoomSel">
-        <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (Pepe's room, else the busiest live room)</option>
+        <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (most active room, switches at most every <%= stageAdmin.status && stageAdmin.status.cfg ? stageAdmin.status.cfg.hold_min : 30 %> min)</option>
         <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.front === r.id ? ' selected' : '' %>><%= r.title %><%= r.title !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
       </select>
       <button type="submit" class="btn">Feature on the homepage</button>
       <span id="stAdminMsg" aria-live="polite">Doesn't move Pepe (<code>!activeroom</code> is his).</span>
       <a href="/rooms/admin" style="margin-left:auto">Rooms admin ›</a>
+      <%- include('partials/front-pick', { fp: stageAdmin.status, open: false }) %>
     </form>
     <% } %>
     <div class="stabs" id="stTabs" role="tablist" aria-label="Stage streams"></div>
@@ -539,7 +541,7 @@
       tabs: document.getElementById('stTabs'), wrap: document.getElementById('videoWrapper'),
       reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute'),
       embedHost: document.getElementById('stEmbed'), twitchHost: document.getElementById('twitch'),
-      api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, manage: <%= staff ? 'true' : 'false' %>,
+      api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, manage: <%= staff ? 'true' : 'false' %>,
       onAir: function (on, sub) { setPill(on, sub || (on ? 'live now' : 'nothing streaming right now')); }
     });
 

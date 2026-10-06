@@ -6,7 +6,8 @@
 //                    slot_count (user stage slots, default 1), approval (scheduled bookings need the
 //                    owner's OK), slot_price (PAT / live minute for a NON-featured slot, default 0 =
 //                    free), created, updated
-//   rooms_kv         small settings: front_room ("auto" | room id), seeded:<room id>
+//   rooms_kv         small settings: front_room ("auto" | room id), seeded:<room id>,
+//                    front_auto (the automatic pick + when it was made, JSON), front_cfg (its tunables, JSON)
 //   room_events      owner/admin actions per room (audit trail shown on the manage page)
 //   room_activity    room_id, day (UTC yyyy-mm-dd), minutes bridged live, peak people, chat lines -
 //                    what the room-owner royalty thresholds read (royalties.js)
@@ -64,6 +65,7 @@ function init() {
         lines INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (room_id, day))`);
       await seed();
       await loadCache();
+      await loadAuto();
     })().catch((e) => { console.error("[rooms] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -312,16 +314,93 @@ async function setFront(value, actor) {
   await loadCache();
   return v;
 }
-/** The room the homepage features: the admin's pick, else (auto) the room Pepe's window shows when
- *  that's bridged, else the busiest live bridged room, else the house room. `summary` = bridge rows. */
-async function frontRoom(summary, pepeStageRoom) {
+// 1.99cj: "auto" = a FAIR activity ranking with hysteresis (frontroom.js has the formula and the
+// rules). No room is preferred - not the house room, not the room Pepe's Camfrog window shows
+// (`!activeroom` is his mic/window business and plays no part here). The current pick and when it
+// was made live in rooms_kv "front_auto" (so a restart doesn't flip it); the tunables in "front_cfg".
+const FR = require("./frontroom");
+let clockFn = () => Date.now();
+const nowMs = () => clockFn();
+let AUTO = null;          // {id, at, score, parts, reason, lead, evalAt, ranked} - loaded from rooms_kv
+let CFG = null;
+let evaluating = null;
+const parseJson = (s) => { try { return s ? JSON.parse(s) : null; } catch (e) { return null; } };
+async function loadAuto() {
+  AUTO = parseJson(await kvGet("front_auto"));
+  CFG = FR.cleanCfg(parseJson(await kvGet("front_cfg")) || {});
+}
+async function frontCfg() { await init(); if (!CFG) await loadAuto(); return CFG; }
+async function setFrontCfg(patch, actor) {
   await init();
+  if (!CFG) await loadAuto();
+  CFG = FR.cleanCfg(patch, CFG);
+  await kvSet("front_cfg", JSON.stringify(CFG));
+  await event(null, "front-cfg", actor, JSON.stringify(CFG));
+  return CFG;
+}
+
+/** Activity per row: the row's own `act` (tests / callers that already have it), else the bridge's
+ *  rolling tally (roomactivity.js) for the configured window + the row's human headcount. */
+function withAct(rows, cfg, now) {
+  let RA = null;
+  try { RA = require("./roomactivity"); } catch (e) { RA = null; }
+  return (rows || []).map((r) => {
+    if (r.act) return r;
+    const a = RA ? RA.stats(r.id, { windowMin: cfg.window_min, now }) : { chatters: 0, lines: 0, micMin: 0, lastAt: null };
+    return { ...r, act: { ...a, people: r.people != null ? r.people : Math.max(0, (Number(r.count) || 0) - 1) } };
+  });
+}
+
+/** Run one evaluation of the automatic pick (at most once per eval_sec unless forced). */
+async function evaluateAuto(summary, { force = false, actor = "auto", now = nowMs() } = {}) {
+  await init();
+  if (!CFG) await loadAuto();
+  if (!force && AUTO && AUTO.id && AUTO.evalAt && now - AUTO.evalAt < CFG.eval_sec * 1000) return AUTO;
+  if (evaluating) return evaluating;
+  evaluating = (async () => {
+    const ranked = FR.rank(withAct(summary, CFG, now), CFG, now);
+    const { state, switched } = FR.decide(AUTO, ranked, CFG, now, { force });
+    state.ranked = ranked.slice(0, 8).map((r) => ({ id: r.id, score: r.score, parts: r.parts, dead: r.dead, lastAt: r.lastAt }));
+    if (state.id) {
+      AUTO = state;
+      await kvSet("front_auto", JSON.stringify(AUTO));
+    }
+    if (switched) {
+      const sc = (id) => { const r = ranked.find((x) => x.id === id); return r ? r.score : "-"; };
+      const detail = `${switched.from || "(none)"} -> ${switched.to}: ${switched.reason} [score ${sc(switched.to)} vs ${sc(switched.from)}]`;
+      console.log("[rooms] front room (auto) " + detail);
+      await event(switched.to, "front-auto", actor, detail);
+    }
+    return AUTO;
+  })().finally(() => { evaluating = null; });
+  return evaluating;
+}
+
+/** The room the homepage features: an admin's pinned pick, else the automatic pick (above), else -
+ *  only when nothing has ever been live - the house room. `summary` = bridge.summary() rows.
+ *  (The old second argument - Pepe's window room - is ignored on purpose.) */
+async function frontRoom(summary, opts = {}) {
+  await init();
+  const o = opts && typeof opts === "object" && !("id" in opts) ? opts : {};
   const pin = CACHE.front;
+  let auto = null;
+  try { auto = await evaluateAuto(summary, { now: o.now != null ? o.now : nowMs() }); } catch (e) { console.error("[rooms] front auto:", e.message); auto = AUTO; }
   if (pin && pin !== "auto" && CACHE.byId.has(pin)) return { id: pin, pinned: true };
-  const live = (summary || []).filter((r) => r.live);
-  if (pepeStageRoom && pepeStageRoom.id && live.some((r) => r.id === pepeStageRoom.id)) return { id: pepeStageRoom.id, pinned: false };
-  if (live.length) return { id: live.slice().sort((a, b) => b.count - a.count)[0].id, pinned: false };
+  if (auto && auto.id) return { id: auto.id, pinned: false };
   return { id: HOUSE_ROOM, pinned: false };
+}
+/** Admin: pick the top room now (hold ignored), logged with who asked. */
+async function frontReevaluate(summary, actor) {
+  return evaluateAuto(summary, { force: true, actor: actor || "admin", now: nowMs() });
+}
+/** Admin display: the setting, the automatic pick with its score breakdown, the ranking, the tunables. */
+async function frontStatus() {
+  await init();
+  if (!CFG) await loadAuto();
+  const title = (id) => { const r = CACHE.byId.get(id); return (r && r.title) || id; };
+  const A = AUTO ? { ...AUTO, title: title(AUTO.id), ranked: (AUTO.ranked || []).map((r) => ({ ...r, title: title(r.id) })),
+                     lead: AUTO.lead ? { ...AUTO.lead, title: title(AUTO.lead.id) } : null } : null;
+  return { setting: CACHE.front || "auto", auto: A, cfg: CFG, holdUntil: A && A.at ? A.at + CFG.hold_min * 60 * 1000 : null };
 }
 const frontSetting = () => CACHE.front || "auto";
 
@@ -382,6 +461,7 @@ function hasRoute(app, path) {
 
 module.exports = {
   init, get, bySlug, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
-  setOwner, addRoom, setFront, frontRoom, frontSetting, noteActivity, activity, ownersForPepe, notify, findUser, event,
+  setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
+  _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
 };

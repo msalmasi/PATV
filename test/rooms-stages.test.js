@@ -145,14 +145,14 @@ test("owner settings: slot count / price / approval clamped; page fields cleaned
   await rooms.setPage(PLANT, { title: "Houseplants", banner: "" }, "pb");
 });
 
-test("front room: admin pick, else Pepe's bridged room, else the busiest live room, else the house room", async () => {
+test("front room: admin pick, else the automatic (fair) pick, else - nothing ever live - the house room", async () => {
   await rooms.setFront("auto", "boss");
+  assert.deepEqual(await rooms.frontRoom([]), { id: HOUSE, pinned: false });
   const summary = [{ id: "A", live: true, count: 3 }, { id: "B", live: true, count: 9 }, { id: "C", live: false, count: 50 }];
-  assert.deepEqual(await rooms.frontRoom(summary, { id: "A" }), { id: "A", pinned: false });
-  assert.deepEqual(await rooms.frontRoom(summary, { id: "C" }), { id: "B", pinned: false }, "Pepe's room isn't live -> busiest live");
-  assert.deepEqual(await rooms.frontRoom([], null), { id: HOUSE, pinned: false });
+  // 1.99cj: Pepe's window room (the old second argument) is ignored; no activity yet -> headcount decides
+  assert.deepEqual(await rooms.frontRoom(summary, { id: "A" }), { id: "B", pinned: false });
   await rooms.setFront(PLANT, "boss");
-  assert.deepEqual(await rooms.frontRoom(summary, { id: "A" }), { id: PLANT, pinned: true });
+  assert.deepEqual(await rooms.frontRoom(summary), { id: PLANT, pinned: true });
   await assert.rejects(rooms.setFront("no-such-room", "boss"), /Unknown room/);
   await rooms.setFront("auto", "boss");
 });

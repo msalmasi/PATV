@@ -153,7 +153,7 @@
       <span class="chip" id="rmCount">👥 <%= room.count %> in the room</span>
       <span class="chip">📡 Camfrog</span>
       <% if (room.house) { %><span class="chip own">🐸 Pepe's room</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Owner: <%= room.owner %></a><% } %>
-      <% if (pepeHere_) { %><span class="chip" title="Pepe's own stream is showing this room right now">🎥 Pepe's window is here</span><% } %>
+      <% if (pepeHere_ === true) { %><span class="chip" title="Pepe is in this room, so his stream is part of its stage">🐸 Pepe is here</span><% } %>
       <% if (manage_) { %><a class="chip own" href="/rooms/<%= encodeURIComponent(room.slug) %>/manage">⚙️ Manage room</a><% } %>
       <% if (typeof feed !== 'undefined' && feed) { %><a class="chip" href="#feed">📝 Room feed<%= feed.posts.length ? ' · ' + (feed.more ? feed.posts.length + '+' : feed.posts.length) : '' %></a><% } %>
       <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Analytics</a><% } %>
@@ -161,12 +161,12 @@
   </section>
   <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
 
-<% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const live = !!st.active || RS.slots.length > 0;
+<% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0;
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
   <script src="/public/js/stage-player.js?v=3"></script>
-  <script src="/public/js/stage-room.js?v=1"></script>
+  <script src="/public/js/stage-room.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
     <h2 id="rmStageH"><span>📺 <%= room.name %> stage</span>
       <span class="live<%= live ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
@@ -202,7 +202,7 @@
       tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'),
       reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
       api: '/api/stage?room=' + encodeURIComponent(<%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>),
-      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, manage: <%= manage_ ? 'true' : 'false' %>,
+      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, manage: <%= manage_ ? 'true' : 'false' %>,
       onAir: function (on) {
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
         document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');

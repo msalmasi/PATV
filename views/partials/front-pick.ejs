@@ -1,0 +1,85 @@
+<%#
+  views/partials/front-pick.ejs (1.99cj) — the homepage's automatic room pick for site staff: which
+  room it is, its score broken down, when it was chosen / how long it's held, the ranking of every live
+  room, and a "Re-evaluate now" button (POST /api/rooms/front/reevaluate). Used on the homepage's admin
+  bar (compact) and on /rooms/admin (open).
+  Pass { fp: rooms.frontStatus(), open: bool }.
+%>
+<% const F = (typeof fp !== 'undefined' && fp) || null; const A = F && F.auto; const C = (F && F.cfg) || { w: {} };
+   const iso = (ms) => new Date(ms).toISOString();
+   const hm = (ms) => iso(ms).slice(11, 16) + ' UTC';
+   const n1 = (v) => (Math.round((Number(v) || 0) * 10) / 10).toLocaleString('en-US'); %>
+<style>
+  .fpk { display: grid; gap: 6px; font-size: 13px; color: #b7c2b7; min-width: 0; width: 100%; }
+  .fpk > * { min-width: 0; max-width: 100%; }
+  .fpk { grid-template-columns: minmax(0, 1fr); }
+  .fpk .fp-line { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; min-width: 0; }
+  .fpk .fp-line b { color: #e8f5e9; }
+  .fpk .fp-score { color: #c6e94f; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .fpk .fp-why { color: #8f9a8f; overflow-wrap: anywhere; }
+  .fpk .fp-re { padding: 4px 10px; border-radius: 8px; border: 1px solid #355e3b; background: #13241a; color: #b9f6ca; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
+  .fpk .fp-re[disabled] { opacity: .6; cursor: default; }
+  .fpk details > summary { cursor: pointer; color: #9fd3a5; }
+  .fpk .fp-tbl { overflow-x: auto; max-width: 100%; }
+  .fpk table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .fpk th, .fpk td { padding: 4px 8px; border-bottom: 1px solid #222; text-align: right; white-space: nowrap; }
+  .fpk th:first-child, .fpk td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 7em; }
+  .fpk th { color: #8f9a8f; font-weight: normal; }
+  .fpk tr.cur td { color: #fff; background: #13200f; }
+  .fpk .tag { font-size: 10.5px; border: 1px solid #3a3a3a; border-radius: 999px; padding: 0 6px; margin-left: 4px; color: #aaa; }
+  .fpk .tag.dead { border-color: #5a2222; color: #ffb4b4; }
+  .fpk .tag.lead { border-color: #6b5a20; color: #f3e3a3; }
+  .fpk .fp-f { color: #8f9a8f; font-size: 12px; overflow-wrap: anywhere; }
+</style>
+<div class="fpk" data-fp>
+  <div class="fp-line">
+    <span>🤖 Auto pick:</span>
+    <% if (A && A.id) { %>
+      <b><%= A.title %></b>
+      <span class="fp-score" title="activity score">score <%= n1(A.score) %></span>
+      <span>chosen <time data-ts="<%= A.at %>" datetime="<%= iso(A.at) %>"><%= hm(A.at) %></time></span>
+      <% if (F.holdUntil && F.holdUntil > Date.now()) { %><span>held until <time data-ts="<%= F.holdUntil %>" datetime="<%= iso(F.holdUntil) %>"><%= hm(F.holdUntil) %></time></span><% } %>
+      <% if (A.reason) { %><span class="fp-why">(<%= A.reason %>)</span><% } %>
+    <% } else { %>
+      <span class="fp-why">nothing chosen yet - no live bridged room has been seen</span>
+    <% } %>
+    <% if (F && F.setting !== 'auto') { %><span class="fp-why">· pinned room overrides it</span><% } %>
+    <button type="button" class="fp-re" data-fp-re>↻ Re-evaluate now</button>
+    <span class="fp-why" data-fp-msg role="status" aria-live="polite"></span>
+  </div>
+  <details<%= (typeof open !== 'undefined' && open) ? ' open' : '' %>>
+    <summary>Score breakdown</summary>
+    <% const R = (A && A.ranked) || []; %>
+    <div class="fp-tbl"><table>
+      <thead><tr><th>Live room</th><th title="unique chatters">Chatters ×<%= C.w.chatters %></th><th>Lines ×<%= C.w.lines %></th><th>Mic min ×<%= C.w.mic %></th><th>People ×<%= C.w.people %></th><th>Score</th></tr></thead>
+      <tbody>
+        <% if (!R.length) { %><tr><td colspan="6" class="fp-why">No live bridged rooms at the last check.</td></tr><% } %>
+        <% R.forEach((r) => { const P = r.parts || {}; const c = (k) => P[k] ? n1(P[k].n) : '0'; %>
+          <tr class="<%= A && r.id === A.id ? 'cur' : '' %>"><td><%= r.title %><%= A && r.id === A.id ? ' ★' : '' %><% if (r.dead) { %><span class="tag dead">quiet <%= C.dead_min %>m+</span><% } %><% if (A && A.lead && A.lead.id === r.id) { %><span class="tag lead">leads <%= A.lead.n %>/<%= C.lead_evals %></span><% } %></td>
+            <td><%= c('chatters') %></td><td><%= c('lines') %></td><td><%= c('mic') %></td><td><%= c('people') %></td><td class="fp-score"><%= n1(r.score) %></td></tr>
+        <% }) %>
+      </tbody>
+    </table></div>
+    <div class="fp-f">score = <%= C.w.chatters %>·chatters + <%= C.w.lines %>·lines + <%= C.w.mic %>·mic minutes (last <%= C.window_min %> min) + <%= C.w.people %>·people now. Bots and Pepe never count; no room gets a bonus.
+      Kept ≥ <%= C.hold_min %> min, then switches when another room scores ≥ <%= C.lead_ratio %>× for <%= C.lead_evals %> checks in a row (one check / <%= C.eval_sec %> s) - or at once when the featured room goes quiet for <%= C.dead_min %> min or stops being live.<% if (A && A.evalAt) { %> Last check <time data-ts="<%= A.evalAt %>" datetime="<%= iso(A.evalAt) %>"><%= hm(A.evalAt) %></time>.<% } %></div>
+  </details>
+</div>
+<script>
+(function () {
+  'use strict';
+  var box = document.currentScript && document.currentScript.previousElementSibling;
+  if (!box || !box.hasAttribute('data-fp')) return;
+  box.querySelectorAll('time[data-ts]').forEach(function (t) {
+    var d = new Date(Number(t.getAttribute('data-ts')));
+    if (!isNaN(d)) t.textContent = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  });
+  var btn = box.querySelector('[data-fp-re]'), msg = box.querySelector('[data-fp-msg]');
+  btn.addEventListener('click', function () {
+    btn.disabled = true; msg.textContent = 'Checking…';
+    fetch('/api/rooms/front/reevaluate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { if (!d.ok) { msg.textContent = d.error || 'Not done.'; btn.disabled = false; return; } location.reload(); })
+      .catch(function () { msg.textContent = 'Couldn\'t reach the site.'; btn.disabled = false; });
+  });
+})();
+</script>

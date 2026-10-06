@@ -12,13 +12,29 @@
   <section class="sb-card" aria-labelledby="frontT">
     <h2 id="frontT">Homepage room</h2>
     <form id="frontForm" class="row">
-      <select name="room" aria-label="Homepage room">
-        <option value="auto"<%= front === 'auto' ? ' selected' : '' %>>Automatic — Pepe's room when bridged, else the busiest live room</option>
+      <select name="room" aria-label="Homepage room" style="max-width:100%;min-width:0">
+        <option value="auto"<%= front === 'auto' ? ' selected' : '' %>>Automatic (most active room, switches at most every <%= fp && fp.cfg ? fp.cfg.hold_min : 30 %> min)</option>
         <% list.forEach((r) => { %><option value="<%= r.id %>"<%= front === r.id ? ' selected' : '' %>><%= r.title %> (<%= r.id %>)</option><% }) %>
       </select>
       <button type="submit" class="btn primary">Save</button><span class="msg" id="frontMsg" role="status"></span>
     </form>
-    <p class="muted">The homepage shows this room's stage (its featured stream, else Pepe's) and its live chat. It does <b>not</b> move Pepe — <code>!activeroom</code> stays his window/mic setting in chat.</p>
+    <p class="muted">The homepage shows this room's stage (its featured stream, else Pepe's - Pepe's stream is on the stage of every room he's in) and its live chat. Picking a room pins it. It does <b>not</b> move Pepe — <code>!activeroom</code> stays his window/mic setting in chat, and the automatic pick ignores it.</p>
+    <%- include('partials/front-pick', { fp, open: true }) %>
+    <% const FC = (fp && fp.cfg) || { w: {} }; %>
+    <h3 id="fcT">Automatic pick tuning</h3>
+    <form id="fcForm" class="settings" aria-labelledby="fcT">
+      <label>Hold a pick at least (min)<input type="number" name="hold_min" min="0" max="1440" step="1" value="<%= FC.hold_min %>"></label>
+      <label>Switch when another scores ≥ (×)<input type="number" name="lead_ratio" min="1" max="10" step="0.05" value="<%= FC.lead_ratio %>"></label>
+      <label>…for this many checks in a row<input type="number" name="lead_evals" min="1" max="30" step="1" value="<%= FC.lead_evals %>"></label>
+      <label>Quiet = no chat / mic for (min)<input type="number" name="dead_min" min="1" max="240" step="1" value="<%= FC.dead_min %>"></label>
+      <label>Activity window (min)<input type="number" name="window_min" min="5" max="90" step="1" value="<%= FC.window_min %>"></label>
+      <label>Check every (s)<input type="number" name="eval_sec" min="15" max="900" step="5" value="<%= FC.eval_sec %>"></label>
+      <label>Weight: unique chatter<input type="number" name="w_chatters" min="0" max="100" step="0.05" value="<%= FC.w.chatters %>"></label>
+      <label>Weight: chat line<input type="number" name="w_lines" min="0" max="100" step="0.05" value="<%= FC.w.lines %>"></label>
+      <label>Weight: mic minute<input type="number" name="w_mic" min="0" max="100" step="0.05" value="<%= FC.w.mic %>"></label>
+      <label>Weight: person in the room<input type="number" name="w_people" min="0" max="100" step="0.05" value="<%= FC.w.people %>"></label>
+      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save tuning</button><span class="msg" id="fcMsg" role="status"></span></div>
+    </form>
   </section>
 
   <section class="sb-card" aria-labelledby="ownT">
@@ -88,6 +104,10 @@
   document.getElementById('frontForm').addEventListener('submit', function (e) {
     e.preventDefault();
     post('/api/rooms/front', formJson(e.target)).then(function (j) { document.getElementById('frontMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+  });
+  document.getElementById('fcForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/rooms/front/config', formJson(e.target)).then(function (j) { document.getElementById('fcMsg').textContent = j.ok ? 'Saved - applies from the next check.' : (j.error || 'Not saved.'); });
   });
   document.querySelectorAll('.ownForm').forEach(function (f) {
     f.addEventListener('submit', function (e) {
