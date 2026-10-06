@@ -9,7 +9,7 @@
 //   kind   cmd | poll.vote | poll.create | poll.end
 //          (kind "table" — Hold'em/Blackjack seat actions — is queued by tables.js from /api/tables/act
 //          and claimed on its own fast lane, /api/tables/claim; the claim below never hands it out)
-//   cmd    for kind=cmd: market | pool | wager | bounty | stash | loan | lotto
+//   cmd    for kind=cmd: market | pool | wager | bounty | stash | loan | lotto | donate
 //   a0..a19  the words, in order (empty ones are skipped). For kind=cmd they're joined into the
 //          command's arguments, e.g. cmd=wager a0=@bob a1=10k a2="Lakers win" a3=judge a4=@carol
 //   back   the page to return to (a local path)
@@ -22,7 +22,7 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   status TEXT NOT NULL DEFAULT 'pending', message TEXT, created INTEGER, claimed INTEGER, updated INTEGER)`).catch(() => {});
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
-const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar"]);
+const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "donate"]);
 
 const clean = (s, n = 300) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 const safeBack = (b) => (/^\/[A-Za-z0-9/_?=&.%-]*$/.test(String(b || "")) && !String(b).startsWith("//") ? String(b) : "/");

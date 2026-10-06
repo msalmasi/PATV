@@ -33,7 +33,7 @@ let base, server;
 test.before(async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS users (userId TEXT PRIMARY KEY, username TEXT UNIQUE, displayname TEXT, password TEXT,
                   class TEXT DEFAULT 'pleb', points_balance INTEGER DEFAULT 0, xp INTEGER DEFAULT 0, level INTEGER DEFAULT 0,
-                  camfrogUsername TEXT)`);
+                  camfrogUsername TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`);
   for (const [id, name, cf, lv] of [["u1", "alice", "AliceCF", 12], ["u2", "bob", "bobcf", 30], ["u3", "carol", null, 50],
     ["u4", "dave", "davecf", 5], ["u5", "erin", "erincf", 80], ["u6", "frank", "frankcf", 200], ["u7", "newbie", "newbiecf", 3]]) {
     await runQuery("INSERT INTO users (userId, username, displayname, password, camfrogUsername, level, points_balance) VALUES (?, ?, ?, 'x', ?, ?, 5000)",

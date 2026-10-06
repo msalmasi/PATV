@@ -166,6 +166,14 @@ app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogP
 // the nav's inbox bell: unread count for signed-in page views (inbox.js, one indexed COUNT)
 const inbox = require("./inbox");
 app.use(inbox.navCount);
+// welcome bonus (welcome.js, 1.99bg): a device id for every browser + signed-in activity days
+const welcome = require("./welcome");
+app.use(welcome.middleware((req) => {
+  const token = req.cookies && req.cookies.jwt;
+  if (!token || !process.env.SECRET_KEY) return null;
+  try { return (require("jsonwebtoken").verify(token, process.env.SECRET_KEY) || {}).userId || null; } catch (e) { return null; }
+}));
+welcome.start();
 
 let clients = []; // Keep track of connected clients for SSE
 
@@ -206,6 +214,39 @@ app.get("/admin/panel", addUser, (req, res) => {
     );
     return res.redirect("/login");
   }
+});
+
+// Welcome bonus admin (welcome.js, 1.99bg): settings, the last decisions, "pay anyway". Admins only.
+async function welcomeAdmin(req) {
+  if (!req.user || !req.user.userId) return null;
+  const u = (await getQuery("SELECT username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
+  return u && u.class === "Admin" ? u : null;
+}
+app.get("/api/admin/welcome", addUser, async (req, res) => {
+  try {
+    if (!(await welcomeAdmin(req))) return res.status(403).json({ error: "admins only" });
+    res.json(await welcome.adminView());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/admin/welcome/config", addUser, async (req, res) => {
+  try {
+    if (!guard.sameSite(req)) return res.status(403).json({ error: "cross-site request refused" });
+    const a = await welcomeAdmin(req);
+    if (!a) return res.status(403).json({ error: "admins only" });
+    const c = await welcome.setConfig(req.body || {});
+    console.log(`[welcome] config set by ${a.username}: ${JSON.stringify(c)}`);
+    res.json({ ok: true, config: c });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post("/api/admin/welcome/pay", addUser, async (req, res) => {
+  try {
+    if (!guard.sameSite(req)) return res.status(403).json({ error: "cross-site request refused" });
+    const a = await welcomeAdmin(req);
+    if (!a) return res.status(403).json({ error: "admins only" });
+    const r = await welcome.payout(String((req.body || {}).userId || ""), true);
+    console.log(`[welcome] ${a.username} paid ${(req.body || {}).userId} anyway: ${JSON.stringify(r)}`);
+    res.json(r);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Just for fun
@@ -404,7 +445,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
         if (bonus[0].twitchBonus === 0) {
           const badgeId = 'twitch-user'; // Replace with your actual badge ID
           await awardBadge(currentUser.userId, badgeId);
-          await awardBonus(currentUser.userId, "twitch connect", 50000)
+          await welcome.connectBonus(currentUser.userId, "twitch", twitchUser.id, awardBonus)
         }
         await runQuery(
           "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -435,7 +476,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           if (bonus[0].twitchBonus === 0) {
             const badgeId = 'twitch-user'; // Replace with your actual badge ID
             await awardBadge(existingTwitchEmail[0].userId, badgeId);
-            await awardBonus(existingTwitchEmail[0].userId, "twitch connect", 50000)
+            await welcome.connectBonus(existingTwitchEmail[0].userId, "twitch", twitchUser.id, awardBonus)
           }
           await runQuery(
             "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -456,7 +497,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
             twitchId: twitchUser.id,
             twitchDisplayname: twitchUser.display_name,
             avatar: twitchUser.profile_image_url,
-            points_balance: 5000,
+            points_balance: 0,          // 1.99bg: the welcome bonus vests instead (welcome.js)
           };
           await runQuery(
             "INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -479,8 +520,9 @@ app.get("/auth/twitch/callback", async (req, res) => {
             await awardBadge(newUser.userId, newUserBadgeId);
             const badgeId = 'twitch-user'; // Replace with your actual badge ID
             await awardBadge(newUser.userId, badgeId);
-            await awardBonus(newUser.userId, "twitch connect", 50000)
           }
+          // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
+          await welcome.enroll(newUser.userId, "twitch", req, res);
           await runQuery(
             "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [1, newUser.userId]
@@ -588,7 +630,7 @@ async function mergeConflict(req, res, provider) {
     const bonus = await getQuery(`SELECT ${L.bonusCol} AS b FROM users WHERE userId = ?`, [toId]);
     if (bonus[0] && bonus[0].b === 0) {
       try { await awardBadge(toId, L.badge); } catch (e) { /* already has it */ }
-      await awardBonus(toId, L.bonusType, 50000);
+      await welcome.connectBonus(toId, provider, L.id(c), awardBonus);
     }
     await runQuery(`UPDATE users SET ${L.bonusCol} = 1, ${L.bonusCol}_at = CURRENT_TIMESTAMP WHERE userId = ?`, [toId]);
     req.flash("success", `Accounts merged - ${L.label} is linked here now and ${(Number(from.points_balance) || 0).toLocaleString("en-US")} PAT came with it.`);
@@ -695,7 +737,7 @@ app.get("/auth/discord/callback", async (req, res) => {
         if (bonus[0].discordBonus === 0) {
           const badgeId = 'discord-user'; // Replace with your actual badge ID
           await awardBadge(currentUser.userId, badgeId);
-          await awardBonus(currentUser.userId, "discord connect", 50000)
+          await welcome.connectBonus(currentUser.userId, "discord", discordUser.id, awardBonus)
         }
         await runQuery(
           "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -722,7 +764,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           if (bonus[0].discordBonus === 0) {
             const badgeId = 'discord-user'; // Replace with your actual badge ID
             await awardBadge(existingDiscordEmail[0].userId, badgeId);
-            await awardBonus(existingDiscordEmail[0].userId, "discord connect", 50000)
+            await welcome.connectBonus(existingDiscordEmail[0].userId, "discord", discordUser.id, awardBonus)
           }
           await runQuery(
             "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -744,7 +786,7 @@ app.get("/auth/discord/callback", async (req, res) => {
             avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`,
             discordId: discordUser.id,
             discordUsername: discordUser.username,
-            points_balance: 5000,
+            points_balance: 0,          // 1.99bg: the welcome bonus vests instead (welcome.js)
           };
           
           await runQuery(
@@ -768,8 +810,9 @@ app.get("/auth/discord/callback", async (req, res) => {
             await awardBadge(newUser.userId, newUserBadgeId);
             const badgeId = 'discord-user'; // Replace with your actual badge ID
             await awardBadge(newUser.userId, badgeId);
-            await awardBonus(newUser.userId, "discord connect", 50000)
           }
+          // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
+          await welcome.enroll(newUser.userId, "discord", req, res);
           await runQuery(
             "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [1, newUser.userId]
@@ -1371,7 +1414,7 @@ app.get('/api/users/username/:username', async (req, res) => {
 // This endpoint creates a new Twitch user based on the info sent from the bot.
 app.post('/api/users/twitch/register', async (req, res) => {
     // Bot-only (it used to take ANY caller, with the starting balance from the request body).
-    // New accounts start at 0 - the connect bonus below is their welcome PAT.
+    // New accounts start at 0; their welcome bonus vests (welcome.js, 1.99bg).
     if (!isPlatformBot((req.body || {}).botToken)) {
       return res.status(403).json({ error: "unauthorized" });
     }
@@ -1394,8 +1437,8 @@ app.post('/api/users/twitch/register', async (req, res) => {
         await awardBadge(userId, newUserBadgeId);
         const badgeId = 'twitch-user'; // Replace with your actual badge ID
         await awardBadge(userId, badgeId);
-        await awardBonus(userId, "twitch connect", 50000)
       }
+      await welcome.enroll(userId, "twitch-bot");    // 1.99bg: the welcome bonus vests (no instant connect bonus)
       await runQuery(
         "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
         [1, userId]
@@ -1409,7 +1452,7 @@ app.post('/api/users/twitch/register', async (req, res) => {
   // This endpoint creates a new Discord user based on the info sent from the bot.
 app.post('/api/users/discord/register', async (req, res) => {
     // Bot-only (it used to take ANY caller, with the starting balance from the request body).
-    // New accounts start at 0 - the connect bonus below is their welcome PAT.
+    // New accounts start at 0; their welcome bonus vests (welcome.js, 1.99bg).
     if (!isPlatformBot((req.body || {}).botToken)) {
       return res.status(403).json({ error: "unauthorized" });
     }
@@ -1432,8 +1475,8 @@ app.post('/api/users/discord/register', async (req, res) => {
         await awardBadge(userId, newUserBadgeId);
         const badgeId = 'discord-user'; // Replace with your actual badge ID
         await awardBadge(userId, badgeId);
-        await awardBonus(userId, "discord connect", 50000)
       }
+      await welcome.enroll(userId, "discord-bot");   // 1.99bg: the welcome bonus vests (no instant connect bonus)
       await runQuery(
         "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
         [1, userId]
@@ -2077,7 +2120,7 @@ app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
   const { camfrogUsername } = req.params;
   try {
     const results = await getQuery(
-      "SELECT userId, username, displayname, camfrogUsername, discordId, discordUsername, points_balance, xp, level FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
+      "SELECT userId, username, displayname, camfrogUsername, discordId, discordUsername, points_balance, xp, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?)",
       [camfrogUsername]
     );
     if (results.length > 0) {
@@ -2170,7 +2213,7 @@ app.post('/api/users/camfrog/register', async (req, res) => {
   if (!isBotToken((req.body || {}).botToken)) {
     return res.status(403).json({ error: 'forbidden' });
   }
-  const { username, email, password, camfrogUsername, avatar, points_balance } = req.body;
+  const { username, email, password, camfrogUsername, avatar } = req.body;
   // Pepe's Camfrog display name for them (markup stripped), else their Camfrog login - never the
   // random CF account name.
   const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(camfrogUsername, true) || username;
@@ -2182,13 +2225,14 @@ app.post('/api/users/camfrog/register', async (req, res) => {
       [userId, username, displayname, email, password, camfrogUsername, avatar, 0]
     );
     await displaynames.markNewAccount(userId).catch(() => {});
-    // 1.63: the welcome PAT comes out of a vault ("new_account" payout row), never minted.
-    const welcome = Math.max(0, Math.floor(Number(points_balance) || 5000));
-    const funded = await funding.fundPayout(userId, welcome, "new_account", "Welcome PAT");
+    // 1.99bg: no welcome cash at sign-up (it was farmable with alts). The welcome bonus vests once
+    // the account has really been used, once per person - welcome.js. `identity` is Pepe's alias
+    // identity for this login (one person, several Camfrog logins). points_balance is ignored.
+    await welcome.enroll(userId, "camfrog", null, null, typeof req.body.identity === "string" ? req.body.identity.slice(0, 60) : null);
     const newUserBadgeId = 'fresh_meat';
     await awardBadge(userId, newUserBadgeId);
     await inbox.attachPendingSafe(userId, camfrogUsername);   // notices Pepe sent before the account existed
-    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: funded ? welcome : 0 } });
+    res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: 0 } });
   } catch (error) {
     console.error('Error creating Camfrog user:', error.message);
     res.status(500).json({ error: 'Failed to create new user' });

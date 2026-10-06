@@ -10,6 +10,8 @@ const { runQuery, getQuery } = require("./dbUtils");
 const markets = require("./markets");
 const actions = require("./actions");
 const staking = require("./staking");
+const credit = require("./credit");
+const welcome = require("./welcome");
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS wallet_snapshots (
   key TEXT PRIMARY KEY, data TEXT NOT NULL, updated INTEGER)`).catch(() => {});
@@ -43,17 +45,21 @@ function cleanLoans(body) {
     id: parseInt(r.id, 10) || 0, nick: str(r.nick, 60), amount: Math.floor(num(r.amount)), term: num(r.term),
     why: str(r.why, 300), status: REQ_STATUS.has(r.status) ? r.status : str(r.status, 20), created: num(r.created) || null,
     by: r.by ? str(r.by, 60) : null, loan: r.loan == null ? null : parseInt(r.loan, 10) || null, deny_why: r.deny_why ? str(r.deny_why, 300) : null,
+    // the requester's credit score when they asked (1.99bg)
+    credit: Number.isFinite(Number(r.credit)) && r.credit !== null && r.credit !== undefined ? Math.floor(num(r.credit)) : null,
+    credit_band: r.credit_band ? str(r.credit_band, 20) : null,
   })).filter((r) => r.id);
   const rv = body.reserve || {};
   const reserve = { rate_week: num(rv.rate_week), max_days: num(rv.max_days), enabled: !!rv.enabled, book: Math.floor(num(rv.book)), room: Math.floor(num(rv.room)),
     base: Math.floor(num(rv.base)), per_level: Math.floor(num(rv.per_level)), max_auto: Math.floor(num(rv.max_auto)),
-    max_open: Math.floor(num(rv.max_open)), min: Math.floor(num(rv.min)), limits: {} };
+    max_open: Math.floor(num(rv.max_open)), min: Math.floor(num(rv.min)), limits: {},
+    credit: rv.credit && typeof rv.credit === "object" ? credit.cleanWeights(rv.credit) : null };   // 1.99bg score weights
   // per-borrower limit factors (1.99aw); anyone not listed has no Reserve history
   const lim = rv.limits && typeof rv.limits === "object" && !Array.isArray(rv.limits) ? rv.limits : {};
   for (const k of Object.keys(lim).slice(0, 5000)) {
     const f = lim[k] || {};
     reserve.limits[low(k).slice(0, 60)] = { repaid: Math.floor(num(f.repaid)), lates: Math.floor(num(f.lates)), open: Math.floor(num(f.open)),
-      late: !!f.late, reason: f.reason ? str(f.reason, 200) : null };
+      late: !!f.late, reason: f.reason ? str(f.reason, 200) : null, credit: f.credit ? credit.cleanHistory(f.credit) : null };
   }
   return { loans, requests, reserve };
 }
@@ -125,11 +131,31 @@ function register(app, { isBotToken, addUser }) {
     }
   });
 
+  // A borrower's credit score for someone about to lend to them (the P2P form). Signed-in users with
+  // a linked Camfrog name only - the same thing !loan check shows in a room. Score, band, top factors.
+  app.get("/wallet/credit", addUser, async (req, res) => {
+    if (!req.user || !req.user.userId) return res.status(401).json({ error: "sign in" });
+    const name = String(req.query.u || "").trim().replace(/^@+/, "").slice(0, 60);
+    if (!/^[A-Za-z0-9_.\-]{1,60}$/.test(name)) return res.status(400).json({ error: "who?" });
+    try {
+      const me = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0];
+      if (!me || !me.camfrogUsername) return res.status(403).json({ error: "link your Camfrog name first" });
+      const row = (await getQuery("SELECT camfrogUsername, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?) LIMIT 1", [name]))[0];
+      if (!row) return res.status(404).json({ error: `${name} has no PATV account yet` });
+      const ln = (await load("loans")) || { reserve: null };
+      const cs = credit.forCamfrog(ln.reserve || { limits: {} }, row.camfrogUsername, row);
+      res.json({ name: row.camfrogUsername, score: cs.score, band: cs.band, top: cs.factors.filter((f) => f.points).slice(0, 3) });
+    } catch (e) {
+      console.error("[wallet] credit lookup:", e.message);
+      res.status(500).json({ error: "couldn't look that up" });
+    }
+  });
+
   app.get("/wallet", addUser, async (req, res) => {
     const msg = req.query.msg ? String(req.query.msg).slice(0, 200) : null;
     if (!req.user || !req.user.userId) return res.render("wallet", { user: null, signedIn: false, msg });
     try {
-      const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance, level FROM users WHERE userId = ?", [req.user.userId]))[0];
+      const u = (await getQuery("SELECT username, camfrogUsername, class, points_balance, level, created_at FROM users WHERE userId = ?", [req.user.userId]))[0];
       if (!u) return res.render("wallet", { user: req.user.username, signedIn: false, msg });
       const camfrog = u.camfrogUsername || null;
       const me = camfrog ? low(camfrog) : null;
@@ -171,6 +197,12 @@ function register(app, { isBotToken, addUser }) {
 
       let admin = null;
       if (isAdmin) {
+        // requesters' credit scores, live (level + account age from users)
+        const pend = (ln.requests || []).filter((r) => r.status === "pending" || r.status === "approving");
+        const names = [...new Set(pend.map((r) => low(r.nick)))].slice(0, 200);
+        const rows = names.length ? await getQuery(`SELECT LOWER(camfrogUsername) AS c, level, created_at FROM users WHERE LOWER(camfrogUsername) IN (${names.map(() => "?").join(",")})`, names) : [];
+        const byName = Object.fromEntries(rows.map((r) => [r.c, r]));
+        for (const r of pend) r.creditLive = credit.forCamfrog(ln.reserve || { limits: {} }, r.nick, byName[low(r.nick)] || null);
         const all = open.slice().sort((a, b) => b.balance - a.balance).map((s) => {
           const p = staking.positionFor(sk, s);
           return { ...s, hold: (p && p.hold) || {}, vaulted: staking.holdValue(p) };
@@ -189,6 +221,8 @@ function register(app, { isBotToken, addUser }) {
         bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
         borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, admin,
         myLimit: reserveLimit(ln.reserve || null, camfrog, u.level), // only ever the signed-in user's own
+        myCredit: camfrog ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog, u) : null,
+        welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
         acts: await actions.recentFor(req.user.userId, "wallet"),
       });
     } catch (e) {

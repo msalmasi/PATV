@@ -55,6 +55,17 @@
   .wl .card.limit b.lim { color: #ffd700; white-space: nowrap; }
   .wl table.bd td { padding: 5px 10px; }
   .wl table.bd td:first-child { overflow-wrap: anywhere; }
+  .wl .credit { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; }
+  .wl .credit .num { font-family: 'Press Start 2P', monospace; font-size: 22px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .wl .credit .meter { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #e57373 0%, #e0a030 45%, #c9d36a 64%, #81c784 80%, #4caf50 100%); position: relative; }
+  .wl .credit .meter i { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 2px #111; }
+  .wl .band { font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; display: inline-block; white-space: nowrap; }
+  .wl .band.excellent, .wl .band.very-good { border-color: #4caf50; color: #81c784; } .wl .band.good { border-color: #9ccc65; color: #c5e1a5; }
+  .wl .band.fair { border-color: #e0a030; color: #ffcc80; } .wl .band.poor { border-color: #e57373; color: #e57373; }
+  .wl ul.factors { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+  .wl ul.factors li { display: flex; justify-content: space-between; gap: 10px; color: #ccc; border-bottom: 1px solid #1c1c1c; padding: 3px 0; }
+  .wl ul.factors b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .wl .welcome { border-color: #6b5a20; }
 </style>
 <div class="wl">
 <% if (!signedIn) { %>
@@ -81,12 +92,28 @@
   const VK = ['bank', 'house', 'mm', 'auto'];
   const vaultSelect = '<select name="a3" aria-label="Vault">' + VK.map((k) => '<option value="' + k + '"' + (k === 'auto' ? ' selected' : '') + '>' + VN[k] + '</option>').join('') + '</select>';
   const holdLine = (h) => VK.filter((k) => h && h[k]).map((k) => VN[k] + ' ' + fmt(h[k].value)).join(' · ');
+  const bandCls = (b) => String(b || '').toLowerCase().replace(/[^a-z]+/g, '-');
+  const pts = (p) => (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p);
+  const meterPos = (s, c) => Math.max(0, Math.min(100, ((s - (c.min || 300)) / ((c.max || 850) - (c.min || 300))) * 100)).toFixed(1);
 %>
   <h1>Wallet</h1>
   <p class="bal"><b><%= fmt(bal) %></b> PAT</p>
   <p class="center info"><%= camfrog ? 'Camfrog: ' + camfrog + ' · ' : '' %><a href="/history">PAT history ›</a></p>
 
   <%- include('partials/actions', { acts, msg }) %>
+  <% if (welcomeStatus && welcomeStatus.state === 'pending') { const ws = welcomeStatus; %>
+    <div class="card welcome" style="margin:12px 0">
+      <span class="name">👋 Welcome bonus: PAT <%= fmt(ws.amount) %> — on its way</span>
+      <% if (ws.need && ws.need.length) { %>
+        <span class="info">It's paid once you've really played here (once per person, from the Federal Reserve). Still to do: <%= ws.need.join(' · ') %>.</span>
+      <% } else { %>
+        <span class="info">You've done it — it's paid within a few minutes<%= ws.enabled ? '' : ' (paused by the admins right now)' %>.</span>
+      <% } %>
+      <% if (ws.connectOwed) { %><span class="info">Your Discord/Twitch connect bonus is paid with it.</span><% } %>
+    </div>
+  <% } else if (welcomeStatus && welcomeStatus.state === 'paid') { %>
+    <p class="center info">👋 Welcome bonus paid: PAT <%= fmt(welcomeStatus.amount) %>.</p>
+  <% } %>
   <% if (!canAct) { %><p class="hint">Link your Camfrog name (<code>!verify</code>) to use stashes, staking and loans from here — Pepe runs them as you.</p><% } %>
 
   <!-- ───────── Stashes ───────── -->
@@ -191,7 +218,19 @@
     <h3>Borrowed</h3>
     <% if (borrowed.length) loanTable(borrowed, 'b'); else { %><p class="info">You don't owe anyone.</p><% } %>
     <h3>Lent</h3>
-    <% if (lent.length) loanTable(lent, 'l'); else { %><p class="info">No open loans you've made. Lend in a room: <code>!loan @bob 10k 10% 7d</code></p><% } %>
+    <% if (lent.length) loanTable(lent, 'l'); else { %><p class="info">No open loans you've made.</p><% } %>
+    <div class="forms">
+      <form method="post" action="/act" id="lend"><%- hidden('loan') %>
+        <b>🤝 Lend to someone</b>
+        <input type="text" name="a0" data-at maxlength="60" placeholder="@user" required aria-label="Borrower">
+        <span class="info" id="lend-credit" aria-live="polite">Type a name to see their credit score.</span>
+        <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="Amount, e.g. 10k" required aria-label="Amount">
+        <input type="text" name="a2" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="Interest %, e.g. 10%" required aria-label="Interest">
+        <label>Term <select name="a3"><% [1, 3, 7, 14, 30].forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%= d %> day<%= d === 1 ? '' : 's' %></option><% }) %></select></label>
+        <button type="submit">Offer loan</button>
+        <span class="info">The amount is held from your balance until they accept (10 min) — same as <code>!loan @bob 10k 10% 7d</code>.</span>
+      </form>
+    </div>
     <% if (loanHistory.length) { %>
       <details style="margin-top:12px"><summary>Loan history (<%= loanHistory.length %>)</summary>
         <div class="tbl"><table>
@@ -240,6 +279,22 @@
         </table></div>
       <% } %>
     </div>
+    <% if (myCredit) { const c = myCredit; %>
+      <div class="card" id="credit" style="margin-top:12px">
+        <span class="name">📊 Your credit score</span>
+        <div class="credit">
+          <span class="num"><%= c.score %></span>
+          <span><span class="band <%= bandCls(c.band) %>"><%= c.band %></span> <span class="info">out of <%= c.min %>–<%= c.max %></span></span>
+          <div class="meter" role="img" aria-label="Credit score <%= c.score %> of <%= c.max %>"><i style="left:<%= meterPos(c.score, c) %>%"></i></div>
+        </div>
+        <ul class="factors">
+          <% c.factors.forEach((f) => { %>
+            <li><span><%= f.label.charAt(0).toUpperCase() + f.label.slice(1) %></span><b class="<%= f.points > 0 ? 'up' : f.points < 0 ? 'down' : '' %>"><%= pts(f.points) %></b></li>
+          <% }) %>
+        </ul>
+        <span class="info">From your loan history (personal and Federal Reserve loans), what you owe now against your level, your account's age and your level. Lenders and the admins see it when you borrow; it doesn't change your instant limit. Bands: 800+ Excellent · 740 Very good · 670 Good · 580 Fair · below Poor.</span>
+      </div>
+    <% } %>
     <% if (canAct && reserve.enabled) { %>
       <div class="forms">
         <% if (ml.state === 'ok' || ml.state === 'nodata') { %>
@@ -263,6 +318,17 @@
           <label>Term <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%= d %> day<%= d === 1 ? '' : 's' %></option><% }) %></select></label>
           <input type="text" name="a3" maxlength="200" placeholder="What's it for?" required>
           <button type="submit">Send request</button>
+        </form>
+      </div>
+    <% } %>
+    <% if (canAct) { %>
+      <div class="forms">
+        <form method="post" action="/act" id="donate"><%- hidden('donate') %>
+          <b>🎁 Give to the casino</b>
+          <label>Into <select name="a0"><option value="casino">💰 Casino vault (what casino heists rob)</option><option value="lotto">🎟️ Lotto pot (the jackpot)</option><option value="house">🎰 House (the bankroll)</option></select></label>
+          <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="Amount, e.g. 25k" required aria-label="Amount">
+          <button type="submit">Donate</button>
+          <span class="info">A gift, not a stake — it's gone from your wallet and Pepe thanks you in the room. Same as <code>!donate lotto 25k</code>.</span>
         </form>
       </div>
     <% } %>
@@ -301,6 +367,11 @@
         <div class="card admin">
           <span class="ref">LR<%= r.id %> · <%= r.status %> · <%= when(r.created) %> UTC</span>
           <span class="name"><%= r.nick %> wants <%= fmt(r.amount) %> PAT for <%= dur(r.term) %></span>
+          <% const rc = r.creditLive; if (rc) { %>
+            <span class="info">📊 Credit <b><%= rc.score %></b> <span class="band <%= bandCls(rc.band) %>"><%= rc.band %></span>
+              <%= rc.factors.filter((f) => f.points).slice(0, 3).map((f) => f.label + ' (' + pts(f.points) + ')').join(' · ') %>
+              <%= r.credit != null && r.credit !== rc.score ? '· was ' + r.credit + ' when asked' : '' %></span>
+          <% } %>
           <span class="info">“<%= r.why %>”</span>
           <form class="inline" method="post" action="/act"><%- hidden('loan') %>
             <input type="hidden" name="a0" value="approve"><input type="hidden" name="a1" value="LR<%= r.id %>">
@@ -364,6 +435,23 @@
       const fmt = (s) => s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s >= 60 ? Math.floor(s/60) + 'm ' + (s%60) + 's' : s > 0 ? s + 's' : 'now';
       const tick = () => document.querySelectorAll('[data-until]').forEach((el) => { el.textContent = fmt(Math.max(0, Math.round(Number(el.dataset.until) - Date.now() / 1000))); });
       tick(); setInterval(tick, 1000);
+      const who = document.querySelector('#lend input[name=a0]'), out = document.getElementById('lend-credit');
+      if (who && out) {
+        let t = null, last = '';
+        const look = () => {
+          const v = who.value.trim().replace(/^@+/, '');
+          if (!v || v === last) return;
+          last = v;
+          out.textContent = 'Looking up ' + v + '…';
+          fetch('/wallet/credit?u=' + encodeURIComponent(v), { credentials: 'same-origin' }).then((r) => r.json()).then((d) => {
+            if (who.value.trim().replace(/^@+/, '') !== v) return;
+            out.textContent = d.error ? d.error : ('📊 ' + d.name + "'s credit: " + d.score + ' ' + d.band
+              + (d.top && d.top.length ? ' — ' + d.top.map((f) => f.label + ' (' + (f.points > 0 ? '+' : '') + f.points + ')').join(', ') : ''));
+          }).catch(() => { out.textContent = "Couldn't look that up."; });
+        };
+        who.addEventListener('input', () => { clearTimeout(t); t = setTimeout(look, 450); });
+        who.addEventListener('change', look);
+      }
       document.querySelectorAll('form').forEach((f) => f.addEventListener('submit', () => {
         f.querySelectorAll('[data-at]').forEach((i) => { const v = i.value.trim().replace(/^@+/, ''); if (v) i.value = '@' + v; });
       }));

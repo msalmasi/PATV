@@ -12,6 +12,63 @@
         </div>
 
         
+    <div class="panel" id="welcome-admin">
+        <h3>Welcome bonus</h3>
+        <p style="font-size:13px;color:#aaa;line-height:1.5">New accounts start at 0. The welcome bonus vests after real play (level, active days, account age) and is paid once per person from the Federal Reserve; an account that matches one that already got it (Camfrog identity, Discord, Twitch, email, browser, or too many from one network) is marked duplicate - you can still pay it. Connect bonuses: once per Discord/Twitch id, held until the welcome vests.</p>
+        <form id="welcome-config" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;align-items:end">
+            <label>On <select name="enabled"><option value="1">yes</option><option value="0">no (pending ones wait)</option></select></label>
+            <label>Amount (PAT) <input type="number" name="amount" min="0" step="1000"></label>
+            <label>Min level <input type="number" name="min_level" min="0"></label>
+            <label>Active days <input type="number" name="min_days" min="0"></label>
+            <label>Min account age (h) <input type="number" name="min_age_hours" min="0"></label>
+            <label>Per network <input type="number" name="ip_max" min="0"></label>
+            <label>...per days <input type="number" name="ip_window_days" min="1"></label>
+            <label>Expire after (days) <input type="number" name="expire_days" min="1"></label>
+            <label>Connect bonus (PAT) <input type="number" name="connect_amount" min="0" step="1000"></label>
+            <button type="submit">Save</button>
+        </form>
+        <p id="welcome-stats" style="font-size:13px;color:#ccc"></p>
+        <div style="overflow-x:auto"><table id="welcome-recent" style="width:100%;font-size:12px;border-collapse:collapse"></table></div>
+    </div>
+    <script>
+    (function () {
+        const host = document.getElementById('welcome-admin');
+        const form = document.getElementById('welcome-config');
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[c]);
+        const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : '';
+        async function load() {
+            const r = await fetch('/api/admin/welcome');
+            if (r.status === 403) { host.querySelector('p').insertAdjacentHTML('afterend', '<p>Admins only.</p>'); form.remove(); return; }
+            const d = await r.json();
+            for (const [k, v] of Object.entries(d.config || {})) if (form.elements[k]) form.elements[k].value = v;
+            const c = d.counts || {};
+            document.getElementById('welcome-stats').textContent = 'Pending ' + (c.pending || 0) + ' · paid ' + (c.paid || 0) + ' · duplicate ' + (c.duplicate || 0)
+                + ' · expired ' + (c.expired || 0) + ' · legacy ' + (c.legacy || 0) + ' — last 7 days: ' + d.paid7.n + ' paid, '
+                + Number(d.paid7.total).toLocaleString() + ' PAT (' + Number(d.paid7.perDay).toLocaleString() + '/day)';
+            document.getElementById('welcome-recent').innerHTML = '<tr><th align="left">Account</th><th align="left">State</th><th align="left">Why</th><th>When (UTC)</th><th></th></tr>'
+                + (d.recent || []).map((x) => '<tr style="border-top:1px solid #333"><td>' + esc(x.displayname || x.username || x.userId) + ' <small>(' + esc(x.source || '') + ')</small></td><td>' + esc(x.state)
+                + (x.amount ? ' ' + Number(x.amount).toLocaleString() : '') + '</td><td>' + esc(x.reason || '') + (x.dup_name ? ' → ' + esc(x.dup_name) : '') + '</td><td>' + when(x.decided || x.created) + '</td><td>'
+                + (x.state === 'duplicate' || x.state === 'expired' ? '<button data-pay="' + esc(x.userId) + '">Pay anyway</button>' : '') + '</td></tr>').join('');
+        }
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const body = {};
+            for (const el of form.elements) if (el.name) body[el.name] = Number(el.value);
+            const r = await fetch('/api/admin/welcome/config', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+            alert(r.ok ? 'Saved.' : 'Not saved.');
+            load();
+        });
+        host.addEventListener('click', async (e) => {
+            const id = e.target && e.target.dataset && e.target.dataset.pay;
+            if (!id || !confirm('Pay this account its welcome bonus anyway?')) return;
+            const r = await (await fetch('/api/admin/welcome/pay', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({userId: id})})).json();
+            alert(r.ok ? 'Paid ' + Number(r.amount).toLocaleString() + ' PAT.' : 'Not paid: ' + (r.why || r.error));
+            load();
+        });
+        load().catch(() => {});
+    })();
+    </script>
+
     <div class="panel">
         <h3>Create Redemption Code</h3>
     <form id="redemption-codes" action="/api/admin/redemption-codes" method="post">

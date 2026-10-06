@@ -98,7 +98,8 @@ async function registerUser(req, res) {
     try {
       await runQuery(
         "INSERT INTO users (userId, username, displayname, password, email, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [userId, username, username, hashedPassword, email, 50000, 0, "/public/img/avatar.png"]
+        // 1.99bg: starts at 0 (the 50,000 here was minted and farmable) - the welcome bonus vests (welcome.js)
+        [userId, username, username, hashedPassword, email, 0, 0, "/public/img/avatar.png"]
       );
     } catch (e) {
       // two sign-ups for the same name at once: the UNIQUE index catches the second
@@ -108,6 +109,7 @@ async function registerUser(req, res) {
     registerLimit.hit(ip);
     console.log(`[auth] new account ${username} (${userId})`);
     await displaynames.markNewAccount(userId).catch(() => {});   // displayname = username, automatic
+    await require("./welcome").enroll(userId, "web", req, res);
 
     // Best effort: the account exists whether or not these work.
     try {
