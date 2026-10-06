@@ -2,7 +2,8 @@
 // and the homepage's live room panel (views/home.ejs):
 //   PATVRoom.audio(el, slug)   mini player for the room's live audio (play/pause, volume + mute,
 //                              live / buffering state, jump to live, level meter)
-//   PATVRoom.relay(el, slug)   the "say something" box (Pepe relays it into the room as "🌐 you (web)")
+//   PATVRoom.relay(el, slug)   the "say something" box (Pepe relays it into the room as "🌐 you (web)");
+//                              a "!" line is a command Pepe runs as your Camfrog name (autocomplete + your private answers)
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip (20 s max) Pepe plays on the room's mic when
 //                              it's free; shown only while the room's bridge_mic switch is on
 // All are driven by the live view JSON: call .update(d) with each poll result.
@@ -128,34 +129,114 @@
   }
 
   // ── chat relay box ──
+  // A line starting with "!" is a command: Pepe runs it in the room as your linked Camfrog name, with
+  // the same permissions and prices as typing it there (1.99). Typing "!" opens a list of the room's
+  // allowed commands (with prices); "!commands" lists them all. Answers Pepe would have PM'd show
+  // here, for you only; public answers land in the room feed.
   function relay(host, slug) {
     var form = el('form', 'rb-say hide'); form.setAttribute('autocomplete', 'off');
-    var lab = el('label', 'rb-sr', 'Message to the room'); lab.htmlFor = 'rbSay' + slug;
+    var lab = el('label', 'rb-sr', 'Message or !command to the room'); lab.htmlFor = 'rbSay' + slug;
+    var wrap = el('div', 'rb-say-in');
     var inp = el('input'); inp.id = 'rbSay' + slug; inp.type = 'text'; inp.maxLength = 300; inp.required = true;
     inp.placeholder = 'Say something — Pepe relays it as “🌐 you (web)”';
+    inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-autocomplete', 'list'); inp.setAttribute('aria-expanded', 'false');
+    var list = el('ul', 'rb-ac hide'); list.id = 'rbAc' + slug; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'Commands');
+    inp.setAttribute('aria-controls', list.id);
+    wrap.appendChild(inp); wrap.appendChild(list);
     var btn = el('button', 'rb-btn rb-send', 'Send'); btn.type = 'submit';
+    var hint = el('div', 'rb-hint hide', 'Type !commands to see what you can run here as your Camfrog name.');
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
-    form.appendChild(lab); form.appendChild(inp); form.appendChild(btn);
-    host.appendChild(form); host.appendChild(mine);
-    var last = '';
+    var feed = el('ul', 'rb-cmdfeed'); feed.setAttribute('aria-live', 'polite'); feed.setAttribute('aria-label', 'Your commands');
+    form.appendChild(lab); form.appendChild(wrap); form.appendChild(btn);
+    host.appendChild(form); host.appendChild(hint); host.appendChild(mine); host.appendChild(feed);
+    var last = '', lastJs = [], cmds = null, local = [], acIdx = -1, acItems = [];
+
+    function fmtPrice(n) { return n > 0 ? Number(n).toLocaleString('en-US') + ' PAT' : ''; }
+    function closeAc() { list.classList.add('hide'); list.textContent = ''; acItems = []; acIdx = -1; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); }
+    function pick(c) { inp.value = c + ' '; closeAc(); inp.focus(); }
+    function paintAc() {
+      acItems.forEach(function (li, i) {
+        var on = i === acIdx; li.classList.toggle('on', on); li.setAttribute('aria-selected', on ? 'true' : 'false');
+        if (on) { inp.setAttribute('aria-activedescendant', li.id); if (li.scrollIntoView) li.scrollIntoView({ block: 'nearest' }); }
+      });
+    }
+    function openAc() {
+      var v = inp.value;
+      if (!cmds || v.charAt(0) !== '!' || /\s/.test(v)) { closeAc(); return; }
+      var q = v.toLowerCase();
+      var names = Object.keys(cmds).concat(['!commands']).filter(function (c) { return c.indexOf(q) === 0; }).sort();
+      // cheap ones first in the list's natural order; just cap it
+      names = names.slice(0, 8);
+      list.textContent = ''; acItems = [];
+      if (!names.length || (names.length === 1 && names[0] === q)) { closeAc(); return; }
+      names.forEach(function (c, i) {
+        var li = el('li', 'rb-ac-it'); li.id = list.id + '-' + i; li.setAttribute('role', 'option');
+        li.appendChild(el('span', 'rb-ac-c', c));
+        var p = c === '!commands' ? 'list them all' : fmtPrice(cmds[c]);
+        if (p) li.appendChild(el('span', 'rb-ac-p', p));
+        li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(c); });
+        list.appendChild(li); acItems.push(li);
+      });
+      acIdx = -1; list.classList.remove('hide'); inp.setAttribute('aria-expanded', 'true'); paintAc();
+    }
+    inp.addEventListener('input', openAc);
+    inp.addEventListener('blur', function () { setTimeout(closeAc, 100); });
+    inp.addEventListener('keydown', function (e) {
+      if (list.classList.contains('hide') || !acItems.length) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); acIdx = (acIdx + 1) % acItems.length; paintAc(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); acIdx = acIdx <= 0 ? acItems.length - 1 : acIdx - 1; paintAc(); }
+      else if ((e.key === 'Enter' || e.key === 'Tab') && acIdx >= 0) { e.preventDefault(); pick(acItems[acIdx].firstChild.textContent); }
+      else if (e.key === 'Escape') { closeAc(); }
+    });
+
+    function renderFeed(js) {
+      feed.textContent = '';
+      var rows = local.concat(js.filter(function (x) { return x.kind === 'cmd'; }).map(function (j) {
+        var st = j.state !== 'done' ? 'waiting for Pepe…' : (j.ok ? (j.replies && j.replies.length ? '' : (j.msg || 'done')) : 'not run — ' + (j.msg || 'refused'));
+        return { at: j.at, text: j.text, st: st, ok: j.state === 'done' ? j.ok : null, replies: j.replies || [] };
+      })).sort(function (a, b) { return a.at - b.at; }).slice(-4);
+      rows.forEach(function (r) {
+        var li = el('li', 'rb-cmd' + (r.ok === false ? ' bad' : ''));
+        var head = el('div', 'rb-cmd-h');
+        head.appendChild(el('span', 'rb-cmd-t', '› ' + r.text));
+        if (r.st) head.appendChild(el('span', 'rb-cmd-s', r.st));
+        li.appendChild(head);
+        r.replies.forEach(function (t) { li.appendChild(el('div', 'rb-cmd-r', '🔒 ' + t)); });
+        feed.appendChild(li);
+      });
+    }
+
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      closeAc();
       var text = inp.value.trim(); if (!text) return;
+      var isCmd = text.charAt(0) === '!';
       btn.disabled = true;
-      fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: text }) })
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/say', { method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ text: text }) })
         .then(function (r) { return r.json(); })
-        .then(function (d) { if (d.ok) { inp.value = ''; mine.textContent = '💬 your message: waiting for Pepe…'; } else mine.textContent = '💬 ' + (d.error || 'not sent'); })
+        .then(function (d) {
+          if (d.ok && d.local) { inp.value = ''; local.push({ at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
+          if (d.ok) { inp.value = ''; if (!isCmd) mine.textContent = '💬 your message: waiting for Pepe…'; return; }
+          if (isCmd) { local.push({ at: Date.now(), text: text, st: 'not sent — ' + (d.error || 'refused'), ok: false, replies: [] }); local = local.slice(-2); renderFeed(lastJs); }
+          else mine.textContent = '💬 ' + (d.error || 'not sent');
+        })
         .catch(function () { mine.textContent = '💬 couldn\'t reach the site'; })
-        .then(function () { setTimeout(function () { btn.disabled = false; }, 3000); });
+        .then(function () { setTimeout(function () { btn.disabled = false; }, isCmd ? 1500 : 3000); });
     });
     return {
       update: function (d) {
         form.classList.toggle('hide', !(d && d.room && d.room.relay));
+        cmds = d && d.room && d.room.cmds ? d.room.cmds : null;
+        hint.classList.toggle('hide', !(cmds && d.room.relay));
+        inp.placeholder = cmds ? 'Say something, or type ! for commands — relayed as “🌐 you (web)”' : 'Say something — Pepe relays it as “🌐 you (web)”';
         var js = (d && d.mine) || [], k = JSON.stringify(js);
+        lastJs = js;
         if (k === last) return;
         last = k;
         var j = js.filter(function (x) { return x.kind === 'say'; }).pop();
         if (j) mine.textContent = '💬 your message: ' + (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
+        renderFeed(js);
       },
     };
   }

@@ -265,6 +265,7 @@ async function ingest(body) {
     R.relay = !!s.relay;
     R.micRelay = !!s.mic_relay;
     R.cams = !!s.cams;
+    R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     if (!R.audio) audioClose(R.id);
     R.updated = now;
     touched.add(R);
@@ -357,7 +358,8 @@ async function liveView(R, after, userId) {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
             transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
-            relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R) },
+            relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
+            cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null },
     mine: userId ? relay.mineFor(userId, R.id) : [],
     members: R.members.map((u) => withPatv(u, L)),
     mic: R.mic.map((u) => withPatv(u, L)),

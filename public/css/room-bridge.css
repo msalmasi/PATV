@@ -30,4 +30,27 @@
 .rb-ptt-txt { color: #8a8a8a; font-size: 12.5px; min-width: 0; }
 .rb-mine { color: #8a8a8a; font-size: 12.5px; min-height: 1em; }
 
+/* commands from the relay (1.99): autocomplete + the user's own (private) command feed */
+.rb-say-in { position: relative; min-width: 0; }
+.rb-say-in input { width: 100%; box-sizing: border-box; }
+.rb-ac { position: absolute; left: 0; right: 0; bottom: calc(100% + 4px); z-index: 30; margin: 0; padding: 4px; list-style: none;
+         background: #111; border: 1px solid #2f6d3a; border-radius: 8px; max-height: 240px; overflow-y: auto;
+         box-shadow: 0 6px 18px rgba(0, 0, 0, .5); }
+.rb-ac.hide, .rb-hint.hide { display: none; }
+.rb-ac-it { display: flex; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer;
+            font-size: 13px; color: #ddd; }
+.rb-ac-it.on, .rb-ac-it:hover { background: #1e3a22; }
+.rb-ac-c { font-family: ui-monospace, Consolas, monospace; color: #9be7a1; overflow: hidden; text-overflow: ellipsis; }
+.rb-ac-p { color: #ffd54f; font-size: 12px; white-space: nowrap; }
+.rb-hint { color: #6f8f72; font-size: 12px; margin-top: 4px; }
+.rb-cmdfeed { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+.rb-cmd { background: #0d0d0d; border: 1px solid #1f2a20; border-radius: 8px; padding: 6px 8px; font-size: 12.5px; color: #bbb;
+          overflow-wrap: anywhere; min-width: 0; }
+.rb-cmd.bad { border-color: #5a2a2a; }
+.rb-cmd-h { display: flex; flex-wrap: wrap; gap: 4px 10px; justify-content: space-between; }
+.rb-cmd-t { font-family: ui-monospace, Consolas, monospace; color: #9be7a1; min-width: 0; }
+.rb-cmd-s { color: #8a8a8a; }
+.rb-cmd.bad .rb-cmd-s { color: #ff8a80; }
+.rb-cmd-r { color: #ddd; margin-top: 3px; }
+
 @media (prefers-reduced-motion: reduce) { .rb-meter { display: none; } .rb-meter i { transition: none; } }

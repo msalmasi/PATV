@@ -20,9 +20,20 @@
 // (/api/bridge/snapframe, bot token, checked against the account) - image bytes are never accepted
 // from a browser. Pepe says with each snapshot whether the !snap rules let THIS viewer save it (on /
 // admins-only / opted out); Save and Download only show when they do.
+//
+// Chat commands (1.99): a relay line starting with "!" is a COMMAND, not chat. It is queued as a
+// "cmd" job carrying the account's verified Camfrog link (users.camfrogUsername - never anything
+// from the request), and Pepe runs it in that room as that login through his real dispatcher: the
+// same permissions, automod, cooldowns and PAT prices as typing it in Camfrog. Pepe sends each
+// room's allowed commands + prices with the room snapshot (R.cmds, {} = off); the site refuses
+// anything not on it plus its own deny-list copy, rate-limits per account, and requires JSON +
+// X-Requested-With (no cross-site form can send that). Pepe echoes the line in the room as
+// "🌐 <name> (web): !cmd ..."; replies he would have PM'd come back in the ack and show only in
+// that user's own relay feed. Every command is written to bridge_cmd_log (account, Camfrog login,
+// room, command, result) - admins read it at /api/bridge/cmdlog. "!commands" is answered here.
 const express = require("express");
 const crypto = require("crypto");
-const { getQuery } = require("./dbUtils");
+const { getQuery, runQuery } = require("./dbUtils");
 const queueAction = (...a) => require("./actions").queue(...a);   // lazy: actions.js opens its table on load
 
 const SAY_MAX = 300, CLIP_MAX_BYTES = 600 * 1024, CLIP_MAX_SECS = 30;
@@ -35,6 +46,62 @@ const jobs = new Map();          // id -> {id, kind, roomId, userId, username, c
 const snaps = new Map();         // `${roomId}|${login}` -> {sid, ts, ok, status, img: Buffer, viewers: Set(userId), rule, okFor: Map(userId -> price), cost, saves: Map(userId -> action id)}
 const frames = new Map();        // frame id -> {img, userId, username, roomId, login, ts}   (frames queued for a save)
 const hits = new Map();          // `${kind}|${userId}` -> [timestamps]
+
+// -- chat commands from the relay (1.99) --
+const CMD_GAP = 2000, CMD_BURST = 10, CMD_WINDOW = 60 * 1000;      // = Pepe's own per-login limit
+const CMD_MAX_REPLIES = 12;
+// Never from the web (Pepe has the same list and is the one that decides; this is a second net).
+const CMD_DENY = new Set(("!update !reload !reloadbot !vm !wheelfix !test !sniff !pktsniff !roomshell !clickbtn !clickbutton " +
+  "!audiobtn !roombtns !roombuttons !roomtabs !roomwindows !menuwatch !listdiag !dumprows !memory !model !automod !perm " +
+  "!perms !role !roles !botadmin !botadmins !redlist !admin !mod !moderator !friend !unrole !demote !removerole !ignore " +
+  "!transcript !globalunblock !mute !unmute !roomaudio !bridge !chatty !chattycam !chattydepth !autotopic !lookmode " +
+  "!lookpublic !greeter !greet !persona !personas !convo !campause !camresume !costume !costumes !dressup !votemodmode " +
+  "!msg !dm !dms !inbox !verify !patv !patvname !incognito !forgetme !alias !log !history !modlog !search !userlist " +
+  "!unames !analytics !activity !mystats !watchlist !cam !cams !opencam !camwatch !whowatching !activeroom !audioroom " +
+  "!microom !joinroom !leaveroom !switchroom !roomswitch !winroom !wintrace !winlist !stream !scene !scenes !schedule " +
+  "!sched !schedules !rec !record !autoclip !alerts !alert !web !epstein").split(" "));
+const CMD_NAME_RE = /^![a-z0-9_-]{1,24}$/;
+const cmdName = (t) => String(t || "").trim().split(/\s+/)[0].toLowerCase();
+
+/** Pepe's per-room menu {"!topic": 1000, ...} -> a clean copy ({} when absent / off). */
+function cleanCmds(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+  let n = 0;
+  for (const [k, v] of Object.entries(raw)) {
+    const c = String(k).toLowerCase();
+    if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c)) continue;
+    out[c] = Math.max(0, Math.min(1e9, parseInt(v, 10) || 0));
+    if (++n >= 300) break;
+  }
+  return out;
+}
+
+/** "!commands" - answered by the site, from the room's menu. */
+function commandsText(cmds) {
+  const list = Object.keys(cmds || {}).sort();
+  if (!list.length) return "Commands from the website aren't on in this room.";
+  const paid = list.filter((c) => cmds[c] > 0).map((c) => `${c} (${cmds[c].toLocaleString("en-US")} PAT)`);
+  return `You can run ${list.length} commands here as your Camfrog name - same permissions and prices as in the room: ` +
+    list.join(" ") + (paid.length ? `. Paid: ${paid.join(", ")} (admins free).` : ".");
+}
+
+const cmdLogReady = runQuery(`CREATE TABLE IF NOT EXISTS bridge_cmd_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, user_id TEXT NOT NULL, username TEXT, camfrog TEXT,
+  room TEXT, command TEXT, job TEXT, status TEXT, result TEXT, updated INTEGER)`).catch(() => {});
+async function cmdLog(fields) {
+  try {
+    await cmdLogReady;
+    await runQuery(`INSERT INTO bridge_cmd_log (ts, user_id, username, camfrog, room, command, job, status, result, updated)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [Date.now(), fields.userId, fields.username || null, fields.camfrog || null, fields.room || null,
+       String(fields.command || "").slice(0, 300), fields.job || null, fields.status, String(fields.result || "").slice(0, 300), Date.now()]);
+  } catch (e) { console.error("[bridge-relay] cmd log:", e.message); }
+}
+function cmdLogResult(jobId, status, result) {
+  cmdLogReady.then(() => runQuery("UPDATE bridge_cmd_log SET status = ?, result = ?, updated = ? WHERE job = ?",
+    [status, String(result || "").slice(0, 300), Date.now(), jobId])).catch(() => {});
+}
 
 function limited(key, gap, burst, windowMs) {
   const now = Date.now();
@@ -57,6 +124,11 @@ setInterval(() => {
 const clean = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g, " ")
   .replace(/<[^<>]{0,60}>/g, "").replace(/\s+/g, " ").trim().slice(0, n);
 
+// Pepe's replies are shown with textContent, so a "<new room topic>" in a usage line stays as typed
+// (clean() would eat it as markup); control / bidi characters still go.
+const cleanReply = (s) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
+  .replace(/\s+/g, " ").trim().slice(0, 400);
+
 function newJob(fields) {
   const j = Object.assign({ id: "w" + crypto.randomBytes(8).toString("hex"), state: "pending", at: Date.now(), claimed: 0, tries: 0, result: null }, fields);
   jobs.set(j.id, j);
@@ -68,11 +140,13 @@ function takeJobs(liveRoomIds) {
   const now = Date.now(), out = [];
   for (const j of jobs.values()) {
     if (!liveRoomIds.has(j.roomId)) continue;
-    const due = j.state === "pending" || (j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    // A command is offered ONCE: a re-offer after a lost ack (or a Pepe restart, which forgets the job
+    // ids it has seen) could run a paid command twice. Chat lines / clips / snaps may be retried.
+    const due = j.state === "pending" || (j.kind !== "cmd" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
-    if (j.kind === "say") base.text = j.text;
+    if (j.kind === "say" || j.kind === "cmd") base.text = j.text;
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
     out.push(base);
@@ -85,8 +159,18 @@ function applyAcks(acks) {
   for (const a of Array.isArray(acks) ? acks.slice(0, 100) : []) {
     const j = a && jobs.get(String(a.id || ""));
     if (!j) continue;
+    const replies = (Array.isArray(a.replies) ? a.replies : []).slice(0, CMD_MAX_REPLIES).map(cleanReply).filter(Boolean);
+    if (a.late) {
+      // a reply that came after the command finished (Pepe answered from a thread / timer)
+      if (j.result) j.result.replies = (j.result.replies || []).concat(replies).slice(-CMD_MAX_REPLIES);
+      continue;
+    }
     j.state = "done";
     j.result = { ok: !!a.ok, msg: clean(a.msg, 200) };
+    if (j.kind === "cmd") {
+      j.result.replies = replies;
+      cmdLogResult(j.id, a.ok ? "ok" : "refused", j.result.msg);
+    }
     j.data = null;
   }
 }
@@ -96,9 +180,11 @@ function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
     if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap") continue;
-    out.push({ id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at });
+    const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
+    if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
+    out.push(o);
   }
-  return out.slice(-5);
+  return out.slice(-8);
 }
 
 function register(app, { isBotToken, addUser, bySlug, isLive }) {
@@ -118,14 +204,50 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!u) return res.status(401).json({ ok: false, error: "Sign in first." });
     const R = roomFor(req, res, "relay");
     if (!R) return;
-    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
     const text = clean((req.body || {}).text, SAY_MAX);
+    if (text.startsWith("!")) return runCmd(req, res, u, R, text);
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe." });
     if (!text) return res.status(400).json({ ok: false, error: "Type something first." });
     const lim = limited("say|" + u.userId, 3000, 5, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
     const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, text });
     console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} job=${j.id}`);
     res.json({ ok: true, id: j.id });
+  });
+
+  // A "!" line: a command run by Pepe as the account's linked Camfrog login (see the top of the file).
+  async function runCmd(req, res, u, R, text) {
+    if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") return res.status(400).json({ ok: false, error: "Bad request." });
+    const c = cmdName(text);
+    const cmds = R.cmds || {};
+    if (c === "!commands") return res.json({ ok: true, local: true, reply: commandsText(cmds), cmds });
+    if (!Object.keys(cmds).length) return res.status(403).json({ ok: false, error: "Commands from the website aren't on in this room." });
+    if (!u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a room with Pepe \u2014 commands run as that name." });
+    if (!CMD_NAME_RE.test(c) || CMD_DENY.has(c) || !(c in cmds)) {
+      return res.status(400).json({ ok: false, error: `${c.slice(0, 30)} isn't available from the website \u2014 type !commands for the list.` });
+    }
+    const lim = limited("cmd|" + u.userId, CMD_GAP, CMD_BURST, CMD_WINDOW);
+    if (lim) return res.status(429).json({ ok: false, error: lim });
+    const j = newJob({ kind: "cmd", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, text });
+    console.log(`[bridge-relay] cmd room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} cmd=${c} job=${j.id}`);
+    cmdLog({ userId: u.userId, username: u.username, camfrog: u.camfrogUsername, room: R.id, command: text, job: j.id, status: "pending", result: "" });
+    res.json({ ok: true, id: j.id, cmd: true });
+  }
+
+  // Admins: the web command audit (newest first). ?room= / ?camfrog= filter; ?limit= up to 500.
+  app.get("/api/bridge/cmdlog", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
+    const a = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
+    if (!a || a.class !== "Admin") return res.status(403).json({ ok: false, error: "Admins only." });
+    await cmdLogReady;
+    const where = [], args = [];
+    if (req.query.room) { where.push("room = ?"); args.push(String(req.query.room).slice(0, 80)); }
+    if (req.query.camfrog) { where.push("LOWER(camfrog) = ?"); args.push(String(req.query.camfrog).toLowerCase().slice(0, 40)); }
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 100));
+    const rows = await getQuery(`SELECT ts, username, camfrog, room, command, status, result FROM bridge_cmd_log
+                                 ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY id DESC LIMIT ?`, [...args, limit]);
+    res.json({ ok: true, rows });
   });
 
   app.post("/api/rooms/:slug/clip", addUser, express.raw({ type: ["audio/*", "application/octet-stream"], limit: CLIP_MAX_BYTES }), async (req, res) => {
@@ -296,4 +418,4 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, _jobs: jobs, _snaps: snaps, _frames: frames };
+module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, cleanCmds, commandsText, CMD_DENY, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };
