@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
 const funding = require('./funding');
 const { moveUserRows, copyCamfrogBadges } = require('./accountMerge');
+const inbox = require('./inbox');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
@@ -445,9 +446,11 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(moved)}`);
     await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
 
+    await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
     return { merged: true, addedBalance: auto.points_balance || 0, addedXp: auto.xp || 0, unlinkedFrom };
   } else {
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [cfLower, userId]);
+    await inbox.attachPendingSafe(userId, cfLower);
     return { merged: false, unlinkedFrom };
   }
 }

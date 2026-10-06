@@ -18,6 +18,8 @@ const OWNED = [
   ["user_badge_showcase", "user_id", "unique"],
   ["shop_prefs", "user_id", "unique"],
   ["profile_layout", "user_id", "unique"],
+  ["inbox", "user_id", "unique"],          // unique (user_id, ref): a notice both accounts got stays once
+  ["inbox_prefs", "user_id", "unique"],
   ["user_cosmetics", "user_id", "update"],
   ["achievement_feed", "userId", "update"],
   ["blackjack", "userId", "update"],

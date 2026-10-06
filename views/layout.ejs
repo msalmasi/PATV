@@ -89,7 +89,8 @@
             <div class="navbar-right">
                 <% if (typeof user == 'undefined' || !user) { %>
                     <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
-                <% } else { %>
+                <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; %>
+                    <a href="/inbox" class="nav-bell<%= _ib ? ' has' : '' %>" title="Inbox<%= _ib ? ' (' + _ib + ' unread)' : '' %>" aria-label="Inbox<%= _ib ? ', ' + _ib + ' unread' : '' %>"><span aria-hidden="true">🔔</span><% if (_ib) { %><span class="nav-badge"><%= _ib > 99 ? '99+' : _ib %></span><% } %></a>
                     <div class="avatar">
                         <a href="/u/<%= user %>/profile" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>
                     </div>
@@ -134,6 +135,12 @@
             .nav-burger > summary { font-size: 22px; line-height: 1; padding: 6px 10px; }
             .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
             .navbar .avatar img { margin-left: 0; }
+            .nav-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+                        border-radius: 8px; font-size: 19px; line-height: 1; color: #aaa; filter: grayscale(.6); }
+            .nav-bell:hover, .nav-bell:focus-visible { background: #24242a; filter: none; }
+            .nav-bell.has { filter: none; }
+            .nav-bell .nav-badge { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+                                   background: #e53935; color: #fff; font: bold 11px/18px Ubuntu, sans-serif; text-align: center; box-shadow: 0 0 0 2px #121212; }
             @media (max-width: 760px) {
                 .nav-main, .nav-more { display: none; }
                 .nav-burger { display: block; }

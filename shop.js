@@ -26,6 +26,7 @@
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
+const inbox = require("./inbox");
 
 const STORE_OWNER_USERNAME = process.env.STORE_OWNER_USERNAME || "pb";
 const SITE = String(process.env.PUBLIC_BASE_URL || "https://publicaccess.tv").replace(/\/+$/, "");
@@ -240,13 +241,16 @@ async function notify(userId, { subject, text, pm, link }) {
     if (!u) return out;
     const p = await prefsFor(userId);
     const url = link ? SITE + link : "";
+    // always the inbox (1.99au); the Camfrog PM below also honours the inbox's per-category switch
+    out.inbox = await inbox.addSafe(userId, { kind: "shop", title: subject, body: text, link });
     if (u.email && !p.email_off) {
       out.email = await sendEmail(u.email, subject,
         `${text}\n\n${url}\n\n— PATV Shop. Turn these emails off in your seller dashboard: ${SITE}/shop/seller#notify`);
     }
-    if (u.camfrogUsername && !p.pm_off) {
+    if (u.camfrogUsername && !p.pm_off && await inbox.pmAllowed(userId, "shop")) {
       try {
-        await actions.queue(userId, { kind: "notify", args: [u.camfrogUsername, `${pm || subject} ${url}`.trim().slice(0, 300)],
+        // Pepe PMs it in a room they're in, or holds it until they show up (pepe_notice.py)
+        await actions.queue(userId, { kind: "notify", args: [u.camfrogUsername, `${pm || subject} ${url}`.trim().slice(0, 300), "shop"],
                                       tag: "shop-notify", label: subject });
         out.pm = true;
       } catch (e) {

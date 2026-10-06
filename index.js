@@ -161,6 +161,9 @@ const og = require("./og");
 const userstats = require("./userstats");
 const profileLayout = require("./profilelayout");
 app.use((req, res, next) => { res.locals.ogBase = og.origin(req); res.locals.ogPath = req.originalUrl.split("?")[0]; next(); });
+// the nav's inbox bell: unread count for signed-in page views (inbox.js, one indexed COUNT)
+const inbox = require("./inbox");
+app.use(inbox.navCount);
 
 let clients = []; // Keep track of connected clients for SSE
 
@@ -1009,6 +1012,7 @@ require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
+inbox.register(app, { isBotToken, addUser });
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./userstats").register(app, { isBotToken });
 const bridge = require("./bridge");
@@ -1653,6 +1657,10 @@ async function transferPat(senderUsername, recipientUsername, rawAmount, note = 
     [uuidv4(), recipient.userId, "tip received", amount, sender.userId, note]
   );
 
+  // the recipient's inbox (1.99au): who, how much, and the note if there was one
+  inbox.addSafe(recipient.userId, { kind: "tip", title: `${sender.username} tipped you PAT ${amount.toLocaleString("en-US")}`,
+                                    body: note ? `"${note}"` : "", link: "/history" });
+
   achievements.checkWeb(sender.userId);            // tipped / tips-received achievements
   achievements.checkWeb(recipient.userId);
   const after = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [sender.userId]);
@@ -2164,6 +2172,7 @@ app.post('/api/users/camfrog/register', async (req, res) => {
     const funded = await funding.fundPayout(userId, welcome, "new_account", "Welcome PAT");
     const newUserBadgeId = 'fresh_meat';
     await awardBadge(userId, newUserBadgeId);
+    await inbox.attachPendingSafe(userId, camfrogUsername);   // notices Pepe sent before the account existed
     res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: funded ? welcome : 0 } });
   } catch (error) {
     console.error('Error creating Camfrog user:', error.message);
