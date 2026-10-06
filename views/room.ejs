@@ -1,4 +1,5 @@
 <%- include('layout', { title: room.name + ' — live on PATV', user: user }) %>
+<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, bridged_ = room.bridged !== false; %>
 <style>
   .rm { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
   .rm *, .rm *::before, .rm *::after { box-sizing: border-box; }
@@ -108,6 +109,27 @@
   .rm .stab[aria-selected="true"] { border-color: #c6e94f; background: #1b2a12; color: #fff; }
   .rm .stab:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
   .rm .stab.off .dot { background: #666; animation: none; }
+  /* 1.99bi: every room's stage (public/js/stage-room.js), owner bits, the Go live call to action */
+  .rm .stab .star { color: #ffd700; }
+  .rm .stab .src { font-size: 11px; color: #9fb3c8; border: 1px solid #2a3442; border-radius: 999px; padding: 0 6px; }
+  .rm .stab.feat { border-color: #6b5a20; }
+  .rm .stabs .adm { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .rm .stabs .adm button { padding: 5px 10px; border-radius: 8px; border: 1px solid #5a2222; background: #2a1010; color: #ffb4b4; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
+  .rm .stabs .adm button[data-act=feature], .rm .stabs .adm button[data-act=unfeature] { border-color: #6b5a20; background: #1d1a0f; color: #e8d9a0; }
+  .rm .stage .player .embed { position: absolute; inset: 0; z-index: 2; background: #000; }
+  .rm .stage .player .embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .rm .stage-foot { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 10px; font-size: 13px; color: #aab3aa; }
+  .rm .stage-foot .sp { flex: 1; }
+  .rm .golive-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: 999px; font-weight: bold; font-size: 13.5px; white-space: nowrap;
+                    background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; border: 0; }
+  .rm .golive-btn.ghost { background: #1d1a0f; border: 1px solid #6b5a20; color: #f3e3a3 !important; }
+  .rm .upnext { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+  .rm .upnext li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .rm .upnext time { color: #c6e94f; font-variant-numeric: tabular-nums; min-width: 5.5em; }
+  .rm .banner-img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 12px; display: block; border: 1px solid #222; }
+  .rm .desc { color: #bbb; font-size: 14px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+  .rm .meta a.chip { color: #b9d8bb; }
+  .rm .meta .chip.own { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
   @media (max-width: 860px) {
     .rm .grid { grid-template-columns: minmax(0, 1fr); }
     .rm .feed { height: 58vh; }
@@ -119,90 +141,82 @@
   }
 </style>
 <main class="rm">
-  <div class="crumb"><a href="/rooms">Live rooms</a> › <%= room.name %></div>
+  <div class="crumb"><a href="/rooms">Channel guide</a> › <%= room.name %></div>
+  <% if (room.banner) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
   <section class="hero" aria-labelledby="rmTitle">
     <h1 id="rmTitle"><%= room.name %>
       <span class="live<%= room.live ? '' : ' off' %>" id="rmLive"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span>
     </h1>
     <div class="topic" id="rmTopic"><%= room.topic %></div>
+    <% if (room.description) { %><div class="desc"><%= room.description %></div><% } %>
     <div class="meta">
       <span class="chip" id="rmCount">👥 <%= room.count %> in the room</span>
       <span class="chip">📡 Camfrog</span>
+      <% if (room.house) { %><span class="chip own">🐸 Pepe's room</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Owner: <%= room.owner %></a><% } %>
+      <% if (pepeHere_) { %><span class="chip" title="Pepe's own stream is showing this room right now">🎥 Pepe's window is here</span><% } %>
+      <% if (manage_) { %><a class="chip own" href="/rooms/<%= encodeURIComponent(room.slug) %>/manage">⚙️ Manage room</a><% } %>
       <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Analytics</a><% } %>
     </div>
   </section>
   <div class="banner" role="note">📡 <b>Live from Camfrog — read-only (v1).</b> What the room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div>
 
-<% if (onStage) { const st = stage || {}; %>
+<% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const live = !!st.active || RS.slots.length > 0;
+     const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-  <script src="/public/js/stage-player.js?v=2"></script>
-  <section class="card stage <%= st.active ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
-    <h2 id="rmStageH"><span>📺 This room is on the main stage</span>
-      <span class="live<%= st.active ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= st.active ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
+  <script src="/public/js/stage-player.js?v=3"></script>
+  <script src="/public/js/stage-room.js?v=1"></script>
+  <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
+    <h2 id="rmStageH"><span>📺 <%= room.name %> stage</span>
+      <span class="live<%= live ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
     <div class="stabs" id="rmTabs" role="tablist" aria-label="Stage streams"></div>
     <div class="player">
       <div class="wrap" id="rmVideo"></div>
       <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
       <button type="button" class="unmute hide" id="rmStUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
+      <div class="embed hide" id="rmEmbed"></div>
     </div>
-    <div class="off-air"><span>The stream is off air right now — it plays here the moment it's back.</span><a href="/">Main stage ›</a></div>
+    <div class="off-air"><span id="rmOffTxt">Nothing on this stage right now — be the first: go live here.</span></div>
+    <div class="stage-foot">
+      <span id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span>
+      <span class="sp"></span>
+      <a class="golive-btn" href="/stage?room=<%= encodeURIComponent(room.slug) %>">🎥 Go live here</a>
+      <% if (!RS.featured) { %><a class="golive-btn ghost" href="/stage?room=<%= encodeURIComponent(room.slug) %>&feature=1">★ Get featured</a><% } %>
+    </div>
+    <% if ((RS.upcoming || []).length) { %>
+      <ul class="upnext" aria-label="Coming up on this stage">
+        <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%= u.display %></b><span class="muted"><%= u.minutes %> min<%= u.featured ? ' · ★ featured' : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
+      </ul>
+    <% } %>
   </section>
   <script>
   (function () {
     'use strict';
-    var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
-    var box = document.getElementById('rmStage'), pepeOn = <%= st.active ? 'true' : 'false' %>, on = pepeOn;
-    var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
-    // paid stage slots live now (mainstage.js): the stage shows the paid stream, a tab flips to Pepe's
-    var slots = [], view = 'pepe', loaded = false;
-    var p = PATVStage.player({ wrap: document.getElementById('rmVideo'), reconnect: document.getElementById('rmStReconnect'),
-                               unmute: document.getElementById('rmStUnmute') });
-    var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-    function cur() { for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
-    function set() {
-      var s = cur();
-      on = !!s || pepeOn;
-      box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
-      document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');
-      document.getElementById('rmStPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
-      p.setSrc(s ? s.hls : PEPE_HLS);
-      if (on && loaded) p.start(); else if (!on) p.stop();
-      var tabs = document.getElementById('rmTabs'), h = '';
-      if (slots.length) {
-        slots.forEach(function (x) {
-          h += '<button type="button" class="stab" role="tab" data-v="slot:' + esc(x.id) + '" aria-selected="' + (view === 'slot:' + x.id) + '"><span class="dot" aria-hidden="true"></span>' +
-               '<span class="n' + (x.nameCss ? ' cx-name' : '') + '" style="' + esc(x.nameCss || '') + '">' + esc(x.display) + '</span> is live</button>';
-        });
-        h += '<button type="button" class="stab' + (pepeOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '"><span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (pepeOn ? '' : ' (off air)') + '</button>';
-      }
-      tabs.innerHTML = h;
-    }
-    document.getElementById('rmTabs').addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-v]');
-      if (b) { view = b.getAttribute('data-v'); set(); }
+    var box = document.getElementById('rmStage');
+    document.querySelectorAll('.upnext time[data-ts]').forEach(function (t) {
+      var d = new Date(Number(t.getAttribute('data-ts')));
+      t.textContent = d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     });
-    // the stage can move to another room (an admin, or !activeroom): then this page drops the player
-    var iv = null;
-    function poll() {
-      return fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
-        if (!g.room || g.room.slug !== slug) { clearInterval(iv); p.stop(); box.remove(); return; }
-        var had = slots.length, was = cur();
-        pepeOn = !!g.active;
-        slots = Array.isArray(g.slots) ? g.slots : [];
-        if (was && !cur()) view = slots.length ? 'slot:' + slots[0].id : 'pepe';
-        else if (!had && slots.length && view === 'pepe') view = 'slot:' + slots[0].id;
-        set();
-      }).catch(function () {});
-    }
-    iv = setInterval(poll, 10000);
-    poll();
-    window.addEventListener('load', function () { loaded = true; if (on) p.start(); });
+    PATVStage.switcher({
+      tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'),
+      reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
+      api: '/api/stage?room=' + encodeURIComponent(<%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>),
+      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, manage: <%= manage_ ? 'true' : 'false' %>,
+      onAir: function (on) {
+        box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
+        document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');
+        document.getElementById('rmStPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
+      }
+    });
   })();
   </script>
 <% } %>
+<% if (!bridged_) { %>
+  <section class="card"><p class="muted" style="margin:0">📡 Pepe isn't bridging this room to the website right now, so there's no live chat here — the stage above still works. Join the room on Camfrog to hang out.</p></section>
+<% } %>
 
-<% if (!signedIn) { %>
+<% if (!bridged_) { %>
+<% } else if (!signedIn) { %>
   <section class="card tease">
     <div class="big" aria-hidden="true">🐸</div>
     <h2 style="justify-content:center">Sign in to watch the room live</h2>

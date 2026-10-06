@@ -84,3 +84,35 @@
 @media (max-width: 520px) { .sb { padding: 10px 10px 44px; } .sb-head { background: none; padding: 0; margin: 0; }
 .sb-head h1 { font-size: 22px; } .sb .fact .v { font-size: 17px; } }
 @media (prefers-reduced-motion: reduce) { .sb .dot { animation: none; } }
+/* 1.99ba: the Go live hub - room picker, choices, upcoming list; owner + rooms admin pages */
+.sb .book2 { display: grid; gap: 12px; }
+.sb .book2 .fld { display: grid; gap: 5px; font-size: 13px; color: #bbb; }
+.sb .book2 .fld select, .sb .book2 .fld input { width: 100%; }
+.sb .roominfo { margin: -4px 0 0; min-height: 1.2em; }
+.sb .choice { border: 1px solid #262626; border-radius: 12px; padding: 8px; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; }
+.sb .choice legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.sb .choice label { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 9px; border: 1px solid #222; background: #0d0d0d; cursor: pointer; min-width: 0; }
+.sb .choice label:has(input:checked) { border-color: var(--lime); background: #141d0e; }
+.sb .choice input { margin-top: 3px; accent-color: var(--green); flex: none; }
+.sb .choice span { display: grid; gap: 2px; min-width: 0; }
+.sb .choice b { font-size: 14px; color: #fff; }
+.sb .choice small { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.sb .btn.big { font-size: 16px; padding: 11px 20px; justify-self: start; }
+.sb .btn.gold { background: #1d1a0f; border-color: #6b5a20; color: #f3e3a3 !important; }
+.sb .mylist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sb .mylist li { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; background: rgba(0,0,0,.35); border: 1px solid #1f2a20; border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
+.sb .mylist li > span { flex: 1 1 220px; min-width: 0; overflow-wrap: anywhere; }
+.sb .mylist .btn { padding: 5px 10px; font-size: 12.5px; }
+.sb .toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+.sb .toggle { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: rgba(0,0,0,.35); border: 1px solid #1f2a20; border-radius: 10px; padding: 8px 10px; font-size: 13.5px; }
+.sb .toggle .on { color: #9be3a6; font-weight: bold; } .sb .toggle .off { color: #888; }
+.sb .pillrow { display: flex; flex-wrap: wrap; gap: 6px; }
+.sb .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid #333; color: #bbb; white-space: nowrap; }
+.sb .tag.gold { border-color: #6b5a20; color: #f3e3a3; background: #1d1a0f; }
+.sb .tag.red { border-color: #7a2222; color: #ffb4b4; background: #3a1010; }
+.sb textarea { width: 100%; min-height: 80px; resize: vertical; }
+.sb .settings textarea, .sb .settings input[type=text] { width: 100%; }
+.sb .big-num { font-size: 26px; font-weight: bold; color: var(--gold); font-variant-numeric: tabular-nums; }
+.sb .meter2 { height: 8px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
+.sb .meter2 span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); }
+@media (max-width: 520px) { .sb .choice { grid-template-columns: minmax(0, 1fr); } .sb .btn.big { justify-self: stretch; } }

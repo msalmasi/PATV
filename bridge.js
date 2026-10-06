@@ -17,11 +17,10 @@
 //   GET /rooms                 bridged rooms (counts only for visitors)
 //   GET /rooms/:slug           the live room view
 //   GET /api/rooms/:slug/live?after=<cursor>   JSON the page polls (~1.5s)
-// The STAGE ROOM (1.99aj): the Camfrog room the main stage (OBS / HLS stream) is showing = Pepe's
-// active room (`!activeroom`). Pepe reports it with the stage state; the homepage's room panel shows
-// it ("On stage: <room>") and that room's live page shows the stream above its feed. Site Admins can
-// move the stage: POST /api/stage/room {room} queues a "stage.room" action Pepe validates and runs
-// (only rooms he is in; refused while a game or Pepe's mic/audio would be cut short).
+// Pepe's window room (1.99aj): the Camfrog room Pepe's OBS stream is showing = his active room
+// (`!activeroom`). Pepe reports it with the stage state and the site shows it as information only.
+// 1.99bi: the website no longer moves it - every room has its own stage (mainstage.js) and the
+// homepage's featured room is a site setting (rooms.js front room), decoupled from !activeroom.
 const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const cosmetics = require("./cosmetics");
@@ -199,6 +198,11 @@ function stageRoom() {
   return { name: (R && R.name) || STAGE.roomName || STAGE.room, slug: R ? R.slug : null, pinned: !!STAGE.pinned };
 }
 /** Admin-only extras: the rooms Pepe is in (what the stage can move to) and the current room id. */
+/** {id} of Pepe's window room when it's known (for the front room's "auto" choice). */
+function stageRoomRef() {
+  if (!STAGE.room || Date.now() - STAGE.at > STAGE_ROOM_FRESH) return null;
+  return { id: STAGE.room };
+}
 function stageAdmin() {
   const fresh = Date.now() - STAGE.at < STAGE_ROOM_FRESH;
   return { room: fresh ? STAGE.room : null, pinned: !!STAGE.pinned, rooms: fresh ? STAGE.rooms : [] };
@@ -241,6 +245,7 @@ async function ingest(body) {
               room: rid(g.room), roomName: str(g.room_name, 100), pinned: !!g.pinned, rooms: roomList };
   }
   const touched = new Set();
+  const lines = new Map();                 // room id -> new chat lines this batch (room activity)
   for (const id of (Array.isArray(body.closed) ? body.closed : []).slice(0, MAX_ROOMS)) {
     if (typeof id === "string" && rooms.has(id)) await dropRoom(id);
   }
@@ -293,6 +298,7 @@ async function ingest(body) {
     if (!it) continue;
     if (it.k === "tx" && it.id && R.feed.some((x) => x.k === "tx" && x.id === it.id)) continue;   // one line per mic-up
     it.c = ++cursor;
+    if (it.k === "msg" || it.k === "tx") lines.set(R.id, (lines.get(R.id) || 0) + 1);
     R.feed.push(it);
     if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
     newItems.push([R.id, it]);
@@ -306,6 +312,15 @@ async function ingest(body) {
     await persistRoom(R);
     if (R.feed.length >= FEED_KEEP && R.feed[0]) await runQuery("DELETE FROM bridge_feed WHERE room_id = ? AND c < ?", [R.id, R.feed[0].c]);
   }
+  // 1.99bi: every bridged room gets a registry row (rooms.js), and its activity feeds the royalty thresholds
+  try {
+    const reg = require("./rooms");
+    for (const R of touched) {
+      if (rooms.get(R.id) !== R) continue;
+      await reg.noteBridged(R.id, R.name);
+      await reg.noteActivity(R.id, R.count, lines.get(R.id) || 0, now);
+    }
+  } catch (e) { console.error("[bridge] rooms:", e.message); }
   return { rooms: touched.size, items: newItems.length };
 }
 
@@ -339,12 +354,14 @@ function withPatv(u, L) {
 }
 
 const isLive = (R) => Date.now() - R.updated < STALE_MS;
+// 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
+const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
 
 /** For the homepage / room list. `full` (signed-in) adds who's on the mic. */
 async function summary(full) {
   await load();
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
-    slug: R.slug, name: R.name, count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
+    id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
     mic: full ? R.mic.map((u) => (u.anon ? "someone" : u.display)) : [],
     topic: full ? R.topic : "",
   }));
@@ -440,58 +457,47 @@ function register(app, { isBotToken, addUser }) {
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
 
+  // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that
+  // room's live user slots (mainstage.js). Old clients that send no room get the front room.
   app.get("/api/stage", async (req, res) => {
     res.set("Cache-Control", "no-store");
-    // 1.99al: paid stage slots live right now (mainstage.js) ride along with Pepe's stream state
-    let slots = [];
-    try { slots = await require("./mainstage").publicSlots(); } catch (e) { slots = []; }
-    res.json({ ...stage(), slots });
-  });
-
-  // Move the main stage to another of Pepe's rooms (site Admins). JSON only (a cross-site form can't
-  // send it). Pepe re-checks the room and his BUSY rules and answers through the action.
-  const adminOf = async (req) => {
-    if (!req.user || !req.user.userId) return null;
-    const u = (await getQuery("SELECT class FROM users WHERE userId = ?", [req.user.userId]))[0];
-    return u && u.class === "Admin" ? u : null;
-  };
-  app.post("/api/stage/room", addUser, express.json({ limit: "4kb" }), async (req, res) => {
-    if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") return res.status(400).json({ ok: false, error: "Bad request." });
-    if (!(await adminOf(req))) return res.status(403).json({ ok: false, error: "Admins only." });
-    const want = String((req.body || {}).room || "").trim();
-    const A = stageAdmin();
-    if (!A.rooms.length) return res.status(503).json({ ok: false, error: "Pepe hasn't reported his rooms yet — try again in a minute." });
-    const target = want.toLowerCase() === "auto" ? "auto" : (A.rooms.find((r) => r.id === want) || {}).id;
-    if (!target) return res.status(400).json({ ok: false, error: "Pepe isn't in that room." });
+    let slots = [], front = null;
     try {
-      const id = await require("./actions").queue(req.user.userId, { kind: "stage.room", args: [target], tag: "stage",
-        label: target === "auto" ? "stage: follow the open tab" : "stage: " + target });
-      res.json({ ok: true, id });
-    } catch (e) {
-      res.status(e.message === "busy" ? 429 : 500).json({ ok: false, error: e.message === "busy" ? "You already have a few things waiting — give Pepe a moment." : "Something went wrong — nothing was sent." });
-    }
-  });
-  app.get("/api/stage/room/:id", addUser, async (req, res) => {
-    res.set("Cache-Control", "no-store");
-    if (!(await adminOf(req))) return res.status(403).json({ ok: false, error: "Admins only." });
-    const a = (await getQuery("SELECT status, message FROM pepe_actions WHERE id = ? AND user_id = ? AND kind = 'stage.room'",
-      [parseInt(req.params.id, 10) || 0, req.user.userId]))[0];
-    if (!a) return res.status(404).json({ ok: false, error: "No such action." });
-    const A = stageAdmin();
-    res.json({ ok: true, status: a.status, message: a.message || "", stage: stage(), stageRoomId: A.room, pinned: A.pinned });
+      const reg = require("./rooms");
+      const web = require("./roomsweb");
+      let R = req.query.room ? await web.resolveRoom(String(req.query.room)) : null;
+      if (!R) {
+        const f = await reg.frontRoom(await summary(false), stageRoomRef());
+        R = await reg.get(f.id);
+        if (R) front = { id: R.id, slug: web.linkSlug(R), title: R.title, pinned: f.pinned };
+      }
+      if (R) slots = await require("./mainstage").publicSlots(R.id);
+    } catch (e) { slots = []; }
+    res.json({ ...stage(), slots, front });
   });
 
+  // 1.99bi: the channel guide - every room, what's on its stage now and what's booked next
   app.get("/rooms", addUser, async (req, res) => {
-    const list = await summary(!!(req.user && req.user.userId));
-    res.locals.og = { title: "Live rooms — Public Access TV", description: "Camfrog rooms Pepe sits in, live on PATV: chat, who's here and who's on the mic.",
-                      image: res.locals.ogBase + "/og/page.png?t=Live%20rooms", url: res.locals.ogBase + "/rooms" };
-    res.render("rooms", { user: req.user ? req.user.username : null, list, signedIn: !!(req.user && req.user.userId) });
+    const signedIn = !!(req.user && req.user.userId);
+    const reg = require("./rooms");
+    const g = await require("./roomsweb").guideRows(signedIn);
+    res.locals.og = { title: "Channel guide — Public Access TV", description: "Every PATV room, what's on its stage now and what's on next. Camfrog rooms live on the web.",
+                      image: res.locals.ogBase + "/og/page.png?t=Channel%20guide", url: res.locals.ogBase + "/rooms" };
+    let owned = [];
+    if (signedIn) { try { owned = await reg.ownedBy(req.user.userId); } catch (e) { owned = []; } }
+    res.render("rooms", { user: req.user ? req.user.username : null, rows: g.rows, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
   });
 
   app.get("/rooms/:slug", addUser, async (req, res) => {
     await load();
-    const R = bySlug(req.params.slug);
     const signedIn = !!(req.user && req.user.userId);
+    const reg = require("./rooms");
+    let R = bySlug(req.params.slug);
+    const info = R ? await reg.get(R.id) : await require("./roomsweb").resolveRoom(req.params.slug);
+    if (!R && info) {
+      // a registered room Pepe isn't bridging right now: its page and stage still work
+      R = rooms.get(info.id) || { id: info.id, name: info.title, slug: info.slug, topic: "", members: [], mic: [], count: 0, updated: 0, feed: [], offline: true };
+    }
     if (!R) {
       return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such room",
         message: "That room isn't bridged to PATV right now.", title: "Room not found" });
@@ -502,11 +508,17 @@ function register(app, { isBotToken, addUser }) {
     }
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked,
-      room: { name: R.name, slug: R.slug, count: R.count, live: isLive(R), topic: signedIn ? R.topic : "" },
-      initial: signedIn ? await liveView(R, 0, req.user.userId) : null,
-      onStage: !!(STAGE.room === R.id && Date.now() - STAGE.at < STAGE_ROOM_FRESH), stage: stage(),
+      room: { id: R.id, name: (info && info.title) || R.name, slug: R.slug, count: R.count, live: !R.offline && isLive(R), topic: signedIn ? R.topic : "",
+              bridged: !R.offline, description: info ? info.description : "", banner: info ? info.banner : "",
+              owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
+              house: !!(info && info.house) },
+      initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId) : null,
+      pepeHere: !!(STAGE.room === R.id && Date.now() - STAGE.at < STAGE_ROOM_FRESH), stage: stage(),
+      roomStage: await require("./mainstage").roomStage(R.id, req.user),
+      manage: await reg.canManage(req.user, R.id),
+      analytics: reg.hasRoute(app, "/rooms/:slug/analytics"),
     });
   });
 }
 
-module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, liveFor, _rooms: rooms };
+module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, liveFor, bySlug, _rooms: rooms };

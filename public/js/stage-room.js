@@ -1,0 +1,150 @@
+// stage-room.js — a room's stage on a page (1.99bi): Pepe's stream + the room's live user slots, with
+// tabs to switch between them. Used by the homepage (the front room) and every room page.
+//
+//   PATVStage.switcher({
+//     tabs, wrap, reconnect, unmute, embedHost, twitchHost?,   elements (see home.ejs / room.ejs)
+//     api: '/api/stage' | '/api/stage?room=<slug>',            what to poll (every 10 s)
+//     slots: [...], pepeOn: bool, manage: bool,                first render (server-side data)
+//     onAir(on, sub)                                           the page's ON AIR pill / subtitle
+//   })
+// Default view: the room's FEATURED slot when it's live, else Pepe's stream. Viewers switch freely.
+// HLS slots play in the shared video.js player (stage-player.js); embed slots (YouTube / Twitch) are
+// rendered only with the official players, from {p,t,id} re-checked here (never a raw URL).
+// manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot.
+(function () {
+  'use strict';
+  var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
+  var YT_ID = /^[A-Za-z0-9_-]{11}$/, YT_CH = /^UC[A-Za-z0-9_-]{22}$/, TW_LOGIN = /^[A-Za-z0-9_]{3,25}$/, TW_VOD = /^[0-9]{5,12}$/;
+  function embedUrl(e) {
+    if (!e) return null;
+    var host = /^[a-z0-9.-]+$/i.test(location.hostname) ? location.hostname : 'publicaccess.tv';
+    var q = 'autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1';
+    if (e.p === 'youtube' && (e.t === 'video' || e.t === 'live') && YT_ID.test(e.id)) return 'https://www.youtube-nocookie.com/embed/' + e.id + '?' + q;
+    if (e.p === 'youtube' && e.t === 'channel' && YT_CH.test(e.id)) return 'https://www.youtube-nocookie.com/embed/live_stream?channel=' + e.id + '&' + q;
+    if (e.p === 'twitch' && e.t === 'channel' && TW_LOGIN.test(e.id)) return 'https://player.twitch.tv/?channel=' + e.id + '&parent=' + host + '&autoplay=true&muted=true';
+    if (e.p === 'twitch' && e.t === 'vod' && TW_VOD.test(e.id)) return 'https://player.twitch.tv/?video=v' + e.id + '&parent=' + host + '&autoplay=true&muted=true';
+    return null;
+  }
+  var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+
+  function switcher(o) {
+    var slots = Array.isArray(o.slots) ? o.slots : [];
+    var pepeOn = !!o.pepeOn, twitchLive = false, chosen = false;
+    var view = 'pepe';
+    var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
+    var embedFor = null, loaded = document.readyState === 'complete';
+    function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
+    function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
+    function pickDefault() { var f = featured(); view = f ? 'slot:' + f.id : 'pepe'; }
+    pickDefault();
+    function setEmbed(e) {
+      var url = embedUrl(e);
+      if (!o.embedHost) return;
+      if (!url) { o.embedHost.innerHTML = ''; o.embedHost.classList.add('hide'); embedFor = null; return; }
+      if (embedFor === url) return;
+      embedFor = url;
+      o.embedHost.innerHTML = '';
+      var f = document.createElement('iframe');
+      f.src = url; f.title = 'Stage video'; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      f.setAttribute('allowfullscreen', ''); f.referrerPolicy = 'strict-origin-when-cross-origin';
+      f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+      o.embedHost.appendChild(f);
+      o.embedHost.classList.remove('hide');
+    }
+    function show() {
+      var s = cur();
+      var tw = o.twitchHost;
+      if (s && s.embed) {
+        player.stop(); if (tw) tw.classList.add('hide'); setEmbed(s.embed);
+        o.onAir && o.onAir(true, (s.title ? s.title + ' · ' : '') + 'from ' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch'));
+      } else if (s) {
+        setEmbed(null); if (tw) tw.classList.add('hide');
+        player.setSrc(s.hls); if (loaded) player.start();
+        o.onAir && o.onAir(true, s.title || null);
+      } else if (twitchLive && tw) {
+        setEmbed(null); player.stop(); tw.classList.remove('hide');
+        o.onAir && o.onAir(true, 'live on Twitch');
+      } else if (pepeOn) {
+        setEmbed(null); if (tw) tw.classList.add('hide');
+        player.setSrc(PEPE_HLS); if (loaded) player.start();
+        o.onAir && o.onAir(true, null);
+      } else {
+        setEmbed(null); if (tw) tw.classList.add('hide'); player.stop();
+        var any = slots.length > 0;
+        o.onAir && o.onAir(any, any ? "Pepe's stream is off air - pick a stream above" : 'nothing streaming right now');
+      }
+      renderTabs();
+    }
+    function renderTabs() {
+      var box = o.tabs;
+      if (!box) return;
+      if (!slots.length) { box.innerHTML = ''; return; }
+      var h = '';
+      slots.forEach(function (s) {
+        h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
+             (s.title ? ' title="' + esc(s.title) + '"' : '') + '>' +
+             '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="featured">★</span>' : '') +
+             '<span class="n' + (s.nameCss ? ' cx-name' : '') + '" style="' + esc(s.nameCss || '') + '">' + esc(s.display) + '</span>' +
+             (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') + '</button>';
+      });
+      var pOn = pepeOn || twitchLive;
+      h += '<button type="button" class="stab' + (pOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
+           '<span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (pOn ? '' : ' (off air)') + '</button>';
+      var s = cur();
+      if (o.manage && s) {
+        h += '<span class="adm">' + (s.featured ? '<button type="button" data-act="unfeature" data-id="' + esc(s.id) + '">☆ Unfeature</button>'
+                                                : '<button type="button" data-act="feature" data-id="' + esc(s.id) + '">★ Feature</button>') +
+             '<button type="button" data-act="cut" data-id="' + esc(s.id) + '">✂ Cut</button>' +
+             '<button type="button" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">Cut + ban</button></span>';
+      }
+      box.innerHTML = h;
+    }
+    if (o.tabs) {
+      o.tabs.addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        if (b.hasAttribute('data-v')) { view = b.getAttribute('data-v'); chosen = true; show(); return; }
+        var act = b.getAttribute('data-act');
+        if (!act) return;
+        var ban = b.hasAttribute('data-ban');
+        var q = act === 'cut' ? (ban ? 'Cut this slot AND ban them from this room\'s stage?' : 'Cut this slot? Unused PAT is refunded.')
+              : act === 'unfeature' ? 'Stop featuring this slot? A paid feature is refunded for the unused minutes.' : 'Feature this slot? It becomes the room\'s main stream.';
+        if (!confirm(q)) return;
+        b.disabled = true;
+        fetch('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-id')) + '/' + act, { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ban: ban }) })
+          .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || 'Could not do that.'); poll(); })
+          .catch(function () { alert('Could not reach the server.'); b.disabled = false; });
+      });
+    }
+    function poll() {
+      return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
+        var was = cur(), wasF = featured();
+        pepeOn = !!g.active;
+        slots = Array.isArray(g.slots) ? g.slots : [];
+        var f = featured();
+        if (was && !cur()) pickDefault();                                           // that slot ended / was cut
+        else if (!chosen && (f ? f.id : null) !== (wasF ? wasF.id : null)) pickDefault();   // featured changed and the viewer never chose
+        if (o.onPoll) o.onPoll(g);
+        show();
+      }).catch(function () {});
+    }
+    setInterval(poll, 10000);
+    window.addEventListener('load', function () {
+      loaded = true;
+      show();
+      if (o.twitchHost && window.Twitch) {
+        var tw = new Twitch.Player(o.twitchHost.id, { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
+        tw.addEventListener(Twitch.Player.READY, function () {
+          tw.addEventListener(Twitch.Player.ONLINE, function () { twitchLive = true; show(); });
+          tw.addEventListener(Twitch.Player.OFFLINE, function () { twitchLive = false; show(); });
+        });
+      }
+    });
+    if (loaded) show(); else renderTabs();
+    return { poll: poll, show: show, view: function () { return view; } };
+  }
+  window.PATVStage = window.PATVStage || {};
+  window.PATVStage.switcher = switcher;
+  window.PATVStage.embedUrl = embedUrl;
+})();

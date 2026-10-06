@@ -1,4 +1,4 @@
-// mainstage.js — room stages: user stream slots per room, featuring, scheduling, a queue (1.99al, 1.99ba).
+// mainstage.js — room stages: user stream slots per room, featuring, scheduling, a queue (1.99al, 1.99bi).
 //
 // Every Camfrog room on PATV has a STAGE: Pepe's stream (always there) plus N user SLOTS that people
 // stream to (the room owner sets N, default 1; rooms.js). Viewers switch freely between a room's live
@@ -138,7 +138,7 @@ function init() {
         revenue_vault TEXT,
         settled INTEGER NOT NULL DEFAULT 0
       )`);
-      // 1.99ba: per-room stages. Added columns; existing rows are kept and moved to the house room.
+      // 1.99bi: per-room stages. Added columns; existing rows are kept and moved to the house room.
       await addColumn("stage_slots", "room_id", "TEXT");
       await addColumn("stage_slots", "kind", "TEXT");                 // feature | slot
       await addColumn("stage_slots", "featured", "INTEGER NOT NULL DEFAULT 0");
@@ -1270,7 +1270,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
   app.post("/api/stage/admin/unban", addUser, needStaff, async (req, res) => {
     try { res.json({ ok: await unban((req.body || {}).userId, actor(req)) }); } catch (e) { fail(res, e); }
   });
-  // Pepe ("!stage cut"): cut open slots back to Pepe's stream - every room, or {room} only (1.99ba)
+  // Pepe ("!stage cut"): cut open slots back to Pepe's stream - every room, or {room} only (1.99bi)
   app.post("/api/stage/cut", async (req, res) => {
     const b = req.body || {};
     if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });

@@ -19,7 +19,8 @@
   const wheelHref = me ? '/u/' + encodeURIComponent(me.username) + '/wheel' : '/login';
   // things to do: compact, action-first; `hot` = something live there now, `fresh` = you haven't tried it
   const todo = [
-    { href: '/rooms' + (room ? '/' + encodeURIComponent(room.slug) : ''), ic: '📡', t: 'Live rooms', s: room ? room.count + ' in ' + room.name : null, hot: !!(room && room.live) },
+    { href: '/rooms', ic: '📡', t: 'Channel guide', s: room ? room.count + ' in ' + room.name : null, hot: !!(room && room.live) },
+    { href: '/stage', ic: '🎥', t: 'Go live', s: 'stream to a room', hot: paid.length > 0 },
     { href: '/markets', ic: '🔮', t: 'Markets', s: S0.markets ? S0.markets + ' open' : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
     { href: '/lotto', ic: '🎟️', t: 'Lotto', s: S0.lotto ? short(S0.lotto.jackpot) + ' jackpot' : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
     { href: wheelHref, ic: '🎡', t: 'Wheel', s: S0.casinoPot ? short(S0.casinoPot) + ' pot' : null },
@@ -36,7 +37,8 @@
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
-<script src="/public/js/stage-player.js?v=2"></script>
+<script src="/public/js/stage-player.js?v=3"></script>
+<script src="/public/js/stage-room.js?v=1"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
 <%- include('partials/cosmetics-css') %>
@@ -239,6 +241,27 @@
   .hm .stabs .adm button:hover { border-color: #ff5252; }
   @media (max-width: 520px) { .hm .stabs { padding: 0 10px 8px; } .hm .stabs .adm { margin-left: 0; } }
   @media (prefers-reduced-motion: reduce) { .hm .dot { animation: none; } }
+  /* 1.99bi: room stages - featured star, embeds, the Go live call to action */
+  .hm .stab .star { color: var(--gold); }
+  .hm .stab .src { font-size: 11px; color: #9fb3c8; border: 1px solid #2a3442; border-radius: 999px; padding: 0 6px; }
+  .hm .stab.feat { border-color: #6b5a20; }
+  .hm .stabs .adm button.feat { border-color: #6b5a20; background: #1d1a0f; color: #e8d9a0; }
+  .hm .player .embed { position: absolute; inset: 0; z-index: 2; background: #000; }
+  .hm .player .embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .hm .golive-btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-weight: bold; font-size: 13.5px;
+                    background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; border: 0; white-space: nowrap; box-shadow: 0 0 0 0 rgba(229,57,53,.5); }
+  .hm .golive-btn:hover { filter: brightness(1.08); color: #fff !important; }
+  .hm .golive-btn.ghost { background: #1d1a0f; border: 1px solid #6b5a20; color: #f3e3a3 !important; }
+  .hm .golive { display: grid; gap: 8px; }
+  .hm .golive p { margin: 0; color: #c9d3c9; font-size: 13.5px; line-height: 1.5; }
+  .hm .golive .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hm .golive ul { margin: 0; padding-left: 18px; color: #aab3aa; font-size: 12.5px; line-height: 1.55; }
+  .hm .stage .bar .room-on { color: #fff; font-weight: bold; }
+  .hm .guide-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .hm .guide-mini a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; color: #ddd !important; font-size: 13px; }
+  .hm .guide-mini .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
+  .hm .guide-mini .w { grid-column: 1 / -1; color: #9aa59a; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 520px) { .hm .stage .bar .sp { display: none; } .hm .stage .bar { gap: 8px 10px; } }
 </style>
 
 <main class="hm">
@@ -248,21 +271,24 @@
       <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
       <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
       <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
-      <span class="sub" id="stRoom"<% if (!st.room) { %> hidden<% } %>>📡 <% if (st.room && st.room.slug) { %><a href="/rooms/<%= encodeURIComponent(st.room.slug) %>"><%= st.room.name %></a><% } else if (st.room) { %><%= st.room.name %><% } %></span>
+      <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/rooms/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><% } %>
       <span class="sp"></span>
-      <a class="sub" href="/stage/book">Book the stage ›</a>
+      <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a>
+      <a class="golive-btn ghost" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) + '&feature=1' : '?feature=1' %>">★ Get featured</a>
+      <a class="sub" href="/rooms">Guide ›</a>
       <a class="sub" href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch ›</a>
     </div>
     <% if (stageAdmin) { %>
     <form class="stage-admin" id="stAdmin" autocomplete="off">
       <span class="tag">Admin</span>
-      <label for="stRoomSel">Stage room</label>
+      <label for="stRoomSel">Front page room</label>
       <select id="stRoomSel">
-        <option value="auto"<%= stageAdmin.pinned ? '' : ' selected' %>>Follow the open Camfrog tab (auto)</option>
-        <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.pinned && stageAdmin.room === r.id ? ' selected' : '' %>><%= r.name %><%= r.name !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
+        <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (Pepe's room, else the busiest live room)</option>
+        <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.front === r.id ? ' selected' : '' %>><%= r.title %><%= r.title !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
       </select>
-      <button type="submit" class="btn"<%= (stageAdmin.rooms || []).length ? '' : ' disabled' %>>Put on stage</button>
-      <span id="stAdminMsg" aria-live="polite"><%= (stageAdmin.rooms || []).length ? '' : 'Pepe hasn\'t reported his rooms yet.' %></span>
+      <button type="submit" class="btn">Feature on the homepage</button>
+      <span id="stAdminMsg" aria-live="polite">Doesn't move Pepe (<code>!activeroom</code> is his).</span>
+      <a href="/rooms/admin" style="margin-left:auto">Rooms admin ›</a>
     </form>
     <% } %>
     <div class="stabs" id="stTabs" role="tablist" aria-label="Stage streams"></div>
@@ -272,6 +298,7 @@
         <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
         <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
         <div id="twitch" class="hide"></div>
+        <div class="embed hide" id="stEmbed"></div>
       </div>
       <div class="stage-side" id="stageSide"></div>
     </div>
@@ -316,9 +343,18 @@
           <div class="muted" style="margin-top:4px">Watch or take a seat ›</div>
         </a>
       <% } %>
+      <div class="box golive">
+        <h3>🎥 Your show on PATV</h3>
+        <p><b>Anyone can go live.</b> Stream to a room's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
+        <ul>
+          <li>Ordinary slots are <b>free</b> in most rooms<%= paid.length ? '' : ' — book one now or for later' %>.</li>
+          <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
+        </ul>
+        <div class="row"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a><a class="btn" href="/rooms" style="padding:6px 10px;font-size:13px">Channel guide</a></div>
+      </div>
       <% if (liveRooms.length >= 2) { %>
         <div class="box">
-          <h3>📡 Live rooms</h3>
+          <h3>📡 On now</h3>
           <ul class="rooms-mini">
             <% liveRooms.forEach((r) => { %>
               <li><a href="/rooms/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="muted">👥 <%= r.count %> · 🎙 <%= r.micCount %></span></a></li>
@@ -469,133 +505,31 @@
       placeWidgets();
     }
 
-    // ── the HLS player (public/js/stage-player.js): created on demand, retried every 10 s on any error or stall ──
-    // Pepe's stream, and any PAID slots live right now (mainstage.js). During a paid slot the stage
-    // shows it; the tabs flip to Pepe's stream (which keeps running as always) and back.
-    var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
-    var slots = <%- JSON.stringify(paid.map(function (x) { return { id: x.id, display: x.display, nameCss: x.nameCss, hls: x.hls }; })).replace(/</g, '\\u003c') %>;
-    var STAFF = <%= staff ? 'true' : 'false' %>;
-    var view = slots.length ? 'slot:' + slots[0].id : 'pepe';
-    var twitchLive = false, hlsLive = <%= st.active ? 'true' : 'false' %>;
-    function curSlot() {
-      if (view.indexOf('slot:') !== 0) return null;
-      var id = view.slice(5);
-      for (var i = 0; i < slots.length; i++) if (slots[i].id === id) return slots[i];
-      return null;
-    }
-    function src() { var s = curSlot(); return s ? s.hls : PEPE_HLS; }
-    function anyLive() { return hlsLive || twitchLive || slots.length > 0; }
-    var stagePlayer = PATVStage.player({ wrap: document.getElementById('videoWrapper'), id: 'videoElement', src: src(),
-      reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute') });
-    function startPlayer() { if (twitchLive && !curSlot()) return; stagePlayer.setSrc(src()); stagePlayer.start(); }
-    function stopPlayer() { stagePlayer.stop(); }
-    var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
-    // what the stage shows right now: a paid slot (HLS), or Pepe (Twitch when it's live there, else HLS)
-    function show() {
-      var s = curSlot(), tw = document.getElementById('twitch');
-      if (s) { tw.classList.add('hide'); startPlayer(); setPill(true, null); }
-      else if (twitchLive) { stopPlayer(); tw.classList.remove('hide'); setPill(true, 'live on Twitch'); }
-      else if (hlsLive) { tw.classList.add('hide'); startPlayer(); setPill(true, null); }
-      else { tw.classList.add('hide'); stopPlayer(); setPill(anyLive(), anyLive() ? "Pepe's stream is off air right now" : 'nothing streaming right now'); }
-      renderTabs();
-    }
-    function renderTabs() {
-      var box = document.getElementById('stTabs');
-      if (!slots.length) { box.innerHTML = ''; return; }
-      var h = '';
-      slots.forEach(function (s) {
-        h += '<button type="button" class="stab" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '">' +
-             '<span class="dot" aria-hidden="true"></span><span class="n' + (s.nameCss ? ' cx-name' : '') + '" style="' + esc(s.nameCss || '') + '">' + esc(s.display) + '</span> is live</button>';
-      });
-      h += '<button type="button" class="stab' + (hlsLive || twitchLive ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
-           '<span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (hlsLive || twitchLive ? '' : ' (off air)') + '</button>';
-      var s = curSlot();
-      if (STAFF && s) h += '<span class="adm"><button type="button" data-cut="' + esc(s.id) + '">✂ Cut to Pepe</button><button type="button" data-cut="' + esc(s.id) + '" data-ban="1">Cut + ban</button></span>';
-      box.innerHTML = h;
-    }
-    document.getElementById('stTabs').addEventListener('click', function (e) {
-      var b = e.target.closest('button');
-      if (!b) return;
-      if (b.hasAttribute('data-v')) { view = b.getAttribute('data-v'); show(); return; }
-      if (b.hasAttribute('data-cut')) {
-        var ban = b.hasAttribute('data-ban');
-        if (!confirm(ban ? 'Cut this slot to Pepe AND ban them from booking?' : 'Cut this slot to Pepe? The unused PAT is refunded.')) return;
-        b.disabled = true;
-        fetch('/api/stage/admin/cut', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: b.getAttribute('data-cut'), ban: ban }) })
-          .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || 'Could not cut it.'); pollStage(); })
-          .catch(function () { alert('Could not reach the server.'); b.disabled = false; });
-      }
+    // ── the stage (public/js/stage-room.js): the FRONT ROOM's stage - its featured slot by default, else
+    // Pepe's stream (Twitch when it's live there, else HLS); tabs switch between every live stream.
+    var initSlots = <%- JSON.stringify(paid).replace(/</g, '\\u003c') %>;
+    PATVStage.switcher({
+      tabs: document.getElementById('stTabs'), wrap: document.getElementById('videoWrapper'),
+      reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute'),
+      embedHost: document.getElementById('stEmbed'), twitchHost: document.getElementById('twitch'),
+      api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, manage: <%= staff ? 'true' : 'false' %>,
+      onAir: function (on, sub) { setPill(on, sub || (on ? 'live now' : 'nothing streaming right now')); }
     });
 
-    // ON AIR = the playlist is actually being written (checked on the server) or Twitch is live
-    function pollStage() {
-      fetch('/api/stage', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (g) {
-        var was = hlsLive, hadSlots = slots.length, cur = curSlot();
-        hlsLive = !!g.active;
-        var rl = document.getElementById('stRoom');
-        if (rl) {
-          rl.hidden = !g.room; rl.textContent = g.room ? '📡 ' : '';
-          if (g.room) { var x = document.createElement(g.room.slug ? 'a' : 'span'); x.textContent = g.room.name; if (g.room.slug) x.href = '/rooms/' + encodeURIComponent(g.room.slug); rl.appendChild(x); }
-        }
-        slots = Array.isArray(g.slots) ? g.slots : [];
-        if (cur && !curSlot()) view = slots.length ? 'slot:' + slots[0].id : 'pepe';   // that slot ended / was cut
-        else if (!hadSlots && slots.length && view === 'pepe') view = 'slot:' + slots[0].id;   // a paid slot just went live
-        if (hlsLive !== was || slots.length !== hadSlots || view !== (cur ? 'slot:' + cur.id : 'pepe') || (curSlot() && stagePlayer.src() !== src())) {
-          show();
-          if (!anyLive() && (was || hadSlots)) setPill(false, 'stream ended just now');
-        } else renderTabs();
-      }).catch(function () {});
-    }
-    setInterval(pollStage, 10000);
-
-    // admin: move the stage to another of Pepe's rooms (queued for Pepe; he checks it's safe)
+    // admin: which room the homepage features (a site setting - Pepe's !activeroom is untouched)
     var adm = document.getElementById('stAdmin');
     if (adm) {
       var admMsg = document.getElementById('stAdminMsg'), admBtn = adm.querySelector('button');
       adm.addEventListener('submit', function (e) {
         e.preventDefault();
-        admBtn.disabled = true; admMsg.textContent = 'Sending to Pepe…';
-        fetch('/api/stage/room', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
-                                   body: JSON.stringify({ room: document.getElementById('stRoomSel').value }) })
+        admBtn.disabled = true; admMsg.textContent = 'Saving…';
+        fetch('/api/rooms/front', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ room: document.getElementById('stRoomSel').value }) })
           .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (!d.ok) { admMsg.textContent = d.error || 'Not sent.'; admBtn.disabled = false; return; }
-            var tries = 0;
-            (function check() {
-              fetch('/api/stage/room/' + d.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (a) {
-                if (a.status === 'done') {
-                  // Pepe answered; his stage report reaches the site a few seconds later - wait for it so
-                  // the reload shows the new room (it used to reload too early and look unchanged)
-                  admMsg.textContent = '✓ ' + (a.message || 'Done') + ' — updating the stage…';
-                  var want = document.getElementById('stRoomSel').value, waited = 0;
-                  (function settle() {
-                    fetch('/api/stage/room/' + d.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (b) {
-                      var moved = b && (want === 'auto' ? b.pinned === false : b.stageRoomId === want);
-                      if (moved || (waited += 1000) > 15000) { location.reload(); return; }
-                      setTimeout(settle, 1000);
-                    }).catch(function () { location.reload(); });
-                  })();
-                  return;
-                }
-                if (a.status === 'failed') { admMsg.textContent = '✗ ' + (a.message || 'Pepe refused'); admBtn.disabled = false; return; }
-                if (++tries > 30) { admMsg.textContent = 'Pepe hasn\'t answered yet — is he online?'; admBtn.disabled = false; return; }
-                admMsg.textContent = 'Waiting for Pepe…'; setTimeout(check, 2000);
-              }).catch(function () { admMsg.textContent = 'Couldn\'t reach the site.'; admBtn.disabled = false; });
-            })();
-          })
+          .then(function (d) { if (!d.ok) { admMsg.textContent = d.error || 'Not saved.'; admBtn.disabled = false; return; } location.reload(); })
           .catch(function () { admMsg.textContent = 'Couldn\'t reach the site.'; admBtn.disabled = false; });
       });
     }
-
-    window.addEventListener('load', function () {
-      show();
-      if (!window.Twitch) return;
-      var tw = new Twitch.Player('twitch', { channel: 'publicaccess_ttv', width: '100%', height: '100%', muted: true, parent: [location.hostname] });
-      tw.addEventListener(Twitch.Player.READY, function () {
-        tw.addEventListener(Twitch.Player.ONLINE, function () { twitchLive = true; show(); });
-        tw.addEventListener(Twitch.Player.OFFLINE, function () { twitchLive = false; show(); });
-      });
-    });
 
     // ── NOW SPINNING / LAST SPIN on the stage wheel, in the spinner's name colour ──
     function spinLine(sp) {

@@ -1,5 +1,5 @@
 // rooms.js — the room registry: who OWNS each Camfrog room on PATV, its page settings, its stage
-// settings, which room the homepage features, and a light activity tally (1.99ba).
+// settings, which room the homepage features, and a light activity tally (1.99bi).
 //
 //   rooms_registry   room_id (Camfrog room id, e.g. "PepeFrog.Room") PK, slug, title, description,
 //                    banner, owner_kind ('house' = Pepe / the site | 'user' | 'none'), owner_user_id,

@@ -1,0 +1,95 @@
+<%- include('layout', { title: 'Rooms admin', user: user }) %>
+<!-- views/roomsAdmin.ejs — site staff (1.99bi): room owners, the homepage's featured room, royalty
+     rates. Stage money settings stay on /stage/admin. -->
+<link rel="stylesheet" href="/public/css/stage.css?v=2">
+<% const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
+<main class="sb" id="ra">
+  <div class="sb-head">
+    <h1>🏠 Rooms admin</h1>
+    <p class="lede">Who owns each room, which room the homepage features, and room-owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/rooms">Channel guide ›</a></p>
+  </div>
+
+  <section class="sb-card" aria-labelledby="frontT">
+    <h2 id="frontT">Homepage room</h2>
+    <form id="frontForm" class="row">
+      <select name="room" aria-label="Homepage room">
+        <option value="auto"<%= front === 'auto' ? ' selected' : '' %>>Automatic — Pepe's room when bridged, else the busiest live room</option>
+        <% list.forEach((r) => { %><option value="<%= r.id %>"<%= front === r.id ? ' selected' : '' %>><%= r.title %> (<%= r.id %>)</option><% }) %>
+      </select>
+      <button type="submit" class="btn primary">Save</button><span class="msg" id="frontMsg" role="status"></span>
+    </form>
+    <p class="muted">The homepage shows this room's stage (its featured stream, else Pepe's) and its live chat. It does <b>not</b> move Pepe — <code>!activeroom</code> stays his window/mic setting in chat.</p>
+  </section>
+
+  <section class="sb-card" aria-labelledby="ownT">
+    <h2 id="ownT">Rooms &amp; owners</h2>
+    <div class="tblwrap"><table><thead><tr><th>Room</th><th>Owner</th><th>Stage</th><th>Now</th><th></th></tr></thead><tbody>
+      <% list.forEach((r) => { const g = guide.find((x) => x.id === r.id) || {}; %>
+        <tr>
+          <td><a href="/rooms/<%= encodeURIComponent(g.slug || r.slug) %>"><b><%= r.title %></b></a><br><span class="muted"><%= r.id %></span></td>
+          <td><form class="row ownForm" data-room="<%= r.id %>" style="margin:0">
+              <input type="text" name="owner" value="<%= r.house ? 'house' : r.owner ? r.owner.username : '' %>" placeholder="username, Camfrog name, house, or empty" aria-label="Owner of <%= r.title %>">
+              <button type="submit" class="btn">Set</button></form>
+              <span class="muted"><%= r.house ? "🐸 Pepe / site admins" : r.owner ? '👑 ' + (r.owner.display || r.owner.username) + (r.owner.camfrog ? ' · CF ' + r.owner.camfrog : '') : 'no owner' %></span></td>
+          <td><%= r.slot_count %> slot<%= r.slot_count === 1 ? '' : 's' %> · <%= r.slot_price ? fmt(r.slot_price) + ' PAT/min' : 'free' %><%= r.approval ? ' · approval' : '' %></td>
+          <td><%= g.live ? '● live' : (g.bridged ? 'bridged' : '—') %><%= g.count ? ' · 👥 ' + g.count : '' %><%= (g.now || []).length ? ' · 📺 ' + g.now.length : '' %></td>
+          <td><a class="btn" href="/rooms/<%= encodeURIComponent(g.slug || r.slug) %>/manage">Manage</a></td>
+        </tr>
+      <% }) %>
+    </tbody></table></div>
+    <form id="addForm" class="row"><input type="text" name="room" placeholder="Camfrog room id (e.g. plant_based_chatting)" required aria-label="Room id">
+      <input type="text" name="title" placeholder="title" aria-label="Title"><button type="submit" class="btn">Add room</button><span class="msg" id="addMsg" role="status"></span></form>
+    <p class="muted">Rooms Pepe bridges are added automatically (no owner). Owner = one PATV account (matched by username, display name or Camfrog/Discord/Twitch name); <code>house</code> = Pepe's (site admins run it, no royalties). Owners sync to Pepe within ~2 minutes for chat <code>!stage</code> commands.</p>
+  </section>
+
+  <section class="sb-card" aria-labelledby="royT">
+    <h2 id="royT">Room-owner royalties</h2>
+    <form id="royForm" class="settings">
+      <label class="chk"><input type="checkbox" name="enabled" <%= roy.enabled ? 'checked' : '' %>> Royalties on</label>
+      <label>% of paid stage time<input type="number" name="stage_pct" min="0" max="50" step="0.5" value="<%= roy.stage_pct %>"></label>
+      <label>% of Pepe command spend<input type="number" name="spend_pct" min="0" max="50" step="0.5" value="<%= roy.spend_pct %>"></label>
+      <label>Payout period (days)<input type="number" name="period_days" min="1" max="31" value="<%= roy.period_days %>"></label>
+      <label>Active days needed<input type="number" name="min_active_days" min="0" max="31" value="<%= roy.min_active_days %>"></label>
+      <label>Active day = minutes live ≥<input type="number" name="active_minutes" min="0" max="1440" value="<%= roy.active_minutes %>"></label>
+      <label>…and peak people ≥<input type="number" name="active_peak" min="0" value="<%= roy.active_peak %>"></label>
+      <label>Cap per payout (PAT)<input type="number" name="cap_per_period" min="0" value="<%= roy.cap_per_period %>"></label>
+      <label>Expire unpaid after (periods)<input type="number" name="keep_periods" min="1" max="52" value="<%= roy.keep_periods %>"></label>
+      <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save royalties</button><span class="msg" id="royMsg" role="status"></span></div>
+    </form>
+    <p class="muted">Accruing moves no money. Payouts come out of the Federal Reserve (Pepe's routing flow <code>room_owner</code>), skipped and retried if it can't cover them. Changing the period length re-buckets future periods.</p>
+    <div class="tblwrap"><table><thead><tr><th>Room</th><th>Owner</th><th class="num">Earned</th><th class="num">Paid</th><th class="num">Expired</th></tr></thead><tbody>
+      <% if (!overview.length) { %><tr><td colspan="5" class="muted">Nothing earned yet.</td></tr><% } %>
+      <% overview.forEach((o) => { %><tr><td><%= o.title %></td><td><%= o.owner %></td><td class="num"><%= fmt(o.earned) %></td><td class="num"><%= fmt(o.paid) %></td><td class="num"><%= fmt(o.forfeited) %></td></tr><% }) %>
+    </tbody></table></div>
+  </section>
+</main>
+<script>
+(function () {
+  'use strict';
+  function post(url, body) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); });
+  }
+  function formJson(f) { var o = {}; Array.prototype.forEach.call(f.elements, function (el) { if (el.name) o[el.name] = el.type === 'checkbox' ? el.checked : el.value; }); return o; }
+  document.getElementById('frontForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/rooms/front', formJson(e.target)).then(function (j) { document.getElementById('frontMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+  });
+  document.querySelectorAll('.ownForm').forEach(function (f) {
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      post('/api/rooms/admin/owner', { room: f.getAttribute('data-room'), owner: f.elements.owner.value }).then(function (j) { if (!j.ok) alert(j.error || 'Not saved.'); else location.reload(); });
+    });
+  });
+  document.getElementById('addForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/rooms/admin/add', formJson(e.target)).then(function (j) { if (!j.ok) document.getElementById('addMsg').textContent = j.error || 'Not added.'; else location.reload(); });
+  });
+  document.getElementById('royForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/rooms/admin/royalties', formJson(e.target)).then(function (j) { document.getElementById('royMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+  });
+})();
+</script>
+</body>
+</html>

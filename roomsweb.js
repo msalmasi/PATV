@@ -1,4 +1,4 @@
-// roomsweb.js — the pages and APIs around room ownership (1.99ba): the channel guide (/rooms), the
+// roomsweb.js — the pages and APIs around room ownership (1.99bi): the channel guide (/rooms), the
 // owner's room dashboard (/rooms/:slug/manage), the rooms admin (/rooms/admin), the homepage's front
 // room, and the bot-token endpoints Pepe uses (owners sync, owner !stage commands, royalty spend).
 // Data lives in rooms.js (registry), mainstage.js (stages) and royalties.js.

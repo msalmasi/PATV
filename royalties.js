@@ -1,4 +1,4 @@
-// royalties.js — room-owner royalties (1.99ba): an incentive for owners to build their rooms up.
+// royalties.js — room-owner royalties (1.99bi): an incentive for owners to build their rooms up.
 //
 // A room owner earns a share of the PAT spent in their room:
 //   stage   stage_pct % of what people PAY for stage time in the room (paid featuring + priced slots),

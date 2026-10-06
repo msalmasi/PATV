@@ -62,5 +62,6 @@
     }
     return { start: start, stop: stop, running: function () { return !!p; }, setSrc: setSrc, src: function () { return SRC; } };
   }
-  window.PATVStage = { player: player };
+  window.PATVStage = window.PATVStage || {};
+  window.PATVStage.player = player;
 })();

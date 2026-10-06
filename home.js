@@ -118,14 +118,22 @@ function register(app, { addUser, xpForNextLevel }) {
           "SELECT username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?",
           [username]))[0] || null;
       }
-      const [S, rooms, top, slots] = await Promise.all([stats(), bridge.summary(!!me), topFrogs(),
-        require("./mainstage").publicSlots().catch(() => [])]);
-      // the room panel = the STAGE ROOM (the room the main stage shows, Pepe's active room) when it's
-      // bridged; otherwise the first live room, as before
+      const [S, rooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
+      // 1.99bi: the homepage features the FRONT ROOM (an admin's pick, else auto) - its stage (Pepe's
+      // stream + that room's featured / live slots) and, when it's bridged, its live chat panel.
+      // Pepe's !activeroom (his Camfrog window) no longer decides this.
+      const reg = require("./rooms");
+      const web = require("./roomsweb");
       const stage = bridge.stage();
-      const onStage = stage.room && stage.room.slug ? rooms.find((r) => r.slug === stage.room.slug) || null : null;
+      const front = await reg.frontRoom(rooms, bridge.stageRoomRef()).catch(() => ({ id: reg.HOUSE_ROOM, pinned: false }));
+      const frontReg = await reg.get(front.id).catch(() => null);
+      const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
+                                     owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null } : null;
+      const slots = await require("./mainstage").publicSlots(front.id).catch(() => []);
+      const onStage = rooms.find((r) => r.id === front.id) || null;
       const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
-      const stageAdmin = me && me.class === "Admin" ? bridge.stageAdmin() : null;
+      const isStaff = !!(me && (me.class === "Admin" || me.class === "Staff"));
+      const stageAdmin = isStaff ? { front: reg.frontSetting(), rooms: (await reg.list()).map((r) => ({ id: r.id, title: r.title })) } : null;
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
       const roomLive = me && room ? await bridge.liveFor(room.slug) : null;
@@ -133,9 +141,9 @@ function register(app, { addUser, xpForNextLevel }) {
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top,
-        roomOnStage: !!(onStage && room === onStage), stageAdmin,
+        roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, featuredPrice: require("./mainstage").config().price_per_min,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
-        slots, staff: !!(req.user && (req.user.class === "Admin" || req.user.class === "Staff")),
+        slots, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals
         displayname: me ? me.displayname : null, classh: me ? me.class : null, level: me ? me.level : null,
         xp: me ? Math.round(me.xp) : null, avatar: me ? me.avatar : null, email: me ? me.email : null,

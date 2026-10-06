@@ -38,7 +38,7 @@
               const wheelHref = (typeof user == 'undefined' || !user) ? '/login' : '/u/' + user + '/wheel';
               const main = [
                 ['/', '📺', 'Watch'],
-                ['/rooms', '📡', 'Live rooms'],
+                ['/rooms', '📡', 'Channel guide'],
                 [wheelHref, '<img src="/public/img/star.gif" height="16" alt="">', 'Wheel'],
                 ['/feed', '🎞️', 'Clips & snaps'],
                 ['/markets', '🔮', 'Markets'],
@@ -87,6 +87,7 @@
                 </details>
             </div>
             <div class="navbar-right">
+                <a href="/stage" class="nav-golive" title="Go live: stream to a room's stage, or get featured"><span aria-hidden="true">🎥</span><span class="lb"> Go live</span></a>
                 <% if (typeof user == 'undefined' || !user) { %>
                     <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
                 <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; %>
@@ -133,6 +134,10 @@
             .nav-sep { height: 1px; background: #2c2c33; margin: 4px 2px; }
             .nav-burger { display: none; }
             .nav-burger > summary { font-size: 22px; line-height: 1; padding: 6px 10px; }
+            .nav-golive { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 999px; font-weight: bold; font-size: 14px; white-space: nowrap;
+                          background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; }
+            .nav-golive:hover, .nav-golive:focus-visible { filter: brightness(1.1); color: #fff !important; }
+            @media (max-width: 420px) { .nav-golive .lb { display: none; } .nav-golive { padding: 6px 10px; } }
             .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
             .navbar .avatar img { margin-left: 0; }
             .nav-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;

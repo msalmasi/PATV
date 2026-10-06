@@ -1,4 +1,5 @@
-// /stage/book — booking a paid Main Stage slot, its live status, and streaming from the browser.
+// /stage — the "Go live" hub (1.99bi): book a slot on a room's stage now / later / in the queue, the
+// live status of your open slot, your upcoming bookings, and streaming from the browser.
 // Browser mode: MediaRecorder (1 s WebM chunks) -> POST /api/stage/slots/:id/relay?seq=N, one at a
 // time and in order; the server pipes them through ffmpeg into the stage. Out of order / relay gone
 // -> restart the recorder from chunk 0 (a fresh WebM header).
@@ -9,81 +10,172 @@
   var PRICE = Number(root.getAttribute('data-price')) || 0;
   var $ = function (id) { return document.getElementById(id); };
   var fmt = function (n) { return Math.round(Number(n) || 0).toLocaleString('en-US'); };
+  var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
   var mmss = function (s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
     return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+  var when = function (ms) { var d = new Date(Number(ms)); return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); };
   var KEY_STORE = 'stageKey:';
-  var slot = null, polling = null, again = false;
+  var slot = null, polling = null, roomState = null, whenTouched = false;
 
   function post(url, body) {
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), credentials: 'same-origin' })
       .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); });
   }
   function show(id, on) { $(id).classList.toggle('hide', !on); }
+  function radio(name) { var r = document.querySelector('input[name=' + name + ']:checked'); return r ? r.value : null; }
+  function setRadio(name, v) { var r = document.querySelector('input[name=' + name + '][value=' + v + ']'); if (r) { r.checked = true; } }
+  function roomOpt(idOrSlug) {
+    var opts = $('room').options;
+    for (var i = 0; i < opts.length; i++) if (opts[i].value === idOrSlug || opts[i].getAttribute('data-id') === idOrSlug) return opts[i];
+    return null;
+  }
+  function roomTitle(id) { var o = roomOpt(id); return o ? o.getAttribute('data-title') : id; }
+  if (/[?&]feature=1/.test(location.search)) setRadio('kind', 'feature');
 
   // ── booking form ──
   var mins = $('mins'), minsR = $('minsR');
-  function holdCalc() { $('holdAmt').textContent = fmt((Number(mins.value) || 0) * PRICE); }
-  mins.addEventListener('input', function () { minsR.value = mins.value; holdCalc(); });
-  minsR.addEventListener('input', function () { mins.value = minsR.value; holdCalc(); });
-  holdCalc();
+  function price() {
+    if (radio('kind') === 'feature') return PRICE;
+    var o = $('room').selectedOptions[0];
+    return o ? Number(o.getAttribute('data-price')) || 0 : 0;
+  }
+  function formCalc() {
+    var o = $('room').selectedOptions[0], sp = o ? Number(o.getAttribute('data-price')) || 0 : 0;
+    $('slotPriceTxt').textContent = sp ? fmt(sp) + ' PAT / live min in this room' : 'free in this room';
+    $('holdAmt').textContent = fmt((Number(mins.value) || 0) * price());
+    var w = radio('when'), embed = radio('mode') === 'embed';
+    show('embedFld', embed); show('atFld', w === 'later');
+    $('bookBtn').textContent = w === 'later' ? '📅 Book this time' : w === 'queue' ? '⏳ Join the queue' : (embed ? '▶ Put it on now' : '🎥 Go live now');
+  }
+  mins.addEventListener('input', function () { minsR.value = mins.value; formCalc(); });
+  minsR.addEventListener('input', function () { mins.value = minsR.value; formCalc(); });
+  document.querySelectorAll('#bookForm input[type=radio]').forEach(function (r) { r.addEventListener('change', formCalc); });
+  document.querySelectorAll('input[name=when]').forEach(function (r) { r.addEventListener('change', function () { whenTouched = true; }); });
+  $('room').addEventListener('change', function () { whenTouched = false; setRadio('when', 'now'); formCalc(); refresh(); });
+  (function () {           // the time picker: from the next quarter hour, within the booking window
+    var d = new Date(Date.now() + 20 * 60000); d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    var loc = function (x) { return x.getFullYear() + '-' + pad(x.getMonth() + 1) + '-' + pad(x.getDate()) + 'T' + pad(x.getHours()) + ':' + pad(x.getMinutes()); };
+    $('at').value = loc(d); $('at').min = loc(new Date());
+    var days = Number(root.getAttribute('data-days')) || 14;
+    $('at').max = loc(new Date(Date.now() + days * 86400000));
+  })();
+  formCalc();
+
   $('bookForm').addEventListener('submit', function (e) {
     e.preventDefault();
-    var m = Number(mins.value);
-    if (!confirm('Hold ' + fmt(m * PRICE) + ' PAT for a ' + m + '-minute stage slot? You pay only for the minutes you are live; the rest comes back.')) return;
+    var m = Number(mins.value), w = radio('when'), feat = radio('kind') === 'feature', mode = radio('mode');
+    var body = { room: $('room').value, minutes: m, feature: feat, mode: mode, embed: $('embed').value, title: $('title').value };
+    if (mode === 'embed' && !$('embed').value.trim()) { $('bookMsg').textContent = 'Paste a YouTube or Twitch link.'; return; }
+    var hold = m * price();
+    var url = '/api/stage/book';
+    if (w === 'later') {
+      var at = new Date($('at').value).getTime();
+      if (!at || at < Date.now() + 60000) { $('bookMsg').textContent = 'Pick a start time in the future.'; return; }
+      body.start_at = at;
+    } else if (w === 'queue') url = '/api/stage/queue';
+    var q = w === 'queue' ? 'Join the queue for a ' + m + '-minute ' + (feat ? 'featured ' : '') + 'slot? When a slot frees up it\'s booked for you' + (hold ? ' and ' + fmt(hold) + ' PAT is held then' : '') + '.'
+      : (hold ? 'Hold ' + fmt(hold) + ' PAT for a ' + m + '-minute ' + (feat ? 'featured ' : '') + 'slot? You pay only for the minutes you\'re live; the rest comes back.'
+              : 'Book a free ' + m + '-minute slot' + (w === 'later' ? ' at ' + when(body.start_at) : ' now') + '?');
+    if (!confirm(q)) return;
     $('bookBtn').disabled = true; $('bookMsg').textContent = 'Booking…';
-    post('/api/stage/book', { minutes: m }).then(function (j) {
+    post(url, body).then(function (j) {
       $('bookBtn').disabled = false;
-      if (!j.ok) { $('bookMsg').textContent = j.error || 'Could not book.'; return; }
-      $('bookMsg').textContent = ''; again = false;
-      try { sessionStorage.setItem(KEY_STORE + j.slot.id, j.key); } catch (e) {}
-      render({ slot: j.slot });
+      if (!j.ok) {
+        $('bookMsg').textContent = j.error || 'Could not book.';
+        if (/queue/i.test(j.error || '') && w === 'now') { setRadio('when', 'queue'); formCalc(); }
+        return;
+      }
+      if (w === 'queue') $('bookMsg').textContent = 'You\'re #' + j.position + ' in the queue - we\'ll tell you (inbox + Pepe) when you\'re up.';
+      else if (j.slot && (j.slot.status === 'requested')) $('bookMsg').textContent = 'Requested - the room\'s owner approves it. Your hold comes back if they don\'t.';
+      else if (j.slot && j.slot.status === 'scheduled') $('bookMsg').textContent = 'Booked for ' + when(j.slot.start_at) + '. Your key works from a few minutes before.';
+      else $('bookMsg').textContent = '';
+      if (j.key && j.slot) { try { sessionStorage.setItem(KEY_STORE + j.slot.id, j.key); } catch (x) {} }
       refresh();
     }).catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = 'Could not reach the server.'; });
   });
 
   // ── status ──
   var REASONS = { owner_ended: 'you ended it', time_up: 'your time ran out', never_live: "it never went live, so you got everything back",
-    idle: 'the stream was off air too long', cut: 'an admin cut it back to Pepe', banned: 'an admin cut it', deadline: 'it reached its deadline', restart: 'it timed out while the site restarted' };
+    idle: 'the stream was off air too long', cut: 'it was cut back to Pepe', banned: 'an admin or the room owner cut it', deadline: 'it reached its deadline',
+    restart: 'it timed out while the site restarted', cancelled: 'you cancelled it', denied: 'the room owner declined it', not_approved: "it wasn't approved in time",
+    no_room: 'no slot was free at its start' };
   function render(d) {
     if (d.balance != null) $('bal').textContent = fmt(d.balance);
-    var s = d.slot;
-    var open = s && s.status !== 'ended';
-    if (d.banned && !open) { show('bookCard', false); show('busyCard', true); $('busyMsg').textContent = "You can't book the stage right now."; }
-    else if (d.busy && !open) { show('bookCard', false); show('busyCard', true); $('busyMsg').textContent = 'Someone else has the stage right now - check back when their slot ends.'; }
-    else { show('busyCard', false); show('bookCard', !open && (again || !(s && s.status === 'ended'))); }
-    show('slotCard', !!open);
-    show('doneCard', !!(s && s.status === 'ended') && !open && !again);
-    if (s && s.status === 'ended') {
-      $('doneTxt').innerHTML = 'Ended - ' + (REASONS[s.end_reason] || s.end_reason || 'ended') + '. Live <b>' + mmss(s.live_seconds) + '</b>, charged <b>' +
-        fmt(s.charged) + '</b> PAT (' + s.billed_minutes + ' min), refunded <b>' + fmt(s.refunded) + '</b> PAT.';
-      stopWeb('');
-      if (slot && slot.id === s.id) { try { sessionStorage.removeItem(KEY_STORE + s.id); } catch (e) {} }
+    roomState = d.room;
+    if (d.room) {
+      var R = d.room, bits = [];
+      bits.push('🎬 ' + R.open + '/' + R.room.slot_count + ' slot' + (R.room.slot_count === 1 ? '' : 's') + ' in use');
+      if (R.featured) bits.push('★ featured: ' + R.featured.display);
+      if (R.queue.length) bits.push(R.queue.length + ' in the queue');
+      if (R.room.approval) bits.push('bookings for later need the owner\'s OK');
+      if (R.upcoming.length) bits.push('next booking ' + when(R.upcoming[0].start_at));
+      $('roomInfo').textContent = bits.join(' · ');
+      $('nowTxt').textContent = R.free > 0 ? 'a slot is free' : 'all slots busy';
+      if (R.free < 1 && !whenTouched && radio('when') === 'now') { setRadio('when', 'queue'); formCalc(); }
+      $('queueTxt').textContent = R.queue.length ? R.queue.length + ' waiting' : 'next free slot';
     }
-    slot = s;
-    if (!open) return;
+    if (d.banned) $('roomInfo').textContent = 'You can\'t book this room\'s stage.';
+    var list = d.slots || [];
+    var s = list.find ? list.find(function (x) { return x.status === 'waiting' || x.status === 'active'; }) : null;
+    show('slotCard', !!s);
+    var last = d.slot && d.slot.status === 'ended' ? d.slot : null;
+    show('doneCard', !s && !!last && last.ended && Date.now() - last.ended < 30 * 60000);
+    if (!s && last) {
+      $('doneTxt').innerHTML = 'Ended - ' + esc(REASONS[last.end_reason] || last.end_reason || 'ended') + '. Live <b>' + mmss(last.live_seconds) + '</b>, charged <b>' +
+        fmt(last.charged) + '</b> PAT, refunded <b>' + fmt(last.refunded) + '</b> PAT.';
+      if (slot && slot.id === last.id) { stopWeb(''); try { sessionStorage.removeItem(KEY_STORE + last.id); } catch (e) {} }
+    }
+    // upcoming + queue
+    var up = list.filter(function (x) { return x.status === 'scheduled' || x.status === 'requested'; });
+    var h = '';
+    up.forEach(function (x) {
+      h += '<li><span><b>' + esc(roomTitle(x.room_id)) + '</b> · ' + when(x.start_at) + ' · ' + x.max_minutes + ' min' + (x.featured ? ' · ★ featured' : '') +
+           (x.embed_label ? ' · ' + esc(x.embed_label) : '') + (x.status === 'requested' ? ' · <i>waiting for the owner</i>' : '') +
+           (x.held ? ' · ' + fmt(x.held) + ' PAT held' : '') + '</span>' +
+           (x.mode !== 'embed' ? '<button type="button" class="btn" data-key="' + esc(x.id) + '">Key</button>' : '') +
+           '<button type="button" class="btn danger" data-cancel="' + esc(x.id) + '">Cancel</button></li>';
+    });
+    (d.queue || []).forEach(function (q) {
+      h += '<li><span><b>' + esc(roomTitle(q.room_id)) + '</b> · queue #' + q.position + ' · ' + q.minutes + ' min' + (q.feature ? ' · ★ featured' : '') + '</span>' +
+           '<button type="button" class="btn danger" data-leave="' + esc(q.id) + '">Leave</button></li>';
+    });
+    $('upList').innerHTML = h;
+    show('upCard', !!h);
+    slot = s || null;
+    if (!s) return;
+    $('slotRoom').textContent = roomTitle(s.room_id);
+    var o = roomOpt(s.room_id);
+    $('watchLink').href = o ? '/rooms/' + encodeURIComponent(o.value) : '/';
+    var embed = s.mode === 'embed';
+    show('streamPanes', !embed); show('embedNote', embed);
     var st = $('slotState');
     st.className = 'state ' + (s.live ? 'live' : 'wait');
-    st.innerHTML = s.live ? '<span class="dot" aria-hidden="true"></span> LIVE on the stage' : (s.went_live ? 'Off air - reconnect to continue' : 'Waiting for your stream');
+    st.innerHTML = (s.live ? '<span class="dot" aria-hidden="true"></span> LIVE' + (s.featured ? ' · ★ FEATURED' : '') : (s.went_live ? 'Off air - reconnect to continue' : 'Waiting for your stream'));
     $('liveTime').textContent = mmss(s.live_seconds);
     $('charged').textContent = fmt(s.charged) + ' PAT';
     $('held').textContent = fmt(s.held) + ' PAT';
-    if (!s.went_live) {
+    if (!s.went_live && !embed) {
       $('leftK').textContent = 'Go live within';
       $('leftV').textContent = mmss((s.start_by - Date.now()) / 1000);
-      $('slotNote').textContent = 'Start streaming before the timer runs out, or the slot is cancelled and everything is refunded.';
+      $('slotNote').textContent = 'Start streaming before the timer runs out, or the slot is cancelled' + (s.held ? ' and everything is refunded.' : '.');
     } else {
-      $('leftK').textContent = 'Live time left';
+      $('leftK').textContent = 'Time left';
       $('leftV').textContent = mmss(s.max_minutes * 60 - s.live_seconds);
-      $('slotNote').textContent = s.live ? 'You are on the main stage. ' + fmt(s.price_per_min) + ' PAT per started minute.' : 'Your stream dropped. Billing is paused until you are back.';
+      $('slotNote').textContent = s.live ? (s.featured ? 'You\'re the featured stream in ' + roomTitle(s.room_id) + '. ' : 'You\'re on the stage in ' + roomTitle(s.room_id) + '. ') +
+        (s.price_per_min && s.held > s.charged ? fmt(s.price_per_min) + ' PAT per started minute live.' : 'Viewers pick your tab to watch.') : 'Your stream dropped. Billing is paused until you are back.';
     }
+    // "feature me": a free slot, nobody featured in the room
+    var canFeat = !s.featured && !s.price_per_min && roomState && roomState.room.id === s.room_id && !roomState.featured;
+    show('featBtn', !!canFeat);
     var k = null;
     try { k = sessionStorage.getItem(KEY_STORE + s.id); } catch (e) {}
     $('rtmpKey').value = k || '';
     $('keyNote').textContent = k ? 'Your key works only for this slot and stops working when it ends. Don\'t share it.'
-      : 'Your key was shown in the tab you booked from. Lost it? End this slot (unused PAT comes back) and book again - or go live from the browser instead.';
+      : 'This tab doesn\'t have your key - press "New key" for a fresh one (the old one stops working), or go live from the browser.';
   }
   function refresh() {
-    return fetch('/api/stage/me', { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
+    return fetch('/api/stage/me?room=' + encodeURIComponent($('room').value), { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) {
       if (j && j.ok) render(j);
     }).catch(function () {});
   }
@@ -91,7 +183,7 @@
   polling = setInterval(refresh, 3000);
 
   $('endBtn').addEventListener('click', function () {
-    if (!slot || !confirm('End your slot now? Unused PAT is refunded right away.')) return;
+    if (!slot || !confirm('End your slot now?' + (slot.held > slot.charged ? ' Unused PAT is refunded right away.' : ''))) return;
     $('endBtn').disabled = true;
     stopWeb('');
     post('/api/stage/slots/' + encodeURIComponent(slot.id) + '/end').then(function (j) {
@@ -100,7 +192,41 @@
       refresh();
     }).catch(function () { $('endBtn').disabled = false; });
   });
-  $('againBtn').addEventListener('click', function () { again = true; show('doneCard', false); show('bookCard', true); });
+  $('featBtn').addEventListener('click', function () {
+    if (!slot) return;
+    var left = Math.max(1, slot.max_minutes - Math.ceil(slot.live_seconds / 60));
+    var m = Number(prompt('Feature yourself for how many minutes? (max ' + left + ', ' + fmt(PRICE) + ' PAT per started minute live, the rest comes back)', String(Math.min(left, 15))));
+    if (!m) return;
+    post('/api/stage/slots/' + encodeURIComponent(slot.id) + '/upgrade', { minutes: m }).then(function (j) {
+      $('slotMsg').textContent = j.ok ? '★ You\'re featured.' : (j.error || 'Could not feature you.');
+      refresh();
+    });
+  });
+  function newKey(id, then) {
+    post('/api/stage/slots/' + encodeURIComponent(id) + '/key').then(function (j) {
+      if (!j.ok) { alert(j.error || 'Could not make a key.'); return; }
+      try { sessionStorage.setItem(KEY_STORE + id, j.key); } catch (e) {}
+      if (then) then(j.key);
+      refresh();
+    });
+  }
+  $('newKey').addEventListener('click', function () {
+    if (slot && confirm('Make a new stream key? The old one stops working.')) newKey(slot.id);
+  });
+  $('upList').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.hasAttribute('data-cancel')) {
+      if (!confirm('Cancel this booking? Anything held is refunded.')) return;
+      post('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-cancel')) + '/end').then(function (j) { if (!j.ok) alert(j.error || 'Could not cancel.'); refresh(); });
+    } else if (b.hasAttribute('data-leave')) {
+      post('/api/stage/queue/' + encodeURIComponent(b.getAttribute('data-leave')) + '/leave').then(function () { refresh(); });
+    } else if (b.hasAttribute('data-key')) {
+      var id = b.getAttribute('data-key'), k = null;
+      try { k = sessionStorage.getItem(KEY_STORE + id); } catch (x) {}
+      if (k) { prompt('Your stream key for that booking (works from a few minutes before the start):', k); return; }
+      if (confirm('This tab doesn\'t have that booking\'s key. Make a new one?')) newKey(id, function (key) { prompt('Your new stream key (works from a few minutes before the start):', key); });
+    }
+  });
 
   // copy / show key
   document.querySelectorAll('[data-copy]').forEach(function (b) {

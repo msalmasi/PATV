@@ -1,34 +1,170 @@
-<%- include('layout', { title: 'Live rooms', user: user }) %>
+<%- include('layout', { title: 'Channel guide', user: user }) %>
+<!-- views/rooms.ejs — the channel guide (1.99bi): every room as a channel, what's on its stage now and
+     what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows(). -->
+<%
+  const sched = [];
+  rows.forEach((r) => r.next.forEach((n) => sched.push({ ...n, room: r })));
+  sched.sort((a, b) => a.start_at - b.start_at);
+  const pepeOn = !!(pepe && pepe.active);
+%>
 <style>
-  .rl { max-width: 900px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
-  .rl a { color: #81c784; text-decoration: none; }
-  .rl h1 { margin: 0; font-size: 26px; }
-  .rl .lead { color: #aaa; font-size: 14px; line-height: 1.55; margin: 0; }
-  .rl .list { display: grid; gap: 10px; }
-  .rl .room { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; align-items: center; background: #111; border: 1px solid #222; border-radius: 14px; padding: 14px 16px; color: #e6e6e6 !important; }
-  .rl .room:hover, .rl .room:focus-visible { border-color: #4caf50; }
-  .rl .room b { font-size: 18px; overflow-wrap: anywhere; }
-  .rl .room .sub { grid-column: 1 / -1; color: #999; font-size: 13px; overflow-wrap: anywhere; }
-  .rl .live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 9px; border-radius: 999px; background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
-  .rl .live.off { background: #1c1c1c; border-color: #333; color: #999; }
-  .rl .empty { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 24px; text-align: center; color: #999; }
-  .rl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .cg { max-width: 1180px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; box-sizing: border-box; width: 100%; }
+  .cg *, .cg *::before, .cg *::after { box-sizing: border-box; }
+  .cg a { color: #81c784; text-decoration: none; }
+  .cg a:hover { color: #a5d6a7; }
+  .cg h1 { margin: 0; font-size: 26px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cg .lead { color: #aab3aa; font-size: 14.5px; line-height: 1.55; margin: 4px 0 0; }
+  .cg h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6;
+           display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .cg h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #888; font-size: 12.5px; }
+  .cg .muted { color: #8a8a8a; font-size: 13px; }
+  .cg .cta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px 18px; align-items: center; padding: 16px 18px; border-radius: 16px;
+             background: radial-gradient(120% 160% at 0% 0%, #3a1414 0%, #1a0f0f 45%, #111 80%); border: 1px solid #5a2a22; }
+  .cg .cta b.big { font-size: 18px; color: #fff; display: block; margin-bottom: 4px; }
+  .cg .cta ol { margin: 6px 0 0; padding-left: 20px; color: #d9c9c3; font-size: 13.5px; line-height: 1.6; }
+  .cg .cta .btns { display: flex; flex-direction: column; gap: 8px; }
+  .cg .golive-btn { display: inline-flex; justify-content: center; align-items: center; gap: 7px; padding: 10px 16px; border-radius: 999px; font-weight: bold; font-size: 14.5px; white-space: nowrap;
+                    background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; border: 0; }
+  .cg .golive-btn.ghost { background: #1d1a0f; border: 1px solid #6b5a20; color: #f3e3a3 !important; }
+  .cg .pepe { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; background: #0f1a10; border: 1px solid #234d2a; border-radius: 14px; padding: 10px 14px; font-size: 14px; }
+  .cg .pepe b { color: #fff; }
+  .cg .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
+  .cg .pill.on { background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; }
+  .cg .pill.off { background: #1c1c1c; border: 1px solid #333; color: #999; }
+  .cg .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: cgPulse 1.6s ease-in-out infinite; }
+  .cg .pill.off .dot { background: #666; animation: none; }
+  @keyframes cgPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .cg .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+  .cg .ch { background: #111; border: 1px solid #222; border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; align-content: start; }
+  .cg .ch.live { border-color: #2f4a2f; }
+  .cg .ch.onair { border-color: #7a2222; box-shadow: 0 0 0 1px #3a1010 inset; }
+  .cg .ch .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cg .ch .top a.t { font-size: 17px; font-weight: bold; color: #fff !important; overflow-wrap: anywhere; }
+  .cg .ch .sub { font-size: 12.5px; color: #9aa59a; display: flex; gap: 4px 10px; flex-wrap: wrap; }
+  .cg .ch .sub .own { color: #e8d9a0; }
+  .cg .slotrow { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 13.5px; }
+  .cg .slotrow .k { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; padding-top: 3px; }
+  .cg .slotrow .k.now { color: #ffb4b4; }
+  .cg .slotrow ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; min-width: 0; }
+  .cg .slotrow li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cg .slotrow li .star { color: #ffd700; }
+  .cg .slotrow li .src { font-size: 11px; color: #9fb3c8; }
+  .cg .slotrow li time { color: #c6e94f; font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .cg .ch .acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .cg .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 13px; font-weight: bold; }
+  .cg .btn:hover { border-color: #4caf50; }
+  .cg .btn.red { border-color: #5a2a22; background: #241210; color: #ffc9b9 !important; }
+  .cg .sched { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .cg .sched li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; align-items: baseline; background: #111; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
+  .cg .sched time { color: #c6e94f; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .cg .sched .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cg .owned { display: flex; gap: 8px; flex-wrap: wrap; }
+  .cg .empty { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 24px; text-align: center; color: #999; }
+  @media (max-width: 640px) {
+    .cg { padding: 12px 12px 44px; }
+    .cg .cta { grid-template-columns: minmax(0, 1fr); }
+    .cg .cta .btns { flex-direction: row; flex-wrap: wrap; }
+    .cg .grid { grid-template-columns: minmax(0, 1fr); }
+    .cg .sched li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .cg .dot { animation: none; } }
 </style>
-<main class="rl">
-  <h1>📡 Live rooms</h1>
-  <p class="lead">Camfrog rooms Pepe sits in, live on PATV — read-only for now (v1). Room admins switch a room on with <code>!bridge on</code>; anyone can stay off the page with <code>!bridge hide</code>.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the chat and see who's in.<% } %></p>
-  <% if (!list.length) { %>
-    <div class="empty">No rooms are bridged right now.</div>
-  <% } else { %>
-    <div class="list">
-      <% list.forEach((r) => { %>
-        <a class="room" href="/rooms/<%= encodeURIComponent(r.slug) %>">
-          <b><%= r.name %></b>
-          <span class="live<%= r.live ? '' : ' off' %>"><%= r.live ? '● LIVE' : 'OFFLINE' %></span>
-          <span class="sub">👥 <%= r.count %> in the room · 🎙️ <%= r.micCount %> on the mic<% if (r.mic.length) { %>: <%= r.mic.join(', ') %><% } %><% if (r.topic) { %> · 📌 <%= r.topic %><% } %></span>
-        </a>
+<main class="cg">
+  <div>
+    <h1>📡 Channel guide</h1>
+    <p class="lead">Every PATV room is a channel: its Camfrog chat live on the web, Pepe's stream, and a stage anyone can stream to.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the rooms' chat.<% } %></p>
+  </div>
+
+  <section class="cta" aria-label="Go live">
+    <div>
+      <b class="big">🎥 Your show, on PATV</b>
+      <span class="muted" style="font-size:14px;color:#d9c9c3">Every room has stage slots you can stream to — and one featured stream that leads the room (and the front page).</span>
+      <ol>
+        <li>Pick a room and a slot: <b>now</b>, <b>later</b>, or join the <b>queue</b>.</li>
+        <li>Stream from <b>OBS</b>, straight from your <b>browser</b>, or drop a <b>YouTube / Twitch</b> link.</li>
+        <li>Want the spotlight? <b>Get featured</b> — pay per live minute, unused PAT comes back.</li>
+      </ol>
+    </div>
+    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a></div>
+  </section>
+
+  <div class="pepe" role="status">
+    <span class="pill <%= pepeOn ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%= pepeOn ? 'ON AIR' : 'OFF AIR' %></span>
+    <span><b>🐸 Pepe's stream</b> plays on every room's stage<%= pepe && pepe.room ? ' — his window shows ' : '' %><% if (pepe && pepe.room) { %><% if (pepe.room.slug) { %><a href="/rooms/<%= encodeURIComponent(pepe.room.slug) %>"><%= pepe.room.name %></a><% } else { %><%= pepe.room.name %><% } %><% } %>.</span>
+    <a href="/" style="margin-left:auto">Front page ›</a>
+  </div>
+
+  <% if (owned && owned.length) { %>
+    <section aria-labelledby="ownH">
+      <h2 id="ownH">Your rooms <small>you own these</small></h2>
+      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/rooms/<%= encodeURIComponent(r.slug) %>/manage">⚙️ <%= r.title %></a><% }) %></div>
+    </section>
+  <% } %>
+
+  <section aria-labelledby="chH">
+    <h2 id="chH">Channels <small><%= rows.filter((r) => r.live).length %> live · <%= rows.length %> rooms<% if (staff) { %> · <a href="/rooms/admin">Rooms admin ›</a><% } %></small></h2>
+    <% if (!rows.length) { %>
+      <div class="empty">No rooms yet.</div>
+    <% } else { %>
+    <div class="grid">
+      <% rows.forEach((r) => { const liveNow = r.now.filter((s) => s.live); %>
+        <article class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %>" aria-label="<%= r.title %>">
+          <div class="top">
+            <a class="t" href="/rooms/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
+            <span class="pill <%= r.live ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span>
+            <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this room's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
+          </div>
+          <div class="sub">
+            <% if (r.bridged) { %><span>👥 <%= r.count %></span><span>🎙 <%= r.micCount %></span><% } %>
+            <% if (r.house) { %><span class="own">🐸 Pepe's room</span><% } else if (r.owner) { %><span class="own">👑 <%= r.owner %></span><% } %>
+            <span>🎬 <%= r.now.length %>/<%= r.slot_count %> slots</span>
+            <% if (r.pepe_here) { %><span>🎥 Pepe's window</span><% } %>
+          </div>
+          <% if (r.topic || r.description) { %><div class="muted" style="overflow-wrap:anywhere"><%= (r.description || r.topic).slice(0, 140) %></div><% } %>
+          <div class="slotrow"><span class="k now">Now</span>
+            <ul>
+              <% if (!r.now.length) { %><li class="muted">🐸 Pepe's stream<%= pepeOn ? '' : ' (off air)' %> — slot open</li><% } %>
+              <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="featured">★</span> ' : '' %><b><%= s.display %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%= s.mode === 'embed' ? (s.embed_label || 'video') : (s.live ? '● live' : 'starting…') %></span></li><% }) %>
+            </ul>
+          </div>
+          <div class="slotrow"><span class="k">Next</span>
+            <ul>
+              <% if (!r.next.length) { %><li class="muted">Nothing booked — <a href="/stage?room=<%= encodeURIComponent(r.slug) %>">book a slot</a></li><% } %>
+              <% r.next.forEach((n) => { %><li><time data-ts="<%= n.start_at %>"><%= new Date(n.start_at).toISOString().slice(11, 16) %></time><b><%= n.display %></b><%= n.featured ? ' ★' : '' %><%= n.title ? ' — ' + n.title : '' %></li><% }) %>
+            </ul>
+          </div>
+          <div class="acts">
+            <a class="btn" href="/rooms/<%= encodeURIComponent(r.slug) %>">▶ Watch</a>
+            <a class="btn red" href="/stage?room=<%= encodeURIComponent(r.slug) %>">🎥 Go live here</a>
+          </div>
+        </article>
       <% }) %>
     </div>
-  <% } %>
+    <% } %>
+  </section>
+
+  <section aria-labelledby="scH">
+    <h2 id="scH">Schedule <small>booked slots, all rooms · your local time</small></h2>
+    <% if (!sched.length) { %>
+      <div class="empty">Nothing booked yet. <a href="/stage">Book the first slot ›</a></div>
+    <% } else { %>
+      <ul class="sched">
+        <% sched.slice(0, 30).forEach((n) => { %>
+          <li><time data-ts="<%= n.start_at %>" data-long="1"><%= new Date(n.start_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>
+            <span class="w"><b><%= n.display %></b><%= n.featured ? ' ★' : '' %> in <a href="/rooms/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
   <%- include('partials/room-analytics-list') %>
 </main>
+<script>
+  document.querySelectorAll('time[data-ts]').forEach(function (t) {
+    var d = new Date(Number(t.getAttribute('data-ts')));
+    var hm = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    var today = new Date().toDateString() === d.toDateString();
+    t.textContent = (t.hasAttribute('data-long') || !today ? d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' ' : '') + hm;
+  });
+</script>
+</body>
+</html>

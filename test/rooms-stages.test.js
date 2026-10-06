@@ -1,5 +1,5 @@
 // Offline tests for room owners, per-room stages, featuring, scheduling / queue, embeds and royalties
-// (1.99ba: rooms.js, mainstage.js, stageembed.js, royalties.js, roomsweb.js).
+// (1.99bi: rooms.js, mainstage.js, stageembed.js, royalties.js, roomsweb.js).
 //   node --test test/rooms-stages.test.js      (needs the repo's node_modules; uses a temp DB)
 "use strict";
 const test = require("node:test");
