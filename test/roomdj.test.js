@@ -174,6 +174,33 @@ test("search: Pepe's results come back on the action, for its owner only", async
   assert.ok(panel.acts.some((x) => x.id === a.d.id && x.message === "found 2 - pick one"), "recent DJ requests listed");
 });
 
+test("DJ patter (1.99bl): shout-outs for anyone, patter switches for admins, sanitised queue + settings", async () => {
+  const sync = JSON.parse(JSON.stringify(SYNC));
+  sync.rooms[0].patter = { on: true, live: true, every: 99, words: 30, joins: true, starters: false };
+  sync.rooms[0].price.shoutout = 2500;
+  sync.state.shoutouts = [{ to: "Bob‮", by: "Alice", msg: "happy birthday", ded: true }, { to: "" }, "junk"];
+  await post("/api/dj/sync", sync);
+  const v = (await get("/api/rooms/pepes-pad/dj", "u1")).d;
+  assert.equal(v.room.price.shoutout, 2500);
+  assert.deepEqual(v.room.patter, { on: true, live: true, every: 10, words: 30, joins: true, starters: false }, "clamped");
+  assert.equal(v.state.shoutouts.length, 1, "malformed entries dropped");
+  assert.equal(v.state.shoutouts[0].to, "Bob", "bidi stripped");
+  assert.equal(v.state.shoutouts[0].ded, true);
+  assert.equal((await post("/api/rooms/pepes-pad/dj", { verb: "shoutout", text: "" }, "u1")).status, 400, "needs a name");
+  assert.equal((await post("/api/rooms/pepes-pad/dj", { verb: "shoutout", text: "<b> hi" }, "u1")).status, 400, "starts with a login");
+  assert.equal((await post("/api/rooms/pepes-pad/dj", { verb: "dj.patter.off" }, "u1")).status, 403, "patter switches: admins only");
+  const a = await post("/api/rooms/pepes-pad/dj", { verb: "shoutout", text: "@bob happy birthday -d" }, "u1");
+  assert.equal(a.d.ok, true);
+  const row = (await getQuery("SELECT * FROM pepe_actions WHERE id = ?", [a.d.id]))[0];
+  assert.deepEqual(JSON.parse(row.args), [R.id, "shoutout", "@bob happy birthday -d"]);
+  assert.match(row.label, /shout-out/);
+  const s = await post("/api/rooms/pepes-pad/dj", { verb: "skip", text: "ignored" }, "u3");
+  assert.deepEqual(JSON.parse((await getQuery("SELECT args FROM pepe_actions WHERE id = ?", [s.d.id]))[0].args), [R.id, "skip"]);
+  assert.equal((await post("/api/rooms/pepes-pad/dj", { verb: "dj.patter.joins.off" }, "u3")).d.ok, true, "an admin may switch patter");
+  await runQuery("UPDATE pepe_actions SET status = 'done'");
+  await post("/api/dj/sync", SYNC);
+});
+
 test("homepage helper: now playing for a music room only", () => {
   assert.deepEqual(roomdj.nowPlaying(R.id), { title: "Now Song", artist: "Now Artist", playing: true, dj: true });
   assert.equal(roomdj.nowPlaying(R2.id), null);

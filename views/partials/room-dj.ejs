@@ -67,6 +67,13 @@
   .rdj .mine .m { grid-column: 2; color: #e0e0e0; overflow-wrap: anywhere; }
   .rdj .mine .failed .m { color: #e6a07a; }
   .rdj .ro { margin: 0; color: #aaa; font-size: 13px; }
+  .rdj .hide { display: none !important; }
+  .rdj form.so { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+  .rdj form.so .ded { grid-column: 1 / 2; font-size: 12.5px; color: #bbb; display: flex; gap: 6px; align-items: center; }
+  .rdj form.so button { grid-column: 2 / 3; justify-self: end; }
+  .rdj ul.sol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+  .rdj ul.sol li { overflow-wrap: anywhere; }
+  .rdj ul.sol q { color: #e8dcf7; font-style: italic; }
   @media (max-width: 860px) {
     .rdj .top, .rdj .cols { grid-template-columns: minmax(0, 1fr); }
     .rdj .now { grid-template-columns: 64px minmax(0, 1fr); }
@@ -108,6 +115,18 @@
           </form>
           <p class="hint" id="rdjVibeHint"></p>
         </div>
+        <div class="tool hide" id="rdjSoBox">
+          <h3>Shout-out from the DJ</h3>
+          <form id="rdjSo" class="so" autocomplete="off">
+            <label class="sr" for="rdjSoTo">Who it's for (Camfrog name)</label>
+            <input type="text" id="rdjSoTo" maxlength="41" placeholder="Camfrog name">
+            <label class="sr" for="rdjSoMsg">Message (optional)</label>
+            <input type="text" id="rdjSoMsg" maxlength="120" placeholder="Message (optional)">
+            <label class="ded"><input type="checkbox" id="rdjSoDed"> dedicate the next song</label>
+            <button class="b go" type="submit">📣 Send</button>
+          </form>
+          <p class="hint" id="rdjSoHint"></p>
+        </div>
         <div class="tool admin hide" id="rdjAdmin">
           <h3>DJ controls (admins)</h3>
           <div class="ctrls" id="rdjAdminBtns"></div>
@@ -118,4 +137,4 @@
     </div>
   </div>
 </section>
-<script src="/public/js/room-dj.js?v=1" defer></script>
+<script src="/public/js/room-dj.js?v=2" defer></script>

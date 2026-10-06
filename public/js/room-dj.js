@@ -82,6 +82,24 @@
       row('The vibe right now', v);
     }
     if (d.genre) row('Leaning into', d.genre);
+    var pt = P.room && P.room.patter;
+    if (d.on && pt && pt.on && P.room.talk) {
+      row('🎙️ Patter', (pt.live ? 'Live — ' : '') + 'greetings, chatter' + (pt.starters ? ', new topics' : '') +
+        ' and shout-outs go into one short link between songs' + (pt.joins ? '' : ' (joins left out)') +
+        ' · up to ' + pt.words + ' words');
+    }
+    var so = s.shoutouts || [];
+    if (so.length) {
+      var ul = el('ul', 'sol');
+      so.forEach(function (x) {
+        var li = el('li');
+        li.appendChild(el('b', null, '📣 ' + x.to));
+        li.appendChild(document.createTextNode(' from ' + x.by + (x.ded ? ' · dedication' : '')));
+        if (x.msg) { li.appendChild(document.createTextNode(' — ')); li.appendChild(el('q', null, x.msg)); }
+        ul.appendChild(li);
+      });
+      row('Shout-outs waiting (' + so.length + ')', ul);
+    }
     if (s.drop) { var q = el('div', 'v'); q.appendChild(el('q', null, s.drop.text)); row('🎙️ Pepe just said', q); }
   }
   function renderQueue() {
@@ -133,6 +151,10 @@
     $('rdjVibeBox').classList.toggle('hide', !d.on);
     $('rdjVibeHint').textContent = me.djAdmin ? 'As an admin this sets the DJ\'s genre bias (!dj vibe).'
       : 'Free · steers Pepe\'s picks for the next ~45 minutes · one request every 2 minutes.';
+    var pt = r.patter, soOk = s.connected && d.on && r.talk && pt && pt.on;
+    $('rdjSoBox').classList.toggle('hide', !soOk);
+    $('rdjSoHint').textContent = (me.djAdmin ? 'Admins shout out for free.' : pat(r.price.shoutout) + ' — held when you ask, only taken when Pepe says it (refunded after 30 min if he doesn\'t).') +
+      ' One every 15 minutes; no links. Like !dj shoutout.';
     var adm = $('rdjAdmin');
     adm.classList.toggle('hide', !me.djAdmin);
     if (me.djAdmin) {
@@ -140,6 +162,14 @@
       a.appendChild(d.on ? btn('🎧 Auto-DJ off', null, 'dj.off') : btn('🎧 Auto-DJ on', null, 'dj.on', { go: true }));
       if (d.on) a.appendChild(btn('🎧 Pepe picks next', null, 'dj.next'));
       a.appendChild(r.talk ? btn('🎙️ DJ talk off', 'this room', 'dj.talk.off') : btn('🎙️ DJ talk on', 'this room', 'dj.talk.on'));
+      if (pt) {
+        a.appendChild(pt.on ? btn('🎙️ Patter off', 'this room', 'dj.patter.off', { title: 'Greeter, chatty and starters use the mic on their own again' })
+          : btn('🎙️ Patter on', 'this room', 'dj.patter.on', { title: 'One DJ voice: everything spoken goes into links between songs' }));
+        if (pt.on) {
+          a.appendChild(pt.joins ? btn('👋 Joins out of patter', null, 'dj.patter.joins.off') : btn('👋 Joins into patter', null, 'dj.patter.joins.on'));
+          a.appendChild(pt.starters ? btn('💬 No new topics', null, 'dj.patter.starters.off') : btn('💬 Open new topics', null, 'dj.patter.starters.on'));
+        }
+      }
       if (d.genre) a.appendChild(btn('🧹 Clear the vibe bias', null, 'dj.vibe.clear'));
       if (d.clear) a.appendChild(btn('🧼 Reset session', 'vibe, cues + queue', 'dj.clear',
         { title: 'Like !dj clear: drops the vibe, the cues and the whole queue (paid requests refunded); the current song plays out' }));
@@ -230,6 +260,14 @@
       e.preventDefault();
       var q = $('rdjVibeQ').value.trim();
       if (q) { act('vibe', q, 'Vibe'); $('rdjVibeQ').value = ''; }
+    });
+    $('rdjSo').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var who = $('rdjSoTo').value.trim().replace(/^@/, '').split(/\s+/)[0];
+      var msg = $('rdjSoMsg').value.trim();
+      if (!who) return say('Type the Camfrog name of who it\'s for.', 'bad');
+      act('shoutout', who + (msg ? ' ' + msg : '') + ($('rdjSoDed').checked ? ' -d' : ''), 'Shout-out');
+      $('rdjSoMsg').value = '';
     });
   }
 

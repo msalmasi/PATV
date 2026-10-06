@@ -1,8 +1,9 @@
 // roomdj.js — Pepe's music / Auto-DJ on the room pages (1.99ba).
 //
 // Pepe (pepe_roomdj.py) pushes the DJ state for the bridged rooms that actually hear his music:
-//   POST /api/dj/sync    {password, rooms: [{id, name, queue, play, pause, talk, price: {queue}}],
-//                         state: {connected, at, now, queue[], dj: {on, vibe, genre}, drop, votes, max_pending},
+//   POST /api/dj/sync    {password, rooms: [{id, name, queue, play, pause, talk, patter, price: {queue, shoutout}}],
+//                         state: {connected, at, now, queue[], dj: {on, vibe, genre}, drop, votes, max_pending,
+//                                 shoutouts: [{to, by, msg, ded}]},
 //                         admins: {dj: [logins], music: [logins]}}      -> {ok, watching: [room ids]}
 //   POST /api/dj/result  {password, id, results: [{n, title, artist, album, art}]}   (a website !find's list)
 // The admin lists only decide which buttons a viewer sees (never sent to a browser); Pepe re-checks
@@ -28,13 +29,22 @@ const MAX_ROOMS = 20, MAX_QUEUE = 12, MAX_RESULTS = 10, MAX_ADMINS = 200;
 const VERBS = {
   find: "all", pick: "all", skip: "all", pause: "all", resume: "all", play: "all", remove: "all", vibe: "all",
   "dj.on": "dj", "dj.off": "dj", "dj.next": "dj", "dj.talk.on": "dj", "dj.talk.off": "dj", "dj.vibe.clear": "dj", "dj.clear": "dj",
+  // 1.99bk DJ patter: paid shout-outs for anyone (Pepe holds the PAT, takes it when he says it)
+  shoutout: "all",
+  "dj.patter.on": "dj", "dj.patter.off": "dj", "dj.patter.joins.on": "dj", "dj.patter.joins.off": "dj",
+  "dj.patter.starters.on": "dj", "dj.patter.starters.off": "dj",
 };
+const TEXT_VERBS = { find: 100, pick: 3, vibe: 140, shoutout: 170 };
 const LABELS = {
   find: (t) => "🔎 search: " + t, pick: (t) => "➕ queue #" + t, skip: () => "⏭️ skip", pause: () => "⏸️ pause",
   resume: () => "▶️ resume", play: () => "▶️ start the music", remove: () => "🗑️ remove my last request",
   vibe: (t) => "🎧 vibe: " + t, "dj.on": () => "🎧 Auto-DJ on", "dj.off": () => "🎧 Auto-DJ off", "dj.next": () => "🎧 Pepe picks next",
   "dj.talk.on": () => "🎙️ DJ talk on", "dj.talk.off": () => "🎙️ DJ talk off", "dj.vibe.clear": () => "🎧 clear the vibe bias",
   "dj.clear": () => "🧼 reset the DJ session",
+  shoutout: (t) => "📣 shout-out: " + t,
+  "dj.patter.on": () => "🎙️ DJ patter on", "dj.patter.off": () => "🎙️ DJ patter off",
+  "dj.patter.joins.on": () => "🎙️ patter: fold in joins", "dj.patter.joins.off": () => "🎙️ patter: leave joins out",
+  "dj.patter.starters.on": () => "🎙️ patter: open topics", "dj.patter.starters.off": () => "🎙️ patter: no topics",
 };
 
 // ── sanitising (Pepe already cleans; this is the second line) ──
@@ -74,6 +84,12 @@ function cleanState(s) {
   const v = s.votes || {};
   out.votes = { start: int(v.start, 1, 20) || 4, stop: int(v.stop, 1, 20) || 2 };
   out.maxPending = int(s.max_pending, 1, 20) || 2;
+  out.shoutouts = (Array.isArray(s.shoutouts) ? s.shoutouts : []).slice(0, 10).map((x) => {
+    if (!x || typeof x !== "object" || !str(x.to, 40)) return null;
+    const o = { to: str(x.to, 40), by: str(x.by, 40) || "someone", ded: !!x.ded };
+    if (x.msg) o.msg = str(x.msg, 140);
+    return o;
+  }).filter(Boolean);
   return out;
 }
 
@@ -81,8 +97,12 @@ function cleanRoom(r) {
   if (!r || typeof r !== "object") return null;
   const id = str(r.id, 128);
   if (!id) return null;
+  const p = r.patter && typeof r.patter === "object" ? r.patter : null;
   return { id, name: str(r.name, 60) || id, queue: r.queue !== false, play: r.play !== false, pause: r.pause !== false,
-           talk: r.talk !== false, price: { queue: int((r.price || {}).queue, 0, 1e12) } };
+           talk: r.talk !== false,
+           patter: p ? { on: !!p.on, live: !!p.live, every: int(p.every, 1, 10) || 1, words: int(p.words, 15, 90) || 45,
+                         joins: !!p.joins, starters: !!p.starters } : null,
+           price: { queue: int((r.price || {}).queue, 0, 1e12), shoutout: int((r.price || {}).shoutout, 0, 1e12) } };
 }
 
 // ── state ──
@@ -148,7 +168,7 @@ async function panelFor(R, me) {
   }
   return {
     active: true, age: Math.max(0, Date.now() - S.at),   // the page runs the progress bar on from here
-    room: { queue: room.queue, play: room.play, pause: room.pause, talk: room.talk, price: room.price },
+    room: { queue: room.queue, play: room.play, pause: room.pause, talk: room.talk, patter: room.patter, price: room.price },
     state: st,
     me: { linked: !!(me && me.camfrog), djAdmin: !!(me && me.djAdmin), musicAdmin: !!(me && me.musicAdmin) },
     acts: acts.map((a) => ({ id: a.id, label: a.label, status: a.status, message: a.message || "" })),
@@ -209,11 +229,11 @@ function register(app, { isBotToken, addUser, bySlug = defaultBySlug }) {
     const who = Object.prototype.hasOwnProperty.call(VERBS, verb) ? VERBS[verb] : null;
     if (!who) return res.status(400).json({ ok: false, error: "That can't be done from the site." });
     if (who === "dj" && !me.djAdmin) return res.status(403).json({ ok: false, error: "DJ controls are for Pepe's admins." });
-    let text = str(b.text, verb === "find" ? 100 : 140);
+    let text = Object.prototype.hasOwnProperty.call(TEXT_VERBS, verb) ? str(b.text, TEXT_VERBS[verb]) : "";
     if (verb === "find" && !text) return res.status(400).json({ ok: false, error: "Type a song to search for." });
     if (verb === "vibe" && !text) return res.status(400).json({ ok: false, error: "Tell Pepe what you want to hear." });
     if (verb === "pick" && !/^\d{1,2}$/.test(text)) return res.status(400).json({ ok: false, error: "Pick a number from the list." });
-    if (!["find", "pick", "vibe"].includes(verb)) text = "";
+    if (verb === "shoutout" && !/^@?[\w.\-$]{1,40}(\s|$)/.test(text)) return res.status(400).json({ ok: false, error: "Start with the Camfrog name of who it's for." });
     try {
       const id = await require("./actions").queue(req.user.userId, { kind: "dj", args: text ? [R.id, verb, text] : [R.id, verb],
         tag: "dj:" + R.id, label: LABELS[verb](text) });
