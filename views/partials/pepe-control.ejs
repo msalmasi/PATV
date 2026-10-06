@@ -1,0 +1,185 @@
+<%#
+  views/partials/pepe-control.ejs - admin-only Pepe control panel (pepecontrol.js), included once at
+  the bottom of the homepage. Emits NOTHING unless the viewer's account (fresh from the DB) is Admin;
+  the API checks the role again on every call.
+%><% if (typeof me !== 'undefined' && me && me.class === 'Admin' && typeof pepeCtlCsrf === 'function') { %>
+<style>
+  .pc { --pc-bg: #0b0d0c; --pc-line: #232a26; --pc-muted: #8a948e; --pc-ok: #4caf50; --pc-warn: #ffb74d; --pc-bad: #ef5350;
+        background: var(--pc-bg); border: 1px solid var(--pc-line); border-radius: 14px; color: #e6e6e6; font-family: Ubuntu, sans-serif; min-width: 0; }
+  .pc > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pc > summary::-webkit-details-marker { display: none; }
+  .pc > summary:focus-visible { outline: 2px solid var(--pc-ok); outline-offset: 2px; border-radius: 14px; }
+  .pc .pc-t { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; }
+  .pc .pc-chev { margin-left: auto; color: var(--pc-muted); font-size: 12px; }
+  .pc[open] .pc-chev::after { content: 'hide'; } .pc:not([open]) .pc-chev::after { content: 'show'; }
+  .pc .pc-dot { width: 9px; height: 9px; border-radius: 50%; background: #555; display: inline-block; flex: none; }
+  .pc .pc-dot.ok { background: var(--pc-ok); box-shadow: 0 0 6px var(--pc-ok); } .pc .pc-dot.bad { background: var(--pc-bad); } .pc .pc-dot.warn { background: var(--pc-warn); }
+  .pc .pc-sum { font-size: 13px; color: var(--pc-muted); }
+  .pc .pc-body { padding: 0 16px 16px; display: grid; gap: 14px; }
+  .pc .pc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .pc .pc-kv { background: #121614; border: 1px solid var(--pc-line); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+  .pc .pc-kv b { display: block; font-size: 11px; color: var(--pc-muted); font-weight: normal; text-transform: uppercase; letter-spacing: .05em; }
+  .pc .pc-kv span { display: block; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+  .pc .pc-act { display: grid; gap: 10px; }
+  .pc .pc-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pc .pc-seg { display: inline-flex; border: 1px solid var(--pc-line); border-radius: 9px; overflow: hidden; }
+  .pc .pc-seg label { padding: 7px 12px; font-size: 13px; cursor: pointer; color: #ccc; }
+  .pc .pc-seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .pc .pc-seg input:checked + span { color: #fff; }
+  .pc .pc-seg label:has(input:checked) { background: #1d2a21; color: #fff; }
+  .pc .pc-seg label:has(input:focus-visible) { outline: 2px solid var(--pc-ok); outline-offset: -2px; }
+  .pc button { font: inherit; font-size: 14px; font-weight: bold; padding: 9px 14px; border-radius: 9px; border: 1px solid #2f3a33; background: #18201b; color: #e6e6e6; cursor: pointer; }
+  .pc button:hover:not([disabled]), .pc button:focus-visible { border-color: var(--pc-ok); }
+  .pc button[disabled] { opacity: .5; cursor: not-allowed; }
+  .pc button.pc-danger { background: #5a1414; border-color: #8b2323; color: #fff; }
+  .pc button.pc-danger:hover:not([disabled]) { border-color: #ff7b7b; }
+  .pc .pc-confirm { border: 1px solid #6b2a2a; background: #170d0d; border-radius: 12px; padding: 12px; display: grid; gap: 10px; }
+  .pc .pc-confirm[hidden], .pc [hidden] { display: none !important; }
+  .pc .pc-confirm input[type=password] { font: inherit; font-size: 16px; padding: 9px 11px; border-radius: 9px; border: 1px solid #3a3a3a; background: #0f0f0f; color: #eee; width: 100%; max-width: 320px; }
+  .pc .pc-msg { font-size: 13.5px; padding: 8px 10px; border-radius: 9px; background: #121614; border: 1px solid var(--pc-line); }
+  .pc .pc-msg.err { border-color: #7a2222; color: #ffb4b4; } .pc .pc-msg.ok { border-color: #2e6b31; color: #b9f6ca; } .pc .pc-msg.run { border-color: #7a5a1a; color: #ffe0a3; }
+  .pc .pc-muted { color: var(--pc-muted); font-size: 12.5px; }
+  .pc h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--pc-muted); }
+  .pc .pc-log { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .pc .pc-log td, .pc .pc-log th { text-align: left; padding: 5px 6px; border-top: 1px solid var(--pc-line); vertical-align: top; }
+  .pc .pc-log th { color: var(--pc-muted); font-weight: normal; }
+  .pc .pc-logwrap { overflow-x: auto; max-height: 260px; overflow-y: auto; }
+  @media (max-width: 560px) {
+    .pc .pc-log thead { display: none; }
+    .pc .pc-log tr { display: grid; grid-template-columns: 1fr auto; border-top: 1px solid var(--pc-line); padding: 4px 0; }
+    .pc .pc-log td { border: 0; padding: 2px 4px; }
+    .pc .pc-log td.r { grid-column: 1 / -1; }
+    .pc .pc-row button { flex: 1 1 100%; }
+  }
+</style>
+<details class="pc" id="pepeCtl" data-csrf="<%= pepeCtlCsrf(me.username) %>">
+  <summary><span class="pc-dot" id="pcDot" aria-hidden="true"></span><span class="pc-t">Pepe control panel</span><span class="pc-sum" id="pcSum">admin only</span><span class="pc-chev" aria-hidden="true"></span></summary>
+  <div class="pc-body">
+    <div class="pc-grid" id="pcGrid" aria-live="polite"><div class="pc-kv"><b>Status</b><span>loading…</span></div></div>
+    <div class="pc-act">
+      <div class="pc-row">
+        <span class="pc-muted">When:</span>
+        <div class="pc-seg" role="radiogroup" aria-label="When to restart">
+          <label><input type="radio" name="pcMode" value="games" checked><span>Between games (safe)</span></label>
+          <label><input type="radio" name="pcMode" value="now"><span>Force now</span></label>
+        </div>
+      </div>
+      <div class="pc-row">
+        <button type="button" data-kind="pepe" class="pc-go">Restart Pepe…</button>
+        <button type="button" data-kind="full" class="pc-go">Restart Camfrog + Pepe…</button>
+      </div>
+      <div class="pc-confirm" id="pcConfirm" hidden>
+        <div><b id="pcWhat"></b><div class="pc-muted">Runs on the VM supervisor, so it works even if Pepe is hung. Pepe posts a notice in his rooms first when he can.</div></div>
+        <label class="pc-muted" for="pcPw">Confirm with your account password</label>
+        <input type="password" id="pcPw" autocomplete="current-password" maxlength="200">
+        <div class="pc-row"><button type="button" class="pc-danger" id="pcYes">Yes, restart</button><button type="button" id="pcNo">Cancel</button></div>
+      </div>
+      <div class="pc-msg" id="pcMsg" hidden role="status"></div>
+      <div class="pc-muted" id="pcRate"></div>
+    </div>
+    <div>
+      <h3>Audit log</h3>
+      <div class="pc-logwrap"><table class="pc-log"><thead><tr><th>When</th><th>Admin</th><th>Event</th><th>IP hash</th></tr></thead><tbody id="pcLog"></tbody></table></div>
+    </div>
+  </div>
+</details>
+<script>
+(function () {
+  'use strict';
+  var box = document.getElementById('pepeCtl');
+  if (!box) return;
+  var csrf = box.getAttribute('data-csrf');
+  var $ = function (id) { return document.getElementById(id); };
+  var timer = null, pending = null, nonce = null, lastActive = null, watching = null;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function ago(ms) { if (!ms) return '—'; var s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? s + 's ago' : s < 5400 ? Math.round(s / 60) + 'm ago' : s < 172800 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; }
+  function dur(sec) { if (sec == null || !isFinite(sec)) return '—'; sec = Math.max(0, Math.round(sec)); var d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60); return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm ' + (sec % 60) + 's'; }
+  function when(ms) { if (!ms) return '—'; var d = new Date(ms); return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  function api(path, body) {
+    var o = { credentials: 'same-origin', cache: 'no-store', headers: { 'x-csrf-token': csrf } };
+    if (body) { o.method = 'POST'; o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(body); }
+    return fetch(path, o).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status)); return j; }); });
+  }
+  function msg(text, cls) { var m = $('pcMsg'); if (!text) { m.hidden = true; return; } m.hidden = false; m.className = 'pc-msg ' + (cls || ''); m.textContent = text; }
+  function kv(k, v) { var d = el('div', 'pc-kv'); d.appendChild(el('b', null, k)); d.appendChild(el('span', null, v)); return d; }
+  var STATE = { pending: 'Sent - waiting for the VM to pick it up', claimed: 'Picked up by the VM', accepted: 'Accepted by the VM supervisor', running: 'Restarting', waiting: 'Waiting for the current game to finish', done: 'Done', failed: 'Failed', expired: 'Expired - the VM did not pick it up within 2 minutes', superseded: 'Superseded by a newer restart' };
+
+  function render(d) {
+    var s = d.status || {}, p = s.pepe || {}, sup = s.supervisor || {}, dep = s.deploy || {}, cf = s.camfrog || {};
+    var pepeUp = d.online && p.running;
+    $('pcDot').className = 'pc-dot ' + (!d.online ? 'bad' : pepeUp ? 'ok' : 'warn');
+    $('pcSum').textContent = !d.online ? 'VM offline (last seen ' + ago(d.last_seen) + ')' : pepeUp ? 'Pepe online' + (s.version ? ' · v' + s.version : '') : 'VM online · Pepe not running';
+    var g = $('pcGrid'); g.textContent = '';
+    g.appendChild(kv('VM supervisor', d.online ? 'online · heartbeat ' + ago(d.last_seen) : 'OFFLINE · last heartbeat ' + ago(d.last_seen)));
+    g.appendChild(kv('Pepe', !p.pid ? 'not running' : (p.running ? 'running' : 'stopped') + (p.hung ? ' · no output ' + dur(p.silent_s) : '') + ' · pid ' + p.pid));
+    g.appendChild(kv('Version', (s.version ? 'v' + s.version : '?') + (s.sha ? ' (' + String(s.sha).slice(0, 7) + ')' : '') + (s.env === 'staging' ? ' · STAGING' : '')));
+    g.appendChild(kv('Pepe uptime', p.started ? dur(d.now / 1000 - p.started) : '—'));
+    g.appendChild(kv('Camfrog', cf.pid ? 'running' + (cf.hung ? ' · NOT RESPONDING' : '') + (cf.started ? ' · up ' + dur(d.now / 1000 - cf.started) : '') : 'not running'));
+    var rooms = (p.rooms || []);
+    g.appendChild(kv('Rooms joined', rooms.length ? rooms.join(', ') : (p.live_ts ? 'none' : 'unknown')));
+    var busy = (p.busy || []);
+    g.appendChild(kv('Games running', busy.length ? busy.join(', ') : 'none'));
+    var dtxt = dep.probation ? 'on probation until ' + when(dep.probation.until * 1000) : 'stable';
+    if (dep.pending) dtxt += ' · update ' + String(dep.pending.sha || '').slice(0, 7) + ' pending';
+    if (dep.current && dep.current.ts) dtxt += ' · deployed ' + ago(dep.current.ts * 1000);
+    g.appendChild(kv('Deploy', dtxt));
+    var L = d.last;
+    g.appendChild(kv('Last restart', L ? (L.username || '?') + ' · ' + ago(L.finished_at || L.created_at) + ' · ' + L.status + (L.detail ? ' (' + L.detail + ')' : '') : (p.start_reason ? p.start_reason : 'none from the website')));
+    g.appendChild(kv('Supervisor', sup.started ? 'up ' + dur(d.now / 1000 - sup.started) + (sup.age_s > 30 ? ' · busy ' + dur(sup.age_s) : '') : '—'));
+
+    var a = d.active;
+    var lockBtns = !!(a && a.status !== 'waiting');
+    document.querySelectorAll('#pepeCtl .pc-go').forEach(function (b) { b.disabled = lockBtns || d.rate.used >= d.rate.max; });
+    $('pcRate').textContent = d.rate.used + ' of ' + d.rate.max + ' restarts used in the last ' + d.rate.window_min + ' min.';
+    var w = a || (watching && d.commands.find(function (c) { return c.id === watching; }));
+    if (w) {
+      var t = STATE[w.status] || w.status;
+      var cls = w.status === 'done' ? 'ok' : (w.status === 'failed' || w.status === 'expired') ? 'err' : 'run';
+      msg((d.kinds[w.kind] || w.kind) + ' (' + (d.modes[w.mode] || w.mode) + '): ' + t + (w.detail ? ' - ' + w.detail : ''), cls);
+      if (!a) watching = null;
+    }
+    lastActive = a;
+    var tb = $('pcLog'); tb.textContent = '';
+    (d.audit || []).forEach(function (r) {
+      var tr = el('tr');
+      tr.appendChild(el('td', null, when(r.at)));
+      tr.appendChild(el('td', null, r.username || 'VM'));
+      tr.appendChild(el('td', 'r', r.action + (r.result ? ': ' + r.result : '')));
+      tr.appendChild(el('td', null, r.ip_hash || ''));
+      tb.appendChild(tr);
+    });
+    if (!(d.audit || []).length) { var tr = el('tr'); var td = el('td', 'pc-muted', 'Nothing yet.'); td.colSpan = 4; tr.appendChild(td); tb.appendChild(tr); }
+  }
+  function load() {
+    timer = null;
+    return api('/api/pepe/control/status').then(render).catch(function (e) { $('pcSum').textContent = 'status unavailable: ' + e.message; })
+      .then(function () { if (box.open && !document.hidden) timer = setTimeout(load, lastActive || watching ? 2500 : 10000); });
+  }
+  box.addEventListener('toggle', function () { if (box.open) { if (!timer) load(); } else { clearTimeout(timer); timer = null; cancel(); } });
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && box.open && !timer) load(); });
+
+  function mode() { var r = box.querySelector('input[name=pcMode]:checked'); return r ? r.value : 'games'; }
+  function cancel() { pending = null; nonce = null; $('pcConfirm').hidden = true; $('pcPw').value = ''; }
+  box.querySelectorAll('.pc-go').forEach(function (b) {
+    b.addEventListener('click', function () {
+      // step 1: arm - fetch a single-use nonce and show the in-page confirm
+      pending = { kind: b.getAttribute('data-kind'), mode: mode() };
+      $('pcWhat').textContent = (pending.kind === 'full' ? 'Restart Camfrog + Pepe' : 'Restart Pepe') + ' - ' + (pending.mode === 'now' ? 'force now' : 'between games (waits for a running game to finish)');
+      $('pcConfirm').hidden = false; msg('');
+      api('/api/pepe/control/nonce', {}).then(function (j) { nonce = j.nonce; $('pcPw').focus(); }).catch(function (e) { msg(e.message, 'err'); cancel(); });
+    });
+  });
+  $('pcNo').addEventListener('click', cancel);
+  $('pcPw').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $('pcYes').click(); } });
+  $('pcYes').addEventListener('click', function () {
+    // step 2: confirm with the password; the nonce is spent whatever the answer
+    if (!pending || !nonce) { msg('Start again.', 'err'); return; }
+    var body = { kind: pending.kind, mode: pending.mode, nonce: nonce, password: $('pcPw').value };
+    $('pcYes').disabled = true;
+    api('/api/pepe/control/command', body).then(function (j) { watching = j.command.id; msg(STATE.pending + ' (expires in 2 min)', 'run'); cancel(); clearTimeout(timer); load(); })
+      .catch(function (e) { msg(e.message, 'err'); cancel(); })
+      .then(function () { $('pcYes').disabled = false; });
+  });
+})();
+</script>
+<% } %>
