@@ -38,9 +38,9 @@ async function mkUser(bal = START) {
 }
 // end everything open so the next test can book (max_concurrent = 1)
 async function clear() { for (const s of await getQuery("SELECT id FROM stage_slots WHERE status != 'ended'")) await S.end(s.id, "test_cleanup", "test"); }
-const pub = (name, extra = {}) => S.rtmpCallback({ call: "publish", app: "live", name, addr: "1.2.3.4", clientid: "7", ...extra });
-const upd = (name, extra = {}) => S.rtmpCallback({ call: "update_publish", app: "live", name, addr: "1.2.3.4", clientid: "7", ...extra });
-const done = (name, extra = {}) => S.rtmpCallback({ call: "publish_done", app: "live", name, addr: "1.2.3.4", clientid: "7", ...extra });
+const pub = (name, extra = {}) => S.rtmpCallback({ call: "publish", app: "stage", name, addr: "1.2.3.4", clientid: "7", ...extra });
+const upd = (name, extra = {}) => S.rtmpCallback({ call: "update_publish", app: "stage", name, addr: "1.2.3.4", clientid: "7", ...extra });
+const done = (name, extra = {}) => S.rtmpCallback({ call: "publish_done", app: "stage", name, addr: "1.2.3.4", clientid: "7", ...extra });
 // `secs` of streaming: on_update every 10 s, the billing tick every 5 s
 async function stream(name, secs, extra) {
   for (let t = 0; t < secs; t += 5) {
@@ -124,13 +124,22 @@ test("on_publish: valid key redirects to the slot stream; wrong / used / public-
   assert.equal((await pub(r.key, { app: "other" })).status, 403, "other applications refused");
   const ok = await pub(r.key);
   assert.equal(ok.status, 302);
-  assert.equal(ok.location, r.slot.stream);
-  assert.ok(ok.location.startsWith(S.STREAM_PREFIX));
-  assert.equal((await pub("broadcast")).status, 200, "Pepe's key passes through");
-  assert.equal((await upd("broadcast")).status, 200);
+  assert.equal(ok.location, "rtmp://127.0.0.1/live/" + r.slot.stream, "pushed to the HLS app under the public name");
+  assert.ok(r.slot.stream.startsWith(S.STREAM_PREFIX) && !ok.location.includes(r.key));
+  // the HLS application: Pepe's key passes; slot pushes only from loopback and only while open
+  const out = (call, name, extra = {}) => S.rtmpCallback({ call, app: "live", name, addr: "127.0.0.1", clientid: "3", ...extra });
+  assert.equal((await out("publish", "broadcast", { addr: "5.6.7.8" })).status, 200, "Pepe's key passes through");
+  assert.equal((await out("update_publish", "broadcast")).status, 200);
+  assert.equal((await pub("broadcast")).status, 403, "Pepe's key is not a slot key on the ingest app");
+  assert.equal((await out("publish", r.slot.stream)).status, 200, "the local push is allowed");
+  assert.equal((await out("publish", r.slot.stream, { addr: "5.6.7.8" })).status, 403, "nobody else may publish a slot name");
+  assert.equal((await out("publish", r.key)).status, 403, "keys are never accepted on the HLS app");
+  assert.equal((await out("publish", "anything")).status, 403);
+  assert.equal((await out("update_publish", r.slot.stream)).status, 200);
   await S.end(r.slot.id, "owner_ended", u.username);
   assert.equal((await pub(r.key)).status, 403, "used key dead after the slot");
   assert.equal((await upd(r.slot.stream, { clientid: "99" })).status, 403, "an ended slot's stream is dropped");
+  assert.equal((await out("update_publish", r.slot.stream)).status, 403, "and its HLS push too");
 });
 
 test("relay keys: only the server's HMAC, only from loopback", async () => {
@@ -143,7 +152,7 @@ test("relay keys: only the server's HMAC, only from loopback", async () => {
   const forged = "r." + r.slot.id + "." + "x".repeat(32);
   assert.equal((await pub(forged, { addr: "127.0.0.1" })).status, 403);
   const ok = await pub(rk, { addr: "127.0.0.1", clientid: "55" });
-  assert.equal(ok.status, 302); assert.equal(ok.location, r.slot.stream);
+  assert.equal(ok.status, 302); assert.equal(ok.location, "rtmp://127.0.0.1/live/" + r.slot.stream);
 });
 
 test("per-minute billing while live; owner ends -> refund the rest, revenue to the Reserve", async () => {
@@ -306,7 +315,7 @@ test("browser relay: owner-only on every chunk, in order, killed on end, bitrate
   x = await S.relayChunk(u, r.slot.id, 0, chunk);
   assert.equal(x.ok, true); assert.equal(spawned.length, 1);
   const args = spawned[0].args.join(" ");
-  assert.ok(args.includes("rtmp://127.0.0.1/live/r." + r.slot.id + "."), "publishes locally with the relay key");
+  assert.ok(args.includes("rtmp://127.0.0.1/stage/r." + r.slot.id + "."), "publishes to the local ingest app with the relay key");
   assert.ok(!args.includes(S.relayKey(r.slot.id) + "x"));
   adv(1000); x = await S.relayChunk(u, r.slot.id, 1, chunk); assert.equal(x.ok, true);
   adv(1000); x = await S.relayChunk(u, r.slot.id, 3, chunk); assert.equal(x.restart, true, "gap -> restart");
@@ -344,12 +353,12 @@ test("HTTP: the rtmp callback answers only straight from loopback; relay route c
     const r = await S.book(u, { minutes: 5 });
     const form = (o) => new URLSearchParams(o).toString();
     const hdr = { "Content-Type": "application/x-www-form-urlencoded" };
-    let res = await fetch(base + "/api/stage/rtmp", { method: "POST", headers: hdr, body: form({ call: "publish", app: "live", name: "bad", addr: "1.1.1.1", clientid: "1" }), redirect: "manual" });
+    let res = await fetch(base + "/api/stage/rtmp", { method: "POST", headers: hdr, body: form({ call: "publish", app: "stage", name: "bad", addr: "1.1.1.1", clientid: "1" }), redirect: "manual" });
     assert.equal(res.status, 403);
-    res = await fetch(base + "/api/stage/rtmp", { method: "POST", headers: hdr, body: form({ call: "publish", app: "live", name: r.key, addr: "1.1.1.1", clientid: "1" }), redirect: "manual" });
+    res = await fetch(base + "/api/stage/rtmp", { method: "POST", headers: hdr, body: form({ call: "publish", app: "stage", name: r.key, addr: "1.1.1.1", clientid: "1" }), redirect: "manual" });
     assert.equal(res.status, 302);
-    assert.equal(res.headers.get("location"), r.slot.stream);
-    res = await fetch(base + "/api/stage/rtmp", { method: "POST", headers: { ...hdr, "X-Forwarded-For": "9.9.9.9" }, body: form({ call: "publish", app: "live", name: r.key }), redirect: "manual" });
+    assert.equal(res.headers.get("location"), "rtmp://127.0.0.1/live/" + r.slot.stream);
+    res = await fetch(base + "/api/stage/rtmp", { method: "POST", headers: { ...hdr, "X-Forwarded-For": "9.9.9.9" }, body: form({ call: "publish", app: "stage", name: r.key }), redirect: "manual" });
     assert.equal(res.status, 403, "through the public proxy = refused");
     res = await fetch(base + "/api/stage/slots/" + r.slot.id + "/relay?seq=0", { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: Buffer.alloc(10) });
     assert.equal(res.status, 401);

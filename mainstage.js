@@ -16,14 +16,19 @@
 // "jackpot" = a jackpot_rakes row into the casino pot. A server restart loses nothing: slots are
 // in the DB, the next tick resumes them, and any slot whose deadline passed meanwhile is settled.
 //
-// Streaming: nginx-rtmp calls POST /api/stage/rtmp (on_publish / on_update / on_publish_done, only
-// from loopback). A slot key (random, shown once, stored only as a SHA-256 hash, cleared when the
-// slot ends) is accepted and REDIRECTED to the slot's public stream name, so the key never becomes
-// the HLS filename. on_update (every 10 s) is the liveness heartbeat for billing, and answering it
-// with 403 is how a cut / ended slot is kicked off the server. Pepe's own key ("broadcast") is
-// passed through untouched on the prod application. The browser mode posts MediaRecorder chunks
-// to /api/stage/slots/:id/relay (owner checked on every chunk); one ffmpeg per slot turns them
-// into RTMP to the local nginx with an internal HMAC relay key.
+// Streaming: two nginx-rtmp applications, both calling POST /api/stage/rtmp (on_publish /
+// on_update / on_publish_done, answered only from loopback):
+//   INGEST ("stage"; staging "stage_staging") - no HLS. Users publish here with their slot key
+//     (random, shown once, stored only as a SHA-256 hash, cleared when the slot ends). A valid key
+//     is answered with a 3xx to rtmp://127.0.0.1/<OUT>/<slot stream name>, which makes nginx PUSH
+//     the stream there - so the key is never an HLS filename. (A plain rename doesn't work: the HLS
+//     module opens its files before the notify module renames.)
+//   OUT ("live"; staging "live_staging") - the HLS application. Takes Pepe's own key ("broadcast",
+//     prod only) and the pushes of open slots (slot stream names, from loopback only).
+// on_update (every 10 s) is the liveness heartbeat for billing, and answering it with 403 is how a
+// cut / ended slot is kicked off the server. The browser mode posts MediaRecorder chunks to
+// /api/stage/slots/:id/relay (owner checked on every chunk); one ffmpeg per slot turns them into
+// RTMP to the local INGEST app with an internal HMAC relay key.
 //
 // Several slots can be live at once in this model (ids everywhere); `max_concurrent` (default 1)
 // is the only thing that limits it today.
@@ -33,15 +38,16 @@ const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const STAGING = !!process.env.STAGING;
-const RTMP_APP = process.env.STAGE_RTMP_APP || (STAGING ? "live_staging" : "live");
+const RTMP_APP = process.env.STAGE_RTMP_APP || (STAGING ? "stage_staging" : "stage");   // ingest
+const OUT_APP = process.env.STAGE_OUT_APP || (STAGING ? "live_staging" : "live");         // HLS
 const RTMP_PUBLIC = process.env.STAGE_RTMP_URL || `rtmp://stream.publicaccess.tv/${RTMP_APP}`;
 const RTMP_LOCAL = process.env.STAGE_RTMP_LOCAL || `rtmp://127.0.0.1/${RTMP_APP}`;
+const OUT_LOCAL = process.env.STAGE_OUT_LOCAL || `rtmp://127.0.0.1/${OUT_APP}`;
 // nginx-rtmp wants a distinct hls_path per application: the staging app writes to /mnt/hls/staging
 const HLS_BASE = String(process.env.STAGE_HLS_BASE || ("https://publicaccess.tv/hls" + (STAGING ? "/staging" : ""))).replace(/\/+$/, "");
 const STREAM_PREFIX = STAGING ? "stg-" : "stage-";
-// Pepe's OBS key(s): let through untouched, and only on the prod application (the staging app
-// writes into the same HLS directory, so it must never accept "broadcast").
-const PEPE_KEYS = new Set(RTMP_APP === "live"
+// Pepe's OBS key(s): let through untouched, only on the prod HLS application.
+const PEPE_KEYS = new Set(OUT_APP === "live"
   ? String(process.env.STAGE_PEPE_KEYS || "broadcast").split(",").map((s) => s.trim()).filter(Boolean) : []);
 const RELAY_SECRET = process.env.SECRET_KEY || crypto.randomBytes(32).toString("hex");
 const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
@@ -368,7 +374,7 @@ async function slotByName(name) {
   return (await getQuery("SELECT * FROM stage_slots WHERE key_hash = ? AND status != 'ended'", [sha(name)]))[0] || null;
 }
 
-// Returns {status, location?}. 2xx = allow, 3xx = allow + rename to `location`, else reject/drop.
+// Returns {status, location?}. 2xx = allow, 3xx = allow + push to `location`, else reject/drop.
 async function rtmpCallback(f) {
   await init();
   const call = String(f.call || "");
@@ -377,9 +383,20 @@ async function rtmpCallback(f) {
   const cid = String(f.clientid || "") + "@" + app;
   const t = now();
   if (call === "play" || call === "update_play" || call === "play_done") return { status: 200 };
-  if (app !== RTMP_APP) return { status: 403 };
-  if (PEPE_KEYS.has(name)) return { status: 200 };
 
+  // ── the HLS application: Pepe's key, and the local pushes of open slots ──
+  if (app === OUT_APP) {
+    if (PEPE_KEYS.has(name)) return { status: 200 };
+    if (call === "publish_done") return { status: 200 };
+    if (!name.startsWith(STREAM_PREFIX)) return { status: 403 };
+    if (call === "publish" && !isLoopback(f.addr)) return { status: 403 };
+    const s = (await getQuery("SELECT * FROM stage_slots WHERE stream = ? AND status != 'ended'", [name]))[0];
+    if (!s || s.settled) return { status: 403 };
+    return { status: 200 };
+  }
+  if (app !== RTMP_APP) return { status: 403 };
+
+  // ── the ingest application: slot keys + relay keys ──
   if (call === "publish") {
     let s = null;
     const relayFor = parseRelayKey(name);
@@ -396,11 +413,11 @@ async function rtmpCallback(f) {
     if (!r.changes) return { status: 403 };
     clients.set(cid, s.id);
     if (!s.went_live) event(s.id, "live", s.username, relayFor ? "browser" : "rtmp");
-    return { status: 302, location: s.stream };
+    return { status: 302, location: `${OUT_LOCAL}/${s.stream}` };
   }
 
   if (call === "update_publish" || call === "publish_done") {
-    let s = clients.has(cid) ? await getSlot(clients.get(cid)) : await slotByName(name);
+    const s = clients.has(cid) ? await getSlot(clients.get(cid)) : await slotByName(name);
     if (!s) return { status: call === "publish_done" ? 200 : 403 };
     if (call === "publish_done") {
       clients.delete(cid);
@@ -545,7 +562,7 @@ async function adminState() {
   const log = (await getQuery("SELECT * FROM stage_slots ORDER BY created DESC LIMIT 50")).map((s) => view(s, t));
   const bans = await getQuery("SELECT userId, username, reason, by, at FROM stage_bans ORDER BY at DESC");
   const events = await getQuery("SELECT slot_id, ts, what, actor, detail FROM stage_events ORDER BY ts DESC LIMIT 60");
-  return { config: config(), open, log, bans, events, rtmp_app: RTMP_APP, relays: relays.size };
+  return { config: config(), open, log, bans, events, rtmp_app: RTMP_APP + " -> " + OUT_APP, relays: relays.size };
 }
 
 // ── routes ──
@@ -677,7 +694,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
 module.exports = {
   register, start, init, book, end, tick, reconcile, rtmpCallback, relayChunk, stopRelay, publicSlots, adminState,
   setConfig, config, ban, unban, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
-  Refuse, RTMP_APP, STREAM_PREFIX, DEFAULTS,
+  Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick,
