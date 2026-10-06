@@ -11,6 +11,17 @@
   var api = '/api/rooms/' + encodeURIComponent(slug) + '/dj';
   var P = null, fetchedAt = 0, timer = null, fails = 0, lastKey = '', busy = false, watchT = null;
 
+  // ── collapsed / open (1.99bx): remembered per browser ──
+  var OPEN_KEY = 'patvDjOpen', tog = document.getElementById('rdjTog');
+  function isOpen() { return !box.classList.contains('collapsed'); }
+  function setOpen(open, save) {
+    box.classList.toggle('collapsed', !open);
+    if (tog) { tog.setAttribute('aria-expanded', String(open)); tog.textContent = open ? 'Close booth ▴' : 'Open booth ▾'; }
+    if (save) { try { localStorage.setItem(OPEN_KEY, open ? '1' : '0'); } catch (e) { /* private mode */ } }
+  }
+  (function () { var v = null; try { v = localStorage.getItem(OPEN_KEY); } catch (e) { v = null; } setOpen(v === '1', false); })();
+  if (tog) tog.addEventListener('click', function () { setOpen(!isOpen(), true); });
+
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function $(id) { return document.getElementById(id); }
   function pat(n) { return Number(n || 0).toLocaleString() + ' PAT'; }
@@ -66,6 +77,46 @@
     f.style.width = (n.duration_ms ? (100 * ms / n.duration_ms) : 0).toFixed(2) + '%';
     pos.textContent = mmss(ms);
     tr.setAttribute('aria-valuenow', String(Math.round(ms / 1000)));
+    var mf = $('rdjMiniFill');
+    if (mf) { mf.style.width = f.style.width; $('rdjMiniTrack').setAttribute('aria-valuenow', String(Math.round(ms / 1000))); }
+  }
+  // the collapsed bar: cover, title / artist, a thin progress line, the controls this viewer may use
+  function renderMini() {
+    var s = P.state, r = P.room, me = P.me, n = s.now, d = s.dj || {};
+    var a = $('rdjMiniArt'), m = $('rdjMini');
+    a.textContent = '';
+    if (n && n.art) {
+      var im = el('img'); im.alt = ''; im.referrerPolicy = 'no-referrer';
+      im.onerror = function () { a.textContent = '🎵'; };
+      im.src = n.art; a.appendChild(im);
+    } else a.textContent = '🎵';
+    $('rdjMiniT').textContent = !s.connected ? 'Pepe\'s music is offline right now.' : n ? n.title : 'Nothing playing right now.';
+    $('rdjMiniA').textContent = n && s.connected ? n.artist + (n.playing ? '' : ' · ⏸ paused') : (d.on ? 'Auto-DJ is on' : '');
+    m.classList.toggle('paused', !(n && n.playing));
+    $('rdjMiniTrack').classList.toggle('hide', !(n && s.connected));
+    $('rdjMiniTrack').setAttribute('aria-valuemax', String(Math.round(((n && n.duration_ms) || 0) / 1000)));
+    if (!n) $('rdjMiniFill').style.width = '0';
+    var c = $('rdjMiniCtrls');
+    c.textContent = '';
+    if (!s.connected || !linked) return;
+    var admin = me.musicAdmin, playing = !!(n && n.playing);
+    if (playing && (r.pause || admin)) {
+      c.appendChild(btn(admin ? '⏭️ Skip' : '⏭️ Vote skip', null, 'skip', { title: admin ? 'Skip now' : 'Free · ' + s.votes.stop + ' votes skip it' }));
+      c.appendChild(btn(admin ? '⏸️ Pause' : '⏸️ Vote pause', null, 'pause', { title: admin ? 'Pause now' : 'Free · ' + s.votes.stop + ' votes pause it' }));
+    }
+    if (!playing && n) c.appendChild(btn(admin ? '▶️ Resume' : '▶️ Vote resume', null, 'resume', { title: admin ? 'Resume now' : 'Free · ' + s.votes.start + ' votes' }));
+    if (!n && (r.play || admin)) c.appendChild(btn(admin ? '▶️ Start' : '▶️ Vote start', null, 'play', { title: admin ? 'Start the music' : 'Free · ' + s.votes.start + ' votes' }));
+    if (me.djAdmin && d.on) c.appendChild(btn('🎧 Next', null, 'dj.next', { title: 'Pepe picks the next song' }));
+    if (r.queue || admin) {
+      var q = el('button', 'b go', '🔎 Request'); q.type = 'button';
+      q.title = 'Search for a song to queue';
+      q.addEventListener('click', function () {
+        setOpen(true, true);
+        var f = $('rdjFindQ');
+        if (f) { f.focus(); try { f.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { /* old browser */ } }
+      });
+      c.appendChild(q);
+    }
   }
   function renderBooth() {
     var s = P.state, d = s.dj || {}, b = $('rdjBooth');
@@ -194,7 +245,7 @@
     var key = JSON.stringify([P.state, P.room, P.me, P.acts, busy]);
     if (key === lastKey) { tickProgress(); return; }
     lastKey = key;
-    renderNow(); renderBooth(); renderQueue(); renderCtrls(); renderTools();
+    renderNow(); renderBooth(); renderQueue(); renderCtrls(); renderTools(); renderMini();
   }
 
   // ── actions ──

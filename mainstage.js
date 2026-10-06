@@ -968,6 +968,34 @@ async function roomStage(roomId, viewer) {
     price: CONFIG.price_per_min, enabled: CONFIG.enabled && CONFIG.max_concurrent > 0,
   };
 }
+/** A room's schedule for its page (1.99bx): what's on now, the booked / scheduled slots ahead, the
+ *  queue. Only public facts: names as shown on the stage, titles, featured / ordinary, stream / embed.
+ *  Requests still waiting for the owner's OK are shown to the room's managers (manage = true) and, as
+ *  their own, to the person who asked - never to anyone else. No user ids, slot ids or keys. */
+async function roomSchedule(roomId, viewer, manage) {
+  await init();
+  const t = now();
+  const me = viewer && viewer.userId ? viewer.userId : null;
+  const open = await openSlots(roomId);
+  const fut = await futureSlots(roomId);
+  const q = await queueFor(roomId);
+  const row = (s) => {
+    const e = embedOf(s);
+    return { display: s.displayname || s.username, title: s.title || null, featured: !!s.featured, mode: isEmbed(s) ? "embed" : "stream",
+             embed_label: e ? embeds.label(e) : null, minutes: s.max_minutes, mine: !!me && s.userId === me };
+  };
+  const live = open.map((s) => ({ ...row(s), live: isLive(s, t), since: s.went_live || null, start_at: startOf(s),
+                                  ends_by: (s.went_live || startOf(s)) + s.max_minutes * 60000 }))
+    .sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (b.live ? 1 : 0) - (a.live ? 1 : 0) || (a.since || a.start_at) - (b.since || b.start_at));
+  const upcoming = fut.filter((s) => s.status === "scheduled" || (s.status === "requested" && (manage || (me && s.userId === me))))
+    .slice(0, 40)
+    .map((s) => ({ ...row(s), start_at: startOf(s), status: s.status === "requested" ? "requested" : "scheduled" }));
+  const queue = q.map((e, i) => ({ position: i + 1, display: e.displayname || e.username, minutes: e.minutes, featured: !!e.feature,
+                                   title: e.title || null, mode: e.mode === "embed" ? "embed" : "stream", mine: !!me && e.userId === me }));
+  const out = { live, upcoming, queue };
+  if (manage) out.pending = fut.filter((s) => s.status === "requested").length;
+  return out;
+}
 /** The channel guide: per room, what's on now and what's next. Map room id -> {now[], next[]}. */
 async function guide() {
   await init();
@@ -1291,7 +1319,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
 module.exports = {
   register, start, init, book, end, tick, reconcile, rtmpCallback, relayChunk, stopRelay, publicSlots, adminState, ownerState,
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
-  unfeature, featureByOwner, upgrade, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, guide, mine, regenKey, openSlots, futureSlots,
+  unfeature, featureByOwner, upgrade, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },

@@ -171,7 +171,8 @@ function register(app, { addUser, isBotToken }) {
       const R = await resolveRoom(req.params.slug);
       if (!R) return res.status(404).json({ ok: false, error: "No such room." });
       const st = await stage.roomStage(R.id, req.user);
-      res.json({ ok: true, ...st, pepe: bridge().stage(), manage: await rooms.canManage(req.user, R.id) });
+      const manage = await rooms.canManage(req.user, R.id);
+      res.json({ ok: true, ...st, pepe: bridge().stage(), manage, schedule: await stage.roomSchedule(R.id, req.user, manage) });
     } catch (e) { fail(res, e); }
   });
 

@@ -516,6 +516,7 @@ function register(app, { isBotToken, addUser }) {
       pepeHere: !!(STAGE.room === R.id && Date.now() - STAGE.at < STAGE_ROOM_FRESH), stage: stage(),
       roomStage: await require("./mainstage").roomStage(R.id, req.user),
       manage: await reg.canManage(req.user, R.id),
+      schedule: await require("./mainstage").roomSchedule(R.id, req.user, await reg.canManage(req.user, R.id)).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
       analytics: reg.hasRoute(app, "/rooms/:slug/analytics"),
       feed: await require("./feedweb").roomFeed(R.id, req.user, req.query).catch((e) => { console.error("[feed] room feed:", e.message); return null; }),
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",

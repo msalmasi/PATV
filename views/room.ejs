@@ -1,5 +1,5 @@
 <%- include('layout', { title: room.name + ' — live on PATV', user: user }) %>
-<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, bridged_ = room.bridged !== false; %>
+<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false; %>
 <style>
   .rm { max-width: 1120px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
   .rm *, .rm *::before, .rm *::after { box-sizing: border-box; }
@@ -184,7 +184,7 @@
       <a class="golive-btn" href="/stage?room=<%= encodeURIComponent(room.slug) %>">🎥 Go live here</a>
       <% if (!RS.featured) { %><a class="golive-btn ghost" href="/stage?room=<%= encodeURIComponent(room.slug) %>&feature=1">★ Get featured</a><% } %>
     </div>
-    <% if ((RS.upcoming || []).length) { %>
+    <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="Coming up on this stage">
         <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%= u.display %></b><span class="muted"><%= u.minutes %> min<%= u.featured ? ' · ★ featured' : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
       </ul>
@@ -212,6 +212,7 @@
   })();
   </script>
 <% } %>
+<% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_, manage: manage_ }) %><% } %>
 <% if (!bridged_) { %>
   <section class="card"><p class="muted" style="margin:0">📡 Pepe isn't bridging this room to the website right now, so there's no live chat here — the stage above still works. Join the room on Camfrog to hang out.</p></section>
 <% } %>
@@ -262,8 +263,8 @@
       </section>
     </aside>
   </div>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=3">
-  <script src="/public/js/room-bridge.js?v=3"></script>
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
+  <script src="/public/js/room-bridge.js?v=4"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {

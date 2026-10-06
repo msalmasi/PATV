@@ -1,5 +1,7 @@
 <%# The room page's DJ panel (1.99ba, roomdj.js + public/js/room-dj.js). Pass { slug, linked }.
-    Hidden until Pepe reports music in this room; filled and refreshed by the script. %>
+    Hidden until Pepe reports music in this room; filled and refreshed by the script.
+    1.99bx: collapsed by default to one bar (#rdjMini: art, title, progress, quick controls); the toggle
+    opens the full booth (#rdjFull) and the choice is remembered per browser (localStorage patvDjOpen). %>
 <style>
   .rdj { display: grid; gap: 12px; background: radial-gradient(120% 160% at 100% 0%, #1d1430 0%, #111 55%); }
   .rdj.hide { display: none !important; }
@@ -74,14 +76,50 @@
   .rdj ul.sol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
   .rdj ul.sol li { overflow-wrap: anywhere; }
   .rdj ul.sol q { color: #e8dcf7; font-style: italic; }
+  /* 1.99bx: collapsed by default - one compact now-playing bar; the full booth opens with the toggle */
+  .rdj h2 .hd { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .rdj .tog { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12.5px; padding: 4px 11px; border-radius: 999px; border: 1px solid #4a3566;
+              background: #181022; color: #e3c8ff; cursor: pointer; min-height: 30px; white-space: nowrap; }
+  .rdj .tog:hover, .rdj .tog:focus-visible { border-color: #c792ff; background: #24183a; outline: none; }
+  .rdj.collapsed { gap: 8px; padding-top: 10px; padding-bottom: 10px; }
+  .rdj.collapsed h2 { margin-bottom: 0; }
+  .rdj.collapsed .full { display: none; }
+  .rdj:not(.collapsed) .mini { display: none; }
+  .rdj .full { display: grid; gap: 12px; min-width: 0; }
+  .rdj .mini { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; min-width: 0; }
+  .rdj .mini .art { width: 44px; height: 44px; border-radius: 8px; font-size: 18px; }
+  .rdj .mini .mt { min-width: 0; display: grid; gap: 1px; }
+  .rdj .mini .mt b { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rdj .mini .mt span { color: #aaa; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rdj .mini .thin { height: 3px; background: #262626; border-radius: 999px; overflow: hidden; margin-top: 5px; }
+  .rdj .mini .thin .fill { height: 100%; }
+  .rdj .mini.paused .fill { background: #666; }
+  .rdj .mini .ctrls { flex-wrap: nowrap; gap: 6px; }
+  .rdj .mini button.b { min-height: 34px; padding: 5px 10px; font-size: 12.5px; white-space: nowrap; }
+  @media (max-width: 560px) {
+    .rdj .mini { grid-template-columns: 44px minmax(0, 1fr); }
+    .rdj .mini .ctrls { grid-column: 1 / -1; flex-wrap: wrap; }
+    .rdj .mini .ctrls:empty { display: none; }
+  }
   @media (max-width: 860px) {
     .rdj .top, .rdj .cols { grid-template-columns: minmax(0, 1fr); }
     .rdj .now { grid-template-columns: 64px minmax(0, 1fr); }
     .rdj .now > .art { width: 64px; height: 64px; }
   }
 </style>
-<section class="card rdj hide" id="rdj" aria-labelledby="rdjH" data-slug="<%= slug %>" data-linked="<%= linked ? '1' : '' %>">
-  <h2 id="rdjH"><span>🎧 DJ booth</span> <span class="pill off" id="rdjPill">Auto-DJ off</span></h2>
+<section class="card rdj hide collapsed" id="rdj" aria-labelledby="rdjH" data-slug="<%= slug %>" data-linked="<%= linked ? '1' : '' %>">
+  <h2 id="rdjH"><span>🎧 DJ booth</span> <span class="hd"><span class="pill off" id="rdjPill">Auto-DJ off</span>
+    <button type="button" class="tog" id="rdjTog" aria-expanded="false" aria-controls="rdjFull">Open booth ▾</button></span></h2>
+  <div class="mini" id="rdjMini">
+    <div class="art" id="rdjMiniArt" aria-hidden="true">🎵</div>
+    <div class="mt">
+      <b id="rdjMiniT">Nothing playing right now.</b>
+      <span id="rdjMiniA"></span>
+      <div class="thin" role="progressbar" aria-label="Song progress" aria-valuemin="0" id="rdjMiniTrack"><div class="fill" id="rdjMiniFill"></div></div>
+    </div>
+    <div class="ctrls" id="rdjMiniCtrls" role="group" aria-label="Quick music controls"></div>
+  </div>
+  <div class="full" id="rdjFull">
   <div class="top">
     <div class="now" id="rdjNow"></div>
     <div class="booth" id="rdjBooth"></div>
@@ -136,5 +174,6 @@
       <% } %>
     </div>
   </div>
+  </div>
 </section>
-<script src="/public/js/room-dj.js?v=2" defer></script>
+<script src="/public/js/room-dj.js?v=3" defer></script>

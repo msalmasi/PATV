@@ -54,3 +54,5 @@
 .rb-cmd-r { color: #ddd; margin-top: 3px; }
 
 @media (prefers-reduced-motion: reduce) { .rb-meter { display: none; } .rb-meter i { transition: none; } }
+.rb-micsel { background: #0d0d0d; color: #ddd; border: 1px solid #333; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 12.5px; max-width: 100%; min-width: 0; flex: 0 1 220px; }
+.rb-micsel.hide { display: none !important; }

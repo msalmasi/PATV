@@ -269,7 +269,28 @@
   $('tabWeb').addEventListener('click', function () { tab('web'); });
 
   // ── browser streaming ──
-  var media = null, extra = [], rec = null, seq = 0, queue = [], sending = false, live = false, sent = [], audioCtx = null, fails = 0;
+  // 1.99bx: camera + mic pickers and "Switch camera", before and WHILE live.
+  // MediaRecorder can't swap a track mid-recording (Chrome/Firefox stop or error when the recorded
+  // stream's tracks change), so what it records is a PROGRAM feed whose tracks never change:
+  //   * video: the camera is painted onto a <canvas> and the canvas is recorded (captureStream). The
+  //     painting runs off a Web Worker clock, so a background tab doesn't freeze the picture
+  //     (requestAnimationFrame stops there, main-thread timers are throttled to 1/s).
+  //   * audio: mic (+ screen audio) go through one Web Audio mixer (MediaStreamAudioDestinationNode).
+  // Switching a camera / mic only changes what feeds the canvas / the mixer: the recorder, the relay,
+  // ffmpeg and the stage never notice. The canvas holds the last frame while the new camera opens.
+  // Fallback (no canvas.captureStream / Web Audio): the tracks are recorded directly and a switch
+  // restarts the recorder (seq 0 -> the server restarts its ffmpeg: a couple of seconds' gap).
+  // Screen mode records the screen's own video track (no canvas) - only the mic can be switched there.
+  var LS_CAM = 'patvCamId', LS_MIC = 'patvMicId', LS_FACE = 'patvCamFacing';
+  function pref(k, v) {
+    try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, String(v)); } catch (e) { /* private mode */ }
+    return null;
+  }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  var cam = null, mic = null, scr = null;        // what we captured (cam: video only, mic: audio only)
+  var prog = null;                               // the program feed while live: {ac, dest, nodes, canvas, g, vid, track, stop}
+  var media = null, rec = null, seq = 0, queue = [], sending = false, live = false, sent = [], fails = 0;
+  var previewing = false, switching = false, camOn = true, micOn = true, devs = { video: [], audio: [] };
   var MIMES = ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=h264,opus', 'video/webm', 'video/mp4'];
   function mime() {
     if (!window.MediaRecorder) return null;
@@ -278,61 +299,344 @@
   }
   function webMsg(t) { $('webMsg').textContent = t || ''; }
   function srcKind() { var r = document.querySelector('input[name=src]:checked'); return r ? r.value : 'camera'; }
-  function getMedia() {
-    var md = navigator.mediaDevices;
-    if (!md) return Promise.reject(new Error('This browser can\'t capture video here (needs HTTPS and a modern browser).'));
-    if (srcKind() === 'camera') {
-      return md.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: { echoCancellation: true, noiseSuppression: true } });
-    }
-    if (!md.getDisplayMedia) return Promise.reject(new Error('Screen sharing isn\'t supported in this browser.'));
-    return md.getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true }).then(function (scr) {
-      return md.getUserMedia({ audio: true }).catch(function () { return null; }).then(function (mic) {
-        var out = new MediaStream(scr.getVideoTracks());
-        var auds = scr.getAudioTracks().concat(mic ? mic.getAudioTracks() : []);
-        extra = [scr].concat(mic ? [mic] : []);
-        if (auds.length > 1 && (window.AudioContext || window.webkitAudioContext)) {
-          // MediaRecorder records one audio track: mix screen audio + mic
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          var dest = audioCtx.createMediaStreamDestination();
-          auds.forEach(function (t) { audioCtx.createMediaStreamSource(new MediaStream([t])).connect(dest); });
-          dest.stream.getAudioTracks().forEach(function (t) { out.addTrack(t); });
-          out._mic = mic;
-        } else auds.forEach(function (t) { out.addTrack(t); });
-        return out;
-      });
+  function md() { return navigator.mediaDevices || null; }
+  function gum(c) { return md().getUserMedia(c); }
+  function camTrack() { return cam ? cam.getVideoTracks()[0] || null : null; }
+  function micTrack() { return mic ? mic.getAudioTracks()[0] || null : null; }
+  function scrVideo() { return scr ? scr.getVideoTracks()[0] || null : null; }
+  function settings(t) { try { return (t && t.getSettings && t.getSettings()) || {}; } catch (e) { return {}; } }
+  function stopStream(s) { if (s) s.getTracks().forEach(function (t) { t.onended = null; try { t.stop(); } catch (e) { /* gone */ } }); }
+  function errText(e, what) {
+    var n = e && e.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') return 'Permission denied - allow the ' + what + ' for this site in your browser (the lock / camera icon by the address), then try again.';
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'No ' + what + ' found.';
+    if (n === 'OverconstrainedError') return 'That ' + what + ' isn\'t available - pick another one.';
+    if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') return 'Your ' + what + ' is busy - close other apps or tabs using it, then try again.';
+    return (e && e.message) || ('Could not open the ' + what + '.');
+  }
+  // constraints: an explicit pick is exact; the remembered one is only "ideal" (a stale id never fails)
+  function vCons(o) {
+    var c = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } };
+    if (o && o.deviceId) c.deviceId = { exact: o.deviceId };
+    else if (o && o.facing) c.facingMode = { exact: o.facing };
+    else { var id = pref(LS_CAM), f = pref(LS_FACE); if (id) c.deviceId = { ideal: id }; else if (f) c.facingMode = { ideal: f }; }
+    return c;
+  }
+  function aCons(o) {
+    var c = { echoCancellation: true, noiseSuppression: true };
+    if (o && o.deviceId) c.deviceId = { exact: o.deviceId };
+    else { var id = pref(LS_MIC); if (id) c.deviceId = { ideal: id }; }
+    return c;
+  }
+  function remember(kind) {
+    var st = settings(kind === 'camera' ? camTrack() : micTrack());
+    if (kind === 'camera') { if (st.deviceId) pref(LS_CAM, st.deviceId); if (st.facingMode) pref(LS_FACE, st.facingMode); }
+    else if (st.deviceId) pref(LS_MIC, st.deviceId);
+  }
+
+  // ── opening sources ──
+  function openCamera() {
+    // one prompt for both; a missing / busy camera still lets the mic stream (black picture) when we can draw one
+    return gum({ video: vCons(), audio: aCons() }).then(function (s) {
+      cam = new MediaStream(s.getVideoTracks()); mic = new MediaStream(s.getAudioTracks());
+      return '';
+    }, function (e) {
+      if (!e || /NotAllowed|Security|PermissionDenied/.test(e.name || '')) throw e;
+      return gum({ audio: aCons() }).then(function (s) {
+        cam = null; mic = s;
+        return errText(e, 'camera') + ' You can still go live with your mic and a black picture, or pick another camera.';
+      }, function () { throw e; });
     });
   }
+  function openScreen() {
+    if (!md().getDisplayMedia) return Promise.reject(new Error('Screen sharing isn\'t supported in this browser.'));
+    return md().getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true }).then(function (s) {
+      scr = s;
+      return gum({ audio: aCons() }).then(function (m) { mic = m; return ''; }, function (e) { mic = null; return errText(e, 'microphone') + ' Streaming the screen without your mic.'; });
+    });
+  }
+  function hookCam() {
+    var t = camTrack(); if (!t) return;
+    t.enabled = camOn;
+    t.onended = function () { if (!switching) lost('camera'); };
+  }
+  function hookMic() {
+    var t = micTrack(); if (!t) return;
+    t.enabled = micOn;
+    t.onended = function () { if (!switching) lost('microphone'); };
+  }
+  function hookScr() {
+    var t = scrVideo(); if (!t) return;
+    t.onended = function () { if (live) stopWeb('Your screen share stopped.'); else releaseMedia(); };
+  }
+
+  // ── the program feed ──
+  function clock(fn, ms) {
+    var w = null, iv = null, url = null;
+    try {
+      url = URL.createObjectURL(new Blob(['var t=null;onmessage=function(e){clearInterval(t);if(e.data>0)t=setInterval(function(){postMessage(0)},e.data)}'], { type: 'text/javascript' }));
+      w = new Worker(url);
+      w.onmessage = fn; w.postMessage(ms);
+    } catch (e) { w = null; iv = setInterval(fn, ms); }
+    return function () {
+      if (w) { try { w.postMessage(0); w.terminate(); } catch (e) { /* gone */ } }
+      if (iv) clearInterval(iv);
+      if (url) { try { URL.revokeObjectURL(url); } catch (e) { /* fine */ } }
+    };
+  }
+  function draw() {
+    var p = prog; if (!p || !p.g) return;
+    var c = p.canvas, g = p.g, v = p.vid, t = camTrack();
+    var cw = c.width, ch = c.height;
+    if (!t || !camOn || t.readyState !== 'live') { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); return; }
+    if (v.readyState < 2 || !v.videoWidth) return;              // the new camera is opening: hold the last frame
+    var vw = v.videoWidth, vh = v.videoHeight, s = Math.min(cw / vw, ch / vh), dw = vw * s, dh = vh * s;
+    if (dw < cw - 1 || dh < ch - 1) { g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch); }
+    try { g.drawImage(v, (cw - dw) / 2, (ch - dh) / 2, dw, dh); } catch (e) { /* frame not ready */ }
+  }
+  function buildProgram(ac) {
+    var p = { nodes: [] };
+    if (ac && ac.createMediaStreamDestination) {
+      p.ac = ac; p.dest = ac.createMediaStreamDestination();
+      if (ac.state === 'suspended' && ac.resume) ac.resume().catch(function () {});
+    } else if (ac) { try { ac.close(); } catch (e) { /* fine */ } }
+    if (srcKind() === 'camera') {
+      var c = document.createElement('canvas');
+      if (typeof c.captureStream === 'function') {
+        var pv = $('pv'), st = settings(camTrack());
+        var w = pv.videoWidth || st.width || 1280, h = pv.videoHeight || st.height || 720;
+        var k = Math.min(1, 1280 / Math.max(w, h));
+        c.width = Math.max(2, Math.round(w * k / 2) * 2); c.height = Math.max(2, Math.round(h * k / 2) * 2);
+        var g = c.getContext('2d');
+        var track = null;
+        try { track = c.captureStream(30).getVideoTracks()[0] || null; } catch (e) { track = null; }
+        if (g && track) {
+          g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
+          var v = document.createElement('video');
+          v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true');
+          // in the page and "visible" (not display:none) so every browser keeps decoding it
+          v.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1';
+          document.body.appendChild(v);
+          p.canvas = c; p.g = g; p.vid = v; p.track = track;
+          p.stop = clock(draw, 33);
+        }
+      }
+    }
+    prog = p;
+    rewire();
+  }
+  function teardownProgram() {
+    var p = prog; prog = null;
+    if (!p) return;
+    if (p.stop) p.stop();
+    if (p.track) { try { p.track.stop(); } catch (e) { /* gone */ } }
+    if (p.vid) { try { p.vid.srcObject = null; p.vid.remove(); } catch (e) { /* gone */ } }
+    p.nodes.forEach(function (n) { try { n.disconnect(); } catch (e) { /* gone */ } });
+    if (p.ac) { try { p.ac.close(); } catch (e) { /* gone */ } }
+  }
+  // what the recorder records: the program's stable tracks, or (fallback) the sources themselves
+  function recTracks() {
+    var v = prog && prog.track ? prog.track : (srcKind() === 'camera' ? camTrack() : scrVideo());
+    var a = prog && prog.ac ? prog.dest.stream.getAudioTracks()[0] : (micTrack() || (scr && scr.getAudioTracks()[0]) || null);
+    return [v, a].filter(function (t) { return t && t.readyState !== 'ended'; });
+  }
+  // after any source change: feed the canvas / mixer; in the fallback, restart the recorder on new tracks
+  function rewire() {
+    showPreview();
+    if (prog && prog.vid) {
+      prog.vid.srcObject = cam || null;
+      if (cam) { var pr = prog.vid.play(); if (pr && pr.catch) pr.catch(function () {}); }
+    }
+    if (prog && prog.ac) {
+      prog.nodes.forEach(function (n) { try { n.disconnect(); } catch (e) { /* gone */ } });
+      prog.nodes = [];
+      [mic, scr].forEach(function (s) {
+        var a = s ? s.getAudioTracks().filter(function (t) { return t.readyState === 'live'; }) : [];
+        if (!a.length) return;
+        try { var n = prog.ac.createMediaStreamSource(new MediaStream(a)); n.connect(prog.dest); prog.nodes.push(n); } catch (e) { /* no audio from it */ }
+      });
+    }
+    $('micBtn').disabled = !micTrack(); $('camBtn').disabled = !(camTrack() || scrVideo());
+    if (!live) return;
+    var next = recTracks();
+    if (!next.some(function (t) { return t.kind === 'video'; })) { stopWeb('Your ' + (srcKind() === 'camera' ? 'camera' : 'screen share') + ' stopped.'); return; }
+    var cur = media ? media.getTracks() : [];
+    var same = next.length === cur.length && next.every(function (t) { return cur.indexOf(t) >= 0; });
+    if (!same) { media = new MediaStream(next); restartRecorder(); }
+  }
+  function showPreview() {
+    var s = srcKind() === 'camera' ? cam : scr, pv = $('pv');
+    if (pv.srcObject !== s) pv.srcObject = s || null;
+    show('pvEmpty', !s);
+    $('pvEmpty').textContent = previewing && !s ? (mic ? 'No camera - mic only' : 'No source') : 'Pick a source to preview';
+  }
   function releaseMedia() {
-    [media].concat(extra).forEach(function (m) { if (m) m.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} }); });
-    if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
-    media = null; extra = [];
-    $('pv').srcObject = null; show('pvEmpty', true);
+    teardownProgram();
+    stopStream(cam); stopStream(mic); stopStream(scr);
+    cam = mic = scr = null; media = null; previewing = false;
+    $('pv').srcObject = null; show('pvEmpty', true); $('pvEmpty').textContent = 'Pick a source to preview';
     $('micBtn').disabled = true; $('camBtn').disabled = true;
+    pickers();
   }
   function preview() {
     if (live) return Promise.resolve(media);
     releaseMedia();
-    webMsg('Asking for your ' + (srcKind() === 'camera' ? 'camera and mic' : 'screen') + '…');
-    return getMedia().then(function (m) {
-      media = m; webMsg('');
-      $('pv').srcObject = m; show('pvEmpty', false);
-      $('micBtn').disabled = !micTracks().length; $('camBtn').disabled = !m.getVideoTracks().length;
+    if (!md() || !md().getUserMedia) {
+      var e0 = new Error('This browser can\'t capture video here (needs HTTPS and a modern browser).'); webMsg(e0.message); return Promise.reject(e0);
+    }
+    var screen = srcKind() === 'screen';
+    webMsg('Asking for your ' + (screen ? 'screen' : 'camera and mic') + '…');
+    return (screen ? openScreen() : openCamera()).then(function (note) {
+      previewing = true; camOn = true; micOn = true;
+      hookCam(); hookMic(); hookScr();
       setToggle('micBtn', true, '🎤 Mic'); setToggle('camBtn', true, '🎥 Video');
-      m.getVideoTracks().forEach(function (t) { t.addEventListener('ended', function () { if (live) stopWeb('Your ' + (srcKind() === 'camera' ? 'camera' : 'screen share') + ' stopped.'); else releaseMedia(); }); });
-      return m;
-    }).catch(function (e) { webMsg(e && e.name === 'NotAllowedError' ? 'Permission denied - allow the camera/screen in your browser to stream.' : (e && e.message) || 'Could not start that source.'); throw e; });
+      rewire();
+      remember('camera'); remember('microphone');
+      webMsg(note || '');
+      listDevices();
+      return media;
+    }).catch(function (e) {
+      releaseMedia();
+      webMsg(errText(e, screen ? 'screen' : 'camera and mic'));
+      throw e;
+    });
   }
-  function micTracks() { if (!media) return []; return media._mic ? media._mic.getAudioTracks() : media.getAudioTracks(); }
+  // a device unplugged / taken away: fall back to another one; live, the program keeps streaming
+  // (black picture / silence) until there is one
+  function lost(kind) {
+    var isCam = kind === 'camera';
+    if (isCam) { stopStream(cam); cam = null; } else { stopStream(mic); mic = null; }
+    rewire();
+    if (!previewing) return;
+    (isCam ? gum({ video: vCons() }) : gum({ audio: aCons() })).then(function (s) {
+      if (!previewing) { stopStream(s); return; }
+      if (isCam) { cam = s; hookCam(); } else { mic = s; hookMic(); }
+      rewire();
+      listDevices().then(function () {
+        var id = settings(isCam ? camTrack() : micTrack()).deviceId, d = null;
+        (isCam ? devs.video : devs.audio).forEach(function (x) { if (x.deviceId === id) d = x; });
+        webMsg('Your ' + kind + ' disconnected - switched to ' + ((d && d.label) || 'another one') + '.');
+      });
+    }, function () {
+      listDevices();
+      webMsg('Your ' + kind + ' disconnected' + (live ? (isCam ? ' - viewers see a black picture until you pick another camera.' : ' - the stream is silent until you pick another mic.') : '.'));
+    });
+  }
+  // iOS: opening one kind can end the other kind's track - reopen it quietly
+  function heal() {
+    var m = micTrack();
+    if (mic && m && m.readyState === 'ended') gum({ audio: aCons() }).then(function (s) { stopStream(mic); mic = s; hookMic(); rewire(); }, function () { lost('microphone'); });
+    var c = camTrack();
+    if (cam && c && c.readyState === 'ended') gum({ video: vCons() }).then(function (s) { stopStream(cam); cam = s; hookCam(); rewire(); }, function () { lost('camera'); });
+  }
+  // switch to another camera / mic: open the new one first (seamless on desktop); a phone that can't
+  // run two at once (busy) gets the old one stopped first. iOS ends the old track by itself.
+  function switchDev(kind, o) {
+    var isCam = kind === 'camera';
+    if (switching || !previewing || (isCam && srcKind() !== 'camera')) return Promise.resolve(false);
+    var get = isCam ? camTrack : micTrack, hook = isCam ? hookCam : hookMic;
+    var cons = function (x) { return isCam ? { video: vCons(x) } : { audio: aCons(x) }; };
+    var set = function (s) { if (isCam) cam = s; else mic = s; };
+    var old = isCam ? cam : mic, oldId = settings(get()).deviceId;
+    switching = true;
+    webMsg('Switching ' + kind + '…');
+    return gum(cons(o)).catch(function (e) {
+      if (!old || !(e && /NotReadable|TrackStart|Abort/.test(e.name || ''))) throw e;
+      stopStream(old); old = null; set(null);
+      return gum(cons(o));
+    }).then(function (s) {
+      stopStream(old); set(s); hook();
+      switching = false;
+      remember(kind); rewire(); heal(); webMsg(''); listDevices();
+      return true;
+    }, function (e) {
+      switching = false;
+      webMsg(errText(e, kind));
+      var t = get();
+      if (t && t.readyState === 'live') { listDevices(); return false; }
+      set(null);                                               // the old one is gone too: get it back
+      return gum(cons(oldId ? { deviceId: oldId } : null)).then(function (s) { set(s); hook(); }, function () { /* stays without */ })
+        .then(function () { rewire(); heal(); listDevices(); return false; });
+    });
+  }
+  // "Switch camera": front <-> back on phones (facingMode); elsewhere the next camera in the list
+  function flip() {
+    var st = settings(camTrack());
+    var nextDev = function () {
+      var L = devs.video.filter(function (d) { return d.deviceId; });
+      if (L.length < 2) return null;
+      var i = -1; L.forEach(function (d, j) { if (d.deviceId === st.deviceId) i = j; });
+      return { deviceId: L[(i + 1) % L.length].deviceId };
+    };
+    if (st.facingMode === 'user' || st.facingMode === 'environment') {
+      return switchDev('camera', { facing: st.facingMode === 'user' ? 'environment' : 'user' }).then(function (ok) {
+        var n = !ok && nextDev(); if (n) return switchDev('camera', n);
+      });
+    }
+    var n = nextDev();
+    return n ? switchDev('camera', n) : Promise.resolve(false);
+  }
+
+  // ── the pickers ──
+  function fill(sel, list, noun, cur) {
+    sel.textContent = '';
+    var named = list.some(function (d) { return d.label; });
+    if (!named) {
+      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Default ' + noun; sel.appendChild(o0);
+      sel.disabled = true; return;
+    }
+    list.forEach(function (d, i) {
+      var o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || (noun.charAt(0).toUpperCase() + noun.slice(1) + ' ' + (i + 1));
+      sel.appendChild(o);
+    });
+    sel.disabled = false;
+    if (cur && list.some(function (d) { return d.deviceId === cur; })) sel.value = cur;
+  }
+  function pickers() {
+    var camMode = srcKind() === 'camera';
+    show('camFld', camMode);
+    var named = devs.video.concat(devs.audio).some(function (d) { return d.label; });
+    show('flipBtn', camMode && previewing && !!camTrack() && (devs.video.length > 1 || /^(user|environment)$/.test(settings(camTrack()).facingMode || '')));
+    $('flipBtn').disabled = switching;
+    $('devNote').textContent = !md() ? '' : named ? (live ? 'You can switch while live - the stream keeps going.' : '')
+      : 'Press Preview once and allow the camera and mic - then you can choose which ones to use.';
+  }
+  function listDevices() {
+    if (!md() || !md().enumerateDevices) { show('devs', false); return Promise.resolve(); }
+    return md().enumerateDevices().then(function (all) {
+      devs.video = all.filter(function (d) { return d.kind === 'videoinput'; });
+      devs.audio = all.filter(function (d) { return d.kind === 'audioinput' && d.deviceId !== 'communications'; });
+      fill($('camSel'), devs.video, 'camera', settings(camTrack()).deviceId || pref(LS_CAM));
+      fill($('micSel'), devs.audio, 'microphone', settings(micTrack()).deviceId || pref(LS_MIC));
+      pickers();
+    }).catch(function () { pickers(); });
+  }
+  $('camSel').addEventListener('change', function () {
+    var id = $('camSel').value; if (!id) return;
+    pref(LS_CAM, id); pref(LS_FACE, null);
+    if (previewing && srcKind() === 'camera') switchDev('camera', { deviceId: id });
+  });
+  $('micSel').addEventListener('change', function () {
+    var id = $('micSel').value; if (!id) return;
+    pref(LS_MIC, id);
+    if (previewing) switchDev('microphone', { deviceId: id });
+  });
+  $('flipBtn').addEventListener('click', function () { flip(); });
+  if (md() && md().addEventListener) md().addEventListener('devicechange', function () { listDevices(); });
+  listDevices();
+
   function setToggle(id, on, label) { var b = $(id); b.setAttribute('aria-pressed', String(on)); b.textContent = label + (on ? ' on' : ' off'); }
   $('pvBtn').addEventListener('click', function () { preview().catch(function () {}); });
-  document.querySelectorAll('input[name=src]').forEach(function (r) { r.addEventListener('change', function () { if (!live && media) preview().catch(function () {}); }); });
+  document.querySelectorAll('input[name=src]').forEach(function (r) {
+    r.addEventListener('change', function () { pickers(); if (!live && previewing) preview().catch(function () {}); });
+  });
   $('micBtn').addEventListener('click', function () {
-    var ts = micTracks(); if (!ts.length) return;
-    var on = !ts[0].enabled; ts.forEach(function (t) { t.enabled = on; }); setToggle('micBtn', on, '🎤 Mic');
+    var t = micTrack(); if (!t) return;
+    micOn = !micOn; t.enabled = micOn; setToggle('micBtn', micOn, '🎤 Mic');
   });
   $('camBtn').addEventListener('click', function () {
-    if (!media) return; var ts = media.getVideoTracks(); if (!ts.length) return;
-    var on = !ts[0].enabled; ts.forEach(function (t) { t.enabled = on; }); setToggle('camBtn', on, '🎥 Video');
+    var t = srcKind() === 'camera' ? camTrack() : scrVideo(); if (!t) return;
+    camOn = !camOn; t.enabled = camOn; setToggle('camBtn', camOn, '🎥 Video');
   });
 
   function startRecorder() {
@@ -349,7 +653,7 @@
   }
   function restartRecorder() {
     if (!live) return;
-    try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (e) {}
+    try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (e) { /* already stopped */ }
     rec = null;
     setTimeout(function () { if (live) { try { startRecorder(); } catch (e) { stopWeb(e.message); } } }, 300);
   }
@@ -389,19 +693,31 @@
 
   $('goBtn').addEventListener('click', function () {
     if (!slot || live) return;
-    (media ? Promise.resolve(media) : preview()).then(function () {
+    // made inside the tap: iOS only lets audio start from a user gesture
+    var ac = null;
+    if (AC) { try { ac = new AC(); } catch (e) { ac = null; } }
+    (previewing ? Promise.resolve() : preview()).then(function () {
+      buildProgram(ac); ac = null;
+      var tracks = recTracks();
+      if (!tracks.some(function (t) { return t.kind === 'video'; })) {
+        teardownProgram();
+        webMsg('No camera to stream - plug one in, pick another camera, or choose Screen.');
+        return;
+      }
+      media = new MediaStream(tracks);
       live = true; fails = 0;
-      try { startRecorder(); } catch (e) { live = false; webMsg(e.message); return; }
+      try { startRecorder(); } catch (e) { live = false; teardownProgram(); webMsg(e.message); return; }
       show('goBtn', false); show('stopBtn', true); show('onAir', true); show('pvBtn', false);
       document.querySelectorAll('input[name=src]').forEach(function (r) { r.disabled = true; });
+      pickers();
       webMsg('Connecting to the stage… you should be live in a few seconds.');
       setTimeout(function () { if (live) webMsg(''); }, 8000);
-    }).catch(function () {});
+    }).catch(function () { if (ac) { try { ac.close(); } catch (e) { /* fine */ } } });
   });
   function stopWeb(msg) {
     var was = live;
     live = false;
-    try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (e) {}
+    try { if (rec && rec.state !== 'inactive') rec.stop(); } catch (e) { /* already stopped */ }
     rec = null; queue = []; sending = false; sent = [];
     $('kbps').textContent = '0'; $('kbpsBar').style.width = '0';
     show('goBtn', true); show('stopBtn', false); show('onAir', false); show('pvBtn', true);

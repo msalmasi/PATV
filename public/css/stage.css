@@ -122,3 +122,11 @@
 .sb .meter2 { height: 8px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
 .sb .meter2 span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); }
 @media (max-width: 520px) { .sb .choice { grid-template-columns: minmax(0, 1fr); } .sb .btn.big { justify-self: stretch; } }
+/* 1.99bx: camera / mic pickers + Switch camera on the browser stream */
+.sb .devs { display: grid; gap: 8px; margin: 8px 0; }
+.sb .devs .fld { display: grid; gap: 4px; font-size: 13px; color: #bbb; min-width: 0; }
+.sb .devs select { width: 100%; max-width: 100%; text-overflow: ellipsis; }
+.sb .devs select:disabled { opacity: .6; }
+.sb .devs .btn { justify-self: start; }
+.sb .devs .muted { margin: 0; font-size: 12.5px; }
+.sb .devs .muted:empty { display: none; }

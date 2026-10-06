@@ -330,7 +330,31 @@
     var txt = el('span', 'rb-ptt-txt', 'up to 20 s · Pepe plays it on the mic when it\'s free');
     txt.setAttribute('aria-live', 'polite');
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
-    box.appendChild(btn); box.appendChild(txt);
+    // 1.99bx: which mic (shown once the browser has named them - after the first clip - and only
+    // when there's more than one). The pick is an "ideal" deviceId: a stale / unplugged one quietly
+    // falls back to the default, so the iOS gesture timing below is untouched.
+    var micSel = el('select', 'rb-micsel hide'); micSel.setAttribute('aria-label', 'Microphone for push-to-talk');
+    box.appendChild(btn); box.appendChild(micSel); box.appendChild(txt);
+    function listMics() {
+      var md = navigator.mediaDevices;
+      if (!md || !md.enumerateDevices) return;
+      md.enumerateDevices().then(function (all) {
+        var L = all.filter(function (d) { return d.kind === 'audioinput' && d.deviceId !== 'communications' && d.label; });
+        micSel.textContent = '';
+        L.forEach(function (d) { var o = el('option', null, d.label); o.value = d.deviceId; micSel.appendChild(o); });
+        var cur = store('patvMicId');
+        if (cur && L.some(function (d) { return d.deviceId === cur; })) micSel.value = cur;
+        micSel.classList.toggle('hide', L.length < 2);
+      }).catch(function () { /* no list: default mic */ });
+    }
+    micSel.addEventListener('change', function () { if (micSel.value) store('patvMicId', micSel.value); });
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', listMics);
+    listMics();
+    function micCons() {
+      var c = { echoCancellation: true, noiseSuppression: true }, id = store('patvMicId');
+      if (id) c.deviceId = { ideal: id };
+      return c;
+    }
     host.appendChild(box); host.appendChild(mine);
     var can = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
@@ -365,9 +389,10 @@
       opening = true; pressAt = Date.now();
       recSession.before();
       txt.textContent = 'opening the microphone…';
-      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (s) {
+      navigator.mediaDevices.getUserMedia({ audio: micCons() }).then(function (s) {
         opening = false;
         stream = s;
+        if (micSel.classList.contains('hide') || !micSel.options.length) listMics();   // names are readable now
         // The press already ended while the browser opened the mic (first-time permission prompt, a
         // slow device). A HOLD that's over is not a recording - let the mic go at once. (Before
         // 1.99bk this recorded on for 20 s with the room ducked; the next press "fixed" it.)

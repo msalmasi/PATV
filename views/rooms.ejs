@@ -1,6 +1,7 @@
 <%- include('layout', { title: 'Channel guide', user: user }) %>
 <!-- views/rooms.ejs — the channel guide (1.99bi): every room as a channel, what's on its stage now and
-     what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows(). -->
+     what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
+     1.99bx: a whole card (and a whole schedule row) opens its room - a stretched link on a.t / a.rl. -->
 <%
   const sched = [];
   rows.forEach((r) => r.next.forEach((n) => sched.push({ ...n, room: r })));
@@ -60,6 +61,18 @@
   .cg .sched .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cg .owned { display: flex; gap: 8px; flex-wrap: wrap; }
   .cg .empty { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 24px; text-align: center; color: #999; }
+  /* 1.99bx: the whole card / schedule row opens the room - a stretched link (the title / room link's
+     ::after covers the card); every other link or button inside sits above it and works on its own */
+  .cg .ch, .cg .sched li { position: relative; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+  .cg .ch a.t::after, .cg .sched a.rl::after { content: ""; position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+  .cg .ch a:not(.t), .cg .ch button, .cg .ch input, .cg .ch select, .cg .sched a:not(.rl), .cg .sched button { position: relative; z-index: 2; }
+  .cg .ch:hover, .cg .ch:focus-within { border-color: #4caf50; background: #131a13; }
+  .cg .ch.onair:hover, .cg .ch.onair:focus-within { border-color: #c64a4a; }
+  .cg .ch:hover a.t { text-decoration: underline; text-underline-offset: 3px; }
+  .cg .ch:has(a.t:focus-visible), .cg .sched li:has(a.rl:focus-visible) { outline: 2px solid #c6e94f; outline-offset: 2px; }
+  .cg .ch a.t:focus-visible, .cg .sched a.rl:focus-visible { outline: none; }
+  .cg .sched li:hover, .cg .sched li:focus-within { border-color: #4caf50; background: #131a13; }
+  @media (prefers-reduced-motion: no-preference) { .cg .ch:hover { transform: translateY(-1px); } }
   @media (max-width: 640px) {
     .cg { padding: 12px 12px 44px; }
     .cg .cta { grid-template-columns: minmax(0, 1fr); }
@@ -151,7 +164,7 @@
       <ul class="sched">
         <% sched.slice(0, 30).forEach((n) => { %>
           <li><time data-ts="<%= n.start_at %>" data-long="1"><%= new Date(n.start_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>
-            <span class="w"><b><%= n.display %></b><%= n.featured ? ' ★' : '' %> in <a href="/rooms/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
+            <span class="w"><b><%= n.display %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/rooms/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
         <% }) %>
       </ul>
     <% } %>
