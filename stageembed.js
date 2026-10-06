@@ -114,12 +114,16 @@ function label(e) {
  *  link field - or null. Only a connected account (twitchId) counts. Twitch OAuth stores display_name
  *  (twitchDisplayname), which is the login with different capitals for ASCII names; a localized display
  *  name (e.g. CJK) isn't a login, so there's no suggestion for it. The result is always something
- *  parse() accepts as a channel, and it still goes through parse() when they submit. */
+ *  parse() accepts as a channel, and it still goes through parse() when they submit.
+ *  1.99bu: the real login (twitchLogin, saved at every Twitch sign-in - twitchlogin.js) wins; the
+ *  display-name derivation is the fallback for accounts that haven't signed in with Twitch since. */
 function twitchChannelUrl(user) {
   if (!user || !user.twitchId) return null;
-  const login = String(user.twitchDisplayname || "").trim();
-  if (!TW_LOGIN.test(login) || TW_RESERVED.has(login.toLowerCase())) return null;
-  return "https://twitch.tv/" + login.toLowerCase();
+  for (const raw of [user.twitchLogin, user.twitchDisplayname]) {
+    const login = String(raw || "").trim();
+    if (TW_LOGIN.test(login) && !TW_RESERVED.has(login.toLowerCase())) return "https://twitch.tv/" + login.toLowerCase();
+  }
+  return null;
 }
 
 module.exports = { parse, clean, playerUrl, label, twitchChannelUrl, EmbedError };

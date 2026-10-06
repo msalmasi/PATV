@@ -5,7 +5,7 @@
 //
 //   node migrate-stale-accounts.js [--dir=<folder with myapp.db>] [--bot-dir=<copies of Pepe's data files>]
 //        [--tiers=A,B,C,G,A2 (1.99bs: A2 in by default)] [--tier-a-days=90] [--dormant-days=180] [--low-max=3]
-//        [--low-days=2] [--bot-keep-min=100000] [--sensitivity] [--export=<file.json>] [--now=<ISO date>]
+//        [--low-days=2] [--bot-keep-min=100000] [--bot-keep-any=150000] [--sensitivity] [--export=<file.json>] [--now=<ISO date>]
 //   ... --notice --apply-on=YYYY-MM-DD [--apply]   start the warning window: mark the selected accounts
 //                                                  pending (inbox notice each; Pepe PMs the Camfrog logins
 //                                                  when he sees them; any activity clears it)
@@ -42,6 +42,7 @@ const opts = {
   tierADays: num("tier-a-days", stale.DEFAULTS.tierADays), dormantDays: num("dormant-days", stale.DEFAULTS.dormantDays),
   lowMax: num("low-max", stale.DEFAULTS.lowMax), lowDays: num("low-days", stale.DEFAULTS.lowDays),
   graceDays: num("grace-days", stale.DEFAULTS.graceDays), botKeepMin: num("bot-keep-min", stale.DEFAULTS.botKeepMin),
+  botKeepAny: num("bot-keep-any", stale.DEFAULTS.botKeepAny),
 };
 const now = args.now ? Date.parse(String(args.now)) : Date.now();
 const apply = !!args.apply;

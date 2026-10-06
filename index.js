@@ -38,6 +38,8 @@ const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
 stale.ensure();
 stale.ensureNotice();                                // 1.99bs: the archive warning window
+const twitchLogin = require("./twitchlogin");       // 1.99bu: users.twitchLogin, saved at Twitch sign-in
+twitchLogin.ensure();
 stale.startNoticeTimers();
 setTimeout(() => require("./accountMerge").ensureCamfrogUnique(), 3000);   // 1.99bs: one account per Camfrog login
 setTimeout(() => displaynames.ready().catch((e) => console.error("[displaynames] schema:", e.message)), 2000);
@@ -436,6 +438,9 @@ app.get("/auth/twitch/callback", async (req, res) => {
 
     const twitchUser = userProfileResponse.data.data[0];
     if (!twitchUser || !twitchUser.id) throw new Error("no Twitch user in the response");
+    // 1.99bu: keep the real Twitch login (the channel name) fresh on whichever account holds this id;
+    // saved again below once a link / new account exists
+    await twitchLogin.save(twitchUser.id, twitchUser.login);
 
     // Attempt to decode the existing JWT from the cookie
     let currentUser;
@@ -463,6 +468,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           currentUserUsername: currentUser.username,
           twitchId: twitchUser.id,
           twitchDisplayname: twitchUser.display_name,
+          twitchLogin: twitchLogin.clean(twitchUser.login),
         };
         return res.redirect("/resolve-twitch-conflict"); // Redirect to a page to handle the decision
       } else {
@@ -477,6 +483,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
           [twitchUser.id, twitchUser.display_name, 1, currentUser.userId]
         );
+        await twitchLogin.save(twitchUser.id, twitchUser.login);
         // Award Badge
         return res.redirect(`/u/${currentUser.username}/profile/edit`);
       }
@@ -556,6 +563,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
           currentUser = newUser;
         }
       }
+      await twitchLogin.save(twitchUser.id, twitchUser.login);
       await stale.touch(currentUser.userId, "twitch sign-in");   // 1.99bm: an archived account comes back
       // Sign them in (90-day sliding login - see middleware/loginCookie.js)
       issueLogin(res, currentUser);
@@ -648,6 +656,9 @@ async function mergeConflict(req, res, provider) {
     }
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [Number(from.points_balance) || 0, toId]);
     await runQuery(`UPDATE users SET ${L.idCol} = ?, ${L.nameCol} = ? WHERE userId = ?`, [L.id(c), L.name(c), toId]);
+    // 1.99bu: the Twitch login comes along with the Twitch id (this sign-in's, else the merged account's)
+    if (provider === "twitch" && c.twitchLogin) await twitchLogin.save(L.id(c), c.twitchLogin);
+    else if (from.twitchLogin && from.twitchId) await twitchLogin.save(from.twitchId, from.twitchLogin);
     // keep the merged account's PAT history with the balance it brings (else /history can't add up),
     // and everything else it owned (badges, cosmetics, spins, orders... - accountMerge.js)
     await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [toId, fromId]);

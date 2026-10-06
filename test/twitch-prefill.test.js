@@ -105,3 +105,27 @@ test("booking with the suggested link goes through the normal embed path", async
     body: JSON.stringify({ room: "pepefrog-room", minutes: 15, mode: "embed", embed: "https://twitch.tv/directory" }) });
   assert.equal(bad.status, 400, "an edited link is still validated");
 });
+
+// 1.99bu: the real Twitch login (users.twitchLogin, saved at every Twitch sign-in) wins over the display name
+test("twitchChannelUrl prefers the saved login, falls back to the display name", () => {
+  assert.equal(E.twitchChannelUrl({ twitchId: "1", twitchLogin: "real_login", twitchDisplayname: "ShownName" }), "https://twitch.tv/real_login");
+  assert.equal(E.twitchChannelUrl({ twitchId: "1", twitchLogin: "real_login", twitchDisplayname: "日本語の名前" }), "https://twitch.tv/real_login");
+  assert.equal(E.twitchChannelUrl({ twitchId: "1", twitchLogin: null, twitchDisplayname: "ShownName" }), "https://twitch.tv/shownname");
+  assert.equal(E.twitchChannelUrl({ twitchId: "1", twitchLogin: "bad login!", twitchDisplayname: "ShownName" }), "https://twitch.tv/shownname");
+  assert.equal(E.twitchChannelUrl({ twitchId: null, twitchLogin: "real_login" }), null, "still only a connected account");
+});
+
+test("twitchlogin.save stores the login on the account with that Twitch id (and the page uses it)", async () => {
+  const TL = require(path.join(repo, "twitchlogin"));
+  assert.equal(TL.clean("Some_Login"), "some_login");
+  assert.equal(TL.clean("日本語"), null);
+  assert.equal(TL.clean("ab"), null);
+  assert.equal(await TL.save("777", "cjk_real"), 1);
+  assert.equal(await TL.save("777", "cjk_real"), 0, "unchanged: no write");
+  assert.equal(await TL.save("999", "nobody_here"), 0, "no account on that id");
+  assert.equal(await TL.save("777", "<bad>"), 0);
+  assert.equal((await getQuery("SELECT twitchLogin FROM users WHERE userId = 'cjk'"))[0].twitchLogin, "cjk_real");
+  const html = await page("cjk", "/stage?room=pepefrog-room");
+  assert.match(html, /id="twChip" data-url="https:\/\/twitch\.tv\/cjk_real"/, "a localized display name now gets its channel");
+  assert.equal(await TL.save("777", "renamed_one"), 1, "a renamed channel is updated at the next sign-in");
+});

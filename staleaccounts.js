@@ -16,10 +16,11 @@
 //      "CFxxxxxxxx" name (made before 1.99az), with no own activity - reclaimed regardless of age
 //   A2 made by the Twitch/Discord bot (placeholder email) - 1.99bs (admin decision 2026-10-06), selected
 //      by default: every bot-made account EXCEPT one with real activity (more than the low-activity
-//      threshold, tips, purchases or a linked Camfrog login) AND a balance >= botKeepMin (100,000 PAT).
-//      So dust under 100k and anything with no real activity go, whatever the balance - unless it was
-//      active (own action / raffle / level-up, not the creation bonus) within tierADays. Signing in with
-//      Twitch/Discord, or the bots looking the person up again, restores it.
+//      threshold, tips, purchases or a linked Camfrog login) AND a balance >= botKeepMin (100,000 PAT),
+//      and (1.99bu, admin decision) EXCEPT any with a balance above botKeepAny (150,000 PAT) - a balance
+//      that size shows the person was really there. So dust under 100k and no-activity accounts up to
+//      150k go - unless active (own action / raffle / level-up, not the creation bonus) within tierADays.
+//      Signing in with Twitch/Discord, or the bots looking the person up again, restores it.
 //   A2M a bot-made account like A2 whose Twitch/Discord name IS another account's username or Camfrog
 //      login: proposed for a merge into that account instead - never selected
 //   M  duplicate: a second account on the same Camfrog login (or one of Pepe's aliases of it) - MERGED
@@ -57,7 +58,7 @@ const { runQuery, getQuery } = require("./dbUtils");
 const DAY = 86400000;
 const CF_RANDOM = /^CF[a-z0-9]{8}$/;
 const CF_RANDOM_LOGIN = /^cf[a-z0-9]{8}$/;
-const DEFAULTS = { tierADays: 90, dormantDays: 180, lowMax: 3, lowDays: 2, graceDays: 60, welcomeDays: 90, botKeepMin: 100000 };
+const DEFAULTS = { tierADays: 90, dormantDays: 180, lowMax: 3, lowDays: 2, graceDays: 60, welcomeDays: 90, botKeepMin: 100000, botKeepAny: 150000 };
 // The tiers an apply / a notice run selects unless told otherwise (A2 joined in 1.99bs).
 const DEFAULT_TIERS = ["A", "B", "C", "G", "A2"];
 // System-ish accounts that are never classified: the Twitch channel's own account, and the Twitch
@@ -357,7 +358,7 @@ function classify(f, o = {}, now = Date.now()) {
   // actions, raffles, level-ups and Camfrog sightings, but not the bonus the account was born with.
   if (f.botMade) {
     const real = !low || f.tips > 0 || f.purchases > 0 || !!f.login;
-    if (!(real && f.balance >= o.botKeepMin)) {
+    if (!(real && f.balance >= o.botKeepMin) && !(f.balance > o.botKeepAny)) {
       const quiet = (now - Math.max(f.lastActive, f.lastSignal, f.cfSeen)) / DAY;
       const what = `${f.twitch ? "Twitch" : "Discord"}-bot account, ${real ? "under " + o.botKeepMin.toLocaleString("en-US") + " PAT" : "no real activity"}`;
       if (quiet < o.tierADays) return { tier: "active", why: `${what}, but active ${Math.floor(quiet)}d ago` };

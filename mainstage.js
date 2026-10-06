@@ -1124,10 +1124,12 @@ function register(app, { addUser, isBotToken, noTimers }) {
     await init();
     let me = null, twitchUrl = null;
     if (req.user && req.user.userId) {
-      me = (await getQuery("SELECT userId, username, displayname, points_balance, class, twitchId, twitchDisplayname FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+      const hasLogin = await require("./twitchlogin").ensure();     // 1.99bu: the real Twitch login
+      me = (await getQuery(`SELECT userId, username, displayname, points_balance, class, twitchId, twitchDisplayname${hasLogin ? ", twitchLogin" : ""}
+                            FROM users WHERE userId = ?`, [req.user.userId]))[0] || null;
       // the link field suggests the signed-in user's OWN connected Twitch channel (server-rendered, no API)
       twitchUrl = embeds.twitchChannelUrl(me);
-      if (me) { delete me.twitchId; delete me.twitchDisplayname; }
+      if (me) { delete me.twitchId; delete me.twitchDisplayname; delete me.twitchLogin; }
     }
     const all = await rooms.list();
     const want = String(req.query.room || "");

@@ -49,10 +49,15 @@ test("bot-made accounts: keep real activity + >= 100k, prune dust and no-activit
   // real but under 100k, quiet for 120 days: pruned
   await user("dust", { username: "dusty", discord: "2", dname: "dusty", bal: 58000, created: 400 });
   for (let i = 0; i < 6; i++) await txn("dust", "blackjack wager", -1000, 120 + i);
-  // no real activity, big raffle balance, quiet: pruned regardless of balance
+  // no real activity but a balance above 150k: kept (1.99bu - a balance that size shows they were there)
   await user("rich0", { username: "rafflebot", discord: "3", dname: "rafflebot", bal: 831000, created: 600 });
   await txn("rich0", "discord connect", 50000, 600);
   await txn("rich0", "discord-raffle", 781000, 400);
+  // no real activity, up to 150k: pruned (exactly 150k too)
+  await user("mid", { username: "midbot", discord: "9", dname: "midbot", bal: 150000, created: 600 });
+  await txn("mid", "discord connect", 50000, 600);
+  await txn("mid", "discord-raffle", 100000, 400);
+  await user("mid2", { username: "midbot2", discord: "10", dname: "midbot2", bal: 150001, created: 600 });
   // brand new bot account with only its creation bonus: no activity at all -> pruned
   await user("fresh", { username: "newbie", discord: "4", dname: "newbie", bal: 110000, created: 20 });
   await txn("fresh", "discord connect", 50000, 20);
@@ -69,10 +74,10 @@ test("bot-made accounts: keep real activity + >= 100k, prune dust and no-activit
   await txn("linked", "tip sent", -100, 200);
 
   const t = await tiers();
-  assert.deepStrictEqual([t.keep, t.dust, t.rich0, t.fresh, t.recent, t.twin, t.wom, t.linked],
-                         ["D", "A2", "A2", "A2", "active", "A2M", "X", "A2"]);
-  // a raised keep threshold makes the rich real account a candidate too
-  const p = await stale.plan({ now: NOW, supply: { total: 1, wallets: 1 }, botKeepMin: 1e9 });
+  assert.deepStrictEqual([t.keep, t.dust, t.rich0, t.mid, t.mid2, t.fresh, t.recent, t.twin, t.wom, t.linked],
+                         ["D", "A2", "D", "A2", "D", "A2", "active", "A2M", "X", "A2"]);
+  // raised keep thresholds make the rich real account a candidate too
+  const p = await stale.plan({ now: NOW, supply: { total: 1, wallets: 1 }, botKeepMin: 1e9, botKeepAny: 1e9 });
   assert.strictEqual(p.rows.find((r) => r.f.userId === "keep").tier, "A2");
   assert.ok(stale.DEFAULT_TIERS.includes("A2"));
 });
@@ -121,8 +126,9 @@ test("warning window: pending -> cleared by any activity; banner once; Pepe's li
   assert.ok(!(await stale.pendingLogins()).logins.some((x) => x.login === "tatyb"));
 
   // a Discord lookup / sign-in (touch) clears it too, without restoring anything
-  assert.strictEqual(await stale.touch("rich0", "discord"), null);
-  assert.strictEqual((await getQuery("SELECT state, cleared_via FROM stale_notice WHERE userId = 'rich0'"))[0].state, "cleared");
+  assert.ok(!ids.includes("rich0"), "a bot account above 150k is never warned");
+  assert.strictEqual(await stale.touch("mid", "discord"), null);
+  assert.strictEqual((await getQuery("SELECT state, cleared_via FROM stale_notice WHERE userId = 'mid'"))[0].state, "cleared");
 
   // a signed-in page view: cleared + a one-time banner
   const mw = stale.noticeMiddleware(() => "fresh");
