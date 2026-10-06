@@ -5,10 +5,18 @@
 //   users.terms_accepted_version / users.terms_accepted_at (ms)   recorded at sign-up (the web form) and
 //                                  the first time someone posts or comments after VERSION changed
 //   needs(userId)                  true when the user hasn't accepted VERSION yet (feedweb's posting gate)
+//   enforced()                     1.99cf: is acceptance required at all? The admin switch terms_enforced
+//                                  (/feed/admin, feedstore config, default OFF) AND no [[PLACEHOLDER]] left in
+//                                  views/terms.ejs + views/privacy.ejs. Off: the pages show a "Draft" banner,
+//                                  nobody is asked to accept, sign-up records nothing.
+//   placeholders()                 the [[...]] markers still in those two pages ({page, text}); while any
+//                                  remain the switch can't be turned on (feedstore.setConfig refuses)
 //
 // Bump VERSION (and UPDATED) when the terms change materially: everyone is asked once more, the next
 // time they post.
 "use strict";
+const fs = require("fs");
+const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const VERSION = "2026-10-06";
@@ -31,10 +39,49 @@ function init() {
   return ready;
 }
 
-let REQUIRED = true;
-/** Tests of other features switch the posting gate off. */
-function _setRequired(on) { REQUIRED = !!on; }
-const required = () => REQUIRED;
+// ── 1.99cf: the switch (set by feedstore from its config; default OFF) ──
+let SETTING = false;
+let OVERRIDE = null;                              // tests: true / false forces the gate, null follows the setting
+/** feedstore calls this whenever its config loads or changes (terms_enforced). */
+function setEnforced(on) { SETTING = !!on; }
+/** Tests of other features switch the posting gate off (null = follow the admin setting again). */
+function _setRequired(on) { OVERRIDE = on == null ? null : !!on; }
+
+// The [[PLACEHOLDER]] markers left in the two pages: PH('...') calls and literal [[...]] text. Re-read when a
+// file changes (mtime), so filling them in and deploying is enough.
+const PAGES = [["terms", path.join(__dirname, "views", "terms.ejs")], ["privacy", path.join(__dirname, "views", "privacy.ejs")]];
+const PH_CALL = /\bPH\(\s*(['"`])((?:(?!\1).)*)\1\s*\)/g;
+const PH_TEXT = /\[\[([^\[\]]{1,200})\]\]/g;
+const EJS_COMMENT = /<%#[\s\S]*?%>/g;
+let phCache = { key: "", list: [] };
+let phOverride = null;                            // tests: a fixed list
+function _setPlaceholders(list) { phOverride = list == null ? null : list.slice(); }
+function placeholders() {
+  if (phOverride) return phOverride.slice();
+  let key = "";
+  for (const [, f] of PAGES) { try { key += fs.statSync(f).mtimeMs + ";"; } catch (e) { key += "missing;"; } }
+  if (key === phCache.key) return phCache.list.slice();
+  const list = [];
+  for (const [page, f] of PAGES) {
+    let src = "";
+    try { src = fs.readFileSync(f, "utf8"); } catch (e) { list.push({ page, text: "(page missing)" }); continue; }
+    const seen = new Set();
+    for (const line of src.replace(EJS_COMMENT, "").split(/\r?\n/)) {
+      if (/\bconst\s+PH\s*=/.test(line)) continue;            // the helper itself
+      for (const m of line.matchAll(PH_CALL)) seen.add(m[2].trim());
+      for (const m of line.replace(PH_CALL, "").matchAll(PH_TEXT)) seen.add(m[1].trim());
+    }
+    for (const t of seen) list.push({ page, text: t });
+  }
+  phCache = { key, list };
+  return list.slice();
+}
+/** Acceptance is required: the admin switch is on and the pages are finished (or a test forced it). */
+function enforced() {
+  if (OVERRIDE !== null) return OVERRIDE;
+  return SETTING && placeholders().length === 0;
+}
+const required = enforced;
 
 async function accepted(userId) {
   await init();
@@ -43,7 +90,7 @@ async function accepted(userId) {
 }
 /** True when this user still has to accept the current terms before posting. */
 async function needs(userId) {
-  if (!REQUIRED || !userId) return false;
+  if (!userId || !enforced()) return false;
   const a = await accepted(userId);
   return !!a && a.version !== VERSION;
 }
@@ -58,10 +105,12 @@ async function accept(userId) {
 
 function register(app, { addUser }) {
   init().catch(() => {});
+  // every page rendered after this: may it say "By posting / signing up you agree to the Terms"?
+  app.use((req, res, next) => { res.locals.termsEnforced = enforced(); next(); });
   const page = (view, title, path) => (req, res) => {
     res.locals.og = { title: title + " — Public Access TV", description: title + " for publicaccess.tv.", image: (res.locals.ogBase || "") + "/og/page.png?t=" + encodeURIComponent(title),
                       url: (res.locals.ogBase || "") + path };
-    res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED });
+    res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED, enforced: enforced() });
   };
   app.get("/terms", addUser, page("terms", "Terms of Service", "/terms"));
   app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy"));
@@ -83,4 +132,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { VERSION, UPDATED, init, needs, accept, accepted, register, required, _setRequired };
+module.exports = { VERSION, UPDATED, init, needs, accept, accepted, register, required, enforced, setEnforced, placeholders, _setRequired, _setPlaceholders };

@@ -42,7 +42,7 @@
     </fieldset>
     <% if (cp.terms && cp.terms.needed) { %>
       <label class="fc-terms ck"><input type="checkbox" name="acceptTerms" required> I've read and agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> (I'm 18+). You'll only be asked once.</label>
-    <% } else { %>
+    <% } else if (cp.terms && cp.terms.enforced) { %><%# 1.99cf: nothing while the Terms aren't enforced (admin switch, default off) %>
       <p class="fc-terms">By posting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>.</p>
     <% } %>
     <div class="fc-send">

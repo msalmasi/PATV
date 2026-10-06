@@ -73,6 +73,13 @@ test.before(async () => {
   await terms.init();
   await audit.init();
   await store.setConfig({ posts_per_hour: 1000, posts_per_day: 1000, post_gap_secs: 0, comment_gap_secs: 0, comments_per_hour: 1000 }, "test");
+  // 1.99cf: the gate is an admin switch (default off) that can't go on while the pages have [[placeholders]].
+  // These tests run with it ON, as if the pages were finished; "Terms switch" below covers off + the refusal.
+  assert.equal(store.config().terms_enforced, false, "default off");
+  assert.equal(terms.enforced(), false);
+  terms._setPlaceholders([]);
+  await store.setConfig({ terms_enforced: true }, "test");
+  assert.equal(terms.enforced(), true);
   // everyone but "fresh" has accepted the current Terms (fresh is the existing user who'll be asked)
   for (const u of users.values()) if (u.username !== "fresh") await terms.accept(u.userId);
   const app = express();
@@ -308,6 +315,97 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(p.text, /patv_dev/);
   assert.match(t.text, /id="siteFootTpl"/, "footer links on every layout page");
   assert.match(t.text, /href="\/privacy">Privacy Policy/);
+  assert.doesNotMatch(t.text, /class="draft"/, "no Draft banner while enforced");
+});
+
+// 1.99cf: the switch. Off (the default): no acceptance anywhere, the pages say Draft. On: as above. Turning it on
+// is refused while the pages still have [[placeholders]], and /feed/admin lists them.
+const renderView = (view, locals) => new Promise((ok, bad) => {
+  require("ejs").renderFile(path.join(repo, "views", view + ".ejs"), locals, {}, (e, html) => (e ? bad(e) : ok(html)));
+});
+test("Terms switch: off = posting + commenting work with no acceptance, no 428, no 'By posting you agree', sign-up records nothing, pages say Draft", async () => {
+  await store.setConfig({ terms_enforced: false }, "test");
+  try {
+    assert.equal(terms.enforced(), false);
+    await runQuery("UPDATE users SET terms_accepted_version = NULL, terms_accepted_at = NULL WHERE userId = ?", [U.fresh.userId]);
+    assert.equal(await terms.needs(U.fresh.userId), false);
+    const html = (await get("/feed", U.fresh)).text;
+    assert.doesNotMatch(html, /name="acceptTerms"/);
+    assert.doesNotMatch(html, /By posting you agree/);
+    const r = await post("/api/feed/posts", U.fresh, { body: "posting while the terms are a draft" }, NET());
+    assert.equal(r.status, 200, JSON.stringify(r.d));
+    const c = await post(`/api/feed/posts/${r.d.id}/comments`, U.fresh, { body: "a comment, no terms asked" });
+    assert.equal(c.status, 200, JSON.stringify(c.d));
+    assert.doesNotMatch((await get("/feed/p/" + r.d.id, U.fresh)).text, /by commenting you agree/);
+    assert.equal((await terms.accepted(U.fresh.userId)).version, null, "nothing recorded");
+    // sign-up: the form has no agreement line and nothing is recorded
+    const { registerUser } = require(path.join(repo, "user.controller"));
+    let redirected = null;
+    const req = { body: { username: "draftperson", email: "draftperson@example.com", password: "a-long-password-1", confirm_password: "a-long-password-1" },
+                  get: (h) => (h === "host" ? "test" : h === "cf-connecting-ip" ? "192.0.2.201" : undefined), cookies: {}, secure: true, socket: {}, flash: () => {} };
+    const res = { cookie: () => {}, redirect: (u) => { redirected = u; }, status: () => res, send: () => {} };
+    await registerUser(req, res);
+    assert.ok(redirected);
+    assert.equal((await getQuery("SELECT terms_accepted_version AS v FROM users WHERE username = 'draftperson'"))[0].v, null);
+    const regLocals = { user: null, errors: [], success: [], form: {}, next: "" };
+    assert.doesNotMatch(await renderView("register", { ...regLocals, termsEnforced: false }), /class="au-terms"|By posting you agree/);
+    assert.doesNotMatch(await renderView("register", regLocals), /class="au-terms"/, "missing local = off");
+    assert.match(await renderView("register", { ...regLocals, termsEnforced: true }), /class="au-terms"[^]*By posting you agree to the Terms/);
+    // the pages stay up, with a Draft banner; the footer links stay
+    const t = await get("/terms", null), p = await get("/privacy", null);
+    assert.equal(t.status, 200); assert.equal(p.status, 200);
+    assert.match(t.text, /class="draft"[^>]*><b>Draft<\/b>/);
+    assert.match(p.text, /class="draft"[^>]*><b>Draft<\/b>/);
+    assert.match(t.text, /href="\/privacy">Privacy Policy/);
+  } finally {
+    await store.setConfig({ terms_enforced: true }, "test");
+  }
+  // back on: the same user is asked again (current behaviour)
+  assert.equal(await terms.needs(U.fresh.userId), true);
+  assert.equal((await post("/api/feed/posts", U.fresh, { body: "asked again" }, NET())).status, 428);
+  await terms.accept(U.fresh.userId);
+});
+
+test("Terms switch: can't be turned on while [[placeholders]] remain in /terms or /privacy; /feed/admin lists them", async () => {
+  await store.setConfig({ terms_enforced: false }, "test");
+  terms._setPlaceholders(null);                     // the real pages (still the template)
+  try {
+    const ph = terms.placeholders();
+    assert.ok(ph.length > 5, "the template's markers are found");
+    assert.ok(ph.some((x) => x.page === "terms" && x.text === "CONTACT EMAIL"));
+    assert.ok(ph.some((x) => x.page === "privacy" && x.text === "PRIVACY CONTACT EMAIL"));
+    assert.ok(!ph.some((x) => /^PLACEHOLDER$|' \+ s \+ '/.test(x.text)), "the helper and the file comment aren't counted");
+    // the API (Admins) refuses with the list; nothing changes
+    const r = await post("/api/feed/admin/config", U.admin, { terms_enforced: true });
+    assert.equal(r.status, 409, JSON.stringify(r.d));
+    assert.match(r.d.error, /placeholder/);
+    assert.match(r.d.error, /OPERATOR LEGAL NAME/);
+    assert.equal(store.config().terms_enforced, false);
+    assert.equal(terms.enforced(), false);
+    await assert.rejects(store.setConfig({ terms_enforced: true }, "test"), /placeholder/);
+    // other settings still save while it stays off
+    assert.equal((await post("/api/feed/admin/config", U.admin, { terms_enforced: false, mention_gap_min: 16 })).status, 200);
+    assert.equal(store.config().mention_gap_min, 16);
+    // the admin page: the switch (disabled) and every remaining marker
+    const a = (await get("/feed/admin", U.admin)).text;
+    assert.match(a, /name="terms_enforced" disabled/);
+    assert.match(a, /\[\[OPERATOR LEGAL NAME\]\]/);
+    assert.match(a, /\[\[PRIVACY CONTACT EMAIL\]\]/);
+    assert.match(a, new RegExp("<b>" + ph.length + "</b> \\[\\[placeholder\\]\\]s left"));
+    // even if the setting were on (stored before the markers came back), it isn't in force with markers left
+    terms.setEnforced(true);
+    assert.equal(terms.enforced(), false);
+    // once the pages are finished the switch goes on
+    terms._setPlaceholders([]);
+    assert.equal((await post("/api/feed/admin/config", U.admin, { terms_enforced: true })).status, 200);
+    assert.equal(terms.enforced(), true);
+    assert.doesNotMatch((await get("/feed/admin", U.admin)).text, /name="terms_enforced"[^>]*disabled/);
+    // Staff can't flip it (Admins only, like every feed setting)
+    assert.equal((await post("/api/feed/admin/config", U.staff, { terms_enforced: false })).status, 403);
+  } finally {
+    terms._setPlaceholders([]);
+    await store.setConfig({ terms_enforced: true, mention_gap_min: 15 }, "test");
+  }
 });
 
 // ───────────────────────────── reports ─────────────────────────────

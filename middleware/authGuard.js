@@ -67,12 +67,28 @@ function sameSite(req) {
 // ---------------------------------------------------------------------------------------------
 // Rate limiting
 // ---------------------------------------------------------------------------------------------
+// 1.99cf: proxy headers are only believed when the TCP peer is this box (nginx on 127.0.0.1 / ::1). The app
+// listens on loopback only (BIND_HOST), but if it were ever reachable directly, a caller could otherwise write
+// any CF-Connecting-IP / X-Forwarded-For it liked and dodge the rate limits, the welcome-bonus dedupe and the
+// abuse metadata. Behind nginx: CF-Connecting-IP (Cloudflare sets it), else the LAST X-Forwarded-For hop (the
+// one nginx appended = its own peer; earlier hops are whatever the client sent), else the socket.
+const LOOPBACK = /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i;
+const isLoopback = (a) => LOOPBACK.test(String(a || ""));
+const peerOf = (req) => (req && req.socket && req.socket.remoteAddress) || "";
+/** {ip, via}: via is "cf" | "xff" (trusted proxy headers) or "direct" (the socket address). */
+function clientAddr(req) {
+  const peer = peerOf(req);
+  if (isLoopback(peer)) {
+    const h = (k) => { try { return req.get(k) || ""; } catch (e) { return ""; } };
+    const cf = String(h("cf-connecting-ip")).trim();
+    if (cf) return { ip: cf, via: "cf" };
+    const hops = String(h("x-forwarded-for")).split(",").map((s) => s.trim()).filter(Boolean);
+    if (hops.length) return { ip: hops[hops.length - 1], via: "xff" };
+  }
+  return { ip: peer || "?", via: "direct" };
+}
 function clientIp(req) {
-  const cf = req.get("cf-connecting-ip");
-  if (cf) return cf.trim();
-  const xff = req.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  return (req.socket && req.socket.remoteAddress) || "?";
+  return clientAddr(req).ip;
 }
 
 /**
@@ -153,6 +169,8 @@ module.exports = {
   refererNext,
   sameSite,
   clientIp,
+  clientAddr,
+  isLoopback,
   limiter,
   waitText,
   checkUsername,

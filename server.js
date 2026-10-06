@@ -105,8 +105,9 @@ function getHmacMessage(req) {
   }
 
   // At the end of server.js
-app.listen(PORT, async () => {
-    console.log(`Webhook listener is running on port ${PORT}`);
+// 1.99cf: loopback only - Twitch reaches it through nginx (https://publicaccess.tv/webhooks/callback)
+require('./listen').listen(app, PORT, 'webhooks', async () => {
+    console.log(`Webhook listener is running on ${require('./listen').bindHost()}:${PORT}`);
   
 // Delete all existing subscriptions
   await deleteAllSubscriptions();

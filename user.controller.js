@@ -109,7 +109,9 @@ async function registerUser(req, res) {
     registerLimit.hit(ip);
     console.log(`[auth] new account ${username} (${userId})`);
     // 1.99cc: the form says "By creating an account you agree to the Terms" - record which version, and when
-    await require("./terms").accept(userId).catch((e) => console.error("[auth] terms accept:", e.message));
+    // 1.99cf: only while the Terms are enforced (the form shows that line only then); otherwise they're asked on their first post
+    const termsMod = require("./terms");
+    if (termsMod.enforced()) await termsMod.accept(userId).catch((e) => console.error("[auth] terms accept:", e.message));
     await displaynames.markNewAccount(userId).catch(() => {});   // displayname = username, automatic
     await require("./welcome").enroll(userId, "web", req, res);
 

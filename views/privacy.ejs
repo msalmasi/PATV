@@ -10,6 +10,9 @@
     <div class="eyebrow">PUBLICACCESS.TV</div>
     <h1>Privacy Policy</h1>
     <div class="updated">Last updated <%= UPDATED %></div>
+    <% if (typeof enforced === 'undefined' || !enforced) { %><%# 1.99cf: the admin switch terms_enforced is off %>
+      <div class="draft" role="note"><b>Draft</b> This policy is still being finished.</div>
+    <% } %>
     <p class="lead">What PATV collects, why, who can see it, how long we keep it and what you can do about it. The short version: we collect what we need to run a community site and keep it safe, we don't sell your data, there are no ads or third-party trackers, and the private abuse data on posts is admin-only and deleted on a schedule.</p>
   </header>
 

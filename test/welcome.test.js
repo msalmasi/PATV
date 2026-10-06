@@ -49,7 +49,7 @@ async function user(id, o) {
 }
 const stats = (login, days) => runQuery("INSERT OR REPLACE INTO camfrog_userstats (login, data, updated) VALUES (?, ?, ?)",
   [login, JSON.stringify({ chat: { days: Object.fromEntries(days.map((d) => [day(d), 20])) } }), Date.now()]);
-const req = (dev, ip) => ({ cookies: { patv_dev: dev }, get: (h) => (h === "cf-connecting-ip" ? ip : undefined), secure: false, socket: {} });
+const req = (dev, ip) => ({ cookies: { patv_dev: dev }, get: (h) => (h === "cf-connecting-ip" ? ip : undefined), secure: false, socket: { remoteAddress: "127.0.0.1" } });   // through nginx (1.99cf: proxy headers only count from loopback)
 const res = { cookie() {} };
 const state = async (id) => ((await getQuery("SELECT state, reason, dup_of FROM welcome_bonus WHERE userId = ?", [id]))[0] || {});
 const paidTo = (id) => paid.filter((p) => p.userId === id).reduce((t, p) => t + p.amount, 0);

@@ -27,7 +27,7 @@
     <% } else if (signed) { %>
       <form class="cm-new composer" data-act="comment" data-post="<%= p.id %>">
         <textarea name="body" maxlength="2000" rows="2" placeholder="Add a comment…" aria-label="Your comment" required></textarea>
-        <div class="cbar"><span class="hint mut">Commenting as <b><%= viewer.display %></b> · by commenting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a><%= typeof termsNeeded !== 'undefined' && termsNeeded ? ' (you’ll be asked once)' : '' %></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Comment</button></div>
+        <div class="cbar"><span class="hint mut">Commenting as <b><%= viewer.display %></b><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · by commenting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a><%= typeof termsNeeded !== 'undefined' && termsNeeded ? ' (you’ll be asked once)' : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Comment</button></div>
       </form>
     <% } else { %>
       <div class="cm-signin"><span>Join the conversation</span><a class="btn-s" href="/login?next=<%= encodeURIComponent('/feed/p/' + p.id + '#comments') %>">Sign in to comment</a></div>

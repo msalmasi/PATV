@@ -31,6 +31,7 @@ const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
+const terms = require("./terms");
 
 const TITLE_MAX = 140, BODY_MAX = 5000, COMMENT_MAX = 2000, MAX_IMAGES = 4, MAX_ATTACH = 6, MAX_ROOMS = 5;
 const PAGE = 20;
@@ -42,6 +43,7 @@ const DEFAULTS = Object.freeze({
   user_quota_mb: 500, global_quota_gb: 20, min_free_gb: 8,
   media_min_level: 2,                 // upload media: a linked Camfrog name OR at least this level
   require_link_to_post: false,        // text/link posts: any signed-in account unless this is on
+  terms_enforced: false,              // 1.99cf: ask people to accept the Terms (terms.js); can't go on while [[placeholders]] remain
   new_account_hours: 24, new_account_posts_per_day: 3,
   posts_per_hour: 10, posts_per_day: 40, comments_per_hour: 60, uploads_per_hour: 20, upload_mb_per_day: 400,
   report_hide_threshold: 3,           // distinct reporters (accounts older than new_account_hours) -> hidden pending review
@@ -265,18 +267,29 @@ function cleanConfig(c) {
   const bool = (v, d) => (v == null ? d : v === true || v === 1 || v === "1" || v === "on" || v === "true");
   out.enabled = bool(c && c.enabled, DEFAULTS.enabled);
   out.require_link_to_post = bool(c && c.require_link_to_post, DEFAULTS.require_link_to_post);
+  out.terms_enforced = bool(c && c.terms_enforced, DEFAULTS.terms_enforced);
   return out;
 }
 async function loadConfig() {
   let c = {};
   try { c = JSON.parse((await kvGet("config")) || "{}"); } catch (e) { c = {}; }
   CONFIG = cleanConfig(c);
+  terms.setEnforced(CONFIG.terms_enforced);
   return CONFIG;
 }
 async function setConfig(patch, actor) {
   await init();
   const merged = cleanConfig({ ...CONFIG, ...(patch || {}) });
+  // 1.99cf: never make people accept an unfinished template
+  if (merged.terms_enforced && !CONFIG.terms_enforced) {
+    const ph = terms.placeholders();
+    if (ph.length) {
+      const names = [...new Set(ph.map((p) => p.text))];
+      throw new Refuse(409, `The Terms can't be required yet: ${ph.length} [[placeholder]]${ph.length === 1 ? "" : "s"} left in /terms and /privacy (${names.slice(0, 5).join("; ")}${names.length > 5 ? "; …" : ""}). Fill them in first.`);
+    }
+  }
   await kvSet("config", JSON.stringify(merged));
+  terms.setEnforced(merged.terms_enforced);
   const decayChanged = merged.hot_decay_secs !== CONFIG.hot_decay_secs;
   CONFIG = merged;
   if (decayChanged) await rehotAll();

@@ -8,6 +8,9 @@
     <div class="eyebrow">PUBLICACCESS.TV</div>
     <h1>Terms of Service</h1>
     <div class="updated">Last updated <%= UPDATED %></div>
+    <% if (typeof enforced === 'undefined' || !enforced) { %><%# 1.99cf: the admin switch terms_enforced is off %>
+      <div class="draft" role="note"><b>Draft</b> These terms are still being finished and nobody is asked to accept them yet.</div>
+    <% } %>
     <p class="lead">The rules for using publicaccess.tv ("PATV"), Pepe the bot and everything attached to them. Please read them: by creating an account, signing in or posting, you agree to them. They work together with our <a href="/privacy">Privacy Policy</a>.</p>
   </header>
 

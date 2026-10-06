@@ -134,8 +134,9 @@ async function composerFor(viewer, roomId) {
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, roomId ? [roomId] : [""], { media: true });
   const prices = { post: C.price_post, link: C.price_link, image: C.price_image, audio: C.price_audio, video: C.price_video };
   // 1.99cc: "By posting you agree to the Terms" - and a one-time tick box until this account has accepted the current version
+  // 1.99cf: only while the admin switch terms_enforced is on (default off: no line, no tick box)
   const termsNeeded = await terms.needs(viewer.userId).catch(() => false);
-  return { user: viewer.username, terms: { needed: termsNeeded, version: terms.VERSION }, rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
+  return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all, room: roomId || null, refusal: refusal ? refusal.message : null, mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK };
 }
@@ -258,7 +259,7 @@ function register(app, { addUser, isBotToken }) {
                         url: res.locals.ogBase + "/feed/p/" + p.id };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
       res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
-                           reasons: store.REASONS, staff, termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false });
+                           reasons: store.REASONS, staff, termsEnforced: terms.enforced(), termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false });
     } catch (e) {
       console.error("[feed] post page:", e);
       res.status(500).send("Something went wrong.");
@@ -276,7 +277,8 @@ function register(app, { addUser, isBotToken }) {
     res.set("Cache-Control", "no-store");
     res.render("feedAdmin", { user: viewer.username, viewer, C: store.config(), D: store.DEFAULTS, reports: await store.reports(), bans: await store.bans(),
                               used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
-                              userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [] });
+                              userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [],
+                              termsPH: terms.placeholders(), termsLive: terms.enforced() });
   });
 
   // ── files ──
@@ -501,7 +503,9 @@ function register(app, { addUser, isBotToken }) {
   // ── posts ──
   // 1.99cc: the Terms gate (428 + code "terms" until accepted; {acceptTerms: true} accepts and goes on) and the
   // admin-only abuse record (contentaudit.js) of every create / edit. Neither ever shows in a response.
+  // 1.99cf: only while the admin switch terms_enforced is on (feedstore's config sets it on load, hence init first)
   const termsGate = async (req) => {
+    await store.init();
     if (!(await terms.needs(req.user.userId))) return false;
     if ((req.body || {}).acceptTerms === true) { await terms.accept(req.user.userId); return false; }
     return true;

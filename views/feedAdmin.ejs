@@ -121,6 +121,22 @@
     <form id="faCfg" class="fa-cfg">
       <label class="ck"><input type="checkbox" name="enabled"<%= C.enabled ? ' checked' : '' %>> Posting is on (off = only staff can post)</label>
       <label class="ck"><input type="checkbox" name="require_link_to_post"<%= C.require_link_to_post ? ' checked' : '' %>> Text posts and comments need a linked Camfrog name too</label>
+      <%# 1.99cf: the Terms gate (terms.js). Off = /terms and /privacy say "Draft", nobody is asked to accept. %>
+      <% const tph = typeof termsPH !== 'undefined' ? termsPH : []; const tblocked = !C.terms_enforced && tph.length > 0; %>
+      <fieldset class="fa-terms"><legend>Terms of Service</legend>
+        <label class="ck"><input type="checkbox" name="terms_enforced"<%= C.terms_enforced ? ' checked' : '' %><%= tblocked ? ' disabled' : '' %>> Require accepting the <a href="/terms" target="_blank" rel="noopener">Terms</a> before posting or commenting (sign-up and the composer say so)</label>
+        <% if (C.terms_enforced && typeof termsLive !== 'undefined' && !termsLive) { %>
+          <p class="fc-err">Switched on, but NOT in force: placeholders are back in the pages. Nobody is asked until they're filled in.</p>
+        <% } %>
+        <% if (tph.length) { %>
+          <p class="mut">Can't be switched on yet: <b><%= tph.length %></b> [[placeholder]]<%= tph.length === 1 ? '' : 's' %> left. Fill these in (views/terms.ejs, views/privacy.ejs) and deploy:</p>
+          <ul class="fa-ph">
+            <% tph.forEach((x) => { %><li><a href="/<%= x.page %>" target="_blank" rel="noopener">/<%= x.page %></a>: <code>[[<%= x.text %>]]</code></li><% }) %>
+          </ul>
+        <% } else if (!C.terms_enforced) { %>
+          <p class="mut">No placeholders left: the switch can go on.</p>
+        <% } %>
+      </fieldset>
       <% F.forEach(([h, rows]) => { %>
         <fieldset><legend><%= h %></legend>
           <% rows.forEach(([k, l]) => { %><label><span><%= l %></span><input type="number" name="<%= k %>" value="<%= C[k] %>" min="0" placeholder="<%= D[k] %>"></label><% }) %>

@@ -4522,7 +4522,8 @@ app.use(addUser, (req, res) => {
   notFound(req, res);
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port   ${port}`);
+// 1.99cf: loopback only (nginx is the way in); BIND_HOST overrides. See listen.js.
+require("./listen").listen(app, port, "site", () => {
+  console.log(`Server running on ${require("./listen").bindHost()}:${port}`);
 });
 

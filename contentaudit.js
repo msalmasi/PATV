@@ -1,8 +1,8 @@
 // contentaudit.js — abuse metadata on feed posts and comments (1.99cc). ADMIN-ONLY.
 //
 // What: when a post or comment is created or edited, one row in content_audit with
-//   ip          the client IP (guard.clientIp: Cloudflare's CF-Connecting-IP, else the first
-//               X-Forwarded-For hop, else the socket) - RAW, nulled after RAW_DAYS (90)
+//   ip          the client IP (guard.clientAddr: behind nginx on this box, Cloudflare's CF-Connecting-IP,
+//               else the last X-Forwarded-For hop; otherwise the socket) - RAW, nulled after RAW_DAYS (90)
 //   ua          the User-Agent (<= 300 chars) - nulled after RAW_DAYS
 //   ip_hash     HMAC-SHA256(per-database salt, network) - IPv4 as is, IPv6 by its /64 - kept with the
 //               row (HASH_DAYS, 365) so repeat abuse can still be matched after the raw IP is gone
@@ -80,9 +80,9 @@ const linkedOf = (u) => ({ camfrog: !!(u && u.camfrogUsername), discord: !!(u &&
 /** What the request says about the client (NOT stored as is - record() does the hashing). */
 function fromRequest(req) {
   const get = (h) => { try { return req.get(h) || null; } catch (e) { return null; } };
-  const ip = guard.clientIp(req);
-  const via = get("cf-connecting-ip") ? "cf" : get("x-forwarded-for") ? "xff" : "direct";
-  const cc = String(get("cf-ipcountry") || "").trim().toUpperCase();
+  // 1.99cf: proxy headers (incl. CF-IPCountry) count only when the request came through nginx on this box
+  const { ip, via } = guard.clientAddr(req);
+  const cc = via === "direct" ? "" : String(get("cf-ipcountry") || "").trim().toUpperCase();
   const dev = req.cookies && typeof req.cookies.patv_dev === "string" && /^[a-f0-9]{32}$/.test(req.cookies.patv_dev) ? req.cookies.patv_dev : null;
   return {
     ip: ip && ip !== "?" ? clip(ip, 64) : null, via, ua: clip(get("user-agent"), 300), lang: clip(get("accept-language"), 100),
