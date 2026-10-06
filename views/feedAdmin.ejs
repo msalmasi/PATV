@@ -1,5 +1,5 @@
 <%- include('layout', { title: 'Feed admin', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=1">
+<link rel="stylesheet" href="/public/css/feed.css?v=2">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
   const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');
@@ -14,6 +14,9 @@
                      ['uploads_per_hour', 'Uploads per hour'], ['upload_mb_per_day', 'Upload MB per day'], ['report_hide_threshold', 'Hide a post after this many reports (pending review)']]],
     ['Prices (PAT, 0 = free; to the Federal Reserve)', [['price_post', 'Every post'], ['price_link', 'Per link'], ['price_image', 'Per picture'], ['price_audio', 'Per audio file'], ['price_video', 'Per video']]],
     ['Pepe', [['mention_gap_min', 'Room mentions: at most one per room every (minutes)']]],
+    ['Voting & ranking', [['hot_decay_secs', 'Hot: seconds of age worth one order of magnitude of score (Reddit 45000 = 12.5 h)'],
+                          ['downvote_min_level', 'Downvotes count from a linked Camfrog name OR this level'],
+                          ['votes_per_min', 'Vote changes per minute per account'], ['votes_per_hour', 'Vote changes per hour per account']]],
   ];
 %>
 <main class="fd fd-admin">

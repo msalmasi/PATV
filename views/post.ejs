@@ -1,61 +1,40 @@
 <%- include('layout', { title: (p.title || (p.link && p.link.title) || ('Post by ' + p.author.display)).slice(0, 80) + ' — PATV feed', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=1">
-<% const signed = !!viewer; %>
+<link rel="stylesheet" href="/public/css/feed.css?v=2">
+<%
+  const signed = !!viewer;
+  const cs = typeof csort !== 'undefined' ? csort : 'best';
+  const backRoom = p.rooms.length === 1 && !p.global ? p.rooms[0] : null;
+%>
 <main class="fd fd-detail">
-  <div class="crumb"><a href="/feed">Feed</a><% p.rooms.forEach((r) => { %> · <a href="/rooms/<%= encodeURIComponent(r.slug) %>#feed"><%= r.title %></a><% }) %></div>
+  <nav class="crumb" aria-label="Back">
+    <% if (backRoom) { %><a href="/rooms/<%= encodeURIComponent(backRoom.slug) %>#feed"><%- fx.icon('back') %><%= backRoom.title %> feed</a>
+    <% } else { %><a href="/feed"><%- fx.icon('back') %>Feed</a><% } %>
+  </nav>
   <%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: true, ctxRoom: null }) %>
 
   <section class="fd-comments" id="comments" aria-labelledby="cH">
-    <h2 id="cH">💬 <%= p.comments %> comment<%= p.comments === 1 ? '' : 's' %></h2>
-    <% if (signed) { %>
-      <form class="cm-new" data-act="comment" data-post="<%= p.id %>">
-        <textarea name="body" maxlength="2000" rows="3" placeholder="Add a comment…" aria-label="Your comment" required></textarea>
-        <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Comment</button></div>
+    <div class="cm-top">
+      <h2 id="cH">Comments <span class="n"><%= fx.num(p.comments) %></span></h2>
+      <% if (comments.length > 1) { %>
+        <nav class="cm-sort" aria-label="Sort comments">
+          <span class="mut">Sort by</span>
+          <% fx.CSORTS.forEach((s) => { %><a class="<%= cs === s ? 'on' : '' %>" href="?<%= s === 'best' ? '' : 'csort=' + s %>#comments"<%= cs === s ? ' aria-current=true' : '' %>><%= fx.CSORT_LABELS[s] %></a><% }) %>
+        </nav>
+      <% } %>
+    </div>
+    <% if (p.locked) { %>
+      <p class="cm-locked"><%- fx.icon('lock') %>Comments are locked<%= p.lockedBy ? ' by ' + p.lockedBy : '' %>.</p>
+    <% } else if (signed) { %>
+      <form class="cm-new composer" data-act="comment" data-post="<%= p.id %>">
+        <textarea name="body" maxlength="2000" rows="2" placeholder="Add a comment…" aria-label="Your comment" required></textarea>
+        <div class="cbar"><span class="hint mut">Commenting as <b><%= viewer.display %></b></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Comment</button></div>
       </form>
     <% } else { %>
-      <p class="mut"><a href="/login?next=<%= encodeURIComponent('/feed/p/' + p.id + '#comments') %>">Sign in</a> to comment.</p>
+      <div class="cm-signin"><span>Join the conversation</span><a class="btn-s" href="/login?next=<%= encodeURIComponent('/feed/p/' + p.id + '#comments') %>">Sign in to comment</a></div>
     <% } %>
-    <% if (!comments.length) { %><p class="mut">No comments yet.</p><% } %>
+    <% if (!comments.length) { %><p class="cm-empty mut">No comments yet<%= p.locked ? '' : ' — start the conversation' %>.</p><% } %>
     <ol class="cm-list">
-      <% comments.forEach((c) => { %>
-        <li class="cm" id="c-<%= c.id %>" data-id="<%= c.id %>">
-          <% if (c.deleted) { %>
-            <div class="cm-head mut">[deleted]</div>
-          <% } else { %>
-            <div class="cm-head"><a href="/u/<%= encodeURIComponent(c.author.username) %>/profile" class="fp-author"><%= c.author.display %></a> <span class="mut">· <%= fx.ago(c.created) %><%= c.edited ? ' · edited' : '' %></span></div>
-            <div class="cm-body"><%- fx.body(c.body) %></div>
-            <div class="cm-foot">
-              <% if (signed) { %><button type="button" data-act="reply">↩ Reply</button><% } %>
-              <% if (c.mine) { %><button type="button" data-act="cedit">✏️ Edit</button><% } %>
-              <% if (c.mine || staff || modRooms.size) { %><button type="button" data-act="cdelete">🗑 Delete</button><% } %>
-              <% if (signed && !c.mine) { %><button type="button" data-act="creport">⚑ Report</button><% } %>
-            </div>
-            <% if (c.mine) { %><form class="cm-editf hide" data-act="cedit-save"><textarea name="body" maxlength="2000" rows="3" aria-label="Edit comment"><%= c.body %></textarea><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save</button></div></form><% } %>
-          <% } %>
-          <% if (c.replies.length) { %>
-            <ol class="cm-replies">
-              <% c.replies.forEach((r) => { %>
-                <li class="cm" id="c-<%= r.id %>" data-id="<%= r.id %>">
-                  <div class="cm-head"><a href="/u/<%= encodeURIComponent(r.author.username) %>/profile" class="fp-author"><%= r.author.display %></a> <span class="mut">· <%= fx.ago(r.created) %><%= r.edited ? ' · edited' : '' %></span></div>
-                  <div class="cm-body"><%- fx.body(r.body) %></div>
-                  <div class="cm-foot">
-                    <% if (r.mine) { %><button type="button" data-act="cedit">✏️ Edit</button><% } %>
-                    <% if (r.mine || staff || modRooms.size) { %><button type="button" data-act="cdelete">🗑 Delete</button><% } %>
-                    <% if (signed && !r.mine) { %><button type="button" data-act="creport">⚑ Report</button><% } %>
-                  </div>
-                  <% if (r.mine) { %><form class="cm-editf hide" data-act="cedit-save"><textarea name="body" maxlength="2000" rows="3" aria-label="Edit reply"><%= r.body %></textarea><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save</button></div></form><% } %>
-                </li>
-              <% }) %>
-            </ol>
-          <% } %>
-          <% if (signed && !c.deleted) { %>
-            <form class="cm-replyf hide" data-act="comment" data-post="<%= p.id %>" data-parent="<%= c.id %>">
-              <textarea name="body" maxlength="2000" rows="2" placeholder="Reply to <%= c.author.display %>…" aria-label="Your reply"></textarea>
-              <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Reply</button></div>
-            </form>
-          <% } %>
-        </li>
-      <% }) %>
+      <% comments.forEach((c) => { %><%- include('partials/feed-comment', { c, p, fx, viewer, staff, modRooms, reply: false }) %><% }) %>
     </ol>
   </section>
 </main>

@@ -1,11 +1,11 @@
 <%#
-  The room page's Feed section (1.99bv). Locals: feed (feedweb.roomFeed), fx, embeds, host, room (the page's room view)
+  The room page's Feed section (1.99bv; sort bar + owner tools 1.99ca). Locals: feed (feedweb.roomFeed), fx, embeds, host, room (the page's room view)
 %><%
   const F = feed;
-  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, fp: '' }, o); Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
+  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
   const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=1">
+<link rel="stylesheet" href="/public/css/feed.css?v=2">
 <section class="card rf" id="feed" aria-labelledby="rfH">
   <h2 id="rfH"><span>📝 <%= room.name %> feed</span><small><a href="/feed?room=<%= encodeURIComponent(room.slug) %>">open in the feed ›</a></small></h2>
   <% if (F.follow) { %>
@@ -14,17 +14,16 @@
   <% } %>
   <%# 1.99bz: Pepe's fresh captures from this room - tap one for the story viewer %>
   <%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer }, heading: '📸 Fresh captures', next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
+  <% if (F.mod.owner || F.mod.admin) { %>
+    <a class="rf-modlink" href="/rooms/<%= encodeURIComponent(F.slug) %>/feed/mod"><%- fx.icon('shield') %><span>Moderate this feed</span><% if (F.queue) { %><span class="rf-n"><%= F.queue %></span><% } %></a>
+  <% } %>
   <% if (F.mention !== null) { %>
     <label class="rf-mention" title="Room owners: Pepe posts a short line in the Camfrog room when someone posts here (at most one every few minutes)">
       <input type="checkbox" id="rfMention" data-slug="<%= room.slug %>"<%= F.mention ? ' checked' : '' %>> 🐸 Pepe announces new posts in the room
     </label>
   <% } %>
   <%- include('feed-composer', { composer: F.composer, next: '/rooms/' + encodeURIComponent(room.slug) + '#feed' }) %>
-  <div class="fd-sort" aria-label="Sort the room feed">
-    <a class="<%= F.sort === 'new' ? 'on' : '' %>" href="<%= fq({ fsort: '' }) %>">🆕 New</a>
-    <a class="<%= F.sort === 'hot' ? 'on' : '' %>" href="<%= fq({ fsort: 'hot' }) %>">🔥 Hot</a>
-    <a class="<%= F.sort === 'top' ? 'on' : '' %>" href="<%= fq({ fsort: 'top' }) %>">🏆 Top</a>
-  </div>
+  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort the room feed' }) %>
   <% if (!F.posts.length) { %>
     <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this room yet.' %></p>
   <% } else { %>

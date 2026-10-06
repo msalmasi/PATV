@@ -1,0 +1,63 @@
+<%#
+  One comment (1.99bx) with its replies (one level). Locals: c (feedstore.comments row), p (the post), fx, viewer,
+  staff (bool), modRooms (Set), reply (bool: this is a reply)
+%><%
+  const signed = !!viewer;
+  const isReply = typeof reply !== 'undefined' && reply;
+  const canDel = c.mine || staff || (modRooms && modRooms.size > 0);
+  const cv = c.myVote || 0;
+  const hasMenu = !c.deleted && signed && (c.mine || canDel || !c.mine);
+%>
+<li class="cm<%= c.deleted ? ' is-del' : '' %><%= c.replies && c.replies.length ? ' has-kids' : '' %>" id="c-<%= c.id %>" data-id="<%= c.id %>">
+  <% if (c.deleted) { %>
+    <span class="av av-del" aria-hidden="true"></span>
+    <div class="cm-head"><span class="mut">[deleted]</span></div>
+  <% } else { %>
+    <span class="av" style="--h:<%= fx.hue(c.author.username) %>" aria-hidden="true"><%= fx.initial(c.author.display) %></span>
+    <div class="cm-head">
+      <a href="/u/<%= encodeURIComponent(c.author.username) %>/profile" class="fp-author"><%= c.author.display %></a>
+      <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="Wrote the post">OP</span><% } %>
+      <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>
+      <% if (c.edited) { %><span class="fp-ed">(edited)</span><% } %>
+    </div>
+  <% } %>
+  <span class="rail" aria-hidden="true"></span>
+  <% if (!c.deleted) { %>
+    <div class="cm-body"><%- fx.body(c.body) %></div>
+    <div class="bar cm-bar">
+      <div class="vote h" data-v="<%= cv %>" data-kind="comment"<%- c.mine ? ' data-own="1"' : '' %>>
+        <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= cv === 1 ? 'true' : 'false' %>" aria-label="Upvote comment"><%- fx.icon('up') %></button>
+        <span class="vs" title="<%= c.ups %> up · <%= c.downs %> down"><%= fx.num(c.score) %></span>
+        <button type="button" class="vb vb-down" data-act="vote" data-dir="-1" aria-pressed="<%= cv === -1 ? 'true' : 'false' %>" aria-label="<%= c.mine ? 'You can\'t downvote your own comment' : 'Downvote comment' %>"<%= c.mine ? ' disabled' : '' %>><%- fx.icon('down') %></button>
+      </div>
+      <% if (signed && !isReply) { %><button type="button" class="act" data-act="reply"><%- fx.icon('reply') %><span>Reply</span></button><% } %>
+      <% if (hasMenu) { %>
+        <details class="more">
+          <summary class="act" aria-label="More actions" title="More"><%- fx.icon('more') %></summary>
+          <div class="menu" role="menu">
+            <% if (c.mine) { %><button type="button" role="menuitem" data-act="cedit"><%- fx.icon('edit') %>Edit</button><% } %>
+            <% if (canDel) { %><button type="button" role="menuitem" class="danger" data-act="cdelete"><%- fx.icon('trash') %>Delete</button><% } %>
+            <% if (!c.mine) { %><button type="button" role="menuitem" data-act="creport"><%- fx.icon('flag') %>Report</button><% } %>
+          </div>
+        </details>
+      <% } %>
+    </div>
+    <% if (c.mine) { %>
+      <form class="cm-editf composer hide" data-act="cedit-save">
+        <textarea name="body" maxlength="2000" rows="3" aria-label="Edit comment"><%= c.body %></textarea>
+        <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="cedit">Cancel</button><button type="submit" class="btn-s">Save</button></div>
+      </form>
+    <% } %>
+  <% } %>
+  <% if (!isReply && signed && !c.deleted) { %>
+    <form class="cm-replyf composer hide" data-act="comment" data-post="<%= p.id %>" data-parent="<%= c.id %>">
+      <textarea name="body" maxlength="2000" rows="2" placeholder="Reply to <%= c.author.display %>…" aria-label="Your reply"></textarea>
+      <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="reply">Cancel</button><button type="submit" class="btn-s">Reply</button></div>
+    </form>
+  <% } %>
+  <% if (c.replies && c.replies.length) { %>
+    <ol class="cm-replies">
+      <% c.replies.forEach((r) => { %><%- include('feed-comment', { c: r, p, fx, viewer, staff, modRooms, reply: true }) %><% }) %>
+    </ol>
+  <% } %>
+</li>

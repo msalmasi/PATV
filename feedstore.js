@@ -12,7 +12,11 @@
 //   feed_attachments   id, post_id (NULL until posted), owner_id, kind image|audio|video|preview,
 //                      ct, file, thumb, poster, w, h, secs, bytes, sort, state uploading|processing|
 //                      ready|failed|deleted|purged, error, created, size_declared, received, sniff
-//   feed_votes         post_id, user_id, value (+1 today; v2 allows -1), created - one row per user
+//                      (1.99bx) ups / downs (cached COUNTED votes), score = ups - downs, hot (Reddit hot rank,
+//                      indexed), controversy (Reddit's magnitude ** balance) - all rewritten by recountPost
+//   feed_votes         post_id, user_id, value +1 / -1 (no row = no vote), w (1 = counts, 0 = a downvote from
+//                      an account that can't downvote yet), created, updated - one row per user
+//   feed_comment_votes comment_id, post_id, user_id, value, w, created, updated (comments: ups/downs/score)
 //   feed_comments      id, post_id, parent_id (one level of replies), author_id, body, created,
 //                      edited, deleted_at, deleted_by
 //   feed_reports       id, post_id, comment_id, reporter_id, reason, note, created, resolved_at,
@@ -30,6 +34,7 @@ const rooms = require("./rooms");
 
 const TITLE_MAX = 140, BODY_MAX = 5000, COMMENT_MAX = 2000, MAX_IMAGES = 4, MAX_ATTACH = 6, MAX_ROOMS = 5;
 const PAGE = 20;
+const MAX_PINS = 3;
 const DEFAULTS = Object.freeze({
   enabled: true,
   max_image_mb: 10, max_audio_mb: 25, max_video_mb: 100,
@@ -44,6 +49,10 @@ const DEFAULTS = Object.freeze({
   price_post: 0, price_link: 0, price_image: 0, price_audio: 0, price_video: 0,   // PAT; 0 = free
   mention_gap_min: 15,                // Pepe's room mentions: at most one line per room per this many minutes
   post_gap_secs: 20, comment_gap_secs: 4,   // minimum time between two posts / two comments by one account
+  // voting + ranking (1.99bx)
+  hot_decay_secs: 45000,              // Hot: seconds of age that cost one order of magnitude of score (Reddit: 45000 = 12.5 h)
+  downvote_min_level: 2,              // a downvote counts from a linked Camfrog name OR at least this level (anti-brigade)
+  votes_per_min: 30, votes_per_hour: 300,   // vote changes per account (posts + comments together)
 });
 const INT_KEYS = Object.keys(DEFAULTS).filter((k) => typeof DEFAULTS[k] === "number");
 const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1, 500], max_audio_secs: [10, 3600], max_video_secs: [5, 1800],
@@ -51,7 +60,8 @@ const LIMITS = { max_image_mb: [1, 50], max_audio_mb: [1, 200], max_video_mb: [1
   new_account_posts_per_day: [0, 100], posts_per_hour: [1, 1000], posts_per_day: [1, 5000], comments_per_hour: [1, 5000],
   uploads_per_hour: [1, 1000], upload_mb_per_day: [10, 100000], report_hide_threshold: [1, 100], deleted_purge_days: [0, 365],
   price_post: [0, 1e9], price_link: [0, 1e9], price_image: [0, 1e9], price_audio: [0, 1e9], price_video: [0, 1e9], mention_gap_min: [1, 1440],
-  post_gap_secs: [0, 3600], comment_gap_secs: [0, 600] };
+  post_gap_secs: [0, 3600], comment_gap_secs: [0, 600],
+  hot_decay_secs: [3600, 1000000], downvote_min_level: [0, 100], votes_per_min: [1, 1000], votes_per_hour: [1, 20000] };
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
@@ -105,9 +115,124 @@ function init() {
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS feed_mentions_once ON feed_mentions (room_id, post_id)");
       await runQuery("CREATE TABLE IF NOT EXISTS feed_kv (key TEXT PRIMARY KEY, value TEXT)");
       await loadConfig();
+      await migrateVotes();
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
+}
+
+// ── 1.99bx: up/down votes, cached counts, hot / controversy columns ──
+async function addCol(table, col, def) {
+  const have = (await getQuery(`PRAGMA table_info(${table})`)).some((c) => c.name === col);
+  if (!have) await runQuery(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+async function migrateVotes() {
+  await addCol("feed_posts", "ups", "INTEGER NOT NULL DEFAULT 0");
+  await addCol("feed_posts", "downs", "INTEGER NOT NULL DEFAULT 0");
+  await addCol("feed_posts", "hot", "REAL NOT NULL DEFAULT 0");
+  await addCol("feed_posts", "controversy", "REAL NOT NULL DEFAULT 0");
+  await addCol("feed_votes", "w", "INTEGER NOT NULL DEFAULT 1");
+  await addCol("feed_votes", "updated", "INTEGER");
+  await addCol("feed_comments", "ups", "INTEGER NOT NULL DEFAULT 0");
+  await addCol("feed_comments", "downs", "INTEGER NOT NULL DEFAULT 0");
+  await addCol("feed_comments", "score", "INTEGER NOT NULL DEFAULT 0");
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_comment_votes (
+    comment_id TEXT NOT NULL, post_id TEXT NOT NULL, user_id TEXT NOT NULL, value INTEGER NOT NULL, w INTEGER NOT NULL DEFAULT 1,
+    created INTEGER, updated INTEGER, PRIMARY KEY (comment_id, user_id))`);
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_cvotes_post ON feed_comment_votes (post_id, user_id)");
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_votes_user ON feed_votes (user_id, updated)");
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_votes_recent ON feed_votes (post_id, updated)");
+  // room moderation (1.99bx): pins, room-only NSFW / hide, the approval queue, comment locks, approved posters
+  await addCol("feed_post_rooms", "pinned_at", "INTEGER");
+  await addCol("feed_post_rooms", "pinned_by", "TEXT");
+  await addCol("feed_post_rooms", "nsfw", "INTEGER");
+  await addCol("feed_post_rooms", "hidden_at", "INTEGER");
+  await addCol("feed_post_rooms", "hidden_by", "TEXT");
+  await addCol("feed_post_rooms", "pending", "INTEGER NOT NULL DEFAULT 0");
+  await addCol("feed_post_rooms", "approved_by", "TEXT");
+  await addCol("feed_posts", "locked_at", "INTEGER");
+  await addCol("feed_posts", "locked_by", "TEXT");
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_room_members (room_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT, by TEXT, at INTEGER,
+    PRIMARY KEY (room_id, user_id))`);
+  await runQuery(`CREATE TABLE IF NOT EXISTS feed_room_report_done (room_id TEXT NOT NULL, post_id TEXT NOT NULL, comment_id TEXT NOT NULL DEFAULT '',
+    at INTEGER NOT NULL, by TEXT, action TEXT, PRIMARY KEY (room_id, post_id, comment_id))`);
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_posts_hot ON feed_posts (hot)");
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_posts_score ON feed_posts (score, created)");
+  await runQuery("CREATE INDEX IF NOT EXISTS feed_posts_contro ON feed_posts (controversy, created)");
+  if ((await kvGet("votes_v2")) !== "1") {
+    // 1.99bw stored upvotes only (value 1): normalise to +1 / -1, then backfill ups, downs, score, hot
+    await runQuery("UPDATE feed_votes SET value = CASE WHEN value > 0 THEN 1 ELSE -1 END WHERE value != 0");
+    await runQuery("DELETE FROM feed_votes WHERE value = 0");
+    await runQuery("UPDATE feed_votes SET updated = COALESCE(created, 0) WHERE updated IS NULL");
+    const ids = await getQuery("SELECT id FROM feed_posts");
+    for (const r of ids) await recountPost(r.id);
+    await kvSet("votes_v2", "1");
+    await kvSet("hot_decay", String(CONFIG.hot_decay_secs));
+    console.log(`[feed] votes v2 migration: ${ids.length} posts backfilled`);
+  } else if ((await kvGet("hot_decay")) !== String(CONFIG.hot_decay_secs)) {
+    await rehotAll();
+  }
+}
+
+// Reddit's ranking maths (r2/lib/db/_sorts.pyx), seconds since its epoch
+const HOT_EPOCH = 1134028003;
+/** Hot: log10(max(|score|, 1)) * sign(score) + (created - epoch) / decay, rounded to 7 places. */
+function hotRank(score, createdMs, decay = CONFIG.hot_decay_secs) {
+  const s = Number(score) || 0;
+  const order = Math.log10(Math.max(Math.abs(s), 1));
+  const sign = s > 0 ? 1 : s < 0 ? -1 : 0;
+  return Math.round((sign * order + (createdMs / 1000 - HOT_EPOCH) / decay) * 1e7) / 1e7;
+}
+/** Controversial: (ups + downs) ** (smaller / larger); 0 unless there are both ups and downs. */
+function controversy(ups, downs) {
+  if (!(ups > 0) || !(downs > 0)) return 0;
+  const balance = ups > downs ? downs / ups : ups / downs;
+  return Math.pow(ups + downs, balance);
+}
+/** Best (comments): the Wilson score interval's lower bound at 80% confidence (Reddit's "confidence"). */
+function wilson(ups, downs, z = 1.281551565545) {
+  const n = ups + downs;
+  if (!n) return 0;
+  const p = ups / n;
+  const left = p + (z * z) / (2 * n);
+  const right = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return (left - right) / (1 + (z * z) / n);
+}
+
+/**
+ * Re-derive a post's cached counts from feed_votes in ONE statement (atomic in SQLite, so concurrent
+ * votes can't leave ups/downs/score out of step), then hot + controversy - written only if ups/downs
+ * are still the ones they were computed from (a racing recount writes the newer ones).
+ */
+async function recountPost(id) {
+  await runQuery(`UPDATE feed_posts SET
+      ups = (SELECT COUNT(*) FROM feed_votes WHERE post_id = ?1 AND value = 1 AND w = 1),
+      downs = (SELECT COUNT(*) FROM feed_votes WHERE post_id = ?1 AND value = -1 AND w = 1),
+      score = (SELECT COALESCE(SUM(value), 0) FROM feed_votes WHERE post_id = ?1 AND w = 1)
+    WHERE id = ?1`, [id]);
+  for (let i = 0; i < 5; i++) {
+    const r = (await getQuery("SELECT ups, downs, score, created FROM feed_posts WHERE id = ?", [id]))[0];
+    if (!r) return null;
+    const w = await runQuery("UPDATE feed_posts SET hot = ?, controversy = ? WHERE id = ? AND ups = ? AND downs = ?",
+                             [hotRank(r.score, r.created), controversy(r.ups, r.downs), id, r.ups, r.downs]);
+    if (w.changes) return r;
+  }
+  return (await getQuery("SELECT ups, downs, score, created FROM feed_posts WHERE id = ?", [id]))[0] || null;
+}
+async function recountComment(id) {
+  await runQuery(`UPDATE feed_comments SET
+      ups = (SELECT COUNT(*) FROM feed_comment_votes WHERE comment_id = ?1 AND value = 1 AND w = 1),
+      downs = (SELECT COUNT(*) FROM feed_comment_votes WHERE comment_id = ?1 AND value = -1 AND w = 1),
+      score = (SELECT COALESCE(SUM(value), 0) FROM feed_comment_votes WHERE comment_id = ?1 AND w = 1)
+    WHERE id = ?1`, [id]);
+  return (await getQuery("SELECT ups, downs, score FROM feed_comments WHERE id = ?", [id]))[0] || null;
+}
+/** Every post's hot rank again (the admin changed hot_decay_secs). */
+async function rehotAll() {
+  const rows = await getQuery("SELECT id, score, created FROM feed_posts");
+  for (const r of rows) await runQuery("UPDATE feed_posts SET hot = ? WHERE id = ?", [hotRank(r.score, r.created), r.id]);
+  await kvSet("hot_decay", String(CONFIG.hot_decay_secs));
+  return rows.length;
 }
 
 // ── config ──
@@ -136,7 +261,9 @@ async function setConfig(patch, actor) {
   await init();
   const merged = cleanConfig({ ...CONFIG, ...(patch || {}) });
   await kvSet("config", JSON.stringify(merged));
+  const decayChanged = merged.hot_decay_secs !== CONFIG.hot_decay_secs;
   CONFIG = merged;
+  if (decayChanged) await rehotAll();
   console.log(`[feed] config set by ${actor || "?"}: ${JSON.stringify(merged)}`);
   return CONFIG;
 }
@@ -262,15 +389,15 @@ function parseJson(s) { try { return s ? JSON.parse(s) : null; } catch (e) { ret
 const effNsfw = (p) => (p.nsfw_admin === 0 || p.nsfw_admin === 1 ? !!p.nsfw_admin : !!p.nsfw);
 
 /** Decorate post rows: author, rooms, attachments, my vote, flags. */
-async function decorate(rows, viewer) {
+async function decorate(rows, viewer, { ctxRoom = null, detail = false } = {}) {
   if (!rows.length) return [];
   const ids = rows.map((r) => r.id);
   const q = ids.map(() => "?").join(",");
   const [A, PR, AT, MV, FW] = await Promise.all([
     authors(rows.map((r) => r.author_id)),
-    getQuery(`SELECT post_id, room_id, removed_at FROM feed_post_rooms WHERE post_id IN (${q})`, ids),
+    getQuery(`SELECT post_id, room_id, removed_at, pinned_at, nsfw, hidden_at, pending FROM feed_post_rooms WHERE post_id IN (${q})`, ids),
     getQuery(`SELECT * FROM feed_attachments WHERE post_id IN (${q}) AND state = 'ready' ORDER BY sort, created`, ids),
-    viewer && viewer.userId ? getQuery(`SELECT post_id, value FROM feed_votes WHERE user_id = ? AND post_id IN (${q})`, [viewer.userId, ...ids]) : [],
+    viewer && viewer.userId ? getQuery(`SELECT post_id, value, w FROM feed_votes WHERE user_id = ? AND post_id IN (${q})`, [viewer.userId, ...ids]) : [],
     // 1.99bz: which of these authors the viewer follows (the author chip's Follow button)
     viewer && viewer.userId ? require("./follows").followedAmong(viewer.userId, "user", rows.map((r) => r.author_id)) : new Set(),
   ]);
@@ -278,20 +405,27 @@ async function decorate(rows, viewer) {
   return rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id).map((x) => {
       const R = rooms.getCached(x.room_id);
-      return { id: x.room_id, slug: R ? R.slug : rooms.slugify(x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null };
+      return { id: x.room_id, slug: R ? R.slug : rooms.slugify(x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null,
+               pinned: !!x.pinned_at, nsfw: x.nsfw === 1, hidden: !!x.hidden_at, pending: !!x.pending };
     });
+    const ctx = ctxRoom ? roomsOf.find((x) => x.id === ctxRoom) : null;
+    // a room owner's NSFW mark applies in their room's view and on the post page - never on the main feed / other rooms
+    const nsfw = effNsfw(r) || (ctxRoom ? !!(ctx && ctx.nsfw) : (detail && roomsOf.some((x) => x.nsfw && !x.removed)));
     const att = AT.filter((a) => a.post_id === r.id).map((a) => ({ id: a.id, kind: a.kind, ct: a.ct, file: a.file, thumb: a.thumb, poster: a.poster,
                                                                  w: a.w, h: a.h, secs: a.secs }));
     const link = parseJson(r.link_json);
+    const mv = MV.find((v) => v.post_id === r.id);
     return {
       id: r.id, title: r.title || "", body: r.body || "", created: r.created, edited: r.edited, score: r.score, comments: r.comments,
-      nsfw: effNsfw(r), nsfwAuthor: !!r.nsfw, nsfwAdmin: r.nsfw_admin, global: !!r.global, cost: r.cost,
+      ups: r.ups || 0, downs: r.downs || 0, myVote: mv ? (mv.value > 0 ? 1 : -1) : 0,
+      nsfw, nsfwAuthor: !!r.nsfw, nsfwRoom: !!(ctx && ctx.nsfw), pinned: !!(ctx && ctx.pinned), roomHidden: !!(ctx && ctx.hidden), pending: !!(ctx && ctx.pending),
+      locked: !!r.locked_at, lockedBy: r.locked_by || null, nsfwAdmin: r.nsfw_admin, global: !!r.global, cost: r.cost,
       deleted: !!r.deleted_at, hidden: !!r.hidden_at, deleteReason: r.delete_reason || null,
       author: A.get(r.author_id) || { userId: r.author_id, username: "[gone]", display: "[deleted account]" },
       followingAuthor: FW.has(r.author_id),
       mine: !!(viewer && viewer.userId === r.author_id),
-      voted: !!MV.find((v) => v.post_id === r.id && v.value > 0),
-      rooms: roomsOf.filter((x) => !x.removed || staff),
+      voted: !!(mv && mv.value > 0),
+      rooms: roomsOf.filter((x) => (!x.removed && !x.pending && !x.hidden) || staff),
       roomsAll: roomsOf,
       images: att.filter((a) => a.kind === "image"), audio: att.filter((a) => a.kind === "audio"), video: att.filter((a) => a.kind === "video"),
       link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
@@ -299,57 +433,95 @@ async function decorate(rows, viewer) {
   });
 }
 
-function hotScore(p, t = NOW()) {
-  const ageH = Math.max(0, (t - p.created) / 3600e3);
-  return (Math.max(0, p.score) + 0.5 * Math.max(0, p.comments) + 1) / Math.pow(ageH + 2, 1.5);
+/** A post row's hot rank (as stored in feed_posts.hot). */
+const hotScore = (p) => hotRank(p.score, p.created);
+
+// ── sorting (reusable: /feed, the room feeds, Following, profiles) ──
+const SORTS = Object.freeze(["hot", "new", "top", "controversial", "rising"]);
+const WINDOWS = Object.freeze({ hour: 3600e3, day: 86400e3, week: 7 * 86400e3, month: 30 * 86400e3, year: 365 * 86400e3, all: 0 });
+const TIMED = new Set(["top", "controversial"]);       // the sorts that take a time filter
+const RISING_VOTES_MS = 6 * 3600e3, RISING_MAX_AGE_MS = 48 * 3600e3;
+const cleanSort = (s, d = "hot") => (SORTS.includes(s) ? s : d);
+const cleanWindow = (t, d = "week") => (Object.prototype.hasOwnProperty.call(WINDOWS, t) ? t : d);
+
+/**
+ * SQL for a sort over `feed_posts p`: {where: [...], args: [...], order, select (extra columns)}.
+ *   hot           p.hot (precomputed Reddit hot rank)
+ *   new           newest first
+ *   top           score, within the time window `t` (hour|day|week|month|year|all)
+ *   controversial Reddit's controversy (precomputed), within `t`
+ *   rising        posts under 48 h old by the net counted votes OTHER people gave them in the last 6 h
+ */
+function rankSpec(sort, t = "all", now = NOW()) {
+  const s = cleanSort(sort);
+  const where = [], args = [];
+  let select = "", order;
+  const win = WINDOWS[cleanWindow(t, "all")];
+  if (TIMED.has(s) && win) { where.push("p.created > ?"); args.push(now - win); }
+  if (s === "hot") order = "p.hot DESC, p.created DESC";
+  else if (s === "new") order = "p.created DESC";
+  else if (s === "top") order = "p.score DESC, p.ups DESC, p.created DESC";
+  else if (s === "controversial") order = "p.controversy DESC, (p.ups + p.downs) DESC, p.created DESC";
+  else {
+    const vel = "(SELECT COALESCE(SUM(v.value), 0) FROM feed_votes v WHERE v.post_id = p.id AND v.w = 1 AND v.user_id != p.author_id AND v.updated > ?)";
+    select = `, ${vel} AS velocity`;
+    args.unshift(now - RISING_VOTES_MS);            // the select's placeholder comes first
+    where.push("p.created > ?", `${vel} > 0`); args.push(now - RISING_MAX_AGE_MS, now - RISING_VOTES_MS);
+    order = "velocity DESC, p.hot DESC";
+  }
+  return { sort: s, where, args, order, select };
 }
 
 /**
- * A page of posts. scope: {room: room id} | {global: true} | {author: userId}. sort new|top|hot.
+ * A page of posts. scope: {room: room id} | {author: userId} | {authors: [userIds]} (Following) | the main
+ * feed. sort: hot|new|top|controversial|rising; top: the time window for top/controversial.
  * Visible = not deleted, not hidden (staff see hidden ones), and in a room: not removed from it.
  */
-async function list({ room = null, author = null, following = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE } = {}) {
+async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true } = {}) {
   await init();
   const staff = isStaff(viewer);
-  const where = ["p.deleted_at IS NULL"], args = [];
-  if (!staff) where.push("p.hidden_at IS NULL");
+  const roomMod = room ? await rooms.canManage(viewer, room) : false;
+  const R = rankSpec(sort, top, NOW());
+  const scope = ["p.deleted_at IS NULL"], sargs = [];
+  if (!staff) scope.push("p.hidden_at IS NULL");
   let from = "feed_posts p";
+  const jargs = [];
   if (following) {
     // 1.99bz: posts by people `following` follows + posts in rooms they follow (one row per post)
     await require("./follows").init();
     const f = require("./follows").feedFilter(following);
-    where.push(f.sql); args.push(...f.args);
+    scope.push(f.sql); sargs.push(...f.args);
   } else if (room) {
     from += " JOIN feed_post_rooms pr ON pr.post_id = p.id AND pr.room_id = ?";
-    args.push(room);
-    if (!staff) where.push("pr.removed_at IS NULL");
-  } else if (author) {
-    where.push("p.author_id = ?"); args.push(author);
-  } else {
-    where.push("p.global = 1");
-  }
-  const t = NOW();
-  const win = { day: 86400e3, week: 7 * 86400e3, month: 30 * 86400e3 }[top];
-  if (sort === "top" && win) { where.push("p.created > ?"); args.push(t - win); }
-  page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
-  let rows;
-  if (sort === "hot") {
-    // rank the last 14 days in JS (no pow() in every SQLite build), then page
-    const cand = await getQuery(`SELECT p.* FROM ${from} WHERE ${where.join(" AND ")} AND p.created > ? ORDER BY p.created DESC LIMIT 1000`, [...args, t - 14 * 86400e3]);
-    cand.sort((a, b) => hotScore(b, t) - hotScore(a, t) || b.created - a.created);
-    let ranked = cand;
-    if (cand.length < page * limit) {
-      const older = await getQuery(`SELECT p.* FROM ${from} WHERE ${where.join(" AND ")} AND p.created <= ? ORDER BY p.created DESC LIMIT ?`,
-                                   [...args, t - 14 * 86400e3, page * limit - cand.length + 1]);
-      ranked = cand.concat(older);
+    jargs.push(room);
+    if (!staff) scope.push("pr.removed_at IS NULL");
+    // pending approval / hidden in the room: only its owner (and admins) see them, plus the author their own
+    if (!roomMod) {
+      if (viewer && viewer.userId) { scope.push("((pr.pending = 0 AND pr.hidden_at IS NULL) OR p.author_id = ?)"); sargs.push(viewer.userId); }
+      else scope.push("pr.pending = 0 AND pr.hidden_at IS NULL");
     }
-    rows = ranked.slice((page - 1) * limit, page * limit + 1);
+  } else if (author) {
+    scope.push("p.author_id = ?"); sargs.push(author);
+  } else if (Array.isArray(authorIds)) {
+    const ids = authorIds.map(String).slice(0, 2000);
+    if (!ids.length) return { posts: [], more: false, page: 1, sort: R.sort };
+    scope.push(`p.author_id IN (${ids.map(() => "?").join(",")})`); sargs.push(...ids);
   } else {
-    const order = sort === "top" ? "p.score DESC, p.comments DESC, p.created DESC" : "p.created DESC";
-    rows = await getQuery(`SELECT p.* FROM ${from} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ? OFFSET ?`, [...args, limit + 1, (page - 1) * limit]);
+    scope.push("p.global = 1");
   }
+  page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
+  // placeholders in text order: select (rising) -> join -> scope -> sort filters
+  const selArgs = R.select ? [R.args[0]] : [], sortArgs = R.select ? R.args.slice(1) : R.args;
+  // a room's pinned posts (at most MAX_PINS) head page 1 of every sort and are left out of the ranking
+  let pinned = [];
+  if (room && pinsOn) {
+    if (page === 1) pinned = await getQuery(`SELECT p.* FROM ${from} WHERE ${scope.join(" AND ")} AND pr.pinned_at IS NOT NULL ORDER BY pr.pinned_at DESC LIMIT ${MAX_PINS}`, [...jargs, ...sargs]);
+    scope.push("pr.pinned_at IS NULL");
+  }
+  const rows = await getQuery(`SELECT p.*${R.select} FROM ${from} WHERE ${scope.concat(R.where).join(" AND ")} ORDER BY ${R.order} LIMIT ? OFFSET ?`,
+                              [...selArgs, ...jargs, ...sargs, ...sortArgs, limit + 1, (page - 1) * limit]);
   const more = rows.length > limit;
-  return { posts: await decorate(rows.slice(0, limit), viewer), more, page };
+  return { posts: await decorate(pinned.concat(rows.slice(0, limit)), viewer, { ctxRoom: room }), more, page, sort: R.sort };
 }
 
 async function getRow(id) {
@@ -357,10 +529,10 @@ async function getRow(id) {
   await init();
   return (await getQuery("SELECT * FROM feed_posts WHERE id = ?", [id]))[0] || null;
 }
-async function get(id, viewer) {
+async function get(id, viewer, opts = {}) {
   const r = await getRow(id);
   if (!r) return null;
-  return (await decorate([r], viewer))[0];
+  return (await decorate([r], viewer, opts))[0];
 }
 
 // ── permissions on a post ──
@@ -424,6 +596,12 @@ async function create(userId, input, deps = {}) {
   if (refusal) throw new Refuse(refusal.status, refusal.message);
   const rate = await postRate(u);
   if (rate) throw new Refuse(429, rate);
+  const pendingIn = new Set();
+  for (const rid of roomIds) {
+    const why = await roomPostRefusal(u, rid);
+    if (why) throw new Refuse(why.status, why.message);
+    if ((await roomSettings(rid)).approval && !(await rooms.canManage(u, rid))) pendingIn.add(rid);
+  }
   // attachments: mine, ready, not on a post yet
   let atts = [];
   if (attIds.length) {
@@ -466,11 +644,16 @@ async function create(userId, input, deps = {}) {
     // 1.99bz: Pepe announces the post in a room when the room's OWNER has announcements on (the gate)
     // AND the author left "announce in <room>" ticked. No announce list (older pages) = every such room.
     const announce = Array.isArray(input.announce) ? new Set(input.announce.map(String)) : null;
+    const wants = (rid) => !announce || announce.has(rid) || [...announce].some((x) => (rooms.getCached(rid) || {}).slug === x);
     for (const rid of roomIds) {
-      await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created) VALUES (?, ?, ?)", [id, rid, t]);
-      if (!announce || announce.has(rid) || [...announce].some((x) => (rooms.getCached(rid) || {}).slug === x)) await queueMention(rid, id);
+      await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, rid, t, pendingIn.has(rid) ? (wants(rid) ? 1 : 2) : 0]);
+      if (!pendingIn.has(rid) && wants(rid)) await queueMention(rid, id);
     }
+    // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote)
+    await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
+    await recountPost(id);
   } catch (e) {
+    await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("UPDATE feed_attachments SET post_id = NULL WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_post_rooms WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_posts WHERE id = ?", [id]).catch(() => {});
@@ -535,15 +718,17 @@ async function removeFromRoom(user, id, roomId) {
 async function restoreToRoom(user, id, roomId) {
   if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this room's owner can do that.");
   await runQuery("UPDATE feed_post_rooms SET removed_at = NULL, removed_by = NULL WHERE post_id = ? AND room_id = ?", [id, roomId]);
+  await rooms.event(roomId, "feed-restore", user.username, id);
   return true;
 }
 
 /** Admin: force the NSFW flag (1/0) or give it back to the author (null). Also un-hides / hides. */
-async function adminSet(user, id, { nsfw, hidden } = {}) {
+async function adminSet(user, id, { nsfw, hidden, locked } = {}) {
   if (!isStaff(user)) throw new Refuse(403, "Admins only.");
   const r = await getRow(id);
   if (!r) throw new Refuse(404, "No such post.");
   if (nsfw !== undefined) await runQuery("UPDATE feed_posts SET nsfw_admin = ? WHERE id = ?", [nsfw === null ? null : (nsfw ? 1 : 0), id]);
+  if (locked !== undefined) await runQuery("UPDATE feed_posts SET locked_at = ?, locked_by = ? WHERE id = ?", [locked ? NOW() : null, locked ? user.username : null, id]);
   if (hidden !== undefined) {
     await runQuery("UPDATE feed_posts SET hidden_at = ? WHERE id = ?", [hidden ? NOW() : null, id]);
     if (!hidden) await runQuery("UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = 'kept' WHERE post_id = ? AND resolved_at IS NULL", [NOW(), user.username, id]);
@@ -552,41 +737,137 @@ async function adminSet(user, id, { nsfw, hidden } = {}) {
 }
 
 // ── votes ──
-async function vote(user, id, on) {
+// Rules (1.99bx):
+//  - one vote per account per post / comment: +1, -1 or none; `dir` is the state you want (idempotent),
+//    so up -> down -> none is three requests and a repeated click can't double count
+//  - your own post / comment starts with your +1 (you can take it back) and you can't downvote it
+//  - a downvote from an account without a linked Camfrog name and below downvote_min_level is stored
+//    (you see it highlighted) but doesn't count (w = 0) - anti-brigade; staff always count
+//  - spam: votes_per_min / votes_per_hour vote CHANGES per account (posts + comments), a 300 ms gap per item
+/** Normalise a requested vote: 1 | -1 | 0, or null for "toggle the upvote" (the 1.99bw API). */
+function cleanDir(dir, on) {
+  if (dir !== undefined && dir !== null && dir !== "") {
+    const n = Number(dir);
+    return n > 0 ? 1 : n < 0 ? -1 : 0;
+  }
+  if (on !== undefined) return on ? 1 : 0;
+  return null;
+}
+const downCounts = (u, C = CONFIG) => !!u && (isStaff(u) || !!u.camfrogUsername || (Number(u.level) || 0) >= C.downvote_min_level);
+const voteLog = new Map();      // userId -> [timestamps] of recent vote changes (in memory; resets on restart)
+function voteRate(u) {
+  if (isStaff(u)) return null;
+  const t = NOW(), C = CONFIG;
+  const arr = (voteLog.get(u.userId) || []).filter((x) => t - x < 3600e3);
+  voteLog.set(u.userId, arr);
+  if (arr.filter((x) => t - x < 60e3).length >= C.votes_per_min) return "You're voting very fast - take a breather.";
+  if (arr.length >= C.votes_per_hour) return "You've voted a lot this hour - try again later.";
+  return null;
+}
+function noteVote(u) {
+  const arr = voteLog.get(u.userId) || [];
+  arr.push(NOW());
+  voteLog.set(u.userId, arr);
+  if (voteLog.size > 20000) for (const [k, v] of voteLog) if (!v.length || NOW() - v[v.length - 1] > 3600e3) voteLog.delete(k);
+}
+async function voter(user) {
+  if (!user || !user.userId) throw new Refuse(401, "Sign in to vote.");
+  const u = await account(user.userId);
+  if (!u) throw new Refuse(401, "Sign in to vote.");
+  if (u.archived_at) throw new Refuse(403, "This account is archived.");
+  const ban = (await getQuery("SELECT 1 FROM feed_bans WHERE user_id = ? AND room_id = '' AND (until IS NULL OR until > ?)", [u.userId, NOW()]))[0];
+  if (ban) throw new Refuse(403, "You can't vote on the feed right now.");
+  return u;
+}
+/**
+ * Shared vote write. table feed_votes | feed_comment_votes. -> {vote, counted, changed}
+ */
+async function applyVote(u, { table, key, id, authorId, postId }, dir, what) {
+  const cur = (await getQuery(`SELECT value, w FROM ${table} WHERE ${key} = ? AND user_id = ?`, [id, u.userId]))[0];
+  const now = cur ? (cur.value > 0 ? 1 : -1) : 0;
+  let want = dir === null ? (now === 1 ? 0 : 1) : dir;
+  if (want === -1 && u.userId === authorId) throw new Refuse(403, `You can't downvote your own ${what}.`);
+  if (want === now) return { vote: now, counted: !cur || cur.w === 1, changed: false };
+  const g = burst("vote|" + u.userId + "|" + id, 300);
+  if (g) throw new Refuse(429, "Easy there.");
+  const rate = voteRate(u);
+  if (rate) throw new Refuse(429, rate);
+  const w = want === -1 && !downCounts(u) ? 0 : 1;
+  const t = NOW();
+  if (want === 0) await runQuery(`DELETE FROM ${table} WHERE ${key} = ? AND user_id = ?`, [id, u.userId]);
+  else if (table === "feed_votes") {
+    await runQuery(`INSERT INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(post_id, user_id) DO UPDATE SET value = excluded.value, w = excluded.w, updated = excluded.updated`, [id, u.userId, want, w, t, t]);
+  } else {
+    await runQuery(`INSERT INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(comment_id, user_id) DO UPDATE SET value = excluded.value, w = excluded.w, updated = excluded.updated`, [id, postId, u.userId, want, w, t, t]);
+  }
+  noteVote(u);
+  return { vote: want, counted: want === 0 || w === 1, changed: true };
+}
+
+/** Vote on a post. dir: 1 | -1 | 0 (or undefined + on: the 1.99bw toggle). -> {vote, voted, score, ups, downs, counted} */
+async function vote(user, id, dir, on) {
   const r = await getRow(id);
   if (!r || r.deleted_at || r.hidden_at) throw new Refuse(404, "No such post.");
-  if (!user || !user.userId) throw new Refuse(401, "Sign in to vote.");
-  const g = burst("vote|" + user.userId + "|" + id, 400);
-  if (g) throw new Refuse(429, "Easy there.");
-  const want = on === undefined ? !(await getQuery("SELECT 1 FROM feed_votes WHERE post_id = ? AND user_id = ?", [id, user.userId])).length : !!on;
-  if (want) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, created) VALUES (?, ?, 1, ?)", [id, user.userId, NOW()]);
-  else await runQuery("DELETE FROM feed_votes WHERE post_id = ? AND user_id = ?", [id, user.userId]);
-  const s = (await getQuery("SELECT COALESCE(SUM(value), 0) AS s FROM feed_votes WHERE post_id = ?", [id]))[0].s;
-  await runQuery("UPDATE feed_posts SET score = ? WHERE id = ?", [s, id]);
-  return { voted: want, score: s };
+  const u = await voter(user);
+  const v = await applyVote(u, { table: "feed_votes", key: "post_id", id, authorId: r.author_id }, cleanDir(dir, on), "post");
+  const c = v.changed ? await recountPost(id) : r;
+  return { vote: v.vote, voted: v.vote === 1, counted: v.counted, score: c.score, ups: c.ups, downs: c.downs };
+}
+
+/** Vote on a comment (same rules). -> {vote, score, ups, downs, counted} */
+async function voteComment(user, cid, dir) {
+  const c = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [String(cid || "")]))[0];
+  if (!c || c.deleted_at) throw new Refuse(404, "No such comment.");
+  const p = await getRow(c.post_id);
+  if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
+  const u = await voter(user);
+  const v = await applyVote(u, { table: "feed_comment_votes", key: "comment_id", id: c.id, authorId: c.author_id, postId: c.post_id }, cleanDir(dir), "comment");
+  const n = v.changed ? await recountComment(c.id) : c;
+  return { vote: v.vote, counted: v.counted, score: n.score, ups: n.ups, downs: n.downs };
 }
 
 // ── comments (one level of replies) ──
-async function comments(postId, viewer) {
+const CSORTS = Object.freeze(["best", "top", "new", "controversial"]);
+const cleanCSort = (s) => (CSORTS.includes(s) ? s : "best");
+/** Comparator for a comment sort (best = Wilson lower bound, then older first). */
+function commentOrder(sort) {
+  const s = cleanCSort(sort);
+  if (s === "new") return (a, b) => b.created - a.created;
+  if (s === "top") return (a, b) => b.score - a.score || b.ups - a.ups || a.created - b.created;
+  if (s === "controversial") return (a, b) => controversy(b.ups, b.downs) - controversy(a.ups, a.downs) || (b.ups + b.downs) - (a.ups + a.downs) || b.created - a.created;
+  return (a, b) => wilson(b.ups, b.downs) - wilson(a.ups, a.downs) || b.score - a.score || a.created - b.created;
+}
+
+/** A post's comments, threaded one level, each level sorted by `sort` (best|top|new|controversial). */
+async function comments(postId, viewer, sort = "best") {
   await init();
   const rows = await getQuery("SELECT * FROM feed_comments WHERE post_id = ? ORDER BY created", [postId]);
   const A = await authors(rows.map((r) => r.author_id));
+  const mine = viewer && viewer.userId
+    ? new Map((await getQuery("SELECT comment_id, value FROM feed_comment_votes WHERE post_id = ? AND user_id = ?", [postId, viewer.userId])).map((v) => [v.comment_id, v.value > 0 ? 1 : -1]))
+    : new Map();
   const all = rows.map((c) => ({ id: c.id, parent: c.parent_id, body: c.deleted_at ? "" : c.body, deleted: !!c.deleted_at, created: c.created, edited: c.edited,
     author: c.deleted_at ? null : A.get(c.author_id) || { username: "[gone]", display: "[deleted account]" },
+    ups: c.ups || 0, downs: c.downs || 0, score: c.score || 0, myVote: mine.get(c.id) || 0,
     mine: !!(viewer && viewer.userId === c.author_id && !c.deleted_at), replies: [] }));
   const top = [], byId = new Map(all.map((c) => [c.id, c]));
   for (const c of all) {
     if (c.parent && byId.has(c.parent)) byId.get(c.parent).replies.push(c);
     else top.push(c);
   }
+  const cmp = commentOrder(sort);
   // a deleted comment with no replies just goes away
-  return top.filter((c) => !c.deleted || c.replies.some((r) => !r.deleted)).map((c) => ({ ...c, replies: c.replies.filter((r) => !r.deleted) }));
+  return top.filter((c) => !c.deleted || c.replies.some((r) => !r.deleted)).sort(cmp)
+    .map((c) => ({ ...c, replies: c.replies.filter((r) => !r.deleted).sort(cmp) }));
 }
 
 async function comment(user, postId, { body, parent } = {}) {
   const p = await getRow(postId);
   if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
   const u = await account(user && user.userId);
+  if (p.locked_at && !(await canLock(u, p.id))) throw new Refuse(403, "Comments on this post are locked.");
   const roomIds = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [postId])).map((r) => r.room_id);
   const refusal = await postRefusal(u, roomIds);
   if (refusal) throw new Refuse(refusal.status, refusal.message.replace("to post", "to comment"));
@@ -606,8 +887,11 @@ async function comment(user, postId, { body, parent } = {}) {
     if (par.parent_id) par = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [par.parent_id]))[0] || par;   // replies stay one level deep
   }
   const id = newId(10);
+  const t = NOW();
   await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created) VALUES (?, ?, ?, ?, ?, ?)",
-                 [id, postId, par ? par.id : null, u.userId, text, NOW()]);
+                 [id, postId, par ? par.id : null, u.userId, text, t]);
+  await runQuery("INSERT OR IGNORE INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, 1, 1, ?, ?)", [id, postId, u.userId, t, t]);
+  await recountComment(id);
   await recount(postId);
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;
@@ -637,7 +921,7 @@ async function editComment(user, id, body) {
   return true;
 }
 /** Author, site staff, or the owner of a room the post is in. */
-async function removeComment(user, id) {
+async function removeComment(user, id, reason) {
   const c = (await getQuery("SELECT * FROM feed_comments WHERE id = ?", [String(id)]))[0];
   if (!c || c.deleted_at) throw new Refuse(404, "No such comment.");
   let ok = user && (user.userId === c.author_id || isStaff(user));
@@ -647,9 +931,20 @@ async function removeComment(user, id) {
     }
   }
   if (!ok) throw new Refuse(403, "You can't delete that comment.");
-  await runQuery("UPDATE feed_comments SET deleted_at = ?, deleted_by = ? WHERE id = ?", [NOW(), user.userId === c.author_id ? "author" : user.username, c.id]);
+  const own = user.userId === c.author_id;
+  await runQuery("UPDATE feed_comments SET deleted_at = ?, deleted_by = ? WHERE id = ?", [NOW(), own ? "author" : user.username, c.id]);
   await runQuery("UPDATE feed_reports SET resolved_at = ?, resolved_by = ?, action = 'deleted' WHERE comment_id = ? AND resolved_at IS NULL", [NOW(), user.username, c.id]);
   await recount(c.post_id);
+  if (!own) {
+    const why = cleanLine(reason, 200);
+    await notify(c.author_id, { title: "Your comment was removed", body: `"${cleanLine(c.body, 80)}" was removed by a moderator${why ? ": " + why : "."}`,
+                                link: `/feed/p/${c.post_id}`, ref: "feed-crm:" + c.id });
+    if (!isStaff(user)) {
+      for (const r of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [c.post_id])) {
+        if (await rooms.canManage(user, r.room_id)) await rooms.event(r.room_id, "feed-comment-remove", user.username, `${c.id} on ${c.post_id}${why ? ": " + why : ""}`);
+      }
+    }
+  }
   return true;
 }
 
@@ -821,9 +1116,206 @@ async function sweep(media) {
   return { purged: dead.length, orphans: orphans.length, tmp };
 }
 
+// ── room moderation (1.99bx): owners (rooms.canManage = the room's owner, or site staff) on THEIR room ──
+// Room-scoped (only the room in question changes): pin (max 3), room NSFW mark, hide in the room pending
+// review, approve / reject a pending post, remove / restore, the room's report queue, bans, settings and
+// approved posters. Post-wide (comments are shared by every place a post shows): lock comments - an owner
+// only when the post lives in rooms they manage and NOT on the main feed; removing a comment on a post
+// in their room (as in 1.99bw), with an optional reason in the author's inbox. Every action -> room_events.
+const WHO = Object.freeze(["everyone", "linked", "followers", "approved"]);
+const ROOM_DEFAULTS = Object.freeze({ who: "everyone", approval: false, per_day: 0 });
+function cleanRoomSettings(c) {
+  const o = { ...ROOM_DEFAULTS };
+  if (c && WHO.includes(c.who)) o.who = c.who;
+  if (c && c.approval != null) o.approval = c.approval === true || c.approval === 1 || c.approval === "1" || c.approval === "on" || c.approval === "true";
+  if (c && c.per_day != null && c.per_day !== "") { const n = Math.floor(Number(c.per_day)); if (Number.isFinite(n)) o.per_day = Math.min(1000, Math.max(0, n)); }
+  return o;
+}
+async function roomSettings(roomId) {
+  await init();
+  let c = {};
+  try { c = JSON.parse((await kvGet("room:" + roomId)) || "{}"); } catch (e) { c = {}; }
+  return cleanRoomSettings(c);
+}
+/** The Following feature (another module) can tell us who follows a room; until then "followers" = approved posters. */
+let followerCheck = null;
+function setFollowerCheck(fn) { followerCheck = typeof fn === "function" ? fn : null; }
+async function isRoomMember(userId, roomId) {
+  return !!(await getQuery("SELECT 1 FROM feed_room_members WHERE room_id = ? AND user_id = ?", [roomId, userId]))[0];
+}
+/** null when `u` may post in `roomId` under the room's own rules (owner + staff always may). */
+async function roomPostRefusal(u, roomId) {
+  if (!u || await rooms.canManage(u, roomId)) return null;
+  const S = await roomSettings(roomId);
+  const R = rooms.getCached(roomId);
+  const name = R ? R.title : roomId;
+  if (S.who === "linked" && !u.camfrogUsername) return { status: 403, message: `${name} takes posts from linked Camfrog accounts - type !verify in a room with Pepe.` };
+  if (S.who === "followers") {
+    const ok = followerCheck ? await followerCheck(u.userId, roomId) : false;
+    if (!ok && !(await isRoomMember(u.userId, roomId))) return { status: 403, message: `Only ${name}'s followers can post there.` };
+  }
+  if (S.who === "approved" && !(await isRoomMember(u.userId, roomId))) return { status: 403, message: `Only approved posters can post in ${name} - ask the room owner.` };
+  if (S.per_day > 0) {
+    const n = (await getQuery(`SELECT COUNT(*) AS n FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
+                                WHERE pr.room_id = ? AND p.author_id = ? AND p.created > ?`, [roomId, u.userId, NOW() - 86400e3]))[0].n;
+    if (n >= S.per_day) return { status: 429, message: `${name} allows ${S.per_day} post${S.per_day === 1 ? "" : "s"} a day per person.` };
+  }
+  return null;
+}
+/** Lock / unlock: staff anywhere; a room owner only if every place the post shows is a room they manage. */
+async function canLock(user, postId) {
+  if (!user || !user.userId) return false;
+  if (isStaff(user)) return true;
+  const p = await getRow(postId);
+  if (!p || p.global) return false;
+  const placed = await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [postId]);
+  if (!placed.length) return false;
+  for (const r of placed) if (!(await rooms.canManage(user, r.room_id))) return false;
+  return true;
+}
+async function placement(postId, roomId) {
+  return (await getQuery("SELECT * FROM feed_post_rooms WHERE post_id = ? AND room_id = ?", [String(postId || ""), String(roomId || "")]))[0] || null;
+}
+/**
+ * One owner action on their room's feed. op: pin|unpin|nsfw|unnsfw|hide|unhide|approve|reject|remove|restore|
+ * lock|unlock|dismiss|settings|member-add|member-remove. -> {ok, ...}
+ */
+async function roomMod(user, roomId, op, a = {}) {
+  await init();
+  roomId = String(roomId || "");
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this room's owner can do that.");
+  const t = NOW(), who = user.username;
+  const needPlace = async () => {
+    const pl = await placement(a.post, roomId);
+    if (!pl) throw new Refuse(404, "That post isn't in this room.");
+    return pl;
+  };
+  const log = (what, detail) => rooms.event(roomId, "feed-" + what, who, detail);
+  switch (op) {
+    case "pin": {
+      await needPlace();
+      const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_post_rooms WHERE room_id = ? AND pinned_at IS NOT NULL AND post_id != ? AND removed_at IS NULL", [roomId, a.post]))[0].n;
+      if (n >= MAX_PINS) throw new Refuse(409, `You can pin ${MAX_PINS} posts - unpin one first.`);
+      await runQuery("UPDATE feed_post_rooms SET pinned_at = ?, pinned_by = ? WHERE post_id = ? AND room_id = ?", [t, who, a.post, roomId]);
+      await log("pin", a.post); return { ok: true };
+    }
+    case "unpin":
+      await needPlace();
+      await runQuery("UPDATE feed_post_rooms SET pinned_at = NULL, pinned_by = NULL WHERE post_id = ? AND room_id = ?", [a.post, roomId]);
+      await log("unpin", a.post); return { ok: true };
+    case "nsfw": case "unnsfw":
+      await needPlace();
+      await runQuery("UPDATE feed_post_rooms SET nsfw = ? WHERE post_id = ? AND room_id = ?", [op === "nsfw" ? 1 : null, a.post, roomId]);
+      await log(op, a.post); return { ok: true };
+    case "hide": case "unhide":
+      await needPlace();
+      await runQuery("UPDATE feed_post_rooms SET hidden_at = ?, hidden_by = ? WHERE post_id = ? AND room_id = ?", [op === "hide" ? t : null, op === "hide" ? who : null, a.post, roomId]);
+      if (op === "hide") await markDone(roomId, a.post, "", "hidden", who);
+      await log(op, a.post); return { ok: true };
+    case "approve": {
+      const pl = await needPlace();
+      if (!pl.pending) return { ok: true, already: true };
+      await runQuery("UPDATE feed_post_rooms SET pending = 0, approved_by = ? WHERE post_id = ? AND room_id = ?", [who, a.post, roomId]);
+      if (pl.pending === 1) await queueMention(roomId, a.post);
+      const p = await getRow(a.post);
+      if (p) await notify(p.author_id, { title: "Your post was approved", body: `It's live in ${(rooms.getCached(roomId) || {}).title || roomId}.`, link: `/feed/p/${p.id}`, ref: "feed-ok:" + p.id + ":" + roomId });
+      await log("approve", a.post); return { ok: true };
+    }
+    case "reject": {
+      await needPlace();
+      await runQuery("UPDATE feed_post_rooms SET pending = 0, removed_at = ?, removed_by = ? WHERE post_id = ? AND room_id = ?", [t, "rejected:" + who, a.post, roomId]);
+      const p = await getRow(a.post);
+      const why = cleanLine(a.reason, 200);
+      if (p) await notify(p.author_id, { title: "Your post wasn't approved", body: `${(rooms.getCached(roomId) || {}).title || roomId} didn't take it${why ? ": " + why : "."}`, link: `/feed/p/${p.id}`, ref: "feed-no:" + p.id + ":" + roomId });
+      await log("reject", a.post + (why ? ": " + why : "")); return { ok: true };
+    }
+    case "remove": { await removeFromRoom(user, a.post, roomId); await markDone(roomId, a.post, "", "removed", who); return { ok: true }; }
+    case "restore": { await restoreToRoom(user, a.post, roomId); return { ok: true }; }
+    case "lock": case "unlock": {
+      await needPlace();
+      if (!(await canLock(user, a.post))) throw new Refuse(403, "This post is on the main feed or in other rooms too - only an admin can lock it.");
+      await runQuery("UPDATE feed_posts SET locked_at = ?, locked_by = ? WHERE id = ?", [op === "lock" ? t : null, op === "lock" ? who : null, a.post]);
+      await log(op, a.post); return { ok: true };
+    }
+    case "dismiss":
+      await needPlace();
+      await markDone(roomId, a.post, a.comment ? String(a.comment) : "", "dismissed", who);
+      await log("dismiss", a.post + (a.comment ? " comment " + a.comment : "")); return { ok: true };
+    case "settings": {
+      const S = cleanRoomSettings({ ...(await roomSettings(roomId)), ...(a.settings || {}) });
+      await kvSet("room:" + roomId, JSON.stringify(S));
+      await log("settings", JSON.stringify(S)); return { ok: true, settings: S };
+    }
+    case "member-add": {
+      const u = await rooms.findUser(a.user);
+      if (!u) throw new Refuse(404, `No single PATV account named "${cleanLine(a.user, 40)}".`);
+      await runQuery("INSERT OR REPLACE INTO feed_room_members (room_id, user_id, username, by, at) VALUES (?, ?, ?, ?, ?)", [roomId, u.userId, u.username, who, t]);
+      await log("member-add", u.username); return { ok: true, user: { userId: u.userId, username: u.username } };
+    }
+    case "member-remove":
+      await runQuery("DELETE FROM feed_room_members WHERE room_id = ? AND user_id = ?", [roomId, String(a.userId || "")]);
+      await log("member-remove", String(a.userId || "")); return { ok: true };
+    default: throw new Refuse(400, "Unknown action.");
+  }
+}
+async function markDone(roomId, postId, commentId, action, by) {
+  await runQuery(`INSERT INTO feed_room_report_done (room_id, post_id, comment_id, at, by, action) VALUES (?, ?, ?, ?, ?, ?)
+                  ON CONFLICT(room_id, post_id, comment_id) DO UPDATE SET at = excluded.at, by = excluded.by, action = excluded.action`,
+                 [roomId, postId, commentId || "", NOW(), by, action]);
+}
+/**
+ * The room's report queue: open reports (newer than the room's own dismiss / action) on posts placed in the
+ * room, grouped per post and per comment. Admin resolutions close them too. -> [{post, comment, reasons: {label: n}, count, notes, last}]
+ */
+async function roomReports(roomId) {
+  await init();
+  const rows = await getQuery(`SELECT r.*, d.at AS done_at FROM feed_reports r
+      JOIN feed_post_rooms pr ON pr.post_id = r.post_id AND pr.room_id = ? AND pr.removed_at IS NULL
+      JOIN feed_posts p ON p.id = r.post_id AND p.deleted_at IS NULL
+      LEFT JOIN feed_room_report_done d ON d.room_id = pr.room_id AND d.post_id = r.post_id AND d.comment_id = COALESCE(r.comment_id, '')
+      WHERE r.resolved_at IS NULL AND (d.at IS NULL OR r.created > d.at) ORDER BY r.created DESC LIMIT 500`, [roomId]);
+  const groups = new Map();
+  for (const r of rows) {
+    const k = r.post_id + "|" + (r.comment_id || "");
+    if (!groups.has(k)) groups.set(k, { postId: r.post_id, commentId: r.comment_id || null, reasons: {}, count: 0, notes: [], last: 0 });
+    const g = groups.get(k);
+    const label = REASONS[r.reason] || r.reason;
+    g.reasons[label] = (g.reasons[label] || 0) + 1;
+    g.count++;
+    if (r.note && g.notes.length < 5) g.notes.push(r.note);
+    g.last = Math.max(g.last, r.created);
+  }
+  const list = [...groups.values()];
+  const posts = new Map((await decorate(await getQuery(`SELECT * FROM feed_posts WHERE id IN (${list.map(() => "?").join(",") || "''"})`, list.map((g) => g.postId)),
+                                        { class: "Admin", userId: "_" }, { ctxRoom: roomId })).map((p) => [p.id, p]));
+  const cids = list.filter((g) => g.commentId).map((g) => g.commentId);
+  const C = cids.length ? await getQuery(`SELECT c.id, c.body, c.deleted_at, u.username FROM feed_comments c LEFT JOIN users u ON u.userId = c.author_id WHERE c.id IN (${cids.map(() => "?").join(",")})`, cids) : [];
+  return list.filter((g) => posts.has(g.postId)).map((g) => ({ ...g, post: posts.get(g.postId), comment: g.commentId ? C.find((c) => c.id === g.commentId) || null : null }))
+    .filter((g) => !g.comment || !g.comment.deleted_at).sort((a, b) => b.count - a.count || b.last - a.last);
+}
+/** Posts waiting for approval in a room (oldest first). */
+async function roomPending(roomId, viewer) {
+  const rows = await getQuery(`SELECT p.* FROM feed_posts p JOIN feed_post_rooms pr ON pr.post_id = p.id AND pr.room_id = ?
+                               WHERE pr.pending > 0 AND pr.removed_at IS NULL AND p.deleted_at IS NULL ORDER BY p.created LIMIT 100`, [roomId]);
+  return decorate(rows, viewer, { ctxRoom: roomId });
+}
+async function roomMembers(roomId) {
+  await init();
+  return getQuery("SELECT * FROM feed_room_members WHERE room_id = ? ORDER BY at DESC", [roomId]);
+}
+/** The room's feed audit trail (room_events rows starting feed-). */
+async function roomAudit(roomId, limit = 100) {
+  await init();
+  return getQuery("SELECT * FROM room_events WHERE room_id = ? AND what LIKE 'feed-%' ORDER BY ts DESC LIMIT ?", [roomId, limit]);
+}
+
 module.exports = {
+  roomMod, roomSettings, roomPostRefusal, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, account, isNewAccount, usedBytes,
-  list, get, getRow, decorate, canModerate, create, edit, remove, removeFromRoom, restoreToRoom, adminSet, vote,
+  list, get, getRow, decorate, canModerate, create, edit, remove, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
+  hotRank, controversy, wilson, rankSpec, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
+  downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   setRestricted, mentionOn, setMention, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,

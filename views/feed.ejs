@@ -1,11 +1,11 @@
 <%- include('layout', { title: tab === 'following' ? 'Following — feed' : room ? room.title + ' — feed' : 'Feed', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=1">
+<link rel="stylesheet" href="/public/css/feed.css?v=2">
 <link rel="stylesheet" href="/public/css/stories.css?v=1">
 <%
   // 1.99bz: tabs = Posts | Following. Pepe's clips & snaps are the story strip on top (no separate tab;
   // ?tab=captures redirects here). Room filter, tabs, sort and pager swap #fdTop/#fdList in place
   // (public/js/feed-composer.js) so the composer's draft is never lost.
-  const base = { tab: tab === 'following' ? 'following' : '', room: room ? room.slug : '', sort: sort === 'hot' ? '' : sort, t: sort === 'top' ? top : '', by: author ? author.username : '' };
+  const base = { tab: tab === 'following' ? 'following' : '', room: room ? room.slug : '', sort: sort === 'hot' ? '' : sort, t: fx.TIMED.has(sort) ? top : '', by: author ? author.username : '' };
   const q = (o) => { const x = Object.assign({}, base, o); Object.keys(x).forEach((k) => { if (!x[k]) delete x[k]; }); const s = new URLSearchParams(x).toString(); return '/feed' + (s ? '?' + s : ''); };
   const here = q({});
 %>
@@ -34,12 +34,7 @@
         <p class="login">⭐ Follow rooms and people to get a feed of just their posts. <a href="/login?next=<%= encodeURIComponent(here) %>">Sign in</a> to see yours.</p>
       <% } else { %>
         <% if (tab === 'following') { %><%- include('partials/following-panel', { follow, here }) %><% } %>
-        <div class="fd-sort" aria-label="Sort">
-          <a data-swap class="<%= sort === 'hot' ? 'on' : '' %>" href="<%= q({ sort: '', t: '', p: '' }) %>">🔥 Hot</a>
-          <a data-swap class="<%= sort === 'new' ? 'on' : '' %>" href="<%= q({ sort: 'new', t: '', p: '' }) %>">🆕 New</a>
-          <a data-swap class="<%= sort === 'top' ? 'on' : '' %>" href="<%= q({ sort: 'top', p: '' }) %>">🏆 Top</a>
-          <% if (sort === 'top') { ['day', 'week', 'month', 'all'].forEach((w) => { %><a data-swap class="sm<%= top === w ? ' on' : '' %>" href="<%= q({ sort: 'top', t: w, p: '' }) %>"><%= w === 'all' ? 'all time' : 'this ' + w %></a><% }) } %>
-        </div>
+        <%- include('partials/feed-sort', { fx, sort, top, swap: true, href: (s, t) => q({ sort: s === 'hot' ? '' : s, t: t || '', p: '' }) }) %>
         <% if (!posts.length) { %>
           <p class="empty"><%= page > 1 ? 'No more posts.' : tab === 'following' ? ((follow && (follow.rooms.length || follow.people.length)) ? 'Nothing new from the people and rooms you follow.' : 'You don\'t follow anyone yet — tap “+ Follow” on a room, a profile or a post\'s author.') : 'Nothing posted here yet — be the first.' %></p>
         <% } else { %>

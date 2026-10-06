@@ -49,7 +49,64 @@ function ago(ms, now = Date.now()) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 const fileUrl = (name) => (name && media.FILE_RE.test(name) ? "/feed/f/" + name : null);
-const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs };
+
+// ── one icon set for every post / comment control (24-unit grid, stroke = currentColor) ──
+const ICON_PATHS = {
+  up: '<path d="M12 4 4.5 12.5H9V20h6v-7.5h4.5Z"/>',
+  down: '<path d="M12 20 4.5 11.5H9V4h6v7.5h4.5Z"/>',
+  comment: '<path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.4-4.4A7.5 7.5 0 1 1 20 11.5Z"/>',
+  share: '<path d="M12 15V3.5M7.5 8 12 3.5 16.5 8"/><path d="M5 12.5V19a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-6.5"/>',
+  more: '<circle cx="5.5" cy="12" r="1.4" class="f"/><circle cx="12" cy="12" r="1.4" class="f"/><circle cx="18.5" cy="12" r="1.4" class="f"/>',
+  edit: '<path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M9 7V4.5h6V7"/><path d="m6 7 1 13h10l1-13"/>',
+  flag: '<path d="M5 21V4M5 4h12l-2.5 4.5L17 13H5"/>',
+  nsfw: '<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>',
+  hide: '<path d="M3 12s3.5-6.5 9-6.5S21 12 21 12s-3.5 6.5-9 6.5S3 12 3 12Z"/><circle cx="12" cy="12" r="2.5"/><path d="M4 4l16 16"/>',
+  show: '<path d="M3 12s3.5-6.5 9-6.5S21 12 21 12s-3.5 6.5-9 6.5S3 12 3 12Z"/><circle cx="12" cy="12" r="2.5"/>',
+  remove: '<circle cx="12" cy="12" r="8.5"/><path d="M8 12h8"/>',
+  restore: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  reply: '<path d="M10 8V4.5L3.5 11 10 17.5V14c5 0 8 1.5 10.5 5-.8-5.5-4-10.2-10.5-11Z"/>',
+  hot: '<path d="M12 21c3.9 0 6.5-2.6 6.5-6.2 0-3.6-2.6-5.3-3.8-8.3-1 1.9-2 2.7-3 2.7.2-2.6-.8-4.8-2.7-6.2.1 3.7-4.5 6.2-4.5 11.8C4.5 18.4 8.1 21 12 21Z"/>',
+  new: '<path d="M12 3.5 14 10l6.5 2-6.5 2-2 6.5-2-6.5-6.5-2 6.5-2Z"/>',
+  top: '<path d="M4 20h16M7 16.5V12M12 16.5V6.5M17 16.5V9.5"/>',
+  controversial: '<path d="M13.5 3 5 13.5h6L10 21l9-10.5h-6Z"/>',
+  rising: '<path d="m3.5 17 6-6 4 4 7-7.5"/><path d="M15 7.5h5.5V13"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  back: '<path d="M15 5 8 12l7 7"/>',
+  chevron: '<path d="m7 10 5 5 5-5"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0v3"/>',
+  unlock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 6.8-1.2"/>',
+  pin: '<path d="M9 3.5h6l-1 6 3.5 3.5h-11L10 9.5Z"/><path d="M12 13v7.5"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  shield: '<path d="M12 3 5 6v5.5c0 4.5 3 8 7 9.5 4-1.5 7-5 7-9.5V6Z"/>',
+};
+/** Inline SVG (a fixed string per name - nothing user-supplied goes in). */
+function icon(name, cls = "") {
+  const p = ICON_PATHS[name];
+  if (!p) return "";
+  return `<svg class="ic${cls ? " " + cls : ""}" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+}
+/** A stable hue (0-359) for an author's initial bubble. */
+function hue(s) {
+  let h = 0;
+  for (const ch of String(s || "")) h = (h * 31 + ch.codePointAt(0)) >>> 0;
+  return h % 360;
+}
+const initial = (s) => (Array.from(String(s || "?").replace(/^[^\p{L}\p{N}]+/u, ""))[0] || "?").toUpperCase();
+/** Compact number: 999, 1.2k, 15k, 1.1m. */
+function num(n) {
+  const v = Number(n) || 0, a = Math.abs(v);
+  if (a < 1000) return String(v);
+  if (a < 10000) return (v / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  if (a < 1e6) return Math.round(v / 1000) + "k";
+  return (v / 1e6).toFixed(1).replace(/\.0$/, "") + "m";
+}
+const SORT_LABELS = { hot: "Hot", new: "New", top: "Top", controversial: "Controversial", rising: "Rising" };
+const WINDOW_LABELS = { hour: "Past hour", day: "Today", week: "This week", month: "This month", year: "This year", all: "All time" };
+const CSORT_LABELS = { best: "Best", top: "Top", new: "New", controversial: "Controversial" };
+const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs, icon, hue, initial, num, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+             SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
 // 1.99bz: stories.js owns them (privacy: anonymous subjects, missing files skipped) ──
@@ -62,8 +119,8 @@ async function viewerOf(req) {
   const a = await store.account(req.user.userId);
   return a ? { ...a, display: a.displayname || a.username } : null;
 }
-const SORTS = new Set(["new", "top", "hot"]);
-const TOPS = new Set(["day", "week", "month", "all"]);
+const SORTS = new Set(store.SORTS);
+const TOPS = new Set(Object.keys(store.WINDOWS));
 
 /** Everything the composer needs (rooms to pick, limits, what this viewer may do). */
 async function composerFor(viewer, roomId) {
@@ -84,17 +141,20 @@ async function roomFeed(roomId, reqUser, query = {}) {
   await store.init();
   const viewer = reqUser && reqUser.userId ? await viewerOf({ user: reqUser }) : null;
   const sort = SORTS.has(query.fsort) ? query.fsort : "new";
+  const top = TOPS.has(query.ft) ? query.ft : "week";
   const page = Math.max(1, parseInt(query.fp, 10) || 1);
-  const L = await store.list({ room: roomId, sort, page, viewer, limit: 10 });
+  const L = await store.list({ room: roomId, sort, top, page, viewer, limit: 10 });
   const mod = viewer ? { admin: store.isStaff(viewer), owner: await rooms.canManage(viewer, roomId) } : { admin: false, owner: false };
   return {
-    room: roomId, sort, page, posts: L.posts, more: L.more, viewer, mod,
+    room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod,
+    slug: (rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId),
     caps: viewer ? await captures(roomId, 24) : [],
     // 1.99bz: signed-out viewers get the room's story circle (sign-in prompt), never the pictures
     storyRooms: viewer ? [] : await stories.forViewer(null, { room: roomId }),
     follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
     mention: mod.owner ? await store.mentionOn(roomId) : null,
+    queue: mod.owner || mod.admin ? (await store.roomReports(roomId)).length + (await store.roomPending(roomId, viewer)).length : 0,
   };
 }
 
@@ -176,21 +236,24 @@ function register(app, { addUser, isBotToken }) {
   app.get("/feed/p/:id", addUser, async (req, res) => {
     try {
       const viewer = await viewerOf(req);
-      const p = await store.get(req.params.id, viewer);
+      const p = await store.get(req.params.id, viewer, { detail: true });
       const staff = store.isStaff(viewer);
-      if (!p || (p.deleted && !staff) || (p.hidden && !staff && !p.mine)) {
+      const modRooms = new Set();
+      if (p && viewer) for (const r of p.roomsAll) if (await rooms.canManage(viewer, r.id)) modRooms.add(r.id);
+      // only waiting for approval / hidden / taken out everywhere it was posted: its author, those rooms' owners and staff
+      const shownSomewhere = p && (p.global || p.roomsAll.some((r) => !r.removed && !r.pending && !r.hidden));
+      if (!p || (p.deleted && !staff) || (p.hidden && !staff && !p.mine) || (!shownSomewhere && !staff && !p.mine && !modRooms.size)) {
         return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "Post not found",
           message: "It was deleted, or it never existed.", title: "Post not found" });
       }
-      const C = await store.comments(p.id, viewer);
-      const modRooms = new Set();
-      if (viewer) for (const r of p.roomsAll) if (await rooms.canManage(viewer, r.id)) modRooms.add(r.id);
+      const csort = store.cleanCSort(req.query.csort);
+      const C = await store.comments(p.id, viewer, csort);
       const desc = (p.nsfw ? "NSFW post" : (p.body || (p.link && p.link.title) || "")).replace(/\s+/g, " ").slice(0, 180) || "A post on the PATV feed";
       res.locals.og = { title: (p.nsfw ? "[NSFW] " : "") + (p.title || (p.link && p.link.title) || `Post by ${p.author.display}`).slice(0, 90) + " — PATV feed",
                         description: desc, image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent((p.title || "PATV feed").slice(0, 60)),
                         url: res.locals.ogBase + "/feed/p/" + p.id };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
-      res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, fx, embeds, host: viewOpts(req).host, modRooms,
+      res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
                            reasons: store.REASONS, staff });
     } catch (e) {
       console.error("[feed] post page:", e);
@@ -443,23 +506,59 @@ function register(app, { addUser, isBotToken }) {
   });
   postAct("edit", async (v, id, b) => { await store.edit(v, id, b); return {}; });
   postAct("delete", async (v, id, b) => { await store.remove(v, id, b.reason); return {}; });
-  postAct("vote", async (v, id, b) => store.vote(v, id, b.on === undefined ? undefined : !!b.on));
+  // {dir: 1 | -1 | 0} sets the vote; {} toggles the upvote and {on} sets it (the 1.99bw API)
+  postAct("vote", async (v, id, b) => store.vote(v, id, b.dir, b.on === undefined ? undefined : !!b.on));
   postAct("remove-room", async (v, id, b) => { await store.removeFromRoom(v, id, String(b.room || "")); return {}; });
   postAct("restore-room", async (v, id, b) => { await store.restoreToRoom(v, id, String(b.room || "")); return {}; });
   postAct("admin", async (v, id, b) => {
     const patch = {};
     if ("nsfw" in b) patch.nsfw = b.nsfw === null ? null : !!b.nsfw;
     if ("hidden" in b) patch.hidden = !!b.hidden;
+    if ("locked" in b) patch.locked = !!b.locked;
     await store.adminSet(v, id, patch);
     return {};
   });
   postAct("report", async (v, id, b) => store.report(v, { post: id, comment: b.comment || null, reason: b.reason, note: b.note }));
   postAct("comments", async (v, id, b) => store.comment(v, id, { body: b.body, parent: b.parent }));
+  app.post("/api/feed/comments/:id/vote", addUser, guard(false), async (req, res) => {
+    try { res.json({ ok: true, ...(await store.voteComment(await viewerOf(req), req.params.id, (req.body || {}).dir)) }); } catch (e) { fail(res, e); }
+  });
   app.post("/api/feed/comments/:id/edit", addUser, guard(false), async (req, res) => {
     try { await store.editComment(await viewerOf(req), req.params.id, (req.body || {}).body); res.json({ ok: true }); } catch (e) { fail(res, e); }
   });
   app.post("/api/feed/comments/:id/delete", addUser, guard(false), async (req, res) => {
-    try { await store.removeComment(await viewerOf(req), req.params.id); res.json({ ok: true }); } catch (e) { fail(res, e); }
+    try { await store.removeComment(await viewerOf(req), req.params.id, (req.body || {}).reason); res.json({ ok: true }); } catch (e) { fail(res, e); }
+  });
+
+  // ── room owners: their room's feed (1.99bx). Owner or staff, checked per room in feedstore.roomMod ──
+  const roomOf = async (slug) => (await rooms.get(String(slug || ""))) || (await require("./roomsweb").resolveRoom(String(slug || "")));
+  app.post("/api/rooms/:slug/feed/mod", addUser, guard(false), async (req, res) => {
+    try {
+      const R = await roomOf(req.params.slug);
+      if (!R) return res.status(404).json({ ok: false, error: "No such room." });
+      const b = req.body || {};
+      res.json(await store.roomMod(await viewerOf(req), R.id, String(b.op || ""), { post: b.post ? String(b.post) : null, comment: b.comment || null,
+                                                                                  reason: b.reason, settings: b.settings, user: b.user, userId: b.userId }));
+    } catch (e) { fail(res, e); }
+  });
+  app.get("/rooms/:slug/feed/mod", addUser, async (req, res) => {
+    try {
+      const viewer = await viewerOf(req);
+      const R = await roomOf(req.params.slug);
+      if (!R) return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "No such room", message: "That room isn't on PATV.", title: "No such room" });
+      if (!viewer) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
+      if (!(await rooms.canManage(viewer, R.id))) {
+        return res.status(403).render("notFound", { user: viewer.username, heading: "Not your room", message: "Only this room's owner (and site admins) can moderate its feed.", title: "Not your room" });
+      }
+      await store.init();
+      res.set("X-Robots-Tag", "noindex");
+      res.render("feedRoomMod", { user: viewer.username, viewer, room: R, fx, embeds, host: viewOpts(req).host,
+        reports: await store.roomReports(R.id), pending: await store.roomPending(R.id, viewer), settings: await store.roomSettings(R.id),
+        members: await store.roomMembers(R.id), bans: await store.bans(R.id), audit: await store.roomAudit(R.id), WHO: store.WHO });
+    } catch (e) {
+      console.error("[feed] room mod page:", e);
+      res.status(500).send("Something went wrong.");
+    }
   });
 
   // ── admin ──

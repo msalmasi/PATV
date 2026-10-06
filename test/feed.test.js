@@ -391,19 +391,19 @@ test("new accounts: a few posts a day, no uploads; the gap between posts", async
   await store.setConfig({ post_gap_secs: 0 }, "test");
 });
 
-test("votes: one per user, toggles, score cached", async () => {
+test("votes: one per user, toggles, score cached (the author's own +1 included, 1.99bx)", async () => {
   let r = await post(`/api/feed/posts/${P1}/vote`, U.bob, {});
-  assert.deepEqual(r.d, { ok: true, voted: true, score: 1 });
+  assert.deepEqual([r.d.ok, r.d.voted, r.d.vote, r.d.score], [true, true, 1, 2]);
   store._gaps.clear();
   await post(`/api/feed/posts/${P1}/vote`, U.carol, {});
   store._gaps.clear();
   r = await post(`/api/feed/posts/${P1}/vote`, U.bob, { on: true });      // a second "up" from the same user counts once
-  assert.equal(r.d.score, 2);
+  assert.equal(r.d.score, 3);
   store._gaps.clear();
   r = await post(`/api/feed/posts/${P1}/vote`, U.bob, {});                // toggle off
-  assert.deepEqual([r.d.voted, r.d.score], [false, 1]);
+  assert.deepEqual([r.d.voted, r.d.score], [false, 2]);
   const rows = await getQuery("SELECT COUNT(*) AS n FROM feed_votes WHERE post_id = ?", [P1]);
-  assert.equal(rows[0].n, 1);
+  assert.equal(rows[0].n, 2);
   assert.equal((await post(`/api/feed/posts/${P1}/vote`, null, {})).status, 401);
 });
 
@@ -411,7 +411,8 @@ test("sorting: new / top / hot", async () => {
   const t0 = Date.now();
   const mk = async (body, ageH, score) => {
     const r = await post("/api/feed/posts", U.admin, { body });
-    await runQuery("UPDATE feed_posts SET created = ?, score = ? WHERE id = ?", [t0 - ageH * 3600e3, score, r.d.id]);
+    const created = t0 - ageH * 3600e3;
+    await runQuery("UPDATE feed_posts SET created = ?, score = ?, hot = ? WHERE id = ?", [created, score, store.hotRank(score, created), r.d.id]);
     return r.d.id;
   };
   const old = await mk("old but loved", 72, 50), fresh = await mk("fresh", 0.1, 2), mid = await mk("mid", 5, 10);
@@ -419,8 +420,8 @@ test("sorting: new / top / hot", async () => {
   assert.deepEqual(await ids("new"), [fresh, mid, old]);
   assert.deepEqual(await ids("top"), [old, mid, fresh]);
   const hot = await ids("hot");
-  assert.equal(hot[0], fresh, "hot favours new posts with some votes");
-  assert.ok(store.hotScore({ score: 50, comments: 0, created: t0 - 72 * 3600e3 }, t0) < store.hotScore({ score: 2, comments: 0, created: t0 - 360e3 }, t0));
+  assert.deepEqual(hot, [mid, fresh, old], "10 votes 5 h ago beat 2 votes now; 50 votes 3 days ago are buried");
+  assert.ok(store.hotRank(50, t0 - 72 * 3600e3) < store.hotRank(2, t0 - 360e3));
 });
 
 test("comments: one level of replies, inbox notices to the author and the person replied to", async () => {

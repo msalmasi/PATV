@@ -149,7 +149,7 @@ async function setPrefs(user, { notify }) {
 function feedFilter(userId) {
   return {
     sql: `(p.author_id IN (SELECT target_id FROM follows WHERE follower = ? AND target_kind = 'user')
-           OR EXISTS (SELECT 1 FROM feed_post_rooms fr WHERE fr.post_id = p.id AND fr.removed_at IS NULL
+           OR EXISTS (SELECT 1 FROM feed_post_rooms fr WHERE fr.post_id = p.id AND fr.removed_at IS NULL AND fr.pending = 0 AND fr.hidden_at IS NULL
                       AND fr.room_id IN (SELECT target_id FROM follows WHERE follower = ? AND target_kind = 'room')))`,
     args: [userId, userId],
   };

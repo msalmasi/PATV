@@ -1,0 +1,22 @@
+<%#
+  The feed sort bar (1.99bx): Hot / New / Top / Controversial / Rising, and a time filter that only shows
+  for Top and Controversial. Reused by /feed, the room feeds (and Following / profiles).
+  Locals: fx, sort, top (time window), href(sort, t) -> url, label (aria label, optional), swap (links swap the list in place on /feed)
+%><%
+  const t_ = fx.WINDOWS.includes(top) ? top : 'week';
+  const timed_ = fx.TIMED.has(sort);
+  const sw_ = typeof swap !== 'undefined' && swap ? ' data-swap' : '';
+%>
+<nav class="fs" aria-label="<%= typeof label !== 'undefined' && label ? label : 'Sort posts' %>">
+  <div class="fs-sorts">
+    <% fx.SORTS.forEach((s) => { %><a<%- sw_ %> class="fs-pill<%= sort === s ? ' on' : '' %>" href="<%= href(s, fx.TIMED.has(s) ? t_ : '') %>"<%= sort === s ? ' aria-current=true' : '' %>><%- fx.icon(s) %><span><%= fx.SORT_LABELS[s] %></span></a><% }) %>
+  </div>
+  <% if (timed_) { %>
+    <details class="fs-time">
+      <summary aria-label="Time range: <%= fx.WINDOW_LABELS[t_] %>"><%- fx.icon('clock') %><span><%= fx.WINDOW_LABELS[t_] %></span><%- fx.icon('chevron', 'chev') %></summary>
+      <div class="fs-menu" role="menu">
+        <% fx.WINDOWS.forEach((w) => { %><a<%- sw_ %> role="menuitem" class="<%= w === t_ ? 'on' : '' %>" href="<%= href(sort, w) %>"><%= fx.WINDOW_LABELS[w] %></a><% }) %>
+      </div>
+    </details>
+  <% } %>
+</nav>

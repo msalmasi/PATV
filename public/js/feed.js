@@ -1,4 +1,4 @@
-// feed.js — the feed's browser side (1.99bv): votes,
+// feed.js — the feed's browser side (1.99bv; up/down votes, the "more" menus and room-owner tools 1.99ca): votes,
 // comments and replies, edit / delete / report, room-owner and admin buttons, NSFW reveal and
 // click-to-play embeds. Every write is a same-site JSON fetch with X-Requested-With: fetch.
 (function () {
@@ -19,6 +19,13 @@
         return d;
       });
     });
+  }
+  function fmtNum(n) {
+    var v = Number(n) || 0, a = Math.abs(v);
+    if (a < 1000) return String(v);
+    if (a < 10000) return (v / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+    if (a < 1e6) return Math.round(v / 1000) + 'k';
+    return (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'm';
   }
   function login() { location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search); }
   function postOf(el) { var a = el.closest('.fp'); return a ? a.getAttribute('data-id') : null; }
@@ -66,18 +73,35 @@
     }
     if (act === 'share') {
       var url = location.origin + b.getAttribute('data-url');
-      if (navigator.share) { navigator.share({ url: url }).catch(function () {}); return; }
-      if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { b.textContent = '✔ Link copied'; }, function () { window.prompt('Copy the link:', url); });
+      var lbl = b.querySelector('.lbl') || b;
+      if (navigator.share && /Mobi|Android/i.test(navigator.userAgent)) { navigator.share({ url: url }).catch(function () {}); return; }
+      var done = function () { lbl.textContent = 'Link copied'; b.classList.add('done'); setTimeout(function () { lbl.textContent = 'Share'; b.classList.remove('done'); }, 2000); };
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy the link:', url); });
       else window.prompt('Copy the link:', url);
       return;
     }
     if (act === 'vote') {
       if (!signed) return login();
-      b.disabled = true;
-      api('/api/feed/posts/' + id + '/vote', {}).then(function (d) {
-        b.classList.toggle('on', d.voted); b.setAttribute('aria-pressed', d.voted ? 'true' : 'false');
-        b.parentNode.querySelector('.fp-score').textContent = d.score;
-      }).catch(function (e) { alert(e.message); }).then(function () { b.disabled = false; });
+      var box = b.closest('.vote');
+      if (!box || box.classList.contains('busy') || b.disabled) return;
+      var cur = parseInt(box.getAttribute('data-v'), 10) || 0;
+      var want = parseInt(b.getAttribute('data-dir'), 10) || 0;
+      var dir = cur === want ? 0 : want;               // up -> up = none; up -> down = down
+      var kind = box.getAttribute('data-kind');
+      var vurl = kind === 'comment' ? '/api/feed/comments/' + b.closest('.cm').getAttribute('data-id') + '/vote' : '/api/feed/posts/' + id + '/vote';
+      var vs = box.querySelector('.vs');
+      var setState = function (v) {
+        box.setAttribute('data-v', String(v));
+        box.querySelector('.vb-up').setAttribute('aria-pressed', v === 1 ? 'true' : 'false');
+        box.querySelector('.vb-down').setAttribute('aria-pressed', v === -1 ? 'true' : 'false');
+      };
+      setState(dir);
+      box.classList.add('busy');
+      api(vurl, { dir: dir }).then(function (d) {
+        setState(d.vote);
+        vs.textContent = fmtNum(d.score);
+        vs.title = d.ups + ' up · ' + d.downs + ' down' + (d.counted === false ? ' · your downvote counts once your account is level 2 or has a linked Camfrog name' : '');
+      }).catch(function (e) { setState(cur); alert(e.message); }).then(function () { box.classList.remove('busy'); });
       return;
     }
     if (act === 'report' || act === 'creport') {
@@ -100,18 +124,78 @@
       api('/api/feed/posts/' + id + '/' + act, { room: b.getAttribute('data-room') }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
-    if (act === 'admin-nsfw' || act === 'admin-hide') {
+    if (act === 'admin-nsfw' || act === 'admin-hide' || act === 'admin-lock') {
       var on = b.getAttribute('data-on') === '1';
-      api('/api/feed/posts/' + id + '/admin', act === 'admin-nsfw' ? { nsfw: on } : { hidden: on }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
+      var patch = act === 'admin-nsfw' ? { nsfw: on } : act === 'admin-hide' ? { hidden: on } : { locked: on };
+      api('/api/feed/posts/' + id + '/admin', patch).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
-    if (act === 'reply') { var li = b.closest('.cm'); var f2 = li.querySelector(':scope > .cm-replyf'); if (f2) { f2.classList.toggle('hide'); f2.querySelector('textarea').focus(); } return; }
+    // room owners: their room only (the server checks the owner per room)
+    if (act === 'rmod') {
+      var op = b.getAttribute('data-op'), body = { op: op, post: id };
+      if (op === 'reject') { var rs = window.prompt('Reject this post for your room? Reason (optional, the author is told):', ''); if (rs === null) return; body.reason = rs; }
+      api('/api/rooms/' + encodeURIComponent(b.getAttribute('data-slug')) + '/feed/mod', body).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
+      return;
+    }
+    if (act === 'room-ban') {
+      var d = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting and commenting in this room.\nHow long? 1 = a day, 7 = a week, 0 = permanently', '1');
+      if (d === null) return;
+      var days = parseInt(d, 10); if (!(days >= 0)) { alert('Type a number of days (0 = permanently).'); return; }
+      var reason = window.prompt('Reason (optional):', '') || '';
+      api('/api/feed/ban', { user: b.getAttribute('data-user'), room: b.getAttribute('data-slug'), days: days, reason: reason })
+        .then(function () { alert('Banned from the room' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
+      return;
+    }
+    if (act === 'reply') {
+      var li = b.closest('.cm'); var f2 = li.querySelector(':scope > .cm-replyf');
+      if (f2) { f2.classList.toggle('hide'); if (!f2.classList.contains('hide')) f2.querySelector('textarea').focus(); }
+      return;
+    }
     if (act === 'cedit') { var li2 = b.closest('.cm'); var f3 = li2.querySelector(':scope > .cm-editf'); if (f3) f3.classList.toggle('hide'); return; }
     if (act === 'cdelete') {
-      if (!window.confirm('Delete this comment?')) return;
-      api('/api/feed/comments/' + b.closest('.cm').getAttribute('data-id') + '/delete', {}).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
+      var cm = b.closest('.cm');
+      var own = !!cm.querySelector(':scope > .cm-editf');
+      var cwhy = '';
+      if (own) { if (!window.confirm('Delete your comment?')) return; }
+      else { cwhy = window.prompt('Remove this comment. Reason (optional, the author is told):', ''); if (cwhy === null) return; }
+      api('/api/feed/comments/' + cm.getAttribute('data-id') + '/delete', { reason: cwhy }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
+  });
+
+  // the "more" menus and the time filter: one open at a time; close on an item, outside click or Escape
+  function closeMenus(except) {
+    document.querySelectorAll('details.more[open], details.fs-time[open]').forEach(function (d) { if (d !== except) d.removeAttribute('open'); });
+  }
+  document.addEventListener('toggle', function (ev) {
+    var d = ev.target;
+    if (!d.matches || !d.matches('details.more, details.fs-time') || !d.open) return;
+    closeMenus(d);
+    var m = d.querySelector('.menu, .fs-menu');
+    if (m) {
+      // open upwards near the bottom of the screen; slide left / right to stay on screen
+      d.classList.remove('up');
+      m.style.left = '';
+      var r = m.getBoundingClientRect(), vw = document.documentElement.clientWidth;
+      if (r.bottom > window.innerHeight - 8 && r.height < d.getBoundingClientRect().top) d.classList.add('up');
+      var shift = 0;
+      if (r.right > vw - 8) shift = r.right - (vw - 8);
+      if (r.left - shift < 8) shift = r.left - 8;
+      if (shift) m.style.left = (parseFloat(getComputedStyle(m).left) - shift) + 'px';
+    }
+  }, true);
+  document.addEventListener('click', function (ev) {
+    var inMenu = ev.target.closest('details.more, details.fs-time');
+    if (!inMenu) return closeMenus(null);
+    if (ev.target.closest('.menu [data-act], .menu a')) inMenu.removeAttribute('open');
+  });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') closeMenus(null); });
+
+  // comment boxes grow with their text
+  document.addEventListener('input', function (ev) {
+    var t = ev.target;
+    if (t.tagName !== 'TEXTAREA' || !t.closest('.composer')) return;
+    t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, 420) + 'px';
   });
 
   document.addEventListener('submit', function (ev) {
