@@ -221,8 +221,8 @@
       var tb = el('tbody');
       D.records.forEach(function (r) {
         tb.appendChild(el('tr', null, [
-          el('td', { text: fmtDate(r.at) }), el('td', { text: r.kind + ' ' + r.event }),
-          el('td', null, [r.ip ? el('code', { text: r.ip }) : el('span', { cls: 'mut', text: r.rawPurged ? 'deleted (90 d)' : '-' }), r.via && r.via !== 'cf' ? el('div', { cls: 'mut', text: 'via ' + r.via + ' (not Cloudflare - may be spoofed)' }) : null]),
+          el('td', { text: fmtDate(r.at) }), el('td', { text: r.kind + ' ' + r.event + (r.bot ? ' (bot-generated: Pepe)' : '') }),
+          el('td', null, [r.ip ? el('code', { text: r.ip }) : el('span', { cls: 'mut', text: r.rawPurged ? 'deleted (90 d)' : '-' }), r.via && r.via !== 'cf' && r.via !== 'bot' ?el('div', { cls: 'mut', text: 'via ' + r.via + ' (not Cloudflare - may be spoofed)' }) : null]),
           el('td', null, [r.ipKey ? el('code', { text: r.ipKey }) : '-']),
           el('td', { cls: 'ua', text: r.ua || (r.rawPurged ? 'deleted (90 d)' : '-') }),
           el('td', { text: r.lang || '-' }), el('td', { text: r.country || '-' }), el('td', { text: age(r.acctAgeDays) }),

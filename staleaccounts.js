@@ -313,6 +313,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     // ownerless ghost: an auto account with no Camfrog login, or whose "login" is really a PATV
     // account name (Pepe used to create these from "CFxxxxxxxx" names - 1.99az stopped it)
     if (f.login && SYSTEM_LOGINS.has(f.login)) f.holds.add("Pepe's own login");
+    if (f.userId === "pepe-bot") f.holds.add("Pepe's feed account");      // 1.99cg pepefeed.js (feedstore.PEPE_ID)
   }
   for (const f of F.values()) {
     f.ghost = f.isCF && (!f.login || (CF_RANDOM_LOGIN.test(f.login) && (usernames.has(f.login) || !f.cfSeen)));

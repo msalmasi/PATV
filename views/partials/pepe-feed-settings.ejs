@@ -1,0 +1,40 @@
+<%#
+  Pepe's settings for ONE feed scope (1.99cg, pepefeed.js). Locals: s (pepefeed.scopeView: settings + used + quiet + global),
+  where ("this room" | "the main feed"), url (the POST endpoint), wrap ("settings" for a room: {settings: ...}; "main" for /feed/admin),
+  admin (bool: the viewer is a site Admin), roomScope (bool)
+%><%
+  const locked_ = s.admin_lock && !admin;
+  const hours_ = [-1].concat(Array.from({ length: 24 }, (_, h) => h));
+  const hl_ = (h) => (h < 0 ? 'Off' : (h % 12 || 12) + ' ' + (h < 12 ? 'am' : 'pm'));
+  const G_ = s.global || {};
+%>
+<form class="pf-form" data-url="<%= url %>" data-wrap="<%= wrap %>">
+  <% if (locked_) { %><p class="pf-lock">A site admin has locked Pepe's settings for <%= where %> - you can see them, but not change them.</p><% } %>
+  <fieldset class="pf-grid"<%= locked_ ? ' disabled' : '' %>>
+    <label class="pf-sw"><input type="checkbox" name="respond"<%= s.respond ? ' checked' : '' %>>
+      <span>Answer when someone mentions Pepe<small>"@pepe", "pepe" as a word, or a reply to one of his posts or comments. Always within the limits below.</small></span></label>
+    <label class="pf-sw"><input type="checkbox" name="auto"<%= s.auto ? ' checked' : '' %>>
+      <span>Let Pepe take part on his own<small>He comments on fresh posts now and then and makes the odd post of his own: a room recap, a fun question, a DJ-set recap, a take on a real headline, the day's snaps.</small></span></label>
+    <div class="pf-limits">
+      <label>His posts per day<input type="number" name="posts_per_day" min="0" max="20" value="<%= s.posts_per_day %>"></label>
+      <label>His comments per day<input type="number" name="comments_per_day" min="0" max="200" value="<%= s.comments_per_day %>"></label>
+      <label>Back-and-forth per thread (his replies in one conversation)<input type="number" name="max_depth" min="1" max="20" value="<%= s.max_depth %>"></label>
+      <label>Minutes between his own actions<input type="number" name="gap_min" min="0" max="1440" value="<%= s.gap_min %>"></label>
+      <label>Quiet from (New York time)<select name="quiet_start"><% hours_.forEach((h) => { %><option value="<%= h %>"<%= s.quiet_start === h ? ' selected' : '' %>><%= hl_(h) %></option><% }) %></select></label>
+      <label>Quiet until<select name="quiet_end"><% hours_.forEach((h) => { %><option value="<%= h %>"<%= s.quiet_end === h ? ' selected' : '' %>><%= hl_(h) %></option><% }) %></select></label>
+    </div>
+    <label class="pf-sw"><input type="checkbox" name="vision"<%= s.vision ? ' checked' : '' %>>
+      <span>Let him look at pictures in posts<small>One extra AI call per picture. Off: he reads the text, the link preview and that there are pictures.</small></span></label>
+    <% if (admin && roomScope) { %>
+      <label class="pf-sw"><input type="checkbox" name="admin_lock"<%= s.admin_lock ? ' checked' : '' %>>
+        <span>Admin lock<small>The room owner can see these settings but not change them.</small></span></label>
+    <% } %>
+  </fieldset>
+  <div class="pf-use" aria-label="The last 24 hours">
+    <span>Last 24 h here: <b><%= s.used.posts %></b> post<%= s.used.posts === 1 ? '' : 's' %> · <b><%= s.used.comments %></b> comment<%= s.used.comments === 1 ? '' : 's' %></span>
+    <% if (s.quiet) { %><span>Quiet hours now</span><% } %>
+    <% if (G_.enabled === false) { %><span>Pepe is switched off on the whole feed by an admin</span><% } %>
+    <span class="mut">Site-wide caps win: <%= G_.posts_per_day %> posts · <%= G_.comments_per_day %> comments a day in total. Quiet hours pause his own activity; mentions are still answered.</span>
+  </div>
+  <div class="cm-row"><span class="fc-err" role="alert"></span><% if (!locked_) { %><button type="submit" class="btn-s">Save Pepe's settings</button><% } %></div>
+</form>

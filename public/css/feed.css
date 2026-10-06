@@ -384,3 +384,34 @@ label.fc-terms input { margin-top: 2px; accent-color: #4caf50; }
 .rm-who { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; font-size: 11.5px; }
 .rm-who span { border: 1px solid #33333b; border-radius: 999px; padding: 0 7px; color: #bbb; }
 .rm-who span.y { border-color: #2f5a32; color: #b8f0bf; }
+
+/* 1.99cg: Pepe on the feed - his avatar + bot badge, the settings cards (room owners, /feed/admin), his action log */
+.av-pepe { padding: 0; object-fit: cover; background: #1d3b20; border: 1px solid #2f5a32; box-sizing: border-box; }
+.fp-author.bot-badge { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: #d7f5b0 !important; background: #1f3a1f;
+  border: 1px solid #3f7a3a; border-radius: 999px; padding: 0 8px; line-height: 20px; max-width: none; white-space: nowrap; }
+.fp-author.bot-badge:hover { text-decoration: none; background: #26472a; }
+.pf-card .pf-grid { display: grid; gap: 10px; }
+.pf-card .pf-sw { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: #ddd; }
+.pf-card .pf-sw input { margin-top: 3px; accent-color: #4caf50; flex: none; }
+.pf-card .pf-sw small { display: block; color: #999; font-size: 12.5px; margin-top: 2px; }
+.pf-card fieldset:disabled { opacity: .55; }
+.pf-card .pf-limits { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 12px; }
+.pf-card .pf-limits label { display: grid; gap: 4px; font-size: 12.5px; color: #bbb; grid-template-columns: none; }
+.pf-card .pf-limits input, .pf-card .pf-limits select { width: 100%; box-sizing: border-box; background: #121215; color: #eee; border: 1px solid #2c2c33; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13.5px; }
+.pf-card .pf-use { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12.5px; }
+.pf-card .pf-use span { border: 1px solid #2c2c33; border-radius: 999px; padding: 1px 9px; color: #bbb; }
+.pf-card .pf-lock { font-size: 12.5px; color: #ffcc80; background: #2b2316; border: 1px solid #5a4520; border-radius: 8px; padding: 6px 10px; }
+.pf-log td { font-size: 12.5px; vertical-align: top; }
+.pf-log .a-post, .pf-log .a-comment { color: #b8f0bf; }
+.pf-log .a-refused { color: #ffab91; }
+.pf-log .a-skip { color: #9a9a9a; }
+.pf-log .del { text-decoration: line-through; color: #888; }
+.pf-card .pf-h { font-size: 14px; color: #c6e94f; margin: 14px 0 6px; }
+.pf-card h2 .av-pepe { vertical-align: -4px; }
+.pf-card fieldset.pf-grid { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pf-card .pf-limits label { grid-template-rows: 1fr auto; align-items: end; }
+.pf-card .pf-use span.mut { border: 0; padding: 0; flex-basis: 100%; color: #8a8a8a; }
+.pf-card > .sub { text-align: left; font-size: 14px; }
+.pf-card .pf-form { margin-top: 8px; display: grid; gap: 10px; }
+.pf-log .pf-note { overflow-wrap: anywhere; max-width: 46ch; font-size: 11.5px; }
+.pf-log td:nth-child(2) { min-width: 14ch; }

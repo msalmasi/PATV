@@ -1,5 +1,5 @@
 <%- include('layout', { title: (p.title || (p.link && p.link.title) || ('Post by ' + p.author.display)).slice(0, 80) + ' — PATV feed', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=3">
+<link rel="stylesheet" href="/public/css/feed.css?v=4">
 <%
   const signed = !!viewer;
   const cs = typeof csort !== 'undefined' ? csort : 'best';
@@ -10,7 +10,7 @@
     <% if (backRoom) { %><a href="/rooms/<%= encodeURIComponent(backRoom.slug) %>#feed"><%- fx.icon('back') %><%= backRoom.title %> feed</a>
     <% } else { %><a href="/feed"><%- fx.icon('back') %>Feed</a><% } %>
   </nav>
-  <%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: true, ctxRoom: null }) %>
+  <%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: true, ctxRoom: null, pepeMuted: typeof pepeMuted !== 'undefined' ? pepeMuted : false }) %>
 
   <section class="fd-comments" id="comments" aria-labelledby="cH">
     <div class="cm-top">

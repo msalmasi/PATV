@@ -1,5 +1,5 @@
 <%- include('layout', { title: 'Feed admin', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=3">
+<link rel="stylesheet" href="/public/css/feed.css?v=4">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
   const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');
@@ -98,6 +98,47 @@
   </section>
   <% } %>
 
+  <%# 1.99cg: Pepe on the feed - main-feed settings, global caps, where he's on, every action he took (pepefeed.js) %>
+  <% if (pepe) { const G = pepe.global, U = pepe.used; %>
+  <section class="fa-card pf-card" id="pepe">
+    <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe on the feed</h2>
+    <p class="sub">Account <a href="/u/<%= encodeURIComponent(pepe.account.username) %>/profile"><%= pepe.account.username %></a> · last 24 h: <b><%= U.posts %></b> posts, <b><%= U.comments %></b> comments, <b>$<%= Number(U.cost || 0).toFixed(4) %></b> of $<%= Number(G.llm_budget_usd).toFixed(2) %> LLM budget</p>
+    <% if (!isAdmin) { %><p class="mut">Only site Admins can change these.</p><% } %>
+    <h3 class="pf-h">Site-wide caps (win over every room)</h3>
+    <form class="pf-form fa-cfg" data-url="/api/feed/admin/pepe" data-wrap="global">
+      <fieldset<%= isAdmin ? '' : ' disabled' %>>
+        <label class="ck"><input type="checkbox" name="enabled"<%= G.enabled ? ' checked' : '' %>> Pepe is on (off = he never posts, comments or answers anywhere)</label>
+        <label><span>His posts per day, all scopes</span><input type="number" name="posts_per_day" min="0" max="100" value="<%= G.posts_per_day %>"></label>
+        <label><span>His comments per day, all scopes</span><input type="number" name="comments_per_day" min="0" max="1000" value="<%= G.comments_per_day %>"></label>
+        <label><span>LLM budget per day for the feed (USD, spend tagged "feed")</span><input type="number" name="llm_budget_usd" min="0" max="100" step="0.01" value="<%= G.llm_budget_usd %>"></label>
+        <label><span>Seconds between two mention replies</span><input type="number" name="reply_gap_secs" min="0" max="3600" value="<%= G.reply_gap_secs %>"></label>
+        <label><span>Hard cap: writes per minute</span><input type="number" name="writes_per_min" min="1" max="60" value="<%= G.writes_per_min %>"></label>
+      </fieldset>
+      <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
+    </form>
+    <h3 class="pf-h">The main feed</h3>
+    <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'the main feed', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
+    <h3 class="pf-h">Rooms where he's on</h3>
+    <% if (!pepe.rooms.length) { %><p class="mut">None yet - room owners switch him on from their room's feed moderation page (admins can too, and can lock it).</p><% } else { %>
+      <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Room</th><th>Mentions</th><th>On his own</th><th>24 h</th><th></th></tr></thead><tbody>
+        <% pepe.rooms.forEach((r) => { %><tr><td><%= r.title %><%= r.house ? " (Pepe's)" : '' %><%= r.admin_lock ? ' 🔒' : '' %></td><td><%= r.respond ? 'on' : 'off' %></td><td><%= r.auto ? 'on' : 'off' %></td>
+          <td><%= r.used.posts %>p · <%= r.used.comments %>c</td><td><% if (r.slug) { %><a href="/rooms/<%= encodeURIComponent(r.slug) %>/feed/mod#pepe">Settings ›</a><% } %></td></tr><% }) %>
+      </tbody></table></div>
+    <% } %>
+    <h3 class="pf-h">What he did</h3>
+    <% if (!pepe.log.length) { %><p class="mut">Nothing yet.</p><% } else { %>
+      <div class="fa-scroll"><table class="fa-t pf-log"><thead><tr><th>When (UTC)</th><th>What</th><th>Where</th><th>On</th><th>Cost</th></tr></thead><tbody>
+        <% pepe.log.forEach((r) => { %><tr>
+          <td class="mut"><%= new Date(r.at).toISOString().slice(5, 16).replace('T', ' ') %></td>
+          <td class="a-<%= r.action %>"><%= r.action %><%= r.why ? ' · ' + r.why : '' %><%= r.kind ? ' · ' + r.kind : '' %><%= r.by ? ' by ' + r.by : '' %><% if (r.note && r.action !== 'post' && r.action !== 'comment') { %><div class="mut pf-note"><%= String(r.note).replace(/[{}"]/g, "").replace(/,/g, ", ").slice(0, 160) %></div><% } %></td>
+          <td><%= r.scopeTitle %></td>
+          <td><% if (r.href) { %><a class="<%= r.postDeleted || r.commentDeleted ? 'del' : '' %>" href="<%= r.href %>"><%= r.postTitle || r.post_id %><%= r.comment_id ? ' (comment)' : '' %></a><%= r.postDeleted || r.commentDeleted ? ' · deleted' : '' %><% } else { %><span class="mut">-</span><% } %></td>
+          <td class="mut"><%= r.cost ? '$' + Number(r.cost).toFixed(4) : '' %></td></tr><% }) %>
+      </tbody></table></div>
+    <% } %>
+  </section>
+  <% } %>
+
   <section class="fa-card">
     <h2>Feed bans</h2>
     <form id="faBan" class="fa-inline">
@@ -146,7 +187,8 @@
     </form>
   </section>
 </main>
-<script src="/public/js/feed-safety.js?v=1" defer></script>
+<script src="/public/js/feed-safety.js?v=2" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
+<script src="/public/js/pepe-feed.js?v=1" defer></script>
 </body>
 </html>

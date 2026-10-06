@@ -1086,6 +1086,7 @@ app.get("/info", addUser, (req, res) => {
 // Clips & snaps (moved off Netlify) and prediction markets. The feed (1.99bv, feedweb.js) owns /feed:
 // user posts to the main feed and to rooms, plus these captures.
 require("./feedweb").register(app, { isBotToken, addUser });
+require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
 require("./media").register(app, { isBotToken, addUser });

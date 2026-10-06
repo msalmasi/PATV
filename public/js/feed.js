@@ -140,6 +140,11 @@
       api('/api/feed/posts/' + id + '/admin', patch).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
+    // 1.99cg: "Mute Pepe in this thread" (the post's author, its rooms' owners, staff - checked on the server)
+    if (act === 'pepe-mute') {
+      api('/api/feed/posts/' + id + '/pepe-mute', { on: b.getAttribute('data-on') === '1' }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
+      return;
+    }
     // room owners: their room only (the server checks the owner per room)
     if (act === 'rmod') {
       var op = b.getAttribute('data-op'), body = { op: op, post: id };

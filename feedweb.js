@@ -259,7 +259,8 @@ function register(app, { addUser, isBotToken }) {
                         url: res.locals.ogBase + "/feed/p/" + p.id };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
       res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
-                           reasons: store.REASONS, staff, termsEnforced: terms.enforced(), termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false });
+                           reasons: store.REASONS, staff, termsEnforced: terms.enforced(), termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false,
+                           pepeMuted: await require("./pepefeed").isMuted(p.id).catch(() => false) });
     } catch (e) {
       console.error("[feed] post page:", e);
       res.status(500).send("Something went wrong.");
@@ -278,7 +279,9 @@ function register(app, { addUser, isBotToken }) {
     res.render("feedAdmin", { user: viewer.username, viewer, C: store.config(), D: store.DEFAULTS, reports: await store.reports(), bans: await store.bans(),
                               used, free, dir: media.dir(), fx, roomsById: new Map((await rooms.list()).map((r) => [r.id, r])),
                               userReports: await store.userReports(), isAdmin, viewLog: isAdmin ? await audit.viewLog(30) : [],
-                              termsPH: terms.placeholders(), termsLive: terms.enforced() });
+                              termsPH: terms.placeholders(), termsLive: terms.enforced(),
+                              pepe: await require("./pepefeed").adminView().catch((e) => { console.error("[feed] pepe admin view:", e.message); return null; }),
+                              PF: require("./pepefeed") });
   });
 
   // ── files ──
@@ -611,7 +614,8 @@ function register(app, { addUser, isBotToken }) {
       res.set("X-Robots-Tag", "noindex");
       res.render("feedRoomMod", { user: viewer.username, viewer, room: R, fx, embeds, host: viewOpts(req).host,
         reports: await store.roomReports(R.id), pending: await store.roomPending(R.id, viewer), settings: await store.roomSettings(R.id),
-        members: await store.roomMembers(R.id), bans: await store.bans(R.id), audit: await store.roomAudit(R.id), WHO: store.WHO });
+        members: await store.roomMembers(R.id), bans: await store.bans(R.id), audit: await store.roomAudit(R.id), WHO: store.WHO,
+        pepe: await require("./pepefeed").scopeView(R.id), PF: require("./pepefeed") });
     } catch (e) {
       console.error("[feed] room mod page:", e);
       res.status(500).send("Something went wrong.");

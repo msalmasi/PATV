@@ -31,9 +31,15 @@
   <div class="fp-main">
     <div class="fp-meta">
       <% if (p.pinned) { %><span class="fp-pin" title="Pinned by the room owner"><%- fx.icon('pin') %>Pinned</span><span class="dot" aria-hidden="true">·</span><% } %>
+      <% if (p.author.bot) { %>
+        <%# 1.99cg: Pepe's own posts - his avatar and the bot badge instead of a name (pepefeed.js) %>
+        <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22" aria-hidden="true">
+        <a class="fp-author bot-badge" href="/u/<%= encodeURIComponent(p.author.username) %>/profile" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
+      <% } else { %>
       <span class="av" style="--h:<%= fx.hue(p.author.username) %>" aria-hidden="true"><%= fx.initial(p.author.display) %></span>
       <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>/profile"><%= p.author.display %></a>
-      <% if (signed && !p.mine && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
+      <% } %>
+      <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length || (p.global && ctx_)) { %>
         <span class="dot" aria-hidden="true">·</span>
         <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/rooms/<%= encodeURIComponent(r.slug) %>#feed"><%= r.title %><%= r.removed ? ' (removed)' : '' %></a><% }) %><% if (p.global && ctx_) { %><%= roomsShown.length ? ', ' : '' %><a class="fp-room" href="/feed">main feed</a><% } %></span>
@@ -98,6 +104,9 @@
               <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %>Delete</button>
             <% } %>
             <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report post</button><% } %>
+            <% if (detail_ && typeof pepeMuted !== 'undefined' && !p.author.bot && !p.deleted && (p.mine || staff_ || myRooms.length)) { %>
+              <button type="button" role="menuitem" data-act="pepe-mute" data-on="<%= pepeMuted ? '0' : '1' %>" title="Pepe won't answer or comment in this thread"><%- fx.icon(pepeMuted ? 'show' : 'hide') %><%= pepeMuted ? 'Let Pepe back in this thread' : 'Mute Pepe in this thread' %></button>
+            <% } %>
             <% ownRooms.forEach((r) => { const q_ = ' data-room="' + r.id + '" data-slug="' + r.slug + '"'; %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%= r.title %></span></div>
               <% if (r.pending) { %>

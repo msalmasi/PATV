@@ -304,6 +304,11 @@ const cleanLine = (s, n) => String(s == null ? "" : s).replace(CTRL, "").replace
 const cleanText = (s, n) => String(s == null ? "" : s).replace(/\r\n?/g, "\n").replace(CTRL, "").replace(/\n{4,}/g, "\n\n\n").trim().slice(0, n);
 const newId = (n = 12) => crypto.randomBytes(16).toString("base64url").replace(/[-_]/g, "").slice(0, n).padEnd(n, "x");
 const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
+// 1.99cg: Pepe's own site account (pepefeed.js creates it). His posts / comments go through the same create /
+// comment code as everyone's, but the per-user rate limits are replaced by his own caps (pepefeed.js, server side)
+// and he never gets the author's automatic upvote (his votes count for nothing in the rankings).
+const PEPE_ID = "pepe-bot";
+const isPepe = (u) => !!u && (u.userId === PEPE_ID || u === PEPE_ID);
 const ID_RE = /^[A-Za-z0-9]{8,16}$/;
 
 let UCOLS = null;
@@ -360,10 +365,10 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
       if (r) return { status: 403, message: `Pepe says: ${r.reason || "you were moderated in this room recently"}.` };
     }
   }
-  if (C.require_link_to_post && !u.camfrogUsername && !isStaff(u)) {
+  if (C.require_link_to_post && !u.camfrogUsername && !isStaff(u) && !isPepe(u)) {
     return { status: 403, message: "Link your Camfrog name first: type !verify in a room with Pepe." };
   }
-  if (media && !isStaff(u) && !u.camfrogUsername && (Number(u.level) || 0) < C.media_min_level) {
+  if (media && !isStaff(u) && !isPepe(u) && !u.camfrogUsername && (Number(u.level) || 0) < C.media_min_level) {
     return { status: 403, message: `Uploading pictures, audio and video needs a linked Camfrog name (type !verify in a room with Pepe) or level ${C.media_min_level}.` };
   }
   return null;
@@ -381,7 +386,7 @@ function burst(key, ms) {
 }
 async function postRate(u) {
   const C = CONFIG, t = NOW();
-  if (isStaff(u)) return null;
+  if (isStaff(u) || isPepe(u)) return null;          // Pepe: pepefeed.js's caps instead
   const n = async (ms) => (await getQuery("SELECT COUNT(*) AS n FROM feed_posts WHERE author_id = ? AND created > ?", [u.userId, t - ms]))[0].n;
   if (isNewAccount(u) && (await n(86400e3)) >= C.new_account_posts_per_day) {
     return `New accounts can post ${C.new_account_posts_per_day} time${C.new_account_posts_per_day === 1 ? "" : "s"} a day - link your Camfrog name (!verify) to lift that.`;
@@ -410,7 +415,8 @@ async function authors(ids) {
   const rows = await getQuery(`SELECT userId, username, ${C.has("displayname") ? "displayname" : "NULL AS displayname"}, class
                                FROM users WHERE userId IN (${want.map(() => "?").join(",")})`, want);
   const m = new Map();
-  for (const r of rows) m.set(r.userId, { userId: r.userId, username: r.username, display: r.displayname || r.username, staff: r.class === "Admin" || r.class === "Staff" });
+  for (const r of rows) m.set(r.userId, { userId: r.userId, username: r.username, display: r.displayname || r.username, staff: r.class === "Admin" || r.class === "Staff",
+                                          bot: r.userId === PEPE_ID });
   return m;
 }
 
@@ -678,8 +684,8 @@ async function create(userId, input, deps = {}) {
       await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, rid, t, pendingIn.has(rid) ? (wants(rid) ? 1 : 2) : 0]);
       if (!pendingIn.has(rid) && wants(rid)) await queueMention(rid, id);
     }
-    // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote)
-    await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
+    // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote) - never Pepe's
+    if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
     await recountPost(id);
   } catch (e) {
     await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
@@ -801,6 +807,7 @@ function noteVote(u) {
 }
 async function voter(user) {
   if (!user || !user.userId) throw new Refuse(401, "Sign in to vote.");
+  if (isPepe(user)) throw new Refuse(403, "Pepe doesn't vote.");
   const u = await account(user.userId);
   if (!u) throw new Refuse(401, "Sign in to vote.");
   if (u.archived_at) throw new Refuse(403, "This account is archived.");
@@ -892,20 +899,27 @@ async function comments(postId, viewer, sort = "best") {
   const cmp = commentOrder(sort);
   // a deleted comment with no replies just goes away
   return top.filter((c) => !c.deleted || c.replies.some((r) => !r.deleted)).sort(cmp)
-    .map((c) => ({ ...c, replies: c.replies.filter((r) => !r.deleted).sort(cmp) }));
+    // 1.99cg: a conversation Pepe is part of reads in time order (his answers make no sense shuffled; his replies
+    // also start at 0 with no self-vote, so "best" would sink every one of them under the line it answers)
+    .map((c) => {
+      const kids = c.replies.filter((r) => !r.deleted);
+      const withPepe = c.author && c.author.bot || kids.some((r) => r.author && r.author.bot);
+      return { ...c, replies: kids.sort(withPepe ? (a, b) => a.created - b.created : cmp) };
+    });
 }
 
 async function comment(user, postId, { body, parent } = {}) {
   const p = await getRow(postId);
   if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
   const u = await account(user && user.userId);
+  if (!u) throw new Refuse(401, "Sign in to comment.");
   if (p.locked_at && !(await canLock(u, p.id))) throw new Refuse(403, "Comments on this post are locked.");
   const roomIds = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [postId])).map((r) => r.room_id);
   const refusal = await postRefusal(u, roomIds);
   if (refusal) throw new Refuse(refusal.status, refusal.message.replace("to post", "to comment"));
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "Write something first.");
-  if (!isStaff(u)) {
+  if (!isStaff(u) && !isPepe(u)) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_comments WHERE author_id = ? AND created > ?", [u.userId, NOW() - 3600e3]))[0].n;
     if (n >= CONFIG.comments_per_hour) throw new Refuse(429, "You've commented a lot this hour - try again later.");
     if (isNewAccount(u) && n >= 10) throw new Refuse(429, "New accounts can comment 10 times an hour - link your Camfrog name (!verify) to lift that.");
@@ -922,7 +936,7 @@ async function comment(user, postId, { body, parent } = {}) {
   const t = NOW();
   await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created) VALUES (?, ?, ?, ?, ?, ?)",
                  [id, postId, par ? par.id : null, u.userId, text, t]);
-  await runQuery("INSERT OR IGNORE INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, 1, 1, ?, ?)", [id, postId, u.userId, t, t]);
+  if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, 1, 1, ?, ?)", [id, postId, u.userId, t, t]);
   await recountComment(id);
   await recount(postId);
   // notices: the post's author, and the person replied to (never yourself, never twice)
@@ -1588,6 +1602,6 @@ module.exports = {
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,
-  setRestricted, mentionOn, setMention, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps,
+  setRestricted, mentionOn, setMention, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
 };

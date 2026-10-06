@@ -46,6 +46,8 @@ function init() {
         target_kind TEXT NOT NULL, target_id TEXT NOT NULL, subject_id TEXT, reason TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS content_audit_views_at ON content_audit_views (at)");
       await runQuery("CREATE TABLE IF NOT EXISTS content_audit_meta (k TEXT PRIMARY KEY, v TEXT)");
+      // 1.99cg: bot = 1 for Pepe's own posts / comments (pepefeed.js) - written by his server, no network data
+      if (!(await getQuery("PRAGMA table_info(content_audit)")).some((c) => c.name === "bot")) await runQuery("ALTER TABLE content_audit ADD COLUMN bot INTEGER NOT NULL DEFAULT 0");
       const s = (await getQuery("SELECT v FROM content_audit_meta WHERE k = 'salt'"))[0];
       if (s && s.v) salt = s.v;
       else {
@@ -101,11 +103,11 @@ async function record(ctx, { kind, id, postId = null, event = "create", user } =
     const t = NOW();
     const net = netOf(ctx.ip);
     const born = createdMs(user);
-    await runQuery(`INSERT INTO content_audit (kind, target_id, post_id, user_id, event, at, ip, ua, ip_hash, via, lang, country, acct_age_s, linked, session_hash)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await runQuery(`INSERT INTO content_audit (kind, target_id, post_id, user_id, event, at, ip, ua, ip_hash, via, lang, country, acct_age_s, linked, session_hash, bot)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [kind === "comment" ? "comment" : "post", String(id), postId ? String(postId) : null, user.userId, event === "edit" ? "edit" : "create", t,
                     ctx.ip || null, ctx.ua || null, net ? hmac("ip", net) : null, ctx.via || null, ctx.lang || null, ctx.country || null,
-                    born ? Math.max(0, Math.floor((t - born) / 1000)) : null, JSON.stringify(linkedOf(user)), ctx.device ? hmac("dev", ctx.device) : null]);
+                    born ? Math.max(0, Math.floor((t - born) / 1000)) : null, JSON.stringify(linkedOf(user)), ctx.device ? hmac("dev", ctx.device) : null, ctx.bot ? 1 : 0]);
     return true;
   } catch (e) {
     console.error("[audit] record failed:", e.message);
@@ -170,7 +172,7 @@ async function details(viewer, target, { reason = null } = {}) {
     kind: r.kind, target: r.target_id, post: r.post_id, event: r.event, at: r.at,
     ip: r.ip, ua: r.ua, rawPurged: !!r.raw_purged_at || (r.ip == null && t - r.at > RAW_DAYS * DAY), via: r.via, lang: r.lang, country: r.country,
     acctAgeDays: ageDays(r.acct_age_s), linked: (() => { try { return JSON.parse(r.linked || "{}"); } catch (e) { return {}; } })(),
-    ipKey: r.ip_hash ? r.ip_hash.slice(0, 8) : null, deviceKey: r.session_hash ? r.session_hash.slice(0, 8) : null,
+    ipKey: r.ip_hash ? r.ip_hash.slice(0, 8) : null, deviceKey: r.session_hash ? r.session_hash.slice(0, 8) : null, bot: !!r.bot,
   }));
   // other accounts on the same network / browser in the last SAME_IP_DAYS (counts + usernames)
   const hashes = [...new Set(rows.map((r) => r.ip_hash).filter(Boolean))].slice(0, 50);
