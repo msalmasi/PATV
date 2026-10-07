@@ -133,7 +133,7 @@ async function seenMap(userId) {
 
 /**
  * Every room with captures from the last 24 h. Signed in: items (oldest first, the story's order),
- * seen state, a cover (the newest photo). Signed out: rooms and counts only.
+ * seen state, a cover (the newest photo or clip poster). Signed out: rooms and counts only.
  * Order: unseen rooms first, then by the newest capture.
  */
 async function forViewer(viewer, { room = null } = {}) {
@@ -151,11 +151,10 @@ async function forViewer(viewer, { room = null } = {}) {
     list.sort((a, b) => a.created - b.created);
     const latest = list[list.length - 1].created;
     const upto = seen.get(rid) || 0;
-    // cover: the newest photo, else the newest clip's poster frame (1.99dq); never NSFW
-    const rev = [...list].reverse();
-    const cp = rev.find((c) => c.kind === "photo" && !c.nsfw);
-    const cv = cp ? null : rev.find((c) => c.kind === "clip" && c.poster && !c.nsfw);
-    const cover = cp ? cp.src : cv ? cv.poster : null;
+    // cover: the newest capture that has a picture - a photo, or a clip's poster frame (1.99dq; 1.99ds:
+    // a newer clip's poster wins over an older photo); never NSFW, never an audio waveform card
+    const cv = [...list].reverse().find((c) => !c.nsfw && (c.kind === "photo" || (c.kind === "clip" && c.poster)));
+    const cover = cv ? (cv.kind === "photo" ? cv.src : cv.poster) : null;
     const base = { ...roomInfo(rid), latest, count: list.length, unseen: latest > upto };
     if (signed) out.push({ ...base, seen: upto, cover, items: list.map(({ room: _r, ...x }) => x) });
     else out.push({ ...base, unseen: true, cover: null });

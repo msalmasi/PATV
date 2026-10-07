@@ -189,3 +189,22 @@ test("stories + strip: clips with a poster show it with ▶ and the duration; wi
   assert.doesNotMatch(tile("ee000003"), /<img/);                                    // NSFW: no picture on the strip
   assert.match(tile("ee000003"), /🔞/);
 });
+
+test("story cover: the newest capture with a picture - a newer clip's poster beats an older photo, an older one doesn't", async () => {
+  const webp = Buffer.from("RIFF\x10\x00\x00\x00WEBPVP8 ", "binary");
+  const put = async (id, kind, room, ageMs, poster) => {
+    const file = id + (kind === "photo" ? ".jpg" : ".mp4");
+    fs.writeFileSync(path.join(media.DIR, file), "x");
+    await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, nsfw)
+                    VALUES (?, ?, ?, ?, 1, ?, 'bob', 'alice', ?, ?, ?, 0, 0, 0)`,
+                    [id, kind, kind === "photo" ? "image/jpeg" : "video/mp4", file, kind === "photo" ? null : 20, room, Date.now() - ageMs, Date.now() + 3600e3]);
+    if (poster) fs.writeFileSync(media.posterFile(id), webp);
+  };
+  await put("ff000001", "photo", "pady", 60e3);
+  await put("ff000002", "clip", "pady", 1e3, true);
+  await put("ff000003", "clip", "padz", 60e3, true);
+  await put("ff000004", "photo", "padz", 1e3);
+  const S = await stories.forViewer({ userId: "u1" });
+  assert.equal(S.find((x) => x.id === "pady").cover, "/media/ff000002/poster");
+  assert.equal(S.find((x) => x.id === "padz").cover, "/media/ff000004/raw");
+});

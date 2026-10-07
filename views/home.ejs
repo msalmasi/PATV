@@ -52,7 +52,7 @@
   .hm *, .hm *::before, .hm *::after { box-sizing: border-box; }
   .hm a { color: #81c784; text-decoration: none; }
   .hm a:hover { color: #a5d6a7; }
-  .hm .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; min-width: 0; }
+  .hm .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: var(--py) var(--px); min-width: 0; }
   .hm h2 { margin: 0 0 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6;
            display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   .hm h2 a, .hm h2 small { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12.5px; color: #81c784; }
@@ -69,20 +69,41 @@
   @keyframes hmPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
   /* ── main stage ── */
-  .hm .stage { border: 1px solid var(--line); border-radius: 16px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #0d0d0f 55%); overflow: hidden; }
-  .hm .stage .bar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; padding: 10px 14px; }
+  /* 1.99ds: one padding for every card and the stage (--px / --py), one gap between blocks (--gap) */
+  .hm { --px: 16px; --py: 14px; --gap: 12px; }
+  .hm .stage { border: 1px solid var(--line); border-radius: 14px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #0d0d0f 55%); overflow: hidden; }
+  .hm .stage .bar { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: var(--py) var(--px) var(--gap); min-width: 0; }
   .hm .stage .bar .ttl { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; color: var(--lime); }
-  .hm .stage .bar .sub { color: #aab3aa; font-size: 13px; }
-  .hm .stage .bar .sp { flex: 1; }
+  .hm .stage .bar .sub { color: #aab3aa; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hm .stage .bar .sub a { color: #c6e94f !important; }
-  .hm .stage-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 0 14px 10px; font-size: 13px; color: #aab3aa; }
+  .hm .stage.live #stSub { display: none; }
+  /* admin-only strip: collapsed to one line by default */
+  .hm .stage-adm { margin: 0 var(--px) var(--gap); border: 1px solid #2a2618; border-radius: 10px; background: rgba(20, 18, 8, .55); font-size: 13px; color: #aab3aa; min-width: 0; }
+  .hm .stage-adm > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 6px; padding: 7px 12px; color: #ffcc80; font-weight: bold; min-width: 0;
+                             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hm .stage-adm > summary::-webkit-details-marker { display: none; }
+  .hm .stage-adm > summary .muted { font-weight: normal; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+  .hm .stage-adm > summary .gear { display: inline-block; transition: transform .2s; }
+  .hm .stage-adm[open] > summary .gear { transform: rotate(60deg); }
+  .hm .stage-adm > summary:focus-visible { outline: 2px solid var(--lime); outline-offset: -2px; border-radius: 10px; }
+  .hm .stage-admin { display: grid; gap: 8px; padding: 0 12px 10px; min-width: 0; }
+  .hm .stage-admin .sa-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
   .hm .stage-admin select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; min-width: 0; max-width: 100%; }
   .hm .stage-admin .btn { padding: 6px 12px; font-size: 13px; }
-  .hm .stage-admin .tag { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: #ffb74d; border: 1px solid #6b5a20; border-radius: 999px; padding: 1px 7px; }
-  .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; padding: 0 12px 12px; align-items: start; }
+  .hm .stage-admin #stAdminMsg:empty { display: none; }
+  .hm .stage-admin .sa-link { margin-left: auto; white-space: nowrap; }
+  .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); padding: 0 var(--px) var(--px); align-items: start; }
   .hm .stage.live .stage-body { display: grid; }
   .hm .stage.live .stage-off { display: none; }
-  .hm .player { position: relative; width: 100%; max-width: calc((100vh - 190px) * 16 / 9); margin: 0 auto; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #262626; }
+  /* the player column: the video, then its Snap / Clip row at the same width */
+  .hm .stage-main { width: 100%; max-width: calc((100vh - 190px) * 16 / 9); min-width: 0; justify-self: center; }
+  .hm .player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #262626; }
+  .hm .stage-main .stcap { margin: 0; padding: 7px 10px; gap: 6px 8px; background: #0c120c; border: 1px solid #262626; border-top: 0; border-radius: 0 0 12px 12px; }
+  .hm .stage-main:has(> .stcap:not(.hide):not(:empty)) .player { border-radius: 12px 12px 0 0; }
+  .hm .stage-main .stcap-btn { padding: 5px 11px; font-size: 13px; }
+  .hm .stage-main .stcap-secs { padding: 4px 4px; }
+  .hm .stage-main .stcap-price { margin-left: auto; text-align: right; }
+  @media (max-width: 760px) { .hm .stage-main .stcap-price { margin-left: 0; text-align: left; flex-basis: 100%; } }
   .hm .player #videoWrapper { position: absolute; inset: 0; display: block; height: auto; }
   .hm .player .video-js { width: 100%; height: 100%; }
   .hm .player #videoOverlay { position: absolute; inset: 0; display: grid; place-items: center; grid-template-rows: none; grid-template-columns: none; cursor: pointer; z-index: 3; background: rgba(0,0,0,.45); }
@@ -90,7 +111,8 @@
   .hm .player #twitch { position: absolute; inset: 0; padding: 0; height: auto; }
   .hm .player #twitch iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
   .hm .hide { display: none !important; }
-  .hm .stage-side { display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .hm .stage-side { display: grid; gap: var(--gap); align-content: start; align-self: start; min-width: 0; }
+  .hm .stage-side > * { margin-top: 0; }
   .hm .player .reconnect { position: absolute; inset: 0; display: grid; place-items: center; grid-auto-flow: column; gap: 8px; place-content: center;
                            background: rgba(0,0,0,.72); color: #ddd; font-size: 15px; z-index: 4; }
   .hm .player .unmute { position: absolute; inset: 0; z-index: 3; background: rgba(0,0,0,.35); border: 0; cursor: pointer; display: grid; place-items: center; }
@@ -124,7 +146,7 @@
   .hm .aw-hm .aw-coinbtn .aw-coin { --s: 72px; }
   .hm .aw-hm .aw-status { min-height: 2.4em; font-size: 18px; }
   .hm .aw-hm a.aw-tool { text-align: center; color: var(--aw-text) !important; }
-  .hm .stage-off { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; padding: 0 12px 12px; }
+  .hm .stage-off { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--gap); padding: 0 var(--px) var(--px); }
   .hm .stage-off > * { flex: 1 1 240px; min-width: 0; }
   .hm .stage-off > .aw-hm { flex: 0 1 340px; }
 
@@ -228,20 +250,19 @@
     .hm .lr { grid-template-columns: minmax(0, 1fr); }
     .hm .me { grid-template-columns: auto minmax(0, 1fr); }
     .hm .me .acts { grid-column: 1 / -1; justify-content: flex-start; }
-    .hm .player { max-width: none; }
+    .hm .stage-main { max-width: none; }
   }
   @media (max-width: 520px) {
-    .hm { padding: 10px 10px 44px; gap: 12px; }
+    .hm { padding: 10px 10px 44px; gap: 12px; --px: 12px; --py: 12px; --gap: 10px; }
     .hm .me .gtf { display: none; }
     .hm .lr-feed { height: 300px; }
     .hm .todo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hm .tf { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .hm .tf .r1 { grid-column: 1 / -1; }
     .hm .pitch { grid-template-columns: minmax(0, 1fr); }
-    .hm .stage-body, .hm .stage-off { padding: 0 8px 8px; }
   }
   /* paid stage slots (1.99al): which stream the stage shows */
-  .hm .stabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 10px; align-items: center; }
+  .hm .stabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 var(--px) var(--gap); align-items: center; }
   .hm .stabs:empty { display: none; }
   .hm .stab { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 11px; border-radius: 999px; border: 1px solid #2b2b2b;
               background: #141414; color: #cfd8cf; font: inherit; font-size: 13px; cursor: pointer; min-width: 0; }
@@ -253,7 +274,7 @@
   .hm .stabs .adm { display: inline-flex; gap: 6px; margin-left: auto; }
   .hm .stabs .adm button { padding: 5px 10px; border-radius: 8px; border: 1px solid #5a2222; background: #2a1010; color: #ffb4b4; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
   .hm .stabs .adm button:hover { border-color: #ff5252; }
-  @media (max-width: 520px) { .hm .stabs { padding: 0 10px 8px; } .hm .stabs .adm { margin-left: 0; } }
+  @media (max-width: 520px) { .hm .stabs .adm { margin-left: 0; } }
   @media (prefers-reduced-motion: reduce) { .hm .dot { animation: none; } }
   /* 1.99bi: room stages - featured star, embeds, the Go live call to action */
   .hm .stab .star { color: var(--gold); }
@@ -270,65 +291,94 @@
   .hm .golive p { margin: 0; color: #c9d3c9; font-size: 13.5px; line-height: 1.5; }
   .hm .golive .row { display: flex; flex-wrap: wrap; gap: 6px; }
   .hm .golive ul { margin: 0; padding-left: 18px; color: #aab3aa; font-size: 12.5px; line-height: 1.55; }
-  .hm .golive-wide { margin: 0 12px 12px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 8px 22px; align-items: center; padding: 12px 16px; }
+  .hm .golive-wide { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 8px 22px; align-items: center; }
   .hm .golive-wide .gl-txt { display: grid; gap: 4px; min-width: 0; }
-  .hm .golive-wide h3 { margin: 0; }
-  .hm .golive-wide .row { justify-content: flex-end; }
+  .hm .golive-wide h3 { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .hm .golive-wide .row { justify-content: flex-end; align-items: center; }
+  .hm .golive-wide .row .btn { padding: 7px 12px; font-size: 13px; border-radius: 999px; }
   @media (max-width: 1100px) {
     .hm .golive-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .hm .golive-wide .row { grid-column: 1 / -1; justify-content: flex-start; }
   }
   @media (max-width: 760px) { .hm .golive-wide { grid-template-columns: minmax(0, 1fr); } }
-  @media (max-width: 520px) { .hm .golive-wide { margin: 0 8px 8px; padding: 10px 12px; } }
   .hm .stage .bar .room-on { color: #fff; font-weight: bold; }
   .hm .guide-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .hm .guide-mini a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; color: #ddd !important; font-size: 13px; }
   .hm .guide-mini .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: bold; }
   .hm .guide-mini .w { grid-column: 1 / -1; color: #9aa59a; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  @media (max-width: 520px) { .hm .stage .bar .sp { display: none; } .hm .stage .bar { gap: 8px 10px; } }
+  /* 1.99ds: the story strip is a card like the others */
+  .hm .hm-stories { padding-bottom: 6px; }
+  .hm .hm-stories .ss { margin: 0; }
+  .hm .hm-stories .ss-h { margin: 0 0 6px; }
+  .hm .hm-stories .ss-row { padding: 4px 0 8px; }
 </style>
 
 <main class="hm">
-  <% if (typeof story !== 'undefined' && story && story.rooms.length) { %><div class="hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the pads', next: '/' }) %></div><% } %>
+  <% if (typeof story !== 'undefined' && story && story.rooms.length) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the pads', next: '/' }) %></div><% } %>
+
+  <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
+  <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
+    <div class="gl-txt">
+      <h3 id="gsH">🎥 Your show on PATV</h3>
+      <p><b>Anyone can go live.</b> Stream to a pad's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
+    </div>
+    <ul>
+      <li>Ordinary slots are <b>free</b> in most pads<%= paid.length ? '' : ' — book one now or for later' %>.</li>
+      <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
+    </ul>
+    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="golive-btn ghost" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) + '&feature=1' : '?feature=1' %>">★ Get featured</a><a class="btn" href="/p">Pads</a></div>
+  </section>
+
   <!-- ───── main stage ───── -->
   <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">
     <div class="bar">
       <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
       <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
-      <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
       <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><% } %>
-      <span class="sp"></span>
-      <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a>
-      <a class="golive-btn ghost" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) + '&feature=1' : '?feature=1' %>">★ Get featured</a>
-      <a class="sub" href="/p">Guide ›</a>
-      <a class="sub" href="https://twitch.tv/publicaccess_ttv" rel="noopener">Twitch ›</a>
+      <%# the subtitle only shows while off air (the ON AIR pill says it otherwise); setPill() still writes it %>
+      <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
     </div>
     <% if (stageAdmin) { %>
-    <form class="stage-admin" id="stAdmin" autocomplete="off">
-      <span class="tag">Admin</span>
-      <label for="stRoomSel">Front-page pad</label>
-      <select id="stRoomSel">
-        <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (most active pad, switches at most every <%= stageAdmin.status && stageAdmin.status.cfg ? stageAdmin.status.cfg.hold_min : 30 %> min)</option>
-        <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.front === r.id ? ' selected' : '' %>><%= r.title %><%= r.title !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
-      </select>
-      <button type="submit" class="btn">Feature on the homepage</button>
-      <span id="stAdminMsg" aria-live="polite">Doesn't move Pepe (<code>!activeroom</code> is his).</span>
-      <a href="/pads/admin" style="margin-left:auto">Pads admin ›</a>
-      <%- include('partials/front-pick', { fp: stageAdmin.status, open: false }) %>
-    </form>
+    <%# 1.99ds: every admin-only control in one collapsible strip (collapsed by default, remembered per browser) %>
+    <details class="stage-adm" id="stAdmBox">
+      <summary><span class="gear" aria-hidden="true">⚙</span> Admin <span class="muted">· front page: <%= frontInfo ? frontInfo.title : '—' %> (<%= stageAdmin.front === 'auto' ? 'auto pick' : 'pinned' %>)</span></summary>
+      <form class="stage-admin" id="stAdmin" autocomplete="off">
+        <div class="sa-row">
+          <label for="stRoomSel">Front-page pad</label>
+          <select id="stRoomSel">
+            <option value="auto"<%= stageAdmin.front === 'auto' ? ' selected' : '' %>>Automatic (most active pad, switches at most every <%= stageAdmin.status && stageAdmin.status.cfg ? stageAdmin.status.cfg.hold_min : 30 %> min)</option>
+            <% (stageAdmin.rooms || []).forEach((r) => { %><option value="<%= r.id %>"<%= stageAdmin.front === r.id ? ' selected' : '' %>><%= r.title %><%= r.title !== r.id ? ' (' + r.id + ')' : '' %></option><% }) %>
+          </select>
+          <button type="submit" class="btn">Feature on the homepage</button>
+          <span id="stAdminMsg" aria-live="polite"></span>
+          <a class="sa-link" href="/pads/admin">Pads admin ›</a>
+        </div>
+        <%- include('partials/front-pick', { fp: stageAdmin.status, open: false }) %>
+      </form>
+    </details>
+    <script>
+      (function () {
+        var d = document.getElementById('stAdmBox'), K = 'patv.home.adminOpen';
+        try { if (localStorage.getItem(K) === '1') d.open = true; } catch (e) {}
+        d.addEventListener('toggle', function () { try { localStorage.setItem(K, d.open ? '1' : '0'); } catch (e) {} });
+      })();
+    </script>
     <% } %>
     <div class="stabs" id="stTabs" role="tablist" aria-label="Stage streams"></div>
     <div class="stage-body">
-      <div class="player" id="player">
-        <div id="videoWrapper"></div>
-        <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
-        <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
-        <div id="twitch" class="hide"></div>
-        <div class="embed hide" id="stEmbed"></div>
+      <%# 1.99ds: the player and its Snap / Clip row share one column, so the row sits under the video at its width %>
+      <div class="stage-main">
+        <div class="player" id="player">
+          <div id="videoWrapper"></div>
+          <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
+          <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
+          <div id="twitch" class="hide"></div>
+          <div class="embed hide" id="stEmbed"></div>
+        </div>
+        <div class="stcap hide" id="stCap" aria-label="Snap or clip this stream"></div>
       </div>
       <div class="stage-side" id="stageSide"></div>
     </div>
-    <div class="stcap hide" id="stCap" aria-label="Snap or clip this stream"></div>
     <div class="stage-off" id="stageOff"></div>
     <!-- the stage widgets render once and move between the live side panel and the off-air strip -->
     <div class="hide" id="stageWidgets">
@@ -380,18 +430,6 @@
           </ul>
         </div>
       <% } %>
-    </div>
-    <!-- 1.99bk: the Go live pitch is a full-width strip under the stage (on and off air), not a side card -->
-    <div class="box golive golive-wide" id="stageShow">
-      <div class="gl-txt">
-        <h3>🎥 Your show on PATV</h3>
-        <p><b>Anyone can go live.</b> Stream to a pad's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
-      </div>
-      <ul>
-        <li>Ordinary slots are <b>free</b> in most pads<%= paid.length ? '' : ' — book one now or for later' %>.</li>
-        <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
-      </ul>
-      <div class="row"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a><a class="btn" href="/p" style="padding:6px 10px;font-size:13px">Pads</a></div>
     </div>
   </section>
 
