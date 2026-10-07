@@ -261,6 +261,19 @@
   .rm .about .ab-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; border: 1px solid #2f6b3a; background: #12301a;
                        color: #c8efcf !important; font-weight: bold; font-size: 13px; }
   .rm .about .ab-btn:hover, .rm .about .ab-btn:focus-visible { border-color: #4caf50; color: #fff !important; }
+  /* 1.99el: About's Analytics card - headline tiles, then the button */
+  .rm .an-card { display: grid; gap: 14px; }
+  .rm .an-card > h2 { margin: 0; flex-wrap: wrap; align-items: baseline; }
+  .rm .an-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .rm .an-t { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 12px; min-width: 0; }
+  .rm .an-t.an-wide { grid-column: span 2; }
+  .rm .an-t .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .rm .an-t .v { font-size: 20px; font-weight: bold; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+  .rm .an-t .v.sm { font-size: 15px; }
+  .rm .an-t .s { font-size: 12px; color: #888; margin-top: 2px; overflow-wrap: anywhere; }
+  .rm .an-t .up { color: #81c784; } .rm .an-t .down { color: #ef9a9a; }
+  .rm .an-gate { margin: 0; color: #bbb; font-size: 14px; line-height: 1.6; }
+  @media (max-width: 400px) { .rm .an-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* 1.99ec: the Live tab's side cards - the title stays on one line; its action (link / count) sits right of it,
      or drops below it as a whole on a narrow card, never splitting the title */
   .rm .side .card > h2 { flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
@@ -811,11 +824,31 @@
         <dt>Run by</dt><dd><% if (room.house) { %>🐸 Pepe (a house pad)<% } else if (room.owner) { %><a href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 <%= room.owner %></a><% } else { %><span class="muted">Nobody yet</span><% } %></dd>
         <% if (feed_ && feed_.follow) { %><dt>Followers</dt><dd><%= feed_.follow.followers.toLocaleString('en-US') %></dd><% } %>
         <% if (!siteOnly_) { %><dt>Camfrog room</dt><dd><%= room.camfrogName || room.name %></dd><% } %>
-        <%# 1.99ec: a real button - shown whenever the analytics page exists for this pad (roomstats.js; the page is public, its numbers for signed-in viewers) %>
-        <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><dt>Analytics</dt><dd><a class="ab-btn" href="<%= roomAnalytics %>">📈 Pad analytics ›</a></dd><% } %>
         <% if (manage_) { %><dt>Settings</dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings">⚙ Pad settings ›</a></dd><% } %>
       </dl>
     </section>
+    <%# 1.99el: Analytics is its own card (was an "Analytics: Pad analytics ›" row above): the 30-day headline numbers
+        from roomstats.preview (cached), for signed-in viewers only - visitors get the analytics page's sign-in prompt %>
+    <% const anCard_ = typeof roomAnalyticsCard !== 'undefined' && roomAnalyticsCard ? roomAnalyticsCard : null;
+       const anSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user);
+       const anS_ = anCard_ && anSigned_ ? anCard_.stats : null; %>
+    <% if (analytics_) { %>
+    <section class="card an-card" aria-labelledby="anH">
+      <h2 id="anH"><span>📈 Analytics</span><small>last 30 days</small></h2>
+      <% if (anS_) { %>
+      <div class="an-tiles">
+        <div class="an-t"><div class="k">Messages</div><div class="v"><%= anS_.msgs30 %></div><div class="s"><% if (anS_.msgsTrend != null) { %><span class="<%= anS_.msgsTrend >= 0 ? 'up' : 'down' %>"><%= anS_.msgsTrend >= 0 ? '▲' : '▼' %> <%= Math.abs(anS_.msgsTrend) %>%</span> on the month before<% } else { %>public chat<% } %></div></div>
+        <div class="an-t"><div class="k">Visitors</div><div class="v"><%= anS_.uniq30 %></div><div class="s">different people</div></div>
+        <div class="an-t"><div class="k">Mic time</div><div class="v"><%= anS_.mic30 %></div><div class="s">on the mic</div></div>
+        <div class="an-t"><div class="k">Typical size</div><div class="v"><%= anS_.typical %></div><div class="s"><%= anS_.typicalNote %><% if (anS_.peakSize) { %> · peak <%= anS_.peakSize %><% } %></div></div>
+        <div class="an-t an-wide"><div class="k">Busiest</div><div class="v sm"><%= anS_.peak %></div><div class="s">by messages</div></div>
+      </div>
+      <% } else if (!anSigned_) { %>
+      <p class="an-gate">🔒 Pad analytics are for signed-in members, like the live Camfrog room chat. <a href="/login?next=<%= encodeURIComponent('/p/' + room.slug) %>">Sign in</a></p>
+      <% } %>
+      <div class="an-foot"><a class="ab-btn" href="<%= analytics_ %>">See full analytics ›</a></div>
+    </section>
+    <% } %>
     <% if (feed_ && feed_.rules) { %><%- include('partials/pad-rules', { fx, rules: feed_.rules, slug: room.slug, canEdit: !!(feed_.mod.owner || feed_.mod.admin), open: true, id: 'rules' }) %><% } %>
     <% if (!siteOnly_) { %>
     <section class="card join" aria-labelledby="joinH">

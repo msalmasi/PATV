@@ -205,7 +205,9 @@ test("pad page signed out: a sign-in bar instead of the composer; About's analyt
     user: null, signedIn: false, linked: false, room: { name: "P", slug: "p", count: 0, live: false, topic: "", platform: "camfrog", description: "", camfrogName: "P" },
     initial: null, padTabs: { tabs: ["live", "about"], initial: "about", active: false, camfrog: true, posts: [] }, latest: [], stage: {}, roomStage: null, schedule: null,
     manage: false, feed: null, embeds: require(path.join(repo, "stageembed")), host: "x", roomAnalytics: "/p/p/analytics", escapeFn: (s) => String(s) });
-  assert.match(html, /<dt>Analytics<\/dt><dd><a class="ab-btn" href="\/p\/p\/analytics">📈 Pad analytics ›<\/a><\/dd>/);
+  // 1.99el: Analytics is its own About card (was a details-list row); signed out = the sign-in prompt + the button
+  assert.doesNotMatch(html, /<dt>Analytics<\/dt>/);
+  assert.match(html, /🔒 Pad analytics are for signed-in members[\s\S]*<a class="ab-btn" href="\/p\/p\/analytics">See full analytics ›<\/a>/);
 });
 
 // ───────────────────────── /feed and the profile Posts tab ─────────────────────────

@@ -139,6 +139,81 @@ test("slug for a non-bridged room comes from its name; bridged rooms share the l
   assert.doesNotMatch(list, /class="ral"/);
 });
 
+// 1.99el: the pad About tab's Analytics card (was an "Analytics: Pad analytics ›" row in the details list)
+test("About tab: an Analytics card with the headline numbers for members, the sign-in prompt for visitors", async () => {
+  const r = (await roomstats.all()).find((x) => x.room === "PepeFrog.Room");
+  const p = roomstats.preview(r);
+  assert.equal(p.uniq30, "57");
+  assert.equal(p.typical, "14");
+  assert.equal(p.peakSize, "31");
+  assert.equal(typeof p.msgsTrend, "number", "the month-on-month trend is there");
+  assert.equal(roomstats.preview(r), p, "cached until the next sync");
+  const html = await (await get("/p/pepes-pad", "u3")).text();
+  const card = html.slice(html.indexOf('class="card an-card"'), html.indexOf("</section>", html.indexOf('class="card an-card"')));
+  assert.ok(card.length > 50, "the card is on the About tab");
+  assert.match(card, /📈 Analytics/);
+  assert.equal((card.match(/class="an-t( an-wide)?"/g) || []).length, 5, "messages, visitors, mic time, typical size, busiest");
+  assert.ok(card.includes(">" + p.msgs30 + "<"), "messages (30d)");
+  assert.match(card, /class="(up|down)">[▲▼] \d+%<\/span> on the month before/, "with its trend arrow");
+  assert.ok(card.includes(">" + p.mic30 + "<"), "mic time (30d)");
+  assert.match(card, /peak 31/);
+  assert.match(card, /busiest Fri-Sat/);
+  assert.match(card, /href="\/p\/pepes-pad\/analytics">See full analytics ›<\/a>/);
+  assert.doesNotMatch(html, /<dt>Analytics<\/dt>/, "the old details-list row is gone");
+  assert.match(html, /role="menuitem"[^>]*href="\/p\/pepes-pad\/analytics"|href="\/p\/pepes-pad\/analytics"[^>]*role="menuitem"/, "the header ⋯ menu link stays");
+  // a visitor: the analytics page's sign-in prompt, no numbers
+  const v = await (await get("/p/pepes-pad")).text();
+  const vc = v.slice(v.indexOf('class="card an-card"'), v.indexOf("</section>", v.indexOf('class="card an-card"')));
+  assert.match(vc, /for signed-in members/);
+  assert.match(vc, /See full analytics ›/);
+  assert.doesNotMatch(vc, /class="an-t/);
+  assert.doesNotMatch(vc, /busiest Fri-Sat|peak 31/);
+});
+
+// 1.99el: notes stored before 1.99el were cut at 400 characters mid-sentence
+test("summary: a cut note shows up to its last full sentence, a full one as written", async () => {
+  const cut = "DRAMA_CENTRAL is a rowdy late-night hangout where regulars roast each other on the mic and argue about everything. "
+    + "Lately it has been Pad Wars talk, PAT gifting and a lawn-care cam feud between wattz and tha_hussler that will not die. "
+    + "Lawn care, bowel troubles and Canada-vs-NYC arguments fill the quiet hours between the louder sets on the mic. "
+    + "The earlier bot-building/heist crowd was around a lot less this week, and new faces showed up most nights.";
+  const stored = cut.slice(0, 400);          // what the old 400 cap kept: mid-sentence
+  assert.ok(cut.length > 400 && stored.includes("The earlier") && !stored.trim().endsWith("."), JSON.stringify(stored.slice(-30)));
+  assert.equal(roomstats.sentenceTrim(stored), cut.slice(0, cut.indexOf(" The earlier")));
+  assert.equal(roomstats.sentenceTrim("Busy room. Lots of football talk"), "Busy room. Lots of football talk", "a short note is never trimmed");
+  const whole = cut.slice(0, cut.indexOf(" The earlier")) + " The earlier bot-building crowd comes back on weekends.";
+  assert.equal(roomstats.sentenceTrim(whole), whole);
+  assert.ok(roomstats.sentenceTrim("x".repeat(1200)).endsWith("…"), "a runaway note is capped with an ellipsis");
+  assert.ok(roomstats.sentenceTrim("x".repeat(1200)).length <= 901);
+  // longer notes survive the sync now (was cut at 400)
+  const long = whole + " Two more sentences keep it going past the old cap. And here is the last one, with a full stop.";
+  await sync({ rooms: [room("DRAMA_CENTRAL", "DRAMA_CENTRAL", { knowledge: { summary: long, topics: [{ t: "football", w: 3 }], at: 1790000000 } })] });
+  let html = await (await get("/p/drama-central/analytics", "u3")).text();
+  assert.ok(html.includes("And here is the last one, with a full stop.</p>"), "a long note is shown whole");
+  await sync({ rooms: [room("DRAMA_CENTRAL", "DRAMA_CENTRAL", { knowledge: { summary: stored, topics: [{ t: "football", w: 3 }], at: 1790000000 } })] });
+  html = await (await get("/p/drama-central/analytics", "u3")).text();
+  assert.ok(html.includes("between the louder sets on the mic.</p>"), "the cut note ends at its last sentence");
+  assert.doesNotMatch(html, /crowd was a/);
+});
+
+// 1.99el: snapshots ~6 hours apart showed the same date twice ("Oct 7, 2026" x2)
+test("topics over time: each snapshot is labelled with its day and hour, in the page's timezone", async () => {
+  const at = (iso) => Math.floor(Date.parse(iso) / 1000);
+  const y = new Date().getUTCFullYear();
+  assert.equal(roomstats.histWhen(at(`${y}-10-07T12:05:00Z`), "Eastern Daylight Time"), "Oct 7 · 8 AM");
+  assert.equal(roomstats.histWhen(at(`${y}-10-07T18:05:00Z`), "Eastern Daylight Time"), "Oct 7 · 2 PM");
+  assert.equal(roomstats.histWhen(at(`${y}-10-07T18:05:00Z`), "EDT"), "Oct 7 · 2 PM");
+  assert.equal(roomstats.histWhen(at(`${y}-10-07T18:05:00Z`), "Somewhere Odd"), "Oct 7 · 6 PM UTC", "an unknown zone says UTC");
+  assert.equal(roomstats.histWhen(at(`${y - 1}-10-07T18:05:00Z`), "UTC"), `Oct 7, ${y - 1} · 6 PM`, "another year shows the year");
+  const hist = [`${y}-10-06T08:00:00Z`, `${y}-10-06T14:00:00Z`, `${y}-10-07T02:00:00Z`, `${y}-10-07T08:00:00Z`, `${y}-10-07T14:00:00Z`]
+    .map((iso, i) => ({ at: at(iso), topics: ["topic " + i] }));
+  await sync({ tz: "Eastern Daylight Time", rooms: [room("DRAMA_CENTRAL", "DRAMA_CENTRAL", { history: hist })] });
+  const html = await (await get("/p/drama-central/analytics", "u3")).text();
+  const labels = [...html.matchAll(/<div><b>([^<]+)<\/b><span>topic \d<\/span><\/div>/g)].map((m) => m[1]);
+  assert.equal(labels.length, 5);
+  assert.equal(new Set(labels).size, 5, `no duplicate labels: ${labels.join(" | ")}`);
+  assert.deepEqual(labels, ["Oct 7 · 10 AM", "Oct 7 · 4 AM", "Oct 6 · 10 PM", "Oct 6 · 10 AM", "Oct 6 · 4 AM"], "newest first");
+});
+
 test("unknown rooms 404, removed rooms disappear", async () => {
   assert.equal((await get("/p/nope/analytics", "u3")).status, 404);
   const r = await sync({ rooms: [], remove: ["DRAMA_CENTRAL"] });

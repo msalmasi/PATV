@@ -20,7 +20,7 @@ const express = require("express");
 const { runQuery, getQuery } = require("./dbUtils");
 const { _render: R } = require("./userstats");
 
-const MAX_ROOMS = 30, DAYS = 90;
+const MAX_ROOMS = 30, DAYS = 90, SUMMARY_MAX = 900;
 const ready = (async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS camfrog_roomstats (
     room_id TEXT PRIMARY KEY, name TEXT, data TEXT NOT NULL, updated INTEGER)`);
@@ -87,7 +87,9 @@ function clean(r) {
     games: { days: dayMap((r.games || {}).days, (v) => counts(v, 8)) },
     mod: { total: counts((r.mod || {}).total), days: dayMap((r.mod || {}).days, (v) => counts(v)) },
     knowledge: {
-      summary: str(k.summary, 400), vibe: str(k.vibe, 160), at: int(k.at),
+      // 1.99el: was 400 - Pepe's 2-3 sentence notes ran past it and were cut mid-sentence (Pepe capped them at
+      // 400 too; he now sends up to 900, ending at a sentence)
+      summary: str(k.summary, SUMMARY_MAX), vibe: str(k.vibe, 160), at: int(k.at),
       topics: (Array.isArray(k.topics) ? k.topics : []).slice(0, 10)
         .map((t) => ({ t: str(t && t.t, 60), w: int(t && t.w, 1, 5) || 1 })).filter((t) => t.t),
       jokes: strList(k.jokes, 6, 120), events: strList(k.events, 6, 140), rules: strList(k.rules, 5, 120),
@@ -235,13 +237,99 @@ function visitorsChart(axis, days) {
 
 const sumDays = (days, k0, f) => Object.entries(days || {}).filter(([k]) => k >= k0).reduce((a, [, v]) => a + f(v), 0);
 
-/** The analytics page's view model. */
-async function forRoom(r, slug) {
-  const md = await meta().catch(() => ({}));
+// 1.99el: Pepe's summary ends at a full sentence. Notes stored before 1.99el were cut at 400 characters
+// mid-sentence ("...The earlier bot-building/heist crowd was a"): show them up to their last full sentence.
+const SENT_END = /[.!?…]["'”’)\]]*(?=\s|$)/g;
+const SENT_TAIL = /[.!?…]["'”’)\]]*$/;
+const SOFT_TAIL = /[\s,;:\-—]+$/;
+const LEGACY_CAP = 400;            // what notes were cut at before 1.99el
+function sentenceTrim(text, max = SUMMARY_MAX) {
+  const s = String(text == null ? "" : text).replace(/\s+/g, " ").trim();
+  // shorter than the old 400 cap (399 = a cut that landed on a space, which was stripped) and within the limit:
+  // never cut, shown as written
+  if (s.length < LEGACY_CAP - 1 && s.length <= max) return s;
+  if (s.length <= max && SENT_TAIL.test(s)) return s;
+  const head = s.slice(0, max);
+  let end = -1, m;
+  SENT_END.lastIndex = 0;
+  while ((m = SENT_END.exec(head))) end = m.index + m[0].length;
+  if (end >= Math.min(40, Math.floor(head.length / 3))) return head.slice(0, end).trim();
+  // no full sentence to fall back to: cut at a word and say so
+  const cut = s.length <= max ? s : (head.includes(" ") ? head.slice(0, head.lastIndexOf(" ")) : head);
+  return cut.replace(SOFT_TAIL, "") + "…";
+}
+
+// 1.99el: "Topics over time" snapshots are ~6 hours apart, so a date alone repeated ("Oct 7, 2026" twice). Each
+// label carries the hour, in the timezone the page states (Pepe sends a Windows zone name such as "Eastern
+// Daylight Time"); an unknown zone falls back to UTC and says so. The year only when it isn't this year.
+const TZ_MAP = [[/^(us )?eastern (standard|daylight|summer)? ?time$|^E[SD]T$/i, "America/New_York"],
+                [/^(us )?central (standard|daylight|summer)? ?time$|^C[SD]T$/i, "America/Chicago"],
+                [/^(us )?mountain (standard|daylight|summer)? ?time$|^M[SD]T$/i, "America/Denver"],
+                [/^(us )?pacific (standard|daylight|summer)? ?time$|^P[SD]T$/i, "America/Los_Angeles"],
+                [/^(gmt standard|british summer|gmt daylight) time$|^BST$/i, "Europe/London"],
+                [/^(utc|gmt|coordinated universal time)$/i, "UTC"]];
+function ianaZone(tz) {
+  const t = String(tz || "").trim();
+  if (!t) return null;
+  for (const [re, z] of TZ_MAP) if (re.test(t)) return z;      // Windows names / US abbreviations first ("EST" is a fixed offset in IANA)
+  if (!t.includes("/")) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: t }); return t; } catch (e) { return null; }
+}
+function histWhen(ts, tz, now = Date.now()) {
+  if (!ts) return "—";
+  const zone = ianaZone(tz);
+  const parts = (d, o) => Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: zone || "UTC", ...o })
+    .formatToParts(d).map((p) => [p.type, p.value]));
+  const d = new Date(ts * 1000);
+  const p = parts(d, { month: "short", day: "numeric", year: "numeric", hour: "numeric", hour12: true });
+  const thisYear = parts(new Date(now), { year: "numeric" }).year;
+  return `${p.month} ${p.day}${p.year !== thisYear ? ", " + p.year : ""} · ${p.hour} ${p.dayPeriod}${zone ? "" : " UTC"}`;
+}
+
+/** The day axis and the 30-day headline numbers - shared by the analytics page and the pad About card. */
+function headline(r) {
   const today = new Date().toISOString().slice(0, 10);
   const latest = Object.keys(r.days || {}).sort().pop();
   const axis = R.dayAxis(latest && latest > today ? latest : today, DAYS);
-  const d30 = axis[axis.length - 30], d90 = axis[0];
+  const d30 = axis[axis.length - 30], prev30 = axis[axis.length - 60];
+  const days = r.days || {};
+  const msgs30 = sumDays(days, d30, (v) => v.m);
+  const msgsPrev = Object.entries(days).filter(([k]) => k >= prev30 && k < d30).reduce((a, [, v]) => a + v.m, 0);
+  return {
+    axis, d30,
+    tiles: {
+      msgs30: R.fmt(msgs30), msgsTrend: msgsPrev > 50 ? Math.round(((msgs30 - msgsPrev) / msgsPrev) * 100) : null,
+      mic30: R.dur(sumDays(days, d30, (v) => v.s)),
+      uniq30: R.fmt((r.uniq || {}).d30 || 0),
+      typical: r.size && r.size.typical != null ? R.fmt(r.size.typical) : "—",
+      typicalNote: r.size && r.size.src === "roster" ? "people in the room" : "people around per hour",
+      peakSize: r.size && r.size.peak != null ? R.fmt(r.size.peak) : null,
+      peak: r.peak || "—",
+    },
+  };
+}
+
+// 1.99el: the pad About tab's Analytics card - the headline tiles only (no people, no charts), cached per room
+// until Pepe's next sync for it (or 5 minutes), so a pad page view costs a Map lookup.
+const PREVIEW_TTL = 5 * 60 * 1000;
+const previewCache = new Map();
+function preview(r) {
+  if (!r) return null;
+  const key = r.room, hit = previewCache.get(key);
+  if (hit && hit.updated === r.updated && Date.now() - hit.at < PREVIEW_TTL) return hit.v;
+  const t = headline(r).tiles;
+  const v = { msgs30: t.msgs30, msgsTrend: t.msgsTrend, uniq30: t.uniq30, mic30: t.mic30, typical: t.typical,
+              typicalNote: t.typicalNote, peakSize: t.peakSize, peak: t.peak };
+  previewCache.set(key, { at: Date.now(), updated: r.updated, v });
+  if (previewCache.size > MAX_ROOMS * 2) previewCache.delete(previewCache.keys().next().value);
+  return v;
+}
+
+/** The analytics page's view model. */
+async function forRoom(r, slug) {
+  const md = await meta().catch(() => ({}));
+  const hl = headline(r);
+  const axis = hl.axis, d30 = hl.d30, d90 = axis[0];
   const days = r.days || {};
   // people: privacy per linked PATV account
   const priv = await privateLogins([...r.regulars, ...r.mic_top].map((p) => p.login));
@@ -281,9 +369,6 @@ async function forRoom(r, slug) {
   // growth: new vs returning
   const new30 = sumDays(days, d30, (v) => v.n), new90 = sumDays(days, d90, (v) => v.n);
   const visitorDays30 = sumDays(days, d30, (v) => v.u);
-  const prev30 = axis[axis.length - 60];
-  const msgs30 = sumDays(days, d30, (v) => v.m);
-  const msgsPrev = Object.entries(days).filter(([k]) => k >= prev30 && k < d30).reduce((a, [, v]) => a + v.m, 0);
   const avgVisitors = Math.round(visitorDays30 / 30);
   const how = r.how || [], hows = r.hows || [];
   const k = r.knowledge || {};
@@ -291,15 +376,11 @@ async function forRoom(r, slug) {
   return {
     name: r.name, slug, tz: md.tz || "", updated: r.updated ? R.ago(Math.floor(r.updated / 1000)) : null,
     tiles: {
-      msgs30: R.fmt(msgs30), msgsTrend: msgsPrev > 50 ? Math.round(((msgs30 - msgsPrev) / msgsPrev) * 100) : null,
-      mic30: R.dur(sumDays(days, d30, (v) => v.s)), cmds30: R.fmt(sumDays(days, d30, (v) => v.k)),
+      ...hl.tiles, cmds30: R.fmt(sumDays(days, d30, (v) => v.k)),
       avgVisitors: R.fmt(avgVisitors), new30: R.fmt(new30), new90: R.fmt(new90),
-      uniq30: R.fmt((r.uniq || {}).d30 || 0), returning30: R.fmt(Math.max(0, ((r.uniq || {}).d30 || 0) - new30)),
+      returning30: R.fmt(Math.max(0, ((r.uniq || {}).d30 || 0) - new30)),
       uniq90: R.fmt((r.uniq || {}).d90 || 0),
-      typical: r.size && r.size.typical != null ? R.fmt(r.size.typical) : "—",
-      typicalNote: r.size && r.size.src === "roster" ? "people in the room" : "people around per hour",
-      peakSize: r.size && r.size.peak != null ? R.fmt(r.size.peak) : null,
-      peak: r.peak || "—", first: R.dateOf(r.first), last: R.ago(r.last),
+      first: R.dateOf(r.first), last: R.ago(r.last),
     },
     msgChart: R.barChart(axis, Object.fromEntries(Object.entries(days).map(([d, v]) => [d, v.m])), { color: "#4caf50", label: "Messages per day",
       fmtV: (v) => `${R.fmt(v)} message${v === 1 ? "" : "s"}`, unit: (v) => R.fmt(v) }),
@@ -319,13 +400,13 @@ async function forRoom(r, slug) {
     cats: cats.map(([c, n]) => ({ label: (CAT[c] || [c])[0], color: (CAT[c] || [0, "#90a4ae"])[1], n: R.fmt(n), pct: (n / catSum) * 100 })),
     games: gameRows, mod: modRows, modTotal: R.fmt(Object.values(mod90).reduce((a, b) => a + b, 0)),
     know: {
-      has: !!(k.summary || (k.topics || []).length), summary: k.summary || "", vibe: k.vibe || "",
+      has: !!(k.summary || (k.topics || []).length), summary: sentenceTrim(k.summary), vibe: k.vibe || "",
       at: k.at ? R.ago(k.at) : null,
       topics: (k.topics || []).map((t) => ({ t: t.t, w: t.w, size: (0.85 + 0.45 * (t.w / wmax)).toFixed(2) })),
       jokes: k.jokes || [], events: k.events || [], rules: k.rules || [],
     },
     changes: r.changes || [],
-    history: (r.history || []).slice(-8).reverse().map((h) => ({ when: R.dateOf(h.at), topics: h.topics })),
+    history: (r.history || []).slice(-8).reverse().map((h) => ({ when: histWhen(h.at, md.tz), topics: h.topics })),
   };
 }
 
@@ -370,7 +451,10 @@ function register(app, { isBotToken, addUser }) {
     try {
       const r = await bySlug(req.params.slug);
       res.locals.roomAnalytics = r ? `/p/${encodeURIComponent(String(req.params.slug).toLowerCase())}/analytics` : null;
-    } catch (e) { res.locals.roomAnalytics = null; }
+      // 1.99el: the About tab's Analytics card (cached headline numbers). Like the analytics page, the template
+      // only prints them for a signed-in viewer (bridge.js's signedIn); others get the same sign-in prompt
+      res.locals.roomAnalyticsCard = r ? { stats: preview(r) } : null;
+    } catch (e) { res.locals.roomAnalytics = null; res.locals.roomAnalyticsCard = null; }
     next();
   });
 
@@ -395,4 +479,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, clean, forRoom, bySlug, listing, all };
+module.exports = { register, clean, forRoom, bySlug, listing, all, preview, sentenceTrim, histWhen };

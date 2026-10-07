@@ -69,16 +69,24 @@
   .ra .pills { display: flex; flex-wrap: wrap; gap: 6px; }
   .ra .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: #161616; border: 1px solid #2a2a2a; color: #ccc; }
   .ra .pill b { color: #fff; margin-left: 3px; }
-  .ra .topics { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+  .ra .topics { display: flex; flex-wrap: wrap; gap: 10px 8px; align-items: center; }
   .ra .topics span { padding: 3px 11px; border-radius: 999px; background: #151a15; border: 1px solid #243324; color: #c8e6c9; line-height: 1.4; }
-  .ra .know { display: grid; gap: 12px; }
-  .ra .know p { margin: 0; line-height: 1.55; color: #ddd; }
-  .ra .know ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: #ccc; font-size: 14px; line-height: 1.45; }
-  .ra .ksub { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; margin: 0 0 6px; }
+  /* 1.99el: one vertical rhythm in "What people talk about" - 22px between sections (summary, vibe, topics, the
+     jokes / moments / norms columns, changes / topics over time), 8px from a label to its content, 8px between
+     list items, 10px between chip rows */
+  .ra .know { display: grid; gap: 22px; }
+  .ra .know p { margin: 0; line-height: 1.6; color: #ddd; }
+  .ra .know p.ksub { margin: 0 0 8px; color: #9a9; line-height: 1.4; }   /* .know p's margin:0 used to win: labels sat on their lists */
+  .ra .know ul { margin: 0; padding-left: 18px; display: grid; gap: 8px; color: #ccc; font-size: 14px; line-height: 1.5; }
+  .ra .know .two { gap: 22px 28px; }
+  .ra .know .two > div { display: grid; align-content: start; min-width: 0; }
+  .ra .ksub { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; margin: 0 0 8px; line-height: 1.4; }
   .ra .vibe { display: inline-block; font-size: 13px; padding: 4px 12px; border-radius: 999px; background: #1a1630; border: 1px solid #3a3260; color: #d1c4e9; }
-  .ra .hist { display: grid; gap: 6px; font-size: 13px; }
-  .ra .hist div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 8px; color: #bbb; }
-  .ra .hist b { color: #888; font-weight: normal; }
+  /* 1.99el: one grid for every row, so the date + time column ("Oct 7 · 8 AM") lines up and never wraps */
+  .ra .hist { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; font-size: 13px; line-height: 1.5; }
+  .ra .hist div { display: contents; color: #bbb; }
+  .ra .hist b { color: #888; font-weight: normal; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ra .hist span { color: #bbb; min-width: 0; overflow-wrap: anywhere; }
   .ra .empty { color: #777; font-size: 13px; }
   .ra .gate { background: #111; border: 1px dashed #333; border-radius: 14px; padding: 28px 18px; text-align: center; color: #bbb; line-height: 1.6; }
   .ra .gate a { display: inline-block; margin-top: 10px; border: 1px solid #2e4d2b; border-radius: 8px; padding: 8px 16px; }
@@ -93,7 +101,7 @@
     .ra-cells { gap: 1px; }
     .ra .hide-sm { display: none; }
     .ra .brow { grid-template-columns: minmax(70px, 110px) minmax(0, 1fr) auto; }
-    .ra .hist div { grid-template-columns: 76px minmax(0, 1fr); }
+    .ra .hist { gap: 8px 10px; font-size: 12.5px; }
   }
 </style>
 <main class="ra" id="ra">

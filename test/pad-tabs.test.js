@@ -210,7 +210,7 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   assert.match(live.slice(0, 900), /<p class="lstat" id="rmStatus"><span id="rmStDot" aria-hidden="true">🟢<\/span>\s*<span><b id="rmCount">2<\/b> in <b>Plant Based Chatting<\/b><\/span>[\s\S]*🐸 Pepe is here<\/span><\/p>/, "status line at the top of Live");
   const about = own.slice(own.indexOf('id="padPanel-about"'));
   assert.match(about, /<dt>Camfrog room<\/dt><dd>Plant Based Chatting<\/dd>/);
-  assert.match(about, /📈 Pad analytics/);
+  assert.match(about, /📈 Analytics[\s\S]*See full analytics ›/, "1.99el: About's Analytics card");
   // a different tagline shows; the public gets no ⚙
   const pub = await renderRoom({ room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: false, topic: "Grow stuff", platform: "camfrog", description: "Plants and chat" } });
   assert.match(pub, /<div class="topic" id="rmTopic" data-desc="Plants and chat">Grow stuff<\/div>/);
