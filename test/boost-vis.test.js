@@ -97,12 +97,13 @@ async function renderPads(rows) {
 }
 const pad = (id, extra = {}) => ({ id, slug: id.toLowerCase(), title: id, live: true, bridged: true, count: 5, micCount: 1, slot_count: 1, now: [], next: [], ...extra });
 
-test("/p: no 'Boost a pad' button (boosting happens on the pad page); the copy still says fans can boost", async () => {
+test("/p: no 'Boost a pad' button (boosting happens on the pad page); 1.99es: the Your-show card is one line", async () => {
   const html = await renderPads([pad("Alpha", { trend: { rank: 1, front: true, score: 50, boost: 0 } })]);
   assert.doesNotMatch(html, /Boost a pad/i);
   assert.doesNotMatch(html, /href="#trending"/);
   assert.match(html, /href="\/stage">🎥 Go live</);
-  assert.match(html, /Fans can <b>🚀 boost<\/b> a pad/);
+  assert.match(html, /<b>Anyone can go live\.<\/b> Stream to a pad's stage from OBS or your browser, or put a YouTube \/ Twitch link on it\./);
+  assert.doesNotMatch(html, /Fans can <b>🚀 boost<\/b> a pad|earned, never bought|Pick a pad and a slot/);
 });
 
 test("/p: the 🚀 badge only on boosted pads - card header slot and Trending strip", async () => {
@@ -137,13 +138,15 @@ async function renderHome(locals = {}) {
   }, locals));
 }
 
-test("home: no 'Boost a pad' button; Go live and Pads stay; the copy links fans to /p", async () => {
+test("home: no 'Boost a pad' button; Go live and Pads stay; 1.99es: the Your-show card is one line, no bullets", async () => {
   const html = await renderHome();
   assert.doesNotMatch(html, /Boost a pad/i);
   assert.doesNotMatch(html, /#trending/);
   assert.match(html, /class="golive-btn" href="\/stage\?room=alpha">🎥 Go live</);
   assert.match(html, /<a class="btn" href="\/p">Pads<\/a>/);
-  assert.match(html, /<b>🚀 boost<\/b> a pad from <a href="\/p">its page<\/a>/);
+  const card = html.slice(html.indexOf('id="stageShow"'), html.indexOf("</section>", html.indexOf('id="stageShow"')));
+  assert.match(card, /<p><b>Anyone can go live\.<\/b> Stream to a pad's stage from OBS or your browser, or put a YouTube \/ Twitch link on it\.<\/p>/);
+  assert.doesNotMatch(card, /<ul>|<li>|Ordinary slots|liveliest pad|boost/);
 });
 
 test("home: Top Pads lists the given (top 5, live) pads with 👥 / 🎙 and a 🚀 badge only when boosted; hidden when none live", async () => {
@@ -153,7 +156,8 @@ test("home: Top Pads lists the given (top 5, live) pads with 👥 / 🎙 and a �
   assert.doesNotMatch(html, /On now/);
   const box = html.slice(html.indexOf('id="tpH"'), html.indexOf("</ol>", html.indexOf('id="tpH"')));
   assert.deepEqual([...box.matchAll(/href="\/p\/([^"]+)"/g)].map((m) => m[1]), ["b", "a"], "in the given order");
-  assert.match(box, /👥 12<\/span><span[^>]*>🎙 2<\/span><span class="bm boost-mark"[^>]*>🚀 1\.2M<\/span>/);
+  // 1.99es: the badge sits by the name, the counts stay in their own column
+  assert.match(box, /<span class="nt">Bee<\/span><span class="bm boost-mark"[^>]*>🚀 1\.2M<\/span><\/span><span class="v"><span[^>]*>👥 12<\/span><span[^>]*>🎙 2<\/span><\/span>/);
   assert.equal((box.match(/boost-mark/g) || []).length, 1, "the unboosted pad has no badge");
   const bar = html.slice(html.indexOf('id="stTtl"'), html.indexOf('id="stSub"'));
   assert.match(bar, /<span class="bm boost-mark" title="Boosted: 1,234,567 PAT still active[^"]*"[^>]*>🚀 1\.2M<\/span>/, "front stage header badge");

@@ -16,6 +16,6 @@
 <% } else { %>
   <% if (visitor_) { %><%- include('follow-btn', { kind: 'user', id: usernameProfile, following: S_.following, signed: S_.signed, next: back_ }) %><% } %>
   <% if (visitor_ && S_.signed) { %><a class="btn pf-msg" href="/messages?to=<%= encodeURIComponent(usernameProfile) %>" title="Send a direct message">💬 Message</a><% } %>
-  <link rel="stylesheet" href="/public/css/stories.css?v=4">
+  <link rel="stylesheet" href="/public/css/stories.css?v=5">
   <script src="/public/js/follow.js?v=1" defer></script>
 <% } %>

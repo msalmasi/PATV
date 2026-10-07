@@ -156,6 +156,24 @@
   .rm .upnext { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
   .rm .upnext li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
   .rm .upnext time { color: #c6e94f; font-variant-numeric: tabular-nums; min-width: 5.5em; }
+  /* 1.99es: the pad's look - banner inside the header behind a scrim, the avatar by the name, the accent (--pad-accent, padlook.js) */
+  .rm .hero { position: relative; }
+  .rm .hero.has-bn { padding-top: 0; }
+  .rm .hero-bn { position: relative; height: 180px; margin: 0 -18px 4px; background: #111; border-radius: 13px 13px 0 0; overflow: hidden; }
+  .rm .hero-bn img { width: 100%; height: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
+  .rm .hero-bn::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,10,0) 35%, rgba(10,10,10,.55) 70%, #111 100%); }
+  .rm .hero.has-bn .hd { margin-top: -46px; position: relative; z-index: 1; }
+  .rm .hero.has-bn h1 { text-shadow: 0 1px 4px rgba(0,0,0,.85); }
+  .rm .rm-av { width: 56px; height: 56px; flex: none; border-radius: 16px; overflow: hidden; border: 3px solid #111; background: #1a1a1a; display: inline-block; }
+  .rm .rm-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rm.pad-acc .hero { background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--pad-accent) 30%, #111) 0%, #111 58%); border-color: color-mix(in srgb, var(--pad-accent) 35%, #222); }
+  .rm.pad-acc .padref { color: var(--pad-accent); }
+  .rm.pad-acc .ptab[aria-selected="true"] { background: color-mix(in srgb, var(--pad-accent) 22%, #111); border-color: var(--pad-accent); }
+  .rm.pad-acc .hd-follow .fw-btn:not(.on) { background: var(--pad-accent); border-color: var(--pad-accent); color: var(--pad-accent-ink) !important; }
+  .rm.pad-acc .hd-follow .fw-btn.on { border-color: var(--pad-accent); color: var(--pad-accent) !important; }
+  .rm.pad-acc .ibtn:hover, .rm.pad-acc .hd-more[open] > summary { border-color: var(--pad-accent); }
+  .rm.pad-acc .golive-btn.ghost { border-color: var(--pad-accent); color: var(--pad-accent) !important; }
+  @media (max-width: 640px) { .rm .hero-bn { height: 120px; } .rm .rm-av { width: 46px; height: 46px; border-radius: 13px; } .rm .hero.has-bn .hd { margin-top: -36px; } }
   .rm .banner-img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 12px; display: block; border: 1px solid #222; }
   .rm .desc { color: #bbb; font-size: 14px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
   .rm .padref { font-size: 14px; color: #9ccc9f; font-weight: bold; letter-spacing: .02em; }
@@ -301,9 +319,14 @@
     .rm .feed { scroll-behavior: auto; }
   }
 </style>
-<main class="rm">
+<%# 1.99es: the pad's look (padlook.js via app.locals): accent -> CSS custom properties on <main> (validated hex only),
+    an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
+    A pad with no look renders exactly as before (the old link banner above the header). %>
+<% const LK_ = typeof padLook === 'function' ? padLook(room.id) : null;
+   const avHtml_ = typeof padAv === 'function' ? padAv(room.id, { cls: 'rm-av', fallback: '' }) : ''; %>
+<main class="rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p">Pads</a> › p/<%= room.slug %></div>
-  <% if (room.banner) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
+  <% if (room.banner && !(LK_ && LK_.banner)) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
   <%# 1.99ef: the header is three zones - identity (left: name + LIVE, p/slug + quiet type tags, one description line),
       actions (right: Follow + the follower count as plain text, ⚙ settings with the moderation / approvals badge,
       ⋯ Rules / Pad analytics / Copy link) - and no status: who's in the room / Pepe is here is the Live tab's status
@@ -314,10 +337,11 @@
      const queue_ = feed_ && feed_.queue ? feed_.queue : 0, pending_ = schedule_ && schedule_.pending ? schedule_.pending : 0;
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
      const psTitle_ = 'Pad settings: page, stage, feed, Pepe, rules, moderation' + (queue_ ? ' · ' + queue_ + ' waiting in Moderation' : '') + (pending_ ? ' · ' + pending_ + ' to approve' : ''); %>
-  <section class="hero" aria-labelledby="rmTitle">
+  <section class="hero<%= LK_ && LK_.banner ? ' has-bn' : '' %>" aria-labelledby="rmTitle">
+    <% if (LK_ && LK_.banner) { %><div class="hero-bn" aria-hidden="true"><img src="<%= LK_.banner %>" alt="" decoding="async"></div><% } %>
     <div class="hd">
       <div class="hd-id">
-        <h1 id="rmTitle"><%= room.name %>
+        <h1 id="rmTitle"><%- avHtml_ %><%= room.name %>
           <% if (!siteOnly_) { %><span class="live <%= room.live ? 'chat' : 'off' %>" id="rmLive" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span><% } %>
         </h1>
         <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">

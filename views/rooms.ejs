@@ -4,7 +4,8 @@
    /* 1.99ed: inside a pad card (one <a>) names are plain text - no nested links */
    const TXT = (n, d) => escapeFn(d != null && d !== '' ? d : (n == null ? '' : n));
    /* 1.99ek: the shared 🚀 boost badge (boostmark.js) - "" when a pad isn't boosted */
-   const BM = typeof boostMark === 'function' ? boostMark : () => ''; %>
+   const BM = typeof boostMark === 'function' ? boostMark : () => '';
+   const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js) %>
 <!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99ed: a pad card is ONE link (a.ch) with no buttons and no links inside; fixed rows (head / meta /
@@ -67,6 +68,14 @@
   .cg a.ch:focus-visible { outline: 2px solid #c6e94f; outline-offset: 2px; }
   .cg a.ch:hover .t, .cg a.ch:focus-visible .t { text-decoration: underline; text-underline-offset: 3px; }
   .cg .ch-head { grid-area: head; display: grid; gap: 6px; min-width: 0; align-content: start; }
+  .cg .ch-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .cg .ch-name .pill.ch-mark { flex: none; }
+  .cg .ch-name .t { min-width: 0; }
+  .cg .pad-av { width: 28px; height: 28px; flex: none; border-radius: 8px; overflow: hidden; display: inline-grid; place-items: center; background: #1c2a1c; border: 1px solid #2c3a2d; font-size: 13px; font-weight: bold; color: #fff; }
+  .cg .pad-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cg .tr-list .tn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 8em; }
+  .cg .tr-list .tn .t { flex: 0 1 auto; }
+  .cg .tr-list .tn .tg { flex: none; }
   .cg .ch-head .t { font-size: 17px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* badges: platform + status, then a free slot for boost / trending marks (.ch-mark) */
   .cg .ch-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
@@ -136,12 +145,8 @@
   <section class="cta" aria-label="Go live">
     <div>
       <b class="big">🎥 Your show, on PATV</b>
-      <span class="muted" style="font-size:14px;color:#d9c9c3">Every pad has stage slots you can stream to (free on most pads). The front page shows the liveliest pad — earned, never bought.</span>
-      <ol>
-        <li>Pick a pad and a slot: <b>now</b>, <b>later</b>, or join the <b>queue</b>.</li>
-        <li>Stream from <b>OBS</b>, straight from your <b>browser</b>, or drop a <b>YouTube / Twitch</b> link.</li>
-        <li>Want your pad on the front page? Get people chatting and on the mic. Fans can <b>🚀 boost</b> a pad from its page to tip a close race.</li>
-      </ol>
+      <%# 1.99es: one line, like the homepage's card (the three steps are gone) %>
+      <span class="muted" style="font-size:14px;color:#d9c9c3"><b>Anyone can go live.</b> Stream to a pad's stage from OBS or your browser, or put a YouTube / Twitch link on it.</span>
     </div>
     <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a></div>
   </section>
@@ -168,8 +173,9 @@
     <% } else { %>
       <ol class="tr-list">
         <% trend_.forEach((r) => { %><li class="<%= r.trend.front ? 'front' : '' %>">
-          <a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
-          <span class="tags"><% if (r.trend.front) { %><span class="tg on">📺 On the front page</span><% } else { %><span class="tg">Trending #<%= r.trend.rank - (trend_[0].trend.front ? 1 : 0) %></span><% } %><%- BM(r.boost_pat, 'tg boost') %><span class="tg">👥 <%= r.count %></span></span>
+          <%# 1.99es: the 🚀 badge sits by the name, not among the stat tags %>
+          <span class="tn"><a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a><%- BM(r.boost_pat, 'tg boost') %></span>
+          <span class="tags"><% if (r.trend.front) { %><span class="tg on">📺 On the front page</span><% } else { %><span class="tg">Trending #<%= r.trend.rank - (trend_[0].trend.front ? 1 : 0) %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
           <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="Boost <%= r.title %>">🚀 Boost</a>
         </li><% }) %>
       </ol>
@@ -195,13 +201,12 @@
            const pepeTip = "Pepe is in this room — his stream plays here"; %>
         <a class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>">
           <div class="ch-head">
-            <span class="t"><%= r.title %></span>
+            <%# 1.99es: avatar, name, then the 🚀 badge by the name (it used to trail the status pills) %>
+            <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t"><%= r.title %></span><%- BM(r.boost_pat, 'pill ch-mark') %></span>
             <span class="ch-badges">
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
               <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="The pad's Camfrog room (ON STAGE = a video stream)"><span class="dot" aria-hidden="true"></span><%= r.live ? '💬 ROOM ACTIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
               <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
-              <%# 1.99ek: the boost mark (reserved slot since 1.99ed) - only when the pad is boosted %>
-              <%- BM(r.boost_pat, 'pill ch-mark') %>
             </span>
           </div>
           <div class="ch-meta">

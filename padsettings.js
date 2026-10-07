@@ -3,7 +3,7 @@
 // (feed reports, approval, bans, Pepe's feed settings) and the pad page's live Manage panel, and "is Pepe on my
 // feed?" wasn't findable. The hub has one section per job; the page draws all of them and the tabs (public/js/
 // pad-settings.js) show one at a time (no JS: all, in order):
-//   General      title, description, banner, the platform badge (read-only), royalties
+//   General      title, description, the look (1.99es: avatar, banner upload, accent - padlook.js), the platform badge (read-only), royalties
 //   Stage        who's on now, bookings, slots / prices / approval, stage bans, stage events
 //   Feed         who can post, the approval switch, posts per day, approved posters, Camfrog announcements
 //   Pepe         "Pepe on this pad's feed" (the pad's master switch), answering / taking part / limits / vision,
@@ -64,6 +64,8 @@ async function hubData(R, viewer, app) {
     am: await AM.settings(R.id), amGlobal: await AM.globalCaps(), AM, automod,
     rules: await padrules.get(R.id), effective: await padrules.effective(R.id), padrules,
     queue: reports.length + pending.length,
+    // 1.99es: the pad's look (padlook.js) - avatar, banner upload + focal point, accent colour
+    look: await require("./padlook").init().then(() => require("./padlook").look(R.id)), PL: require("./padlook"),
   };
 }
 

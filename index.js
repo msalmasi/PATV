@@ -1084,6 +1084,7 @@ require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe 
 require("./feedautomod").register(app, { isBotToken, addUser });   // 1.99dc: Pepe's feed automod (verdicts, settings, reversals, notices)
 require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules (else Padiquette)
 require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settings hub /p/:slug/settings (was /manage + /mod)
+require("./padlook").register(app, { addUser });       // 1.99es: a pad's look - avatar, banner, accent (/api/rooms/:slug/look, /media/pad/<file>)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories

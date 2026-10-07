@@ -478,7 +478,41 @@
     var d = inline();
     if (d) { data = applyLocal(d); paintRings(); }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initRings); else initRings();
-  document.addEventListener('patv:feed-swapped', function () { data = null; loading = null; initRings(); });
+  // 1.99es: the strip's scroller - no native scrollbar (stories.css), so: which edges have more (the fade), and
+  // ‹ › buttons (hover-capable pointers only, CSS) that page by about one viewport. Touch / trackpad / shift + wheel /
+  // keyboard focus scroll natively; the vertical wheel is never taken over.
+  function initStrips() {
+    document.querySelectorAll('.ss-scroll').forEach(function (box) {
+      if (box.__ssInit) return;
+      box.__ssInit = true;
+      var row = box.querySelector('.ss-row');
+      if (!row) return;
+      if (row.querySelector('.ss-t')) box.classList.add('thumbs');
+      var raf = 0;
+      function update() {
+        raf = 0;
+        var max = row.scrollWidth - row.clientWidth;
+        box.classList.toggle('ovf', max > 1);
+        box.classList.toggle('at-start', row.scrollLeft <= 1);
+        box.classList.toggle('at-end', row.scrollLeft >= max - 1);
+      }
+      function soon() { if (!raf) raf = requestAnimationFrame(update); }
+      var smooth = !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      box.querySelectorAll('.ss-arr').forEach(function (b) {
+        b.hidden = false;
+        b.addEventListener('click', function () {
+          var dir = b.classList.contains('prev') ? -1 : 1;
+          row.scrollBy({ left: dir * Math.max(120, row.clientWidth * 0.85), behavior: smooth ? 'smooth' : 'auto' });
+        });
+      });
+      row.addEventListener('scroll', soon, { passive: true });
+      if (window.ResizeObserver) new ResizeObserver(soon).observe(row); else window.addEventListener('resize', soon);
+      row.querySelectorAll('img').forEach(function (im) { if (!im.complete) im.addEventListener('load', soon, { once: true }); });
+      update();
+    });
+  }
+  function initAll() { initRings(); initStrips(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll); else initAll();
+  document.addEventListener('patv:feed-swapped', function () { data = null; loading = null; initRings(); initStrips(); });
   window.patvStories = { open: open, _state: function () { return V; } };
 })();

@@ -194,7 +194,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   // the navbar
   assert.match(html, new RegExp('<a href="/p/' + s + '/submit" class="nav-post" title="Create a post in p/' + s + '">'));
   assert.ok(html.indexOf('class="nav-post"') < html.indexOf('class="nav-golive"'), "Post sits before Go live");
-  assert.match(html, /feed\.css\?v=15/); assert.match(html, /feed-composer\.js\?v=12/); assert.match(html, /stories\.js\?v=6/);
+  assert.match(html, /feed\.css\?v=16/); assert.match(html, /feed-composer\.js\?v=13/); assert.match(html, /stories\.js\?v=7/);
 });
 
 test("pad page signed out: a sign-in bar instead of the composer; About's analytics link is a button", async () => {
@@ -244,7 +244,7 @@ test("/submit: signed out -> login with next=; signed in -> the open composer wi
   assert.match(formTag(r.text), /data-expanded="1"/); assert.doesNotMatch(formTag(r.text), / hidden /);
   assert.match(r.text, /class="fc-comm" data-empty/, "no pad preselected");
   assert.match(r.text, /name="community" value="plant_based_chatting"/, "the pad picker lists the pads");
-  assert.match(r.text, /feed-composer\.js\?v=12/);
+  assert.match(r.text, /feed-composer\.js\?v=13/);
 });
 
 test("/p/<pad>/submit preselects that pad; signed out -> login next=; unknown pad 404; /submit?pad= -> /p/<pad>/submit", async () => {

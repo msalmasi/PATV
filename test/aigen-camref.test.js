@@ -216,8 +216,8 @@ test("the composer and the pad page: the cam option, Use in Generate, the right-
   const m = /data-aigen="([^"]+)"/.exec(html);
   const cfg = JSON.parse(m[1].replace(/&#34;/g, '"').replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
   assert.ok(cfg.camPads.includes(ROOM) && !cfg.camPads.includes(LOUNGE), "the cam option only for Camfrog pads");
-  assert.match(html, /feed-composer\.js\?v=12/, "composer cache-buster bumped");
-  assert.match(html, /feed\.css\?v=15/, "feed.css cache-buster bumped");
+  assert.match(html, /feed-composer\.js\?v=13/, "composer cache-buster bumped");
+  assert.match(html, /feed\.css\?v=16/, "feed.css cache-buster bumped");
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
   assert.match(room, /✨ Use in Generate/, "the popover's action");
   assert.match(room, /patv:gen-cam/, "handed to the composer on the page");

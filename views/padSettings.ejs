@@ -8,9 +8,9 @@
   panel by pad-settings.js.
 %>
 <link rel="stylesheet" href="/public/css/stage.css?v=5">
-<link rel="stylesheet" href="/public/css/feed.css?v=15">
+<link rel="stylesheet" href="/public/css/feed.css?v=16">
 <link rel="stylesheet" href="/public/css/room-mod.css?v=4">
-<link rel="stylesheet" href="/public/css/pad-settings.css?v=1">
+<link rel="stylesheet" href="/public/css/pad-settings.css?v=2">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -52,17 +52,49 @@
   <%# ─────────────── General ─────────────── %>
   <section class="ps-sec" id="general" role="tabpanel" aria-labelledby="tab-general">
     <h2 class="ps-h">🏷️ General</h2>
-    <p class="ps-what">How your pad looks to everyone: its name, its description, the banner on top of the pad page, and the badge that says what it's backed by.</p>
+    <p class="ps-what">How your pad looks to everyone: its name, its description, its avatar, banner and colour, and the badge that says what it's backed by.</p>
     <div class="sb-card ps-card">
       <h3>Pad page</h3>
       <form id="pageForm" class="book2 ps-form">
         <label class="fld">Title<input type="text" name="title" maxlength="60" value="<%= room.title %>"></label>
         <label class="fld">Description<textarea name="description" maxlength="500" rows="3"><%= room.description %></textarea></label>
-        <label class="fld">Banner image <small>an https:// link, shown on top of the pad page</small><input type="text" name="banner" maxlength="300" value="<%= room.banner %>" placeholder="https://…"></label>
+        <label class="fld">Banner link <small>optional: an https:// image link, used when no banner is uploaded below</small><input type="text" name="banner" maxlength="300" value="<%= room.banner %>" placeholder="https://…"></label>
         <div class="row"><button type="submit" class="btn primary">Save page</button><span class="msg" id="pageMsg" role="status"></span></div>
       </form>
       <div class="ps-kv"><span>Platform badge</span><span><%- padBadge(platform) %> <small class="muted"><%= camfrog ? 'Set by the Camfrog room behind this pad.' : 'A pad made on the site - no Camfrog room behind it.' %> The badge follows the platform; ask a site admin to change it.</small></span></div>
       <div class="ps-kv"><span>Address</span><span><a href="<%= href %>">publicaccess.tv/p/<%= slug %></a></span></div>
+    </div>
+    <%# 1.99es: the pad's look (padlook.js, public/js/pad-look.js) - free, owner-only %>
+    <% const LK = typeof look !== 'undefined' && look ? look : { avatar: null, banner: null, bannerY: 50, accent: null, vars: '' };
+       const PAL = typeof PL !== 'undefined' && PL ? PL.PALETTE : [];
+       const mono_ = typeof PL !== 'undefined' && PL ? PL.monogram(room) : '?';
+       const maxMb_ = typeof PL !== 'undefined' && PL ? PL.MAX_BYTES / 1048576 : 5; %>
+    <div class="sb-card ps-card pl" id="look" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/look" data-max="<%= typeof PL !== 'undefined' && PL ? PL.MAX_BYTES : 5242880 %>" style="<%= LK.vars %>">
+      <h3>🎨 Look</h3>
+      <p class="ps-mini">Your pad's avatar, banner and colour. They show on the pad page, the Pads list, Top Pads, stories and the feed's pad chips. Free. Pictures are re-encoded (metadata stripped) and must be safe for work — adult pictures are refused (<a href="/terms">Terms</a>).</p>
+      <div class="pl-prev" aria-hidden="true">
+        <div class="pl-bn<%= LK.banner ? ' has' : '' %>"><% if (LK.banner) { %><img src="<%= LK.banner %>" alt=""><% } %></div>
+        <div class="pl-id"><span class="pl-av<%= LK.avatar ? ' has' : '' %>" data-mono="<%= mono_ %>"><% if (LK.avatar) { %><img src="<%= LK.avatar %>" alt=""><% } else { %><%= mono_ %><% } %></span><b><%= room.title %></b></div>
+      </div>
+      <div class="pl-row">
+        <div class="pl-fld"><span class="pl-k">Avatar <small>square, shown at 256 px · up to <%= maxMb_ %> MB</small></span>
+          <div class="pl-btns"><label class="btn pl-file">Upload avatar<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif" data-kind="avatar"></label>
+            <button type="button" class="btn ghost" data-remove="avatar"<%= LK.avatar ? '' : ' hidden' %>>Remove</button></div></div>
+        <div class="pl-fld"><span class="pl-k">Banner <small>wide picture, 1600 px · up to <%= maxMb_ %> MB</small></span>
+          <div class="pl-btns"><label class="btn pl-file">Upload banner<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif" data-kind="banner"></label>
+            <button type="button" class="btn ghost" data-remove="banner"<%= LK.banner ? '' : ' hidden' %>>Remove</button></div>
+          <label class="pl-y"<%= LK.banner ? '' : ' hidden' %>>Focal point <small>which part of the banner stays in view</small>
+            <input type="range" name="banner_y" min="0" max="100" step="1" value="<%= LK.bannerY %>" aria-label="Banner focal point, top to bottom"></label></div>
+      </div>
+      <fieldset class="pl-acc"><legend class="pl-k">Accent colour <small>header, tabs and buttons on the pad page, and the pad's chip</small></legend>
+        <div class="pl-sw" role="radiogroup" aria-label="Accent colour">
+          <label class="pl-c none" title="No accent (the default green)"><input type="radio" name="accent" value=""<%= LK.accent ? '' : ' checked' %>><span>✕</span></label>
+          <% PAL.forEach((c) => { %><label class="pl-c" title="<%= c.name %>" style="--c:<%= c.hex %>"><input type="radio" name="accent" value="<%= c.id %>"<%= LK.accent === c.hex ? ' checked' : '' %> aria-label="<%= c.name %>"><span></span></label><% }) %>
+        </div>
+        <label class="pl-hex">Custom <input type="text" name="custom" maxlength="7" placeholder="#4caf50" pattern="#?[0-9A-Fa-f]{6}|#?[0-9A-Fa-f]{3}" value="<%= LK.accent && !PAL.some((c) => c.hex === LK.accent) ? LK.accent : '' %>" spellcheck="false" autocomplete="off" aria-label="Custom accent colour (hex)"></label>
+        <p class="ps-mini">Colours too dark to read on the site's dark background are lightened automatically.</p>
+      </fieldset>
+      <div class="cm-row"><span class="fc-err" id="plMsg" role="status" aria-live="polite"></span><button type="button" class="btn primary" id="plSave">Save colour &amp; focal point</button></div>
     </div>
     <div class="sb-card ps-card" id="royalties">
       <h3>Royalties</h3>
@@ -365,5 +397,6 @@
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=4" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>
+<script src="/public/js/pad-look.js?v=1" defer></script>
 </body>
 </html>

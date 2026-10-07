@@ -5,13 +5,35 @@
 .ss *, .sv *, .sv-ask * { box-sizing: border-box; }
 .ss-h { font: 600 13px Ubuntu, sans-serif; color: #c6e94f; margin: 0 0 8px; letter-spacing: 0; text-transform: none; display: flex; gap: 8px; align-items: baseline; }
 .ss-h small { color: #888; font-weight: normal; font-size: 12px; }
-.ss-row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; padding: 4px 2px 8px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+/* 1.99es: the native scrollbar is hidden (it was a light-grey bar on the dark theme); touch, trackpad, shift + wheel and
+   keyboard focus still scroll. stories.js marks .ss-scroll with ovf / at-start / at-end: the edge that has more fades
+   out (a mask - works on any card background), and hover-capable pointers get ‹ › buttons that page by a viewport. */
+.ss-scroll { position: relative; min-width: 0; --fl: 0px; --fr: 0px; }
+.ss-scroll.ovf:not(.at-start) { --fl: 28px; }
+.ss-scroll.ovf:not(.at-end) { --fr: 44px; }
+.ss-row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; padding: 4px 2px 8px; scroll-snap-type: x proximity; scroll-padding-inline: 8px;
+          scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch;
+          -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%); }
+.ss-row::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.ss-arr { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .ss-scroll.ovf .ss-arr { display: grid; place-items: center; position: absolute; top: 38px; z-index: 3; width: 32px; height: 32px; margin-top: -16px; padding: 0 0 2px;
+    border-radius: 50%; border: 1px solid #3a3a3a; background: rgba(18,18,18,.92); color: #eee; font: 700 20px/1 Ubuntu, sans-serif; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .ss-scroll.ovf .ss-arr.prev { left: 0; }
+  .ss-scroll.ovf .ss-arr.next { right: 0; }
+  .ss-scroll.ovf .ss-arr:hover { border-color: #4caf50; color: #fff; }
+  .ss-scroll.ovf.at-start .ss-arr.prev, .ss-scroll.ovf.at-end .ss-arr.next { display: none; }
+  .ss-scroll.thumbs .ss-arr { top: 68px; }
+}
 .ss-c { flex: none; width: 76px; display: grid; justify-items: center; gap: 5px; background: none; border: 0; padding: 0; cursor: pointer; color: #ddd; font: 12px Ubuntu, sans-serif; position: relative; scroll-snap-align: start; }
 .ss-ring { width: 72px; height: 72px; border-radius: 50%; padding: 3px; display: grid; place-items: center;
            background: conic-gradient(from 210deg, #c6e94f, #4caf50, #26c6da, #ab47bc, #ff7043, #c6e94f); }
 .ss-c.seen .ss-ring { background: #3a3a3a; }
 .ss-av { width: 100%; height: 100%; border-radius: 50%; border: 3px solid #0d0d0d; background: #1c2a1c; overflow: hidden; position: relative; display: grid; place-items: center; }
 .ss-av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+.ss-av img.ss-pav { z-index: 0; }              /* 1.99es: the pad's avatar sits under a capture cover */
 .ss-mono { font: 700 18px Ubuntu, sans-serif; color: #c6e94f; letter-spacing: .02em; }
 .ss-n { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.2; }
 .ss-c.seen .ss-n { color: #999; }

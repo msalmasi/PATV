@@ -146,7 +146,19 @@ const hopBase = (scope) => {
   return "/hop";
 };
 const hopHref = (scope, opts = {}) => HOPM.hopHref(hopBase(scope), opts);
-const fx = { esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+/**
+ * 1.99es: a pad's chip badge (the bar, the chips, the composer's picker): its avatar (padlook.js) when it has one, else the
+ * frog / sofa / initial (cBadge); its accent colours it (a validated hex, as a custom property only). size: "sm" | "lg" | "".
+ */
+function padChip(c, size = "", badge = null) {
+  let L = null;
+  try { L = c && c.id ? require("./padlook").look(c.id) : null; } catch (e) { L = null; }
+  const cls = "cbadge" + (size ? " " + size : "") + (L && L.avatar ? " has-img" : "") + (L && L.accent ? " acc" : "");
+  const st = "--h:" + hue(c && c.slug) + (L && L.accent ? ";--pad-accent:" + L.accent : "");
+  const inner = L && L.avatar ? `<img src="${esc(L.avatar)}" alt="" loading="lazy">` : esc(badge != null ? badge : cBadge(c));
+  return `<span class="${cls}" style="${st}" aria-hidden="true">${inner}</span>`;
+}
+const fx = { esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.

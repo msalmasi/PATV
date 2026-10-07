@@ -617,7 +617,11 @@
     var b = document.createElement('span'); b.className = 'cbadge sm' + (x ? '' : ' all'); b.setAttribute('aria-hidden', 'true');
     var t = document.createElement('b');
     if (x) {
-      b.textContent = x.getAttribute('data-badge') || '';
+      // 1.99es: the pad's avatar / accent (padlook.js) when it has them
+      var av = x.getAttribute('data-av'), acc = x.getAttribute('data-acc');
+      if (av && /^\/media\/pad\/[a-f0-9]{32}_a\.webp$/.test(av)) { var im = document.createElement('img'); im.src = av; im.alt = ''; b.appendChild(im); b.classList.add('has-img'); }
+      else b.textContent = x.getAttribute('data-badge') || '';
+      if (acc && /^#[0-9a-f]{6}$/.test(acc)) { b.classList.add('acc'); b.style.setProperty('--pad-accent', acc); }
       b.style.setProperty('--h', x.getAttribute('data-hue') || '0');
       t.textContent = x.getAttribute('data-title') || x.value;
       // 1.99df: the label is p/<slug>, or u/<username> for "Your profile"

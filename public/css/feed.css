@@ -456,6 +456,10 @@ label.fc-terms input { margin-top: 2px; accent-color: #4caf50; }
 .cbadge.sm { width: 20px; height: 20px; border-radius: 6px; font-size: 11px; }
 .cbadge.lg { width: 56px; height: 56px; border-radius: 16px; font-size: 26px; }
 .cbadge.all { background: #1b2b1b; border-color: #2f5a34; }
+/* 1.99es: a pad's look on its chip (padlook.js): its avatar fills the badge, its accent colours it */
+.cbadge.acc { background: color-mix(in srgb, var(--pad-accent) 42%, #111); border-color: var(--pad-accent); }
+.cbadge.has-img { overflow: hidden; background: #111; padding: 0; }
+.cbadge.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .fd-h { margin: 6px 0 2px; font-size: 26px; text-align: left; }
 .fd .fd-h + .sub { text-align: left; }
 .cb { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; margin: 14px 0 12px; }

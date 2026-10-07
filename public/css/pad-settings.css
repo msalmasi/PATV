@@ -133,3 +133,40 @@
 .ps .fa-inline input, .ps .fa-inline select { flex: 1 1 160px; width: auto; min-width: 0; }
 .ps .ps-rule input, .ps .ps-rules textarea { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 7px; padding: 8px 10px; font: inherit; font-size: 14px; box-sizing: border-box; width: 100%; }
 .ps .ps-rule input { font-weight: bold; }
+
+/* 1.99es: the Look card (public/js/pad-look.js) - avatar, banner + focal point, accent swatches */
+.pl { --pad-accent: #4caf50; }
+.pl .pl-prev { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid #262626; background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--pad-accent) 26%, #111) 0%, #111 60%); margin: 4px 0 12px; }
+.pl .pl-bn { height: 110px; background: #141414; }
+.pl .pl-bn:not(.has) { height: 44px; background: transparent; }
+.pl .pl-bn img { width: 100%; height: 100%; object-fit: cover; object-position: 50% var(--pad-banner-y, 50%); display: block; }
+.pl .pl-id { display: flex; align-items: center; gap: 10px; padding: 0 14px 12px; margin-top: -26px; position: relative; }
+.pl .pl-id b { color: #fff; font-size: 17px; overflow-wrap: anywhere; text-shadow: 0 1px 3px #000; padding-top: 24px; }
+.pl .pl-av { width: 56px; height: 56px; flex: none; border-radius: 16px; display: grid; place-items: center; overflow: hidden; font: 700 24px Ubuntu, sans-serif; color: #fff;
+             background: color-mix(in srgb, var(--pad-accent) 40%, #1a1a1a); border: 3px solid #111; }
+.pl .pl-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pl .pl-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 18px; }
+.pl .pl-fld { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.pl .pl-k { font-weight: bold; color: #e6e6e6; font-size: 14px; display: grid; gap: 2px; }
+.pl .pl-k small, .pl .pl-y small { color: #9aa09a; font-weight: normal; font-size: 12.5px; }
+.pl .pl-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pl .pl-file { position: relative; overflow: hidden; cursor: pointer; }
+.pl .pl-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
+.pl .pl-file:focus-within { outline: 2px solid #4AFFEF; outline-offset: 1px; }
+.pl .pl-y { display: grid; gap: 4px; font-size: 13.5px; color: #ccc; }
+.pl .pl-y[hidden] { display: none; }
+.pl .pl-y input { width: 100%; accent-color: var(--pad-accent); }
+.pl .pl-acc { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; display: grid; gap: 8px; }
+.pl .pl-acc legend { padding: 0; margin-bottom: 8px; }
+.pl .pl-sw { display: flex; flex-wrap: wrap; gap: 8px; }
+.pl .pl-c { position: relative; width: 34px; height: 34px; cursor: pointer; }
+.pl .pl-c input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.pl .pl-c span { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; background: var(--c); border: 2px solid #222; color: #bbb; font-size: 14px; }
+.pl .pl-c.none span { background: #1a1a1a; border-color: #333; }
+.pl .pl-c input:checked + span { box-shadow: 0 0 0 2px #0d0d0d, 0 0 0 4px #fff; }
+.pl .pl-c input:focus-visible + span { outline: 2px solid #4AFFEF; outline-offset: 3px; }
+.pl .pl-hex { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: #ccc; }
+.pl .pl-hex input { width: 8.5em; padding: 6px 9px; border-radius: 8px; border: 1px solid #333; background: #0d0d0d; color: #fff; font: 14px ui-monospace, monospace; }
+.pl .pl-hex input:invalid { border-color: #a33; }
+.pl .fc-err.ok { color: #9be39f; }
+.pl.busy { opacity: .75; pointer-events: none; }

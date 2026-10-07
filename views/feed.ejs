@@ -1,6 +1,6 @@
 <%- include('layout', { title: mode === 'following' ? 'Following — feed' : room ? 'p/' + room.slug + ' — ' + room.title + ' — feed' : 'All — feed', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=15">
-<link rel="stylesheet" href="/public/css/stories.css?v=4">
+<link rel="stylesheet" href="/public/css/feed.css?v=16">
+<link rel="stylesheet" href="/public/css/stories.css?v=5">
 <%
   // 1.99ci: the feed is pad-based (Reddit's model). The bar on top picks WHICH pads you're reading: All
   // (every pad), Following, or one pad (1.99ck: that's the pad's own page, /p/<slug>). Pepe's
@@ -20,7 +20,7 @@
       <details class="cb-pick">
         <summary aria-label="Pad: <%= curLabel %>. Change pad">
           <span class="cb-k">Pad</span>
-          <span class="cb-cur"><% if (room) { %><span class="cbadge" style="--h:<%= fx.hue(room.slug) %>" aria-hidden="true"><%= fx.cBadge(header || room) %></span><% } else { %><span class="cbadge all" aria-hidden="true"><%= mode === 'following' ? '⭐' : '🌐' %></span><% } %><b><%= curLabel %></b></span>
+          <span class="cb-cur"><% if (room) { %><%- fx.padChip ? fx.padChip(Object.assign({}, header || room, { id: room.id, slug: room.slug })) : '' %><% } else { %><span class="cbadge all" aria-hidden="true"><%= mode === 'following' ? '⭐' : '🌐' %></span><% } %><b><%= curLabel %></b></span>
           <%- fx.icon('chevron', 'chev') %>
         </summary>
         <div class="cb-menu" role="menu">
@@ -30,7 +30,7 @@
           <div class="cb-sep" role="separator"></div>
           <% comms.forEach((c) => { %>
             <a data-swap role="menuitem" class="cb-it<%= room && room.id === c.id ? ' on' : '' %>" data-name="<%= (c.title + ' ' + c.slug).toLowerCase() %>" href="<%= q({ where: c.slug, p: '', by: '' }) %>">
-              <span class="cbadge" style="--h:<%= fx.hue(c.slug) %>" aria-hidden="true"><%= fx.cBadge(c) %></span>
+              <%- fx.padChip(c) %>
               <span class="t"><b><%= c.title %> <%- fx.padBadge(c) %></b><small>p/<%= c.slug %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small></span>
             </a>
           <% }) %>
@@ -40,7 +40,7 @@
       <div class="cb-chips" aria-label="Quick picks">
         <a data-swap class="cb-chip<%= where === 'all' ? ' on' : '' %>" href="<%= q({ where: 'all', p: '' }) %>"<%- where === 'all' ? ' aria-current="page"' : '' %>>🌐 All</a>
         <a data-swap class="cb-chip<%= where === 'following' ? ' on' : '' %>" href="<%= q({ where: 'following', p: '', by: '' }) %>"<%- where === 'following' ? ' aria-current="page"' : '' %>>⭐ Following</a>
-        <% chipComms.forEach((c) => { %><a data-swap class="cb-chip<%= room && room.id === c.id ? ' on' : '' %>" href="<%= q({ where: c.slug, p: '', by: '' }) %>"<%- room && room.id === c.id ? ' aria-current="page"' : '' %>><span class="cbadge sm" style="--h:<%= fx.hue(c.slug) %>" aria-hidden="true"><%= fx.cBadge(c) %></span><%= c.title %></a><% }) %>
+        <% chipComms.forEach((c) => { %><a data-swap class="cb-chip<%= room && room.id === c.id ? ' on' : '' %>" href="<%= q({ where: c.slug, p: '', by: '' }) %>"<%- room && room.id === c.id ? ' aria-current="page"' : '' %>><%- fx.padChip(c, 'sm') %><%= c.title %></a><% }) %>
         <% if (room && !chipComms.some((c) => c.id === room.id)) { %><a data-swap class="cb-chip on" aria-current="page" href="<%= here %>"><%= room.title %></a><% } %>
       </div>
     </nav>
@@ -80,7 +80,7 @@
     </div>
   </div>
 </main>
-<script src="/public/js/stories.js?v=6" defer></script>
+<script src="/public/js/stories.js?v=7" defer></script>
 <%- include('partials/feed-js', { viewer }) %>
 </body>
 </html>

@@ -16,6 +16,7 @@
   // 1.99eo: the front pad's next scheduled slot ({display, title, start_at}) for the off-air slate, or null
   const nextUp_ = typeof nextUp !== 'undefined' && nextUp && Number(nextUp.start_at) > 0 ? nextUp : null;
   const BM = typeof boostMark === 'function' ? boostMark : () => '';
+  const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js), '' when rendered bare
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
   const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
@@ -123,6 +124,13 @@
   .hm .rooms-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .hm .rooms-mini a { display: flex; justify-content: space-between; gap: 8px; color: #ddd !important; font-size: 13.5px; padding: 3px 0; }
   .hm .rooms-mini .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 1.99es: name + avatar + 🚀 on the left, the 👥 / 🎙 counts in fixed columns on the right */
+  .hm .tp .rooms-mini .n { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; }
+  .hm .tp .rooms-mini .nt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .tp .rooms-mini .n .bm { flex: none; }
+  .hm .tp .rooms-mini .v > span { display: inline-block; min-width: 3.2em; text-align: right; }
+  .hm .pad-av { width: 20px; height: 20px; flex: none; border-radius: 6px; overflow: hidden; display: inline-grid; place-items: center; background: #1c2a1c; font-size: 11px; font-weight: bold; color: #fff; }
+  .hm .pad-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* 1.99ek: Top Pads + the shared 🚀 boost badge (boostmark.js) */
   .hm .tp h2 { margin-bottom: 6px; }
   .hm .tp .rooms-mini { grid-template-columns: minmax(0, 1fr); }
@@ -359,16 +367,13 @@
   .hm .golive p { margin: 0; color: #c9d3c9; font-size: 13.5px; line-height: 1.5; }
   .hm .golive .row { display: flex; flex-wrap: wrap; gap: 6px; }
   .hm .golive ul { margin: 0; padding-left: 18px; color: #aab3aa; font-size: 12.5px; line-height: 1.55; }
-  .hm .golive-wide { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 8px 22px; align-items: center; }
+  /* 1.99es: two zones - the one line, then the buttons (the bullet list is gone) */
+  .hm .golive-wide { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 22px; align-items: center; }
   .hm .golive-wide .gl-txt { display: grid; gap: 4px; min-width: 0; }
   .hm .golive-wide h3 { margin: 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
   .hm .golive-wide .row { justify-content: flex-end; align-items: center; }
   .hm .golive-wide .row .btn { padding: 7px 12px; font-size: 13px; border-radius: 999px; }
-  @media (max-width: 1100px) {
-    .hm .golive-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .hm .golive-wide .row { grid-column: 1 / -1; justify-content: flex-start; }
-  }
-  @media (max-width: 760px) { .hm .golive-wide { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 760px) { .hm .golive-wide { grid-template-columns: minmax(0, 1fr); } .hm .golive-wide .row { justify-content: flex-start; } }
   .hm .stage .bar .room-on { color: #fff; font-weight: bold; }
   .hm .guide-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .hm .guide-mini a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; color: #ddd !important; font-size: 13px; }
@@ -388,12 +393,8 @@
   <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
     <div class="gl-txt">
       <h3 id="gsH">🎥 Your show on PATV</h3>
-      <p><b>Anyone can go live.</b> Stream to a pad's stage from OBS or right from your browser, or put a YouTube / Twitch link on it.</p>
+      <p><b>Anyone can go live.</b> Stream to a pad's stage from OBS or your browser, or put a YouTube / Twitch link on it.</p>
     </div>
-    <ul>
-      <li>Ordinary slots are <b>free</b> in most pads<%= paid.length ? '' : ' — book one now or for later' %>.</li>
-      <li>The front page shows the <b>liveliest pad</b> (chat, mic, people) — it's earned, not bought. Fans can <b>🚀 boost</b> a pad from <a href="/p">its page</a> to tip a close race.</li>
-    </ul>
     <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="btn" href="/p">Pads</a></div>
   </section>
 
@@ -503,7 +504,8 @@
           <h2 id="tpH"><span>Top Pads</span><a href="/p">All pads ›</a></h2>
           <ol class="rooms-mini">
             <% tops_.forEach((r) => { %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span><%- BM(r.boost, 'bm') %></span></a></li>
+              <%# 1.99es: the 🚀 badge sits by the NAME (not among the counts), so the 👥 / 🎙 columns line up boosted or not; the pad's avatar (padlook.js) first %>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt"><%= r.name %></span><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span></span></a></li>
             <% }) %>
           </ol>
         </section>
