@@ -15,9 +15,11 @@
 // WHERE THE PAT GOES (economy v2 "room flow", camfrog-bot docs/ECONOMY-V2.md 3.1 / 7.1, mapped onto
 // what exists in phase E-0 - no new vault is created, nothing is minted or burned):
 //   * the booster is debited (one transaction, idempotent by the client's ref);
-//   * the FORT KNOX half (ceil 50%) goes where paid-command fees go today: the Federal Reserve, as a
-//     negative reserve_claims row (flow "boost" / "stage_slot") that Pepe's funding tick credits to
-//     his Reserve (frida-bot _funding_tick). Fort Knox doesn't exist until E-1;
+//   * the FORT KNOX half (ceil 50%) is a negative reserve_claims row that Pepe's funding tick credits
+//     (frida-bot _funding_tick). E-1 (Pepe's pepe_layers.py, flag econ_layers): while Pepe reports Fort
+//     Knox as live on /api/g/funding-sync (funding.fortknoxLive()), the claim's flow is "fortknox:boost" /
+//     "fortknox:stage_slot" and Pepe credits it to Fort Knox (ledger row fk_to = 'fortknox'); otherwise
+//     the flow is "boost" / "stage_slot" and it lands in his Federal Reserve as Fort Knox's stand-in;
 //   * the ROOM VAULT half (floor 50%) is HELD for that pad in the room-vault escrow below (it never
 //     pays out from here) until E-3 opens real room vaults (`room:<id>`) and migrates it;
 //   * the pad's owner boosting / paying in their own pad: 100% Fort Knox half (doc 7.1 - self-spend
@@ -27,8 +29,12 @@
 //
 //   room_flow_ledger  one row per room-flow charge: ref (unique - idempotency), kind boost|slot_fee,
 //                     room_id, payer id / name, amount, fortknox (sent to the Reserve), room_vault
-//                     (held in escrow), via web|chat, created, detail, migrated (E-1 / E-3 fill it)
-//     Fort Knox half to move at E-1:    SUM(fortknox)   WHERE migrated_fk IS NULL  (now in the Reserve)
+//                     (held in escrow), via web|chat, created, detail, migrated (E-1 / E-3 fill it),
+//                     fk_to (E-1: 'fortknox' = the half was booked straight into Fort Knox; NULL = the Reserve)
+//     Fort Knox half still in the Reserve: SUM(fortknox) WHERE fk_to IS NULL AND migrated_fk IS NULL. E-1's
+//       one-time move (Pepe "!econ fortknox migrate", dry run first) reads it from POST /api/g/fortknox-migration,
+//       moves it Reserve -> Fort Knox, then POST /api/g/fortknox-migration/mark stamps migrated_fk on exactly
+//       those rows (batch-keyed in fk_migrations, amount-checked, a replay is a no-op)
 //     room vault escrow to move at E-3: SUM(room_vault) WHERE migrated_rv IS NULL  (per room_id)
 //
 // Flags (boost_config, admin): pay (on: PAT moves; off: boosting is refused, nothing charged) - the
@@ -66,6 +72,10 @@ function init() {
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS room_flow_ref ON room_flow_ledger (ref)");
       await runQuery("CREATE INDEX IF NOT EXISTS room_flow_room ON room_flow_ledger (kind, room_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS room_flow_payer ON room_flow_ledger (payer_id, created)");
+      // E-1: where the Fort Knox half went (NULL = the Reserve, the pre-E-1 stand-in)
+      try { await runQuery("ALTER TABLE room_flow_ledger ADD COLUMN fk_to TEXT"); } catch (e) { /* already there */ }
+      await runQuery(`CREATE TABLE IF NOT EXISTS fk_migrations (batch TEXT PRIMARY KEY, max_id INTEGER NOT NULL,
+        amount INTEGER NOT NULL, rows INTEGER NOT NULL, created INTEGER NOT NULL)`);
       await runQuery("CREATE TABLE IF NOT EXISTS boost_config (key TEXT PRIMARY KEY, value TEXT)");
       await runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
         claimId TEXT PRIMARY KEY, flow TEXT NOT NULL, userId TEXT, type TEXT, amount INTEGER NOT NULL,
@@ -139,16 +149,20 @@ async function routeInTx({ ref, kind, room_id, payer_id, payer_name, amount, own
   if (!(a > 0)) throw new Refuse(400, "Nothing to route.");
   const sp = split(a, owner_self);
   const t = now();
-  await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  // E-1: Fort Knox is live in Pepe -> book the half straight into it; else the Reserve (migrated later)
+  const fk = sp.fortknox > 0 && require("./funding").fortknoxLive();
+  await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail, fk_to)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                  [ref, kind, room_id, payer_id || null, payer_name || null, a, sp.fortknox, sp.room_vault, owner_self ? 1 : 0, via || "web", t,
-                  detail ? String(detail).slice(0, 200) : null]);
+                  detail ? String(detail).slice(0, 200) : null, fk ? "fortknox" : null]);
   if (sp.fortknox > 0) {
-    // negative = the website collected it: Pepe's funding tick credits his Federal Reserve (Fort Knox's stand-in until E-1)
+    // negative = the website collected it: Pepe's funding tick credits Fort Knox ("fortknox:<flow>") or, before
+    // E-1 / with the layers off, his Federal Reserve as Fort Knox's stand-in
+    const base = flow || kind;
     await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
-                   [uuidv4(), flow || kind, payer_id || null, `${kind === "boost" ? "boost" : "stage slot fee"} ${room_id}: Fort Knox half`.slice(0, 120), -sp.fortknox]);
+                   [uuidv4(), fk ? "fortknox:" + base : base, payer_id || null, `${kind === "boost" ? "boost" : "stage slot fee"} ${room_id}: Fort Knox half`.slice(0, 120), -sp.fortknox]);
   }
-  return { ref, kind, room_id, payer_name: payer_name || null, amount: a, ...sp, owner_self: !!owner_self, created: t };
+  return { ref, kind, room_id, payer_name: payer_name || null, amount: a, ...sp, owner_self: !!owner_self, created: t, fk_to: fk ? "fortknox" : null };
 }
 
 /** E-0 telemetry (econ.js): the charge as a "room" flow - best effort, after the commit. */
@@ -239,14 +253,51 @@ async function status(roomId, t = now(), halfMin = 60) {
     pay: CONFIG.pay, min: CONFIG.min, max: CONFIG.max,
   };
 }
-/** What's held for each pad's room vault (escrow, not yet migrated), and the Fort Knox half sent to the Reserve. */
+/** What's held for each pad's room vault (escrow, not yet migrated), the Fort Knox half still in the Reserve
+ *  (fortknox: booked before E-1, not moved yet) and the half booked straight into Fort Knox (fortknox_direct). */
 async function escrow() {
   await init();
   const rows = await getQuery(`SELECT room_id, SUM(CASE WHEN migrated_rv IS NULL THEN room_vault ELSE 0 END) AS room_vault,
-                               SUM(CASE WHEN migrated_fk IS NULL THEN fortknox ELSE 0 END) AS fortknox, SUM(amount) AS total, COUNT(*) AS n
+                               SUM(CASE WHEN fk_to IS NULL AND migrated_fk IS NULL THEN fortknox ELSE 0 END) AS fortknox,
+                               SUM(CASE WHEN fk_to = 'fortknox' OR migrated_fk IS NOT NULL THEN fortknox ELSE 0 END) AS fortknox_done,
+                               SUM(amount) AS total, COUNT(*) AS n
                                FROM room_flow_ledger GROUP BY room_id ORDER BY room_vault DESC`);
   const sum = (k) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
-  return { rooms: rows, room_vault: sum("room_vault"), fortknox: sum("fortknox"), total: sum("total") };
+  return { rooms: rows, room_vault: sum("room_vault"), fortknox: sum("fortknox"), fortknox_done: sum("fortknox_done"), total: sum("total") };
+}
+
+// ── E-1: the one-time move of the Fort Knox halves booked into the Reserve before Fort Knox existed ──
+const FK_WHERE = "fk_to IS NULL AND migrated_fk IS NULL AND fortknox > 0";
+/** What Pepe's "!econ fortknox migrate" would move: {amount, rows, max_id, pending_claims}. pending_claims =
+ *  boost / slot-fee claims Pepe hasn't credited to his Reserve yet (the move waits for them). */
+async function fkMigrationSummary() {
+  await init();
+  const r = (await getQuery(`SELECT COALESCE(SUM(fortknox), 0) AS amount, COUNT(*) AS rows, COALESCE(MAX(id), 0) AS max_id
+                             FROM room_flow_ledger WHERE ${FK_WHERE}`))[0];
+  const p = (await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE settled = 0 AND flow IN ('boost', 'stage_slot')"))[0];
+  return { amount: Number(r.amount) || 0, rows: Number(r.rows) || 0, max_id: Number(r.max_id) || 0, pending_claims: Number(p.n) || 0 };
+}
+/** Stamp migrated_fk on exactly the rows Pepe moved (id <= max_id, still unmoved), once per batch. The rows'
+ *  sum must equal `amount` (what Pepe moved) or nothing is stamped. A replayed batch returns the first result. */
+async function fkMigrationMark({ batch, max_id, amount }) {
+  await init();
+  const b = String(batch || "");
+  const maxId = Math.floor(Number(max_id));
+  const amt = Math.floor(Number(amount));
+  if (!/^fkm[0-9]{1,12}$/.test(b) || !(maxId > 0) || !(amt > 0)) throw new Refuse(400, "bad batch");
+  return tx(async () => {
+    const had = (await getQuery("SELECT * FROM fk_migrations WHERE batch = ?", [b]))[0];
+    if (had) {
+      if (had.amount !== amt || had.max_id !== maxId) throw new Refuse(409, "that batch was marked with different numbers");
+      return { dup: true, rows: had.rows, amount: had.amount };
+    }
+    const r = (await getQuery(`SELECT COALESCE(SUM(fortknox), 0) AS amount, COUNT(*) AS rows FROM room_flow_ledger WHERE id <= ? AND ${FK_WHERE}`, [maxId]))[0];
+    if (Number(r.amount) !== amt) throw new Refuse(409, `amount mismatch: the ledger has ${r.amount}, Pepe moved ${amt}`);
+    const t = now();
+    const u = await runQuery(`UPDATE room_flow_ledger SET migrated_fk = ? WHERE id <= ? AND ${FK_WHERE}`, [t, maxId]);
+    await runQuery("INSERT INTO fk_migrations (batch, max_id, amount, rows, created) VALUES (?, ?, ?, ?, ?)", [b, maxId, amt, u.changes || 0, t]);
+    return { dup: false, rows: u.changes || 0, amount: amt };
+  });
 }
 
 // ── routes ──
@@ -307,6 +358,16 @@ function register(app, { addUser, isBotToken }) {
       res.json({ ok: false, message: "the website couldn't do that right now - nothing was charged" });
     }
   });
+  // E-1 (bot only): the one-time Fort Knox move - Pepe reads the total, moves it, then has the rows stamped
+  app.post("/api/g/fortknox-migration", async (req, res) => {
+    if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    try { res.json({ ok: true, ...(await fkMigrationSummary()) }); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/g/fortknox-migration/mark", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
+    try { res.json({ ok: true, ...(await fkMigrationMark(b)) }); } catch (e) { fail(res, e); }
+  });
   app.post("/api/boost/admin", addUser, jsonOnly, async (req, res) => {
     try {
       if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only.");
@@ -325,5 +386,6 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, config, setConfig, split, activePat, routeInTx, telemetry, boost, recent, activeMap, status, escrow, register, clearCache, Refuse, DEFAULTS,
+  fkMigrationSummary, fkMigrationMark,
   _setClock: (fn) => { clock = fn || (() => Date.now()); clearCache(); },
 };

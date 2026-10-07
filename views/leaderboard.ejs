@@ -119,6 +119,12 @@
   .lb-sup .r .a small { color: #888; font-weight: normal; margin-left: 6px; }
   .lb-sup .r .bar { grid-column: 1 / -1; height: 6px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
   .lb-sup .r .bar span { display: block; height: 100%; background: linear-gradient(90deg, #ffd700, #ff9f1c); }
+  .lb-sup .lyr { display: grid; gap: 10px; padding: 12px 0 4px; border-top: 1px solid #262626; }
+  .lb-sup .lyr:first-child { border-top: 0; padding-top: 0; }
+  .lb-sup .lyr-h { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; font-variant-numeric: tabular-nums; }
+  .lb-sup .lyr-h b { color: #fff; }
+  .lb-sup .lyr-h .a { text-align: right; color: #ffd700; font-weight: bold; }
+  .lb-sup .lyr-h .d { grid-column: 1 / -1; color: #888; font-size: 0.85em; }
 
   @media (max-width: 720px) {
     .lb-row { grid-template-columns: 34px minmax(0, 1fr) auto; }
@@ -241,9 +247,19 @@
         <p class="muted" style="margin:-4px 0 14px">Total supply: <b style="color:#ffd700"><%= fmt(supply.total) %> PAT</b>
           <% if (supply.burned) { %> · 🔥 burned for good: <b><%= fmt(supply.burned.total) %></b> (7 days <%= fmt(supply.burned.d7) %>, 30 days <%= fmt(supply.burned.d30) %>) · <a href="/economy#burned">burn log</a><% } %></p>
         <div class="lb-sup">
-          <% supply.rows.forEach((r) => { const share = supply.total ? (r.amount / supply.total * 100) : 0; %>
-            <div class="r"><span class="l"><%= r.label %></span><span class="a"><%= fmt(r.amount) %><small><%= share.toFixed(1) %>%</small></span>
-              <span class="bar"><span style="width: <%= Math.max(0, Math.min(100, share)).toFixed(1) %>%"></span></span></div>
+          <% const _groups = (supply.layers && supply.layers.length) ? supply.layers.map((g) => ({ ...g, rows: supply.rows.filter((r) => r.layer === g.key) }))
+                                                                    : [{ key: "all", label: "", rows: supply.rows }]; %>
+          <% _groups.forEach((g) => { const gshare = supply.total ? (g.amount / supply.total * 100) : 0; %>
+            <div class="lyr">
+              <% if (g.label) { %>
+                <div class="lyr-h"><b><%= g.label %></b><span class="a"><%= fmt(g.amount) %><small style="color:#888;font-weight:normal;margin-left:6px"><%= gshare.toFixed(1) %>%</small></span>
+                  <span class="d"><%= g.blurb %></span></div>
+              <% } %>
+              <% g.rows.forEach((r) => { const share = supply.total ? (r.amount / supply.total * 100) : 0; %>
+                <div class="r"><span class="l"><%= r.label %></span><span class="a"><%= fmt(r.amount) %><small><%= share.toFixed(1) %>%</small></span>
+                  <span class="bar"><span style="width: <%= Math.max(0, Math.min(100, share)).toFixed(1) %>%"></span></span></div>
+              <% }) %>
+            </div>
           <% }) %>
         </div>
         <p class="muted" style="margin:14px 0 0">The games never mint or burn PAT &mdash; it moves between wallets and these pools. The only PAT ever destroyed is the

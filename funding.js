@@ -18,6 +18,11 @@ const state = {
   reserve: null,          // Federal Reserve balance last synced from Pepe (null = never synced)
   syncedAt: 0,
   flows: {},              // flow -> "reserve" | "jackpot"
+  // economy v2 E-1 (Pepe's pepe_layers.py): Fort Knox's balance while Pepe's layers are ON, else null.
+  // Every sync sets it (a sync without it - an older Pepe, or the layers off - turns it back to null),
+  // so the site books the Fort Knox half of a boost / slot fee as a "fortknox:<flow>" claim only while
+  // the Pepe settling the claims credits those to Fort Knox (boosts.routeInTx).
+  fortknox: null,
 };
 
 let ready = runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
@@ -90,8 +95,10 @@ function sync(body) {
   if (body.flows && typeof body.flows === "object") {
     for (const [k, v] of Object.entries(body.flows)) state.flows[k] = v === "jackpot" ? "jackpot" : "reserve";
   }
+  state.fortknox = typeof body.fortknox === "number" && isFinite(body.fortknox) ? Math.max(0, Math.floor(body.fortknox)) : null;
   state.syncedAt = Date.now();
 }
+const fortknoxLive = () => state.fortknox !== null;
 
 async function claims() {
   await ready;
@@ -108,4 +115,4 @@ async function settle(ids) {
   return n;
 }
 
-module.exports = { fundPayout, takeFunds, canFund, sync, claims, settle, state };
+module.exports = { fundPayout, takeFunds, canFund, sync, claims, settle, state, fortknoxLive };

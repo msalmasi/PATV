@@ -83,7 +83,9 @@ async function setConfig(patch) {
 const enabled = async () => !!(await config()).economy_e0;
 
 // ── 1. charges ──
-const KINDS = new Set(["room", "federal", "fine", "game"]);
+// "layer" (E-1, Pepe's pepe_layers.py): an internal move between economy layers - a Fed policy mint, the
+// one-time Fort Knox migration. Journaled with the charges (same ref idempotency) but never revenue.
+const KINDS = new Set(["room", "federal", "fine", "game", "layer"]);
 const VIAS = new Set(["chat", "pm", "web", "system"]);
 function cleanCharge(x) {
   if (!x || typeof x !== "object") return null;
@@ -360,7 +362,9 @@ async function telemetry(nDays = 7) {
     }
     return r;
   };
+  const layerMoves = {};
   for (const c of charges) {
+    if (c.kind === "layer") { layerMoves[c.flow] = (layerMoves[c.flow] || 0) + num(c.amount); continue; }
     const r = get(c.room_id || "");
     const a = num(c.amount);
     r.revenue.total += a;
@@ -426,10 +430,11 @@ async function telemetry(nDays = 7) {
     });
   }
   out.sort((a, b) => (b.revenue.total - a.revenue.total) || String(a.room_id).localeCompare(String(b.room_id)));
-  const all = split5050(charges);
+  const revenue = charges.filter((c) => c.kind !== "layer");
+  const all = split5050(revenue);
   return { ok: true, enabled: !!cfg.economy_e0, days, rooms: out,
-           totals: { revenue: charges.reduce((s, c) => s + num(c.amount), 0), split: all },
-           recipe: RECIPE, notes: { burn_reserve: 0 } };
+           totals: { revenue: revenue.reduce((s, c) => s + num(c.amount), 0), split: all },
+           layer_moves: layerMoves, recipe: RECIPE, notes: { burn_reserve: 0 } };
 }
 
 async function isAdmin(req) {

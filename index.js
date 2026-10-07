@@ -1301,16 +1301,22 @@ async function patSupply() {
     if (rv > 0) rows.push({ key: "room_vault_escrow", label: "🚀 Room vault escrow (boosts + slot fees, held for the pads)", amount: Math.floor(rv) });
   } catch (e) { /* no boosts table yet */ }
   rows.sort((a, b) => b.amount - a.amount);
+  // economy v2 E-1: each row's layer (Federal Reserve / Protocol Treasury / incentive layer / ...) - labels only
+  const SL = require("./supplylayers");
+  for (const r of rows) r.layer = SL.layerOf(r.key);
+  const layers = SL.group(rows).map((g) => ({ key: g.key, label: g.label, blurb: g.blurb, amount: g.amount, rows: g.rows.map((r) => r.key) }));
   const total = rows.reduce((s, r) => s + r.amount, 0);
   // the burn reserve still exists until it's burned, but it's out of circulation
   const outOfCirculation = rows.filter((r) => r.key === "vault:burn").reduce((s, r) => s + r.amount, 0);
   let burned = null;
   try { burned = await require("./burns").burned(); } catch (e) { burned = null; }
-  return { total, circulating: total - outOfCirculation, outOfCirculation, burned, rows, updated: snap.length ? snap[0].updated_at : null };
+  return { total, circulating: total - outOfCirculation, outOfCirculation, burned, rows, layers, updated: snap.length ? snap[0].updated_at : null };
 }
 app.get("/api/stats/supply", async (req, res) => {
   try { res.json(await patSupply()); } catch (e) { res.status(500).json({ error: "failed" }); }
 });
+// the supply page, by economy layer, lives on the rankings page's Supply tab
+app.get("/supply", (req, res) => res.redirect(302, "/rankings#supply"));
 
 // HTTP POST endpoint for registering a new user.
 app.post("/register", registerUser);
