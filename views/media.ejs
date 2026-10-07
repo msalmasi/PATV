@@ -5,6 +5,7 @@
   .md .stage { position: relative; background: #000; border-radius: 10px; overflow: hidden; margin: 18px 0 12px; }
   .md .stage img, .md .stage video { width: 100%; max-height: 75vh; object-fit: contain; display: block; }
   .md .stage audio { width: 94%; margin: 28px 0; }
+  .md .stage img.wave { max-width: 480px; margin: 18px auto 0; border-radius: 8px; }
   .md .stage.nsfw img, .md .stage.nsfw video { filter: blur(28px); }
   .md .stage .gate { position: absolute; inset: 0; display: grid; place-content: center; gap: 10px; background: rgba(0,0,0,.45); color: #fff; font-size: 15px; }
   .md .stage .gate button { justify-self: center; padding: 8px 16px; border-radius: 8px; border: 1px solid #e57373; background: #2a1010; color: #ffcdd2; font: inherit; font-weight: bold; cursor: pointer; }
@@ -24,8 +25,9 @@
   <% } else { const src = '/media/' + item.id + '/raw'; const nsfw_ = !!item.nsfw; %>
     <div class="stage<%= nsfw_ ? ' nsfw' : '' %>" id="mdStage">
       <% if (item.kind === 'clip') { %>
-        <video src="<%= src %>" controls playsinline preload="metadata"></video>
+        <video src="<%= src %>" controls playsinline preload="metadata"<% if (typeof poster !== 'undefined' && poster) { %> poster="<%= poster %>"<% } %>></video>
       <% } else if (item.kind === 'audio') { %>
+<% if (typeof poster !== 'undefined' && poster) { %><img class="wave" src="<%= poster %>" alt="" onerror="this.remove()"><% } %>
         <audio src="<%= src %>" controls preload="metadata"></audio>
       <% } else { %>
         <img src="<%= src %>" alt="<%= what_ %> of <%= item.subject || 'someone' %>">

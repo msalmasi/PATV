@@ -10,10 +10,11 @@
   const next_ = typeof next !== 'undefined' && next ? next : '/';
   const mono = (t) => String(t || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '📡';
   const kindIc = { photo: '📸', clip: '📹', audio: '🔊' };
+  const mmss = (s) => { s = Math.round(Number(s) || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const showRooms = (S.rooms || []).length > 0, showCaps = (S.caps || []).length > 0;
 %>
 <% if (showRooms || showCaps) { %>
-<link rel="stylesheet" href="/public/css/stories.css?v=2">
+<link rel="stylesheet" href="/public/css/stories.css?v=3">
 <section class="ss" aria-label="Stories: snaps and clips from the pads' Camfrog rooms and stages, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
   <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
   <div class="ss-row" role="list">
@@ -26,15 +27,18 @@
       </button>
     <% }) %>
     <% (S.caps || []).forEach((c) => { %>
-      <a role="listitem" class="ss-t k-<%= c.kind %>" href="<%= c.page %>" data-story-room="<%= S.room %>" data-story-item="<%= c.id %>"
+      <a role="listitem" class="ss-t k-<%= c.kind %><%= c.kind !== 'photo' && c.poster && !c.nsfw ? ' has-p' : '' %>" href="<%= c.page %>" data-story-room="<%= S.room %>" data-story-item="<%= c.id %>"
          aria-label="<%= c.source === 'stage' ? 'Stage ' + (c.kind === 'clip' ? 'clip' : 'snap') : (c.kind === 'photo' ? 'Snap' : c.kind === 'clip' ? 'Clip' : 'Audio') %> of <%= c.subject || 'someone' %><%= c.nsfw ? ' (NSFW)' : '' %>">
         <% if (c.kind === 'photo' && !c.nsfw) { %><img src="<%= c.src %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
+        <%# 1.99dq: clips show their poster frame, audio its waveform card; the camcorder icon stays as the fallback %>
+        <% if (c.kind !== 'photo' && c.poster && !c.nsfw) { %><img class="pst" src="<%= c.poster %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
         <span class="ic" aria-hidden="true"><%= c.nsfw ? '🔞' : c.source === 'stage' ? '📺' : kindIc[c.kind] %></span>
+        <% if (c.kind !== 'photo') { %><span class="dur" aria-hidden="true"><%= c.kind === 'clip' ? '▶' : '🔊' %><% if (c.secs > 0) { %> <%= mmss(c.secs) %><% } %></span><% } %>
         <span class="who"><%= c.subject || 'someone' %></span>
       </a>
     <% }) %>
   </div>
 </section>
 <% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=3" defer></script>
+<script src="/public/js/stories.js?v=4" defer></script>
 <% } %>

@@ -36,6 +36,98 @@ function fileExists(row) {
   return !!(row && typeof row.file === "string" && /^[A-Za-z0-9]+\.(jpg|mp4|m4a|webp)$/.test(row.file) && fs.existsSync(path.join(DIR, row.file)));
 }
 
+// ── poster frames (1.99dq) ──
+// Every clip (and room-audio capture) gets a small webp poster next to its file: "<id>_p.webp" (a fixed
+// name, no column - the id is all we need, and fileExists() never matches it). Clips: one frame at ~1 s
+// (10% of a short clip). Audio: a waveform on the story strip's purple card. ffmpeg runs in feedmedia.js's
+// job queue (2 at a time, niced, timeouts). Made at upload (/api/media), at a stage capture's publish
+// (stagecap.js) and by a backfill (startup + the 5-minute sweep) for anything still missing one.
+const POSTER_PX = 360;
+const ID_RE = /^[a-f0-9]{8,32}$/i;
+const posterFile = (id) => (ID_RE.test(String(id || "")) ? path.join(DIR, String(id) + "_p.webp") : null);
+function hasPoster(row) {
+  const p = row && (row.kind === "clip" || row.kind === "audio") ? posterFile(row.id) : null;
+  return !!p && fs.existsSync(p);
+}
+const posterFailed = new Set();   // ids whose poster couldn't be made (not retried until a restart)
+const posterPending = new Map();  // id -> promise (one job per id)
+
+const defaultPosterImpl = async (row, src, out) => {
+  const fm = require("./feedmedia");
+  const sharp = require("sharp");
+  const png = out + ".png";
+  const base = ["-hide_banner", "-nostdin", "-v", "error", "-protocol_whitelist", "file", "-f", "mov"];
+  const release = await fm.slot();
+  try {
+    if (row.kind === "clip") {
+      const secs = Number(row.secs) || 0;
+      const at = secs >= 10 ? 1 : secs > 0 ? Math.round(secs * 10) / 100 : 0;
+      const grab = (t) => fm.run(fm.bin("ffmpeg"), [...base, "-ss", String(t), "-i", src, "-map", "0:v:0", "-frames:v", "1",
+        "-an", "-map_metadata", "-1", "-f", "image2", "-c:v", "png", "-y", png], { timeoutMs: 30000 });
+      await grab(at);
+      if (!fs.existsSync(png) && at > 0) await grab(0);     // -ss past the last frame writes nothing
+    } else {
+      await fm.run(fm.bin("ffmpeg"), [...base, "-i", src, "-filter_complex",
+        "[0:a:0]aformat=channel_layouts=mono,showwavespic=s=640x200:colors=0xc6e94f[w]", "-map", "[w]", "-frames:v", "1",
+        "-f", "image2", "-c:v", "png", "-y", png], { timeoutMs: 30000 });
+    }
+  } finally { release(); }
+  try {
+    if (!fs.existsSync(png)) throw new Error("no frame");
+    if (row.kind === "clip") {
+      await sharp(fs.readFileSync(png), { limitInputPixels: 60e6 }).resize({ width: POSTER_PX, height: POSTER_PX * 2, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 72, effort: 4 }).toFile(out);
+    } else {
+      const W = POSTER_PX, H = 240;
+      const card = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><radialGradient id="g" cx="50%" cy="40%" r="75%">` +
+        `<stop offset="0" stop-color="#3b1d4f"/><stop offset="1" stop-color="#000"/></radialGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/></svg>`);
+      const wave = await sharp(fs.readFileSync(png)).resize({ width: W - 32, height: 110, fit: "fill" }).png().toBuffer();
+      await sharp(card).composite([{ input: wave, top: 65, left: 16 }]).webp({ quality: 72, effort: 4 }).toFile(out);
+    }
+  } finally { try { fs.unlinkSync(png); } catch (e) { /* none */ } }
+};
+let posterImpl = defaultPosterImpl;
+function _setPosterImpl(fn) { posterImpl = fn || defaultPosterImpl; }
+
+/** Make `row`'s poster unless it has one. -> true (made or already there) | false. One job per id. */
+function makePoster(row) {
+  if (!row || (row.kind !== "clip" && row.kind !== "audio")) return Promise.resolve(false);
+  const out = posterFile(row.id);
+  if (!out || !fileExists(row)) return Promise.resolve(false);
+  if (fs.existsSync(out)) return Promise.resolve(true);
+  if (posterPending.has(row.id)) return posterPending.get(row.id);
+  const tmp = out + ".part.webp";
+  const p = (async () => {
+    try {
+      await posterImpl(row, path.join(DIR, row.file), tmp);
+      if (!fs.existsSync(tmp) || !fs.statSync(tmp).size) throw new Error("empty poster");
+      fs.renameSync(tmp, out);
+      posterFailed.delete(row.id);
+      return true;
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch (_) { /* none */ }
+      posterFailed.add(row.id);
+      console.error(`[media] poster ${row.id}:`, e.message, e.stderr || "");
+      return false;
+    } finally { posterPending.delete(row.id); }
+  })();
+  posterPending.set(row.id, p);
+  return p;
+}
+
+/** Posters for every live clip / audio capture that lacks one. Idempotent. -> {checked, made, had, failed} */
+async function backfillPosters({ retryFailed = false } = {}) {
+  await ready;
+  const rows = await getQuery("SELECT * FROM media WHERE deleted = 0 AND expires > ? AND kind IN ('clip', 'audio')", [Date.now()]);
+  const res = { checked: rows.length, made: 0, had: 0, failed: 0 };
+  for (const r of rows) {
+    if (hasPoster(r)) { res.had++; continue; }
+    if (!fileExists(r) || (!retryFailed && posterFailed.has(r.id))) continue;
+    if (await makePoster(r)) res.made++; else res.failed++;
+  }
+  return res;
+}
+
 const TYPES = { "image/jpeg": ".jpg", "video/mp4": ".mp4", "audio/mp4": ".m4a" };
 const KINDS = new Set(["photo", "clip", "audio"]);
 const MAX_BYTES = 6 * 1024 * 1024;
@@ -48,7 +140,12 @@ function botAuthed(req, isBotToken) {
 
 async function removeMedia(row) {
   try { fs.unlinkSync(path.join(DIR, row.file)); } catch (e) { /* already gone */ }
+  removePoster(row.id);
   await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [row.id]);
+}
+function removePoster(id) {
+  const p = posterFile(id);
+  if (p) { try { fs.unlinkSync(p); } catch (e) { /* none */ } }
 }
 
 function ttlText(ms) {
@@ -58,7 +155,7 @@ function ttlText(ms) {
   return `${Math.max(1, Math.floor(s / 60))}m`;
 }
 
-function register(app, { isBotToken, addUser }) {
+function register(app, { isBotToken, addUser, noTimers }) {
   const bigJson = express.json({ limit: "9mb" });   // a 6 MB clip is ~8 MB of base64
 
   // Upload (Pepe)
@@ -85,6 +182,12 @@ function register(app, { isBotToken, addUser }) {
         [id, kind, ct, file, buf.length, Number(b.secs) || 0, anon ? "" : String(b.subject || "").slice(0, 60),
          String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires, anon ? 1 : 0]);
       res.json({ success: true, id, expires, url: `/media/${id}` });
+      // the poster frame / waveform card, in the ffmpeg queue (an INSERT OR REPLACE re-upload gets a fresh one)
+      if (kind === "clip" || kind === "audio") {
+        removePoster(id);
+        posterFailed.delete(id);
+        makePoster({ id, kind, file, secs: Number(b.secs) || 0 }).catch(() => {});
+      }
     } catch (e) {
       console.error("[media] upload:", e);
       res.status(500).json({ success: false, error: "server_error" });
@@ -137,6 +240,24 @@ function register(app, { isBotToken, addUser }) {
     res.sendFile(path.join(DIR, row.file), { acceptRanges: true });
   });
 
+  // 1.99dq: a clip's poster frame / an audio capture's waveform card. Same rules as /raw (anyone with the
+  // capture's id, expiry honoured; the pages that list captures are members-only, and NSFW is blurred by the
+  // page). 404 when there's none yet - the UI falls back to the camcorder icon.
+  app.get("/media/:id/poster", async (req, res) => {
+    const { row, gone } = await live(req.params.id);
+    res.set("X-Robots-Tag", "noindex");
+    res.set("X-Content-Type-Options", "nosniff");
+    if (gone) return res.status(gone).type("text/plain").send(gone === 410 ? "This capture has expired." : "Not found.");
+    if (!hasPoster(row)) {
+      res.set("Cache-Control", "no-store");
+      if (!posterFailed.has(row.id)) makePoster(row).catch(() => {});   // missed by upload + backfill: make it now for next time
+      return res.status(404).type("text/plain").send("No poster.");
+    }
+    res.set("Cache-Control", `private, max-age=${Math.max(0, Math.min(3600, Math.floor((row.expires - Date.now()) / 1000)))}`);
+    res.type("image/webp");
+    res.sendFile(posterFile(row.id));
+  });
+
   // One capture's page (the link Pepe posts in chat)
   app.get("/media/:id", addUser, async (req, res) => {
     const { row, gone } = await live(req.params.id);
@@ -149,7 +270,8 @@ function register(app, { isBotToken, addUser }) {
       if (R) pad = { title: R.title, href: require("./pads").padHref(R) };
     } catch (e) { pad = null; }
     try { canDelete = !!(req.user && req.user.userId) && (await require("./stagecap").canDelete(req.user, row)); } catch (e) { canDelete = false; }
-    res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null, pad, canDelete });
+    const poster = hasPoster(row) ? `/media/${encodeURIComponent(row.id)}/poster` : null;   // 1.99dq
+    res.render("media", { user: req.user ? req.user.username : null, item: { ...row, ttl: ttlText(row.expires - Date.now()) }, gone: null, pad, canDelete, poster });
   });
 
   // The /feed page (posts + these captures) lives in feedweb.js since 1.99bv.
@@ -162,7 +284,21 @@ function register(app, { isBotToken, addUser }) {
       for (const r of rows) await removeMedia(r);
       if (rows.length) console.log(`[media] purged ${rows.length} expired`);
     } catch (e) { console.error("[media] purge:", e.message); }
+    try {
+      const b = await backfillPosters();
+      if (b.made || b.failed) console.log(`[media] posters: made ${b.made}, failed ${b.failed} (${b.checked} live clips/audio)`);
+    } catch (e) { console.error("[media] posters:", e.message); }
   }, 5 * 60 * 1000).unref();
+
+  // 1.99dq: one-time backfill of posters for the captures that predate them (idempotent: skips any that have one)
+  if (!noTimers) {
+    setTimeout(async () => {
+      try {
+        const b = await backfillPosters();
+        console.log(`[media] poster backfill: ${b.checked} live clips/audio, ${b.had} had one, made ${b.made}, failed ${b.failed}`);
+      } catch (e) { console.error("[media] poster backfill:", e.message); }
+    }, 20 * 1000).unref();
+  }
 }
 
-module.exports = { register, fileExists, DIR, ready };
+module.exports = { register, fileExists, hasPoster, makePoster, backfillPosters, removePoster, posterFile, _setPosterImpl, DIR, ready };

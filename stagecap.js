@@ -465,6 +465,8 @@ async function publish(id, username, { hours, byAnon, by } = {}) {
   } catch (e) { /* never fails a publish */ }
   auditCtx.delete(c.id);
   console.log(`[stagecap] published ${c.id} -> media ${mid} (${c.kind}, room ${c.room_id}, by ${c.username})`);
+  // 1.99dq: a clip's poster frame, the same helper Pepe's uploads use (ffmpeg job queue); snaps are their own picture
+  if (c.kind === "clip") media.makePoster({ id: mid, kind: "clip", file, secs: c.secs || 0 }).catch(() => {});
   return { media_id: mid, expires };
 }
 
@@ -488,6 +490,7 @@ async function remove(user, mediaId) {
   if (!m) throw refuse(404, "No such capture.");
   if (!(await canDelete(user, m))) throw refuse(403, "Only the pad's owner, an admin, the person who took it or the streamer can delete this.");
   try { fs.unlinkSync(path.join(media.DIR, m.file)); } catch (e) { /* gone */ }
+  media.removePoster(m.id);
   await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [m.id]);
   console.log(`[stagecap] media ${m.id} deleted by ${user.username || user.userId}`);
   return true;

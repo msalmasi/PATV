@@ -242,6 +242,7 @@
       var m = document.createElement(it.kind === 'clip' ? 'video' : 'audio');
       m.className = it.kind === 'clip' ? 'sv-vid' : 'sv-aud';
       m.preload = 'auto'; m.setAttribute('playsinline', ''); m.playsInline = true; m.muted = V.muted;
+      if (it.kind === 'clip' && it.poster) m.poster = it.poster;   // 1.99dq: the poster frame while the clip loads
       if (it.kind === 'audio') {
         var card = el('div', 'sv-audio-card');
         card.appendChild(el('div', 'sv-audio-ic', '🔊'));

@@ -35,8 +35,9 @@
       <% items.forEach((c) => { const t = titles[c.room] || { title: c.room, slug: c.room }; %>
         <article class="it<%= c.nsfw ? ' nsfw' : '' %>">
           <a class="media" href="<%= c.page %>" aria-label="<%= c.kind === 'clip' ? 'Stage clip' : 'Stage snap' %> of <%= c.subject || 'a stream' %>">
-            <% if (c.kind === 'clip') { %><video src="<%= c.src %>#t=0.5" preload="metadata" muted playsinline></video><% } else { %><img src="<%= c.src %>" alt="" loading="lazy"><% } %>
-            <span class="k"><%= c.kind === 'clip' ? '🎬 ' + Math.round(c.secs || 0) + 's' : '📸' %></span>
+            <%# 1.99dq: clips show their poster frame (no video download per tile); the old metadata-video is the fallback %>
+            <% if (c.kind === 'clip' && c.poster) { %><img src="<%= c.poster %>" alt="" loading="lazy" data-v="<%= c.src %>" onerror="var v=document.createElement('video');v.src=this.getAttribute('data-v')+'#t=0.5';v.preload='metadata';v.muted=true;v.playsInline=true;this.replaceWith(v)"><% } else if (c.kind === 'clip') { %><video src="<%= c.src %>#t=0.5" preload="metadata" muted playsinline></video><% } else { %><img src="<%= c.src %>" alt="" loading="lazy"><% } %>
+            <span class="k"><%= c.kind === 'clip' ? '▶ ' + Math.floor(Math.round(c.secs || 0) / 60) + ':' + String(Math.round(c.secs || 0) % 60).padStart(2, '0') : '📸' %></span>
             <span class="gate"><span>🔞 NSFW</span><button type="button" data-reveal>Show (18+)</button></span>
           </a>
           <div class="cap">

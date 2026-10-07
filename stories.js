@@ -89,6 +89,8 @@ async function clean(rows) {
     room: r.room || "", created: Number(r.created) || 0, expires: Number(r.expires) || 0, secs: Number(r.secs) || 0,
     // 1.99cr: stage captures (stagecap.js) read "📺 Stage snap/clip of <stream> by <user>"; NSFW comes from the slot
     source: r.source === "stage" ? "stage" : "cam", nsfw: !!Number(r.nsfw || 0),
+    // 1.99dq: a clip's poster frame / an audio capture's waveform card (media.js) - null until it's made
+    poster: media.hasPoster(r) ? "/media/" + encodeURIComponent(r.id) + "/poster" : null,
   }));
 }
 
@@ -149,9 +151,13 @@ async function forViewer(viewer, { room = null } = {}) {
     list.sort((a, b) => a.created - b.created);
     const latest = list[list.length - 1].created;
     const upto = seen.get(rid) || 0;
-    const cover = [...list].reverse().find((c) => c.kind === "photo" && !c.nsfw);
+    // cover: the newest photo, else the newest clip's poster frame (1.99dq); never NSFW
+    const rev = [...list].reverse();
+    const cp = rev.find((c) => c.kind === "photo" && !c.nsfw);
+    const cv = cp ? null : rev.find((c) => c.kind === "clip" && c.poster && !c.nsfw);
+    const cover = cp ? cp.src : cv ? cv.poster : null;
     const base = { ...roomInfo(rid), latest, count: list.length, unseen: latest > upto };
-    if (signed) out.push({ ...base, seen: upto, cover: cover ? cover.src : null, items: list.map(({ room: _r, ...x }) => x) });
+    if (signed) out.push({ ...base, seen: upto, cover, items: list.map(({ room: _r, ...x }) => x) });
     else out.push({ ...base, unseen: true, cover: null });
   }
   out.sort((a, b) => (b.unseen - a.unseen) || (b.latest - a.latest));
