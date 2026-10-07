@@ -207,7 +207,8 @@
     .pf .who { width: 100%; }
     .pf .chips, .pf .actions, .pf .showcase { justify-content: center; }
     .pf .pf-strip { width: 100%; display: flex; flex-wrap: wrap; text-align: left; }
-    .pf .ps { padding: 10px 12px; flex: 1 1 0; min-width: 0; }
+    .pf .ps { padding: 10px 12px; flex: 1 1 auto; min-width: 0; }
+    .pf .ps:not(.lv) b { white-space: nowrap; overflow-wrap: normal; }   /* 1.99eh: 1,098,509,372 on one line; a cell wraps to the next row instead */
     .pf .ps.lv { flex-basis: 100%; order: 9; }
     .pf .ps b { font-size: 16px; }
     .pf .pf-menu { left: auto; right: 0; }
