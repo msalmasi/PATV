@@ -37,9 +37,10 @@
     <% if (A && A.id) { %>
       <b><%= A.title %></b>
       <span class="fp-score" title="activity score">score <%= n1(A.score) %></span>
-      <span>chosen <time data-ts="<%= A.at %>" datetime="<%= iso(A.at) %>"><%= hm(A.at) %></time></span>
+      <span>picked <time data-ts="<%= A.at %>" datetime="<%= iso(A.at) %>"><%= (new Date(A.at).toDateString() === new Date().toDateString()) ? hm(A.at) : new Date(A.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + hm(A.at) %></time></span>
+      <% if (A.evalAt) { %><span>· last checked <time data-ts="<%= A.evalAt %>" datetime="<%= iso(A.evalAt) %>"><%= hm(A.evalAt) %></time></span><% } %>
       <% if (F.holdUntil && F.holdUntil > Date.now()) { %><span>held until <time data-ts="<%= F.holdUntil %>" datetime="<%= iso(F.holdUntil) %>"><%= hm(F.holdUntil) %></time></span><% } %>
-      <% if (A.reason) { %><span class="fp-why">(<%= A.reason %>)</span><% } %>
+      <% if (A.reason) { %><span class="fp-why">(picked because: <%= A.reason %>)</span><% } %>
     <% } else { %>
       <span class="fp-why">nothing chosen yet - no live bridged pad has been seen</span>
     <% } %>
