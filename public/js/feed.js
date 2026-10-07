@@ -169,6 +169,12 @@
         .then(function () { alert((b.getAttribute('data-what') ? 'Blocked from ' + what : 'Banned from this pad') + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
       return;
     }
+    // 1.99di: the author shows / hides the prompt of an AI-generated file (aigen.js checks it's theirs)
+    if (act === 'ai-prompt') {
+      api('/api/feed/attachments/' + b.getAttribute('data-att') + '/ai-prompt', { show: b.getAttribute('data-show') === '1' })
+        .then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
+      return;
+    }
     // 1.99df: a profile post's "Also show in All" (its author only - checked on the server)
     if (act === 'in-all') {
       api('/api/feed/posts/' + id + '/edit', { inAll: b.getAttribute('data-on') === '1' }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });

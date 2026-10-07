@@ -163,7 +163,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/feed/aigen/chunk" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1075,6 +1075,7 @@ app.get("/info", addUser, (req, res) => {
 // 1.99ck: "pads" (p/<slug>) - the 301s from the old /rooms/..., /feed/c/<slug> addresses come first
 require("./pads").register(app);
 require("./feedweb").register(app, { isBotToken, addUser });
+require("./aigen").register(app, { isBotToken, addUser });   // 1.99di: AI pictures / videos for posts (Pepe's !imagine / !video from the composer)
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)
 require("./feedautomod").register(app, { isBotToken, addUser });   // 1.99dc: Pepe's feed automod (verdicts, settings, reversals, notices)
 require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules (else Padiquette)

@@ -16,12 +16,33 @@
       <div class="fc-pv" id="fcPv" aria-live="polite"></div>
     </div>
     <ul class="fc-files" id="fcFiles" aria-live="polite"></ul>
+    <%# 1.99di: "✨ Generate" - Pepe's !imagine / !video as you (aigen.js): the same price, filters and refunds as chat %>
+    <% if (!cp.mediaRefusal && cp.aigen) { %>
+      <div class="fc-gen hide" id="fcGen" data-aigen="<%= JSON.stringify(cp.aigen) %>">
+        <div class="fc-gen-head">
+          <div class="fc-gen-kind" role="radiogroup" aria-label="What to generate">
+            <label><input type="radio" name="genKind" value="image" checked> 🖼 Image</label>
+            <label><input type="radio" name="genKind" value="video"> 🎬 Video</label>
+          </div>
+          <span class="fc-gen-by mut">Pepe's <code>!imagine</code> / <code>!video</code></span>
+        </div>
+        <textarea name="genPrompt" rows="2" maxlength="<%= cp.aigen.promptMax %>" aria-label="Prompt" autocomplete="off"></textarea>
+        <div class="fc-gen-go">
+          <span class="fc-gen-price" id="fcGenPrice"></span>
+          <button type="button" class="btn-s" id="fcGenGo">✨ Generate</button>
+        </div>
+        <p class="fc-gen-terms">Charged when it's made · refunded if it fails or is refused · a result you discard is <b>not</b> refunded. Text prompts only, with the same filters as chat. Posts with it get a ✨ AI-generated badge.</p>
+        <span class="fc-err" id="fcGenErr" role="alert"></span>
+        <div class="fc-gen-jobs" id="fcGenJobs" aria-live="polite"></div>
+      </div>
+    <% } %>
     <div class="fc-tools">
       <button type="button" class="fc-tool" data-tool="link" aria-label="Add a link">🔗 Link</button>
       <% if (!cp.mediaRefusal) { %>
         <label class="fc-tool">🖼 Picture<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple data-kind="image" hidden></label>
         <label class="fc-tool">🔊 Audio<input type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac" data-kind="audio" hidden></label>
         <label class="fc-tool">🎬 Video<input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" data-kind="video" hidden></label>
+        <% if (cp.aigen) { %><button type="button" class="fc-tool fc-tool-gen" data-tool="gen" aria-controls="fcGen" title="Make a picture or a video with Pepe's !imagine / !video">✨ Generate</button><% } %>
       <% } %>
       <label class="fc-tool ck" title="Blurred until someone clicks it"><input type="checkbox" name="nsfw"> 🔞 NSFW</label>
     </div>

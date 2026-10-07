@@ -10,6 +10,9 @@
 //   * "Pepe announces it in <room>" for the picked community, only when its owner switched announcements on
 //     (1.99cu: always shown for the picked pad; default ON for Camfrog pads; greyed out with the reason - announcements
 //     off, no Camfrog room, Pepe not in the room - when he can't; disabled boxes are never sent nor kept in the draft)
+//   * (1.99di) "✨ Generate": a picture or video made by Pepe's !imagine / !video (aigen.js) - prompt, price, a
+//     preview with progress, then Attach / Regenerate (charged again) / Discard (not refunded); jobs are kept on
+//     the server, so leaving the page loses nothing
 // Page: the pad bar, sort and pager links on /feed and /feed/following (data-swap)
 // swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
 // composer is ever lost.
@@ -126,7 +129,7 @@
       v: 1, at: Date.now(), path: location.pathname,
       title: form.elements.title.value, body: form.elements.body.value, link: form.elements.link.value, nsfw: form.elements.nsfw.checked,
       community: picked(), announceOff: announceOff(),
-      files: files.filter(function (f) { return (f.state === 'ready' || f.restoring) && f.id; }).map(function (f) { return { id: f.id, kind: f.kind, name: f.name, url: f.url || null }; })
+      files: files.filter(function (f) { return (f.state === 'ready' || f.restoring) && f.id; }).map(function (f) { return { id: f.id, kind: f.kind, name: f.name, url: f.url || null, ai: !!f.ai }; })
     };
   }
   function empty(d) { return !d.title.trim() && !d.body.trim() && !d.link.trim() && !d.files.length; }
@@ -192,7 +195,7 @@
   function ready(f, att) {
     f.state = 'ready'; f.restoring = false;
     f.el.bi.style.width = '100%';
-    say(f, (f.kind === 'image' ? 'Ready' : 'Ready · ' + (att.secs ? Math.round(att.secs) + 's' : '')) + ' ✔');
+    say(f, (f.kind === 'image' ? 'Ready' : 'Ready · ' + (att.secs ? Math.round(att.secs) + 's' : '')) + ' ✔' + (f.ai ? ' · ✨ AI-generated' : ''));
     if (att.url && (f.kind === 'image' || f.kind === 'video')) {
       f.url = att.url;
       f.el.th.style.backgroundImage = 'url("' + att.url.replace(/["\\]/g, '') + '")'; f.el.th.textContent = '';
@@ -256,6 +259,142 @@
       inp.value = '';
     });
   });
+
+  // ── ✨ Generate (1.99di, aigen.js): Pepe's !imagine / !video as this account, previewed here, then attached ──
+  // Jobs live on the server: leaving the page keeps them (the list is fetched again on load, and an inbox notice
+  // says when one is done). Charged when it's made, refunded if it fails or is refused; a discarded result isn't.
+  var gen = document.getElementById('fcGen');
+  if (gen) (function () {
+    var cfg = {};
+    try { cfg = JSON.parse(gen.getAttribute('data-aigen')) || {}; } catch (e) { cfg = {}; }
+    var jobsEl = document.getElementById('fcGenJobs'), priceEl = document.getElementById('fcGenPrice'), goBtn = document.getElementById('fcGenGo');
+    var gErr = document.getElementById('fcGenErr');
+    var promptEl = form.elements.genPrompt;
+    var cards = {};
+    var PH = { image: 'Describe the picture… e.g. a frog DJ in a neon nightclub, synthwave style', video: 'Describe the clip… e.g. a frog surfing a huge wave at sunset, slow motion' };
+    function kind() { var x = form.querySelector('input[name=genKind]:checked'); return x ? x.value : 'image'; }
+    function priceOf(k) { var p = (cfg.prices || {})[picked()] || cfg.global || {}; return Number(p[k]) || 0; }
+    function fmtP(n) { return n ? Number(n).toLocaleString('en-US') + ' PAT' : 'free'; }
+    function what(k) { return k === 'video' ? 'video' : 'picture'; }
+    function setGErr(t) { gErr.textContent = t || ''; }
+    function showPrice() {
+      var k = kind();
+      priceEl.textContent = (k === 'video' ? '🎬 A video' : '🖼 A picture') + ' costs ' + fmtP(priceOf(k)) + (picked() ? '' : ' (the price of the pad you pick)') + ' · ' + ((cfg.eta || {})[k] || '');
+      promptEl.placeholder = PH[k];
+    }
+    function idem() { return 'g' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); }
+    function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+    function btn(text, cls, fn) { var b = el('button', cls || 'fc-gj-btn', text); b.type = 'button'; b.addEventListener('click', fn); return b; }
+    function attached(id) { return files.some(function (f) { return f.id === id; }); }
+
+    form.querySelector('[data-tool=gen]').addEventListener('click', function () {
+      gen.classList.toggle('hide');
+      if (!gen.classList.contains('hide')) { showPrice(); promptEl.focus(); }
+    });
+    form.addEventListener('change', function (ev) { if (ev.target.name === 'genKind' || ev.target.name === 'community') showPrice(); });
+    promptEl.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); goBtn.click(); } });
+
+    function start(k, prompt, again) {
+      setGErr('');
+      prompt = String(prompt || '').trim();
+      if (prompt.length < 3) { setGErr('Describe what to make.'); promptEl.focus(); return; }
+      var price = priceOf(k);
+      if (again && !window.confirm('Make a new ' + what(k) + ' from the same prompt? It costs ' + fmtP(price) + ' again - the one you have now is not refunded.')) return;
+      goBtn.disabled = true;
+      api('/api/feed/aigen', { kind: k, prompt: prompt, pad: picked() || null, price: price, back: location.pathname + location.search, idem: idem() })
+        .then(function (d) { if (!again) promptEl.value = ''; card(d.job); poll(d.job.id); })
+        .catch(function (e) { setGErr(e.message); })
+        .then(function () { goBtn.disabled = false; });
+    }
+    goBtn.addEventListener('click', function () { start(kind(), promptEl.value, false); });
+
+    function statusLine(j) {
+      if (j.status === 'queued') return 'Waiting for Pepe…';
+      if (j.status === 'running') return 'Generating… ' + (j.eta || '') + ' · ' + (j.elapsed || 0) + ' s - you can leave this page: it is kept, and you get a notice when it is done.';
+      if (j.status === 'done') return 'Ready · ' + (j.cost ? fmtP(j.cost) + ' charged' : 'free') + (j.nsfw ? ' · 🔞 Pepe marked it NSFW - a post with it is NSFW' : '');
+      return '⚠️ ' + (j.message || 'It failed') + (j.refunded ? ' · refunded' : (j.cost ? '' : ' · nothing charged'));
+    }
+    function card(j) {
+      if (j.attachment && attached(j.attachment.id)) return;
+      var c = cards[j.id];
+      if (!c) { c = cards[j.id] = { el: el('div', 'fc-gj') }; jobsEl.insertBefore(c.el, jobsEl.firstChild); }
+      c.job = j;
+      var box = c.el;
+      box.innerHTML = '';
+      box.setAttribute('data-status', j.status);
+      var m = el('div', 'fc-gj-m');
+      if (j.status === 'done' && j.attachment) {
+        if (j.kind === 'video') {
+          var v = document.createElement('video'); v.src = j.attachment.file; if (j.attachment.poster) v.poster = j.attachment.poster;
+          v.controls = true; v.playsInline = true; v.preload = 'metadata'; m.appendChild(v);
+        } else {
+          var im = document.createElement('img'); im.src = j.attachment.url; im.alt = 'Generated picture: ' + j.prompt; m.appendChild(im);
+        }
+        m.appendChild(el('span', 'fp-ai-badge', '✨ AI'));
+      } else if (j.status === 'queued' || j.status === 'running') {
+        m.appendChild(el('span', 'fc-gj-spin')); m.setAttribute('aria-busy', 'true');
+      } else {
+        m.appendChild(el('span', 'fc-gj-x', '⚠️'));
+      }
+      var b = el('div', 'fc-gj-b');
+      var q = el('div', 'fc-gj-q'); q.appendChild(el('b', null, j.kind === 'video' ? '🎬 ' : '🖼 ')); q.appendChild(document.createTextNode(j.prompt)); b.appendChild(q);
+      b.appendChild(el('div', 'fc-gj-st' + (j.status === 'failed' || j.status === 'timeout' ? ' bad' : ''), statusLine(j)));
+      var acts = el('div', 'fc-gj-acts');
+      if (j.status === 'done' && j.attachment) {
+        acts.appendChild(btn('📎 Attach to post', 'fc-gj-btn pri', function () { attach(j); }));
+        acts.appendChild(btn('↻ Regenerate · ' + fmtP(priceOf(j.kind)), null, function () { start(j.kind, j.prompt, true); }));
+        acts.appendChild(btn('Discard', 'fc-gj-btn ghost', function () {
+          if (!window.confirm('Discard this ' + what(j.kind) + '? ' + (j.cost && !j.refunded ? 'The ' + fmtP(j.cost) + ' is not refunded - it was made.' : ''))) return;
+          api('/api/feed/aigen/' + j.id + '/discard', {}).then(function () { drop(j.id); }).catch(function (e) { setGErr(e.message); });
+        }));
+        var lab = el('label', 'fc-gj-show ck'); var ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = !j.attachment.hidePrompt;
+        ck.addEventListener('change', function () {
+          api('/api/feed/attachments/' + j.attachment.id + '/ai-prompt', { show: ck.checked }).then(function () { j.attachment.hidePrompt = !ck.checked; })
+            .catch(function (e) { ck.checked = !ck.checked; setGErr(e.message); });
+        });
+        lab.appendChild(ck); lab.appendChild(document.createTextNode(' Show the prompt on the post')); acts.appendChild(lab);
+      } else if (j.status === 'queued') {
+        acts.appendChild(btn('Cancel', 'fc-gj-btn ghost', function () {
+          api('/api/feed/aigen/' + j.id + '/discard', {}).then(function () { drop(j.id); }).catch(function (e) { setGErr(e.message); });
+        }));
+      } else if (j.status === 'failed' || j.status === 'timeout') {
+        acts.appendChild(btn('Try again', null, function () { drop(j.id); start(j.kind, j.prompt, false); }));
+        acts.appendChild(btn('Dismiss', 'fc-gj-btn ghost', function () { drop(j.id); }));
+      }
+      b.appendChild(acts);
+      box.appendChild(m); box.appendChild(b);
+      gen.classList.remove('hide');
+    }
+    function drop(id) { var c = cards[id]; if (c) { clearTimeout(c.timer); c.el.remove(); delete cards[id]; } }
+    function poll(id) {
+      var c = cards[id];
+      if (!c) return;
+      clearTimeout(c.timer);
+      var j = c.job;
+      if (j.status !== 'queued' && j.status !== 'running') return;
+      c.timer = setTimeout(function () {
+        fetch('/api/feed/aigen/' + id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+          if (!cards[id]) return;
+          if (d && d.ok && d.job) { card(d.job); poll(id); } else if (d && d.error) { drop(id); }
+        }).catch(function () { poll(id); });
+      }, j.kind === 'video' ? 4000 : 2500);
+    }
+    function attach(j) {
+      setErr('');
+      var k = j.kind, have = files.filter(function (x) { return x.kind === k && x.state !== 'failed'; }).length;
+      if (k === 'image' && have >= maxImages) return setGErr('At most ' + maxImages + ' pictures per post.');
+      if (k === 'video' && have >= 1) return setGErr('One video per post.');
+      var f = { kind: k, name: '✨ ' + j.prompt.slice(0, 80), id: j.attachment.id, state: 'processing', ai: true };
+      files.push(f); row(f); ready(f, { url: j.attachment.url, secs: j.attachment.secs });
+      drop(j.id);
+    }
+    // jobs already going or finished (another page, a reload) - not the ones the restored draft holds
+    fetch('/api/feed/aigen?pad=' + encodeURIComponent(picked() || ''), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) return;
+      (d.jobs || []).slice().reverse().forEach(function (j) { card(j); poll(j.id); });
+    }).catch(function () { /* the panel still works */ });
+    showPrice();
+  })();
 
   // ── the community picker (1.99ci): one community, searchable; the announce checkbox follows it ──
   var comm = form.querySelector('.fc-comm');
@@ -328,7 +467,7 @@
     syncAnnounce();
     var pending = (Array.isArray(d.files) ? d.files : []).slice(0, 6).filter(function (x) { return x && /^[a-f0-9]{24}$/.test(String(x.id)); });
     pending.forEach(function (x) {
-      var f = { kind: x.kind === 'audio' || x.kind === 'video' ? x.kind : 'image', name: String(x.name || 'file').slice(0, 100), id: x.id, state: 'processing', restoring: true, url: x.url || null };
+      var f = { kind: x.kind === 'audio' || x.kind === 'video' ? x.kind : 'image', name: String(x.name || 'file').slice(0, 100), id: x.id, state: 'processing', restoring: true, url: x.url || null, ai: !!x.ai };
       files.push(f); row(f); say(f, 'Checking…');
       fetch('/api/feed/uploads/' + f.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
         if (j.ok && j.state === 'ready' && j.attachment) ready(f, j.attachment);

@@ -184,11 +184,17 @@ async function composerFor(viewer, roomId) {
   // 1.99cc: "By posting you agree to the Terms" - and a one-time tick box until this account has accepted the current version
   // 1.99cf: only while the admin switch terms_enforced is on (default off: no line, no tick box)
   const termsNeeded = await terms.needs(viewer.userId).catch(() => false);
+  // 1.99di: "✨ Generate" (aigen.js) - Pepe's !imagine / !video price for each pad the viewer may post in (its Camfrog
+  // room's price, else the global one); same eligibility as uploads (mediaRefusal)
+  const aigen = require("./aigen");
+  const aiPrices = {};
+  for (const r of all) aiPrices[r.id] = await aigen.pricesFor(r.id).catch(() => ({ image: aigen.DEFAULT_PRICES.imagine, video: aigen.DEFAULT_PRICES.video }));
   return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all,
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
-           prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK };
+           prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK,
+           aigen: { prices: aiPrices, global: await aigen.pricesFor(null).catch(() => null), eta: aigen.ETA, promptMax: aigen.PROMPT_MAX } };
 }
 
 /** The room page's Feed section (bridge.js /rooms/:slug). */

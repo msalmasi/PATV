@@ -17,6 +17,8 @@
 //   feed_attachments   id, post_id (NULL until posted), owner_id, kind image|audio|video|preview,
 //                      ct, file, thumb, poster, w, h, secs, bytes, sort, state uploading|processing|
 //                      ready|failed|deleted|purged, error, created, size_declared, received, sniff
+//                      (1.99di) ai_generated, ai_prompt, ai_model, ai_nsfw, ai_hide_prompt, ai_job: a file Pepe generated
+//                      (aigen.js) - badge + prompt toggle on the post; ai_nsfw makes the post NSFW
 //                      (1.99bx) ups / downs (cached COUNTED votes), score = ups - downs, hot (Reddit hot rank,
 //                      indexed), controversy (Reddit's magnitude ** balance) - all rewritten by recountPost
 //   feed_votes         post_id, user_id, value +1 / -1 (no row = no vote), w (1 = counts, 0 = a downvote from
@@ -144,6 +146,14 @@ function init() {
       await migrateMentionDefault();
       // 1.99df: profile posts - the owner's per-post "Also show in All" (1 = yes, the default; only profile posts set 0)
       await addCol("feed_posts", "in_all", "INTEGER NOT NULL DEFAULT 1");
+      // 1.99di: AI-generated files (aigen.js: Pepe's !imagine / !video from the composer) - the flag, the prompt (shown
+      // under a "prompt" toggle unless the author hides it), the model, and Pepe's NSFW verdict (a post using it is NSFW)
+      await addCol("feed_attachments", "ai_generated", "INTEGER NOT NULL DEFAULT 0");
+      await addCol("feed_attachments", "ai_prompt", "TEXT");
+      await addCol("feed_attachments", "ai_model", "TEXT");
+      await addCol("feed_attachments", "ai_nsfw", "INTEGER NOT NULL DEFAULT 0");
+      await addCol("feed_attachments", "ai_hide_prompt", "INTEGER NOT NULL DEFAULT 0");
+      await addCol("feed_attachments", "ai_job", "TEXT");
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -595,8 +605,12 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       const R = rooms.getCached(x.room_id);
       return [x.room_id, { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, profile: profileName(R), label: padLabelOf(R, x.room_id) }];
     })).values()];
+    const mineRow = !!(viewer && viewer.userId === r.author_id);
+    // 1.99di: an AI-generated file carries {prompt (null when the author hid it - they and staff still see it), hidden}
     const att = AT.filter((a) => a.post_id === r.id).map((a) => ({ id: a.id, kind: a.kind, ct: a.ct, file: a.file, thumb: a.thumb, poster: a.poster,
-                                                                 w: a.w, h: a.h, secs: a.secs }));
+                                                                 w: a.w, h: a.h, secs: a.secs,
+                                                                 ai: a.ai_generated ? { prompt: a.ai_hide_prompt && !mineRow && !staff ? null : (a.ai_prompt || null),
+                                                                                        hidden: !!a.ai_hide_prompt } : null }));
     const link = parseJson(r.link_json);
     const mv = MV.find((v) => v.post_id === r.id);
     return {
@@ -616,6 +630,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       images: att.filter((a) => a.kind === "image"), audio: att.filter((a) => a.kind === "audio"), video: att.filter((a) => a.kind === "video"),
       link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
       xpost, crossposts, xcount: crossposts.length,
+      ai: att.filter((a) => a.ai && a.kind !== "preview"),       // 1.99di: the post's AI-generated files (badge + prompt toggle)
     };
   });
 }
@@ -852,6 +867,8 @@ async function create(userId, input, deps = {}) {
     previewAtt = pv.thumb || null;
   }
   const cost = priceOf(C, { ...counts, link: !!link });
+  // 1.99di: a file Pepe's result check called NSFW makes the post NSFW whatever the author ticked
+  const aiNsfw = atts.some((a) => a.ai_nsfw);
   const id = newId();
   const label = `feed post ${id}`;
   // 1.99df: "Also show in All" - only a profile post can opt out (default: shown)
@@ -862,7 +879,7 @@ async function create(userId, input, deps = {}) {
     await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created, in_all)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, u.userId, title || null, body || null, link ? link.url : null, link ? JSON.stringify(link) : null,
-                    input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t, inAll]);
+                    aiNsfw || input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t, inAll]);
     let i = 0;
     for (const a of atts) {
       const r = await runQuery("UPDATE feed_attachments SET post_id = ?, sort = ? WHERE id = ? AND owner_id = ? AND post_id IS NULL AND state = 'ready'", [id, i++, a.id, u.userId]);
