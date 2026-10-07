@@ -1,8 +1,10 @@
-<%# A room's schedule on its page (1.99bx): on now, the booked / scheduled slots ahead, the queue.
-    Pass { slug, schedule (mainstage.roomSchedule), manage }. Times are rendered in UTC here and turned
-    into the viewer's local time by public/js/room-schedule.js, which also refreshes it every 30 s from
-    /api/rooms/:slug/stage. Requests waiting for the owner's OK are only in `schedule` for the room's
-    managers and the person who asked (roomSchedule decides) - this template shows whatever it gets. %>
+<%# A pad's stage schedule (1.99bx; 1.99dx: no longer a card of its own - it's the lower half of the pad's ONE
+    Stage card in views/room.ejs, under the player and its action row): on now, the booked / scheduled slots
+    ahead, the queue. Pass { slug, schedule (mainstage.roomSchedule) }. Times are rendered in UTC here and
+    turned into the viewer's local time by public/js/room-schedule.js, which also refreshes it (and the
+    card's slot status line) every 30 s from /api/rooms/:slug/stage. Requests waiting for the owner's OK are
+    only in `schedule` for the pad's managers and the person who asked (roomSchedule decides) - this template
+    shows whatever it gets. The pad settings link lives in the pad header only. %>
 <%
   const S = schedule || { live: [], upcoming: [], queue: [] };
   const iso = (ms) => new Date(Number(ms)).toISOString();
@@ -10,12 +12,7 @@
   const src = (r) => r.mode === 'embed' ? '▶ ' + (r.embed_label || 'Video link') : '🎥 Stream';
 %>
 <style>
-  .rs h2 { align-items: center; flex-wrap: wrap; }
-  .rs h2 .acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-  .rs .sbtn { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12.5px; font-weight: bold; padding: 5px 12px; border-radius: 999px;
-              background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; white-space: nowrap; }
-  .rs .sbtn.ghost { background: #1d1a0f; border: 1px solid #6b5a20; color: #f3e3a3 !important; }
-  .rs .sbtn:focus-visible { outline: 2px solid #ffd700; outline-offset: 2px; }
+  .rs { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #1f2a20; }
   .rs .scols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
   .rs h3 { margin: 0 0 6px; font-size: 12px; color: #9fb39f; text-transform: uppercase; letter-spacing: .08em; font-weight: normal; }
   .rs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -35,15 +32,10 @@
   .rs .tg.pend { border-color: #6b5a20; color: #ffcf7a; background: #1d160a; }
   .rs .tg.you { border-color: #2f6b3a; color: #bdf0c6; background: #12301a; }
   .rs .empty { color: #888; font-size: 13px; padding: 4px 2px; }
-  .rs .note { color: #888; font-size: 12px; margin: 8px 0 0; }
+  .rs .note { color: #7d7d7d; font-size: 11.5px; margin: 0; }
   @media (max-width: 860px) { .rs .scols { grid-template-columns: minmax(0, 1fr); } }
 </style>
-<section class="card rs" id="rmSched" aria-labelledby="rmSchedH" data-slug="<%= slug %>">
-  <h2 id="rmSchedH"><span>📅 Schedule</span>
-    <span class="acts">
-      <a class="sbtn" href="/stage?room=<%= encodeURIComponent(slug) %>">Book a slot</a>
-      <% if (manage) { %><a class="sbtn ghost" href="/p/<%= encodeURIComponent(slug) %>/settings#stage">⚙ Pad settings<%= S.pending ? ' · ' + S.pending + ' to approve' : '' %></a><% } %>
-    </span></h2>
+<div class="rs" id="rmSched" data-slug="<%= slug %>" role="group" aria-label="Stage schedule">
   <div class="scols">
     <div>
       <h3 id="rsLiveH">On now</h3>
@@ -59,7 +51,7 @@
     <div>
       <h3 id="rsUpH">Coming up</h3>
       <ul id="rsUp" aria-labelledby="rsUpH">
-        <% if (!S.upcoming.length) { %><li class="empty">Nothing booked yet — <a href="/stage?room=<%= encodeURIComponent(slug) %>">book the first slot</a>.</li><% } %>
+        <% if (!S.upcoming.length) { %><li class="empty">Nothing booked yet — <a href="/stage?room=<%= encodeURIComponent(slug) %>#whenSet">book the first slot</a>.</li><% } %>
         <% S.upcoming.forEach((r) => { %><li class="srow<%= r.status === 'requested' ? ' pend' : '' %><%= r.mine ? ' mine' : '' %>">
           <span class="when"><time data-ts="<%= r.start_at %>" data-min="<%= r.minutes %>" datetime="<%= iso(r.start_at) %>"><%= utc(r.start_at) %></time> · <%= r.minutes %> min</span>
           <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
@@ -80,5 +72,5 @@
     </div>
   </div>
   <p class="note" id="rsNote">Times in your local time<span id="rsTz"></span>.</p>
-</section>
-<script src="/public/js/room-schedule.js?v=3" defer></script>
+</div>
+<script src="/public/js/room-schedule.js?v=4" defer></script>

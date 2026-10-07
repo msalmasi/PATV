@@ -2,11 +2,23 @@
 <% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
    const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
    const ULE = typeof ulEsc === 'function' ? ulEsc : escapeFn; %>
-<%# The pad page (1.99ck, /p/<slug>; was /rooms/<slug> + /feed/c/<slug>): header, stage + schedule, the live
-    Camfrog room behind the pad when there is one (chat, people, mic, DJ booth), then the pad's feed. A
-    site pad (the Camfrog Lounge) has no Camfrog room: no live section, no "not bridged" note. 1.99x: the header
-    shows the pad's platform badge (🐸 Camfrog Pad / 🌐 Site Pad). %>
-<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null, dms_ = typeof dms !== 'undefined' && !!dms; %>
+<%# The pad page (1.99ck, /p/<slug>; was /rooms/<slug> + /feed/c/<slug>). A site pad (the Camfrog Lounge) has no
+    Camfrog room: no live section, no "not bridged" note. 1.99x: the header shows the pad's platform badge
+    (🐸 Camfrog Pad / 🌐 Site Pad).
+    1.99dx: header, then the story strip (fresh captures, only when there are some), then a sticky tab bar
+    (public/js/pad-tabs.js) over three panels that are only ever HIDDEN, never unmounted, so polling, push-to-talk,
+    the mic, the stage player and the schedule refresh keep running whichever tab shows:
+      Live (on pads without a Camfrog room: "Stage") - the ONE Stage card (player, Snap / Clip, slot status, Go live
+        here / Book a slot / Get featured, on now / coming up / queue), the DJ booth, the Camfrog chat bridge with
+        the Manage card (collapsed to the topic), "Latest from the feed", on the mic, who's in the room
+      Feed - composer, sorts and posts, the Rules card in its side column
+      About - description, owner, rules, how to join the Camfrog room, analytics
+    The schedule has no tab of its own any more: it's the lower half of the Stage card. %>
+<% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null, dms_ = typeof dms !== 'undefined' && !!dms;
+   const PT_ = typeof padTabs !== 'undefined' && padTabs ? padTabs : { tabs: ['live'].concat(feed_ ? ['feed'] : [], ['about']), initial: 'live', active: false, camfrog: !siteOnly_, posts: [] };
+   const latest_ = typeof latest !== 'undefined' && latest ? latest : [];
+   const tabOn_ = (t) => PT_.initial === t;
+   const liveLabel_ = PT_.camfrog ? 'Live' : 'Stage'; %>
 <%# 1.99x: the platform badge (pads.js padBadge via fx or app.locals; a plain fallback when rendered bare) %>
 <% const padBadge_ = typeof fx !== 'undefined' && fx && fx.padBadge ? fx.padBadge : typeof padBadge === 'function' ? padBadge
      : (p) => '<span class="pad-plat pp-' + p + '">' + (p === 'site' ? '🌐 Site Pad' : '🐸 Camfrog Pad') + '</span>'; %>
@@ -146,13 +158,60 @@
   .rm .padref { font-size: 14px; color: #9ccc9f; font-weight: bold; letter-spacing: .02em; }
   .rm .meta { align-items: center; }
   .rm .meta .fw-btn { font-size: 12px; padding: 3px 12px; }
+  /* 1.99dx: story strip under the header, the sticky tab bar, the merged Stage card's action row, the latest-posts card */
+  .rm .rm-story { padding: 10px 14px; }
+  .rm .rm-story .ss { margin: 0; }
+  .rm .ptabs { position: sticky; top: 0; z-index: 30; display: flex; gap: 4px; padding: 6px; margin: 0 -2px; background: rgba(13,13,13,.94);
+               backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); border: 1px solid #222; border-radius: 12px; overflow-x: auto; scrollbar-width: none; }
+  .rm .ptabs::-webkit-scrollbar { display: none; }
+  .rm .ptab { appearance: none; flex: 1 1 0; min-width: max-content; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px;
+              border-radius: 9px; border: 1px solid transparent; background: none; color: #aab3aa; font: inherit; font-size: 14.5px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+  .rm .ptab:hover { color: #fff; background: #161616; }
+  .rm .ptab[aria-selected="true"] { color: #fff; background: #12301a; border-color: #2f6b3a; }
+  .rm .ptab:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 1px; }
+  .rm .ptab .pdot { width: 8px; height: 8px; border-radius: 50%; background: #ff5252; animation: rmPulse 1.6s ease-in-out infinite; }
+  .rm .ptab .pnew { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: #ffd54f; color: #1a1400; font-weight: bold; }
+  .rm .ptab .pnew[hidden], .rm .ptab .pdot[hidden] { display: none; }
+  .rm .ppanel { display: grid; gap: 14px; min-width: 0; }
+  .rm .ppanel[hidden] { display: none !important; }
+  .rm .stage-bar { display: grid; gap: 10px; margin-top: 12px; }
+  .rm .stage-bar .slots { font-size: 13px; color: #aab3aa; }
+  .rm .stage-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .rm .sact { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 8px 16px; border-radius: 999px; font-weight: bold; font-size: 13.5px;
+              white-space: nowrap; border: 1px solid #6b5a20; background: #1d1a0f; color: #f3e3a3 !important; flex: 0 1 auto; }
+  .rm .sact:hover { border-color: #c6a83f; color: #fff !important; }
+  .rm .sact:focus-visible { outline: 2px solid #ffd700; outline-offset: 2px; }
+  .rm .sact.primary { background: linear-gradient(90deg, #e53935, #ff7043); border-color: transparent; color: #fff !important; }
+  .rm .sact[hidden] { display: none; }
+  .rm .plf-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .rm .plf-l li { display: grid; gap: 2px; min-width: 0; }
+  .rm .plf-t { color: #e6e6e6 !important; font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  .rm .plf-t:hover { color: #a5d6a7 !important; }
+  .rm .plf-l small { color: #777; font-size: 12px; }
+  .rm .hero .desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .rm .about .desc { color: #ccc; }
+  .rm .about dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 10px 0 0; font-size: 14px; }
+  .rm .about dt { color: #888; }
+  .rm .about dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .rm .fgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; align-items: start; }
+  .rm .fgrid > * { min-width: 0; }
+  .rm .fgrid .rf { margin: 0; }
+  @media (max-width: 860px) {
+    .rm .fgrid { grid-template-columns: minmax(0, 1fr); }
+    .rm .fgrid .fside { order: 2; }
+  }
+  @media (max-width: 520px) {
+    .rm .ptab { padding: 9px 10px; font-size: 14px; }
+    .rm .sact { flex: 1 1 calc(50% - 8px); padding: 8px 10px; }
+    .rm .sact.primary { flex-basis: 100%; }
+  }
   @media (max-width: 860px) {
     .rm .grid { grid-template-columns: minmax(0, 1fr); }
     .rm .feed { height: 58vh; }
     .rm .hero h1 { font-size: 22px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .rm .dot, .rm .eq i { animation: none; }
+    .rm .dot, .rm .eq i, .rm .ptab .pdot { animation: none; }
     .rm .feed { scroll-behavior: auto; }
   }
 </style>
@@ -174,12 +233,19 @@
       <span class="chip" title="This pad is backed by a Camfrog room">📡 Camfrog room<%= room.camfrogName && room.camfrogName !== room.name ? ': ' + room.camfrogName : '' %></span><% } %>
       <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 Pad owner: <%= room.owner %></a><% } %>
       <% if (pepeHere_ === true && !siteOnly_) { %><span class="chip" title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %>
-      <% if (manage_) { %><a class="chip own ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= feed_ && feed_.queue ? '#moderation' : '' %>" title="Everything about this pad: page, stage, feed, Pepe, rules, moderation">⚙ Pad settings<% if (feed_ && feed_.queue) { %> <span class="ps-q" title="Waiting for you in Moderation"><%= feed_.queue %></span><% } %></a><% } %>
-      <% if (feed_ && feed_.rules) { %><a class="chip" href="#rules" onclick="var d=document.getElementById('rules');if(d)d.open=true">📜 Rules</a><% } %>
-      <% if (feed_) { %><a class="chip" href="#feed">📝 Feed<%= feed_.posts.length ? ' · ' + (feed_.more ? feed_.posts.length + '+' : feed_.posts.length) : '' %></a><% } %>
+      <% if (manage_) { %><a class="chip own ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= feed_ && feed_.queue ? '#moderation' : '' %>" title="Everything about this pad: page, stage, feed, Pepe, rules, moderation">⚙ Pad settings<% if (feed_ && feed_.queue) { %> <span class="ps-q" title="Waiting for you in Moderation"><%= feed_.queue %></span><% } %><% if (schedule_ && schedule_.pending) { %> · <%= schedule_.pending %> to approve<% } %></a><% } %>
+      <% if (feed_ && feed_.rules) { %><a class="chip" href="?tab=feed#rules" data-pad-tab="feed" data-open="rules">📜 Rules</a><% } %>
       <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Pad analytics</a><% } %>
     </div>
   </section>
+  <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
+    <section class="card rm-story" aria-label="Fresh captures from this pad"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer }, heading: '📸 Fresh captures', next: '/p/' + encodeURIComponent(room.slug) }) %></section>
+  <% } %>
+  <nav class="ptabs" id="padTabs" role="tablist" aria-label="Pad sections">
+    <% PT_.tabs.forEach((t) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= t %>" data-tab="<%= t %>" aria-controls="padPanel-<%= t %>" aria-selected="<%= tabOn_(t) ? 'true' : 'false' %>" tabindex="<%= tabOn_(t) ? 0 : -1 %>">
+      <% if (t === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%= liveLabel_ %><% } else if (t === 'feed') { %>Feed <span class="pnew" id="padFeedNew" hidden></span><% } else { %>About<% } %></button><% }) %>
+  </nav>
+  <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <b>Live from the Camfrog room — read-only (v1).</b> What the Camfrog room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div><% } %>
 
 <% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0;
@@ -202,12 +268,15 @@
     </div>
     <div class="stcap hide" id="rmCap" aria-label="Snap or clip this stream"></div>
     <div class="off-air"><span id="rmOffTxt">Nothing on this stage right now — be the first: go live here.</span></div>
-    <div class="stage-foot">
-      <span id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span>
-      <span class="sp"></span>
-      <a class="golive-btn" href="/stage?room=<%= encodeURIComponent(room.slug) %>">🎥 Go live here</a>
-      <% if (!RS.featured) { %><a class="golive-btn ghost" href="/stage?room=<%= encodeURIComponent(room.slug) %>&feature=1">★ Get featured</a><% } %>
+    <div class="stage-bar">
+      <span class="slots" id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span>
+      <div class="stage-acts">
+        <a class="sact primary" href="/stage?room=<%= encodeURIComponent(room.slug) %>">🎥 Go live here</a>
+        <a class="sact" href="/stage?room=<%= encodeURIComponent(room.slug) %>#whenSet">📅 Book a slot</a>
+        <a class="sact" id="rmFeatBtn" href="/stage?room=<%= encodeURIComponent(room.slug) %>&feature=1"<%= RS.featured ? ' hidden' : '' %>>★ Get featured</a>
+      </div>
     </div>
+    <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="Coming up on this stage">
         <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%- UL(u.username, { text: u.display }) %></b><span class="muted"><%= u.minutes %> min<%= u.featured ? ' · ★ featured' : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
@@ -239,12 +308,12 @@
   })();
   </script>
 <% } %>
-<% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_, manage: manage_ }) %><% } %>
 <% if (!bridged_ && !siteOnly_) { %>
   <section class="card"><p class="muted" style="margin:0">📡 Pepe isn't bridging this pad's Camfrog room to the website right now, so there's no live chat here — the stage and the feed still work. Join the Camfrog room to hang out.</p></section>
 <% } %>
 
 <% if (!bridged_ || siteOnly_) { %>
+  <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else if (!signedIn) { %>
   <section class="card tease">
     <div class="big" aria-hidden="true">🐸</div>
@@ -253,6 +322,7 @@
     <a class="btn" href="/login">Sign in</a>
     <p class="muted">No account? <a href="/register">Make one</a> — then link your Camfrog name with <code>!verify</code>.</p>
   </section>
+  <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else { %>
   <%- include('partials/room-dj', { slug: room.slug, linked: linked }) %>
   <div class="grid">
@@ -272,6 +342,7 @@
     <aside class="side">
       <%# 1.99co: the Manage panel - filled and shown by public/js/room-mod.js only when Pepe says this viewer moderates the room %>
       <section class="card pm" id="rmMod" hidden></section>
+      <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
       <section class="card" aria-labelledby="micH">
         <h2 id="micH">On the mic</h2>
         <div class="mic" id="rmMic"></div>
@@ -282,20 +353,12 @@
         <ul class="people" id="rmPeople"></ul>
         <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
       </section>
-      <section class="card join" aria-labelledby="joinH">
-        <h2 id="joinH">Join the Camfrog room</h2>
-        <ol>
-          <li>Open Camfrog (<a href="https://www.camfrog.com/" rel="noopener">get it here</a>) and sign in.</li>
-          <li>Open the <b>Room List</b> and search for <b><%= room.name %></b>.</li>
-          <li>Say hi — Pepe answers <code>!help</code>.</li>
-        </ol>
-      </section>
     </aside>
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
   <script src="/public/js/room-bridge.js?v=5"></script>
-  <link rel="stylesheet" href="/public/css/room-mod.css?v=1">
-  <script src="/public/js/room-mod.js?v=2"></script>
+  <link rel="stylesheet" href="/public/css/room-mod.css?v=3">
+  <script src="/public/js/room-mod.js?v=3"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -304,7 +367,7 @@
     var data = JSON.parse(document.getElementById('rmInit').textContent);
     var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
     var cursor = 0, timer = null, fails = 0, lastPeople = '', lastMic = '';
-    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %> }) : null;
+    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %>, collapsible: true }) : null;
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -365,6 +428,10 @@
     }
     jump.addEventListener('click', function () { feedEl.scrollTop = feedEl.scrollHeight; jump.style.display = 'none'; });
     feedEl.addEventListener('scroll', function () { if (nearBottom()) jump.style.display = 'none'; });
+    // 1.99dx: the chat fills in while its tab is hidden (no height to scroll) - land on the newest line when it shows
+    document.addEventListener('patv:padtab', function (e) {
+      if (e.detail && e.detail.tab === 'live') { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
+    });
 
     function renderRoom(d) {
       var r = d.room;
@@ -410,20 +477,19 @@
             cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? 'On cam' : (u.on_cam === false ? 'Off cam' : 'Cam unknown');
           }
           ic.appendChild(cam);
-          var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
-          // 1.99co: moderators (Pepe says so) manage someone by clicking them (or their ⋯ button)
+          // 1.99dx: moderators (Pepe sent caps for this viewer) get a ⋯ menu next to the cam icon: the actions
+          // Pepe allows them on this person (room-mod.js menuItems; the server re-checks every one). The name
+          // itself stays the link to the person's profile.
           if (roomMod && roomMod.active() && !u.self && !u.anon && u.login) {
             var mg = el('button', 'pm-mg', '⋯'); mg.type = 'button';
-            mg.title = 'Manage ' + label(u); mg.setAttribute('aria-label', 'Manage ' + label(u));
+            mg.title = 'Actions for ' + label(u); mg.setAttribute('aria-label', 'Actions for ' + label(u));
+            mg.setAttribute('aria-haspopup', 'menu'); mg.setAttribute('data-login', u.login);
+            (function (who, b, canCam) {
+              b.addEventListener('click', function () { roomMod.menu(who, b, { cam: canCam ? function () { snapOpen(who); } : null }); });
+            })(u, mg, !!(r.cams && u.on_cam));
             ic.appendChild(mg);
-            li.classList.add('pm-can');
-            (function (who) {
-              li.addEventListener('click', function (e) {
-                if (e.target.closest('a') || (e.target.closest('button') && !e.target.closest('.pm-mg'))) return;
-                roomMod.open(who);
-              });
-            })(u);
           }
+          var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
           li.appendChild(ic); ul.appendChild(li);
         });
         document.getElementById('rmPplN').textContent = d.members.length ? '(' + d.members.length + ')' : '';
@@ -617,5 +683,53 @@
   })();
   </script>
 <% } %>
-<% if (typeof feed !== 'undefined' && feed) { %><%- include('partials/room-feed', { feed, fx, embeds, host, room }) %><% } %>
+  </section>
+<% if (feed_) { %>
+  <section class="ppanel" id="padPanel-feed" role="tabpanel" aria-labelledby="padTab-feed"<%= tabOn_('feed') ? '' : ' hidden' %>>
+    <div class="fgrid">
+      <div class="fmain"><%- include('partials/room-feed', { feed: feed_, fx, embeds, host, room, noStory: true, noRules: true }) %></div>
+      <aside class="fside side">
+        <% if (feed_.rules) { %><section class="card"><%- include('partials/pad-rules', { fx, rules: feed_.rules, slug: room.slug, canEdit: !!(feed_.mod.owner || feed_.mod.admin), id: 'rules' }) %></section><% } %>
+        <section class="card">
+          <h2><span>p/<%= room.slug %></span></h2>
+          <p class="muted" style="margin:0"><%= room.description || ('A pad on Public Access TV.') %></p>
+          <p style="margin:8px 0 0;font-size:13px"><a href="?tab=about" data-pad-tab="about">About this pad ›</a></p>
+        </section>
+      </aside>
+    </div>
+  </section>
+<% } %>
+  <section class="ppanel about" id="padPanel-about" role="tabpanel" aria-labelledby="padTab-about"<%= tabOn_('about') ? '' : ' hidden' %>>
+    <section class="card" aria-labelledby="abH">
+      <h2 id="abH"><span>ℹ️ About p/<%= room.slug %></span></h2>
+      <% if (room.description) { %><div class="desc"><%= room.description %></div><% } else { %><p class="muted" style="margin:0">No description yet.</p><% } %>
+      <dl>
+        <dt>Pad</dt><dd><%= room.name %> · <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %></dd>
+        <dt>Run by</dt><dd><% if (room.house) { %>🐸 Pepe (a house pad)<% } else if (room.owner) { %><a href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 <%= room.owner %></a><% } else { %><span class="muted">Nobody yet</span><% } %></dd>
+        <% if (feed_ && feed_.follow) { %><dt>Followers</dt><dd><%= feed_.follow.followers.toLocaleString('en-US') %></dd><% } %>
+        <% if (!siteOnly_) { %><dt>Camfrog room</dt><dd><%= room.camfrogName || room.name %></dd><% } %>
+        <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><dt>Analytics</dt><dd><a href="<%= roomAnalytics %>">📈 Pad analytics ›</a></dd><% } %>
+        <% if (manage_) { %><dt>Settings</dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings">⚙ Pad settings ›</a></dd><% } %>
+      </dl>
+    </section>
+    <% if (feed_ && feed_.rules) { %><section class="card"><%- include('partials/pad-rules', { fx, rules: feed_.rules, slug: room.slug, canEdit: !!(feed_.mod.owner || feed_.mod.admin), open: true }) %></section><% } %>
+    <% if (!siteOnly_) { %>
+    <section class="card join" aria-labelledby="joinH">
+      <h2 id="joinH">Join the Camfrog room</h2>
+      <ol>
+        <li>Open Camfrog (<a href="https://www.camfrog.com/" rel="noopener">get it here</a>) and sign in.</li>
+        <li>Open the <b>Room List</b> and search for <b><%= room.camfrogName || room.name %></b>.</li>
+        <li>Say hi — Pepe answers <code>!help</code>.</li>
+      </ol>
+    </section>
+    <% } %>
+  </section>
+  <script src="/public/js/pad-tabs.js?v=1"></script>
+  <script>
+  (function () {
+    'use strict';
+    if (!window.PATVPadTabs) return;
+    PATVPadTabs.init(<%- JSON.stringify({ slug: room.slug, platform: PT_.camfrog ? 'camfrog' : (room.platform || 'site'), active: !!PT_.active, posts: PT_.posts || [], more: false }).replace(/</g, '\\u003c') %>);
+  })();
+  </script>
 </main>

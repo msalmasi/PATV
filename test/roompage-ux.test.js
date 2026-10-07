@@ -92,10 +92,16 @@ const renderRoom = (extra) => ejs.renderFile(path.join(repo, "views", "room.ejs"
   user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "" },
   initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, ...extra });
 
-test("room page: the Schedule card - local-time markup, Book a slot, Manage for owners only, no pending for the public", async () => {
+test("room page: the schedule inside the ONE Stage card - local-time markup, one action row, no settings button, no pending for the public", async () => {
   const pub = await renderRoom({ schedule: await S.roomSchedule(PLANT, stranger, false), manage: false });
   assert.match(pub, /id="rmSched"/);
-  assert.match(pub, /href="\/stage\?room=plant_based_chatting">Book a slot/);
+  // 1.99dx: merged into the Stage card, under the player: status line, Go live (primary) + Book a slot + Get featured in one row
+  const card = pub.slice(pub.indexOf('id="rmStage"'), pub.indexOf("</section>", pub.indexOf('id="rmSched"')));
+  assert.ok(card.includes('id="rmSched"'), "the schedule is inside the Stage card");
+  assert.ok(card.indexOf('id="rmCap"') < card.indexOf('id="rmSlotsTxt"') && card.indexOf('id="rmSlotsTxt"') < card.indexOf('id="rmSched"'), "player + Snap/Clip, then the status + actions, then the schedule");
+  assert.match(card, /<div class="stage-acts">\s*<a class="sact primary" href="\/stage\?room=plant_based_chatting">🎥 Go live here<\/a>\s*<a class="sact" href="\/stage\?room=plant_based_chatting#whenSet">📅 Book a slot<\/a>\s*<a class="sact" id="rmFeatBtn"/);
+  assert.match(card, /Times in your local time/);
+  assert.doesNotMatch(pub, /class="card rs"/, "no separate Schedule card");
   assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/settings/, "1.99dc: no settings link for the public");
   assert.match(pub, /Alice Live/); assert.match(pub, /Bob Booked/); assert.match(pub, /Dave Queued/);
   assert.match(pub, /★ Featured/); assert.match(pub, /Ordinary slot/); assert.match(pub, /▶ YouTube/); assert.match(pub, /🎥 Stream/);
@@ -105,8 +111,9 @@ test("room page: the Schedule card - local-time markup, Book a slot, Manage for 
   assert.doesNotMatch(pub, /class="upnext"/, "the old up-next list gives way to the schedule");
 
   const own = await renderRoom({ schedule: await S.roomSchedule(PLANT, owner, true), manage: true });
-  assert.match(own, /\/p\/plant_based_chatting\/settings#stage">⚙ Pad settings · 1 to approve/);
-  assert.match(own, /class="chip own ps-link" href="\/p\/plant_based_chatting\/settings"[^>]*>⚙ Pad settings</, "1.99dc: ONE settings link in the pad header");
+  assert.doesNotMatch(own, /settings#stage/, "1.99dx: no Pad settings button in the Stage card");
+  assert.match(own, /⚙ Pad settings[^<]*· 1 to approve<\/a>/, "the header's settings chip carries the approvals count");
+  assert.match(own, /class="chip own ps-link" href="\/p\/plant_based_chatting\/settings"[^>]*>⚙ Pad settings[ <]/, "1.99dc: ONE settings link in the pad header");
   assert.match(own, /Carol Pending/); assert.match(own, /Waiting for the owner/);
 
   // names / titles are escaped

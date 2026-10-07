@@ -1,6 +1,7 @@
 // room-mod.js — the pad page's "Manage" panel (1.99co, padmod.js): Camfrog room moderation from the web.
 //
-//   PATVRoom.mod(host, slug, opts) -> { update(d), active(), key(), open(user) }
+//   PATVRoom.mod(host, slug, opts) -> { update(d), active(), key(), open(user), menu(user, anchor, {cam}), closeMenu() }
+//   opts: { dms, collapsible (the pad page: collapsed to the topic line, remembered per browser) }
 //
 // Shown only when the live view carries `mod` (Pepe says this viewer's linked Camfrog login has mod
 // powers in this room); it lists only the actions in mod.actions. Every click is a STRUCTURED request
@@ -55,6 +56,34 @@
     return s;
   }
 
+  // What the roster's ⋯ menu offers for user u (1.99dx). Pure, so tests can pin the gating:
+  //   - nothing at all without caps (Pepe gave this viewer no mod powers here), or for anonymous / Pepe / no login
+  //   - View profile (when the Camfrog name is linked to a PATV account), Open cam (when the page can)
+  //   - moderation: exactly the actions Pepe listed in caps.actions that this menu knows, in group order;
+  //     never on yourself (the server refuses that too); "unban" is left out for people IN the room;
+  //     disabled while web moderation is off in the room; destructive ones flagged (they get a confirm step)
+  //   - "More…" (the full Manage dialog: strikes history, roles) whenever there are moderation actions
+  function menuItems(caps, u, x) {
+    x = x || {};
+    if (!caps || !Array.isArray(caps.actions) || !u || u.anon || u.self || !u.login) return [];
+    var out = [];
+    if (u.patv && u.patv.username) out.push({ kind: 'link', id: 'profile', group: 'who', label: '👤 View profile', href: '/u/' + encodeURIComponent(u.patv.username) });
+    if (x.cam) out.push({ kind: 'cam', id: 'cam', group: 'who', label: '📷 Open cam' });
+    var me = caps.login && String(u.login).toLowerCase() === String(caps.login).toLowerCase();
+    if (me) return out;
+    var n = 0;
+    GROUPS.forEach(function (g) {
+      caps.actions.forEach(function (a) {
+        if (!Object.prototype.hasOwnProperty.call(A, a) || A[a].group !== g[0]) return;
+        if (x.inRoom && a === 'unban') return;
+        out.push({ kind: 'act', id: a, group: g[0], label: A[a].icon + ' ' + A[a].label + (A[a].confirm ? '…' : ''), danger: !!A[a].confirm, disabled: caps.on === false });
+        n++;
+      });
+    });
+    if (n) out.push({ kind: 'more', id: 'more', group: 'more', label: '⋯ More (history, roles)…' });
+    return out;
+  }
+
   function mod(host, slug, opts) {
     opts = opts || {};
     var base = '/api/rooms/' + encodeURIComponent(slug) + '/mod';
@@ -69,7 +98,32 @@
     var off = el('p', 'pm-note warn hide', '🛑 Web moderation is off in this room — an admin turns it on in Camfrog with !bridge cmds on.');
     var blocked = el('p', 'pm-note warn hide');
     var body = el('div', 'pm-body');
-    host.appendChild(h); host.appendChild(off); host.appendChild(blocked); host.appendChild(body);
+    // 1.99dx (the pad page): collapsed by default to one line - the room's current topic - with a toggle;
+    // the open / closed state is remembered per browser. The settings hub page keeps it open.
+    var sumLine = null, tog = null, isOpen = true;
+    if (opts.collapsible) {
+      try { isOpen = localStorage.getItem('patvModOpen') === '1'; } catch (e) { isOpen = false; }
+      tog = el('button', 'pm-tog'); tog.type = 'button'; tog.setAttribute('aria-controls', 'pmBody' + slug);
+      body.id = 'pmBody' + slug;
+      h.appendChild(tog);
+      sumLine = el('p', 'pm-sum');
+      tog.addEventListener('click', function () {
+        isOpen = !isOpen;
+        try { localStorage.setItem('patvModOpen', isOpen ? '1' : '0'); } catch (e) { /* blocked storage */ }
+        paintOpen();
+      });
+    }
+    function paintOpen() {
+      if (!tog) return;
+      tog.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      tog.textContent = isOpen ? 'Close ▴' : 'Open ▾';
+      tog.setAttribute('aria-label', (isOpen ? 'Collapse' : 'Expand') + ' the Manage room panel');
+      body.hidden = !isOpen;
+      sumLine.hidden = isOpen;
+      host.classList.toggle('pm-collapsed', !isOpen);
+    }
+    host.appendChild(h); if (sumLine) host.appendChild(sumLine); host.appendChild(off); host.appendChild(blocked); host.appendChild(body);
+    paintOpen();
 
     // topic
     var tWrap = el('div', 'pm-sec pm-topic');
@@ -136,7 +190,7 @@
     sWrap.appendChild(el('p', 'pm-hint', 'Each change asks for your PATV password and is logged.'));
     body.appendChild(sWrap);
 
-    var hint = el('p', 'pm-hint', 'Tip: click someone in the room list to manage them. Actions run as your Camfrog name — the room sees "🌐 you (web): !kick …".');
+    var hint = el('p', 'pm-hint', 'Tip: the ⋯ next to someone in the room list manages them. Actions run as your Camfrog name — the room sees "🌐 you (web): !kick …".');
     body.appendChild(hint);
     var res = el('ul', 'pm-results'); res.setAttribute('aria-live', 'polite'); res.setAttribute('aria-label', 'Your moderation results');
     body.appendChild(res);
@@ -291,67 +345,179 @@
         hist.appendChild(ul);
       }).catch(function (e) { if (hl.isConnected) hl.textContent = e.message; });
 
-      function say(text, cls) { out.textContent = ''; if (text) out.appendChild(el('p', 'pm-note' + (cls ? ' ' + cls : ''), text)); }
+      function say(text, cls) { sayIn(out, text, cls); }
       function act(a) {
-        var def = A[a];
-        if (!def.confirm) {
+        if (!A[a].confirm) {
           say('Sending ' + preview(a, u.login, {}) + '…');
-          run(a, u.login, {}, function (ok, r) { say(r.st + (r.replies && r.replies.length ? ' ' + r.replies[0] : ''), ok ? 'ok' : ok === false ? 'bad' : ''); });
+          run(a, u.login, {}, function (ok, r) { say(resultText(r), ok ? 'ok' : ok === false ? 'bad' : ''); });
           return;
         }
         // confirm step: what will happen, the extra input, a reason, the exact command Pepe runs
         main.classList.add('hide'); conf.classList.remove('hide'); conf.textContent = ''; say('');
-        var form = el('form', 'pm-cform'); form.setAttribute('autocomplete', 'off');
-        form.appendChild(el('p', 'pm-q', def.confirm.replace('{u}', who)));
-        var args = {};
-        var hoursSel = null, amtIn = null;
-        if (def.arg === 'hours') {
-          var lh = el('label', 'pm-lab', 'How long'); lh.htmlFor = 'pmHours';
-          hoursSel = el('select'); hoursSel.id = 'pmHours';
-          HOURS.forEach(function (x) { var o = el('option', null, x[1]); o.value = String(x[0]); if (x[0] === 24) o.selected = true; hoursSel.appendChild(o); });
-          form.appendChild(lh); form.appendChild(hoursSel);
-        }
-        if (def.arg === 'amount') {
-          var la = el('label', 'pm-lab', 'Amount (PAT)'); la.htmlFor = 'pmAmt';
-          amtIn = el('input'); amtIn.id = 'pmAmt'; amtIn.type = 'number'; amtIn.min = '1'; amtIn.step = '1'; amtIn.value = '25000'; amtIn.inputMode = 'numeric'; amtIn.required = true;
-          var chips = el('div', 'pm-chips');
-          FINES.forEach(function (f) { chips.appendChild(btn('chip', f >= 1000 ? f / 1000 + 'k' : String(f), function () { amtIn.value = String(f); paint(); })); });
-          form.appendChild(la); form.appendChild(amtIn); form.appendChild(chips);
-        }
-        var lr = el('label', 'pm-lab', a === 'fine' ? 'Reason (Pepe says it in the room with the fine)' : 'Reason (optional — goes in Pepe\'s mod log)');
-        lr.htmlFor = 'pmReason';
-        var rIn = el('input'); rIn.id = 'pmReason'; rIn.type = 'text'; rIn.maxLength = REASON_MAX; rIn.placeholder = a === 'fine' ? 'e.g. spamming the wheel' : 'e.g. slurs in chat';
-        form.appendChild(lr); form.appendChild(rIn);
-        var pv = el('div', 'pm-cmd');
-        form.appendChild(pv);
-        var row = el('div', 'pm-row');
-        var go = el('button', 'pm-btn danger go'); go.type = 'submit'; go.textContent = def.icon + ' ' + def.label + ' ' + who;
-        var back = btn('', 'Cancel', function () { conf.classList.add('hide'); main.classList.remove('hide'); say(''); });
-        row.appendChild(go); row.appendChild(back); form.appendChild(row);
-        function paint() {
-          args = {};
-          if (hoursSel) args.hours = parseInt(hoursSel.value, 10);
-          if (amtIn) args.amount = parseInt(amtIn.value, 10) || 0;
-          var rs = rIn.value.replace(/\s+/g, ' ').trim();
-          if (rs) args.reason = rs;
-          pv.textContent = '';
-          pv.appendChild(el('span', 'pm-k', 'Pepe runs'));
-          pv.appendChild(el('code', null, preview(a, u.login, args)));
-          go.disabled = !!amtIn && !(args.amount >= 1);
-        }
-        [hoursSel, amtIn, rIn].forEach(function (x) { if (x) { x.addEventListener('input', paint); x.addEventListener('change', paint); } });
-        paint();
-        form.addEventListener('submit', function (e) {
-          e.preventDefault(); paint();
-          go.disabled = true; say('Sending to Pepe…');
-          run(a, u.login, args, function (ok, r) {
-            say(r.st + (r.replies && r.replies.length ? ' ' + r.replies[0] : ''), ok ? 'ok' : ok === false ? 'bad' : '');
-            if (ok !== false) { conf.classList.add('hide'); main.classList.remove('hide'); } else go.disabled = false;
-          });
-        });
-        conf.appendChild(form);
-        (hoursSel || amtIn || rIn).focus();
+        var cf = confirmForm(a, u, 'pmd', say,
+          function () { conf.classList.add('hide'); main.classList.remove('hide'); },
+          function () { conf.classList.add('hide'); main.classList.remove('hide'); say(''); });
+        conf.appendChild(cf.form);
+        cf.focus();
       }
+    }
+
+    function sayIn(out, text, cls) { out.textContent = ''; if (text) out.appendChild(el('p', 'pm-note' + (cls ? ' ' + cls : ''), text)); }
+    function resultText(r) { return r.st + (r.replies && r.replies.length ? ' ' + r.replies[0] : ''); }
+
+    // The confirm step for a destructive action (shared by the Manage dialog and the roster's ⋯ menu, 1.99dx):
+    // the question, the extra input (hours / amount), a reason, the exact command Pepe will run, Go + Cancel.
+    // done() after Pepe accepted (or hasn't answered yet), cancel() on Cancel; say(text, cls) shows progress.
+    function confirmForm(a, u, pfx, say, done, cancel) {
+      var def = A[a], who = u.display || u.login;
+      var form = el('form', 'pm-cform'); form.setAttribute('autocomplete', 'off');
+      form.appendChild(el('p', 'pm-q', def.confirm.replace('{u}', who)));
+      var args = {};
+      var hoursSel = null, amtIn = null;
+      if (def.arg === 'hours') {
+        var lh = el('label', 'pm-lab', 'How long'); lh.htmlFor = pfx + 'Hours';
+        hoursSel = el('select'); hoursSel.id = pfx + 'Hours';
+        HOURS.forEach(function (x) { var o = el('option', null, x[1]); o.value = String(x[0]); if (x[0] === 24) o.selected = true; hoursSel.appendChild(o); });
+        form.appendChild(lh); form.appendChild(hoursSel);
+      }
+      if (def.arg === 'amount') {
+        var la = el('label', 'pm-lab', 'Amount (PAT)'); la.htmlFor = pfx + 'Amt';
+        amtIn = el('input'); amtIn.id = pfx + 'Amt'; amtIn.type = 'number'; amtIn.min = '1'; amtIn.step = '1'; amtIn.value = '25000'; amtIn.inputMode = 'numeric'; amtIn.required = true;
+        var chips = el('div', 'pm-chips');
+        FINES.forEach(function (f) { chips.appendChild(btn('chip', f >= 1000 ? f / 1000 + 'k' : String(f), function () { amtIn.value = String(f); paint(); })); });
+        form.appendChild(la); form.appendChild(amtIn); form.appendChild(chips);
+      }
+      var lr = el('label', 'pm-lab', a === 'fine' ? 'Reason (Pepe says it in the room with the fine)' : 'Reason (optional — goes in Pepe\'s mod log)');
+      lr.htmlFor = pfx + 'Reason';
+      var rIn = el('input'); rIn.id = pfx + 'Reason'; rIn.type = 'text'; rIn.maxLength = REASON_MAX; rIn.placeholder = a === 'fine' ? 'e.g. spamming the wheel' : 'e.g. slurs in chat';
+      form.appendChild(lr); form.appendChild(rIn);
+      var pv = el('div', 'pm-cmd');
+      form.appendChild(pv);
+      var row = el('div', 'pm-row');
+      var go = el('button', 'pm-btn danger go'); go.type = 'submit'; go.textContent = def.icon + ' ' + def.label + ' ' + who;
+      var back = btn('', 'Cancel', function () { cancel(); });
+      row.appendChild(go); row.appendChild(back); form.appendChild(row);
+      function paint() {
+        args = {};
+        if (hoursSel) args.hours = parseInt(hoursSel.value, 10);
+        if (amtIn) args.amount = parseInt(amtIn.value, 10) || 0;
+        var rs = rIn.value.replace(/\s+/g, ' ').trim();
+        if (rs) args.reason = rs;
+        pv.textContent = '';
+        pv.appendChild(el('span', 'pm-k', 'Pepe runs'));
+        pv.appendChild(el('code', null, preview(a, u.login, args)));
+        go.disabled = !!amtIn && !(args.amount >= 1);
+      }
+      [hoursSel, amtIn, rIn].forEach(function (x) { if (x) { x.addEventListener('input', paint); x.addEventListener('change', paint); } });
+      paint();
+      form.addEventListener('submit', function (e) {
+        e.preventDefault(); paint();
+        go.disabled = true; say('Sending to Pepe…');
+        run(a, u.login, args, function (ok, r) {
+          say(resultText(r), ok ? 'ok' : ok === false ? 'bad' : '');
+          if (ok !== false) done(); else go.disabled = false;
+        });
+      });
+      return { form: form, focus: function () { (hoursSel || amtIn || rIn).focus(); } };
+    }
+
+    // ── the roster's ⋯ menu (1.99dx): a small popover next to someone IN the room ──
+    // Only for viewers Pepe gave caps (the page shows ⋯ only then); it lists exactly the actions in
+    // caps.actions (menuItems), runs them through the same run() / confirm step as the dialog, and the
+    // server re-checks everything (/api/rooms/<slug>/mod: caps for this login, action allowed, not yourself).
+    var pop = null;
+    function closeMenu(refocus) {
+      if (!pop) return;
+      var p = pop; pop = null;
+      document.removeEventListener('pointerdown', p._outside, true);
+      document.removeEventListener('keydown', p._keys, true);
+      p.remove();
+      if (refocus) {
+        var a = p._anchor && p._anchor.isConnected ? p._anchor : null;
+        if (!a) Array.prototype.some.call(document.querySelectorAll('.pm-mg'), function (b) { if (b.getAttribute('data-login') === p._login) { a = b; return true; } return false; });
+        if (a) a.focus();
+      }
+    }
+    function place(p, anchor) {
+      if (!anchor || !anchor.getBoundingClientRect || !anchor.isConnected) return;
+      var r = anchor.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+      var vw = document.documentElement.clientWidth, vh = window.innerHeight;
+      var left = Math.max(8, Math.min(r.right - w, vw - w - 8));
+      var top = r.bottom + 6;
+      if (top + h > vh - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+      p.style.left = (left + window.scrollX) + 'px';
+      p.style.top = (top + window.scrollY) + 'px';
+    }
+    function menu(u, anchor, extra) {
+      extra = extra || {};
+      if (pop && pop._login === u.login) { closeMenu(true); return; }      // the same ⋯ again: toggle shut
+      closeMenu(false);
+      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: true });
+      if (!items.length) return;
+      var who = u.display || u.login;
+      var p = el('div', 'pm-pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Actions for ' + who);
+      p._anchor = anchor; p._login = u.login;
+      var hd = el('div', 'pm-pop-h');
+      var nm = el('div', 'pm-pop-n'); nm.appendChild(el('b', null, who));
+      if (u.display && u.display !== u.login) nm.appendChild(el('small', 'pm-login', u.login));
+      hd.appendChild(nm);
+      var x = btn('pm-x', '×', function () { closeMenu(true); }); x.setAttribute('aria-label', 'Close'); hd.appendChild(x);
+      p.appendChild(hd);
+      if (!caps.on) p.appendChild(el('p', 'pm-note warn', '🛑 Web moderation is off in this room.'));
+      else if (caps.blocked) p.appendChild(el('p', 'pm-note warn', '⚠️ Pepe won\'t take commands from you right now: ' + caps.blocked));
+      var list = el('div', 'pm-pop-l'); list.setAttribute('role', 'menu'); list.setAttribute('aria-label', 'Actions for ' + who);
+      var conf = el('div', 'pm-pop-c hide');
+      var out = el('div', 'pm-out'); out.setAttribute('aria-live', 'polite');
+      function menuEls() { return Array.prototype.filter.call(list.querySelectorAll('[role="menuitem"]'), function (b) { return !b.disabled; }); }
+      function focusItem(i) { var bs = menuEls(); if (bs.length) bs[(i + bs.length) % bs.length].focus(); }
+      function backToList() { conf.classList.add('hide'); list.classList.remove('hide'); conf.textContent = ''; place(p, anchor); focusItem(0); }
+      var lastGroup = null;
+      items.forEach(function (it) {
+        if (lastGroup !== null && it.group !== lastGroup) { var sep = el('div', 'pm-pop-sep'); sep.setAttribute('role', 'separator'); list.appendChild(sep); }
+        lastGroup = it.group;
+        var b;
+        if (it.kind === 'link') { b = el('a', 'pm-pop-i', it.label); b.href = it.href; }
+        else { b = el('button', 'pm-pop-i' + (it.danger ? ' danger' : ''), it.label); b.type = 'button'; if (it.disabled) b.disabled = true; }
+        b.setAttribute('role', 'menuitem'); b.tabIndex = -1;
+        b.addEventListener('click', function (e) {
+          if (it.kind === 'link') return;                       // a normal link (View profile)
+          e.preventDefault();
+          if (it.kind === 'cam') { closeMenu(false); extra.cam(); return; }
+          if (it.kind === 'more') { closeMenu(false); open(u); return; }
+          if (!A[it.id].confirm) {
+            sayIn(out, 'Sending ' + preview(it.id, u.login, {}) + '…');
+            run(it.id, u.login, {}, function (ok, r) { if (pop === p) sayIn(out, resultText(r), ok ? 'ok' : ok === false ? 'bad' : ''); }, b);
+            return;
+          }
+          // destructive: the in-page confirm step (reason, extra input, the exact command) inside the popover
+          list.classList.add('hide'); conf.classList.remove('hide'); conf.textContent = ''; sayIn(out, '');
+          var cf = confirmForm(it.id, u, 'pmp', function (t, c) { if (pop === p) sayIn(out, t, c); }, backToList, function () { sayIn(out, ''); backToList(); });
+          conf.appendChild(cf.form); place(p, anchor); cf.focus();
+        });
+        list.appendChild(b);
+      });
+      p.appendChild(list); p.appendChild(conf); p.appendChild(out);
+      document.body.appendChild(p);
+      pop = p;
+      place(p, anchor);
+      p._keys = function (e) {
+        if (pop !== p) return;
+        if (e.key === 'Escape') {
+          e.preventDefault(); e.stopPropagation();
+          if (!conf.classList.contains('hide')) { sayIn(out, ''); backToList(); return; }
+          closeMenu(true); return;
+        }
+        if (!p.contains(document.activeElement) || list.classList.contains('hide')) return;
+        var bs = menuEls(), i = bs.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); focusItem(i + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); focusItem(i < 0 ? -1 : i - 1); }
+        else if (e.key === 'Home') { e.preventDefault(); focusItem(0); }
+        else if (e.key === 'End') { e.preventDefault(); focusItem(-1); }
+      };
+      p._outside = function (e) { if (pop === p && !p.contains(e.target) && !(anchor && anchor.contains(e.target))) closeMenu(false); };
+      document.addEventListener('keydown', p._keys, true);
+      document.addEventListener('pointerdown', p._outside, true);
+      focusItem(0);
     }
 
     // the banned / punished list
@@ -448,7 +614,7 @@
       caps = d && d.mod ? d.mod : null;
       room = d && d.room ? d.room : null;
       host.hidden = !caps;
-      if (!caps) { closeDlg(); lastKey = ''; return; }
+      if (!caps) { closeDlg(); closeMenu(false); lastKey = ''; return; }
       var k = JSON.stringify(caps);
       if (k !== lastKey) {
         lastKey = k;
@@ -462,6 +628,7 @@
       var hasTopic = caps.topicPrice != null;
       tWrap.classList.toggle('hide', !hasTopic);
       tCur.textContent = room && room.topic ? room.topic : '(no topic)';
+      if (sumLine) { sumLine.textContent = '📌 ' + (room && room.topic ? room.topic : '(no topic)'); sumLine.title = 'Current room topic'; }
       tGo.textContent = 'Set topic' + (caps.topicPrice ? ' · ' + pat(caps.topicPrice) : ' (free for you)');
       tEdit.disabled = !caps.on;
       bList.disabled = false;
@@ -474,9 +641,12 @@
       active: function () { return !!caps; },
       key: function () { return caps ? (caps.on ? 'm1' : 'm0') : ''; },
       open: open,
+      menu: menu,                          // 1.99dx: the roster's ⋯ popover
+      closeMenu: closeMenu,
     };
   }
 
   P.mod = mod;
   P._modPreview = preview;
+  P._modMenuItems = menuItems;
 })();

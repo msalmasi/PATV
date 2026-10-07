@@ -97,3 +97,42 @@
   .pm-acts .pm-btn { flex: 1 1 calc(50% - 6px); }
   .pm-set { grid-template-columns: minmax(0, 1fr) 110px; }
 }
+
+/* 1.99dx: the pad page's Manage card collapses to the topic line (room-mod.js opts.collapsible) */
+.pm-tog { appearance: none; margin-left: auto; font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12px; font-weight: bold;
+          padding: 3px 10px; border-radius: 999px; border: 1px solid #6b5a20; background: #1d1a0f; color: #f3e3a3; cursor: pointer; }
+.pm-tog:hover, .pm-tog:focus-visible { border-color: #c6a83f; }
+.pm-tog:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+.pm.pm-collapsed h2 { margin-bottom: 6px; }
+.pm-sum { margin: 0; font-size: 13.5px; color: #c9b46a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-sum[hidden], .pm-body[hidden] { display: none !important; }
+.pm.pm-collapsed > .pm-note { margin: 8px 0 0; }
+
+/* the roster's ⋯ popover menu (appended to <body>) */
+.pm-pop { position: absolute; z-index: 70; width: min(280px, calc(100vw - 16px)); max-height: min(70vh, 520px); overflow-y: auto; box-sizing: border-box;
+          background: #151515; border: 1px solid #3a3420; border-radius: 12px; box-shadow: 0 14px 44px rgba(0,0,0,.7); padding: 8px;
+          display: grid; gap: 6px; font-family: Ubuntu, sans-serif; color: #e6e6e6; font-size: 14px; }
+.pm-pop *, .pm-pop *::before, .pm-pop *::after { box-sizing: border-box; }
+.pm-pop .hide { display: none !important; }
+.pm-pop-h { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 2px 2px 6px 6px; border-bottom: 1px solid #242424; }
+.pm-pop-n { min-width: 0; display: grid; }
+.pm-pop-n b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-pop-n small { color: #888; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pm-pop .pm-x { min-height: 30px; padding: 2px 10px; font-size: 16px; }
+.pm-pop-l { display: grid; gap: 2px; }
+.pm-pop-i { appearance: none; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 10px; border-radius: 8px; border: 1px solid transparent;
+            background: none; color: #e2e2e2 !important; font: inherit; font-size: 14px; text-align: left; cursor: pointer; text-decoration: none; }
+.pm-pop-i:hover, .pm-pop-i:focus-visible { background: #1d1a0f; border-color: #6b5a20; color: #fff !important; outline: none; }
+.pm-pop-i.danger { color: #ffcdcd !important; }
+.pm-pop-i.danger:hover, .pm-pop-i.danger:focus-visible { background: #2a1010; border-color: #7a2222; }
+.pm-pop-i[disabled] { opacity: .45; cursor: not-allowed; }
+.pm-pop-sep { height: 1px; background: #242424; margin: 3px 4px; }
+.pm-pop .pm-note { font-size: 12.5px; }
+.pm-pop .pm-cform input, .pm-pop .pm-cform select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; width: 100%; }
+.pm-pop .pm-q { font-size: 14px; }
+.rm .people .pm-mg { min-width: 26px; }
+@media (max-width: 520px) {
+  /* a bottom sheet on phones */
+  .pm-pop { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100vw; max-height: 80vh; border-radius: 14px 14px 0 0; padding: 10px 12px 16px; }
+  .pm-pop-i { min-height: 42px; }
+}

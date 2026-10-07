@@ -603,23 +603,62 @@ function register(app, { isBotToken, addUser }) {
     // /feed/c/<slug>?sort=... addresses carry over) or the older ?fsort= &ft= &fp=
     const q = req.query || {};
     const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p };
+    // 1.99dx: the pad page's tabs (Live/Stage · Feed · About, public/js/pad-tabs.js) - which one opens first
+    const initial = signedIn && !R.offline ? await liveView(R, 0, req.user.userId, login) : null;
+    const roomStage = await require("./mainstage").roomStage(R.id, req.user);
+    const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
+    const here = pepeIn(R.id), st = stage();
+    const latest = feed ? await padLatest(R.id, req.user, feed) : [];
+    const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: R.count, members: initial ? initial.members : null,
+      pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
       user: req.user ? req.user.username : null, signedIn, linked,
       room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: signedIn ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
-      initial: signedIn && !R.offline ? await liveView(R, 0, req.user.userId, login) : null,
+      initial, padTabs, latest,
       dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
-      pepeHere: pepeIn(R.id), stage: stage(),
-      roomStage: await require("./mainstage").roomStage(R.id, req.user),
+      pepeHere: here, stage: st,
+      roomStage,
       manage,
       schedule: await require("./mainstage").roomSchedule(R.id, req.user, manage).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
       analytics: reg.hasRoute(app, "/p/:slug/analytics"),
-      feed: await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; }),
+      feed,
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });
   });
 }
 
-module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, isLive, _rooms: rooms };
+// ── 1.99dx: the pad page's tabs ──
+// The newest few posts of a pad (the Live tab's "Latest from the feed" card and the Feed tab's "N new" badge):
+// the page's own first page when it is sorted by new, else one extra newest-first read.
+async function padLatest(roomId, user, feed) {
+  let posts = feed && feed.sort === "new" && feed.page === 1 ? feed.posts : null;
+  if (!posts) {
+    try { posts = ((await require("./feedweb").roomFeed(roomId, user, {})) || {}).posts || []; } catch (e) { posts = []; }
+  }
+  return (posts || []).filter((p) => p && !p.deleted && !p.hidden && !p.pending && !p.roomHidden)
+    .sort((a, b) => Number(b.created) - Number(a.created)).slice(0, 10)
+    .map((p) => ({ id: p.id, url: typeof p.url === "string" && /^\/(?![/\\])/.test(p.url) ? p.url : null, created: Number(p.created) || 0, title: String(p.title || "").slice(0, 120),
+                   text: String(p.body || "").replace(/\s+/g, " ").trim().slice(0, 140), nsfw: !!p.nsfw,
+                   author: p.author ? (p.author.bot ? "Pepe" : p.author.display || p.author.username || "") : "" }));
+}
+/** Which tabs a pad page has and which opens first (before the browser's own choice: its remembered tab,
+ *  #hash). The Live tab is "Stage" on pads without a Camfrog room; the room is "active" when people are in
+ *  it (not counting Pepe) or its stage is on air. */
+function padTabsFor(o) {
+  const T = require("./public/js/pad-tabs");
+  const camfrog = o.platform === "camfrog";
+  const tabs = ["live"].concat(o.feed ? ["feed"] : [], ["about"]);
+  const people = Array.isArray(o.members) ? o.members.filter((m) => m && !m.self && !m.bot).length
+    : Math.max(0, (Number(o.count) || 0) - (o.pepeHere === true ? 1 : 0));
+  const stageOn = (o.pepeOn && o.pepeHere !== false) || (Array.isArray(o.slots) && o.slots.length > 0);
+  const active = !!((camfrog && o.live && people > 0) || stageOn);
+  const qs = String(o.query || "").includes("?") ? String(o.query).slice(String(o.query).indexOf("?")) : "";
+  const requested = T.requestedTab(qs, "");
+  return { tabs, camfrog, active, people, stageOn, requested, initial: T.pickTab({ tabs, platform: o.platform, active, requested, stored: null }),
+           posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
+}
+
+module.exports = { register, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, isLive, _rooms: rooms };

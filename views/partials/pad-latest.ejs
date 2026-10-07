@@ -1,0 +1,18 @@
+<%# The Live tab's "Latest from the feed" card (1.99dx): the pad's 2-3 newest posts and a way over to the Feed tab
+    (data-pad-tab="feed": public/js/pad-tabs.js switches tabs; without JS it's a ?tab=feed link).
+    Locals: latest (bridge.js padLatest), slug, fx (optional: fx.ago) %>
+<% const L_ = (typeof latest !== 'undefined' && latest ? latest : []).slice(0, 3);
+   const ago_ = typeof fx !== 'undefined' && fx && fx.ago ? fx.ago : (ms) => new Date(ms).toISOString().slice(0, 10); %>
+<section class="card plf" aria-labelledby="plfH">
+  <h2 id="plfH"><span>📝 Latest from the feed</span><small><a href="?tab=feed" data-pad-tab="feed">Open feed ›</a></small></h2>
+  <% if (!L_.length) { %>
+    <p class="muted" style="margin:0">Nothing posted in p/<%= slug %> yet — <a href="?tab=feed" data-pad-tab="feed">start the feed ›</a></p>
+  <% } else { %>
+    <ul class="plf-l">
+      <% L_.forEach((p) => { %><li>
+        <a class="plf-t" href="<%= p.url || ('/feed/p/' + encodeURIComponent(p.id)) %>"><%= p.nsfw ? '🔞 ' + (p.title || 'NSFW post') : (p.title || p.text || 'A post') %></a>
+        <small><%= p.author %> · <time datetime="<%= new Date(p.created).toISOString() %>"><%= ago_(p.created) %></time></small>
+      </li><% }) %>
+    </ul>
+  <% } %>
+</section>

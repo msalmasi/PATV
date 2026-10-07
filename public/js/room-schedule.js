@@ -1,4 +1,6 @@
-// room-schedule.js — the Schedule card on a room page (1.99bx, views/partials/room-schedule.ejs).
+// room-schedule.js — the schedule half of a pad's Stage card (1.99bx, views/partials/room-schedule.ejs; 1.99dx:
+// merged into the Stage card - it also keeps the card's slot status line, #rmSlotsTxt, and the Get featured
+// button current).
 // Puts every time in the viewer's local timezone and refreshes the card every 30 s from
 // GET /api/rooms/:slug/stage (its `schedule`: mainstage.roomSchedule - pending requests only for the
 // room's managers and the person who asked). Everything from the server goes in via textContent.
@@ -59,7 +61,7 @@
     if (!rows.length) { ul.appendChild(empty()); return; }
     rows.forEach(function (r) { ul.appendChild(make(r)); });
   }
-  function bookLink(text) { var a = el('a', null, text); a.href = '/stage?room=' + encodeURIComponent(slug); return a; }
+  function bookLink(text) { var a = el('a', null, text); a.href = '/stage?room=' + encodeURIComponent(slug) + '#whenSet'; return a; }
   function render(S) {
     list('rsLive', S.live || [], function () { return el('li', 'empty', 'Nothing on this stage right now.'); }, function (r) {
       var li = el('li', 'srow' + (r.live ? ' live' : '') + (r.mine ? ' mine' : ''));
@@ -84,13 +86,24 @@
     });
     localize(box);
   }
+  // the Stage card's status line: "🎬 1/2 slots in use · 3 waiting · free slots" (same words as views/room.ejs)
+  function slots(d) {
+    var t = document.getElementById('rmSlotsTxt');
+    if (t && d.room) {
+      var n = Number(d.room.slot_count) || 1, q = d.queue && d.queue.length ? d.queue.length : 0, price = Number(d.room.slot_price) || 0;
+      t.textContent = '🎬 ' + (Number(d.open) || 0) + '/' + n + ' slot' + (n === 1 ? '' : 's') + ' in use' + (q ? ' · ' + q + ' waiting' : '')
+        + (price ? ' · ' + price.toLocaleString('en-US') + ' PAT/min' : ' · free slots');
+    }
+    var f = document.getElementById('rmFeatBtn');
+    if (f) f.hidden = !!d.featured;
+  }
   var timer = null;
   function poll() {
     clearTimeout(timer); timer = null;
     if (document.hidden) return;
     fetch('/api/rooms/' + encodeURIComponent(slug) + '/stage', { credentials: 'same-origin', cache: 'no-store' })
       .then(function (r) { return r.json(); })
-      .then(function (d) { if (d && d.ok && d.schedule) render(d.schedule); })
+      .then(function (d) { if (d && d.ok && d.schedule) render(d.schedule); if (d && d.ok) slots(d); })
       .catch(function () { /* keep what's shown */ })
       .then(function () { timer = setTimeout(poll, 30000); });
   }
