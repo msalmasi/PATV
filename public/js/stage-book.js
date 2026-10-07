@@ -158,6 +158,9 @@
     $('upList').innerHTML = h;
     show('upCard', !!h);
     slot = s || null;
+    // 1.99et: the WebRTC go-live (stage-golive-rtc.js, only on the page while webrtc_enabled is on) follows the open slot
+    window.PATVStageSlot = s || null;
+    try { window.dispatchEvent(new CustomEvent('patv:slot', { detail: s || null })); } catch (e) { /* old browser */ }
     if (!s) return;
     $('slotRoom').textContent = roomTitle(s.room_id);
     var o = roomOpt(s.room_id);
@@ -269,6 +272,7 @@
     var obs = which === 'obs';
     $('tabObs').setAttribute('aria-selected', String(obs)); $('tabWeb').setAttribute('aria-selected', String(!obs));
     show('paneObs', obs); show('paneWeb', !obs);
+    if ($('tabRtc')) { $('tabRtc').setAttribute('aria-selected', 'false'); show('paneRtc', false); }   // 1.99et (stage-golive-rtc.js)
   }
   $('tabObs').addEventListener('click', function () { tab('obs'); });
   $('tabWeb').addEventListener('click', function () { tab('web'); });

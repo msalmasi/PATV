@@ -27,4 +27,6 @@ jobs:
             echo "::endgroup::"
           done
       - name: Deploy scripts parse
-        run: bash -n deploy/patv-update.sh && bash -n deploy/install.sh
+        run: |
+          bash -n deploy/patv-update.sh && bash -n deploy/install.sh
+          for f in deploy/webrtc/*.sh; do bash -n "$f" || exit 1; done

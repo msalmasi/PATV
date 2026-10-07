@@ -1,0 +1,41 @@
+# PATV coturn (1.99et): TURN / STUN for the stages' WebRTC. Installed by deploy/webrtc/install.sh to
+# /etc/systemd/system/patv-turn.service. The Ubuntu package's own coturn.service is MASKED (it would start
+# with the package's default config). Config: /etc/patv-turn/turnserver.conf. Logs: journalctl -u patv-turn
+[Unit]
+Description=PATV TURN server (coturn)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=turnserver
+Group=turnserver
+RuntimeDirectory=patv-turn
+ExecStart=/usr/bin/turnserver -c /etc/patv-turn/turnserver.conf
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+MemoryMax=1G
+# hardening (systemd 245)
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+# coturn opens its (unused) default sqlite user DB at start; let it
+ReadWritePaths=-/var/lib/turn
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

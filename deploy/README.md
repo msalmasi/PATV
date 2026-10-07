@@ -54,6 +54,12 @@ The updater script updates itself when `deploy/` changes. Unit-file changes need
 
 pm2 is saved and enabled at boot (`pm2-root.service`). After adding or removing an app, run `pm2 save`.
 
+## WebRTC (WHIP / WHEP / TURN)
+
+MediaMTX and coturn for the stages' ultra-low-latency streaming are installed separately, by hand, with
+`deploy/webrtc/install.sh` (undo: `rollback.sh`). See `deploy/webrtc/INSTALL.md`. The site side is behind
+the stage setting `webrtc_enabled` (off by default).
+
 ## Refreshing staging's data
 
 Staging, and staging Pepe (which writes to it), drift from prod over time. On the VPS,

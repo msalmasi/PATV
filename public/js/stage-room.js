@@ -37,6 +37,9 @@
     var pepeOn = !!o.pepeOn, pepeHere = o.pepeHere !== false, twitchLive = false, chosen = false;
     var view = 'pepe';
     var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
+    // 1.99et: ⚡ Low latency (stage-lowlat.js, on the page only while webrtc_enabled is on) wraps the HLS player;
+    // a slot published over WHIP carries s.whep. Without it everything below is the plain HLS player.
+    if (PATVStage.rtcWrap) player = PATVStage.rtcWrap(player, { wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute });
     var embedFor = null, loaded = document.readyState === 'complete';
     function featured() { for (var i = 0; i < slots.length; i++) if (slots[i].featured) return slots[i]; return null; }
     function cur() { if (view.indexOf('slot:') !== 0) return null; for (var i = 0; i < slots.length; i++) if ('slot:' + slots[i].id === view) return slots[i]; return null; }
@@ -64,14 +67,14 @@
         o.onAir && o.onAir(true, (s.title ? s.title + ' · ' : '') + 'from ' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch'));
       } else if (s) {
         setEmbed(null); if (tw) tw.classList.add('hide');
-        player.setSrc(s.hls); if (loaded) player.start();
+        player.setSrc(s.hls, s.whep || null); if (loaded) player.start();
         o.onAir && o.onAir(true, s.title || null);
       } else if (twitchLive && tw && pepeHere) {
         setEmbed(null); player.stop(); tw.classList.remove('hide');
         o.onAir && o.onAir(true, 'live on Twitch');
       } else if (pepeOn && pepeHere) {
         setEmbed(null); if (tw) tw.classList.add('hide');
-        player.setSrc(PEPE_HLS); if (loaded) player.start();
+        player.setSrc(PEPE_HLS, null); if (loaded) player.start();
         o.onAir && o.onAir(true, null);
       } else {
         setEmbed(null); if (tw) tw.classList.add('hide'); player.stop();

@@ -8,6 +8,8 @@
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const defMin = Math.min(C.max_minutes, Math.max(C.min_minutes, 15));
   const sel = (rooms || []).find((r) => r.id === pick) || (rooms || [])[0] || null;
+  // 1.99et: WebRTC (WHIP) go-live - only while the stage setting webrtc_enabled is on (webrtc.js)
+  const rtc = typeof locals.webrtcCfg === 'function' ? locals.webrtcCfg() : null;
 %>
 <main class="sb" id="sb" data-price="<%= C.price_per_min %>" data-min="<%= C.min_minutes %>" data-max="<%= C.max_minutes %>"
       data-rtmp="<%= rtmpServer %>" data-signed="<%= me ? 1 : 0 %>" data-lead="<%= C.lead_min %>" data-days="<%= C.schedule_days %>">
@@ -68,6 +70,7 @@
         <div class="tabs" role="tablist" aria-label="How to stream">
           <button type="button" role="tab" id="tabObs" aria-selected="true" aria-controls="paneObs">Stream from OBS</button>
           <button type="button" role="tab" id="tabWeb" aria-selected="false" aria-controls="paneWeb">Go live from browser</button>
+          <% if (rtc) { %><button type="button" role="tab" id="tabRtc" aria-selected="false" aria-controls="paneRtc">⚡ Browser · ultra-low latency</button><% } %>
         </div>
 
         <div class="pane" id="paneObs" role="tabpanel" aria-labelledby="tabObs">
@@ -79,6 +82,17 @@
           <p class="muted" id="keyNote">Your key works only for this slot and stops working when it ends. Don't share it.</p>
           <button type="button" class="btn" id="newKey">New key</button>
           <p class="muted">Recommended: 1280×720 or 1920×1080, 30 fps, x264 2500–4500 kbps, keyframe interval 2 s, AAC 128 kbps.</p>
+          <% if (rtc) { %>
+          <div class="whip" id="whipBox">
+            <h3>⚡ OBS 30+ over WHIP (ultra-low latency)</h3>
+            <p>In OBS: <b>Settings → Stream → Service: WHIP</b>, then paste these. Viewers who pick ⚡ Low latency see you about a second behind.</p>
+            <label class="kv">Server
+              <span class="copyrow"><input type="text" readonly id="whipUrl" value=""><button type="button" class="btn" data-copy="whipUrl">Copy</button></span></label>
+            <label class="kv">Bearer Token
+              <span class="copyrow"><input type="text" readonly value="Your stream key (above) - the same key" aria-readonly="true"><button type="button" class="btn" data-copy="rtmpKey">Copy key</button></span></label>
+            <p class="muted">Use RTMP <i>or</i> WHIP, not both at once. WHIP settings: x264 (or a hardware H.264 encoder), Opus audio (OBS picks it), keyframe interval 1–2 s, B-frames off.</p>
+          </div>
+          <% } %>
         </div>
 
         <div class="pane hide" id="paneWeb" role="tabpanel" aria-labelledby="tabWeb">
@@ -111,6 +125,35 @@
             </div>
           </div>
         </div>
+        <% if (rtc) { %>
+        <div class="pane hide" id="paneRtc" role="tabpanel" aria-labelledby="tabRtc" data-base="<%= rtc.base %>">
+          <p><b>Go live from your browser (camera / screen) — ultra-low latency.</b> Sent over WebRTC: viewers who pick ⚡ Low latency see you about a second behind, everyone else gets the normal stream.</p>
+          <div class="web">
+            <div class="preview"><video id="rtcPv" muted playsinline autoplay></video><span class="pv-empty" id="rtcPvEmpty">Pick a source to preview</span>
+              <span class="onair hide" id="rtcOnAir"><span class="dot" aria-hidden="true"></span> LIVE ⚡</span></div>
+            <div class="ctl">
+              <fieldset class="src"><legend>Source</legend>
+                <label><input type="radio" name="rtcSrc" value="camera" checked> Camera + mic</label>
+                <label><input type="radio" name="rtcSrc" value="screen"> Screen (+ mic)</label>
+              </fieldset>
+              <div class="devs" role="group" aria-label="Camera and microphone">
+                <label class="fld">📷 Camera <select id="rtcCam"><option value="">Default camera</option></select></label>
+                <label class="fld">🎤 Microphone <select id="rtcMic"><option value="">Default microphone</option></select></label>
+                <label class="fld">Bitrate cap <select id="rtcKbps">
+                  <option value="1000">1 Mbps · weak upload</option><option value="2500" selected>2.5 Mbps</option>
+                  <option value="4000">4 Mbps</option><option value="6000">6 Mbps · fast upload</option></select></label>
+              </div>
+              <div class="row">
+                <button type="button" class="btn" id="rtcPvBtn">Preview</button>
+                <button type="button" class="btn primary" id="rtcGo">⚡ Go live</button>
+                <button type="button" class="btn danger hide" id="rtcStop">Stop</button>
+              </div>
+              <p class="msg" id="rtcMsg" role="status" aria-live="polite"></p>
+              <p class="muted">Keep this tab open while you're live. Stop doesn't end your slot - use <b>End my slot</b> for that.</p>
+            </div>
+          </div>
+        </div>
+        <% } %>
       </div>
       <p class="muted hide" id="embedNote">Your video is on the stage. It stays on until your time is up or you end the slot.</p>
     </section>
@@ -181,6 +224,9 @@
   <% } %>
   <p class="muted center"><a href="/p">Pads ›</a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=6" defer></script>
+<script src="/public/js/stage-book.js?v=7" defer></script>
+<% if (rtc) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=1">
+<script src="/public/js/webrtc-client.js?v=1" defer></script>
+<script src="/public/js/stage-golive-rtc.js?v=1" defer></script><% } %>
 </body>
 </html>

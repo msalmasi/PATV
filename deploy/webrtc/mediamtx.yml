@@ -1,0 +1,89 @@
+###############################################################################################
+# PATV MediaMTX (1.99et) - WebRTC (WHIP ingest + WHEP playback) and HLS only. TEMPLATE.
+# install.sh renders it to /etc/mediamtx/mediamtx.yml (root:mediamtx 0640) and fills:
+#   @PUBLIC_IP@   the VPS's public IPv4 (the only ICE host candidate we hand out)
+#   @AUTH_URL@    the site that answers MediaMTX's auth hook (staging first, prod after the promote)
+# MediaMTX hot-reloads this file when it changes. Pinned to v1.21.1 (keys checked against its
+# reference mediamtx.yml - unknown keys make it refuse to start).
+#
+#   https://stream.publicaccess.tv/whip/<stream>          nginx -> 127.0.0.1:8889/<stream>/whip
+#   https://stream.publicaccess.tv/whep/<stream>          nginx -> 127.0.0.1:8889/<stream>/whep
+#   https://stream.publicaccess.tv/<stream>/index.m3u8    nginx -> 127.0.0.1:8888 (HLS of WHIP streams)
+#   ICE (media)  UDP 8189 + TCP 8189 fallback, straight to the box (not through nginx)
+#   API          127.0.0.1:9997 only - the site's live detection reads /v3/paths/list
+###############################################################################################
+
+logLevel: info
+logDestinations: [stdout]          # journald (journalctl -u mediamtx)
+readTimeout: 10s
+writeTimeout: 10s
+
+# ── auth: every publish / read of a path asks the PATV site (webrtc.js, POST /api/stage/whip-auth).
+# Publish = the slot's stream key (or a 10-minute browser token) as "Authorization: Bearer";
+# read = public for any open stage slot. The site that's called forwards the other site's prefix
+# (prod "stage-", staging "stg-") to its peer (WHIP_AUTH_PEER in its .env).
+authMethod: http
+authHTTPAddress: "@AUTH_URL@"
+authHTTPExclude:
+  - action: api                    # the API listens on loopback only (below)
+  - action: metrics
+  - action: pprof
+
+# ── control API: loopback only ──
+api: true
+apiAddress: 127.0.0.1:9997
+apiAllowOrigins: []
+apiTrustedProxies: []
+
+metrics: false
+pprof: false
+playback: false
+
+# ── everything we don't use is OFF (nginx-rtmp keeps :1935; nothing else may listen publicly) ──
+rtsp: false
+rtmp: false
+srt: false
+moq: false
+
+# ── HLS of WHIP streams (the default player + the fallback when WebRTC can't connect) ──
+hls: true
+hlsAddress: 127.0.0.1:8888
+hlsEncryption: false
+hlsAllowOrigins: ["https://publicaccess.tv", "https://www.publicaccess.tv", "https://staging.publicaccess.tv"]
+hlsTrustedProxies: ["127.0.0.1"]
+hlsAlwaysRemux: true               # the playlist is ready the moment a viewer asks
+hlsVariant: fmp4                   # plain fMP4 HLS (H.264 + Opus) - video.js plays it; LL-HLS isn't needed with WHEP
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+hlsMuxerCloseAfter: 60s
+
+# ── WebRTC: the WHIP / WHEP HTTP side behind nginx; media (ICE) straight to the public IP ──
+webrtc: true
+webrtcAddress: 127.0.0.1:8889
+webrtcEncryption: false            # TLS is nginx's job
+webrtcAllowOrigins: ["https://publicaccess.tv", "https://www.publicaccess.tv", "https://staging.publicaccess.tv"]
+webrtcTrustedProxies: ["127.0.0.1"]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189       # TCP fallback for networks that block UDP
+webrtcIPsFromInterfaces: false     # the box has docker bridges - never offer those
+webrtcIPsFromInterfacesList: []
+webrtcIPsFromInterfacesExcludeList: []
+webrtcAdditionalHosts: ["@PUBLIC_IP@"]
+webrtcICEServers2: []              # the server is on a public IP; clients get TURN from /api/turn
+webrtcSTUNGatherTimeout: 5s
+webrtcHandshakeTimeout: 10s
+webrtcTrackGatherTimeout: 2s
+
+pathDefaults:
+  source: publisher
+  overridePublisher: true          # an OBS / browser reconnect replaces its own stale session (needs the key again)
+  maxReaders: 150                  # WHEP viewers per stream (+1 for the HLS muxer); HLS viewers don't count
+  record: false
+
+# Only stage slot stream names exist: prod "stage-<16 hex>", staging "stg-<16 hex>" (mainstage.js).
+# Any other path is refused before auth is even asked.
+paths:
+  "~^(stage|stg)-[0-9a-f]{16}$":
+    source: publisher

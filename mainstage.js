@@ -85,6 +85,9 @@ const DEFAULTS = {
   stagecap_enabled: true,
   stagecap_snaps: true,
   stagecap_clips: true,
+  // 1.99et: ultra-low-latency WebRTC (webrtc.js: WHIP ingest, WHEP ⚡ playback, TURN) - OFF until the
+  // MediaMTX / coturn install (deploy/webrtc/) is live; off = nothing WebRTC anywhere
+  webrtc_enabled: false,
 };
 const OPEN = "('waiting','active')";
 const FUTURE = "('requested','scheduled')";
@@ -151,6 +154,7 @@ function init() {
       await addColumn("stage_slots", "title", "TEXT");
       await addColumn("stage_slots", "approved_by", "TEXT");
       await addColumn("stage_slots", "notified", "INTEGER NOT NULL DEFAULT 0");
+      await addColumn("stage_slots", "via", "TEXT");                  // 1.99et: how it's live now - rtmp | browser | whip
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
                       start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
@@ -280,6 +284,7 @@ function cleanConfig(c) {
     stagecap_enabled: onOff(c.stagecap_enabled, DEFAULTS.stagecap_enabled),
     stagecap_snaps: onOff(c.stagecap_snaps, DEFAULTS.stagecap_snaps),
     stagecap_clips: onOff(c.stagecap_clips, DEFAULTS.stagecap_clips),
+    webrtc_enabled: onOff(c.webrtc_enabled, DEFAULTS.webrtc_enabled),
   };
   if (o.max_minutes < o.min_minutes) o.max_minutes = o.min_minutes;
   return o;
@@ -292,6 +297,7 @@ async function setConfig(patch, actor) {
                    [k, JSON.stringify(next[k])]);
   }
   CONFIG = next;
+  pubCache.clear();                       // 1.99et: webrtc_enabled changes what the stage lists carry
   await event(null, "config", actor, JSON.stringify(next));
   return CONFIG;
 }
@@ -519,6 +525,7 @@ async function end(slotId, reason, actor) {
     for (const [cid, sid] of clients) if (sid === res.id) clients.delete(cid);
     lastTick.delete(res.id);
     pubCache.clear();
+    try { require("./webrtc").soon(); } catch (e) { /* 1.99et: kicks an ended slot's WHIP publisher */ }
     await event(res.id, "ended", actor, `${reason}: charged ${res.charged}, refunded ${res.refund}`, res.room_id);
   }
   return res;
@@ -800,22 +807,11 @@ async function rtmpCallback(f) {
 
   // ── the ingest application: slot keys + relay keys ──
   if (call === "publish") {
-    let s = null;
     const relayFor = parseRelayKey(name);
-    if (relayFor) {
-      if (!isLoopback(f.addr)) return { status: 403 };
-      s = await getSlot(relayFor);
-    } else if (name && !name.startsWith(STREAM_PREFIX)) {
-      s = (await getQuery(`SELECT * FROM stage_slots WHERE key_hash = ? AND status IN ${OPEN}`, [sha(name)]))[0] || null;
-    }
-    if (!s || !["waiting", "active"].includes(s.status) || s.settled || isEmbed(s) || t > deadline(s)) return { status: 403 };
-    if (await isBanned(s.userId, s.room_id)) return { status: 403 };
-    const r = await runQuery(`UPDATE stage_slots SET publishing = 1, beat = ?, status = 'active',
-                              went_live = COALESCE(went_live, ?), last_live = ? WHERE id = ? AND settled = 0`, [t, t, t, s.id]);
-    if (!r.changes) return { status: 403 };
+    const s = await publishGate({ key: name, addr: f.addr }, t);
+    if (!s) return { status: 403 };
+    if (!(await goLive(s, t, relayFor ? "browser" : "rtmp"))) return { status: 403 };
     clients.set(cid, s.id);
-    pubCache.clear();
-    if (!s.went_live) event(s.id, "live", s.username, relayFor ? "browser" : "rtmp", s.room_id);
     return { status: 302, location: `${OUT_LOCAL}/${s.stream}` };
   }
 
@@ -834,6 +830,64 @@ async function rtmpCallback(f) {
     return { status: 200 };
   }
   return { status: 200 };
+}
+
+// ── 1.99et: THE publish gate - nginx-rtmp's on_publish (above) and MediaMTX's WHIP auth hook (webrtc.js)
+// both ask it, so who may publish to a slot is decided in one place. -> the open slot, or null.
+//   {key}      a slot's stream key (OBS: RTMP key, or the WHIP bearer token - the same key), or a relay
+//              key (the server's own ffmpeg; loopback only, never with noRelay)
+//   {slotId}   a caller that already proved who it is (webrtc.js: a signed browser WHIP token)
+async function publishGate(o = {}, t = now()) {
+  await init();
+  const key = String(o.key || "");
+  let s = null;
+  const relayFor = o.slotId ? null : parseRelayKey(key);
+  if (o.slotId) s = await getSlot(o.slotId);
+  else if (relayFor) {
+    if (o.noRelay || !isLoopback(o.addr)) return null;
+    s = await getSlot(relayFor);
+  } else if (key && !key.startsWith(STREAM_PREFIX)) {
+    s = (await getQuery(`SELECT * FROM stage_slots WHERE key_hash = ? AND status IN ${OPEN}`, [sha(key)]))[0] || null;
+  }
+  if (!s || !["waiting", "active"].includes(s.status) || s.settled || isEmbed(s) || t > deadline(s)) return null;
+  if (await isBanned(s.userId, s.room_id)) return null;
+  return s;
+}
+/** A publisher came on: the slot is active and live from now (billing heartbeat = beat). -> changed? */
+async function goLive(s, t, via) {
+  const r = await runQuery(`UPDATE stage_slots SET publishing = 1, beat = ?, status = 'active', via = ?,
+                            went_live = COALESCE(went_live, ?), last_live = ? WHERE id = ? AND settled = 0`, [t, via || null, t, t, s.id]);
+  if (!r.changes) return false;
+  pubCache.clear();
+  if (!s.went_live) event(s.id, "live", s.username, via || "rtmp", s.room_id);
+  return true;
+}
+/** The open slot streaming under this public stream name (WHEP / HLS reads), or null. */
+async function openSlotByStream(name) {
+  await init();
+  return (await getQuery(`SELECT * FROM stage_slots WHERE stream = ? AND status IN ${OPEN}`, [String(name || "")]))[0] || null;
+}
+/** 1.99et: MediaMTX's ready WHIP paths (webrtc.sync, every 5 s) = on_update for WHIP slots: each one with
+ *  an open slot is that slot's heartbeat; WHIP slots no longer in the list stop publishing (publish_done).
+ *  -> the names with NO open slot (ended / cut / banned / past the deadline): webrtc.js kicks them. */
+async function whipBeat(names, t = now()) {
+  await init();
+  const orphans = [];
+  const seen = new Set();
+  for (const name of names || []) {
+    const s = await openSlotByStream(name);
+    if (!s || s.settled || isEmbed(s) || t > deadline(s) || (await isBanned(s.userId, s.room_id))) { orphans.push(name); continue; }
+    seen.add(s.id);
+    if (!s.publishing || s.via !== "whip") await goLive(s, t, "whip");
+    else await runQuery("UPDATE stage_slots SET beat = ? WHERE id = ? AND settled = 0", [t, s.id]);
+  }
+  const gone = await getQuery(`SELECT id FROM stage_slots WHERE via = 'whip' AND publishing = 1 AND status IN ${OPEN}`);
+  for (const g of gone) {
+    if (seen.has(g.id)) continue;
+    await runQuery("UPDATE stage_slots SET publishing = 0, last_live = ? WHERE id = ? AND settled = 0", [t, g.id]);
+    pubCache.clear();
+  }
+  return orphans;
 }
 
 function isLoopback(a) {
@@ -934,14 +988,24 @@ function view(s, t = now()) {
     live_seconds: Math.floor((s.live_ms || 0) / 1000), billed_minutes: billedMinutes(s.live_ms),
     charged: s.settled ? s.charged : chargeFor(s, s.live_ms), refunded: s.refunded == null ? null : s.refunded,
     end_reason: s.end_reason || null, ended_by: s.ended_by || null,
-    stream: s.stream, hls: `${HLS_BASE}/${s.stream}.m3u8`, relay: relays.has(s.id),
+    stream: s.stream, hls: hlsOf(s), relay: relays.has(s.id),
     start_at: startOf(s), start_by: startOf(s) + CONFIG.start_window_min * 60000,
     opens_at: isEmbed(s) ? startOf(s) : startOf(s) - CONFIG.lead_min * 60000,
     room_id: s.room_id || rooms.HOUSE_ROOM, kind: s.kind || "slot", featured: !!s.featured, feature_by: s.feature_by || null,
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
     // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
-    capture: !s.capture_off && !isEmbed(s), nsfw: !!s.nsfw,
+    capture: !s.capture_off && !isEmbed(s) && s.via !== "whip", nsfw: !!s.nsfw,
   };
+}
+// 1.99et: a WHIP slot's HLS comes from MediaMTX (webrtc.js), everything else from nginx-rtmp's /hls
+function hlsOf(s) {
+  if (s.via === "whip") { try { return require("./webrtc").hlsUrl(s.stream); } catch (e) { /* fall through */ } }
+  return `${HLS_BASE}/${s.stream}.m3u8`;
+}
+// ...and, while webrtc_enabled is on, its WHEP URL for the ⚡ Low latency toggle (absent otherwise)
+function whepOf(s) {
+  if (s.via !== "whip" || isEmbed(s)) return null;
+  try { const w = require("./webrtc"); return w.enabled() ? w.whepUrl(s.stream) : null; } catch (e) { return null; }
 }
 // What a stage shows: the slots live right now in a room (cached briefly; pages poll it).
 const pubCache = new Map();   // room id ("" = every room) -> {at, list}
@@ -954,11 +1018,13 @@ async function publicSlots(roomId) {
   try { nameStyle = require("./cosmetics").nameStyle; } catch (e) { /* no cosmetics */ }
   const list = (await openSlots(roomId || undefined)).filter((s) => isLive(s, t)).map((s) => {
     const e = embedOf(s);
+    const whep = e ? null : whepOf(s);
     return {
       id: s.id, username: s.username, display: s.displayname || s.username, nameCss: nameStyle(s.username) || "",
-      hls: e ? null : `${HLS_BASE}/${s.stream}.m3u8`, embed: e, since: s.went_live, room_id: s.room_id,
+      hls: e ? null : hlsOf(s), embed: e, since: s.went_live, room_id: s.room_id,
       featured: !!s.featured, feature_by: s.feature_by || null, title: s.title || null, mode: s.mode || "stream",
-      capture: !e && !s.capture_off, nsfw: !!s.nsfw,     // 1.99cr: the stage's Snap / Clip buttons (stagecap.js)
+      capture: !e && !s.capture_off && s.via !== "whip", nsfw: !!s.nsfw,     // 1.99cr: the stage's Snap / Clip buttons (stagecap.js; not on MediaMTX's HLS)
+      ...(whep ? { whep } : {}),                                              // 1.99et: only while webrtc_enabled is on
     };
   }).sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0) || (a.since || 0) - (b.since || 0));
   pubCache.set(k, { at: Date.now(), list });
@@ -1146,6 +1212,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   const express = require("express");
   if (!noTimers) start();
+  require("./webrtc").register(app, { addUser, noTimers });   // 1.99et: WHIP auth hook, /api/turn, browser WHIP (flag webrtc_enabled)
   const isStaff = rooms.isStaff;
   const fail = (res, e) => {
     if (e && (e.refuse || (e.status && e.status < 500 && e.message))) return res.status(e.status).json({ ok: false, error: e.message });
@@ -1346,6 +1413,7 @@ module.exports = {
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
+  publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,

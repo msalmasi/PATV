@@ -1,0 +1,40 @@
+# PATV MediaMTX (1.99et): WHIP ingest, WHEP playback, HLS of WHIP streams. Installed by
+# deploy/webrtc/install.sh to /etc/systemd/system/mediamtx.service. Config: /etc/mediamtx/mediamtx.yml
+# (hot-reloaded on change). Logs: journalctl -u mediamtx
+[Unit]
+Description=PATV MediaMTX (WebRTC WHIP/WHEP + HLS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mediamtx
+Group=mediamtx
+WorkingDirectory=/var/lib/mediamtx
+StateDirectory=mediamtx
+ExecStart=/usr/local/bin/mediamtx /etc/mediamtx/mediamtx.yml
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+MemoryMax=2G
+# hardening (systemd 245)
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
