@@ -81,8 +81,12 @@ function displayOf(r) {
 const stats = { lookups: 0 };
 let query = getQuery;
 
-/** Names -> Map(key -> {username, display}) for the ones with a live account. ONE users query. */
-async function lookup(names) {
+/** Names -> Map(key -> {username, display}) for the ones with a live account. ONE users query.
+ *  opts.linkedOnly (1.99eb, the room bridge): a name matches ONLY an account whose linked camfrogUsername
+ *  it is - no users.username fallback, so a Camfrog login that merely equals someone's PATV username is
+ *  never shown as that person. */
+async function lookup(names, opts = {}) {
+  const linkedOnly = !!(opts && opts.linkedOnly);
   const keys = [...new Set([...names].map(keyOf).filter(Boolean))].slice(0, MAX_KEYS);
   const out = new Map();
   if (!keys.length) return out;
@@ -91,7 +95,7 @@ async function lookup(names) {
   stats.lookups++;
   const rows = await query(
     `SELECT username, displayname, camfrogUsername${hasAvatar ? ", avatar" : ""} FROM users
-      WHERE (LOWER(camfrogUsername) IN (${ph}) OR LOWER(username) IN (${ph}))${live}`, [...keys, ...keys]);
+      WHERE (LOWER(camfrogUsername) IN (${ph})${linkedOnly ? "" : ` OR LOWER(username) IN (${ph})`})${live}`, linkedOnly ? keys : [...keys, ...keys]);
   const best = new Map();       // key -> [rank, row]
   const want = new Set(keys);
   const offer = (k, rank, r) => {
@@ -104,7 +108,7 @@ async function lookup(names) {
     const cf = String(r.camfrogUsername || "").toLowerCase();
     const un = String(r.username).toLowerCase();
     if (cf) offer(cf, isCf(r.username) ? 1 : 0, r);   // the login: a real account before a CF auto one
-    offer(un, 2, r);                                   // a PATV username
+    if (!linkedOnly) offer(un, 2, r);                  // a PATV username
   }
   for (const [k, [, r]] of best) {
     const o = { username: r.username, display: displayOf(r) };

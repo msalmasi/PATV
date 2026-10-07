@@ -5,7 +5,11 @@
 // Which tab opens: an explicit request (?tab=feed, #feed, a feed sort / page in the query, #rules) beats the
 // visitor's last pick for this pad (localStorage) which beats the smart default: Live when the pad's Camfrog
 // room is active (people in it, or its stage on air), else Feed; pads without a Camfrog room (site / profile
-// pads) always default to Feed. Panels are only HIDDEN (the hidden attribute) - never unmounted - so the
+// pads) always default to Feed.
+// 1.99eb: only Live and Feed are remembered ("feed@<ms>" / "live@<ms>"); About never is (an old stored
+// "about" is ignored), so a plain /p/<slug> link ("Open pad", a pad name) can't land on About. And while the
+// room is live, a remembered Feed only wins when it was picked in the last FEED_STICKY_MS (30 min - long
+// enough to read the feed, click away and come back; short enough that tomorrow's visit opens on Live). Panels are only HIDDEN (the hidden attribute) - never unmounted - so the
 // chat relay polling, push-to-talk, mic state, the stage player and the 30 s schedule refresh keep running
 // whichever tab is showing.
 // The Feed tab carries an "N new" badge: posts newer than this visitor's last look at the feed (a timestamp
@@ -16,6 +20,8 @@
   var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'feed', about: 'about', info: 'about', schedule: 'live' };
   var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp)=/;
   var FIRST_LOOK_MS = 3 * 24 * 3600 * 1000;   // a first visit counts the last 3 days' posts as new
+  var FEED_STICKY_MS = 30 * 60 * 1000;        // 1.99eb: a picked Feed beats Live-when-live for this long
+  var REMEMBER = { live: true, feed: true };   // 1.99eb: About is never remembered
 
   function has(tabs, t) { return !!t && tabs.indexOf(t) >= 0; }
 
@@ -38,12 +44,30 @@
     return null;
   }
 
-  /** requested > the visitor's last pick > the smart default (each only when that tab exists). */
+  /** The stored last pick ("feed@<ms>", "live@<ms>"; a pre-1.99eb bare "feed" / "live" has no time) ->
+   *  {tab, at} or null. About (or anything else) is never a remembered tab. */
+  function parseStored(raw) {
+    if (raw && typeof raw === 'object') raw = raw.tab + '@' + (raw.at || 0);
+    var m = /^([a-z]+)(?:@(\d+))?$/.exec(String(raw == null ? '' : raw).trim().toLowerCase());
+    if (!m || !REMEMBER[m[1]]) return null;
+    return { tab: m[1], at: m[2] ? Number(m[2]) : 0 };
+  }
+  function storedValue(t, now) { return REMEMBER[t] ? t + '@' + Math.floor(now || Date.now()) : null; }
+
+  /** requested > the visitor's last pick (Live / Feed only) > the smart default (each only when that tab
+   *  exists). When the smart default is Live (the room is live), a remembered Feed only wins when it was
+   *  picked within FEED_STICKY_MS. */
   function pickTab(o) {
     var tabs = o.tabs || [];
     if (has(tabs, o.requested)) return o.requested;
-    if (has(tabs, o.stored)) return o.stored;
-    return defaultTab(o);
+    var def = defaultTab(o);
+    var st = parseStored(o.stored);
+    if (st && has(tabs, st.tab)) {
+      if (!(def === 'live' && st.tab === 'feed')) return st.tab;
+      var age = (o.now || Date.now()) - st.at;
+      if (st.at && age >= 0 && age < FEED_STICKY_MS) return 'feed';
+    }
+    return def;
   }
 
   /** How many posts are newer than `seen` (ms; null = first visit: the last 3 days). */
@@ -92,7 +116,7 @@
       });
       if (t === 'feed') { seen = Date.now(); store(keySeen, seen); }
       paintBadge();
-      if (opts.remember) store(keyTab, t);
+      if (opts.remember && REMEMBER[t]) store(keyTab, storedValue(t));   // 1.99eb: never About
       if (opts.url && root.history && root.history.replaceState) {
         try {
           var u = new URL(root.location.href);
@@ -138,7 +162,8 @@
     return { show: show, current: function () { return current; } };
   }
 
-  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount };
+  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount,
+              parseStored: parseStored, storedValue: storedValue, FEED_STICKY_MS: FEED_STICKY_MS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PATVPadTabs = api;
 })(typeof window !== 'undefined' ? window : globalThis);

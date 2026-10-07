@@ -137,12 +137,42 @@ test("a display name never impersonates: matching is by login only", async () =>
   assert.equal(u.login, "nobody1");
 });
 
+test("1.99eb: a login resolves ONLY to an account whose LINKED camfrogUsername it is - no username fallback", async () => {
+  bridge._nameCache.clear();
+  // "plantbaked" is u1's PATV username, but u1's linked Camfrog login is foamy1111; nobody links "plantbaked"
+  const ev1 = { id: "plantbaked", login: "plantbaked", display: "plant guy" };
+  const v = await feedFor([msg(ev1, "not the real plantbaked"), ev("mic.grab", { user: ev1 })],
+    [{ room: ROOM, members: [ev1], mic: [ev1], count: 1 }]);
+  const u = v.feed.filter((x) => x.k === "msg").pop().u;
+  assert.ok(!u.patv, "no profile link to u1");
+  assert.equal(u.display, "plant guy", "the Camfrog display name, not u1's PATV name");
+  assert.ok(!v.feed.filter((x) => x.k === "mic").pop().u.patv);
+  assert.ok(!v.members.find((x) => x.login === "plantbaked").patv, "roster");
+  assert.ok(!v.mic[0].patv, "mic chips");
+  const s = (await bridge.summary(true)).find((r) => r.slug === "names-room");
+  assert.deepEqual(s.mic, ["plant guy"], "homepage mic list");
+  // the economy pages' default lookup keeps the username fallback
+  assert.equal((await UL.lookup(["plantbaked"])).get("plantbaked").username, "plantbaked");
+  assert.equal((await UL.lookup(["plantbaked"], { linkedOnly: true })).size, 0);
+  assert.equal((await UL.lookup(["FOAMY1111"], { linkedOnly: true })).get("foamy1111").username, "plantbaked", "case-insensitive, real over CF auto");
+  assert.equal((await UL.lookup(["jardoo"], { linkedOnly: true })).size, 0, "archived never");
+});
+
+test("bridge profile links use /u/<username> (1.99dv), never /u/<username>/profile", () => {
+  for (const f of ["views/home.ejs", "views/room.ejs", "public/js/room-mod.js"]) {
+    const src = fs.readFileSync(path.join(repo, f), "utf8");
+    assert.ok(!/patv\.username\)\s*\+\s*['"]\/profile/.test(src), f);
+  }
+});
+
 test("web relay: the PATV display name rides on say / clip jobs, never someone else's login or Pepe's", async () => {
   assert.equal(await relay.webName({ username: "webby", displayname: "Webby McWeb" }), "Webby McWeb");
   assert.equal(await relay.webName({ username: "faker", displayname: "victim_cf" }), "", "another account's login is refused");
   assert.equal(await relay.webName({ username: "x", displayname: "PepeFrog" }), "");
   assert.equal(await relay.webName({ username: "x", displayname: "" }), "", "none -> Pepe picks (Camfrog display, then login)");
   assert.equal(await relay.webName({ username: "plantbaked", displayname: "plantbaked" }), "plantbaked", "your own username is fine");
+  assert.equal(await relay.webName({ username: "webby", displayname: "foamy1111" }), "", "another account's LINKED login (what the bridge resolves) is refused");
+  assert.equal(await relay.webName({ username: "webby", displayname: "secretsam" }), "", "another account's PATV username is refused too");
   const j = relay.newJob({ kind: "say", roomId: ROOM.id, userId: "u6", username: "webby", camfrog: "webby_cf", display: "Webby McWeb", text: "hi" });
   const out = relay.takeJobs(new Set([ROOM.id])).find((x) => x.id === j.id);
   assert.equal(out.display, "Webby McWeb");

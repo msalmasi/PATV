@@ -732,7 +732,7 @@
       // 1.99ea: the name is the PATV display name (server-resolved by login) linking to the profile,
       // else the Camfrog display name; the login is the tooltip
       var n;
-      if (u && !u.anon && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username) + '/profile'; }
+      if (u && !u.anon && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username); }
       else n = el('span', 'w', label(u));
       if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
       if (u && !u.anon && !u.self && u.login) n.title = u.login;

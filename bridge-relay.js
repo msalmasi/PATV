@@ -141,7 +141,9 @@ const cleanReply = (s) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u00
 
 /** 1.99ea: the name a web line goes into the room under - the account's PATV display name, or "" to let
  *  Pepe pick (the Camfrog display name, then the login). A display name is display only, so one that is
- *  ANOTHER account's login / username (or Pepe's) is never sent - "🌐 <someone else> (web)" can't happen. */
+ *  ANOTHER account's login / username (or Pepe's) is never sent - "🌐 <someone else> (web)" can't happen.
+ *  1.99eb: the default lookup here (camfrogUsername first, then username) is a superset of the bridge's
+ *  linked-only rule: any name the bridge would show as another account is refused, plus other usernames. */
 async function webName(u) {
   let d = "";
   try { d = clean(require("./displaynames").usable(u && u.displayname), 40); } catch (e) { d = ""; }

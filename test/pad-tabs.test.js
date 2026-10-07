@@ -46,9 +46,57 @@ test("default tab: Live when the Camfrog room is active, else Feed; non-Camfrog 
 test("pickTab: an explicit request beats the remembered tab, which beats the smart default; unknown tabs are ignored", () => {
   const tabs = ["live", "feed", "about"];
   assert.equal(T.pickTab({ tabs, platform: "camfrog", active: true, requested: "feed", stored: "about" }), "feed");
-  assert.equal(T.pickTab({ tabs, platform: "camfrog", active: true, requested: null, stored: "about" }), "about");
+  assert.equal(T.pickTab({ tabs, platform: "camfrog", active: true, requested: null, stored: "about" }), "live", "1.99eb: About is never a remembered tab");
   assert.equal(T.pickTab({ tabs, platform: "camfrog", active: true, requested: "schedule!", stored: "nope" }), "live");
   assert.equal(T.pickTab({ tabs: ["live", "about"], platform: "camfrog", active: false, requested: "feed", stored: null }), "live");
+});
+
+// ── 1.99eb: "Open pad" on a live pad landed on About (a remembered "about" beat the smart default) ──
+test("remembered tab: only Live / Feed are remembered; About never is", () => {
+  const now = 1_800_000_000_000;
+  assert.equal(T.storedValue("about", now), null);
+  assert.equal(T.storedValue("feed", now), "feed@" + now);
+  assert.equal(T.storedValue("live", now), "live@" + now);
+  assert.equal(T.parseStored("about"), null);
+  assert.equal(T.parseStored("about@" + now), null);
+  assert.deepEqual(T.parseStored("feed@" + now), { tab: "feed", at: now });
+  assert.deepEqual(T.parseStored("feed"), { tab: "feed", at: 0 }, "a pre-1.99eb bare value has no time");
+  assert.equal(T.parseStored("bogus"), null);
+  assert.equal(T.parseStored(null), null);
+});
+
+test("Open pad / a pad-name link (no ?tab / #hash) on a live room opens Live, whatever was last remembered", () => {
+  const tabs = ["live", "feed", "about"], now = 1_800_000_000_000;
+  const open = (stored, active = true) => T.pickTab({ tabs, platform: "camfrog", active, requested: T.requestedTab("", ""), stored, now });
+  assert.equal(open(null), "live");
+  assert.equal(open("about"), "live", "an old stored About is ignored");
+  assert.equal(open("about@" + now), "live");
+  assert.equal(open("live@" + (now - 864e5)), "live");
+  assert.equal(open("feed"), "live", "a pre-1.99eb Feed (no time) never beats Live");
+  assert.equal(open("feed@" + (now - 31 * 60e3)), "live", "Feed picked over 30 min ago: Live wins");
+  assert.equal(open("feed@" + (now - T.FEED_STICKY_MS)), "live", "the window is exclusive");
+  assert.equal(open("feed@" + (now - 5 * 60e3)), "feed", "Feed picked 5 min ago sticks");
+  assert.equal(open("feed@" + (now + 60e3)), "live", "a time in the future (clock skew) doesn't stick");
+  assert.equal(T.FEED_STICKY_MS, 30 * 60 * 1000);
+  // not live: the remembered Live / Feed still applies (any age); About still never does
+  assert.equal(open("live@1", false), "live");
+  assert.equal(open("feed@1", false), "feed");
+  assert.equal(open("about", false), "feed");
+  // an explicit ?tab=about / #about still opens About
+  assert.equal(T.pickTab({ tabs, platform: "camfrog", active: true, requested: T.requestedTab("?tab=about", ""), stored: "feed@" + now, now }), "about");
+  assert.equal(T.pickTab({ tabs, platform: "camfrog", active: true, requested: T.requestedTab("", "#about"), stored: null, now }), "about");
+});
+
+test("the server default for a live pad is Live (the guide's Open pad link carries no tab)", () => {
+  const t = bridge.padTabsFor({ platform: "camfrog", live: true, feed: true, pepeHere: true, pepeOn: false, slots: [], query: "/p/pepelab",
+    members: [{ login: "pepe", self: true }, { login: "bob" }] });
+  assert.equal(t.requested, null);
+  assert.equal(t.initial, "live");
+  const views = path.join(repo, "views");
+  for (const f of ["rooms.ejs", "home.ejs"]) {
+    const src = fs.readFileSync(path.join(views, f), "utf8");
+    assert.ok(!/href="\/p\/[^"]*(#about|tab=about)/i.test(src), f + ": no pad link points at About");
+  }
 });
 
 test("requestedTab: ?tab= and #hash deep links (aliases), feed sorts / pages and #rules mean Feed", () => {

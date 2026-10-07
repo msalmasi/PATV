@@ -385,8 +385,9 @@ async function ingest(body) {
 
 // ── names: PATV display name > Camfrog display name > login (1.99ea) ──
 // Every bridge line / roster entry is resolved BY LOGIN (never by a display name - those are display
-// only and anyone can pick one) with userlinks.js's rules: users.camfrogUsername, then users.username,
-// case-insensitive; a real account beats a random "CF..." auto one; archived accounts never match.
+// only and anyone can pick one) against users.camfrogUsername ONLY (1.99eb: UL.lookup linkedOnly - no
+// users.username fallback, so a Camfrog login that merely equals someone's PATV username never shows as
+// them), case-insensitive; a real account beats a random "CF..." auto one; archived accounts never match.
 // The result per login (hit or miss) is cached NAME_TTL, so the ~1.5 s polls cost a query only for
 // logins not seen in the last minute. Anonymised people ("someone", !incognito / !bridge hide) carry
 // no login and are never looked up.
@@ -406,7 +407,7 @@ async function resolveNames(users) {
   for (let i = 0; i < keys.length; i += 400) {
     const part = keys.slice(i, i + 400);
     let found;
-    try { found = await UL.lookup(part); } catch (e) { console.error("[bridge] names:", e.message); break; }
+    try { found = await UL.lookup(part, { linkedOnly: true }); } catch (e) { console.error("[bridge] names:", e.message); break; }
     for (const k of part) { nameCache.delete(k); nameCache.set(k, { acc: found.get(k) || null, at: now }); }
   }
   while (nameCache.size > NAME_MAX) nameCache.delete(nameCache.keys().next().value);
