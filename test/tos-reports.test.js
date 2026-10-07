@@ -316,7 +316,8 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(t.text, new RegExp("Last updated " + terms.UPDATED));
   assert.match(t.text, /support@publicaccess\.tv/);                   // 1.99dd: the contact details are filled in
   assert.match(t.text, /Houseplants LLC/);
-  assert.match(t.text, /\[\[DMCA AGENT POSTAL ADDRESS\]\]/);         // still pending
+  assert.match(t.text, /228 Park Ave S, New York, NY 10003/);       // 1.99dk: the last placeholder is filled
+  assert.doesNotMatch(t.text, /\[\[[A-Z]/);
   assert.match(t.text, /no cash value/);
   assert.match(t.text, /18 years old/);
   const p = await get("/privacy", null);
@@ -379,13 +380,13 @@ test("Terms switch: off = posting + commenting work with no acceptance, no 428, 
 
 test("Terms switch: can't be turned on while [[placeholders]] remain in /terms or /privacy; /feed/admin lists them", async () => {
   await store.setConfig({ terms_enforced: false }, "test");
-  terms._setPlaceholders(null);                     // the real pages (still the template)
+  terms._setPlaceholders(null);                     // the real pages: finished since 1.99dk
+  assert.equal(terms.placeholders().length, 0, "no [[placeholders]] left on the real pages");
+  terms._setPlaceholders([{ page: "terms", text: "DMCA AGENT POSTAL ADDRESS" }]);   // simulate one left
   try {
     const ph = terms.placeholders();
     assert.ok(ph.length >= 1, "the remaining markers are found");
     assert.ok(ph.some((x) => x.page === "terms" && x.text === "DMCA AGENT POSTAL ADDRESS"));
-    assert.ok(!ph.some((x) => x.text === "CONTACT EMAIL" || x.text === "OPERATOR LEGAL NAME"), "filled-in markers are gone");
-    assert.ok(!ph.some((x) => /^PLACEHOLDER$|' \+ s \+ '/.test(x.text)), "the helper and the file comment aren't counted");
     // the API (Admins) refuses with the list; nothing changes
     const r = await post("/api/feed/admin/config", U.admin, { terms_enforced: true });
     assert.equal(r.status, 409, JSON.stringify(r.d));
