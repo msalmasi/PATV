@@ -330,7 +330,7 @@ async function groupRate(me, { newGroup = false, adding = 0 } = {}) {
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]);
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
-const padText = (t) => { try { return require("./pads").padRefs(esc(t)); } catch (e) { return esc(t); } };
+const padText = (t) => { try { const P = require("./pads"); return P.userRefs(P.padRefs(esc(t))); } catch (e) { return esc(t); } };   // 1.99df: + u/<name>
 /** Escape, link bare http(s) URLs (nofollow ugc, new tab) and known p/<slug> pads, keep line breaks. */
 function render(text) {
   const s = String(text == null ? "" : text);

@@ -25,8 +25,11 @@ function padSlug(R) {
   if (!R) return "";
   try { return require("./roomsweb").linkSlug(R); } catch (e) { return R.slug; }
 }
-/** "/p/<slug>" (+ an optional sub-page: "settings", "analytics", "audio"). R is a pad or a slug. */
+/** 1.99df: a user's profile address (their profile pad's page - the profile feed lives on the profile). */
+const profileHref = (username) => "/u/" + encodeURIComponent(String(username || "")) + "/profile";
+/** "/p/<slug>" (+ an optional sub-page: "settings", "analytics", "audio"). R is a pad or a slug. 1.99df: a profile pad -> the profile. */
 function padHref(R, sub = "") {
+  if (R && typeof R === "object" && R.profile && R.profile.username) return profileHref(R.profile.username) + (sub ? "#posts" : "");
   const slug = typeof R === "string" ? R : padSlug(R);
   return "/p/" + encodeURIComponent(String(slug || "").toLowerCase()) + (sub ? "/" + sub : "");
 }
@@ -73,12 +76,40 @@ function padRefs(html, known = padBySlugSync) {
   });
 }
 
+// 1.99df: u/<username> inside already-escaped text -> a link to that profile (like p/<slug>). Same boundaries as
+// PAD_REF_RE; a username is letters, digits, dot, dash, underscore and starts / ends with a letter or digit, so
+// escaping can't interfere. `known(name)` -> the account's exact username, or null (not linked). The default checks
+// a small in-memory username set (refreshed every few minutes); until it's loaded every well-formed name links (an
+// unknown one lands on the profile 404).
+const USER_REF_RE = /(^|[^A-Za-z0-9_/.\-])u\/([A-Za-z0-9](?:[A-Za-z0-9._-]{0,38}[A-Za-z0-9])?)(?![A-Za-z0-9_\-/])/g;
+let NAMES = null, namesAt = 0, namesBusy = false;
+function refreshNames() {
+  if (namesBusy) return;
+  namesBusy = true;
+  require("./dbUtils").getQuery("SELECT username FROM users WHERE username IS NOT NULL")
+    .then((rows) => { const m = new Map(); for (const r of rows) m.set(String(r.username).toLowerCase(), r.username); NAMES = m; namesAt = Date.now(); })
+    .catch(() => {}).finally(() => { namesBusy = false; });
+}
+function knownUserSync(name) {
+  if (!NAMES || Date.now() - namesAt > 5 * 60e3) refreshNames();
+  if (!NAMES) return name;
+  return NAMES.get(String(name).toLowerCase()) || null;
+}
+function userRefs(html, known = knownUserSync) {
+  return String(html == null ? "" : html).replace(USER_REF_RE, (m, pre, name) => {
+    const real = known(name);
+    if (!real) return m;
+    return `${pre}<a class="user-ref" href="${profileHref(real)}">u/${name}</a>`;
+  });
+}
+
 // ── platform badges (1.99x) ──
 const PLATFORM_INFO = {
   camfrog: { icon: "🐸", label: "Camfrog Pad", tip: "A Camfrog Pad: backed by a Camfrog room" },
   site: { icon: "🌐", label: "Site Pad", tip: "A Site Pad: made by the site, no Camfrog room behind it" },
   twitch: { icon: "🟣", label: "Twitch Pad", tip: "A Twitch Pad: backed by a Twitch channel" },
   discord: { icon: "💬", label: "Discord Pad", tip: "A Discord Pad: backed by a Discord server" },
+  profile: { icon: "👤", label: "Profile", tip: "A member's profile: only they post here" },     // 1.99df
 };
 /** A pad's platform from a platform name, a pad ({platform} / {id} / {slug}) or a room id. Defaults to camfrog. */
 function platformOf(x) {
@@ -105,11 +136,16 @@ function register(app) {
   // 1.99x: /p/<retired slug> and every page under it -> the pad's current slug, query kept (GET / HEAD only)
   app.use("/p/:slug", (req, res, next) => {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
+    // 1.99df: a profile pad's page (and anything under it) is the member's profile
+    const P = require("./rooms").bySlugCached(String(req.params.slug || "").toLowerCase());
+    if (P && P.profile && P.profile.username) return res.redirect(301, profileHref(P.profile.username) + "#posts");
     const cur = currentSlugFor(req.params.slug);
     if (!cur) return next();
     const rest = req.path && req.path !== "/" ? req.path : "";
     res.redirect(301, "/p/" + encodeURIComponent(cur) + rest + qsOf(req));
   });
+  // 1.99df: /u/<username> (what u/<name> reads like) -> the profile, where the profile feed lives
+  app.get("/u/:username", (req, res) => res.redirect(301, profileHref(req.params.username) + qsOf(req)));
   app.get("/rooms", to(() => "/p"));
   app.get("/pads", to(() => "/p"));
   app.get("/rooms/admin", to(() => "/pads/admin"));
@@ -130,5 +166,8 @@ function register(app) {
   app.get("/feed/c/:slug", to((req) => "/p/" + enc(req)));
 }
 
+/** 1.99df: a pad's label: "p/<slug>", or "u/<username>" for a profile pad. */
+const padLabel = (R) => (R && R.profile && R.profile.username ? "u/" + R.profile.username : "p/" + (R ? padSlug(R) || R.slug || "" : ""));
+
 module.exports = { register, padSlug, padHref, padRefs, padBySlugSync, qsOf, PAD_REF_RE, OLD_SLUGS, currentSlugFor,
-                   PLATFORM_INFO, platformOf, padBadge };
+                   PLATFORM_INFO, platformOf, padBadge, USER_REF_RE, userRefs, profileHref, padLabel, _setNames: (m) => { NAMES = m; namesAt = m ? Date.now() : 0; } };

@@ -55,6 +55,8 @@ async function resolve(kind, id) {
   if (!KINDS.has(kind) || !raw) return null;
   if (kind === "room") {
     const R = (await rooms.get(raw)) || (await rooms.bySlug(raw.replace(/^p\//i, "")));
+    // 1.99df: a profile pad isn't followable as a pad - follow the person (their profile posts are theirs)
+    if (R && R.profile) return null;
     return R ? { kind, id: R.id, label: R.title, href: require("./pads").padHref(R) } : null;
   }
   const C = new Set((await getQuery("PRAGMA table_info(users)")).map((c) => c.name));
@@ -171,7 +173,9 @@ async function notifyNewPost(post, authorName) {
     if (!rows.length) return 0;
     const inbox = require("./inbox");
     const what = post.nsfw ? "an NSFW post" : (post.title || post.body || (post.link && post.link.title) || "a new post").replace(/\s+/g, " ").slice(0, 80);
-    const where = (post.rooms || []).length ? " in " + post.rooms.map((r) => (r.slug ? "p/" + r.slug : r.title)).slice(0, 2).join(", ") : "";
+    // 1.99df: a profile post reads "X posted on their profile"
+    const where = (post.rooms || []).some((r) => r.profile) ? " on their profile"
+      : (post.rooms || []).length ? " in " + post.rooms.map((r) => (r.slug ? "p/" + r.slug : r.title)).slice(0, 2).join(", ") : "";
     let n = 0;
     for (const r of rows) {
       const ok = await inbox.addSafe(r.follower, { kind: "follow", title: `${authorName} posted${where}`, body: post.nsfw ? what : `"${what}"`,

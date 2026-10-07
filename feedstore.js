@@ -31,6 +31,16 @@
 //                      red-list suspended, kicked/banned recently - per room) synced with the owner map
 //   feed_mentions      queued "new post on the room feed" lines for Pepe (per-room switch, throttled)
 //   feed_kv            config (JSON) and per-room settings
+//
+// 1.99df: profile posting (Reddit's u/). A member's profile is a pad of its own (rooms.js: platform "profile", id
+// user:<userId>, slug u-<username>, made on first use by rooms.ensureProfile) - so votes, comments, crossposts (both
+// ways), bans, locks, reports, Padiquette and Pepe's scopes are the pad code unchanged. What's special:
+//   - only the profile's owner may post / crosspost there (roomPostRefusal - not even staff);
+//   - the composer / crosspost dialog name it "u/<username>" (or "profile"), resolved for the poster here;
+//   - feed_posts.in_all: the owner's per-post "Also show in All" (default on); off keeps it out of All (and the
+//     homepage's Hot), never out of Following, the profile or the post page;
+//   - the owner moderates their profile pad like any pad owner (rooms.canManage): remove comments on posts there,
+//     lock comments, ban people from commenting on the profile - nothing anywhere else.
 "use strict";
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
@@ -132,6 +142,8 @@ function init() {
       await migrateSafety();
       await migrateCommunities();
       await migrateMentionDefault();
+      // 1.99df: profile posts - the owner's per-post "Also show in All" (1 = yes, the default; only profile posts set 0)
+      await addCol("feed_posts", "in_all", "INTEGER NOT NULL DEFAULT 1");
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -376,6 +388,29 @@ async function communityOf(x) {
 }
 /** 1.99ck: the slug a pad's links and p/<slug> labels use (pads.js). */
 const padSlugOf = (R, roomId) => (R ? require("./pads").padSlug(R) : rooms.slugify(roomId));
+/** 1.99df: the profile owner's username when R is a profile pad, else null. */
+const profileName = (R) => (R && R.profile ? R.profile.username || "?" : null);
+/** 1.99df: how a pad is written: "p/<slug>", or "u/<username>" for a profile pad. */
+const padLabelOf = (R, roomId) => (R && R.profile ? "u/" + (R.profile.username || "?") : "p/" + padSlugOf(R, roomId));
+/**
+ * 1.99df: a picker / API key that names a profile ("profile", "u/<name>", "@me") -> the POSTER's own profile pad
+ * (made on first use). undefined when the key isn't a profile key (the caller goes on with communityOf). Someone
+ * else's profile throws: only its owner posts there.
+ */
+async function profileKey(u, key) {
+  const k = String(key == null ? "" : key).trim();
+  const m = /^(?:profile|@me|u\/(.{1,64}))$/i.exec(k);
+  if (!m) return undefined;
+  const name = m[1] ? m[1].trim() : null;
+  if (u && (!name || String(u.username).toLowerCase() === name.toLowerCase())) {
+    const R = await rooms.ensureProfile(u.userId);
+    if (!R) throw new Refuse(403, "Your account can't have a profile feed.");
+    return R;
+  }
+  throw new Refuse(403, name ? `Only ${name} can post on their profile.` : "Sign in to post on your profile.");
+}
+/** An explicit "no" (false / 0 / "0" / "off" / "false"); anything else, including missing, is not. */
+const offFlag = (v) => v === false || v === 0 || v === "0" || v === "off" || v === "false";
 const ID_RE = /^[A-Za-z0-9]{8,16}$/;
 
 let UCOLS = null;
@@ -418,6 +453,8 @@ async function postRefusal(u, roomIds = [], { media = false } = {}) {
   for (const rid of roomIds) {
     if (rid && bans.find((b) => b.room_id === rid)) {
       const R = rooms.getCached(rid);
+      // 1.99df: a profile ban = blocked from commenting on that member's profile posts
+      if (R && R.profile) return { status: 403, message: `${R.profile.username || "This member"} has blocked you from commenting on their profile.` };
       return { status: 403, message: `You can't post in ${R ? R.title : rid}.` };
     }
   }
@@ -534,7 +571,8 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     const roomsOf = PR.filter((x) => x.post_id === r.id).map((x) => {
       const R = rooms.getCached(x.room_id);
       return { id: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null,
-               pinned: !!x.pinned_at, nsfw: x.nsfw === 1, hidden: !!x.hidden_at, pending: !!x.pending };
+               pinned: !!x.pinned_at, nsfw: x.nsfw === 1, hidden: !!x.hidden_at, pending: !!x.pending,
+               profile: profileName(R), label: padLabelOf(R, x.room_id) };     // 1.99df: a profile pad shows as u/<username>
     });
     const ctx = ctxRoom ? roomsOf.find((x) => x.id === ctxRoom) : null;
     // a room owner's NSFW mark applies in their room's view; in the aggregate views (All, Following, profiles, the
@@ -549,13 +587,13 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       const removed = !o || o.deleted || o.hidden || !oVisible;
       const from = o ? (o.roomsAll.find((x) => !x.removed && !x.pending && !x.hidden) || o.roomsAll[0] || null) : null;
       xpost = { id: r.crosspost_of, removed, post: removed && !staffV ? null : o,
-                from: from ? { id: from.id, slug: from.slug, title: from.title } : null, author: o ? o.author : null };
+                from: from ? { id: from.id, slug: from.slug, title: from.title, profile: from.profile || null, label: from.label } : null, author: o ? o.author : null };
       if (o && o.nsfw) nsfw = true;
     }
     const xps = XP.filter((x) => x.crosspost_of === r.id);
     const crossposts = [...new Map(xps.map((x) => {
       const R = rooms.getCached(x.room_id);
-      return [x.room_id, { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id }];
+      return [x.room_id, { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, profile: profileName(R), label: padLabelOf(R, x.room_id) }];
     })).values()];
     const att = AT.filter((a) => a.post_id === r.id).map((a) => ({ id: a.id, kind: a.kind, ct: a.ct, file: a.file, thumb: a.thumb, poster: a.poster,
                                                                  w: a.w, h: a.h, secs: a.secs }));
@@ -566,6 +604,8 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       ups: r.ups || 0, downs: r.downs || 0, myVote: mv ? (mv.value > 0 ? 1 : -1) : 0,
       nsfw, nsfwAuthor: !!r.nsfw, nsfwRoom: !!(ctx && ctx.nsfw), pinned: !!(ctx && ctx.pinned), roomHidden: !!(ctx && ctx.hidden), pending: !!(ctx && ctx.pending),
       locked: !!r.locked_at, lockedBy: r.locked_by || null, nsfwAdmin: r.nsfw_admin, global: !!r.global, cost: r.cost,
+      // 1.99df: on a profile (its owner's), and whether it also shows in All
+      onProfile: roomsOf.some((x) => x.profile && !x.removed), inAll: r.in_all !== 0,
       deleted: !!r.deleted_at, hidden: !!r.hidden_at, deleteReason: r.delete_reason || null,
       author: A.get(r.author_id) || { userId: r.author_id, username: "[gone]", display: "[deleted account]" },
       followingAuthor: FW.has(r.author_id),
@@ -683,6 +723,7 @@ async function list({ room = null, author = null, following = null, authors: aut
     visible();
   } else {
     visible();                          // All
+    scope.push("p.in_all != 0");        // 1.99df: a profile post its owner kept out of All
   }
   if (sfw) {
     // no NSFW anywhere: the author's / an admin's flag, any live community's mark, or (a crosspost) the original's
@@ -769,7 +810,8 @@ async function create(userId, input, deps = {}) {
   const roomIds = [];
   const picked = input.community != null && input.community !== "" ? [input.community] : (Array.isArray(input.rooms) ? input.rooms : []);
   for (const r of picked.slice(0, 6)) {
-    const R = await communityOf(r);
+    let R = await profileKey(u, r);                                   // 1.99df: "u/<me>" / "profile" = my profile pad
+    if (R === undefined) R = await communityOf(r);
     if (!R) throw new Refuse(400, "That pad isn't on PATV.");
     if (!roomIds.includes(R.id)) roomIds.push(R.id);
   }
@@ -812,13 +854,15 @@ async function create(userId, input, deps = {}) {
   const cost = priceOf(C, { ...counts, link: !!link });
   const id = newId();
   const label = `feed post ${id}`;
+  // 1.99df: "Also show in All" - only a profile post can opt out (default: shown)
+  const inAll = roomIds.some((rid) => rooms.isProfile(rid)) && offFlag(input.inAll) ? 0 : 1;
   await chargeFor(u, cost, label);
   try {
     const t = NOW();
-    await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created, in_all)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, u.userId, title || null, body || null, link ? link.url : null, link ? JSON.stringify(link) : null,
-                    input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t]);
+                    input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t, inAll]);
     let i = 0;
     for (const a of atts) {
       const r = await runQuery("UPDATE feed_attachments SET post_id = ?, sort = ? WHERE id = ? AND owner_id = ? AND post_id IS NULL AND state = 'ready'", [id, i++, a.id, u.userId]);
@@ -876,11 +920,12 @@ async function crosspostOriginal(u, origId) {
 }
 /** null when `u` may crosspost `o` into pad R, else {status, message} (the rate limits are checked per action). */
 async function crosspostRefusal(u, o, R) {
+  const name = R.profile ? "your profile" : R.title;                  // 1.99df
   const here = (await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [o.id, R.id]))[0];
-  if (here) return { status: 409, message: `That post is already in ${R.title}.` };
+  if (here) return { status: 409, message: `That post is already in ${name}.` };
   const dup = (await getQuery(`SELECT x.id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id AND pr.room_id = ? AND pr.removed_at IS NULL
                                WHERE x.crosspost_of = ? AND x.deleted_at IS NULL LIMIT 1`, [R.id, o.id]))[0];
-  if (dup) return { status: 409, message: `It's already been crossposted to ${R.title}.` };
+  if (dup) return { status: 409, message: `It's already been crossposted to ${name}.` };
   return (await postRefusal(u, [R.id])) || (await roomPostRefusal(u, R.id));
 }
 /** One crosspost row in pad R (charged; rolled back + refunded on failure). -> {id, pending} */
@@ -931,11 +976,14 @@ async function crosspostMany(userId, origId, input = {}) {
   if (acct) throw new Refuse(acct.status, acct.message);
   const results = [], go = [], seen = new Set();
   for (const k of asked) {
-    const R = await communityOf(k);
+    // 1.99df: "u/<me>" / "profile" = share to my profile (Reddit's "share to profile"); someone else's profile is refused
+    let R;
+    try { R = await profileKey(u, k); } catch (e) { results.push({ community: k, pad: null, status: "refused", code: e.status || 403, error: e.message }); continue; }
+    if (R === undefined) R = await communityOf(k);
     if (!R) { results.push({ community: k, pad: null, status: "refused", code: 400, error: `No such pad: ${k}.` }); continue; }
     if (seen.has(R.id)) continue;                                        // the same pad named twice (id + slug)
     seen.add(R.id);
-    const res = { community: k, pad: { id: R.id, slug: padSlugOf(R, R.id), title: R.title } };
+    const res = { community: k, pad: { id: R.id, slug: padSlugOf(R, R.id), title: R.profile ? "Your profile" : R.title, label: padLabelOf(R, R.id), profile: profileName(R) } };
     const why = await crosspostRefusal(u, o, R);
     if (why) Object.assign(res, { status: "refused", code: why.status, error: why.message });
     else go.push([res, R]);
@@ -967,7 +1015,7 @@ async function crosspostMany(userId, origId, input = {}) {
   }
   const made = results.filter((r) => r.status === "created" || r.status === "pending");
   if (made.length && o.author_id !== u.userId) {
-    const where = made.map((r) => "p/" + r.pad.slug).join(", ");
+    const where = made.map((r) => (r.pad.profile ? "their profile" : r.pad.label || "p/" + r.pad.slug)).join(", ");
     await notify(o.author_id, { title: `${u.displayname || u.username} crossposted your post to ${where}`,
                                 body: `"${(o.title || o.body || "your post").replace(/\s+/g, " ").slice(0, 80)}"`, link: made[0].url, ref: "feed-xp:" + made[0].id });
   }
@@ -1023,7 +1071,7 @@ async function hot(viewer = null, limit = 5) {
     const R = p.rooms[0] || null;
     const q = p.xpost && p.xpost.post ? p.xpost.post : p;
     return { id: p.id, url: "/feed/p/" + p.id, title: p.title || q.title || (q.link && q.link.title) || cleanLine(q.body, 90) || "(no title)",
-             community: R ? { slug: R.slug, title: R.title, platform: R.id ? rooms.platformOf(R.id) : undefined } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
+             community: R ? { slug: R.slug, title: R.title, platform: R.id ? rooms.platformOf(R.id) : undefined, label: R.label, profile: R.profile || null } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
              thumb: p.nsfw ? null : thumbOf(p), crosspost: !!p.xpost, created: p.created,
              kind: q.video && q.video.length ? "video" : q.images && q.images.length ? "image" : q.audio && q.audio.length ? "audio" : q.link ? "link" : "text" };
   });
@@ -1040,7 +1088,13 @@ async function edit(user, id, patch) {
   if (!title && !body && !r.link_url && !r.crosspost_of && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
     throw new Refuse(400, "A post can't be empty.");
   }
-  await runQuery("UPDATE feed_posts SET title = ?, body = ?, nsfw = ?, edited = ? WHERE id = ?", [title || null, body || null, nsfw, NOW(), id]);
+  // 1.99df: a profile post's "Also show in All" (the owner turns it off / on again any time; not an edit of the text)
+  if (patch.inAll !== undefined && patch.inAll !== null) {
+    const onProfile = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [id])).some((x) => rooms.isProfile(x.room_id));
+    if (onProfile) await runQuery("UPDATE feed_posts SET in_all = ? WHERE id = ?", [offFlag(patch.inAll) ? 0 : 1, id]);
+  }
+  const onlyInAll = patch.title == null && patch.body == null && patch.nsfw == null;
+  if (!onlyInAll) await runQuery("UPDATE feed_posts SET title = ?, body = ?, nsfw = ?, edited = ? WHERE id = ?", [title || null, body || null, nsfw, NOW(), id]);
   return get(id, user);
 }
 
@@ -1603,6 +1657,7 @@ async function ban(user, target, { room = "", reason = "", days = 0 } = {}) {
   if (roomId ? !(await rooms.canManage(user, roomId)) : !isStaff(user)) throw new Refuse(403, roomId ? "Only this pad's owner can do that." : "Admins only.");
   const u = await rooms.findUser(target);
   if (!u) throw new Refuse(404, `No single PATV account named "${String(target).slice(0, 40)}".`);
+  if (roomId && rooms.isProfile(roomId) && u.userId === roomId.slice(rooms.PROFILE_PREFIX.length)) throw new Refuse(400, "That's you.");   // 1.99df
   const until = Number(days) > 0 ? NOW() + Math.min(3650, Number(days)) * 86400e3 : null;
   await runQuery("INSERT OR REPLACE INTO feed_bans (user_id, room_id, username, reason, by, at, until) VALUES (?, ?, ?, ?, ?, ?, ?)",
                  [u.userId, roomId, u.username, cleanLine(reason, 200) || null, user.username, NOW(), until]);
@@ -1694,6 +1749,7 @@ const PLAT_NAME = { site: "Site", twitch: "Twitch", discord: "Discord" };
 async function announceState(roomId, viewer = null) {
   const id = String(roomId || "");
   const plat = rooms.platformOf(id);
+  if (plat === "profile") return { ok: false, code: "site", why: "A profile has no Camfrog room", manage: false };     // 1.99df
   if (plat !== "camfrog") return { ok: false, code: "site", why: `${PLAT_NAME[plat] || "Site"} pad, no Camfrog room`, manage: false };
   if (!(await mentionOn(id))) {
     const manage = !!viewer && (isStaff(viewer) || !!(await rooms.canManage(viewer, id).catch(() => false)));
@@ -1808,6 +1864,13 @@ async function isRoomMember(userId, roomId) {
 }
 /** null when `u` may post in `roomId` under the room's own rules (owner + staff always may). */
 async function roomPostRefusal(u, roomId) {
+  // 1.99df: a profile pad takes posts from its owner only - not other members, not staff, not Pepe
+  if (rooms.isProfile(roomId)) {
+    const R = rooms.getCached(roomId);
+    const owner = R && R.owner ? R.owner.userId : String(roomId).slice(rooms.PROFILE_PREFIX.length);
+    if (u && u.userId === owner) return null;
+    return { status: 403, message: `Only ${R && R.profile && R.profile.username ? R.profile.username : "its owner"} can post on their profile.` };
+  }
   if (!u || await rooms.canManage(u, roomId)) return null;
   const S = await roomSettings(roomId);
   const R = rooms.getCached(roomId);

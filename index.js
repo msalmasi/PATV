@@ -1371,7 +1371,8 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         // section order + visibility (profilelayout.js)
         layout: L,
         // 1.99bz: the Posts panel (layout section "posts") + follower counts and the Follow button
-        social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts") })
+        // 1.99df: the Posts panel is the profile feed (sorts, the owner's composer) - its query string and the host for embeds
+        social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
         // the owner's recent "New avatar" requests (website action queue, tag "avatar")

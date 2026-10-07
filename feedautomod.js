@@ -35,6 +35,10 @@
 // a room_events row ("feed-automod"), and a feed_automod row the owner can REVERSE from the pad's settings hub
 // (undoes the hide / remove, closes Pepe's report, tells the author; logged "feed-automod-reverse").
 // Never judged: Pepe's own content, site staff, the pad's own owner.
+// 1.99df: profile pads (rooms.js platform "profile") have no automod settings of their own and are OFF by default. One
+// global switch (automod:global "profiles", admins, /feed/admin) turns it on for every profile at once; they then use
+// the All scope's severity settings (scope '' in the log and the budget) and are judged against Padiquette. The
+// owner's own posts are never judged (they're the pad owner), so in practice it's other people's comments.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const store = require("./feedstore");
@@ -50,7 +54,7 @@ const SEVERITIES = Object.freeze(["none", "minor", "serious", "severe"]);
 const ACTIONS = Object.freeze(["none", "flag", "hide", "remove"]);
 const RANK = { none: 0, flag: 1, hide: 2, remove: 3 };
 const DEFAULTS = Object.freeze({ on: false, minor: "flag", serious: "flag", severe: "hide", admin_lock: false });
-const GLOBAL_DEFAULTS = Object.freeze({ enabled: true, budget_usd: 0.25, per_day: 400 });
+const GLOBAL_DEFAULTS = Object.freeze({ enabled: true, budget_usd: 0.25, per_day: 400, profiles: false });
 const REASON_MAX = 240;
 const APPEAL = "/terms#moderation";
 const BY = "pepe-automod";
@@ -91,6 +95,8 @@ function cleanGlobal(c) {
   c = c && typeof c === "object" ? c : {};
   const o = { ...GLOBAL_DEFAULTS };
   if (c.enabled != null) o.enabled = bool(c.enabled);
+  if (c.profiles != null) o.profiles = bool(c.profiles);                 // 1.99df: the automod on every profile
+  if (Number(c.profiles_since) > 0) o.profiles_since = Math.floor(Number(c.profiles_since));
   if (c.budget_usd != null && c.budget_usd !== "") { const n = Number(c.budget_usd); if (Number.isFinite(n)) o.budget_usd = Math.round(Math.min(20, Math.max(0, n)) * 100) / 100; }
   if (c.per_day != null && c.per_day !== "") { const n = Math.floor(Number(c.per_day)); if (Number.isFinite(n)) o.per_day = Math.min(5000, Math.max(0, n)); }
   return o;
@@ -101,6 +107,11 @@ async function settings(scope) {
   await init();
   scope = String(scope || "");
   const own = await readJson("automod:scope:" + scope);
+  // 1.99df: a profile follows the global "profiles" switch with the All scope's severities - never its own settings
+  if (scope && rooms.isProfile(scope)) {
+    const Gc = await globalCaps();
+    return { ...(await settings("")), on: !!Gc.profiles, on_since: Gc.profiles_since || 0, inherited: true, profile: true };
+  }
   if (scope && own == null) {
     const R = rooms.getCached(scope);
     if (R && R.house) return { ...(await settings("")), inherited: true };
@@ -117,6 +128,7 @@ async function setScope(user, scope, patch) {
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const admin = isAdmin(user);
   if (!scope) { if (!admin) throw new Refuse(403, "Only site admins set the automod for All."); }
+  else if (rooms.isProfile(scope)) throw new Refuse(403, "Profiles follow the site-wide automod switch for profiles (site admins, /feed/admin).");   // 1.99df
   else {
     if (!(await rooms.get(scope))) throw new Refuse(404, "No such pad.");
     if (!admin && !(await rooms.canManage(user, scope))) throw new Refuse(403, "Only this pad's owner can do that.");
@@ -137,7 +149,9 @@ async function setScope(user, scope, patch) {
 async function setGlobal(user, patch) {
   if (!isAdmin(user)) throw new Refuse(403, "Admins only.");
   await init();
-  const next = cleanGlobal({ ...(await globalCaps()), ...(patch || {}) });
+  const cur = await globalCaps();
+  const next = cleanGlobal({ ...cur, ...(patch || {}) });
+  if (next.profiles && !cur.profiles) next.profiles_since = NOW();         // 1.99df: nothing older is judged
   await store.kvSet("automod:global", JSON.stringify(next));
   console.log(`[automod] global by=${user.username}: ${JSON.stringify(next)}`);
   return next;
@@ -211,6 +225,12 @@ async function activePads() {
   for (const R of await rooms.list()) {
     const S = await settings(R.id);
     if (S.on) out.push({ R, scope: S.inherited ? "" : R.id, S });
+  }
+  // 1.99df: every profile, when the admins switched the automod on for profiles
+  const Gc = await globalCaps();
+  if (Gc.profiles) {
+    const S = await settings(rooms.PROFILE_PREFIX);
+    for (const R of await rooms.profilePads()) out.push({ R, scope: "", S });
   }
   return out;
 }

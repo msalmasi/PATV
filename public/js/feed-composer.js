@@ -276,7 +276,8 @@
       b.textContent = x.getAttribute('data-badge') || '';
       b.style.setProperty('--h', x.getAttribute('data-hue') || '0');
       t.textContent = x.getAttribute('data-title') || x.value;
-      var sm = document.createElement('small'); sm.textContent = 'p/' + (x.getAttribute('data-slug') || '');
+      // 1.99df: the label is p/<slug>, or u/<username> for "Your profile"
+      var sm = document.createElement('small'); sm.textContent = x.getAttribute('data-label') || ('p/' + (x.getAttribute('data-slug') || ''));
       cur.appendChild(b); cur.appendChild(t); cur.appendChild(sm);
       comm.removeAttribute('data-empty');
     } else {
@@ -358,6 +359,8 @@
     var body = {
       title: form.elements.title.value, body: form.elements.body.value, link: form.elements.link.value.trim(), nsfw: form.elements.nsfw.checked,
       community: roomsSel[0], announce: announce,
+      // 1.99df: a profile post's "Also show in All" (the box only exists for the profile choice)
+      inAll: form.elements.inAll ? form.elements.inAll.checked : undefined,
       attachments: files.filter(function (f) { return f.state === 'ready'; }).map(function (f) { return f.id; })
     };
     // 1.99cc: the Terms tick box (shown until this account accepted the current version)
@@ -378,7 +381,11 @@
       errEl.textContent = 'Posted ✔'; errEl.classList.add('ok');
       // stay on a pad page (the new post shows on top of New); elsewhere open the post
       var u = new URL(location.href);
-      if (/^\/p\/[^/]+\/?$/.test(u.pathname)) { ['fsort', 'fp', 'sort', 'p', 't', 'ft'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = 'feed';
+      // 1.99df: on a profile (the profile feed) - back to its posts
+      if (/^\/u\/[^/]+\/profile\/?$/.test(u.pathname)) { ['psort', 'pp', 'pt'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = 'posts';
+        var tp = u.toString();
+        if (tp.split('#')[0] === location.href.split('#')[0]) { location.hash = 'posts'; location.reload(); } else location.href = tp; }
+      else if (/^\/p\/[^/]+\/?$/.test(u.pathname)) { ['fsort', 'fp', 'sort', 'p', 't', 'ft'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = 'feed';
         var target = u.toString();
         if (target.split('#')[0] === location.href.split('#')[0]) { location.hash = 'feed'; location.reload(); } else location.href = target; }
       else location.href = d.url;

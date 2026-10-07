@@ -454,6 +454,8 @@ async function padOf(postId) {
   const r = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL ORDER BY created LIMIT 1", [postId]))[0];
   if (!r) return null;
   const R = rooms.getCached(r.room_id);
+  // 1.99df: a profile post - the bot writes "in p/<slug> (<title>)", so the title says whose profile it is
+  if (R && R.profile) return { title: `u/${R.profile.username}'s profile`, slug: R.slug, profile: R.profile.username };
   return { title: (R && R.title) || r.room_id, slug: (R && R.slug) || rooms.slugify(r.room_id) };
 }
 // live comments only: never deleted (removed), hidden, or with an open report
@@ -591,15 +593,23 @@ async function scopesState(U) {
   for (const r of await rooms.list()) ids.push(r.id);
   const out = {};
   for (const id of ids) {
-    const S = { ...(await scopeSettings(id)) };
-    if (S.enabled === false) { S.respond = false; S.auto = false; }        // 1.99dc: the pad's "Pepe on this feed" switch
-    if (id && !S.respond && !S.auto) continue;
-    const R = id ? rooms.getCached(id) : null;
-    out[id] = { ...S, title: id ? (R ? R.title : id) : "All (site-wide)", slug: R ? R.slug : null, house: !!(R && R.house),
-                url: SITE() + (R ? "/p/" + encodeURIComponent(R.slug) : "/feed"),
-                quiet: quietNow(S), used: scopeUse(U, id) };
+    const e = await scopeEntry(id, U);
+    if (e) out[id] = e;
   }
   return out;
+}
+/** One scope as the bot's sync carries it, or null when Pepe does nothing there. 1.99df: a profile pad is titled
+ *  "u/<name>'s profile", links to the profile and never takes auto activity (mentions only). */
+async function scopeEntry(id, U) {
+  const S = { ...(await scopeSettings(id)) };
+  if (S.enabled === false) { S.respond = false; S.auto = false; }          // 1.99dc: the pad's "Pepe on this feed" switch
+  const R = id ? rooms.getCached(id) : null;
+  if (R && R.profile) S.auto = false;
+  if (id && !S.respond && !S.auto) return null;
+  const pads = require("./pads");
+  return { ...S, title: id ? (R ? (R.profile ? `u/${R.profile.username}'s profile` : R.title) : id) : "All (site-wide)", slug: R ? R.slug : null, house: !!(R && R.house),
+           profile: !!(R && R.profile), url: SITE() + (R ? (R.profile ? pads.padHref(R) : "/p/" + encodeURIComponent(R.slug)) : "/feed"),
+           quiet: quietNow(S), used: scopeUse(U, id) };
 }
 
 /** The bot's sync. body: {} -> {account, global, used, scopes, mentions, threads, snaps, lastKinds} */
@@ -615,6 +625,11 @@ async function sync(body = {}) {
   res.automod = await require("./feedautomod").work().catch((e) => { console.error("[pepefeed] automod work:", e.message); return { caps: { enabled: false }, items: [] }; });
   if (!G.enabled) return res;
   res.mentions = await findMentions(acct);
+  // 1.99df: profile pads aren't in the scope list (there'd be one per member) - add the ones a mention needs, so the
+  // bot finds the scope's settings and limits like any pad's
+  for (const m of res.mentions) {
+    if (m.scope && !scopes[m.scope]) { const e = await scopeEntry(m.scope, U); if (e) scopes[m.scope] = e; }
+  }
   const autoScopes = Object.keys(scopes).filter((k) => scopes[k].auto);
   res.threads = await findThreads(autoScopes);
   // his last post of each kind per scope (a week back), so he spaces recaps / questions / news

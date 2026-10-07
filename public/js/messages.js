@@ -233,7 +233,7 @@
     var box = el('div', { cls: 'dm-embeds' });
     E.forEach(function (e) {
       if (e.unavailable) { box.appendChild(el('div', { cls: 'dm-card gone', text: 'Post unavailable - it was removed or hidden.' })); return; }
-      var meta = el('div', { cls: 'cm' }, [e.pad ? el('span', { cls: 'pad', text: 'p/' + e.pad.slug }) : null,
+      var meta = el('div', { cls: 'cm' }, [e.pad ? el('span', { cls: 'pad', text: e.pad.label || ('p/' + e.pad.slug) }) : null,
         e.author ? el('span', { text: 'u/' + e.author.username }) : null,
         el('span', { text: (e.score || 0) + ' point' + (e.score === 1 ? '' : 's') + ' · ' + (e.comments || 0) + ' comment' + (e.comments === 1 ? '' : 's') })]);
       var tx = el('div', { cls: 'ct' }, [meta, el('div', { cls: 'tt' }, [e.nsfw ? el('span', { cls: 'tag', text: 'NSFW' }) : null, e.title || 'Post'])]);

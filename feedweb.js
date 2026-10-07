@@ -25,7 +25,8 @@ const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]);
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
 // 1.99ck: the plain-text parts also get p/<slug> pad links (pads.js; known pads only, never inside a URL)
-const padText = (t) => require("./pads").padRefs(esc(t));
+// 1.99df: and u/<username> profile links
+const padText = (t) => { const P = require("./pads"); return P.userRefs(P.padRefs(esc(t))); };
 function linkify(text) {
   const s = String(text == null ? "" : text);
   let out = "", last = 0, m;
@@ -170,7 +171,15 @@ async function composerFor(viewer, roomId) {
   }));
   const refusal = await store.postRefusal(viewer, []);
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, [], { media: true });
-  const here = roomId ? list.find((r) => r.id === roomId) : null;
+  // 1.99df: "Your profile (u/<username>)" heads the picker - only ever the viewer's own; its value "u/<username>" makes
+  // the profile pad on the first post (feedstore.profileKey). Profiles follow Padiquette and have no Camfrog room.
+  if (!refusal) {
+    const P = rooms.profileOfCached(viewer.userId);
+    all.unshift({ id: "u/" + viewer.username, slug: P ? P.slug : "u-" + rooms.slugify(viewer.username), title: "Your profile", label: "u/" + viewer.username,
+                  profile: true, platform: "profile", followers: 0, community: true, house: false, announce: false, ann: null, rules: 0 });
+  }
+  if (roomId === "profile") roomId = refusal ? null : "u/" + viewer.username;
+  const here = roomId ? (all.find((r) => r.id === roomId) ? { ...all.find((r) => r.id === roomId), canPost: true } : list.find((r) => r.id === roomId)) : null;
   const prices = { post: C.price_post, link: C.price_link, image: C.price_image, audio: C.price_audio, video: C.price_video };
   // 1.99cc: "By posting you agree to the Terms" - and a one-time tick box until this account has accepted the current version
   // 1.99cf: only while the admin switch terms_enforced is on (default off: no line, no tick box)
@@ -294,7 +303,9 @@ function register(app, { addUser, isBotToken }) {
         rooms: roomList, communities: comms, posts: L.posts, more: L.more, fx, embeds, host: viewOpts(req).host,
         authorFollow: author && viewer && author.userId !== viewer.userId ? await follows.isFollowing(viewer.userId, "user", author.userId) : null,
         composer: await composerFor(viewer, R ? R.id : null),
-        modRooms: viewer ? new Set((await Promise.all(roomList.map(async (x) => ((await rooms.canManage(viewer, x.id)) ? x.id : null)))).filter(Boolean)) : new Set(),
+        // 1.99df: + the viewer's own profile pad (not in the pad list); staff: every profile pad of the posts on this page
+        modRooms: viewer ? new Set((await Promise.all(roomList.concat(L.posts.flatMap((p) => p.roomsAll.filter((r) => r.profile)))
+          .map(async (x) => ((await rooms.canManage(viewer, x.id)) ? x.id : null)))).filter(Boolean)) : new Set(),
       });
     } catch (e) {
       console.error("[feed] /feed:", e);
@@ -322,9 +333,18 @@ function register(app, { addUser, isBotToken }) {
       // 1.99cu: ann = can Pepe announce a crosspost there ({ok, code, why, manage}; signed in only)
       const anns = new Map();
       if (viewer) for (const c of list) if (c.canPost) anns.set(c.id, await store.announceState(c.id, viewer));
-      res.json({ ok: true, crosspostMax: store.config().crosspost_max_pads, communities: list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers,
-                                                          posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, platform: c.platform, house: c.house, here: here.has(c.id),
-                                                          ann: anns.get(c.id) || null })) });
+      const out = list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers, label: "p/" + c.slug,
+                                     posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, platform: c.platform, house: c.house, here: here.has(c.id),
+                                     ann: anns.get(c.id) || null }));
+      // 1.99df: "Your profile" first (share to profile) - the viewer's own only, made on the first crosspost
+      if (viewer) {
+        const P = rooms.profileOfCached(viewer.userId);
+        const refusal = await store.postRefusal(viewer, []);
+        out.unshift({ id: "u/" + viewer.username, slug: P ? P.slug : "u-" + rooms.slugify(viewer.username), title: "Your profile", label: "u/" + viewer.username,
+                      description: "", followers: 0, posts: 0, canPost: !refusal, refusal: refusal ? refusal.message : null, community: true, platform: "profile", house: false,
+                      profile: true, here: !!(P && here.has(P.id)), ann: null });
+      }
+      res.json({ ok: true, crosspostMax: store.config().crosspost_max_pads, communities: out });
     } catch (e) { fail(res, e); }
   });
 
@@ -716,6 +736,21 @@ function register(app, { addUser, isBotToken }) {
   });
   // (the page: the pad settings hub /p/:slug/settings, padsettings.js - 1.99dc; /p/:slug/mod redirects there)
 
+  // 1.99df: your profile feed's settings (your own profile only): {pepe: bool} = Pepe answers mentions on your profile
+  // posts (default on). Blocking people from commenting uses /api/feed/ban + /api/feed/unban with room = the profile
+  // pad's slug, like any pad owner's ban.
+  app.post("/api/profile/settings", addUser, guard(false), async (req, res) => {
+    try {
+      const v = await viewerOf(req);
+      const b = req.body || {};
+      const P = await rooms.ensureProfile(v.userId);
+      if (!P) return res.status(403).json({ ok: false, error: "Your account can't have a profile feed." });
+      const out = { ok: true, slug: P.slug };
+      if (b.pepe !== undefined) out.pepe = (await require("./pepefeed").setScope(v, P.id, { respond: !!b.pepe })).respond !== false;
+      res.json(out);
+    } catch (e) { fail(res, e); }
+  });
+
   // ── admin ──
   app.post("/api/feed/admin/config", addUser, guard(false), async (req, res) => {
     try {
@@ -811,16 +846,47 @@ async function botSync(body) {
  * session user or null. The panel itself obeys the profile layout (section "posts"); the posts are the
  * same ones /feed?by=<username> lists (deleted / report-hidden ones left out for everyone but staff).
  */
-async function profileSocial(profileUser, reqUser, { show = true } = {}) {
+//
+// 1.99df: the Posts panel IS the profile feed (Reddit's u/ page): full post cards with votes, Hot / New / Top /
+// Controversial / Rising (?psort, ?pt, ?pp - the anchor is #posts), and a view switch (?pview): "all" = every post
+// they made (their profile + every pad, as before) or "profile" = just their profile pad. The owner gets the
+// composer with "Your profile" picked, and the profile's settings (Pepe answers mentions here, who's blocked from
+// commenting). show = false (the layout hides "posts" from this viewer): nothing is loaded - not the posts, not the
+// profile pad's posts.
+async function profileSocial(profileUser, reqUser, { show = true, query = {}, host = "publicaccess.tv" } = {}) {
   await store.init();
   const viewer = reqUser && reqUser.userId ? await viewerOf({ user: reqUser }) : null;
-  const L = show ? await store.list({ author: profileUser.userId, sort: "new", page: 1, viewer, limit: 4 }) : { posts: [], more: false };
+  const self = !!(viewer && viewer.userId === profileUser.userId);
+  const q = query || {};
+  const sort = SORTS.has(q.psort) ? q.psort : "new";
+  const top = TOPS.has(q.pt) ? q.pt : "week";
+  const page = Math.max(1, Math.min(200, parseInt(q.pp, 10) || 1));
+  const view = q.pview === "profile" ? "profile" : "all";
+  const pad = await rooms.profileOf(profileUser.userId);
+  let L = { posts: [], more: false };
+  if (show) {
+    if (view === "profile") L = pad ? await store.list({ room: pad.id, sort, top, page, viewer, limit: 10, pins: false }) : L;
+    else L = await store.list({ author: profileUser.userId, sort, top, page, viewer, limit: 10 });
+  }
+  const modRooms = new Set();
+  if (viewer) for (const p of L.posts) for (const r of p.roomsAll) if (!modRooms.has(r.id) && (await rooms.canManage(viewer, r.id))) modRooms.add(r.id);
   const c = await follows.counts("user", profileUser.userId);
+  let settings = null;
+  if (self && show) {
+    const PF = require("./pepefeed");
+    settings = {
+      pepe: pad ? (await PF.scopeSettings(pad.id)).respond !== false : true,
+      bans: pad ? (await store.bans(pad.id)).filter((b) => !b.until || b.until > Date.now()).map((b) => ({ userId: b.user_id, username: b.username, until: b.until, reason: b.reason })) : [],
+      slug: pad ? pad.slug : null,
+    };
+  }
   return {
-    posts: L.posts, more: L.more, counts: c,
-    self: !!(viewer && viewer.userId === profileUser.userId),
-    following: viewer && viewer.userId !== profileUser.userId ? await follows.isFollowing(viewer.userId, "user", profileUser.userId) : false,
-    signed: !!viewer,
+    posts: L.posts, more: L.more, counts: c, sort, top, page, view, show,
+    self,
+    following: viewer && !self ? await follows.isFollowing(viewer.userId, "user", profileUser.userId) : false,
+    signed: !!viewer, viewer, modRooms, host, fx, embeds, settings,
+    padId: pad ? pad.id : null,
+    composer: self && show ? await composerFor(viewer, "profile") : null,
   };
 }
 

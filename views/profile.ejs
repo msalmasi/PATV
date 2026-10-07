@@ -49,8 +49,8 @@
   .pf .lvl { display: grid; gap: 8px; }
   .pf .lvl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
   .pf .lvl-top b { font-size: 18px; }
-  .pf .bar { height: 14px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
-  .pf .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .pf .lvl .bar { height: 14px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
+  .pf .lvl .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
   .pf .muted { color: #888; font-size: 13px; }
   .pf h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
   .pf .gtf { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
@@ -169,7 +169,7 @@
       stats: true, level: true, gtf: true, badges: true,
       avatar: !!(av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))),
       analytics: !!hasAnalytics,
-      posts: !!(typeof social !== 'undefined' && social && (social.posts.length || isMe)),
+      posts: !!(typeof social !== 'undefined' && social && (social.posts.length || isMe || social.page > 1 || social.view === 'profile')),
     };
     const SEC = {};
     SEC.stats = function () { %>

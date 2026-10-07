@@ -251,7 +251,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
   await each("user_badges", "badgeId", "SELECT userId AS id, badgeId FROM user_badges", (f, r) => { if (!AUTO_BADGES.has(r.badgeId)) f.badges++; });
   await each("user_cosmetics", "source", "SELECT user_id AS id, source FROM user_cosmetics", (f, r) => { if (r.source !== "level") f.cosmetics++; });
   await each("user_roles", "role", "SELECT userId AS id, role FROM user_roles", (f, r) => f.roles.push(r.role));
-  await each("rooms_registry", "owner_user_id", "SELECT owner_user_id AS id FROM rooms_registry", (f) => f.holds.add("room owner"));
+  await each("rooms_registry", "owner_user_id", "SELECT owner_user_id AS id FROM rooms_registry WHERE room_id NOT LIKE 'user:%'", (f) => f.holds.add("room owner"));   // 1.99df: a profile pad isn't a room
   await each("stage_slots", "status", "SELECT userId AS id FROM stage_slots WHERE status != 'ended' OR settled = 0", (f) => f.holds.add("stage slot"));
   await each("shop_orders", "status", "SELECT buyer_id AS id FROM shop_orders WHERE status NOT IN ('completed','refunded','cancelled','closed','resolved') UNION SELECT seller_id FROM shop_orders WHERE status NOT IN ('completed','refunded','cancelled','closed','resolved')", (f) => f.holds.add("open shop order"));
   await each("prizes", "seller_id", "SELECT seller_id AS id FROM prizes WHERE seller_id IS NOT NULL AND COALESCE(status,'active') IN ('active','pending','review')", (f) => f.holds.add("shop listing"));

@@ -84,7 +84,7 @@ test("platform: derived once for older rows (patv: -> site, else camfrog); twitc
   assert.equal(rooms.isCommunityOnly("patv:lounge"), true);
   assert.equal(rooms.isCommunityOnly("PepeFrog.Room"), false);
   assert.equal(rooms.isCommunityOnly("Never.Registered"), false, "an unregistered Camfrog room is camfrog");
-  assert.deepEqual(rooms.PLATFORMS, ["camfrog", "site", "twitch", "discord"]);
+  assert.deepEqual(rooms.PLATFORMS, ["camfrog", "site", "twitch", "discord", "profile"]);   // 1.99df: + profile pads
   assert.equal(rooms.platformFromId("twitch:somechan"), "twitch");
   assert.equal(rooms.platformFromId("patv:new"), "site");
   assert.equal(rooms.platformFromId("Any.Room"), "camfrog");

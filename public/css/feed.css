@@ -593,3 +593,11 @@ label.fc-terms input { margin-top: 2px; accent-color: #4caf50; }
 .fc-rules { margin: 0; font-size: 12.5px; color: #a9b0a9; }
 .fc-rules.hide { display: none; }
 .chip .ps-q { display: inline-block; min-width: 18px; text-align: center; background: #d03b3b; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 0 6px; line-height: 17px; margin-left: 2px; }
+/* 1.99df: profile posts - u/<username> where the pad label goes, u/ links in text, the composer's "Your profile" + "Also show in All" */
+.fd .fp-room.fp-user, .rf .fp-room.fp-user { color: #b9d8ff; }
+a.user-ref { color: #9fc6ee; }
+.fc-comm-it.is-profile .t b { color: #e6f0ff; }
+.fc-comm-sep { height: 1px; background: #262626; margin: 4px 2px; }
+.fc-inall { display: inline-flex; gap: 6px; align-items: center; margin-top: 6px; font-size: 12.5px; color: #c9d6e6; padding: 3px 9px; border: 1px dashed #2f4a66; border-radius: 999px; cursor: pointer; }
+.fc-inall input { accent-color: #4caf50; margin: 0; }
+.fc-inall.hide { display: none; }

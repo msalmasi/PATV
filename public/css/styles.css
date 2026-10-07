@@ -684,3 +684,4 @@ height: 1.5rem;
 .pad-filter a { display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 999px; border: 1px solid #2b2b2b; background: #151515; color: #ccc !important; text-decoration: none; }
 .pad-filter a.on { border-color: #4caf50; background: #12301a; color: #fff !important; }
 .pad-filter a small { color: #888; }
+.pad-plat.pp-profile { border-color: #2f4a66; background: #0e1621; color: #b9d8ff; }   /* 1.99df: a member's profile */

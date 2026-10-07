@@ -159,12 +159,19 @@
       return;
     }
     if (act === 'room-ban') {
-      var d = window.prompt('Ban ' + b.getAttribute('data-user') + ' from posting and commenting in this pad.\nHow long? 1 = a day, 7 = a week, 0 = permanently', '1');
+      // 1.99df: data-what = "commenting on your profile" (a profile owner's block)
+      var what = b.getAttribute('data-what') || 'posting and commenting in this pad';
+      var d = window.prompt('Ban ' + b.getAttribute('data-user') + ' from ' + what + '.\nHow long? 1 = a day, 7 = a week, 0 = permanently', '1');
       if (d === null) return;
       var days = parseInt(d, 10); if (!(days >= 0)) { alert('Type a number of days (0 = permanently).'); return; }
       var reason = window.prompt('Reason (optional):', '') || '';
       api('/api/feed/ban', { user: b.getAttribute('data-user'), room: b.getAttribute('data-slug'), days: days, reason: reason })
-        .then(function () { alert('Banned from this pad' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
+        .then(function () { alert((b.getAttribute('data-what') ? 'Blocked from ' + what : 'Banned from this pad') + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
+      return;
+    }
+    // 1.99df: a profile post's "Also show in All" (its author only - checked on the server)
+    if (act === 'in-all') {
+      api('/api/feed/posts/' + id + '/edit', { inAll: b.getAttribute('data-on') === '1' }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
     if (act === 'reply') {
@@ -245,7 +252,8 @@
     } else if (act === 'cedit-save') {
       api('/api/feed/comments/' + f.closest('.cm').getAttribute('data-id') + '/edit', { body: f.elements.body.value }).then(function () { location.reload(); }).catch(fail);
     } else if (act === 'edit-save') {
-      api('/api/feed/posts/' + postOf(f) + '/edit', { title: f.elements.title.value, body: f.elements.body.value, nsfw: f.elements.nsfw.checked }).then(function () { location.reload(); }).catch(fail);
+      api('/api/feed/posts/' + postOf(f) + '/edit', { title: f.elements.title.value, body: f.elements.body.value, nsfw: f.elements.nsfw.checked,
+        inAll: f.elements.inAll ? f.elements.inAll.checked : undefined }).then(function () { location.reload(); }).catch(fail);
     }
   });
 

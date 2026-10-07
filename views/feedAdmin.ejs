@@ -1,5 +1,5 @@
 <%- include('partials/admin-open', { title: 'Feed admin', user: user, section: 'feed', admIsAdmin: isAdmin }) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=9">
+<link rel="stylesheet" href="/public/css/feed.css?v=10">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
   const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');
@@ -181,6 +181,8 @@
         <label class="ck"><input type="checkbox" name="enabled"<%= AG.enabled ? ' checked' : '' %>> Automod is allowed (off = no pad gets checked, whatever its setting)</label>
         <label><span>Model budget per day (USD)</span><input type="number" name="budget_usd" min="0" max="20" step="0.01" value="<%= AG.budget_usd %>"></label>
         <label><span>Checks per day, all pads</span><input type="number" name="per_day" min="0" max="5000" value="<%= AG.per_day %>"></label>
+        <%# 1.99df: profiles have no automod settings of their own - one switch for all of them (the All severities below) %>
+        <label class="ck"><input type="checkbox" name="profiles"<%= AG.profiles ? ' checked' : '' %>> Also check members' profiles (others' comments on profile posts, judged by Padiquette with the All settings below). Off by default.</label>
       </fieldset>
       <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
     </form>

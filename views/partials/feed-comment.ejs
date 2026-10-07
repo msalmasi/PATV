@@ -47,6 +47,9 @@
             <% if (c.mine) { %><button type="button" role="menuitem" data-act="cedit"><%- fx.icon('edit') %>Edit</button><% } %>
             <% if (canDel) { %><button type="button" role="menuitem" class="danger" data-act="cdelete"><%- fx.icon('trash') %>Delete</button><% } %>
             <% if (!c.mine) { %><button type="button" role="menuitem" data-act="creport"><%- fx.icon('flag') %>Report comment</button><% } %>
+            <%# 1.99df: on a profile post: the profile's owner can block the commenter from commenting on their profile %>
+            <% const prof_ = !c.mine && c.author && !c.author.bot && modRooms ? (p.roomsAll || []).find((r) => r.profile && modRooms.has(r.id)) : null;
+               if (prof_) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= c.author.username %>" data-slug="<%= prof_.slug %>" data-what="commenting on your profile"><%- fx.icon('shield') %>Block from commenting on your profile</button><% } %>
             <% if (viewer && viewer.class === 'Admin') { %><button type="button" role="menuitem" data-act="cdetails"><%- fx.icon('shield') %>Details (admin)</button><% } %>
           </div>
         </details>

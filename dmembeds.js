@@ -63,7 +63,7 @@ async function card(id) {
         id, href, unavailable: false,
         title: (p.title || q.title || (q.link && q.link.title) || "").slice(0, 140) || (q.body ? String(q.body).replace(/\s+/g, " ").slice(0, 100) : "Post"),
         author: p.author ? { username: p.author.username, display: p.author.display } : null,
-        pad: room ? { title: room.title, slug: room.slug } : null,
+        pad: room ? { title: room.title, slug: room.slug, label: room.label || "p/" + room.slug } : null,     // 1.99df: label = u/<name> on a profile
         score: p.score || 0, comments: p.comments || 0, nsfw: !!p.nsfw,
         thumb: thumb && /^[a-f0-9]{32}(?:_t|_p)?\.webp$/.test(thumb) ? "/feed/f/" + thumb : null,
       };

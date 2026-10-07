@@ -1,5 +1,5 @@
 <%- include('layout', { title: (p.title || (p.link && p.link.title) || ('Post by ' + p.author.display)).slice(0, 80) + ' — PATV feed', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=9">
+<link rel="stylesheet" href="/public/css/feed.css?v=10">
 <%
   const signed = !!viewer;
   const cs = typeof csort !== 'undefined' ? csort : 'best';

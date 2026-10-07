@@ -455,7 +455,7 @@ test("profile Posts panel: a layout section (public/hidden), the latest posts, N
                   VALUES (?, ?, 'image', 'image/webp', ?, ?, 32, 32, 10, 'ready', ?, 10, 10)`, [att, U.alice.userId, out.file, out.thumb, Date.now()]);
   await store.create(U.alice.userId, { title: "nsfw pic <script>", attachments: [att], nsfw: true, community: LOUNGE });
   const s = await web.profileSocial({ userId: U.alice.userId, username: "alice" }, null);
-  assert.ok(s.posts.length >= 1 && s.posts.length <= 4);
+  assert.ok(s.posts.length >= 1 && s.posts.length <= 10);   // 1.99df: the profile feed pages 10 at a time
   const html = await ejs.renderFile(path.join(repo, "views/partials/profile-posts.ejs"), { social: s, usernameProfile: "alice", displayname: "Alice", isMe: false });
   assert.ok(html.includes("/feed?by=alice"));
   assert.ok(!html.includes(out.thumb) && !html.includes(out.file), "no NSFW picture");

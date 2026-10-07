@@ -31,11 +31,14 @@
     var b = el('span', 'cbadge sm');
     b.setAttribute('aria-hidden', 'true');
     b.style.setProperty('--h', String(hue(c.slug || '')));
+    if (c.profile) { b.textContent = '👤'; return b; }
     b.textContent = c.community ? '🛋️' : c.house ? '🐸' : (String(c.title || '?').replace(/^[^A-Za-z0-9]+/, '').charAt(0) || '?').toUpperCase();
     return b;
   }
   // 1.99x: the pad's platform badge (same look as pads.js padBadge, compact)
-  var PLAT = { camfrog: ['🐸', 'Camfrog Pad'], site: ['🌐', 'Site Pad'], twitch: ['🟣', 'Twitch Pad'], discord: ['💬', 'Discord Pad'] };
+  var PLAT = { camfrog: ['🐸', 'Camfrog Pad'], site: ['🌐', 'Site Pad'], twitch: ['🟣', 'Twitch Pad'], discord: ['💬', 'Discord Pad'], profile: ['👤', 'Profile'] };
+  // 1.99df: a pad's label - p/<slug>, or u/<username> for "Your profile" (share to profile)
+  function lab(c) { return c.label || ('p/' + (c.slug || '')); }
   function platBadge(c) {
     var p = PLAT[c.platform] ? c.platform : (c.community ? 'site' : 'camfrog');
     var b = el('span', 'pad-plat sm pp-' + p, PLAT[p][0]);
@@ -120,8 +123,8 @@
     on.forEach(function (box) {
       var c = el('button', 'xp-chip'); c.type = 'button';
       c.setAttribute('data-id', box.value);
-      c.setAttribute('aria-label', 'Remove p/' + box.getAttribute('data-slug'));
-      c.appendChild(document.createTextNode('p/' + box.getAttribute('data-slug')));
+      c.setAttribute('aria-label', 'Remove ' + box.getAttribute('data-label'));
+      c.appendChild(document.createTextNode(box.getAttribute('data-label')));
       c.appendChild(el('span', 'x', '×'));
       state.chips.appendChild(c);
     });
@@ -134,6 +137,7 @@
     var A = state.anns;
     A.textContent = '';
     on.forEach(function (box) {
+      if (box.getAttribute('data-profile')) return;                     // 1.99df: a profile has no Camfrog room to announce in
       var id = box.value, a = state.ann[id] || { ok: false, why: 'Announcements are off for this pad' };
       var w = el('div', 'xp-ann-w');
       var l = el('label', 'xp-ann' + (a.ok ? '' : ' off'));
@@ -165,14 +169,15 @@
       var it = el('label', 'xp-it');
       it.setAttribute('data-name', (c.title + ' ' + c.slug).toLowerCase());
       var r = el('input'); r.type = 'checkbox'; r.name = 'community'; r.value = c.id;
-      r.setAttribute('data-slug', c.slug); r.setAttribute('data-title', c.title);
+      r.setAttribute('data-slug', c.slug); r.setAttribute('data-title', c.title); r.setAttribute('data-label', lab(c));
+      if (c.profile) r.setAttribute('data-profile', '1');
       var off = !c.canPost || c.here;
       if (off) { r.disabled = true; it.classList.add('off'); it.title = c.here ? 'Already there' : (c.refusal || 'You can\'t post there'); }
       else usable++;
       var t = el('span', 't');
       t.appendChild(el('b', null, c.title));
       var sm = el('small'); sm.appendChild(platBadge(c)); t.appendChild(sm);
-      sm.appendChild(document.createTextNode(' p/' + c.slug + (c.here ? ' · already there' : !c.canPost ? ' · ' + (c.refusal || 'you can\'t post here') : ' · ' + plural(c.followers, 'follower'))));
+      sm.appendChild(document.createTextNode(' ' + lab(c) + (c.here ? ' · already there' : !c.canPost ? ' · ' + (c.refusal || 'you can\'t post here') : c.profile ? ' · share to your profile' : ' · ' + plural(c.followers, 'follower'))));
       it.appendChild(r); it.appendChild(el('span', 'xp-ck')); it.appendChild(badge(c)); it.appendChild(t);
       L.appendChild(it);
     });
@@ -200,7 +205,7 @@
       var t = el('span', 't');
       var top = el('span', 'xp-rt');
       top.appendChild(el('b', null, x.pad ? x.pad.title : x.community));
-      if (x.pad) top.appendChild(el('small', null, ' p/' + x.pad.slug));
+      if (x.pad) top.appendChild(el('small', null, ' ' + lab(x.pad)));
       t.appendChild(top);
       t.appendChild(el('small', 'xp-rs', x.status === 'refused' ? (x.error || st[1]) : st[1]));
       li.appendChild(t);
@@ -251,7 +256,7 @@
       state.si.value = ''; state.err.textContent = ''; state.err.classList.remove('ok');
       state.go.disabled = false; state.go.textContent = 'Crosspost';
       state.sum.textContent = ''; state.chips.textContent = '';
-      state.sub.textContent = 'Share this post in other pads. Each crosspost links back to the original; votes and comments there are its own, and each pad\'s rules apply.';
+      state.sub.textContent = 'Share this post in other pads, or on your profile. Each crosspost links back to the original; votes and comments there are its own, and each pad\'s rules apply.';
       state.list.textContent = '';
       state.list.appendChild(el('p', 'mut', 'Loading pads…'));
       if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');

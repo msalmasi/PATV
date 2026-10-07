@@ -48,13 +48,27 @@ const OLD_SEED_DESC = [
 ];
 
 // ── platforms (1.99x): where a pad comes from. Camfrog pads are backed by a Camfrog room; site pads were
-// made by the site itself (patv:<x>). Twitch / Discord pads are valid values, not used yet. ──
-const PLATFORMS = ["camfrog", "site", "twitch", "discord"];
-/** The platform an id implies (rows without one yet): patv: -> site, twitch: / discord: -> those, else camfrog. */
+// made by the site itself (patv:<x>). Twitch / Discord pads are valid values, not used yet.
+// 1.99df: "profile" - a user's own profile pad (id user:<userId>, slug u-<username>, owned by that user; Reddit's u/).
+// Profile pads live in the registry so posts, votes, comments, crossposts, bans, rules and Pepe's scopes all work the
+// same way, but they're never listed: list() / listCached() / ownedBy() / ownersForPepe() leave them out (the Pads
+// page, the pickers, the bridge, the stage, Pepe's owner sync) - profilePads() is the one way to get them. ──
+const PLATFORMS = ["camfrog", "site", "twitch", "discord", "profile"];
+const PROFILE_PREFIX = "user:";
+/** The platform an id implies (rows without one yet): patv: -> site, twitch: / discord: -> those, user: -> profile, else camfrog. */
 function platformFromId(roomId) {
-  const m = /^(patv|twitch|discord):/i.exec(String(roomId || ""));
+  const m = /^(patv|twitch|discord|user):/i.exec(String(roomId || ""));
   if (!m) return "camfrog";
-  return m[1].toLowerCase() === "patv" ? "site" : m[1].toLowerCase();
+  const k = m[1].toLowerCase();
+  return k === "patv" ? "site" : k === "user" ? "profile" : k;
+}
+/** 1.99df: a user's profile pad id (user:<userId>). */
+const profileId = (userId) => PROFILE_PREFIX + String(userId || "");
+/** 1.99df: is this (a pad view, or a room id) a profile pad? */
+function isProfile(x) {
+  if (!x) return false;
+  if (typeof x === "string") return x.startsWith(PROFILE_PREFIX);
+  return x.platform === "profile" || String(x.id || "").startsWith(PROFILE_PREFIX);
 }
 const cleanPlatform = (p, roomId) => (PLATFORMS.includes(String(p || "").toLowerCase()) ? String(p).toLowerCase() : platformFromId(roomId));
 /** A pad's platform: the registry's when it's registered, else what its id implies. */
@@ -86,7 +100,7 @@ function init() {
       const cols = new Set((await getQuery("PRAGMA table_info(rooms_registry)")).map((c) => c.name));
       if (!cols.has("platform")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN platform TEXT");
       await runQuery(`UPDATE rooms_registry SET platform = CASE WHEN room_id LIKE 'patv:%' THEN 'site' WHEN room_id LIKE 'twitch:%' THEN 'twitch'
-                      WHEN room_id LIKE 'discord:%' THEN 'discord' ELSE 'camfrog' END WHERE platform IS NULL OR platform = ''`);
+                      WHEN room_id LIKE 'discord:%' THEN 'discord' WHEN room_id LIKE 'user:%' THEN 'profile' ELSE 'camfrog' END WHERE platform IS NULL OR platform = ''`);
       await runQuery("CREATE INDEX IF NOT EXISTS rooms_registry_owner ON rooms_registry (owner_user_id)");
       await runQuery("CREATE TABLE IF NOT EXISTS rooms_kv (key TEXT PRIMARY KEY, value TEXT)");
       await runQuery("CREATE TABLE IF NOT EXISTS room_events (room_id TEXT, ts INTEGER, what TEXT, actor TEXT, detail TEXT)");
@@ -254,6 +268,8 @@ function view(r) {
     house: r.owner_kind === "house",
     platform: cleanPlatform(r.platform, r.room_id),                  // 1.99x: camfrog | site | twitch | discord
     community: cleanPlatform(r.platform, r.room_id) !== "camfrog",   // 1.99ci: no Camfrog room behind it
+    // 1.99df: a profile pad: whose profile (the label is u/<username>, the link /u/<username>/profile)
+    profile: cleanPlatform(r.platform, r.room_id) === "profile" && r.owner_user_id ? { userId: r.owner_user_id, username: r.owner_username || null } : null,
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
   };
 }
@@ -266,11 +282,43 @@ function maybeRefresh() {
 }
 async function get(roomId) { await init(); maybeRefresh(); return view(CACHE.byId.get(String(roomId || ""))); }
 async function bySlug(slug) { await init(); return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
-async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].map(view).sort((a, b) => a.title.localeCompare(b.title)); }
+// 1.99df: list() and listCached() never include profile pads (profilePads() does)
+const notProfile = (r) => cleanPlatform(r.platform, r.room_id) !== "profile";
+async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter(notProfile).map(view).sort((a, b) => a.title.localeCompare(b.title)); }
 function getCached(roomId) { return view(CACHE.byId.get(String(roomId || ""))); }
 /** 1.99ck: a pad by slug from the cache, synchronously (pads.js autolinks p/<slug> while rendering). */
 function bySlugCached(slug) { return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
-function listCached() { return [...CACHE.byId.values()].map(view); }
+function listCached() { return [...CACHE.byId.values()].filter(notProfile).map(view); }
+/** 1.99df: every profile pad (the automod's "profiles" switch). */
+async function profilePads() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter((r) => !notProfile(r)).map(view); }
+/** 1.99df: a user's profile pad from the cache, or null when they've never posted to their profile. */
+function profileOfCached(userId) { return userId ? view(CACHE.byId.get(profileId(userId))) : null; }
+async function profileOf(userId) { await init(); return profileOfCached(userId); }
+/**
+ * 1.99df: a user's profile pad, made the first time it's needed (their first profile post / crosspost / setting).
+ * id user:<userId>, slug u-<username> (-2, -3 ... if a pad already has it), title u/<username>, owned by them,
+ * platform profile. -> the pad view, or null when there's no such (live) account.
+ */
+async function ensureProfile(userId) {
+  await init();
+  const have = profileOfCached(userId);
+  if (have) return have;
+  const C = await userCols();
+  const u = (await getQuery(`SELECT userId, username, ${ucol(C, "archived_at")} AS archived_at FROM users WHERE userId = ?`, [String(userId || "")]))[0];
+  if (!u || u.archived_at) return null;
+  const id = profileId(u.userId);
+  if (!(await getQuery("SELECT 1 FROM rooms_registry WHERE room_id = ?", [id])).length) {
+    const base = ("u-" + slugify(u.username)).slice(0, 60);
+    let slug = base;
+    for (let i = 2; (await getQuery("SELECT 1 FROM rooms_registry WHERE slug = ?", [slug])).length; i++) slug = base + "-" + i;
+    const t = Date.now();
+    await runQuery(`INSERT OR IGNORE INTO rooms_registry (room_id, slug, title, owner_kind, owner_user_id, platform, created, updated)
+                    VALUES (?, ?, ?, 'user', ?, 'profile', ?, ?)`, [id, slug, ("u/" + u.username).slice(0, 60), u.userId, t, t]);
+    await kvSet("seeded:" + id, "profile");
+  }
+  await loadCache();
+  return profileOfCached(u.userId);
+}
 
 /** Stage settings for a room (defaults when it isn't registered - mainstage.js reads this). */
 async function stageSettings(roomId) {
@@ -532,4 +580,5 @@ module.exports = {
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
+  PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,
 };
