@@ -86,14 +86,14 @@
   .pf button.chip.gtfc { cursor: pointer; border-color: var(--rc, #3a3a1c); background: #17150b; color: #ece2b0; }
   .pf button.chip.gtfc:hover, .pf button.chip.gtfc:focus-visible { background: #221f10; outline: none; }
   /* stat strip: PAT · Level + XP · Badges */
-  .pf .pf-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: #222;
+  .pf .pf-strip { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 1px; background: #222;
                   border: 1px solid #222; border-radius: 12px; overflow: hidden; }
-  .pf .ps { background: #0e0e0e; padding: 12px 18px; display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; }
+  .pf .ps { flex: 1 1 auto; background: #0e0e0e; padding: 12px 18px; display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; }
   .pf a.ps:hover { background: #141a14; }
   .pf .ps .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
-  .pf .ps b { font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .pf .ps b { font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; }   /* 1.99ei: a long PAT balance never breaks mid-number */
   .pf .ps b.gold { color: #ffd700; }
-  .pf .ps.lv { grid-column: span 2; }
+  .pf .ps.lv { flex: 3 1 240px; }   /* 1.99ei: the strip is a wrapping flex row (cells size to content) */
   .pf .ps .lv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .pf .ps .lv-row small { color: #888; font-size: 11.5px; white-space: nowrap; }
   .pf .xb { height: 5px; background: #1f1f1f; border-radius: 999px; overflow: hidden; margin-top: 3px; }
@@ -206,9 +206,8 @@
     .pf .who { justify-items: center; }
     .pf .who { width: 100%; }
     .pf .chips, .pf .actions, .pf .showcase { justify-content: center; }
-    .pf .pf-strip { width: 100%; display: flex; flex-wrap: wrap; text-align: left; }
-    .pf .ps { padding: 10px 12px; flex: 1 1 auto; min-width: 0; }
-    .pf .ps:not(.lv) b { white-space: nowrap; overflow-wrap: normal; }   /* 1.99eh: 1,098,509,372 on one line; a cell wraps to the next row instead */
+    .pf .pf-strip { width: 100%; text-align: left; }
+    .pf .ps { padding: 10px 12px; }
     .pf .ps.lv { flex-basis: 100%; order: 9; }
     .pf .ps b { font-size: 16px; }
     .pf .pf-menu { left: auto; right: 0; }
