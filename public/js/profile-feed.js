@@ -25,6 +25,14 @@
       .catch(function (e) { pepe.checked = !pepe.checked; alert(e.message); })
       .then(function () { pepe.disabled = false; });
   });
+  // 1.99dn: "Don't post my room generations" (POST /api/profile/settings {roomgenOff})
+  var rg = box.querySelector('[data-pp-roomgen]');
+  if (rg) rg.addEventListener('change', function () {
+    rg.disabled = true;
+    api('/api/profile/settings', { roomgenOff: rg.checked }).then(function (d) { rg.checked = !!d.roomgenOff; if (d.slug) box.setAttribute('data-slug', d.slug); })
+      .catch(function (e) { rg.checked = !rg.checked; alert(e.message); })
+      .then(function () { rg.disabled = false; });
+  });
   box.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-pp-unban]');
     if (!b) return;

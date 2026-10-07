@@ -20,7 +20,7 @@
   };
   const name_ = displayname || usernameProfile;
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=11">
+<link rel="stylesheet" href="/public/css/feed.css?v=12">
 <section class="card rf pp" id="posts" aria-labelledby="ppH">
   <h2 id="ppH"><span>📝 Posts · <span class="pp-u">u/<%= usernameProfile %></span></span><a class="pp-all" href="/feed?by=<%= encodeURIComponent(usernameProfile) %>">on the feed ›</a></h2>
   <nav class="pp-views" aria-label="Which posts">
@@ -47,6 +47,7 @@
       <summary>⚙ Profile feed settings</summary>
       <div class="pp-set-b" data-pp-settings data-slug="<%= ST.slug || '' %>">
         <label class="ck"><input type="checkbox" data-pp-pepe<%= ST.pepe ? ' checked' : '' %>> <span>🐸 Pepe can reply on my profile (when someone mentions him on one of your profile posts)</span></label>
+        <label class="ck"><input type="checkbox" data-pp-roomgen<%= ST.roomgenOff ? ' checked' : '' %>> <span>✨ Don't post my room generations (pictures / videos you make with <code>!imagine</code> / <code>!video</code> in a Camfrog room are otherwise posted to that room's pad feed; <code>-nofeed</code> skips one)</span></label>
         <p class="mut">Your profile follows <a href="/guidelines">Padiquette</a>. You can delete comments on your profile posts, lock their comments and block people from commenting here (from a post's or comment's ⋯ menu, or below). Reports go to the site admins.</p>
         <h3>Blocked from commenting on your profile</h3>
         <% if (!ST.bans.length) { %><p class="mut">Nobody.</p><% } else { %>
@@ -84,5 +85,5 @@
   .pf .pp-ban input { flex: 1 1 140px; }
   .pf .pp .mut { color: #888; margin: 0; }
 </style>
-<% if (S_.settings) { %><script src="/public/js/profile-feed.js?v=1" defer></script><% } %>
+<% if (S_.settings) { %><script src="/public/js/profile-feed.js?v=2" defer></script><% } %>
 <% if (fx_) { %><%- include('feed-js', { viewer: S_.viewer }) %><% } %>

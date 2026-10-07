@@ -187,14 +187,17 @@ async function composerFor(viewer, roomId) {
   // 1.99di: "✨ Generate" (aigen.js) - Pepe's !imagine / !video price for each pad the viewer may post in (its Camfrog
   // room's price, else the global one); same eligibility as uploads (mediaRefusal)
   const aigen = require("./aigen");
-  const aiPrices = {};
+  const aiPrices = {}, refPrices = {};
   for (const r of all) aiPrices[r.id] = await aigen.pricesFor(r.id).catch(() => ({ image: aigen.DEFAULT_PRICES.imagine, video: aigen.DEFAULT_PRICES.video }));
+  // 1.99dn: + a reference picture = Pepe's -cam surcharge (the pad's room's, else global)
+  for (const r of all) refPrices[r.id] = await aigen.refPriceFor(r.id).catch(() => aigen.DEFAULT_SURCHARGE);
   return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all,
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK,
-           aigen: { prices: aiPrices, global: await aigen.pricesFor(null).catch(() => null), eta: aigen.ETA, promptMax: aigen.PROMPT_MAX } };
+           aigen: { prices: aiPrices, global: await aigen.pricesFor(null).catch(() => null), eta: aigen.ETA, promptMax: aigen.PROMPT_MAX,
+                    refPrices, refGlobal: await aigen.refPriceFor(null).catch(() => aigen.DEFAULT_SURCHARGE) } };
 }
 
 /** The room page's Feed section (bridge.js /rooms/:slug). */
@@ -753,6 +756,8 @@ function register(app, { addUser, isBotToken }) {
       if (!P) return res.status(403).json({ ok: false, error: "Your account can't have a profile feed." });
       const out = { ok: true, slug: P.slug };
       if (b.pepe !== undefined) out.pepe = (await require("./pepefeed").setScope(v, P.id, { respond: !!b.pepe })).respond !== false;
+      // 1.99dn: "Don't post my room generations" (aigen.js: a room's !imagine / !video -> its pad feed)
+      if (b.roomgenOff !== undefined) out.roomgenOff = await require("./aigen").setOptOut(v.userId, !!b.roomgenOff);
       res.json(out);
     } catch (e) { fail(res, e); }
   });
@@ -884,6 +889,7 @@ async function profileSocial(profileUser, reqUser, { show = true, query = {}, ho
       pepe: pad ? (await PF.scopeSettings(pad.id)).respond !== false : true,
       bans: pad ? (await store.bans(pad.id)).filter((b) => !b.until || b.until > Date.now()).map((b) => ({ userId: b.user_id, username: b.username, until: b.until, reason: b.reason })) : [],
       slug: pad ? pad.slug : null,
+      roomgenOff: await require("./aigen").optedOut(profileUser.userId).catch(() => false),     // 1.99dn
     };
   }
   return {

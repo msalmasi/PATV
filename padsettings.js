@@ -56,6 +56,7 @@ async function hubData(R, viewer, app) {
     reports, pending, settings: await store.roomSettings(R.id), members: await store.roomMembers(R.id), bans: await store.bans(R.id),
     audit: await store.roomAudit(R.id), WHO: store.WHO, pins: await pins(R.id),
     announce: camfrog ? await store.mentionOn(R.id) : null,
+    aigenRoom: camfrog ? await require("./aigen").roomGenOn(R.id) : null,      // 1.99dn: room !imagine / !video -> this feed
     // Pepe + automod + rules (new)
     pepe: await PF.scopeView(R.id), PF,
     am: await AM.settings(R.id), amGlobal: await AM.globalCaps(), AM, automod,

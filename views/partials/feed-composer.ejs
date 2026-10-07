@@ -27,11 +27,25 @@
           <span class="fc-gen-by mut">Pepe's <code>!imagine</code> / <code>!video</code></span>
         </div>
         <textarea name="genPrompt" rows="2" maxlength="<%= cp.aigen.promptMax %>" aria-label="Prompt" autocomplete="off"></textarea>
+        <%# 1.99dn: an optional reference picture (image-to-image / image-to-video): an upload (the normal upload
+            pipeline) or a picture already in this draft; priced like chat's -cam %>
+        <div class="fc-gen-ref" id="fcGenRef">
+          <div class="fc-gen-ref-h">
+            <span class="fc-gen-ref-l">Reference picture <small class="mut">(optional)</small></span>
+            <span class="fc-gen-ref-pick" id="fcGenRefPick">
+              <label class="fc-gj-btn">📷 Upload<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" id="fcGenRefFile" hidden></label>
+              <button type="button" class="fc-gj-btn" id="fcGenRefDraft" aria-expanded="false" aria-controls="fcGenRefList">🖼 From this draft</button>
+            </span>
+          </div>
+          <div class="fc-gen-ref-list hide" id="fcGenRefList" aria-label="Pictures in this draft"></div>
+          <ul class="fc-files fc-gen-ref-cur" id="fcGenRefCur" aria-live="polite"></ul>
+          <p class="fc-gen-ref-note">⚖️ Only use photos you have the right to use. A real person's photo can never be made nude or sexual, and minors are always refused. A reference adds <b id="fcGenRefPrice"></b> (like <code>-cam</code> in chat).</p>
+        </div>
         <div class="fc-gen-go">
           <span class="fc-gen-price" id="fcGenPrice"></span>
           <button type="button" class="btn-s" id="fcGenGo">✨ Generate</button>
         </div>
-        <p class="fc-gen-terms">Charged when it's made · refunded if it fails or is refused · a result you discard is <b>not</b> refunded. Text prompts only, with the same filters as chat. Posts with it get a ✨ AI-generated badge.</p>
+        <p class="fc-gen-terms">Charged when it's made · refunded if it fails or is refused · a result you discard is <b>not</b> refunded. A prompt (and optionally a reference picture), with the same rules as chat. Posts with it get a ✨ AI-generated badge.</p>
         <span class="fc-err" id="fcGenErr" role="alert"></span>
         <div class="fc-gen-jobs" id="fcGenJobs" aria-live="polite"></div>
       </div>

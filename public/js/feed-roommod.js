@@ -20,6 +20,13 @@
       .catch(function (e) { alert(e.message); ann.checked = !ann.checked; });
   });
 
+  // 1.99dn: "Post room generations to the feed" (a room's !imagine / !video -> this pad's feed; default ON)
+  var gen = document.getElementById('rmAigenRoom');
+  if (gen) gen.addEventListener('change', function () {
+    api('/api/rooms/' + encodeURIComponent(slug) + '/feed/aigen-room', { on: gen.checked })
+      .catch(function (e) { alert(e.message); gen.checked = !gen.checked; });
+  });
+
   root.addEventListener('click', function (ev) {
     var b = ev.target.closest('button[data-op]');
     if (!b) return;

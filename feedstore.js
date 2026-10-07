@@ -809,6 +809,9 @@ function priceOf(C, { images, audio, video, link }) {
 /**
  * Create a post. input: {title, body, link (url string), attachments: [ids], rooms: [room ids], global, nsfw}
  * deps.preview(url) -> link preview ({url, domain, title, description, site, embed, thumb: attachment row|null})
+ * 1.99dn: deps.free - no post price (aigen.js: a Camfrog room's !imagine / !video posted to its pad, already paid in
+ * chat); deps.roomGen - that post, made by Pepe on a room member's behalf: the pad's who-can-post rules are about
+ * people, so they don't stop Pepe there (the pad's own "post room generations" switch does)
  */
 async function create(userId, input, deps = {}) {
   await init();
@@ -839,7 +842,7 @@ async function create(userId, input, deps = {}) {
   if (rate) throw new Refuse(429, rate);
   const pendingIn = new Set();
   for (const rid of roomIds) {
-    const why = await roomPostRefusal(u, rid);
+    const why = deps.roomGen && isPepe(u) ? null : await roomPostRefusal(u, rid);
     if (why) throw new Refuse(why.status, why.message);
     if ((await roomSettings(rid)).approval && !(await rooms.canManage(u, rid))) pendingIn.add(rid);
   }
@@ -866,7 +869,7 @@ async function create(userId, input, deps = {}) {
              embed: pv.embed || null };
     previewAtt = pv.thumb || null;
   }
-  const cost = priceOf(C, { ...counts, link: !!link });
+  const cost = deps.free ? 0 : priceOf(C, { ...counts, link: !!link });
   // 1.99di: a file Pepe's result check called NSFW makes the post NSFW whatever the author ticked
   const aiNsfw = atts.some((a) => a.ai_nsfw);
   const id = newId();

@@ -8,7 +8,7 @@
   panel by pad-settings.js.
 %>
 <link rel="stylesheet" href="/public/css/stage.css?v=5">
-<link rel="stylesheet" href="/public/css/feed.css?v=11">
+<link rel="stylesheet" href="/public/css/feed.css?v=12">
 <link rel="stylesheet" href="/public/css/room-mod.css?v=1">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=1">
 <%
@@ -157,6 +157,13 @@
       <h3>Announcements in the Camfrog room</h3>
       <label class="ps-switch"><input type="checkbox" id="rmMention"<%= announce ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
         <span>🐸📣 Pepe announces new posts in the Camfrog room<small>A short line in the room when someone posts here, at most one every few minutes. On by default.</small></span></label>
+    </div>
+    <% } %>
+    <% if (typeof aigenRoom !== 'undefined' && aigenRoom !== null) { %>
+    <div class="fa-card ps-card" id="aigen-room">
+      <h3>Room generations</h3>
+      <label class="ps-switch"><input type="checkbox" id="rmAigenRoom"<%= aigenRoom ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
+        <span>✨ Post room generations to the feed<small>Pictures and videos made with <code>!imagine</code> / <code>!video</code> in the Camfrog room are posted here too (as the member's linked account, else as Pepe "made by … in the room"), with the ✨ AI badge. Never announced in the room - they were just shown there. Members can opt out. On by default.</small></span></label>
     </div>
     <% } %>
   </section>
@@ -354,7 +361,7 @@
 </main>
 <script id="rmgState" type="application/json"><%- JSON.stringify(st).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/room-manage.js?v=1" defer></script>
-<script src="/public/js/feed-roommod.js?v=2" defer></script>
+<script src="/public/js/feed-roommod.js?v=3" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=1" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>

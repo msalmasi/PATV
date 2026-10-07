@@ -24,6 +24,23 @@
 // Prices: Pepe pushes his !imagine / !video prices - global and per Camfrog room - to /api/feed/aigen/prices
 // every 10 min (feed_kv aigen_prices). A pad with a Camfrog room shows that room's price, anything else (site-only
 // pads, profiles) the global one, before that the room's relay command menu, before that Pepe's defaults.
+//
+// 1.99dn
+//   * Reference picture: the Generate panel can take one picture as a reference (image-to-image / image-to-video):
+//     an upload through the normal feed upload pipeline (/api/feed/uploads: re-encoded, metadata dropped) or a
+//     picture already in the draft - either way an image attachment of the account's own (`ref`). /start hands it
+//     to Pepe re-encoded as a <= REF_MAX_PX JPEG. It costs what chat's -cam does: the !imagine / !video price +
+//     Pepe's camsurcharge (pushed with the prices; DEFAULT_SURCHARGE before that). Pepe's guard treats it as a
+//     photo of a real person: it can never be turned nude / sexual, and minors are always refused.
+//   * Room generations -> the room's pad feed: a successful !imagine / !video in a Camfrog room is posted to that
+//     room's pad. POST /api/feed/aigen/room (bot) decides: the pad's switch "Post room generations to the feed"
+//     (feed_kv aigen_room:<pad>, default ON, Pad settings -> Feed), the requester's opt-out (feed_kv
+//     aigen_nofeed:<userId>, Profile feed settings; or !imagine -nofeed in chat), feed bans / Pepe's refusals, the
+//     feed's post limits and storage quotas. Author: the requester's linked PATV account, else Pepe with "made by
+//     <display> in the room" (incognito: "someone"; Pepe's own chatty pictures: Pepe). It's a job row with
+//     origin = 'room' (never in the composer, no inbox notices) that takes the same /chunk + /result; /result then
+//     makes the post itself (free - it was paid in chat - and never announced in the room: it was just shown
+//     there). Anything refused = skipped; the chat command is never held up by it.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -45,6 +62,10 @@ const MAX_BYTES = 60 * 1024 * 1024;
 const POLL_FRESH_MS = 20e3;                                     // polled this recently = the composer is open: no inbox notice
 const ETA = { image: "~10–30 s", video: "~30–90 s" };
 const JOB_RE = /^g[a-f0-9]{20}$/;
+const DEFAULT_SURCHARGE = 10000;                                // Pepe's DEFAULT_PAT_COSTS camsurcharge (a reference picture)
+const REF_MAX_PX = 1536;                                        // the reference picture Pepe gets (JPEG)
+const ROOM_PEPE_PER_DAY = 40;                                   // room generations Pepe posts per pad per 24 h (on members' behalf)
+const ATT_RE = /^[a-f0-9]{16,40}$/;
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
@@ -62,6 +83,11 @@ function init() {
         notified INTEGER, received INTEGER NOT NULL DEFAULT 0)`);
       await runQuery("CREATE INDEX IF NOT EXISTS feed_aigen_user ON feed_aigen_jobs (user_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS feed_aigen_status ON feed_aigen_jobs (status, created)");
+      // 1.99dn: the reference picture (an attachment id) + room generations posted to the pad feed
+      for (const [col, def] of [["ref_att", "TEXT"], ["origin", "TEXT"], ["post_id", "TEXT"], ["title", "TEXT"], ["byline", "TEXT"]]) {
+        const have = (await getQuery("PRAGMA table_info(feed_aigen_jobs)")).some((c) => c.name === col);
+        if (!have) await runQuery(`ALTER TABLE feed_aigen_jobs ADD COLUMN ${col} ${def}`);
+      }
     })().catch((e) => { console.error("[aigen] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -103,6 +129,15 @@ async function pricesFor(padId) {
   return out;
 }
 
+/** 1.99dn: the reference picture's surcharge for a pad = Pepe's -cam surcharge (the room's, else global). */
+async function refPriceFor(padId) {
+  const P = await loadPrices();
+  const room = camfrogRoomOf(padId);
+  const r = room && P.rooms && P.rooms[room] ? cleanPrice(P.rooms[room].camsurcharge) : null;
+  const g = P.global ? cleanPrice(P.global.camsurcharge) : null;
+  return r != null ? r : g != null ? g : DEFAULT_SURCHARGE;
+}
+
 /** A pad as the composer / API names it (id or slug; "u/<me>" = my profile) -> its room id ("u/..." kept), or null. */
 async function normPad(p) {
   const s = String(p || "").trim().slice(0, 120);
@@ -131,7 +166,7 @@ function view(j, att) {
   const live = j.status === "queued" || j.status === "running";
   return {
     id: j.id, kind: j.kind, prompt: j.prompt, status: j.status, message: j.message || null, price: j.price, cost: j.cost,
-    refunded: !!j.refunded, nsfw: !!j.nsfw, created: j.created, started: j.started, secs: j.secs || 0, eta: ETA[j.kind],
+    refunded: !!j.refunded, nsfw: !!j.nsfw, ref: !!j.ref_att, created: j.created, started: j.started, secs: j.secs || 0, eta: ETA[j.kind],
     elapsed: live ? Math.max(0, Math.round((NOW() - (j.started || j.created)) / 1000)) : null,
     attachment: att ? { id: att.id, kind: att.kind, w: att.w, h: att.h, secs: att.secs, posted: !!att.post_id,
                         url: "/feed/f/" + (att.thumb || att.poster || att.file), file: "/feed/f/" + att.file,
@@ -147,7 +182,7 @@ async function job(id) { return (await getQuery("SELECT * FROM feed_aigen_jobs W
 async function mine(userId) {
   await init();
   const rows = await getQuery(`SELECT * FROM feed_aigen_jobs WHERE user_id = ? AND created > ? AND status IN ('queued','running','done','failed','timeout')
-                               ORDER BY created DESC LIMIT 12`, [userId, NOW() - KEEP_MS]);
+                               AND origin IS NULL ORDER BY created DESC LIMIT 12`, [userId, NOW() - KEEP_MS]);
   const out = [];
   for (const j of rows) {
     const a = await attOf(j);
@@ -171,7 +206,7 @@ async function create(user, b, { queue, audit } = {}) {
   if (b.pad && !pad) throw new Refuse(400, "That pad isn't on PATV.");
   const why = await refusal(u, pad);
   if (why) throw new Refuse(why.status || 403, why.message);
-  const open = await getQuery("SELECT kind FROM feed_aigen_jobs WHERE user_id = ? AND status IN ('queued','running')", [u.userId]);
+  const open = await getQuery("SELECT kind FROM feed_aigen_jobs WHERE user_id = ? AND status IN ('queued','running') AND origin IS NULL", [u.userId]);
   if (open.length >= MAX_OPEN) throw new Refuse(429, `You have ${open.length} generations going - wait for one to finish.`);
   if (kind === "video" && open.filter((x) => x.kind === "video").length >= MAX_OPEN_VIDEO) throw new Refuse(429, "One video at a time - wait for the one that's generating.");
   const C = store.config();
@@ -181,16 +216,26 @@ async function create(user, b, { queue, audit } = {}) {
     }
   }
   if (media.diskFreeBytes() < C.min_free_gb * 1024 ** 3) throw new Refuse(507, "The feed's storage is full right now - try again later.");
+  // 1.99dn: an optional reference picture - one of this account's own ready pictures (an upload / a draft picture)
+  let ref = null;
+  if (b.ref != null && b.ref !== "") {
+    const rid = String(b.ref);
+    const a = ATT_RE.test(rid) ? (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [rid]))[0] : null;
+    if (!a || a.owner_id !== u.userId || a.kind !== "image" || a.state !== "ready" || !a.file) {
+      throw new Refuse(400, "That reference picture isn't one of yours (or it's still processing) - pick it again.");
+    }
+    ref = a.id;
+  }
   const prices = await pricesFor(pad);
-  const price = prices[kind];
+  const price = prices[kind] + (ref ? await refPriceFor(pad) : 0);
   const shown = cleanPrice(b.price);
   if (shown != null && shown < price) throw new Refuse(409, `The price changed to ${fmt(price)} PAT - check it and try again.`);
   const id = "g" + crypto.randomBytes(10).toString("hex");
   const back = /^\/[A-Za-z0-9/_?=&.%#-]*$/.test(String(b.back || "")) && !String(b.back).startsWith("//") ? String(b.back).slice(0, 200) : null;
   const t = NOW();
-  await runQuery(`INSERT INTO feed_aigen_jobs (id, user_id, username, camfrog, kind, prompt, pad, room, price, status, back, created)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
-                 [id, u.userId, u.username, u.camfrogUsername || null, kind, prompt, pad, camfrogRoomOf(pad), price, back, t]);
+  await runQuery(`INSERT INTO feed_aigen_jobs (id, user_id, username, camfrog, kind, prompt, pad, room, price, status, back, created, ref_att)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)`,
+                 [id, u.userId, u.username, u.camfrogUsername || null, kind, prompt, pad, camfrogRoomOf(pad), price, back, t, ref]);
   try {
     const aid = await (queue || require("./actions").queue)(u.userId, { kind: "aigen", args: [id], tag: "aigen", label: `✨ generate ${kind}: ${prompt}`.slice(0, 200), idem: b.idem });
     await runQuery("UPDATE feed_aigen_jobs SET action_id = ? WHERE id = ?", [aid || null, id]);
@@ -201,7 +246,7 @@ async function create(user, b, { queue, audit } = {}) {
     throw e;
   }
   if (audit) await audit({ kind: "aigen", id, event: "generate", user: u }).catch(() => {});
-  console.log(`[aigen] ${id} ${kind} by ${u.username} pad=${pad || "-"} price=${price}`);
+  console.log(`[aigen] ${id} ${kind} by ${u.username} pad=${pad || "-"} price=${price}${ref ? " ref=" + ref : ""}`);
   return view(await job(id), null);
 }
 
@@ -243,7 +288,24 @@ async function start(b) {
   const r = await runQuery("UPDATE feed_aigen_jobs SET status = 'running', started = ?, progress_at = ? WHERE id = ? AND status = 'queued'", [NOW(), NOW(), j.id]);
   if (!r.changes) throw new Refuse(410, j.status === "discarded" ? "that generation was cancelled" : "that generation has expired");
   try { fs.unlinkSync(tmpPath(j.id)); } catch (e) { /* none */ }
-  return { id: j.id, kind: j.kind, prompt: j.prompt, room: j.room || null, price: j.price, username: j.username, camfrog: j.camfrog || null };
+  const out = { id: j.id, kind: j.kind, prompt: j.prompt, room: j.room || null, price: j.price, username: j.username, camfrog: j.camfrog || null };
+  // 1.99dn: the reference picture, as a JPEG (has_ref without data = it's gone: Pepe refuses, nothing charged)
+  if (j.ref_att) {
+    out.has_ref = true;
+    const r = await refJpeg(j.ref_att, j.user_id).catch((e) => { console.error("[aigen] ref", j.id, e.message); return null; });
+    if (r) out.ref = { data: r.toString("base64"), mime: "image/jpeg" };
+  }
+  return out;
+}
+/** The reference attachment (still this account's own, ready) -> a <= REF_MAX_PX JPEG Buffer, or null. */
+async function refJpeg(attId, userId) {
+  const a = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [attId]))[0];
+  if (!a || a.owner_id !== userId || a.kind !== "image" || a.state !== "ready" || !a.file) return null;
+  const f = media.filePath(a.file);
+  if (!f || !fs.existsSync(f)) return null;
+  const sharp = require("sharp");
+  return sharp(f).rotate().resize({ width: REF_MAX_PX, height: REF_MAX_PX, fit: "inside", withoutEnlargement: true })
+    .flatten({ background: "#ffffff" }).jpeg({ quality: 88 }).toBuffer();
 }
 async function progress(b) {
   await init();
@@ -282,7 +344,7 @@ async function finish(j, status, fields, notice) {
 
 /** An inbox notice when the person isn't watching the composer (it polls while open). */
 async function tell(j) {
-  if (!j || j.notified || (j.polled && NOW() - j.polled < POLL_FRESH_MS)) return false;
+  if (!j || j.origin === "room" || j.notified || (j.polled && NOW() - j.polled < POLL_FRESH_MS)) return false;
   await runQuery("UPDATE feed_aigen_jobs SET notified = ? WHERE id = ?", [NOW(), j.id]);
   const what = j.kind === "video" ? "video" : "picture";
   const ok = j.status === "done";
@@ -314,7 +376,8 @@ async function result(b) {
     throw new Refuse(409, "the file didn't arrive in one piece");
   }
   const u = await store.account(j.user_id);
-  if (!store.isStaff(u) && (await store.usedBytes(j.user_id)) + size > C.user_quota_mb * 1024 * 1024) {
+  const room = j.origin === "room";
+  if (!store.isStaff(u) && !(room && store.isPepe(u)) && (await store.usedBytes(j.user_id)) + size > C.user_quota_mb * 1024 * 1024) {
     await finish(j, "failed", { message: `you're using your ${C.user_quota_mb} MB of space` }, true);
     throw new Refuse(413, `You're using your ${C.user_quota_mb} MB of space`);
   }
@@ -348,20 +411,136 @@ async function result(b) {
     await finish(j, "failed", { message: msg });
     throw new Refuse(422, msg);
   }
+  if (room) return roomPost(j, attId, nsfw, b);
   await finish(j, "done", { attachment_id: attId, nsfw, model: String(b.model || "").slice(0, 80) || null,
                             cost: cleanPrice(b.cost) != null ? cleanPrice(b.cost) : j.cost }, true);
   console.log(`[aigen] ${j.id} done -> attachment ${attId} (${size} bytes${nsfw ? ", NSFW" : ""})`);
   return { ok: true, attachment: attId };
 }
 
+// ── 1.99dn: room generations -> the room's pad feed ──
+const onFlag = (v) => v === true || v === 1 || v === "1" || v === "on" || v === "true";
+/** The pad's "Post room generations to the feed" switch (default ON). */
+async function roomGenOn(padId) {
+  await store.init();
+  const v = await store.kvGet("aigen_room:" + String(padId || ""));
+  return v == null ? true : v === "1";
+}
+async function setRoomGen(user, padId, on) {
+  if (!(await rooms.canManage(user, padId))) throw new Refuse(403, "Only this pad's owner can do that.");
+  await store.kvSet("aigen_room:" + padId, on ? "1" : "0");
+  try { await rooms.event(padId, "feed-aigen-room", user.username, on ? "on" : "off"); } catch (e) { /* no event log */ }
+  return !!on;
+}
+/** A member's "Don't post my room generations" (default: posted). */
+async function optedOut(userId) {
+  await store.init();
+  return (await store.kvGet("aigen_nofeed:" + String(userId || ""))) === "1";
+}
+async function setOptOut(userId, out) {
+  await store.init();
+  await store.kvSet("aigen_nofeed:" + userId, out ? "1" : "0");
+  return !!out;
+}
+
+/**
+ * Pepe: "this !imagine / !video just succeeded in <room>" {room, login, display, incognito, pepe, kind, prompt, title,
+ * model} -> {ok: true, id} (send the file: /chunk + /result) or {ok: false, skip: why} (don't post it).
+ */
+async function roomStart(b) {
+  await init();
+  const kind = Object.prototype.hasOwnProperty.call(KINDS, b.kind) ? b.kind : null;
+  if (!kind) throw new Refuse(400, "unknown kind");
+  const prompt = String(b.prompt || "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, PROMPT_MAX);
+  if (!prompt) throw new Refuse(400, "no prompt");
+  const skip = (why) => { console.log(`[aigen] room post skipped (${b.room}): ${why}`); return { ok: false, skip: why }; };
+  const R = await store.communityOf(String(b.room || "").slice(0, 80)).catch(() => null);
+  if (!R || rooms.platformOf(R.id) !== "camfrog") return skip("this room has no pad");
+  if (!(await roomGenOn(R.id))) return skip("posting room generations is off for this pad");
+  const C = store.config();
+  if (!C.enabled) return skip("posting is switched off");
+  const t = NOW();
+  const login = b.pepe ? "" : String(b.login || "").trim().toLowerCase().slice(0, 60);
+  // the requester's linked account: their opt-out, bans and the feed's limits apply even when Pepe posts it for them
+  let linked = null;
+  if (login) {
+    const row = (await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = ? LIMIT 1", [login]))[0];
+    if (row) linked = await store.account(row.userId);
+    const rs = await getQuery("SELECT room_id FROM feed_restricted WHERE login = ? AND (until IS NULL OR until > ?)", [login, t]);
+    if (rs.some((r) => r.room_id === "" || r.room_id === R.id)) return skip("Pepe's refusals apply to this login");
+  }
+  if (linked) {
+    if (await optedOut(linked.userId)) return skip("the member opted out");
+    const why = await store.postRefusal(linked, [R.id], { media: true });
+    if (why) return skip(why.message);
+  }
+  let author, byline;
+  const what = kind === "video" ? "!video" : "!imagine";
+  const display = store.cleanLine ? store.cleanLine(b.display, 40) : String(b.display || "").slice(0, 40);
+  if (linked && !b.incognito) {
+    author = linked;
+    const why = await store.roomPostRefusal(linked, R.id);
+    if (why) return skip(why.message);
+    const bud = await store.postBudget(linked);
+    if (bud.left <= 0) return skip(bud.why || "post limit");
+    if (!store.isStaff(linked) && (await store.usedBytes(linked.userId)) + (kind === "video" ? 20 : 3) * 1024 * 1024 > C.user_quota_mb * 1024 * 1024) {
+      return skip("the member's storage is full");
+    }
+    byline = `✨ Made with ${what} in the Camfrog room.`;
+  } else {
+    const acct = await require("./pepefeed").ensureAccount();
+    author = await store.account(acct.userId);
+    if (!author) return skip("Pepe has no site account");
+    const n = (await getQuery(`SELECT COUNT(*) AS n FROM feed_aigen_jobs WHERE origin = 'room' AND pad = ? AND user_id = ? AND created > ?
+                                AND status IN ('running','done')`, [R.id, author.userId, t - 86400e3]))[0].n;
+    if (n >= ROOM_PEPE_PER_DAY) return skip("Pepe's daily room-generation posts for this pad are used up");
+    byline = b.pepe ? `✨ Pepe made this with ${what} in the Camfrog room.`
+      : `✨ Made with ${what} by ${b.incognito ? "someone" : (display || "someone")} in the Camfrog room.`;
+  }
+  if ((await store.usedBytes(null)) + 20 * 1024 * 1024 > C.global_quota_gb * 1024 ** 3 || media.diskFreeBytes() < C.min_free_gb * 1024 ** 3) {
+    return skip("the feed's storage is full");
+  }
+  const title = (store.cleanLine ? store.cleanLine(b.title || prompt, 140) : String(b.title || prompt).slice(0, 140)) || prompt.slice(0, 140);
+  const id = "g" + crypto.randomBytes(10).toString("hex");
+  await runQuery(`INSERT INTO feed_aigen_jobs (id, user_id, username, camfrog, kind, prompt, pad, room, price, cost, status, created, started, progress_at,
+                  origin, title, byline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'running', ?, ?, ?, 'room', ?, ?)`,
+                 [id, author.userId, author.username, login || null, kind, prompt, R.id, camfrogRoomOf(R.id), t, t, t, title, byline]);
+  console.log(`[aigen] room ${kind} ${id} for ${login || "pepe"} -> p/${R.slug || R.id} as ${author.username}`);
+  return { ok: true, id };
+}
+
+/** /result of a room job: the attachment is ready - make the post (free, never announced in the room). */
+async function roomPost(j, attId, nsfw, b) {
+  let made = null;
+  try {
+    made = await store.create(j.user_id, { title: j.title || j.prompt.slice(0, 140), body: j.byline || "", community: j.pad, attachments: [attId],
+                                           nsfw: !!nsfw, announce: [] }, { free: true, roomGen: true });
+  } catch (e) {
+    const msg = e && e.refuse ? e.message : "the post couldn't be made";
+    if (!(e && e.refuse)) console.error("[aigen] room post", j.id, e);
+    const a = (await getQuery("SELECT * FROM feed_attachments WHERE id = ?", [attId]))[0];
+    if (a && !a.post_id) {
+      media.removeFiles([a.file, a.thumb, a.poster].filter(Boolean));
+      await runQuery("UPDATE feed_attachments SET state = 'deleted' WHERE id = ? AND post_id IS NULL", [attId]);
+    }
+    await finish(j, "failed", { message: String(msg).slice(0, 300) });
+    console.log(`[aigen] room post ${j.id} not made: ${msg}`);
+    throw new Refuse(e && e.status && e.status < 500 ? e.status : 409, msg);
+  }
+  await finish(j, "done", { attachment_id: attId, nsfw, model: String(b.model || "").slice(0, 80) || null, post_id: made ? made.id : null });
+  console.log(`[aigen] room post ${j.id} -> post ${made && made.id} in ${j.pad}${nsfw ? " (NSFW)" : ""}`);
+  return { ok: true, attachment: attId, post: made ? made.id : null };
+}
+
 async function setPrices(b) {
   await init();
   const P = { global: {}, rooms: {}, at: NOW() };
-  for (const k of Object.values(KINDS)) { const v = cleanPrice((b.global || {})[k]); if (v != null) P.global[k] = v; }
+  const KEYS = [...Object.values(KINDS), "camsurcharge"];      // 1.99dn: + the -cam surcharge (the reference picture)
+  for (const k of KEYS) { const v = cleanPrice((b.global || {})[k]); if (v != null) P.global[k] = v; }
   for (const [room, pr] of Object.entries(b.rooms || {}).slice(0, 500)) {
     if (!/^[\w.@ -]{1,80}$/.test(room) || !pr || typeof pr !== "object") continue;
     const o = {};
-    for (const k of Object.values(KINDS)) { const v = cleanPrice(pr[k]); if (v != null) o[k] = v; }
+    for (const k of KEYS) { const v = cleanPrice(pr[k]); if (v != null) o[k] = v; }
     P.rooms[room] = o;
   }
   await store.kvSet("aigen_prices", JSON.stringify(P));
@@ -421,7 +600,7 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
       const u = await store.account(req.user.userId);
       const pad = await normPad(req.query.pad);
       const why = await refusal(u, pad);
-      res.json({ ok: true, eligible: !why, why: why ? why.message : null, prices: await pricesFor(pad), jobs: await mine(req.user.userId),
+      res.json({ ok: true, eligible: !why, why: why ? why.message : null, prices: await pricesFor(pad), refPrice: await refPriceFor(pad), jobs: await mine(req.user.userId),
                  limits: { open: MAX_OPEN, openVideo: MAX_OPEN_VIDEO, promptMax: PROMPT_MAX }, eta: ETA });
     } catch (e) { fail(res, e); }
   });
@@ -462,6 +641,17 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
   app.post("/api/feed/aigen/prices", json, bot, async (req, res) => {
     try { res.json(await setPrices(req.body || {})); } catch (e) { fail(res, e); }
   });
+  // 1.99dn: a room's !imagine / !video -> its pad feed (Pepe), and the pad owner's switch
+  app.post("/api/feed/aigen/room", json, bot, async (req, res) => {
+    try { res.json(await roomStart(req.body || {})); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/rooms/:slug/feed/aigen-room", json, addUser, guard, async (req, res) => {
+    try {
+      const R = await require("./roomsweb").resolveRoom(req.params.slug);
+      if (!R) return res.status(404).json({ ok: false, error: "No such pad." });
+      res.json({ ok: true, on: await setRoomGen(await store.account(req.user.userId), R.id, onFlag((req.body || {}).on)) });
+    } catch (e) { fail(res, e); }
+  });
 
   if (!noTimers) {
     const t = setInterval(() => sweep().catch((e) => console.error("[aigen] sweep:", e.message)), 60e3);
@@ -470,4 +660,5 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
 }
 
 module.exports = { register, init, create, discard, setPromptShown, start, progress, chunk, result, setPrices, sweep, mine, pricesFor, refusal, view,
+                   refPriceFor, roomStart, roomGenOn, setRoomGen, optedOut, setOptOut, DEFAULT_SURCHARGE, ROOM_PEPE_PER_DAY, REF_MAX_PX,
                    camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse };

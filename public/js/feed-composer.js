@@ -12,7 +12,8 @@
 //     off, no Camfrog room, Pepe not in the room - when he can't; disabled boxes are never sent nor kept in the draft)
 //   * (1.99di) "✨ Generate": a picture or video made by Pepe's !imagine / !video (aigen.js) - prompt, price, a
 //     preview with progress, then Attach / Regenerate (charged again) / Discard (not refunded); jobs are kept on
-//     the server, so leaving the page loses nothing
+//     the server, so leaving the page loses nothing; (1.99dn) an optional reference picture - an upload (the
+//     normal upload pipeline, never added to the post) or a picture from this draft - priced + Pepe's -cam surcharge
 // Page: the pad bar, sort and pager links on /feed and /feed/following (data-swap)
 // swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
 // composer is ever lost.
@@ -103,6 +104,7 @@
   var go = document.getElementById('fcGo');
   var files = [];        // {kind, name, id, state, el, url}
   var linkRow = document.getElementById('fcLinkRow');
+  var onFileRemoved = null;   // 1.99dn: the Generate panel drops a draft picture used as its reference
   var pv = document.getElementById('fcPv');
   var DRAFT_KEY = 'patvFeedDraft:' + (form.getAttribute('data-user') || '_');
   var DRAFT_TTL = 5 * 3600 * 1000;       // the server drops never-posted uploads after 6 h
@@ -173,7 +175,7 @@
   form.elements.link.addEventListener('input', function () { clearTimeout(pvTimer); pvTimer = setTimeout(preview, 700); });
   form.elements.link.addEventListener('blur', preview);
 
-  function row(f) {
+  function row(f, box) {
     var li = document.createElement('li');
     var th = document.createElement('span'); th.className = 'th'; th.textContent = f.kind === 'image' ? '🖼' : f.kind === 'audio' ? '🔊' : '🎬';
     var mid = document.createElement('div');
@@ -186,10 +188,11 @@
       f.cancel = true;
       if (f.id) api('/api/feed/uploads/' + f.id + '/discard', {}).catch(function () {});
       files = files.filter(function (y) { return y !== f; }); li.remove(); refreshGo();
+      if (onFileRemoved) onFileRemoved(f);
     });
     li.appendChild(th); li.appendChild(mid); li.appendChild(x);
     f.el = { li: li, th: th, st: st, bar: bar, bi: bi };
-    list.appendChild(li);
+    (box || list).appendChild(li);
   }
   function say(f, t, bad) { f.el.st.textContent = t; f.el.st.classList.toggle('bad', !!bad); }
   function ready(f, att) {
@@ -243,7 +246,7 @@
     });
   }
 
-  form.querySelectorAll('input[type=file]').forEach(function (inp) {
+  form.querySelectorAll('input[type=file][data-kind]').forEach(function (inp) {
     inp.addEventListener('change', function () {
       setErr('');
       var kind = inp.getAttribute('data-kind');
@@ -273,14 +276,22 @@
     var cards = {};
     var PH = { image: 'Describe the picture… e.g. a frog DJ in a neon nightclub, synthwave style', video: 'Describe the clip… e.g. a frog surfing a huge wave at sunset, slow motion' };
     function kind() { var x = form.querySelector('input[name=genKind]:checked'); return x ? x.value : 'image'; }
-    function priceOf(k) { var p = (cfg.prices || {})[picked()] || cfg.global || {}; return Number(p[k]) || 0; }
+    // 1.99dn: the reference picture (null | {id, url, name, state, upload: true for one uploaded just for this})
+    var ref = null;
+    var refCur = document.getElementById('fcGenRefCur'), refList = document.getElementById('fcGenRefList');
+    var refDraftBtn = document.getElementById('fcGenRefDraft'), refFile = document.getElementById('fcGenRefFile');
+    var refPriceEl = document.getElementById('fcGenRefPrice');
+    function refPrice() { var p = (cfg.refPrices || {})[picked()]; if (p == null) p = cfg.refGlobal; return Number(p) || 0; }
+    function baseOf(k) { var p = (cfg.prices || {})[picked()] || cfg.global || {}; return Number(p[k]) || 0; }
+    function priceOf(k) { return baseOf(k) + (ref ? refPrice() : 0); }
     function fmtP(n) { return n ? Number(n).toLocaleString('en-US') + ' PAT' : 'free'; }
     function what(k) { return k === 'video' ? 'video' : 'picture'; }
     function setGErr(t) { gErr.textContent = t || ''; }
     function showPrice() {
       var k = kind();
-      priceEl.textContent = (k === 'video' ? '🎬 A video' : '🖼 A picture') + ' costs ' + fmtP(priceOf(k)) + (picked() ? '' : ' (the price of the pad you pick)') + ' · ' + ((cfg.eta || {})[k] || '');
-      promptEl.placeholder = PH[k];
+      priceEl.textContent = (k === 'video' ? '🎬 A video' : '🖼 A picture') + ' costs ' + fmtP(priceOf(k)) + (ref ? ' (with the reference picture)' : '') + (picked() ? '' : ' (the price of the pad you pick)') + ' · ' + ((cfg.eta || {})[k] || '');
+      promptEl.placeholder = ref ? (k === 'video' ? 'Describe how to animate the picture… e.g. they wave and smile, slow zoom' : 'Describe what to make from the picture… e.g. as a pirate captain, oil painting') : PH[k];
+      if (refPriceEl) refPriceEl.textContent = fmtP(refPrice()) === 'free' ? 'nothing' : fmtP(refPrice());
     }
     function idem() { return 'g' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); }
     function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
@@ -298,15 +309,68 @@
       setGErr('');
       prompt = String(prompt || '').trim();
       if (prompt.length < 3) { setGErr('Describe what to make.'); promptEl.focus(); return; }
+      if (ref && ref.state === 'failed') { setGErr('The reference picture failed - remove it or pick another.'); return; }
+      if (ref && ref.state !== 'ready') { setGErr('Wait for the reference picture to finish uploading.'); return; }
       var price = priceOf(k);
       if (again && !window.confirm('Make a new ' + what(k) + ' from the same prompt? It costs ' + fmtP(price) + ' again - the one you have now is not refunded.')) return;
       goBtn.disabled = true;
-      api('/api/feed/aigen', { kind: k, prompt: prompt, pad: picked() || null, price: price, back: location.pathname + location.search, idem: idem() })
+      api('/api/feed/aigen', { kind: k, prompt: prompt, pad: picked() || null, price: price, ref: ref ? ref.id : null, back: location.pathname + location.search, idem: idem() })
         .then(function (d) { if (!again) promptEl.value = ''; card(d.job); poll(d.job.id); })
         .catch(function (e) { setGErr(e.message); })
         .then(function () { goBtn.disabled = false; });
     }
     goBtn.addEventListener('click', function () { start(kind(), promptEl.value, false); });
+
+    // ── 1.99dn: the reference picture ──
+    function clearRef(keepUpload) {
+      if (ref && ref.upload && !keepUpload) { ref.cancel = true; if (ref.id) api('/api/feed/uploads/' + ref.id + '/discard', {}).catch(function () {}); }
+      ref = null; refCur.innerHTML = ''; showPrice();
+    }
+    function refRow(r) {
+      // a picture from the draft: its own little row (its ✕ only un-picks it - the draft keeps the picture)
+      refCur.innerHTML = '';
+      var li = el('li'), th = el('span', 'th'), mid = el('div'), x = el('button', null, '✕');
+      if (r.url) { th.style.backgroundImage = 'url("' + String(r.url).replace(/["\\]/g, '') + '")'; } else th.textContent = '🖼';
+      mid.appendChild(el('div', 'nm', r.name || 'Picture')); mid.appendChild(el('div', 'st', 'Reference picture ✔'));
+      x.type = 'button'; x.setAttribute('aria-label', 'Don\'t use this picture as the reference');
+      x.addEventListener('click', function () { clearRef(); });
+      li.appendChild(th); li.appendChild(mid); li.appendChild(x); refCur.appendChild(li);
+    }
+    function pickDraft(f) {
+      clearRef();
+      ref = { id: f.id, url: f.url, name: f.name, state: 'ready', upload: false };
+      refRow(ref); refList.classList.add('hide'); refDraftBtn.setAttribute('aria-expanded', 'false'); showPrice();
+    }
+    refDraftBtn.addEventListener('click', function () {
+      setGErr('');
+      var pics = files.filter(function (f) { return f.kind === 'image' && f.state === 'ready' && f.id; });
+      refList.innerHTML = '';
+      if (!pics.length) { refList.appendChild(el('p', 'mut', 'No pictures in this draft yet - add one with 🖼 Picture, or upload one here.')); }
+      pics.forEach(function (f) {
+        var b = el('button', 'fc-gen-ref-it'); b.type = 'button'; b.title = f.name; b.setAttribute('aria-label', 'Use ' + f.name + ' as the reference');
+        if (f.url) b.style.backgroundImage = 'url("' + String(f.url).replace(/["\\]/g, '') + '")'; else b.textContent = '🖼';
+        b.addEventListener('click', function () { pickDraft(f); });
+        refList.appendChild(b);
+      });
+      var open = refList.classList.toggle('hide') === false;
+      refDraftBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    refFile.addEventListener('change', function () {
+      setGErr('');
+      var file = (refFile.files || [])[0];
+      refFile.value = '';
+      if (!file) return;
+      var capMb = caps.image || 10;
+      if (file.size > capMb * 1024 * 1024) { setGErr(file.name + ' is over ' + capMb + ' MB.'); return; }
+      clearRef();
+      var f = { kind: 'image', name: file.name, state: 'new', upload: true };
+      ref = f; refCur.innerHTML = '';
+      row(f, refCur);
+      showPrice();
+      upload(f, file).then(function () { if (ref === f) showPrice(); });
+    });
+    // the ✕ on a draft picture (or on the uploaded reference's own row) drops it as the reference too
+    onFileRemoved = function (f) { if (ref && (ref === f || (ref.id && ref.id === f.id))) { ref = null; refCur.innerHTML = ''; showPrice(); } };
 
     function statusLine(j) {
       if (j.status === 'queued') return 'Waiting for Pepe…';
