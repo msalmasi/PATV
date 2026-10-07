@@ -54,6 +54,7 @@
   @supports (grid-template-rows: subgrid) {
     .cg .grid { row-gap: 0; }
     .cg a.ch { grid-row: span 4; grid-template-rows: subgrid; margin-bottom: 12px; }
+    .cg .ch-foot { align-self: start; } /* the foot track is shared, so NOW / NEXT line up across the row */
   }
   .cg a.ch.live { border-color: #2f4a2f; }
   .cg a.ch.onair { border-color: #7a2222; box-shadow: 0 0 0 1px #3a1010 inset; }
