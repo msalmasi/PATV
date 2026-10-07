@@ -88,6 +88,17 @@
   </div>
 </section>
 
+<section class="adm-card" id="econ-telemetry" aria-labelledby="econT">
+  <h2 id="econT">Economy telemetry <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Economy v2, phase E-0: measurement only, nothing is paid. The last 7 days per room: revenue by flow (every PAT flow Pepe routes, tagged with its room), verified watch-minutes from the stage players (one session per account, visible + playing; the streamer and linked accounts excluded, likely alts counted apart), participants (&ge; 10 chat lines or &ge; 5 mic minutes that day), and a <b>dry run</b>: what the 50/50 split would have put in the room's vault and what the room-vault recipe (10%/day, owner 15 / gang 15 / streamers 25 / participants 35 / games 10) would have paid from an empty vault. Gang and room-games slices are 0 until those phases exist; the room reward top-up would ask 1:1 of "paid". Burn reserve: 0 (no Treasury epoch yet).</p>
+  <div id="econ-tel-status" class="adm-help">Loading…</div>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>Room</th><th class="num">Revenue 7d</th><th>Top flows</th><th class="num">50/50 to vault</th><th class="num">to Fort Knox</th><th class="num">VWM (alt / self)</th><th class="num">Participants/day</th><th class="num">Recipe would pay</th><th class="num">Vault after 7d</th></tr></thead>
+    <tbody id="econ-tel-rows"><tr><td colspan="9" class="empty">…</td></tr></tbody>
+  </table></div>
+  <p class="adm-help" id="econ-tel-foot"></p>
+</section>
+
 <section class="adm-card" id="shop" aria-labelledby="shopT">
   <h2 id="shopT">Prize shop</h2>
   <p class="adm-help">Member listings, orders, disputes and the shop's fee settings have their own admin page; official (site) prizes have the older manager.</p>
@@ -111,7 +122,7 @@
     <li><b>Casino bans</b> (the site only stores the flag Pepe sets).</li>
   </ul>
 </section>
-<script src="/public/js/admin-panel.js?v=2" defer></script>
+<script src="/public/js/admin-panel.js?v=3" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

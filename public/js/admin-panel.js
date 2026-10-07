@@ -191,6 +191,35 @@
     }).catch(function () {});
   }
 
+  // ── Economy: economy v2 E-0 telemetry (admins only; econ.js) ──
+  if ($('econ-tel-rows')) {
+    fetch('/api/admin/econ/telemetry?days=7', { cache: 'no-store' }).then(function (r) { return r.status === 403 ? null : r.json(); }).then(function (d) {
+      var st = $('econ-tel-status');
+      if (!d) { st.textContent = 'Admins only.'; $('econ-tel-rows').innerHTML = ''; return; }
+      if (!d.ok) { st.textContent = 'Could not load: ' + (d.error || 'error'); return; }
+      st.innerHTML = (d.enabled ? '<b>economy_e0 on</b>' : '<b>economy_e0 OFF</b> (nothing new is recorded)') + ' · ' + esc(d.days[0]) + ' → ' + esc(d.days[d.days.length - 1])
+        + ' · all rooms: ' + n(d.totals.revenue) + ' PAT routed, 50/50 would send ' + n(Math.round(d.totals.split.to_vault)) + ' to room vaults and '
+        + n(Math.round(d.totals.split.to_fortknox)) + ' to Fort Knox (' + n(d.totals.split.games) + ' in game flows, not split)';
+      $('econ-tel-rows').innerHTML = (d.rooms || []).map(function (r) {
+        var flows = Object.keys(r.revenue.by_flow).sort(function (a, b) { return r.revenue.by_flow[b] - r.revenue.by_flow[a]; }).slice(0, 4)
+          .map(function (f) { return esc(f) + ' ' + n(r.revenue.by_flow[f]); }).join(', ');
+        var via = Object.keys(r.revenue.by_via).map(function (k) { return k + ' ' + n(r.revenue.by_via[k]); }).join(' · ');
+        var dr = r.dryrun;
+        var pay = dr ? n(dr.paid) + ' <small>(owner ' + n(dr.slices.owner) + ' · streamers ' + n(dr.slices.streamers) + ' · people ' + n(dr.slices.participants)
+          + '; claimed ' + Math.round(dr.claimed * 100) + '%)</small>' : '-';
+        return '<tr><td><b>' + esc(r.title) + '</b>' + (r.house ? ' <small>(house)</small>' : '') + (via ? '<br><small>' + esc(via) + '</small>' : '') + '</td>'
+          + '<td class="num">' + n(r.revenue.total) + '</td><td><small>' + (flows || '-') + '</small></td>'
+          + '<td class="num">' + n(Math.round(r.split.to_vault)) + (r.split.owner_self ? '<br><small>owner self ' + n(r.split.owner_self) + '</small>' : '') + '</td>'
+          + '<td class="num">' + n(Math.round(r.split.to_fortknox)) + '</td>'
+          + '<td class="num">' + n(r.watch.vwm) + ' <small>(' + n(r.watch.alt_min) + ' / ' + n(r.watch.self_min) + ')</small><br><small>' + n(r.watch.viewers) + ' viewers</small></td>'
+          + '<td class="num">' + r.people.qualified_avg + '<br><small>' + n(r.people.unique) + ' people · ' + n(r.people.active_min) + ' active min</small></td>'
+          + '<td class="num">' + pay + '</td>'
+          + '<td class="num">' + (dr ? n(dr.balance) + (dr.equilibrium ? '<br><small>equilibrium ' + n(dr.equilibrium) + '</small>' : '') : '-') + '</td></tr>';
+      }).join('') || '<tr><td colspan="9" class="empty">Nothing recorded yet.</td></tr>';
+      $('econ-tel-foot').textContent = 'VWM = verified watch-minutes, capped at ' + 120 + ' per viewer per stream per day; alt = likely alts (shared browser, >3 on one network, welcome dedupe); self = the streamer and linked accounts. Equilibrium = 7-day vault inflow / (10% × claimed share).';
+    }).catch(function () { $('econ-tel-status').textContent = 'Could not reach the server.'; });
+  }
+
   // ── Economy: PAT grants (the old "Points Panel") ──
   var grant = $('pointsTransferForm');
   if (grant) {

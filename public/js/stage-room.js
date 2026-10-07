@@ -145,6 +145,24 @@
       }).catch(function () {});
     }
     setInterval(poll, 10000);
+    // economy E-0: verified watch-minutes. Every 30 s a signed-in viewer's page says what it is showing
+    // (HLS streams only - embeds can't be verified), whether the tab is visible and the video is playing,
+    // and where the playhead is. The server credits only consecutive beats from one session per account
+    // with the position advancing; a paused or hidden tab earns nothing. No PAT is paid for it (yet).
+    var sid = (Math.random().toString(36).slice(2) + Date.now().toString(36)).slice(0, 32);
+    var roomQ = (/[?&]room=([^&]+)/.exec(o.api || '') || [])[1] || '';
+    try { roomQ = decodeURIComponent(roomQ); } catch (e) {}
+    var beats = o.watch === false ? null : setInterval(watchBeat, 30000);
+    function watchBeat() {
+      var sel = selection();
+      if (!sel || sel.embed || !player.running()) return;
+      var st = player.state ? player.state() : null;
+      fetch('/api/econ/watch/beat', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stream: String(sel.stream), room: roomQ, sid: sid, visible: document.visibilityState === 'visible',
+                               playing: !!(st && st.playing), pos: st ? st.time : 0, muted: st ? st.muted : true }) })
+        .then(function (r) { if (r.status === 401 || r.status === 404) { clearInterval(beats); beats = null; } })
+        .catch(function () {});
+    }
     window.addEventListener('load', function () {
       loaded = true;
       show();

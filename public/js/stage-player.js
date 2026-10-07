@@ -60,7 +60,15 @@
       SRC = url;
       if (p) { stop(); start(); }
     }
-    return { start: start, stop: stop, running: function () { return !!p; }, setSrc: setSrc, src: function () { return SRC; } };
+    // economy E-0: what the viewer is actually getting, for the watch-minute heartbeat (stage-room.js)
+    function state() {
+      if (!p) return null;
+      try {
+        return { playing: !p.paused() && !p.ended() && !retry, time: Number(p.currentTime()) || 0,
+                 muted: !!p.muted() || Number(p.volume()) === 0 };
+      } catch (e) { return null; }
+    }
+    return { start: start, stop: stop, running: function () { return !!p; }, setSrc: setSrc, src: function () { return SRC; }, state: state };
   }
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.player = player;
