@@ -13,6 +13,9 @@ function cleanAi(ai) {
   return { state: String(ai.state || ""), result: ai.result == null ? null : String(ai.result).slice(0, 60),
            confidence: Number(ai.confidence) || 0, reason: String(ai.reason || "").slice(0, 240),
            until: Number(ai.until) || 0,
+           // 1.99dh: when Pepe looks again, whether he handed it to the admins, the price data he used
+           next_try: Number(ai.next_try) || 0, escalated: Number(ai.escalated) || 0, tries: Number(ai.tries) || 0,
+           evidence: String(ai.evidence || "").slice(0, 320),
            disputes: (ai.disputes || []).slice(0, 30).map((d) => ({ nick: String(d.nick || "").slice(0, 60), why: String(d.why || "").slice(0, 160) })) };
 }
 

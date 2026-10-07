@@ -70,6 +70,9 @@
       <span class="who">🤖 Pepe (AI judge, experimental)</span>
       <% if (st === 'thinking') { %><span>Pepe is reading the evidence…</span>
       <% } else if (st === 'unsure') { %><span>Pepe wasn't sure yet<%= ai.reason ? ':' : '.' %></span><% if (ai.reason) { %><span class="reason"><%= ai.reason %></span><% } %>
+        <% if (ai.evidence) { %><span class="info">📈 <%= ai.evidence %></span><% } %>
+        <% if (ai.escalated) { %><span class="info">He's handed it to the admins to settle.</span>
+        <% } else if (ai.next_try && ai.next_try > now) { %><span class="info">He'll look again at <%= when(ai.next_try).slice(11) %> UTC (in <%- cd(ai.next_try) %>).</span><% } %>
       <% } else if (st === 'proposed' || st === 'disputed') { %>
         <span class="call">His call: <b><%= ai.result %></b><%= ai.confidence ? ' (' + Math.round(ai.confidence * 100) + '% sure)' : '' %></span>
         <% if (ai.reason) { %><span class="reason"><%= ai.reason %></span><% } %>

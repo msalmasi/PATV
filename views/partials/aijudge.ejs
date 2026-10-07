@@ -1,4 +1,4 @@
-<%# Pepe-as-judge box for a market/pool page. Pass { m, kind: 'market'|'pool', inIt, now }. %>
+<%# Pepe-as-judge box for a market/pool page. Pass { m, kind: 'market'|'pool', inIt, judgeMe, now }. judgeMe (= an admin on an AI-judged market) may ask Pepe too. %>
 <% if (m && m.ai_judge) {
   const ai = m.ai || {};
   const ref = 'M' + m.id;
@@ -14,14 +14,25 @@
       <% (ai.disputes || []).forEach((d) => { %><p class="aij-sub">⚖️ <%= d.nick %>: <%= d.why || '(no reason)' %></p><% }) %>
     <% } else if (ai.state === 'thinking') { %>
       <p>Pepe is looking it up right now…</p>
+    <% } else if (ai.state === 'unsure' && live && ai.escalated) { %>
+      <p>Pepe couldn't tell after <%= ai.tries || 'several' %> tries — <%= ai.reason %></p>
+      <p class="aij-sub">He's handed it to the admins to settle. Anyone in it can still ask him to look again.</p>
     <% } else if (ai.state === 'unsure' && live) { %>
-      <p>Pepe couldn't tell yet — <%= ai.reason %>. He'll look again in a few hours.</p>
+      <p>Pepe couldn't tell yet — <%= ai.reason %></p>
+      <% if (ai.next_try && ai.next_try > now) { const mins = Math.max(1, Math.round((ai.next_try - now) / 60)); %>
+        <p class="aij-sub">He'll look again at <%= new Date(ai.next_try * 1000).toISOString().slice(11, 16) %> UTC (in <%= mins >= 90 ? Math.round(mins / 60) + ' h' : mins + ' min' %>). If he still can't tell after a few tries, the admins settle it.</p>
+      <% } else { %>
+        <p class="aij-sub">He'll look again shortly.</p>
+      <% } %>
     <% } else if (live) { %>
-      <p>When <%= kind === 'market' ? 'trading' : 'betting' %> closes, Pepe searches the web, proposes the result with his reasoning, and it pays out after a dispute window.</p>
+      <p>When <%= kind === 'market' ? 'trading' : 'betting' %> closes, Pepe checks the evidence (exchange price data for price questions, the web, his Camfrog records), proposes the result with his reasoning, and it pays out after a dispute window.</p>
     <% } %>
-    <% if (live && inIt) { %>
+    <% if (ai.evidence && live && (ai.state === 'unsure' || ai.state === 'proposed')) { %>
+      <p class="aij-sub">📈 <%= ai.evidence %></p>
+    <% } %>
+    <% if (live && (inIt || judgeMe)) { %>
       <div class="aij-forms">
-        <% if (ai.state === 'proposed') { %>
+        <% if (ai.state === 'proposed' && inIt) { %>
           <form method="post" action="/act">
             <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="<%= kind %>">
             <input type="hidden" name="a0" value="dispute"><input type="hidden" name="a1" value="<%= ref %>">
@@ -29,7 +40,7 @@
             <input type="text" name="a2" maxlength="160" placeholder="Why is Pepe wrong?">
             <button type="submit" class="aij-dis">Dispute</button>
           </form>
-        <% } else if (ai.state !== 'disputed' && ai.state !== 'thinking') { %>
+        <% } else if (ai.state !== 'proposed' && ai.state !== 'disputed' && ai.state !== 'thinking') { %>
           <form method="post" action="/act">
             <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="<%= kind %>">
             <input type="hidden" name="a0" value="ai"><input type="hidden" name="a1" value="<%= ref %>">

@@ -32,6 +32,8 @@ function cleanAi(ai) {
     confidence: Math.max(0, Math.min(1, num(ai.confidence))),
     reason: str(ai.reason, 600),
     until: num(ai.until) || null,
+    next_try: num(ai.next_try) || null, escalated: num(ai.escalated) || null, tries: num(ai.tries),
+    evidence: str(ai.evidence, 320),
     disputes: (Array.isArray(ai.disputes) ? ai.disputes : []).slice(0, 50)
       .map((d) => ({ nick: str(d && d.nick, 60), why: str(d && d.why, 300), ts: num(d && d.ts) })),
   };
