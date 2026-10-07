@@ -1,5 +1,5 @@
 // Offline tests for 1.99dv: one URL scheme across the site (Reddit-like: p/ = pad, u/ = user).
-//   - a post's canonical address: /p/<pad>/posts/<id>/<title-slug> (its first live pad) or /u/<username>/posts/<id>/<slug>
+//   - a post's canonical address: /p/<pad>/posts/<id>/<title-slug> (its fixed home pad, 1.99ep) or /u/<username>/posts/<id>/<slug>
 //     (a profile post); the id alone resolves - a wrong / missing slug, a wrong pad or username, and the old /feed/p/<id>
 //     301 there with the query string kept; a post the viewer can't see 404s on every address (no redirect, no leak)
 //   - crossposts are their own posts in their own pad; a post taken out of its first pad moves to the next one
@@ -24,7 +24,7 @@ delete process.env.STAGING;
 process.env.SECRET_KEY = "test-secret";
 process.env.FEED_DIR = path.join(tmp, "feedfiles");
 const express = require("express");
-const { runQuery } = require(path.join(repo, "dbUtils"));
+const { runQuery, getQuery } = require(path.join(repo, "dbUtils"));
 const rooms = require(path.join(repo, "rooms"));
 const store = require(path.join(repo, "feedstore"));
 const web = require(path.join(repo, "feedweb"));
@@ -103,11 +103,14 @@ test("title slugs: ascii, lower case, '-' between words, ~60 characters cut at a
   assert.equal(pads.postSlug({ title: "", body: "" }), "");
 });
 
-test("postHref: the first live pad, else the first; a profile pad -> /u/<name>; no placement -> the author's profile", () => {
+test("postHref: the fixed home pad (1.99ep), else the first placement; a profile pad -> /u/<name>; no placement -> the author's profile", () => {
   const P = (roomsAll, extra = {}) => pads.postHref({ id: "AbCdEf123456", title: "Hi There", roomsAll, author: { username: "alice" }, ...extra });
   assert.equal(P([{ id: "a", slug: "drama-central" }]), "/p/drama-central/posts/AbCdEf123456/hi-there");
-  assert.equal(P([{ id: "a", slug: "gone", removed: true }, { id: "b", slug: "pics" }]), "/p/pics/posts/AbCdEf123456/hi-there");
-  assert.equal(P([{ id: "a", slug: "wait", pending: true }, { id: "b", slug: "pics", hidden: true }]), "/p/wait/posts/AbCdEf123456/hi-there", "none live: the first");
+  // 1.99ep: no "first live pad" any more - the home pad stays the address whatever happens to its placements
+  assert.equal(P([{ id: "a", slug: "gone", removed: true }, { id: "b", slug: "pics" }]), "/p/gone/posts/AbCdEf123456/hi-there");
+  assert.equal(P([{ id: "a", slug: "pics" }, { id: "b", slug: "home", removed: true }], { homePad: "b" }), "/p/home/posts/AbCdEf123456/hi-there",
+    "home_pad wins over placement order and state");
+  assert.equal(P([{ id: "a", slug: "wait", pending: true }, { id: "b", slug: "pics", hidden: true }]), "/p/wait/posts/AbCdEf123456/hi-there", "no home pad: the first");
   assert.equal(P([{ id: "u", slug: "u-alice", profile: "alice" }]), "/u/alice/posts/AbCdEf123456/hi-there");
   assert.equal(P([]), "/u/alice/posts/AbCdEf123456/hi-there");
   assert.equal(P([{ id: "a", slug: "pics" }], { title: "" , body: "" }), "/p/pics/posts/AbCdEf123456", "no slug: the id alone");
@@ -158,7 +161,7 @@ test("posts: a post the viewer can't see 404s on every address - no redirect, so
   assert.equal(staff.location, `/p/plant-based-chatting/posts/${p.id}/secret-plans`);
 });
 
-test("posts: a crosspost lives in its own pad; a post taken out of its first pad moves to the next (old address 301s)", async () => {
+test("posts: a crosspost lives in its own pad; a post's address is its fixed home pad (1.99ep) - it never moves", async () => {
   const o = await mkPost(U.alice, { title: "Look at my fern", body: "fern", community: ROOM_B });
   const x = await call("POST", `/api/feed/posts/${o.id}/crosspost`, U.bob, { community: slug(ROOM_C), title: "Fern from p/plant-based-chatting" });
   assert.equal(x.status, 200, x.text);
@@ -170,14 +173,21 @@ test("posts: a crosspost lives in its own pad; a post taken out of its first pad
   assert.ok(op.text.includes(`href="${xc}"`), "Crossposted to: the crosspost's address");
   const xp = await get(xc, U.bob);
   assert.ok(xp.text.includes(`href="/p/plant-based-chatting/posts/${o.id}/look-at-my-fern"`), "the embedded original links its address");
-  // a second placement (legacy data / migration): the first live one is the address
+  // a second placement (legacy data / migration): the home pad stays the address, even once the post is taken out of it
+  const home = `/p/plant-based-chatting/posts/${o.id}/look-at-my-fern`;
+  assert.equal((await getQuery("SELECT home_pad FROM feed_posts WHERE id = ?", [o.id]))[0].home_pad, ROOM_B, "home_pad set at creation");
+  assert.equal((await getQuery("SELECT home_pad FROM feed_posts WHERE id = ?", [x.d.id]))[0].home_pad, ROOM_C, "a crosspost's home is its own pad");
   await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, 0)", [o.id, LOUNGE, Date.now() + 1000]);
-  assert.equal(await store.postPath(o.id), `/p/plant-based-chatting/posts/${o.id}/look-at-my-fern`);
+  assert.equal(await store.postPath(o.id), home);
   await runQuery("UPDATE feed_post_rooms SET removed_at = ? WHERE post_id = ? AND room_id = ?", [Date.now(), o.id, ROOM_B]);
-  const moved = `/p/camfrog-lounge/posts/${o.id}/look-at-my-fern`;
-  assert.equal(await store.postPath(o.id), moved);
-  assert.equal((await get(`/p/plant-based-chatting/posts/${o.id}/look-at-my-fern`, U.bob)).location, moved);
-  assert.equal((await get(moved, U.bob)).status, 200);
+  assert.equal(await store.postPath(o.id), home, "1.99ep: no move to the next live pad");
+  assert.equal((await get(`/p/camfrog-lounge/posts/${o.id}/look-at-my-fern`, U.bob)).location, home);
+  assert.equal((await get(home, U.bob)).status, 200, "still shown somewhere: the page answers at its home address");
+  // an old row with no home_pad is backfilled from its FIRST placement (not its first live one)
+  await runQuery("UPDATE feed_posts SET home_pad = NULL WHERE id = ?", [o.id]);
+  await runQuery(`UPDATE feed_posts SET home_pad = (SELECT pr.room_id FROM feed_post_rooms pr WHERE pr.post_id = feed_posts.id ORDER BY pr.created, pr.rowid LIMIT 1)
+                  WHERE id = ?`, [o.id]);
+  assert.equal(await store.postPath(o.id), home);
 });
 
 test("posts: a profile post's address is /u/<username>/posts/<id>/<slug>; /p/u-<name>/posts/... and /feed/p/ 301 there", async () => {

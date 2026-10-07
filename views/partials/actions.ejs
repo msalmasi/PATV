@@ -62,9 +62,18 @@
         <span class="act-label"><%= a.label %></span>
         <%# 1.99du: Pepe sends the reason (bot 1.99ds: "something went wrong: <type>: <reason>"); the bare legacy
             string is from the 2026-10-05 webact bug (fixed in the bot's 1.99ae) - say so instead of nothing %>
+        <%# 1.99ep: a failure carries a stable error code (weberrors.js, decorated as a.err by actions.recentFor):
+            the friendly message (Pepe's own reply when he gave one), a hint, and the code in small print for support %>
+        <% if (a.err) { %>
+        <span class="act-msg"><%= a.err.message %></span>
+        <span class="act-hint"><%= a.err.hint %></span>
+        <span class="act-code">code <%= a.err.code %><%= a.err.incident ? ' · incident ' + a.err.incident : '' %></span>
+        <% } else { %>
         <span class="act-msg"><%= a.status === 'pending' || a.status === 'claimed' ? 'waiting for Pepe…'
           : /^\s*something went wrong\.?\s*$/i.test(a.message || '') ? 'Pepe hit a bug on his side (since fixed) — nothing happened, so just try again.'
+          : /^\s*something went wrong:/i.test(a.message || '') ? 'Something went wrong on Pepe\'s side. Check your balance before trying again.'
           : (a.message || (a.status === 'failed' ? 'Pepe couldn\'t do it (no reason given).' : '')) %></span>
+        <% } %>
       </div>
     <% }) %>
   </div>
@@ -81,4 +90,6 @@
   .act-label { color: #bbb; font-family: monospace; overflow-wrap: anywhere; }
   .act-msg { grid-column: 2; color: #e0e0e0; overflow-wrap: anywhere; }
   .act-failed .act-msg { color: #e57373; }
+  .act-hint { grid-column: 2; color: #9e9e9e; font-size: 12px; }
+  .act-code { grid-column: 2; color: #666; font-size: 11px; font-family: monospace; }
 </style>

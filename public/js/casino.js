@@ -479,7 +479,8 @@
     if (sig === sigActs) return;
     sigActs = sig;
     $("cz-acts").innerHTML = acts.map((a) => `<div class="${esc(a.status)}"><span>${a.status === "done" ? "✅" : a.status === "failed" ? "❌" : "⏳"}</span>` +
-      `<span class="lab">${esc(a.label)}</span><span class="m">${a.status === "pending" || a.status === "claimed" ? "waiting for Pepe…" : esc(a.message || "")}</span></div>`).join("");
+      `<span class="lab">${esc(a.label)}</span><span class="m">${a.status === "pending" || a.status === "claimed" ? "waiting for Pepe…" : esc(a.message || "")}` +
+      (a.code ? `<small class="code" style="display:block;color:#666;font-size:11px;font-family:monospace">code ${esc(a.code)}${a.incident ? " · incident " + esc(a.incident) : ""}</small>` : "") + `</span></div>`).join("");
   }
 
   // ── clocks ──

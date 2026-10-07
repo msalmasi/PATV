@@ -309,7 +309,9 @@ function register(app, { isBotToken, addUser }) {
           out.me = {
             username: u.username, camfrog: u.camfrogUsername || null, banned: !!u.casino_banned, admin: u.class === "Admin",
             seats: PRIV.get(String(u.username).toLowerCase()) || [],            // ONLY this user's own seats
-            actions: acts.map((a) => ({ id: a.id, label: a.label, status: a.status, message: a.message, created: a.created })),
+            // 1.99ep: a failure shows the friendly message + its error code (weberrors.js)
+            actions: acts.map((a) => ({ id: a.id, label: a.label, status: a.status, message: a.err ? a.err.message : a.message,
+                                        code: a.err ? a.err.code : null, incident: a.err ? a.err.incident : null, created: a.created })),
           };
         }
       } catch (e) {

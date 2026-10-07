@@ -207,7 +207,7 @@ test("1.99ee slots: free by default; an owner's price holds per minute; the fee 
   } finally { await rooms.setStage(PLANT, { slot_price: 0 }, "pb", { maxSlots: 4, maxPrice: PRICE }); }
 });
 
-test("1.99ee featuring is earned: feature=true books an ordinary slot, nothing extra held; the owner features free; a LEGACY paid feature is still refunded when unfeatured", async () => {
+test("featuring is free and never bought: feature=true books an ordinary slot, nothing extra held; the owner features free", async () => {
   await rooms.setStage(PLANT, { slot_count: 3 }, "pb", { maxSlots: 4, maxPrice: PRICE });
   const [a, b, c] = [await mkUser(), await mkUser(), await mkUser()];
   const pa = await S.book(a, { room: PLANT, minutes: 10, feature: true });
@@ -215,21 +215,17 @@ test("1.99ee featuring is earned: feature=true books an ordinary slot, nothing e
   assert.equal(await balance(a.userId), START, "nothing charged for asking");
   const sb = await S.book(b, { room: PLANT, minutes: 10, feature: true });
   assert.equal(sb.slot.featured, false, "a second one too - no exclusive paid slot");
-  // a legacy paid featured row from before 1.99ee (held up front at the old featured price)
-  await runQuery("UPDATE users SET points_balance = points_balance - 1000 WHERE userId = ?", [a.userId]);
-  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, 'stage feature hold (legacy test)', -1000)", ["legacy-" + a.userId, a.userId]);
-  await runQuery("UPDATE stage_slots SET kind = 'feature', featured = 1, feature_by = 'paid', price_per_min = ?, held = 1000, revenue_vault = 'reserve' WHERE id = ?", [PRICE, pa.slot.id]);
   await pub(pa.key, { clientid: "41" }); await S.tick();
-  await stream(pa.slot.stream, 90, { clientid: "41" });
-  const before = await balance(a.userId);
+  await S.featureByOwner(pa.slot.id, "pb");
   await S.featureByOwner(sb.slot.id, "pb");
   const A = await S.getSlot(pa.slot.id), B = await S.getSlot(sb.slot.id);
   assert.equal(A.featured, 0); assert.equal(B.featured, 1); assert.equal(B.feature_by, "owner");
-  assert.equal(A.held, 200, "legacy hold shrunk to what was used"); assert.equal(await balance(a.userId), before + 800, "unused legacy feature refunded at once");
+  assert.equal(await balance(a.userId), START, "unfeaturing moves no PAT");
+  const un = await S.unfeature(sb.slot.id, "pb", "test");
+  assert.ok(un && un.refund === undefined, "1.99ep: unfeature has no refund path");
+  await S.featureByOwner(sb.slot.id, "pb");
   const res = await S.end(pa.slot.id, "owner_ended", a.username);
-  assert.equal(res.charged, 200); assert.equal(await balance(a.userId), START - 200);
-  const acc = await getQuery("SELECT amount FROM royalty_ledger WHERE ref = ?", ["stage:" + pa.slot.id]);
-  assert.deepEqual(acc.map((x) => x.amount), [40], "a legacy row settles the legacy way (Reserve + 20% owner accrual)");
+  assert.equal(res.charged, 0); assert.equal(await balance(a.userId), START);
   // the public view: the owner's featured slot first
   await pub(sb.key, { clientid: "42" }); await S.tick();
   const pc = await S.book(c, { room: PLANT, minutes: 5, feature: true });
@@ -239,16 +235,61 @@ test("1.99ee featuring is earned: feature=true books an ordinary slot, nothing e
   await rooms.setStage(PLANT, { slot_count: 1 }, "pb", { maxSlots: 4, maxPrice: PRICE });
 });
 
-test("1.99ee feature me is retired: the upgrade is refused (410) and charges nothing", async () => {
+test("1.99ep paid featuring is gone: no upgrade, no paid-feature code left in the stage module", async () => {
+  assert.equal(S.upgrade, undefined, "no upgrade() export");
+  const src = fs.readFileSync(path.join(repo, "mainstage.js"), "utf8");
+  assert.doesNotMatch(src, /\/api\/stage\/slots\/:id\/upgrade/, "no upgrade route");
+  assert.doesNotMatch(src, /LEGACY_PAID_FEATURE|feature_by = 'paid',|feature_by === "paid"|stage feature refund|stage feature hold|jackpot_rakes \(jackpotId, spinId/,
+    "no paid-feature billing / refunds / legacy settlement");
+  assert.doesNotMatch(fs.readFileSync(path.join(repo, "home.js"), "utf8"), /featuredPrice/, "home.js has no featured price");
+  for (const f of ["public/js/room-manage.js", "public/js/stage-room.js", "public/js/stage-book.js", "views/stageAdmin.ejs", "roomsweb.js"]) {
+    assert.doesNotMatch(fs.readFileSync(path.join(repo, f), "utf8"), /paid feature|PAT refunded\)|name="revenue_vault"|feature: feat/i, f);
+  }
+});
+
+test("1.99ep purge: settled paid-feature bookings are deleted (backup first), the ledger rows stay, open ones are kept; idempotent", async () => {
   const u = await mkUser();
-  const r = await S.book(u, { room: PLANT, minutes: 20, feature: false });
-  await pub(r.key, { clientid: "51" }); await S.tick();
-  await stream(r.slot.stream, 60, { clientid: "51" });
-  await assert.rejects(S.upgrade(u, r.slot.id, 2), (e) => e.status === 410 && /Boost/.test(e.message));
-  assert.equal(await balance(u.userId), START);
-  assert.equal((await S.getSlot(r.slot.id)).featured, 0);
-  const res = await S.end(r.slot.id, "owner_ended", u.username);
-  assert.equal(res.charged, 0);
+  const t0 = Date.now();
+  const row = (id, extra) => runQuery(`INSERT INTO stage_slots (id, userId, username, displayname, status, created, max_minutes, price_per_min, held, charged,
+      refunded, stream, revenue_vault, room_id, kind, featured, feature_by, settled, mode, start_at)
+      VALUES (?, ?, ?, ?, ?, ?, 15, 1000, ?, ?, ?, ?, 'reserve', ?, ?, 0, ?, ?, 'stream', ?)`,
+    [id, u.userId, u.username, u.username, extra.status, t0, extra.held, extra.charged, extra.refunded, "stg-" + id, PLANT, extra.kind, extra.by, extra.settled, t0]);
+  await row("legacyfeat-1", { status: "ended", held: 15000, charged: 2000, refunded: 13000, kind: "feature", by: null, settled: 1 });
+  await row("legacyfeat-2", { status: "ended", held: 14000, charged: 3000, refunded: 11000, kind: "slot", by: "paid", settled: 1 });
+  await row("legacyfeat-3", { status: "ended", held: 10000, charged: 10000, refunded: 0, kind: "feature", by: "paid", settled: 1 });
+  await row("legacyslot-4", { status: "scheduled", held: 0, charged: 0, refunded: null, kind: "slot", by: null, settled: 0 });
+  await runQuery("INSERT INTO stage_events (slot_id, ts, what, actor, detail) VALUES ('legacyfeat-1', 1, 'booked', 'x', 'held 15000')");
+  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES ('tx-legacy-1', ?, 'stage slot hold (15 min max)', -15000)", [u.userId]);
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, settled) VALUES ('rc-legacy-1', 'stage_slot', ?, 'stage slot legacyfe: 2 min', -2000, 1)", [u.userId]);
+  // a settled one something still points at (a saved stage capture) is kept, only relabelled
+  await runQuery("INSERT INTO stage_slots (id, userId, username, status, created, max_minutes, price_per_min, held, charged, stream, revenue_vault, room_id, kind, feature_by, settled) VALUES ('legacyfeat-5', ?, ?, 'ended', ?, 5, 1000, 5000, 1000, 'stg-5', 'reserve', ?, 'feature', 'paid', 1)", [u.userId, u.username, t0, PLANT]);
+  await runQuery(`CREATE TABLE IF NOT EXISTS stage_captures (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, username TEXT, room_id TEXT NOT NULL, source TEXT NOT NULL,
+    slot_id TEXT, stream_label TEXT, kind TEXT NOT NULL, ct TEXT NOT NULL, secs REAL, bytes INTEGER, nsfw INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL,
+    action_id INTEGER, media_id TEXT, message TEXT, created INTEGER NOT NULL, updated INTEGER)`);
+  await runQuery("INSERT INTO stage_captures (id, user_id, room_id, source, slot_id, kind, ct, state, created) VALUES ('cap1', ?, ?, 'slot', 'legacyfeat-5', 'snap', 'image/jpeg', 'saved', 1)", [u.userId, PLANT]);
+  await runQuery("INSERT OR REPLACE INTO stage_config (key, value) VALUES ('revenue_vault', '\"jackpot\"')");
+  process.env.DB_BACKUP_DIR = path.join(tmp, "backups");
+  const out = await S.purgePaidFeaturing();
+  assert.ok(out && out.backup && fs.existsSync(out.backup) && fs.statSync(out.backup).size > 4096, "a DB backup came first");
+  assert.deepEqual(out.deleted.sort(), ["legacyfeat-1", "legacyfeat-2", "legacyfeat-3"]);
+  assert.deepEqual(out.kept, ["legacyfeat-5"]);
+  assert.equal(out.held, 39000); assert.equal(out.charged, 15000); assert.equal(out.refunded, 24000);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM stage_slots WHERE id LIKE 'legacyfeat-%'"))[0].n, 1);
+  const kept = await S.getSlot("legacyfeat-5");
+  assert.equal(kept.kind, "slot"); assert.equal(kept.feature_by, null);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM stage_events WHERE slot_id = 'legacyfeat-1'"))[0].n, 0, "its events went with it");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM transactions WHERE transactionId = 'tx-legacy-1'"))[0].n, 1, "the PAT history stays");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE claimId = 'rc-legacy-1'"))[0].n, 1, "the Reserve ledger stays");
+  assert.equal((await S.getSlot("legacyslot-4")).revenue_vault, "room_flow", "an unsettled legacy-route slot settles as a room flow now");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM stage_config WHERE key = 'revenue_vault'"))[0].n, 0, "the dead config row is cleared");
+  const rec = JSON.parse((await getQuery("SELECT value FROM stage_config WHERE key = 'purge_paid_feature_v1'"))[0].value);
+  assert.equal(rec.deleted.length, 3);
+  assert.equal(await S.purgePaidFeaturing(), null, "a second run does nothing (and takes no backup)");
+  await S.end("legacyslot-4", "test_cleanup", "test");
+  // fixtures out again (the money-conservation test sums these tables)
+  await runQuery("DELETE FROM transactions WHERE transactionId = 'tx-legacy-1'");
+  await runQuery("DELETE FROM reserve_claims WHERE claimId = 'rc-legacy-1'");
+  await runQuery("DELETE FROM stage_slots WHERE id IN ('legacyfeat-5', 'legacyslot-4')");
 });
 
 test("embed slots: live at once (no key), billed while open, never accepted by nginx", async () => {

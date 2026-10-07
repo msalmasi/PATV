@@ -58,10 +58,21 @@ function postSlug(p) {
   const body = String(p.body || "").replace(/\s+/g, " ").trim().split(" ").slice(0, 10).join(" ");
   return titleSlug(p.title) || titleSlug(p.link && p.link.title) || titleSlug(body);
 }
-/** The placement a post's address uses: the first one still live (not removed / pending / hidden), else the first. */
+/**
+ * The placement a post's address uses. 1.99ep: its fixed HOME pad (feed_posts.home_pad, set at creation, never
+ * changes - v2 decision 2026-10-07), whatever happens to its placements; the "first live pad" rule is gone. A post
+ * without one (none in practice: old rows are backfilled) falls back to its first placement.
+ */
 function homeOf(p) {
   const all = (p && p.roomsAll) || [];
-  return all.find((r) => !r.removed && !r.pending && !r.hidden) || all[0] || null;
+  if (p && p.homePad) {
+    const h = all.find((r) => r.id === p.homePad);
+    if (h) return h;
+    let R = null;
+    try { R = require("./rooms").getCached(p.homePad); } catch (e) { R = null; }
+    return { id: p.homePad, slug: R ? R.slug : null, profile: R && R.profile ? R.profile.username || null : null };
+  }
+  return all[0] || null;
 }
 /**
  * A post's canonical path. p: a decorated post ({id, title, link, body, roomsAll: [{id, slug, profile, removed,

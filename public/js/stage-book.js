@@ -30,7 +30,7 @@
     return null;
   }
   function roomTitle(id) { var o = roomOpt(id); return o ? o.getAttribute('data-title') : id; }
-  // 1.99ee: featuring isn't sold any more (old ?feature=1 links just open the page) - pads are 🚀 boosted instead
+  // featuring is never sold (1.99ee; old ?feature=1 links just open the page) - pads are 🚀 boosted instead
 
   // ── booking form ──
   var mins = $('mins'), minsR = $('minsR');
@@ -79,8 +79,8 @@
 
   $('bookForm').addEventListener('submit', function (e) {
     e.preventDefault();
-    var m = Number(mins.value), w = radio('when'), feat = false, mode = radio('mode');
-    var body = { room: $('room').value, minutes: m, feature: feat, mode: mode, embed: $('embed').value, title: $('title').value };
+    var m = Number(mins.value), w = radio('when'), mode = radio('mode');
+    var body = { room: $('room').value, minutes: m, mode: mode, embed: $('embed').value, title: $('title').value };
     if (mode === 'embed' && !$('embed').value.trim()) { $('bookMsg').textContent = 'Paste a YouTube or Twitch link.'; return; }
     var hold = m * price();
     var url = '/api/stage/book';
@@ -89,8 +89,8 @@
       if (!at || at < Date.now() + 60000) { $('bookMsg').textContent = 'Pick a start time in the future.'; return; }
       body.start_at = at;
     } else if (w === 'queue') url = '/api/stage/queue';
-    var q = w === 'queue' ? 'Join the queue for a ' + m + '-minute ' + (feat ? 'featured ' : '') + 'slot? When a slot frees up it\'s booked for you' + (hold ? ' and ' + fmt(hold) + ' PAT is held then' : '') + '.'
-      : (hold ? 'Hold ' + fmt(hold) + ' PAT for a ' + m + '-minute ' + (feat ? 'featured ' : '') + 'slot? You pay only for the minutes you\'re live; the rest comes back.'
+    var q = w === 'queue' ? 'Join the queue for a ' + m + '-minute slot? When a slot frees up it\'s booked for you' + (hold ? ' and ' + fmt(hold) + ' PAT is held then' : '') + '.'
+      : (hold ? 'Hold ' + fmt(hold) + ' PAT for a ' + m + '-minute slot? You pay only for the minutes you\'re live; the rest comes back.'
               : 'Book a free ' + m + '-minute slot' + (w === 'later' ? ' at ' + when(body.start_at) : ' now') + '?');
     if (!confirm(q)) return;
     $('bookBtn').disabled = true; $('bookMsg').textContent = 'Booking…';
@@ -152,7 +152,7 @@
            '<button type="button" class="btn danger" data-cancel="' + esc(x.id) + '">Cancel</button></li>';
     });
     (d.queue || []).forEach(function (q) {
-      h += '<li><span><b>' + esc(roomTitle(q.room_id)) + '</b> · queue #' + q.position + ' · ' + q.minutes + ' min' + (q.feature ? ' · ★ featured' : '') + '</span>' +
+      h += '<li><span><b>' + esc(roomTitle(q.room_id)) + '</b> · queue #' + q.position + ' · ' + q.minutes + ' min' + '</span>' +
            '<button type="button" class="btn danger" data-leave="' + esc(q.id) + '">Leave</button></li>';
     });
     $('upList').innerHTML = h;

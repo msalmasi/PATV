@@ -161,8 +161,8 @@ function register(app, { addUser, isBotToken }) {
       if (verb === "unfeature") {
         const s = open.find((x) => x.featured);
         if (!s) return res.json({ ok: false, message: "nobody is featured" });
-        const r = await stage.unfeature(s.id, who, "the pad owner unfeatured it");
-        return res.json({ ok: true, message: `${s.displayname || s.username} isn't featured any more` + (r && r.refund ? ` (${r.refund.toLocaleString("en-US")} PAT refunded)` : "") });
+        await stage.unfeature(s.id, who, "the pad owner unfeatured it");
+        return res.json({ ok: true, message: `${s.displayname || s.username} isn't featured any more` });
       }
       if (verb === "slots") {
         const n = Math.floor(Number(arg));

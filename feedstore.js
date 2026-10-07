@@ -12,6 +12,9 @@
 //                      longer read or written as 1: every post lives in a community (feed_post_rooms); the column
 //                      stays so old rows / links keep working, and the communities_v1 migration gave the old
 //                      main-feed-only posts a home in the Camfrog Lounge (rooms.LOUNGE_ID).
+//                      (1.99ep) home_pad: the pad (rooms_registry id; a profile pad for a profile post) the post was
+//                      created in - fixed at creation, never changes, the base of its canonical URL (pads.postHref).
+//                      A crosspost is its own row with its own home_pad. Old rows: backfilled from their first placement.
 //   feed_post_rooms    post_id, room_id (rooms_registry id), removed_at / removed_by (a room owner
 //                      can take a post out of THEIR room without deleting it elsewhere)
 //   feed_attachments   id, post_id (NULL until posted), owner_id, kind image|audio|video|preview,
@@ -154,6 +157,7 @@ function init() {
       await addCol("feed_attachments", "ai_nsfw", "INTEGER NOT NULL DEFAULT 0");
       await addCol("feed_attachments", "ai_hide_prompt", "INTEGER NOT NULL DEFAULT 0");
       await addCol("feed_attachments", "ai_job", "TEXT");
+      await migrateHomePad();
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -222,6 +226,17 @@ async function migrateSafety() {
   await runQuery("CREATE INDEX IF NOT EXISTS user_reports_open ON user_reports (resolved_at, created)");
   await runQuery("CREATE INDEX IF NOT EXISTS user_reports_reporter ON user_reports (reporter_id, created)");
   await runQuery("CREATE INDEX IF NOT EXISTS feed_reports_reporter ON feed_reports (reporter_id, created)");
+}
+
+// ── 1.99ep: a post's fixed home pad (v2 decision 2026-10-07: a post belongs to exactly one pad or user) ──
+/** feed_posts.home_pad + the backfill for older posts: their FIRST placement (by creation), whatever its state
+ *  now. Idempotent (only rows still NULL; a post with no placement at all stays NULL = its author's profile). */
+async function migrateHomePad() {
+  await addCol("feed_posts", "home_pad", "TEXT");
+  const r = await runQuery(`UPDATE feed_posts SET home_pad = (SELECT pr.room_id FROM feed_post_rooms pr WHERE pr.post_id = feed_posts.id
+                            ORDER BY pr.created, pr.rowid LIMIT 1)
+                            WHERE home_pad IS NULL AND EXISTS (SELECT 1 FROM feed_post_rooms pr WHERE pr.post_id = feed_posts.id)`);
+  if (r && r.changes) console.log(`[feed] home_pad: ${r.changes} post(s) given their fixed home pad`);
 }
 
 // ── 1.99ci: communities only + crossposts ──
@@ -629,7 +644,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       mine: !!(viewer && viewer.userId === r.author_id),
       voted: !!(mv && mv.value > 0),
       rooms: roomsOf.filter((x) => (!x.removed && !x.pending && !x.hidden) || staff),
-      roomsAll: roomsOf,
+      roomsAll: roomsOf, homePad: r.home_pad || null,      // 1.99ep: the fixed home pad (canonical URL)
       images: att.filter((a) => a.kind === "image"), audio: att.filter((a) => a.kind === "audio"), video: att.filter((a) => a.kind === "video"),
       link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
       xpost, crossposts, xcount: crossposts.length,
@@ -904,10 +919,11 @@ async function create(userId, input, deps = {}) {
   await chargeFor(u, cost, label);
   try {
     const t = NOW();
-    await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created, in_all)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await runQuery(`INSERT INTO feed_posts (id, author_id, title, body, link_url, link_json, nsfw, global, cost, created, in_all, home_pad)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, u.userId, title || null, body || null, link ? link.url : null, link ? JSON.stringify(link) : null,
-                    aiNsfw || input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t, inAll]);
+                    aiNsfw || input.nsfw === true || input.nsfw === 1 || input.nsfw === "1" || input.nsfw === "on" ? 1 : 0, 0, cost, t, inAll,
+                    roomIds[0] || null]);      // 1.99ep: its fixed home pad (one pad per post since 1.99ci)
     let i = 0;
     for (const a of atts) {
       const r = await runQuery("UPDATE feed_attachments SET post_id = ?, sort = ? WHERE id = ? AND owner_id = ? AND post_id IS NULL AND state = 'ready'", [id, i++, a.id, u.userId]);
@@ -983,8 +999,8 @@ async function crosspostOne(u, o, R, title, announce = true) {
   try {
     const t = NOW();
     // nsfw: the original's effective flag at the time (the embed also follows the original live, see decorate)
-    await runQuery("INSERT INTO feed_posts (id, author_id, title, nsfw, global, cost, created, crosspost_of) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
-                   [id, u.userId, title, effNsfw(o) ? 1 : 0, cost, t, o.id]);
+    await runQuery("INSERT INTO feed_posts (id, author_id, title, nsfw, global, cost, created, crosspost_of, home_pad) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
+                   [id, u.userId, title, effNsfw(o) ? 1 : 0, cost, t, o.id, R.id]);       // 1.99ep: a crosspost's home is its own pad
     await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, R.id, t, pending ? (announce ? 1 : 2) : 0]);
     if (!pending && announce) await queueMention(R.id, id);
     await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);

@@ -33,15 +33,12 @@
       <label>Off-air grace (min)<input type="number" name="idle_grace_min" min="1" value="<%= C.idle_grace_min %>"></label>
       <label>Bookings / user / hour<input type="number" name="bookings_per_hour" min="1" value="<%= C.bookings_per_hour %>"></label>
       </div></details>
-      <label>Legacy revenue <small>(only slots booked before 1.99ee; new fees are a room flow)</small><select name="revenue_vault">
-        <option value="reserve" <%= C.revenue_vault === 'reserve' ? 'selected' : '' %>>Federal Reserve</option>
-        <option value="jackpot" <%= C.revenue_vault === 'jackpot' ? 'selected' : '' %>>Casino jackpot</option></select></label>
       <label class="chk" title="Kill switch: off hides 📸 Snap / 🎬 Clip on every stage player, and the site and Pepe refuse saves"><input type="checkbox" name="stagecap_enabled" <%= C.stagecap_enabled !== false ? 'checked' : '' %>> Viewers can snap / clip the stages</label>
       <label class="chk"><input type="checkbox" name="stagecap_snaps" <%= C.stagecap_snaps !== false ? 'checked' : '' %>> &nbsp;↳ stage snaps</label>
       <label class="chk"><input type="checkbox" name="stagecap_clips" <%= C.stagecap_clips !== false ? 'checked' : '' %>> &nbsp;↳ stage clips</label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save settings</button><span class="msg" id="cfgMsg" role="status"></span></div>
     </form>
-    <p class="muted">1.99bi: every pad has its own stage. Pad owners set their pad's slot count (up to the cap above) and an optional price for slots (free by default, at most the max above). 1.99ee: featuring can't be bought - the owner features a slot for free, the front page is the automatic ranking, and pads are 🚀 boosted instead. Slot fees and boosts settle as a room flow: half to the Federal Reserve (Fort Knox's stand-in), half held in the pad's room-vault escrow. A slot keeps the price it was booked at; paid featured slots booked before 1.99ee keep their old terms. Owners: <a href="/pads/admin">Pads admin ›</a></p>
+    <p class="muted">1.99bi: every pad has its own stage. Pad owners set their pad's slot count (up to the cap above) and an optional price for slots (free by default, at most the max above). 1.99ee: featuring can't be bought - the owner features a slot for free, the front page is the automatic ranking, and pads are 🚀 boosted instead. Slot fees and boosts settle as a room flow: half to the Federal Reserve (Fort Knox's stand-in), half held in the pad's room-vault escrow. A slot keeps the price it was booked at. (1.99ep: the bookings from before boosts were cleaned up.) Owners: <a href="/pads/admin">Pads admin ›</a></p>
   </section>
 
   <section class="sb-card" id="bans" aria-labelledby="banT">

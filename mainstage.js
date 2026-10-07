@@ -5,18 +5,16 @@
 // slots and Pepe's stream. One slot per room can be FEATURED - it becomes the room's default stream
 // (and the homepage's, when that room is the front room): the room owner (or site staff) features any
 // open slot, free.
-// 1.99ee: featuring can't be BOUGHT any more (boosts.js: "featuring is earned" - people boost a pad
-// instead, which feeds the front-page ranking). New bookings are always ordinary slots, the queue never
-// books a featured one and the "feature me" upgrade is refused (410). Paid featured rows from before
-// 1.99ee (kind 'feature' / feature_by 'paid') keep their terms: billed per live minute at the price they
-// booked, the rest refunded on every exit path, settled the legacy way (Reserve + owner royalty accrual).
+// 1.99ee: featuring can't be BOUGHT (boosts.js: "featuring is earned" - people boost a pad instead, which
+// feeds the front-page ranking). 1.99ep: the last of paid featuring is gone - no "feature me" upgrade route,
+// no paid-feature billing / refunds, no legacy (Reserve / jackpot) settlement; purgePaidFeaturing() removes
+// the old settled paid-feature booking rows (their PAT ledger rows - transactions, reserve_claims - stay).
 //
 // Slot kinds:
 //   slot     an ordinary slot. Price = the room's slot_price (default 0 = FREE; the owner may charge up
 //            to price_per_min). Since 1.99ee its fee settles as a ROOM FLOW (revenue_vault 'room_flow',
 //            boosts.routeInTx): half to the Federal Reserve (Fort Knox's stand-in until E-1), half held
 //            for the pad's room vault (room_flow_ledger escrow, until E-3).
-//   feature  legacy (before 1.99ee): a paid featured booking at the global price_per_min.
 // Sources: an RTMP key (OBS…), the browser (MediaRecorder relay), or an EMBED - a YouTube video/live or
 // Twitch channel/VOD (stageembed.js: parsed to {p,t,id}, rendered only with the official players). An
 // embed slot is "live" from the moment it opens (we can't see inside YouTube/Twitch).
@@ -30,11 +28,9 @@
 //
 // Money: book = one transaction (debit the whole hold + slot row). Billing ticks only move the slot's
 // own bookkeeping (live_ms -> charged, never more than held). Settling = one transaction, guarded by
-// `settled = 0`, that refunds held - charged to the user and books the charged part as revenue:
-// revenue_vault 'room_flow' (every booking since 1.99ee) = boosts.routeInTx in the same transaction; legacy
-// rows: "reserve" = a NEGATIVE reserve_claims row, flow "stage_slot", which Pepe's funding tick credits
-// to the Federal Reserve, or "jackpot" = a jackpot_rakes row, and the room owner's royalty share is
-// ACCRUED (royalties.js - released later by the Reserve, never minted).
+// `settled = 0`, that refunds held - charged to the user and books the charged part as revenue: a room flow
+// (revenue_vault 'room_flow', boosts.routeInTx in the same transaction - every slot since 1.99ee; 1.99ep
+// moved the few older unsettled rows onto it too, see purgePaidFeaturing).
 // A server restart loses nothing: slots are in the DB, the next tick resumes them.
 //
 // Streaming: two nginx-rtmp applications, both calling POST /api/stage/rtmp (on_publish /
@@ -78,7 +74,6 @@ const DEFAULTS = {
   max_minutes: 60,
   max_concurrent: 6,       // user streams open at the same time, site-wide (server/bandwidth guard)
   max_slots_per_room: 4,   // the most slots an owner can give a room
-  revenue_vault: "reserve", // "reserve" (Federal Reserve) | "jackpot" (casino pot)
   start_window_min: 10,    // must go live within this long of the slot opening, or it's refunded in full
   idle_grace_min: 5,       // after going live, ends if the stream is down this long
   bookings_per_hour: 3,    // per user
@@ -92,7 +87,6 @@ const DEFAULTS = {
   stagecap_clips: true,
 };
 const OPEN = "('waiting','active')";
-const LEGACY_PAID_FEATURE = false;   // 1.99ee: the old paid "feature me" upgrade - retired (featuring is earned)
 const FUTURE = "('requested','scheduled')";
 const BEAT_STALE_MS = 30 * 1000;     // on_update comes every 10 s; 3 missed = not live
 const TICK_MS = 5000;
@@ -147,9 +141,9 @@ function init() {
       )`);
       // 1.99bi: per-room stages. Added columns; existing rows are kept and moved to the house room.
       await addColumn("stage_slots", "room_id", "TEXT");
-      await addColumn("stage_slots", "kind", "TEXT");                 // feature | slot
+      await addColumn("stage_slots", "kind", "TEXT");                 // slot (1.99ep: the legacy 'feature' kind is gone)
       await addColumn("stage_slots", "featured", "INTEGER NOT NULL DEFAULT 0");
-      await addColumn("stage_slots", "feature_by", "TEXT");           // paid | owner
+      await addColumn("stage_slots", "feature_by", "TEXT");           // owner (1.99ep: 'paid' is gone)
       await addColumn("stage_slots", "mode", "TEXT");                 // stream | embed
       await addColumn("stage_slots", "embed", "TEXT");                // JSON {p,t,id}
       await addColumn("stage_slots", "start_at", "INTEGER");
@@ -157,10 +151,8 @@ function init() {
       await addColumn("stage_slots", "title", "TEXT");
       await addColumn("stage_slots", "approved_by", "TEXT");
       await addColumn("stage_slots", "notified", "INTEGER NOT NULL DEFAULT 0");
-      await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'feature'), mode = COALESCE(mode, 'stream'),
-                      start_at = COALESCE(start_at, created), featured = CASE WHEN status != 'ended' THEN 1 ELSE featured END,
-                      feature_by = CASE WHEN status != 'ended' THEN 'paid' ELSE feature_by END
-                      WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
+      await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
+                      start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_user ON stage_slots (userId, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_room ON stage_slots (room_id, status)");
@@ -186,9 +178,77 @@ function init() {
       await require("./royalties").init();
       await require("./boosts").init();          // 1.99ee: room_flow_ledger (slot fees settle into it)
       await loadConfig();
+      // 1.99ep: never blocks the stage - a failed backup / purge is logged and retried at the next start
+      await purgePaidFeaturing().catch((e) => console.error("[stage] paid-featuring purge (retried next start):", e.message));
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
+}
+
+// ── 1.99ep: purge the old paid featuring (replaced by boosts in 1.99ee) ──
+// Idempotent, runs at every start (a no-op once done). Before touching anything it writes a full DB backup
+// (VACUUM INTO backups/myapp-pre-feature-purge-<time>.db - skipped when there is nothing to do). Then:
+//   1. deletes SETTLED paid-feature bookings (kind 'feature' or feature_by 'paid') from stage_slots, and their
+//      stage_events rows - metadata only: their money already moved and stays in the ledger (the holds /
+//      refunds in `transactions`, the Reserve credit in `reserve_claims`, any royalty_ledger accrual); none of
+//      those point at the slot row (reserve_claims.type only names its first 8 characters as text). A row
+//      something still needs (a stage_captures save, a royalty_ledger ref) is kept and only relabelled.
+//   2. an UNSETTLED paid-feature row (none on prod 2026-10-07) is kept and becomes an owner feature on a room flow:
+//      it settles like any slot (its hold is billed per live minute at its own price, the rest refunded).
+//   3. unsettled slots on the legacy revenue routes ("reserve" / "jackpot") move to "room_flow" - the only
+//      settlement left (prod: one free scheduled slot, nothing held).
+//   4. clears the dead stage_config row "revenue_vault" (the legacy-revenue switch).
+// The result of the first run that did anything is kept in stage_config "purge_paid_feature_v1".
+async function purgePaidFeaturing() {
+  const PAID = "(kind = 'feature' OR feature_by = 'paid')";
+  const settled = await getQuery(`SELECT id, held, charged, refunded FROM stage_slots WHERE ${PAID} AND settled = 1`);
+  const open = await getQuery(`SELECT id FROM stage_slots WHERE ${PAID} AND settled = 0`);
+  const legacy = await getQuery("SELECT id FROM stage_slots WHERE settled = 0 AND (revenue_vault IS NULL OR revenue_vault != 'room_flow')");
+  const cfg = await getQuery("SELECT 1 FROM stage_config WHERE key = 'revenue_vault'");
+  if (!settled.length && !open.length && !legacy.length && !cfg.length) return null;
+  const backup = await backupDb("pre-feature-purge");
+  const out = { at: now(), backup, deleted: [], kept: [], reopened: open.map((s) => s.id), rerouted: legacy.map((s) => s.id),
+                held: 0, charged: 0, refunded: 0 };
+  await tx(async () => {
+    for (const s of settled) {
+      let needed = false;
+      try {
+        needed = (await getQuery("SELECT 1 FROM stage_captures WHERE slot_id = ? LIMIT 1", [s.id])).length > 0
+          || (await getQuery("SELECT 1 FROM royalty_ledger WHERE ref = ? LIMIT 1", ["stage:" + s.id])).length > 0;
+      } catch (e) { needed = false; }      // a table that doesn't exist yet references nothing
+      if (needed) {
+        await runQuery("UPDATE stage_slots SET kind = 'slot', feature_by = NULL, featured = 0 WHERE id = ?", [s.id]);
+        out.kept.push(s.id);
+        continue;
+      }
+      await runQuery("DELETE FROM stage_events WHERE slot_id = ?", [s.id]);
+      await runQuery("DELETE FROM stage_slots WHERE id = ? AND settled = 1", [s.id]);
+      out.deleted.push(s.id);
+      out.held += Number(s.held) || 0; out.charged += Number(s.charged) || 0; out.refunded += Number(s.refunded) || 0;
+    }
+    if (open.length) {
+      await runQuery(`UPDATE stage_slots SET kind = 'slot', feature_by = CASE WHEN featured = 1 THEN 'owner' ELSE NULL END,
+                      revenue_vault = 'room_flow' WHERE ${PAID} AND settled = 0`);
+    }
+    await runQuery("UPDATE stage_slots SET revenue_vault = 'room_flow' WHERE settled = 0 AND (revenue_vault IS NULL OR revenue_vault != 'room_flow')");
+    await runQuery("DELETE FROM stage_config WHERE key = 'revenue_vault'");
+    if (!(await getQuery("SELECT 1 FROM stage_config WHERE key = 'purge_paid_feature_v1'")).length) {
+      await runQuery("INSERT INTO stage_config (key, value) VALUES ('purge_paid_feature_v1', ?)", [JSON.stringify(out)]);
+    }
+  });
+  console.log(`[stage] 1.99ep paid-featuring purge: deleted ${out.deleted.length} settled booking(s) (held ${out.held}, charged ${out.charged}, ` +
+              `refunded ${out.refunded} - ledger rows kept), kept ${out.kept.length}, reopened ${out.reopened.length}, rerouted ${out.rerouted.length}; backup ${backup || "-"}`);
+  return out;
+}
+/** A full copy of the DB before a data migration (VACUUM INTO, consistent while the app runs). -> path */
+async function backupDb(tag) {
+  const fs = require("fs"), path = require("path");
+  const dir = path.resolve(process.env.DB_BACKUP_DIR || "backups");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `myapp-${tag}-${new Date().toISOString().replace(/[:.]/g, "-")}.db`);
+  await runQuery(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+  if (!fs.existsSync(file) || fs.statSync(file).size < 4096) throw new Error("backup looks empty: " + file);
+  return file;
 }
 
 let CONFIG = { ...DEFAULTS };
@@ -210,7 +270,6 @@ function cleanConfig(c) {
     max_minutes: int(c.max_minutes, 1, 600, DEFAULTS.max_minutes),
     max_concurrent: int(c.max_concurrent, 0, 32, DEFAULTS.max_concurrent),
     max_slots_per_room: int(c.max_slots_per_room, 1, 8, DEFAULTS.max_slots_per_room),
-    revenue_vault: c.revenue_vault === "jackpot" ? "jackpot" : "reserve",
     start_window_min: int(c.start_window_min, 1, 120, DEFAULTS.start_window_min),
     idle_grace_min: int(c.idle_grace_min, 1, 60, DEFAULTS.idle_grace_min),
     bookings_per_hour: int(c.bookings_per_hour, 1, 100, DEFAULTS.bookings_per_hour),
@@ -290,8 +349,7 @@ function parseRelayKey(name) {
 const billedMinutes = (liveMs) => Math.ceil(Math.max(0, Number(liveMs) || 0) / 60000);
 function chargeFor(slot, liveMs) {
   if (!slot.price_per_min || !slot.held) return 0;
-  const billable = Math.max(0, (Number(liveMs) || 0) - (Number(slot.bill_base_ms) || 0));
-  return Math.min(slot.held, Math.min(billedMinutes(billable), slot.max_minutes) * slot.price_per_min);
+  return Math.min(slot.held, Math.min(billedMinutes(liveMs), slot.max_minutes) * slot.price_per_min);
 }
 const startOf = (s) => Number(s.start_at) || Number(s.created);
 // the latest moment a slot may still be running, whatever happens
@@ -338,7 +396,7 @@ function overlapping(list, a, b, excludeId) {
 
 // ── book ──
 // opts: {room, minutes, mode: stream|embed, embed: url, title, start_at (ms; omitted / now = right now)}
-// (1.99ee: `feature` is ignored - every booking is an ordinary slot; the owner can feature it for free)
+// (every booking is an ordinary slot; the owner can feature it for free - featuring is never bought)
 async function book(user, opts = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in to book the stage.");
@@ -353,7 +411,6 @@ async function book(user, opts = {}) {
     throw new Refuse(400, `Pick between ${C.min_minutes} and ${C.max_minutes} minutes.`);
   }
   if (await isBanned(user.userId, roomId)) throw new Refuse(403, "You can't book the stage.");
-  const feature = false;      // 1.99ee: featuring is earned (boosts.js), never bought
   const mode = opts.mode === "embed" ? "embed" : "stream";
   let embed = null;
   if (mode === "embed") {
@@ -386,15 +443,12 @@ async function book(user, opts = {}) {
         throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken right now - join the queue.`
                                                 : "The stage is taken right now - try again when the current slot ends.");
       }
-      if (feature && open.some((s) => s.featured)) throw new Refuse(409, "Someone is featured in this pad right now - book an ordinary slot, or join the queue.");
-      if (feature && overlapping(fut.filter((s) => s.featured), startAt, until).length) throw new Refuse(409, "A featured slot is booked soon - pick a later time.");
     } else {
       const mine = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE userId = ? AND status IN ${FUTURE}`, [user.userId]);
       if (mine[0].n >= C.schedule_per_user) throw new Refuse(429, `You can hold ${C.schedule_per_user} upcoming bookings at once.`);
       const clash = overlapping(open.concat(fut), startAt, until);
       if (clash.some((s) => s.userId === user.userId)) throw new Refuse(409, "You already have a booking then.");
       if (clash.length >= RS.slot_count) throw new Refuse(409, "Every slot in this pad is booked then - pick another time.");
-      if (feature && clash.some((s) => s.featured)) throw new Refuse(409, "Someone is already featured then - pick another time or book an ordinary slot.");
     }
     const recent = await getQuery("SELECT COUNT(*) AS n FROM stage_slots WHERE userId = ? AND created > ?", [user.userId, t - 3600 * 1000]);
     if (recent[0].n >= C.bookings_per_hour) throw new Refuse(429, "You've booked the stage a lot this hour - try again later.");
@@ -403,9 +457,9 @@ async function book(user, opts = {}) {
     if (hold > 0) {
       const paid = await runQuery("UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
                                   [hold, user.userId, hold]);
-      if (!paid.changes) throw new Refuse(402, `A ${minutes}-minute ${feature ? "featured " : ""}slot holds ${hold.toLocaleString("en-US")} PAT - you don't have enough.`);
+      if (!paid.changes) throw new Refuse(402, `A ${minutes}-minute slot holds ${hold.toLocaleString("en-US")} PAT - you don't have enough.`);
       await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                     [uuidv4(), user.userId, `stage ${feature ? "feature" : "slot"} hold (${minutes} min max)`, -hold]);
+                     [uuidv4(), user.userId, `stage slot hold (${minutes} min max)`, -hold]);
     }
     const stream = STREAM_PREFIX + crypto.randomBytes(8).toString("hex");
     const status = needsApproval ? "requested" : scheduled ? "scheduled" : (mode === "embed" ? "active" : "waiting");
@@ -413,17 +467,17 @@ async function book(user, opts = {}) {
                     key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, went_live, last_live)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, user.userId, u.username, u.displayname || u.username, status, t, minutes, price, hold, key ? sha(key) : null, stream,
-                    "room_flow", roomId, feature ? "feature" : "slot", feature ? 1 : 0, feature ? "paid" : null, mode,
+                    "room_flow", roomId, "slot", 0, null, mode,
                     embed ? JSON.stringify(embed) : null, startAt, title,
                     status === "active" ? t : null, status === "active" ? t : null]);
     return { id, status };
   });
   pubCache.clear();
   await event(out.id, scheduled ? (needsApproval ? "requested" : "scheduled") : "booked", user.username,
-              `${feature ? "featured " : ""}${minutes} min, held ${hold}${mode === "embed" ? ", " + embeds.label(embed) : ""}${scheduled ? ", starts " + new Date(startAt).toISOString() : ""}`, roomId);
+              `${minutes} min, held ${hold}${mode === "embed" ? ", " + embeds.label(embed) : ""}${scheduled ? ", starts " + new Date(startAt).toISOString() : ""}`, roomId);
   if (needsApproval && RS.owner) {
     rooms.notify(RS.owner.userId, { kind: "stage", title: `${user.username || "Someone"} asked for a stage slot in ${RS.title}`,
-      body: `${minutes} min${feature ? ", featured" : ""} on ${new Date(startAt).toUTCString()}. Approve or deny it on your pad page.`,
+      body: `${minutes} min on ${new Date(startAt).toUTCString()}. Approve or deny it on your pad page.`,
       link: `/p/${encodeURIComponent(RS.slug)}/settings#stage`, ref: "stage-req:" + out.id }).catch(() => {});
   }
   const slot = await getSlot(out.id);
@@ -448,23 +502,14 @@ async function end(slotId, reason, actor) {
       await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
                      [uuidv4(), s.userId, `stage slot refund (${billedMinutes(s.live_ms)} of ${s.max_minutes} min used)`, refund]);
     }
-    if (charged > 0 && s.revenue_vault === "room_flow") {
+    if (charged > 0) {
       // 1.99ee: a slot fee is a room flow - half to the Reserve (the Fort Knox half), half held for the pad's room vault
+      // (1.99ep: the only settlement - the legacy Reserve / jackpot routes are gone, purgePaidFeaturing moved old rows)
       const roomId = s.room_id || rooms.HOUSE_ROOM;
       const RS = await rooms.stageSettings(roomId);
       fee = await require("./boosts").routeInTx({ ref: "slot:" + s.id, kind: "slot_fee", room_id: roomId, payer_id: s.userId, payer_name: s.username,
         amount: charged, owner_self: !!(RS.owner && RS.owner.userId === s.userId), via: "web", flow: "stage_slot",
         detail: `${s.displayname || s.username}: ${billedMinutes(s.live_ms)} min` });
-    } else if (charged > 0) {
-      if (s.revenue_vault === "jackpot") {
-        await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), null, s.userId, charged]);
-      } else {
-        await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
-                       [uuidv4(), "stage_slot", s.userId, `stage slot ${s.id.slice(0, 8)}: ${billedMinutes(s.live_ms)} min`, -charged]);
-      }
-      // the room owner's royalty share: accrued here, released by the Reserve later (royalties.js)
-      await require("./royalties").accrue({ room_id: s.room_id, source: "stage", base: charged, payer: s.userId,
-                                            ref: "stage:" + s.id, detail: `${s.displayname || s.username}: ${billedMinutes(s.live_ms)} min` });
     }
     return { id: s.id, charged, refund, userId: s.userId, room_id: s.room_id, status: s.status };
   });
@@ -479,30 +524,16 @@ async function end(slotId, reason, actor) {
   return res;
 }
 
-// ── featuring ──
-// Stop paid featuring now: charge what was used, refund the rest of the hold right away (held = charged,
-// so it can't bill any more), and the slot carries on unfeatured.
+// ── featuring (free: the pad owner / staff pick the pad's main stream; 1.99ep: never paid) ──
 async function unfeature(slotId, actor, why = "unfeatured") {
   await init();
-  const res = await tx(async () => {
-    const s = (await getQuery(`SELECT * FROM stage_slots WHERE id = ? AND settled = 0`, [String(slotId || "")]))[0];
-    if (!s || !s.featured) return null;
-    let refund = 0;
-    if (s.feature_by === "paid") {
-      const charged = chargeFor(s, s.live_ms);
-      refund = s.held - charged;
-      await runQuery("UPDATE stage_slots SET held = ?, charged = ? WHERE id = ? AND settled = 0", [charged, charged, s.id]);
-      if (refund > 0) {
-        await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [refund, s.userId]);
-        await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                       [uuidv4(), s.userId, `stage feature refund (${why})`, refund]);
-      }
-    }
-    await runQuery("UPDATE stage_slots SET featured = 0, feature_by = NULL WHERE id = ?", [s.id]);
-    return { id: s.id, refund, room_id: s.room_id, userId: s.userId, paid: s.feature_by === "paid" };
-  });
-  if (res) { pubCache.clear(); await event(res.id, "unfeatured", actor, `${why}, refunded ${res.refund}`, res.room_id); }
-  return res;
+  const s = (await getQuery(`SELECT * FROM stage_slots WHERE id = ? AND settled = 0`, [String(slotId || "")]))[0];
+  if (!s || !s.featured) return null;
+  const r = await runQuery("UPDATE stage_slots SET featured = 0, feature_by = NULL WHERE id = ? AND featured = 1", [s.id]);
+  if (!r.changes) return null;
+  pubCache.clear();
+  await event(s.id, "unfeatured", actor, why, s.room_id);
+  return { id: s.id, room_id: s.room_id, userId: s.userId };
 }
 // The owner / staff feature an open slot (free). Whatever was featured in that room stops being so.
 async function featureByOwner(slotId, actor) {
@@ -519,37 +550,6 @@ async function featureByOwner(slotId, actor) {
     link: "/stage", ref: "featured:" + s.id + ":" + now(), pm: false }).catch(() => {});
   return { ok: true };
 }
-// A streamer paid to feature their own FREE open slot (nothing else featured in the room).
-// 1.99ee: retired - featuring is earned; the route answers 410 with a pointer to boosting.
-async function upgrade(user, slotId, minutes) {
-  await init();
-  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  if (!LEGACY_PAID_FEATURE) throw new Refuse(410, "Featuring can't be bought any more - it's earned. Boost the pad instead (🚀 on the pad's page).");
-  const C = CONFIG;
-  const s0 = await getSlot(slotId);
-  if (!s0 || s0.userId !== user.userId || s0.settled || !["waiting", "active"].includes(s0.status)) throw new Refuse(404, "That isn't your open slot.");
-  if (s0.featured) throw new Refuse(409, "You're already featured.");
-  if (s0.price_per_min > 0) throw new Refuse(409, "This pad charges for slots - book a featured slot instead.");
-  const left = Math.max(1, s0.max_minutes - billedMinutes(s0.live_ms));
-  const m = Math.min(left, Math.max(1, Math.floor(Number(minutes) || left)));
-  const hold = m * C.price_per_min;
-  await tx(async () => {
-    const s = (await getQuery("SELECT * FROM stage_slots WHERE id = ? AND settled = 0", [s0.id]))[0];
-    if (!s || s.featured) throw new Refuse(409, "Someone is featured already.");
-    const f = await getQuery(`SELECT 1 FROM stage_slots WHERE room_id = ? AND featured = 1 AND status IN ${OPEN}`, [s.room_id]);
-    if (f.length) throw new Refuse(409, "Someone is featured in this pad right now.");
-    const paid = await runQuery("UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?", [hold, user.userId, hold]);
-    if (!paid.changes) throw new Refuse(402, `Featuring for ${m} min holds ${hold.toLocaleString("en-US")} PAT - you don't have enough.`);
-    await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                   [uuidv4(), user.userId, `stage feature hold (${m} min max)`, -hold]);
-    await runQuery(`UPDATE stage_slots SET featured = 1, feature_by = 'paid', price_per_min = ?, held = ?, bill_base_ms = live_ms
-                    WHERE id = ? AND settled = 0`, [C.price_per_min, hold, s.id]);
-  });
-  pubCache.clear();
-  await event(s0.id, "featured", user.username, `paid upgrade ${m} min, held ${hold}`, s0.room_id);
-  return view(await getSlot(s0.id));
-}
-
 // ── owner approval for scheduled requests ──
 async function approve(slotId, actor) {
   await init();
@@ -590,7 +590,6 @@ async function joinQueue(user, opts = {}) {
   const mode = opts.mode === "embed" ? "embed" : "stream";
   let embed = null;
   if (mode === "embed") { try { embed = embeds.parse(opts.embed); } catch (e) { throw new Refuse(400, e.message); } }
-  const feature = false;     // 1.99ee: a queued turn is always an ordinary slot
   if ((await getQuery("SELECT 1 FROM stage_queue WHERE userId = ? AND status = 'waiting'", [user.userId])).length) throw new Refuse(409, "You're already in a queue.");
   if ((await getQuery(`SELECT 1 FROM stage_slots WHERE userId = ? AND status IN ${OPEN}`, [user.userId])).length) throw new Refuse(409, "You already have a stage slot.");
   const n = await getQuery("SELECT COUNT(*) AS n FROM stage_queue WHERE room_id = ? AND status = 'waiting'", [roomId]);
@@ -600,9 +599,9 @@ async function joinQueue(user, opts = {}) {
   const id = uuidv4();
   await runQuery(`INSERT INTO stage_queue (id, room_id, userId, username, displayname, minutes, feature, mode, embed, title, created)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                 [id, roomId, user.userId, u.username, u.displayname || u.username, minutes, feature ? 1 : 0, mode,
+                 [id, roomId, user.userId, u.username, u.displayname || u.username, minutes, 0, mode,
                   embed ? JSON.stringify(embed) : null, cleanTitle(opts.title), now()]);
-  await event(null, "queued", u.username, `${minutes} min${feature ? " featured" : ""}`, roomId);
+  await event(null, "queued", u.username, `${minutes} min`, roomId);
   return { id, position: n[0].n + 1 };
 }
 async function leaveQueue(user, entryId) {
@@ -634,12 +633,6 @@ async function tick() {
       }
       if (s.publishing && !live && !isEmbed(s)) {
         await runQuery("UPDATE stage_slots SET publishing = 0 WHERE id = ? AND settled = 0", [s.id]);   // heartbeat lost
-      }
-      // a paid upgrade of a free slot that has used its featured minutes: quietly unfeatured
-      if (s.kind === "slot" && s.featured && s.feature_by === "paid" && s.held > 0 && chargeFor(s, liveMs) >= s.held) {
-        await runQuery("UPDATE stage_slots SET featured = 0, feature_by = NULL WHERE id = ? AND settled = 0", [s.id]);
-        pubCache.clear();
-        await event(s.id, "unfeatured", "system", "featured minutes used up", s.room_id);
       }
       let why = null;
       if (liveMs >= s.max_minutes * 60000) why = "time_up";
@@ -690,10 +683,9 @@ async function tickFuture(t) {
     if (open.some((x) => x.userId === s.userId)) continue;
     if (s.featured && open.some((x) => x.featured)) {
       if (t < start) continue;
-      // a featured booking's start beats the owner's free pick; a PAID featured stream keeps its spot
+      // a booking the owner featured ahead of time takes over the pad's main stream when it starts
       const f = open.find((x) => x.featured);
-      if (f.feature_by === "owner") await unfeature(f.id, "system", "a booked featured slot started");
-      else continue;
+      await unfeature(f.id, "system", "a booked featured slot started");
     }
     const embed = isEmbed(s);
     const r = await runQuery(`UPDATE stage_slots SET status = ?, went_live = CASE WHEN ? THEN ? ELSE went_live END,
@@ -726,11 +718,10 @@ async function tickQueue(t) {
       const soon = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE room_id = ? AND status = 'scheduled' AND start_at < ?`,
                                   [roomId, t + (C.lead_min + 5) * 60000]);
       if (open.length + soon[0].n >= RS.slot_count) break;
-      const wantFeature = false;     // 1.99ee: featuring isn't sold - an old entry that asked for it gets an ordinary slot
       let res = null, err = null;
       try {
         res = await book({ userId: head.userId, username: head.username }, {
-          room: roomId, minutes: head.minutes, feature: wantFeature, mode: head.mode,
+          room: roomId, minutes: head.minutes, mode: head.mode,
           embed: head.embed ? embedUrl(JSON.parse(head.embed)) : undefined, title: head.title });
       } catch (e) { err = e; }
       if (res) {
@@ -946,9 +937,8 @@ function view(s, t = now()) {
     stream: s.stream, hls: `${HLS_BASE}/${s.stream}.m3u8`, relay: relays.has(s.id),
     start_at: startOf(s), start_by: startOf(s) + CONFIG.start_window_min * 60000,
     opens_at: isEmbed(s) ? startOf(s) : startOf(s) - CONFIG.lead_min * 60000,
-    room_id: s.room_id || rooms.HOUSE_ROOM, kind: s.kind || "feature", featured: !!s.featured, feature_by: s.feature_by || null,
+    room_id: s.room_id || rooms.HOUSE_ROOM, kind: s.kind || "slot", featured: !!s.featured, feature_by: s.feature_by || null,
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
-    bill_base_seconds: Math.floor((s.bill_base_ms || 0) / 1000),
     // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
     capture: !s.capture_off && !isEmbed(s), nsfw: !!s.nsfw,
   };
@@ -1257,9 +1247,6 @@ function register(app, { addUser, isBotToken, noTimers }) {
   app.post("/api/stage/slots/:id/key", addUser, needUser, async (req, res) => {
     try { res.set("Cache-Control", "no-store"); res.json({ ok: true, ...(await regenKey(req.user, req.params.id)) }); } catch (e) { fail(res, e); }
   });
-  app.post("/api/stage/slots/:id/upgrade", addUser, needUser, async (req, res) => {
-    try { res.json({ ok: true, slot: await upgrade(req.user, req.params.id, (req.body || {}).minutes) }); } catch (e) { fail(res, e); }
-  });
   // owner / staff controls on a slot in their room
   app.post("/api/stage/slots/:id/feature", addUser, needUser, async (req, res) => {
     try {
@@ -1357,7 +1344,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
 module.exports = {
   register, start, init, book, end, tick, reconcile, rtmpCallback, relayChunk, stopRelay, publicSlots, adminState, ownerState,
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
-  unfeature, featureByOwner, upgrade, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
+  unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },

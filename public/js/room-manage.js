@@ -20,7 +20,7 @@
     $('openRows').innerHTML = o.length ? o.map(function (s) {
       return '<tr><td><a href="/u/' + encodeURIComponent(s.username) + '">' + esc(s.display) + '</a>' + (s.title ? '<br><span class="muted">' + esc(s.title) + '</span>' : '') + '</td>' +
         '<td>' + (s.live ? '<span class="live-tag">● LIVE</span>' : esc(s.status === 'waiting' ? 'waiting to go live' : 'off air')) +
-        (s.featured ? ' <span class="tag gold">★ ' + (s.feature_by === 'paid' ? 'paid feature' : 'featured') + '</span>' : '') + '</td>' +
+        (s.featured ? ' <span class="tag gold">★ ' + 'featured' + '</span>' : '') + '</td>' +
         '<td>' + src(s) + '</td><td class="num">' + mmss(s.live_seconds) + '</td><td class="num">' + fmt(s.charged) + ' / ' + fmt(s.held) + '</td>' +
         '<td><span class="row" style="margin:0">' + (s.featured ? '<button type="button" class="btn gold" data-act="unfeature" data-id="' + esc(s.id) + '">☆ Unfeature</button>'
                                                        : '<button type="button" class="btn gold" data-act="feature" data-id="' + esc(s.id) + '">★ Feature</button>') +
@@ -42,7 +42,7 @@
     }).join('') : '<li class="muted">Nothing booked.</li>';
     var q = S.queue || [];
     $('queueList').innerHTML = q.length ? q.map(function (e) {
-      return '<li><span>#' + e.position + ' <b>' + esc(e.display) + '</b> · ' + e.minutes + ' min' + (e.feature ? ' · wants featured' : '') + (e.mode === 'embed' ? ' · video link' : '') + ' · since ' + when(e.created) + '</span></li>';
+      return '<li><span>#' + e.position + ' <b>' + esc(e.display) + '</b> · ' + e.minutes + ' min' + (e.mode === 'embed' ? ' · video link' : '') + ' · since ' + when(e.created) + '</span></li>';
     }).join('') : '<li class="muted">Nobody waiting.</li>';
     var b = S.bans || [];
     $('banRows').innerHTML = b.length ? b.map(function (x) {
@@ -62,7 +62,7 @@
     var act = b.getAttribute('data-act');
     if (act) {
       var ban = b.hasAttribute('data-ban');
-      var ask = { feature: 'Feature this slot? It becomes the pad\'s main stream.', unfeature: 'Stop featuring it? A paid feature is refunded for the unused minutes.',
+      var ask = { feature: 'Feature this slot? It becomes the pad\'s main stream.', unfeature: 'Stop featuring it? The slot stays on as an ordinary one.',
                   cut: ban ? 'Cut this slot AND ban them from this pad\'s stage?' : 'End this slot? Anything unused is refunded.', approve: null, deny: 'Decline this booking? Their hold is refunded.' }[act];
       if (ask && !confirm(ask)) return;
       var body = { ban: ban };

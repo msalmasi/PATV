@@ -1,7 +1,8 @@
 // royalties.js — room-owner royalties (1.99bi): an incentive for owners to build their rooms up.
 //
 // A room owner earns a share of the PAT spent in their room:
-//   stage   stage_pct % of what people PAY for stage time in the room (paid featuring + priced slots),
+//   stage   stage_pct % of what people PAID for stage time in the room before 1.99ee (paid featuring + priced slots; since
+//           1.99ee slot fees are a room flow and 1.99ep removed the legacy settlement, so nothing new accrues here),
 //           accrued when the slot settles (mainstage.end, same transaction)
 //   spend   the "room_owner" share of room-specific PAT spent in the room, as Pepe's PAT Routing table
 //           (pepe_routes.py, admin panel) splits it - Pepe reports the SHARE itself, already deposited

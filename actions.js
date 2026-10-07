@@ -25,7 +25,12 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS pepe_actions (
   // 1.99bj: a one-time key per form submission (idempotency). An existing table gets the column; the
   // unique index makes a second row with the same (user, key) impossible, even for two racing posts.
   .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN idem TEXT").catch(() => {}))
-  .then(() => runQuery("CREATE UNIQUE INDEX IF NOT EXISTS pepe_actions_idem ON pepe_actions (user_id, idem)").catch(() => {}));
+  .then(() => runQuery("CREATE UNIQUE INDEX IF NOT EXISTS pepe_actions_idem ON pepe_actions (user_id, idem)").catch(() => {}))
+  // 1.99ep: a failure's stable error code + hint (weberrors.js) and, for E_INTERNAL, Pepe's incident id
+  .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN code TEXT").catch(() => {}))
+  .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN hint TEXT").catch(() => {}))
+  .then(() => runQuery("ALTER TABLE pepe_actions ADD COLUMN incident TEXT").catch(() => {}));
+const weberrors = require("./weberrors");
 const RECLAIM_MS = 2 * 60 * 1000;
 const KINDS = new Set(["cmd", "poll.vote", "poll.create", "poll.end"]);
 const CMDS = new Set(["market", "pool", "wager", "bounty", "stash", "loan", "lotto", "avatar", "donate"]);
@@ -34,11 +39,14 @@ const IDEM_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const clean = (s, n = 300) => String(s == null ? "" : s).replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 const safeBack = (b) => (/^\/[A-Za-z0-9/_?=&.%-]*$/.test(String(b || "")) && !String(b).startsWith("//") ? String(b) : "/");
 
-/** The signed-in user's last `limit` actions for one page (tag). */
+/** The signed-in user's last `limit` actions for one page (tag). 1.99ep: a failed one carries `err`
+ *  (weberrors.present: {code, message, hint, incident}) - what views/partials/actions.ejs shows. */
 async function recentFor(userId, tag, limit = 8) {
   if (!userId) return [];
   await ready;
-  return getQuery("SELECT * FROM pepe_actions WHERE user_id = ? AND tag = ? ORDER BY id DESC LIMIT ?", [userId, tag, limit]);
+  const rows = await getQuery("SELECT * FROM pepe_actions WHERE user_id = ? AND tag = ? ORDER BY id DESC LIMIT ?", [userId, tag, limit]);
+  for (const a of rows) a.err = weberrors.present(a);
+  return rows;
 }
 
 /** Store one action for a user (also used by other modules). Returns the new id or throws
@@ -133,8 +141,13 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     await ready;
     for (const r of ((req.body || {}).results || []).slice(0, 50)) {
-      await runQuery("UPDATE pepe_actions SET status = ?, message = ?, updated = ? WHERE id = ?",
-        [r.ok ? "done" : "failed", String(r.message || "").slice(0, 400), Date.now(), parseInt(r.id, 10) || 0]);
+      // 1.99ep: a failure carries a stable code (unknown / missing -> inferred from the message), its hint and,
+      // for E_INTERNAL, Pepe's incident id; a success clears them (a later follow-up can turn a failure into ok)
+      const code = r.ok ? null : (weberrors.CODES.includes(r.code) ? r.code : weberrors.classify(r.message));
+      const hint = r.ok ? null : String(r.hint || weberrors.ERRORS[code][1]).slice(0, 300);
+      const incident = !r.ok && /^[0-9a-f]{6,16}$/i.test(String(r.incident || "")) ? String(r.incident) : null;
+      await runQuery("UPDATE pepe_actions SET status = ?, message = ?, code = ?, hint = ?, incident = ?, updated = ? WHERE id = ?",
+        [r.ok ? "done" : "failed", String(r.message || "").slice(0, 400), code, hint, incident, Date.now(), parseInt(r.id, 10) || 0]);
     }
     res.json({ ok: true });
   });
