@@ -1,22 +1,22 @@
 <%# views/messages.ejs — the one inbox (messages.js, 1.99cp; notices merged in 1.99cu). The shell only: public/js/messages.js
     renders the conversation list, the chat and the 🔔 Notices pane (inbox.js) from `boot` (JSON, below) and the JSON APIs,
-    with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there. %>
+    with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
+    1.99cz: groups (the ✎ "New conversation" dialog, the members dialog), pictures (the 🖼 tray, the lightbox) and post cards. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=2">
+<link rel="stylesheet" href="/public/css/messages.css?v=3">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="Conversations">
     <div class="dm-sh">
       <h1>Messages</h1>
-      <button type="button" class="dm-ib" id="dmNewBtn" title="New message" aria-label="New message"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/></svg></button>
+      <button type="button" class="dm-ib" id="dmNewBtn" title="New conversation or group" aria-label="New conversation or group"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/></svg></button>
       <button type="button" class="dm-ib" id="dmGearBtn" title="Settings" aria-label="Message and notice settings"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
     </div>
-    <form class="dm-find" id="dmFind" hidden autocomplete="off">
-      <label for="dmFindIn" class="vh">Username to message</label>
-      <input id="dmFindIn" name="to" placeholder="Message someone: their username" maxlength="64" spellcheck="false" autocapitalize="off">
-      <button type="submit">Go</button>
-      <div class="dm-find-msg" id="dmFindMsg" role="status"></div>
-    </form>
+    <div class="dm-share" id="dmShare" role="status" hidden>
+      <span><b>Send a post:</b> pick a conversation (or press ✎). The link goes in the message box.</span>
+      <button type="button" id="dmShareX" aria-label="Cancel sharing">✕</button>
+    </div>
+    <div class="dm-find-msg" id="dmFindMsg" role="status"></div>
     <div class="dm-pinned">
       <a class="dm-it dm-pin<%= _ntOn ? ' on' : '' %><%= _ntN ? ' unread' : '' %>" id="dmNotices" href="/messages/notices"<%- _ntOn ? ' aria-current="true"' : '' %>>
         <span class="av av-bell" aria-hidden="true">🔔</span>
@@ -42,13 +42,18 @@
       <button type="button" class="dm-back" id="dmBack" aria-label="Back to conversations"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
       <span class="av av-l" id="dmHeadAv" aria-hidden="true"></span>
       <div class="dm-who"><a class="dm-name" id="dmHeadName" href="#"></a><span class="dm-handle" id="dmHeadHandle"></span></div>
+      <span class="dm-muted" id="dmHeadMuted" title="Muted: no Camfrog alerts" hidden>🔕</span>
       <details class="dm-menu" id="dmMenu">
         <summary aria-label="Conversation options"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor"/></svg></summary>
         <div class="dm-pop" role="menu">
-          <a role="menuitem" id="dmMProfile" href="#">View profile</a>
+          <a role="menuitem" id="dmMProfile" href="#" data-for="dm">View profile</a>
+          <button type="button" role="menuitem" data-dm="members" data-for="group">Members &amp; add people</button>
+          <button type="button" role="menuitem" data-dm="rename" data-for="group">Rename group</button>
+          <button type="button" role="menuitem" data-dm="mute" id="dmMMute">Mute</button>
           <button type="button" role="menuitem" data-dm="clear">Clear history (for you)</button>
           <button type="button" role="menuitem" data-dm="hide">Delete conversation (for you)</button>
-          <button type="button" role="menuitem" class="danger" data-dm="block" id="dmMBlock">Block</button>
+          <button type="button" role="menuitem" class="danger" data-dm="leave" data-for="group">Leave group</button>
+          <button type="button" role="menuitem" class="danger" data-dm="block" id="dmMBlock" data-for="dm">Block</button>
         </div>
       </details>
     </header>
@@ -59,7 +64,10 @@
     </div>
     <form class="dm-compose" id="dmCompose" hidden autocomplete="off">
       <div class="dm-refuse" id="dmRefuse" role="status" hidden></div>
+      <ul class="dm-tray" id="dmTray" aria-label="Pictures to send" hidden></ul>
       <div class="dm-cbox">
+        <button type="button" class="dm-att" id="dmAttach" title="Add pictures (up to <%= boot.maxPics %>)" aria-label="Add pictures"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="m21 16-5.2-5.2a1.5 1.5 0 0 0-2.1 0L5 19.5"/></svg></button>
+        <input type="file" id="dmFile" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple hidden>
         <label for="dmText" class="vh">Message</label>
         <textarea id="dmText" rows="1" maxlength="<%= boot.maxLen %>" placeholder="Message"></textarea>
         <button type="submit" id="dmSend" aria-label="Send"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 20 4l-4 16-4-7Z"/><path d="m12 13 8-9"/></svg></button>
@@ -124,9 +132,51 @@
       <div class="dm-dlg-acts"><span class="dm-err" id="dmRepMsg" role="status"></span><button type="button" id="dmRepClose">Cancel</button><button type="submit" class="pri">Report</button></div>
     </form>
   </dialog>
+
+  <%# 1.99cz: ✎ - one person = a direct message, 2-9 people = a group %>
+  <dialog class="dm-dlg" id="dmNewDlg" aria-labelledby="dmNewT">
+    <form method="dialog" id="dmNewForm" autocomplete="off">
+      <h2 id="dmNewT">New conversation</h2>
+      <p class="mut">Add one person for a direct message, or <%= boot.groupMin - 1 %>-<%= boot.groupMax - 1 %> people for a group.</p>
+      <div class="dm-pick">
+        <label for="dmNewIn" class="vh">Add someone by username</label>
+        <input id="dmNewIn" placeholder="Username, then Enter" maxlength="64" spellcheck="false" autocapitalize="off">
+        <button type="button" id="dmNewAdd">Add</button>
+      </div>
+      <ul class="dm-people" id="dmNewPeople" aria-label="People added" aria-live="polite"></ul>
+      <label class="nt" id="dmNewTitleL" hidden>Group name <span class="mut">(optional)</span><input id="dmNewTitle" maxlength="<%= boot.titleMax %>" placeholder="Named after the members if you leave it empty"></label>
+      <div class="dm-dlg-acts"><span class="dm-err" id="dmNewMsg" role="status"></span><button type="button" id="dmNewClose">Cancel</button><button type="submit" class="pri" id="dmNewGo" disabled>Message</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="dm-dlg" id="dmMembersDlg" aria-labelledby="dmMemT">
+    <form method="dialog" id="dmMemForm" autocomplete="off">
+      <h2 id="dmMemT">Members</h2>
+      <ul class="dm-people dm-members" id="dmMemList"></ul>
+      <fieldset id="dmMemAddF">
+        <legend>Add people</legend>
+        <div class="dm-pick">
+          <label for="dmMemIn" class="vh">Username to add</label>
+          <input id="dmMemIn" placeholder="Username, then Enter" maxlength="64" spellcheck="false" autocapitalize="off">
+          <button type="button" id="dmMemAdd">Add</button>
+        </div>
+        <ul class="dm-people" id="dmMemResults" aria-live="polite"></ul>
+        <p class="mut" id="dmMemHint"></p>
+      </fieldset>
+      <div class="dm-dlg-acts"><span class="dm-err" id="dmMemMsg" role="status"></span><button type="button" id="dmMemClose">Close</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="dm-lb" id="dmLightbox" aria-label="Picture">
+    <img id="dmLbImg" alt="">
+    <button type="button" class="dm-lb-x" id="dmLbClose" aria-label="Close">✕</button>
+    <button type="button" class="dm-lb-nav prev" id="dmLbPrev" aria-label="Previous picture">‹</button>
+    <button type="button" class="dm-lb-nav next" id="dmLbNext" aria-label="Next picture">›</button>
+    <span class="dm-lb-n" id="dmLbN"></span>
+  </dialog>
 </main>
 <script>document.body.classList.add('dm-page');   /* messages.css: the page is one viewport-high app screen, no footer */</script>
 <script type="application/json" id="dmBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-<script src="/public/js/messages.js?v=2" defer></script>
+<script src="/public/js/messages.js?v=3" defer></script>
 </body>
 </html>

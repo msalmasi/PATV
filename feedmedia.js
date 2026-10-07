@@ -169,8 +169,8 @@ class MediaError extends Error { constructor(m, status) { super(m); this.status 
  * that is removed afterwards.
  */
 const HEIF_TIMEOUT_MS = 60 * 1000;
-async function heicToPng(input) {
-  const work = fs.mkdtempSync(path.join(dir(), "tmp", "heic-"));
+async function heicToPng(input, { tmpDir = null } = {}) {
+  const work = fs.mkdtempSync(path.join(tmpDir || path.join(dir(), "tmp"), "heic-"));
   const release = await slot();
   try {
     const capped = (cmd, args) => (process.platform === "linux" && !process.env.FEED_NO_PRLIMIT
@@ -198,14 +198,16 @@ async function heicToPng(input) {
   } finally { release(); }
 }
 
-async function processImage(input, fmt) {
+// opts.outDir / opts.tmpDir (1.99cz): write somewhere other than the feed's directory - DM pictures (dmmedia.js)
+// live in their own private directory. The re-encode is the same either way.
+async function processImage(input, fmt, opts = {}) {
   if (fmt === "heic") {
-    const h = await heicToPng(input);
-    try { return await processImage(h.png, "png"); } finally { h.cleanup(); }
+    const h = await heicToPng(input, { tmpDir: opts.tmpDir || null });
+    try { return await processImage(h.png, "png", opts); } finally { h.cleanup(); }
   }
   const sharp = require("sharp");
   const base = crypto.randomBytes(16).toString("hex");
-  const sub = path.join(dir(), base.slice(0, 2));
+  const sub = path.join(opts.outDir || dir(), base.slice(0, 2));
   fs.mkdirSync(sub, { recursive: true });
   const animated = fmt === "gif" || fmt === "webp";
   let meta;

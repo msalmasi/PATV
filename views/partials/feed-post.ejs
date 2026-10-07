@@ -95,6 +95,7 @@
               <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %>Delete</button>
             <% } %>
             <% if (canXpost) { %><button type="button" role="menuitem" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %>Crosspost</button><% } %>
+            <% if (!p.deleted && !p.hidden) { %><a role="menuitem" href="/messages?share=<%= encodeURIComponent(p.id) %>"><%- fx.icon('share') %>Share → Send in a message</a><% } %>
             <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><a role="menuitem" href="/messages?to=<%= encodeURIComponent(p.author.username) %>"><%- fx.icon('comment') %>Message <%= p.author.display %></a><% } %>
             <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report post</button><% } %>
             <% if (detail_ && typeof pepeMuted !== 'undefined' && !p.author.bot && !p.deleted && (p.mine || staff_ || myRooms.length)) { %>

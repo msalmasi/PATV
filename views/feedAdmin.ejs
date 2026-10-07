@@ -96,7 +96,7 @@
     <% if (!dmR.length) { %><p class="mut">No reported messages.</p><% } %>
     <% dmR.forEach((g) => { %>
       <div class="fa-rep fa-dm<%= g.urgent ? ' urgent' : '' %>" data-msg="<%= g.messageId %>" data-user="<%= g.sender %>">
-        <div class="fa-rep-h"><% if (g.urgent) { %><span class="tag nsfw">URGENT</span> <% } %><span class="tag lock">DM</span> from <a href="/u/<%= encodeURIComponent(g.sender) %>/profile"><b>@<%= g.sender %></b></a>
+        <div class="fa-rep-h"><% if (g.urgent) { %><span class="tag nsfw">URGENT</span> <% } %><span class="tag lock"><%= g.group ? 'Group DM' : 'DM' %></span> from <a href="/u/<%= encodeURIComponent(g.sender) %>/profile"><b>@<%= g.sender %></b></a>
           <span class="mut">sent <%= g.msgAt ? fx.ago(g.msgAt) : '?' %> ago · <%= g.reports.length %> report<%= g.reports.length === 1 ? '' : 's' %></span></div>
         <ul>
           <% g.reports.forEach((r) => { %><li><% if (r.urgent) { %><span class="tag nsfw">urgent</span> <% } %><b><%= r.label %></b> from <%= r.reporter %><%= r.note ? ' — “' + r.note + '”' : '' %> <span class="mut"><%= fx.ago(r.created) %></span></li><% }) %>
@@ -221,7 +221,7 @@
 </main>
 <script src="/public/js/feed-safety.js?v=2" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
-<% if (isAdmin) { %><script src="/public/js/dm-admin.js?v=1" defer></script><% } %>
+<% if (isAdmin) { %><script src="/public/js/dm-admin.js?v=2" defer></script><% } %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <%- include('partials/admin-close') %>
 </body>

@@ -20,7 +20,28 @@
     q.textContent = m.text || '(no text)';
     q.style.cssText = 'margin:8px 0;padding:10px 12px;border-left:3px solid #ff8a80;background:#1a1414;white-space:pre-wrap;overflow-wrap:anywhere;';
     box.appendChild(el('div', 'mut', 'From @' + (m.from || '?') + ' · sent ' + when(m.at) + (m.deleted ? ' · since deleted' + (m.deletedBy && m.deletedBy !== 'author' ? ' by ' + m.deletedBy : ' by the sender') + ' (the report kept this copy)' : '')));
+    // 1.99cz: minimal context only (DM or group, its name and size - never other messages)
+    var C = d.context || {};
+    box.appendChild(el('div', 'mut', C.kind === 'group' ? 'In a group: "' + (C.title || '') + '" (' + (C.members || '?') + ' members)' : 'In a direct message'));
     box.appendChild(q);
+    // its pictures: fetched one by one through the admin-only route (each view is logged server-side), only when clicked
+    var P = m.pictures || [];
+    if (P.length) {
+      var row = el('div', 'fa-dm-pics');
+      row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;';
+      P.forEach(function (p) {
+        var b = el('button', null, 'Show picture' + (p.nsfw ? ' (marked NSFW)' : ''));
+        b.type = 'button';
+        b.addEventListener('click', function () {
+          b.disabled = true;
+          fetch(p.url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+            .then(function (bl) { var img = document.createElement('img'); img.src = URL.createObjectURL(bl); img.alt = 'Reported picture'; img.style.cssText = 'max-width:320px;max-height:320px;border-radius:6px;'; b.replaceWith(img); })
+            .catch(function (e) { b.disabled = false; alert(e.message); });
+        });
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+    }
     var D = d.details || {};
     var recs = D.records || [];
     var s = D.subject || {};
