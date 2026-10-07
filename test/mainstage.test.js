@@ -25,10 +25,13 @@ const PRICE = 100;
 const START = 100000;
 
 async function balance(userId) { return (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [userId]))[0].b; }
+// 1.99ee: a slot fee is a room flow - half a Reserve claim (the Fort Knox half), half held in the pad's room-vault
+// escrow (room_flow_ledger); "reserve" here = both halves (what the fee became), "fk" / "room" = each half
 async function revenue() {
   const r = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'stage_slot'");
   const j = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
-  return { reserve: -r[0].t, jackpot: j[0].t };
+  const rv = await getQuery("SELECT COALESCE(SUM(room_vault),0) AS t FROM room_flow_ledger");
+  return { reserve: -r[0].t + rv[0].t, jackpot: j[0].t };
 }
 let n = 0;
 async function mkUser(bal = START) {
@@ -58,6 +61,9 @@ test.before(async () => {
   await S.init();
   await S.setConfig({ price_per_min: PRICE, min_minutes: 2, max_minutes: 30, max_concurrent: 1, start_window_min: 10,
                       idle_grace_min: 5, bookings_per_hour: 50, revenue_vault: "reserve", enabled: true }, "test");
+  // 1.99ee: no paid take-over any more - these billing tests run on a house room whose owner priced its slots
+  const rooms = require(path.join(repo, "rooms"));
+  await rooms.setStage(rooms.HOUSE_ROOM, { slot_price: PRICE }, "test", { maxSlots: 4, maxPrice: PRICE });
 });
 test.afterEach(clear);
 
@@ -262,18 +268,24 @@ test("restart: expired slots settle on startup, live ones resume via name lookup
   assert.equal(s.charged + s.refunded, s.held);
 });
 
-test("revenue can route to the casino jackpot instead", async () => {
+test("1.99ee: a slot fee is a room flow (half Reserve claim, half room-vault escrow) whatever the legacy revenue setting says", async () => {
   await S.setConfig({ revenue_vault: "jackpot" }, "test");
   try {
     const u = await mkUser();
     const before = await revenue();
+    const fk0 = -(await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'stage_slot'"))[0].t;
     const r = await S.book(u, { minutes: 5 });
     await pub(r.key, { clientid: "16" }); await S.tick();
     await stream(r.slot.stream, 20, { clientid: "16" });
     await S.end(r.slot.id, "owner_ended", "x");
     const after = await revenue();
-    assert.equal(after.jackpot - before.jackpot, 100);
-    assert.equal(after.reserve, before.reserve);
+    assert.equal(after.jackpot, before.jackpot, "new bookings never feed the jackpot");
+    assert.equal(after.reserve - before.reserve, 100);
+    const fk1 = -(await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'stage_slot'"))[0].t;
+    assert.equal(fk1 - fk0, 50, "the Fort Knox half is a Reserve claim");
+    const row = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", ["slot:" + r.slot.id]))[0];
+    assert.equal(row.kind, "slot_fee"); assert.equal(row.amount, 100); assert.equal(row.room_vault, 50); assert.equal(row.fortknox, 50);
+    assert.equal((await S.getSlot(r.slot.id)).revenue_vault, "room_flow");
   } finally { await S.setConfig({ revenue_vault: "reserve" }, "test"); }
 });
 

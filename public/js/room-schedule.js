@@ -1,6 +1,6 @@
-// room-schedule.js — the schedule half of a pad's Stage card (1.99bx, views/partials/room-schedule.ejs; 1.99dx:
-// merged into the Stage card - it also keeps the card's slot status line, #rmSlotsTxt, and the Get featured
-// button current).
+// room-schedule.js — the schedule half of a pad's Go live card (1.99bx, views/partials/room-schedule.ejs; 1.99dx:
+// merged into the Stage card; 1.99ee: its own Go live card under the Stage card) - it also keeps the card's slot
+// status line, #rmSlotsTxt, and the 🚀 boost line, #rmBoostTxt, current.
 // Puts every time in the viewer's local timezone and refreshes the card every 30 s from
 // GET /api/rooms/:slug/stage (its `schedule`: mainstage.roomSchedule - pending requests only for the
 // room's managers and the person who asked). Everything from the server goes in via textContent.
@@ -86,7 +86,7 @@
     });
     localize(box);
   }
-  // the Stage card's status line: "🎬 1/2 slots in use · 3 waiting · free slots" (same words as views/room.ejs)
+  // the Go live card's status line: "🎬 1/2 slots in use · 3 waiting · free slots" (same words as views/room.ejs)
   function slots(d) {
     var t = document.getElementById('rmSlotsTxt');
     if (t && d.room) {
@@ -94,8 +94,14 @@
       t.textContent = '🎬 ' + (Number(d.open) || 0) + '/' + n + ' slot' + (n === 1 ? '' : 's') + ' in use' + (q ? ' · ' + q + ' waiting' : '')
         + (price ? ' · ' + price.toLocaleString('en-US') + ' PAT/min' : ' · free slots');
     }
-    var f = document.getElementById('rmFeatBtn');
-    if (f) f.hidden = !!d.featured;
+    // 1.99ee: the boost line ("🚀 boosted · N PAT in the last hour"; hidden at 0) - "Get featured" is gone
+    var bt = document.getElementById('rmBoostTxt');
+    if (bt && d.boost) {
+      var n = Number(d.boost.last_hour) || 0;
+      bt.hidden = n <= 0;
+      var bb = bt.querySelector('b');
+      if (bb) bb.textContent = n.toLocaleString('en-US');
+    }
   }
   var timer = null;
   function poll() {

@@ -69,7 +69,7 @@
       <% if (!roy) { %>
         <p class="note"><%= room.house ? "House pads don't earn royalties — their share stays in the Federal Reserve." : 'Royalties go to a pad owner. This pad has none yet.' %></p>
       <% } else { const R = roy, pct = Math.min(100, R.active_days_needed ? (R.active_days / R.active_days_needed) * 100 : 100); const osh = (R.owner_shares || []).filter((x) => x.pct > 0); %>
-        <p class="muted">You earn <b><%= R.config.stage_pct %>%</b> of what people pay for stage time here<% if (osh.length) { %> and a share of the PAT spent on Pepe's paid commands, song requests, voices and DJ shout-outs in this pad's Camfrog room<% } %> (your own spending doesn't count). Paid out every <%= R.config.period_days %> days if the pad was active on at least <b><%= R.active_days_needed %></b> days. Max <%= fmt(R.config.cap_per_period) %> PAT per payout.</p>
+        <p class="muted">You earn <% if (osh.length) { %>a share of the PAT spent on Pepe's paid commands, song requests, voices and DJ shout-outs in this pad's Camfrog room<% } else { %>a share of what's spent in this pad<% } %> (your own spending doesn't count). Stage slot fees and 🚀 boosts go half to this pad's room vault instead, which pays owners, streamers and regulars once room vaults open. Paid out every <%= R.config.period_days %> days if the pad was active on at least <b><%= R.active_days_needed %></b> days. Max <%= fmt(R.config.cap_per_period) %> PAT per payout.</p>
         <div class="facts">
           <div class="fact"><span class="k">This period</span><span class="v"><%= fmt(R.this_period.total) %> <small>PAT</small></span></div>
           <div class="fact"><span class="k">Waiting</span><span class="v"><%= fmt(R.pending) %> <small>PAT</small></span></div>
@@ -103,11 +103,11 @@
       <h3>Slots, prices &amp; approval</h3>
       <form id="stageForm" class="settings ps-form">
         <label>User slots (1–<%= C.max_slots_per_room %>)<input type="number" name="slot_count" min="1" max="<%= C.max_slots_per_room %>" value="<%= room.slot_count %>"></label>
-        <label>Slot price <small>PAT per live minute, 0 = free; max <%= fmt(C.price_per_min) %></small><input type="number" name="slot_price" min="0" max="<%= C.price_per_min %>" value="<%= room.slot_price %>"></label>
+        <label>Slot price <small>PAT per live minute, 0 = free (the default); max <%= fmt(C.price_per_min) %></small><input type="number" name="slot_price" min="0" max="<%= C.price_per_min %>" value="<%= room.slot_price %>"></label>
         <label class="chk"><input type="checkbox" name="approval" <%= room.approval ? 'checked' : '' %>> Bookings for later need my approval</label>
         <div class="row"><button type="submit" class="btn primary">Save stage settings</button><span class="msg" id="stageMsg" role="status"></span></div>
       </form>
-      <p class="muted">Pepe's stream is always on every pad's stage. Paid featuring costs <%= fmt(C.price_per_min) %> PAT per live minute. In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>
+      <p class="muted">Pepe's stream is always on every pad's stage. Slots are free unless you set a price; a slot fee goes half to this pad's room vault (held for it until room vaults open) and half to Fort Knox — your own bookings here go all to Fort Knox. Featuring can't be bought: you feature a slot for free, and the front page picks the liveliest pad (people can 🚀 boost a pad, split the same way). In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>
     </div>
     <div class="sb-card ps-card" id="stagebans">
       <h3>Banned from this pad's stage</h3>

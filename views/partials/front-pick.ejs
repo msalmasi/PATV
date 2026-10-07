@@ -5,7 +5,7 @@
   bar (compact) and on /pads/admin (open).
   Pass { fp: rooms.frontStatus(), open: bool }.
 %>
-<% const F = (typeof fp !== 'undefined' && fp) || null; const A = F && F.auto; const C = (F && F.cfg) || { w: {} };
+<% const F = (typeof fp !== 'undefined' && fp) || null; const A = F && F.auto; const C = (F && F.cfg) || { w: {} }; const B = C.boost || { on: true, k: 0.1, cap: 25, rel: 0.5, half_min: 60 };
    const iso = (ms) => new Date(ms).toISOString();
    const hm = (ms) => iso(ms).slice(11, 16) + ' UTC';
    const n1 = (v) => (Math.round((Number(v) || 0) * 10) / 10).toLocaleString('en-US'); %>
@@ -52,16 +52,16 @@
     <summary>Score breakdown</summary>
     <% const R = (A && A.ranked) || []; %>
     <div class="fp-tbl"><table>
-      <thead><tr><th>Live pad</th><th title="unique chatters">Chatters ×<%= C.w.chatters %></th><th>Lines ×<%= C.w.lines %></th><th>Mic min ×<%= C.w.mic %></th><th>People ×<%= C.w.people %></th><th>Score</th></tr></thead>
+      <thead><tr><th>Live pad</th><th title="unique chatters">Chatters ×<%= C.w.chatters %></th><th>Lines ×<%= C.w.lines %></th><th>Mic min ×<%= C.w.mic %></th><th>People ×<%= C.w.people %></th><th title="active boost PAT (decayed) -> points">🚀 Boost</th><th>Score</th></tr></thead>
       <tbody>
-        <% if (!R.length) { %><tr><td colspan="6" class="fp-why">No live bridged pads at the last check.</td></tr><% } %>
+        <% if (!R.length) { %><tr><td colspan="7" class="fp-why">No live bridged pads at the last check.</td></tr><% } %>
         <% R.forEach((r) => { const P = r.parts || {}; const c = (k) => P[k] ? n1(P[k].n) : '0'; %>
           <tr class="<%= A && r.id === A.id ? 'cur' : '' %>"><td><%= r.title %><%= A && r.id === A.id ? ' ★' : '' %><% if (r.dead) { %><span class="tag dead">quiet <%= C.dead_min %>m+</span><% } %><% if (A && A.lead && A.lead.id === r.id) { %><span class="tag lead">leads <%= A.lead.n %>/<%= C.lead_evals %></span><% } %></td>
-            <td><%= c('chatters') %></td><td><%= c('lines') %></td><td><%= c('mic') %></td><td><%= c('people') %></td><td class="fp-score"><%= n1(r.score) %></td></tr>
+            <td><%= c('chatters') %></td><td><%= c('lines') %></td><td><%= c('mic') %></td><td><%= c('people') %></td><td><%= P.boost ? n1(P.boost.n) + ' → +' + n1(P.boost.pts) : '—' %></td><td class="fp-score"><%= n1(r.score) %></td></tr>
         <% }) %>
       </tbody>
     </table></div>
-    <div class="fp-f">score = <%= C.w.chatters %>·chatters + <%= C.w.lines %>·lines + <%= C.w.mic %>·mic minutes (last <%= C.window_min %> min) + <%= C.w.people %>·people now. Bots and Pepe never count; no pad gets a bonus.
+    <div class="fp-f">score = <%= C.w.chatters %>·chatters + <%= C.w.lines %>·lines + <%= C.w.mic %>·mic minutes (last <%= C.window_min %> min) + <%= C.w.people %>·people now. Bots and Pepe never count; no pad gets a bonus. 🚀 Boost<%= B.on ? '' : ' (OFF)' %> = min(<%= B.cap %>, <%= B.k %>·√active boost PAT, <%= B.rel %>×activity score), 0 for a quiet pad; boosts halve every <%= B.half_min %> min.
       Kept ≥ <%= C.hold_min %> min, then switches when another pad scores ≥ <%= C.lead_ratio %>× for <%= C.lead_evals %> checks in a row (one check / <%= C.eval_sec %> s) - or at once when the featured pad goes quiet for <%= C.dead_min %> min or stops being live.<% if (A && A.evalAt) { %> Last check <time data-ts="<%= A.evalAt %>" datetime="<%= iso(A.evalAt) %>"><%= hm(A.evalAt) %></time>.<% } %></div>
   </details>
 </div>

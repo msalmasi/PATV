@@ -30,12 +30,11 @@
     return null;
   }
   function roomTitle(id) { var o = roomOpt(id); return o ? o.getAttribute('data-title') : id; }
-  if (/[?&]feature=1/.test(location.search)) setRadio('kind', 'feature');
+  // 1.99ee: featuring isn't sold any more (old ?feature=1 links just open the page) - pads are 🚀 boosted instead
 
   // ── booking form ──
   var mins = $('mins'), minsR = $('minsR');
   function price() {
-    if (radio('kind') === 'feature') return PRICE;
     var o = $('room').selectedOptions[0];
     return o ? Number(o.getAttribute('data-price')) || 0 : 0;
   }
@@ -80,7 +79,7 @@
 
   $('bookForm').addEventListener('submit', function (e) {
     e.preventDefault();
-    var m = Number(mins.value), w = radio('when'), feat = radio('kind') === 'feature', mode = radio('mode');
+    var m = Number(mins.value), w = radio('when'), feat = false, mode = radio('mode');
     var body = { room: $('room').value, minutes: m, feature: feat, mode: mode, embed: $('embed').value, title: $('title').value };
     if (mode === 'embed' && !$('embed').value.trim()) { $('bookMsg').textContent = 'Paste a YouTube or Twitch link.'; return; }
     var hold = m * price();
@@ -181,9 +180,6 @@
       $('slotNote').textContent = s.live ? (s.featured ? 'You\'re the featured stream in ' + roomTitle(s.room_id) + '. ' : 'You\'re on the stage in ' + roomTitle(s.room_id) + '. ') +
         (s.price_per_min && s.held > s.charged ? fmt(s.price_per_min) + ' PAT per started minute live.' : 'Viewers pick your tab to watch.') : 'Your stream dropped. Billing is paused until you are back.';
     }
-    // "feature me": a free slot, nobody featured in the room
-    var canFeat = !s.featured && !s.price_per_min && roomState && roomState.room.id === s.room_id && !roomState.featured;
-    show('featBtn', !!canFeat);
     // 1.99cr: may viewers snap / clip this stream, is it NSFW (not while a change is on its way)
     show('capOpts', !embed);
     if (!capBusy) { $('capAllow').checked = s.capture !== false; $('capNsfw').checked = !!s.nsfw; }
@@ -226,16 +222,6 @@
       if (!j.ok) alert(j.error || 'Could not end it.');
       refresh();
     }).catch(function () { $('endBtn').disabled = false; });
-  });
-  $('featBtn').addEventListener('click', function () {
-    if (!slot) return;
-    var left = Math.max(1, slot.max_minutes - Math.ceil(slot.live_seconds / 60));
-    var m = Number(prompt('Feature yourself for how many minutes? (max ' + left + ', ' + fmt(PRICE) + ' PAT per started minute live, the rest comes back)', String(Math.min(left, 15))));
-    if (!m) return;
-    post('/api/stage/slots/' + encodeURIComponent(slot.id) + '/upgrade', { minutes: m }).then(function (j) {
-      $('slotMsg').textContent = j.ok ? '★ You\'re featured.' : (j.error || 'Could not feature you.');
-      refresh();
-    });
   });
   function newKey(id, then) {
     post('/api/stage/slots/' + encodeURIComponent(id) + '/key').then(function (j) {

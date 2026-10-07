@@ -3,19 +3,20 @@
 // Every Camfrog room on PATV has a STAGE: Pepe's stream (always there) plus N user SLOTS that people
 // stream to (the room owner sets N, default 1; rooms.js). Viewers switch freely between a room's live
 // slots and Pepe's stream. One slot per room can be FEATURED - it becomes the room's default stream
-// (and the homepage's, when that room is the front room):
-//   - the room owner (or site staff) features any open slot, free;
-//   - or, while nothing is featured, a user PAYS to be featured: the original 1.99al take-over, now
-//     per room - PAT held up front, billed per live minute, the rest refunded on every exit path.
+// (and the homepage's, when that room is the front room): the room owner (or site staff) features any
+// open slot, free.
+// 1.99ee: featuring can't be BOUGHT any more (boosts.js: "featuring is earned" - people boost a pad
+// instead, which feeds the front-page ranking). New bookings are always ordinary slots, the queue never
+// books a featured one and the "feature me" upgrade is refused (410). Paid featured rows from before
+// 1.99ee (kind 'feature' / feature_by 'paid') keep their terms: billed per live minute at the price they
+// booked, the rest refunded on every exit path, settled the legacy way (Reserve + owner royalty accrual).
 //
 // Slot kinds:
-//   feature  a paid featured booking (book with feature=true; the old API default). Price = the global
-//            price_per_min. It stays featured until it ends, unless the owner/staff unfeature it - then
-//            the unused hold is refunded right away and it carries on as an ordinary slot for free.
-//   slot     an ordinary slot. Price = the room's slot_price (default 0 = free; the owner may charge up
-//            to the featured price). A FREE slot can be upgraded to featured by its streamer while
-//            nothing is featured ("feature me": a hold for N minutes at the featured price, billed only
-//            from that moment; when those minutes are used up it quietly stops being featured).
+//   slot     an ordinary slot. Price = the room's slot_price (default 0 = FREE; the owner may charge up
+//            to price_per_min). Since 1.99ee its fee settles as a ROOM FLOW (revenue_vault 'room_flow',
+//            boosts.routeInTx): half to the Federal Reserve (Fort Knox's stand-in until E-1), half held
+//            for the pad's room vault (room_flow_ledger escrow, until E-3).
+//   feature  legacy (before 1.99ee): a paid featured booking at the global price_per_min.
 // Sources: an RTMP key (OBS…), the browser (MediaRecorder relay), or an EMBED - a YouTube video/live or
 // Twitch channel/VOD (stageembed.js: parsed to {p,t,id}, rendered only with the official players). An
 // embed slot is "live" from the moment it opens (we can't see inside YouTube/Twitch).
@@ -30,9 +31,10 @@
 // Money: book = one transaction (debit the whole hold + slot row). Billing ticks only move the slot's
 // own bookkeeping (live_ms -> charged, never more than held). Settling = one transaction, guarded by
 // `settled = 0`, that refunds held - charged to the user and books the charged part as revenue:
-// "reserve" (default) = a NEGATIVE reserve_claims row, flow "stage_slot", which Pepe's funding tick
-// credits to the Federal Reserve, or "jackpot" = a jackpot_rakes row. In the same transaction the
-// room owner's royalty share is ACCRUED (royalties.js - released later by the Reserve, never minted).
+// revenue_vault 'room_flow' (every booking since 1.99ee) = boosts.routeInTx in the same transaction; legacy
+// rows: "reserve" = a NEGATIVE reserve_claims row, flow "stage_slot", which Pepe's funding tick credits
+// to the Federal Reserve, or "jackpot" = a jackpot_rakes row, and the room owner's royalty share is
+// ACCRUED (royalties.js - released later by the Reserve, never minted).
 // A server restart loses nothing: slots are in the DB, the next tick resumes them.
 //
 // Streaming: two nginx-rtmp applications, both calling POST /api/stage/rtmp (on_publish /
@@ -71,7 +73,7 @@ const FFMPEG = process.env.FFMPEG_PATH || "ffmpeg";
 
 const DEFAULTS = {
   enabled: true,
-  price_per_min: 1000,     // PAT per started live minute of PAID FEATURING (and the cap on a room's slot price)
+  price_per_min: 1000,     // the most a pad owner may charge per live minute for a slot (1.99ee: paid featuring is gone)
   min_minutes: 5,
   max_minutes: 60,
   max_concurrent: 6,       // user streams open at the same time, site-wide (server/bandwidth guard)
@@ -90,6 +92,7 @@ const DEFAULTS = {
   stagecap_clips: true,
 };
 const OPEN = "('waiting','active')";
+const LEGACY_PAID_FEATURE = false;   // 1.99ee: the old paid "feature me" upgrade - retired (featuring is earned)
 const FUTURE = "('requested','scheduled')";
 const BEAT_STALE_MS = 30 * 1000;     // on_update comes every 10 s; 3 missed = not live
 const TICK_MS = 5000;
@@ -181,6 +184,7 @@ function init() {
         jackpotId TEXT PRIMARY KEY, spinId TEXT, userId TEXT, amount INTEGER)`).catch(() => {});
       await rooms.init();
       await require("./royalties").init();
+      await require("./boosts").init();          // 1.99ee: room_flow_ledger (slot fees settle into it)
       await loadConfig();
     })().catch((e) => { ready = null; throw e; });
   }
@@ -333,8 +337,8 @@ function overlapping(list, a, b, excludeId) {
 }
 
 // ── book ──
-// opts: {room, minutes, feature (default true = the 1.99al take-over), mode: stream|embed, embed: url,
-//        title, start_at (ms; omitted / now = right now)}
+// opts: {room, minutes, mode: stream|embed, embed: url, title, start_at (ms; omitted / now = right now)}
+// (1.99ee: `feature` is ignored - every booking is an ordinary slot; the owner can feature it for free)
 async function book(user, opts = {}) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in to book the stage.");
@@ -349,7 +353,7 @@ async function book(user, opts = {}) {
     throw new Refuse(400, `Pick between ${C.min_minutes} and ${C.max_minutes} minutes.`);
   }
   if (await isBanned(user.userId, roomId)) throw new Refuse(403, "You can't book the stage.");
-  const feature = opts.feature === undefined ? true : truthy(opts.feature);
+  const feature = false;      // 1.99ee: featuring is earned (boosts.js), never bought
   const mode = opts.mode === "embed" ? "embed" : "stream";
   let embed = null;
   if (mode === "embed") {
@@ -363,7 +367,7 @@ async function book(user, opts = {}) {
     startAt = Math.floor(startAt / 60000) * 60000;
     if (C.schedule_days < 1 || startAt > t + C.schedule_days * 86400000) throw new Refuse(400, `Book up to ${C.schedule_days} days ahead.`);
   } else startAt = t;
-  const price = feature ? C.price_per_min : Math.min(C.price_per_min, RS.slot_price || 0);
+  const price = Math.min(C.price_per_min, RS.slot_price || 0);      // the owner's slot price; 0 = free (the default)
   const hold = minutes * price;
   const staffOrOwner = rooms.isStaff(user) || !!(RS.owner && RS.owner.userId === user.userId);
   const needsApproval = scheduled && !!RS.approval && !staffOrOwner;
@@ -409,7 +413,7 @@ async function book(user, opts = {}) {
                     key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, went_live, last_live)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                    [id, user.userId, u.username, u.displayname || u.username, status, t, minutes, price, hold, key ? sha(key) : null, stream,
-                    C.revenue_vault, roomId, feature ? "feature" : "slot", feature ? 1 : 0, feature ? "paid" : null, mode,
+                    "room_flow", roomId, feature ? "feature" : "slot", feature ? 1 : 0, feature ? "paid" : null, mode,
                     embed ? JSON.stringify(embed) : null, startAt, title,
                     status === "active" ? t : null, status === "active" ? t : null]);
     return { id, status };
@@ -429,6 +433,7 @@ async function book(user, opts = {}) {
 // ── settle: the ONLY place money comes back out of a slot ──
 async function end(slotId, reason, actor) {
   await init();
+  let fee = null;
   const res = await tx(async () => {
     const s = (await getQuery("SELECT * FROM stage_slots WHERE id = ?", [String(slotId || "")]))[0];
     if (!s || s.settled) return null;
@@ -443,7 +448,14 @@ async function end(slotId, reason, actor) {
       await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
                      [uuidv4(), s.userId, `stage slot refund (${billedMinutes(s.live_ms)} of ${s.max_minutes} min used)`, refund]);
     }
-    if (charged > 0) {
+    if (charged > 0 && s.revenue_vault === "room_flow") {
+      // 1.99ee: a slot fee is a room flow - half to the Reserve (the Fort Knox half), half held for the pad's room vault
+      const roomId = s.room_id || rooms.HOUSE_ROOM;
+      const RS = await rooms.stageSettings(roomId);
+      fee = await require("./boosts").routeInTx({ ref: "slot:" + s.id, kind: "slot_fee", room_id: roomId, payer_id: s.userId, payer_name: s.username,
+        amount: charged, owner_self: !!(RS.owner && RS.owner.userId === s.userId), via: "web", flow: "stage_slot",
+        detail: `${s.displayname || s.username}: ${billedMinutes(s.live_ms)} min` });
+    } else if (charged > 0) {
       if (s.revenue_vault === "jackpot") {
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), null, s.userId, charged]);
       } else {
@@ -456,6 +468,7 @@ async function end(slotId, reason, actor) {
     }
     return { id: s.id, charged, refund, userId: s.userId, room_id: s.room_id, status: s.status };
   });
+  if (res && fee) { try { require("./boosts").telemetry(fee, fee.payer_name, "web"); } catch (e) { /* telemetry only */ } }
   if (res) {
     stopRelay(res.id);
     for (const [cid, sid] of clients) if (sid === res.id) clients.delete(cid);
@@ -506,10 +519,12 @@ async function featureByOwner(slotId, actor) {
     link: "/stage", ref: "featured:" + s.id + ":" + now(), pm: false }).catch(() => {});
   return { ok: true };
 }
-// A streamer pays to feature their own FREE open slot (nothing else featured in the room).
+// A streamer paid to feature their own FREE open slot (nothing else featured in the room).
+// 1.99ee: retired - featuring is earned; the route answers 410 with a pointer to boosting.
 async function upgrade(user, slotId, minutes) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  if (!LEGACY_PAID_FEATURE) throw new Refuse(410, "Featuring can't be bought any more - it's earned. Boost the pad instead (🚀 on the pad's page).");
   const C = CONFIG;
   const s0 = await getSlot(slotId);
   if (!s0 || s0.userId !== user.userId || s0.settled || !["waiting", "active"].includes(s0.status)) throw new Refuse(404, "That isn't your open slot.");
@@ -575,7 +590,7 @@ async function joinQueue(user, opts = {}) {
   const mode = opts.mode === "embed" ? "embed" : "stream";
   let embed = null;
   if (mode === "embed") { try { embed = embeds.parse(opts.embed); } catch (e) { throw new Refuse(400, e.message); } }
-  const feature = truthy(opts.feature);
+  const feature = false;     // 1.99ee: a queued turn is always an ordinary slot
   if ((await getQuery("SELECT 1 FROM stage_queue WHERE userId = ? AND status = 'waiting'", [user.userId])).length) throw new Refuse(409, "You're already in a queue.");
   if ((await getQuery(`SELECT 1 FROM stage_slots WHERE userId = ? AND status IN ${OPEN}`, [user.userId])).length) throw new Refuse(409, "You already have a stage slot.");
   const n = await getQuery("SELECT COUNT(*) AS n FROM stage_queue WHERE room_id = ? AND status = 'waiting'", [roomId]);
@@ -711,7 +726,7 @@ async function tickQueue(t) {
       const soon = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE room_id = ? AND status = 'scheduled' AND start_at < ?`,
                                   [roomId, t + (C.lead_min + 5) * 60000]);
       if (open.length + soon[0].n >= RS.slot_count) break;
-      const wantFeature = !!head.feature && !open.some((x) => x.featured);
+      const wantFeature = false;     // 1.99ee: featuring isn't sold - an old entry that asked for it gets an ordinary slot
       let res = null, err = null;
       try {
         res = await book({ userId: head.userId, username: head.username }, {
@@ -970,6 +985,8 @@ async function roomStage(roomId, viewer) {
   const q = await queueFor(roomId);
   const mine = viewer && viewer.userId ? q.findIndex((x) => x.userId === viewer.userId) : -1;
   const featured = open.find((s) => s.featured) || null;
+  let boost = null;
+  try { boost = await require("./boosts").status(roomId); } catch (e) { boost = null; }   // 1.99ee: the Stage card's boost line
   return {
     room: { id: roomId, slug: RS.slug, title: RS.title, slot_count: RS.slot_count, slot_price: RS.slot_price, approval: RS.approval },
     slots: live, open: open.length, free: Math.max(0, RS.slot_count - open.length),
@@ -977,7 +994,7 @@ async function roomStage(roomId, viewer) {
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
-    price: CONFIG.price_per_min, enabled: CONFIG.enabled && CONFIG.max_concurrent > 0,
+    price: CONFIG.price_per_min, enabled: CONFIG.enabled && CONFIG.max_concurrent > 0, boost,
   };
 }
 /** A room's schedule for its page (1.99bx): what's on now, the booked / scheduled slots ahead, the
@@ -1182,7 +1199,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     const all = await rooms.list();
     const want = String(req.query.room || "");
     const pick = all.find((r) => r.slug === want || r.id === want) || all.find((r) => r.id === rooms.HOUSE_ROOM) || all[0] || null;
-    res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Get featured on the main stage.",
+    res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Slots are free on most pads.",
                       image: res.locals.ogBase + "/og/page.png?t=Go%20live%20on%20PATV", url: res.locals.ogBase + "/stage" };
     res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: isStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
@@ -1343,5 +1360,5 @@ module.exports = {
   isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
-  _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache,
+  _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,
 };

@@ -349,9 +349,9 @@
     </div>
     <ul>
       <li>Ordinary slots are <b>free</b> in most pads<%= paid.length ? '' : ' — book one now or for later' %>.</li>
-      <li><b>Get featured</b> on the front page: <%= Number(featuredPrice || 0).toLocaleString('en-US') %> PAT per live minute, unused PAT back.</li>
+      <li>The front page shows the <b>liveliest pad</b> (chat, mic, people) — it's earned, not bought. Fans can <b>🚀 boost</b> a pad to tip a close race.</li>
     </ul>
-    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="golive-btn ghost" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) + '&feature=1' : '?feature=1' %>">★ Get featured</a><a class="btn" href="/p">Pads</a></div>
+    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="golive-btn ghost" href="/p#trending" title="Boost a pad: it adds to the pad's front-page score">🚀 Boost a pad</a><a class="btn" href="/p">Pads</a></div>
   </section>
 
   <!-- ───── main stage ───── -->

@@ -175,7 +175,11 @@ test("slots per room: the owner's count is the limit; rooms don't share it; the 
   await rooms.setStage(PLANT, { slot_count: 1 }, "pb", { maxSlots: 4, maxPrice: PRICE });
 });
 
-test("a priced room: ordinary slots hold the room's price; the owner's price is capped at the featured price", async () => {
+test("1.99ee slots: free by default; an owner's price holds per minute; the fee is a room flow (50% Reserve claim / 50% room-vault escrow, no royalty accrual); the owner's own booking is 100% Fort Knox", async () => {
+  const f = await mkUser();
+  const free = await S.book(f, { room: PLANT, minutes: 5 });
+  assert.equal(free.slot.held, 0, "free by default"); assert.equal(free.slot.price_per_min, 0);
+  await S.end(free.slot.id, "owner_ended", f.username);
   await rooms.setStage(PLANT, { slot_price: 40 }, "pb", { maxSlots: 4, maxPrice: PRICE });
   try {
     const u = await mkUser();
@@ -185,63 +189,71 @@ test("a priced room: ordinary slots hold the room's price; the owner's price is 
     await stream(r.slot.stream, 70, { clientid: "31" });
     const res = await S.end(r.slot.id, "owner_ended", u.username);
     assert.equal(res.charged, 80); assert.equal(await balance(u.userId), START - 80);
-    // the owner earned 20% royalty on it (accrued, not paid)
-    const acc = await getQuery("SELECT amount, source FROM royalty_ledger WHERE ref = ?", ["stage:" + r.slot.id]);
-    assert.deepEqual(acc.map((x) => [x.source, x.amount]), [["stage", 16]]);
+    const row = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", ["slot:" + r.slot.id]))[0];
+    assert.deepEqual([row.kind, row.room_id, row.amount, row.fortknox, row.room_vault, row.owner_self], ["slot_fee", PLANT, 80, 40, 40, 0]);
+    const claim = await getQuery("SELECT amount FROM reserve_claims WHERE flow = 'stage_slot' AND type LIKE ?", ["%" + PLANT + "%"]);
+    assert.ok(claim.some((c) => c.amount === -40), "the Fort Knox half is a Reserve claim");
+    assert.equal((await getQuery("SELECT COUNT(*) AS n FROM royalty_ledger WHERE ref = ?", ["stage:" + r.slot.id]))[0].n, 0, "no 20% owner royalty on room-flow fees");
+    // the owner books (and pays for) a slot in his own pad: all of it to the Fort Knox half
+    const ro = await S.book(owner, { room: PLANT, minutes: 5 });
+    await pub(ro.key, { clientid: "32" }); await S.tick();
+    await stream(ro.slot.stream, 30, { clientid: "32" });
+    await S.end(ro.slot.id, "owner_ended", "pb");
+    const orow = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", ["slot:" + ro.slot.id]))[0];
+    assert.deepEqual([orow.amount, orow.fortknox, orow.room_vault, orow.owner_self], [40, 40, 0, 1]);
+    // the owner's price is capped at the site maximum
+    const R = await rooms.setStage(PLANT, { slot_price: PRICE * 50 }, "pb", { maxSlots: 4, maxPrice: PRICE });
+    assert.equal(R.slot_price, PRICE);
   } finally { await rooms.setStage(PLANT, { slot_price: 0 }, "pb", { maxSlots: 4, maxPrice: PRICE }); }
 });
 
-test("featuring: one per room; paid feature only while nobody is featured; owner features free and overrides (paid one refunded)", async () => {
+test("1.99ee featuring is earned: feature=true books an ordinary slot, nothing extra held; the owner features free; a LEGACY paid feature is still refunded when unfeatured", async () => {
   await rooms.setStage(PLANT, { slot_count: 3 }, "pb", { maxSlots: 4, maxPrice: PRICE });
   const [a, b, c] = [await mkUser(), await mkUser(), await mkUser()];
   const pa = await S.book(a, { room: PLANT, minutes: 10, feature: true });
-  assert.equal(pa.slot.featured, true); assert.equal(pa.slot.held, 1000); assert.equal(pa.slot.feature_by, "paid");
-  await assert.rejects(S.book(b, { room: PLANT, minutes: 5, feature: true }), (e) => e.status === 409 && /featured/.test(e.message));
-  const sb = await S.book(b, { room: PLANT, minutes: 10, feature: false });
-  // a goes live 90 s (2 billed minutes) then the owner features b instead
+  assert.equal(pa.slot.featured, false); assert.equal(pa.slot.held, 0); assert.equal(pa.slot.kind, "slot"); assert.equal(pa.slot.feature_by, null);
+  assert.equal(await balance(a.userId), START, "nothing charged for asking");
+  const sb = await S.book(b, { room: PLANT, minutes: 10, feature: true });
+  assert.equal(sb.slot.featured, false, "a second one too - no exclusive paid slot");
+  // a legacy paid featured row from before 1.99ee (held up front at the old featured price)
+  await runQuery("UPDATE users SET points_balance = points_balance - 1000 WHERE userId = ?", [a.userId]);
+  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, 'stage feature hold (legacy test)', -1000)", ["legacy-" + a.userId, a.userId]);
+  await runQuery("UPDATE stage_slots SET kind = 'feature', featured = 1, feature_by = 'paid', price_per_min = ?, held = 1000, revenue_vault = 'reserve' WHERE id = ?", [PRICE, pa.slot.id]);
   await pub(pa.key, { clientid: "41" }); await S.tick();
   await stream(pa.slot.stream, 90, { clientid: "41" });
   const before = await balance(a.userId);
   await S.featureByOwner(sb.slot.id, "pb");
-  let A = await S.getSlot(pa.slot.id), B = await S.getSlot(sb.slot.id);
+  const A = await S.getSlot(pa.slot.id), B = await S.getSlot(sb.slot.id);
   assert.equal(A.featured, 0); assert.equal(B.featured, 1); assert.equal(B.feature_by, "owner");
-  assert.equal(A.held, 200, "hold shrunk to what was used"); assert.equal(await balance(a.userId), before + 800, "unused feature refunded at once");
-  // a keeps streaming, but isn't billed any more
-  await stream(pa.slot.stream, 120, { clientid: "41" });
-  assert.equal((await S.getSlot(pa.slot.id)).charged, 200);
+  assert.equal(A.held, 200, "legacy hold shrunk to what was used"); assert.equal(await balance(a.userId), before + 800, "unused legacy feature refunded at once");
   const res = await S.end(pa.slot.id, "owner_ended", a.username);
-  assert.equal(res.charged, 200); assert.equal(res.refund, 0);
-  assert.equal(await balance(a.userId), START - 200);
-  // owner unfeatures b (free feature: nothing to refund) -> c can now pay to be featured
-  await S.unfeature(sb.slot.id, "pb");
+  assert.equal(res.charged, 200); assert.equal(await balance(a.userId), START - 200);
+  const acc = await getQuery("SELECT amount FROM royalty_ledger WHERE ref = ?", ["stage:" + pa.slot.id]);
+  assert.deepEqual(acc.map((x) => x.amount), [40], "a legacy row settles the legacy way (Reserve + 20% owner accrual)");
+  // the public view: the owner's featured slot first
+  await pub(sb.key, { clientid: "42" }); await S.tick();
   const pc = await S.book(c, { room: PLANT, minutes: 5, feature: true });
-  assert.equal(pc.slot.featured, true);
-  // public view: featured first
-  await pub(pc.key, { clientid: "42" }); await S.tick();
+  assert.equal(pc.slot.featured, false);
   const live = await S.publicSlots(PLANT);
-  assert.equal(live[0].id, pc.slot.id); assert.equal(live[0].featured, true);
+  assert.equal(live[0].id, sb.slot.id); assert.equal(live[0].featured, true);
   await rooms.setStage(PLANT, { slot_count: 1 }, "pb", { maxSlots: 4, maxPrice: PRICE });
 });
 
-test("feature me: a free slot pays only from the upgrade on, stops being featured when its minutes are used up", async () => {
+test("1.99ee feature me is retired: the upgrade is refused (410) and charges nothing", async () => {
   const u = await mkUser();
   const r = await S.book(u, { room: PLANT, minutes: 20, feature: false });
   await pub(r.key, { clientid: "51" }); await S.tick();
-  await stream(r.slot.stream, 120, { clientid: "51" });            // 2 free minutes
-  const v = await S.upgrade(u, r.slot.id, 2);
-  assert.equal(v.featured, true); assert.equal(v.held, 200); assert.equal(v.charged, 0, "earlier minutes are not billed");
-  assert.equal(await balance(u.userId), START - 200);
-  await stream(r.slot.stream, 30, { clientid: "51" });
-  assert.equal((await S.getSlot(r.slot.id)).charged, 100);
-  await stream(r.slot.stream, 100, { clientid: "51" });
-  const s = await S.getSlot(r.slot.id);
-  assert.equal(s.charged, 200); assert.equal(s.featured, 0, "used up -> quietly unfeatured"); assert.equal(s.status, "active", "but still on the stage");
-  await assert.rejects(S.upgrade(await mkUser(), r.slot.id, 2), (e) => e.status === 404, "only your own slot");
+  await stream(r.slot.stream, 60, { clientid: "51" });
+  await assert.rejects(S.upgrade(u, r.slot.id, 2), (e) => e.status === 410 && /Boost/.test(e.message));
+  assert.equal(await balance(u.userId), START);
+  assert.equal((await S.getSlot(r.slot.id)).featured, 0);
   const res = await S.end(r.slot.id, "owner_ended", u.username);
-  assert.equal(res.charged, 200); assert.equal(await balance(u.userId), START - 200);
+  assert.equal(res.charged, 0);
 });
 
 test("embed slots: live at once (no key), billed while open, never accepted by nginx", async () => {
+  await rooms.setStage(PLANT, { slot_price: PRICE }, "pb", { maxSlots: 4, maxPrice: PRICE });   // 1.99ee: billed only on a priced pad
+  try {
   const u = await mkUser();
   await assert.rejects(S.book(u, { room: PLANT, minutes: 5, feature: true, mode: "embed", embed: "https://evil.com/x" }), (e) => e.status === 400);
   const r = await S.book(u, { room: PLANT, minutes: 5, feature: true, mode: "embed", embed: "https://youtu.be/dQw4w9WgXcQ", title: "Music <b>video</b>" });
@@ -253,9 +265,12 @@ test("embed slots: live at once (no key), billed while open, never accepted by n
   for (let i = 0; i < 20; i++) { adv(5000); await S.tick(); }                 // ~95 s
   const res = await S.end(r.slot.id, "owner_ended", u.username);
   assert.equal(res.charged, 200);
+  } finally { await rooms.setStage(PLANT, { slot_price: 0 }, "pb", { maxSlots: 4, maxPrice: PRICE }); }
 });
 
 test("scheduling: holds when booked, opens at start - lead, reminder before, capacity respected, cancel refunds in full", async () => {
+  await rooms.setStage(PLANT, { slot_price: PRICE }, "pb", { maxSlots: 4, maxPrice: PRICE });   // 1.99ee: a priced pad holds
+  try {
   const [a, b, c] = [await mkUser(), await mkUser(), await mkUser()];
   const at = T + 60 * 60000;
   const r = await S.book(a, { room: PLANT, minutes: 10, feature: true, start_at: at });
@@ -282,12 +297,13 @@ test("scheduling: holds when booked, opens at start - lead, reminder before, cap
   await S.tick();
   // cancel the later one: full refund
   const res = await S.end(later.slot.id, "cancelled", b.username);
-  assert.equal(res.refund, 0); assert.equal(await balance(b.userId), START);
+  assert.equal(res.refund, 1000); assert.equal(await balance(b.userId), START);
   await assert.rejects(S.book(a, { room: PLANT, minutes: 5, start_at: T + 20 * 86400000 }), /days ahead/);
+  } finally { await rooms.setStage(PLANT, { slot_price: 0 }, "pb", { maxSlots: 4, maxPrice: PRICE }); }
 });
 
 test("approval: requests wait for the owner; deny refunds; not approved in time refunds; owner/staff bookings skip it", async () => {
-  await rooms.setStage(PLANT, { approval: true }, "pb", { maxSlots: 4, maxPrice: PRICE });
+  await rooms.setStage(PLANT, { approval: true, slot_price: PRICE }, "pb", { maxSlots: 4, maxPrice: PRICE });
   try {
     const [a, b] = [await mkUser(), await mkUser()];
     const r1 = await S.book(a, { room: PLANT, minutes: 5, feature: true, start_at: T + 3 * 3600000 });
@@ -306,10 +322,10 @@ test("approval: requests wait for the owner; deny refunds; not approved in time 
     assert.equal(s3.status, "ended"); assert.equal(s3.end_reason, "not_approved");
     const ro = await S.book(owner, { room: PLANT, minutes: 5, feature: false, start_at: T + 3600000 });
     assert.equal(ro.slot.status, "scheduled", "the owner's own bookings need no approval");
-  } finally { await rooms.setStage(PLANT, { approval: false }, "pb", { maxSlots: 4, maxPrice: PRICE }); }
+  } finally { await rooms.setStage(PLANT, { approval: false, slot_price: 0 }, "pb", { maxSlots: 4, maxPrice: PRICE }); }
 });
 
-test("queue: next up gets the slot when it frees (featured if asked and free), notified; can leave; full refusal", async () => {
+test("queue: next up gets the slot when it frees (1.99ee: an ordinary slot even if it asked for featured), notified; can leave; full refusal", async () => {
   const [a, b, c] = [await mkUser(), await mkUser(), await mkUser()];
   const sa = await S.book(a, { room: PLANT, minutes: 5, feature: false });
   const q1 = await S.joinQueue(b, { room: PLANT, minutes: 5, feature: true });
@@ -322,7 +338,7 @@ test("queue: next up gets the slot when it frees (featured if asked and free), n
   await S.tick();
   const mineB = await S.mine(b.userId);
   const sb = mineB.slots.find((x) => x.status === "waiting");
-  assert.ok(sb, "b got the slot"); assert.equal(sb.featured, true); assert.equal(sb.held, 500);
+  assert.ok(sb, "b got the slot"); assert.equal(sb.featured, false); assert.equal(sb.held, 0);
   assert.ok((await getQuery("SELECT title FROM inbox WHERE user_id = ?", [b.userId])).some((x) => /You're up/.test(x.title)));
   assert.equal((await S.queueFor(PLANT)).length, 1);
   assert.equal(await S.leaveQueue(c, q2.id), true);
@@ -341,10 +357,11 @@ test("room bans: block booking + publishing in that room only; the owner can't b
   await S.roomUnban(PLANT, u.userId, "pb");
 });
 
-test("legacy API: book() with no room = a paid take-over of the house room (the 1.99al behaviour)", async () => {
+test("legacy API: book() with no room = the house room; 1.99ee: an ordinary (free) slot, never a paid take-over", async () => {
   const u = await mkUser();
   const r = await S.book(u, { minutes: 5 });
-  assert.equal(r.slot.room_id, HOUSE); assert.equal(r.slot.featured, true); assert.equal(r.slot.held, 500);
+  assert.equal(r.slot.room_id, HOUSE); assert.equal(r.slot.featured, false); assert.equal(r.slot.held, 0);
+  assert.equal(await balance(u.userId), START);
 });
 
 // ── royalties ──
@@ -521,6 +538,7 @@ test("money is conserved across stages: balances + held + revenue = what everyon
   const open = await getQuery("SELECT COALESCE(SUM(held),0) AS h FROM stage_slots WHERE settled = 0");
   const rev = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'stage_slot'");
   const paidOut = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'room_owner'");
+  const escrow = await getQuery("SELECT COALESCE(SUM(room_vault),0) AS t FROM room_flow_ledger WHERE kind = 'slot_fee'");   // 1.99ee: the room-vault half
   const started = (await getQuery("SELECT COUNT(*) AS n FROM users"))[0].n * START;
-  assert.equal(users[0].b + open[0].h + (-rev[0].t) - paidOut[0].t, started);
+  assert.equal(users[0].b + open[0].h + (-rev[0].t) + escrow[0].t - paidOut[0].t, started);
 });

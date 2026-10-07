@@ -8,14 +8,15 @@
     1.99dx: header, then the story strip (fresh captures, only when there are some), then a sticky tab bar
     (public/js/pad-tabs.js) over three panels that are only ever HIDDEN, never unmounted, so polling, push-to-talk,
     the mic, the stage player and the schedule refresh keep running whichever tab shows:
-      Live (on pads without a Camfrog room: "Stage") - the ONE Stage card (player, Snap / Clip, slot status, Go live
-        here / Book a slot / Get featured, on now / coming up / queue), the DJ booth, the Camfrog chat bridge with
-        the Manage card (collapsed to the topic), "Latest from the feed", on the mic, who's in the room
+      Live (on pads without a Camfrog room: "Stage") - the Stage card (player, Snap / Clip), right under it the Go live
+        card (1.99ee: slot status + 🚀 boost line, Go live here / Book a slot / 🚀 Boost this pad, on now / coming up /
+        queue), the DJ booth, the Camfrog chat bridge with the Manage card (collapsed to the topic), "Latest from the
+        feed", on the mic, who's in the room
       Feed - composer (collapsed to a "Create post" bar), sorts and posts: ONE centred column (1.99ec - the side
         column with the Rules card and the pad blurb is gone; both are in About)
       About - description, owner, analytics, rules (the #rules anchor, where the header's Rules chip goes), how to
         join the Camfrog room
-    The schedule has no tab of its own any more: it's the lower half of the Stage card. %>
+    The schedule has no tab of its own: it's the lower half of the Go live card. %>
 <% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null, dms_ = typeof dms !== 'undefined' && !!dms;
    const PT_ = typeof padTabs !== 'undefined' && padTabs ? padTabs : { tabs: ['live'].concat(feed_ ? ['feed'] : [], ['about']), initial: 'live', active: false, camfrog: !siteOnly_, posts: [] };
    const latest_ = typeof latest !== 'undefined' && latest ? latest : [];
@@ -191,6 +192,24 @@
   .rm .sact:focus-visible { outline: 2px solid #ffd700; outline-offset: 2px; }
   .rm .sact.primary { background: linear-gradient(90deg, #e53935, #ff7043); border-color: transparent; color: #fff !important; }
   .rm .sact[hidden] { display: none; }
+  /* 1.99ee: the Go live card (split out of the Stage card) + 🚀 Boost */
+  .rm .golive-card .stage-bar { margin-top: 0; }
+  .rm .stage-bar .boosted { color: #ffcf7a; }
+  .rm .stage-bar .boosted[hidden] { display: none; }
+  .rm .sact.boost { font: inherit; font-weight: bold; font-size: 13.5px; cursor: pointer; border-color: #7a4a1f; background: #20140a; color: #ffd9a8 !important; }
+  .rm .sact.boost:hover { border-color: #ff9a3c; }
+  .rm .boostbox { display: grid; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid #4a3418; background: #150f08; }
+  .rm .boostbox[hidden] { display: none; }
+  .rm .boostbox .bx-what { margin: 0; color: #c9bba8; font-size: 13px; line-height: 1.5; }
+  .rm .boostbox .bx-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rm .boostbox .bx-presets { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+  .rm .boostbox .bx-presets button { padding: 6px 12px; border-radius: 999px; border: 1px solid #4a3418; background: #1d140a; color: #ffd9a8; font: inherit; font-size: 13px; cursor: pointer; }
+  .rm .boostbox .bx-presets button:hover, .rm .boostbox .bx-presets button:focus-visible { border-color: #ff9a3c; outline: none; }
+  .rm .boostbox .bx-amt { display: inline-flex; align-items: center; gap: 6px; color: #aaa; }
+  .rm .boostbox .bx-amt input { width: 9em; max-width: 40vw; padding: 7px 10px; border-radius: 8px; border: 1px solid #333; background: #0d0d0d; color: #fff; font: inherit; }
+  .rm .boostbox .bx-msg { margin: 0; font-size: 13px; color: #c6e94f; min-height: 1em; }
+  .rm .boostbox .bx-msg.err { color: #ff8a80; }
+  .rm .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .rm .plf-l { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .rm .plf-l li { display: grid; gap: 2px; min-width: 0; }
   .rm .plf-t { color: #e6e6e6 !important; font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
@@ -289,13 +308,31 @@
     </div>
     <div class="stcap hide" id="rmCap" aria-label="Snap or clip this stream"></div>
     <div class="off-air"><span id="rmOffTxt">Nothing on this stage right now — be the first: go live here.</span></div>
+  </section>
+  <%# 1.99ee: go live / slots / schedule are their own card under the stage card (the stage card is the player + Snap / Clip).
+      🚀 Boost replaces "★ Get featured": featuring is earned (the front page's automatic ranking); a boost adds to this
+      pad's score there (boosts.js). Only Camfrog pads can be on the front page, so only they show the button. %>
+  <% const BO_ = RS.boost || null, canBoost_ = !siteOnly_ && (room.platform || 'camfrog') === 'camfrog', signedIn_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
+  <section class="card golive-card" id="rmGoLive" aria-labelledby="rmGoLiveH">
+    <h2 id="rmGoLiveH" class="gl-h">🎬 Go live</h2>
     <div class="stage-bar">
-      <span class="slots" id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span>
+      <span class="slots"><span id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span><% if (canBoost_) { %><span class="boosted" id="rmBoostTxt"<%= BO_ && BO_.last_hour > 0 ? '' : ' hidden' %>> · 🚀 boosted · <b><%= BO_ ? Number(BO_.last_hour).toLocaleString('en-US') : 0 %></b> PAT in the last hour</span><% } %></span>
       <div class="stage-acts">
         <a class="sact primary" href="/stage?room=<%= encodeURIComponent(room.slug) %>">🎥 Go live here</a>
         <a class="sact" href="/stage?room=<%= encodeURIComponent(room.slug) %>#whenSet">📅 Book a slot</a>
-        <a class="sact" id="rmFeatBtn" href="/stage?room=<%= encodeURIComponent(room.slug) %>&feature=1"<%= RS.featured ? ' hidden' : '' %>>★ Get featured</a>
+        <% if (canBoost_) { %><% if (signedIn_) { %><button type="button" class="sact boost" id="rmBoostBtn" aria-expanded="false" aria-controls="rmBoostBox">🚀 Boost this pad</button><% } else { %><a class="sact boost" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '#boost') %>">🚀 Boost this pad</a><% } %><% } %>
       </div>
+      <% if (canBoost_ && signedIn_) { %>
+      <form class="boostbox" id="rmBoostBox" data-slug="<%= room.slug %>" hidden autocomplete="off">
+        <p class="bx-what">Push <b><%= room.name %></b> up the front-page ranking. Boosts fade by half every hour and only count while people here are chatting or on the mic — they can tip a close race, not carry a quiet pad. Half goes to this pad's room vault, half to Fort Knox.<% if (!siteOnly_) { %> In the Camfrog room: <code>!boost 5000</code>.<% } %></p>
+        <div class="bx-row">
+          <span class="bx-presets" role="group" aria-label="Amount"><button type="button" data-amt="1000">1,000</button><button type="button" data-amt="5000">5,000</button><button type="button" data-amt="25000">25,000</button></span>
+          <label class="bx-amt"><span class="sr">PAT to boost with</span><input type="number" name="amount" min="<%= BO_ ? BO_.min : 100 %>" max="<%= BO_ ? BO_.max : 1000000 %>" step="1" value="5000" inputmode="numeric"> <small>PAT</small></label>
+          <button type="submit" class="sact primary">🚀 Boost</button>
+        </div>
+        <p class="bx-msg" id="rmBoostMsg" role="status" aria-live="polite"></p>
+      </form>
+      <% } %>
     </div>
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
@@ -304,6 +341,7 @@
       </ul>
     <% } %>
   </section>
+  <% if (canBoost_ && signedIn_) { %><script src="/public/js/pad-boost.js?v=1" defer></script><% } %>
   <script>
   (function () {
     'use strict';

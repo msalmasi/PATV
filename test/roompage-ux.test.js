@@ -48,6 +48,7 @@ test.before(async () => {
   await S.book(a, { room: PLANT, minutes: 10, feature: false, title: "Open mic" });                  // on now (waiting for the stream)
   const rb = await S.book(owner, { room: PLANT, minutes: 15, feature: true, start_at: T + 2 * 3600000, title: "Owner's show" });
   assert.equal(rb.slot.status, "scheduled");
+  await S.featureByOwner(rb.slot.id, "pb");          // 1.99ee: featuring is the owner's (free) call, never bought
   const rbb = await S.book(b, { room: PLANT, minutes: 20, feature: false, start_at: T + 3 * 3600000, title: "Bob's set",
                                mode: "embed", embed: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" });
   assert.equal(rbb.slot.status, "requested");
@@ -65,7 +66,7 @@ test("schedule data: live now, booked + scheduled ahead, the queue; pending requ
   const bob = pub.upcoming[1];
   assert.equal(bob.mode, "embed"); assert.match(bob.embed_label, /YouTube/i); assert.equal(bob.status, "scheduled");
   assert.equal(pub.upcoming[0].featured, true);
-  assert.deepEqual(pub.queue.map((q) => [q.position, q.display, q.featured]), [[1, "Dave Queued", true]]);
+  assert.deepEqual(pub.queue.map((q) => [q.position, q.display, q.featured]), [[1, "Dave Queued", false]], "1.99ee: a queued turn is never a paid feature");
   assert.equal(pub.pending, undefined);
   const json = JSON.stringify(pub);
   assert.doesNotMatch(json, /Carol Pending|SECRET-PENDING-TITLE/, "a pending request isn't public");
@@ -92,14 +93,21 @@ const renderRoom = (extra) => ejs.renderFile(path.join(repo, "views", "room.ejs"
   user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "" },
   initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, ...extra });
 
-test("room page: the schedule inside the ONE Stage card - local-time markup, one action row, no settings button, no pending for the public", async () => {
+test("room page: the Stage card (player + Snap / Clip) then its own Go live card - status + boost line, one action row with 🚀 Boost, the schedule; no settings button, no pending for the public", async () => {
   const pub = await renderRoom({ schedule: await S.roomSchedule(PLANT, stranger, false), manage: false });
   assert.match(pub, /id="rmSched"/);
-  // 1.99dx: merged into the Stage card, under the player: status line, Go live (primary) + Book a slot + Get featured in one row
-  const card = pub.slice(pub.indexOf('id="rmStage"'), pub.indexOf("</section>", pub.indexOf('id="rmSched"')));
-  assert.ok(card.includes('id="rmSched"'), "the schedule is inside the Stage card");
-  assert.ok(card.indexOf('id="rmCap"') < card.indexOf('id="rmSlotsTxt"') && card.indexOf('id="rmSlotsTxt"') < card.indexOf('id="rmSched"'), "player + Snap/Clip, then the status + actions, then the schedule");
-  assert.match(card, /<div class="stage-acts">\s*<a class="sact primary" href="\/stage\?room=plant_based_chatting">🎥 Go live here<\/a>\s*<a class="sact" href="\/stage\?room=plant_based_chatting#whenSet">📅 Book a slot<\/a>\s*<a class="sact" id="rmFeatBtn"/);
+  // 1.99ee: the Stage card is the player + Snap / Clip; the Go live card right under it holds the status line, the actions and the schedule
+  const stageCard = pub.slice(pub.indexOf('id="rmStage"'), pub.indexOf("</section>", pub.indexOf('id="rmStage"')));
+  assert.ok(stageCard.includes('id="rmCap"') && !stageCard.includes('id="rmSlotsTxt"') && !stageCard.includes('id="rmSched"'), "the Stage card keeps only the player + Snap/Clip");
+  assert.ok(pub.indexOf('id="rmGoLive"') > pub.indexOf('id="rmStage"'), "the Go live card comes right after it");
+  const card = pub.slice(pub.indexOf('id="rmGoLive"'), pub.indexOf("</section>", pub.indexOf('id="rmSched"')));
+  assert.match(pub, /<section class="card golive-card" id="rmGoLive" aria-labelledby="rmGoLiveH">\s*<h2 id="rmGoLiveH"[^>]*>🎬 Go live<\/h2>/, "a small header, the same card style");
+  assert.ok(card.includes('id="rmSched"'), "the schedule is inside the Go live card");
+  assert.ok(card.indexOf('id="rmSlotsTxt"') < card.indexOf('id="rmBoostTxt"') && card.indexOf('id="rmBoostTxt"') < card.indexOf('id="rmSched"'), "status + boost line, then the actions, then the schedule");
+  assert.match(card, /<div class="stage-acts">\s*<a class="sact primary" href="\/stage\?room=plant_based_chatting">🎥 Go live here<\/a>\s*<a class="sact" href="\/stage\?room=plant_based_chatting#whenSet">📅 Book a slot<\/a>\s*<button type="button" class="sact boost" id="rmBoostBtn"[^>]*>🚀 Boost this pad<\/button>/);
+  assert.doesNotMatch(pub, /rmFeatBtn|Get featured|feature=1/, "1.99ee: no paid featuring anywhere on the pad page");
+  assert.match(pub, /id="rmBoostTxt" hidden>/, "no boosts yet: the boost line is hidden");
+  assert.match(pub, /pad-boost\.js\?v=1/);
   assert.match(card, /Times in your local time/);
   assert.doesNotMatch(pub, /class="card rs"/, "no separate Schedule card");
   assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/settings/, "1.99dc: no settings link for the public");
@@ -148,7 +156,8 @@ test("/stage: camera + mic pickers and Switch camera in the browser pane; the pr
     C: { price_per_min: 0, min_minutes: 2, max_minutes: 30, lead_min: 5, schedule_days: 14, enabled: true, max_concurrent: 6, idle_grace_min: 5 },
     rtmpServer: "rtmp://example/stage", balance: 0, twitchUrl: null, staff: false });
   for (const id of ["camSel", "micSel", "flipBtn", "devNote", "camFld"]) assert.match(html, new RegExp('id="' + id + '"'));
-  assert.match(html, /stage-book\.js\?v=5/);
+  assert.match(html, /stage-book\.js\?v=6/);
+  assert.doesNotMatch(html, /featBtn|name="kind" value="feature"/, "1.99ee: featuring isn't sold on /stage");
   const js = fs.readFileSync(path.join(repo, "public", "js", "stage-book.js"), "utf8");
   assert.match(js, /captureStream/); assert.match(js, /createMediaStreamDestination/); assert.match(js, /enumerateDevices/);
   assert.match(js, /facingMode/); assert.match(js, /devicechange/); assert.match(js, /new Worker/);

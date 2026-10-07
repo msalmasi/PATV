@@ -1293,6 +1293,11 @@ async function patSupply() {
   pools = pools.filter((p) => !/^burned/i.test(String(p.key || "")));
   const rows = [{ key: "wallets", label: `👛 Player wallets (${Number(w[0].n).toLocaleString()} accounts)`, amount: Math.floor(Number(w[0].w) || 0) },
                 { key: "jackpot", label: "🎰 Casino jackpot", amount: Math.floor(Number(j[0].j) || 0) }, ...pools];
+  // 1.99ee: the room-vault half of boosts and stage slot fees, held on the site for each pad until room vaults open (boosts.js)
+  try {
+    const rv = (await require("./boosts").escrow()).room_vault;
+    if (rv > 0) rows.push({ key: "room_vault_escrow", label: "🚀 Room vault escrow (boosts + slot fees, held for the pads)", amount: Math.floor(rv) });
+  } catch (e) { /* no boosts table yet */ }
   rows.sort((a, b) => b.amount - a.amount);
   const total = rows.reduce((s, r) => s + r.amount, 0);
   // the burn reserve still exists until it's burned, but it's out of circulation

@@ -22,15 +22,28 @@
 //   * no live room at all -> keep whatever was chosen (the caller falls back to the house room only
 //     when nothing was ever chosen)
 //   * an admin's "Re-evaluate now" picks the top room immediately, hold or not
+//
+// 🚀 BOOSTS (1.99ee, boosts.js - featuring is earned, never bought): anyone can boost a pad with PAT.
+// A row's `boost` = its ACTIVE boost PAT (each boost decays with a half-life of boost.half_min, 60 min).
+//     boost points = 0 if the room is dead (no human chat / mic for dead_min) or its activity score is 0
+//                  = min(boost.cap, boost.k * sqrt(active PAT), boost.rel * activity score)
+//   defaults k 0.1, cap 25, rel 0.5: 10k PAT -> +10, 40k -> +20, 62.5k+ -> +25 (the cap), and never more
+//   than half of the room's own activity score. A busy room scores ~40-80, a quiet one ~10, and a switch
+//   needs a 1.25x lead for 2 checks after the 30-minute hold - so a boost can tip a close race (it can
+//   be the last 25%), sqrt makes every extra PAT worth less, and a dead or empty room can't win at all.
+//   The 30-minute hold is the minimum dwell: a boost only ever acts through the clear-lead rule, so
+//   it can never move the pick sooner than hold_min after the last switch.
 "use strict";
 
 const DEFAULTS = Object.freeze({
   hold_min: 30, lead_ratio: 1.25, lead_evals: 2, dead_min: 10, window_min: 20, eval_sec: 60,
   w: Object.freeze({ chatters: 4, lines: 0.25, mic: 1.5, people: 0.5 }),
+  boost: Object.freeze({ on: true, k: 0.1, cap: 25, rel: 0.5, half_min: 60 }),
 });
 const LIMITS = {
   hold_min: [0, 24 * 60], lead_ratio: [1, 10], lead_evals: [1, 30], dead_min: [1, 240], window_min: [5, 90], eval_sec: [15, 900],
 };
+const BOOST_LIMITS = { k: [0, 10], cap: [0, 1000], rel: [0, 5], half_min: [5, 24 * 60] };
 const W_MAX = 100;
 
 const num = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
@@ -50,7 +63,24 @@ function cleanCfg(patch, base = DEFAULTS) {
     const v = pw[k] != null ? pw[k] : p["w_" + k];
     out.w[k] = num(v, 0, W_MAX, bw[k] != null ? bw[k] : DEFAULTS.w[k]);
   }
+  // 1.99ee: boost terms (nested {boost: {...}} or flat boost_k / boost_cap / boost_rel / boost_half_min / boost_on)
+  const pb = p.boost && typeof p.boost === "object" ? p.boost : {};
+  const bb = (base && base.boost) || DEFAULTS.boost;
+  out.boost = {};
+  for (const k of Object.keys(BOOST_LIMITS)) {
+    const v = pb[k] != null ? pb[k] : p["boost_" + k];
+    out.boost[k] = num(v, BOOST_LIMITS[k][0], BOOST_LIMITS[k][1], bb[k] != null ? bb[k] : DEFAULTS.boost[k]);
+  }
+  const on = pb.on != null ? pb.on : p.boost_on;
+  out.boost.on = on == null || on === "" ? (bb.on != null ? !!bb.on : true) : (on === true || on === 1 || on === "1" || on === "on" || on === "true");
   return out;
+}
+
+/** Boost points for a room (pure): 0 for a dead / inactive room, else min(cap, k*sqrt(active), rel*activity). */
+function boostPoints(activePat, actScore, dead, b = DEFAULTS.boost) {
+  const a = Math.max(0, Number(activePat) || 0), s = Math.max(0, Number(actScore) || 0);
+  if (!b || b.on === false || dead || s <= 0 || a <= 0) return 0;
+  return r2(Math.min(b.cap, b.k * Math.sqrt(a), b.rel * s));
 }
 
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -70,11 +100,15 @@ function score(act, w = DEFAULTS.w) {
 
 const isDead = (lastAt, cfg, now) => !lastAt || now - lastAt > cfg.dead_min * 60 * 1000;
 
-/** rows = [{id, live, act: {chatters, lines, micMin, people, lastAt}}] -> live rooms, best first. */
+/** rows = [{id, live, act: {chatters, lines, micMin, people, lastAt}, boost: active boost PAT}] -> live rooms, best first. */
 function rank(rows, cfg, now) {
   return (rows || []).filter((r) => r && r.id && r.live).map((r) => {
     const sc = score(r.act, cfg.w);
-    return { id: r.id, score: sc.score, parts: sc.parts, lastAt: (r.act && r.act.lastAt) || null, dead: isDead(r.act && r.act.lastAt, cfg, now) };
+    const dead = isDead(r.act && r.act.lastAt, cfg, now);
+    const bp = boostPoints(r.boost, sc.score, dead, cfg.boost || DEFAULTS.boost);
+    const parts = { ...sc.parts };
+    if (Number(r.boost) > 0) parts.boost = { n: Math.round(Number(r.boost)), w: (cfg.boost || DEFAULTS.boost).k, pts: bp };
+    return { id: r.id, score: r2(sc.score + bp), activity: sc.score, boost: bp, parts, lastAt: (r.act && r.act.lastAt) || null, dead };
   }).sort((a, b) => b.score - a.score || b.parts.people.n - a.parts.people.n || b.parts.chatters.n - a.parts.chatters.n
          || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
@@ -89,8 +123,9 @@ function decide(state, ranked, cfg, now, { force = false } = {}) {
   if (st.evalAt && now - st.evalAt > 3 * cfg.eval_sec * 1000) st.lead = null;
   st.evalAt = now;
   const top = ranked[0] || null;
-  const pick = (r, reason) => {
+  const pick = (r, why) => {
     const from = st.id;
+    const reason = why + (r.boost > 0 ? ` · incl. 🚀 boost +${r.boost}` : "");
     const same = from === r.id;
     const next = { ...st, id: r.id, at: same ? st.at : now, lead: null, score: r.score, parts: r.parts, reason: same ? st.reason : reason };
     return { state: next, switched: same ? null : { from, to: r.id, reason } };
@@ -115,4 +150,4 @@ function decide(state, ranked, cfg, now, { force = false } = {}) {
   return { state: st, switched: null };
 }
 
-module.exports = { DEFAULTS, LIMITS, cleanCfg, score, rank, decide, isDead };
+module.exports = { DEFAULTS, LIMITS, BOOST_LIMITS, cleanCfg, score, boostPoints, rank, decide, isDead };

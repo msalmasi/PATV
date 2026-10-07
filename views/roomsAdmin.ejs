@@ -33,9 +33,23 @@
       <label>Weight: chat line<input type="number" name="w_lines" min="0" max="100" step="0.05" value="<%= FC.w.lines %>"></label>
       <label>Weight: mic minute<input type="number" name="w_mic" min="0" max="100" step="0.05" value="<%= FC.w.mic %>"></label>
       <label>Weight: person in the Camfrog room<input type="number" name="w_people" min="0" max="100" step="0.05" value="<%= FC.w.people %>"></label>
+      <% const FB = FC.boost || { on: true, k: 0.1, cap: 25, rel: 0.5, half_min: 60 }; %>
+      <label class="chk"><input type="checkbox" name="boost_on" <%= FB.on ? 'checked' : '' %>> 🚀 Boosts count in the score</label>
+      <label>Boost: k (points per √PAT)<input type="number" name="boost_k" min="0" max="10" step="0.01" value="<%= FB.k %>"></label>
+      <label>Boost: cap (points)<input type="number" name="boost_cap" min="0" max="1000" step="1" value="<%= FB.cap %>"></label>
+      <label>Boost: at most × the pad's activity<input type="number" name="boost_rel" min="0" max="5" step="0.05" value="<%= FB.rel %>"></label>
+      <label>Boost half-life (min)<input type="number" name="boost_half_min" min="5" max="1440" step="1" value="<%= FB.half_min %>"></label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save tuning</button><span class="msg" id="fcMsg" role="status"></span></div>
     </form>
     </div></details>
+  </section>
+
+  <%# 1.99ee: boosts (boosts.js) - the money switch and what's been routed so far %>
+  <section class="sb-card" id="boosts" aria-labelledby="boostT">
+    <h2 id="boostT">🚀 Boosts &amp; slot fees</h2>
+    <p class="muted">Featuring is earned (the automatic pick above); people boost pads instead. Every boost and stage slot fee is a room flow: half goes to the Federal Reserve (Fort Knox's stand-in until economy v2 E-1), half is held in the pad's room-vault escrow (room_flow_ledger) until E-3 opens room vaults. An owner paying in their own pad: all of it to the Reserve.</p>
+    <form id="boostCfg" class="row"><label class="chk"><input type="checkbox" name="pay" id="boostPay"> Boosting on (PAT moves)</label><button type="submit" class="btn primary">Save</button><span class="msg" id="boostMsg" role="status"></span></form>
+    <p class="muted" id="boostSum">Loading…</p>
   </section>
 
   <section class="sb-card" id="owners" aria-labelledby="ownT">
@@ -107,6 +121,18 @@
   document.getElementById('frontForm').addEventListener('submit', function (e) {
     e.preventDefault();
     post('/api/rooms/front', formJson(e.target)).then(function (j) { document.getElementById('frontMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+  });
+  // 1.99ee: boosts
+  fetch('/api/boost/admin', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+    if (!j.ok) { document.getElementById('boostSum').textContent = j.error || 'Not available.'; return; }
+    document.getElementById('boostPay').checked = !!j.config.pay;
+    var E = j.escrow, f = function (n) { return Math.round(Number(n) || 0).toLocaleString('en-US'); };
+    document.getElementById('boostSum').textContent = 'Routed so far: ' + f(E.total) + ' PAT · to the Reserve (Fort Knox half): ' + f(E.fortknox) +
+      ' · held for room vaults: ' + f(E.room_vault) + (E.rooms.length ? ' (' + E.rooms.filter(function (r) { return r.room_vault > 0; }).map(function (r) { return r.room_id + ' ' + f(r.room_vault); }).join(', ') + ')' : '');
+  }).catch(function () { document.getElementById('boostSum').textContent = 'Could not load.'; });
+  document.getElementById('boostCfg').addEventListener('submit', function (e) {
+    e.preventDefault();
+    post('/api/boost/admin', { pay: document.getElementById('boostPay').checked }).then(function (j) { document.getElementById('boostMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
   });
   document.getElementById('fcForm').addEventListener('submit', function (e) {
     e.preventDefault();

@@ -456,13 +456,15 @@ async function setFrontCfg(patch, actor) {
 
 /** Activity per row: the row's own `act` (tests / callers that already have it), else the bridge's
  *  rolling tally (roomactivity.js) for the configured window + the row's human headcount. */
-function withAct(rows, cfg, now) {
+function withAct(rows, cfg, now, boosts) {
   let RA = null;
   try { RA = require("./roomactivity"); } catch (e) { RA = null; }
   return (rows || []).map((r) => {
-    if (r.act) return r;
+    // 1.99ee: the row's active boost PAT (boosts.js, decayed) unless the caller already gave one
+    const b = r.boost != null ? r.boost : (boosts && boosts.get(r.id)) || 0;
+    if (r.act) return { ...r, boost: b };
     const a = RA ? RA.stats(r.id, { windowMin: cfg.window_min, now }) : { chatters: 0, lines: 0, micMin: 0, lastAt: null };
-    return { ...r, act: { ...a, people: r.people != null ? r.people : Math.max(0, (Number(r.count) || 0) - 1) } };
+    return { ...r, boost: b, act: { ...a, people: r.people != null ? r.people : Math.max(0, (Number(r.count) || 0) - 1) } };
   });
 }
 
@@ -473,9 +475,13 @@ async function evaluateAuto(summary, { force = false, actor = "auto", now = nowM
   if (!force && AUTO && AUTO.id && AUTO.evalAt && now - AUTO.evalAt < CFG.eval_sec * 1000) return AUTO;
   if (evaluating) return evaluating;
   evaluating = (async () => {
-    const ranked = FR.rank(withAct(summary, CFG, now), CFG, now);
+    let bmap = null;
+    if (CFG.boost && CFG.boost.on) {
+      try { bmap = await require("./boosts").activeMap(now, CFG.boost.half_min); } catch (e) { console.error("[rooms] boosts:", e.message); bmap = null; }
+    }
+    const ranked = FR.rank(withAct(summary, CFG, now, bmap), CFG, now);
     const { state, switched } = FR.decide(AUTO, ranked, CFG, now, { force });
-    state.ranked = ranked.slice(0, 8).map((r) => ({ id: r.id, score: r.score, parts: r.parts, dead: r.dead, lastAt: r.lastAt }));
+    state.ranked = ranked.slice(0, 8).map((r) => ({ id: r.id, score: r.score, activity: r.activity, boost: r.boost, parts: r.parts, dead: r.dead, lastAt: r.lastAt }));
     if (state.id) {
       AUTO = state;
       await kvSet("front_auto", JSON.stringify(AUTO));
@@ -518,6 +524,20 @@ async function frontStatus() {
   return { setting: CACHE.front || "auto", auto: A, cfg: CFG, holdUntil: A && A.at ? A.at + CFG.hold_min * 60 * 1000 : null };
 }
 const frontSetting = () => CACHE.front || "auto";
+/** 1.99ee: public "Trending" for the Pads guide - the automatic pick and the runners-up from the last
+ *  check (live pads only, best first), with their boost points. No activity internals beyond the score. */
+async function trending(limit = 5) {
+  await init();
+  if (!CFG) await loadAuto();
+  const A = AUTO;
+  if (!A || !Array.isArray(A.ranked)) return { front: null, runners: [], evalAt: null };
+  const v = (r) => {
+    const reg = CACHE.byId.get(r.id);
+    return { id: r.id, slug: reg ? reg.slug : null, title: (reg && reg.title) || r.id, score: r.score, boost: Number(r.boost) || 0, dead: !!r.dead };
+  };
+  const list = A.ranked.map(v).filter((r) => r.slug);
+  return { front: list.find((r) => r.id === A.id) || null, runners: list.filter((r) => r.id !== A.id && !r.dead).slice(0, limit), evalAt: A.evalAt || null };
+}
 
 // ── activity (for royalty thresholds): fed by bridge.js ingest ──
 const lastMin = new Map();      // room id -> the minute bucket last counted (memory)
@@ -576,7 +596,7 @@ function hasRoute(app, path) {
 
 module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
-  setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
+  setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,

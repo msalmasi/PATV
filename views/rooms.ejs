@@ -107,6 +107,17 @@
     .cg .sched li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   }
   @media (prefers-reduced-motion: reduce) { .cg .dot { animation: none; } }
+  /* 1.99ee: Trending */
+  .cg .tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+  .cg .tr-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; border-radius: 12px; background: #111; border: 1px solid #222; min-width: 0; }
+  .cg .tr-list li.front { border-color: #2f6b3a; background: #0f1a11; }
+  .cg .tr-list .t { font-weight: bold; color: #fff; min-width: 0; overflow-wrap: anywhere; flex: 1 1 8em; }
+  .cg .tr-list .tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cg .tr-list .tg { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; color: #bbb; background: #151515; white-space: nowrap; }
+  .cg .tr-list .tg.on { border-color: #2f6b3a; color: #bdf0c6; background: #12301a; }
+  .cg .tr-list .tg.boost { border-color: #7a4a1f; color: #ffd9a8; background: #20140a; }
+  .cg .tr-list .bst { font-size: 12.5px; font-weight: bold; color: #ffd9a8; border: 1px solid #7a4a1f; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+  .cg .tr-list .bst:hover { border-color: #ff9a3c; color: #fff; }
 </style>
 <main class="cg">
   <div>
@@ -117,14 +128,14 @@
   <section class="cta" aria-label="Go live">
     <div>
       <b class="big">🎥 Your show, on PATV</b>
-      <span class="muted" style="font-size:14px;color:#d9c9c3">Every pad has stage slots you can stream to — and one featured stream that leads the pad (and the front page).</span>
+      <span class="muted" style="font-size:14px;color:#d9c9c3">Every pad has stage slots you can stream to (free on most pads). The front page shows the liveliest pad — earned, never bought.</span>
       <ol>
         <li>Pick a pad and a slot: <b>now</b>, <b>later</b>, or join the <b>queue</b>.</li>
         <li>Stream from <b>OBS</b>, straight from your <b>browser</b>, or drop a <b>YouTube / Twitch</b> link.</li>
-        <li>Want the spotlight? <b>Get featured</b> — pay per live minute, unused PAT comes back.</li>
+        <li>Want your pad on the front page? Get people chatting and on the mic. Fans can <b>🚀 boost</b> a pad to tip a close race.</li>
       </ol>
     </div>
-    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="/stage?feature=1">★ Get featured</a></div>
+    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="#trending">🚀 Boost a pad</a></div>
   </section>
 
   <div class="pepe" role="status">
@@ -139,6 +150,23 @@
       <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/settings">⚙ <%= r.title %></a><% }) %></div>
     </section>
   <% } %>
+
+  <%# 1.99ee: Trending - the front page's automatic pick and the runners-up from its last check (roomsweb.guideRows r.trend) %>
+  <% const trend_ = rows.filter((r) => r.trend).sort((a, b) => a.trend.rank - b.trend.rank); %>
+  <section class="card trend" id="trending" aria-labelledby="trH">
+    <h2 id="trH">🔥 Trending <small>the front page shows the liveliest pad · chat, mic and people decide, 🚀 boosts can tip a close race</small></h2>
+    <% if (!trend_.length) { %>
+      <div class="empty">No live Camfrog pads right now.</div>
+    <% } else { %>
+      <ol class="tr-list">
+        <% trend_.forEach((r) => { %><li class="<%= r.trend.front ? 'front' : '' %>">
+          <a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
+          <span class="tags"><% if (r.trend.front) { %><span class="tg on">📺 On the front page</span><% } else { %><span class="tg">Trending #<%= r.trend.rank - (trend_[0].trend.front ? 1 : 0) %></span><% } %><% if (r.trend.boost > 0) { %><span class="tg boost">🚀 +<%= r.trend.boost %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
+          <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="Boost <%= r.title %>">🚀 Boost</a>
+        </li><% }) %>
+      </ol>
+    <% } %>
+  </section>
 
   <section class="card" aria-labelledby="chH">
     <h2 id="chH">Pads <small><%= rows.filter((r) => r.live).length %> live · <%= rows.length %> pad<%= rows.length === 1 ? '' : 's' %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>

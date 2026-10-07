@@ -64,6 +64,12 @@ async function guideRows(signedIn) {
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)
     || b.count - a.count || a.title.localeCompare(b.title));
+  // 1.99ee: the automatic front-page ranking on each row (r.trend: {rank, front, score, boost}) - the guide's "Trending" strip
+  try {
+    const T = await rooms.trending(5);
+    const all = [T.front, ...T.runners].filter(Boolean);
+    all.forEach((t, i) => { const row = out.find((x) => x.id === t.id); if (row) row.trend = { rank: i + 1, front: !!(T.front && T.front.id === t.id), score: t.score, boost: t.boost }; });
+  } catch (e) { console.error("[rooms] trending:", e.message); }
   return { rows: out, pepe };
 }
 
@@ -78,6 +84,7 @@ function register(app, { addUser, isBotToken }) {
   const needUser = (req, res, next) => (req.user && req.user.userId ? next() : res.status(401).json({ ok: false, error: "Sign in first." }));
   const needStaff = (req, res, next) => (rooms.isStaff(req.user) ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
   const actor = (req) => (req.user && req.user.username) || "?";
+  require("./boosts").register(app, { addUser, isBotToken });     // 1.99ee: 🚀 pad boosts (web + Pepe's !boost)
   const manageable = async (req, res) => {
     const R = await resolveRoom(req.params.slug);
     if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }
