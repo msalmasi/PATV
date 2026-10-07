@@ -35,7 +35,6 @@
   .rm .hero h1 { margin: 0; font-size: 26px; line-height: 1.2; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .rm .topic { color: #cfd8cf; font-size: 15px; overflow-wrap: anywhere; }
   .rm .topic:empty { display: none; }
-  .rm .meta { display: flex; flex-wrap: wrap; gap: 6px; }
   .rm .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; white-space: nowrap; }
   .rm .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; font-weight: bold; letter-spacing: .06em; }
   .rm .live.off { background: #1c1c1c; border-color: #333; color: #999; }
@@ -156,11 +155,40 @@
   .rm .upnext time { color: #c6e94f; font-variant-numeric: tabular-nums; min-width: 5.5em; }
   .rm .banner-img { width: 100%; max-height: 200px; object-fit: cover; border-radius: 12px; display: block; border: 1px solid #222; }
   .rm .desc { color: #bbb; font-size: 14px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
-  .rm .meta a.chip { color: #b9d8bb; }
-  .rm .meta .chip.own { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
   .rm .padref { font-size: 14px; color: #9ccc9f; font-weight: bold; letter-spacing: .02em; }
-  .rm .meta { align-items: center; }
-  .rm .meta .fw-btn { font-size: 12px; padding: 3px 12px; }
+  /* 1.99ef: header zones - identity (left), actions (right), no status chips; the Live tab's status line */
+  .rm .hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; min-width: 0; }
+  .rm .hd-id { display: grid; gap: 4px; min-width: 0; flex: 1 1 260px; }
+  .rm .hd-ref { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; }
+  .rm .hd-tags { display: inline-flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .rm .htag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; border: 1px solid #333; background: #161616; color: #aaa; white-space: nowrap; }
+  .rm .htag.own { border-color: #4d421a; background: #17140b; color: #d9c98c; }
+  .rm a.htag.own:hover { color: #f3e3a3; border-color: #6b5a20; }
+  .rm .hd-acts { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; padding-top: 2px; }
+  .rm .hd-follow { display: flex; align-items: center; gap: 8px; }
+  .rm .hd-follow .fw-btn { min-height: 36px; padding: 7px 16px; font-size: 14px; font-weight: bold; }
+  .rm .hd-fc { font-size: 13px; color: #999; white-space: nowrap; }
+  .rm .hd-fc b { color: #ddd; font-variant-numeric: tabular-nums; }
+  .rm .ibtn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid #2b2b2b;
+              background: #161616; color: #ccc !important; font-size: 17px; line-height: 1; cursor: pointer; list-style: none; user-select: none; }
+  .rm .ibtn:hover { border-color: #4caf50; color: #fff !important; }
+  .rm .ibtn:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 1px; }
+  .rm .ibtn .ps-q { position: absolute; top: -7px; right: -7px; min-width: 18px; padding: 0 5px; border-radius: 999px; background: #d03b3b; color: #fff; font-size: 11px; font-weight: 700; line-height: 17px; text-align: center; }
+  .rm .hd-more { position: relative; }
+  .rm .hd-more > summary::-webkit-details-marker { display: none; }
+  .rm .hd-more[open] > summary { border-color: #4caf50; }
+  .rm .hd-menu { position: absolute; z-index: 40; top: calc(100% + 6px); right: 0; min-width: 190px; display: grid; gap: 2px; padding: 6px;
+                 background: #141414; border: 1px solid #2c2c2c; border-radius: 10px; box-shadow: 0 12px 28px rgba(0,0,0,.6); }
+  .rm .hd-menu a, .rm .hd-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 7px; border: 0; background: none;
+                 color: #ddd !important; font: 14px Ubuntu, sans-serif; text-align: left; cursor: pointer; white-space: nowrap; }
+  .rm .hd-menu a:hover, .rm .hd-menu button:hover, .rm .hd-menu a:focus-visible, .rm .hd-menu button:focus-visible { background: #1f2a1f; outline: none; }
+  .rm .lstat { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13.5px; color: #aab3aa; padding: 0 4px; }
+  .rm .lstat b { color: #e6e6e6; }
+  .rm .lstat .ls-sep { color: #555; }
+  @media (max-width: 640px) {
+    .rm .hd-acts { flex: 1 1 100%; padding-top: 0; justify-content: flex-end; }
+    .rm .hd-follow { margin-right: auto; }
+  }
   /* 1.99dx: story strip under the header, the sticky tab bar, the merged Stage card's action row, the latest-posts card */
   .rm .rm-story { padding: 10px 14px; }
   .rm .rm-story .ss { margin: 0; }
@@ -258,24 +286,42 @@
 <main class="rm">
   <div class="crumb"><a href="/p">Pads</a> › p/<%= room.slug %></div>
   <% if (room.banner) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
+  <%# 1.99ef: the header is three zones - identity (left: name + LIVE, p/slug + quiet type tags, one description line),
+      actions (right: Follow + the follower count as plain text, ⚙ settings with the moderation / approvals badge,
+      ⋯ Rules / Pad analytics / Copy link) - and no status: who's in the room / Pepe is here is the Live tab's status
+      line, "Camfrog room: X" is in About. %>
+  <% const desc_ = (room.description || '').trim(), topic_ = (room.topic || '').trim();
+     const sameTxt_ = (a, b) => a.replace(/\s+/g, ' ').toLowerCase() === b.replace(/\s+/g, ' ').toLowerCase();
+     const fcount_ = feed_ && feed_.follow ? feed_.follow.followers : 0;
+     const queue_ = feed_ && feed_.queue ? feed_.queue : 0, pending_ = schedule_ && schedule_.pending ? schedule_.pending : 0;
+     const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
+     const psTitle_ = 'Pad settings: page, stage, feed, Pepe, rules, moderation' + (queue_ ? ' · ' + queue_ + ' waiting in Moderation' : '') + (pending_ ? ' · ' + pending_ + ' to approve' : ''); %>
   <section class="hero" aria-labelledby="rmTitle">
-    <h1 id="rmTitle"><%= room.name %>
-      <% if (!siteOnly_) { %><span class="live<%= room.live ? '' : ' off' %>" id="rmLive" title="Is the Camfrog room live?"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span><% } %>
-    </h1>
-    <div class="padref">p/<%= room.slug %></div>
-    <div class="topic" id="rmTopic"><%= room.topic %></div>
-    <% if (room.description) { %><div class="desc"><%= room.description %></div><% } %>
-    <div class="meta">
-      <% if (feed_ && feed_.follow) { %><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: 'Follow this pad' }) %>
-        <span class="chip" title="Follow this pad to get its posts on your Following feed"><b data-follower-count-kind="room" data-follower-count-id="<%= feed_.room %>"><%= feed_.follow.followers.toLocaleString('en-US') %></b> follower<%= feed_.follow.followers === 1 ? '' : 's' %></span><% } %>
-      <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
-      <% if (!siteOnly_) { %><% if (bridged_) { %><span class="chip" id="rmCount">👥 <%= room.count %> in the Camfrog room</span><% } %>
-      <span class="chip" title="This pad is backed by a Camfrog room">📡 Camfrog room<%= room.camfrogName && room.camfrogName !== room.name ? ': ' + room.camfrogName : '' %></span><% } %>
-      <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 Pad owner: <%= room.owner %></a><% } %>
-      <% if (pepeHere_ === true && !siteOnly_) { %><span class="chip" title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %>
-      <% if (manage_) { %><a class="chip own ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= feed_ && feed_.queue ? '#moderation' : '' %>" title="Everything about this pad: page, stage, feed, Pepe, rules, moderation">⚙ Pad settings<% if (feed_ && feed_.queue) { %> <span class="ps-q" title="Waiting for you in Moderation"><%= feed_.queue %></span><% } %><% if (schedule_ && schedule_.pending) { %> · <%= schedule_.pending %> to approve<% } %></a><% } %>
-      <% if (feed_ && feed_.rules) { %><a class="chip" href="?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules</a><% } %>
-      <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Pad analytics</a><% } %>
+    <div class="hd">
+      <div class="hd-id">
+        <h1 id="rmTitle"><%= room.name %>
+          <% if (!siteOnly_) { %><span class="live<%= room.live ? '' : ' off' %>" id="rmLive" title="Is the Camfrog room live?"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span><% } %>
+        </h1>
+        <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
+          <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
+          <% if (room.house) { %><span class="htag own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="htag own" href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 Pad owner: <%= room.owner %></a><% } %>
+        </span></div>
+        <div class="topic" id="rmTopic" data-desc="<%= desc_ %>"><%= topic_ && !sameTxt_(topic_, desc_) ? topic_ : '' %></div>
+        <% if (desc_) { %><div class="desc"><%= desc_ %></div><% } %>
+      </div>
+      <div class="hd-acts">
+        <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: 'Follow this pad' }) %>
+          <span class="hd-fc" title="Follow this pad to get its posts on your Following feed"><b data-follower-count-kind="room" data-follower-count-id="<%= feed_.room %>"><%= fcount_.toLocaleString('en-US') %></b> follower<%= fcount_ === 1 ? '' : 's' %></span></div><% } %>
+        <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%= psTitle_ %>" aria-label="<%= psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
+        <details class="hd-more" id="rmMore">
+          <summary class="ibtn" aria-label="More: rules, analytics, share" title="More">⋯</summary>
+          <div class="hd-menu" role="menu">
+            <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules</a><% } %>
+            <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>">📈 Pad analytics</a><% } %>
+            <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>">🔗 Copy link</button>
+          </div>
+        </details>
+      </div>
     </div>
   </section>
   <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
@@ -286,6 +332,10 @@
       <% if (t === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%= liveLabel_ %><% } else if (t === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span>Feed <span class="pnew" id="padFeedNew" hidden></span><% } else { %>About<% } %></button><% }) %>
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
+  <%# 1.99ef: the room's live status (was header chips): who's in the Camfrog room, Pepe is here %>
+  <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmStatus"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
+    <% if (bridged_) { %><span><b id="rmCount"><%= room.count %></b> in <b><%= cfName_ %></b></span><% } else { %><span>📡 Camfrog room <b><%= cfName_ %></b></span><% } %>
+    <% if (pepeHere_ === true) { %><span class="ls-sep" aria-hidden="true">·</span><span title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %></p><% } %>
   <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <b>Live from the Camfrog room — read-only (v1).</b> What the Camfrog room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div><% } %>
 
 <% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0;
@@ -494,8 +544,10 @@
 
     function renderRoom(d) {
       var r = d.room;
-      document.getElementById('rmTopic').textContent = r.topic || '';
-      document.getElementById('rmCount').textContent = '👥 ' + r.count + ' in the Camfrog room';
+      var tpEl = document.getElementById('rmTopic'), tpTxt = (r.topic || '').trim(), norm = function (x) { return String(x || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
+      tpEl.textContent = norm(tpTxt) === norm(tpEl.getAttribute('data-desc')) ? '' : tpTxt;   // 1.99ef: no tagline that repeats the description
+      document.getElementById('rmCount').textContent = r.count;
+      document.getElementById('rmStDot').textContent = r.live ? '🟢' : '⚪';
       var live = document.getElementById('rmLive');
       live.classList.toggle('off', !r.live);
       document.getElementById('rmLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
@@ -775,6 +827,28 @@
     <% } %>
   </section>
   <script src="/public/js/pad-tabs.js?v=3"></script>
+  <script>
+  // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address
+  (function () {
+    'use strict';
+    var m = document.getElementById('rmMore');
+    if (!m) return;
+    document.addEventListener('click', function (e) { if (m.open && !m.contains(e.target)) m.open = false; });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && m.open) { m.open = false; m.querySelector('summary').focus(); } });
+    m.addEventListener('click', function (e) {
+      var it = e.target.closest('[role="menuitem"]');
+      if (!it) return;
+      var path = it.getAttribute('data-copy-link');
+      if (path) {
+        var url = location.origin + path, done = function () { it.textContent = '✅ Link copied'; setTimeout(function () { it.textContent = '🔗 Copy link'; m.open = false; }, 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy this link', url); });
+        else window.prompt('Copy this link', url);
+        return;
+      }
+      m.open = false;
+    });
+  })();
+  </script>
   <script>
   (function () {
     'use strict';

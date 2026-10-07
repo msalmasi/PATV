@@ -169,6 +169,8 @@ test("owner view: Posts tab open with the composer on top; More menu holds the m
     assert.doesNotMatch(outside, re);
   }
   assert.match(actions, /⋯ More <span class="tj-new"[^>]*>3<\/span>/, "new tips show on the More button");
+  assert.doesNotMatch(outside, /data-follow-kind|pf-msg/, "no Follow / Message on your own profile");
+  assert.match(html, /<a class="ps fw" href="\/feed\/following" title="Your follow lists"><span class="k">Followers<\/span>/, "the owner's count opens their lists");
   // stat strip; the old stat tiles, Level card and GTF card are gone
   assert.match(html, /class="pf-strip"/);
   assert.match(html, /<span class="k">PAT<\/span><b class="gold">1,234,567<\/b>/);
@@ -188,6 +190,18 @@ test("visitor view: Tip + More (achievements), the feed with sorts, no composer,
   assert.match(actions, /Achievements/);
   assert.doesNotMatch(actions, /Edit profile|Wallet|Log out|Cosmetics|PAT history|tip jar/);
   assert.doesNotMatch(html, /New avatar…|Your recent requests/);
+  // 1.99ef zones: Follow + Message in the actions row, Report in More, the counts in the stat strip - none among the tags
+  const outside = actions.slice(0, actions.indexOf("<details"));
+  const menu = actions.slice(actions.indexOf('class="pf-menu"'));
+  assert.match(outside, /data-follow-kind="user" data-follow-id="alice"/);
+  assert.match(outside, /class="btn pf-msg" href="\/messages\?to=alice"/);
+  assert.ok(outside.indexOf("data-follow-kind") < outside.indexOf("💸 Tip"), "Follow leads");
+  assert.match(menu, /role="menuitem" class="pf-report" data-safety="report-user" data-user="alice"/);
+  assert.doesNotMatch(outside, /report-user/);
+  const strip = html.slice(html.indexOf('class="pf-strip"'), html.indexOf('<div class="actions">'));
+  assert.match(strip, /<div class="ps fw"><span class="k">Followers<\/span>\s*<span class="fw-row"><b data-follower-count-kind="user" data-follower-count-id="alice">\d+<\/b><small>\d+ following<\/small>/);
+  const who = html.slice(html.indexOf('<div class="who">'), html.indexOf('class="pf-strip"'));
+  assert.doesNotMatch(who, /follower|data-follow-kind|pf-msg|report-user/, "identity zone: no counts / actions");
 });
 
 test("the tab path opens that tab (deep link); an unknown one falls back to Posts; links are /u/<name>/<tab> (1.99dv)", async () => {

@@ -120,8 +120,9 @@ test("room page: the Stage card (player + Snap / Clip) then its own Go live card
 
   const own = await renderRoom({ schedule: await S.roomSchedule(PLANT, owner, true), manage: true });
   assert.doesNotMatch(own, /settings#stage/, "1.99dx: no Pad settings button in the Stage card");
-  assert.match(own, /⚙ Pad settings[^<]*· 1 to approve<\/a>/, "the header's settings chip carries the approvals count");
-  assert.match(own, /class="chip own ps-link" href="\/p\/plant_based_chatting\/settings"[^>]*>⚙ Pad settings[ <]/, "1.99dc: ONE settings link in the pad header");
+  // 1.99ef: the settings link is the header's ⚙ icon button; the approvals count is its badge (and in its label)
+  assert.match(own, /class="ibtn ps-link" href="\/p\/plant_based_chatting\/settings" title="Pad settings[^"]*· 1 to approve"[^>]*>⚙<span class="ps-q" aria-hidden="true">1<\/span><\/a>/, "the ⚙ button carries the approvals count");
+  assert.equal((own.match(/ps-link/g) || []).length, 1, "1.99dc: ONE settings link in the pad header");
   assert.match(own, /Carol Pending/); assert.match(own, /Waiting for the owner/);
 
   // names / titles are escaped

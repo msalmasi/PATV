@@ -1,21 +1,21 @@
 <%#
-  Profile hero: follower / following counts (public) and the Follow button (1.99bz). The lists themselves
-  are only on the owner's own Following tab. Locals: social (feedweb.profileSocial), usernameProfile, previewing
-%><% const S_ = social; const back_ = '/u/' + encodeURIComponent(usernameProfile); %>
-<div class="pf-follow">
-  <span class="fw-counts">
-    <span><b data-follower-count-kind="user" data-follower-count-id="<%= usernameProfile %>"><%= S_.counts.followers.toLocaleString('en-US') %></b> follower<%= S_.counts.followers === 1 ? '' : 's' %></span>
-    <span><b><%= S_.counts.following.toLocaleString('en-US') %></b> following</span>
-    <% if (S_.self && !previewing) { %><a href="/feed/following">your lists ›</a><% } %>
-  </span>
-  <% if (!S_.self && !previewing) { %><%- include('follow-btn', { kind: 'user', id: usernameProfile, following: S_.following, signed: S_.signed, next: back_ }) %><% } %>
-  <% if (!S_.self && !previewing && S_.signed) { %><a class="pf-msg" href="/messages?to=<%= encodeURIComponent(usernameProfile) %>" title="Send a direct message">💬 Message</a><% } %>
-  <% if (!S_.self && !previewing && S_.signed) { %><button type="button" class="pf-report" data-safety="report-user" data-user="<%= usernameProfile %>" title="Report this account to the site admins">⚑ Report user</button><% } %>
-</div>
-<% if (!S_.self && !previewing && S_.signed) { %><script src="/public/js/feed-safety.js?v=4" defer></script>
-<style>.pf-report { background: none; border: 1px solid #3a3a42; color: #aaa; border-radius: 999px; padding: 3px 10px; font: 12.5px Ubuntu, sans-serif; cursor: pointer; }
-.pf-report:hover, .pf-report:focus-visible { color: #ff8a80; border-color: #ff8a80; }
-.pf-msg { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #3CC47C; color: #e6ffe6 !important; background: #0f1a10; border-radius: 999px; padding: 3px 12px; font: bold 12.5px Ubuntu, sans-serif; text-decoration: none; }
-.pf-msg:hover, .pf-msg:focus-visible { background: #17301a; }</style><% } %>
-<link rel="stylesheet" href="/public/css/stories.css?v=3">
-<script src="/public/js/follow.js?v=1" defer></script>
+  Profile follow bits (1.99bz). 1.99ef: split by header zone so counts never sit among tags -
+    part 'stat'    - the Followers / following cell in the stat strip (public counts; the owner's links to their lists)
+    part 'actions' - Follow + Message for a signed visitor (the actions row), plus the follow script / styles
+    part 'menu'    - "Report user" as a ⋯ More menu item (signed visitors)
+  The lists themselves are only on the owner's own Following page. Locals: social (feedweb.profileSocial),
+  usernameProfile, previewing, part
+%><% const S_ = social; const back_ = '/u/' + encodeURIComponent(usernameProfile); const part_ = typeof part !== 'undefined' && part ? part : 'actions';
+   const visitor_ = !S_.self && !previewing; %>
+<% if (part_ === 'stat') { const tag_ = S_.self && !previewing ? 'a' : 'div'; %>
+  <<%= tag_ %> class="ps fw"<%- tag_ === 'a' ? ' href="/feed/following" title="Your follow lists"' : '' %>><span class="k">Followers</span>
+    <span class="fw-row"><b data-follower-count-kind="user" data-follower-count-id="<%= usernameProfile %>"><%= S_.counts.followers.toLocaleString('en-US') %></b><small><%= S_.counts.following.toLocaleString('en-US') %> following</small></span></<%= tag_ %>>
+<% } else if (part_ === 'menu') { %>
+  <% if (visitor_ && S_.signed) { %><hr><button type="button" role="menuitem" class="pf-report" data-safety="report-user" data-user="<%= usernameProfile %>" title="Report this account to the site admins">⚑ Report user</button>
+  <script src="/public/js/feed-safety.js?v=4" defer></script><% } %>
+<% } else { %>
+  <% if (visitor_) { %><%- include('follow-btn', { kind: 'user', id: usernameProfile, following: S_.following, signed: S_.signed, next: back_ }) %><% } %>
+  <% if (visitor_ && S_.signed) { %><a class="btn pf-msg" href="/messages?to=<%= encodeURIComponent(usernameProfile) %>" title="Send a direct message">💬 Message</a><% } %>
+  <link rel="stylesheet" href="/public/css/stories.css?v=3">
+  <script src="/public/js/follow.js?v=1" defer></script>
+<% } %>

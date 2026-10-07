@@ -390,6 +390,7 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   assert.ok(pb.includes("Plants &lt;b&gt;and&lt;/b&gt; chat"));
   assert.match(pb, /title="Follow this pad" class="fw-btn[^"]*" data-follow-kind="room" data-follow-id="plant_based_chatting"/);
   assert.match(pb, /👑 Pad owner: /);
+  assert.match(pb, /<span class="hd-fc"[^>]*><b data-follower-count-kind="room"[^>]*>\d+<\/b> followers?<\/span>/, "1.99ef: the follower count is plain text by Follow, not a chip");
   assert.ok(pb.includes("📡 Camfrog room") && pb.includes("legacyRoom04"));
   assert.ok(pb.includes("🐸 Camfrog Pad"), "1.99x: a Camfrog-backed pad wears the Camfrog badge");
   assert.ok(pb.includes('href="/p">Pads</a>'));

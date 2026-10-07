@@ -190,6 +190,39 @@ test("page: site pads label the first tab Stage; the story strip sits above the 
   assert.doesNotMatch(site, /Join the Camfrog room/);
 });
 
+test("1.99ef header zones: identity (name, p/slug + quiet type tags, one description), actions (⚙ + ⋯), status in the Live tab", async () => {
+  const own = await renderRoom({ manage: true, pepeHere: true, roomAnalytics: "/p/plant_based_chatting/analytics", schedule: { pending: 2, live: [], queue: [], upcoming: [] },
+    room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "plants  AND chat", platform: "camfrog",
+      description: "Plants and chat", owner: "pb", ownerUser: "pb", camfrogName: "Plant Based Chatting" } });
+  const hero = own.slice(own.indexOf('<section class="hero"'), own.indexOf("</section>", own.indexOf('<section class="hero"')));
+  assert.doesNotMatch(hero, /class="chip|class="meta"/, "no mixed chip row in the header");
+  assert.doesNotMatch(hero, /in the Camfrog room|Pepe is here|Camfrog room:/, "live status / room info not in the header");
+  const idZone = hero.slice(hero.indexOf('class="hd-id"'), hero.indexOf('class="hd-acts"'));
+  assert.match(idZone, /<div class="padref">p\/plant_based_chatting<\/div><span class="hd-tags">[\s\S]*🐸 Camfrog Pad[\s\S]*👑 Pad owner: pb/);
+  const acts = hero.slice(hero.indexOf('class="hd-acts"'));
+  assert.match(acts, /class="ibtn ps-link"[^>]*>⚙<span class="ps-q" aria-hidden="true">2<\/span>/, "approvals badge on ⚙");
+  const menu = acts.slice(acts.indexOf('class="hd-menu"'));
+  assert.match(menu, /href="\/p\/plant_based_chatting\/analytics">📈 Pad analytics/);
+  assert.match(menu, /data-copy-link="\/p\/plant_based_chatting">🔗 Copy link/);
+  assert.match(hero, /<div class="topic" id="rmTopic" data-desc="Plants and chat"><\/div>/, "a tagline that repeats the description is not shown");
+  assert.equal((hero.match(/class="desc"/g) || []).length, 1, "one description line");
+  const live = own.slice(own.indexOf('id="padPanel-live"'), own.indexOf('id="padPanel-about"'));
+  assert.match(live.slice(0, 900), /<p class="lstat" id="rmStatus"><span id="rmStDot" aria-hidden="true">🟢<\/span>\s*<span><b id="rmCount">2<\/b> in <b>Plant Based Chatting<\/b><\/span>[\s\S]*🐸 Pepe is here<\/span><\/p>/, "status line at the top of Live");
+  const about = own.slice(own.indexOf('id="padPanel-about"'));
+  assert.match(about, /<dt>Camfrog room<\/dt><dd>Plant Based Chatting<\/dd>/);
+  assert.match(about, /📈 Pad analytics/);
+  // a different tagline shows; the public gets no ⚙
+  const pub = await renderRoom({ room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: false, topic: "Grow stuff", platform: "camfrog", description: "Plants and chat" } });
+  assert.match(pub, /<div class="topic" id="rmTopic" data-desc="Plants and chat">Grow stuff<\/div>/);
+  assert.doesNotMatch(pub, /ps-link/);
+  assert.match(pub, /id="rmStDot" aria-hidden="true">⚪/);
+  assert.match(pub, /data-copy-link=/, "everyone gets ⋯ (Copy link)");
+  // site pads: no status line
+  const site = await renderRoom({ room: { name: "Lounge", slug: "lounge", count: 0, live: false, topic: "", platform: "site", siteOnly: true, bridged: false } });
+  assert.doesNotMatch(site, /id="rmStatus"/);
+  assert.match(site, /🌐 Site Pad/);
+});
+
 test("people list: the name stays the profile link; ⋯ only when the mod panel is active, next to the cam icon, opening the menu", async () => {
   const html = await renderRoom({});
   const js = html.slice(html.indexOf("function renderRoom(d)"), html.indexOf("function listNote"));

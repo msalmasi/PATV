@@ -43,16 +43,24 @@
   const acts = isMe && typeof avatarActs !== 'undefined' && avatarActs ? avatarActs : [];
   const tipNew = isMe && typeof tipJarNew !== 'undefined' ? tipJarNew : 0;
 
+  // 1.99ef: header zones - identity (photo, name, handle, role / GTF chips), stats (PAT · Level · Badges · Followers),
+  // actions (Follow · Message · Tip, or Edit profile · Wallet; ⋯ More holds the rest, Report user included)
+  const soc = typeof social !== 'undefined' && social ? social : null;
   const tabs = PL ? PL.tabsFor(L, has) : [];
   const active = PL ? PL.pickTab(tabs, typeof profileTab !== 'undefined' ? profileTab : '') : null;
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
-  .pf { max-width: 920px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; }
+  /* 1.99ef: one fixed-width column - width:100% (an auto-margined grid item in the body grid shrank to its content, so the
+     width jumped per tab / composer state: 491 / 556 / 920px); every panel fills it */
+  .pf { width: 100%; max-width: min(952px, 100vw); min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
+        display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .pf .pf-panel, .pf .pf-tabs, .pf .pf-bar, .pf > .card { width: 100%; box-sizing: border-box; }
   .pf a { color: #81c784; text-decoration: none; }
   .pf a:hover { color: #a5d6a7; }
   .pf .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; }
-  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 22px; align-items: center;
+  /* 1.99ef: summary card rhythm - 20px between groups (identity / stats / actions), 6-8px inside a group */
+  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px 28px; align-items: center; padding: 24px 28px;
               background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
   .pf .pf-face { position: relative; line-height: 0; justify-self: center; }
   .pf .avatar { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d;
@@ -65,9 +73,11 @@
   .pf .pf-gtfmini:hover, .pf .pf-gtfmini:focus-visible { transform: scale(1.08); outline: none; }
   .pf .pf-gtfmini svg { width: 42px; height: 42px; display: block; image-rendering: pixelated; }
   .pf .pf-gtfmini.empty { border-style: dashed; font-size: 22px; line-height: 1; }
+  .pf .who { display: grid; gap: 6px; align-content: center; min-width: 0; }
   .pf .who h1 { margin: 0; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
-  .pf .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
-  .pf .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .pf .handle { color: #9a9; font-size: 14px; overflow-wrap: anywhere; }
+  .pf .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .pf .chips:empty { display: none; }
   .pf .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; font-family: inherit; line-height: 1.4; }
   .pf .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
   .pf .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
@@ -76,7 +86,7 @@
   /* stat strip: PAT · Level + XP · Badges */
   .pf .pf-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: #222;
                   border: 1px solid #222; border-radius: 12px; overflow: hidden; }
-  .pf .ps { background: #0e0e0e; padding: 9px 14px; display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; }
+  .pf .ps { background: #0e0e0e; padding: 12px 18px; display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; }
   .pf a.ps:hover { background: #141a14; }
   .pf .ps .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
   .pf .ps b { font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
@@ -95,6 +105,11 @@
   .pf .btn:hover { border-color: #4caf50; }
   .pf .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
   .pf .btn.ghost { background: transparent; }
+  .pf .actions .fw-btn { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: bold; line-height: 1.2; }
+  .pf .actions .pf-msg { border-color: #2f5a3a; }
+  .pf .pf-menu .pf-report:hover, .pf .pf-menu .pf-report:focus-visible { color: #ff8a80 !important; }
+  .pf .ps.fw .fw-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .pf .ps.fw .fw-row small { color: #888; font-size: 11.5px; white-space: nowrap; }
   .pf .tj-new { padding: 1px 7px; border-radius: 999px; background: #4caf50; color: #fff; font-size: 11px; font-weight: bold; }
   .pf .pf-more { position: relative; }
   .pf .pf-more > summary { list-style: none; }
@@ -118,7 +133,7 @@
   .pf .badge img { height: 48px; width: 48px; object-fit: contain; image-rendering: pixelated; }
   .pf .badge span { font-size: 12px; line-height: 1.25; color: #ccc; overflow-wrap: anywhere; }
   .pf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  .pf .showcase { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pf .showcase { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
   .pf .showcase .pin { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border: 1px solid #3a3a1c; border-radius: 10px; padding: 4px 10px 4px 4px; font-size: 12px; color: #e8e2b0; }
   .pf .showcase img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
   /* tabs */
@@ -185,14 +200,14 @@
   @media (max-width: 560px) {
     .pf { padding-top: 12px; gap: 12px; }
     .pf .card { padding: 16px 14px; }
-    .pf .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    .pf .hero { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; gap: 16px; padding: 20px 16px; }
+    .pf .who { justify-items: center; }
     .pf .who { width: 100%; }
     .pf .chips, .pf .actions, .pf .showcase { justify-content: center; }
-    .pf .pf-strip { width: 100%; display: flex; text-align: left; }
-    .pf .ps { padding: 8px 10px; flex: 0 0 auto; }
-    .pf .ps.lv { flex: 1 1 auto; }
+    .pf .pf-strip { width: 100%; display: flex; flex-wrap: wrap; text-align: left; }
+    .pf .ps { padding: 10px 12px; flex: 1 1 0; min-width: 0; }
+    .pf .ps.lv { flex-basis: 100%; order: 9; }
     .pf .ps b { font-size: 16px; }
-    .pf .ps .lv-row small { display: none; }
     .pf .pf-menu { left: auto; right: 0; }
     .pf .actions { gap: 6px; }
     .pf .actions .btn { padding: 7px 11px; font-size: 13.5px; }
@@ -227,7 +242,6 @@
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
         <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%= gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
       </div>
-      <% if (typeof social !== 'undefined' && social) { %><%- include('partials/profile-follow', { social, usernameProfile, previewing }) %><% } %>
       <% if (cxShow.length) { %>
         <div class="showcase" aria-label="Pinned badges">
           <% cxShow.forEach((b) => { %><span class="pin" title="<%= b.description %>"><img src="<%= b.icon %>" alt=""><%= b.name %></span><% }) %>
@@ -246,13 +260,15 @@
       <% if (L.show('stats')) { %>
         <a class="ps<%= L.hidden('stats') ? ' is-hidden' : '' %>" href="/achievements?user=<%= enc %>"><span class="k">Badges</span><b><%= badges.length %></b></a>
       <% } %>
+      <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'stat' }) %><% } %>
     </div>
     <div class="actions">
       <% if (isMe) { %>
         <a class="btn primary" href="/u/<%= encodeURIComponent(username) %>/edit">✏️ Edit profile</a>
         <a class="btn" href="/wallet">👛 Wallet</a>
       <% } else if (!previewing) { %>
-        <a class="btn primary" href="/u/<%= enc %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a>
+        <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'actions' }) %><% } %>
+        <a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a>
       <% } %>
       <details class="pf-more" data-pf-more>
         <summary class="btn" aria-haspopup="menu">⋯ More<% if (tipNew > 0) { %> <span class="tj-new" title="New tips in your jar"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
@@ -260,6 +276,7 @@
           <% if (isMe) { %>
             <a role="menuitem" href="/u/<%= enc %>/tip">💰 Your tip jar<% if (tipNew > 0) { %> <span class="tj-new"><%= tipNew > 99 ? '99+' : tipNew %> new</span><% } %></a>
             <a role="menuitem" href="/history">📜 PAT history</a>
+            <% if (soc) { %><a role="menuitem" href="/feed/following">⭐ Your follow lists</a><% } %>
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
             <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar &amp; wardrobe</button><% } %>
@@ -269,6 +286,7 @@
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
             <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %><a role="menuitem" href="/history?user=<%= enc %>">📜 PAT history</a><% } %>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar</button><% } %>
+            <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'menu' }) %><% } %>
           <% } %>
         </div>
       </details>

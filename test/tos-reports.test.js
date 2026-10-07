@@ -573,7 +573,7 @@ test("report user: from a profile; not yourself; once while open; admins get it 
   // the profile button markup
   const ejs = require("ejs");
   const html = await ejs.renderFile(path.join(repo, "views", "partials", "profile-follow.ejs"),
-    { social: { counts: { followers: 0, following: 0 }, self: false, following: false, signed: true }, usernameProfile: "carol", previewing: false });
+    { social: { counts: { followers: 0, following: 0 }, self: false, following: false, signed: true }, usernameProfile: "carol", previewing: false, part: "menu" });
   assert.match(html, /data-safety="report-user" data-user="carol"/);
 });
 

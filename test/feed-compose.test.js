@@ -176,7 +176,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   assert.match(feedPanel, /<div class="fcol">/);
   assert.doesNotMatch(feedPanel, /class="fside|<aside|About this pad ›|A pad on Public Access TV/, "no side column");
   assert.doesNotMatch(feedPanel, /class="rf-rules"/, "no Rules card in the Feed");
-  assert.match(html, /<a class="chip" href="\?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules<\/a>/);
+  assert.match(html, /<a role="menuitem" href="\?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules<\/a>/, "Rules: the header's ⋯ menu -> About");
   const about = html.slice(html.indexOf('id="padPanel-about"'));
   assert.match(about, /<details class="rf-rules" id="rules" open>/, "the #rules anchor is in About");
   assert.equal((html.match(/id="rules"/g) || []).length, 1, "one #rules anchor");

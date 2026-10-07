@@ -50,7 +50,10 @@
       <p class="sub"><%= mode === 'following' ? 'Posts from the people and pads you follow.' : 'Posts from every PATV pad, and Pepe\'s snaps & clips from the Camfrog rooms.' %></p>
     <% } %>
     <%- include('partials/story-strip', { story, heading: room ? '📸 Fresh from ' + room.title : '📸 Stories', next: here }) %>
-    <% if (author && mode === 'all') { %><p class="sub">Posts by <b><%= author.displayname || author.username %></b><% if (authorFollow !== null) { %> <%- include('partials/follow-btn', { kind: 'user', id: author.username, following: authorFollow, signed: true, next: here, small: true }) %><% } %> · <a data-swap href="<%= q({ by: '' }) %>">show everyone</a></p><% } %>
+    <%# 1.99ef: the author filter bar - who (left), Follow + clear (right), not one run-on line %>
+    <% if (author && mode === 'all') { %><div class="sub fd-by" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px">
+      <span style="min-width:0;overflow-wrap:anywhere">Posts by <a href="/u/<%= encodeURIComponent(author.username) %>"><b><%= author.displayname || author.username %></b></a></span>
+      <span style="display:inline-flex;align-items:center;gap:10px"><% if (authorFollow !== null) { %><%- include('partials/follow-btn', { kind: 'user', id: author.username, following: authorFollow, signed: true, next: here, small: true }) %><% } %><a data-swap href="<%= q({ by: '' }) %>">✕ Show everyone</a></span></div><% } %>
   </div>
 
   <div class="fd-col">
