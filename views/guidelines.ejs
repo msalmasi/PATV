@@ -1,0 +1,83 @@
+<%# /guidelines — Padiquette (1.99dc, guidelines.js): PATV's site-wide guidelines, rendered from the same data the
+    feed automod judges by. Locals: G (guidelines.js), user %>
+<%- include('layout', { title: G.NAME + ' · Public Access TV', user: user }) %>
+<%- include('partials/legal-css') %>
+<style>
+  .gl .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 10px 0 0; }
+  .gl .tile { background: #111; border: 1px solid #232323; border-radius: 12px; padding: 12px 14px; }
+  .gl .tile b { display: block; color: #fff; margin-bottom: 2px; }
+  .gl .tile p { margin: 0; font-size: 14.5px; color: #c9d3c9; line-height: 1.55; }
+  .gl .free .tile { border-color: #2f6b3a; background: linear-gradient(180deg, #0f1a10 0%, #111 80px); }
+  .gl .hard { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+  .gl .hard li { background: #111; border: 1px solid #232323; border-left: 4px solid #555; border-radius: 10px; padding: 10px 12px; }
+  .gl .hard li.severe { border-left-color: #ff5252; }
+  .gl .hard li.serious { border-left-color: #ffb74d; }
+  .gl .hard li.minor { border-left-color: #c6e94f; }
+  .gl .hard b { color: #fff; }
+  .gl .hard p { margin: 2px 0 0; font-size: 14.5px; color: #c9d3c9; }
+  .gl .hard .sev { float: right; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9a9a; margin-left: 8px; }
+  .gl .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; border: 1px solid #333; font-size: 12px; color: #bbb; margin: 0 4px 4px 0; }
+  .gl .how { display: grid; gap: 6px; padding-left: 20px; }
+</style>
+<main class="lg gl" id="guidelines">
+  <header class="hero">
+    <div class="eyebrow">PUBLICACCESS.TV</div>
+    <h1>📜 <%= G.NAME %></h1>
+    <div class="updated">How we get along · updated <%= G.UPDATED %></div>
+    <p class="lead"><%= G.INTRO %></p>
+  </header>
+
+  <section id="spirit">
+    <h2>The short version</h2>
+    <p><b>Say what you want, how you want — just don't make the place worse for other people.</b> We'd rather have a loud, funny, slightly unhinged crowd than a polite, empty one. The few hard limits below are about real harm to real people, not about being offended.</p>
+  </section>
+
+  <section id="good" class="good">
+    <h2>Good pad manners</h2>
+    <div class="grid2"><% G.GOOD.forEach((g) => { %><div class="tile"><b><%= g.title %></b><p><%= g.text %></p></div><% }) %></div>
+  </section>
+
+  <section id="free" class="free">
+    <h2>Totally fine here</h2>
+    <p>PATV gives a <b>wide latitude to free speech and unfiltered language</b>. None of this breaks Padiquette on its own:</p>
+    <div class="grid2"><% G.LATITUDE.forEach((g) => { %><div class="tile"><b><%= g.title %></b><p><%= g.text %></p></div><% }) %></div>
+    <p class="note">A pad can be stricter than this — a pad for kids' cartoons might ban swearing, a support pad might ban roasting. If a pad has its own rules, they're on the pad page and next to the post box. Respect them while you're there.</p>
+  </section>
+
+  <section id="limits">
+    <h2>The hard limits</h2>
+    <p>These hold in every pad, whatever its own rules say. Breaking them gets content hidden or removed, and the serious ones get accounts banned.</p>
+    <ul class="hard">
+      <% G.RULES.forEach((r) => { %><li class="<%= r.severity %>" id="rule-<%= r.id %>"><span class="sev"><%= r.severity %></span><b><%= r.title %></b><p><%= r.desc %></p></li><% }) %>
+    </ul>
+  </section>
+
+  <section id="pads">
+    <h2>Pad rules</h2>
+    <p>Pad owners can write up to 15 rules of their own. A pad with no rules follows Padiquette. Owners run their own pads — they can approve, hide and remove posts in them and ban people from posting there — but they can't make anything on the hard-limits list OK.</p>
+  </section>
+
+  <section id="pepe">
+    <h2>Pepe's automod</h2>
+    <p>A pad owner can switch on Pepe's automod. Pepe then reads new posts and comments in that pad and checks them against the pad's rules (or Padiquette) and the hard limits. He's told, in so many words, that swearing, dark jokes, roasting, hot takes and adult topics are not violations.</p>
+    <ul class="how">
+      <li>Every call comes with a one-line reason that names the rule.</li>
+      <li>By default he only <b>flags</b> things for the pad owner, and <b>hides</b> only the severe stuff (illegal content, doxxing, credible threats, intimate images shared without consent, child sexual abuse material) until a person looks.</li>
+      <li>You're told in your inbox, with how to appeal. The pad owner can reverse any of his calls with one click.</li>
+      <li>He never bans anyone. People make those calls.</li>
+    </ul>
+  </section>
+
+  <section id="report">
+    <h2>When something crosses the line</h2>
+    <p><b>Report it, don't retaliate.</b> Use Report in the ⋯ menu of any post or comment, or Report user on a profile. Pad owners see reports about their pad; site admins see everything, and child-safety reports go straight to them. Reporting in bad faith (to get someone you don't like in trouble) can pause your reports.</p>
+    <p>Think a mod, a pad owner or Pepe got it wrong? Ask the pad owner first. If that doesn't sort it, appeal to the site admins — see <a href="/terms#moderation">Moderation and appeals</a> in the Terms.</p>
+  </section>
+
+  <section id="legal">
+    <h2>The fine print</h2>
+    <p>Padiquette is the friendly version. The <a href="/terms#rules">Terms of Service</a> are the binding version and win if the two ever disagree. See also the <a href="/privacy">Privacy Policy</a>.</p>
+  </section>
+</main>
+</body>
+</html>

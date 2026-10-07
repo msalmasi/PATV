@@ -97,6 +97,7 @@ test.before(async () => {
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
   require(path.join(repo, "pads")).register(app);                 // 1.99ck: the old addresses 301 to /p/...
   web.register(app, { addUser, isBotToken: (x) => x === "bot" });
+  require(path.join(repo, "padsettings")).register(app, { addUser });   // 1.99dc: the pad settings hub (/mod + /manage redirect there)
   require(path.join(repo, "bridge")).register(app, { addUser, isBotToken: (x) => x === "bot" });   // the pad page /p/<slug>
   follows.register && follows.register(app, { addUser });
   server = app.listen(0);
@@ -417,10 +418,13 @@ test("redirects (1.99ck): every old room / community address 301s to its /p/ add
     ["/rooms/admin", "/pads/admin"],
     ["/rooms/plant-based-chatting", "/p/plant-based-chatting"],
     ["/rooms/plant-based-chatting?fsort=top&ft=day#feed", "/p/plant-based-chatting?fsort=top&ft=day"],
-    ["/rooms/plant-based-chatting/manage", "/p/plant-based-chatting/manage"],
-    ["/rooms/plant-based-chatting/manage?tab=royalties", "/p/plant-based-chatting/manage?tab=royalties"],
-    ["/rooms/plant-based-chatting/feed/mod", "/p/plant-based-chatting/mod"],
-    ["/rooms/plant-based-chatting/feed/mod?x=y", "/p/plant-based-chatting/mod?x=y"],
+    // 1.99dc: /manage and /mod are the settings hub now - straight there, the right tab picked, the query kept
+    ["/rooms/plant-based-chatting/manage", "/p/plant-based-chatting/settings?tab=stage"],
+    ["/rooms/plant-based-chatting/manage?tab=royalties", "/p/plant-based-chatting/settings?tab=stage"],
+    ["/rooms/plant-based-chatting/feed/mod", "/p/plant-based-chatting/settings?tab=moderation"],
+    ["/rooms/plant-based-chatting/feed/mod?x=y", "/p/plant-based-chatting/settings?x=y&tab=moderation"],
+    ["/p/plant-based-chatting/manage", "/p/plant-based-chatting/settings?tab=stage"],
+    ["/p/plant-based-chatting/mod", "/p/plant-based-chatting/settings?tab=moderation"],
     ["/rooms/plant-based-chatting/analytics?days=7", "/p/plant-based-chatting/analytics?days=7"],
     ["/rooms/plant-based-chatting/audio?t=123", "/p/plant-based-chatting/audio?t=123"],
     ["/feed/c/plant-based-chatting", "/p/plant-based-chatting"],
@@ -523,7 +527,7 @@ test("multi-pad crosspost: one crosspost per pad (own votes + comments), the new
   // the dialog script: checkboxes, the summary, the results
   const js = fs.readFileSync(path.join(repo, "public/js/feed-crosspost.js"), "utf8");
   assert.ok(js.includes("r.type = 'checkbox'") && js.includes("' selected'") && js.includes("pads: on.map"));
-  assert.ok(fs.readFileSync(path.join(repo, "views/partials/feed-js.ejs"), "utf8").includes("feed-crosspost.js?v=5"), "cache-buster bumped");
+  assert.ok(fs.readFileSync(path.join(repo, "views/partials/feed-js.ejs"), "utf8").includes("feed-crosspost.js?v=6"), "cache-buster bumped");
 });
 
 test("multi-pad crosspost: each pad's rules on their own (approval, who-can-post, bans, Pepe) - partial success; duplicates refused", async () => {

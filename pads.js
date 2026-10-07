@@ -5,7 +5,7 @@
 // This module owns the pad URLs that aren't a page of their own:
 //   - the 301s from every old address (query string kept):
 //       /rooms -> /p · /pads -> /p · /rooms/admin -> /pads/admin · /rooms/<s> -> /p/<s>
-//       /rooms/<s>/manage -> /p/<s>/manage · /rooms/<s>/feed/mod -> /p/<s>/mod
+//       /rooms/<s>/manage + /p/<s>/manage -> /p/<s>/settings?tab=stage · /rooms/<s>/feed/mod + /p/<s>/mod -> /p/<s>/settings?tab=moderation (1.99dc)
 //       /rooms/<s>/analytics -> /p/<s>/analytics · /rooms/<s>/audio -> /p/<s>/audio · /feed/c/<s> -> /p/<s>
 //     (/feed?room=<x> is redirected by feedweb.js's /feed handler, which knows the feed's other params.)
 //   - 1.99x: retired slugs (OLD_SLUGS, e.g. patv-lounge -> the Camfrog Lounge): /p/<old>[/<sub>] 301s to the
@@ -25,7 +25,7 @@ function padSlug(R) {
   if (!R) return "";
   try { return require("./roomsweb").linkSlug(R); } catch (e) { return R.slug; }
 }
-/** "/p/<slug>" (+ an optional sub-page: "manage", "mod", "analytics", "audio"). R is a pad or a slug. */
+/** "/p/<slug>" (+ an optional sub-page: "settings", "analytics", "audio"). R is a pad or a slug. */
 function padHref(R, sub = "") {
   const slug = typeof R === "string" ? R : padSlug(R);
   return "/p/" + encodeURIComponent(String(slug || "").toLowerCase()) + (sub ? "/" + sub : "");
@@ -114,8 +114,17 @@ function register(app) {
   app.get("/pads", to(() => "/p"));
   app.get("/rooms/admin", to(() => "/pads/admin"));
   app.get("/rooms/:slug", to((req) => "/p/" + enc(req)));
-  app.get("/rooms/:slug/manage", to((req) => "/p/" + enc(req) + "/manage"));
-  app.get("/rooms/:slug/feed/mod", to((req) => "/p/" + enc(req) + "/mod"));
+  // 1.99dc: the pad's settings hub (padsettings.js) replaced /manage and /mod - straight there, the tab picked; the
+  // browser keeps an old link's #anchor through the redirect and the hub has those anchors
+  const hub = (tab) => (req, res) => {
+    const q = new URLSearchParams(qsOf(req).slice(1));
+    q.set("tab", tab);
+    res.redirect(301, "/p/" + enc(req) + "/settings?" + q.toString());
+  };
+  app.get("/rooms/:slug/manage", hub("stage"));
+  app.get("/rooms/:slug/feed/mod", hub("moderation"));
+  app.get("/p/:slug/manage", hub("stage"));
+  app.get("/p/:slug/mod", hub("moderation"));
   app.get("/rooms/:slug/analytics", to((req) => "/p/" + enc(req) + "/analytics"));
   app.get("/rooms/:slug/audio", to((req) => "/p/" + enc(req) + "/audio"));
   app.get("/feed/c/:slug", to((req) => "/p/" + enc(req)));

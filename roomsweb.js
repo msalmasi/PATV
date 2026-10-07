@@ -1,5 +1,5 @@
 // roomsweb.js — the pages and APIs around pad (room) ownership (1.99bi): the Pads (/p, was /rooms), the
-// owner's dashboard (/p/:slug/manage), the pads admin (/pads/admin), the homepage's front
+// owner's dashboard APIs (the page is the settings hub, padsettings.js), the pads admin (/pads/admin), the homepage's front
 // room, and the bot-token endpoints Pepe uses (owners sync, owner !stage commands, royalty spend).
 // Data lives in rooms.js (registry), mainstage.js (stages) and royalties.js.
 "use strict";
@@ -179,26 +179,7 @@ function register(app, { addUser, isBotToken }) {
     } catch (e) { fail(res, e); }
   });
 
-  // ── owner dashboard ──
-  app.get("/p/:slug/manage", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
-    const R = await resolveRoom(req.params.slug);
-    if (!R) return res.status(404).render("notFound", { user: req.user.username, heading: "No such pad", message: "That pad isn't on PATV.", title: "Pad not found" });
-    if (!(await rooms.canManage(req.user, R.id))) {
-      return res.status(403).render("notFound", { user: req.user.username, heading: "Not your pad", message: "Only this pad's owner (and site admins) can manage it.", title: "Not your pad" });
-    }
-    const st = await stage.ownerState(R.id);
-    const roy = R.owner ? await royalties.status(R.id, R.owner.userId) : null;
-    let B = null;
-    try { B = bridge()._rooms.get(R.id) || null; } catch (e) { B = null; }
-    const C = stage.config();
-    res.render("roomManage", {
-      user: req.user.username, room: R, slug: linkSlug(R), st, roy, C,
-      bridge: B ? { live: Date.now() - B.updated < 90000, relay: !!B.relay, mic: !!B.micRelay, cams: !!B.cams, audio: !!B.audio, transcripts: B.transcripts !== false } : null,
-      staff: rooms.isStaff(req.user), analytics: rooms.hasRoute(app, "/p/:slug/analytics"),
-      events: await getQuery("SELECT ts, what, actor, detail FROM room_events WHERE room_id = ? ORDER BY ts DESC LIMIT 20", [R.id]),
-    });
-  });
+  // ── owner dashboard: the pad settings hub /p/:slug/settings (padsettings.js, 1.99dc; /p/:slug/manage redirects there) ──
   app.post("/api/rooms/:slug/page", addUser, needUser, jsonOnly, async (req, res) => {
     try {
       const R = await manageable(req, res); if (!R) return;

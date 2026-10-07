@@ -8,18 +8,30 @@
   const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
   const here_ = '/p/' + encodeURIComponent(room.slug);
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=8">
+<link rel="stylesheet" href="/public/css/feed.css?v=9">
 <section class="card rf" id="feed" aria-labelledby="rfH">
   <h2 id="rfH"><span>📝 p/<%= room.slug %> feed</span><small><a href="/feed">All pads ›</a></small></h2>
   <%# 1.99bz: Pepe's fresh captures from this pad's Camfrog room - tap one for the story viewer %>
   <%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer }, heading: '📸 Fresh captures', next: here_ + '#feed' }) %>
-  <% if (F.mod.owner || F.mod.admin) { %>
-    <a class="rf-modlink" href="<%= here_ %>/mod"><%- fx.icon('shield') %><span>Moderate this pad</span><% if (F.queue) { %><span class="rf-n"><%= F.queue %></span><% } %></a>
-  <% } %>
-  <% if (F.mention !== null && !room.siteOnly) { %>
-    <label class="rf-mention" title="Pad owners: Pepe posts a short line in the Camfrog room when someone posts here (at most one every few minutes)">
-      <input type="checkbox" id="rfMention" data-slug="<%= room.slug %>"<%= F.mention ? ' checked' : '' %>> 🐸 Pepe announces new posts in the Camfrog room
-    </label>
+  <%# 1.99dc: the pad's rules (padrules.js) - its own, or Padiquette; owners edit them in the settings hub. Moderation
+      and the announce switch moved there too (the header's "⚙ Pad settings"). %>
+  <% const RU = F.rules; if (RU) { %>
+    <details class="rf-rules" id="rules">
+      <summary><span class="rf-rules-t">📜 Rules</span><span class="rf-rules-s"><%= RU.source === 'pad' ? RU.rules.length + ' rule' + (RU.rules.length === 1 ? '' : 's') + ' for p/' + room.slug : 'This pad follows ' + RU.name %></span><%- fx.icon('chevron', 'chev') %></summary>
+      <div class="rf-rules-b">
+        <% if (RU.intro) { %><p class="rf-rules-intro"><%= RU.intro %></p><% } %>
+        <% if (RU.source === 'pad') { %>
+          <ol class="rf-rules-l"><% RU.rules.forEach((r) => { %><li><b><%= r.title %></b><% if (r.desc) { %><span><%= r.desc %></span><% } %></li><% }) %></ol>
+          <p class="rf-rules-f">Plus the site's hard limits from <a href="<%= RU.url %>">Padiquette</a> — no doxxing, threats, illegal content and the like — which hold in every pad.</p>
+        <% } else { %>
+          <p class="rf-rules-f">No pad rules of its own, so the site-wide guidelines apply: be decent, swear if you like, tag NSFW, report rather than retaliate. The hard limits:</p>
+          <ul class="rf-rules-l hard"><% RU.rules.filter((r) => r.severity !== 'minor').forEach((r) => { %><li><b><%= r.title %></b></li><% }) %></ul>
+          <p class="rf-rules-f"><a href="<%= RU.url %>">Read Padiquette ›</a></p>
+        <% } %>
+        <% if (F.mod.owner || F.mod.admin) { %><p class="rf-rules-f"><a href="<%= here_ %>/settings#rules">✏️ Edit this pad's rules</a></p><% } %>
+      </div>
+    </details>
+    <script>(function () { if (location.hash === '#rules') { var d = document.getElementById('rules'); if (d) d.open = true; } })();</script>
   <% } %>
   <%- include('feed-composer', { composer: F.composer, next: here_ + '#feed' }) %>
   <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed' }) %>

@@ -420,7 +420,7 @@ async function book(user, opts = {}) {
   if (needsApproval && RS.owner) {
     rooms.notify(RS.owner.userId, { kind: "stage", title: `${user.username || "Someone"} asked for a stage slot in ${RS.title}`,
       body: `${minutes} min${feature ? ", featured" : ""} on ${new Date(startAt).toUTCString()}. Approve or deny it on your pad page.`,
-      link: `/p/${encodeURIComponent(RS.slug)}/manage`, ref: "stage-req:" + out.id }).catch(() => {});
+      link: `/p/${encodeURIComponent(RS.slug)}/settings#stage`, ref: "stage-req:" + out.id }).catch(() => {});
   }
   const slot = await getSlot(out.id);
   return { slot: view(slot), key, rtmp: key ? { server: RTMP_PUBLIC, key } : null };

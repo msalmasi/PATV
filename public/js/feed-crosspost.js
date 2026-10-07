@@ -147,7 +147,7 @@
         var why = el('small', 'xp-ann-why', ' ' + (a.why || ''));
         if (a.manage) {
           why.appendChild(document.createTextNode(' · '));
-          var link = el('a', null, 'turn on in Moderate'); link.href = '/p/' + encodeURIComponent(box.getAttribute('data-slug')) + '/mod#announce';
+          var link = el('a', null, 'turn on in Pad settings'); link.href = '/p/' + encodeURIComponent(box.getAttribute('data-slug')) + '/settings#announce';
           why.appendChild(link);
         }
         w.appendChild(why);

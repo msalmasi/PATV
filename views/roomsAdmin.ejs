@@ -50,7 +50,7 @@
               <span class="muted"><%= r.house ? "🐸 Pepe / site admins" : r.owner ? '👑 ' + (r.owner.display || r.owner.username) + (r.owner.camfrog ? ' · CF ' + r.owner.camfrog : '') : 'no owner' %></span></td>
           <td><%= r.slot_count %> slot<%= r.slot_count === 1 ? '' : 's' %> · <%= r.slot_price ? fmt(r.slot_price) + ' PAT/min' : 'free' %><%= r.approval ? ' · approval' : '' %></td>
           <td><%= g.live ? '● live' : (g.bridged ? 'bridged' : '—') %><%= g.count ? ' · 👥 ' + g.count : '' %><%= (g.now || []).length ? ' · 📺 ' + g.now.length : '' %></td>
-          <td><a class="btn" href="/p/<%= encodeURIComponent(g.slug || r.slug) %>/manage">Manage</a></td>
+          <td><a class="btn" href="/p/<%= encodeURIComponent(g.slug || r.slug) %>/settings">Settings</a></td>
         </tr>
       <% }) %>
     </tbody></table></div>

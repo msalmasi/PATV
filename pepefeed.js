@@ -27,6 +27,8 @@
 //                   (1.99cq; was OFF). vision_set = an owner/admin explicitly CHANGED it: only then does a stored
 //                   value override the default. migrateVisionDefault() (once, feed_kv pepe:vision_v1) flips old
 //                   rows that only ever held the old default to ON and keeps real explicit OFFs (seen in the log).
+//   enabled         1.99dc: "Pepe on this pad's feed" - the pad's master switch (default ON). Off = he neither answers
+//                   mentions nor takes part there, whatever respond / auto say (the automod is separate: feedautomod.js)
 //   admin_lock      an admin froze these settings: the room owner sees them but can't change them
 // Global caps (feed_kv "pepe:global", admins only) override every scope: enabled (master switch), posts_per_day,
 // comments_per_day (all scopes together), llm_budget_usd (what Pepe reports spending on feed calls per 24 h),
@@ -58,7 +60,7 @@ const DAY = 86400e3;
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
 
-const SCOPE_DEFAULTS = Object.freeze({ auto: false, posts_per_day: 1, comments_per_day: 10, max_depth: 3, gap_min: 30,
+const SCOPE_DEFAULTS = Object.freeze({ enabled: true, auto: false, posts_per_day: 1, comments_per_day: 10, max_depth: 3, gap_min: 30,
                                        quiet_start: -1, quiet_end: -1, vision: true, admin_lock: false });
 const SCOPE_LIMITS = { posts_per_day: [0, 20], comments_per_day: [0, 200], max_depth: [1, 20], gap_min: [0, 1440], quiet_start: [-1, 23], quiet_end: [-1, 23] };
 const GLOBAL_DEFAULTS = Object.freeze({ enabled: true, posts_per_day: 6, comments_per_day: 40, llm_budget_usd: 0.5, reply_gap_secs: 20, writes_per_min: 6 });
@@ -120,7 +122,7 @@ function cleanScope(c) {
   const o = { ...SCOPE_DEFAULTS };
   c = c || {};
   for (const k of Object.keys(SCOPE_LIMITS)) o[k] = clampInt(c[k], SCOPE_LIMITS[k], SCOPE_DEFAULTS[k]);
-  for (const k of ["auto", "admin_lock"]) if (c[k] != null) o[k] = bool(c[k]);
+  for (const k of ["enabled", "auto", "admin_lock"]) if (c[k] != null) o[k] = bool(c[k]);
   // 1.99cq: a stored vision value counts only once someone explicitly changed it (vision_set); old rows saved the
   // old OFF default on every save, so without the mark they follow today's default (ON)
   if (c.vision_set && c.vision != null) { o.vision = bool(c.vision); o.vision_set = true; }
@@ -311,6 +313,7 @@ function quietNow(S, t = NOW()) {
  */
 function gate(what, why, S, G, U, { scope = "", depth = 0, cost = 0, t = NOW() } = {}) {
   if (!G.enabled) return "Pepe is switched off on the feed";
+  if (S && S.enabled === false) return "Pepe is switched off in this pad";
   const su = scopeUse(U, scope);
   // the model call for this write has already happened (cost): refuse only once the day's spend was used up BEFORE it
   if (U.cost >= G.llm_budget_usd) return "today's feed LLM budget is spent";
@@ -535,7 +538,7 @@ async function findMentions(acct, t = NOW()) {
     const skip = async (why) => { await markSeen(x.target, "skip:" + why); };
     if (!scopes) { await skip("post off-limits"); continue; }
     let scope = null;
-    for (const s of scopes) if ((await scopeSettings(s)).respond) { scope = s; break; }
+    for (const s of scopes) { const x = await scopeSettings(s); if (x.respond && x.enabled !== false) { scope = s; break; } }
     if (scope === null) { await skip("mentions off"); continue; }
     if (x.c && (await getQuery("SELECT 1 FROM feed_reports WHERE comment_id = ? AND resolved_at IS NULL LIMIT 1", [x.c.id]))[0]) { await skip("comment reported"); continue; }
     const ar = await authorRefusal(x.c ? x.c.author_id : p.author_id, scope);
@@ -588,7 +591,8 @@ async function scopesState(U) {
   for (const r of await rooms.list()) ids.push(r.id);
   const out = {};
   for (const id of ids) {
-    const S = await scopeSettings(id);
+    const S = { ...(await scopeSettings(id)) };
+    if (S.enabled === false) { S.respond = false; S.auto = false; }        // 1.99dc: the pad's "Pepe on this feed" switch
     if (id && !S.respond && !S.auto) continue;
     const R = id ? rooms.getCached(id) : null;
     out[id] = { ...S, title: id ? (R ? R.title : id) : "All (site-wide)", slug: R ? R.slug : null, house: !!(R && R.house),
@@ -607,6 +611,8 @@ async function sync(body = {}) {
   const scopes = await scopesState(U);
   const res = { ok: true, account: acct, global: G, used: { posts: U.posts, comments: U.comments, cost: U.cost, last: U.last }, scopes,
                 mentions: [], threads: [], snaps: {}, lastKinds: {}, now: NOW() };
+  // 1.99dc: the feed automod's work rides on the same sync (its own switches and budget - feedautomod.js)
+  res.automod = await require("./feedautomod").work().catch((e) => { console.error("[pepefeed] automod work:", e.message); return { caps: { enabled: false }, items: [] }; });
   if (!G.enabled) return res;
   res.mentions = await findMentions(acct);
   const autoScopes = Object.keys(scopes).filter((k) => scopes[k].auto);

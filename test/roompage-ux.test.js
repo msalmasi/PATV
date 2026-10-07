@@ -96,7 +96,7 @@ test("room page: the Schedule card - local-time markup, Book a slot, Manage for 
   const pub = await renderRoom({ schedule: await S.roomSchedule(PLANT, stranger, false), manage: false });
   assert.match(pub, /id="rmSched"/);
   assert.match(pub, /href="\/stage\?room=plant_based_chatting">Book a slot/);
-  assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/manage">⚙️ Manage/);
+  assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/settings/, "1.99dc: no settings link for the public");
   assert.match(pub, /Alice Live/); assert.match(pub, /Bob Booked/); assert.match(pub, /Dave Queued/);
   assert.match(pub, /★ Featured/); assert.match(pub, /Ordinary slot/); assert.match(pub, /▶ YouTube/); assert.match(pub, /🎥 Stream/);
   assert.match(pub, /<time data-ts="\d+" data-min="15" datetime="2026-10-06T14:00:00.000Z">2026-10-06 14:00 UTC<\/time>/);
@@ -105,7 +105,8 @@ test("room page: the Schedule card - local-time markup, Book a slot, Manage for 
   assert.doesNotMatch(pub, /class="upnext"/, "the old up-next list gives way to the schedule");
 
   const own = await renderRoom({ schedule: await S.roomSchedule(PLANT, owner, true), manage: true });
-  assert.match(own, /\/p\/plant_based_chatting\/manage">⚙️ Manage · 1 to approve/);
+  assert.match(own, /\/p\/plant_based_chatting\/settings#stage">⚙ Pad settings · 1 to approve/);
+  assert.match(own, /class="chip own ps-link" href="\/p\/plant_based_chatting\/settings"[^>]*>⚙ Pad settings</, "1.99dc: ONE settings link in the pad header");
   assert.match(own, /Carol Pending/); assert.match(own, /Waiting for the owner/);
 
   // names / titles are escaped

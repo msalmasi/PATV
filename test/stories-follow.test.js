@@ -257,11 +257,11 @@ test("room announcements: the composer always shows the box - enabled + ticked, 
   await store.setMention(U.owner, ROOM_B, false);
   b = annBlock(await page("/feed", U.alice), ROOM_B);
   assert.match(b, /disabled>/); assert.match(b, /Announcements are off for this pad/);
-  assert.ok(!/turn on in Moderate/.test(b), "not for a regular member");
+  assert.ok(!/turn on in Pad settings/.test(b), "not for a regular member");
   b = annBlock(await page("/feed", U.owner), ROOM_B);
-  assert.match(b, /Announcements are off for this pad/); assert.match(b, /href="\/p\/[^"]+\/mod#announce">turn on in Moderate/);
+  assert.match(b, /Announcements are off for this pad/); assert.match(b, /href="\/p\/[^"]+\/settings#announce">turn on in Pad settings/);   // 1.99dc: the hub
   b = annBlock(await page("/feed", U.admin), ROOM_B);
-  assert.match(b, /turn on in Moderate/, "admins too");
+  assert.match(b, /turn on in Pad settings/, "admins too");
   await store.setMention(U.owner, ROOM_B, true);
   // Pepe isn't in the room: greyed out, and the server won't queue it either
   store._setPepeIn((id) => (id === ROOM_B ? false : null));

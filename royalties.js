@@ -276,7 +276,7 @@ async function releaseTick() {
       await setRun("missed", 0);
       require("./rooms").notify(owner, { kind: "room", title: `Royalties for ${title} carried over`,
         body: `${title} was active on ${days} of the ${CONFIG.min_active_days} days needed last period, so ${pending.toLocaleString("en-US")} PAT waits for a busier one (unpaid royalties expire after ${CONFIG.keep_periods} periods).`,
-        link: R ? `/p/${encodeURIComponent(R.slug)}/manage#royalties` : "/messages/notices", ref: `roy-miss:${room}:${P}`, pm: false }).catch(() => {});
+        link: R ? `/p/${encodeURIComponent(R.slug)}/settings#royalties` : "/messages/notices", ref: `roy-miss:${room}:${P}`, pm: false }).catch(() => {});
       out.push({ room, owner, outcome: "missed", days });
       continue;
     }
@@ -286,7 +286,7 @@ async function releaseTick() {
       if (!run) {
         require("./rooms").notify(owner, { kind: "room", title: `Royalties for ${title} are delayed`,
           body: `The Federal Reserve can't cover ${amount.toLocaleString("en-US")} PAT right now - it's paid as soon as it can.`,
-          link: R ? `/p/${encodeURIComponent(R.slug)}/manage#royalties` : "/messages/notices", ref: `roy-late:${room}:${P}`, pm: false }).catch(() => {});
+          link: R ? `/p/${encodeURIComponent(R.slug)}/settings#royalties` : "/messages/notices", ref: `roy-late:${room}:${P}`, pm: false }).catch(() => {});
       }
       await setRun("unfunded", amount);
       out.push({ room, owner, outcome: "unfunded", amount });
@@ -298,7 +298,7 @@ async function releaseTick() {
     await setRun("released", amount);
     require("./rooms").notify(owner, { kind: "room", title: `+${amount.toLocaleString("en-US")} PAT pad owner royalties for ${title}`,
       body: `Paid by the Federal Reserve for last period (${days} active days).` + (pending > amount ? ` ${(pending - amount).toLocaleString("en-US")} PAT over the cap waits for the next release.` : ""),
-      link: R ? `/p/${encodeURIComponent(R.slug)}/manage#royalties` : "/wallet", ref: `roy-paid:${room}:${P}` }).catch(() => {});
+      link: R ? `/p/${encodeURIComponent(R.slug)}/settings#royalties` : "/wallet", ref: `roy-paid:${room}:${P}` }).catch(() => {});
     out.push({ room, owner, outcome: "released", amount });
   }
   return out;

@@ -111,7 +111,7 @@
   <% if (owned && owned.length) { %>
     <section aria-labelledby="ownH">
       <h2 id="ownH">Your pads <small>you own these</small></h2>
-      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/manage">⚙️ <%= r.title %></a><% }) %></div>
+      <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/settings">⚙ <%= r.title %></a><% }) %></div>
     </section>
   <% } %>
 

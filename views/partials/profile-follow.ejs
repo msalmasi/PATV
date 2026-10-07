@@ -12,7 +12,7 @@
   <% if (!S_.self && !previewing && S_.signed) { %><a class="pf-msg" href="/messages?to=<%= encodeURIComponent(usernameProfile) %>" title="Send a direct message">💬 Message</a><% } %>
   <% if (!S_.self && !previewing && S_.signed) { %><button type="button" class="pf-report" data-safety="report-user" data-user="<%= usernameProfile %>" title="Report this account to the site admins">⚑ Report user</button><% } %>
 </div>
-<% if (!S_.self && !previewing && S_.signed) { %><script src="/public/js/feed-safety.js?v=2" defer></script>
+<% if (!S_.self && !previewing && S_.signed) { %><script src="/public/js/feed-safety.js?v=3" defer></script>
 <style>.pf-report { background: none; border: 1px solid #3a3a42; color: #aaa; border-radius: 999px; padding: 3px 10px; font: 12.5px Ubuntu, sans-serif; cursor: pointer; }
 .pf-report:hover, .pf-report:focus-visible { color: #ff8a80; border-color: #ff8a80; }
 .pf-msg { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #3CC47C; color: #e6ffe6 !important; background: #0f1a10; border-radius: 999px; padding: 3px 12px; font: bold 12.5px Ubuntu, sans-serif; text-decoration: none; }

@@ -1327,6 +1327,7 @@ const REASONS = {
   ncii: "Non-consensual intimate imagery", violence: "Violence or threats", impersonation: "Impersonation",
   copyright: "Copyright infringement", personal: "Personal info / doxxing", nsfw: "Unmarked NSFW", other: "Something else",
   abuse: "Harassment or hate", illegal: "Illegal content",          // 1.99bw keys: still accepted, labelled
+  automod: "Breaks the pad's rules (Pepe automod)",                // 1.99dc: Pepe's automod flags on a pad rule (never in the menu)
 };
 const HINTS = {
   spam: "Ads, scams, repeated junk or fake engagement.",
@@ -1993,6 +1994,7 @@ module.exports = {
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,
+  notify, urgentNotice, cleanLine,
   setRestricted, mentionOn, setMention, migrateMentionDefault, announceState, _setPepeIn, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
 };

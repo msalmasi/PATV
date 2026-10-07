@@ -114,7 +114,7 @@
               <% if (r.removed) { %><button type="button" role="menuitem" data-act="restore-room" data-room="<%= r.id %>"><%- fx.icon('restore') %>Put back in the pad</button>
               <% } else { %><button type="button" role="menuitem" class="danger" data-act="remove-room" data-room="<%= r.id %>"><%- fx.icon('remove') %>Remove from the pad</button><% } %>
               <% if (!p.mine) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= p.author.username %>"<%- q_ %>><%- fx.icon('shield') %>Ban <%= p.author.display %> from this pad</button><% } %>
-              <a role="menuitem" href="/p/<%= encodeURIComponent(r.slug) %>/mod"><%- fx.icon('flag') %>Pad reports &amp; settings</a>
+              <a role="menuitem" href="/p/<%= encodeURIComponent(r.slug) %>/settings#moderation"><%- fx.icon('flag') %>Pad settings &amp; moderation</a>
             <% }) %>
             <% if (staff_) { %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span>Admin</span></div>

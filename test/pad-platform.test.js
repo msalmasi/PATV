@@ -107,7 +107,7 @@ test("redirects: /p/patv-lounge (and its sub-pages, /rooms, /feed/c) 301 to /p/c
     ["/p/patv-lounge/manage?tab=page", "/p/camfrog-lounge/manage?tab=page"],
     ["/p/patv-lounge/mod", "/p/camfrog-lounge/mod"],
     ["/rooms/patv-lounge?sort=new", "/p/camfrog-lounge?sort=new"],
-    ["/rooms/patv-lounge/manage", "/p/camfrog-lounge/manage"],
+    ["/rooms/patv-lounge/manage", "/p/camfrog-lounge/settings?tab=stage"],     // 1.99dc: straight to the settings hub, one hop
     ["/feed/c/patv-lounge?sort=top", "/p/camfrog-lounge?sort=top"],
   ];
   for (const [from, to] of cases) {

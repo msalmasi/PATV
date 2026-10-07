@@ -136,6 +136,9 @@
       var note = el('textarea', { id: 'sfmNote', name: 'note', maxlength: '300', rows: '3', placeholder: 'Links, context, who it targets…' });
       form.appendChild(note);
       form.appendChild(el('p', { cls: 'mut', text: (isUser ? 'Site admins' : 'Site admins (and, for posts in a pad, that pad\'s owner - except child-safety, non-consensual imagery and copyright reports)') + ' will see your report. The person you report isn\'t told who reported them.' }));
+      // 1.99dc: what crosses the line (and what doesn't): Padiquette
+      form.appendChild(el('p', { cls: 'mut' }, ['Not sure it breaks a rule? Swearing, roasting and hot takes are fine here - see ',
+        el('a', { href: '/guidelines', target: '_blank', rel: 'noopener', text: 'Padiquette' }), ' and the pad\'s own rules.']));
       m.body.appendChild(form);
       fs.addEventListener('change', function () {
         var v = form.querySelector('input[name=reason]:checked');

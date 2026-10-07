@@ -206,6 +206,7 @@ app.get("/healthz", (req, res) => {
 // Homepage (home.js): live stats, the live Camfrog room, games, top 5, personal strip
 require("./home").register(app, { addUser, xpForNextLevel });
 require("./terms").register(app, { addUser });   // 1.99cc: /terms, /privacy, POST /api/terms/accept
+require("./guidelines").register(app, { addUser });   // 1.99dc: /guidelines - Padiquette, the site-wide community guidelines
 
 // The admin area (adminweb.js, 1.99cu): /admin Overview + section pages in one shell; /admin/panel -> /admin.
 // Same gate as the old /admin/panel: Admin or Staff, else a flash + /login.
@@ -1075,6 +1076,9 @@ app.get("/info", addUser, (req, res) => {
 require("./pads").register(app);
 require("./feedweb").register(app, { isBotToken, addUser });
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)
+require("./feedautomod").register(app, { isBotToken, addUser });   // 1.99dc: Pepe's feed automod (verdicts, settings, reversals, notices)
+require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules (else Padiquette)
+require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settings hub /p/:slug/settings (was /manage + /mod)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories

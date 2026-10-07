@@ -42,7 +42,7 @@
   <h2 id="rmSchedH"><span>📅 Schedule</span>
     <span class="acts">
       <a class="sbtn" href="/stage?room=<%= encodeURIComponent(slug) %>">Book a slot</a>
-      <% if (manage) { %><a class="sbtn ghost" href="/p/<%= encodeURIComponent(slug) %>/manage">⚙️ Manage<%= S.pending ? ' · ' + S.pending + ' to approve' : '' %></a><% } %>
+      <% if (manage) { %><a class="sbtn ghost" href="/p/<%= encodeURIComponent(slug) %>/settings#stage">⚙ Pad settings<%= S.pending ? ' · ' + S.pending + ' to approve' : '' %></a><% } %>
     </span></h2>
   <div class="scols">
     <div>

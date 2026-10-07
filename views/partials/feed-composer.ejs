@@ -54,9 +54,15 @@
                 <label class="fc-ann" title="Pepe posts a short line in the Camfrog room about new posts (at most one every few minutes)"><input type="checkbox" name="announce" value="<%= r.id %>" checked> 🐸📣 Pepe announces it in the Camfrog room</label>
               <% } else { %>
                 <label class="fc-ann off" aria-disabled="true" title="<%= a_.why %>"><input type="checkbox" name="announce" value="<%= r.id %>" disabled> 🐸📣 Pepe announces it in the Camfrog room</label>
-                <small class="fc-ann-why" data-ann-code="<%= a_.code || 'off' %>"><%= a_.why %><% if (a_.manage) { %> · <a href="/p/<%= encodeURIComponent(r.slug) %>/mod#announce">turn on in Moderate</a><% } %></small>
+                <small class="fc-ann-why" data-ann-code="<%= a_.code || 'off' %>"><%= a_.why %><% if (a_.manage) { %> · <a href="/p/<%= encodeURIComponent(r.slug) %>/settings#announce">turn on in Pad settings</a><% } %></small>
               <% } %>
             </span>
+          <% }) %>
+        </div>
+        <%# 1.99dc: the picked pad's rules (its own, or Padiquette) - one line, follows the picker %>
+        <div class="fc-rules-w">
+          <% cp.rooms.forEach((r) => { %>
+            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 Posting in <b>p/<%= r.slug %></b>: <a href="/p/<%= encodeURIComponent(r.slug) %>#rules" target="_blank" rel="noopener"><% if (r.rules) { %>read its <%= r.rules %> rule<%= r.rules === 1 ? '' : 's' %></a><% } else { %>read the rules</a> (it follows <a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>)<% } %></p>
           <% }) %>
         </div>
       <% } %>

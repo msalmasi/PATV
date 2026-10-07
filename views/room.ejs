@@ -168,7 +168,8 @@
       <span class="chip" title="This pad is backed by a Camfrog room">📡 Camfrog room<%= room.camfrogName && room.camfrogName !== room.name ? ': ' + room.camfrogName : '' %></span><% } %>
       <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Pad owner: <%= room.owner %></a><% } %>
       <% if (pepeHere_ === true && !siteOnly_) { %><span class="chip" title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %>
-      <% if (manage_) { %><a class="chip own" href="/p/<%= encodeURIComponent(room.slug) %>/manage">⚙️ Manage pad</a><% } %>
+      <% if (manage_) { %><a class="chip own ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= feed_ && feed_.queue ? '#moderation' : '' %>" title="Everything about this pad: page, stage, feed, Pepe, rules, moderation">⚙ Pad settings<% if (feed_ && feed_.queue) { %> <span class="ps-q" title="Waiting for you in Moderation"><%= feed_.queue %></span><% } %></a><% } %>
+      <% if (feed_ && feed_.rules) { %><a class="chip" href="#rules" onclick="var d=document.getElementById('rules');if(d)d.open=true">📜 Rules</a><% } %>
       <% if (feed_) { %><a class="chip" href="#feed">📝 Feed<%= feed_.posts.length ? ' · ' + (feed_.more ? feed_.posts.length + '+' : feed_.posts.length) : '' %></a><% } %>
       <% if (typeof roomAnalytics !== 'undefined' && roomAnalytics) { %><a class="chip" href="<%= roomAnalytics %>">📈 Pad analytics</a><% } %>
     </div>

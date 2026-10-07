@@ -1,0 +1,362 @@
+<%- include('layout', { title: 'Pad settings · ' + room.title, user: user }) %>
+<%#
+  The pad settings hub (1.99dc, padsettings.js): one page per pad for its owner and site staff. Sections = tabs
+  (public/js/pad-settings.js shows one at a time; without JS they're all shown, in order). Old /manage + /mod
+  anchors live on here (royalties, pepe, announce, settings, queue, reports, members, bans, audit).
+  The stage cards are drawn by room-manage.js (#rmg), the feed buttons by feed-roommod.js (.fd-rmod), Pepe's
+  limits form by pepe-feed.js (.pf-form); the master switch, automod, rules, reversals and the live Camfrog
+  panel by pad-settings.js.
+%>
+<link rel="stylesheet" href="/public/css/stage.css?v=5">
+<link rel="stylesheet" href="/public/css/feed.css?v=9">
+<link rel="stylesheet" href="/public/css/room-mod.css?v=1">
+<link rel="stylesheet" href="/public/css/pad-settings.css?v=1">
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+  const dt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  const whoLabel = { everyone: 'Everyone signed in', linked: 'Linked Camfrog accounts', followers: 'Followers of the pad', approved: 'Approved posters only' };
+  const href = '/p/' + encodeURIComponent(slug);
+  const isAdmin = viewer && viewer.class === 'Admin';
+  const tabs = [
+    ['general', '🏷️', 'General'], ['stage', '📺', 'Stage'], ['feed', '📝', 'Feed'], ['pepe', '🐸', 'Pepe'],
+    ['rules', '📜', 'Rules'], ['moderation', '🛡️', 'Moderation'], ['camfrog', '📡', 'Camfrog room'],
+  ].filter((t) => t[0] !== 'camfrog' || camfrog);
+  const amLabel = { none: 'Do nothing', flag: 'Flag it for me', hide: 'Hide it until I review', remove: 'Remove it (clear-cut only)' };
+  const sevInfo = {
+    minor: ['Minor', 'Spam, a missing NSFW tag, or a small break of one of your pad rules.'],
+    serious: ['Serious', 'Targeted harassment campaigns, deceptive impersonation, malware, scams - or a serious break of your pad rules.'],
+    severe: ['Severe', 'Illegal content, doxxing, credible threats, non-consensual intimate imagery, child sexual abuse material.'],
+  };
+  const amLocked = am.admin_lock && !isAdmin;
+  const amState = (r) => r.state === 'reversed' ? 'reversed' : r.state === 'skipped' ? 'skipped' : r.action === 'none' ? 'clear' : r.action;
+%>
+<main class="sb fd fd-admin fd-rmod ps" id="rmg" data-slug="<%= slug %>" data-tab="<%= tab %>">
+  <nav class="crumb ps-crumb" aria-label="Breadcrumb"><a href="/p">Pads</a> › <a href="<%= href %>">p/<%= slug %></a> › Settings</nav>
+  <header class="ps-head">
+    <h1>⚙ Pad settings <span class="ps-pad"><%= room.title %></span></h1>
+    <p class="lede"><% if (room.house) { %>🐸 House pad — run by Pepe and the site admins.<% } else if (room.owner) { %>👑 Owned by <b><%= room.owner.display || room.owner.username %></b>.<% } else { %>No owner yet.<% } %>
+      Everything you can change about <b>p/<%= slug %></b> is on this page.</p>
+    <p class="ps-links"><a href="<%= href %>">← Pad page</a><a href="/stage?room=<%= encodeURIComponent(slug) %>">🎥 Go live here</a>
+      <% if (analytics) { %><a href="<%= href %>/analytics">📊 Analytics</a><% } %>
+      <a href="<%= G.PATH %>">📜 <%= G.NAME %></a></p>
+    <% if (staff) { %><p class="ps-staff">🛠 Site staff: you see every pad's hub. Site-wide limits live in <a href="/feed/admin#pepe">Feed admin</a> (Pepe's global caps, the automod budget) and <a href="/pads/admin">Pads admin</a> (owners, the front page, royalties).</p><% } %>
+  </header>
+
+  <div class="ps-wrap">
+  <nav class="ps-nav" aria-label="Settings sections" role="tablist">
+    <% tabs.forEach((t) => { %><a class="ps-tab" role="tab" href="#<%= t[0] %>" data-tab="<%= t[0] %>" aria-controls="<%= t[0] %>" id="tab-<%= t[0] %>"><span aria-hidden="true"><%= t[1] %></span><span><%= t[2] %></span><% if (t[0] === 'moderation' && queue) { %><span class="ps-n" title="Waiting for you"><%= queue %></span><% } %><% if (t[0] === 'pepe') { %><span class="ps-dot <%= pepe.enabled === false ? 'off' : 'on' %>" title="Pepe on this pad's feed: <%= pepe.enabled === false ? 'off' : 'on' %>"></span><% } %></a><% }) %>
+  </nav>
+
+  <div class="ps-body">
+  <%# ─────────────── General ─────────────── %>
+  <section class="ps-sec" id="general" role="tabpanel" aria-labelledby="tab-general">
+    <h2 class="ps-h">🏷️ General</h2>
+    <p class="ps-what">How your pad looks to everyone: its name, its description, the banner on top of the pad page, and the badge that says what it's backed by.</p>
+    <div class="sb-card ps-card">
+      <h3>Pad page</h3>
+      <form id="pageForm" class="book2 ps-form">
+        <label class="fld">Title<input type="text" name="title" maxlength="60" value="<%= room.title %>"></label>
+        <label class="fld">Description<textarea name="description" maxlength="500" rows="3"><%= room.description %></textarea></label>
+        <label class="fld">Banner image <small>an https:// link, shown on top of the pad page</small><input type="text" name="banner" maxlength="300" value="<%= room.banner %>" placeholder="https://…"></label>
+        <div class="row"><button type="submit" class="btn primary">Save page</button><span class="msg" id="pageMsg" role="status"></span></div>
+      </form>
+      <div class="ps-kv"><span>Platform badge</span><span><%- padBadge(platform) %> <small class="muted"><%= camfrog ? 'Set by the Camfrog room behind this pad.' : 'A pad made on the site - no Camfrog room behind it.' %> The badge follows the platform; ask a site admin to change it.</small></span></div>
+      <div class="ps-kv"><span>Address</span><span><a href="<%= href %>">publicaccess.tv/p/<%= slug %></a></span></div>
+    </div>
+    <div class="sb-card ps-card" id="royalties">
+      <h3>Royalties</h3>
+      <% if (!roy) { %>
+        <p class="note"><%= room.house ? "House pads don't earn royalties — their share stays in the Federal Reserve." : 'Royalties go to a pad owner. This pad has none yet.' %></p>
+      <% } else { const R = roy, pct = Math.min(100, R.active_days_needed ? (R.active_days / R.active_days_needed) * 100 : 100); const osh = (R.owner_shares || []).filter((x) => x.pct > 0); %>
+        <p class="muted">You earn <b><%= R.config.stage_pct %>%</b> of what people pay for stage time here<% if (osh.length) { %> and a share of the PAT spent on Pepe's paid commands, song requests, voices and DJ shout-outs in this pad's Camfrog room<% } %> (your own spending doesn't count). Paid out every <%= R.config.period_days %> days if the pad was active on at least <b><%= R.active_days_needed %></b> days. Max <%= fmt(R.config.cap_per_period) %> PAT per payout.</p>
+        <div class="facts">
+          <div class="fact"><span class="k">This period</span><span class="v"><%= fmt(R.this_period.total) %> <small>PAT</small></span></div>
+          <div class="fact"><span class="k">Waiting</span><span class="v"><%= fmt(R.pending) %> <small>PAT</small></span></div>
+          <div class="fact"><span class="k">Paid so far</span><span class="v"><%= fmt(R.paid) %> <small>PAT</small></span></div>
+          <div class="fact"><span class="k">Next payout</span><span class="v"><small><%= day(R.next_release) %> UTC</small></span></div>
+        </div>
+        <div style="display:grid;gap:4px"><span class="muted">Active days this period: <b><%= R.active_days %></b> / <%= R.active_days_needed %></span>
+          <div class="meter2" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>"><span style="width:<%= pct.toFixed(0) %>%"></span></div></div>
+      <% } %>
+    </div>
+  </section>
+
+  <%# ─────────────── Stage ─────────────── %>
+  <section class="ps-sec" id="stage" role="tabpanel" aria-labelledby="tab-stage">
+    <h2 class="ps-h">📺 Stage</h2>
+    <p class="ps-what">Your pad's live stage: who's on it right now, bookings waiting for you, how many slots there are and what they cost, and who's banned from going live here.</p>
+    <div class="sb-card ps-card">
+      <h3>On the stage now</h3>
+      <p class="muted">Feature a slot (free) to make it the pad's main stream. Cut ends a slot (unused PAT refunded); Cut + ban also blocks them from this stage.</p>
+      <div class="tblwrap"><table><thead><tr><th>Who</th><th>Status</th><th>Source</th><th class="num">Live</th><th class="num">Charged / held</th><th></th></tr></thead>
+        <tbody id="openRows"></tbody></table></div>
+      <p class="msg" id="nowMsg" role="status" aria-live="polite"></p>
+    </div>
+    <div class="sb-card ps-card">
+      <h3>Bookings</h3>
+      <h4>Waiting for your OK</h4><ul class="mylist" id="reqList"></ul>
+      <h4>Scheduled</h4><ul class="mylist" id="schedList"></ul>
+      <h4>Queue (next up when a slot frees)</h4><ul class="mylist" id="queueList"></ul>
+    </div>
+    <div class="sb-card ps-card">
+      <h3>Slots, prices &amp; approval</h3>
+      <form id="stageForm" class="settings ps-form">
+        <label>User slots (1–<%= C.max_slots_per_room %>)<input type="number" name="slot_count" min="1" max="<%= C.max_slots_per_room %>" value="<%= room.slot_count %>"></label>
+        <label>Slot price <small>PAT per live minute, 0 = free; max <%= fmt(C.price_per_min) %></small><input type="number" name="slot_price" min="0" max="<%= C.price_per_min %>" value="<%= room.slot_price %>"></label>
+        <label class="chk"><input type="checkbox" name="approval" <%= room.approval ? 'checked' : '' %>> Bookings for later need my approval</label>
+        <div class="row"><button type="submit" class="btn primary">Save stage settings</button><span class="msg" id="stageMsg" role="status"></span></div>
+      </form>
+      <p class="muted">Pepe's stream is always on every pad's stage. Paid featuring costs <%= fmt(C.price_per_min) %> PAT per live minute. In chat, <code>!stage</code>, <code>!stage feature &lt;name&gt;</code>, <code>!stage cut</code> and <code>!stage slots &lt;n&gt;</code> work for you in this pad's Camfrog room.</p>
+    </div>
+    <div class="sb-card ps-card" id="stagebans">
+      <h3>Banned from this pad's stage</h3>
+      <form id="banForm" class="row"><input type="text" name="username" placeholder="PATV or Camfrog name" required aria-label="Name to ban">
+        <input type="text" name="reason" placeholder="reason (optional)" aria-label="Reason"><button type="submit" class="btn danger">Ban</button></form>
+      <div class="tblwrap"><table><thead><tr><th>User</th><th>Reason</th><th>By</th><th></th></tr></thead><tbody id="banRows"></tbody></table></div>
+    </div>
+    <div class="sb-card ps-card">
+      <h3>Recent stage &amp; pad events</h3>
+      <div class="tblwrap"><table><thead><tr><th>When</th><th>What</th><th>By</th><th>Detail</th></tr></thead><tbody id="evRows">
+        <% (stageEvents || []).forEach((e) => { %><tr><td><%= new Date(e.ts).toISOString().slice(0, 16).replace('T', ' ') %></td><td><%= e.what %></td><td><%= e.actor || '' %></td><td><%= e.detail || '' %></td></tr><% }) %>
+        <% if (!stageEvents.length) { %><tr><td colspan="4" class="muted">Nothing yet.</td></tr><% } %>
+      </tbody></table></div>
+    </div>
+  </section>
+
+  <%# ─────────────── Feed ─────────────── %>
+  <section class="ps-sec" id="feed" role="tabpanel" aria-labelledby="tab-feed">
+    <h2 class="ps-h">📝 Feed</h2>
+    <p class="ps-what">Who can post in your pad's feed, whether posts need your OK first, how many posts a person can make a day<%= camfrog ? ', and whether Pepe tells the Camfrog room about new posts' : '' %>.</p>
+    <div class="fa-card ps-card" id="settings">
+      <h3>Who can post</h3>
+      <form class="fa-cfg" id="rmSettings">
+        <label><span>Who can post here</span>
+          <select name="who"><% WHO.forEach((w) => { %><option value="<%= w %>"<%= settings.who === w ? ' selected' : '' %>><%= whoLabel[w] %></option><% }) %></select></label>
+        <label class="ck"><input type="checkbox" name="approval"<%= settings.approval ? ' checked' : '' %>> Posts need my approval before they show in the pad (the approval queue is in Moderation)</label>
+        <label><span>Posts per person per day in this pad (0 = no pad limit)</span><input type="number" name="per_day" min="0" max="1000" value="<%= settings.per_day %>"></label>
+        <p class="fc-note">You and site admins can always post. Site-wide limits (posting speed, new accounts) apply on top.</p>
+        <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save</button></div>
+      </form>
+    </div>
+    <div class="fa-card ps-card" id="members">
+      <h3>Approved posters <span class="n"><%= members.length %></span></h3>
+      <p class="ps-mini">Used when "who can post" is "Approved posters only" (or "Followers", for people who don't follow).</p>
+      <form class="fa-inline" id="rmMember">
+        <input name="user" placeholder="username or Camfrog name" required aria-label="User">
+        <button type="submit" class="btn-s">Add</button><span class="fc-err" role="alert"></span>
+      </form>
+      <% if (members.length) { %>
+        <table class="fa-t"><tbody>
+          <% members.forEach((m) => { %><tr><td><%= m.username %></td><td class="mut">added by <%= m.by %> · <%= dt(m.at) %></td><td><button type="button" class="lnk" data-op="member-remove" data-user="<%= m.user_id %>">Remove</button></td></tr><% }) %>
+        </tbody></table>
+      <% } %>
+    </div>
+    <% if (announce !== null) { %>
+    <div class="fa-card ps-card" id="announce">
+      <h3>Announcements in the Camfrog room</h3>
+      <label class="ps-switch"><input type="checkbox" id="rmMention"<%= announce ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
+        <span>🐸📣 Pepe announces new posts in the Camfrog room<small>A short line in the room when someone posts here, at most one every few minutes. On by default.</small></span></label>
+    </div>
+    <% } %>
+  </section>
+
+  <%# ─────────────── Pepe ─────────────── %>
+  <section class="ps-sec pf-card" id="pepe" role="tabpanel" aria-labelledby="tab-pepe">
+    <h2 class="ps-h"><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe</h2>
+    <p class="ps-what">Pepe the bot on your pad's feed. The switch below turns him on or off here; underneath are what he does when he's on, and his automod (separate - it can run while he stays quiet).</p>
+    <div class="fa-card ps-card ps-master<%= pepe.enabled === false ? ' is-off' : '' %>">
+      <% const pLocked = pepe.admin_lock && !isAdmin; %>
+      <label class="ps-switch big"><input type="checkbox" id="psPepeOn" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/feed/pepe"<%= pepe.enabled === false ? '' : ' checked' %><%= pLocked ? ' disabled' : '' %>><span class="ps-sw" aria-hidden="true"></span>
+        <span><b>Pepe on this pad's feed</b> <span class="ps-state" data-on="ON" data-off="OFF"><%= pepe.enabled === false ? 'OFF' : 'ON' %></span>
+          <small>On: he answers people who mention him here<%= pepe.auto ? ' and takes part on his own' : '' %>, within the limits below. Off: he stays out of this pad's feed completely.</small></span></label>
+      <p class="fc-err" id="psPepeErr" role="alert"></p>
+      <% if (pepe.global && pepe.global.enabled === false) { %><p class="pf-lock">A site admin has switched Pepe off on the whole feed right now.</p><% } %>
+    </div>
+    <div class="fa-card ps-card<%= pepe.enabled === false ? ' ps-dim' : '' %>">
+      <h3>What Pepe does here</h3>
+      <%- include('partials/pepe-feed-settings', { s: pepe, where: 'this pad', url: '/api/rooms/' + encodeURIComponent(slug) + '/feed/pepe', wrap: 'settings', admin: isAdmin, roomScope: true }) %>
+    </div>
+    <div class="fa-card ps-card ps-am" id="automod">
+      <h3>🛡️ Automod</h3>
+      <p class="ps-mini">When it's on, Pepe reads every new post and comment in this pad and checks it against <% if (effective.source === 'pad') { %>your <a href="#rules" data-goto="rules">pad rules</a> (<%= effective.rules.length %>)<% } else { %><a href="<%= G.PATH %>"><%= G.NAME %></a>, the site-wide guidelines (your pad has no rules of its own - <a href="#rules" data-goto="rules">add some</a>)<% } %>, plus the site's hard limits. He gives swearing, dark humour, roasting, hot takes and adult topics a wide berth - those aren't violations unless your rules say so. Every action comes with a one-line reason citing the rule; the author is told (with how to appeal) and you can reverse any of them in <a href="#automodlog" data-goto="moderation">Moderation</a>. He never bans anyone.</p>
+      <form class="ps-amform" id="psAutomod" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/automod">
+        <% if (amLocked) { %><p class="pf-lock">A site admin has locked the automod settings for this pad.</p><% } %>
+        <fieldset<%= amLocked ? ' disabled' : '' %>>
+          <label class="ps-switch"><input type="checkbox" name="on"<%= am.on ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
+            <span><b>Pepe automod</b> <span class="ps-state" data-on="ON" data-off="OFF"><%= am.on ? 'ON' : 'OFF' %></span><small><%= am.inherited ? 'Following the site-wide (All) setting - change anything here to give this pad its own.' : 'Off by default. Only new posts and comments are checked, from the moment you switch it on.' %></small></span></label>
+          <div class="ps-sev">
+            <% ['minor', 'serious', 'severe'].forEach((k) => { %>
+              <label class="ps-sevrow"><span><b class="sev-<%= k %>"><%= sevInfo[k][0] %></b><small><%= sevInfo[k][1] %></small></span>
+                <select name="<%= k %>" aria-label="<%= sevInfo[k][0] %>: what Pepe does"><% AM.ACTIONS.forEach((a) => { %><option value="<%= a %>"<%= am[k] === a ? ' selected' : '' %>><%= amLabel[a] %></option><% }) %></select></label>
+            <% }) %>
+          </div>
+          <p class="fc-note">Defaults: flag everything to your queue, and hide only the severe categories until you look. "Remove" is used only when Pepe calls it clear-cut - otherwise he hides. Child sexual abuse material is always hidden and sent straight to the site admins, whatever is set here.</p>
+          <% if (isAdmin) { %><label class="ck ps-ck"><input type="checkbox" name="admin_lock"<%= am.admin_lock ? ' checked' : '' %>> Admin lock (the owner can see these settings, not change them)</label><% } %>
+        </fieldset>
+        <div class="cm-row"><span class="mut ps-mini">Site-wide: <%= amGlobal.enabled ? 'up to ' + amGlobal.per_day + ' checks a day' : 'automod is switched off by a site admin' %>.</span><span class="fc-err" role="alert"></span><% if (!amLocked) { %><button type="submit" class="btn-s">Save automod</button><% } %></div>
+      </form>
+    </div>
+  </section>
+
+  <%# ─────────────── Rules ─────────────── %>
+  <section class="ps-sec" id="rules" role="tabpanel" aria-labelledby="tab-rules">
+    <h2 class="ps-h">📜 Rules</h2>
+    <p class="ps-what">Your pad's own rules. They show in a "Rules" card on the pad page and next to the post box, and Pepe's automod enforces them. No rules = the pad follows <a href="<%= G.PATH %>"><%= G.NAME %></a>, the site-wide guidelines.</p>
+    <div class="fa-card ps-card">
+      <h3><%= rules && rules.rules.length ? 'Your rules (' + rules.rules.length + ')' : 'No rules yet - this pad follows ' + G.NAME %></h3>
+      <form id="psRules" class="ps-rules" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/rules" data-max="<%= padrules.MAX_RULES %>">
+        <label class="fld">Intro <small>optional - a line or two about what the pad is for</small>
+          <textarea name="intro" rows="2" maxlength="<%= padrules.INTRO_MAX %>" placeholder="e.g. Houseplants, cuttings and plant puns. Be nice to the beginners."><%= rules ? rules.intro : '' %></textarea></label>
+        <ol class="ps-rlist" id="psRuleList">
+          <% (rules ? rules.rules : []).forEach((r) => { %>
+            <li class="ps-rule"><div class="ps-rf"><input name="title" maxlength="<%= padrules.TITLE_MAX %>" value="<%= r.title %>" placeholder="Rule title" aria-label="Rule title">
+              <textarea name="desc" rows="2" maxlength="<%= padrules.DESC_MAX %>" placeholder="What it means (optional)" aria-label="Rule description"><%= r.desc %></textarea></div>
+              <div class="ps-rbtn"><button type="button" data-r="up" aria-label="Move up">↑</button><button type="button" data-r="down" aria-label="Move down">↓</button><button type="button" data-r="del" aria-label="Delete rule">✕</button></div></li>
+          <% }) %>
+        </ol>
+        <template id="psRuleTpl"><li class="ps-rule"><div class="ps-rf"><input name="title" maxlength="<%= padrules.TITLE_MAX %>" placeholder="Rule title" aria-label="Rule title">
+          <textarea name="desc" rows="2" maxlength="<%= padrules.DESC_MAX %>" placeholder="What it means (optional)" aria-label="Rule description"></textarea></div>
+          <div class="ps-rbtn"><button type="button" data-r="up" aria-label="Move up">↑</button><button type="button" data-r="down" aria-label="Move down">↓</button><button type="button" data-r="del" aria-label="Delete rule">✕</button></div></li></template>
+        <div class="row"><button type="button" class="btn" id="psRuleAdd">＋ Add a rule</button><span class="mut ps-mini" id="psRuleCount"></span></div>
+        <div class="cm-row"><span class="fc-err" role="alert"></span><% if (rules) { %><button type="button" class="btn-s ghost" id="psRuleClear">Clear (use <%= G.NAME %>)</button><% } %><button type="submit" class="btn-s">Save rules</button></div>
+      </form>
+    </div>
+    <div class="fa-card ps-card">
+      <h3>Always on, in every pad</h3>
+      <p class="ps-mini">These come from <a href="<%= G.PATH %>"><%= G.NAME %></a> and hold everywhere on PATV, on top of your rules:</p>
+      <ul class="ps-hard"><% effective.hard.forEach((r) => { %><li><b><%= r.title %></b></li><% }) %></ul>
+    </div>
+  </section>
+
+  <%# ─────────────── Moderation ─────────────── %>
+  <section class="ps-sec" id="moderation" role="tabpanel" aria-labelledby="tab-moderation">
+    <h2 class="ps-h">🛡️ Moderation</h2>
+    <p class="ps-what">Everything waiting for you in this pad: posts to approve, reports, Pepe's automod calls, pinned posts, feed bans, and a log of who did what. Actions here only change this pad — a post that's also elsewhere stays there.</p>
+    <div class="fa-card ps-card" id="queue">
+      <h3>Waiting for approval <span class="n"><%= pending.length %></span></h3>
+      <% if (!pending.length) { %><p class="mut"><%= settings.approval ? 'Nothing waiting.' : 'Approval is off - posts show straight away (turn it on in Feed).' %></p><% } %>
+      <div class="fd-list">
+        <% pending.forEach((p) => { %>
+          <div class="rm-item" data-post="<%= p.id %>">
+            <div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %></span> <a href="/feed/p/<%= p.id %>">Open ›</a></div>
+            <div class="fa-acts"><button type="button" class="ok" data-op="approve"><%- fx.icon('check') %>Approve</button><button type="button" class="bad" data-op="reject"><%- fx.icon('x') %>Reject</button></div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+    <div class="fa-card ps-card" id="reports">
+      <h3>Reports <span class="n"><%= reports.length %></span></h3>
+      <% if (!reports.length) { %><p class="mut">No open reports on posts in this pad.</p><% } %>
+      <% reports.forEach((g) => { const p = g.post; %>
+        <div class="rm-item" data-post="<%= p.id %>"<% if (g.commentId) { %> data-comment="<%= g.commentId %>"<% } %>>
+          <div class="rm-what">
+            <% if (g.comment) { %><span class="tag warn">Comment</span> <b><%= (g.comment.body || '').slice(0, 160) %></b><span class="mut">by <%= g.comment.username || '?' %> · on "<%= (p.title || p.body || '').slice(0, 60) %>"</span>
+            <% } else { %><span class="tag warn">Post</span> <b><%= p.title || (p.body || '').slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in this pad' : '' %></span><% } %>
+            <a href="/feed/p/<%= p.id %><%= g.commentId ? '#c-' + g.commentId : '' %>">Open ›</a>
+            <% const ai_ = g.authorInfo; if (ai_) { const d_ = ai_.ageDays; %>
+              <%# 1.99cc: owners see the author's account age + linked identities only (no IPs - those are site-admin-only) %>
+              <span class="rm-who" title="The author's account - age and linked identities">
+                <span>account <%= d_ == null ? 'age unknown' : d_ < 1 ? 'under a day old' : d_ < 60 ? d_ + ' day' + (d_ === 1 ? '' : 's') + ' old' : Math.round(d_ / 30) + ' months old' %></span>
+                <% ['camfrog', 'discord', 'twitch'].forEach((k) => { %><span class="<%= ai_.linked[k] ? 'y' : '' %>"><%= ai_.linked[k] ? '✓' : '✗' %> <%= k %></span><% }) %>
+              </span>
+            <% } %>
+          </div>
+          <div class="rm-reasons"><b><%= g.count %> report<%= g.count === 1 ? '' : 's' %>:</b> <%= Object.entries(g.reasons).map(([k, n]) => k + (n > 1 ? ' ×' + n : '')).join(', ') %>
+            <% if (g.notes.length) { %><ul><% g.notes.forEach((n) => { %><li>"<%= n %>"</li><% }) %></ul><% } %></div>
+          <div class="fa-acts">
+            <button type="button" data-op="dismiss"><%- fx.icon('check') %>Dismiss</button>
+            <% if (g.comment) { %><button type="button" class="bad" data-op="cdelete"><%- fx.icon('trash') %>Remove comment</button>
+            <% } else { %><% if (!p.roomHidden) { %><button type="button" data-op="hide"><%- fx.icon('hide') %>Hide pending review</button><% } else { %><button type="button" data-op="unhide"><%- fx.icon('show') %>Unhide</button><% } %>
+              <button type="button" class="bad" data-op="remove"><%- fx.icon('remove') %>Remove from the pad</button><% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+    <div class="fa-card ps-card" id="automodlog">
+      <h3>🤖 Automod calls <span class="n"><%= automod.filter((r) => r.action !== 'none' && r.state !== 'reversed').length %></span></h3>
+      <p class="ps-mini"><%= am.on ? 'Pepe\'s automod is on here.' : 'Pepe\'s automod is off here' + (automod.length ? ' - older calls below.' : ' - turn it on in Pepe.') %> Reverse puts a hidden or removed post back, closes Pepe's report and tells the author.</p>
+      <% const amShown = automod.filter((r) => r.state !== 'skipped'); %>
+      <% if (!amShown.length) { %><p class="mut">No automod calls yet.</p><% } else { %>
+        <div class="fa-scroll"><table class="fa-t ps-amt"><thead><tr><th>When</th><th>What</th><th>Rule &amp; reason</th><th>Pepe did</th><th></th></tr></thead><tbody>
+          <% amShown.forEach((r) => { const s_ = amState(r); %>
+            <tr class="am-<%= s_ %>"><td class="mut"><%= dt(r.at) %></td>
+              <td><a href="<%= r.href %>"><%= r.kind === 'post' ? '📝' : '💬' %> <%= r.what %></a><br><span class="mut">by <%= r.author %></span></td>
+              <td><% if (r.rule_title) { %><b><%= r.rule_title %></b><br><% } %><span class="mut"><%= r.reason || (r.action === 'none' ? 'Fine - no rule broken.' : '') %></span></td>
+              <td><span class="am-tag am-<%= s_ %>"><%= { flag: '🚩 flagged', hide: '🙈 hid', remove: '🗑 removed', clear: '✓ fine', reversed: '↩ reversed', skipped: 'skipped' }[s_] %></span><% if (r.state === 'reversed') { %><br><span class="mut">by <%= r.reversed_by %></span><% } %></td>
+              <td><% if (r.reversible && (r.rule !== 'csam' || staff)) { %><button type="button" class="lnk" data-am-reverse="<%= r.id %>">Reverse</button> · <% } %><a href="/feed/automod/<%= r.id %>">Notice</a></td></tr>
+          <% }) %>
+        </tbody></table></div>
+      <% } %>
+    </div>
+    <div class="fa-card ps-card" id="pins">
+      <h3>📌 Pinned posts <span class="n"><%= pins.length %></span></h3>
+      <% if (!pins.length) { %><p class="mut">Nothing pinned. Pin a post from its ⋯ menu on the pad page (up to 3).</p><% } %>
+      <% pins.forEach((p) => { %><div class="rm-item" data-post="<%= p.id %>"><div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">pinned by <%= p.pinned_by || '?' %> · <%= dt(p.pinned_at) %></span> <a href="/feed/p/<%= p.id %>">Open ›</a></div>
+        <div class="fa-acts"><button type="button" data-op="unpin"><%- fx.icon('pin') %>Unpin</button></div></div><% }) %>
+    </div>
+    <div class="fa-card ps-card" id="bans">
+      <h3>Banned from this pad's feed <span class="n"><%= bans.length %></span></h3>
+      <form class="fa-inline" id="rmBan">
+        <input name="user" placeholder="username or Camfrog name" required aria-label="User">
+        <select name="days" aria-label="How long"><option value="1">1 day</option><option value="7">7 days</option><option value="0">Permanently</option></select>
+        <input name="reason" placeholder="reason (optional)" maxlength="200" aria-label="Reason">
+        <button type="submit" class="btn-s">Ban</button><span class="fc-err" role="alert"></span>
+      </form>
+      <% if (bans.length) { %>
+        <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Who</th><th>Until</th><th>Reason</th><th></th></tr></thead><tbody>
+          <% bans.forEach((b) => { %><tr><td><%= b.username %></td><td><%= b.until ? dt(b.until) : 'permanent' %></td><td><%= b.reason || '' %></td>
+            <td><button type="button" class="lnk" data-op="unban" data-user="<%= b.user_id %>">Unban</button></td></tr><% }) %>
+        </tbody></table></div>
+      <% } %>
+    </div>
+    <div class="fa-card ps-card" id="audit">
+      <h3>Audit log</h3>
+      <% if (!audit.length) { %><p class="mut">Nothing yet.</p><% } else { %>
+        <div class="fa-scroll"><table class="fa-t"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>
+          <% audit.forEach((a) => { %><tr><td class="mut"><%= dt(a.ts) %></td><td><%= a.actor || '' %></td><td><%= String(a.what).replace(/^feed-/, '') %></td><td class="rm-detail"><%= a.detail || '' %></td></tr><% }) %>
+        </tbody></table></div>
+      <% } %>
+    </div>
+  </section>
+
+  <%# ─────────────── Camfrog room ─────────────── %>
+  <% if (camfrog) { %>
+  <section class="ps-sec" id="camfrog" role="tabpanel" aria-labelledby="tab-camfrog">
+    <h2 class="ps-h">📡 Camfrog room</h2>
+    <p class="ps-what">The Camfrog room behind this pad. Moderate the people in it from here — Pepe runs each action as your linked Camfrog name, with the powers you have in the room — and choose what the website bridge lets visitors do.</p>
+    <div class="sb-card ps-card">
+      <h3>Manage the room</h3>
+      <p class="muted" id="psModNote">Checking the room… The Manage panel shows when the room is live and Pepe sees that your linked Camfrog name has moderator powers there.</p>
+      <section class="pm" id="psMod" hidden></section>
+      <div class="ps-people hide" id="psPeopleBox"><h4>In the room now <small id="psPplN"></small></h4><ul class="ps-ppl" id="psPeople"></ul><p class="muted ps-mini">Click someone to manage them.</p></div>
+    </div>
+    <div class="sb-card ps-card" id="bridge">
+      <h3>Website bridge</h3>
+      <% if (!bridge) { %>
+        <p class="note">Pepe isn't bridging this pad's Camfrog room right now — these switches appear when he is (an admin types <code>!bridge on</code> in the Camfrog room).</p>
+      <% } else { %>
+        <p class="muted">What website visitors can do in your Camfrog room. Pepe applies a change within a few seconds.</p>
+        <div class="toggles" id="toggles">
+          <% [['relay', 'Website chat lines (relayed by Pepe)', bridge.relay], ['mic', 'Website voice clips on the mic', bridge.mic], ['cams', 'Cam snapshots', bridge.cams],
+              ['audio', 'Camfrog room audio to the website', bridge.audio], ['transcripts', 'Mic transcripts in the feed', bridge.transcripts]].forEach((t) => { %>
+            <div class="toggle"><span><%= t[1] %><br><span class="<%= t[2] ? 'on' : 'off' %>" data-state="<%= t[0] %>"><%= t[2] ? 'ON' : 'OFF' %></span></span>
+              <button type="button" class="btn" data-sw="<%= t[0] %>" data-on="<%= t[2] ? 0 : 1 %>"><%= t[2] ? 'Turn off' : 'Turn on' %></button></div>
+          <% }) %>
+        </div>
+        <p class="msg" id="brMsg" role="status" aria-live="polite"></p>
+      <% } %>
+    </div>
+  </section>
+  <% } %>
+  </div>
+  </div>
+</main>
+<script id="rmgState" type="application/json"><%- JSON.stringify(st).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/room-manage.js?v=1" defer></script>
+<script src="/public/js/feed-roommod.js?v=2" defer></script>
+<script src="/public/js/pepe-feed.js?v=7" defer></script>
+<% if (camfrog) { %><script src="/public/js/room-mod.js?v=1" defer></script><% } %>
+<script src="/public/js/pad-settings.js?v=1" defer></script>
+</body>
+</html>

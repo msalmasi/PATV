@@ -262,6 +262,8 @@
   function syncAnnounce() {
     var on = roomsChecked();
     form.querySelectorAll('[data-ann-for]').forEach(function (l) { l.classList.toggle('hide', on.indexOf(l.getAttribute('data-ann-for')) < 0); });
+    // 1.99dc: "Posting in p/x: read the rules" follows the picked pad too
+    form.querySelectorAll('[data-rules-for]').forEach(function (l) { l.classList.toggle('hide', on.indexOf(l.getAttribute('data-rules-for')) < 0); });
   }
   function showPicked() {
     if (!comm) return;

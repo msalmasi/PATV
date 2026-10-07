@@ -1,5 +1,5 @@
 <%- include('partials/admin-open', { title: 'Feed admin', user: user, section: 'feed', admIsAdmin: isAdmin }) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=8">
+<link rel="stylesheet" href="/public/css/feed.css?v=9">
 <%
   const mb = (b) => (b / 1024 / 1024).toFixed(1) + ' MB';
   const gb = (b) => (b === Infinity ? 'unknown' : (b / 1024 ** 3).toFixed(1) + ' GB');
@@ -148,10 +148,10 @@
     <h3 class="pf-h">All (site-wide: Pepe's own pads and the Camfrog Lounge follow these unless they have their own)</h3>
     <%- include('partials/pepe-feed-settings', { s: { ...pepe.main, used: (U.byScope[''] || { posts: 0, comments: 0 }), quiet: PF.quietNow(pepe.main), global: G }, where: 'All', url: '/api/feed/admin/pepe', wrap: 'main', admin: isAdmin, roomScope: false }) %>
     <h3 class="pf-h">Pads where he's on</h3>
-    <% if (!pepe.rooms.length) { %><p class="mut">None yet - pad owners switch him on from their pad's reports &amp; settings page (admins can too, and can lock it).</p><% } else { %>
+    <% if (!pepe.rooms.length) { %><p class="mut">None yet - pad owners switch him on in their pad's settings (⚙ Pad settings › Pepe); admins can too, from any pad's settings, and can lock it.</p><% } else { %>
       <div class="fa-scroll"><table class="fa-t"><thead><tr><th>Pad</th><th>Mentions</th><th>On his own</th><th>24 h</th><th></th></tr></thead><tbody>
         <% pepe.rooms.forEach((r) => { %><tr><td><%= r.title %><%= r.house ? " (Pepe's)" : '' %><%= r.admin_lock ? ' 🔒' : '' %></td><td><%= r.respond ? 'on' : 'off' %></td><td><%= r.auto ? 'on' : 'off' %></td>
-          <td><%= r.used.posts %>p · <%= r.used.comments %>c</td><td><% if (r.slug) { %><a href="/p/<%= encodeURIComponent(r.slug) %>/mod#pepe">Settings ›</a><% } %></td></tr><% }) %>
+          <td><%= r.used.posts %>p · <%= r.used.comments %>c</td><td><% if (r.slug) { %><a href="/p/<%= encodeURIComponent(r.slug) %>/settings#pepe">Pad settings ›</a><% } %></td></tr><% }) %>
       </tbody></table></div>
     <% } %>
     <h3 class="pf-h">What he did</h3>
@@ -163,6 +163,43 @@
           <td><%= r.scopeTitle %></td>
           <td><% if (r.href) { %><a class="<%= r.postDeleted || r.commentDeleted ? 'del' : '' %>" href="<%= r.href %>"><%= r.postTitle || r.post_id %><%= r.comment_id ? ' (comment)' : '' %></a><%= r.postDeleted || r.commentDeleted ? ' · deleted' : '' %><% } else { %><span class="mut">-</span><% } %></td>
           <td class="mut"><%= r.cost ? '$' + Number(r.cost).toFixed(4) : '' %></td></tr><% }) %>
+      </tbody></table></div>
+    <% } %>
+  </section>
+  <% } %>
+
+  <%# 1.99dc: Pepe's feed automod (feedautomod.js) - global caps, the All scope, every call %>
+  <% if (typeof automod !== 'undefined' && automod) { const AG = automod.global, AU = automod.used, AMM = automod.main;
+       const amLabel = { none: 'Do nothing', flag: 'Flag it', hide: 'Hide until reviewed', remove: 'Remove (clear-cut only)' }; %>
+  <section class="fa-card pf-card" id="automod">
+    <h2>🛡️ Pepe automod</h2>
+    <p class="sub">Pepe checks new posts and comments in pads that switch it on, against the pad's rules or <a href="/guidelines">Padiquette</a>. Last 24 h: <b><%= AU.count %></b> checks, <b>$<%= Number(AU.cost || 0).toFixed(4) %></b> of $<%= Number(AG.budget_usd).toFixed(2) %> (spend tag <code>feed_automod</code>). Pad owners set theirs in ⚙ Pad settings › Pepe; site staff get the same hub for any pad.</p>
+    <% if (!isAdmin) { %><p class="mut">Only site Admins can change these.</p><% } %>
+    <h3 class="pf-h">Site-wide caps</h3>
+    <form class="pf-form fa-cfg" data-url="/api/feed/admin/automod" data-wrap="global">
+      <fieldset<%= isAdmin ? '' : ' disabled' %>>
+        <label class="ck"><input type="checkbox" name="enabled"<%= AG.enabled ? ' checked' : '' %>> Automod is allowed (off = no pad gets checked, whatever its setting)</label>
+        <label><span>Model budget per day (USD)</span><input type="number" name="budget_usd" min="0" max="20" step="0.01" value="<%= AG.budget_usd %>"></label>
+        <label><span>Checks per day, all pads</span><input type="number" name="per_day" min="0" max="5000" value="<%= AG.per_day %>"></label>
+      </fieldset>
+      <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save caps</button></div><% } %>
+    </form>
+    <h3 class="pf-h">All (house pads without settings of their own follow this; owners' pads are opt-in)</h3>
+    <form class="pf-form fa-cfg" data-url="/api/feed/admin/automod" data-wrap="main">
+      <fieldset<%= isAdmin ? '' : ' disabled' %>>
+        <label class="ck"><input type="checkbox" name="on"<%= AMM.on ? ' checked' : '' %>> Automod on for All</label>
+        <% ['minor', 'serious', 'severe'].forEach((k) => { %><label><span><%= k[0].toUpperCase() + k.slice(1) %></span><select name="<%= k %>"><% automod.AM.ACTIONS.forEach((a) => { %><option value="<%= a %>"<%= AMM[k] === a ? ' selected' : '' %>><%= amLabel[a] %></option><% }) %></select></label><% }) %>
+      </fieldset>
+      <% if (isAdmin) { %><div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save All</button></div><% } %>
+    </form>
+    <h3 class="pf-h">Recent calls</h3>
+    <% if (!automod.list.length) { %><p class="mut">None yet.</p><% } else { %>
+      <div class="fa-scroll"><table class="fa-t pf-log"><thead><tr><th>When (UTC)</th><th>Pad</th><th>What</th><th>Rule · reason</th><th>Did</th></tr></thead><tbody>
+        <% automod.list.forEach((r) => { %><tr><td class="mut"><%= new Date(r.at).toISOString().slice(5, 16).replace('T', ' ') %></td>
+          <td><a href="/p/<%= encodeURIComponent(r.pad.slug) %>/settings#automodlog"><%= r.pad.title %></a></td>
+          <td><a href="<%= r.href %>"><%= r.kind === 'post' ? '📝' : '💬' %> <%= r.what %></a></td>
+          <td><%= r.rule_title || '' %><% if (r.reason) { %><div class="mut pf-note"><%= r.reason %></div><% } %></td>
+          <td><%= r.state === 'reversed' ? '↩ reversed by ' + r.reversed_by : r.action === 'none' ? '✓ fine' : r.action %></td></tr><% }) %>
       </tbody></table></div>
     <% } %>
   </section>
@@ -219,7 +256,7 @@
     </form>
   </section>
 </main>
-<script src="/public/js/feed-safety.js?v=2" defer></script>
+<script src="/public/js/feed-safety.js?v=3" defer></script>
 <script src="/public/js/feed-admin.js?v=2" defer></script>
 <% if (isAdmin) { %><script src="/public/js/dm-admin.js?v=2" defer></script><% } %>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>

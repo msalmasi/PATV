@@ -163,8 +163,10 @@ async function composerFor(viewer, roomId) {
   //         enabled + ticked when ok, greyed out with the reason otherwise
   const all = await Promise.all(list.filter((r) => r.canPost).map(async (r) => {
     const ann = await store.announceState(r.id, viewer);
+    // 1.99dc: "Posting in p/x: read the rules" - the pad's own rules (n), or Padiquette (n = 0)
+    const own = await require("./padrules").get(r.id).catch(() => null);
     return { id: r.id, slug: r.slug, title: r.title, followers: r.followers, community: r.community, platform: r.platform, house: r.house,
-             announce: ann.ok, ann };
+             announce: ann.ok, ann, rules: own ? own.rules.length : 0 };
   }));
   const refusal = await store.postRefusal(viewer, []);
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, [], { media: true });
@@ -197,6 +199,7 @@ async function roomFeed(roomId, reqUser, query = {}) {
     storyRooms: viewer ? [] : await stories.forViewer(null, { room: roomId }),
     follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
+    rules: await require("./padrules").effective(roomId),                   // 1.99dc: the pad page's Rules card
     mention: mod.owner ? await store.mentionOn(roomId) : null,
     queue: mod.owner || mod.admin ? (await store.roomReports(roomId)).length + (await store.roomPending(roomId, viewer)).length : 0,
   };
@@ -369,6 +372,10 @@ function register(app, { addUser, isBotToken }) {
                               dmReports: isAdmin ? await require("./messages").reportQueue().catch((e) => { console.error("[feed] dm reports:", e.message); return []; }) : [],
                               termsPH: terms.placeholders(), termsLive: terms.enforced(),
                               pepe: await require("./pepefeed").adminView().catch((e) => { console.error("[feed] pepe admin view:", e.message); return null; }),
+                              // 1.99dc: Pepe's automod - global caps, the All scope, recent calls everywhere
+                              automod: await (async () => { const AM = require("./feedautomod");
+                                return { global: await AM.globalCaps(), main: await AM.settings(""), used: await AM.usage(), list: await AM.adminList(60), AM }; })()
+                                .catch((e) => { console.error("[feed] automod admin view:", e.message); return null; }),
                               PF: require("./pepefeed") });
   });
 
@@ -707,27 +714,7 @@ function register(app, { addUser, isBotToken }) {
                                                                                   reason: b.reason, settings: b.settings, user: b.user, userId: b.userId }));
     } catch (e) { fail(res, e); }
   });
-  app.get("/p/:slug/mod", addUser, async (req, res) => {
-    try {
-      const viewer = await viewerOf(req);
-      const R = await roomOf(req.params.slug);
-      if (!R) return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "No such pad", message: "That pad isn't on PATV.", title: "Pad not found" });
-      if (!viewer) return res.redirect("/login?next=" + encodeURIComponent(req.originalUrl));
-      if (!(await rooms.canManage(viewer, R.id))) {
-        return res.status(403).render("notFound", { user: viewer.username, heading: "Not your pad", message: "Only this pad's owner (and site admins) can moderate it.", title: "Not your pad" });
-      }
-      await store.init();
-      res.set("X-Robots-Tag", "noindex");
-      res.render("feedRoomMod", { user: viewer.username, viewer, room: R, fx, embeds, host: viewOpts(req).host,
-        reports: await store.roomReports(R.id), pending: await store.roomPending(R.id, viewer), settings: await store.roomSettings(R.id),
-        members: await store.roomMembers(R.id), bans: await store.bans(R.id), audit: await store.roomAudit(R.id), WHO: store.WHO,
-        pepe: await require("./pepefeed").scopeView(R.id), PF: require("./pepefeed"),
-        announce: rooms.platformOf(R.id) === "camfrog" ? await store.mentionOn(R.id) : null });   // 1.99cu: null = no Camfrog room
-    } catch (e) {
-      console.error("[feed] room mod page:", e);
-      res.status(500).send("Something went wrong.");
-    }
-  });
+  // (the page: the pad settings hub /p/:slug/settings, padsettings.js - 1.99dc; /p/:slug/mod redirects there)
 
   // ── admin ──
   app.post("/api/feed/admin/config", addUser, guard(false), async (req, res) => {

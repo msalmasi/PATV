@@ -572,3 +572,24 @@ label.fc-terms input { margin-top: 2px; accent-color: #4caf50; }
 .fp-xfrom > span, .fp-xto > span { min-width: 0; }
 .fp-xfrom .ic, .fp-xto .ic { margin-top: 1px; }
 .fp-xto { flex-wrap: wrap; }
+
+/* 1.99dc: the pad page's Rules card (padrules.js, partials/room-feed.ejs) + the composer's "Posting in p/x: read the rules" */
+.rf-rules { background: #0f120c; border: 1px solid #2c3a20; border-radius: 12px; padding: 0; margin: 4px 0 2px; }
+.rf-rules > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; font-size: 14.5px; }
+.rf-rules > summary::-webkit-details-marker { display: none; }
+.rf-rules > summary:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; border-radius: 12px; }
+.rf-rules .rf-rules-t { font-weight: bold; color: #e9f7c9; }
+.rf-rules .rf-rules-s { color: #9aa09a; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rf-rules .chev { margin-left: auto; color: #9aa09a; transition: transform .15s; }
+.rf-rules[open] .chev { transform: rotate(180deg); }
+.rf-rules-b { padding: 0 14px 12px; display: grid; gap: 8px; }
+.rf-rules-intro { margin: 0; color: #d5dcd5; font-size: 14px; line-height: 1.5; }
+.rf-rules-l { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14px; color: #e4e4e4; }
+.rf-rules-l li::marker { color: #c6e94f; font-weight: bold; }
+.rf-rules-l li span { display: block; color: #a9b0a9; font-size: 13px; line-height: 1.45; }
+.rf-rules-l.hard { gap: 2px; }
+.rf-rules-f { margin: 0; font-size: 13px; color: #9aa09a; line-height: 1.5; }
+.fc-rules-w { margin: 6px 0 0; }
+.fc-rules { margin: 0; font-size: 12.5px; color: #a9b0a9; }
+.fc-rules.hide { display: none; }
+.chip .ps-q { display: inline-block; min-width: 18px; text-align: center; background: #d03b3b; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 0 6px; line-height: 17px; margin-left: 2px; }

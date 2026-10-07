@@ -91,6 +91,7 @@ test.before(async () => {
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
   require(path.join(repo, "pads")).register(app);                 // 1.99ck: old addresses 301 to /p/...
   web.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  require(path.join(repo, "padsettings")).register(app, { addUser });   // 1.99dc: the pad settings hub (/mod + /manage redirect there)
   require(path.join(repo, "bridge")).register(app, { addUser, isBotToken: (t) => t === "bot" });   // the pad page
   terms.register(app, { addUser });
   server = app.listen(0);

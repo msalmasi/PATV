@@ -77,6 +77,8 @@ test.before(async () => {
   app.use((req, res, next) => { res.locals.ogBase = "http://test"; next(); });
   web.register(app, { addUser, isBotToken: (t) => t === "bot" });
   PF.register(app, { addUser, isBotToken: (t) => t === "bot" });
+  require(path.join(repo, "pads")).register(app);                       // 1.99dc: app.locals.padBadge + the old /mod redirect
+  require(path.join(repo, "padsettings")).register(app, { addUser });   // 1.99dc: the pad settings hub
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
 });
@@ -441,10 +443,10 @@ test("render: Pepe's comment and post show his avatar + the 🤖 Pepe badge; the
   html = (await call("GET", "/feed/admin", U.admin)).text;
   assert.ok(html.includes("Pepe on the feed"));
   assert.ok(html.includes(`/feed/p/${pid}#c-${r.d.id}`), "the log links to his comment");
-  html = (await call("GET", `/p/${OWNED}/mod`, U.owner)).text;
+  html = (await call("GET", `/p/${OWNED}/settings`, U.owner)).text;
   assert.ok(html.includes("Pepe on this pad's feed") && html.includes('name="respond"'));
   assert.ok(!html.includes('name="admin_lock"'), "owners don't get the lock");
-  html = (await call("GET", `/p/${OWNED}/mod`, U.admin)).text;
+  html = (await call("GET", `/p/${OWNED}/settings`, U.admin)).text;
   assert.ok(html.includes('name="admin_lock"'));
   await PF.setScope(U.admin, "", { ...PF.SCOPE_DEFAULTS });
 });

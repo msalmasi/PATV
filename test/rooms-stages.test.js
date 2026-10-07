@@ -293,7 +293,7 @@ test("approval: requests wait for the owner; deny refunds; not approved in time 
     const r1 = await S.book(a, { room: PLANT, minutes: 5, feature: true, start_at: T + 3 * 3600000 });
     assert.equal(r1.slot.status, "requested"); assert.equal(await balance(a.userId), START - 500);
     const note = await getQuery("SELECT title, link FROM inbox WHERE user_id = ? AND title LIKE '%asked for a stage slot%'", [owner.userId]);
-    assert.equal(note.length, 1); assert.match(note[0].link, /^\/p\/plant-based-chatting\/manage$/);
+    assert.equal(note.length, 1); assert.match(note[0].link, /^\/p\/plant-based-chatting\/settings#stage$/);   // 1.99dc: the settings hub
     await S.deny(r1.slot.id, "pb", "full that night");
     assert.equal(await balance(a.userId), START);
     const r2 = await S.book(b, { room: PLANT, minutes: 5, feature: false, start_at: T + 2 * 3600000 });
