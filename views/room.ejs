@@ -60,6 +60,9 @@
   .rm .snap button.save { background: #12301a; border-color: #2f6b3a; color: #d7f5dc; font-weight: bold; }
   .rm .snap button.save:hover, .rm .snap button.save:focus-visible { border-color: #4caf50; }
   .rm .snap button.save:disabled { opacity: .55; cursor: default; }
+  .rm .snap button.gen { background: #221a3a; border-color: #4b3a8a; color: #e2d8ff; font-weight: bold; }
+  .rm .snap button.gen:hover, .rm .snap button.gen:focus-visible { border-color: #9b7bff; }
+  .rm .snap button.gen:disabled { opacity: .55; cursor: default; }
   .rm .snap a.dl { color: #9cc7a3; text-decoration: none; white-space: nowrap; }
   .rm .snap a.dl:hover, .rm .snap a.dl:focus-visible { text-decoration: underline; }
   .rm .snap .res { font-size: 12.5px; color: #aaa; overflow-wrap: anywhere; }
@@ -475,6 +478,36 @@
       // Save snap (1.99ap): only when the !snap rules let this viewer snap them (the server decides;
       // `save` is null otherwise, and then there's no Download either).
       if (s.state === 'ok' && s.img && s.save) snapSaveRow(box, s);
+      // 1.99dr: "✨ Use in Generate" - this frame as the composer's AI reference picture (aigen.js claimCamRef:
+      // priced like chat's -cam, the person's opt-out and the room's switches re-checked, never stored)
+      if (s.state === 'ok' && s.img && s.gen) snapGenRow(box, s);
+    }
+    function snapGenRow(box, s) {
+      var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res');
+      res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
+      var g = el('button', 'gen', '✨ Use in Generate'); g.type = 'button';
+      g.title = 'Make an AI picture or video from this frame (Pepe\'s !imagine / !video, priced like -cam in chat)';
+      acts.appendChild(g); box.appendChild(acts); box.appendChild(res);
+      g.addEventListener('click', function () {
+        g.disabled = true; res.className = 'res'; res.textContent = 'Getting it ready…';
+        fetch('/api/feed/aigen/camref', { method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ pad: slug, sid: s.gen.sid }) })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (snapWho !== who || !res.isConnected) return;
+            g.disabled = false;
+            if (!d.ok) { res.className = 'res bad'; res.textContent = d.error || 'Not right now.'; return; }
+            var c = { id: d.id, display: d.display, room: d.room, img: s.img, until: d.until };
+            if (document.getElementById('fcGen')) {
+              document.dispatchEvent(new CustomEvent('patv:gen-cam', { detail: c }));
+              snapClose();
+            } else {
+              // no composer on this page (signed-out view, feed off): hand it to /feed's composer
+              try { sessionStorage.setItem('patvGenCam', JSON.stringify(c)); } catch (e) { /* too big / blocked */ }
+              location.href = '/feed';
+            }
+          }).catch(function () { g.disabled = false; res.className = 'res bad'; res.textContent = 'Couldn\'t reach the site.'; });
+      });
     }
     var saveTimer = null;
     function snapSaveRow(box, s) {

@@ -366,7 +366,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
         const u = await me(req);
         if (u && u.camfrogUsername) save = { sid: s.sid, cost: saveRight(s, req.user.userId), until: s.ts + SNAP_TTL, id: s.saves.get(req.user.userId) || null };
       }
-      return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save,
+      // 1.99dr: "✨ Use in Generate" - any viewer shown this frame may use it as an AI reference picture
+      // (aigen.js claims it by sid, re-checking the room and the person; priced like chat's -cam)
+      const gen = s.ok && s.img && s.viewers && s.viewers.has(req.user.userId) ? { sid: s.sid, until: s.ts + SNAP_TTL } : null;
+      return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save, gen,
         img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
     }
     res.json({ state: pending ? "pending" : "none" });
@@ -429,6 +432,22 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
 }
 
+/**
+ * 1.99dr: a snapshot this viewer was shown, for use as an AI reference picture (aigen.js claimCamRef).
+ * -> {login, img, ts} or {error, status}. Only the room's own frames, only fresh ones, only for an account that
+ * asked for (or rode on) that frame - the same rule as Save snap's "a snapshot you asked for".
+ */
+function snapForGen(roomId, sid, userId) {
+  sid = String(sid || "").slice(0, 40);
+  for (const [k, s] of snaps) {
+    if (!sid || s.sid !== sid || !k.startsWith(roomId + "|")) continue;
+    if (!s.ok || !s.img || Date.now() - s.ts >= SNAP_TTL) return { status: 410, error: "That snapshot expired — take a fresh one." };
+    if (!s.viewers || !s.viewers.has(userId)) return { status: 403, error: "That isn't a snapshot you asked for." };
+    return { login: k.slice(roomId.length + 1), img: s.img, ts: s.ts };
+  }
+  return { status: 410, error: "That snapshot expired — take a fresh one." };
+}
+
 /** The price this viewer would pay to save snapshot `s`, or null if the !snap rules say no. */
 function saveRight(s, userId) {
   if (!s || !s.rule || s.rule === "no") return null;
@@ -436,6 +455,6 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, cleanCmds, commandsText, CMD_DENY,
+module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
   _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

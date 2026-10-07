@@ -35,11 +35,14 @@
             <span class="fc-gen-ref-pick" id="fcGenRefPick">
               <label class="fc-gj-btn">📷 Upload<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" id="fcGenRefFile" hidden></label>
               <button type="button" class="fc-gj-btn" id="fcGenRefDraft" aria-expanded="false" aria-controls="fcGenRefList">🖼 From this draft</button>
+              <%# 1.99dr: a fresh snapshot of someone on cam in the picked pad's Camfrog room (aigen.js camList / claimCamRef) %>
+              <button type="button" class="fc-gj-btn hide" id="fcGenRefCam" aria-expanded="false" aria-controls="fcGenRefCams">📷 From a cam in this room</button>
             </span>
           </div>
           <div class="fc-gen-ref-list hide" id="fcGenRefList" aria-label="Pictures in this draft"></div>
+          <div class="fc-gen-ref-cams hide" id="fcGenRefCams" aria-label="People on cam in this pad's Camfrog room" aria-live="polite"></div>
           <ul class="fc-files fc-gen-ref-cur" id="fcGenRefCur" aria-live="polite"></ul>
-          <p class="fc-gen-ref-note">⚖️ Only use photos you have the right to use. A real person's photo can never be made nude or sexual, and minors are always refused. A reference adds <b id="fcGenRefPrice"></b> (like <code>-cam</code> in chat).</p>
+          <p class="fc-gen-ref-note">⚖️ Only use photos you have the right to use. A real person's photo (or cam) can never be made nude or sexual, and minors are always refused. A cam snapshot is only used for this generation - it isn't saved anywhere. A reference adds <b id="fcGenRefPrice"></b> (like <code>-cam</code> in chat).</p>
         </div>
         <div class="fc-gen-go">
           <span class="fc-gen-price" id="fcGenPrice"></span>

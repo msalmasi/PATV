@@ -41,6 +41,17 @@
 //     origin = 'room' (never in the composer, no inbox notices) that takes the same /chunk + /result; /result then
 //     makes the post itself (free - it was paid in chat - and never announced in the room: it was just shown
 //     there). Anything refused = skipped; the chat command is never held up by it.
+//
+// 1.99dr
+//   * Cam snapshots as the reference: the pad page's bridge popover ("✨ Use in Generate" next to Save snap) and the
+//     Generate panel ("📷 From a cam in this room": the people on cam in the picked pad's Camfrog room, from the bridge
+//     roster - incognito / bridge-hidden people arrive anonymised and are never listed - then a fresh snapshot by
+//     Pepe through the bridge's normal snap job, so the room's !bridge cams switch and the snapshot rate limits
+//     apply). POST /api/feed/aigen/camref claims a frame this account was shown (bridge-relay snapForGen) into a
+//     private, memory-only slot (CAMREF_TTL); POST /api/feed/aigen with `camref` copies it to the job (memory only)
+//     and /start hands it to Pepe ONCE with ref_cam {room, login} - he re-checks the person's opt-out and the room's
+//     switches before charging. Same price as a reference picture = chat's -cam (+ camsurcharge). The frame is
+//     never written to disk or the database; only the generated result becomes an attachment (kept if attached).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -66,6 +77,17 @@ const DEFAULT_SURCHARGE = 10000;                                // Pepe's DEFAUL
 const REF_MAX_PX = 1536;                                        // the reference picture Pepe gets (JPEG)
 const ROOM_PEPE_PER_DAY = 40;                                   // room generations Pepe posts per pad per 24 h (on members' behalf)
 const ATT_RE = /^[a-f0-9]{16,40}$/;
+// 1.99dr: cam snapshots as the reference (memory only - never on disk, never in the DB)
+const CAMREF_TTL = 15 * 60e3;                                   // a claimed snapshot waits this long for "Generate"
+const CAMREF_PER_USER = 3;
+const CAMREF_RE = /^c[a-f0-9]{20}$/;
+const camRefs = new Map();                                      // claim id -> {img, userId, room, login, display, ts}
+const camJobFrames = new Map();                                 // job id -> {img, ts}  (taken by /start, once)
+let bridgeRoom = (roomId) => {
+  try { const B = require("./bridge"); const R = B._rooms.get(roomId); return R && B.isLive(R) ? R : null; } catch (e) { return null; }
+};
+let snapForGen = (roomId, sid, userId) => require("./bridge-relay").snapForGen(roomId, sid, userId);
+function _setBridge(roomFn, snapFn) { if (roomFn) bridgeRoom = roomFn; if (snapFn) snapForGen = snapFn; }
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
@@ -84,7 +106,8 @@ function init() {
       await runQuery("CREATE INDEX IF NOT EXISTS feed_aigen_user ON feed_aigen_jobs (user_id, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS feed_aigen_status ON feed_aigen_jobs (status, created)");
       // 1.99dn: the reference picture (an attachment id) + room generations posted to the pad feed
-      for (const [col, def] of [["ref_att", "TEXT"], ["origin", "TEXT"], ["post_id", "TEXT"], ["title", "TEXT"], ["byline", "TEXT"]]) {
+      for (const [col, def] of [["ref_att", "TEXT"], ["origin", "TEXT"], ["post_id", "TEXT"], ["title", "TEXT"], ["byline", "TEXT"],
+                                ["ref_cam", "TEXT"]]) {      // 1.99dr: {room, login, display} of a cam-snapshot reference
         const have = (await getQuery("PRAGMA table_info(feed_aigen_jobs)")).some((c) => c.name === col);
         if (!have) await runQuery(`ALTER TABLE feed_aigen_jobs ADD COLUMN ${col} ${def}`);
       }
@@ -162,11 +185,15 @@ async function refusal(u, padId) {
 }
 
 // ── jobs ──
+function camOf(j) {
+  if (!j || !j.ref_cam) return null;
+  try { const c = JSON.parse(j.ref_cam); return c && typeof c === "object" ? c : null; } catch (e) { return null; }
+}
 function view(j, att) {
   const live = j.status === "queued" || j.status === "running";
   return {
     id: j.id, kind: j.kind, prompt: j.prompt, status: j.status, message: j.message || null, price: j.price, cost: j.cost,
-    refunded: !!j.refunded, nsfw: !!j.nsfw, ref: !!j.ref_att, created: j.created, started: j.started, secs: j.secs || 0, eta: ETA[j.kind],
+    refunded: !!j.refunded, nsfw: !!j.nsfw, ref: !!(j.ref_att || j.ref_cam), refCam: camOf(j) ? camOf(j).display : null, created: j.created, started: j.started, secs: j.secs || 0, eta: ETA[j.kind],
     elapsed: live ? Math.max(0, Math.round((NOW() - (j.started || j.created)) / 1000)) : null,
     attachment: att ? { id: att.id, kind: att.kind, w: att.w, h: att.h, secs: att.secs, posted: !!att.post_id,
                         url: "/feed/f/" + (att.thumb || att.poster || att.file), file: "/feed/f/" + att.file,
@@ -191,6 +218,51 @@ async function mine(userId) {
     out.push(view(j, a));
   }
   return out;
+}
+
+// ── 1.99dr: cams in a pad's Camfrog room, as reference pictures ──
+/** A member of bridge room R by login - never an anonymised (incognito / bridge-hidden) one, never Pepe. */
+function camMember(R, login) {
+  const low = String(login || "").toLowerCase();
+  return (R && Array.isArray(R.members) ? R.members : []).find((m) => m && !m.anon && !m.self && m.login && String(m.login).toLowerCase() === low) || null;
+}
+/** The people on cam in the pad's Camfrog room -> {ok, slug, room, cams: [{login, display}], why}. */
+async function camList(user, padId) {
+  await init();
+  const pad = await normPad(padId);
+  const room = camfrogRoomOf(pad);
+  if (!room) return { ok: true, cams: [], why: "Pick a Camfrog pad - the cams come from its Camfrog room." };
+  const R = bridgeRoom(room);
+  if (!R) return { ok: true, cams: [], why: "That pad's Camfrog room isn't live on the site right now." };
+  if (!R.cams) return { ok: true, cams: [], why: "Cam snapshots aren't switched on in that Camfrog room." };
+  const cams = R.members.filter((m) => m && !m.anon && !m.self && m.on_cam === true && m.login)
+    .map((m) => ({ login: String(m.login), display: String(m.display || m.login) }))
+    .sort((a, b) => a.display.localeCompare(b.display));
+  return { ok: true, slug: R.slug, room: R.id, cams, why: cams.length ? null : "Nobody is on cam there right now." };
+}
+/** Claim a bridge snapshot this account was shown (sid) as its reference picture -> {ok, id, display, room, until}. */
+async function claimCamRef(user, b) {
+  await init();
+  const u = await store.account(user.userId);
+  if (!u) throw new Refuse(401, "Sign in first.");
+  const pad = await normPad(b.pad);
+  const room = camfrogRoomOf(pad);
+  if (!room) throw new Refuse(400, "Cam snapshots come from a Camfrog pad's room.");
+  const why = await refusal(u, pad);
+  if (why) throw new Refuse(why.status || 403, why.message);
+  const R = bridgeRoom(room);
+  if (!R || !R.cams) throw new Refuse(403, "Cam snapshots aren't switched on in that Camfrog room.");
+  const s = snapForGen(R.id, b.sid, u.userId);
+  if (!s || s.error) throw new Refuse((s && s.status) || 410, (s && s.error) || "That snapshot expired - take a fresh one.");
+  const m = camMember(R, s.login);
+  if (!m) throw new Refuse(403, "Their cam can't be used.");          // incognito / hidden since, or gone
+  const t = NOW();
+  const mineNow = [...camRefs.entries()].filter(([, c]) => c.userId === u.userId).sort((x, y) => x[1].ts - y[1].ts);
+  while (mineNow.length >= CAMREF_PER_USER) camRefs.delete(mineNow.shift()[0]);
+  const id = "c" + crypto.randomBytes(10).toString("hex");
+  camRefs.set(id, { img: s.img, userId: u.userId, room: R.id, login: String(m.login).toLowerCase(), display: String(m.display || m.login), ts: t });
+  console.log(`[aigen] cam ref ${id} by ${u.username}: ${m.login} in ${R.id}`);
+  return { ok: true, id, display: String(m.display || m.login), room: R.id, until: t + CAMREF_TTL };
 }
 
 async function create(user, b, { queue, audit } = {}) {
@@ -226,27 +298,41 @@ async function create(user, b, { queue, audit } = {}) {
     }
     ref = a.id;
   }
+  // 1.99dr: or a cam snapshot from the pad's Camfrog room (claimed by this account, still allowed)
+  let cam = null;
+  if (b.camref != null && b.camref !== "") {
+    if (ref) throw new Refuse(400, "Use one reference picture - the upload or the cam.");
+    const c = CAMREF_RE.test(String(b.camref)) ? camRefs.get(String(b.camref)) : null;
+    if (!c || c.userId !== u.userId || NOW() - c.ts > CAMREF_TTL) throw new Refuse(410, "That cam snapshot expired - take a fresh one.");
+    if (camfrogRoomOf(pad) !== c.room) throw new Refuse(400, "That cam snapshot is from another pad's Camfrog room - pick that pad, or a cam here.");
+    const R = bridgeRoom(c.room);
+    if (!R || !R.cams || !camMember(R, c.login)) throw new Refuse(403, "Their cam can't be used any more.");
+    cam = c;
+  }
   const prices = await pricesFor(pad);
-  const price = prices[kind] + (ref ? await refPriceFor(pad) : 0);
+  const price = prices[kind] + (ref || cam ? await refPriceFor(pad) : 0);
   const shown = cleanPrice(b.price);
   if (shown != null && shown < price) throw new Refuse(409, `The price changed to ${fmt(price)} PAT - check it and try again.`);
   const id = "g" + crypto.randomBytes(10).toString("hex");
   const back = /^\/[A-Za-z0-9/_?=&.%#-]*$/.test(String(b.back || "")) && !String(b.back).startsWith("//") ? String(b.back).slice(0, 200) : null;
   const t = NOW();
-  await runQuery(`INSERT INTO feed_aigen_jobs (id, user_id, username, camfrog, kind, prompt, pad, room, price, status, back, created, ref_att)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)`,
-                 [id, u.userId, u.username, u.camfrogUsername || null, kind, prompt, pad, camfrogRoomOf(pad), price, back, t, ref]);
+  await runQuery(`INSERT INTO feed_aigen_jobs (id, user_id, username, camfrog, kind, prompt, pad, room, price, status, back, created, ref_att, ref_cam)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
+                 [id, u.userId, u.username, u.camfrogUsername || null, kind, prompt, pad, camfrogRoomOf(pad), price, back, t, ref,
+                  cam ? JSON.stringify({ room: cam.room, login: cam.login, display: cam.display }) : null]);
+  if (cam) camJobFrames.set(id, { img: cam.img, ts: t });            // private to this job; /start hands it over once
   try {
     const aid = await (queue || require("./actions").queue)(u.userId, { kind: "aigen", args: [id], tag: "aigen", label: `✨ generate ${kind}: ${prompt}`.slice(0, 200), idem: b.idem });
     await runQuery("UPDATE feed_aigen_jobs SET action_id = ? WHERE id = ?", [aid || null, id]);
   } catch (e) {
+    camJobFrames.delete(id);
     await runQuery("DELETE FROM feed_aigen_jobs WHERE id = ?", [id]);
     if (e.message === "duplicate") throw new Refuse(409, "Already sent - that one is generating.");
     if (e.message === "busy") throw new Refuse(429, "You already have a few things waiting for Pepe - give him a moment.");
     throw e;
   }
   if (audit) await audit({ kind: "aigen", id, event: "generate", user: u }).catch(() => {});
-  console.log(`[aigen] ${id} ${kind} by ${u.username} pad=${pad || "-"} price=${price}${ref ? " ref=" + ref : ""}`);
+  console.log(`[aigen] ${id} ${kind} by ${u.username} pad=${pad || "-"} price=${price}${ref ? " ref=" + ref : ""}${cam ? " cam=" + cam.login : ""}`);
   return view(await job(id), null);
 }
 
@@ -258,6 +344,7 @@ async function discard(user, id) {
   if (j.status === "queued") {
     const r = await runQuery("UPDATE feed_aigen_jobs SET status = 'discarded', finished = ?, message = 'cancelled - nothing was charged' WHERE id = ? AND status = 'queued'", [NOW(), id]);
     if (!r.changes) throw new Refuse(409, "It just started generating - you can discard it when it's done.");
+    camJobFrames.delete(id);
     return { ok: true, charged: false };
   }
   const a = await attOf(j);
@@ -289,6 +376,16 @@ async function start(b) {
   if (!r.changes) throw new Refuse(410, j.status === "discarded" ? "that generation was cancelled" : "that generation has expired");
   try { fs.unlinkSync(tmpPath(j.id)); } catch (e) { /* none */ }
   const out = { id: j.id, kind: j.kind, prompt: j.prompt, room: j.room || null, price: j.price, username: j.username, camfrog: j.camfrog || null };
+  // 1.99dr: a cam snapshot reference - handed over ONCE (memory only; a site restart = gone: Pepe refuses, nothing
+  // charged), with whose cam it is so Pepe can re-check their opt-out and the room's switches
+  if (j.ref_cam) {
+    const c = camOf(j);
+    out.has_ref = true;
+    out.ref_cam = c ? { room: String(c.room || ""), login: String(c.login || "") } : { room: "", login: "" };
+    const f = camJobFrames.get(j.id);
+    camJobFrames.delete(j.id);
+    if (f && f.img) out.ref = { data: f.img.toString("base64"), mime: "image/jpeg" };
+  } else
   // 1.99dn: the reference picture, as a JPEG (has_ref without data = it's gone: Pepe refuses, nothing charged)
   if (j.ref_att) {
     out.has_ref = true;
@@ -552,6 +649,8 @@ async function setPrices(b) {
 async function sweep() {
   await init();
   const t = NOW();
+  for (const [k, c] of camRefs) if (t - c.ts > CAMREF_TTL) camRefs.delete(k);           // 1.99dr
+  for (const [k, f] of camJobFrames) if (t - f.ts > QUEUE_TTL) camJobFrames.delete(k);
   const stale = await getQuery("SELECT * FROM feed_aigen_jobs WHERE (status = 'queued' AND created < ?) OR status = 'running'", [t - QUEUE_TTL]);
   let n = 0;
   for (const j of stale) {
@@ -607,6 +706,15 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
   app.post("/api/feed/aigen", json, addUser, guard, async (req, res) => {
     try { res.json({ ok: true, job: await create(req.user, req.body || {}, { audit: auditRec(req) }) }); } catch (e) { fail(res, e); }
   });
+  // 1.99dr: cams in the picked pad's Camfrog room (incognito / hidden never listed), and claiming a snapshot
+  app.get("/api/feed/aigen/cams", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
+    try { res.json(await camList(req.user, req.query.pad)); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/feed/aigen/camref", json, addUser, guard, async (req, res) => {
+    try { res.json(await claimCamRef(req.user, req.body || {})); } catch (e) { fail(res, e); }
+  });
   app.get("/api/feed/aigen/:id", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false });
@@ -661,4 +769,5 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
 
 module.exports = { register, init, create, discard, setPromptShown, start, progress, chunk, result, setPrices, sweep, mine, pricesFor, refusal, view,
                    refPriceFor, roomStart, roomGenOn, setRoomGen, optedOut, setOptOut, DEFAULT_SURCHARGE, ROOM_PEPE_PER_DAY, REF_MAX_PX,
-                   camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse };
+                   camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, camList, claimCamRef, camMember, _setBridge, CAMREF_TTL,
+                   _camRefs: camRefs, _camJobFrames: camJobFrames, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse };

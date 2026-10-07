@@ -621,4 +621,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, _rooms: rooms };
+module.exports = { register, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, isLive, _rooms: rooms };

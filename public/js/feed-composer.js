@@ -13,7 +13,11 @@
 //   * (1.99di) "✨ Generate": a picture or video made by Pepe's !imagine / !video (aigen.js) - prompt, price, a
 //     preview with progress, then Attach / Regenerate (charged again) / Discard (not refunded); jobs are kept on
 //     the server, so leaving the page loses nothing; (1.99dn) an optional reference picture - an upload (the
-//     normal upload pipeline, never added to the post) or a picture from this draft - priced + Pepe's -cam surcharge
+//     normal upload pipeline, never added to the post) or a picture from this draft - priced + Pepe's -cam surcharge;
+//     (1.99dr) or a CAM SNAPSHOT from the picked pad's Camfrog room: "📷 From a cam in this room" lists who's on cam
+//     (aigen.js camList - incognito / hidden people never), asks Pepe for a fresh snapshot (the bridge's snap job)
+//     and claims it (/api/feed/aigen/camref); the pad page's snapshot popover hands one over with "✨ Use in
+//     Generate" (the `patv:gen-cam` event, or sessionStorage "patvGenCam" when the composer is on another page)
 // Page: the pad bar, sort and pager links on /feed and /feed/following (data-swap)
 // swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
 // composer is ever lost.
@@ -277,6 +281,7 @@
     var PH = { image: 'Describe the picture… e.g. a frog DJ in a neon nightclub, synthwave style', video: 'Describe the clip… e.g. a frog surfing a huge wave at sunset, slow motion' };
     function kind() { var x = form.querySelector('input[name=genKind]:checked'); return x ? x.value : 'image'; }
     // 1.99dn: the reference picture (null | {id, url, name, state, upload: true for one uploaded just for this})
+    // 1.99dr: or a cam snapshot {cam: true, id: claim id, url: data URL, name, room: pad id, state: 'ready'}
     var ref = null;
     var refCur = document.getElementById('fcGenRefCur'), refList = document.getElementById('fcGenRefList');
     var refDraftBtn = document.getElementById('fcGenRefDraft'), refFile = document.getElementById('fcGenRefFile');
@@ -314,7 +319,9 @@
       var price = priceOf(k);
       if (again && !window.confirm('Make a new ' + what(k) + ' from the same prompt? It costs ' + fmtP(price) + ' again - the one you have now is not refunded.')) return;
       goBtn.disabled = true;
-      api('/api/feed/aigen', { kind: k, prompt: prompt, pad: picked() || null, price: price, ref: ref ? ref.id : null, back: location.pathname + location.search, idem: idem() })
+      if (ref && ref.cam && ref.room !== picked()) { setGErr('That cam snapshot is from another pad\'s room - pick a cam here.'); return; }
+      api('/api/feed/aigen', { kind: k, prompt: prompt, pad: picked() || null, price: price, ref: ref && !ref.cam ? ref.id : null,
+                               camref: ref && ref.cam ? ref.id : null, back: location.pathname + location.search, idem: idem() })
         .then(function (d) { if (!again) promptEl.value = ''; card(d.job); poll(d.job.id); })
         .catch(function (e) { setGErr(e.message); })
         .then(function () { goBtn.disabled = false; });
@@ -331,7 +338,8 @@
       refCur.innerHTML = '';
       var li = el('li'), th = el('span', 'th'), mid = el('div'), x = el('button', null, '✕');
       if (r.url) { th.style.backgroundImage = 'url("' + String(r.url).replace(/["\\]/g, '') + '")'; } else th.textContent = '🖼';
-      mid.appendChild(el('div', 'nm', r.name || 'Picture')); mid.appendChild(el('div', 'st', 'Reference picture ✔'));
+      mid.appendChild(el('div', 'nm', r.name || 'Picture'));
+      mid.appendChild(el('div', 'st', r.cam ? '📷 Cam snapshot ✔ · used only for this generation' : 'Reference picture ✔'));
       x.type = 'button'; x.setAttribute('aria-label', 'Don\'t use this picture as the reference');
       x.addEventListener('click', function () { clearRef(); });
       li.appendChild(th); li.appendChild(mid); li.appendChild(x); refCur.appendChild(li);
@@ -371,6 +379,94 @@
     });
     // the ✕ on a draft picture (or on the uploaded reference's own row) drops it as the reference too
     onFileRemoved = function (f) { if (ref && (ref === f || (ref.id && ref.id === f.id))) { ref = null; refCur.innerHTML = ''; showPrice(); } };
+
+    // ── 1.99dr: a cam in the picked pad's Camfrog room ──
+    var camBtn = document.getElementById('fcGenRefCam'), camsEl = document.getElementById('fcGenRefCams');
+    var camTimer = null, camSeq = 0;
+    function camPad() { return (cfg.camPads || []).indexOf(picked()) >= 0; }
+    function syncCamBtn() {
+      if (!camBtn) return;
+      camBtn.classList.toggle('hide', !camPad());
+      if (!camPad()) { camsEl.classList.add('hide'); camBtn.setAttribute('aria-expanded', 'false'); }
+      // a cam snapshot belongs to its pad's room: switching pads drops it
+      if (ref && ref.cam && ref.room !== picked()) { clearRef(); setGErr('The cam snapshot was from another pad - pick a cam in this one.'); }
+    }
+    function useCam(c) {
+      clearRef();
+      ref = { cam: true, id: c.id, url: c.img, name: (c.display || 'Someone') + '\'s cam', room: c.room, state: 'ready' };
+      refRow(ref); showPrice();
+      if (camsEl) { camsEl.classList.add('hide'); camsEl.innerHTML = ''; }
+      if (camBtn) camBtn.setAttribute('aria-expanded', 'false');
+    }
+    function camSay(text) { camsEl.innerHTML = ''; camsEl.appendChild(el('p', 'mut', text)); }
+    function camSnap(slug, who, seq) {
+      // Pepe takes a fresh snapshot through the bridge (the room's cam switch, rate limits and rules apply)
+      clearTimeout(camTimer);
+      camSay('Asking Pepe for a snapshot of ' + who.display + '\'s cam…');
+      fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: who.login }) })
+        .then(function (r) { return r.json(); })
+        .then(function (d) { if (seq !== camSeq) return; if (!d.ok) return camSay(d.error || 'Not right now.'); camPoll(slug, who, seq, 0); })
+        .catch(function () { if (seq === camSeq) camSay('Couldn\'t reach the site.'); });
+    }
+    function camPoll(slug, who, seq, n) {
+      camTimer = setTimeout(function () {
+        fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
+          .then(function (r) { return r.json(); })
+          .then(function (snap) {
+            if (seq !== camSeq) return;
+            if (snap.state === 'refused') return camSay((snap.status || 'Pepe couldn\'t get a picture') + '.');
+            if (snap.state !== 'ok') { if (n > 30) return camSay('Pepe didn\'t get a picture in time - try again in a bit.'); return camPoll(slug, who, seq, n + 1); }
+            if (!snap.gen || !snap.img) return camSay('That snapshot can\'t be used.');
+            return api('/api/feed/aigen/camref', { pad: picked(), sid: snap.gen.sid }).then(function (c) {
+              if (seq !== camSeq) return;
+              useCam({ id: c.id, display: c.display, room: c.room, img: snap.img });
+            });
+          }).catch(function (e) { if (seq === camSeq) camSay(e && e.message ? e.message : 'Couldn\'t reach the site.'); });
+      }, n ? 1500 : 800);
+    }
+    if (camBtn) camBtn.addEventListener('click', function () {
+      setGErr('');
+      var open = camsEl.classList.toggle('hide') === false;
+      camBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (!open) { camSeq++; clearTimeout(camTimer); return; }
+      var seq = ++camSeq;
+      camSay('Checking who\'s on cam…');
+      fetch('/api/feed/aigen/cams?pad=' + encodeURIComponent(picked() || ''), { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (seq !== camSeq) return;
+          if (!d || !d.ok) return camSay((d && d.error) || 'Not right now.');
+          if (!d.cams || !d.cams.length) return camSay(d.why || 'Nobody is on cam there right now.');
+          camsEl.innerHTML = '';
+          d.cams.forEach(function (who) {
+            var b = el('button', 'fc-gj-btn fc-gen-cam-it', '📷 ' + who.display); b.type = 'button';
+            b.title = 'Ask Pepe for a fresh snapshot of ' + who.display + '\'s cam';
+            b.addEventListener('click', function () { camSnap(d.slug, who, ++camSeq); });
+            camsEl.appendChild(b);
+          });
+        }).catch(function () { if (seq === camSeq) camSay('Couldn\'t reach the site.'); });
+    });
+    form.addEventListener('change', function (ev) { if (ev.target.name === 'community') syncCamBtn(); });
+    // "✨ Use in Generate" from the pad page's snapshot popover (same page), or handed over from another page
+    function takeCam(c) {
+      if (!c || !c.id || !c.img) return;
+      var radio = form.querySelector('input[name=community][value="' + String(c.room || '').replace(/["\\]/g, '') + '"]');
+      if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+      if (picked() !== c.room) { gen.classList.remove('hide'); setGErr('You can\'t post in that pad, so its cam can\'t be used here.'); return; }
+      gen.classList.remove('hide');
+      useCam(c);
+      setGErr('');
+      try { gen.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { /* old browsers */ }
+      promptEl.focus();
+    }
+    document.addEventListener('patv:gen-cam', function (ev) { takeCam(ev.detail); });
+    try {
+      var handed = JSON.parse(sessionStorage.getItem('patvGenCam') || 'null');
+      sessionStorage.removeItem('patvGenCam');
+      if (handed && handed.until > Date.now()) setTimeout(function () { takeCam(handed); }, 0);
+    } catch (e) { /* no storage: nothing handed over */ }
+    syncCamBtn();
 
     function statusLine(j) {
       if (j.status === 'queued') return 'Waiting for Pepe…';
