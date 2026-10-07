@@ -596,13 +596,78 @@ function xpForNextLevel(currentLevel) {
 // both saw the old values, BOTH paid the level-up reward and one overwrote the other's XP
 // (CFi00snkcl got "Level-up reward (Lv 4)" twice at 23:23:17 on 2026-10-05).
 const _levelLocks = new Map();
-function updateLevel(userId, additionalXp) {
+function _withLevelLock(userId, fn) {
   const prev = _levelLocks.get(userId) || Promise.resolve();
-  const run = prev.catch(() => {}).then(() => _updateLevelLocked(userId, additionalXp));
+  const run = prev.catch(() => {}).then(fn);
   const tail = run.catch(() => {});
   _levelLocks.set(userId, tail);
   tail.then(() => { if (_levelLocks.get(userId) === tail) _levelLocks.delete(userId); });
   return run;
+}
+function updateLevel(userId, additionalXp) {
+  return _withLevelLock(userId, () => _updateLevelLocked(userId, additionalXp));
+}
+
+// ── Admin XP / level adjustments (1.99cy: the Users & Accounts "XP" card, POST /api/admin/update-level) ──
+// An admin can add (or take away) XP, or set a level outright. Decisions:
+//   * NO level-up rewards: an admin adjustment never pays the 25k per-level reward or a milestone bonus, and
+//     writes nothing to levelup_rewards / levelup_milestones - so if the levels are later taken away and the
+//     member earns them again by playing, those levels pay normally then. Owed milestones aren't retried here.
+//   * Level-unlock cosmetics and level achievements DO follow the new level (they're derived from it, not PAT).
+//   * Serialised with updateLevel through the same per-user lock, so it can't interleave with a game award.
+//   * Every applied change is an admin audit event (adminaudit.js, action "xp").
+const ADMIN_XP_MAX = 50000000;           // |XP| per adjustment
+const ADMIN_LEVEL_MAX = 200;
+/** All the XP it takes to reach `level` from level 0, plus `xp` into the next one. */
+function totalXpOf(level, xp) {
+  let n = 0;
+  for (let l = 0; l < level; l++) n += xpForNextLevel(l);
+  return n + (Number(xp) || 0);
+}
+/** The (level, xp) a total amount of XP comes to. */
+function levelOfTotal(total) {
+  let level = 0, xp = Math.max(0, Math.floor(total));
+  while (level < 100000 && xp >= xpForNextLevel(level)) { xp -= xpForNextLevel(level); level++; }
+  return { level, xp };
+}
+/** Check an admin adjustment's input. -> {mode, amount} or throws {status:400, message}. */
+function checkXpAdjust(mode, amount) {
+  const bad = (m) => Object.assign(new Error(m), { status: 400 });
+  if (mode !== "add" && mode !== "set_level") throw bad("Pick add XP or set level.");
+  const s = String(amount == null ? "" : amount).trim();
+  if (!/^-?\d+$/.test(s)) throw bad(mode === "add" ? "XP must be a whole number (negative takes XP away)." : "The level must be a whole number.");
+  const n = Number(s);
+  if (mode === "add") {
+    if (n === 0) throw bad("Adding 0 XP changes nothing.");
+    if (Math.abs(n) > ADMIN_XP_MAX) throw bad(`At most ${ADMIN_XP_MAX.toLocaleString("en-US")} XP at a time.`);
+  } else if (n < 0 || n > ADMIN_LEVEL_MAX) throw bad(`The level must be between 0 and ${ADMIN_LEVEL_MAX}.`);
+  return { mode, amount: n };
+}
+function _xpPlan(cur, mode, amount) {
+  const before = { level: Number(cur.level) || 0, xp: Math.floor(Number(cur.xp) || 0) };
+  const after = mode === "add" ? levelOfTotal(totalXpOf(before.level, before.xp) + amount) : { level: amount, xp: 0 };
+  return { before, after, xpDelta: totalXpOf(after.level, after.xp) - totalXpOf(before.level, before.xp) };
+}
+/**
+ * Preview (apply = false) or apply an admin adjustment. -> {before, after, xpDelta, applied}
+ * The caller has checked the admin and the input (checkXpAdjust); onApplied(plan) records the audit event.
+ */
+function adminAdjustXp(userId, { mode, amount }, { apply = false, onApplied = null } = {}) {
+  const go = async () => {
+    const row = (await getQuery("SELECT xp, level FROM users WHERE userId = ?", [userId]))[0];
+    if (!row) throw Object.assign(new Error("No such account."), { status: 404 });
+    const plan = _xpPlan(row, mode, amount);
+    if (!apply) return { ...plan, applied: false };
+    await runQuery("UPDATE users SET xp = ?, level = ? WHERE userId = ?", [plan.after.xp, plan.after.level, userId]);
+    if (plan.after.level > plan.before.level) {
+      try { require("./achievements").checkWeb(userId); } catch (e) { /* best effort */ }
+      require("./cosmetics").grantUnlocks(userId, { level: plan.after.level }).catch(() => {});
+    }
+    if (onApplied) await onApplied(plan);
+    console.log(`[xp] admin adjustment ${userId}: Lv ${plan.before.level} (${plan.before.xp}) -> Lv ${plan.after.level} (${plan.after.xp}), no rewards`);
+    return { ...plan, applied: true };
+  };
+  return apply ? _withLevelLock(userId, go) : go();
 }
 
 // Level-up rewards (1.99ax, "option E"): every level pays LEVELUP_BASE_REWARD; a level that's a
@@ -805,6 +870,10 @@ module.exports = {
   awardBadge,
   xpForNextLevel,
   updateLevel,
+  adminAdjustXp,
+  checkXpAdjust,
+  totalXpOf,
+  levelOfTotal,
   levelReward,
   milestoneReward,
   LEVELUP_BASE_REWARD,

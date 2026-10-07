@@ -210,6 +210,8 @@ require("./terms").register(app, { addUser });   // 1.99cc: /terms, /privacy, PO
 // The admin area (adminweb.js, 1.99cu): /admin Overview + section pages in one shell; /admin/panel -> /admin.
 // Same gate as the old /admin/panel: Admin or Staff, else a flash + /login.
 require("./adminweb").register(app, { addUser });
+// 1.99cy: the XP card's POST /api/admin/update-level (preview, then confirm; admins only; no level-up rewards; audited)
+require("./adminxp").register(app, { addUser });
 
 // Welcome bonus admin (welcome.js, 1.99bg): settings, the last decisions, "pay anyway". Admins only.
 async function welcomeAdmin(req) {

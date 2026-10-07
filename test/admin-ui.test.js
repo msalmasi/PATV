@@ -176,7 +176,7 @@ test("control inventory: every control of the old /admin/panel is on its section
   const js = fs.readFileSync(path.join(repo, "public/js/admin-panel.js"), "utf8");
   for (const ep of ["/api/admin/welcome", "/api/admin/welcome/config", "/api/admin/welcome/pay", "/api/admin/stale", "/api/classes", "/api/classes/edit", "/api/admin/update-level",
                     "/api/admin/redemption-codes", "/api/badges", "/api/g/wheel/spin", "/api/g/wheel/jackpot"]) assert.ok(js.includes("'" + ep), "admin-panel.js calls " + ep);
-  assert.ok(js.includes("additionalXp") && js.includes("uses_allowed") && js.includes("new FormData(badges)"), "same request bodies");
+  assert.ok(js.includes("set_level") && js.includes("body.confirm = true") && js.includes("uses_allowed") && js.includes("new FormData(badges)"), "same request bodies");
   assert.ok(!fs.existsSync(path.join(repo, "views/adminPanel.ejs")), "the old one-page view is gone (its route redirects)");
 });
 

@@ -33,13 +33,19 @@
   </section>
 
   <section class="adm-card" id="xp" aria-labelledby="xpT">
-    <h2 id="xpT">Add XP</h2>
-    <p class="adm-help">Adds XP to an account. <b>Known issue:</b> the server has no <code>/api/admin/update-level</code> route, so this fails - it did on the old admin page too. Kept as it was until it gets a real endpoint.</p>
+    <h2 id="xpT">XP and level <span class="adm-pill admin">admins</span></h2>
+    <p class="adm-help">Add (or take away) XP, or set a level. You see the change before it's applied. Admin adjustments pay <b>no</b> level-up PAT rewards; level-unlock cosmetics and achievements follow the new level. Every change is written to the admin log.</p>
     <form id="xpTransferForm" class="adm-form" action="/api/admin/update-level" method="POST">
-      <label for="xpUsername">Username<input type="text" id="xpUsername" name="username" required autocomplete="off"></label>
-      <label for="xpAmount">XP<input type="number" id="xpAmount" name="xp" required></label>
-      <div class="adm-actions"><button type="submit">Add XP</button><span id="xpStatus" class="adm-msg" role="status"></span></div>
+      <label for="xpUsername">Username<input type="text" id="xpUsername" name="username" required autocomplete="off" maxlength="64"></label>
+      <label for="xpMode">Change<select id="xpMode" name="mode"><option value="add">Add XP</option><option value="set_level">Set level</option></select></label>
+      <label for="xpAmount" id="xpAmountLbl">XP (negative takes away)<input type="number" id="xpAmount" name="amount" required step="1" inputmode="numeric"></label>
+      <label for="xpReason">Reason (optional, for the log)<input type="text" id="xpReason" name="reason" maxlength="200" autocomplete="off"></label>
+      <div class="adm-actions"><button type="submit">Review change…</button><span id="xpStatus" class="adm-msg" role="status"></span></div>
     </form>
+    <details class="adm-adv">
+      <summary>Recent adjustments</summary>
+      <div class="adm-adv-body"><ul class="adm-help" id="xpRecent" style="margin:0;padding-left:18px"></ul></div>
+    </details>
   </section>
 
   <section class="adm-card" id="merges" aria-labelledby="mergesT">
@@ -86,7 +92,7 @@
   </table></div>
   <p id="stale-vias" class="adm-help" style="margin-top:8px"></p>
 </section>
-<script src="/public/js/admin-panel.js?v=1" defer></script>
+<script src="/public/js/admin-panel.js?v=2" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

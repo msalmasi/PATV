@@ -87,13 +87,48 @@
   }
 
   // ── Users & Accounts: XP ──
+  // 1.99cy: a real endpoint. Two steps: the first POST is a preview (nothing changes), a confirm() shows
+  // before -> after, and only then the same request goes again with confirm: true. Admins only (server).
   var xp = $('xpTransferForm');
   if (xp) {
+    var xpMode = $('xpMode'), xpAmount = $('xpAmount');
+    var xpLabel = function () {
+      var lvl = xpMode.value === 'set_level';
+      $('xpAmountLbl').firstChild.nodeValue = lvl ? 'New level' : 'XP (negative takes away)';
+      xpAmount.min = lvl ? '0' : ''; xpAmount.max = lvl ? '200' : '';
+    };
+    xpMode.addEventListener('change', xpLabel); xpLabel();
+    var lv = function (s) { return 'Lv ' + n(s.level) + ' (' + n(s.xp) + ' XP)'; };
+    var xpRecent = function () {
+      var list = $('xpRecent');
+      if (!list) return;
+      fetch('/api/admin/xp/recent').then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || !d.ok) { list.innerHTML = '<li class="adm-help">Admins only.</li>'; return; }
+        list.innerHTML = (d.items || []).map(function (x) {
+          var D = x.detail || {};
+          return '<li><b>' + esc(x.target || x.targetId) + '</b>: ' + (D.before ? esc(lv(D.before)) + ' → ' + esc(lv(D.after)) : '') + ' <small>by ' + esc(x.admin || '?') + ' · '
+            + when(x.at) + (x.reason ? ' · ' + esc(x.reason) : '') + '</small></li>';
+        }).join('') || '<li class="adm-help">No adjustments yet.</li>';
+      }).catch(function () {});
+    };
+    xpRecent();
     xp.addEventListener('submit', function (e) {
       e.preventDefault();
-      legacy(fetch('/api/admin/update-level', {
-        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: $('xpUsername').value, additionalXp: $('xpAmount').value }), method: 'POST',
-      }), 'XP added successfully.', 'XP adding failed. Check the username.', 'xpStatus');
+      var raw = String(xpAmount.value || '').trim();
+      if (!/^-?\d+$/.test(raw)) { say('xpStatus', false, 'Enter a whole number.'); return; }
+      var body = { username: $('xpUsername').value.trim(), mode: xpMode.value, amount: Number(raw), reason: $('xpReason').value.trim() };
+      var btn = xp.querySelector('button[type=submit]');
+      var go = function (b) { return postJson('/api/admin/update-level', b).then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); }); };
+      btn.disabled = true; say('xpStatus', true, 'Checking…');
+      go(body).then(function (p) {
+        var msg = '@' + p.user + ': ' + lv(p.before) + ' → ' + lv(p.after) + '\n'
+          + (p.xpDelta >= 0 ? '+' : '') + n(p.xpDelta) + ' XP in total.' + (p.archived ? '\nThis account is archived.' : '')
+          + '\n\nAdmin adjustments pay NO level-up rewards. This is recorded in the admin log. Apply it?';
+        if (!window.confirm(msg)) { say('xpStatus', false, 'Not changed.'); return null; }
+        body.confirm = true;
+        return go(body).then(function (d) { say('xpStatus', true, '@' + d.user + ' is now ' + lv(d.after) + '.'); xp.reset(); xpLabel(); xpRecent(); });
+      }).catch(function (x) { say('xpStatus', false, x.message || 'Failed.'); })
+        .then(function () { btn.disabled = false; });
     });
   }
 
