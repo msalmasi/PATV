@@ -48,7 +48,7 @@
 <style>
   .hm { --card: #111; --line: #222; --muted: #8a8a8a; --green: #4caf50; --lime: #c6e94f; --gold: #ffd700;
         max-width: 1400px; margin: 0 auto; padding: 14px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
-        display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
+        display: grid; gap: var(--cardgap); box-sizing: border-box; width: 100%; }
   .hm *, .hm *::before, .hm *::after { box-sizing: border-box; }
   .hm a { color: #81c784; text-decoration: none; }
   .hm a:hover { color: #a5d6a7; }
@@ -70,7 +70,7 @@
 
   /* ── main stage ── */
   /* 1.99ds: one padding for every card and the stage (--px / --py), one gap between blocks (--gap) */
-  .hm { --px: 16px; --py: 14px; --gap: 12px; }
+  .hm { --px: 16px; --py: 14px; --gap: 12px; --cardgap: 14px; }
   .hm .stage { border: 1px solid var(--line); border-radius: 14px; background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #0d0d0f 55%); overflow: hidden; }
   .hm .stage .bar { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: var(--py) var(--px) var(--gap); min-width: 0; }
   .hm .stage .bar .ttl { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .1em; color: var(--lime); }
@@ -170,7 +170,19 @@
   .hm .me .acts .btn { padding: 7px 11px; font-size: 13px; }
 
   /* ── room + live now ── */
-  .hm .main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+  .hm .main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--cardgap); align-items: start; }
+  .hm .hm-aside { display: grid; gap: var(--cardgap); align-content: start; min-width: 0; }
+  /* 1.99dw: no dead space under the room card - on desktop it stretches to the right column's height and the
+     chat log takes the extra room (380 px minimum, scrolls as before) */
+  @media (min-width: 1101px) {
+    .hm .main { align-items: stretch; }
+    .hm .main > .lr-card { display: flex; flex-direction: column; }
+    .hm .lr-card > .lr { flex: 1 1 auto; min-height: 0; }
+    .hm .lr-card .lr-log { display: flex; flex-direction: column; min-height: 0; }
+    .hm .lr-card .lr-log > * { flex: none; }
+    .hm .lr-card .lr-log > .lr-feed { flex: 1 1 380px; height: auto; min-height: 380px; }
+    .hm .lr-card > .tease { flex: 1 1 auto; align-content: center; }
+  }
   .hm .lr { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 12px; }
   .hm .lr-feed { display: flex; flex-direction: column; gap: 2px; height: 380px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
   .hm .ln { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; padding: 3px 6px; border-radius: 6px; }
@@ -212,7 +224,7 @@
 
   /* ── things to do ── */
   .hm .todo { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
-  .hm .todo a { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 0 8px; align-items: center; background: #111; border: 1px solid #222; border-radius: 10px; padding: 8px 10px; color: #e6e6e6 !important; font-size: 14px; position: relative; }
+  .hm .todo a { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 0 8px; align-items: center; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 10px; padding: 8px 10px; color: #e6e6e6 !important; font-size: 14px; position: relative; }
   .hm .todo a:hover, .hm .todo a:focus-visible { border-color: #2f5a34; }
   .hm .todo .i { font-size: 18px; grid-row: span 2; text-align: center; }
   .hm .todo b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -220,16 +232,17 @@
   .hm .todo a.hot { border-color: #3a5a2a; }
   .hm .todo a.hot small { color: #9ccc65; }
   .hm .todo .tag { position: absolute; top: -7px; right: 8px; font-size: 10px; padding: 1px 7px; border-radius: 999px; background: #6b5a20; color: #fff3c4; font-weight: bold; }
-  .hm .tf { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: end; }
-  .hm .tf a { display: grid; justify-items: center; gap: 4px; text-align: center; background: #111; border: 1px solid #222; border-radius: 14px; padding: 12px 8px; color: #e6e6e6 !important; position: relative; }
+  /* 1.99dw: five equal cards, one baseline; #1 is highlighted by border + background only */
+  .hm .tf { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+  .hm .tf li { display: grid; min-width: 0; }
+  .hm .tf a { display: grid; grid-template-rows: auto auto auto auto; align-content: start; justify-items: center; gap: 4px; text-align: center; background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 12px; padding: 14px 8px 12px; color: #e6e6e6 !important; position: relative; min-width: 0; }
   .hm .tf a:hover, .hm .tf a:focus-visible { border-color: #2f5a34; }
-  .hm .tf .r1 a { border-color: #6b5a20; background: linear-gradient(180deg, #2a2410, #111 70%); padding-top: 20px; }
-  .hm .tf .r2 a { border-color: #4a4f55; padding-top: 16px; }
-  .hm .tf .r3 a { border-color: #5a4330; padding-top: 14px; }
+  .hm .tf .r1 a { border-color: #6b5a20; background: linear-gradient(180deg, #2a2410, #0d0d0d 70%); }
+  .hm .tf .r2 a { border-color: #4a4f55; }
+  .hm .tf .r3 a { border-color: #5a4330; }
   .hm .tf .rk { position: absolute; top: 6px; left: 8px; font-family: 'Press Start 2P', monospace; font-size: 11px; color: var(--muted); }
   .hm .tf .r1 .rk { color: #ffd700; } .hm .tf .r2 .rk { color: #cfd8dc; } .hm .tf .r3 .rk { color: #d7a46b; }
   .hm .tf .av { width: 88px; height: 88px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 16px 16px; }
-  .hm .tf .r1 .av { width: 104px; height: 104px; }
   .hm .tf .av svg { width: 100%; height: 100%; image-rendering: pixelated; shape-rendering: crispEdges; }
   .hm .tf .av img { width: 70%; height: 70%; border-radius: 50%; object-fit: cover; }
   .hm .tf .nm { font-weight: bold; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -237,7 +250,12 @@
   .hm .tf .lv { color: var(--muted); font-size: 12px; }
   .hm .pitch { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; }
   .hm .pitch p { margin: 0; color: #c9d3c9; font-size: 14.5px; line-height: 1.5; }
-  .hm .foot { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--muted); justify-content: center; padding-top: 4px; }
+  .hm h2 .h2r { display: inline-flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .hm h2 .h2r small { color: var(--muted); }
+  /* 1.99dw: the admin Pepe control panel (partials/pepe-control) is a card like the rest */
+  .hm .pc { background: var(--card); border-color: var(--line); }
+  .hm .pc > summary { padding: var(--py) var(--px); }
+  .hm .pc .pc-body { padding: 0 var(--px) var(--py); }
   .hm code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
 
   @media (max-width: 1100px) {
@@ -253,12 +271,18 @@
     .hm .stage-main { max-width: none; }
   }
   @media (max-width: 520px) {
-    .hm { padding: 10px 10px 44px; gap: 12px; --px: 12px; --py: 12px; --gap: 10px; }
+    .hm { padding: 10px 10px 44px; --cardgap: 12px; --px: 12px; --py: 12px; --gap: 10px; }
     .hm .me .gtf { display: none; }
     .hm .lr-feed { height: 300px; }
     .hm .todo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .hm .tf { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .hm .tf .r1 { grid-column: 1 / -1; }
+    /* top frogs: one row each (same size for all five) */
+    .hm .tf { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    .hm .tf a { grid-template-columns: 56px minmax(0, 1fr) auto; grid-template-rows: auto auto; justify-items: start; align-items: center; gap: 0 12px; text-align: left; padding: 8px 12px 8px 34px; }
+    .hm .tf .rk { top: 50%; left: 10px; transform: translateY(-50%); }
+    .hm .tf .av { width: 56px; height: 56px; grid-row: 1 / span 2; border-radius: 10px; }
+    .hm .tf .nm { grid-column: 2; }
+    .hm .tf .pt { grid-column: 3; grid-row: 1 / span 2; }
+    .hm .tf .lv { grid-column: 2; grid-row: 2; }
     .hm .pitch { grid-template-columns: minmax(0, 1fr); }
   }
   /* paid stage slots (1.99al): which stream the stage shows */
@@ -469,12 +493,12 @@
   <!-- ───── room + live now ───── -->
   <div class="main">
     <% if (room) { %>
-    <section class="card" aria-labelledby="lrH">
+    <section class="card lr-card" aria-labelledby="lrH">
       <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'on' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
         <a href="/p/<%= encodeURIComponent(room.slug) %>">Open the pad ›</a></h2>
       <% if (me) { %>
         <div class="lr">
-          <div>
+          <div class="lr-log">
             <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat and mic transcripts" tabindex="0"><p class="muted">Loading the room…</p></div>
             <% if (me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><div id="lrPtt" style="margin-top:6px;display:grid;gap:4px"></div><% } %>
             <div class="ro">Live from Camfrog — read-only (v1). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
@@ -495,7 +519,7 @@
       <% } %>
     </section>
     <% } %>
-    <aside style="display:grid;gap:14px;align-content:start;min-width:0">
+    <aside class="hm-aside">
       <%# 1.99ci: the mini feed - the top 5 hot posts across every community (signed-out visitors: no NSFW) %>
       <% if (typeof hot !== 'undefined' && hot) { %><%- include('partials/home-hot', { hot, fx }) %><% } %>
       <section class="card now" aria-labelledby="nowH">
@@ -510,8 +534,8 @@
   </div>
 
   <!-- ───── things to do ───── -->
-  <section aria-labelledby="tdH">
-    <h2 id="tdH">Things to do <a href="/about">About PATV ›</a></h2>
+  <section class="card" aria-labelledby="tdH">
+    <h2 id="tdH"><span>Things to do</span><a href="/about">About PATV ›</a></h2>
     <div class="todo">
       <% todo.forEach((t) => { %>
         <a class="<%= t.hot ? 'hot' : '' %>" href="<%= t.href %>">
@@ -523,8 +547,8 @@
   </section>
 
   <!-- ───── top frogs ───── -->
-  <section aria-labelledby="tfH">
-    <h2 id="tfH">Top frogs <a href="/rankings">All rankings ›</a></h2>
+  <section class="card" aria-labelledby="tfH">
+    <h2 id="tfH"><span>Top frogs</span><span class="h2r"><small><%= fmt(S0.members) %> members</small><a href="/rankings">All rankings ›</a></span></h2>
     <ol class="tf">
       <% (top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
         <li class="r<%= i + 1 %>">
@@ -540,11 +564,7 @@
     </ol>
   </section>
 
-  <nav class="foot" aria-label="More">
-    <a href="/about">About PATV</a><a href="/economy">How PAT works</a><a href="https://pepe.publicaccess.tv" rel="noopener">Pepe's commands</a>
-    <a href="https://discord.gg/publicaccess" rel="noopener">Discord</a><a href="/achievements">Achievements</a><a href="/shop">Prize shop</a>
-    <span><%= fmt(S0.members) %> members</span>
-  </nav>
+  <%# 1.99dw: the old link row is in the site footer now (layout.ejs); the member count is in the Top frogs header %>
   <%- include('partials/pepe-control', { me }) %>
 </main>
 
