@@ -89,8 +89,8 @@
             <div class="navbar-right">
                 <%# 1.99ec: "✏️ Post" - the create-post page; on a pad's pages (/p/<pad>/...) it preselects that pad %>
                 <% const _pm = typeof ogPath !== 'undefined' && ogPath ? /^\/p\/([A-Za-z0-9._~%-]+)/.exec(ogPath) : null; %>
-                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="Create a post<%= _pm ? ' in p/' + _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() : '' %>"><span aria-hidden="true">✏️</span><span class="lb"> Post</span></a>
-                <a href="/stage" class="nav-golive" title="Go live: stream to a pad's stage"><span aria-hidden="true">🎥</span><span class="lb"> Go live</span></a>
+                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="Create a post<%= _pm ? ' in p/' + _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() : '' %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="lb">Post</span></a>
+                <a href="/stage" class="nav-golive" title="Go live: stream to a pad's stage"><span class="cta-ic" aria-hidden="true">🎥</span><span class="lb">Go live</span></a>
                 <% if (typeof user == 'undefined' || !user) { %>
                     <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
                 <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; const _dm = (typeof dmUnread !== 'undefined' && dmUnread > 0) ? dmUnread : 0; %>
@@ -139,15 +139,20 @@
             .nav-sep { height: 1px; background: #2c2c33; margin: 4px 2px; }
             .nav-burger { display: none; }
             .nav-burger > summary { font-size: 22px; line-height: 1; padding: 6px 10px; }
-            .nav-golive { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 999px; font-weight: bold; font-size: 14px; white-space: nowrap;
-                          background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; }
-            .nav-golive:hover, .nav-golive:focus-visible { filter: brightness(1.1); color: #fff !important; }
+            /* 1.99ek: Post and Go live share one pill base - same height, padding, font, radius, icon box and
+               min-width; only the colours differ (Post: green outline, Go live: red gradient). `.navbar a.nav-*` outranks
+               styles.css's `.navbar a { font-size: 16px; margin-right: 20px }` */
+            .navbar a.nav-post, .navbar a.nav-golive { display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box;
+                                height: 34px; min-width: 104px; padding: 0 14px; margin-right: 0; border-radius: 999px; border: 1px solid transparent;
+                                font: bold 14px/1 Ubuntu, sans-serif; white-space: nowrap; }
+            .nav-post .cta-ic, .nav-golive .cta-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 16px; line-height: 1; flex: none; }
+            .navbar a.nav-golive { background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; }
+            .navbar a.nav-golive:hover, .navbar a.nav-golive:focus-visible { filter: brightness(1.1); color: #fff !important; }
             /* 1.99ec: the secondary sibling of Go live */
-            .nav-post { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: 999px; font-weight: bold; font-size: 14px; white-space: nowrap;
-                        border: 1px solid #3c7a46; background: #12301a; color: #c8efcf !important; }
-            .nav-post:hover, .nav-post:focus-visible { border-color: #4caf50; color: #fff !important; }
-            /* 1.99ej: icon-only up to 500px (was 420 - signed in, 421-485px still overflowed with the labels) */
-            @media (max-width: 500px) { .nav-golive .lb, .nav-post .lb { display: none; } .nav-golive { padding: 6px 10px; } .nav-post { padding: 5px 10px; } }
+            .navbar a.nav-post { border-color: #3c7a46; background: #12301a; color: #c8efcf !important; }
+            .navbar a.nav-post:hover, .navbar a.nav-post:focus-visible { border-color: #4caf50; color: #fff !important; }
+            /* 1.99ej: icon-only up to 500px (was 420 - signed in, 421-485px still overflowed with the labels); 1.99ek: equal squares */
+            @media (max-width: 500px) { .nav-golive .lb, .nav-post .lb { display: none; } .navbar a.nav-post, .navbar a.nav-golive { width: 34px; min-width: 0; padding: 0; } }
             .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
             .navbar .avatar img { margin-left: 0; }
             .nav-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
@@ -174,7 +179,7 @@
                 .navbar { padding: 10px 8px; gap: 6px; }
                 .navbar-right { gap: 3px; }
                 #logo { margin-right: 4px; }
-                .nav-golive { padding: 6px 9px; } .nav-post { padding: 5px 9px; }
+                .navbar a.nav-post, .navbar a.nav-golive { width: 32px; height: 32px; }
                 .nav-bell { width: 34px; }
                 .nav-burger > summary { padding: 6px 7px; }
                 .navbar .avatar img { width: 36px; height: 36px; }

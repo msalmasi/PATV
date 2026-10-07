@@ -583,7 +583,7 @@ function register(app, { isBotToken, addUser }) {
     const want = String((req.query && req.query.platform) || "").toLowerCase();
     const platform = reg.PLATFORMS.includes(want) ? want : "";
     const rows = platform ? g.rows.filter((r) => r.platform === platform) : g.rows;
-    res.render("rooms", { padBadge: require("./pads").padBadge, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
+    res.render("rooms", { padBadge: require("./pads").padBadge, boostMark: require("./boostmark").boostMark, PAD_PLATFORMS: require("./pads").PLATFORM_INFO, user: req.user ? req.user.username : null, rows, allCount: g.rows.length, counts, platform, pepe: g.pepe, signedIn, staff: reg.isStaff(req.user), owned });
   });
 
   // 1.99ck: the pad page /p/<slug> - one page per pad (was /rooms/<slug> + /feed/c/<slug>): its header

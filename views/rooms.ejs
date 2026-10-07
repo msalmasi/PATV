@@ -2,7 +2,9 @@
 <% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
    const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
    /* 1.99ed: inside a pad card (one <a>) names are plain text - no nested links */
-   const TXT = (n, d) => escapeFn(d != null && d !== '' ? d : (n == null ? '' : n)); %>
+   const TXT = (n, d) => escapeFn(d != null && d !== '' ? d : (n == null ? '' : n));
+   /* 1.99ek: the shared 🚀 boost badge (boostmark.js) - "" when a pad isn't boosted */
+   const BM = typeof boostMark === 'function' ? boostMark : () => ''; %>
 <!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99ed: a pad card is ONE link (a.ch) with no buttons and no links inside; fixed rows (head / meta /
@@ -35,7 +37,6 @@
   .cg .cta .btns { display: flex; flex-direction: column; gap: 8px; }
   .cg .golive-btn { display: inline-flex; justify-content: center; align-items: center; gap: 7px; padding: 10px 16px; border-radius: 999px; font-weight: bold; font-size: 14.5px; white-space: nowrap;
                     background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; border: 0; }
-  .cg .golive-btn.ghost { background: #1d1a0f; border: 1px solid #6b5a20; color: #f3e3a3 !important; }
   .cg .pepe { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; background: #0f1a10; border: 1px solid #234d2a; border-radius: 14px; padding: 10px var(--px); font-size: 14px; }
   .cg .pepe b { color: #fff; }
   .cg .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
@@ -66,6 +67,8 @@
   .cg .ch-head .t { font-size: 17px; font-weight: bold; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* badges: platform + status, then a free slot for boost / trending marks (.ch-mark) */
   .cg .ch-badges { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+  /* 1.99ek: the 🚀 boost mark (boostmark.js) - active boost PAT, tooltip says how it fades */
+  .cg .pill.ch-mark { background: #20140a; border: 1px solid #7a4a1f; color: #ffd9a8; letter-spacing: 0; cursor: help; }
   .cg .ch-meta { grid-area: meta; font-size: 12.5px; color: #9aa59a; display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; min-width: 0; }
   .cg .ch-meta .padref { color: #9ccc9f; font-weight: bold; }
   .cg .ch-meta .own { color: #e8d9a0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -86,8 +89,9 @@
   .cg .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #181818; color: #ddd !important; font-size: 13px; font-weight: bold; max-width: 100%; }
   .cg .btn:hover, .cg .btn:focus-visible { border-color: #4caf50; }
   .cg .sched { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .cg .sched li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; align-items: baseline; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
-  .cg .sched time { color: #c6e94f; font-variant-numeric: tabular-nums; font-size: 13px; }
+  /* 1.99ek: the time column sizes to its content (max-content) and never wraps - "Sun, Oct 11 01:15 PM" stays on one line */
+  .cg .sched li { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px; align-items: baseline; background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
+  .cg .sched time { color: #c6e94f; font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
   .cg .sched .w { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cg .owned { display: flex; gap: 8px; flex-wrap: wrap; }
   .cg .empty { border: 1px dashed #333; border-radius: 12px; padding: 24px; text-align: center; color: #999; }
@@ -116,7 +120,7 @@
   .cg .tr-list .tags { display: flex; flex-wrap: wrap; gap: 4px; }
   .cg .tr-list .tg { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; color: #bbb; background: #151515; white-space: nowrap; }
   .cg .tr-list .tg.on { border-color: #2f6b3a; color: #bdf0c6; background: #12301a; }
-  .cg .tr-list .tg.boost { border-color: #7a4a1f; color: #ffd9a8; background: #20140a; }
+  .cg .tr-list .tg.boost { border-color: #7a4a1f; color: #ffd9a8; background: #20140a; font-weight: bold; cursor: help; }
   .cg .tr-list .bst { font-size: 12.5px; font-weight: bold; color: #ffd9a8; border: 1px solid #7a4a1f; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
   .cg .tr-list .bst:hover { border-color: #ff9a3c; color: #fff; }
 </style>
@@ -133,10 +137,10 @@
       <ol>
         <li>Pick a pad and a slot: <b>now</b>, <b>later</b>, or join the <b>queue</b>.</li>
         <li>Stream from <b>OBS</b>, straight from your <b>browser</b>, or drop a <b>YouTube / Twitch</b> link.</li>
-        <li>Want your pad on the front page? Get people chatting and on the mic. Fans can <b>🚀 boost</b> a pad to tip a close race.</li>
+        <li>Want your pad on the front page? Get people chatting and on the mic. Fans can <b>🚀 boost</b> a pad from its page to tip a close race.</li>
       </ol>
     </div>
-    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="golive-btn ghost" href="#trending">🚀 Boost a pad</a></div>
+    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a></div>
   </section>
 
   <div class="pepe" role="status">
@@ -162,7 +166,7 @@
       <ol class="tr-list">
         <% trend_.forEach((r) => { %><li class="<%= r.trend.front ? 'front' : '' %>">
           <a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a>
-          <span class="tags"><% if (r.trend.front) { %><span class="tg on">📺 On the front page</span><% } else { %><span class="tg">Trending #<%= r.trend.rank - (trend_[0].trend.front ? 1 : 0) %></span><% } %><% if (r.trend.boost > 0) { %><span class="tg boost">🚀 +<%= r.trend.boost %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
+          <span class="tags"><% if (r.trend.front) { %><span class="tg on">📺 On the front page</span><% } else { %><span class="tg">Trending #<%= r.trend.rank - (trend_[0].trend.front ? 1 : 0) %></span><% } %><%- BM(r.boost_pat, 'tg boost') %><span class="tg">👥 <%= r.count %></span></span>
           <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="Boost <%= r.title %>">🚀 Boost</a>
         </li><% }) %>
       </ol>
@@ -193,7 +197,8 @@
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
               <% if (!r.site_only) { %><span class="pill <%= r.live ? 'on' : 'off' %>" title="The pad's Camfrog room"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
               <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
-              <%# slot: boost / trending marks go here as <span class="pill ch-mark">…</span> %>
+              <%# 1.99ek: the boost mark (reserved slot since 1.99ed) - only when the pad is boosted %>
+              <%- BM(r.boost_pat, 'pill ch-mark') %>
             </span>
           </div>
           <div class="ch-meta">

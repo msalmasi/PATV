@@ -289,13 +289,13 @@ test("conservation: every boost's PAT is in the Reserve claims or the room-vault
 test("pages: the Pads guide shows Trending (front pick + runners-up with their boost), no paid featuring copy anywhere", async () => {
   const ejs = require("ejs");
   const html = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), {
-    user: null, signedIn: false, staff: false, owned: [], pepe: { active: false },
+    user: null, signedIn: false, staff: false, owned: [], pepe: { active: false }, boostMark: require(path.join(repo, "boostmark")).boostMark,
     rows: [{ id: "DRAMA_CENTRAL", slug: "drama-central", title: "DRAMA", live: true, bridged: true, count: 20, micCount: 1, slot_count: 1, now: [], next: [],
              trend: { rank: 1, front: true, score: 62, boost: 0 } },
            { id: "Quiet.Room", slug: "quiet-room", title: "Quiet", live: true, bridged: true, count: 6, micCount: 0, slot_count: 1, now: [], next: [],
-             trend: { rank: 2, front: false, score: 30, boost: 9.9 } }] });
+             trend: { rank: 2, front: false, score: 30, boost: 9.9 }, boost_pat: 12400 }] });
   assert.match(html, /id="trending"/);
-  assert.match(html, /📺 On the front page/); assert.match(html, /Trending #1/); assert.match(html, /🚀 \+9\.9/);
+  assert.match(html, /📺 On the front page/); assert.match(html, /Trending #1/); assert.match(html, /<span class="tg boost boost-mark" title="Boosted: 12,400 PAT still active[^"]*"[^>]*>🚀 12\.4k<\/span>/);   // 1.99ek: active PAT, not points
   assert.match(html, /href="\/p\/quiet-room#boost"/);
   for (const v of ["rooms.ejs", "stageBook.ejs", "home.ejs", "padSettings.ejs", "economy.ejs"]) {
     const src = fs.readFileSync(path.join(repo, "views", v), "utf8");

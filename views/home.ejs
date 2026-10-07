@@ -11,7 +11,9 @@
   const paid = Array.isArray(slots) ? slots : [];
   const pepeHere_ = typeof pepeHere === 'undefined' ? true : pepeHere !== false;   // 1.99cj: Pepe is in the featured room
   const live = (!!st.active && pepeHere_) || paid.length > 0;
-  const liveRooms = (rooms || []).filter((r) => r.live);
+  // 1.99ek: Top Pads (home.topPads: top 5 live pads, the front pick's order) and the shared 🚀 badge (boostmark.js)
+  const tops_ = typeof tops !== 'undefined' && Array.isArray(tops) ? tops : [];
+  const BM = typeof boostMark === 'function' ? boostMark : () => '';
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
   const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
@@ -120,6 +122,14 @@
   .hm .rooms-mini { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
   .hm .rooms-mini a { display: flex; justify-content: space-between; gap: 8px; color: #ddd !important; font-size: 13.5px; padding: 3px 0; }
   .hm .rooms-mini .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 1.99ek: Top Pads + the shared 🚀 boost badge (boostmark.js) */
+  .hm .tp h2 { margin-bottom: 6px; }
+  .hm .tp .rooms-mini { grid-template-columns: minmax(0, 1fr); }
+  .hm .tp .rooms-mini li { min-width: 0; }
+  .hm .tp .rooms-mini a { align-items: center; }
+  .hm .rooms-mini .v { display: inline-flex; flex: none; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .hm .bm { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; border: 1px solid #7a4a1f; background: #20140a; color: #ffd9a8;
+            font-size: 12px; font-weight: bold; white-space: nowrap; cursor: help; flex: none; }
   .hm .aw-hm .aw-now { width: 100%; font-family: var(--aw-pixel); font-size: 9px; letter-spacing: 1px; color: var(--aw-dim); text-align: center; min-height: 14px; line-height: 1.6; overflow-wrap: anywhere; }
   .hm .aw-hm .aw-now .who { font-family: Ubuntu, sans-serif; font-size: 15px; letter-spacing: 0; font-weight: bold; color: #fff; }
   .hm .aw-hm .aw-now .amt { color: var(--aw-gold); display: block; white-space: nowrap; }
@@ -311,7 +321,6 @@
   .hm .golive-btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-weight: bold; font-size: 13.5px;
                     background: linear-gradient(90deg, #e53935, #ff7043); color: #fff !important; border: 0; white-space: nowrap; box-shadow: 0 0 0 0 rgba(229,57,53,.5); }
   .hm .golive-btn:hover { filter: brightness(1.08); color: #fff !important; }
-  .hm .golive-btn.ghost { background: #1d1a0f; border: 1px solid #6b5a20; color: #f3e3a3 !important; }
   .hm .golive { display: grid; gap: 8px; }
   .hm .golive p { margin: 0; color: #c9d3c9; font-size: 13.5px; line-height: 1.5; }
   .hm .golive .row { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -349,9 +358,9 @@
     </div>
     <ul>
       <li>Ordinary slots are <b>free</b> in most pads<%= paid.length ? '' : ' — book one now or for later' %>.</li>
-      <li>The front page shows the <b>liveliest pad</b> (chat, mic, people) — it's earned, not bought. Fans can <b>🚀 boost</b> a pad to tip a close race.</li>
+      <li>The front page shows the <b>liveliest pad</b> (chat, mic, people) — it's earned, not bought. Fans can <b>🚀 boost</b> a pad from <a href="/p">its page</a> to tip a close race.</li>
     </ul>
-    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="golive-btn ghost" href="/p#trending" title="Boost a pad: it adds to the pad's front-page score">🚀 Boost a pad</a><a class="btn" href="/p">Pads</a></div>
+    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="btn" href="/p">Pads</a></div>
   </section>
 
   <!-- ───── main stage ───── -->
@@ -359,7 +368,7 @@
     <div class="bar">
       <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
       <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
-      <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><% } %>
+      <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><%- BM(frontInfo.boost, 'bm') %><% } %>
       <%# the subtitle only shows while off air (the ON AIR pill says it otherwise); setPill() still writes it %>
       <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
     </div>
@@ -445,15 +454,16 @@
           <div class="muted" style="margin-top:4px">Watch or take a seat ›</div>
         </a>
       <% } %>
-      <% if (liveRooms.length >= 2) { %>
-        <div class="box">
-          <h3>📡 On now</h3>
-          <ul class="rooms-mini">
-            <% liveRooms.forEach((r) => { %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="muted">👥 <%= r.count %> · 🎙 <%= r.micCount %></span></a></li>
+      <%# 1.99ek: "Top Pads" (was "On now"): the top 5 LIVE pads, ranked by the front pick's score (activity + 🚀 boost points); hidden when none is live %>
+      <% if (tops_.length) { %>
+        <section class="box tp" aria-labelledby="tpH">
+          <h2 id="tpH"><span>Top Pads</span><a href="/p">All pads ›</a></h2>
+          <ol class="rooms-mini">
+            <% tops_.forEach((r) => { %>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"><span class="n"><%= r.name %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span><%- BM(r.boost, 'bm') %></span></a></li>
             <% }) %>
-          </ul>
-        </div>
+          </ol>
+        </section>
       <% } %>
     </div>
   </section>

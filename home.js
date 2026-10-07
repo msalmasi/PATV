@@ -109,6 +109,22 @@ async function personal(me, S) {
   return out;
 }
 
+/**
+ * 1.99ek: the homepage's "Top Pads" (was "On now") - the top `n` LIVE pads in the front pick's order.
+ * rows = bridge.summary() rows; ranked = rooms.rankLive().ranked (live only, best first, same score as the
+ * front-page auto pick incl. boost points); boosts = Map id -> active boost PAT. A live row the ranking
+ * missed (shouldn't happen) goes last by headcount. -> [{id, slug, name, count, micCount, boost}]
+ */
+function topPads(rows, ranked, boosts, n = 5) {
+  const live = (rows || []).filter((r) => r && r.live && r.slug);
+  const pos = new Map((ranked || []).map((r, i) => [r.id, i]));
+  const at = (r) => (pos.has(r.id) ? pos.get(r.id) : Infinity);
+  return live.slice().sort((a, b) => at(a) - at(b) || (b.count || 0) - (a.count || 0) || String(a.name).localeCompare(String(b.name)))
+    .slice(0, n)
+    .map((r) => ({ id: r.id, slug: r.slug, name: r.name, count: r.count || 0, micCount: r.micCount || 0,
+                   boost: Math.round((boosts && boosts.get && boosts.get(r.id)) || 0) }));
+}
+
 function register(app, { addUser, xpForNextLevel }) {
   app.get("/", addUser, async (req, res) => {
     try {
@@ -131,8 +147,12 @@ function register(app, { addUser, xpForNextLevel }) {
       const front = await reg.frontRoom(rooms).catch(() => ({ id: reg.HOUSE_ROOM, pinned: false }));
       const pepeHere = bridge.pepeIn(front.id) !== false;
       const frontReg = await reg.get(front.id).catch(() => null);
+      // 1.99ek: Top Pads (the front pick's score, live pads only) + every pad's active boost PAT for the 🚀 badges
+      const RL = await reg.rankLive(rooms).catch((e) => { console.error("[home] top pads:", e.message); return { ranked: [], boosts: new Map() }; });
+      const tops = topPads(rooms, RL.ranked, RL.boosts, 5);
       const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
-                                     owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null } : null;
+                                     owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
+                                     boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;
       const slots = await require("./mainstage").publicSlots(front.id).catch(() => []);
       const onStage = rooms.find((r) => r.id === front.id) || null;
       const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
@@ -149,7 +169,7 @@ function register(app, { addUser, xpForNextLevel }) {
       res.locals.og = { title: "Public Access TV", description: "Live streams, Pepe the frog, Camfrog rooms live on the web, PAT games, markets and more.",
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
-        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top,
+        username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top, tops, boostMark: require("./boostmark").boostMark,
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me }, hot, fx: require("./feedweb").fx,
         roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, pepeHere, featuredPrice: require("./mainstage").config().price_per_min,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
@@ -174,4 +194,4 @@ function register(app, { addUser, xpForNextLevel }) {
   });
 }
 
-module.exports = { register, stats };
+module.exports = { register, stats, topPads };

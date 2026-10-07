@@ -539,6 +539,23 @@ async function trending(limit = 5) {
   return { front: list.find((r) => r.id === A.id) || null, runners: list.filter((r) => r.id !== A.id && !r.dead).slice(0, limit), evalAt: A.evalAt || null };
 }
 
+/** 1.99ek: every pad's ACTIVE boost PAT now (boosts.activeMap: one cached query for all pads, decayed with
+ *  the front pick's half-life) - for the 🚀 badges wherever pads are listed. Empty map on any error. */
+async function boostPats(now = nowMs()) {
+  try {
+    const cfg = await frontCfg();
+    return await require("./boosts").activeMap(now, (cfg.boost && cfg.boost.half_min) || 60);
+  } catch (e) { console.error("[rooms] boost pats:", e.message); return new Map(); }
+}
+/** 1.99ek: the LIVE pads ranked NOW by the front pick's own score (activity + boost points, frontroom.rank) -
+ *  the homepage's "Top Pads". `summary` = bridge.summary() rows. -> {ranked: [{id, score, ...}], boosts: Map id -> active PAT} */
+async function rankLive(summary, { now = nowMs() } = {}) {
+  const cfg = await frontCfg();
+  const boosts = await boostPats(now);
+  const ranked = FR.rank(withAct(summary, cfg, now, cfg.boost && cfg.boost.on ? boosts : null), cfg, now);
+  return { ranked, boosts };
+}
+
 // ── activity (for royalty thresholds): fed by bridge.js ingest ──
 const lastMin = new Map();      // room id -> the minute bucket last counted (memory)
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
@@ -596,7 +613,7 @@ function hasRoute(app, path) {
 
 module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
-  setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
+  setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
   _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,

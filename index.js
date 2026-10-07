@@ -98,6 +98,8 @@ app.set("view engine", "ejs");
 app.set("views", "./views");
 // 1.99dt: <%- ul(name) %> / <%- padLink(room) %> in any view: names link to PATV profiles, rooms to pads (userlinks.js)
 require("./userlinks").install(app);
+// 1.99ek: <%- boostMark(activePat, cls) %> - the shared 🚀 boost badge (boostmark.js)
+require("./boostmark").install(app);
 
 // Set morgan logging
 // app.use(morgan("combined"));

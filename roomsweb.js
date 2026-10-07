@@ -45,6 +45,7 @@ async function guideRows(signedIn) {
     else byId.get(b.id).br = b;
   }
   const pepe = B.stage();
+  const bpat = await rooms.boostPats();       // 1.99ek: active boost PAT per pad (one cached query) for the 🚀 badges
   const out = [];
   for (const [id, x] of byId) {
     const r = x.reg, b = x.br;
@@ -60,6 +61,7 @@ async function guideRows(signedIn) {
       pepe_here: B.pepeIn ? B.pepeIn(id) === true : false,
       platform: rooms.platformOf(id),            // 1.99x: camfrog | site | twitch | discord (a bridged-only room is camfrog)
       site_only: rooms.isCommunityOnly(id),      // 1.99ck: a pad with no Camfrog room (the Camfrog Lounge)
+      boost_pat: Math.round(bpat.get(id) || 0),  // 1.99ek: active (decayed) boost PAT - 0 = not boosted
     });
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)
