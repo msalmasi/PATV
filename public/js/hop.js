@@ -169,7 +169,7 @@
     }
     H.tail.textContent = H.next ? 'Loading more…' : (H.items.length ? 'That\'s everything here.' : '');
     H.tail.classList.toggle('end', !H.next);
-    if (!H.items.length) H.empty.hidden = false;
+    if (!H.items.length) { H.empty.hidden = false; H.up.disabled = true; H.down.disabled = true; }
   }
   function add(items) {
     var from = H.items.length;
