@@ -364,11 +364,8 @@ function register(app, { isBotToken, addUser }) {
     }
   });
 
-  // Registered BEFORE bridge.js's pages: hand the room list / room page their analytics links.
-  app.get("/p", async (req, res, next) => {
-    try { res.locals.roomAnalyticsList = await listing(); } catch (e) { res.locals.roomAnalyticsList = []; }
-    next();
-  });
+  // Registered BEFORE bridge.js's pages: hand the pad page its analytics link (1.99ed: /p no longer lists
+  // every pad's analytics - a pad's About tab and header menu link it).
   app.get("/p/:slug", async (req, res, next) => {
     try {
       const r = await bySlug(req.params.slug);

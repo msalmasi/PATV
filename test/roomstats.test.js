@@ -133,9 +133,10 @@ test("slug for a non-bridged room comes from its name; bridged rooms share the l
   assert.match(html, /href="\/p\/pepes-pad\/analytics"/, "the pad page links its analytics");
   const a = await (await get("/p/pepes-pad/analytics", "u3")).text();
   assert.match(a, /Pad page/, "analytics links back to the pad page");
+  // 1.99ed: /p no longer lists every pad's analytics (the pad page / About tab links it)
   const list = await (await get("/p")).text();
-  assert.match(list, /href="\/p\/drama-central\/analytics"/);
-  assert.match(list, /href="\/p\/pepes-pad\/analytics"/);
+  assert.doesNotMatch(list, /\/analytics"/);
+  assert.doesNotMatch(list, /class="ral"/);
 });
 
 test("unknown rooms 404, removed rooms disappear", async () => {

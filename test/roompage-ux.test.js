@@ -157,17 +157,39 @@ test("/stage: camera + mic pickers and Switch camera in the browser pane; the pr
   assert.match(bridge, /recSession\.before\(\)/, "the iOS audio-session handling is still there");
 });
 
-test("Pads: each card and schedule row is a stretched link to its pad page", async () => {
+test("Pads: each card is one link to its pad (no buttons, no nested links); schedule rows are stretched links", async () => {
   const html = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), {
     user: null, signedIn: false, staff: false, owned: [], pepe: { active: false },
-    rows: [{ id: PLANT, slug: PLANT, title: "Houseplants", live: true, bridged: true, count: 3, micCount: 1, slot_count: 1, house: false, owner: "pb",
-             now: [], next: [{ display: "pb", start_at: T + 3600000, minutes: 15, featured: true, title: null }] }] });
-  assert.match(html, /<a class="t" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
-  assert.match(html, /<a class="rl" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
+    ul: (n, o) => '<a href="/u/' + n + '">' + ((o && o.text) || n) + "</a>",
+    rows: [{ id: PLANT, slug: PLANT, title: "Houseplants", live: true, bridged: true, count: 3, micCount: 0, slot_count: 1, house: false, owner: "pb", ownerUser: "pb",
+             pepe_here: true, description: "Plants",
+             now: [{ username: "ann", display: "Ann", live: true, mode: "rtmp" }],
+             next: [{ username: "pb", display: "pb", start_at: T + 3600000, minutes: 15, featured: true, title: null }] },
+           { id: "quiet", slug: "quiet", title: "Quiet", live: false, bridged: false, count: 0, micCount: 0, slot_count: 2, house: true, now: [], next: [] }] });
   assert.match(html, /<h1>📡 Pads<\/h1>/);
+  assert.match(html, /<a class="ch live onair" href="\/p\/plant_based_chatting">/);
+  assert.match(html, /<a class="rl" href="\/p\/plant_based_chatting">Houseplants<\/a>/);
   assert.match(html, /<span class="padref">p\/plant_based_chatting<\/span>/);
   assert.doesNotMatch(html, /Channel guide|>Channels /, "no 'channel' copy left");
-  assert.match(html, /\.cg \.ch a\.t::after, \.cg \.sched a\.rl::after \{ content: ""; position: absolute; inset: 0;/);
-  assert.match(html, /\.cg \.ch a:not\(\.t\), \.cg \.ch button/, "inner buttons sit above the stretched link");
-  assert.match(html, /href="\/stage\?room=plant_based_chatting">🎥 Go live here/);
+  // no buttons on the cards
+  assert.doesNotMatch(html, /Open pad|Go live here|class="acts"/);
+  // no nested anchors: every pad card contains no other <a>
+  const cards = html.split(/<a class="ch(?=[ "])/).slice(1).map((c) => c.slice(0, c.indexOf("</a>")));
+  assert.equal(cards.length, 2);
+  for (const c of cards) assert.doesNotMatch(c, /<a[\s>]/, "no <a> inside a pad card");
+  // fixed rows; Pepe is an icon with a tooltip; zero mic count hidden; "book a slot" link gone
+  for (const k of ["ch-head", "ch-meta", "ch-desc", "ch-foot", "ch-badges"]) assert.match(cards[0], new RegExp('class="' + k + '"'));
+  assert.match(cards[0], /<span class="pepe-here" role="img" title="Pepe is in this room — his stream plays here" aria-label="Pepe is in this room — his stream plays here">🐸<\/span>/);
+  assert.doesNotMatch(html, /Pepe's here/);
+  assert.match(cards[0], /👥 3/);
+  assert.doesNotMatch(cards[0], /🎙/);
+  assert.doesNotMatch(cards[1], /👥/);
+  assert.match(cards[0], /<b>Ann<\/b>/);
+  assert.match(cards[1], /class="ch-desc"><\/div>/, "the description row is there even when empty");
+  assert.match(cards[1], /Nothing booked<\/li>/);
+  assert.doesNotMatch(html, /\/analytics"/, "no analytics list on /p");
+  assert.match(html, /grid-template-rows: subgrid/);
+  assert.match(html, /\.cg \.sched a\.rl::after \{ content: ""; position: absolute; inset: 0;/);
+  // Go live stays on the "Your show" card
+  assert.match(html, /<a class="golive-btn" href="\/stage">🎥 Go live<\/a>/);
 });
