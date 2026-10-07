@@ -188,6 +188,7 @@
   .hm .ln { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; padding: 3px 6px; border-radius: 6px; }
   .hm .ln:hover { background: #161616; }
   .hm .ln .w { font-weight: bold; margin-right: 6px; }
+  .hm .ln a.w { color: inherit; text-decoration: none; } .hm .ln a.w:hover { text-decoration: underline; }
   .hm .ln .t { color: #666; font-size: 11px; margin-left: 4px; }
   .hm .ln.sys { color: #8a8a8a; font-size: 12.5px; }
   .hm .ln.pepe { background: #0f1a10; }
@@ -728,9 +729,13 @@
     function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function nameEl(u) {
-      var n = el('span', 'w', label(u));
+      // 1.99ea: the name is the PATV display name (server-resolved by login) linking to the profile,
+      // else the Camfrog display name; the login is the tooltip
+      var n;
+      if (u && !u.anon && u.patv && u.patv.username) { n = el('a', 'w', label(u)); n.href = '/u/' + encodeURIComponent(u.patv.username) + '/profile'; }
+      else n = el('span', 'w', label(u));
       if (u && u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
-      if (u && !u.anon && u.login && u.display && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
+      if (u && !u.anon && !u.self && u.login) n.title = u.login;
       return n;
     }
     function chipTitle(c, u) { if (u && !u.anon && u.login && u.display && u.display.toLowerCase() !== u.login.toLowerCase()) c.title = u.login; return c; }

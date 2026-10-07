@@ -139,6 +139,24 @@ const clean = (s, n) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f
 const cleanReply = (s) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, " ")
   .replace(/\s+/g, " ").trim().slice(0, 400);
 
+/** 1.99ea: the name a web line goes into the room under - the account's PATV display name, or "" to let
+ *  Pepe pick (the Camfrog display name, then the login). A display name is display only, so one that is
+ *  ANOTHER account's login / username (or Pepe's) is never sent - "🌐 <someone else> (web)" can't happen. */
+async function webName(u) {
+  let d = "";
+  try { d = clean(require("./displaynames").usable(u && u.displayname), 40); } catch (e) { d = ""; }
+  if (!d || /^pepe\s*(frog)?$/i.test(d)) return "";
+  try {
+    const UL = require("./userlinks");
+    const k = UL.keyOf(d);
+    if (k) {
+      const acc = (await UL.lookup([d])).get(k);
+      if (acc && String(acc.username).toLowerCase() !== String(u.username || "").toLowerCase()) return "";
+    }
+  } catch (e) { return ""; }
+  return d;
+}
+
 function newJob(fields) {
   const j = Object.assign({ id: "w" + crypto.randomBytes(8).toString("hex"), state: "pending", at: Date.now(), claimed: 0, tries: 0, result: null }, fields);
   jobs.set(j.id, j);
@@ -162,6 +180,8 @@ function takeJobs(liveRoomIds) {
     if (j.kind === "cmd" && j.setting) base.setting = j.setting;
     if (j.kind === "modinfo") base.target = j.target || "";
     if (j.kind === "clip") { base.mime = j.mime; base.secs = j.secs; base.size = j.data ? j.data.length : 0; }
+    // 1.99ea: the PATV display name for "🌐 <name> (web)" (Pepe falls back to the Camfrog display name, then the login)
+    if ((j.kind === "say" || j.kind === "clip") && j.display) base.display = j.display;
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
     out.push(base);
     if (out.length >= 10) break;
@@ -208,7 +228,7 @@ function mineFor(userId, roomId) {
 function register(app, { isBotToken, addUser, bySlug, isLive }) {
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
-    return (await getQuery("SELECT userId, username, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+    return (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
   };
   const roomFor = (req, res, flag) => {
     const R = bySlug(req.params.slug);
@@ -228,7 +248,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     if (!text) return res.status(400).json({ ok: false, error: "Type something first." });
     const lim = limited("say|" + u.userId, 3000, 5, 60000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
-    const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, text });
+    const j = newJob({ kind: "say", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, display: await webName(u), text });
     console.log(`[bridge-relay] say room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });
@@ -281,7 +301,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
     const mime = String(req.get("content-type") || "audio/webm").split(";")[0].slice(0, 40);
     const lim = limited("clip|" + u.userId, 30000, 3, 600000);
     if (lim) return res.status(429).json({ ok: false, error: lim });
-    const j = newJob({ kind: "clip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, data: buf, mime, secs });
+    const j = newJob({ kind: "clip", roomId: R.id, userId: u.userId, username: u.username, camfrog: u.camfrogUsername, display: await webName(u), data: buf, mime, secs });
     console.log(`[bridge-relay] clip room=${R.id} account=${u.username} camfrog=${u.camfrogUsername} bytes=${buf.length} job=${j.id}`);
     res.json({ ok: true, id: j.id });
   });
@@ -455,6 +475,6 @@ function saveRight(s, userId) {
   return s.rule === "on" && s.viewers && s.viewers.has(userId) ? s.cost : null;
 }
 
-module.exports = { register, takeJobs, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
+module.exports = { register, takeJobs, webName, applyAcks, mineFor, saveRight, snapForGen, SNAP_TTL, cleanCmds, commandsText, CMD_DENY,
   newJob, limited, cmdLog, clean, cleanReply, CMD_GAP, CMD_BURST, CMD_WINDOW,          // 1.99co: the pad Manage panel (padmod.js)
   _sweep: sweep, _jobs: jobs, _snaps: snaps, _frames: frames, _hits: hits };

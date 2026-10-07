@@ -46,6 +46,8 @@ const ready = (async () => {
 const CTRL = /[\u0000-\u001f\u007f​-‏‪-‮⁦-⁩]/g;
 const str = (v, n) => String(v == null ? "" : v).replace(CTRL, " ").replace(/\s+/g, " ").trim().slice(0, n);
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:~\-]{0,127}$/;
+// a Camfrog display name as plain text: <b><n>lou</n></b> -> lou (Pepe strips it too; 1.99ea)
+const plain = (v, n) => str(String(v == null ? "" : v).replace(/<[^>]*>/g, ""), n);
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const slugify = (s) => String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "room";
 
@@ -54,7 +56,7 @@ function cleanUser(u) {
   if (u.anonymous) return { anon: true, display: "someone" };
   const login = str(u.login || u.id, 40);
   if (!LOGIN_RE.test(login)) return null;
-  const out = { login, display: str(u.display, 40) || login };
+  const out = { login, display: plain(u.display, 40) || login };
   if (u.is_self) out.self = true;
   if (u.is_bot) out.bot = true;
   if (typeof u.on_cam === "boolean") out.on_cam = u.on_cam;
@@ -381,33 +383,53 @@ async function ingest(body) {
   return { rooms: touched.size, items: newItems.length };
 }
 
-// ── PATV accounts for Camfrog names (avatar + name colour), cached ──
-let linkCache = new Map(), linkAt = 0, linkLoading = null;
-function links() {
-  if (Date.now() - linkAt < 60 * 1000) return Promise.resolve(linkCache);
-  if (!linkLoading) {
-    linkLoading = getQuery(`SELECT username, camfrogUsername, avatar FROM users WHERE camfrogUsername IS NOT NULL AND camfrogUsername != ''`)
-      .then((rows) => {
-        const m = new Map();
-        for (const r of rows) {
-          const k = String(r.camfrogUsername).toLowerCase();
-          if (!m.has(k) || !String(r.username).startsWith("CF")) m.set(k, r);
-        }
-        linkCache = m; linkAt = Date.now();
-        return m;
-      })
-      .catch((e) => { console.error("[bridge] links:", e.message); return linkCache; })
-      .finally(() => { linkLoading = null; });
+// ── names: PATV display name > Camfrog display name > login (1.99ea) ──
+// Every bridge line / roster entry is resolved BY LOGIN (never by a display name - those are display
+// only and anyone can pick one) with userlinks.js's rules: users.camfrogUsername, then users.username,
+// case-insensitive; a real account beats a random "CF..." auto one; archived accounts never match.
+// The result per login (hit or miss) is cached NAME_TTL, so the ~1.5 s polls cost a query only for
+// logins not seen in the last minute. Anonymised people ("someone", !incognito / !bridge hide) carry
+// no login and are never looked up.
+const UL = require("./userlinks");
+const NAME_TTL = 60 * 1000, NAME_MAX = 5000;
+const nameCache = new Map();            // login key -> {acc: {username, display, avatar} | null, at}
+async function resolveNames(users) {
+  const now = Date.now(), miss = new Set();
+  for (const u of users) {
+    if (!u || u.anon || !u.login) continue;
+    const k = UL.keyOf(u.login);
+    if (!k) continue;
+    const c = nameCache.get(k);
+    if (!c || now - c.at > NAME_TTL) miss.add(k);
   }
-  return linkLoading;
+  const keys = [...miss];
+  for (let i = 0; i < keys.length; i += 400) {
+    const part = keys.slice(i, i + 400);
+    let found;
+    try { found = await UL.lookup(part); } catch (e) { console.error("[bridge] names:", e.message); break; }
+    for (const k of part) { nameCache.delete(k); nameCache.set(k, { acc: found.get(k) || null, at: now }); }
+  }
+  while (nameCache.size > NAME_MAX) nameCache.delete(nameCache.keys().next().value);
+  return nameCache;
 }
 const safeImg = (u) => (typeof u === "string" && (/^https:\/\/[^\s"'<>]+$/.test(u) || /^\/[A-Za-z0-9/_.\-]+$/.test(u)) ? u : null);
 
-function withPatv(u, L) {
+/** A bridge user as the page shows it: `display` = the PATV display name when the login has a live
+ *  account (+ `patv` for the profile link / avatar / name colour), else the Camfrog display name,
+ *  else the login. `login` stays (the tooltip); `cf` = the Camfrog display name when it isn't the
+ *  login. Pepe himself keeps the name Pepe gave. Anonymised users pass through untouched. */
+function withPatv(u, C) {
   if (!u || u.anon) return u;
-  const acc = L.get(String(u.login).toLowerCase());
-  if (!acc) return u;
-  return { ...u, patv: { username: acc.username, avatar: safeImg(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" } };
+  const login = String(u.login || "");
+  const cfName = plain(u.display, 40);
+  const out = { ...u, display: cfName || login };
+  if (cfName && cfName.toLowerCase() !== login.toLowerCase()) out.cf = cfName;
+  const hit = C && C.get(UL.keyOf(login));
+  const acc = hit && hit.acc;
+  if (!acc) return out;
+  out.patv = { username: acc.username, avatar: safeImg(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" };
+  if (!u.self) out.display = str(acc.display, 40) || out.display;
+  return out;
 }
 
 const isLive = (R) => Date.now() - R.updated < STALE_MS;
@@ -417,18 +439,19 @@ const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); ret
 /** For the homepage / room list. `full` (signed-in) adds who's on the mic. */
 async function summary(full) {
   await load();
+  const C = full ? await resolveNames([...rooms.values()].flatMap((R) => R.mic)) : null;   // 1.99ea: names on the mic
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
     id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
     people: RA.people(R.count, R.members),
-    mic: full ? R.mic.map((u) => (u.anon ? "someone" : u.display)) : [],
+    mic: full ? R.mic.map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
     topic: full ? R.topic : "",
   }));
 }
 
 async function liveView(R, after, userId, login) {
-  const L = await links();
-  const feed = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP)
-    .map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
+  const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
+  const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
+  const feed = items.map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
   return {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
@@ -661,4 +684,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { register, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, isLive, _rooms: rooms };
+module.exports = { register, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, isLive, _rooms: rooms,
+  liveView, withPatv, resolveNames, _nameCache: nameCache };

@@ -59,11 +59,13 @@ function ul(name, opts = {}) {
 }
 
 // ── lookup ──
-let archCol = null, archAt = 0;
+let archCol = null, archAt = 0, hasAvatar = false;
 async function hasArchived(q) {
   if (archCol === true || (archCol === false && Date.now() - archAt < 60e3)) return archCol;
   try {
-    archCol = (await q("PRAGMA table_info(users)")).some((c) => c.name === "archived_at");
+    const cols = await q("PRAGMA table_info(users)");
+    archCol = cols.some((c) => c.name === "archived_at");
+    hasAvatar = cols.some((c) => c.name === "avatar");
   } catch (e) { archCol = false; }
   archAt = Date.now();
   return archCol;
@@ -88,7 +90,7 @@ async function lookup(names) {
   const ph = keys.map(() => "?").join(",");
   stats.lookups++;
   const rows = await query(
-    `SELECT username, displayname, camfrogUsername FROM users
+    `SELECT username, displayname, camfrogUsername${hasAvatar ? ", avatar" : ""} FROM users
       WHERE (LOWER(camfrogUsername) IN (${ph}) OR LOWER(username) IN (${ph}))${live}`, [...keys, ...keys]);
   const best = new Map();       // key -> [rank, row]
   const want = new Set(keys);
@@ -104,7 +106,11 @@ async function lookup(names) {
     if (cf) offer(cf, isCf(r.username) ? 1 : 0, r);   // the login: a real account before a CF auto one
     offer(un, 2, r);                                   // a PATV username
   }
-  for (const [k, [, r]] of best) out.set(k, { username: r.username, display: displayOf(r) });
+  for (const [k, [, r]] of best) {
+    const o = { username: r.username, display: displayOf(r) };
+    if (hasAvatar) o.avatar = r.avatar || null;       // 1.99ea: the room bridge shows it
+    out.set(k, o);
+  }
   return out;
 }
 
