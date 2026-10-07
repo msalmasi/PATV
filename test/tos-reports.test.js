@@ -325,6 +325,16 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(p.text, /90 days/);
   assert.match(p.text, /transcribed/);
   assert.match(p.text, /patv_dev/);
+  // 1.99er: §7 keeps the consent rule for real adult content + a tight AI carve-out (no VERSION bump - no re-acceptance)
+  const s7 = (t.text.match(/<section id="nsfw">[\s\S]*?<\/section>/) || [""])[0];
+  assert.match(s7, /Everyone shown in adult content must be an adult who consented to it being made and shared\./);
+  assert.match(s7, /only exception is an AI-generated picture or video/);
+  assert.match(s7, /href="\/guidelines#ai"/);
+  assert.match(s7, /suggestive but non-sexual/);
+  assert.match(s7, /must be marked NSFW/);
+  assert.match(s7, /never show a real, identifiable person nude or in a sexual or sexualised way/);
+  assert.match(s7, /under 18/);
+  assert.equal(terms.VERSION, "2026-10-06", "the §7 carve-out does not force re-acceptance");
   assert.match(t.text, /id="siteFootTpl"/, "footer links on every layout page");
   assert.match(t.text, /href="\/privacy">Privacy Policy/);
   assert.doesNotMatch(t.text, /class="draft"/, "no Draft banner while enforced");

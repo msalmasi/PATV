@@ -193,6 +193,8 @@ test("1.99en content policy: explicit prompts refused before queueing (friendly)
   assert.ok(G.AI_POLICY.never.some((t) => /exposed genitals, exposed female nipples, sex acts/.test(t)));
   assert.ok(G.AI_POLICY.never.some((t) => /minors/.test(t)) && G.AI_POLICY.never.some((t) => /real, identifiable person/.test(t)));
   assert.ok(G.AI_POLICY.allowed.some((t) => /Photorealistic/.test(t)) && G.AI_POLICY.allowed.some((t) => /lingerie, swimwear/.test(t)));
+  // 1.99er: the real-person carve-out matches Terms §7 - suggestive, non-sexual, NSFW; never nude / sexual / sexualised
+  assert.ok(G.AI_POLICY.allowed.some((t) => /non-sexual pictures of a real, identifiable adult/.test(t) && /Never nude, sexual or sexualised/.test(t)));
   const html = await (await fetch(base + "/p/" + rooms.getCached(ROOM).slug, { headers: { "x-test-user": U.alice.userId } })).text();
   assert.match(html, /No explicit nudity — suggestive is fine/, "the Generate help shows the policy");
   assert.match(html, /href="\/guidelines#ai"/, "...and links the full rules");

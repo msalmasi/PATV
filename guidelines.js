@@ -72,6 +72,7 @@ const AI_POLICY = Object.freeze({
   allowed: Object.freeze([
     "Photorealistic pictures, including realistic people.",
     "Sexually suggestive and R-rated content: lingerie, swimwear, innuendo, implied sexuality, R-level violence. Suggestive results are marked 🔞 NSFW automatically, so they're blurred for anyone signed out or not opted in.",
+    "Suggestive but non-sexual pictures of a real, identifiable adult - say, a celebrity in swimwear - marked 🔞 NSFW. Never nude, sexual or sexualised (see below). This is the only exception to the Terms' consent rule for adult content.",
   ]),
   never: Object.freeze([
     "Explicit nudity, for anyone - fictional or real: exposed genitals, exposed female nipples, sex acts.",
