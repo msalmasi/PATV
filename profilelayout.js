@@ -22,15 +22,23 @@
 //     tag; the owner can preview the page as a visitor (?preview=visitor)
 const { runQuery, getQuery } = require("./dbUtils");
 
+// 1.99du: the profile is a header + tabs. Posts is the default tab and first in the default order; the order
+// below decides the order of the tabs (a tab sits where its first section is) and of the cards in Overview.
+// stats / level / avatar live in the header (the stat strip, the XP bar, the GTF portrait) - their switch
+// still hides them, their place in the order doesn't matter.
 const SECTIONS = [
-  { id: "stats", label: "Stat tiles", desc: "PAT balance, level and badge count", icon: "📊" },
-  { id: "level", label: "Level & XP bar", desc: "Progress to the next level", icon: "⭐" },
-  { id: "avatar", label: "GTF avatar", desc: "Your Grand Theft Frogger avatar and what it's wearing", icon: "🐸" },
-  { id: "analytics", label: "Analytics", desc: "Camfrog chat, mic and command activity", icon: "📈" },
-  { id: "gtf", label: "Grand Theft Frogger", desc: "Heist sheet and GTF links", icon: "🥷" },
-  { id: "badges", label: "Badges", desc: "Every badge you've earned", icon: "🏅" },
-  { id: "posts", label: "Posts", desc: "Your latest feed posts (1.99bz)", icon: "📝" },
+  { id: "posts", label: "Posts", desc: "Posts tab (opens first): your feed posts, and the composer for you", icon: "📝" },
+  { id: "stats", label: "Stat strip", desc: "Header: PAT balance and badge count", icon: "📊" },
+  { id: "level", label: "XP bar", desc: "Header: progress to the next level", icon: "⭐" },
+  { id: "avatar", label: "GTF avatar", desc: "Header: your Grand Theft Frogger portrait — click it for the wardrobe", icon: "🐸" },
+  { id: "gtf", label: "Grand Theft Frogger", desc: "Overview tab: heist sheet and GTF links", icon: "🥷" },
+  { id: "badges", label: "Badges", desc: "Overview tab: every badge you've earned", icon: "🏅" },
+  { id: "analytics", label: "Analytics", desc: "Analytics tab: Camfrog chat, mic and command activity", icon: "📈" },
 ];
+// Which tab each section is in (sections not listed are in the header).
+const TABS = { posts: { label: "Posts", icon: "📝" }, overview: { label: "Overview", icon: "🧾" }, analytics: { label: "Analytics", icon: "📈" } };
+const TAB_OF = { posts: "posts", gtf: "overview", badges: "overview", analytics: "analytics" };
+const DEFAULT_TAB = "posts";
 // Panels inside a section that can be hidden on their own (not reordered).
 const SUBS = {
   stats: [
@@ -154,6 +162,33 @@ function view(layout, viewer) {
   };
 }
 
+/**
+ * The profile's tabs for one viewer: [{id, label, icon, sections: [ids in order], hidden}] in layout order.
+ * v = view(); has = {sectionId: bool} - whether the section has anything to show for this profile.
+ * A tab is left out when none of its sections may be shown; `hidden` = every section in it is hidden
+ * from visitors (only the owner / admins get here, greyed).
+ */
+function tabsFor(v, has) {
+  const out = [];
+  for (const id of v.order) {
+    const t = TAB_OF[id];
+    if (!t || (has && !has[id]) || !v.show(id)) continue;
+    let tab = out.find((x) => x.id === t);
+    if (!tab) { tab = { id: t, label: TABS[t].label, icon: TABS[t].icon, sections: [], hidden: true }; out.push(tab); }
+    tab.sections.push(id);
+    if (!v.hidden(id)) tab.hidden = false;
+  }
+  return out;
+}
+
+/** The tab to open: the asked-for one when it's there, else Posts, else the first. null = no tabs. */
+function pickTab(tabs, want) {
+  const w = String(want || "").toLowerCase();
+  if (tabs.some((t) => t.id === w)) return w;
+  if (tabs.some((t) => t.id === DEFAULT_TAB)) return DEFAULT_TAB;
+  return tabs.length ? tabs[0].id : null;
+}
+
 function sameSite(req) {
   // same as cosmetics.js: the login cookie is SameSite=Lax; this is a second check when the browser
   // sends Origin/Referer
@@ -185,4 +220,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { SECTIONS, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };
+module.exports = { SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };

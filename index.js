@@ -1382,6 +1382,9 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         }),
         // section order + visibility (profilelayout.js)
         layout: L,
+        // 1.99du: the profile's tabs (profilelayout.tabsFor / pickTab) - ?tab= picks the open one, Posts by default
+        profileLayoutMod: profileLayout,
+        profileTab: String(req.query.tab || "").slice(0, 20),
         // 1.99bz: the Posts panel (layout section "posts") + follower counts and the Follow button
         // 1.99df: the Posts panel is the profile feed (sorts, the owner's composer) - its query string and the host for embeds
         social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })

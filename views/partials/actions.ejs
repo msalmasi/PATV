@@ -60,7 +60,11 @@
       <div class="act-row act-<%= a.status %>">
         <span class="act-st"><%= a.status === 'done' ? '✅' : a.status === 'failed' ? '❌' : '⏳' %></span>
         <span class="act-label"><%= a.label %></span>
-        <span class="act-msg"><%= a.status === 'pending' || a.status === 'claimed' ? 'waiting for Pepe…' : (a.message || '') %></span>
+        <%# 1.99du: Pepe sends the reason (bot 1.99ds: "something went wrong: <type>: <reason>"); the bare legacy
+            string is from the 2026-10-05 webact bug (fixed in the bot's 1.99ae) - say so instead of nothing %>
+        <span class="act-msg"><%= a.status === 'pending' || a.status === 'claimed' ? 'waiting for Pepe…'
+          : /^\s*something went wrong\.?\s*$/i.test(a.message || '') ? 'Pepe hit a bug on his side (since fixed) — nothing happened, so just try again.'
+          : (a.message || (a.status === 'failed' ? 'Pepe couldn\'t do it (no reason given).' : '')) %></span>
       </div>
     <% }) %>
   </div>

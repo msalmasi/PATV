@@ -1,59 +1,117 @@
 <%- include('layout', { title: `${displayname || usernameProfile} on Public Access`, user: username, og: typeof og !== 'undefined' ? og : null }) %>
 <%
+  // 1.99du: header (photo + GTF portrait, name, stat strip, primary actions + "More") and tabs under it -
+  // Posts (default) · Overview · Analytics, in the owner's layout order (profilelayout.tabsFor).
   const need = xpForNextLevel(level);
   const pct = Math.max(0, Math.min(100, need ? (xp / need) * 100 : 0));
   const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
   const previewing = typeof previewVisitor !== 'undefined' && !!previewVisitor;
   const isMe = username && username == usernameProfile && !previewing;
   // section order + visibility (profilelayout.js). Hidden sections render only for the owner/admins, greyed.
-  const L = typeof layout !== 'undefined' && layout ? layout : { order: ['stats', 'level', 'avatar', 'analytics', 'gtf', 'badges'],
+  const PL = typeof profileLayoutMod !== 'undefined' && profileLayoutMod ? profileLayoutMod : null;
+  const L = typeof layout !== 'undefined' && layout ? layout : { order: ['posts', 'stats', 'level', 'avatar', 'gtf', 'badges', 'analytics'],
     hidden: () => false, show: () => true, seesHidden: false, anyHidden: false };
   const hidTag = (id) => L.hidden(id) ? '<span class="pf-hid">\u{1F441} Hidden from visitors</span>' : '';
   const role = (classh || '').toLowerCase();
+  const enc = encodeURIComponent(usernameProfile);
+  // Profile URLs in one place: the URL-scheme move maps base -> /u/<name> and tab -> /u/<name>/<tab>.
+  const base = '/u/' + enc + '/profile';
+  const tabHref = (t) => base + '?' + new URLSearchParams(Object.assign(t && t !== 'posts' ? { tab: t } : {}, previewing ? { preview: 'visitor' } : {})).toString();
   // equipped cosmetics (cosmetics.js preloads them for this route)
   const pc = typeof profileCosmetics !== 'undefined' && profileCosmetics ? profileCosmetics : null;
   const cx = (k) => (pc && pc.equipped && pc.equipped[k] ? pc.equipped[k].r : null);
   const cxName = cx('name_color'), cxBorder = cx('profile_border'), cxDeco = cx('avatar_decoration'), cxBanner = cx('profile_banner'), cxFx = cx('profile_effect');
   const cxShow = pc && pc.showcase ? pc.showcase : [];
+  const sheet = typeof heistSheet !== 'undefined' && heistSheet ? heistSheet : null;
+  const cf = typeof camfrog !== 'undefined' && camfrog ? camfrog : null;
+
+  const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null;
+  const hasAnalytics = (typeof analytics !== 'undefined' && analytics) || (isMe && !cf);
+  const has = {
+    stats: true, level: true, gtf: true, badges: true,
+    avatar: !!(av && (av.svg || av.items.length || isMe || sheet)),
+    analytics: !!hasAnalytics,
+    posts: !!(typeof social !== 'undefined' && social && (social.posts.length || isMe || social.page > 1 || social.view === 'profile')),
+  };
+  // the GTF portrait: its best item's rarity colours the frame
+  const RANK = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+  const showAv = has.avatar && L.show('avatar');
+  const avItems = av ? av.items : [];
+  const top = avItems.slice().sort((a, b) => RANK.indexOf(b.rarity) - RANK.indexOf(a.rarity))[0] || null;
+  const configured = avItems.length > 0;
+  const gtfLabel = sheet && sheet.cls ? 'GTF: ' + sheet.cls : 'GTF avatar';
+  const acts = isMe && typeof avatarActs !== 'undefined' && avatarActs ? avatarActs : [];
+  const tipNew = isMe && typeof tipJarNew !== 'undefined' ? tipJarNew : 0;
+
+  const tabs = PL ? PL.tabsFor(L, has) : [];
+  const active = PL ? PL.pickTab(tabs, typeof profileTab !== 'undefined' ? profileTab : '') : null;
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
-  .pf { max-width: 920px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 16px; }
+  .pf { max-width: 920px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 14px; }
   .pf a { color: #81c784; text-decoration: none; }
   .pf a:hover { color: #a5d6a7; }
   .pf .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; }
-  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px 22px; align-items: center;
+  .pf .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px 22px; align-items: center;
               background: radial-gradient(120% 140% at 0% 0%, #17301a 0%, #111 55%); }
+  .pf .pf-face { position: relative; line-height: 0; justify-self: center; }
   .pf .avatar { width: 108px; height: 108px; border-radius: 50%; object-fit: cover; border: 3px solid #4caf50; background: #0d0d0d;
                 box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
+  /* the GTF portrait, badge-sized, overlapping the photo */
+  .pf .pf-gtfmini { position: absolute; right: -10px; bottom: -6px; z-index: 3; width: 46px; height: 46px; padding: 0; box-sizing: border-box; cursor: pointer;
+                    border-radius: 10px; border: 2px solid var(--rc, #3a3a3a); overflow: hidden; display: grid; place-items: center;
+                    background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 8px 8px;
+                    box-shadow: 0 0 0 3px #111, 0 0 12px -2px var(--rc, transparent); transition: transform .12s; }
+  .pf .pf-gtfmini:hover, .pf .pf-gtfmini:focus-visible { transform: scale(1.08); outline: none; }
+  .pf .pf-gtfmini svg { width: 42px; height: 42px; display: block; image-rendering: pixelated; }
+  .pf .pf-gtfmini.empty { border-style: dashed; font-size: 22px; line-height: 1; }
   .pf .who h1 { margin: 0; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
   .pf .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
   .pf .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .pf .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
+  .pf .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; font-family: inherit; line-height: 1.4; }
   .pf .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
   .pf .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
-  .pf .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+  .pf button.chip.gtfc { cursor: pointer; border-color: var(--rc, #3a3a1c); background: #17150b; color: #ece2b0; }
+  .pf button.chip.gtfc:hover, .pf button.chip.gtfc:focus-visible { background: #221f10; outline: none; }
+  /* stat strip: PAT · Level + XP · Badges */
+  .pf .pf-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: #222;
+                  border: 1px solid #222; border-radius: 12px; overflow: hidden; }
+  .pf .ps { background: #0e0e0e; padding: 9px 14px; display: grid; gap: 2px; align-content: center; min-width: 0; color: inherit !important; position: relative; }
+  .pf a.ps:hover { background: #141a14; }
+  .pf .ps .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .pf .ps b { font-size: 18px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .pf .ps b.gold { color: #ffd700; }
+  .pf .ps.lv { grid-column: span 2; }
+  .pf .ps .lv-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .pf .ps .lv-row small { color: #888; font-size: 11.5px; white-space: nowrap; }
+  .pf .xb { height: 5px; background: #1f1f1f; border-radius: 999px; overflow: hidden; margin-top: 3px; }
+  .pf .xb span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .pf .ps.is-hidden > :not(.pf-hid) { opacity: .45; }
+  .pf .ps .pf-hid { top: 4px; right: 6px; font-size: 10px; padding: 2px 6px; }
+  /* actions: primary buttons + the "More" menu */
+  .pf .actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .pf .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
-             background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; }
+             background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; line-height: 1.2; }
   .pf .btn:hover { border-color: #4caf50; }
   .pf .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
   .pf .btn.ghost { background: transparent; }
-  .pf .btn .tj-new { padding: 1px 7px; border-radius: 999px; background: #4caf50; color: #fff; font-size: 11px; font-weight: bold; }
-  .pf form.inline { display: inline; margin: 0; }
-  .pf .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
-  .pf .stat { background: #111; border: 1px solid #222; border-radius: 12px; padding: 14px 16px; }
-  .pf .stat .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
-  .pf .stat .v { font-size: 24px; font-weight: bold; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  .pf .stat .v.gold { color: #ffd700; }
-  .pf .stat .s { font-size: 12px; color: #888; margin-top: 2px; }
-  .pf .lvl { display: grid; gap: 8px; }
-  .pf .lvl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-  .pf .lvl-top b { font-size: 18px; }
-  .pf .lvl .bar { height: 14px; background: #1c1c1c; border-radius: 999px; overflow: hidden; }
-  .pf .lvl .bar span { display: block; height: 100%; background: linear-gradient(90deg, #4caf50, #c6e94f); border-radius: 999px; }
+  .pf .tj-new { padding: 1px 7px; border-radius: 999px; background: #4caf50; color: #fff; font-size: 11px; font-weight: bold; }
+  .pf .pf-more { position: relative; }
+  .pf .pf-more > summary { list-style: none; }
+  .pf .pf-more > summary::-webkit-details-marker { display: none; }
+  .pf .pf-menu { position: absolute; z-index: 30; top: calc(100% + 6px); left: 0; min-width: 210px; display: grid; padding: 6px; gap: 2px;
+                 background: #141414; border: 1px solid #2c2c2c; border-radius: 10px; box-shadow: 0 12px 28px rgba(0,0,0,.6); }
+  .pf .pf-menu a, .pf .pf-menu button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 7px; color: #ddd !important;
+                 font: 14px Ubuntu, sans-serif; background: none; border: 0; text-align: left; cursor: pointer; width: 100%; white-space: nowrap; }
+  .pf .pf-menu a:hover, .pf .pf-menu button:hover, .pf .pf-menu a:focus-visible, .pf .pf-menu button:focus-visible { background: #1f2a1f; outline: none; }
+  .pf .pf-menu hr { border: 0; border-top: 1px solid #262626; margin: 4px 2px; }
+  .pf .pf-menu form { margin: 0; }
   .pf .muted { color: #888; font-size: 13px; }
   .pf h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
-  .pf .gtf { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+  .pf .gtf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px 16px; align-items: center; }
+  .pf .gtf-port { width: 72px; height: 72px; padding: 0; border-radius: 12px; border: 2px solid var(--rc, #2a2a2a); overflow: hidden; display: grid; place-items: center; cursor: pointer;
+                  background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 12px 12px; font-size: 30px; }
+  .pf .gtf-port svg { width: 68px; height: 68px; display: block; image-rendering: pixelated; }
   .pf .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; }
   .pf .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
   .pf .badge { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 10px 8px; text-align: center; display: grid; gap: 6px; justify-items: center; }
@@ -63,69 +121,111 @@
   .pf .showcase { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   .pf .showcase .pin { display: inline-flex; align-items: center; gap: 6px; background: rgba(0,0,0,.35); border: 1px solid #3a3a1c; border-radius: 10px; padding: 4px 10px 4px 4px; font-size: 12px; color: #e8e2b0; }
   .pf .showcase img { width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; }
-  .pf .gtf-av { display: grid; justify-items: center; gap: 4px; }
-  .pf .gtf-av .cx-gtf { width: 96px; height: 96px; display: grid; place-items: center; background: #0d0d0d; border-radius: 10px; font-size: 40px; }
-  .pf .avs { display: grid; grid-template-columns: 192px minmax(0, 1fr); gap: 18px 22px; align-items: center; }
-  .pf .avs-frame { width: 192px; height: 192px; box-sizing: border-box; border-radius: 14px; border: 1px solid #2a2a2a; display: grid; place-items: center;
-                   background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 24px 24px; overflow: hidden; }
-  .pf .avs-frame svg { display: block; width: 176px; height: 176px; image-rendering: pixelated; shape-rendering: crispEdges; }
-  .pf .avs-frame.empty { border-style: dashed; }
-  .pf .avs-ph { font-size: 64px; opacity: .35; filter: grayscale(.4); }
-  .pf .avs-info { min-width: 0; }
-  .pf .avs-regen { margin-top: 10px; }
-  .pf .avs-regen summary { display: inline-block; cursor: pointer; list-style: none; }
-  .pf .avs-regen summary::-webkit-details-marker { display: none; }
-  .pf .avs-regen p { margin: 8px 0; max-width: 60ch; }
-  .pf .avs-info h2 { margin-bottom: 6px; }
-  .pf .avs-who { font-size: 18px; font-weight: bold; overflow-wrap: anywhere; }
-  .pf .avs-who .chip { font-size: 12px; font-weight: normal; vertical-align: 2px; margin-left: 4px; }
-  .pf .avs-items { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
-  .pf .avs-items li { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px;
-                      background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 8px; padding: 6px 10px; }
-  .pf .avs-slot { color: #888; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
-  .pf .avs-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ddd; }
-  .pf .avs-r { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
-  .pf .avs-rar { font-size: 11px; text-transform: capitalize; }
-  .pf .avs-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  /* tabs */
+  .pf .pf-tabs { display: flex; gap: 4px; border-bottom: 1px solid #262626; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; margin-bottom: -4px; }
+  .pf .pf-tabs::-webkit-scrollbar { display: none; }
+  .pf .pf-tab { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; color: #aaa !important; font-size: 15px; white-space: nowrap;
+                border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: 8px 8px 0 0; }
+  .pf .pf-tab:hover { color: #e6e6e6 !important; background: #141414; }
+  .pf .pf-tab[aria-selected="true"] { color: #e6ffe6 !important; border-bottom-color: #4caf50; font-weight: bold; }
+  .pf .pf-tab:focus-visible { outline: 2px solid #4caf50; outline-offset: -2px; }
+  .pf .pf-tab.is-hidden { opacity: .6; }
+  .pf .pf-tab .eye { font-size: 11px; }
+  .pf .pf-panel { display: grid; gap: 16px; min-width: 0; }
+  .pf .pf-panel[hidden] { display: none; }
   .pf .pf-slot { position: relative; min-width: 0; display: grid; }
-  .pf .pf-slot.is-hidden > :not(.pf-hid), .pf .stat.is-hidden > :not(.pf-hid) { opacity: .45; filter: grayscale(.6); }
-  .pf .pf-slot.is-hidden > .card, .pf .pf-slot.is-hidden > .stats > .stat, .pf .stat.is-hidden { border-style: dashed; border-color: #3a3a3a; }
+  .pf .pf-slot.is-hidden > :not(.pf-hid) { opacity: .45; filter: grayscale(.6); }
+  .pf .pf-slot.is-hidden > .card { border-style: dashed; border-color: #3a3a3a; }
   .pf .pf-hid { position: absolute; top: -9px; right: 14px; z-index: 5; font-size: 11px; line-height: 1; padding: 4px 9px; border-radius: 999px;
                 background: #1d1a10; border: 1px solid #5a4a1c; color: #e8cf7a; white-space: nowrap; pointer-events: none; }
-  .pf .stat.is-hidden { position: relative; }
   .pf .pf-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding: 10px 14px;
                 border-radius: 12px; border: 1px solid #3a3320; background: #15130b; color: #e8dfb8; font-size: 13px; }
   .pf .pf-bar.preview { border-color: #2f6d8f; background: #0d1a22; color: #b9def2; }
   .pf .pf-bar .btns { display: flex; flex-wrap: wrap; gap: 6px; }
   .pf .pf-bar .btn { padding: 5px 11px; font-size: 13px; }
+  .pf .pf-empty { color: #888; text-align: center; padding: 28px 12px; }
+  /* GTF popover (top layer: [popover] - light dismiss + Esc for free) */
+  .gtf-pop { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; padding: 0; margin: auto;
+             background: #111; color: #e6e6e6; border: 1px solid #2c2c2c; border-radius: 16px; font-family: Ubuntu, sans-serif;
+             box-shadow: 0 24px 60px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.02); }
+  .gtf-pop::backdrop { background: rgba(0,0,0,.6); }
+  .gtf-pop a { color: #81c784; text-decoration: none; }
+  .gtf-pop .gp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #1f1f1f;
+                      background: radial-gradient(120% 200% at 0% 0%, #2a2410 0%, #111 60%); }
+  .gtf-pop .gp-head h2 { margin: 0; color: #ffd700; font: 11px 'Press Start 2P', monospace; letter-spacing: .1em; text-transform: uppercase; }
+  .gtf-pop .gp-x { background: none; border: 0; color: #aaa; font-size: 22px; line-height: 1; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+  .gtf-pop .gp-x:hover, .gtf-pop .gp-x:focus-visible { color: #fff; background: #222; outline: none; }
+  .gtf-pop .gp-body { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 16px 18px; padding: 16px; align-items: start; }
+  .gtf-pop .gp-frame { width: 168px; height: 168px; box-sizing: border-box; border-radius: 14px; border: 2px solid var(--rc, #2a2a2a); display: grid; place-items: center; overflow: hidden;
+                       background: repeating-conic-gradient(#151515 0% 25%, #101010 0% 50%) 50% / 21px 21px; box-shadow: 0 0 22px -6px var(--rc, transparent); }
+  .gtf-pop .gp-frame svg { width: 160px; height: 160px; display: block; image-rendering: pixelated; }
+  .gtf-pop .gp-frame.empty { border-style: dashed; font-size: 60px; opacity: .6; }
+  .gtf-pop .gp-who { font-size: 18px; font-weight: bold; overflow-wrap: anywhere; }
+  .gtf-pop .gp-role { display: inline-block; margin-top: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #3a3a1c; background: #17150b; color: #ece2b0; }
+  .gtf-pop .gp-items { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 4px; }
+  .gtf-pop .gp-items li { display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; padding: 5px 9px;
+                          border-radius: 7px; background: linear-gradient(90deg, color-mix(in srgb, var(--rc) 16%, #0d0d0d), #0d0d0d 70%); border-left: 3px solid var(--rc); }
+  .gtf-pop .gp-slot { color: #888; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .gtf-pop .gp-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6e6e6; }
+  .gtf-pop .gp-rar { font-size: 10.5px; font-weight: bold; letter-spacing: .05em; text-transform: uppercase; color: var(--rc); }
+  .gtf-pop .gp-none { margin: 12px 0 0; padding: 10px 12px; border: 1px dashed #333; border-radius: 10px; color: #aaa; font-size: 13px; }
+  .gtf-pop .gp-acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+  .gtf-pop .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
+                  background: #181818; color: #ddd !important; font: 14px Ubuntu, sans-serif; cursor: pointer; }
+  .gtf-pop .btn:hover { border-color: #4caf50; }
+  .gtf-pop .btn.primary { background: #4caf50; border-color: #4caf50; color: #fff !important; font-weight: bold; }
+  .gtf-pop .gp-regen { grid-column: 1 / -1; }
+  .gtf-pop .gp-regen summary { display: inline-flex; cursor: pointer; list-style: none; }
+  .gtf-pop .gp-regen summary::-webkit-details-marker { display: none; }
+  .gtf-pop .gp-regen p { margin: 8px 0; font-size: 13px; color: #aaa; }
+  .gtf-pop .gp-regen form { margin: 0; }
+  .gtf-pop .gp-log { grid-column: 1 / -1; }
+  .gtf-pop .gp-log .act-box { margin: 0; }
+  .gtf-pop code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
   @media (max-width: 560px) {
-    .pf .avs { grid-template-columns: 1fr; justify-items: center; text-align: center; }
-    .pf .avs-info { width: 100%; }
-    .pf .avs-items li { text-align: left; grid-template-columns: 84px minmax(0, 1fr) auto; }
-    .pf .avs-slot { font-size: 10px; letter-spacing: .04em; }
-    .pf .avs-links { justify-content: center; }
+    .pf { padding-top: 12px; gap: 12px; }
+    .pf .card { padding: 16px 14px; }
     .pf .hero { grid-template-columns: 1fr; justify-items: center; text-align: center; }
-    .pf .chips, .pf .actions { justify-content: center; }
-    .pf .gtf { grid-template-columns: 1fr; }
+    .pf .who { width: 100%; }
+    .pf .chips, .pf .actions, .pf .showcase { justify-content: center; }
+    .pf .pf-strip { width: 100%; display: flex; text-align: left; }
+    .pf .ps { padding: 8px 10px; flex: 0 0 auto; }
+    .pf .ps.lv { flex: 1 1 auto; }
+    .pf .ps b { font-size: 16px; }
+    .pf .ps .lv-row small { display: none; }
+    .pf .pf-menu { left: auto; right: 0; }
+    .pf .actions { gap: 6px; }
+    .pf .actions .btn { padding: 7px 11px; font-size: 13.5px; }
+    .pf .pf-tab { padding: 10px 13px; font-size: 14px; }
+    .pf .gtf { grid-template-columns: auto minmax(0, 1fr); }
+    .pf .gtf > .btn { grid-column: 1 / -1; justify-self: start; }
+    .gtf-pop .gp-body { grid-template-columns: 1fr; justify-items: center; }
+    .gtf-pop .gp-info { width: 100%; text-align: center; }
+    .gtf-pop .gp-items li { text-align: left; }
+    .gtf-pop .gp-acts { justify-content: center; }
   }
 </style>
-<div class="pf">
+<div class="pf" data-profile="<%= usernameProfile %>">
   <section class="card hero cx-host">
     <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
     <% if (cxFx) { %><div class="cx-fx cx-fx-<%= cxFx.effect %>" aria-hidden="true"></div><% } %>
-    <span class="cx-av">
-      <% if (cxDeco && cxDeco.conic) { %><span class="cx-conic<%= cxDeco.spin ? ' cx-spin' : '' %>" style="<%= cxDeco.conic %>" aria-hidden="true"></span><% } %>
-      <img class="avatar" src="<%= avatar %>" alt="<%= usernameProfile %>'s avatar" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
-      <% if (cxDeco && cxDeco.emoji) { %><span class="cx-emoji" aria-hidden="true"><%= cxDeco.emoji %></span><% } %>
-    </span>
+    <div class="pf-face">
+      <span class="cx-av">
+        <% if (cxDeco && cxDeco.conic) { %><span class="cx-conic<%= cxDeco.spin ? ' cx-spin' : '' %>" style="<%= cxDeco.conic %>" aria-hidden="true"></span><% } %>
+        <img class="avatar" src="<%= avatar %>" alt="<%= usernameProfile %>'s avatar" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
+        <% if (cxDeco && cxDeco.emoji) { %><span class="cx-emoji" aria-hidden="true"><%= cxDeco.emoji %></span><% } %>
+      </span>
+      <% if (showAv) { %>
+        <button type="button" class="pf-gtfmini<%= av.svg ? '' : ' empty' %>" popovertarget="gtfPop" data-gtf-open
+                style="--rc:<%= top ? top.color : '#3a3a3a' %>" title="<%= gtfLabel %> — wardrobe" aria-label="Open <%= displayname || usernameProfile %>'s GTF avatar"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></button>
+      <% } %>
+    </div>
     <div class="who">
       <h1><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= displayname || usernameProfile %></span><% } else { %><%= displayname || usernameProfile %><% } %></h1>
-      <div class="handle">@<%= usernameProfile %><% if (typeof camfrog !== 'undefined' && camfrog) { %> · 🐸 <%= camfrog %> on Camfrog<% } %></div>
+      <div class="handle">@<%= usernameProfile %><% if (cf) { %> · 🐸 <%= cf %> on Camfrog<% } %></div>
       <div class="chips">
-        <span class="chip">Level <%= level %></span>
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
-        <% if (badges.length) { %><span class="chip">🏅 <%= badges.length %> badge<%= badges.length === 1 ? '' : 's' %></span><% } %>
-        <% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %><span class="chip">🥷 <%= heistSheet.cls %></span><% } %>
+        <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%= gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
       </div>
       <% if (typeof social !== 'undefined' && social) { %><%- include('partials/profile-follow', { social, usernameProfile, previewing }) %><% } %>
       <% if (cxShow.length) { %>
@@ -134,117 +234,77 @@
         </div>
       <% } %>
     </div>
+    <div class="pf-strip" aria-label="Stats">
+      <% if (L.show('stats') && L.show('stats_balance')) { const h_ = L.hidden('stats') || L.hidden('stats_balance'); %>
+        <div class="ps<%= h_ ? ' is-hidden' : '' %>"<%- h_ ? ' title="Hidden from visitors"' : '' %>><span class="k">PAT</span><b class="gold"><%= fmt(points_balance) %></b></div>
+      <% } %>
+      <div class="ps lv<%= L.show('level') && L.hidden('level') ? ' is-hidden' : '' %>" title="XP comes from chatting, the mic and games. Every level-up pays 25,000 PAT; every 5th level is a milestone with a bigger bonus and a cosmetic.">
+        <span class="k">Level</span>
+        <span class="lv-row"><b><%= level %></b><% if (L.show('level')) { %><small><%= fmt(xp) %> / <%= fmt(need) %> XP</small><% } %></span>
+        <% if (L.show('level')) { %><div class="xb" role="progressbar" aria-label="XP to level <%= level + 1 %>" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div><% } %>
+      </div>
+      <% if (L.show('stats')) { %>
+        <a class="ps<%= L.hidden('stats') ? ' is-hidden' : '' %>" href="/achievements?user=<%= enc %>"><span class="k">Badges</span><b><%= badges.length %></b></a>
+      <% } %>
+    </div>
     <div class="actions">
       <% if (isMe) { %>
         <a class="btn primary" href="/u/<%= username %>/profile/edit">✏️ Edit profile</a>
-        <a class="btn" href="/u/<%= encodeURIComponent(usernameProfile) %>/tip" title="See who tipped you and share your tip link">💰 Your tip jar<% if (typeof tipJarNew !== 'undefined' && tipJarNew > 0) { %> <span class="tj-new"><%= tipJarNew > 99 ? '99+' : tipJarNew %> new</span><% } %></a>
-        <a class="btn" href="/history">📜 PAT history</a>
         <a class="btn" href="/wallet">👛 Wallet</a>
-        <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
-        <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
-        <form class="inline" action="/logout" method="POST"><button class="btn ghost" type="submit">Log out</button></form>
-      <% } else { %>
-        <% if (!previewing) { %><a class="btn primary" href="/u/<%= encodeURIComponent(usernameProfile) %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a><% } %>
-        <a class="btn" href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">🏅 Achievements</a>
-        <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %>
-          <a class="btn" href="/history?user=<%= encodeURIComponent(usernameProfile) %>">📜 PAT history</a>
-        <% } %>
+      <% } else if (!previewing) { %>
+        <a class="btn primary" href="/u/<%= enc %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a>
       <% } %>
+      <details class="pf-more" data-pf-more>
+        <summary class="btn" aria-haspopup="menu">⋯ More<% if (tipNew > 0) { %> <span class="tj-new" title="New tips in your jar"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
+        <div class="pf-menu" role="menu">
+          <% if (isMe) { %>
+            <a role="menuitem" href="/u/<%= enc %>/tip">💰 Your tip jar<% if (tipNew > 0) { %> <span class="tj-new"><%= tipNew > 99 ? '99+' : tipNew %> new</span><% } %></a>
+            <a role="menuitem" href="/history">📜 PAT history</a>
+            <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
+            <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
+            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar &amp; wardrobe</button><% } %>
+            <hr>
+            <form action="/logout" method="POST"><button type="submit" role="menuitem">↪ Log out</button></form>
+          <% } else { %>
+            <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
+            <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %><a role="menuitem" href="/history?user=<%= enc %>">📜 PAT history</a><% } %>
+            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar</button><% } %>
+          <% } %>
+        </div>
+      </details>
     </div>
     <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
 
   <% if (previewing) { %>
     <div class="pf-bar preview" role="status"><span>👁 Previewing your profile as a visitor sees it — hidden sections and “only me &amp; admins” panels are left out.</span>
-      <span class="btns"><a class="btn" href="/u/<%= usernameProfile %>/profile">Back to my view</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span></div>
+      <span class="btns"><a class="btn" href="<%= base %>">Back to my view</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span></div>
   <% } else if (L.seesHidden && L.anyHidden) { %>
     <div class="pf-bar"><span>👁 Greyed-out sections are hidden from visitors<%= isMe ? '' : ' (you see them as an admin)' %>.</span>
-      <% if (isMe) { %><span class="btns"><a class="btn" href="/u/<%= usernameProfile %>/profile?preview=visitor">Preview as visitor</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span><% } %></div>
+      <% if (isMe) { %><span class="btns"><a class="btn" href="<%= base %>?preview=visitor">Preview as visitor</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span><% } %></div>
   <% } %>
 
   <%
-    const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null;
-    const hasAnalytics = (typeof analytics !== 'undefined' && analytics) || (isMe && !(typeof camfrog !== 'undefined' && camfrog));
-    const has = {
-      stats: true, level: true, gtf: true, badges: true,
-      avatar: !!(av && (av.svg || av.items.length || isMe || (typeof heistSheet !== 'undefined' && heistSheet))),
-      analytics: !!hasAnalytics,
-      posts: !!(typeof social !== 'undefined' && social && (social.posts.length || isMe || social.page > 1 || social.view === 'profile')),
-    };
     const SEC = {};
-    SEC.stats = function () { %>
-  <section class="stats">
-    <% if (L.show('stats_balance')) { %><div class="stat<%= L.hidden('stats_balance') ? ' is-hidden' : '' %>"><%- hidTag('stats_balance') %><div class="k">PAT balance</div><div class="v gold"><%= fmt(points_balance) %></div><div class="s">in their wallet</div></div><% } %>
-    <div class="stat"><div class="k">Level</div><div class="v"><%= level %></div><div class="s"><%= Math.round(pct) %>% to level <%= level + 1 %></div></div>
-    <div class="stat"><div class="k">Badges</div><div class="v"><%= badges.length %></div><div class="s"><a href="/achievements?user=<%= encodeURIComponent(usernameProfile) %>">see all achievements</a></div></div>
-  </section>
-  <% };
-    SEC.level = function () { %>
-  <section class="card lvl">
-    <div class="lvl-top"><b>Level <%= level %></b><span class="muted"><%= fmt(xp) %> / <%= fmt(need) %> XP · <%= fmt(need - xp) %> to go</span></div>
-    <div class="bar" role="progressbar" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
-    <div class="muted">XP comes from chatting, the mic and games. Every level-up pays 25,000 PAT; every 5th level is a milestone with a bigger bonus and a cosmetic.</div>
-  </section>
-  <% };
-    SEC.avatar = function () { %>
-  <section class="card avs" aria-label="Grand Theft Frogger avatar">
-    <div class="avs-frame<%= av.svg ? '' : ' empty' %>">
-      <% if (av.svg) { %><%- av.svg %><% } else { %><span class="avs-ph" aria-hidden="true">🐸</span><% } %>
-    </div>
-    <div class="avs-info">
-      <h2>GTF avatar</h2>
-      <div class="avs-who"><%= displayname || usernameProfile %><% if (typeof heistSheet !== 'undefined' && heistSheet && heistSheet.cls) { %> <span class="chip">🥷 <%= heistSheet.cls %></span><% } %></div>
-      <% if (!av.svg) { %>
-        <p class="muted" style="margin:6px 0 0">No GTF avatar yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one<%= isMe ? '' : ' for them' %>.</p>
-      <% } %>
-      <% if (av.items.length) { %>
-        <ul class="avs-items">
-          <% av.items.forEach((it) => { %>
-            <li title="<%= it.desc %>"><span class="avs-slot"><%= it.slot %></span><span class="avs-name"><span class="avs-r" style="background:<%= it.color %>"></span><%= it.emoji %> <%= it.name %></span><span class="avs-rar" style="color:<%= it.color %>"><%= it.rarity %></span></li>
-          <% }) %>
-        </ul>
-      <% } else if (av.svg) { %>
-        <p class="muted" style="margin:6px 0 0">Wearing nothing from the GTF wardrobe yet.</p>
-      <% } %>
-      <div class="avs-links">
-        <% if (isMe) { %><a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Change look</a><% } else { %><a class="btn" href="/cosmetics">🎨 GTF wardrobe</a><% } %>
-        <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">🥷 Heist sheet</a><% } %>
-      </div>
-      <% if (isMe && av.svg && camfrog) { %>
-        <details class="avs-regen">
-          <summary class="btn">🎲 New avatar…</summary>
-          <p class="muted">Pepe rolls you a brand-new pixel avatar for <b>20,000 PAT</b> (the same as <code>!avatar regen</code> in chat). Your equipped cosmetics stay on; your current face is gone for good.</p>
-          <form method="post" action="/act">
-            <input type="hidden" name="kind" value="cmd">
-            <input type="hidden" name="cmd" value="avatar">
-            <input type="hidden" name="a0" value="regen">
-            <input type="hidden" name="tag" value="avatar">
-            <input type="hidden" name="label" value="New GTF avatar">
-            <input type="hidden" name="back" value="/u/<%= encodeURIComponent(usernameProfile) %>/profile">
-            <button class="btn" type="submit">Yes, roll a new one</button>
-          </form>
-        </details>
-      <% } %>
-      <% if (isMe && typeof avatarActs !== 'undefined') { %><%- include('partials/actions', { acts: avatarActs, msg: avatarMsg }) %><% } %>
-    </div>
-  </section>
-  <% };
     SEC.analytics = function () { %>
   <% if (typeof analytics !== 'undefined' && analytics && !analytics.empty) { %>
     <%- include('partials/user-analytics', { a: analytics, L }) %>
   <% } else if (typeof analytics !== 'undefined' && analytics && analytics.empty) { %>
-    <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">Pepe hasn't recorded any Camfrog activity for <%= camfrog %> yet — it shows up here after some chat or mic time.</p></section>
-  <% } else if (isMe && !(typeof camfrog !== 'undefined' && camfrog)) { %>
+    <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">Pepe hasn't recorded any Camfrog activity for <%= cf %> yet — it shows up here after some chat or mic time.</p></section>
+  <% } else if (isMe && !cf) { %>
     <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">No Camfrog name is linked to this account, so there's no chat or mic activity to show. Accounts Pepe makes in Camfrog are linked automatically.</p></section>
   <% } %>
   <% };
     SEC.gtf = function () { %>
-  <section class="card">
+  <section class="card" id="gtf">
     <h2>Grand Theft Frogger</h2>
     <div class="gtf">
+      <% if (showAv) { %>
+        <button type="button" class="gtf-port" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#2a2a2a' %>" aria-label="Open the GTF avatar"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></button>
+      <% } else { %><span></span><% } %>
       <div>
-        <% if (typeof heistSheet !== 'undefined' && heistSheet) { %>
-          <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= heistSheet.url %>">Heist sheet</a><%= heistSheet.cls ? ' · ' + heistSheet.cls : '' %></div>
+        <% if (sheet) { %>
+          <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= sheet.url %>">Heist sheet</a><%= sheet.cls ? ' · ' + sheet.cls : '' %><% if (showAv) { %> · <span class="muted"><%= configured ? avItems.length + ' wardrobe item' + (avItems.length === 1 ? '' : 's') : 'no wardrobe items yet' %></span><% } %></div>
         <% } else { %>
           <div class="muted" style="margin-bottom:8px">No heist sheet yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one.</div>
         <% } %>
@@ -255,7 +315,7 @@
           </div>
         <% } %>
       </div>
-      <% if (typeof heistSheet !== 'undefined' && heistSheet) { %><a class="btn" href="<%= heistSheet.url %>">Open sheet →</a><% } %>
+      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>">Open sheet →</a><% } %>
     </div>
   </section>
   <% };
@@ -263,7 +323,7 @@
   <%- include('partials/profile-posts', { social, usernameProfile, displayname, isMe }) %>
   <% };
     SEC.badges = function () { %>
-  <section class="card">
+  <section class="card" id="badges">
     <h2>Badges</h2>
     <% if (!badges.length) { %>
       <p class="muted" style="margin:0">No badges yet. <a href="/achievements">How to earn them</a></p>
@@ -277,11 +337,70 @@
   </section>
   <% };
   %>
-  <% L.order.forEach((id) => { if (!SEC[id] || !has[id] || !L.show(id)) return; %>
-  <div class="pf-slot<%= L.hidden(id) ? ' is-hidden' : '' %>" data-sec="<%= id %>"><%- hidTag(id) %>
-  <% SEC[id](); %>
-  </div>
-  <% }) %>
+  <% if (tabs.length) { %>
+    <nav class="pf-tabs" role="tablist" aria-label="Profile">
+      <% tabs.forEach((t) => { %>
+        <a class="pf-tab<%= t.hidden ? ' is-hidden' : '' %>" role="tab" id="tb-<%= t.id %>" href="<%= tabHref(t.id) %>" data-tab="<%= t.id %>" aria-controls="tab-<%= t.id %>"
+           aria-selected="<%= t.id === active ? 'true' : 'false' %>" tabindex="<%= t.id === active ? '0' : '-1' %>"<%- t.hidden ? ' title="Hidden from visitors"' : '' %>><span aria-hidden="true"><%= t.icon %></span><%= t.label %><% if (t.hidden) { %> <span class="eye" aria-label="hidden from visitors">👁</span><% } %></a>
+      <% }) %>
+    </nav>
+    <% tabs.forEach((t) => { %>
+      <div class="pf-panel" role="tabpanel" id="tab-<%= t.id %>" aria-labelledby="tb-<%= t.id %>" data-panel="<%= t.id %>"<%= t.id === active ? '' : ' hidden' %>>
+        <% t.sections.forEach((id) => { %>
+          <div class="pf-slot<%= L.hidden(id) ? ' is-hidden' : '' %>" data-sec="<%= id %>"><%- hidTag(id) %>
+          <% SEC[id](); %>
+          </div>
+        <% }) %>
+      </div>
+    <% }) %>
+  <% } else { %>
+    <p class="pf-empty">Nothing else to see here yet.</p>
+  <% } %>
 </div>
+
+<% if (showAv) { %>
+<div id="gtfPop" class="gtf-pop" popover aria-label="Grand Theft Frogger avatar" data-gtf-pop data-gtf-state="<%= configured ? 'configured' : 'unconfigured' %>">
+  <div class="gp-head"><h2>🎮 Grand Theft Frogger</h2><button type="button" class="gp-x" popovertarget="gtfPop" popovertargetaction="hide" aria-label="Close">×</button></div>
+  <div class="gp-body">
+    <div class="gp-frame<%= av.svg ? '' : ' empty' %>" style="--rc:<%= top ? top.color : '#2a2a2a' %>"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></div>
+    <div class="gp-info">
+      <div class="gp-who"><%= displayname || usernameProfile %></div>
+      <% if (sheet && sheet.cls) { %><span class="gp-role" title="Heist role">🥷 <%= sheet.cls %></span><% } %>
+      <% if (!av.svg) { %>
+        <p class="gp-none">No GTF avatar yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one<%= isMe ? '' : ' for them' %>.</p>
+      <% } else if (configured) { %>
+        <ul class="gp-items" aria-label="Wardrobe">
+          <% avItems.forEach((it) => { %>
+            <li style="--rc:<%= it.color %>" title="<%= it.desc %>"><span class="gp-slot"><%= it.slot %></span><span class="gp-name"><%= it.emoji %> <%= it.name %></span><span class="gp-rar"><%= it.rarity %></span></li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="gp-none"><%= isMe ? 'You\'re not wearing anything from the GTF wardrobe yet — backgrounds, hats, masks and frames are in Cosmetics.' : 'Not wearing anything from the GTF wardrobe yet.' %></p>
+      <% } %>
+    </div>
+    <div class="gp-acts">
+      <% if (isMe) { %><a class="btn<%= configured ? '' : ' primary' %>" href="/cosmetics?tab=mine#tabs">🎨 Change look</a><% } else { %><a class="btn" href="/cosmetics">🎨 GTF wardrobe</a><% } %>
+      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>">🥷 Heist sheet</a><% } %>
+    </div>
+    <% if (isMe && av.svg && cf) { %>
+      <details class="gp-regen">
+        <summary class="btn">🎲 New avatar…</summary>
+        <p>Pepe rolls you a brand-new pixel avatar for <b>20,000 PAT</b> (the same as <code>!avatar regen</code> in chat). Your equipped cosmetics stay on; your current face is gone for good.</p>
+        <form method="post" action="/act">
+          <input type="hidden" name="kind" value="cmd">
+          <input type="hidden" name="cmd" value="avatar">
+          <input type="hidden" name="a0" value="regen">
+          <input type="hidden" name="tag" value="avatar">
+          <input type="hidden" name="label" value="New GTF avatar">
+          <input type="hidden" name="back" value="<%= base %>?gtf=1">
+          <button class="btn" type="submit">Yes, roll a new one</button>
+        </form>
+      </details>
+    <% } %>
+    <% if (isMe && typeof avatarActs !== 'undefined') { %><div class="gp-log"><%- include('partials/actions', { acts, msg: typeof avatarMsg !== 'undefined' ? avatarMsg : '' }) %></div><% } %>
+  </div>
+</div>
+<% } %>
+<script src="/public/js/profile-tabs.js?v=1" defer></script>
 </body>
 </html>

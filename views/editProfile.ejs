@@ -306,7 +306,8 @@
 
   <section class="card" id="layout">
     <h2>Profile layout</h2>
-    <p class="lede">Drag sections to reorder them, or use the arrows. Everything is public until you change it: switch a section off to hide it from visitors — you'll still see it on your own profile, greyed out.</p>
+    <p class="lede">Your profile is a header plus tabs — Posts (opens first), Overview and Analytics. The order below sets the order of the tabs and of the cards in Overview; drag sections, or use the arrows. Header items (stat strip, XP bar, GTF avatar) always sit in the header.</p>
+    <p class="lede"> Everything is public until you change it: switch a section off to hide it from visitors — you'll still see it on your own profile, greyed out.</p>
     <form id="layoutForm" action="/api/u/<%= username %>/update/layout" method="post">
       <div class="lay-fixed">🔒 <span><b style="color:#ccc">Profile header</b> — always first: avatar, name, level, pinned badges</span></div>
       <ol class="lay" id="layList" aria-describedby="layHelp">

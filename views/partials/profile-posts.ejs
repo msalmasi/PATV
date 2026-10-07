@@ -22,14 +22,18 @@
 %>
 <link rel="stylesheet" href="/public/css/feed.css?v=13">
 <section class="card rf pp" id="posts" aria-labelledby="ppH">
+  <%# 1.99du: the owner's composer heads the Posts tab ("Your profile" picked); visitors get the feed %>
+  <% if (S_.composer) { %>
+    <div class="pp-compose" aria-label="Post to your profile">
+      <div class="pp-compose-h">✏️ Post to your profile</div>
+      <%- include('feed-composer', { composer: S_.composer, next: base_ + '#posts', fx: fx_ }) %>
+    </div>
+  <% } %>
   <h2 id="ppH"><span>📝 Posts · <span class="pp-u">u/<%= usernameProfile %></span></span><a class="pp-all" href="/feed?by=<%= encodeURIComponent(usernameProfile) %>">on the feed ›</a></h2>
   <nav class="pp-views" aria-label="Which posts">
     <a class="pp-view<%= S_.view === 'all' ? ' on' : '' %>" href="<%= pq({ pview: 'all', pp: '' }) %>"<%- S_.view === 'all' ? ' aria-current="page"' : '' %>>All posts</a>
     <a class="pp-view<%= S_.view === 'profile' ? ' on' : '' %>" href="<%= pq({ pview: 'profile', pp: '' }) %>"<%- S_.view === 'profile' ? ' aria-current="page"' : '' %>>👤 Profile only</a>
   </nav>
-  <% if (S_.composer) { %>
-    <%- include('feed-composer', { composer: S_.composer, next: base_ + '#posts', fx: fx_ }) %>
-  <% } %>
   <% if (fx_) { %><%- include('feed-sort', { fx: fx_, sort: S_.sort, top: S_.top, href: (s, t) => pq({ psort: s, pt: t || '', pp: '' }), label: 'Sort ' + name_ + '\'s posts' }) %><% } %>
   <% if (!S_.posts.length) { %>
     <p class="empty"><%= S_.page > 1 ? 'No more posts.' : isMe ? (S_.view === 'profile' ? 'Nothing on your profile yet - write something above with "Your profile" picked.' : 'You haven\'t posted yet.') : (S_.view === 'profile' ? name_ + ' hasn\'t posted to their profile yet.' : 'No posts yet.') %></p>
@@ -66,6 +70,9 @@
   <% } %>
 </section>
 <style>
+  .pf .pp-compose { display: grid; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid #1f1f1f; }
+  .pf .pp-compose-h { font-size: 14px; font-weight: bold; color: #cfe8cf; }
+  .pf .pp-compose .fc { margin-bottom: 0; }
   .pf .pp h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 0; }
   .pf .pp .pp-u { font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; color: #9ccc9c; font-size: 12px; }
   .pf .pp .pp-all { font-family: Ubuntu, sans-serif; font-size: 12px; letter-spacing: 0; text-transform: none; }
