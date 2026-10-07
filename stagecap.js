@@ -547,6 +547,7 @@ async function sweep() {
 
 // ── routes ──
 function register(app, { addUser, isBotToken, noTimers }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   const express = require("express");
   const json = express.json({ limit: "8kb" });
   const sameSite = (req) => {

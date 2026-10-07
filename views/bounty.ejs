@@ -59,17 +59,17 @@
     <h1><span class="ref"><%= b.ref %></span> <%= b.task %></h1>
     <div class="pot"><%= b.total.toLocaleString() %> PAT</div>
     <div class="info">
-      Posted by <b><%= b.creator %></b> in <%= b.room || 'a room' %> · <%= when(b.created) %> UTC<br>
-      <%= b.status === 'open' ? (open ? 'Open — ends in ' + left(b.deadline) + ' (' + when(b.deadline) + ' UTC)' : 'Expired — refunds on the way')
+      Posted by <b><%- ul(b.creator) %></b> in <%- padLink(b.room, 'a room') %> · <%= when(b.created) %> UTC<br>
+      <%- b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).map((h) => ul(h)).join(', ') + ulEsc(b.resolved ? ' · ' + when(b.resolved) + ' UTC' : '') : ulEsc(b.status === 'open' ? (open ? 'Open — ends in ' + left(b.deadline) + ' (' + when(b.deadline) + ' UTC)' : 'Expired — refunds on the way')
          : b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).join(', ') + (b.resolved ? ' · ' + when(b.resolved) + ' UTC' : '')
          : b.status === 'cancelled' ? 'Cancelled — everyone who chipped in was refunded'
-         : b.status === 'expired' ? 'Expired unpaid — everyone who chipped in was refunded' : b.status %>
+         : b.status === 'expired' ? 'Expired unpaid — everyone who chipped in was refunded' : b.status) %>
     </div>
     <% if (b.verify) { %>
       <div class="verify">🔎 <b>Pepe verifies this one:</b> <%= b.verify.text %>.
-        <span class="info">Claim it and he checks his room logs (public chat, mic, mod log) for you. A clear match pays out on its own; anything less goes to <%= b.creator %>.</span></div>
+        <span class="info">Claim it and he checks his room logs (public chat, mic, mod log) for you. A clear match pays out on its own; anything less goes to <%- ul(b.creator) %>.</span></div>
     <% } else { %>
-      <div class="verify" style="border-color:#333;background:#111">✋ <b style="color:#ccc">Manual bounty:</b> <span class="info"><%= b.creator %> checks the claims and picks who gets paid.</span></div>
+      <div class="verify" style="border-color:#333;background:#111">✋ <b style="color:#ccc">Manual bounty:</b> <span class="info"><%- ul(b.creator) %> checks the claims and picks who gets paid.</span></div>
     <% } %>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
 
@@ -133,7 +133,7 @@
          b.claims.forEach((c) => { const won = (b.hunters || []).includes(c.nick); const ev = c.evidence || {}; const ck = c.check; const p = c.perms || {}; %>
         <div class="claim<%= won ? ' won' : '' %>">
           <div class="top">
-            <span class="who"><%= won ? '🏆 ' : '' %><%= c.nick %></span>
+            <span class="who"><%= won ? '🏆 ' : '' %><%- ul(c.nick) %></span>
             <span class="info"><%= when(c.ts) %> UTC
               <% if (c.rejected) { %> <span class="flag">rejected<%= c.rejected.by ? ' by ' + c.rejected.by : '' %></span><% } %>
               <% if (c.disputed) { %> <span class="flag disp">disputed: admins</span><% } %></span>
@@ -169,7 +169,7 @@
     <h3>The pot</h3>
     <div class="tbl"><table>
       <tr><th>Backer</th><th class="r">PAT</th></tr>
-      <% b.backers.forEach((c) => { %><tr><td><%= c.nick %></td><td class="r"><%= c.amount.toLocaleString() %></td></tr><% }) %>
+      <% b.backers.forEach((c) => { %><tr><td><%- ul(c.nick) %></td><td class="r"><%= c.amount.toLocaleString() %></td></tr><% }) %>
     </table></div>
   <% } %>
 </div>

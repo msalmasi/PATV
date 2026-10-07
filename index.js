@@ -96,6 +96,8 @@ app.set("view engine", "ejs");
 
 // Set the views directory
 app.set("views", "./views");
+// 1.99dt: <%- ul(name) %> / <%- padLink(room) %> in any view: names link to PATV profiles, rooms to pads (userlinks.js)
+require("./userlinks").install(app);
 
 // Set morgan logging
 // app.use(morgan("combined"));

@@ -1,4 +1,7 @@
 <%- include('layout', { title: 'p/' + room.slug + ' — ' + room.name, user: user }) %>
+<% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
+   const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
+   const ULE = typeof ulEsc === 'function' ? ulEsc : escapeFn; %>
 <%# The pad page (1.99ck, /p/<slug>; was /rooms/<slug> + /feed/c/<slug>): header, stage + schedule, the live
     Camfrog room behind the pad when there is one (chat, people, mic, DJ booth), then the pad's feed. A
     site pad (the Camfrog Lounge) has no Camfrog room: no live section, no "not bridged" note. 1.99x: the header
@@ -207,7 +210,7 @@
     </div>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="Coming up on this stage">
-        <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%= u.display %></b><span class="muted"><%= u.minutes %> min<%= u.featured ? ' · ★ featured' : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
+        <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%- UL(u.username, { text: u.display }) %></b><span class="muted"><%= u.minutes %> min<%= u.featured ? ' · ★ featured' : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
       </ul>
     <% } %>
   </section>

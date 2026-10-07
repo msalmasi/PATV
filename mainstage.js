@@ -974,7 +974,7 @@ async function roomStage(roomId, viewer) {
     room: { id: roomId, slug: RS.slug, title: RS.title, slot_count: RS.slot_count, slot_price: RS.slot_price, approval: RS.approval },
     slots: live, open: open.length, free: Math.max(0, RS.slot_count - open.length),
     featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by } : null,
-    upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, start_at: startOf(s), minutes: s.max_minutes,
+    upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
     queue: { length: q.length, position: mine >= 0 ? mine + 1 : null, entry: mine >= 0 ? q[mine].id : null },
     price: CONFIG.price_per_min, enabled: CONFIG.enabled && CONFIG.max_concurrent > 0,
@@ -993,7 +993,7 @@ async function roomSchedule(roomId, viewer, manage) {
   const q = await queueFor(roomId);
   const row = (s) => {
     const e = embedOf(s);
-    return { display: s.displayname || s.username, title: s.title || null, featured: !!s.featured, mode: isEmbed(s) ? "embed" : "stream",
+    return { display: s.displayname || s.username, username: s.username || null, title: s.title || null, featured: !!s.featured, mode: isEmbed(s) ? "embed" : "stream",
              embed_label: e ? embeds.label(e) : null, minutes: s.max_minutes, mine: !!me && s.userId === me };
   };
   const live = open.map((s) => ({ ...row(s), live: isLive(s, t), since: s.went_live || null, start_at: startOf(s),
@@ -1002,8 +1002,15 @@ async function roomSchedule(roomId, viewer, manage) {
   const upcoming = fut.filter((s) => s.status === "scheduled" || (s.status === "requested" && (manage || (me && s.userId === me))))
     .slice(0, 40)
     .map((s) => ({ ...row(s), start_at: startOf(s), status: s.status === "requested" ? "requested" : "scheduled" }));
-  const queue = q.map((e, i) => ({ position: i + 1, display: e.displayname || e.username, minutes: e.minutes, featured: !!e.feature,
+  const queue = q.map((e, i) => ({ position: i + 1, display: e.displayname || e.username, username: e.username || null, minutes: e.minutes, featured: !!e.feature,
                                    title: e.title || null, mode: e.mode === "embed" ? "embed" : "stream", mine: !!me && e.userId === me }));
+  // 1.99dt: the booker's profile link (one users lookup for the whole schedule; archived / unknown -> no link)
+  try {
+    const ul = require("./userlinks");
+    const all = [...live, ...upcoming, ...queue];
+    const found = await ul.lookup(all.map((r) => r.username).filter(Boolean));
+    for (const r of all) { const a = r.username ? found.get(ul.keyOf(r.username)) : null; r.href = a ? ul.profileHref(a.username) : null; }
+  } catch (e) { console.error("[stage] schedule links:", e.message); }
   const out = { live, upcoming, queue };
   if (manage) out.pending = fut.filter((s) => s.status === "requested").length;
   return out;
@@ -1018,12 +1025,12 @@ async function guide() {
   const add = (id) => { if (!by.has(id)) by.set(id, { now: [], next: [] }); return by.get(id); };
   for (const s of open) {
     const e = embedOf(s);
-    add(s.room_id).now.push({ id: s.id, display: s.displayname || s.username, live: isLive(s, t), featured: !!s.featured,
+    add(s.room_id).now.push({ id: s.id, display: s.displayname || s.username, username: s.username || null, live: isLive(s, t), featured: !!s.featured,
       title: s.title || null, mode: s.mode || "stream", embed_label: e ? embeds.label(e) : null, since: s.went_live || null,
       ends_by: (s.went_live || startOf(s)) + s.max_minutes * 60000 });
   }
   for (const s of fut) {
-    add(s.room_id).next.push({ id: s.id, display: s.displayname || s.username, start_at: startOf(s), minutes: s.max_minutes,
+    add(s.room_id).next.push({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" });
   }
   for (const v of by.values()) {
@@ -1128,6 +1135,7 @@ function start() {
 }
 
 function register(app, { addUser, isBotToken, noTimers }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   const express = require("express");
   if (!noTimers) start();
   const isStaff = rooms.isStaff;

@@ -123,7 +123,7 @@
     <div class="grid">
     <% myStashes.forEach((s) => { %>
       <div class="card<%= s.owner_me ? ' own' : '' %>">
-        <span class="ref"><%= s.owner %>/<%= s.name %><%= s.owner_me ? ' · yours' : ' · member' %></span>
+        <span class="ref"><%- ul(s.owner) %>/<%= s.name %><%= s.owner_me ? ' · yours' : ' · member' %></span>
         <div class="stats">
           <div class="stat"><span>Balance</span><b class="gold"><%= fmt(s.balance) %></b></div>
           <div class="stat"><span>In vaults</span><b class="green"><%= fmt(s.vaulted) %></b></div>
@@ -195,7 +195,7 @@
       <% list.forEach((l) => { %>
         <tr>
           <td class="ref"><%= l.ref %> <span class="pill <%= l.status === 'active' ? 'on' : '' %>"><%= LS[l.status] || l.status %></span><%- l.late ? ' <span class="pill late">LATE</span>' : '' %></td>
-          <td><%= side === 'b' ? (l.reserve ? '🏦 Federal Reserve' : l.lender) : l.borrower %></td>
+          <td><%- side === 'b' ? (l.reserve ? '🏦 Federal Reserve' : ul(l.lender)) : ul(l.borrower) %></td>
           <td class="r"><%= fmt(l.principal) %></td><td><%= rate(l) %> · <%= dur(l.term) %></td>
           <td class="r"><%= fmt(l.owed) %><%= l.penalty ? ' (incl. ' + fmt(l.penalty) + ' late penalty)' : '' %></td><td class="r"><%= fmt(l.paid) %></td><td class="r"><b><%= fmt(l.left) %></b></td>
           <td><%- l.status === 'offered' && l.offer_until ? 'offer ends ' + cd(l.offer_until) : l.due ? (l.due > now ? cd(l.due) : '<span class="down">overdue</span>') : '' %></td>
@@ -236,7 +236,7 @@
         <div class="tbl"><table>
           <tr><th>Loan</th><th>With</th><th class="r">Principal</th><th class="r">Paid</th><th>Status</th><th>Ended (UTC)</th></tr>
           <% loanHistory.forEach((l) => { %>
-            <tr><td class="ref"><%= l.ref %></td><td><%= l.iBorrow ? 'from ' + (l.reserve ? 'Federal Reserve' : l.lender) : 'to ' + l.borrower %></td>
+            <tr><td class="ref"><%= l.ref %></td><td><%- l.iBorrow ? 'from ' + (l.reserve ? 'Federal Reserve' : ul(l.lender)) : 'to ' + ul(l.borrower) %></td>
               <td class="r"><%= fmt(l.principal) %></td><td class="r"><%= fmt(l.paid) %></td><td><%= l.status %><%= l.late ? ' (late)' : '' %></td><td><%= when(l.ended || l.created) %></td></tr>
           <% }) %>
         </table></div>
@@ -381,7 +381,7 @@
       <% admin.pending.forEach((r) => { %>
         <div class="card admin">
           <span class="ref">LR<%= r.id %> · <%= r.status %> · <%= when(r.created) %> UTC</span>
-          <span class="name"><%= r.nick %> wants <%= fmt(r.amount) %> PAT for <%= dur(r.term) %></span>
+          <span class="name"><%- ul(r.nick) %> wants <%= fmt(r.amount) %> PAT for <%= dur(r.term) %></span>
           <% const rc = r.creditLive; if (rc) { %>
             <span class="info">📊 Credit <b><%= rc.score %></b> <span class="band <%= bandCls(rc.band) %>"><%= rc.band %></span>
               <%= rc.factors.filter((f) => f.points).slice(0, 3).map((f) => f.label + ' (' + pts(f.points) + ')').join(' · ') %>
@@ -416,7 +416,7 @@
       <div class="tbl" style="margin-top:10px"><table>
         <tr><th>Loan</th><th>Borrower</th><th class="r">Principal</th><th class="r">Owed</th><th class="r">Paid</th><th class="r">Left</th><th>Due</th></tr>
         <% admin.reserveLoans.forEach((l) => { %>
-          <tr><td class="ref"><%= l.ref %><%- l.late ? ' <span class="pill late">LATE</span>' : '' %></td><td><%= l.borrower %></td><td class="r"><%= fmt(l.principal) %></td>
+          <tr><td class="ref"><%= l.ref %><%- l.late ? ' <span class="pill late">LATE</span>' : '' %></td><td><%- ul(l.borrower) %></td><td class="r"><%= fmt(l.principal) %></td>
             <td class="r"><%= fmt(l.owed) %></td><td class="r"><%= fmt(l.paid) %></td><td class="r"><%= fmt(l.left) %></td><td><%- l.due ? (l.due > now ? cd(l.due) : '<span class="down">overdue</span>') : '' %></td></tr>
         <% }) %>
       </table></div>
@@ -437,7 +437,7 @@
       <div class="tbl"><table>
         <tr><th>Stash</th><th class="r">Balance</th><th class="r">In vaults</th><th>Holdings</th><th>Members</th></tr>
         <% admin.stashes.forEach((s) => { %>
-          <tr><td><%= s.owner %>/<%= s.name %></td><td class="r"><%= fmt(s.balance) %></td><td class="r"><%= fmt(s.vaulted) %></td>
+          <tr><td><%- ul(s.owner) %>/<%= s.name %></td><td class="r"><%= fmt(s.balance) %></td><td class="r"><%= fmt(s.vaulted) %></td>
             <td><%= holdLine(s.hold) %></td><td><%= (s.members || []).join(', ') %></td></tr>
         <% }) %>
         <tr class="tot"><td><%= admin.stashes.length %> stashes</td><td class="r"><%= fmt(admin.totals.balance) %></td><td class="r"><%= fmt(admin.totals.vaulted) %></td><td></td><td></td></tr>

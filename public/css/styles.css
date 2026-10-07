@@ -685,3 +685,7 @@ height: 1.5rem;
 .pad-filter a.on { border-color: #4caf50; background: #12301a; color: #fff !important; }
 .pad-filter a small { color: #888; }
 .pad-plat.pp-profile { border-color: #2f4a66; background: #0e1621; color: #b9d8ff; }   /* 1.99df: a member's profile */
+/* 1.99dt: a name that links to its PATV profile (userlinks.js) - the surrounding text colour, dotted underline; a pad named in passing */
+a.ulink[href], a.pad-link[href] { color: inherit; text-decoration: underline dotted; text-decoration-color: rgba(255,255,255,.35); text-underline-offset: 3px; }
+a.ulink[href]:hover, a.pad-link[href]:hover, a.ulink[href]:focus-visible, a.pad-link[href]:focus-visible { color: #81c784; text-decoration: underline solid; }
+.ulink-web { cursor: help; }

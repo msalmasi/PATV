@@ -1,6 +1,6 @@
 <%- include('layout', { title: m ? m.ref + ' · ' + m.question : 'Market not found', user: user}) %>
 <style>
-  .mk { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+  .mk { max-width: 892px; width: 100%; box-sizing: border-box; min-width: 0; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }   /* a grid item with auto margins is sized to its content: width 100% keeps the trades table scrolling inside .tbl at 375 px instead of widening the page */
   .mk a { color: #81c784; }
   .mk .ref { color: #81c784; font-family: monospace; }
   .mk h1 { font-size: 22px; margin: 18px 0 4px; }
@@ -41,6 +41,9 @@
   const pc = (p) => (p * 100).toFixed(p >= 0.995 || p <= 0.005 ? 1 : 0) + '%';
   const fmt = (n) => Math.round(n).toLocaleString();
   const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  // 1.99dt: E escapes; \u0001 in an escaped status line marks where the linked "(by <who>)" goes
+  const E = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const byWho = () => (m && m.settled_by ? ' (by ' + ul(m.settled_by) + ')' : '');
   const judgeOk = typeof judgeMe !== 'undefined' && judgeMe && m && (m.status === 'open' || m.status === 'closed');
 %>
 <div class="mk">
@@ -51,13 +54,13 @@
   <% } else if (m.shares) { %>
     <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
     <div class="info">
-      <%= m.settle && m.settle.kind === 'won' ? 'Resolved: ' + m.settle.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '') + ' — each ' + m.settle.result + ' share paid 1 PAT' + (m.settle.total ? ' (' + fmt(m.settle.total) + ' PAT paid out)' : '')
+      <%- E(m.settle && m.settle.kind === 'won' ? 'Resolved: ' + m.settle.result + '\u0001' + ' — each ' + m.settle.result + ' share paid 1 PAT' + (m.settle.total ? ' (' + fmt(m.settle.total) + ' PAT paid out)' : '')
          : m.settle && m.settle.kind === 'void' ? 'Voided' + (m.settle.reason ? ' (' + m.settle.reason + ')' : '') + ' — holders were refunded' + (m.settle.total != null ? ' ' + fmt(m.settle.total) + ' PAT' : '')
          : m.status === 'open' ? 'Trading open — closes ' + new Date(m.closes * 1000).toUTCString()
-         : m.status === 'settled' || m.status === 'resolved' ? 'Resolved: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '')
+         : m.status === 'settled' || m.status === 'resolved' ? 'Resolved: ' + m.result + '\u0001'
          : m.status === 'void' ? 'Voided — holders were refunded'
-         : m.status === 'settling' ? 'Paying out…' : 'Trading closed — waiting for the judge' %><br>
-      Volume <%= fmt(m.total) %> PAT · <%= m.betCount %> trade<%= m.betCount === 1 ? '' : 's' %> · <%= m.bettors %> holder<%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
+         : m.status === 'settling' ? 'Paying out…' : 'Trading closed — waiting for the judge').split('\u0001').join(byWho()) %><br>
+      Volume <%= fmt(m.total) %> PAT · <%= m.betCount %> trade<%= m.betCount === 1 ? '' : 's' %> · <%= m.bettors %> holder<%= m.bettors === 1 ? '' : 's' %> · judge <%- ul(m.judge) %> · created by <%- ul(m.creator) %> in <%- padLink(m.room, 'a room') %>
     </div>
     <% const lastTraded = 'last traded ' + m.options.map((o) => Math.round(o.last * 100)).join('/'); %>
     <div class="opts">
@@ -177,7 +180,7 @@
         <input type="text" name="reason" maxlength="160" placeholder="Reason (required to void)" style="width:100%;box-sizing:border-box">
         <p class="info" style="margin:0">Void: trading fees are kept, the Federal Reserve takes back its seed first, and holders split what's left — up to what they put in.</p>
         <div class="row"><button type="submit">Resolve</button>
-          <span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
+          <span class="info">Only the judge (<%- ul(m.judge) %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
       </form>
     <% } %>
 
@@ -199,7 +202,7 @@
     <div class="tbl"><table>
       <tr><th>Who</th><th>Side</th><th>Outcome</th><th class="r">Shares</th><th class="r">PAT</th><th class="r">Price</th><th class="r">When (UTC)</th></tr>
       <% m.trades.slice(0, 100).forEach((t) => { %>
-        <tr><td><%= t.nick %><%= t.web ? ' 🌐' : '' %></td><td class="<%= t.side === 'buy' ? 'up' : 'down' %>"><%= t.side %></td><td><%= t.option %></td>
+        <tr><td><%- ul(t.nick, { web: t.web }) %></td><td class="<%= t.side === 'buy' ? 'up' : 'down' %>"><%= t.side %></td><td><%= t.option %></td>
             <td class="r"><%= fmt(t.shares) %></td><td class="r"><%= fmt(t.pat) %></td>
             <td class="r"><%= t.shares ? (t.pat / t.shares).toFixed(3) : '' %></td><td class="r"><%= when(t.ts) %></td></tr>
       <% }) %>
@@ -208,10 +211,10 @@
   <% } else { %>
     <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
     <div class="info">
-      <%= m.status === 'open' ? 'Open — closes ' + new Date(m.closes * 1000).toUTCString()
-         : m.status === 'settled' ? 'Settled: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '')
-         : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge' %><br>
-      Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
+      <%- E(m.status === 'open' ? 'Open — closes ' + new Date(m.closes * 1000).toUTCString()
+         : m.status === 'settled' ? 'Settled: ' + m.result + '\u0001'
+         : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge').split('\u0001').join(byWho()) %><br>
+      Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%- ul(m.judge) %> · created by <%- ul(m.creator) %> in <%- padLink(m.room, 'a room') %>
       · <i><%= m.model === 'pool' ? 'betting pool' : 'pool market (from before share trading)' %></i>
     </div>
     <div class="opts">
@@ -252,7 +255,7 @@
           <label><input type="radio" name="outcome" value="void"> void (refund every stake in full)</label>
         </div>
         <input type="text" name="reason" maxlength="160" placeholder="Reason (required to void)" style="width:100%;box-sizing:border-box">
-        <div class="row"><button type="submit">Settle</button><span class="info">Only the judge (<%= m.judge %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
+        <div class="row"><button type="submit">Settle</button><span class="info">Only the judge (<%- ul(m.judge) %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
       </form>
     <% } %>
     <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: null }) %>
@@ -271,7 +274,7 @@
     <div class="tbl"><table>
       <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When (UTC)</th></tr>
       <% (m.bets || []).slice().sort((a, b) => b.ts - a.ts).forEach((b) => { %>
-        <tr><td><%= b.nick %><%= b.web ? ' 🌐' : '' %></td><td><%= b.option %></td>
+        <tr><td><%- ul(b.nick, { web: b.web }) %></td><td><%= b.option %></td>
             <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%= when(b.ts) %></td></tr>
       <% }) %>
       <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888">No bets yet.</td></tr><% } %>

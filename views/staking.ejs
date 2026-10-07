@@ -1,4 +1,7 @@
 <%- include('layout', { title: 'Staking', user: user}) %>
+<% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
+   const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
+   const ULE = typeof ulEsc === 'function' ? ulEsc : escapeFn; %>
 <style>
   .sk { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
   .sk a { color: #81c784; }
@@ -245,10 +248,10 @@
       <tr><th>Stash</th><th>Vault</th><th class="r">Shares</th><th class="r">Price</th><th class="r">Value</th></tr>
       <% let grand = 0; mine.forEach((m) => { const rows = KEYS.filter((k) => m.hold[k]); grand += m.total; %>
         <% if (!rows.length) { %>
-          <tr><td><%= m.owner %>/<%= m.name %></td><td colspan="4" style="color:#888">nothing staked</td></tr>
+          <tr><td><%- UL(m.owner) %>/<%= m.name %></td><td colspan="4" style="color:#888">nothing staked</td></tr>
         <% } %>
         <% rows.forEach((k, i) => { %>
-          <tr><td><%= i === 0 ? m.owner + '/' + m.name : '' %></td><td><%= V[k].icon %> <%= V[k].name %></td>
+          <tr><td><%- i === 0 ? UL(m.owner) + '/' + ULE(m.name) : '' %></td><td><%= V[k].icon %> <%= V[k].name %></td>
             <td class="r"><%= (Number(m.hold[k].shares) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }) %></td>
             <td class="r"><%= price(snap.prices[k]) %></td><td class="r"><%= fmt(m.hold[k].value) %></td></tr>
         <% }) %>

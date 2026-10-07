@@ -51,7 +51,7 @@ async function guideRows(signedIn) {
     const slots = g.get(id) || { now: [], next: [] };
     out.push({
       id, slug: b ? b.slug : r.slug, title: (r && r.title) || (b && b.name) || id,
-      owner: r && r.owner ? (r.owner.display || r.owner.username) : null, house: !!(r && r.house),
+      owner: r && r.owner ? (r.owner.display || r.owner.username) : null, ownerUser: r && r.owner ? r.owner.username || null : null, house: !!(r && r.house),
       bridged: !!b, live: !!(b && b.live), count: b ? b.count : 0, micCount: b ? b.micCount : 0,
       topic: b ? b.topic : "", description: r ? r.description : "",
       slot_count: r ? r.slot_count : 1, now: slots.now, next: slots.next.slice(0, 4),
@@ -68,6 +68,7 @@ async function guideRows(signedIn) {
 }
 
 function register(app, { addUser, isBotToken }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   const fail = (res, e) => {
     const st = e && e.status && e.status < 500 ? e.status : 500;
     if (st === 500) console.error("[rooms]", e);

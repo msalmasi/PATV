@@ -152,7 +152,9 @@ async function privateLogins(logins) {
   const q = list.map(() => "?").join(",");
   let users = [];
   try {
-    users = await getQuery(`SELECT userId, username, displayname, camfrogUsername FROM users WHERE lower(camfrogUsername) IN (${q})`, list);
+    // 1.99dt: an archived account's privacy choice still counts, but it's never linked
+    const arch = await require("./userlinks").archivedCol();
+    users = await getQuery(`SELECT userId, username, displayname, camfrogUsername, ${arch} AS archived_at FROM users WHERE lower(camfrogUsername) IN (${q})`, list);
   } catch (e) { users = []; }
   let pl = null;
   try { pl = require("./profilelayout"); } catch (e) { pl = null; }
@@ -165,7 +167,11 @@ async function privateLogins(logins) {
         hidden = pl.stateOf(layout, "analytics") === "hidden" || pl.stateOf(layout, "an_rooms") === "hidden";
       } catch (e) { hidden = true; }          // fail closed
     }
-    out.set(login, hidden ? { private: true } : { username: u.username });
+    const prev = out.get(login);
+    if (prev && prev.private) continue;                 // any linked account hiding it keeps the name off
+    if (hidden) out.set(login, { private: true });
+    else if (u.archived_at == null) out.set(login, { username: u.username });
+    else if (!prev) out.set(login, {});                 // archived: named, not linked
   }
   return out;
 }

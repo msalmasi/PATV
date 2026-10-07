@@ -79,6 +79,7 @@ function viewPool(m, me) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   // Pepe pushes wagers here
   app.post("/api/wagers/sync", async (req, res) => {
     const body = req.body || {};

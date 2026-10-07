@@ -105,6 +105,7 @@ async function load(key) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   app.post("/api/wallet/stashes", async (req, res) => {
     const body = req.body || {};
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });

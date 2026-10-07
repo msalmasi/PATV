@@ -72,6 +72,7 @@ function view(b, me) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   async function whoAmI(req) {
     if (!req.user || !req.user.userId) return null;
     const u = await getQuery("SELECT username, camfrogUsername, class, points_balance, casino_banned FROM users WHERE userId = ?", [req.user.userId]);

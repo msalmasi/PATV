@@ -186,6 +186,7 @@ function chart(epochs) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   // 120 epochs with flows can pass express.json()'s default 100kb — index.js must let this path
   // through to the larger parser here (same as /api/media) for big snapshots.
   app.post("/api/staking/sync", express.json({ limit: "4mb" }), async (req, res) => {

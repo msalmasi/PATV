@@ -11,7 +11,7 @@
       <p class="aij-sub">Pays out in <%= Math.floor(left / 60) %> min unless enough people dispute it<%= (ai.disputes || []).length ? ' (' + ai.disputes.length + ' so far)' : '' %>.</p>
     <% } else if (ai.state === 'disputed' && live) { %>
       <p>Pepe said <b><%= ai.result %></b>, but it was disputed — an admin will settle it.</p>
-      <% (ai.disputes || []).forEach((d) => { %><p class="aij-sub">⚖️ <%= d.nick %>: <%= d.why || '(no reason)' %></p><% }) %>
+      <% (ai.disputes || []).forEach((d) => { %><p class="aij-sub">⚖️ <%- ul(d.nick) %>: <%= d.why || '(no reason)' %></p><% }) %>
     <% } else if (ai.state === 'thinking') { %>
       <p>Pepe is looking it up right now…</p>
     <% } else if (ai.state === 'unsure' && live && ai.escalated) { %>

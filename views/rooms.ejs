@@ -1,4 +1,7 @@
 <%- include('layout', { title: 'Pads', user: user }) %>
+<% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
+   const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
+   const ULE = typeof ulEsc === 'function' ? ulEsc : escapeFn; %>
 <!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99bx: a whole card (and a whole schedule row) opens its room - a stretched link on a.t / a.rl. -->
@@ -141,7 +144,7 @@
           <div class="sub">
             <span class="padref">p/<%= r.slug %></span>
             <% if (r.bridged) { %><span title="In the Camfrog room">👥 <%= r.count %></span><span>🎙 <%= r.micCount %></span><% } %>
-            <% if (r.house) { %><span class="own" title="Run by Pepe">🐸 House pad</span><% } else if (r.owner) { %><span class="own">👑 <%= r.owner %></span><% } %>
+            <% if (r.house) { %><span class="own" title="Run by Pepe">🐸 House pad</span><% } else if (r.owner) { %><span class="own">👑 <%- r.ownerUser ? UL(r.ownerUser, { text: r.owner }) : ULE(r.owner) %></span><% } %>
             <span>🎬 <%= r.now.length %>/<%= r.slot_count %> slots</span>
             <% if (r.pepe_here) { %><span title="Pepe is in this pad's Camfrog room - his stream is on its stage">🐸 Pepe's here</span><% } %>
           </div>
@@ -149,13 +152,13 @@
           <div class="slotrow"><span class="k now">Now</span>
             <ul>
               <% if (!r.now.length) { %><li class="muted"><%= r.pepe_here ? "🐸 Pepe's stream" + (pepeOn ? '' : ' (off air)') + ' — slot open' : 'Slot open' %></li><% } %>
-              <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="featured">★</span> ' : '' %><b><%= s.display %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%= s.mode === 'embed' ? (s.embed_label || 'video') : (s.live ? '● live' : 'starting…') %></span></li><% }) %>
+              <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="featured">★</span> ' : '' %><b><%- UL(s.username, { text: s.display }) %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%= s.mode === 'embed' ? (s.embed_label || 'video') : (s.live ? '● live' : 'starting…') %></span></li><% }) %>
             </ul>
           </div>
           <div class="slotrow"><span class="k">Next</span>
             <ul>
               <% if (!r.next.length) { %><li class="muted">Nothing booked — <a href="/stage?room=<%= encodeURIComponent(r.slug) %>">book a slot</a></li><% } %>
-              <% r.next.forEach((n) => { %><li><time data-ts="<%= n.start_at %>"><%= new Date(n.start_at).toISOString().slice(11, 16) %></time><b><%= n.display %></b><%= n.featured ? ' ★' : '' %><%= n.title ? ' — ' + n.title : '' %></li><% }) %>
+              <% r.next.forEach((n) => { %><li><time data-ts="<%= n.start_at %>"><%= new Date(n.start_at).toISOString().slice(11, 16) %></time><b><%- UL(n.username, { text: n.display }) %></b><%= n.featured ? ' ★' : '' %><%= n.title ? ' — ' + n.title : '' %></li><% }) %>
             </ul>
           </div>
           <div class="acts">
@@ -176,7 +179,7 @@
       <ul class="sched">
         <% sched.slice(0, 30).forEach((n) => { %>
           <li><time data-ts="<%= n.start_at %>" data-long="1"><%= new Date(n.start_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>
-            <span class="w"><b><%= n.display %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
+            <span class="w"><b><%- UL(n.username, { text: n.display }) %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
         <% }) %>
       </ul>
     <% } %>

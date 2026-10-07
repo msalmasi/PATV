@@ -78,7 +78,7 @@
         <% if (ai.reason) { %><span class="reason"><%= ai.reason %></span><% } %>
         <% if (st === 'proposed' && ai.until) { %><span class="info">Final <%- ai.until > now ? 'in ' + cd(ai.until) : 'any moment now' %> unless someone in it disputes.</span><% } %>
         <% if (st === 'disputed') { %><span class="info">Disputed — the admins will look at it.</span><% } %>
-        <% if (ai.disputes && ai.disputes.length) { %><ul><% ai.disputes.forEach((d) => { %><li><b><%= d.nick %></b>: <%= d.why %></li><% }) %></ul><% } %>
+        <% if (ai.disputes && ai.disputes.length) { %><ul><% ai.disputes.forEach((d) => { %><li><b><%- ul(d.nick) %></b>: <%= d.why %></li><% }) %></ul><% } %>
         <% if (st === 'proposed' && inIt && canAct && (!ai.until || ai.until > now)) { %>
           <form class="inline" method="post" action="/act"><%- hidden(cmd) %>
             <input type="hidden" name="a0" value="dispute"><input type="hidden" name="a1" value="<%= ref %>">
@@ -99,12 +99,12 @@
 
   const wagerCard = (w, offer) => { %>
     <div class="card<%= offer ? ' offer' : w.inIt ? ' mine' : '' %>">
-      <span class="ref"><%= w.ref %> · <%= STATUS[w.status] || w.status %><%= w.room ? ' · ' + w.room : '' %></span>
-      <span class="vs"><%= w.creator %> vs <%= w.opponent || 'anyone' %></span>
+      <span class="ref"><%= w.ref %> · <%= STATUS[w.status] || w.status %><%- w.room ? ' · ' + padLink(w.room) : '' %></span>
+      <span class="vs"><%- ul(w.creator) %> vs <%- w.opponent ? ul(w.opponent) : 'anyone' %></span>
       <% if (w.terms) { %><span class="terms">“<%= w.terms %>”</span><% } %>
       <span class="pot"><%= fmt(w.amount) %> each · pot <%= fmt(w.pot) %> PAT</span>
       <span class="info">
-        <% if (!w.ai_judge) { %>Judge: <b><%= w.judge || '—' %></b><br><% } %>
+        <% if (!w.ai_judge) { %>Judge: <b><%- w.judge ? ul(w.judge) : '—' %></b><br><% } %>
         <% if (w.status === 'offered' && w.offer_until) { %>Offer open for <%- cd(w.offer_until) %><br><% } %>
         <% if (w.deadline) { %><%- w.deadline > now ? 'Decided by ' + when(w.deadline) + ' UTC (' + cd(w.deadline) + ')' : 'Deadline passed ' + when(w.deadline) + ' UTC — waiting for the judge' %><br><% } %>
         Winner gets <%= fmt(w.payout) %> PAT
@@ -148,7 +148,7 @@
         <% }) %>
       </div>
       <span class="pot">Pot <%= fmt(m.total) %> PAT</span>
-      <span class="info"><%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %><% if (!m.ai_judge) { %> · judge <b><%= m.judge %></b><% } %> · by <%= m.creator %>
+      <span class="info"><%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %><% if (!m.ai_judge) { %> · judge <b><%- ul(m.judge) %></b><% } %> · by <%- ul(m.creator) %>
         <% if (m.mine.length) { %><br>You: <%= m.mine.map((x) => fmt(x.amount) + ' on ' + x.option).join(', ') %><% } %></span>
       <% if (m.ai_judge) aiBox('pool', m.ref, m, m.inIt, m.status === 'open' || m.status === 'closed'); %>
       <% if (canAct && m.status === 'open' && m.closes > now) { %>
@@ -251,8 +251,8 @@
     <div class="tbl"><table>
       <tr><th>Wager</th><th>Who</th><th>Terms</th><th class="r">Pot</th><th>Result</th><th>When (UTC)</th></tr>
       <% doneW.forEach((w) => { %>
-        <tr><td class="ref"><%= w.ref %></td><td><%= w.creator %> vs <%= w.opponent %></td><td><%= w.terms %></td><td class="r"><%= fmt(w.pot) %></td>
-          <td><%= w.status === 'won' ? '🏆 ' + w.winner : 'void — refunded' %><%= w.settled_by ? ' (' + (w.ai_judge && w.settled_by === w.judge ? '🤖 ' : '') + w.settled_by + ')' : '' %></td><td><%= when(w.ended) %></td></tr>
+        <tr><td class="ref"><%= w.ref %></td><td><%- ul(w.creator) %> vs <%- ul(w.opponent) %></td><td><%= w.terms %></td><td class="r"><%= fmt(w.pot) %></td>
+          <td><%- w.status === 'won' ? '🏆 ' + ul(w.winner) : 'void — refunded' %><%- w.settled_by ? ' (' + (w.ai_judge && w.settled_by === w.judge ? '🤖 ' : '') + ul(w.settled_by) + ')' : '' %></td><td><%= when(w.ended) %></td></tr>
       <% }) %>
     </table></div>
   <% } %>

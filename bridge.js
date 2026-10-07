@@ -458,6 +458,7 @@ function bySlug(slug) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   load();
   app.post("/api/bridge/sync", express.json({ limit: "1mb" }), async (req, res) => {
     const body = req.body || {};

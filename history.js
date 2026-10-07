@@ -158,6 +158,7 @@ function identity(u) {
     name,
     alt: alt.length ? alt[0] : null,                              // the most useful other name, in ( )
     title: bits.length ? bits.map((b) => `${b[0]}: ${b[1]}`).join(" · ") : "PAT account only",
+    archived: u.archived_at != null,
   };
 }
 
@@ -251,10 +252,11 @@ async function forUser(userId, { period = "30d", cat = null, page = 1, perPage =
   // Everyone named on the page, with how they're known on Camfrog / Discord / Twitch
   const ids = [...new Set(rows.map((r) => r.counterparty).filter(Boolean))];
   const people = {};
+  const arch = ids.length ? await require("./userlinks").archivedCol() : "NULL";   // 1.99dt: an archived account is named, never linked
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500);
     const us = await getQuery(
-      `SELECT userId, username, camfrogUsername, discordUsername, twitchDisplayname FROM users
+      `SELECT userId, username, camfrogUsername, discordUsername, twitchDisplayname, ${arch} AS archived_at FROM users
         WHERE userId IN (${chunk.map(() => "?").join(",")})`, chunk);
     for (const u of us) people[u.userId] = identity(u);
   }

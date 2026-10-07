@@ -148,7 +148,7 @@
         <div class="card" style="margin-bottom:12px">
           <p class="info" style="margin-top:0">Top winners of draw #<%= latest.draw %> (<% balls(latest.white, latest.pb, true) %>)</p>
           <div class="winners">
-            <% latest.won.slice().sort((a, b) => b[1] - a[1]).slice(0, 12).forEach((w) => { %><span><%= w[0] %> <b><%= fmt(w[1]) %></b></span><% }) %>
+            <% latest.won.slice().sort((a, b) => b[1] - a[1]).slice(0, 12).forEach((w) => { %><span><%- ul(w[0]) %> <b><%= fmt(w[1]) %></b></span><% }) %>
           </div>
         </div>
       <% } %>
@@ -163,7 +163,7 @@
               <td class="r"><%= fmt(h.tickets) %></td>
               <td class="r"><%= fmt(h.winners) %></td>
               <td class="r"><%= fmt(h.paid) %></td>
-              <td><%= h.jackpot_winners && h.jackpot_winners.length ? h.jackpot_winners.join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : 'rolled over (' + fmt(h.jackpot) + ')' %></td>
+              <td><%- h.jackpot_winners && h.jackpot_winners.length ? h.jackpot_winners.map((n) => ul(n)).join(', ') + ' (' + fmt(h.jackpot_paid) + ')' : 'rolled over (' + fmt(h.jackpot) + ')' %></td>
             </tr>
           <% }) %>
         </table>

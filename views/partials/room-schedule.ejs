@@ -51,7 +51,7 @@
         <% if (!S.live.length) { %><li class="empty">Nothing on this stage right now.</li><% } %>
         <% S.live.forEach((r) => { %><li class="srow<%= r.live ? ' live' : '' %><%= r.mine ? ' mine' : '' %>">
           <span class="when"><%= r.live ? '● LIVE' : 'Starting' %> · until <time data-ts="<%= r.ends_by %>" data-fmt="t" datetime="<%= iso(r.ends_by) %>"><%= iso(r.ends_by).slice(11, 16) %> UTC</time></span>
-          <span class="who"><b><%= r.display %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
+          <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
           <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%= r.featured ? '★ Featured' : 'Ordinary slot' %></span><span class="tg"><%= src(r) %></span><% if (r.mine) { %><span class="tg you">You</span><% } %></span>
         </li><% }) %>
       </ul>
@@ -62,7 +62,7 @@
         <% if (!S.upcoming.length) { %><li class="empty">Nothing booked yet — <a href="/stage?room=<%= encodeURIComponent(slug) %>">book the first slot</a>.</li><% } %>
         <% S.upcoming.forEach((r) => { %><li class="srow<%= r.status === 'requested' ? ' pend' : '' %><%= r.mine ? ' mine' : '' %>">
           <span class="when"><time data-ts="<%= r.start_at %>" data-min="<%= r.minutes %>" datetime="<%= iso(r.start_at) %>"><%= utc(r.start_at) %></time> · <%= r.minutes %> min</span>
-          <span class="who"><b><%= r.display %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
+          <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
           <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%= r.featured ? '★ Featured' : 'Ordinary slot' %></span><span class="tg"><%= src(r) %></span><% if (r.status === 'requested') { %><span class="tg pend">⏳ Waiting for the owner's OK</span><% } %><% if (r.mine) { %><span class="tg you">You</span><% } %></span>
         </li><% }) %>
       </ul>
@@ -73,7 +73,7 @@
         <% if (!S.queue.length) { %><li class="empty">Nobody waiting — a free slot goes to the next in line.</li><% } %>
         <% S.queue.forEach((r) => { %><li class="srow<%= r.mine ? ' mine' : '' %>">
           <span class="when">#<%= r.position %> · <%= r.minutes %> min</span>
-          <span class="who"><b><%= r.display %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
+          <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
           <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%= r.featured ? '★ Featured' : 'Ordinary slot' %></span><span class="tg"><%= r.mode === 'embed' ? '▶ Video link' : '🎥 Stream' %></span><% if (r.mine) { %><span class="tg you">You</span><% } %></span>
         </li><% }) %>
       </ul>
@@ -81,4 +81,4 @@
   </div>
   <p class="note" id="rsNote">Times in your local time<span id="rsTz"></span>.</p>
 </section>
-<script src="/public/js/room-schedule.js?v=1" defer></script>
+<script src="/public/js/room-schedule.js?v=2" defer></script>

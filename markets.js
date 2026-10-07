@@ -130,6 +130,7 @@ function view(m, me) {
 }
 
 function register(app, { isBotToken, addUser }) {
+  require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   // Snapshot push (Pepe)
   app.post("/api/markets/sync", async (req, res) => {
     const b = req.body || {};
