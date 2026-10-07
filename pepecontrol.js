@@ -401,5 +401,5 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, request, claim, ack, heartbeat, view, csrfToken, csrfOk, issueNonce, ipHash, init, expireStale,
+module.exports = { register, request, claim, ack, heartbeat, view, csrfToken, csrfOk, issueNonce, takeNonce, ipHash, init, expireStale,
   lookRequest, lookResult, lookFrom, KINDS, MODES, LOOK_VERBS, PICKUP_MS, RATE_MAX, _setClock };

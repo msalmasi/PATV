@@ -30,6 +30,33 @@
   <% } %>
 </section>
 
+<section class="adm-card" id="burn" aria-labelledby="burnT">
+  <h2 id="burnT">🔥 Burn reserve <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">The last step of the weekly surplus waterfall: once the incentive buffer and the Reserve's 25M target are full, the leftover moves into Pepe's burn reserve and is destroyed (total supply goes down). Nothing else feeds it and no other pool can be burned. In <b>accrual</b> mode Pepe burns it at his next burn tick; in <b>batch</b> mode it waits for a burn here (or <code>!burn</code> in chat). Mode and caps are on Pepe's admin panel. Public log: <a href="/economy#burned">/economy#burned</a>.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="burnAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
+      <div class="adm-kv" id="burnKv"><div><b>Status</b><span>loading…</span></div></div>
+      <form class="adm-form" id="burnForm" autocomplete="off">
+        <label for="burnAmt">Amount (PAT)<input type="number" id="burnAmt" min="1" step="1" required></label>
+        <label for="burnWhy">Reason<input type="text" id="burnWhy" maxlength="200" placeholder="what this burn is"></label>
+        <div class="adm-actions"><button type="submit">Preview burn…</button></div>
+      </form>
+      <div id="burnConfirm" hidden>
+        <p class="adm-help" id="burnWhat"></p>
+        <label for="burnPw" class="adm-help">Confirm with your account password</label>
+        <input type="password" id="burnPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="burnYes">Burn it for good</button><button type="button" id="burnNo" class="adm-btn ghost">Cancel</button></div>
+      </div>
+      <p class="adm-msg" id="burnMsg" role="status"></p>
+      <div class="adm-tbl"><table aria-label="Recent burns">
+        <thead><tr><th>When (UTC)</th><th class="num">PAT</th><th>Reason</th><th>By</th></tr></thead>
+        <tbody id="burnRows"><tr><td colspan="4" class="empty">loading…</td></tr></tbody>
+      </table></div>
+    </div>
+    <script src="/public/js/admin-burn.js?v=1" defer></script>
+  <% } %>
+</section>
+
 <section class="adm-card" id="loans" aria-labelledby="loansT">
   <h2 id="loansT">Loans &amp; credit <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Reserve loan requests are approved or declined on the wallet page (its admin sections show each requester's live credit score). Pepe sends the loan book; rates and limits are his.</p>
@@ -119,6 +146,7 @@
     <li><b>PAT Routing</b> - which vault each flow pays from / into, including the pad-owner share.</li>
     <li><b>Automint</b> and <b>vaults</b> (vault flows, the share of all Reserve outflows).</li>
     <li><b>Reserve top-ups</b> and the Reserve loan rate and limits.</li>
+    <li><b>Burn reserve</b> mode (accrual / batch) and the manual-burn caps.</li>
     <li><b>Casino bans</b> (the site only stores the flag Pepe sets).</li>
   </ul>
 </section>

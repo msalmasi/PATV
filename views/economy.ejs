@@ -75,6 +75,7 @@
       <li><a href="#pat">🪙 What is PAT</a></li>
       <li><a href="#flow">🏛️ Where PAT goes</a></li>
       <li><a href="#protocol">⚙️ How the protocol works</a></li>
+      <li><a href="#burned">🔥 Burned</a></li>
       <li><a href="#casino">🎰 Casino</a></li>
       <li><a href="#betting">🤝 Wagers &amp; pools</a></li>
       <li><a href="#markets">📈 Markets</a></li>
@@ -142,8 +143,8 @@
     <div class="kicker">MONEY FLOW</div>
     <h2>🏛️ Where PAT goes</h2>
     <p class="lead">When you pay for something (a spin, a ticket, a fee, a paid command) that PAT doesn't vanish.
-      <b>PAT is never burned.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
-      heist loot and rewards.</p>
+      <b>Spending never burns PAT.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
+      heist loot and rewards. (The one exception is the <a href="#burned">weekly surplus burn</a>.)</p>
     <div class="grid">
       <div class="card">
         <h3>🏛️ The Federal Reserve</h3>
@@ -187,11 +188,32 @@
     <div class="top"><a href="#top">↑ top</a></div>
   </section>
 
+  <!-- 2a. Burned (1.99dk) -->
+  <section id="burned">
+    <div class="kicker">OUT OF CIRCULATION</div>
+    <h2>🔥 Burned</h2>
+    <p class="lead">Once a week the protocol settles its surplus. Rewards and pools are funded first, then a ~4-week incentive
+      buffer and the Federal Reserve's 25M target. <b>Only what's left after all of that</b> moves to the burn reserve and is
+      destroyed, so the total supply goes down. No wallet, vault or other pool is ever burned. Every burn is listed here.
+      <span class="cfg">The weekly settlement is still being built; until it runs, the burn reserve stays empty.</span></p>
+    <div class="grid" id="burnStats" aria-live="polite">
+      <div class="card"><h3>🔥 Total burned</h3><p class="n" data-b="total">…</p></div>
+      <div class="card"><h3>Last 7 days</h3><p class="n" data-b="d7">…</p></div>
+      <div class="card"><h3>Last 30 days</h3><p class="n" data-b="d30">…</p></div>
+    </div>
+    <div class="tbl"><table aria-label="Burn log">
+      <thead><tr><th>Date</th><th>PAT</th><th>From</th><th>Why</th></tr></thead>
+      <tbody id="burnLog"><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table></div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+  <script src="/public/js/burns.js?v=1" defer></script>
+
   <!-- 2b. Protocol -->
   <section id="protocol">
     <div class="kicker">UNDER THE HOOD</div>
     <h2>⚙️ How the PAT protocol works</h2>
-    <p class="lead">The short version: <b>PAT is never burned.</b> Every PAT that exists is sitting somewhere: in a wallet,
+    <p class="lead">The short version: <b>playing never burns PAT.</b> Every PAT that exists is sitting somewhere: in a wallet,
       in a stash, or in one of the pools (the Federal Reserve, the House, the Lotto pot, the Bank, the Market maker,
       a gang's turf, or escrow while a game or bet is running). Playing just moves it around. Here's the map.</p>
 
@@ -274,7 +296,7 @@
         <line x1="294" y1="558" x2="104" y2="558" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
         <text x="196" y="575" font-size="13.5" fill="#ccc" text-anchor="middle">withdraw</text>
       </svg>
-      <figcaption>Where PAT flows: it moves between wallets and pools, and nothing is ever burned.</figcaption>
+      <figcaption>Where PAT flows: it moves between wallets and pools; only the weekly surplus left after the buffer and the Reserve are full is burned.</figcaption>
     </figure>
 
     <h3 class="h3s">🏗️ Capital vaults: PAT that does a job</h3>
@@ -774,7 +796,7 @@
         <p>Crew up and survive rounds of dice rolls to bank loot; bail out or go for the vault door. The store is always open;
           the casino job robs the <b>Casino vault</b> (its own pot, refilled by heist buy-ins and 15% of the House's profit, so hauls grow when the casino is busy) and the bank job cracks the Federal Reserve.</p>
         <div class="cmd"><code>!heist</code> · <code>!join</code> · <code>!bail</code> · <code>!shop</code></div>
-        <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. PAT is never burned.</div>
+        <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. Heists never burn PAT.</div>
       </div>
       <div class="card">
         <h3>🗺️ Turf Wars</h3>

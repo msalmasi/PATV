@@ -1106,7 +1106,8 @@ require("./tables").register(app, { isBotToken, addUser });   // /casino /poker 
 require("./userstats").register(app, { isBotToken });
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
-require("./pepecontrol").register(app, { isBotToken, addUser });   // admin-only Pepe control panel (homepage) + VM supervisor poll/ack
+require("./pepecontrol").register(app, { isBotToken, addUser });
+require("./burns").register(app, { isBotToken, addUser });   // 1.99dk: PAT burning - the burn reserve's public log + admin burns   // admin-only Pepe control panel (homepage) + VM supervisor poll/ack
 // 1.99bi: room owners + per-room stages + royalties (pad owner dashboard /p/:slug/manage, /pads/admin)
 require("./roomsweb").register(app, { isBotToken, addUser });
 require("./royalties").start();
@@ -1286,10 +1287,17 @@ async function patSupply() {
   const snap = await getQuery("SELECT pools, updated_at FROM supply_snapshot WHERE id = 1");
   let pools = [];
   try { pools = snap.length ? JSON.parse(snap[0].pools) : []; } catch (e) { pools = []; }
+  // 1.99dk: burned PAT is gone - it's never a pool, whatever a snapshot says
+  pools = pools.filter((p) => !/^burned/i.test(String(p.key || "")));
   const rows = [{ key: "wallets", label: `👛 Player wallets (${Number(w[0].n).toLocaleString()} accounts)`, amount: Math.floor(Number(w[0].w) || 0) },
                 { key: "jackpot", label: "🎰 Casino jackpot", amount: Math.floor(Number(j[0].j) || 0) }, ...pools];
   rows.sort((a, b) => b.amount - a.amount);
-  return { total: rows.reduce((s, r) => s + r.amount, 0), rows, updated: snap.length ? snap[0].updated_at : null };
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  // the burn reserve still exists until it's burned, but it's out of circulation
+  const outOfCirculation = rows.filter((r) => r.key === "vault:burn").reduce((s, r) => s + r.amount, 0);
+  let burned = null;
+  try { burned = await require("./burns").burned(); } catch (e) { burned = null; }
+  return { total, circulating: total - outOfCirculation, outOfCirculation, burned, rows, updated: snap.length ? snap[0].updated_at : null };
 }
 app.get("/api/stats/supply", async (req, res) => {
   try { res.json(await patSupply()); } catch (e) { res.status(500).json({ error: "failed" }); }
@@ -2244,6 +2252,7 @@ const funding = require("./funding");
 app.post("/api/g/funding-sync", (req, res) => {
   if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
   funding.sync(req.body || {});
+  require("./burns").sync((req.body || {}).burn);     // 1.99dk: Pepe's burn reserve + settings for the admin card
   res.json({ ok: true });
 });
 app.get("/api/g/reserve-claims", async (req, res) => {

@@ -158,6 +158,9 @@
       <% if (hasSupply) { %>
         <button type="button" class="lb-tile" data-go="supply" title="See where it all is"><span class="k">Total PAT supply</span><span class="v"><%= fmt(supply.total) %></span></button>
       <% } %>
+      <% if (hasSupply && supply.burned) { %>
+        <a class="lb-tile" href="/economy#burned" title="PAT destroyed for good - the burn log"><span class="k">🔥 Burned</span><span class="v"><%= fmt(supply.burned.total) %></span></a>
+      <% } %>
       <button type="button" class="lb-tile" data-go="jackpots" title="Recent jackpot winners"><span class="k">Jackpot pot</span><span class="v"><%= fmt(pot) %></span></button>
     </div>
   </section>
@@ -235,14 +238,16 @@
     <div class="card">
       <h2>Where all the PAT is</h2>
       <% if (hasSupply) { %>
-        <p class="muted" style="margin:-4px 0 14px">Total supply: <b style="color:#ffd700"><%= fmt(supply.total) %> PAT</b></p>
+        <p class="muted" style="margin:-4px 0 14px">Total supply: <b style="color:#ffd700"><%= fmt(supply.total) %> PAT</b>
+          <% if (supply.burned) { %> · 🔥 burned for good: <b><%= fmt(supply.burned.total) %></b> (7 days <%= fmt(supply.burned.d7) %>, 30 days <%= fmt(supply.burned.d30) %>) · <a href="/economy#burned">burn log</a><% } %></p>
         <div class="lb-sup">
           <% supply.rows.forEach((r) => { const share = supply.total ? (r.amount / supply.total * 100) : 0; %>
             <div class="r"><span class="l"><%= r.label %></span><span class="a"><%= fmt(r.amount) %><small><%= share.toFixed(1) %>%</small></span>
               <span class="bar"><span style="width: <%= Math.max(0, Math.min(100, share)).toFixed(1) %>%"></span></span></div>
           <% }) %>
         </div>
-        <p class="muted" style="margin:14px 0 0">PAT is never minted or burned by the games &mdash; it moves between wallets and these pools.
+        <p class="muted" style="margin:14px 0 0">The games never mint or burn PAT &mdash; it moves between wallets and these pools. The only PAT ever destroyed is the
+          weekly surplus left once the incentive buffer and the Reserve are full (the 🔥 burn reserve).
           <% if (supply.updated) { %>Pepe's pools as of <%= supply.updated %> UTC.<% } else { %>Pepe hasn't reported his pools yet.<% } %>
           <a href="/economy">How PAT works</a></p>
       <% } else { %>
