@@ -261,6 +261,7 @@ test("avatar fallbacks: no avatar -> the monogram (🐸 house, 🛋️ site pads
   assert.equal(PL.monogram({ title: "🌿 plants" }), "P");
   assert.equal(PL.monogram({ title: "x", house: true }), "🐸");
   assert.equal(PL.monogram({ title: "x", community: true }), "🛋️");
+  assert.equal(PL.monogram({ title: "Camfrog Lounge", house: true, community: true }), "🛋️", "a house SITE pad: the sofa, like its feed chip");
   assert.equal(PL.avatarHtml("Nobody.Room", { pad: { title: "zed" } }), '<span class="pad-av" aria-hidden="true">Z</span>');
   assert.equal(PL.avatarHtml("Nobody.Room", { fallback: "" }), "");
   assert.match(PL.avatarHtml("PepeFrog.Room"), /🐸/, "a house pad from the registry");

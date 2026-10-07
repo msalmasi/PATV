@@ -155,10 +155,10 @@ function cssVars(L) {
   return out.join(";");
 }
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-/** The monogram a pad falls back to: 🐸 house pads, 🛋️ site pads, else its first letter / digit (as the feed's chips). */
+/** The monogram a pad falls back to: 🛋️ site pads, 🐸 house pads, else its first letter / digit (as the feed's chips). */
 function monogram(p) {
+  if (p && p.community) return "🛋️";          // the same order as the feed's chips (feedweb cBadge)
   if (p && p.house) return "🐸";
-  if (p && p.community) return "🛋️";
   const t = String((p && (p.title || p.name)) || "?").replace(/^[^\p{L}\p{N}]+/u, "");
   return (Array.from(t)[0] || "?").toUpperCase();
 }
