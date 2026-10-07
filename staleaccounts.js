@@ -72,7 +72,7 @@ const SYSTEM_LOGINS = new Set(["pepefrog", "pepebeta", "pepefrog.room", "pepebet
 
 // Transaction types. "bonus win" rows take their real type from bonus_winners.
 const SYSTEM_DEBIT = /^(fine|automod-fine|exploit|staff transfer|ledger-correction|bounty-refund-reversal|stale-reclaim|clawback|account merge|zero)/i;
-const ACTIVE_CREDIT = /^(beg|pictionary-win|camfrog-trivia|trivia-payout|store sale|market-sell|market-win|duel winnings|holdem-cashout|bounty-win|showdown-win|arena-win|brawl-win)/i;
+const ACTIVE_CREDIT = /^(beg|pictionary-win|camfrog-trivia|trivia-payout|store sale|market-sell|market-win|duel winnings|holdem-cashout|bounty-win|showdown-win|arena-win|brawl-win|challenge-win|challenge-pot)/i;
 // passive credits that still mean "was in a room / on the site" (raffles need chat, mic hours need the
 // mic, level-ups need XP)
 const PRESENCE_CREDIT = /(raffle|mic-hourly|moan-bonus|level|achievement|channelpoints|connect|welcome)/i;

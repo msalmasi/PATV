@@ -668,6 +668,19 @@
     var feed = document.getElementById('lrFeed'), cursor = 0, started = false, timer = null, fails = 0, lastP = '', lastM = '';
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
     function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
+    // 1.99de mic challenges: one line per judged performance
+    var CHAL = { moan: ['🫦', 'moan'], sing: ['🎤', 'singing'], laugh: ['😂', 'laugh'], fart: ['💨', 'fart'], beatbox: ['🥁', 'beatbox'], impression: ['🎭', 'impression'] };
+    function chalText(it) {
+      var c = CHAL[it.cat] || ['🎤', it.cat], s = function (x) { return x == null ? '?' : x; };
+      var t = it.v === 'won' ? c[0] + ' ' + label(it.u) + ' won a ' + c[1] + '-off against ' + label(it.vs) + ' (' + s(it.score) + ' vs ' + s(it.vsScore) + ')'
+        : it.v === 'tie' ? c[0] + ' ' + label(it.u) + ' and ' + label(it.vs) + ' tied a ' + c[1] + '-off'
+        : it.v === 'not_live' ? c[0] + ' ' + label(it.u) + "'s " + c[1] + ' challenge was disqualified (not live)'
+        : it.v === 'speechless' ? c[0] + ' ' + label(it.u) + "'s " + c[1] + ' challenge left the judges speechless'
+        : c[0] + ' ' + label(it.u) + ' scored ' + s(it.score) + '/10 in the ' + c[1] + ' challenge';
+      if (it.paid) t += ' (+' + Number(it.paid).toLocaleString() + ' PAT)';
+      if (it.text) t += ' — \u201c' + it.text + '\u201d';
+      return t;
+    }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function nameEl(u) {
       var n = el('span', 'w', label(u));
@@ -683,6 +696,7 @@
         d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
         return d;
       }
+      if (it.k === 'chal') return el('div', 'ln sys', chalText(it) + ' · ' + hhmm(it.ts));
       var t = it.k === 'join' ? '→ ' + label(it.u) + ' joined' : it.k === 'leave' ? '← ' + label(it.u) + ' left'
         : it.k === 'mic' ? '🎙️ ' + label(it.u) + ' grabbed the mic' : it.k === 'unmic' ? '🎙️ ' + label(it.u) + ' dropped the mic'
         : it.k === 'topic' ? '📌 topic: ' + it.text : null;
