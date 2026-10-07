@@ -545,11 +545,14 @@ test("prices: free by default; an admin price is charged, goes to the Reserve, a
   await store.setConfig({ price_post: 0, price_link: 0 }, "test");
 });
 
-test("Pepe mentions: off by default; the owner's switch; one line per room per gap; incognito handled by Pepe", async () => {
+test("Pepe mentions: an explicit off; the owner's switch; one line per room per gap; incognito handled by Pepe", async () => {
   await store.setConfig({ mention_gap_min: 10 }, "test");
   store._gaps.clear();
+  // 1.99cu: ON by default for Camfrog pads - switch A and B explicitly off first
+  for (const r of [ROOM_A, ROOM_B]) { await store.kvSet("mention:" + r, "0"); await store.kvSet("mention_set:" + r, "1"); }
+  await runQuery("UPDATE feed_mentions SET sent_at = 1 WHERE sent_at IS NULL");
   await post("/api/feed/posts", U.carol, { body: "quiet", rooms: [ROOM_A] });
-  assert.equal(((await web.botSync({ feed_mentions: true })).feed_mentions || []).length, 0, "off by default");
+  assert.equal(((await web.botSync({ feed_mentions: true })).feed_mentions || []).length, 0, "explicitly off");
   assert.equal((await post("/api/rooms/plant-based-chatting/feed/mention", U.bob, { on: true })).status, 403);
   assert.equal((await post("/api/rooms/plant-based-chatting/feed/mention", U.owner, { on: true })).status, 200);
   store._gaps.clear();
@@ -560,7 +563,9 @@ test("Pepe mentions: off by default; the owner's switch; one line per room per g
   const m = (await web.botSync({ feed_mentions: true })).feed_mentions;
   assert.equal(m.length, 1);
   assert.equal(m[0].room, ROOM_B);
-  assert.match(m[0].text, /^📌 2 new posts on p\/plant-based-chatting — https?:\/\/\S+\/p\/plant-based-chatting#feed$/);
+  // 1.99cu: several posts folded into one line link each post
+  assert.match(m[0].text, /^📌 2 new posts on p\/plant-based-chatting: https?:\/\/\S+\/feed\/p\/\w+ · https?:\/\/\S+\/feed\/p\/\w+$/);
+  assert.ok(m[0].text.includes("/feed/p/" + a.d.id), m[0].text);
   assert.equal(m[0].author_login, "bobcf");
   assert.equal((await web.botSync({ feed_mentions: true })).feed_mentions.length, 0, "handed out once");
   store._gaps.clear();

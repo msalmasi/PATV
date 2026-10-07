@@ -4,7 +4,9 @@
 // or is already crossposted, shows greyed out with the reason), up to crosspostMax of them at once, plus an
 // optional new title for all of them. POST /api/feed/posts/:id/crosspost {communities: [...], title} makes one
 // crosspost per pad; the dialog then shows each pad's result (crossposted / waiting for approval / refused +
-// why) with links to the new crossposts. Everything is built with DOM calls (textContent), nothing
+// why) with links to the new crossposts. 1.99cu: under the chips, "Pepe announces it in the Camfrog room" per
+// picked pad - ticked when he can (announcements on, the default for Camfrog pads, and Pepe in the room), greyed
+// out with the reason otherwise; the ticked ones go as announce: [...]. Everything is built with DOM calls (textContent), nothing
 // user-supplied goes through innerHTML.
 (function () {
   'use strict';
@@ -60,6 +62,7 @@
     sw.appendChild(si);
     var list = el('div', 'xp-list'); list.setAttribute('role', 'group'); list.setAttribute('aria-label', 'Pads');
     var chips = el('div', 'xp-chips');
+    var anns = el('div', 'xp-anns');
     var l2 = el('label', 'xp-l', 'Title '); l2.appendChild(el('small', null, '(optional, for every pad - leave it to keep the original\'s)'));
     var ti = el('input', 'xp-title'); ti.name = 'title'; ti.maxLength = 140; ti.autocomplete = 'off';
     l2.htmlFor = ti.id = 'xpTitle';
@@ -68,13 +71,13 @@
     var cancel = el('button', 'btn-g', 'Cancel'); cancel.type = 'button';
     var go = el('button', 'btn-s', 'Crosspost'); go.type = 'submit';
     row.appendChild(cancel); row.appendChild(go);
-    [h, sub, lrow, sw, list, chips, l2, ti, err, row].forEach(function (x) { f.appendChild(x); });
+    [h, sub, lrow, sw, list, chips, anns, l2, ti, err, row].forEach(function (x) { f.appendChild(x); });
     // the results
     var res = el('div', 'xp-res hide');
     res.setAttribute('role', 'status');
     dlg.appendChild(f); dlg.appendChild(res);
     document.body.appendChild(dlg);
-    state = { f: f, sub: sub, sum: sum, si: si, list: list, chips: chips, ti: ti, err: err, go: go, res: res, max: 5, made: 0 };
+    state = { f: f, sub: sub, sum: sum, si: si, list: list, chips: chips, anns: anns, ann: {}, annOff: {}, ti: ti, err: err, go: go, res: res, max: 5, made: 0 };
     cancel.addEventListener('click', function () { dlg.close(); });
     dlg.addEventListener('click', function (ev) { if (ev.target === dlg) dlg.close(); });     // the backdrop
     dlg.addEventListener('close', function () { if (state.made) location.reload(); });
@@ -122,14 +125,43 @@
       c.appendChild(el('span', 'x', '×'));
       state.chips.appendChild(c);
     });
+    syncAnn(on);
     state.go.textContent = on.length > 1 ? 'Crosspost to ' + on.length + ' pads' : 'Crosspost';
     if (on.length && !state.go.disabled) state.err.textContent = '';
+  }
+  // 1.99cu: one announce line per picked pad (enabled + ticked, or greyed out with the reason)
+  function syncAnn(on) {
+    var A = state.anns;
+    A.textContent = '';
+    on.forEach(function (box) {
+      var id = box.value, a = state.ann[id] || { ok: false, why: 'Announcements are off for this pad' };
+      var w = el('div', 'xp-ann-w');
+      var l = el('label', 'xp-ann' + (a.ok ? '' : ' off'));
+      var c = el('input'); c.type = 'checkbox'; c.name = 'announce'; c.value = id;
+      if (a.ok) { c.checked = !state.annOff[id]; c.addEventListener('change', function () { state.annOff[id] = !c.checked; }); }
+      else { c.disabled = true; l.setAttribute('aria-disabled', 'true'); l.title = a.why || ''; }
+      l.appendChild(c);
+      l.appendChild(document.createTextNode(' 🐸📣 Pepe announces it in p/' + box.getAttribute('data-slug')));
+      w.appendChild(l);
+      if (!a.ok) {
+        var why = el('small', 'xp-ann-why', ' ' + (a.why || ''));
+        if (a.manage) {
+          why.appendChild(document.createTextNode(' · '));
+          var link = el('a', null, 'turn on in Moderate'); link.href = '/p/' + encodeURIComponent(box.getAttribute('data-slug')) + '/mod#announce';
+          why.appendChild(link);
+        }
+        w.appendChild(why);
+      }
+      A.appendChild(w);
+    });
   }
   function fill(comms) {
     var L = state.list;
     L.textContent = '';
     var usable = 0;
+    state.ann = {}; state.annOff = {};
     comms.forEach(function (c) {
+      if (c.ann) state.ann[c.id] = c.ann;
       var it = el('label', 'xp-it');
       it.setAttribute('data-name', (c.title + ' ' + c.slug).toLowerCase());
       var r = el('input'); r.type = 'checkbox'; r.name = 'community'; r.value = c.id;
@@ -192,7 +224,8 @@
     if (!on.length) { state.err.textContent = 'Choose at least one pad.'; return; }
     state.err.textContent = '';
     state.go.disabled = true; state.go.textContent = 'Crossposting…';
-    var body = { pads: on.map(function (b) { return b.value; }), title: state.ti.value.trim() };
+    var body = { pads: on.map(function (b) { return b.value; }), title: state.ti.value.trim(),
+                 announce: on.map(function (b) { return b.value; }).filter(function (id) { return state.ann[id] && state.ann[id].ok && !state.annOff[id]; }) };
     var url = '/api/feed/posts/' + encodeURIComponent(state.post) + '/crosspost';
     api(url, body).catch(function (e) {
       if (e.code !== 'terms' || !window.patvSafety) throw e;

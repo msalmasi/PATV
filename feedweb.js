@@ -159,8 +159,13 @@ async function composerFor(viewer, roomId) {
   const C = store.config();
   // 1.99bz: announce = the room owner lets Pepe announce new posts there (the author then gets a per-post checkbox)
   const list = await store.communities(viewer);
-  const all = await Promise.all(list.filter((r) => r.canPost).map(async (r) => ({ id: r.id, slug: r.slug, title: r.title, followers: r.followers,
-                                                                                community: r.community, platform: r.platform, house: r.house, announce: await store.mentionOn(r.id) })));
+  // 1.99cu: ann = store.announceState {ok, code, why, manage}: the checkbox is always shown for the picked pad,
+  //         enabled + ticked when ok, greyed out with the reason otherwise
+  const all = await Promise.all(list.filter((r) => r.canPost).map(async (r) => {
+    const ann = await store.announceState(r.id, viewer);
+    return { id: r.id, slug: r.slug, title: r.title, followers: r.followers, community: r.community, platform: r.platform, house: r.house,
+             announce: ann.ok, ann };
+  }));
   const refusal = await store.postRefusal(viewer, []);
   const mediaRefusal = refusal ? refusal : await store.postRefusal(viewer, [], { media: true });
   const here = roomId ? list.find((r) => r.id === roomId) : null;
@@ -298,7 +303,8 @@ function register(app, { addUser, isBotToken }) {
   app.get("/api/feed/communities", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
     try {
-      const list = await store.communities(await viewerOf(req));
+      const viewer = await viewerOf(req);
+      const list = await store.communities(viewer);
       // ?post=<id>: mark where that post (its original, for a crosspost) already is - the crosspost dialog greys those out
       const here = new Set();
       if (req.query.post) {
@@ -310,8 +316,12 @@ function register(app, { addUser, isBotToken }) {
           for (const r of rows) here.add(r.room_id);
         }
       }
+      // 1.99cu: ann = can Pepe announce a crosspost there ({ok, code, why, manage}; signed in only)
+      const anns = new Map();
+      if (viewer) for (const c of list) if (c.canPost) anns.set(c.id, await store.announceState(c.id, viewer));
       res.json({ ok: true, crosspostMax: store.config().crosspost_max_pads, communities: list.map((c) => ({ id: c.id, slug: c.slug, title: c.title, description: c.description, followers: c.followers,
-                                                          posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, platform: c.platform, house: c.house, here: here.has(c.id) })) });
+                                                          posts: c.posts, canPost: c.canPost, refusal: c.refusal, community: c.community, platform: c.platform, house: c.house, here: here.has(c.id),
+                                                          ann: anns.get(c.id) || null })) });
     } catch (e) { fail(res, e); }
   });
 
@@ -613,11 +623,11 @@ function register(app, { addUser, isBotToken }) {
       const b = req.body || {};
       const many = b.pads !== undefined ? b.pads : b.communities;
       if (many !== undefined) {
-        const r = await store.crosspostMany(req.user.userId, String(req.params.id), { pads: many, title: b.title });
+        const r = await store.crosspostMany(req.user.userId, String(req.params.id), { pads: many, title: b.title, announce: b.announce });
         for (const x of r.results) if (x.id) await record(req, { kind: "post", id: x.id, postId: x.id, event: "crosspost" });
         return res.json({ ok: true, ...r });
       }
-      const p = await store.crosspost(req.user.userId, String(req.params.id), { community: b.community, title: b.title });
+      const p = await store.crosspost(req.user.userId, String(req.params.id), { community: b.community, title: b.title, announce: b.announce });
       await record(req, { kind: "post", id: p.id, postId: p.id, event: "crosspost" });
       res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id, pending: !!p.pendingApproval, community: p.rooms[0] || (p.roomsAll[0] || null) });
     } catch (e) { fail(res, e); }
@@ -711,7 +721,8 @@ function register(app, { addUser, isBotToken }) {
       res.render("feedRoomMod", { user: viewer.username, viewer, room: R, fx, embeds, host: viewOpts(req).host,
         reports: await store.roomReports(R.id), pending: await store.roomPending(R.id, viewer), settings: await store.roomSettings(R.id),
         members: await store.roomMembers(R.id), bans: await store.bans(R.id), audit: await store.roomAudit(R.id), WHO: store.WHO,
-        pepe: await require("./pepefeed").scopeView(R.id), PF: require("./pepefeed") });
+        pepe: await require("./pepefeed").scopeView(R.id), PF: require("./pepefeed"),
+        announce: rooms.platformOf(R.id) === "camfrog" ? await store.mentionOn(R.id) : null });   // 1.99cu: null = no Camfrog room
     } catch (e) {
       console.error("[feed] room mod page:", e);
       res.status(500).send("Something went wrong.");

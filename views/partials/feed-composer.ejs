@@ -43,10 +43,20 @@
         </div>
       </details>
       <% if (cp.roomRefusal) { %><p class="fc-note">✋ <%= cp.roomRefusal %> You can still pick another pad.</p><% } %>
-      <% const ann = cp.rooms.filter((r) => r.announce); if (ann.length) { %>
+      <%# 1.99cu: the announce checkbox is always there for the picked pad: enabled + ticked when Pepe can announce
+          it (pad announcements on - the default for Camfrog pads - and Pepe in the room), otherwise greyed out
+          with the reason (owners/admins get a link to switch it on in Moderate) %>
+      <% if (cp.rooms.length) { %>
         <div class="fc-anns">
-          <% ann.forEach((r) => { %>
-            <label class="fc-ann<%= cp.room === r.id ? '' : ' hide' %>" data-ann-for="<%= r.id %>" title="This pad's owner lets Pepe post a short line in the Camfrog room about new posts (at most one every few minutes)"><input type="checkbox" name="announce" value="<%= r.id %>" checked> 🐸📣 Pepe announces it in the Camfrog room</label>
+          <% cp.rooms.forEach((r) => { const a_ = r.ann || { ok: !!r.announce, why: 'Announcements are off for this pad' }; %>
+            <span class="fc-ann-w<%= cp.room === r.id ? '' : ' hide' %>" data-ann-for="<%= r.id %>">
+              <% if (a_.ok) { %>
+                <label class="fc-ann" title="Pepe posts a short line in the Camfrog room about new posts (at most one every few minutes)"><input type="checkbox" name="announce" value="<%= r.id %>" checked> 🐸📣 Pepe announces it in the Camfrog room</label>
+              <% } else { %>
+                <label class="fc-ann off" aria-disabled="true" title="<%= a_.why %>"><input type="checkbox" name="announce" value="<%= r.id %>" disabled> 🐸📣 Pepe announces it in the Camfrog room</label>
+                <small class="fc-ann-why" data-ann-code="<%= a_.code || 'off' %>"><%= a_.why %><% if (a_.manage) { %> · <a href="/p/<%= encodeURIComponent(r.slug) %>/mod#announce">turn on in Moderate</a><% } %></small>
+              <% } %>
+            </span>
           <% }) %>
         </div>
       <% } %>

@@ -210,28 +210,136 @@ test("new-post notices: off by default; on = one inbox notice per post per follo
 });
 
 // ───────────────────────────── room announcements ─────────────────────────────
-test("room announcements: the owner's switch is the gate; the author's per-post tick decides", async () => {
+// the composer's announce block for one pad (1.99cu: one per pad, shown for the picked one)
+const annBlock = (html, id) => {
+  const i = html.indexOf(`data-ann-for="${id}"`);
+  if (i < 0) return null;
+  const rest = html.slice(i + 10);
+  const end = Math.min(...[rest.indexOf("data-ann-for="), rest.indexOf("</div>")].filter((x) => x >= 0));
+  return rest.slice(0, end);
+};
+test("room announcements: 1.99cu ON by default for Camfrog pads; the owner's explicit off is the gate; the author's tick decides", async () => {
   const pend = async (pid) => (await getQuery("SELECT * FROM feed_mentions WHERE post_id = ?", [pid])).length;
-  let p = await store.create(U.alice.userId, { title: "switch off", rooms: [ROOM_B], announce: [ROOM_B] });
-  assert.equal(await pend(p.id), 0, "owner switch off: never, whatever the author ticked");
-  await store.setMention(U.owner, ROOM_B, true);
+  assert.equal(await store.mentionOn(ROOM_B), true, "default ON (never set)");
+  assert.equal(await store.mentionOn(ROOM_A), true, "house Camfrog pad: default ON too");
+  assert.equal(await store.mentionOn(LOUNGE), false, "a site pad has no Camfrog room");
+  let p = await store.create(U.alice.userId, { title: "default on", rooms: [ROOM_B], announce: [ROOM_B] });
+  assert.equal(await pend(p.id), 1, "announced with no owner action");
   p = await store.create(U.alice.userId, { title: "unticked", rooms: [ROOM_B], announce: [] });
   assert.equal(await pend(p.id), 0, "author unticked it");
   p = await store.create(U.alice.userId, { title: "ticked", community: ROOM_B, announce: [ROOM_B, ROOM_A] });
   const m = await getQuery("SELECT room_id FROM feed_mentions WHERE post_id = ?", [p.id]);
   assert.deepEqual(m.map((x) => x.room_id), [ROOM_B], "only the post's community (1.99ci: one per post)");
-  p = await store.create(U.alice.userId, { title: "ticked in A", community: ROOM_A, announce: [ROOM_A] });
-  assert.equal(await pend(p.id), 0, "A's owner (the house) hasn't switched announcements on");
+  p = await store.create(U.alice.userId, { title: "site pad", community: LOUNGE, announce: [LOUNGE] });
+  assert.equal(await pend(p.id), 0, "no Camfrog room: never");
   p = await store.create(U.alice.userId, { title: "old page", rooms: [ROOM_B] });
   assert.equal(await pend(p.id), 1, "no announce list (an older page): announced as before");
-  // the composer offers the checkbox only for rooms that allow it (on /feed too)
-  const html = await page("/feed", U.alice);
-  assert.match(html, /data-ann-for="plant_based_chatting"/);
-  assert.ok(!/data-ann-for="PepeFrog.Room"/.test(html));
-  assert.match(html, /Pepe announces it in the Camfrog room/);
-  assert.match(html, /accept="[^"]*image\/heic[^"]*\.heic/);
+  // the owner's explicit OFF is the gate
   await store.setMention(U.owner, ROOM_B, false);
-  assert.ok(!(await page("/feed", U.alice)).includes("data-ann-for"));
+  p = await store.create(U.alice.userId, { title: "switch off", rooms: [ROOM_B], announce: [ROOM_B] });
+  assert.equal(await pend(p.id), 0, "owner switch off: never, whatever the author ticked");
+  await store.setMention(U.owner, ROOM_B, true);
+});
+
+test("room announcements: the composer always shows the box - enabled + ticked, or greyed out with the reason", async () => {
+  await store.setMention(U.owner, ROOM_B, true);
+  let html = await page("/feed", U.alice);
+  let b = annBlock(html, ROOM_B);
+  assert.ok(b, "Camfrog pad with announcements on");
+  assert.match(b, /name="announce" value="plant_based_chatting" checked>/);
+  assert.ok(!/disabled/.test(b));
+  b = annBlock(html, LOUNGE);
+  assert.ok(b, "a site pad still shows the box");
+  assert.match(b, /name="announce" value="patv:lounge" disabled>/);
+  assert.match(b, /Site pad, no Camfrog room/);
+  assert.match(html, /accept="[^"]*image\/heic[^"]*\.heic/);
+  // off for this pad: greyed out; only owners/admins get the "turn on in Moderate" link
+  await store.setMention(U.owner, ROOM_B, false);
+  b = annBlock(await page("/feed", U.alice), ROOM_B);
+  assert.match(b, /disabled>/); assert.match(b, /Announcements are off for this pad/);
+  assert.ok(!/turn on in Moderate/.test(b), "not for a regular member");
+  b = annBlock(await page("/feed", U.owner), ROOM_B);
+  assert.match(b, /Announcements are off for this pad/); assert.match(b, /href="\/p\/[^"]+\/mod#announce">turn on in Moderate/);
+  b = annBlock(await page("/feed", U.admin), ROOM_B);
+  assert.match(b, /turn on in Moderate/, "admins too");
+  await store.setMention(U.owner, ROOM_B, true);
+  // Pepe isn't in the room: greyed out, and the server won't queue it either
+  store._setPepeIn((id) => (id === ROOM_B ? false : null));
+  try {
+    b = annBlock(await page("/feed", U.alice), ROOM_B);
+    assert.match(b, /disabled>/); assert.match(b, /Pepe isn&#39;t in this room right now/);
+    assert.deepEqual(await store.announceState(ROOM_B, U.alice), { ok: false, code: "away", why: "Pepe isn't in this room right now", manage: false });
+    const p = await store.create(U.alice.userId, { title: "pepe away", rooms: [ROOM_B], announce: [ROOM_B] });
+    assert.equal((await getQuery("SELECT * FROM feed_mentions WHERE post_id = ?", [p.id])).length, 0);
+  } finally { store._setPepeIn(null); }
+  assert.equal((await store.announceState(ROOM_B, U.alice)).ok, true);
+  // the pad page preselects it: the picked pad's block is visible (not .hide)
+  html = await page("/p/" + rooms.getCached(ROOM_B).slug, U.alice);
+  assert.match(html, /class="fc-ann-w" data-ann-for="plant_based_chatting"/);
+  // the communities API (crosspost dialog) carries the same state
+  const c = await (await fetch(base + "/api/feed/communities", { headers: { "x-test-user": U.alice.userId } })).json();
+  assert.equal(c.communities.find((x) => x.id === ROOM_B).ann.ok, true);
+  assert.equal(c.communities.find((x) => x.id === LOUNGE).ann.code, "site");
+});
+
+test("room announcements: 1.99cu migration - old default rows go ON, explicit offs (log shows on) stay OFF, runs once", async () => {
+  const R1 = "Mig.Ann.One", R2 = "Mig.Ann.Two", R3 = "Mig.Ann.Three";
+  await store.kvSet("mention:" + R1, "0");                          // never switched on: the old default
+  await store.kvSet("mention:" + R2, "0");                          // switched on, then off
+  await store.kvSet("mention:" + R3, "1");                          // on
+  await runQuery("INSERT INTO room_events (room_id, ts, what, actor, detail) VALUES (?, ?, 'feed-mention', 'plantowner', 'on')", [R2, Date.now() - 5000]);
+  await runQuery("INSERT INTO room_events (room_id, ts, what, actor, detail) VALUES (?, ?, 'feed-mention', 'plantowner', 'off')", [R2, Date.now() - 4000]);
+  await store.kvSet("mention_v1", "");
+  const r = await store.migrateMentionDefault();
+  assert.ok(r.on.includes(R1)); assert.ok(r.kept.includes(R2)); assert.ok(r.marked.includes(R3));
+  assert.equal(await store.mentionOn(R1), true);
+  assert.equal(await store.mentionOn(R2), false);
+  assert.equal(await store.mentionOn(R3), true);
+  assert.equal(await store.migrateMentionDefault(), null, "runs once");
+});
+
+test("room announcements: 1.99cu each line links the post itself; several posts link each, or the newest + the pad", async () => {
+  await store.setConfig({ mention_gap_min: 10 }, "test");
+  await store.setMention(U.owner, ROOM_B, true);
+  await runQuery("UPDATE feed_mentions SET sent_at = 1 WHERE sent_at IS NULL");
+  await runQuery("DELETE FROM feed_kv WHERE key = ?", ["mention_at:" + ROOM_B]);
+  const site = "https://publicaccess.tv";
+  const a = await store.create(U.alice.userId, { title: "one", rooms: [ROOM_B], announce: [ROOM_B] });
+  let m = await store.takeMentions(site);
+  assert.equal(m.length, 1);
+  assert.ok(m[0].text.endsWith(`${site}/feed/p/${a.id}`), m[0].text);
+  // two posts fit: both links
+  await runQuery("DELETE FROM feed_kv WHERE key = ?", ["mention_at:" + ROOM_B]);
+  const b = await store.create(U.alice.userId, { title: "two", rooms: [ROOM_B], announce: [ROOM_B] });
+  const c = await store.create(U.bob.userId, { title: "three", rooms: [ROOM_B], announce: [ROOM_B] });
+  m = await store.takeMentions(site);
+  assert.equal(m.length, 1);
+  assert.ok(m[0].text.startsWith("📌 2 new posts on p/"), m[0].text);
+  assert.ok(m[0].text.includes(`${site}/feed/p/${b.id}`) && m[0].text.includes(`${site}/feed/p/${c.id}`), m[0].text);
+  // too many to fit one line: the newest post + the pad page
+  await runQuery("DELETE FROM feed_kv WHERE key = ?", ["mention_at:" + ROOM_B]);
+  const ids = [];
+  for (let i = 0; i < 9; i++) ids.push((await store.create(U.alice.userId, { title: "bulk " + i, rooms: [ROOM_B], announce: [ROOM_B] })).id);
+  m = await store.takeMentions(site);
+  assert.equal(m.length, 1);
+  assert.ok(m[0].text.length <= 300, m[0].text.length);
+  assert.ok(m[0].text.includes(`newest: ${site}/feed/p/${ids[8]}`), m[0].text);
+  assert.ok(m[0].text.includes(`all: ${site}/p/`), m[0].text);
+});
+
+test("room announcements: crossposts announce in the target pad unless the author unticked it; greyed pads never", async () => {
+  await store.setMention(U.owner, ROOM_B, true);
+  const orig = await store.create(U.alice.userId, { title: "xp me", community: LOUNGE });
+  const pend = async (pid) => (await getQuery("SELECT * FROM feed_mentions WHERE post_id = ?", [pid])).length;
+  let r = await post(`/api/feed/posts/${orig.id}/crosspost`, U.bob, { pads: [ROOM_B], announce: [] });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  assert.equal(await pend(r.d.results[0].id), 0, "unticked in the dialog");
+  const orig2 = await store.create(U.alice.userId, { title: "xp me too", community: LOUNGE });
+  r = await post(`/api/feed/posts/${orig2.id}/crosspost`, U.bob, { pads: [ROOM_B], announce: [ROOM_B] });
+  assert.equal(await pend(r.d.results[0].id), 1, "ticked");
+  const orig3 = await store.create(U.alice.userId, { title: "old dialog", community: LOUNGE });
+  r = await post(`/api/feed/posts/${orig3.id}/crosspost`, U.bob, { pads: [ROOM_B] });
+  assert.equal(await pend(r.d.results[0].id), 1, "no announce list (older page): announced as before");
 });
 
 // ───────────────────────────── stories ─────────────────────────────

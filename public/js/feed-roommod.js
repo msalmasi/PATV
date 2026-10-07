@@ -13,6 +13,13 @@
   var reload = function () { location.reload(); };
   var oops = function (e) { alert(e.message); };
 
+  // 1.99cu: "Pepe announces new posts in the Camfrog room" (default ON; the composer greys it out when off)
+  var ann = document.getElementById('rmMention');
+  if (ann) ann.addEventListener('change', function () {
+    api('/api/rooms/' + encodeURIComponent(slug) + '/feed/mention', { on: ann.checked })
+      .catch(function (e) { alert(e.message); ann.checked = !ann.checked; });
+  });
+
   root.addEventListener('click', function (ev) {
     var b = ev.target.closest('button[data-op]');
     if (!b) return;

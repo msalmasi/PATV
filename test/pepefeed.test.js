@@ -218,22 +218,39 @@ test("never: NSFW, reported, hidden, locked, muted posts, or banned / restricted
   await store.setRestricted([]);
 });
 
-test("rooms: mentions are answered by default in Pepe's house room, NOT in an owner's room until the owner turns it on", async () => {
+test("rooms: 1.99cu mentions are answered by default in EVERY pad (house and owners'); an owner's explicit off holds", async () => {
   await resetLimits();
   const inHouse = await mkPost(U.alice, { body: "pepe in your own room", rooms: [HOUSE], global: false });
   const inOwned = await mkPost(U.alice, { body: "pepe in plant room", rooms: [OWNED], global: false });
   let d = await sync();
   const h = d.mentions.find((x) => x.target === "p:" + inHouse);
   assert.ok(h); assert.equal(h.scope, "", "1.99ci: a house community with no settings of its own is the All scope");
-  assert.ok(!targets(d).includes("p:" + inOwned), "owner's room: off by default (and marked so it isn't re-scanned)");
-  assert.equal((await PF.scopeSettings(OWNED)).respond, false);
+  const ow = d.mentions.find((x) => x.target === "p:" + inOwned);
+  assert.ok(ow, "owner's pad: ON by default now"); assert.equal(ow.scope, OWNED);
+  assert.equal((await PF.scopeSettings(OWNED)).respond, true);
   assert.equal((await PF.scopeSettings(HOUSE)).respond, true);
   assert.equal((await PF.scopeSettings("")).respond, true);
+  assert.equal(PF.respondDefault("Some.Unowned.Room"), true);
   assert.equal((await PF.scopeSettings(HOUSE)).auto, false, "auto is off everywhere by default");
-  // the owner switches mentions on -> a NEW mention there is offered
+  assert.equal((await PF.scopeSettings(OWNED)).auto, false, "auto stays off in owners' pads too");
+  // the settings form re-sending respond:true (the default) doesn't make it explicit; unchecking does
+  assert.equal((await post(`/api/rooms/${OWNED}/feed/pepe`, U.owner, { settings: { respond: true } })).status, 200);
+  assert.ok(!(await PF.scopeSettings(OWNED)).respond_set);
+  assert.equal((await post(`/api/rooms/${OWNED}/feed/pepe`, U.owner, { settings: { respond: false } })).status, 200);
+  assert.equal((await PF.scopeSettings(OWNED)).respond, false);
+  assert.equal((await post(`/api/rooms/${OWNED}/feed/pepe`, U.owner, { settings: { respond: false, comments_per_day: 7 } })).status, 200);
+  assert.equal((await PF.scopeSettings(OWNED)).respond, false, "an explicit off survives later saves");
+  // a mention left while the pad is off is dropped for good (marked seen), never queued for later
+  const whileOff = await mkPost(U.alice, { body: "pepe are you there", rooms: [OWNED], global: false });
+  d = await sync();
+  assert.ok(!targets(d).includes("p:" + whileOff));
+  const seenRow = (await getQuery("SELECT outcome FROM pepe_feed_seen WHERE target = ?", ["p:" + whileOff]))[0];
+  assert.match(String(seenRow && seenRow.outcome), /mentions off/);
+  // the owner switches mentions back on -> the old one stays dropped, a NEW mention there is offered
   assert.equal((await post(`/api/rooms/${OWNED}/feed/pepe`, U.owner, { settings: { respond: true } })).status, 200);
   const later = await mkPost(U.alice, { body: "pepe now?", rooms: [OWNED], global: false });
   d = await sync();
+  assert.ok(!targets(d).includes("p:" + whileOff), "never re-offered");
   const o = d.mentions.find((x) => x.target === "p:" + later);
   assert.ok(o); assert.equal(o.scope, OWNED);
   // a room-only NSFW mark keeps him out
@@ -515,4 +532,102 @@ test("vision: a crosspost carries its original's pictures (site media URL) and t
   await runQuery("UPDATE feed_posts SET nsfw_admin = 1 WHERE id = ?", [orig]);
   assert.equal(await PF.postScopes(x), null, "an NSFW original: the crosspost is off-limits too");
   await runQuery("UPDATE feed_posts SET nsfw_admin = NULL WHERE id = ?", [orig]);
+});
+
+// ───────────────────────────── 1.99cu: mentions default ON everywhere ─────────────────────────────
+test("respond: old default-off rows migrate to ON, explicit offs (seen in the log) stay OFF, runs once", async () => {
+  await resetLimits();
+  assert.equal(PF.cleanScope({ respond: false }).respond, undefined, "an old row's respond:false was just the old default");
+  assert.equal(PF.cleanScope({ respond: false, respond_set: true }).respond, false, "an explicit off holds");
+  await store.kvSet("pepe:scope:Resp.A", JSON.stringify({ ...PF.SCOPE_DEFAULTS, respond: false }));
+  await store.kvSet("pepe:scope:Resp.B", JSON.stringify({ ...PF.SCOPE_DEFAULTS, respond: false }));
+  await store.kvSet("pepe:scope:Resp.C", JSON.stringify({ ...PF.SCOPE_DEFAULTS, respond: true }));
+  await runQuery("INSERT INTO pepe_feed_log (at, action, scope, note, by) VALUES (?, 'settings', 'Resp.B', ?, 'plantowner')",
+                 [clock - 5000, JSON.stringify({ ...PF.SCOPE_DEFAULTS, respond: true })]);
+  await runQuery("INSERT INTO pepe_feed_log (at, action, scope, note, by) VALUES (?, 'settings', 'Resp.A', ?, 'plantowner')",
+                 [clock - 4000, JSON.stringify({ ...PF.SCOPE_DEFAULTS, respond: false })]);
+  await store.kvSet("pepe:respond_v1", "");
+  const r = await PF.migrateRespondDefault();
+  assert.ok(r.on.includes("Resp.A")); assert.ok(r.kept.includes("Resp.B")); assert.ok(!r.on.includes("Resp.C") && !r.kept.includes("Resp.C"));
+  assert.equal((await PF.scopeSettings("Resp.A")).respond, true);
+  assert.equal((await PF.scopeSettings("Resp.B")).respond, false);
+  assert.equal((await PF.scopeSettings("Resp.C")).respond, true);
+  assert.equal(JSON.parse(await store.kvGet("pepe:scope:Resp.C")).respond_set, true, "a stored ON is marked explicit");
+  assert.equal(await PF.migrateRespondDefault(), null, "runs once");
+});
+
+test("crossposts: mentions on the original and on a crosspost are each answered in their own thread, never twice", async () => {
+  await resetLimits();
+  await PF.setScope(U.owner, OWNED, { respond: true });
+  const orig = await mkPost(U.alice, { title: "Hot take @pepe", body: "thoughts?", community: OTHER });
+  const xr = await post(`/api/feed/posts/${orig}/crosspost`, U.bob, { community: LOUNGE });
+  assert.equal(xr.status, 200, xr.text);
+  const xpost = xr.d.id;
+  const xr2 = await post(`/api/feed/posts/${orig}/crosspost`, U.bob, { community: OWNED, title: "pepe what do you make of this" });
+  assert.equal(xr2.status, 200, xr2.text);
+  const xpost2 = xr2.d.id;
+  const c1 = await mkComment(U.bob, orig, "@pepe on the original");
+  const c2 = await mkComment(U.alice, xpost, "@pepe on the crosspost");
+  const d = await sync();
+  const t = targets(d);
+  assert.ok(t.includes("p:" + orig), "the original's own mention");
+  assert.ok(!t.includes("p:" + xpost), "a crosspost with the original's title is not a second mention");
+  assert.ok(t.includes("p:" + xpost2), "a crosspost with its own title mentioning him is its own");
+  const m1 = d.mentions.find((x) => x.target === "c:" + c1), m2 = d.mentions.find((x) => x.target === "c:" + c2);
+  assert.ok(m1 && m2);
+  assert.equal(m1.post.id, orig, "answered in the original's thread");
+  assert.equal(m2.post.id, xpost, "answered in the crosspost's thread");
+  assert.equal(new Set(t).size, t.length, "no target offered twice");
+});
+
+// ───────────────────────────── 1.99cu: richer reply context ─────────────────────────────
+test("context: the whole thread (oldest first, target + Pepe's lines marked), siblings, exclusions, crosspost pads", async () => {
+  await resetLimits();
+  const pid = await mkPost(U.alice, { title: "Thread test", body: "the post", community: OTHER });
+  const top = await mkComment(U.bob, pid, "top level opinion");
+  clock += 1000;
+  const r1 = await mkComment(U.alice, pid, "a reply", top);
+  clock += 1000;
+  await runQuery("INSERT INTO feed_comments (id, post_id, parent_id, author_id, body, created) VALUES (?, ?, ?, ?, ?, ?)",
+                 ["pepeline01", pid, top, store.PEPE_ID, "Pepe said this earlier", clock]);
+  clock += 1000;
+  const hid = await mkComment(U.troll, pid, "hidden one", top);
+  await runQuery("UPDATE feed_comments SET hidden_at = ? WHERE id = ?", [clock, hid]);
+  clock += 1000;
+  const del = await mkComment(U.troll, pid, "deleted one", top);
+  await runQuery("UPDATE feed_comments SET deleted_at = ? WHERE id = ?", [clock, del]);
+  clock += 1000;
+  const rep = await mkComment(U.troll, pid, "reported one", top);
+  await runQuery("INSERT INTO feed_reports (post_id, comment_id, reporter_id, reason, created) VALUES (?, ?, ?, 'spam', ?)", [pid, rep, U.alice.userId, clock]);
+  clock += 1000;
+  const tgt = await mkComment(U.bob, pid, "@pepe what do you think", top);
+  const sib = await mkComment(U.alice, pid, "a different conversation");
+  // deterministic order (comments take the store's clock): top < r1 < Pepe's line < hidden/deleted/reported < target
+  const order = [top, r1, "pepeline01", hid, del, rep, tgt];
+  for (let i = 0; i < order.length; i++) await runQuery("UPDATE feed_comments SET created = ? WHERE id = ?", [clock - 60000 + i * 1000, order[i]]);
+  const conv = await PF.conversation(pid, top, tgt);
+  assert.deepEqual(conv.map((c) => c.id), [top, r1, "pepeline01", tgt], "oldest first; hidden, deleted and reported left out");
+  assert.equal(conv.find((c) => c.id === "pepeline01").author.pepe, true, "Pepe's own line is marked");
+  assert.equal(conv.find((c) => c.id === tgt).target, true);
+  assert.equal(conv.filter((c) => c.target).length, 1);
+  assert.equal(conv.find((c) => c.id === r1).parent, top);
+  const others = await PF.otherComments(pid, top);
+  assert.deepEqual(others.map((c) => c.id), [sib], "siblings: the other top-level conversations only");
+  const d = await sync();
+  const m = d.mentions.find((x) => x.target === "c:" + tgt);
+  assert.ok(m, "offered");
+  assert.deepEqual(m.thread.map((c) => c.id), [top, r1, "pepeline01", tgt]);
+  assert.deepEqual(m.others.map((c) => c.id), [sib]);
+  assert.equal(m.reply_to.parent, top);
+  assert.equal(m.post.pad.title, "Side Room");
+  // a crosspost: the original's content, its pad, and the crossposting pad
+  const xr = await post(`/api/feed/posts/${pid}/crosspost`, U.bob, { community: LOUNGE, title: "look at this" });
+  assert.equal(xr.status, 200, xr.text);
+  const v = await PF.postView(await store.getRow(xr.d.id));
+  assert.equal(v.source_id, pid);
+  assert.equal(v.body, "the post");
+  assert.equal(v.crosspost.title, "Thread test");
+  assert.equal(v.crosspost.pad.title, "Side Room");
+  assert.ok(v.pad && v.pad.slug, "the crossposting pad");
+  assert.notEqual(v.pad.title, "Side Room");
 });

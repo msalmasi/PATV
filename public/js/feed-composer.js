@@ -8,6 +8,8 @@
 //     multi-select - Crosspost shares a post into other communities); a room page / community view
 //     preselects its own
 //   * "Pepe announces it in <room>" for the picked community, only when its owner switched announcements on
+//     (1.99cu: always shown for the picked pad; default ON for Camfrog pads; greyed out with the reason - announcements
+//     off, no Camfrog room, Pepe not in the room - when he can't; disabled boxes are never sent nor kept in the draft)
 // Page: the pad bar, sort and pager links on /feed and /feed/following (data-swap)
 // swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
 // composer is ever lost.
@@ -118,7 +120,7 @@
   // ── draft (localStorage, a convenience: any failure just means no draft) ──
   function picked() { var x = form.querySelector('input[name=community]:checked'); return x ? x.value : ''; }
   function roomsChecked() { var c = picked(); return c ? [c] : []; }
-  function announceOff() { return Array.prototype.slice.call(form.querySelectorAll('input[name=announce]')).filter(function (x) { return !x.checked; }).map(function (x) { return x.value; }); }
+  function announceOff() { return Array.prototype.slice.call(form.querySelectorAll('input[name=announce]:not(:disabled)')).filter(function (x) { return !x.checked; }).map(function (x) { return x.value; }); }
   function draft() {
     return {
       v: 1, at: Date.now(), path: location.pathname,
@@ -319,7 +321,7 @@
       form.querySelectorAll('input[name=community]').forEach(function (x) { x.checked = x.value === d.community; });
     }
     showPicked();
-    if (Array.isArray(d.announceOff)) form.querySelectorAll('input[name=announce]').forEach(function (x) { x.checked = d.announceOff.indexOf(x.value) < 0; });
+    if (Array.isArray(d.announceOff)) form.querySelectorAll('input[name=announce]:not(:disabled)').forEach(function (x) { x.checked = d.announceOff.indexOf(x.value) < 0; });
     syncAnnounce();
     var pending = (Array.isArray(d.files) ? d.files : []).slice(0, 6).filter(function (x) { return x && /^[a-f0-9]{24}$/.test(String(x.id)); });
     pending.forEach(function (x) {
@@ -349,7 +351,7 @@
     if (busy()) return setErr('Wait for the uploads to finish.');
     var roomsSel = roomsChecked();
     if (!roomsSel.length) { setErr('Choose a pad to post in.'); if (comm) comm.open = true; return; }
-    var announce = Array.prototype.slice.call(form.querySelectorAll('input[name=announce]:checked'))
+    var announce = Array.prototype.slice.call(form.querySelectorAll('input[name=announce]:checked:not(:disabled)'))
       .map(function (x) { return x.value; }).filter(function (v) { return roomsSel.indexOf(v) >= 0; });
     var body = {
       title: form.elements.title.value, body: form.elements.body.value, link: form.elements.link.value.trim(), nsfw: form.elements.nsfw.checked,

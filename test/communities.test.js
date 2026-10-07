@@ -523,7 +523,7 @@ test("multi-pad crosspost: one crosspost per pad (own votes + comments), the new
   // the dialog script: checkboxes, the summary, the results
   const js = fs.readFileSync(path.join(repo, "public/js/feed-crosspost.js"), "utf8");
   assert.ok(js.includes("r.type = 'checkbox'") && js.includes("' selected'") && js.includes("pads: on.map"));
-  assert.ok(fs.readFileSync(path.join(repo, "views/partials/feed-js.ejs"), "utf8").includes("feed-crosspost.js?v=4"), "cache-buster bumped");
+  assert.ok(fs.readFileSync(path.join(repo, "views/partials/feed-js.ejs"), "utf8").includes("feed-crosspost.js?v=5"), "cache-buster bumped");
 });
 
 test("multi-pad crosspost: each pad's rules on their own (approval, who-can-post, bans, Pepe) - partial success; duplicates refused", async () => {

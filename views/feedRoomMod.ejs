@@ -1,5 +1,5 @@
 <%- include('layout', { title: room.title + ' — Pad reports & settings', user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=7">
+<link rel="stylesheet" href="/public/css/feed.css?v=8">
 <%#
   A room owner's feed tools (1.99bx): approval queue, reports, settings, approved posters, bans, audit log.
   Locals: viewer, room, fx, embeds, host, reports (feedstore.roomReports), pending, settings, members, bans, audit, WHO
@@ -82,6 +82,11 @@
   <section class="fa-card pf-card" id="pepe">
     <h2><img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22"> Pepe on this pad's feed</h2>
     <p class="sub">Pepe can answer people who mention him in <%= room.title %>'s feed, and take part on his own. His posts and comments carry a 🤖 Pepe badge; you can delete them like anyone's, and "Mute Pepe in this thread" is in a post's ⋯ menu.</p>
+    <% if (typeof announce !== 'undefined' && announce !== null) { %><%# 1.99cu: room announcements (default ON for Camfrog pads) %>
+      <label class="rf-mention" id="announce" title="Pepe posts a short line in the Camfrog room when someone posts here (at most one every few minutes)">
+        <input type="checkbox" id="rmMention"<%= announce ? ' checked' : '' %>> 🐸📣 Pepe announces new posts in the Camfrog room
+      </label>
+    <% } %>
     <%- include('partials/pepe-feed-settings', { s: pepe, where: 'this pad', url: '/api/rooms/' + encodeURIComponent(slug) + '/feed/pepe', wrap: 'settings', admin: viewer.class === 'Admin', roomScope: true }) %>
   </section>
 
@@ -123,7 +128,7 @@
     <% } %>
   </section>
 </main>
-<script src="/public/js/feed-roommod.js?v=1" defer></script>
+<script src="/public/js/feed-roommod.js?v=2" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 </body>
 </html>

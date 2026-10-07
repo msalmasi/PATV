@@ -131,6 +131,7 @@ function init() {
       await migrateVotes();
       await migrateSafety();
       await migrateCommunities();
+      await migrateMentionDefault();
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -883,7 +884,7 @@ async function crosspostRefusal(u, o, R) {
   return (await postRefusal(u, [R.id])) || (await roomPostRefusal(u, R.id));
 }
 /** One crosspost row in pad R (charged; rolled back + refunded on failure). -> {id, pending} */
-async function crosspostOne(u, o, R, title) {
+async function crosspostOne(u, o, R, title, announce = true) {
   const pending = (await roomSettings(R.id)).approval && !(await rooms.canManage(u, R.id));
   const cost = CONFIG.price_post;
   const id = newId();
@@ -894,8 +895,8 @@ async function crosspostOne(u, o, R, title) {
     // nsfw: the original's effective flag at the time (the embed also follows the original live, see decorate)
     await runQuery("INSERT INTO feed_posts (id, author_id, title, nsfw, global, cost, created, crosspost_of) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
                    [id, u.userId, title, effNsfw(o) ? 1 : 0, cost, t, o.id]);
-    await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, R.id, t, pending ? 1 : 0]);
-    if (!pending) await queueMention(R.id, id);
+    await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, R.id, t, pending ? (announce ? 1 : 2) : 0]);
+    if (!pending && announce) await queueMention(R.id, id);
     await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
     await recountPost(id);
   } catch (e) {
@@ -950,11 +951,14 @@ async function crosspostMany(userId, origId, input = {}) {
     const g = burst("post|" + u.userId, CONFIG.post_gap_secs * 1000);
     if (g) throw new Refuse(429, `Slow down - try again in ${g}s.`);
   }
+  // 1.99cu: announce = the pads (ids/slugs) where the author left "Pepe announces it" ticked; none sent = every pad
+  const ann = Array.isArray(input.announce) ? new Set(input.announce.map(String)) : null;
+  const wantsAnnounce = (R) => !ann || ann.has(R.id) || ann.has(R.slug || "") || ann.has(padSlugOf(R, R.id));
   const olink = parseJson(o.link_json);
   const title = cleanLine(input.title, TITLE_MAX) || o.title || cleanLine(o.body, 100) || (olink && cleanLine(olink.title, 100)) || "Crosspost";
   for (const [res, R] of go) {
     try {
-      const made = await crosspostOne(u, o, R, title);
+      const made = await crosspostOne(u, o, R, title, wantsAnnounce(R));
       Object.assign(res, { status: made.pending ? "pending" : "created", id: made.id, url: "/feed/p/" + made.id });
     } catch (e) {
       if (!e.refuse) console.error(`[feed] crosspost ${o.id} -> ${R.id}:`, e);
@@ -972,7 +976,7 @@ async function crosspostMany(userId, origId, input = {}) {
 }
 /** The 1.99ci single-pad crosspost ({community, title?}): refusals throw; -> the new post + pendingApproval. */
 async function crosspost(userId, origId, input = {}) {
-  const r = await crosspostMany(userId, origId, { pads: [input.community], title: input.title });
+  const r = await crosspostMany(userId, origId, { pads: [input.community], title: input.title, announce: input.announce });
   const x = r.results[0];
   if (!x || x.status === "refused") throw new Refuse(x ? x.code : 400, x ? x.error : "Choose a pad to crosspost to.");
   return { ...(await get(x.id, await account(userId))), pendingApproval: x.status === "pending" };
@@ -1633,16 +1637,74 @@ async function setRestricted(list) {
   return rows.length;
 }
 
-async function mentionOn(roomId) { await init(); return (await kvGet("mention:" + roomId)) === "1"; }
+// 1.99cu: room announcements are ON by default for every pad with a Camfrog room (site/Twitch/Discord pads have
+// none, so never). Same explicit-vs-default trick as 1.99cq's vision: a stored "mention:<room>" value only counts
+// once "mention_set:<room>" marks it as an owner's explicit choice; unmarked values (the old default-off era)
+// follow the new default. migrateMentionDefault() marks the old explicit choices once.
+async function mentionOn(roomId) {
+  await init();
+  const id = String(roomId || "");
+  if (!id || rooms.platformOf(id) !== "camfrog") return false;
+  if ((await kvGet("mention_set:" + id)) === "1") return (await kvGet("mention:" + id)) === "1";
+  return true;
+}
 async function setMention(user, roomId, on) {
   if (!(await rooms.canManage(user, roomId))) throw new Refuse(403, "Only this pad's owner can do that.");
   await init();
   await kvSet("mention:" + roomId, on ? "1" : "0");
+  await kvSet("mention_set:" + roomId, "1");
   await rooms.event(roomId, "feed-mention", user.username, on ? "on" : "off");
   return !!on;
 }
+/**
+ * 1.99cu, once (feed_kv mention_v1): announcements went default OFF -> ON. A stored "1" is an owner's explicit ON
+ * (marked). A stored "0" is an explicit OFF only if the pad's event log shows announcements switched on at some
+ * point (an owner turned them on, then off again) - those stay OFF; the rest follow the new default (ON).
+ * -> {on: [pads now on by default], kept: [explicit offs kept], marked: [explicit ons]} | null when already done
+ */
+async function migrateMentionDefault() {
+  if ((await kvGet("mention_v1")) === "1") return null;
+  const out = { on: [], kept: [], marked: [] };
+  const rows = await getQuery("SELECT key, value FROM feed_kv WHERE key LIKE 'mention:%'");
+  for (const r of rows) {
+    const id = r.key.slice("mention:".length);
+    if (!id || (await kvGet("mention_set:" + id)) === "1") continue;
+    if (r.value === "1") { await kvSet("mention_set:" + id, "1"); out.marked.push(id); continue; }
+    let was = null;
+    try { was = (await getQuery("SELECT 1 FROM room_events WHERE room_id = ? AND what = 'feed-mention' AND detail = 'on' LIMIT 1", [id]))[0]; }
+    catch (e) { was = null; }                                            // no room_events table (minimal test DBs)
+    if (was) { await kvSet("mention_set:" + id, "1"); out.kept.push(id); }
+    else out.on.push(id);
+  }
+  await kvSet("mention_v1", "1");
+  if (rows.length) console.log(`[feed] mention default ON: ${out.on.length} pad(s) switched on, ${out.kept.length} explicit off kept, ${out.marked.length} explicit on`);
+  return out;
+}
+/** Pepe's presence in a room (bridge.pepeIn: true / false / null = unknown). Tests swap it with _setPepeIn. */
+const pepeInBridge = (roomId) => { try { return require("./bridge").pepeIn(roomId); } catch (e) { return null; } };
+let pepeInFn = pepeInBridge;
+function _setPepeIn(fn) { pepeInFn = fn || pepeInBridge; }
+const PLAT_NAME = { site: "Site", twitch: "Twitch", discord: "Discord" };
+/**
+ * 1.99cu: can Pepe announce a new post in this pad's Camfrog room right now? Drives the composer's and the
+ * crosspost dialog's "Pepe announces it" checkbox (enabled + ticked, or greyed out with the reason) and the
+ * server-side gate (queueMention). -> {ok, code: on|off|site|away, why, manage: this viewer may switch it on}
+ */
+async function announceState(roomId, viewer = null) {
+  const id = String(roomId || "");
+  const plat = rooms.platformOf(id);
+  if (plat !== "camfrog") return { ok: false, code: "site", why: `${PLAT_NAME[plat] || "Site"} pad, no Camfrog room`, manage: false };
+  if (!(await mentionOn(id))) {
+    const manage = !!viewer && (isStaff(viewer) || !!(await rooms.canManage(viewer, id).catch(() => false)));
+    return { ok: false, code: "off", why: "Announcements are off for this pad", manage };
+  }
+  if (pepeInFn(id) === false) return { ok: false, code: "away", why: "Pepe isn't in this room right now", manage: false };
+  return { ok: true, code: "on", why: null, manage: false };
+}
+const MENTION_LINE_MAX = 300;                                          // 1.99cu: one Camfrog chat line, comfortably
 async function queueMention(roomId, postId) {
   if (!(await mentionOn(roomId))) return;
+  if (pepeInFn(roomId) === false) return;                              // 1.99cu: the box was greyed out (Pepe isn't there)
   await runQuery("INSERT OR IGNORE INTO feed_mentions (room_id, post_id, created) VALUES (?, ?, ?)", [roomId, postId, NOW()]);
 }
 /**
@@ -1672,9 +1734,17 @@ async function takeMentions(site) {
     const name = A ? (A.displayname || A.username) : "someone";
     const nsfw = effNsfw(first);
     const what = nsfw ? "(NSFW)" : cleanLine(first.title || first.body || "", 70);
-    const text = live.length === 1
-      ? `📌 New post on p/${slug} by ${"{author}"}: ${what ? what + " — " : ""}${site}/feed/p/${first.post_id}`
-      : `📌 ${live.length} new posts on p/${slug} — ${site}/p/${encodeURIComponent(slug)}#feed`;
+    // 1.99cu: every line links the post itself (<site>/feed/p/<id>); several posts folded into one line link each
+    // post when they fit in MENTION_LINE_MAX, else the newest post + the pad page
+    const postUrl = (m) => `${site}/feed/p/${m.post_id}`;
+    let text;
+    if (live.length === 1) text = `📌 New post on p/${slug} by ${"{author}"}: ${what ? what + " — " : ""}${postUrl(first)}`;
+    else {
+      text = `📌 ${live.length} new posts on p/${slug}: ${live.map(postUrl).join(" · ")}`;
+      if (text.length > MENTION_LINE_MAX) {
+        text = `📌 ${live.length} new posts on p/${slug} — newest: ${postUrl(live[live.length - 1])} · all: ${site}/p/${encodeURIComponent(slug)}#feed`;
+      }
+    }
     out.push({ room: roomId, text, author: name, author_login: A && A.camfrogUsername ? String(A.camfrogUsername).toLowerCase() : null, post: first.post_id, count: live.length });
   }
   return out;
@@ -1923,6 +1993,6 @@ module.exports = {
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,
-  setRestricted, mentionOn, setMention, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
+  setRestricted, mentionOn, setMention, migrateMentionDefault, announceState, _setPepeIn, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
 };

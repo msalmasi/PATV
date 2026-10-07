@@ -12,8 +12,11 @@
 // 1.99ci (communities only): there's no main feed. Every post lives in a community, so Pepe always acts in a room
 // scope; a house-run community (Pepe's rooms, the Camfrog Lounge) with no settings of its own follows the All
 // settings. His own posts with scope '' go to the Camfrog Lounge (rooms.LOUNGE_ID). Owners' rooms stay opt-in.
-//   respond         answer mentions ("@pepe", "pepe" as a word, a reply to his post / comment). Default ON for
-//                   All and the house communities (Pepe's rooms, the Lounge), OFF elsewhere until the owner turns it on
+//   respond         answer mentions ("@pepe", "pepe" as a word, a reply to his post / comment). Default ON in every
+//                   scope (1.99cu; was ON only for All and the house pads). respond_set = an owner/admin explicitly
+//                   CHANGED it: only then does a stored value override the default (old rows saved the old OFF
+//                   default on every settings save). migrateRespondDefault() (once, feed_kv pepe:respond_v1) flips
+//                   rows that only ever held the old default to ON and keeps real explicit OFFs (seen in the log).
 //   auto            take part on his own. Default OFF
 //   posts_per_day   his own posts in this scope per 24 h (auto)
 //   comments_per_day his comments in this scope per 24 h (mentions + auto)
@@ -79,6 +82,7 @@ function init() {
       await runQuery("CREATE TABLE IF NOT EXISTS pepe_feed_seen (target TEXT PRIMARY KEY, at INTEGER NOT NULL, outcome TEXT, offers INTEGER NOT NULL DEFAULT 0)");
       await runQuery("CREATE TABLE IF NOT EXISTS pepe_feed_mutes (post_id TEXT PRIMARY KEY, by TEXT, at INTEGER)");
       await migrateVisionDefault();
+      await migrateRespondDefault();
     })().catch((e) => { console.error("[pepefeed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -120,7 +124,8 @@ function cleanScope(c) {
   // 1.99cq: a stored vision value counts only once someone explicitly changed it (vision_set); old rows saved the
   // old OFF default on every save, so without the mark they follow today's default (ON)
   if (c.vision_set && c.vision != null) { o.vision = bool(c.vision); o.vision_set = true; }
-  if (c.respond != null) o.respond = bool(c.respond);      // unset = the scope's default (respondDefault)
+  // 1.99cu: same for respond - a stored value counts only once someone explicitly changed it (respond_set)
+  if (c.respond_set && c.respond != null) { o.respond = bool(c.respond); o.respond_set = true; }
   return o;
 }
 function cleanGlobal(c) {
@@ -134,12 +139,8 @@ function cleanGlobal(c) {
   if (c.enabled != null) o.enabled = bool(c.enabled);
   return o;
 }
-/** Mentions are answered by default under All and in the house communities. */
-function respondDefault(scope) {
-  if (!scope) return true;
-  const R = rooms.getCached(scope);
-  return !!(R && R.house);
-}
+/** 1.99cu: mentions are answered by default in every scope (All, house pads, owners' pads); owners can switch it off. */
+function respondDefault(scope) { void scope; return true; }
 async function readJson(key) {
   try { return JSON.parse((await store.kvGet(key)) || "null"); } catch (e) { return null; }
 }
@@ -182,6 +183,34 @@ async function migrateVisionDefault() {
   if (out.on.length || out.kept.length) console.log(`[pepefeed] vision default ON: ${out.on.length} scope(s) switched on, ${out.kept.length} explicit off kept`);
   return out;
 }
+/**
+ * 1.99cu, once: "answer mentions" went default ON in every pad (was ON only for All + house pads). The settings
+ * form saved every field, so a stored respond:false is an EXPLICIT off only if the scope's settings log shows it
+ * on at some point (someone turned it on, then off again). Those stay OFF (respond_set); a stored ON is marked
+ * explicit too; the rest follow the new default. -> {on: [scopes switched to the default], kept: [explicit offs]}
+ */
+async function migrateRespondDefault() {
+  if ((await store.kvGet("pepe:respond_v1")) === "1") return null;
+  const out = { on: [], kept: [] };
+  const rows = await getQuery("SELECT key, value FROM feed_kv WHERE key LIKE 'pepe:scope:%'");
+  for (const r of rows) {
+    let c;
+    try { c = JSON.parse(r.value || "null"); } catch (e) { c = null; }
+    if (!c || typeof c !== "object" || c.respond_set) continue;
+    const scope = r.key.slice("pepe:scope:".length);
+    if (c.respond == null) continue;                                   // never stored: already the default
+    if (bool(c.respond)) { c.respond_set = true; }
+    else {
+      const was = (await getQuery(`SELECT 1 FROM pepe_feed_log WHERE action = 'settings' AND scope = ? AND note LIKE '%"respond":true%' LIMIT 1`, [scope]))[0];
+      if (was) { c.respond_set = true; out.kept.push(scope); }
+      else { delete c.respond; out.on.push(scope); }
+    }
+    await store.kvSet(r.key, JSON.stringify(c));
+  }
+  await store.kvSet("pepe:respond_v1", "1");
+  if (out.on.length || out.kept.length) console.log(`[pepefeed] respond default ON: ${out.on.length} scope(s) switched on, ${out.kept.length} explicit off kept`);
+  return out;
+}
 async function globalCaps() { await init(); return cleanGlobal(await readJson("pepe:global")); }
 
 const isAdmin = (u) => !!u && u.class === "Admin";
@@ -206,6 +235,10 @@ async function setScope(user, scope, patch) {
   // the settings form sends every field: vision becomes explicit only when it actually CHANGES
   if (p.vision != null && bool(p.vision) !== cur.vision) p.vision_set = true;
   else delete p.vision;
+  // 1.99cu: respond likewise, against its effective value (the default when it was never set)
+  const curRespond = cur.respond != null ? cur.respond : respondDefault(scope);
+  if (p.respond != null && bool(p.respond) !== curRespond) p.respond_set = true;
+  else delete p.respond;
   const next = cleanScope({ ...cur, ...p });
   await store.kvSet("pepe:scope:" + scope, JSON.stringify(next));
   await log({ action: "settings", scope, by: user.username, note: JSON.stringify(next).slice(0, 400) });
@@ -395,10 +428,13 @@ async function postView(p) {
   const att = await getQuery("SELECT kind, file, thumb, w, h FROM feed_attachments WHERE post_id = ? AND state = 'ready' ORDER BY sort", [src.id]);
   let link = null;
   try { link = src.link_json ? JSON.parse(src.link_json) : null; } catch (e) { link = null; }
+  // 1.99cu: the pad the post lives in, and for a crosspost the original's own title + pad (Pepe's reply context);
+  // source_id = the post whose content/pictures these are (his vision-description cache key)
   return {
     id: p.id, url: SITE() + "/feed/p/" + p.id, title: p.title || src.title || "", body: String(src.body || p.body || "").slice(0, 2000), created: p.created,
-    author: who(A, p.author_id),
-    crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id) } : null,
+    author: who(A, p.author_id), pad: await padOf(p.id), source_id: src.id,
+    crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id), id: src.id, title: src.title || "",
+                             pad: await padOf(src.id) } : null,
     link: link && link.url ? { url: link.url, domain: link.domain || "", title: link.title || "", description: link.description || "", site: link.site || "" } : null,
     images: att.filter((a) => a.kind === "image").slice(0, 4).map((a) => ({ url: SITE() + "/feed/f/" + (a.thumb || a.file), w: a.w, h: a.h })),
     media: { audio: att.filter((a) => a.kind === "audio").length, video: att.filter((a) => a.kind === "video").length },
@@ -410,11 +446,39 @@ function who(A, userId) {
   if (!A) return { display: "[deleted account]", login: null, pepe: false };
   return { display: A.displayname || A.username, username: A.username, login: A.camfrogUsername ? String(A.camfrogUsername).toLowerCase() : null, pepe: false };
 }
-/** The conversation around a comment (its top-level comment + replies, oldest first, live ones). */
-async function conversation(postId, top) {
-  const rows = await getQuery(`SELECT * FROM feed_comments WHERE post_id = ? AND (id = ? OR parent_id = ?) AND deleted_at IS NULL AND hidden_at IS NULL ORDER BY created`, [postId, top, top]);
+/** 1.99cu: a post's pad as Pepe reads it ({title, slug} of its first live placement, else null). */
+async function padOf(postId) {
+  const r = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL ORDER BY created LIMIT 1", [postId]))[0];
+  if (!r) return null;
+  const R = rooms.getCached(r.room_id);
+  return { title: (R && R.title) || r.room_id, slug: (R && R.slug) || rooms.slugify(r.room_id) };
+}
+// live comments only: never deleted (removed), hidden, or with an open report
+const LIVE_COMMENT = `deleted_at IS NULL AND hidden_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM feed_reports fr WHERE fr.comment_id = feed_comments.id AND fr.resolved_at IS NULL)`;
+const CONVO_MAX = 80, OTHERS_MAX = 10;
+/**
+ * The conversation around a comment: its top-level comment + every reply (replies are one level deep, so this is
+ * the whole reply chain), oldest first, live ones only. 1.99cu: the whole thread (up to CONVO_MAX, newest kept),
+ * longer bodies, parent ids, and `target` on the comment he's answering; Pepe's own lines have author.pepe.
+ */
+async function conversation(postId, top, targetId = null) {
+  const rows = await getQuery(`SELECT * FROM feed_comments WHERE post_id = ? AND (id = ? OR parent_id = ?) AND ${LIVE_COMMENT} ORDER BY created`, [postId, top, top]);
   const out = [];
-  for (const c of rows.slice(-14)) out.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 800), created: c.created });
+  for (const c of rows.slice(-CONVO_MAX)) {
+    out.push({ id: c.id, parent: c.parent_id || null, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 1500),
+               created: c.created, ...(c.id === targetId ? { target: true } : {}) });
+  }
+  return out;
+}
+/** 1.99cu: the post's OTHER top-level conversations (sibling context), best first, live ones only. */
+async function otherComments(postId, excludeTop = null) {
+  const rows = await getQuery(`SELECT c.*, (SELECT COUNT(*) FROM feed_comments r WHERE r.parent_id = c.id AND r.deleted_at IS NULL AND r.hidden_at IS NULL) AS replies
+                               FROM feed_comments c WHERE c.post_id = ? AND c.parent_id IS NULL AND c.id IS NOT ? AND c.deleted_at IS NULL AND c.hidden_at IS NULL
+                                 AND NOT EXISTS (SELECT 1 FROM feed_reports fr WHERE fr.comment_id = c.id AND fr.resolved_at IS NULL)
+                               ORDER BY c.score DESC, c.created DESC LIMIT ?`, [postId, excludeTop, OTHERS_MAX]);
+  const out = [];
+  for (const c of rows) out.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 500), created: c.created, replies: c.replies || 0 });
   return out;
 }
 async function depthOf(postId, top) {
@@ -448,7 +512,21 @@ async function findMentions(acct, t = NOW()) {
     // the newest), but anything he already answered is in pepe_feed_seen
     cand.push({ target: "c:" + c.id, c });
   }
-  for (const p of ps) if (mentions((p.title || "") + "\n" + (p.body || ""), acct.username)) cand.push({ target: "p:" + p.id, p });
+  // 1.99cu: a comment belongs to exactly one post, so mentions on an original and on its crossposts are answered
+  // each in its own thread (target c:<id>, never twice). A crosspost's own POST-level mention counts only when its
+  // title is its own: a title copied from the original (its title, or its text when it had none) is the original's
+  // mention (answered there, once).
+  const origText = new Map();
+  for (const p of ps) {
+    if (!p.crosspost_of || origText.has(p.crosspost_of)) continue;
+    const o = (await store.getRow(p.crosspost_of)) || {};
+    origText.set(p.crosspost_of, ((o.title || "") + "\n" + (o.body || "")).replace(/\s+/g, " ").trim());
+  }
+  for (const p of ps) {
+    const own = String(p.title || "").replace(/\s+/g, " ").trim();
+    if (p.crosspost_of && (!own || String(origText.get(p.crosspost_of) || "").includes(own))) continue;
+    if (mentions((p.title || "") + "\n" + (p.body || ""), acct.username)) cand.push({ target: "p:" + p.id, p });
+  }
   const seen = await seenMap(cand.map((x) => x.target));
   for (const x of cand) {
     if (seen.has(x.target)) continue;
@@ -469,8 +547,9 @@ async function findMentions(acct, t = NOW()) {
     const post = await postView(p);
     out.push({
       target: x.target, why: "mention", scope, post, parent: top, depth, max_depth: S.max_depth, vision: S.vision,
-      reply_to: x.c ? { id: x.c.id, body: String(x.c.body).slice(0, 800), author: who(await store.account(x.c.author_id), x.c.author_id) } : null,
-      thread: x.c ? await conversation(p.id, top) : [],
+      reply_to: x.c ? { id: x.c.id, parent: x.c.parent_id || null, body: String(x.c.body).slice(0, 1500), author: who(await store.account(x.c.author_id), x.c.author_id) } : null,
+      thread: x.c ? await conversation(p.id, top, x.c.id) : [],
+      others: await otherComments(p.id, top),                     // 1.99cu: sibling conversations (trimmed first by Pepe)
       created: x.c ? x.c.created : p.created,
     });
     if (out.length >= 10) break;
@@ -494,7 +573,7 @@ async function findThreads(autoScopes, t = NOW()) {
     if (scope === undefined) continue;
     if (await authorRefusal(p.author_id, scope)) continue;
     const S = await scopeSettings(scope);
-    const top = await getQuery(`SELECT * FROM feed_comments WHERE post_id = ? AND parent_id IS NULL AND deleted_at IS NULL AND hidden_at IS NULL ORDER BY score DESC, created LIMIT 6`, [p.id]);
+    const top = await getQuery(`SELECT * FROM feed_comments WHERE post_id = ? AND parent_id IS NULL AND ${LIVE_COMMENT} ORDER BY score DESC, created LIMIT 6`, [p.id]);
     const thread = [];
     for (const c of top) thread.push({ id: c.id, author: who(await store.account(c.author_id), c.author_id), body: String(c.body).slice(0, 500), created: c.created });
     out.push({ target: "a:" + p.id, why: "auto", scope, post: await postView(p), parent: null, depth: 0, max_depth: S.max_depth, vision: S.vision, thread, created: p.created });
@@ -729,7 +808,7 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, register, ensureAccount, scopeView, sync, comment, post, skip, setScope, setGlobal, scopeSettings, globalCaps, usage, gate, mentions, quietNow, localHour,
-  isMuted, setMute, adminView, migrateVisionDefault, postView, postScopes, findMentions, findThreads, cleanScope, cleanGlobal, respondDefault,
+  isMuted, setMute, adminView, migrateVisionDefault, migrateRespondDefault, postView, conversation, otherComments, padOf, postScopes, findMentions, findThreads, cleanScope, cleanGlobal, respondDefault,
   SCOPE_DEFAULTS, GLOBAL_DEFAULTS, SCOPE_LIMITS, GLOBAL_LIMITS, KINDS, PEPE_ID, Refuse, _setClock, _writes: writeLog,
   _reset: () => { ACCOUNT = null; },
 };
