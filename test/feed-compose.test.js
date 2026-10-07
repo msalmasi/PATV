@@ -174,6 +174,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   const html = r.text;
   const feedPanel = html.slice(html.indexOf('id="padPanel-feed"'), html.indexOf('id="padPanel-about"'));
   assert.match(feedPanel, /<div class="fcol">/);
+  assert.match(html, /\.rm \.fcol \{ width: 100%; min-width: 0; \}/, "1.99ef: the Feed card is full width (lines up with the header / tab bar), no 760px cap");
   assert.doesNotMatch(feedPanel, /class="fside|<aside|About this pad ›|A pad on Public Access TV/, "no side column");
   assert.doesNotMatch(feedPanel, /class="rf-rules"/, "no Rules card in the Feed");
   assert.match(html, /<a role="menuitem" href="\?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules<\/a>/, "Rules: the header's ⋯ menu -> About");

@@ -56,6 +56,8 @@
   .pf { width: 100%; max-width: min(952px, 100vw); min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6;
         display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .pf .pf-panel, .pf .pf-tabs, .pf .pf-bar, .pf > .card { width: 100%; box-sizing: border-box; }
+  /* 1.99eg: a short tab (no scrollbar) vs a long one shifted the column by the scrollbar's width - reserve it */
+  html:has(.pf[data-profile]) { scrollbar-gutter: stable; }
   .pf a { color: #81c784; text-decoration: none; }
   .pf a:hover { color: #a5d6a7; }
   .pf .card { background: #111; border: 1px solid #222; border-radius: 14px; padding: 18px 20px; min-width: 0; }

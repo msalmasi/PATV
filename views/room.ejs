@@ -248,8 +248,10 @@
   .rm .about dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 10px 0 0; font-size: 14px; }
   .rm .about dt { color: #888; }
   .rm .about dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-  /* 1.99ec: the Feed tab is one centred column at a reading width (no side column) */
-  .rm .fcol { width: 100%; max-width: 760px; margin: 0 auto; min-width: 0; }
+  /* 1.99ec: the Feed tab is one column (no side column). 1.99ef: full width - its card's edges line up with the header,
+     the captures card and the tab bar (was max-width 760px, centred); only post text keeps a reading measure */
+  .rm .fcol { width: 100%; min-width: 0; }
+  .rm .fcol .fp-body, .rm .fcol .fp-title { max-width: 80ch; }
   .rm .fcol .rf { margin: 0; }
   .rm .ppanel > .rf-rules { margin: 0; background: #111; border-color: #222; border-radius: 14px; scroll-margin-top: 64px; }
   .rm .ppanel > .rf-rules > summary { flex-wrap: wrap; padding: 12px 16px; }
