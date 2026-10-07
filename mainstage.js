@@ -84,6 +84,10 @@ const DEFAULTS = {
   schedule_per_user: 3,    // future bookings one user can hold
   lead_min: 5,             // a scheduled slot opens (key works) this long before its start
   queue_max: 10,           // people waiting per room
+  // 1.99cw: the admin kill switch for viewers' stage snaps / clips (stagecap.js) + one per kind
+  stagecap_enabled: true,
+  stagecap_snaps: true,
+  stagecap_clips: true,
 };
 const OPEN = "('waiting','active')";
 const FUTURE = "('requested','scheduled')";
@@ -191,6 +195,8 @@ async function loadConfig() {
   CONFIG = cleanConfig(c);
   return CONFIG;
 }
+const onOff = (v, d) => (v === undefined || v === null || v === "" ? d
+  : v === true || v === "true" || v === 1 || v === "1" || v === "on");
 function cleanConfig(c) {
   const int = (v, lo, hi, d) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
   const o = {
@@ -208,6 +214,9 @@ function cleanConfig(c) {
     schedule_per_user: int(c.schedule_per_user, 0, 20, DEFAULTS.schedule_per_user),
     lead_min: int(c.lead_min, 0, 30, DEFAULTS.lead_min),
     queue_max: int(c.queue_max, 0, 50, DEFAULTS.queue_max),
+    stagecap_enabled: onOff(c.stagecap_enabled, DEFAULTS.stagecap_enabled),
+    stagecap_snaps: onOff(c.stagecap_snaps, DEFAULTS.stagecap_snaps),
+    stagecap_clips: onOff(c.stagecap_clips, DEFAULTS.stagecap_clips),
   };
   if (o.max_minutes < o.min_minutes) o.max_minutes = o.min_minutes;
   return o;

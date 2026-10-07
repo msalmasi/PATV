@@ -9,6 +9,9 @@
 // The browser never sends a picture: the server cuts the frame / the last N seconds out of the live
 // HLS on its own disk. A capture is a PREVIEW first (only you see it); "Save" sends it to Pepe, who
 // charges the room's !snap / !clip price and posts it to the pad's story. Discard = nothing charged.
+// 1.99cw: /api/stage/captures/me also says which kinds the site admin allows (`enabled`: a kind
+// that's off is hidden, both off hides the bar) and whether the pad's Camfrog room has !snap off
+// (`room_off`: the buttons show greyed with that reason). Re-read every minute and on a pad change.
 (function () {
   'use strict';
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
@@ -30,6 +33,8 @@
       }).catch(function () {});
     }
     function render() {
+      var en = me && me.enabled ? me.enabled : { snap: true, clip: true };
+      if (!en.snap && !en.clip) { host.innerHTML = ''; host.classList.add('hide'); return; }   // 1.99cw: the admin switched them off
       if (!sel || sel.embed || !sel.stream) {
         host.innerHTML = sel && sel.embed ? '<span class="stcap-note">YouTube and Twitch streams can\'t be snapped or clipped here.</span>' : '';
         host.classList.toggle('hide', !(sel && sel.embed));
@@ -43,18 +48,23 @@
       var p = me && me.prices ? me.prices : { snap: 25000, clip: 50000 };
       var max = me && me.clip ? me.clip.max : 30;
       var opts = [10, 20, 30].filter(function (n) { return n <= max; });
+      var roomOff = me && me.room_off ? me.room_off : null;
+      var price = (en.snap ? 'snap ' + fmt(p.snap) : '') + (en.snap && en.clip ? ' · ' : '') + (en.clip ? 'clip ' + fmt(p.clip) : '') + ' PAT · preview first, pay only if you save';
       host.innerHTML =
-        '<button type="button" class="stcap-btn" data-k="snap" title="Save a still of ' + esc(sel.label) + ' to the pad\'s story">📸 Snap</button>' +
-        '<span class="stcap-clip"><button type="button" class="stcap-btn" data-k="clip" title="Save the last ' + secs + ' s of ' + esc(sel.label) + ' to the pad\'s story">🎬 Clip</button>' +
-        '<select class="stcap-secs" aria-label="Clip length">' + opts.map(function (n) { return '<option value="' + n + '"' + (n === secs ? ' selected' : '') + '>last ' + n + ' s</option>'; }).join('') + '</select></span>' +
-        '<span class="stcap-price">' + (me && me.signed && !me.eligible ? esc(me.why || '') : 'snap ' + fmt(p.snap) + ' · clip ' + fmt(p.clip) + ' PAT · preview first, pay only if you save') + '</span>' +
+        (en.snap ? '<button type="button" class="stcap-btn" data-k="snap" title="Save a still of ' + esc(sel.label) + ' to the pad\'s story">📸 Snap</button>' : '') +
+        (en.clip ? '<span class="stcap-clip"><button type="button" class="stcap-btn" data-k="clip" title="Save the last ' + secs + ' s of ' + esc(sel.label) + ' to the pad\'s story">🎬 Clip</button>' +
+        '<select class="stcap-secs" aria-label="Clip length">' + opts.map(function (n) { return '<option value="' + n + '"' + (n === secs ? ' selected' : '') + '>last ' + n + ' s</option>'; }).join('') + '</select></span>' : '') +
+        '<span class="stcap-price">' + (roomOff ? '🚫 ' + esc(roomOff) : me && me.signed && !me.eligible ? esc(me.why || '') : price) + '</span>' +
         (sel.nsfw ? '<span class="stcap-nsfw" title="The streamer marked this stream NSFW - captures of it are marked NSFW">🔞 NSFW</span>' : '');
-      if (me && me.signed && !me.eligible) host.querySelectorAll('.stcap-btn').forEach(function (b) { b.disabled = true; });
+      // 1.99cw: the pad's Camfrog room has !snap off -> greyed, with the reason (a mod can `!snap on`)
+      if (roomOff || (me && me.signed && !me.eligible)) {
+        host.querySelectorAll('.stcap-btn, .stcap-secs').forEach(function (b) { b.disabled = true; if (roomOff) b.title = roomOff; });
+      }
     }
     host.addEventListener('change', function (e) { if (e.target.classList.contains('stcap-secs')) secs = Number(e.target.value) || 20; });
     host.addEventListener('click', function (e) {
       var b = e.target.closest('.stcap-btn');
-      if (!b || busy || !sel) return;
+      if (!b || busy || !sel || b.disabled) return;
       if (me && !me.signed) { location.href = '/login?next=' + encodeURIComponent(location.pathname); return; }
       var kind = b.getAttribute('data-k');
       busy = true; b.disabled = true;
@@ -133,6 +143,7 @@
     }
 
     load();
+    setInterval(function () { if (!document.hidden) load(); }, 60000);   // 1.99cw: the switches can change
     return { update: function (s) { var r = !sel || !s || sel.stream !== s.stream || sel.capture !== s.capture || sel.embed !== s.embed || sel.nsfw !== s.nsfw; sel = s; if (r) render(); }, reload: load };
   }
   window.PATVStage = window.PATVStage || {};

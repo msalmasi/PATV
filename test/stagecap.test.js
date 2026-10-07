@@ -2,7 +2,8 @@
 // through the stage registry only (path / name injection refused, embeds excluded, the streamer's
 // opt-out honoured), rate limits, the real ffmpeg extraction from a generated testsrc HLS, the
 // website action Pepe charges through (check -> publish, idempotent, gone -> Pepe refunds), the pad's
-// story (label fields, NSFW), deleting, and the content_audit row.
+// story (label fields, NSFW), deleting, and the content_audit row. 1.99cw: the Camfrog room's !snap
+// switch (site-only pads exempt) and the admin's kill switches (stagecap_enabled / _snaps / _clips).
 //   node --test test/stagecap.test.js      (needs the repo's node_modules, ffmpeg + ffprobe on PATH; temp DB + dirs)
 "use strict";
 const test = require("node:test");
@@ -33,6 +34,8 @@ require(path.join(repo, "actions"));
 
 const ROOM = { id: "Room.One", slug: "room-one", title: "Room One" };
 const OTHER = { id: "Room.Two", slug: "room-two", title: "Room Two" };
+const LOUNGE = { id: "patv:lounge", slug: "camfrog-lounge", title: "Camfrog Lounge" };   // a site-only pad
+const roomSnap = { [ROOM.id]: true, [OTHER.id]: true };                                // Pepe's !snap switch per room
 const U = {
   linked: { userId: "u1", username: "linky", class: "pleb" },
   lvl2: { userId: "u2", username: "leveltwo", class: "pleb" },
@@ -88,7 +91,9 @@ test.before(async () => {
   await SC.init();
   SC._setDirs(HLS, PEPE);
   SC._setDeps({
-    resolveRoom: async (s) => (s === ROOM.slug ? ROOM : s === OTHER.slug ? OTHER : null),
+    resolveRoom: async (s) => (s === ROOM.slug ? ROOM : s === OTHER.slug ? OTHER : s === LOUNGE.slug ? LOUNGE : null),
+    snapSwitch: (rid) => (rid in roomSnap ? roomSnap[rid] : null),
+    siteOnly: (rid) => rid === LOUNGE.id,
     pepeIn: () => pepeHere,
     roomCmds: (rid) => (rid === ROOM.id ? { "!snap": 30000, "!clip": 60000 } : {}),
     canManage: async (u, rid) => !!u && (u.class === "Admin" || (u.userId === U.owner.userId && rid === ROOM.id)),
@@ -369,6 +374,110 @@ test("NSFW slot: its captures are NSFW (story item flagged, never the cover); de
   assert.equal((await getQuery("SELECT deleted FROM media WHERE id = ?", [pb.d.id]))[0].deleted, 1);
   assert.ok(!fs.existsSync(path.join(media.DIR, m.file)));
   assert.ok(!(await stories.forViewer({ userId: U.linked.userId })).some((r) => (r.items || []).some((x) => x.id === pb.d.id)));
+});
+
+// ───────────────────────────── 1.99cw: the room's !snap switch ─────────────────────────────
+test("room switch: off (or not reported) in the pad's Camfrog room -> greyed + refused, also at save; site-only pads exempt; check tells Pepe", async () => {
+  adv(70000);
+  roomSnap[ROOM.id] = false;
+  const me = (await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d;
+  assert.equal(me.room_off, SC.ROOM_OFF);
+  assert.match(me.room_off, /Snaps are off in this room/);
+  assert.match(me.room_off, /!snap on/);
+  assert.deepEqual(me.enabled, { snap: true, clip: true }, "the buttons still show (greyed) - only the admin switch hides them");
+  const r = await snap(U.linked, "pepe");
+  assert.equal(r.status, 403);
+  assert.match(r.d.error, /Snaps are off in this room/);
+  const c = await post("/api/stage/capture", { room: ROOM.slug, stream: slotLive.id, kind: "clip", secs: 4 }, U.linked);
+  assert.equal(c.status, 403, "clips too");
+  delete roomSnap[ROOM.id];                        // Pepe hasn't said: the switch's own default (off)
+  assert.equal((await snap(U.linked, "pepe")).status, 403);
+  assert.equal((await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d.room_off, SC.ROOM_OFF);
+  roomSnap[ROOM.id] = true;
+  assert.equal((await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d.room_off, null);
+  const ok = await snap(U.linked, "pepe");
+  assert.equal(ok.status, 200, ok.d.error);
+  // switched off between the preview and Save: the site refuses, nothing is queued
+  roomSnap[ROOM.id] = false;
+  const sv = await post("/api/stage/captures/" + ok.d.capture.id + "/save", {}, U.linked);
+  assert.equal(sv.status, 403);
+  assert.match(sv.d.error, /Snaps are off/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'stagecap.save' AND args LIKE ?", ["%" + ok.d.capture.id + "%"]))[0].n, 0);
+  roomSnap[ROOM.id] = true;
+  const sv2 = await post("/api/stage/captures/" + ok.d.capture.id + "/save", {}, U.linked);
+  assert.equal(sv2.status, 200, sv2.d.error);
+  // Pepe's check says whether the pad HAS a Camfrog room (he re-checks the switch there) and whether it's NSFW
+  const ck = await post("/api/stage/captures/check", { password: "bot-token", id: ok.d.capture.id, user: "linky" });
+  assert.equal(ck.status, 200);
+  assert.equal(ck.d.camfrog_room, true);
+  assert.equal(ck.d.nsfw, false);
+  // the streamer's opt-out still applies on top of a switched-on room
+  await post("/api/stage/slots/" + slotOff.id + "/capture", { allow: false }, U.other);
+  adv(70000);
+  const o = await snap(U.lvl2, slotOff.id);
+  assert.equal(o.status, 403);
+  assert.match(o.d.error, /turned off snaps and clips/);
+  await post("/api/stage/slots/" + slotOff.id + "/capture", { allow: true }, U.other);
+
+  // a site-only pad (no Camfrog room): no switch at all
+  adv(70000);
+  roomSnap[LOUNGE.id] = false;
+  assert.equal((await get("/api/stage/captures/me?room=" + LOUNGE.slug, U.linked)).d.room_off, null);
+  const l = await post("/api/stage/capture", { room: LOUNGE.slug, stream: "pepe", kind: "snap" }, U.lvl2);
+  assert.equal(l.status, 200, l.d.error);
+  assert.equal((await post("/api/stage/captures/" + l.d.capture.id + "/save", {}, U.lvl2)).status, 200);
+  const lck = await post("/api/stage/captures/check", { password: "bot-token", id: l.d.capture.id, user: "leveltwo" });
+  assert.equal(lck.d.camfrog_room, false, "Pepe skips the switch for a site-only pad");
+  await runQuery("UPDATE stage_captures SET state = 'discarded' WHERE state IN ('preview','saving')");
+});
+
+// ───────────────────────────── 1.99cw: the admin's kill switch ─────────────────────────────
+test("kill switch: stagecap_enabled off -> hidden, the API refuses, Pepe's check says disabled, publish refuses; per-kind switches", async () => {
+  assert.deepEqual([MS.DEFAULTS.stagecap_enabled, MS.DEFAULTS.stagecap_snaps, MS.DEFAULTS.stagecap_clips], [true, true, true], "default on");
+  assert.equal(MS.config().stagecap_enabled, true);
+  adv(70000);
+  const pre = await snap(U.linked, "pepe");                       // a preview made while it was on
+  assert.equal(pre.status, 200, pre.d.error);
+  adv(3500);
+  const pre2 = await snap(U.lvl2, slotLive.id);
+  assert.equal(pre2.status, 200, pre2.d.error);
+  assert.equal((await post("/api/stage/captures/" + pre2.d.capture.id + "/save", {}, U.lvl2)).status, 200);   // already with Pepe
+
+  await MS.setConfig({ stagecap_enabled: false }, "test");
+  assert.equal(MS.config().stagecap_enabled, false);
+  const me = (await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d;
+  assert.deepEqual(me.enabled, { snap: false, clip: false }, "both hidden");
+  adv(70000);
+  const r = await snap(U.lvl2, "pepe");
+  assert.equal(r.status, 403);
+  assert.match(r.d.error, /Stage snaps and clips are switched off/);
+  const sv = await post("/api/stage/captures/" + pre.d.capture.id + "/save", {}, U.linked);
+  assert.equal(sv.status, 403, "save refused");
+  const ck = await post("/api/stage/captures/check", { password: "bot-token", id: pre2.d.capture.id, user: "leveltwo" });
+  assert.equal(ck.status, 403);
+  assert.equal(ck.d.error, "disabled", "Pepe refuses at save time");
+  assert.match(ck.d.message, /switched off/);
+  const pb = await post("/api/stage/captures/publish", { password: "bot-token", id: pre2.d.capture.id, user: "leveltwo" });
+  assert.equal(pb.status, 410, "switched off after Pepe's check: publish refuses (he refunds)");
+
+  // per kind: clips off, snaps on
+  await MS.setConfig({ stagecap_enabled: true, stagecap_clips: false }, "test");
+  assert.deepEqual((await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d.enabled, { snap: true, clip: false });
+  adv(70000);
+  const c = await post("/api/stage/capture", { room: ROOM.slug, stream: slotLive.id, kind: "clip", secs: 4 }, U.other);
+  assert.equal(c.status, 403);
+  assert.match(c.d.error, /Stage clips are switched off/);
+  const s = await snap(U.other, slotLive.id);
+  assert.equal(s.status, 200, s.d.error);
+  assert.equal((await post("/api/stage/captures/check", { password: "bot-token", id: pre2.d.capture.id, user: "leveltwo" })).status, 200, "a snap passes Pepe's check");
+  // the admin form posts checkbox booleans / strings
+  await MS.setConfig({ stagecap_snaps: "false", stagecap_clips: "on" }, "test");
+  assert.deepEqual([MS.config().stagecap_snaps, MS.config().stagecap_clips], [false, true]);
+  assert.equal(SC.killed("snap"), "Stage snaps are switched off right now.");
+  assert.equal(SC.killed("clip"), null);
+  await MS.setConfig({ stagecap_enabled: true, stagecap_snaps: true, stagecap_clips: true }, "test");
+  assert.equal(SC.killed("photo"), null);
+  await runQuery("UPDATE stage_captures SET state = 'discarded' WHERE state IN ('preview','saving')");
 });
 
 test("sweep: unsaved previews expire and their files go", async () => {

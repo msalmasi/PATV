@@ -230,3 +230,17 @@ test("Pepe's stage: present on the stage of EVERY room he's in, not only his win
     assert.equal(g.rows.find((r) => r.id === "Other.Room").pepe_here, false);
   } finally { srv.close(); }
 });
+
+test("1.99cw: the room's !snap switch as Pepe reports it (stage rooms first, else a live bridged room; unknown = null)", async () => {
+  const bridge = require(path.join(repo, "bridge"));
+  await bridge.ingest({ stage: { active: true, room: HOUSE, rooms: [{ id: HOUSE, name: "Pepe's Pad", snap: true }, { id: "DRAMA_CENTRAL", name: "DRAMA", snap: false },
+                                                                    { id: "Old.Room", name: "Old" }] } });
+  assert.equal(bridge.snapSwitch(HOUSE), true);
+  assert.equal(bridge.snapSwitch("DRAMA_CENTRAL"), false);
+  assert.equal(bridge.snapSwitch("Old.Room"), null, "an older Pepe sends no switch");
+  assert.equal(bridge.snapSwitch("Nowhere.Room"), null, "a room Pepe isn't in");
+  assert.equal(bridge.stageAdmin().rooms.find((r) => r.id === HOUSE).snap, true);
+  // a bridged room's snapshot carries it too (used when the stage list doesn't say)
+  await bridge.ingest({ rooms: [{ room: { id: "Old.Room", name: "Old" }, members: [{ login: "x1" }], mic: [], count: 1, snap: true }], events: [] });
+  assert.equal(bridge.snapSwitch("Old.Room"), true);
+});

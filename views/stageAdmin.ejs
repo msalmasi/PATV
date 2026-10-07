@@ -36,6 +36,9 @@
       <label>Revenue goes to<select name="revenue_vault">
         <option value="reserve" <%= C.revenue_vault === 'reserve' ? 'selected' : '' %>>Federal Reserve</option>
         <option value="jackpot" <%= C.revenue_vault === 'jackpot' ? 'selected' : '' %>>Casino jackpot</option></select></label>
+      <label class="chk" title="Kill switch: off hides 📸 Snap / 🎬 Clip on every stage player, and the site and Pepe refuse saves"><input type="checkbox" name="stagecap_enabled" <%= C.stagecap_enabled !== false ? 'checked' : '' %>> Viewers can snap / clip the stages</label>
+      <label class="chk"><input type="checkbox" name="stagecap_snaps" <%= C.stagecap_snaps !== false ? 'checked' : '' %>> &nbsp;↳ stage snaps</label>
+      <label class="chk"><input type="checkbox" name="stagecap_clips" <%= C.stagecap_clips !== false ? 'checked' : '' %>> &nbsp;↳ stage clips</label>
       <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save settings</button><span class="msg" id="cfgMsg" role="status"></span></div>
     </form>
     <p class="muted">1.99bi: every pad has its own stage. Pad owners set their pad's slot count (up to the cap above) and an optional price for ordinary slots (at most the featured price); featuring is paid at the featured price, or free when the owner features someone. A slot keeps the price it was booked at. Owners: <a href="/pads/admin">Pads admin ›</a></p>

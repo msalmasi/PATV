@@ -32,6 +32,17 @@
 //
 // Rate limits (memory): per user one snap / 10 s and one clip / 60 s; per stream one snap / 3 s and
 // one clip / 20 s; at most 3 open previews per user.
+//
+// Switches (1.99cw), checked at preview, at save, and by Pepe at save time:
+//   * the admin kill switch: stage config (mainstage.js, Stage admin) stagecap_enabled, plus one per
+//     kind (stagecap_snaps / stagecap_clips), all default ON. Off -> the buttons are hidden, the API
+//     refuses, /api/stage/captures/check answers 403 "disabled" (Pepe refuses) and publish refuses
+//     (Pepe refunds).
+//   * the Camfrog room's !snap switch (`!snap on|off`, default OFF) - the same one !snap and the
+//     bridge's Save snap obey. Pepe reports it per room (bridge.snapSwitch); not reported counts as
+//     off. Off -> the buttons show disabled ("Snaps are off in this room"), the API refuses, and Pepe
+//     re-checks at save. Site-only pads (no Camfrog room, e.g. the Camfrog Lounge) have no switch.
+//   * the streamer's per-slot opt-out (capture_off) still applies on top.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -208,6 +219,9 @@ let deps = {
   roomCmds: (roomId) => { try { const B = require("./bridge")._rooms.get(roomId); return (B && B.cmds) || {}; } catch (e) { return {}; } },
   canManage: (user, roomId) => require("./rooms").canManage(user, roomId),
   isStaff: (u) => require("./rooms").isStaff(u),
+  config: () => require("./mainstage").config(),
+  snapSwitch: (roomId) => { try { return require("./bridge").snapSwitch(roomId); } catch (e) { return null; } },
+  siteOnly: (roomId) => require("./rooms").isCommunityOnly(roomId),
 };
 function _setDeps(d) { deps = { ...deps, ...d }; }
 function _setDirs(hls, pepe) { HLS_DIR = path.resolve(hls); PEPE_HLS_DIR = path.resolve(pepe || hls); }
@@ -226,6 +240,32 @@ function eligibility(u) {
   if ((Number(u.level) || 0) >= MIN_LEVEL) return null;
   return `Snapping and clipping the stage needs a linked Camfrog name (type !verify in a Camfrog room with Pepe) or level ${MIN_LEVEL}.`;
 }
+// ── switches (1.99cw) ──
+const ROOM_OFF = "Snaps are off in this room (a mod can turn them on with !snap on).";
+/** The admin's switches -> {on, snap, clip} (each kind is on only while the master switch is). */
+function switches() {
+  let c = {};
+  try { c = deps.config() || {}; } catch (e) { c = {}; }
+  const on = c.stagecap_enabled !== false;
+  return { on, snap: on && c.stagecap_snaps !== false, clip: on && c.stagecap_clips !== false };
+}
+/** null if the admin lets `kind` (snap | clip | photo) be captured, else why not. */
+function killed(kind) {
+  const s = switches();
+  if (!s.on || (!s.snap && !s.clip)) return "Stage snaps and clips are switched off right now.";
+  if (kind === "clip" ? !s.clip : !s.snap) return kind === "clip" ? "Stage clips are switched off right now." : "Stage snaps are switched off right now.";
+  return null;
+}
+/** Does this pad have a Camfrog room (so its !snap switch applies)? */
+function camfrogRoom(roomId) {
+  try { return !deps.siteOnly(roomId); } catch (e) { return true; }
+}
+/** null if the pad's Camfrog room lets stage captures through, else why not. */
+function roomOff(roomId) {
+  if (!roomId || !camfrogRoom(roomId)) return null;
+  return deps.snapSwitch(roomId) === true ? null : ROOM_OFF;
+}
+
 /** The price shown before saving: the room's !snap / !clip price as Pepe reported it, else his default. */
 function priceOf(roomId, kind) {
   const c = deps.roomCmds(roomId) || {};
@@ -273,8 +313,12 @@ async function capture(user, req, { room, stream, kind, secs } = {}) {
   if (why) throw refuse(u ? 403 : 401, why);
   const k = kind === "clip" ? "clip" : kind === "snap" ? "snap" : null;
   if (!k) throw refuse(400, "Snap or clip?");
+  const off = killed(k);
+  if (off) throw refuse(403, off);
   const R = room ? await deps.resolveRoom(String(room).slice(0, 128)) : null;
   if (!R) throw refuse(404, "No such pad.");
+  const rOff = roomOff(R.id);
+  if (rOff) throw refuse(403, rOff);
   const src = await resolveStream(R, stream);
   const want = k === "clip" ? Math.min(CLIP_MAX, Math.max(CLIP_MIN, Math.round(Number(secs) || CLIP_DEFAULT))) : 0;
   const open = (await getQuery("SELECT COUNT(*) AS n FROM stage_captures WHERE user_id = ? AND state IN ('preview','saving') AND created > ?",
@@ -328,6 +372,8 @@ async function save(user, id, idem) {
   const u = await account(c.user_id);
   const why = eligibility(u);
   if (why) throw refuse(403, why);
+  const off = killed(c.kind) || roomOff(c.room_id);
+  if (off) throw refuse(403, off);
   const actions = require("./actions");
   let aid;
   try {
@@ -393,6 +439,7 @@ async function publish(id, username, { hours, byAnon, by } = {}) {
   }
   const c = await check(id, username);
   if (!c) return null;
+  if (killed(c.kind)) return null;                // switched off since Pepe's check: he refunds
   const mid = crypto.randomBytes(12).toString("hex");
   const ext = c.kind === "clip" ? ".mp4" : ".webp";
   const file = mid + ext;
@@ -524,8 +571,11 @@ function register(app, { addUser, isBotToken, noTimers }) {
       const u = req.user && req.user.userId ? await account(req.user.userId) : null;
       const R = req.query.room ? await deps.resolveRoom(String(req.query.room).slice(0, 128)) : null;
       const why = eligibility(u);
+      const sw = switches();
       res.json({ ok: true, signed: !!u, eligible: !why, why: u ? why : null, clip: { def: CLIP_DEFAULT, max: CLIP_MAX, min: CLIP_MIN },
-                 prices: { snap: priceOf(R ? R.id : null, "snap"), clip: priceOf(R ? R.id : null, "clip") } });
+                 prices: { snap: priceOf(R ? R.id : null, "snap"), clip: priceOf(R ? R.id : null, "clip") },
+                 // 1.99cw: the admin's switches (off -> hidden) and the pad's Camfrog room's !snap switch (off -> greyed)
+                 enabled: { snap: sw.snap, clip: sw.clip }, room_off: R ? roomOff(R.id) : null });
     } catch (e) { fail(res, e); }
   });
 
@@ -579,7 +629,12 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const c = await check(b.id, b.user);
       if (!c) return res.status(404).json({ ok: false, error: "gone" });
-      res.json({ ok: true, kind: c.kind === "clip" ? "clip" : "snap", room: c.room_id, stream: c.stream_label, source: c.source, secs: c.secs || 0 });
+      const off = killed(c.kind);
+      if (off) return res.status(403).json({ ok: false, error: "disabled", message: off });
+      // camfrog_room: Pepe applies the room's !snap switch only to pads with a Camfrog room (1.99cw);
+      // nsfw: his room announcement then says only "an NSFW snap / clip"
+      res.json({ ok: true, kind: c.kind === "clip" ? "clip" : "snap", room: c.room_id, stream: c.stream_label, source: c.source, secs: c.secs || 0,
+                 nsfw: !!c.nsfw, camfrog_room: camfrogRoom(c.room_id) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/stage/captures/publish", json, async (req, res) => {
@@ -622,6 +677,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
 
 module.exports = {
   register, init, capture, save, status, discard, check, publish, remove, canDelete, slotSettings, feed, sweep, eligibility, priceOf,
+  switches, killed, roomOff, ROOM_OFF,
   playlistPath, liveSegments, extractSnap, extractClip, resolveStream, view, PRICES, LIMITS, CLIP_MAX, CLIP_DEFAULT, PREVIEW_TTL, SAVE_TTL, MIN_LEVEL,
   _setDeps, _setDirs, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _hits: hits,
 };
