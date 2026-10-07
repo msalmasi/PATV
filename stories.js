@@ -141,6 +141,8 @@ async function forViewer(viewer, { room = null } = {}) {
   const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS })).filter((c) => c.room);
   const signed = !!(viewer && viewer.userId);
   const seen = signed ? await seenMap(viewer.userId) : new Map();
+  // 1.99eq: what this viewer may do with each capture (📌 Post to pad / 🔖 Save - storykeep.js; the server re-checks)
+  if (signed) { try { await require("./storykeep").annotate(viewer, items); } catch (e) { console.error("[stories] annotate:", e.message); } }
   const by = new Map();
   for (const c of items) {
     if (!by.has(c.room)) by.set(c.room, []);

@@ -1,0 +1,91 @@
+<%- include('layout', { title: 'Saved · PATV', user }) %>
+<%#
+  /u/<me>/saved (1.99eq, storykeep.js): the member's private collection of saved story captures - only its owner ever
+  sees this page (anyone else gets a 404). Kept copies outlive the 24 h story; a capture taken down or marked private
+  later disappears from here too. Tap one to view them in Hop (public/js/hop.js, list mode); 🔖 Unsave removes it.
+  Locals: me, items (storykeep.savedFor), HOP
+%><%
+  const kindIc = { photo: '📸', clip: '📹', audio: '🔊' };
+  const kindName = (it) => it.source === 'stage' ? (it.kind === 'clip' ? 'Stage clip' : 'Stage snap') : it.kind === 'photo' ? 'Snap' : it.kind === 'clip' ? 'Clip' : 'Audio';
+%>
+<%- include('partials/hop-boot', { HOP }) %>
+<style>
+  .sv-saved { max-width: 960px; margin: 0 auto; padding: 20px 16px 48px; font-family: Ubuntu, sans-serif; }
+  .sv-saved h1 { margin: 6px 0 4px; font-size: 24px; }
+  .sv-saved .sub { color: #aaa; margin: 0 0 16px; font-size: 14px; }
+  .sv-saved .back { color: #81c784; text-decoration: none; font-size: 14px; }
+  .svd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; list-style: none; padding: 0; margin: 0; }
+  .svd-it { position: relative; border-radius: 12px; overflow: hidden; background: #111; border: 1px solid #222; aspect-ratio: 3 / 4; }
+  .svd-open { position: absolute; inset: 0; display: block; width: 100%; height: 100%; padding: 0; border: 0; background: #151515; cursor: pointer; color: #fff; }
+  .svd-open img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .svd-open.nsfw img { filter: blur(18px); }
+  .svd-ic { position: absolute; top: 8px; left: 8px; font-size: 14px; padding: 2px 7px; border-radius: 999px; background: rgba(0,0,0,.6); }
+  .svd-big { position: absolute; inset: 0; display: grid; place-items: center; font-size: 40px; }
+  .svd-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 8px 8px; background: linear-gradient(transparent, rgba(0,0,0,.85)); text-align: left;
+             font-size: 12px; color: #ddd; pointer-events: none; overflow: hidden; }
+  .svd-cap b { display: block; color: #fff; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .svd-un { position: absolute; top: 6px; right: 6px; z-index: 2; border: 0; border-radius: 999px; background: rgba(0,0,0,.65); color: #fff; padding: 5px 9px; font-size: 12px; cursor: pointer; }
+  .svd-un:hover, .svd-un:focus-visible { background: #b71c1c; outline: none; }
+  .svd-empty { color: #aaa; background: #111; border: 1px dashed #333; border-radius: 12px; padding: 22px; text-align: center; }
+  @media (max-width: 420px) { .svd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+</style>
+<main class="sv-saved" data-signed="1">
+  <a class="back" href="/u/<%= encodeURIComponent(me) %>">‹ Your profile</a>
+  <h1>🔖 Saved</h1>
+  <p class="sub">Story snaps and clips you saved. Only you can see this page. They stay after the story's 24 hours; one taken down or made private by the person in it disappears from here too.</p>
+  <% if (!items.length) { %>
+    <p class="svd-empty">Nothing saved yet. Open a story and tap <b>🔖 Save</b> to keep a snap or clip.</p>
+  <% } else { %>
+    <ul class="svd-grid" id="svdGrid">
+      <% items.forEach((it) => { %>
+        <li class="svd-it" data-id="<%= it.id %>">
+          <button type="button" class="svd-open<%= it.nsfw ? ' nsfw' : '' %>" data-svd-open="<%= it.id %>" aria-label="<%= kindName(it) %><%= it.subject ? ' of ' + it.subject : '' %> in <%= it.room.title %><%= it.nsfw ? ' (NSFW)' : '' %>">
+            <% if (it.thumb) { %><img src="<%= it.thumb %>" alt="" loading="lazy"><% } else { %><span class="svd-big" aria-hidden="true"><%= kindIc[it.kind] || '📸' %></span><% } %>
+            <span class="svd-ic" aria-hidden="true"><%= it.nsfw ? '🔞' : kindIc[it.kind] || '📸' %></span>
+            <span class="svd-cap"><b><%= it.subject || 'someone' %></b><%= it.room.title %><%= it.captured ? ' · ' + new Date(it.captured).toISOString().slice(0, 10) : '' %></span>
+          </button>
+          <button type="button" class="svd-un" data-svd-unsave="<%= it.id %>" aria-label="Unsave">✕ Unsave</button>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</main>
+<script type="application/json" id="svdData"><%- JSON.stringify(items).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
+<script>
+(function () {
+  'use strict';
+  var data = []; try { data = JSON.parse(document.getElementById('svdData').textContent) || []; } catch (e) { data = []; }
+  var base = location.pathname;
+  function name(it) { return it.source === 'stage' ? (it.kind === 'clip' ? 'Stage clip' : 'Stage snap') : it.kind === 'photo' ? 'Snap' : it.kind === 'clip' ? 'Clip' : 'Audio'; }
+  function hopItem(it) {
+    var m = it.mediaKind === 'image' ? { kind: 'image', src: it.src, w: it.w, h: it.h } : { kind: 'video', src: it.src, poster: it.poster };
+    return { id: it.id, title: name(it) + ' of ' + (it.subject || 'someone'), sub: 'Saved' + (it.captured ? ' · captured ' + new Date(it.captured).toLocaleDateString() : ''),
+             pad: it.room && it.room.href ? { label: it.room.title, href: it.room.href } : null, media: [m], nsfw: !!it.nsfw,
+             actions: [{ id: 'unsave', icon: '✕', label: 'Unsave' }] };
+  }
+  function unsave(id) {
+    return fetch('/api/stories/' + encodeURIComponent(id) + '/unsave', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
+      .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || 'HTTP ' + r.status); return d; }); })
+      .then(function () {
+        var li = document.querySelector('.svd-it[data-id="' + id + '"]'); if (li) li.remove();
+        data = data.filter(function (x) { return x.id !== id; });
+      });
+  }
+  document.addEventListener('click', function (e) {
+    var u = e.target.closest('[data-svd-unsave]');
+    if (u) { u.disabled = true; unsave(u.getAttribute('data-svd-unsave')).catch(function (er) { u.disabled = false; alert(er.message); }); return; }
+    var o = e.target.closest('[data-svd-open]');
+    if (!o || !window.patvHop) return;
+    window.patvHop.open({ mode: 'list', items: data.map(hopItem), start: o.getAttribute('data-svd-open'), base: base, label: '🔖 Saved', signed: true, opener: o,
+      onAction: function (act, it, btn) {
+        if (act !== 'unsave') return;
+        btn.disabled = true;
+        unsave(it.id).then(function () { btn.querySelector('.n').textContent = 'Removed'; }).catch(function (er) { btn.disabled = false; alert(er.message); });
+      } });
+    var st = window.patvHop._state(); if (st) st.listUrl = base;
+  });
+})();
+</script>
+</body>
+</html>

@@ -136,7 +136,17 @@ function feedUrl(where, params = {}) {
 const cBadge = (c) => (c && c.community ? "🛋️" : c && c.house ? "🐸" : initial(c && c.title));
 /** 1.99x: a pad's platform badge html ("🐸 Camfrog Pad" / "🌐 Site Pad"; compact = the icon only) - pads.js */
 const padBadge = (c, opts) => require("./pads").padBadge(c, opts);
-const fx = { esc, body, ago, fileUrl, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+// 1.99eq: Hop (hop.js) - its name and a feed's Hop address ("all" | "following" | "p/<slug>" | "u/<username>")
+const HOPM = require("./hop");
+const hopBase = (scope) => {
+  const s = String(scope || "all");
+  if (s === "following") return "/feed/following/hop";
+  if (/^p\//.test(s)) return "/p/" + encodeURIComponent(s.slice(2).toLowerCase()) + "/hop";
+  if (/^u\//.test(s)) return "/u/" + encodeURIComponent(s.slice(2)) + "/hop";
+  return "/hop";
+};
+const hopHref = (scope, opts = {}) => HOPM.hopHref(hopBase(scope), opts);
+const fx = { esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.

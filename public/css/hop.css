@@ -1,0 +1,80 @@
+/* hop.css — Hop (1.99eq), the full-screen vertical media viewer (public/js/hop.js). */
+html.hop-open, html.hop-open body { overflow: hidden; }
+.hop { position: fixed; inset: 0; z-index: 10000; background: #000; color: #fff; font-family: Ubuntu, sans-serif; outline: none; }
+.hop-list { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior: contain;
+            scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.hop-list::-webkit-scrollbar { display: none; }
+.hop-it { position: relative; height: 100%; scroll-snap-align: start; scroll-snap-stop: always; display: flex; justify-content: center; overflow: hidden; }
+.hop-col { position: relative; width: 100%; height: 100%; max-width: 760px; background: #000; }
+.hop-media { position: absolute; inset: 0; display: flex; }
+.hop-media.multi { overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.hop-media.multi::-webkit-scrollbar { display: none; }
+.hop-m { position: relative; flex: 0 0 100%; height: 100%; display: grid; place-items: center; scroll-snap-align: center; }
+.hop-img, .hop-vid { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+.hop-vid { cursor: pointer; }
+.hop-sound { position: absolute; top: calc(max(10px, env(safe-area-inset-top)) + 54px); right: 12px; padding: 5px 10px; border-radius: 999px; background: rgba(0,0,0,.55);
+             font-size: 12px; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.hop.is-muted .hop-sound { opacity: 1; }
+.hop-ai { position: absolute; left: 12px; top: calc(max(10px, env(safe-area-inset-top)) + 54px); padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,.6); font-size: 11px; }
+.hop-dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; gap: 5px; justify-content: center; z-index: 2; pointer-events: none; }
+.hop-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.4); }
+.hop-dots i.on { background: #fff; }
+
+/* the top bar */
+.hop-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 8px;
+           padding: max(8px, env(safe-area-inset-top)) 10px 18px; background: linear-gradient(rgba(0,0,0,.65), transparent); pointer-events: none; }
+.hop-top > * { pointer-events: auto; }
+.hop-brand { display: inline-flex; align-items: center; gap: 6px; font-size: 17px; }
+.hop-brand b { letter-spacing: .3px; }
+.hop-logo { font-size: 20px; }
+.hop-scope { flex: 1; min-width: 0; font-size: 13px; color: #c6e94f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hop-ico { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(0,0,0,.35); color: #fff; font-size: 17px; cursor: pointer; display: grid; place-items: center; }
+.hop-ico:hover, .hop-ico:focus-visible { background: rgba(255,255,255,.2); outline: none; }
+.hop-ico:disabled { opacity: .35; cursor: default; }
+
+/* the post over the picture */
+.hop-info { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: grid; gap: 4px; justify-items: start;
+            padding: 48px 76px max(18px, env(safe-area-inset-bottom)) 14px; background: linear-gradient(transparent, rgba(0,0,0,.78)); text-shadow: 0 1px 2px #000; }
+.hop-pad { color: #c6e94f !important; font-weight: 700; font-size: 13px; text-decoration: none; }
+.hop-capt { font-size: 12px; color: #ddd; }
+.hop-title { color: #fff !important; font-size: 16px; font-weight: 700; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere;
+             display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hop-title:hover, .hop-pad:hover { text-decoration: underline; }
+.hop-by { font-size: 13px; color: #ddd; }
+.hop-by a { color: #fff !important; font-weight: 600; text-decoration: none; }
+.hop-rail { position: absolute; right: 8px; bottom: max(22px, env(safe-area-inset-bottom)); z-index: 3; display: grid; gap: 14px; justify-items: center; }
+.hop-rb { display: grid; justify-items: center; gap: 2px; min-width: 54px; padding: 0; border: 0; background: none; color: #fff !important; cursor: pointer;
+          text-decoration: none !important; font: 12px Ubuntu, sans-serif; text-shadow: 0 1px 2px #000; }
+.hop-rb .ic { width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,.4); display: grid; place-items: center; font-size: 19px; }
+.hop-rb:hover .ic, .hop-rb:focus-visible .ic { background: rgba(255,255,255,.22); }
+.hop-rb:focus-visible { outline: none; }
+.hop-vote[aria-pressed="true"] .ic { background: #2e7d32; color: #e6ffe6; }
+.hop-rb .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* NSFW */
+.hop-it.is-gated .hop-img, .hop-it.is-gated .hop-vid { filter: blur(30px); }
+.hop-nsfw { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 12px; background: rgba(0,0,0,.4); text-align: center; padding: 16px; }
+.hop-btn { padding: 9px 16px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #ddd; font: 14px Ubuntu, sans-serif; cursor: pointer; }
+.hop-btn.primary { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+
+.hop-tail { height: 72px; display: grid; place-items: center; color: #888; font-size: 13px; scroll-snap-align: end; }
+.hop-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; color: #aaa; }
+.hop-empty[hidden] { display: none; }
+.hop-empty-ic { font-size: 56px; }
+.hop-nav { display: none; }
+.hop-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* desktop: up / down buttons beside the column */
+@media (min-width: 900px) and (hover: hover) {
+  .hop-nav { position: absolute; right: 24px; top: 50%; transform: translateY(-50%); z-index: 3; display: grid; gap: 12px; }
+  .hop-nav .hop-ico { width: 48px; height: 48px; background: rgba(255,255,255,.12); }
+  .hop-nav .hop-ico:hover { background: rgba(255,255,255,.26); }
+  .hop { background: #0a0a0a; }
+  .hop-col { border-left: 1px solid #161616; border-right: 1px solid #161616; }
+}
+@media (prefers-reduced-motion: reduce) { .hop-list { scroll-behavior: auto; } }
+
+/* the Hop page under the viewer (no JS: a plain list of the posts) */
+.hop-page { max-width: 760px; margin: 24px auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
+.hop-page ul { list-style: none; padding: 0; display: grid; gap: 8px; }
+.hop-page a { color: #81c784; }

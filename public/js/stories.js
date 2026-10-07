@@ -11,6 +11,9 @@
 // Photos show for 5 s, clips and audio for their length. Seen state: POST /api/stories/seen (signed in),
 // mirrored in localStorage (patvStorySeen: {room: upto}) - wrapped in try/catch, a convenience only.
 // Signed-out visitors get a sign-in prompt instead of the viewer.
+// 1.99eq: keeping a capture (storykeep.js) - "📌 Post to pad" (a permanent post in its pad, credited to whoever took it;
+// optional caption) and "🔖 Save" (the member's private /u/<me>/saved). Shown per item from its `can` / `saved` /
+// `posted` flags (forViewer); the server checks everything again (who may post, private subjects, removed / expired).
 (function () {
   'use strict';
   if (window.__patvStories) return;
@@ -123,12 +126,13 @@
     var foot = el('div', 'sv-foot');
     var live = el('div', 'sv-live'); live.setAttribute('aria-live', 'polite'); live.className = 'sv-sr';
     var hint = el('div', 'sv-hint', 'Tap → next · tap ← back · hold to pause · swipe ↓ to close');
-    frame.appendChild(bars); frame.appendChild(head); frame.appendChild(stage); frame.appendChild(foot); frame.appendChild(hint);
+    var acts = el('div', 'sv-acts');          // 1.99eq: 📌 Post to pad / 🔖 Save
+    frame.appendChild(bars); frame.appendChild(head); frame.appendChild(stage); frame.appendChild(foot); frame.appendChild(hint); frame.appendChild(acts);
     var prevRoom = el('button', 'sv-side sv-prev'); prevRoom.type = 'button'; prevRoom.setAttribute('aria-label', 'Previous pad'); prevRoom.textContent = '‹';
     var nextRoom = el('button', 'sv-side sv-next'); nextRoom.type = 'button'; nextRoom.setAttribute('aria-label', 'Next pad'); nextRoom.textContent = '›';
     root.appendChild(prevRoom); root.appendChild(frame); root.appendChild(nextRoom); root.appendChild(live);
     return { root: root, frame: frame, bars: bars, room: room, who: who, when: when, mute: mute, pause: pause, x: x, stage: stage, foot: foot,
-             live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom };
+             live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom, acts: acts };
   }
 
   function open(roomId, itemId, opener) {
@@ -209,6 +213,8 @@
     page.setAttribute('aria-label', 'Open this ' + (noun || 'capture') + '\'s page to share or download');
     V.foot.appendChild(page);
     V.live.textContent = R.title + ': ' + what + ' of ' + (it.subject || 'someone') + ', ' + (ii + 1) + ' of ' + R.items.length;
+    closePanel(true);
+    paintActs(R, it);
     // media
     V.stage.innerHTML = '';
     V.stage.classList.remove('gone');
@@ -299,6 +305,82 @@
     V.raf = requestAnimationFrame(tick);
   }
 
+  // ── 1.99eq: 📌 Post to pad / 🔖 Save ──
+  function api(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false }; }).then(function (d) { if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
+  }
+  function paintActs(R, it) {
+    V.acts.innerHTML = '';
+    var can = it.can || {};
+    if (it.posted) {
+      var pl = el('a', 'sv-act on', '📌 Posted ›'); pl.href = it.posted; pl.setAttribute('aria-label', 'Posted to ' + R.title + ': open the post'); V.acts.appendChild(pl);
+    } else if (can.post) {
+      var pb = el('button', 'sv-act', '📌 Post to pad'); pb.type = 'button'; pb.setAttribute('aria-label', 'Post this to ' + R.title + ' for good');
+      pb.addEventListener('click', function () { openPanel(R, it); });
+      V.acts.appendChild(pb);
+    }
+    if (can.save || it.saved) {
+      var sb = el('button', 'sv-act' + (it.saved ? ' on' : ''), it.saved ? '🔖 Saved' : '🔖 Save'); sb.type = 'button';
+      sb.setAttribute('aria-pressed', it.saved ? 'true' : 'false'); sb.setAttribute('aria-label', it.saved ? 'Saved - tap to unsave' : 'Save to your private Saved');
+      sb.addEventListener('click', function () {
+        sb.disabled = true;
+        var was = !!it.saved;
+        api('/api/stories/' + encodeURIComponent(it.id) + (was ? '/unsave' : '/save'), {}).then(function () {
+          it.saved = !was;
+          if (V && V.ri !== undefined && data[V.ri] && data[V.ri].items[V.ii] === it) paintActs(R, it);
+          toast(it.saved ? 'Saved — find it on your profile under 🔖 Saved' : 'Removed from Saved');
+        }).catch(function (e) { sb.disabled = false; toast(e.message); });
+      });
+      V.acts.appendChild(sb);
+    }
+    V.acts.classList.toggle('hide', !V.acts.children.length);
+  }
+  function toast(msg) {
+    var t = el('div', 'sv-toast', msg); t.setAttribute('role', 'status');
+    V.frame.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2600);
+  }
+  function closePanel(silent) {
+    if (!V || !V.panel) return;
+    V.panel.remove(); V.panel = null;
+    if (!silent && V.panelPaused) setPaused(false);
+    V.panelPaused = false;
+  }
+  function openPanel(R, it) {
+    closePanel(true);
+    V.panelPaused = !V.paused;
+    if (!V.paused) setPaused(true);
+    var p = el('form', 'sv-panel'); p.setAttribute('aria-label', 'Post to ' + R.title);
+    p.appendChild(el('h3', null, '📌 Post to ' + R.title));
+    p.appendChild(el('p', null, 'It becomes a permanent post in this pad' + (it.by ? ', credited to ' + it.by : '') + '. ' +
+      (it.subject ? it.subject + ' can remove it from the post any time.' : 'The person in it can remove it any time.')));
+    var cap = el('input', 'sv-cap'); cap.type = 'text'; cap.maxLength = 140; cap.placeholder = 'Add a caption (optional)'; cap.setAttribute('aria-label', 'Caption (optional)');
+    p.appendChild(cap);
+    var err = el('p', 'sv-err'); err.setAttribute('role', 'alert'); p.appendChild(err);
+    var row = el('div', 'sv-ask-btns');
+    var go = el('button', 'sv-btn primary', 'Post'); go.type = 'submit';
+    var no = el('button', 'sv-btn ghost', 'Cancel'); no.type = 'button';
+    no.addEventListener('click', function () { closePanel(false); });
+    row.appendChild(go); row.appendChild(no); p.appendChild(row);
+    p.addEventListener('submit', function (e) {
+      e.preventDefault();
+      go.disabled = true; err.textContent = '';
+      api('/api/stories/' + encodeURIComponent(it.id) + '/post', { caption: cap.value }).then(function (d) {
+        it.posted = d.post.url;
+        paintActs(R, it);
+        p.innerHTML = '';
+        p.appendChild(el('h3', null, d.again ? '📌 Already posted' : '📌 Posted to ' + R.title));
+        var a = el('a', 'sv-btn primary', 'View the post ›'); a.href = d.post.url; p.appendChild(a);
+        var c2 = el('button', 'sv-btn ghost', 'Keep watching'); c2.type = 'button'; c2.addEventListener('click', function () { closePanel(false); }); p.appendChild(c2);
+        a.focus();
+      }).catch(function (e2) { go.disabled = false; err.textContent = e2.message; });
+    });
+    V.panel = p;
+    V.frame.appendChild(p);
+    cap.focus();
+  }
+
   function setPaused(p) {
     V.paused = p;
     V.pause.textContent = p ? '▶' : '❚❚'; V.pause.setAttribute('aria-label', p ? 'Play' : 'Pause');
@@ -339,7 +421,7 @@
     // pointer: tap / hold / swipe on the frame (not on its links and buttons)
     var P = null, holdT = null;
     V.frame.addEventListener('pointerdown', function (e) {
-      if (e.button !== 0 || e.target.closest('a, button')) return;
+      if (e.button !== 0 || e.target.closest('a, button, input, .sv-panel')) return;
       P = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId, held: false };
       clearTimeout(holdT);
       holdT = setTimeout(function () { if (P) { P.held = true; hold(true); } }, 200);
@@ -361,6 +443,8 @@
     V.frame.addEventListener('pointercancel', function (e) { end(e, true); });
     V.frame.addEventListener('contextmenu', function (e) { if (!e.target.closest('a')) e.preventDefault(); });   // long-press menu on phones
     V.root.addEventListener('keydown', function (e) {
+      // 1.99eq: typing a caption - Esc closes the panel, every other key is the input's
+      if (e.target.closest && e.target.closest('.sv-panel')) { if (e.key === 'Escape') { e.preventDefault(); closePanel(false); } return; }
       if (e.key === 'Escape') { e.preventDefault(); close(); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }

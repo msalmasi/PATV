@@ -1,0 +1,5 @@
+<%#
+  Hop (1.99eq): the full-screen media viewer's script + styles (public/js/hop.js). Included by feed-js (every feed) and
+  the Hop / Saved pages. The name comes from hop.js's HOP constant (app.locals.HOP) - rename it there.
+%><link rel="stylesheet" href="/public/css/hop.css?v=1">
+<script src="/public/js/hop.js?v=1" data-hop-name="<%= typeof HOP !== 'undefined' && HOP ? HOP.name : '' %>" data-hop-icon="<%= typeof HOP !== 'undefined' && HOP ? HOP.icon : '' %>" defer></script>

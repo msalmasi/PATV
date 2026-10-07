@@ -363,6 +363,8 @@
         <a class="pf-tab<%= t.hidden ? ' is-hidden' : '' %>" role="tab" id="tb-<%= t.id %>" href="<%= tabHref(t.id) %>" data-tab="<%= t.id %>" aria-controls="tab-<%= t.id %>"
            aria-selected="<%= t.id === active ? 'true' : 'false' %>" tabindex="<%= t.id === active ? '0' : '-1' %>"<%- t.hidden ? ' title="Hidden from visitors"' : '' %>><span aria-hidden="true"><%= t.icon %></span><%= t.label %><% if (t.hidden) { %> <span class="eye" aria-label="hidden from visitors">👁</span><% } %></a>
       <% }) %>
+      <%# 1.99eq: the owner's private Saved captures (storykeep.js) - a page of its own, never shown to visitors %>
+      <% if (isMe) { %><a class="pf-tab" href="<%= base %>/saved" title="Story snaps and clips you saved - only you see these"><span aria-hidden="true">🔖</span>Saved</a><% } %>
     </nav>
     <% tabs.forEach((t) => { %>
       <div class="pf-panel" role="tabpanel" id="tab-<%= t.id %>" aria-labelledby="tb-<%= t.id %>" data-panel="<%= t.id %>"<%= t.id === active ? '' : ' hidden' %>>

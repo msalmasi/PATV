@@ -2,6 +2,8 @@
   A post's content (1.99ci: split out of feed-post.ejs so a crosspost can embed its original). Locals: q (a
   feedstore.decorate row), fx, embeds, host, detail_ (bool), signed (bool), url_ (the post's address, for the
   NSFW sign-in link)
+  1.99eq: in a feed (not detail_) pictures and videos carry data-hop - a tap opens Hop at this post (public/js/hop.js); a
+  feed video is its poster + ▶ (a link to the post without JS) instead of an inline player
 %><%
   const hide_ = q.nsfw && !signed;
   const link_ = q.link;
@@ -14,10 +16,13 @@
   <% if (q.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(q.body) %></div><% } %>
   <% if (q.images.length) { %>
     <div class="fp-imgs n<%= Math.min(q.images.length, 4) %>">
-      <% q.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"<%- im.ai ? ' class="ai"' : '' %>><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="<%= im.ai ? 'AI-generated picture' : 'Picture' %> in <%= q.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>><% if (im.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></a><% }) %>
+      <% q.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"<%- im.ai ? ' class="ai"' : '' %><%- detail_ ? '' : ' data-hop' %>><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="<%= im.ai ? 'AI-generated picture' : 'Picture' %> in <%= q.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>><% if (im.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></a><% }) %>
     </div>
   <% } %>
   <% q.video.forEach((v) => { %>
+    <% if (!detail_) { %>
+    <a class="fp-video fp-vhop<%= v.ai ? ' ai' : '' %>" href="<%= url_ %>" data-hop aria-label="Play the video<%= q.title ? ': ' + q.title : '' %>"><% if (v.poster) { %><img src="<%= fx.fileUrl(v.poster) %>" alt="" loading="lazy"><% } else { %><video src="<%= fx.fileUrl(v.file) %>#t=0.5" preload="metadata" muted playsinline tabindex="-1" aria-hidden="true"></video><% } %><span class="fp-vplay" aria-hidden="true">▶</span><% if (v.secs) { %><span class="fp-vdur" aria-hidden="true"><%= fx.fmtSecs(v.secs) %></span><% } %><% if (v.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></a>
+    <% return; } %>
     <div class="fp-video<%= v.ai ? ' ai' : '' %>"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video><% if (v.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></div>
   <% }) %>
   <% q.audio.forEach((a) => { %>

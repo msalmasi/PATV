@@ -492,6 +492,9 @@ async function remove(user, mediaId) {
   try { fs.unlinkSync(path.join(media.DIR, m.file)); } catch (e) { /* gone */ }
   media.removePoster(m.id);
   await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [m.id]);
+  // 1.99eq: Saved copies go with it; a post of it is hidden unless the capturer deleted their own capture (storykeep.js)
+  await require("./storykeep").onCaptureRemoved(m.id, { reason: "removed", byCapturer: !!m.by_user_id && m.by_user_id === user.userId })
+    .catch((e) => console.error("[stagecap] keep cascade:", e.message));
   console.log(`[stagecap] media ${m.id} deleted by ${user.username || user.userId}`);
   return true;
 }

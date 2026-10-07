@@ -14,7 +14,7 @@
   const showRooms = (S.rooms || []).length > 0, showCaps = (S.caps || []).length > 0;
 %>
 <% if (showRooms || showCaps) { %>
-<link rel="stylesheet" href="/public/css/stories.css?v=3">
+<link rel="stylesheet" href="/public/css/stories.css?v=4">
 <section class="ss" aria-label="Stories: snaps and clips from the pads' Camfrog rooms and stages, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
   <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
   <div class="ss-row" role="list">
@@ -40,5 +40,5 @@
   </div>
 </section>
 <% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=5" defer></script>
+<script src="/public/js/stories.js?v=6" defer></script>
 <% } %>

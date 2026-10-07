@@ -1,7 +1,9 @@
 <%#
   The feed sort bar (1.99bx): Hot / New / Top / Controversial / Rising, and a time filter that only shows
   for Top and Controversial. Reused by /feed, the room feeds (and Following / profiles).
-  Locals: fx, sort, top (time window), href(sort, t) -> url, label (aria label, optional), swap (links swap the list in place on /feed)
+  Locals: fx, sort, top (time window), href(sort, t) -> url, label (aria label, optional), swap (links swap the list in place on /feed),
+  hop (1.99eq, optional: this feed's Hop scope - "all" | "following" | "p/<slug>" | "u/<username>"): the "▶ Hop" button, which opens
+  Hop (public/js/hop.js) on this feed in this sort; without JS it's a link to the feed's Hop page
 %><%
   const t_ = fx.WINDOWS.includes(top) ? top : 'week';
   const timed_ = fx.TIMED.has(sort);
@@ -11,6 +13,10 @@
   <div class="fs-sorts">
     <% fx.SORTS.forEach((s) => { %><a<%- sw_ %> class="fs-pill<%= sort === s ? ' on' : '' %>" href="<%= href(s, fx.TIMED.has(s) ? t_ : '') %>"<%= sort === s ? ' aria-current=true' : '' %>><%- fx.icon(s) %><span><%= fx.SORT_LABELS[s] %></span></a><% }) %>
   </div>
+  <% if (typeof hop !== 'undefined' && hop && fx.HOP) { %>
+    <a class="fs-hop" href="<%= fx.hopHref(hop, { sort, t: timed_ ? t_ : '' }) %>" data-hop-scope="<%= hop %>" data-hop-sort="<%= sort %>" data-hop-t="<%= timed_ ? t_ : '' %>"
+       title="<%= fx.HOP.hint %>" aria-label="<%= fx.HOP.name %>: <%= fx.HOP.hint.toLowerCase() %>"><%= fx.HOP.button %></a>
+  <% } %>
   <% if (timed_) { %>
     <details class="fs-time">
       <summary aria-label="Time range: <%= fx.WINDOW_LABELS[t_] %>"><%- fx.icon('clock') %><span><%= fx.WINDOW_LABELS[t_] %></span><%- fx.icon('chevron', 'chev') %></summary>

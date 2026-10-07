@@ -200,6 +200,10 @@ function register(app, { isBotToken, addUser, noTimers }) {
     await ready;
     const rows = await getQuery("SELECT * FROM media WHERE id = ? AND deleted = 0", [String((req.body || {}).id || "")]);
     if (rows.length) await removeMedia(rows[0]);
+    // 1.99eq: taken down before it expired (admin !snap delete) - Saved copies go with it, a post of it is hidden
+    if (rows.length && Number(rows[0].expires) > Date.now()) {
+      await require("./storykeep").onCaptureRemoved(rows[0].id, { reason: "removed" }).catch((e) => console.error("[media] keep cascade:", e.message));
+    }
     res.json({ success: true, existed: rows.length > 0 });
   });
 
@@ -215,6 +219,8 @@ function register(app, { isBotToken, addUser, noTimers }) {
       const id = String((it && it.id) || "");
       if (!/^[a-f0-9]{8,32}$/i.test(id) || !(it.subject || it.by)) continue;
       if (it.subject) await runQuery("UPDATE media SET anon = 1, subject = '' WHERE id = ?", [id]);
+      // 1.99eq: the subject went private - Saved copies of them go, a post of them is hidden (storykeep.js)
+      if (it.subject) await require("./storykeep").onCaptureRemoved(id, { reason: "private" }).catch((e) => console.error("[media] keep cascade:", e.message));
       if (it.by) await runQuery("UPDATE media SET by_user = 'someone' WHERE id = ?", [id]);
       marked++;
     }

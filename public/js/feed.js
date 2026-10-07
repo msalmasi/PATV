@@ -135,6 +135,13 @@
       api('/api/feed/posts/' + id + '/delete', { reason: why }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
+    // 1.99eq: the person in a story capture takes its post down (storykeep.js; the poster is told)
+    if (act === 'remove-me') {
+      if (!window.confirm('Remove this post of you? It comes down for everyone and the person who posted it is told.')) return;
+      b.disabled = true;
+      api('/api/stories/posts/' + id + '/remove-me', {}).then(function () { location.reload(); }).catch(function (e) { b.disabled = false; alert(e.message); });
+      return;
+    }
     if (act === 'remove-room' || act === 'restore-room') {
       if (act === 'remove-room' && !window.confirm('Take this post out of your pad? (It stays anywhere else it was posted.)')) return;
       api('/api/feed/posts/' + id + '/' + act, { room: b.getAttribute('data-room') }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });

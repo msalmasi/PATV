@@ -1087,6 +1087,8 @@ require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settin
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
+require("./storykeep").register(app, { addUser });   // 1.99eq: stories -> 📌 Post to pad / 🔖 Save (/u/<me>/saved), "Remove me"
+require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen media viewer (/hop, /p/<pad>/hop, /u/<user>/hop, /api/hop)
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");

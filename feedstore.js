@@ -592,6 +592,9 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     viewer && viewer.userId ? require("./follows").followedAmong(viewer.userId, "user", rows.map((r) => r.author_id)) : new Set(),
   ]);
   const staff = isStaff(viewer);
+  // 1.99eq: posts made from a story capture (storykeep.js): "📸 Captured from <room>", the subject's profile, "Remove me"
+  let CAP = new Map();
+  if (!_inner) { try { CAP = await require("./storykeep").forPosts(ids, viewer); } catch (e) { CAP = new Map(); } }
   return rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id).map((x) => {
       const R = rooms.getCached(x.room_id);
@@ -649,6 +652,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
       xpost, crossposts, xcount: crossposts.length,
       ai: att.filter((a) => a.ai && a.kind !== "preview"),       // 1.99di: the post's AI-generated files (badge + prompt toggle)
+      capture: CAP.get(r.id) || null,                            // 1.99eq: made from a story capture (storykeep.forPosts)
     };
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;
@@ -716,7 +720,8 @@ function rankSpec(sort, t = "all", now = NOW()) {
  *   A community: its placements; pending / owner-hidden ones only for the room's owner, admins and the author.
  * Deleted posts never show; report-hidden ones only to staff.
  */
-async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false } = {}) {
+async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false,
+                      media = false, offset = null, idsOnly = false } = {}) {
   await init();
   const staff = isStaff(viewer);
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
@@ -768,20 +773,29 @@ async function list({ room = null, author = null, following = null, authors: aut
     scope.push(`(p.crosspost_of IS NULL OR EXISTS (SELECT 1 FROM feed_posts o WHERE o.id = p.crosspost_of AND ${flag("o")}
                  AND NOT EXISTS (SELECT 1 FROM feed_post_rooms fo WHERE fo.post_id = o.id AND fo.nsfw = 1 AND fo.removed_at IS NULL)))`);
   }
+  // 1.99eq: Hop (hop.js) - media posts only: a ready picture or video on the post, or (a crosspost) on its original
+  if (media) scope.push(MEDIA_SQL);
   page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
   // placeholders in text order: select (rising) -> join -> scope -> sort filters
   const selArgs = R.select ? [R.args[0]] : [], sortArgs = R.select ? R.args.slice(1) : R.args;
   // a room's pinned posts (at most MAX_PINS) head page 1 of every sort and are left out of the ranking
   let pinned = [];
+  // 1.99eq: an explicit offset (Hop's cursor) replaces the page; pins stay in the ranking there (no "page 1")
+  const off = offset !== null && offset !== undefined ? Math.max(0, Math.min(5000, Math.floor(Number(offset)) || 0)) : null;
+  if (off !== null) pinsOn = false;
   if (room && pinsOn) {
     if (page === 1) pinned = await getQuery(`SELECT p.* FROM ${from} WHERE ${scope.join(" AND ")} AND pr.pinned_at IS NOT NULL ORDER BY pr.pinned_at DESC LIMIT ${MAX_PINS}`, [...jargs, ...sargs]);
     scope.push("pr.pinned_at IS NULL");
   }
   const rows = await getQuery(`SELECT p.*${R.select} FROM ${from} WHERE ${scope.concat(R.where).join(" AND ")} ORDER BY ${R.order} LIMIT ? OFFSET ?`,
-                              [...selArgs, ...jargs, ...sargs, ...sortArgs, limit + 1, (page - 1) * limit]);
+                              [...selArgs, ...jargs, ...sargs, ...sortArgs, limit + 1, off !== null ? off : (page - 1) * limit]);
   const more = rows.length > limit;
+  if (idsOnly) return { ids: rows.slice(0, limit).map((r) => r.id), more, page, sort: R.sort };
   return { posts: await decorate(pinned.concat(rows.slice(0, limit)), viewer, { ctxRoom: room }), more, page, sort: R.sort };
 }
+
+// 1.99eq: "this post shows a picture or a video" (its own files, or a crosspost's original's)
+const MEDIA_SQL = `EXISTS (SELECT 1 FROM feed_attachments fa WHERE fa.post_id = COALESCE(p.crosspost_of, p.id) AND fa.state = 'ready' AND fa.kind IN ('image', 'video'))`;
 
 async function getRow(id) {
   if (!ID_RE.test(String(id || ""))) return null;
@@ -878,13 +892,16 @@ async function create(userId, input, deps = {}) {
   if (!title && !body && !linkIn && !attIds.length) throw new Refuse(400, "Write something, add a link or attach a file.");
   const refusal = await postRefusal(u, roomIds, { media: attIds.length > 0 });
   if (refusal) throw new Refuse(refusal.status, refusal.message);
-  const rate = await postRate(u);
+  // 1.99eq: deps.onBehalf - a story capture posted to its pad (storykeep.js) by the pad's owner / a mod / an admin and
+  // credited to the person who took it: the pad's who-can-post rules, its approval queue and the rate limits are the
+  // ACTOR's business (storykeep checks the actor), not the credited author's. The account-wide refusals above still apply.
+  const rate = deps.onBehalf ? null : await postRate(u);
   if (rate) throw new Refuse(429, rate);
   const pendingIn = new Set();
   for (const rid of roomIds) {
-    const why = deps.roomGen && isPepe(u) ? null : await roomPostRefusal(u, rid);
+    const why = (deps.roomGen && isPepe(u)) || deps.onBehalf ? null : await roomPostRefusal(u, rid);
     if (why) throw new Refuse(why.status, why.message);
-    if ((await roomSettings(rid)).approval && !(await rooms.canManage(u, rid))) pendingIn.add(rid);
+    if (!deps.onBehalf && (await roomSettings(rid)).approval && !(await rooms.canManage(u, rid))) pendingIn.add(rid);
   }
   // attachments: mine, ready, not on a post yet
   let atts = [];
@@ -2116,7 +2133,7 @@ module.exports = {
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, postBudget, account, isNewAccount, usedBytes,
   list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, crosspostMany, communities, hot, thumbOf, visibleSql, communityOf,
   communitiesPlan, migrateCommunities, kvGet, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
-  hotRank, controversy, wilson, rankSpec, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
+  hotRank, controversy, wilson, rankSpec, MEDIA_SQL, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,

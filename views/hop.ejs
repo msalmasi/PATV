@@ -1,0 +1,18 @@
+<%- include('layout', { title: HOP.name + ' · ' + label + ' · PATV', user }) %>
+<%#
+  Hop's own page (1.99eq: /hop, /feed/following/hop, /p/<pad>/hop, /u/<user>/hop; hop.js). The viewer opens straight
+  away over it from #hopInit (public/js/hop.js); without JS this is a plain list of the posts.
+  Locals: HOP, scope, base, back, label, sort, t, post, first {items, next}, signed
+%>
+<%- include('partials/hop-boot', { HOP }) %>
+<main class="hop-page">
+  <h1><%= HOP.icon %> <%= HOP.name %> · <%= label %></h1>
+  <p><a href="<%= back %>">‹ Back to the feed</a></p>
+  <% if (!first.items.length) { %><p>No pictures or videos here yet.</p><% } else { %>
+    <ul><% first.items.forEach((it) => { %><li><a href="<%= it.url %>"><%= it.title || 'A post' %></a> <span>by <%= it.author.display %><%= it.pad ? ' in ' + it.pad.label : '' %></span></li><% }) %></ul>
+  <% } %>
+</main>
+<script type="application/json" id="hopInit"><%- JSON.stringify({ scope, base, back, label, sort, t, post, items: first.items, next: first.next, signed })
+  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
+</body>
+</html>

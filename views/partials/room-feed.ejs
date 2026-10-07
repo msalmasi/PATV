@@ -10,7 +10,7 @@
   // 1.99dx: the tabbed pad page renders the story strip under its header and the Rules card in the Feed tab's side column
   const noStory_ = typeof noStory !== 'undefined' && !!noStory, noRules_ = typeof noRules !== 'undefined' && !!noRules;
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=14">
+<link rel="stylesheet" href="/public/css/feed.css?v=15">
 <section class="card rf" id="feed" aria-labelledby="rfH">
   <h2 id="rfH"><span>📝 p/<%= room.slug %> feed</span><small><a href="/feed">All pads ›</a></small></h2>
   <%# 1.99bz: Pepe's fresh captures from this pad's Camfrog room - tap one for the story viewer %>
@@ -19,7 +19,7 @@
       and the announce switch moved there too (the header's "⚙ Pad settings"). %>
   <% if (!noRules_) { %><%- include('pad-rules', { fx, rules: F.rules, slug: room.slug, canEdit: !!(F.mod.owner || F.mod.admin), id: 'rules' }) %><% } %>
   <%- include('feed-composer', { composer: F.composer, next: here_ + '#feed' }) %>
-  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed' }) %>
+  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: 'p/' + room.slug }) %>
   <% if (!F.posts.length) { %>
     <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this pad yet. Be the first!' %></p>
   <% } else { %>
