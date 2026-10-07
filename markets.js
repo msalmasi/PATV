@@ -105,8 +105,85 @@ function viewShares(m, me) {
       });
     }
   }
-  return { ...m, ref: `M${m.id}`, shares: true, options, total: m.volume || 0, bettors: holders.size, settle,
+  if (settle) Object.assign(settle, settleDetail(m, settle));
+  // 1.99dy: the viewer's settled position in one line (payout across all their rows, net P/L)
+  let myResult = null;
+  if (settle && mine && mine.length) {
+    const payout = mine.reduce((a, r) => a + (r.payout || 0), 0), cost = mine.reduce((a, r) => a + (r.cost || 0), 0);
+    myResult = { state: settle.kind === "void" ? "refunded" : payout > 0 ? "won" : "lost", payout, cost, pnl: payout - cost,
+                 rows: mine.map((r) => ({ option: r.option, shares: r.shares, payout: r.payout || 0, state: r.state })) };
+  }
+  return { ...m, ref: `M${m.id}`, shares: true, options, total: m.volume || 0, bettors: holders.size, settle, myResult,
            betCount: (m.trades || []).length, mine, history: m.history || [], trades: (m.trades || []).slice().reverse() };
+}
+
+// 1.99dy: the settlement as an event: when, who judged it (Pepe's AI ruling or a person), his reasoning,
+// and each holder's payout. Pepe's sync carries only paid_out {at, total, result}, not the payout list,
+// so the per-holder amounts are rebuilt from the positions the way pepe_amm._amm_resolve pays them:
+// a win pays int(winning shares) (winners are always covered, never scaled); a void refunds
+// int(cost x 0.98 x ratio) - exact when the pot covered everyone, approximate (approx) when scaled.
+function settleDetail(m, settle) {
+  const po = m.paid_out && typeof m.paid_out === "object" ? m.paid_out : null;
+  const ai = m.ai || null;
+  const res = settle.kind === "won" ? settle.result : null;
+  const byAi = !!(m.ai_judge && ai && ai.state === "final"
+                  && (settle.kind === "void" ? /^void/i.test(String(ai.result || "")) : ai.result === res));
+  const keep = 1 - AMM_FEE_PCT / 100;
+  const payouts = [];
+  for (const p of Object.values(m.positions || {})) {
+    if (settle.kind === "won") {
+      const sh = Number((p.shares || {})[res]) || 0;
+      if (sh >= 1) payouts.push({ nick: p.nick, option: res, shares: sh, amount: Math.floor(sh) });
+    } else {
+      const c = Object.values(p.cost || {}).reduce((a, v) => a + (Number(v) || 0), 0) * keep;
+      const amt = Math.floor(c * settle.ratio);
+      if (c >= 1 && amt > 0) payouts.push({ nick: p.nick, option: null, shares: null, amount: amt });
+    }
+  }
+  payouts.sort((a, b) => b.amount - a.amount);
+  return {
+    at: (po && po.at) || m.ended || 0, by: m.settled_by || null, byAi,
+    why: byAi ? ai.reason || "" : "", evidence: byAi ? ai.evidence || "" : "", confidence: byAi ? ai.confidence || 0 : 0,
+    payouts, winners: payouts.length, approx: settle.kind === "void" && settle.ratio < 1,
+    paid: settle.total != null ? settle.total : payouts.reduce((a, p) => a + p.amount, 0),
+  };
+}
+
+// 1.99dy: a price per share with enough digits to mean something: 0.822 -> "0.822", 0.00415 -> "0.00415",
+// 4.37e-7 -> "4.37e-7"; 1 -> "1.000", 0 -> "0"
+function fmtPrice(x) {
+  x = Number(x);
+  if (!Number.isFinite(x)) return "";
+  if (x === 0) return "0";
+  const a = Math.abs(x);
+  if (a >= 0.1) return x.toFixed(3);
+  if (a >= 1e-6) return String(Number(x.toPrecision(3)));
+  return x.toPrecision(3);
+}
+
+// Pepe writes order replies like "bought 2,409,135 Yes shares for 10,000 PAT (avg 0.00)": a tiny average
+// rounds to 0.00 in chat. Re-derive it from the numbers in the same line.
+function fixOrderMessage(msg) {
+  return String(msg || "").replace(/\b((?:bought|sold) ([\d,]+(?:\.\d+)?) .*? shares for ([\d,]+) PAT[^(]*)\(avg ([\d.]+)\)/i,
+    (all, head, sh, pat, avg) => {
+      const s = Number(sh.replace(/,/g, "")), p = Number(pat.replace(/,/g, ""));
+      return s > 0 && Number(avg) < 0.1 ? `${head}(avg ${fmtPrice(p / s)})` : all;
+    });
+}
+
+// "Ask Pepe to decide" replies are only the interim "🤖 looking into M27…" (his ruling lands on the market
+// itself, later). Once the market is settled, point the newest of those at the result and drop the rest.
+function settledActs(acts, v) {
+  if (!v || !v.settle || !Array.isArray(acts)) return acts;
+  const interim = (a) => a.status === "done" && /^\W*looking into M\d+/i.test(String(a.message || ""));
+  const result = v.settle.kind === "void" ? "voided" : "settled " + v.settle.result;
+  let seen = false;
+  return acts.filter((a) => {
+    if (!interim(a)) return true;
+    if (seen) return false;
+    seen = true;
+    return true;
+  }).map((a) => (interim(a) ? { ...a, message: `Pepe has ruled: ${result} — see the result at the top of this page.` } : a));
 }
 
 function view(m, me) {
@@ -317,9 +394,12 @@ function register(app, { isBotToken, addUser }) {
       acts = await actions.recentFor(req.user.userId, "market-" + id);
     }
     res.locals.og = require("./og").forMarket(req, JSON.parse(rows[0].data));
-    res.render("market", { user: req.user ? req.user.username : null, m: view(JSON.parse(rows[0].data), me), now: Date.now() / 1000, judgeMe, acts, inIt,
+    const v = view(JSON.parse(rows[0].data), me);
+    acts = settledActs(acts, v);
+    orders = orders.map((o) => ({ ...o, message: o.message ? fixOrderMessage(o.message) : o.message }));
+    res.render("market", { user: req.user ? req.user.username : null, m: v, now: Date.now() / 1000, judgeMe, acts, inIt, fmtPrice,
                            orders, msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, bal, minBet: MIN_BET });
   });
 }
 
-module.exports = { register, view, settlement, lmsrPrices };
+module.exports = { register, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs };

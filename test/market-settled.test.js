@@ -134,12 +134,16 @@ test("the bars show the result (No 100% with the trophy, Yes 0%) and the last tr
   assert.match(h, /<span class="price">0%<\/span> · worth 0/);
   assert.equal((h.match(/last traded 18\/82/g) || []).length, 1);
   assert.doesNotMatch(h, /<span class="price">18%/);
-  assert.match(h, /each No share paid 1 PAT \(2,485,637 PAT paid out\)/);
+  // 1.99dy: the result line is now the settlement banner
+  assert.match(h, /⚖ Resolved: NO/);
+  assert.match(h, /Each <b>No<\/b> share paid <b>1 PAT<\/b>/);
+  assert.match(h, /<b>2,485,637<\/b>PAT paid out/);
 });
 
 test("void: each row shows the refund (cost net of the 2% fee, scaled to what the pot paid)", async () => {
   const h = await page("u1", "/markets/28");
-  assert.match(h, /Voided \(parade cancelled\)/);
+  assert.match(h, /⚖ Voided <small>— holders refunded<\/small>/);
+  assert.match(h, /Reason: parade cancelled\./);
   assert.match(h, /scaled to 50%/);
   const r = row(h, "Yes");
   assert.ok(r);

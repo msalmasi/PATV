@@ -79,7 +79,7 @@ test("an existing user is linked: display name, profile href, login in the title
 test("a missing or archived user stays plain text", async () => {
   const h = await page("/markets/27");
   assert.match(h, /judge pepefrog · created by/, "no account for pepefrog: plain");
-  assert.match(h, /Resolved: No \(by pepefrog\)/);
+  assert.match(h, /judged by pepefrog · settled /);   // 1.99dy: the settlement banner
   assert.match(h, /<tr><td>tsyko&nbsp;<span class="ulink-web"[^>]*>🌐<\/span><\/td>/, "archived: plain, marker kept");
   assert.doesNotMatch(h, /tsyko_old/);
   assert.doesNotMatch(h, /<!--ul/, "no marker is left in the page");

@@ -24,6 +24,12 @@
       <% } else { %>
         <p class="aij-sub">He'll look again shortly.</p>
       <% } %>
+    <% } else if (ai.state === 'final' && !live && ai.result) { %>
+      <%# 1.99dy: his ruling stays on the page after it paid out (the settlement banner links here) %>
+      <p id="judgement">Pepe ruled <b><%= ai.result %></b><%= ai.confidence ? ' (' + Math.round(ai.confidence * 100) + '% sure)' : '' %> — <%= ai.reason %></p>
+      <% if (ai.evidence) { %><p class="aij-sub">📈 <%= ai.evidence %></p><% } %>
+      <% if ((ai.disputes || []).length) { %><p class="aij-sub"><%= ai.disputes.length %> dispute<%= ai.disputes.length === 1 ? ' was' : 's were' %> raised:</p>
+        <% ai.disputes.forEach((d) => { %><p class="aij-sub">⚖️ <%- ul(d.nick) %>: <%= d.why || '(no reason)' %></p><% }) %><% } %>
     <% } else if (live) { %>
       <p>When <%= kind === 'market' ? 'trading' : 'betting' %> closes, Pepe checks the evidence (exchange price data for price questions, the web, his Camfrog records), proposes the result with his reasoning, and it pays out after a dispute window.</p>
     <% } %>
