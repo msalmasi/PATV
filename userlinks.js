@@ -4,7 +4,7 @@
 // knows people by. In a view, write <%- ul(name) %> (or ul(name, { web: true }) for something made on
 // the website) instead of <%= name %>. The helper leaves a marker; when the page has rendered, every
 // marked name on it is resolved in ONE query (no N+1), and each becomes
-//   <a class="ulink" href="/u/<username>/profile" title="<login>"><PATV display name></a>
+//   <a class="ulink" href="/u/<username>" title="<login>"><PATV display name></a>
 // or stays the plain, escaped name when there's no live account for it.
 //
 // Resolution (lookup()):
@@ -109,7 +109,7 @@ async function lookup(names) {
 }
 
 /** The href of a profile. */
-const profileHref = (username) => "/u/" + encodeURIComponent(String(username)) + "/profile";
+const profileHref = (username) => "/u/" + encodeURIComponent(String(username));
 
 /** The html for one resolved name (exported for code that builds html itself). */
 function linkHtml(raw, acc, shownIfPlain) {

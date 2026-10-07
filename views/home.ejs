@@ -437,15 +437,15 @@
   <% if (me) { %>
   <section class="card me" aria-label="You">
     <div class="pic">
-      <a href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your profile"><img class="ava" src="<%= pic(me.avatar) %>" alt=""></a>
-      <% if (M.gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>/profile" aria-label="Your GTF avatar"><%- M.gtf %></a><% } %>
+      <a href="/u/<%= encodeURIComponent(me.username) %>" aria-label="Your profile"><img class="ava" src="<%= pic(me.avatar) %>" alt=""></a>
+      <% if (M.gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>" aria-label="Your GTF avatar"><%- M.gtf %></a><% } %>
     </div>
     <div class="who">
       <div class="top"><span class="nm <%= nameCss ? 'cx-name' : '' %>" style="<%= nameCss %>"><%= me.displayname || me.username %></span>
         <span>💰 <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ Lv <b><%= me.level %></b> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span></div>
       <div class="lvl" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="XP to the next level"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
       <div class="chips">
-        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>/profile">🔗 Link Camfrog: type !verify in a Camfrog room</a><% } %>
+        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>">🔗 Link Camfrog: type !verify in a Camfrog room</a><% } %>
         <a class="chip <%= M.tickets ? '' : 'warm' %>" href="/lotto">🎟️ <%= M.tickets ? M.tickets + ' lotto ticket' + (M.tickets === 1 ? '' : 's') : 'no lotto tickets yet' %></a>
         <% if (M.seat) { %><a class="chip mic" href="/casino/t/<%= encodeURIComponent(M.seat.id) %>">🃏 seated at <%= M.seat.game %></a><% } %>
         <% if (M.bets) { %><a class="chip" href="/markets">🔮 <%= M.bets %> open bet<%= M.bets === 1 ? '' : 's' %></a><% } %>
@@ -528,7 +528,7 @@
     <ol class="tf">
       <% (top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
         <li class="r<%= i + 1 %>">
-          <a href="/u/<%= encodeURIComponent(u.username) %>/profile">
+          <a href="/u/<%= encodeURIComponent(u.username) %>">
             <span class="rk"><%= i + 1 %></span>
             <span class="av"><% if (u.gtf) { %><%- u.gtf %><% } else { %><img src="<%= pic(u.avatar) %>" alt="" loading="lazy"><% } %></span>
             <span class="nm <%= cs ? 'cx-name' : '' %>" style="<%= cs %>"><%= u.displayname || u.username %></span>

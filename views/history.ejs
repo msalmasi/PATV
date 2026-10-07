@@ -39,7 +39,7 @@
     </form>
   <% } %>
   <% if (data) { %>
-    <div class="who">Showing <a href="/u/<%= encodeURIComponent(target) %>/profile" style="color:inherit"><b<% if (targetId) { %> class="cp" title="<%= targetId.title %>"<% } %>><%= target %></b></a><% if (targetId && targetId.alt) { %> <span class="mut">(<%= targetId.alt %>)</span><% } %><%= own ? ' (you)' : '' %> · <%= data.count.toLocaleString() %> transactions</div>
+    <div class="who">Showing <a href="/u/<%= encodeURIComponent(target) %>" style="color:inherit"><b<% if (targetId) { %> class="cp" title="<%= targetId.title %>"<% } %>><%= target %></b></a><% if (targetId && targetId.alt) { %> <span class="mut">(<%= targetId.alt %>)</span><% } %><%= own ? ' (you)' : '' %> · <%= data.count.toLocaleString() %> transactions</div>
     <% const q = (o) => '/history?' + new URLSearchParams(Object.assign({ user: target, period, cat: cat || '' }, o)).toString(); %>
     <div class="tabs2">
       <% [['7d','7 days'],['30d','30 days'],['90d','90 days'],['all','All time']].forEach(([p, l]) => { %>
@@ -70,7 +70,7 @@
     <% } %>
       <div class="row2">
         <div class="ic"><%= it.icon %></div>
-        <div class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <% if (it.cp.archived) { %><span class="cp" title="<%= it.cp.title %>"><%= it.cp.name %></span><% } else { %><a class="cp" href="/u/<%= encodeURIComponent(it.cp.name) %>/profile" title="<%= it.cp.title %>"><%= it.cp.name %></a><% } %><% if (it.cp.alt) { %> <span class="mut">(<%= it.cp.alt %>)</span><% } %><% } %><% if (it.note) { %><div class="tnote">&ldquo;<%= it.note %>&rdquo;</div><% } %></div>
+        <div class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <% if (it.cp.archived) { %><span class="cp" title="<%= it.cp.title %>"><%= it.cp.name %></span><% } else { %><a class="cp" href="/u/<%= encodeURIComponent(it.cp.name) %>" title="<%= it.cp.title %>"><%= it.cp.name %></a><% } %><% if (it.cp.alt) { %> <span class="mut">(<%= it.cp.alt %>)</span><% } %><% } %><% if (it.note) { %><div class="tnote">&ldquo;<%= it.note %>&rdquo;</div><% } %></div>
         <div class="tm"><%= tm %></div>
         <div class="am <%= it.points >= 0 ? 'pos' : 'neg' %>"><%= (it.points >= 0 ? '+' : '−') + Math.abs(it.points).toLocaleString() %> PAT</div>
       </div>

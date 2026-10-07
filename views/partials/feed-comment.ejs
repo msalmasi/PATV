@@ -20,9 +20,9 @@
     <% } %>
     <div class="cm-head">
       <% if (c.author.bot) { %>
-        <a href="/u/<%= encodeURIComponent(c.author.username) %>/profile" class="fp-author bot-badge" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
+        <a href="/u/<%= encodeURIComponent(c.author.username) %>" class="fp-author bot-badge" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
       <% } else { %>
-      <a href="/u/<%= encodeURIComponent(c.author.username) %>/profile" class="fp-author"><%= c.author.display %></a>
+      <a href="/u/<%= encodeURIComponent(c.author.username) %>" class="fp-author"><%= c.author.display %></a>
       <% } %>
       <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="Wrote the post">OP</span><% } %>
       <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>

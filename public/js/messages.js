@@ -186,7 +186,7 @@
       var others = (h.members || []).filter(function (m) { return !m.you; });
       var g = groupAvatar(others, 'av-l'); av.className = g.className; while (g.firstChild) av.appendChild(g.firstChild); if (!others.length) av.textContent = '👥';
     } else { av.textContent = initial(w.display || w.username); av.style.setProperty('--h', hue(w.username)); }
-    var href = !grp && w.username ? '/u/' + encodeURIComponent(w.username) + '/profile' : '#';
+    var href = !grp && w.username ? '/u/' + encodeURIComponent(w.username) : '#';
     $('dmHeadName').textContent = grp ? h.title : (w.display || '[gone]');
     $('dmHeadName').href = href;
     $('dmMProfile').href = href;
@@ -444,7 +444,7 @@
       var p = el('p', { text: 'When Pepe executes a stake, a loan gets paid, you\'re picked to judge a wager, an order ships or someone tips you, it shows up here.' });
       if (!me.camfrog) {
         p.appendChild(document.createTextNode(' '));
-        p.appendChild(el('a', { href: '/u/' + encodeURIComponent(me.username) + '/profile/edit', text: 'Link your Camfrog name' }));
+        p.appendChild(el('a', { href: '/u/' + encodeURIComponent(me.username) + '/edit', text: 'Link your Camfrog name' }));
         p.appendChild(document.createTextNode(' to get Pepe\'s notices too.'));
       }
       em.appendChild(p);
@@ -886,7 +886,7 @@
     (h.members || []).forEach(function (m) {
       var acts = el('span', { cls: 'pa' });
       if (!m.you && m.username) {
-        acts.appendChild(el('a', { href: '/u/' + encodeURIComponent(m.username) + '/profile', text: 'Profile' }));
+        acts.appendChild(el('a', { href: '/u/' + encodeURIComponent(m.username), text: 'Profile' }));
         acts.appendChild(el('button', { type: 'button', 'data-mblock': m.username, 'data-on': m.blocked ? '0' : '1', text: m.blocked ? 'Unblock' : 'Block' }));
         if (h.owner) acts.appendChild(el('button', { type: 'button', cls: 'danger', 'data-mremove': m.username, text: 'Remove' }));
       }

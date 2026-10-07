@@ -434,12 +434,12 @@ async function postView(p) {
   // 1.99cu: the pad the post lives in, and for a crosspost the original's own title + pad (Pepe's reply context);
   // source_id = the post whose content/pictures these are (his vision-description cache key)
   return {
-    id: p.id, url: SITE() + "/feed/p/" + p.id, title: p.title || src.title || "", body: String(src.body || p.body || "").slice(0, 2000), created: p.created,
+    id: p.id, url: SITE() + (await store.postLink(p.id)), title: p.title || src.title || "", body: String(src.body || p.body || "").slice(0, 2000), created: p.created,
     author: who(A, p.author_id), pad: await padOf(p.id), source_id: src.id,
     crosspost: src !== p ? { author: who(await store.account(src.author_id), src.author_id), id: src.id, title: src.title || "",
                              pad: await padOf(src.id) } : null,
     link: link && link.url ? { url: link.url, domain: link.domain || "", title: link.title || "", description: link.description || "", site: link.site || "" } : null,
-    images: att.filter((a) => a.kind === "image").slice(0, 4).map((a) => ({ url: SITE() + "/feed/f/" + (a.thumb || a.file), w: a.w, h: a.h })),
+    images: att.filter((a) => a.kind === "image").slice(0, 4).map((a) => ({ url: SITE() + "/media/f/" + (a.thumb || a.file), w: a.w, h: a.h })),
     media: { audio: att.filter((a) => a.kind === "audio").length, video: att.filter((a) => a.kind === "video").length },
     comments: p.comments || 0, score: p.score || 0,
   };
@@ -704,7 +704,7 @@ async function comment(b, req = null) {
   await audit.record(auditCtx(), { kind: "comment", id: r.id, postId, event: "create", user: await store.account(acct.userId) });
   await log({ action: "comment", why, scope, post: postId, comment: r.id, target: b.target || null, cost: b.cost, note: b.model || null });
   if (b.target) await markSeen(b.target, "answered");
-  return { ok: true, id: r.id, url: "/feed/p/" + postId + "#c-" + r.id };
+  return { ok: true, id: r.id, url: await store.postLink(postId, "#c-" + r.id) };
 }
 
 /** Pepe posts on his own. {scope, title, body, kind, cost} -> {ok, id, url} */
@@ -727,7 +727,7 @@ async function post(b, req = null) {
                                               nsfw: false, announce: [] }, {});
   await audit.record(auditCtx(), { kind: "post", id: p.id, postId: p.id, event: "create", user: await store.account(acct.userId) });
   await log({ action: "post", why: "auto", scope, post: p.id, kind, cost: b.cost, note: b.model || null });
-  return { ok: true, id: p.id, url: "/feed/p/" + p.id };
+  return { ok: true, id: p.id, url: p.url };
 }
 
 /** He looked and passed (the model said skip, his own guards said no). The target is never offered again. */
@@ -764,13 +764,14 @@ async function adminView() {
   const cids = [...new Set(rows.map((r) => r.comment_id).filter(Boolean))];
   const cdel = new Set();
   if (cids.length) for (const c of await getQuery(`SELECT id FROM feed_comments WHERE deleted_at IS NOT NULL AND id IN (${cids.map(() => "?").join(",")})`, cids)) cdel.add(c.id);
+  const urls = await store.postLinks(ids).catch(() => new Map());     // 1.99dv: canonical post addresses
   const scopeTitle = (s) => (s === "*" ? "global" : !s ? "All" : (rooms.getCached(s) || {}).title || s);
   return {
     account: acct, global: await globalCaps(), main: await scopeSettings(""), used: U,
     rooms: Object.entries(await scopesState(U)).filter(([k]) => k).map(([id, s]) => ({ id, ...s })),
     log: rows.map((r) => ({ ...r, scopeTitle: scopeTitle(r.scope), postTitle: r.post_id ? (titles.get(r.post_id) || {}).t || "" : "",
                             postDeleted: r.post_id ? !!(titles.get(r.post_id) || {}).deleted : false, commentDeleted: r.comment_id ? cdel.has(r.comment_id) : false,
-                            href: r.post_id ? "/feed/p/" + r.post_id + (r.comment_id ? "#c-" + r.comment_id : "") : null })),
+                            href: r.post_id ? (urls.get(r.post_id) || "/feed/p/" + r.post_id) + (r.comment_id ? "#c-" + r.comment_id : "") : null })),
   };
 }
 

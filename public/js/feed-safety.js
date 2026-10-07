@@ -212,8 +212,8 @@
       el('span', { cls: 'chip', text: 'account age ' + age(S.ageDays) }), el('span', { cls: 'chip', text: 'level ' + (S.level || 0) })]
       .concat(linkedChips(S.linked)).concat(S.archived ? [el('span', { cls: 'chip', text: 'archived' })] : []).concat(S.restricted ? [el('span', { cls: 'chip', text: 'restricted' })] : []));
     b.appendChild(who);
-    if (S.username) b.appendChild(el('p', { cls: 'mut' }, ['Profile: ', el('a', { href: '/u/' + encodeURIComponent(S.username) + '/profile', target: '_blank', rel: 'noopener', text: '/u/' + S.username }),
-      D.target && D.target.post ? ' · ' : '', D.target && D.target.post ? el('a', { href: '/feed/p/' + encodeURIComponent(D.target.post) + (D.target.kind === 'comment' ? '#c-' + encodeURIComponent(D.target.id) : ''), target: '_blank', rel: 'noopener', text: 'open the ' + D.target.kind }) : '']));
+    if (S.username) b.appendChild(el('p', { cls: 'mut' }, ['Profile: ', el('a', { href: '/u/' + encodeURIComponent(S.username), target: '_blank', rel: 'noopener', text: '/u/' + S.username }),
+      D.target && D.target.post ? ' · ' : '', D.target && D.target.post ? el('a', { href: (D.target.url || '/feed/p/' + encodeURIComponent(D.target.post)) + (D.target.kind === 'comment' ? '#c-' + encodeURIComponent(D.target.id) : ''), target: '_blank', rel: 'noopener', text: 'open the ' + D.target.kind }) : '']));
 
     b.appendChild(el('h3', { text: D.target && D.target.kind === 'user' ? 'Latest posting records' : 'When it was posted / edited' }));
     if (!D.records.length) b.appendChild(el('p', { cls: 'mut', text: 'No record (posted before 1.99cc, or older than a year).' }));
@@ -240,7 +240,7 @@
       var box = el('div', { cls: 'box' }, [el('h3', { text: title })]);
       if (!xs.length) box.appendChild(el('p', { cls: 'mut', text: emptyText }));
       else box.appendChild(el('ul', null, xs.map(function (x) {
-        return el('li', null, [el('a', { href: '/u/' + encodeURIComponent(x.username) + '/profile', target: '_blank', rel: 'noopener', text: x.username }), ' · ' + x.count + ' post' + (x.count === 1 ? '' : 's') + '/comments · last ' + fmtDate(x.last)]);
+        return el('li', null, [el('a', { href: '/u/' + encodeURIComponent(x.username), target: '_blank', rel: 'noopener', text: x.username }), ' · ' + x.count + ' post' + (x.count === 1 ? '' : 's') + '/comments · last ' + fmtDate(x.last)]);
       })));
       return box;
     };
@@ -255,8 +255,8 @@
     grid.appendChild(hist);
     b.appendChild(grid);
     var recent = el('div', { cls: 'box' }, [el('h3', { text: 'Recent posts & comments' })]);
-    var items = (H.posts || []).map(function (p) { return { at: p.created, text: p.text, href: '/feed/p/' + p.id, tag: p.deleted ? (p.byAdmin ? 'removed' : 'deleted') : p.hidden ? 'hidden' : 'post' }; })
-      .concat((H.comments || []).map(function (c) { return { at: c.created, text: c.text, href: '/feed/p/' + c.post + '#c-' + c.id, tag: c.deleted ? (c.byMod ? 'removed' : 'deleted') : 'comment' }; }))
+    var items = (H.posts || []).map(function (p) { return { at: p.created, text: p.text, href: p.url || '/feed/p/' + p.id, tag: p.deleted ? (p.byAdmin ? 'removed' : 'deleted') : p.hidden ? 'hidden' : 'post' }; })
+      .concat((H.comments || []).map(function (c) { return { at: c.created, text: c.text, href: c.url || '/feed/p/' + c.post + '#c-' + c.id, tag: c.deleted ? (c.byMod ? 'removed' : 'deleted') : 'comment' }; }))
       .sort(function (a, z) { return z.at - a.at; }).slice(0, 12);
     if (!items.length) recent.appendChild(el('p', { cls: 'mut', text: 'Nothing yet.' }));
     else recent.appendChild(el('ul', null, items.map(function (x) {

@@ -172,7 +172,7 @@
       <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
       <% if (!siteOnly_) { %><% if (bridged_) { %><span class="chip" id="rmCount">👥 <%= room.count %> in the Camfrog room</span><% } %>
       <span class="chip" title="This pad is backed by a Camfrog room">📡 Camfrog room<%= room.camfrogName && room.camfrogName !== room.name ? ': ' + room.camfrogName : '' %></span><% } %>
-      <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>/profile">👑 Pad owner: <%= room.owner %></a><% } %>
+      <% if (room.house) { %><span class="chip own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="chip own" href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 Pad owner: <%= room.owner %></a><% } %>
       <% if (pepeHere_ === true && !siteOnly_) { %><span class="chip" title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %>
       <% if (manage_) { %><a class="chip own ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= feed_ && feed_.queue ? '#moderation' : '' %>" title="Everything about this pad: page, stage, feed, Pepe, rules, moderation">⚙ Pad settings<% if (feed_ && feed_.queue) { %> <span class="ps-q" title="Waiting for you in Moderation"><%= feed_.queue %></span><% } %></a><% } %>
       <% if (feed_ && feed_.rules) { %><a class="chip" href="#rules" onclick="var d=document.getElementById('rules');if(d)d.open=true">📜 Rules</a><% } %>
@@ -295,7 +295,7 @@
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
   <script src="/public/js/room-bridge.js?v=5"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=1">
-  <script src="/public/js/room-mod.js?v=1"></script>
+  <script src="/public/js/room-mod.js?v=2"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -319,7 +319,7 @@
     function name(u) {
       if (!u || u.anon) return el('span', 'who', 'someone');
       var n;
-      if (u.patv) { n = el('a', 'who'); n.href = '/u/' + encodeURIComponent(u.patv.username) + '/profile'; n.textContent = u.display || u.login; }
+      if (u.patv) { n = el('a', 'who'); n.href = '/u/' + encodeURIComponent(u.patv.username); n.textContent = u.display || u.login; }
       else n = el('span', 'who', u.display || u.login);
       if (u.patv && u.patv.style) { n.classList.add('cx-name'); n.style.cssText = u.patv.style; }
       if (u.self) n.title = 'Pepe'; else if (u.display && u.login && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;

@@ -255,7 +255,7 @@
       links.appendChild(el('div', 'pm-k', 'Profile'));
       var lrow = el('div', 'pm-acts');
       if (u.patv && u.patv.username) {
-        var pa = el('a', 'pm-btn', '👤 View profile'); pa.href = '/u/' + encodeURIComponent(u.patv.username) + '/profile'; lrow.appendChild(pa);
+        var pa = el('a', 'pm-btn', '👤 View profile'); pa.href = '/u/' + encodeURIComponent(u.patv.username); lrow.appendChild(pa);
         if (opts.dms) { var ma = el('a', 'pm-btn', '✉️ Message'); ma.href = '/messages?to=' + encodeURIComponent(u.patv.username); lrow.appendChild(ma); }
         if (window.patvSafety && window.patvSafety.report) lrow.appendChild(btn('', '🚩 Report', function () { closeDlg(); window.patvSafety.report({ user: u.patv.username }); }));
       } else {

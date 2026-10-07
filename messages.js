@@ -1121,7 +1121,7 @@ function register(app, { isBotToken, addUser }) {
                 conversations: convs, open, to, view: notices ? "notices" : null, prefs: await prefs(me.userId), blocks: await blockList(me.userId),
                 maxLen: LIMITS.max_len, reasons: reasons().menu, levelOk: LIMITS.level_ok,
                 maxPics: dmmedia.MAX_PER_MESSAGE, groupMax: LIMITS.group_max, groupMin: LIMITS.group_min_others + 1, titleMax: LIMITS.title_max,
-                share: shareId ? { id: shareId, url: `https://${siteHost()}/feed/p/${shareId}` } : null,
+                share: shareId ? { id: shareId, url: `https://${siteHost()}${await require("./feedstore").postLink(shareId)}` } : null,     // 1.99dv: its canonical address
                 notices: Object.assign(nt, { kinds: inbox.kindList(), pm: await inbox.prefs(me.userId),
                                              msg: notices && req.query.msg ? String(req.query.msg).slice(0, 200) : null }) },
       });

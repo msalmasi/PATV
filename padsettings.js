@@ -24,8 +24,10 @@ const store = require("./feedstore");
 const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog"]);
 
 async function pins(roomId) {
-  return getQuery(`SELECT p.id, p.title, p.body, pr.pinned_at, pr.pinned_by FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
+  const rows = await getQuery(`SELECT p.id, p.title, p.body, pr.pinned_at, pr.pinned_by FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
                    WHERE pr.room_id = ? AND pr.pinned_at IS NOT NULL AND pr.removed_at IS NULL AND p.deleted_at IS NULL ORDER BY pr.pinned_at DESC`, [roomId]);
+  for (const r of rows) r.url = await store.postLink(r.id);     // 1.99dv: the post's canonical address
+  return rows;
 }
 
 /** Everything the hub shows for one pad (the viewer may manage it). */

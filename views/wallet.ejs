@@ -256,7 +256,7 @@
     <div class="card limit<%= ml.state === 'ok' ? ' own' : '' %>" style="margin-top:12px">
       <% if (ml.state === 'nolink') { %>
         <span class="name">🏦 Your borrow limit</span>
-        <span class="info"><a href="/u/<%= encodeURIComponent(user) %>/profile">Link your Camfrog name</a> (<code>!verify</code>) to borrow from the Federal Reserve.</span>
+        <span class="info"><a href="/u/<%= encodeURIComponent(user) %>">Link your Camfrog name</a> (<code>!verify</code>) to borrow from the Federal Reserve.</span>
       <% } else if (ml.state === 'nodata') { %>
         <span class="name">🏦 Your borrow limit</span>
         <span class="info">Pepe hasn't sent your limit yet — <code>!loan reserve</code> in a Camfrog room shows it.</span>

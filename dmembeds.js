@@ -1,5 +1,6 @@
 // dmembeds.js — PATV post cards inside direct messages (1.99cz). A message that contains a link to a feed post
-// (https://publicaccess.tv/feed/p/<id>, also www. / staging. / this server's SITE_URL host) gets a compact card:
+// (https://publicaccess.tv/p/<pad>/posts/<id>[/<slug>] or /u/<username>/posts/<id>[/<slug>] - 1.99dv; the old /feed/p/<id>
+// still counts - also www. / staging. / this server's SITE_URL host) gets a compact card:
 // pad, title, author, score, comments and a thumbnail, linking to the post. "Share -> Send in a message" on a post
 // (/messages?share=<id>) just puts that link in the composer.
 //
@@ -8,7 +9,8 @@
 //     -> "Post unavailable" - no title, author or picture, for everyone (staff included: a DM isn't the mod view)
 //   * NSFW (the author's mark, an admin's, or a pad's) -> the card shows, its thumbnail blurred until clicked
 //   * a crosspost shows its original; if the original is gone, it's unavailable
-// The thumbnail is the post's public feed file (/feed/f/...), which applies its own rules again.
+// The thumbnail is the post's public feed file (/media/f/..., was /feed/f/), which applies its own rules again. The card
+// links the post's canonical address; an unavailable one links the short /feed/p/<id> (no pad or title slug in it).
 "use strict";
 
 const MAX_PER_MESSAGE = 3;
@@ -21,6 +23,8 @@ function hosts() {
   return h;
 }
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,500}/gi;
+// 1.99dv: a post's path, old and new: /feed/p/<id>, /p/<pad>/posts/<id>[/<slug>], /u/<username>/posts/<id>[/<slug>]
+const POST_PATH_RE = new RegExp("^(?:/feed/p/(" + POST_ID + ")|/(?:p|u)/[^/]+/posts/(" + POST_ID + ")(?:/[^/]*)?)/?$");
 /** The post ids linked in a message body (in order, de-duplicated, at most MAX_PER_MESSAGE). */
 function postIds(body) {
   const out = [];
@@ -32,8 +36,9 @@ function postIds(body) {
     let u;
     try { u = new URL(m[0].replace(/[).,;:!?\]}]+$/, "")); } catch (e) { continue; }
     if (!H.has(u.host.toLowerCase())) continue;
-    const p = new RegExp("^/feed/p/(" + POST_ID + ")/?$").exec(u.pathname);
-    if (p && !out.includes(p[1])) out.push(p[1]);
+    const p = POST_PATH_RE.exec(u.pathname);
+    const id = p ? p[1] || p[2] : null;
+    if (id && !out.includes(id)) out.push(id);
   }
   return out;
 }
@@ -60,12 +65,12 @@ async function card(id) {
       const room = p.roomsAll.find((r) => !r.removed && !r.pending && !r.hidden);
       const thumb = store.thumbOf ? store.thumbOf(p) : null;
       v = {
-        id, href, unavailable: false,
+        id, href: p.url || href, unavailable: false,
         title: (p.title || q.title || (q.link && q.link.title) || "").slice(0, 140) || (q.body ? String(q.body).replace(/\s+/g, " ").slice(0, 100) : "Post"),
         author: p.author ? { username: p.author.username, display: p.author.display } : null,
         pad: room ? { title: room.title, slug: room.slug, label: room.label || "p/" + room.slug } : null,     // 1.99df: label = u/<name> on a profile
         score: p.score || 0, comments: p.comments || 0, nsfw: !!p.nsfw,
-        thumb: thumb && /^[a-f0-9]{32}(?:_t|_p)?\.webp$/.test(thumb) ? "/feed/f/" + thumb : null,
+        thumb: thumb && /^[a-f0-9]{32}(?:_t|_p)?\.webp$/.test(thumb) ? "/media/f/" + thumb : null,
       };
     }
   } catch (e) { console.error("[dm] embed:", e && e.message); }
@@ -82,4 +87,4 @@ async function forBody(body) {
   return out;
 }
 
-module.exports = { postIds, card, forBody, MAX_PER_MESSAGE, _setClock, _clear };
+module.exports = { POST_PATH_RE, postIds, card, forBody, MAX_PER_MESSAGE, _setClock, _clear };

@@ -442,7 +442,7 @@ test("render: Pepe's comment and post show his avatar + the 🤖 Pepe badge; the
   assert.ok(html.includes("What went down tonight") && html.includes("🤖 Pepe"));
   html = (await call("GET", "/feed/admin", U.admin)).text;
   assert.ok(html.includes("Pepe on the feed"));
-  assert.ok(html.includes(`/feed/p/${pid}#c-${r.d.id}`), "the log links to his comment");
+  assert.ok(html.includes(`/posts/${pid}/render-me#c-${r.d.id}`), "the log links to his comment");
   html = (await call("GET", `/p/${OWNED}/settings`, U.owner)).text;
   assert.ok(html.includes("Pepe on this pad's feed") && html.includes('name="respond"'));
   assert.ok(!html.includes('name="admin_lock"'), "owners don't get the lock");
@@ -527,7 +527,7 @@ test("vision: a crosspost carries its original's pictures (site media URL) and t
   assert.equal(x.crosspost_of, orig);
   const v = await PF.postView(x);
   assert.equal(v.images.length, 1);
-  assert.match(v.images[0].url, /\/feed\/f\/aaaaaaaaaaaaaaaa_t\.webp$/, "the site's own re-encoded webp");
+  assert.match(v.images[0].url, /\/media\/f\/aaaaaaaaaaaaaaaa_t\.webp$/, "the site's own re-encoded webp");
   assert.equal(v.title, "Faded"); assert.equal(v.body, "selfie");
   assert.equal(v.crosspost.author.username, "alice");
   assert.ok(await PF.postScopes(x));

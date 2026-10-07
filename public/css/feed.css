@@ -1,4 +1,4 @@
-/* feed.css — the feed (1.99bv; posts + comments redesigned 1.99bx): /feed, /feed/p/:id, the room page's Feed section, /feed/admin */
+/* feed.css — the feed (1.99bv; posts + comments redesigned 1.99bx): /feed, a post's page (/p/<pad>/posts/<id>), the room page's Feed section, /feed/admin */
 .fd { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; color: #e6e6e6; box-sizing: border-box; width: 100%; }
 .fd *, .rf *, .fd *::before, .rf *::before, .fd *::after, .rf *::after { box-sizing: border-box; }
 .fd h1 { text-align: center; margin-bottom: 4px; }

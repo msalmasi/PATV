@@ -95,6 +95,14 @@ async function call(method, url, u, body, extra) {
   try { d = JSON.parse(text); } catch (e) { d = null; }
   return { status: r.status, d, text, location: r.headers.get("location") };
 }
+
+// 1.99dv: a post's page - the old /feed/p/<id> 301s to its canonical /p/<pad>/posts/<id>/<slug> (or /u/<name>/posts/...)
+async function postPage(id, u) {
+  const r = await call("GET", "/feed/p/" + id, u);
+  if (r.status !== 301) return r;
+  assert.match(r.location, new RegExp("^/(p|u)/[^/]+/posts/" + id + "(/[a-z0-9-]+)?$"), "the old post address 301s to the canonical one");
+  return call("GET", r.location, u);
+}
 const post = (url, u, body) => call("POST", url, u, body);
 async function mkPost(u, body) {
   const r = await post("/api/feed/posts", u, body);
@@ -205,7 +213,7 @@ test("All / Following: shown in All by default; 'Also show in All' off keeps it 
   assert.ok(fol.includes(inAll) && fol.includes(notAll), "followers get both in Following");
   assert.ok(!ids(await store.list({ following: U.bob.userId, sort: "new", viewer: await viewer(U.bob), limit: 100 })).includes(notAll), "non-followers' Following: no");
   assert.ok(ids(await store.list({ author: U.alice.userId, sort: "new", viewer: await viewer(U.bob), limit: 100 })).includes(notAll), "on her profile");
-  const pg = await call("GET", "/feed/p/" + notAll, U.bob);
+  const pg = await postPage(notAll, U.bob);
   assert.equal(pg.status, 200, "the post page works");
   // flip it (author only)
   assert.equal((await post(`/api/feed/posts/${notAll}/edit`, U.bob, { inAll: true })).status, 403);
@@ -319,31 +327,34 @@ test("owner moderation: delete comments, lock, block commenters on their profile
 });
 
 // ───────────────────────────── links ─────────────────────────────
-test("u/<username> autolinks (known names only), /u/<name> and /p/u-<name> go to the profile", async () => {
+test("u/<username> autolinks (known names only), /u/<name>/profile and /p/u-<name> go to the profile", async () => {
   const known = (n) => ({ alice: "alice", "bob.smith": "bob.smith" }[n.toLowerCase()] || null);
-  assert.equal(pads.userRefs("hi u/alice!", known), 'hi <a class="user-ref" href="/u/alice/profile">u/alice</a>!');
-  assert.equal(pads.userRefs("ask u/Alice", known), 'ask <a class="user-ref" href="/u/alice/profile">u/Alice</a>', "case-insensitive, links the real name");
-  assert.equal(pads.userRefs("u/bob.smith.", known), '<a class="user-ref" href="/u/bob.smith/profile">u/bob.smith</a>.');
+  assert.equal(pads.userRefs("hi u/alice!", known), 'hi <a class="user-ref" href="/u/alice">u/alice</a>!');
+  assert.equal(pads.userRefs("ask u/Alice", known), 'ask <a class="user-ref" href="/u/alice">u/Alice</a>', "case-insensitive, links the real name");
+  assert.equal(pads.userRefs("u/bob.smith.", known), '<a class="user-ref" href="/u/bob.smith">u/bob.smith</a>.');
   assert.equal(pads.userRefs("u/nobody here", known), "u/nobody here", "unknown names aren't links");
   assert.equal(pads.userRefs("see /u/alice/profile and menu/alice", known), "see /u/alice/profile and menu/alice", "not inside paths or words");
   // through the feed's text renderer (escaped first, URLs left alone, p/ links too)
   pads._setNames(new Map([["alice", "alice"]]));
   const html = web.linkify("thanks u/alice <b> https://x.test/u/alice");
-  assert.match(html, /thanks <a class="user-ref" href="\/u\/alice\/profile">u\/alice<\/a> &lt;b&gt;/);
+  assert.match(html, /thanks <a class="user-ref" href="\/u\/alice">u\/alice<\/a> &lt;b&gt;/);
   assert.match(html, /<a href="https:\/\/x.test\/u\/alice" rel=/);
   assert.equal((html.match(/user-ref/g) || []).length, 1, "the URL isn't touched");
   pads._setNames(null);
   // redirects
-  const r1 = await call("GET", "/u/alice", null);
+  // 1.99dv: /u/<name> is the profile itself (index.js); the old /u/<name>/profile 301s there
+  const r1 = await call("GET", "/u/alice/profile", null);
   assert.equal(r1.status, 301);
-  assert.equal(r1.location, "/u/alice/profile");
+  assert.equal(r1.location, "/u/alice");
   await rooms.ensureProfile(U.alice.userId);
   const r2 = await call("GET", "/p/u-alice", null);
   assert.equal(r2.status, 301);
-  assert.equal(r2.location, "/u/alice/profile#posts");
+  assert.equal(r2.location, "/u/alice/posts");
   const r3 = await call("GET", "/p/u-alice/settings", U.alice);
   assert.equal(r3.status, 301, "no pad settings hub for a profile");
-  assert.equal(pads.padHref(await rooms.profileOf(U.alice.userId)), "/u/alice/profile");
+  assert.equal(r3.location, "/u/alice/posts");
+  assert.equal(pads.padHref(await rooms.profileOf(U.alice.userId)), "/u/alice");
+  assert.equal(pads.padHref(await rooms.profileOf(U.alice.userId), "settings"), "/u/alice/posts");
   assert.equal(pads.padLabel(await rooms.profileOf(U.alice.userId)), "u/alice");
 });
 

@@ -8,7 +8,7 @@
   const pctOf = (u) => { const n = need(u.level); return n ? Math.max(0, Math.min(100, (Number(u.xp) || 0) / n * 100)) : 0; };
   const nameOf = (u) => typeof cosmeticNameHtml === 'function' ? cosmeticNameHtml(u.username, u.displayname || u.username)
     : String(u.displayname || u.username).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const prof = (u) => '/u/' + encodeURIComponent(u.username) + '/profile';
+  const prof = (u) => '/u/' + encodeURIComponent(u.username);
   const isMe = (u) => !!user && u.username === user;
   // metric per board: [big value, unit]
   const metric = {
@@ -224,7 +224,7 @@
           <% jackpots.forEach((j, index) => { %>
             <div class="lb-jp">
               <span class="rk"><%= index + 1 %></span>
-              <a href="/u/<%= encodeURIComponent(j.username) %>/profile"><%- nameOf(j) %></a>
+              <a href="/u/<%= encodeURIComponent(j.username) %>"><%- nameOf(j) %></a>
               <span class="amt"><%= fmt(j.amount) %> PAT</span>
               <span class="t jackpot-time" data-ts="<%= j.timestamp %>"><%= j.timestamp %></span>
             </div>

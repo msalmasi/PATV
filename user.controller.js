@@ -247,7 +247,7 @@ async function loginUser(req, res) {
 async function updateUsername(req, res) {
   const username = String((req.body && req.body.username) || '').trim();
   const userId = req.user.userId;
-  const editPage = `/u/${encodeURIComponent(req.user.username)}/profile/edit`;
+  const editPage = `/u/${encodeURIComponent(req.user.username)}/edit`;
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
   const problem = guard.checkUsername(username);
   if (problem) {
@@ -283,7 +283,7 @@ async function updateDisplayname(req, res) {
   const r = await displaynames.setByUser(userId, displayname);
   if (r && r.error) req.flash('error', 'Display name not changed: ' + r.error + '.');
   else req.flash('success', r && r.auto ? 'Display name reset to ' + r.displayname + '.' : 'Displayname changed.');
-  res.redirect(`/u/${username}/profile/edit`);
+  res.redirect(`/u/${username}/edit`);
 };
 
 // Update email with retriggering email verification
@@ -296,11 +296,11 @@ async function updateEmail(req, res) {
         if (err) {
             console.error(err.message);
             req.flash('error', 'Error processing request');
-            return res.redirect(`/u/${username}/profile/edit`);
+            return res.redirect(`/u/${username}/edit`);
         }
         if (user) {
             req.flash('error', 'Email already taken');
-            return res.redirect(`/u/${username}/profile/edit`);
+            return res.redirect(`/u/${username}/edit`);
         }
   
         const token = generateValidationToken();
@@ -310,7 +310,7 @@ async function updateEmail(req, res) {
 
         await runQuery('UPDATE users SET email = ?, isEmailVerified = 0 WHERE userId = ?', [email, userId]);
         req.flash('success', 'Verification email sent.');
-        res.redirect(`/u/${username}/profile/edit`);
+        res.redirect(`/u/${username}/edit`);
       });
 };
 
@@ -319,7 +319,7 @@ async function updatePassword(req, res) {
   const password = typeof (req.body && req.body.password) === 'string' ? req.body.password : '';
   const userId = req.user.userId;
   const username = req.user.username;
-  const editPage = `/u/${encodeURIComponent(username)}/profile/edit#password`;
+  const editPage = `/u/${encodeURIComponent(username)}/edit#password`;
   if (!guard.sameSite(req)) return res.status(403).send('Forbidden');
   const problem = guard.checkPassword(password, username);
   if (problem) {
@@ -381,7 +381,7 @@ async function updateDiscordId(req, res) {
   const username = req.user.username;
   await runQuery('UPDATE users SET avatar = ? WHERE discordId = ?', [discordId, userId]);
   req.flash('success', 'Discord changed.');
-  res.redirect(`/u/${username}/profile/edit`);
+  res.redirect(`/u/${username}/edit`);
 };
 
 // Update twitch
@@ -391,7 +391,7 @@ async function updateTwitchId(req, res) {
   const username = req.user.username;
   await runQuery('UPDATE users SET avatar = ? WHERE twitchId = ?', [twitchId, userId]);
   req.flash('success', 'Twitch changed.');
-  res.redirect(`/u/${username}/profile/edit`);
+  res.redirect(`/u/${username}/edit`);
 };
 
 // Internal helper: complete the camfrog link.
@@ -486,7 +486,7 @@ async function updateCamfrogUsername(req, res) {
   if (!cfLower) {
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [null, userId]);
     req.flash('success', 'Camfrog username unlinked.');
-    return res.redirect(`/u/${username}/profile/edit`);
+    return res.redirect(`/u/${username}/edit`);
   }
 
   try {
@@ -494,7 +494,7 @@ async function updateCamfrogUsername(req, res) {
     const me = await getQuery('SELECT camfrogUsername FROM users WHERE userId = ?', [userId]);
     if (me[0]?.camfrogUsername && me[0].camfrogUsername.toLowerCase() === cfLower) {
       req.flash('success', 'Camfrog username already linked.');
-      return res.redirect(`/u/${username}/profile/edit`);
+      return res.redirect(`/u/${username}/edit`);
     }
 
     // Check if another non-CF account already owns this camfrog username
@@ -524,7 +524,7 @@ async function updateCamfrogUsername(req, res) {
     console.error('[CF-LINK] Initiate error:', err);
     req.flash('error', 'Failed to initiate Camfrog link.');
   }
-  res.redirect(`/u/${username}/profile/edit`);
+  res.redirect(`/u/${username}/edit`);
 };
 
 // Step 2: Bot calls this when a user types !verify CODE in Camfrog chat.

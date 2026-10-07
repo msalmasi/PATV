@@ -441,6 +441,7 @@ async function reverse(user, id, note = "") {
 // ── views ──
 async function decorateRows(rows) {
   const out = [];
+  const urls = await store.postLinks(rows.map((r) => r.post_id)).catch(() => new Map());     // 1.99dv
   for (const r of rows) {
     let what = "";
     if (r.kind === "post") { const p = await store.getRow(r.post_id); what = p ? p.title || p.body || "(media post)" : "(gone)"; }
@@ -449,7 +450,7 @@ async function decorateRows(rows) {
     const R = rooms.getCached(r.room_id);
     out.push({ ...r, what: clip(what, 140), author: A ? A.displayname || A.username : "?", authorUser: A ? A.username : null,
                pad: R ? { slug: R.slug, title: R.title } : { slug: r.room_id, title: r.room_id },
-               href: "/feed/p/" + r.post_id + (r.comment_id ? "#c-" + r.comment_id : ""), reversible: r.state !== "reversed" && ["flag", "hide", "remove"].includes(r.action) });
+               href: (urls.get(r.post_id) || "/feed/p/" + r.post_id) + (r.comment_id ? "#c-" + r.comment_id : ""), reversible: r.state !== "reversed" && ["flag", "hide", "remove"].includes(r.action) });
   }
   return out;
 }

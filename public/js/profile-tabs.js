@@ -1,7 +1,8 @@
 // profile-tabs.js — the profile page's tabs, "More" menu and GTF avatar popover (1.99du).
-// Tabs are server-rendered panels (every tab's content is in the page, the open one picked by ?tab=);
-// this switches them without a reload and keeps the URL deep-linkable. A #hash that names a tab
-// (#posts, #overview, #analytics) or something inside one (#profile-settings, #badges) opens that tab.
+// Tabs are server-rendered panels (every tab's content is in the page, the open one picked by the path -
+// 1.99dv: /u/<name>/<tab>, was ?tab=); this switches them without a reload and keeps the URL deep-linkable.
+// A #hash that names a tab (#posts, #overview, #analytics - an old /u/<name>/profile#posts link lands here with
+// it) opens that tab and moves the address to its path; one inside a tab (#profile-settings, #badges) opens it.
 // The GTF popover is a native [popover] (light dismiss + Esc); ?gtf=1 opens it on load - the "New
 // avatar" form comes back there so the request's result shows.
 (function () {
@@ -49,7 +50,9 @@
   function fromHash() {
     var h = (location.hash || "").slice(1);
     if (!h) return;
-    if (activate(h)) return;
+    var named = null;
+    tabs.forEach(function (t) { if (t.getAttribute("data-tab") === h) named = t; });
+    if (named && activate(h, { url: named.getAttribute("href") })) return;
     var el = null;
     try { el = document.getElementById(decodeURIComponent(h)); } catch (e) { el = null; }
     var p = el && el.closest ? el.closest(".pf-panel[data-panel]") : null;

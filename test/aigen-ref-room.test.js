@@ -176,7 +176,7 @@ test("the composer: reference upload + 'from this draft' + the right-to-use note
   assert.equal(cfg.refPrices[ROOM], 12000);
   assert.equal(cfg.refPrices[LOUNGE], 10000);
   assert.equal(cfg.refGlobal, 10000);
-  assert.match(html, /feed-composer\.js\?v=10/, "cache-buster bumped");
+  assert.match(html, /feed-composer\.js\?v=11/, "cache-buster bumped");
   assert.doesNotMatch(html, /Text prompts only/, "the old text-only line is gone");
 });
 

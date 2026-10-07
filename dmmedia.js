@@ -7,7 +7,7 @@
 //
 // Storage: a SEPARATE private directory (DM_DIR; default /var/lib/patv[-staging]/dm, created 0700; off Linux a
 // folder next to the code tree), random 32-hex names. Never under /public, never a public URL, never the feed's
-// /feed/f/ route. Served ONLY by GET /messages/media/<file>:
+// /media/f/ route (was /feed/f/). Served ONLY by GET /messages/media/<file>:
 //   * signed in, and a CURRENT member of the message's conversation (not left), and the message is after the
 //     member's "clear history" point and not deleted - checked on every request (else 404, the same answer as
 //     "no such file", so nothing is confirmed to outsiders); the uploader may also see an upload not sent yet

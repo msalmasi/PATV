@@ -192,7 +192,7 @@ async function details(viewer, target, { reason = null } = {}) {
   };
   const shape = (xs) => xs.map((x) => ({ userId: x.user_id, username: x.username || "[gone]", count: x.n, last: x.last }));
   return {
-    subject: await subjectOf(subjectId), target: { kind, id: tid, post: postId },
+    subject: await subjectOf(subjectId), target: { kind, id: tid, post: postId, url: postId ? await require("./feedstore").postLink(postId) : null },     // 1.99dv: url
     records, sameIp: shape(await others("ip_hash", hashes)), sameDevice: shape(await others("session_hash", devs)),
     history: await historyOf(subjectId), windowDays: SAME_IP_DAYS, rawDays: RAW_DAYS,
   };
@@ -219,10 +219,12 @@ async function historyOf(userId) {
   const against = await q(`SELECT r.reason, COUNT(*) AS n FROM feed_reports r LEFT JOIN feed_posts p ON p.id = r.post_id LEFT JOIN feed_comments c ON c.id = r.comment_id
                            WHERE (r.comment_id IS NULL AND p.author_id = ?1) OR (r.comment_id IS NOT NULL AND c.author_id = ?1) GROUP BY r.reason`, [userId]);
   const userAgainst = await q("SELECT reason, COUNT(*) AS n FROM user_reports WHERE target_id = ? GROUP BY reason", [userId]);
+  // 1.99dv: each post's / comment's canonical address
+  const urls = await require("./feedstore").postLinks(posts.map((p) => p.id).concat(comments.map((c) => c.post_id))).catch(() => new Map());
   return {
-    posts: posts.map((p) => ({ id: p.id, text: String(p.title || p.body || "").slice(0, 100), created: p.created, deleted: !!p.deleted_at,
+    posts: posts.map((p) => ({ id: p.id, url: urls.get(p.id) || null, text: String(p.title || p.body || "").slice(0, 100), created: p.created, deleted: !!p.deleted_at,
                               byAdmin: !!(p.deleted_by && String(p.deleted_by).startsWith("admin:")), hidden: !!p.hidden_at })),
-    comments: comments.map((c) => ({ id: c.id, post: c.post_id, text: String(c.body || "").slice(0, 100), created: c.created, deleted: !!c.deleted_at,
+    comments: comments.map((c) => ({ id: c.id, post: c.post_id, url: urls.has(c.post_id) ? urls.get(c.post_id) + "#c-" + c.id : null, text: String(c.body || "").slice(0, 100), created: c.created, deleted: !!c.deleted_at,
                                      byMod: !!(c.deleted_by && c.deleted_by !== "author") })),
     totals: {
       posts: await n("SELECT COUNT(*) AS n FROM feed_posts WHERE author_id = ?", [userId]),

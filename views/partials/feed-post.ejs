@@ -14,7 +14,7 @@
   const myRooms = p.roomsAll.filter((r) => mods_.has(r.id));
   const v_ = p.myVote || 0;
   const roomsShown = p.rooms.filter((r) => r.id !== ctx_);
-  const url_ = '/feed/p/' + p.id;
+  const url_ = p.url;     // 1.99dv: /p/<pad>/posts/<id>/<slug> (pads.postHref)
   const live_ = p.roomsAll.filter((r) => !r.removed);
   const lockable = staff_ || (live_.length > 0 && live_.every((r) => mods_.has(r.id)));
   const xp_ = p.xpost || null;
@@ -34,15 +34,15 @@
       <% if (p.author.bot) { %>
         <%# 1.99cg: Pepe's own posts - his avatar and the bot badge instead of a name (pepefeed.js) %>
         <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22" aria-hidden="true">
-        <a class="fp-author bot-badge" href="/u/<%= encodeURIComponent(p.author.username) %>/profile" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
+        <a class="fp-author bot-badge" href="/u/<%= encodeURIComponent(p.author.username) %>" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
       <% } else { %>
       <span class="av" style="--h:<%= fx.hue(p.author.username) %>" aria-hidden="true"><%= fx.initial(p.author.display) %></span>
-      <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>/profile"><%= p.author.display %></a>
+      <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>"><%= p.author.display %></a>
       <% } %>
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length) { %>
         <span class="dot" aria-hidden="true">·</span>
-        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><% if (r.profile) { %><%# 1.99df: a profile post shows u/<username> where the pad would be %><a class="fp-room fp-user<%= r.removed ? ' off' : '' %>" href="/u/<%= encodeURIComponent(r.profile) %>/profile" title="<%= r.profile %>'s profile">u/<%= r.profile %><%= r.removed ? ' (removed)' : '' %></a><% } else { %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>" title="<%= r.title %>">p/<%= r.slug %><%= r.removed ? ' (removed)' : '' %></a><% } %><% }) %></span>
+        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><% if (r.profile) { %><%# 1.99df: a profile post shows u/<username> where the pad would be %><a class="fp-room fp-user<%= r.removed ? ' off' : '' %>" href="/u/<%= encodeURIComponent(r.profile) %>" title="<%= r.profile %>'s profile">u/<%= r.profile %><%= r.removed ? ' (removed)' : '' %></a><% } else { %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>" title="<%= r.title %>">p/<%= r.slug %><%= r.removed ? ' (removed)' : '' %></a><% } %><% }) %></span>
       <% } %>
       <span class="dot" aria-hidden="true">·</span>
       <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a>
@@ -61,16 +61,16 @@
       </div>
     <% } %>
     <% if (xp_) { %>
-      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from && xp_.from.profile) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/u/<%= encodeURIComponent(xp_.from.profile) %>/profile">u/<%= xp_.from.profile %></a><% } else if (xp_.from) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>/profile">u/<%= xp_.author.username %></a><% } %></span></p>
+      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from && xp_.from.profile) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/u/<%= encodeURIComponent(xp_.from.profile) %>">u/<%= xp_.from.profile %></a><% } else if (xp_.from) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>">u/<%= xp_.author.username %></a><% } %></span></p>
     <% } %>
     <div class="fp-content<%= p.nsfw ? ' blur' : '' %>">
       <% if (xp_) { %>
         <% if (xp_.post && !(xp_.removed && !staff_)) { const o_ = xp_.post; %>
           <div class="fp-xbox<%= xp_.removed ? ' is-gone' : '' %>">
             <% if (xp_.removed) { %><span class="tag warn">Original removed · staff view</span><% } %>
-            <a class="fp-xtitle" href="/feed/p/<%= o_.id %>"><%= o_.title || (o_.link && o_.link.title) || 'View the original post' %></a>
-            <%- include('feed-post-content', { q: Object.assign({}, o_, { nsfw: p.nsfw }), fx, embeds, host, detail_, signed, url_: '/feed/p/' + o_.id }) %>
-            <a class="fp-xorig" href="/feed/p/<%= o_.id %>"><%- fx.icon('comment') %><span><%= fx.num(o_.score) %> points · <%= fx.num(o_.comments) %> comment<%= o_.comments === 1 ? '' : 's' %> on the original</span></a>
+            <a class="fp-xtitle" href="<%= o_.url %>"><%= o_.title || (o_.link && o_.link.title) || 'View the original post' %></a>
+            <%- include('feed-post-content', { q: Object.assign({}, o_, { nsfw: p.nsfw }), fx, embeds, host, detail_, signed, url_: o_.url }) %>
+            <a class="fp-xorig" href="<%= o_.url %>"><%- fx.icon('comment') %><span><%= fx.num(o_.score) %> points · <%= fx.num(o_.comments) %> comment<%= o_.comments === 1 ? '' : 's' %> on the original</span></a>
           </div>
         <% } else { %>
           <div class="fp-xbox is-gone"><p class="fp-xgone"><%- fx.icon('remove') %>The original post was removed.</p></div>
@@ -81,7 +81,7 @@
       <% if (p.nsfw && signed) { %><button type="button" class="fp-reveal" data-act="reveal">NSFW — click to show</button><% } %>
     </div>
     <% if (p.xcount) { %>
-      <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> pad<%= p.xcount === 1 ? '' : 's' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="/feed/p/<%= x.id %>"><%= x.label || 'p/' + x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
+      <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> pad<%= p.xcount === 1 ? '' : 's' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="<%= x.url %>"><%= x.label || 'p/' + x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
     <% } %>
     <div class="bar fp-bar">
       <a class="act" href="<%= url_ %>#comments"><%- fx.icon('comment') %><span><%= fx.num(p.comments) %><span class="lg"> comment<%= p.comments === 1 ? '' : 's' %></span></span></a>
@@ -108,7 +108,7 @@
                 <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%= viewer && viewer.username === r.profile ? 'Your profile' : 'u/' + r.profile %></span></div>
                 <% if (lockable && !staff_) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= p.locked ? 'unlock' : 'lock' %>"<%- q_ %>><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%= p.locked ? 'Unlock comments' : 'Lock comments' %></button><% } %>
                 <% if (p.mine && !p.deleted) { %><button type="button" role="menuitem" data-act="in-all" data-on="<%= p.inAll ? '0' : '1' %>"><%- fx.icon(p.inAll ? 'hide' : 'show') %><%= p.inAll ? 'Keep out of All' : 'Also show in All' %></button><% } %>
-                <a role="menuitem" href="/u/<%= encodeURIComponent(r.profile) %>/profile#profile-settings"><%- fx.icon('flag') %>Profile feed settings</a>
+                <a role="menuitem" href="/u/<%= encodeURIComponent(r.profile) %>/posts#profile-settings"><%- fx.icon('flag') %>Profile feed settings</a>
               <% return; } %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%= r.title %></span></div>
               <% if (r.pending) { %>

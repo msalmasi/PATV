@@ -1,6 +1,8 @@
 // feedweb.js — the feed's pages and APIs (1.99bv): /feed (posts + Pepe's clips & snaps, room
-// filter), /feed/p/:id (a post and its comments), /feed/admin (reports, settings, bans), the room
-// page's Feed section (bridge.js calls roomFeed), chunked uploads, link previews and the files.
+// filter), a post and its comments (1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>;
+// the old /feed/p/<id> 301s there), /feed/admin (reports, settings, bans), the room page's Feed section
+// (bridge.js calls roomFeed), chunked uploads, link previews and the files (1.99dv: /media/f/<file>; the old
+// /feed/f/<file> 301s there).
 //
 // Every write is JSON with X-Requested-With: fetch from this site (sameSite) - a cross-site form or
 // image tag can't send that. Data and rules: feedstore.js. Upload pipeline: feedmedia.js. Link
@@ -53,7 +55,7 @@ function ago(ms, now = Date.now()) {
   if (s < 30 * 86400) return Math.floor(s / 86400) + "d";
   return new Date(ms).toISOString().slice(0, 10);
 }
-const fileUrl = (name) => (name && media.FILE_RE.test(name) ? "/feed/f/" + name : null);
+const fileUrl = (name) => (name && media.FILE_RE.test(name) ? "/media/f/" + name : null);     // 1.99dv: was /feed/f/
 
 // ── one icon set for every post / comment control (24-unit grid, stroke = currentColor) ──
 const ICON_PATHS = {
@@ -359,7 +361,12 @@ function register(app, { addUser, isBotToken }) {
     } catch (e) { fail(res, e); }
   });
 
-  app.get("/feed/p/:id", addUser, async (req, res) => {
+  // 1.99dv: a post's address is /p/<pad>/posts/<id>/<title-slug> (its first live pad) or /u/<username>/posts/<id>/<title-slug>
+  // (a profile post) - pads.postHref. The id alone resolves: any other pad / username / slug, no slug, and the old
+  // /feed/p/<id>, 301 to the canonical address with the query string kept (the browser keeps the #anchor). A post the
+  // viewer may not see 404s on every address, before any redirect (its canonical address carries its title).
+  app.get(["/feed/p/:id", "/p/:pad/posts/:id", "/p/:pad/posts/:id/:slug", "/u/:username/posts/:id", "/u/:username/posts/:id/:slug"], addUser, async (req, res, next) => {
+    if (!/^[A-Za-z0-9]{8,16}$/.test(String(req.params.id || ""))) return next();
     try {
       const viewer = await viewerOf(req);
       const p = await store.get(req.params.id, viewer, { detail: true });
@@ -372,12 +379,13 @@ function register(app, { addUser, isBotToken }) {
         return res.status(404).render("notFound", { user: viewer ? viewer.username : null, heading: "Post not found",
           message: "It was deleted, or it never existed.", title: "Post not found" });
       }
+      if ((req.baseUrl + req.path).replace(/\/+$/, "") !== p.url) return res.redirect(301, p.url + require("./pads").qsOf(req));
       const csort = store.cleanCSort(req.query.csort);
       const C = await store.comments(p.id, viewer, csort);
       const desc = (p.nsfw ? "NSFW post" : (p.body || (p.link && p.link.title) || "")).replace(/\s+/g, " ").slice(0, 180) || "A post on the PATV feed";
       res.locals.og = { title: (p.nsfw ? "[NSFW] " : "") + (p.title || (p.link && p.link.title) || `Post by ${p.author.display}`).slice(0, 90) + " — PATV feed",
                         description: desc, image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent((p.title || "PATV feed").slice(0, 60)),
-                        url: res.locals.ogBase + "/feed/p/" + p.id };
+                        url: res.locals.ogBase + p.url };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
       res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
                            reasons: store.REASONS, staff, termsEnforced: terms.enforced(), termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false,
@@ -411,7 +419,11 @@ function register(app, { addUser, isBotToken }) {
   });
 
   // ── files ──
-  app.get("/feed/f/:file", addUser, async (req, res) => {
+  // 1.99dv: uploaded / processed media live under /media/ - a post's files at /media/f/<file> (captures stay
+  // /media/<id>, DM pictures stay /messages/media/<file>: private, checked per conversation). The old /feed/f/<file>
+  // 301s (embeds, OG images, saved drafts and Pepe's fetches all follow a redirect; the file's own rules run at /media/f/).
+  app.get("/feed/f/:file", (req, res) => res.redirect(301, "/media/f/" + encodeURIComponent(String(req.params.file || "")) + require("./pads").qsOf(req)));
+  app.get("/media/f/:file", addUser, async (req, res) => {
     const name = String(req.params.file || "");
     const p = media.filePath(name);
     if (!p) return res.status(404).end();
@@ -649,7 +661,7 @@ function register(app, { addUser, isBotToken }) {
       if (await termsGate(req)) return termsRefusal(res);
       const p = await store.create(req.user.userId, req.body || {}, { preview: previewDep });
       await record(req, { kind: "post", id: p.id, postId: p.id, event: "create" });
-      res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id });
+      res.json({ ok: true, id: p.id, url: p.url });
     } catch (e) { fail(res, e); }
   });
   // 1.99ci: crosspost {community, title?} -> a new post in that community embedding this one
@@ -667,7 +679,7 @@ function register(app, { addUser, isBotToken }) {
       }
       const p = await store.crosspost(req.user.userId, String(req.params.id), { community: b.community, title: b.title, announce: b.announce });
       await record(req, { kind: "post", id: p.id, postId: p.id, event: "crosspost" });
-      res.json({ ok: true, id: p.id, url: "/feed/p/" + p.id, pending: !!p.pendingApproval, community: p.rooms[0] || (p.roomsAll[0] || null) });
+      res.json({ ok: true, id: p.id, url: p.url, pending: !!p.pendingApproval, community: p.rooms[0] || (p.roomsAll[0] || null) });
     } catch (e) { fail(res, e); }
   });
   const postAct = (path, fn) => app.post("/api/feed/posts/:id/" + path, addUser, guard(false), async (req, res) => {

@@ -295,12 +295,12 @@ function authView(req, extra) {
 }
 
 app.get("/register", addUser, (req, res) => {
-  if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}/profile`);
+  if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}`);
   res.render("register", authView(req));
 });
 
 app.get("/login", addUser, (req, res) => {
-  if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}/profile`);
+  if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}`);
   res.render("login", authView(req));
 });
 
@@ -475,7 +475,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
         );
         await twitchLogin.save(twitchUser.id, twitchUser.login);
         // Award Badge
-        return res.redirect(`/u/${currentUser.username}/profile/edit`);
+        return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
       }
     } else {
       // Handle new or returning Twitch users
@@ -586,13 +586,13 @@ function pendingConflict(req, provider) {
 async function conflictPage(req, res, provider) {
   const L = LINKS[provider];
   const c = pendingConflict(req, provider);
-  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/profile/edit` : "/login");
+  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/edit` : "/login");
   try {
     const other = (await getQuery("SELECT username, displayname, points_balance FROM users WHERE userId = ?", [c.existingUserId]))[0];
     if (!other) {
       delete req.session.conflict;
       req.flash("error", `That ${L.label} account's other PATV account no longer exists. Try linking ${L.label} again.`);
-      return res.redirect(`/u/${encodeURIComponent(req.user.username)}/profile/edit`);
+      return res.redirect(`/u/${encodeURIComponent(req.user.username)}/edit`);
     }
     res.render("resolve-conflict", {
       user: req.user.username,
@@ -615,7 +615,7 @@ async function mergeConflict(req, res, provider) {
   const L = LINKS[provider];
   if (!guard.sameSite(req)) return res.status(403).send("Cross-site request refused");
   const c = pendingConflict(req, provider);
-  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/profile/edit` : "/login");
+  if (!c) return res.redirect(req.user ? `/u/${encodeURIComponent(req.user.username)}/edit` : "/login");
   const body = req.body || {};
   if (body.decision === "yes" && body.confirm !== "1") {
     req.flash("error", "Tick the box to confirm the merge.");
@@ -623,7 +623,7 @@ async function mergeConflict(req, res, provider) {
   }
   // one decision per conflict: a double-submit or a replay finds nothing pending
   delete req.session.conflict;
-  const edit = `/u/${encodeURIComponent(req.user.username)}/profile/edit`;
+  const edit = `/u/${encodeURIComponent(req.user.username)}/edit`;
   if (body.decision !== "yes") {
     req.flash("success", `Kept separate - your ${L.label} stays linked to the other account.`);
     return res.redirect(edit);
@@ -771,7 +771,7 @@ app.get("/auth/discord/callback", async (req, res) => {
           "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
           [discordUser.id, discordUser.username, 1, currentUser.userId]
         );
-        return res.redirect(`/u/${currentUser.username}/profile/edit`);
+        return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
       }
     } else {
       // Handle new or returning Discord users
@@ -1330,8 +1330,11 @@ app.post("/logout", (req, res) => {
   res.redirect("/");
 });
 
+// 1.99dv: the profile is /u/<username> (was /u/<username>/profile) - its default tab (Posts) - and each tab is a path:
+// /u/<username>/posts, /u/<username>/overview, /u/<username>/analytics; the editor is /u/<username>/edit. The old
+// addresses (/profile, /profile?tab=, /profile/edit) 301 (pads.js).
 // Get user profile
-app.get("/u/:username/profile", addUser, async (req, res) => {
+app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   const usernameProfile = req.params.username; // Fallback to null if no user in session
   const sql =
@@ -1384,7 +1387,7 @@ app.get("/u/:username/profile", addUser, async (req, res) => {
         layout: L,
         // 1.99du: the profile's tabs (profilelayout.tabsFor / pickTab) - ?tab= picks the open one, Posts by default
         profileLayoutMod: profileLayout,
-        profileTab: String(req.query.tab || "").slice(0, 20),
+        profileTab: String(req.params.tab || req.query.tab || "").slice(0, 20),     // 1.99dv: the path picks the tab
         // 1.99bz: the Posts panel (layout section "posts") + follower counts and the Follow button
         // 1.99df: the Posts panel is the profile feed (sorts, the owner's composer) - its query string and the host for embeds
         social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
@@ -2020,9 +2023,9 @@ app.get("/api/u/:username/avatar", addUser, async (req, res) => {
   }
 });
 
-// Get user profile editor
+// Get user profile editor (1.99dv: was /u/:username/profile/edit)
 app.get(
-  "/u/:username/profile/edit",
+  "/u/:username/edit",
   authenticateToken,
   addUser,
   async (req, res) => {
@@ -2065,7 +2068,7 @@ app.get(
           res.status(404).send("User not found.");
         }
       } else {
-        res.redirect(`/u/${username}/profile/edit`);
+        res.redirect(`/u/${encodeURIComponent(username || "")}/edit`);
       }
     } catch (error) {
       console.error("Failed to retrieve user data:", error);

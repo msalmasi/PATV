@@ -108,7 +108,7 @@ test("signed-in members see the analytics, privacy respected", async () => {
   const html = await r.text();
   assert.match(html, /football/);
   assert.match(html, /chaotic but friendly/);
-  assert.match(html, /href="\/u\/alice\/profile"/, "a linked public profile is linked");
+  assert.match(html, /href="\/u\/alice"/, "a linked public profile is linked");
   assert.match(html, />Carol</, "an unlinked regular is shown by their Camfrog name");
   assert.doesNotMatch(html, /ShyPerson/, "someone who hides Analytics on their profile is never named");
   assert.match(html, /\+1 regular keep their activity private/);

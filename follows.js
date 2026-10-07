@@ -64,7 +64,7 @@ async function resolve(kind, id) {
                              ${C.has("archived_at") ? "archived_at" : "NULL AS archived_at"} FROM users WHERE userId = ? OR username = ?
                              ORDER BY (userId = ?) DESC LIMIT 1`, [raw, raw, raw]))[0];   // pages use the username (no internal ids in HTML)
   if (!u || u.archived_at) return null;
-  return { kind, id: u.userId, label: u.displayname || u.username, username: u.username, href: "/u/" + encodeURIComponent(u.username) + "/profile" };
+  return { kind, id: u.userId, label: u.displayname || u.username, username: u.username, href: "/u/" + encodeURIComponent(u.username) };
 }
 
 async function follow(user, kind, id, on = true) {
@@ -179,7 +179,7 @@ async function notifyNewPost(post, authorName) {
     let n = 0;
     for (const r of rows) {
       const ok = await inbox.addSafe(r.follower, { kind: "follow", title: `${authorName} posted${where}`, body: post.nsfw ? what : `"${what}"`,
-                                                   link: "/feed/p/" + post.id, ref: "follow-post:" + post.id });
+                                                   link: post.url || "/feed/p/" + post.id, ref: "follow-post:" + post.id });
       if (ok) n++;
     }
     return n;

@@ -115,6 +115,14 @@ async function call(method, url, u, body) {
   return { status: r.status, d, text, location: r.headers.get("location") };
 }
 const post = (url, u, body) => call("POST", url, u, body);
+// 1.99dv: a post's page - the old /feed/p/<id> 301s to its canonical /p/<pad>/posts/<id>/<slug> (or /u/<name>/posts/...)
+async function postPage(id, u) {
+  const r = await call("GET", "/feed/p/" + id, u);
+  if (r.status !== 301) return r;
+  assert.match(r.location, new RegExp("^/(p|u)/[^/]+/posts/" + id + "(/[a-z0-9-]+)?$"), "the old post address 301s to the canonical one");
+  return call("GET", r.location, u);
+}
+
 const page = (url, u) => call("GET", url, u);
 const mkPost = async (u, body) => { const r = await post("/api/feed/posts", u, body); assert.equal(r.status, 200, JSON.stringify(r.d)); return r.d.id; };
 const xpost = (u, id, body) => post(`/api/feed/posts/${id}/crosspost`, u, body);
@@ -143,8 +151,8 @@ test("communities_v1: main-feed-only posts move to the Camfrog Lounge (counted),
   assert.ok(!(await inLounge("legacyMain01")));
   await store.restoreToRoom(U.admin, "legacyMain01", LOUNGE);
   // the old main-feed flag no longer decides anything; links keep working
-  assert.equal((await page("/feed/p/legacyRoom04", U.bob)).status, 200);
-  assert.equal((await page("/feed/p/legacyMain01", null)).status, 200);
+  assert.equal((await postPage("legacyRoom04", U.bob)).status, 200);
+  assert.equal((await postPage("legacyMain01", null)).status, 200);
 });
 
 // ───────────────────────────── the All query ─────────────────────────────
@@ -262,11 +270,11 @@ test("crosspost: a new post in the target linking the original; files referenced
   // the original's author is told
   assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.alice.userId, "feed-xp:" + x])).length, 1);
   // pages: the crosspost card + "crossposted to"
-  const px = (await page(`/feed/p/${x}`, U.carol)).text;
-  assert.match(px, /Crossposted from <span class="pad-plat pp-camfrog sm" title="A Camfrog Pad[^"]*">🐸<\/span> <a href="\/p\/plant-based-chatting">p\/plant-based-chatting<\/a> by <a href="\/u\/alice\/profile">u\/alice<\/a>/);
-  assert.ok(px.includes(`/feed/f/${file}`) && px.includes('class="fp-xbox"'));
+  const px = (await postPage(x, U.carol)).text;
+  assert.match(px, /Crossposted from <span class="pad-plat pp-camfrog sm" title="A Camfrog Pad[^"]*">🐸<\/span> <a href="\/p\/plant-based-chatting">p\/plant-based-chatting<\/a> by <a href="\/u\/alice">u\/alice<\/a>/);
+  assert.ok(px.includes(`/media/f/${file}`) && px.includes('class="fp-xbox"'));
   assert.ok(px.includes('data-act="crosspost"'), "the post page has a Crosspost button");
-  const po = (await page(`/feed/p/${orig}`, U.carol)).text;
+  const po = (await postPage(orig, U.carol)).text;
   assert.match(po, /Crossposted to 1 pad:/);
   const all = (await page("/feed?sort=new", U.carol)).text;
   assert.ok(all.includes('data-act="crosspost"') && all.includes("Crossposted from"));
@@ -331,7 +339,7 @@ test("crosspost rules: the target's who-can-post, approval queue, bans and rate 
   assert.equal(Y.xpost.removed, true);
   assert.equal(Y.xpost.post, null, "no content for members");
   assert.ok((await store.get(y, U.admin)).xpost.post, "staff still see it");
-  const py = (await page(`/feed/p/${y}`, U.bob)).text;
+  const py = (await postPage(y, U.bob)).text;
   assert.ok(py.includes("The original post was removed.") && !py.includes('class="fp-xtitle"'), "the crosspost keeps its own title, the embed is gone");
   assert.equal((await xpost(U.bob, y, { community: ROOM_C })).status, 404, "nothing left to crosspost");
   // an owner taking the original out of all its communities counts as removed too
@@ -436,10 +444,10 @@ test("redirects (1.99ck): every old room / community address 301s to its /p/ add
     assert.equal(r.status, 301, from);
     assert.equal(r.location, to, from);
   }
-  // signed out too, and the post permalink /feed/p/<id> is NOT a pad address
+  // signed out too, and the old post permalink /feed/p/<id> is NOT a pad address (1.99dv: it 301s to the post's address)
   assert.equal((await page("/rooms/patv-lounge", null)).location, "/p/camfrog-lounge", "1.99x: a retired slug goes straight to the current one");
   const id = await mkPost(U.alice, { body: "permalink", community: LOUNGE });
-  assert.equal((await page("/feed/p/" + id, U.bob)).status, 200);
+  assert.equal((await postPage(id, U.bob)).status, 200);
 });
 
 test("p/<slug> autolinks (1.99ck): known pads in post and comment text link to /p/<slug>; unknown ones, URLs and words stay text", async () => {
@@ -457,7 +465,7 @@ test("p/<slug> autolinks (1.99ck): known pads in post and comment text link to /
   // on a page: a post body and a comment body
   const id = await mkPost(U.alice, { body: "cross-pad shoutout to p/plant-based-chatting", community: LOUNGE });
   assert.equal((await post(`/api/feed/posts/${id}/comments`, U.bob, { body: "agreed, p/patv-lounge rules" })).status, 200);
-  const html = (await page("/feed/p/" + id, U.bob)).text;
+  const html = (await postPage(id, U.bob)).text;
   assert.ok(html.includes('shoutout to <a class="pad-ref" href="/p/plant-based-chatting">p/plant-based-chatting</a>'));
   assert.ok(html.includes('agreed, <a class="pad-ref" href="/p/camfrog-lounge">p/patv-lounge</a> rules'));
 });
@@ -471,7 +479,7 @@ test("Hot on PATV: the top 5 hot posts across All; signed-out visitors never see
   const out = await web.hotMini(null);
   assert.equal(out.posts.length, 5);
   assert.ok(!out.posts.some((p) => p.nsfw || p.id === ids[5]), "signed out: no NSFW (the newest, hottest one is NSFW)");
-  for (const p of out.posts) assert.ok(p.url.startsWith("/feed/p/") && p.community && typeof p.score === "number" && typeof p.comments === "number");
+  for (const p of out.posts) assert.ok(p.url.startsWith("/p/") && p.url.includes("/posts/" + p.id) && p.community && typeof p.score === "number" && typeof p.comments === "number");
   const signed = await web.hotMini(U.bob);
   assert.ok(signed.posts.some((p) => p.id === ids[5] && p.nsfw && p.thumb === null), "members see it flagged, never its picture");
   const html = await ejs.renderFile(path.join(repo, "views/partials/home-hot.ejs"), { hot: out, fx: web.fx });
@@ -503,7 +511,7 @@ test("multi-pad crosspost: one crosspost per pad (own votes + comments), the new
   assert.equal(r.status, 200, JSON.stringify(r.d));
   assert.deepEqual([r.d.created, r.d.pending, r.d.refused], [3, 0, 0]);
   assert.deepEqual(r.d.results.map((x) => [x.pad.id, x.status]), [[ROOM_C, "created"], [LOUNGE, "created"], [X1, "created"]]);
-  for (const x of r.d.results) assert.equal(x.url, "/feed/p/" + x.id);
+  for (const x of r.d.results) assert.equal(x.url, await store.postPath(x.id));
   const rows = await xrows(orig);
   assert.deepEqual(rows.map((x) => x.room_id).sort(), [ROOM_C, LOUNGE, X1].sort());
   assert.equal(new Set(rows.map((x) => x.id)).size, 3, "three separate posts");
@@ -654,7 +662,7 @@ test("multi-pad crosspost: the old single-pad API still works the old way", asyn
   const before = (await xnotices(U.alice)).length;
   let r = await xpost(U.bob, orig, { community: slug(X1), title: "single" });
   assert.equal(r.status, 200);
-  assert.ok(r.d.id && r.d.url === "/feed/p/" + r.d.id && r.d.pending === false && r.d.community && !("results" in r.d));
+  assert.ok(r.d.id && r.d.url === "/p/" + slug(X1) + "/posts/" + r.d.id + "/single" && r.d.pending === false && r.d.community && !("results" in r.d));
   assert.equal(r.d.community.id, X1);
   assert.equal((await store.getRow(r.d.id)).title, "single");
   assert.equal((await xnotices(U.alice)).length, before + 1);

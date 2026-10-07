@@ -18,7 +18,7 @@
   function render(S) {
     var o = S.open || [];
     $('openRows').innerHTML = o.length ? o.map(function (s) {
-      return '<tr><td><a href="/u/' + encodeURIComponent(s.username) + '/profile">' + esc(s.display) + '</a>' + (s.title ? '<br><span class="muted">' + esc(s.title) + '</span>' : '') + '</td>' +
+      return '<tr><td><a href="/u/' + encodeURIComponent(s.username) + '">' + esc(s.display) + '</a>' + (s.title ? '<br><span class="muted">' + esc(s.title) + '</span>' : '') + '</td>' +
         '<td>' + (s.live ? '<span class="live-tag">● LIVE</span>' : esc(s.status === 'waiting' ? 'waiting to go live' : 'off air')) +
         (s.featured ? ' <span class="tag gold">★ ' + (s.feature_by === 'paid' ? 'paid feature' : 'featured') + '</span>' : '') + '</td>' +
         '<td>' + src(s) + '</td><td class="num">' + mmss(s.live_seconds) + '</td><td class="num">' + fmt(s.charged) + ' / ' + fmt(s.held) + '</td>' +

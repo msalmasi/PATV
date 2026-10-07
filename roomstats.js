@@ -251,7 +251,7 @@ async function forRoom(r, slug) {
     for (const p of list) {
       const a = priv.get(p.login);
       if (a && a.private) { hidden++; continue; }
-      shown.push({ ...p, href: a && a.username ? `/u/${encodeURIComponent(a.username)}/profile` : null });
+      shown.push({ ...p, href: a && a.username ? `/u/${encodeURIComponent(a.username)}` : null });
     }
     return { shown, hidden };
   };

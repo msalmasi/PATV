@@ -234,7 +234,7 @@
 
   <%- include('partials/actions', { acts, msg }) %>
   <% if (me && !me.camfrog) { %>
-    <div class="notice">Buying and gifting new items runs through Pepe as your Camfrog name — <a href="/u/<%= me.username %>/profile/edit">link your Camfrog name</a> first. Equipping, listing and gifting items you already own work without it.</div>
+    <div class="notice">Buying and gifting new items runs through Pepe as your Camfrog name — <a href="/u/<%= me.username %>/edit">link your Camfrog name</a> first. Equipping, listing and gifting items you already own work without it.</div>
   <% } %>
 
   <nav class="tabs" id="tabs">
@@ -298,7 +298,7 @@
             <% preview(l.r) %>
             <div class="cxp-title"><b><%= l.item.name %></b><span class="cxp-rar"><%= l.item.rarity %></span></div>
             <% chips(l.item) %>
-            <div class="cxp-src">listing #<%= l.id %> · by <a href="/u/<%= encodeURIComponent(l.seller || '') %>/profile"><%= l.seller_display || l.seller %></a></div>
+            <div class="cxp-src">listing #<%= l.id %> · by <a href="/u/<%= encodeURIComponent(l.seller || '') %>"><%= l.seller_display || l.seller %></a></div>
             <div class="cxp-price"><%= fmt(l.price) %> PAT</div>
             <% if (!me) { %>
               <div class="cxp-muted"><a href="/login">Sign in</a> to buy.</div>
@@ -326,7 +326,7 @@
     <% } else { %>
       <div class="look">
         <div>
-          <div class="cxp-muted" style="margin-bottom:6px">Your look right now · <a href="/u/<%= me.username %>/profile">see your profile</a></div>
+          <div class="cxp-muted" style="margin-bottom:6px">Your look right now · <a href="/u/<%= me.username %>">see your profile</a></div>
           <% mini({ banner: equippedR.profile_banner, border: equippedR.profile_border, effect: equippedR.profile_effect, deco: equippedR.avatar_decoration, name: equippedR.name_color }) %>
         </div>
         <% { const L = {}; GTF_KINDS.forEach((k) => { if (equippedR[k]) L[equippedR[k].opt] = equippedR[k].layer; }); gtfBox(L, 96); } %>
@@ -428,7 +428,7 @@
       <h2>Trading</h2>
       <p>Every item you own is a copy that can change hands. List a copy on the <a href="/cosmetics?tab=market#tabs">market</a> at your price (at least <%= fmt(listMin) %> PAT); it's unequipped and locked while it's listed, and you can cancel any time. When someone buys it Pepe moves the PAT — the seller gets the price minus a <%= fee %>% market fee.</p>
       <h2>Wearing them</h2>
-      <p>One item per slot. Account cosmetics show on your <% if (me) { %><a href="/u/<%= me.username %>/profile">profile</a><% } else { %>profile<% } %> (name colors also show on the rankings); GTF gear shows on your pixel avatar in heists. In a Camfrog room, <code>!equip</code> works too.</p>
+      <p>One item per slot. Account cosmetics show on your <% if (me) { %><a href="/u/<%= me.username %>">profile</a><% } else { %>profile<% } %> (name colors also show on the rankings); GTF gear shows on your pixel avatar in heists. In a Camfrog room, <code>!equip</code> works too.</p>
     </section>
   <% } %>
 </div>

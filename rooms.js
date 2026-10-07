@@ -268,7 +268,7 @@ function view(r) {
     house: r.owner_kind === "house",
     platform: cleanPlatform(r.platform, r.room_id),                  // 1.99x: camfrog | site | twitch | discord
     community: cleanPlatform(r.platform, r.room_id) !== "camfrog",   // 1.99ci: no Camfrog room behind it
-    // 1.99df: a profile pad: whose profile (the label is u/<username>, the link /u/<username>/profile)
+    // 1.99df: a profile pad: whose profile (the label is u/<username>, the link /u/<username>)
     profile: cleanPlatform(r.platform, r.room_id) === "profile" && r.owner_user_id ? { userId: r.owner_user_id, username: r.owner_username || null } : null,
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
   };

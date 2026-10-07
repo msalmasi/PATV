@@ -30,7 +30,7 @@
         <div class="cbar"><span class="hint mut">Commenting as <b><%= viewer.display %></b><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · by commenting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a><%= typeof termsNeeded !== 'undefined' && termsNeeded ? ' (you’ll be asked once)' : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Comment</button></div>
       </form>
     <% } else { %>
-      <div class="cm-signin"><span>Join the conversation</span><a class="btn-s" href="/login?next=<%= encodeURIComponent('/feed/p/' + p.id + '#comments') %>">Sign in to comment</a></div>
+      <div class="cm-signin"><span>Join the conversation</span><a class="btn-s" href="/login?next=<%= encodeURIComponent(p.url + '#comments') %>">Sign in to comment</a></div>
     <% } %>
     <% if (!comments.length) { %><p class="cm-empty mut">No comments yet<%= p.locked ? '' : ' — start the conversation' %>.</p><% } %>
     <ol class="cm-list">

@@ -40,8 +40,8 @@
   }
   function who(r) {
     var s = el('span', 'who'), b = el('b');
-    // 1.99dt: the booker's PATV profile (the server only sends a same-site /u/<name>/profile href)
-    if (r.href && /^\/u\/[^/]+\/profile$/.test(r.href)) { var a = el('a', 'ulink', r.display); a.href = r.href; if (r.username) a.title = r.username; b.appendChild(a); }
+    // 1.99dt: the booker's PATV profile (the server only sends a same-site /u/<name> href - 1.99dv; was /u/<name>/profile)
+    if (r.href && /^\/u\/[^/]+(\/profile)?$/.test(r.href)) { var a = el('a', 'ulink', r.display); a.href = r.href; if (r.username) a.title = r.username; b.appendChild(a); }
     else b.textContent = r.display;
     s.appendChild(b);
     if (r.title) s.appendChild(el('span', 'ttl', r.title));

@@ -1,5 +1,5 @@
 // profilelayout.js — per-user profile layout (2.00): the order of the profile's sections and which
-// ones visitors see. Edited on /u/:username/profile/edit, honoured by /u/:username/profile.
+// ones visitors see. Edited on /u/:username/edit, honoured by /u/:username (1.99dv: was /u/:username/profile[/edit]).
 //
 // Stored per user in profile_layout (user_id -> JSON {order: [...], hidden: [...]}). Everything is
 // validated against SECTIONS / SUBS below: unknown ids are dropped, missing ones are appended in the
@@ -201,7 +201,7 @@ function sameSite(req) {
 function register(app, { addUser }) {
   app.post("/api/u/:username/update/layout", addUser, async (req, res) => {
     if (!req.user || !req.user.userId) return res.redirect("/login");
-    const back = `/u/${encodeURIComponent(req.user.username)}/profile/edit#layout`;
+    const back = `/u/${encodeURIComponent(req.user.username)}/edit#layout`;
     if (req.user.username !== req.params.username) return res.redirect(back);
     if (!sameSite(req)) return res.status(403).send("Forbidden");
     try {

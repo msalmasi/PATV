@@ -220,7 +220,7 @@
 <div class="pe">
   <div class="top">
     <h1>Edit profile</h1>
-    <a class="btn" href="/u/<%= username %>/profile">View profile →</a>
+    <a class="btn" href="/u/<%= username %>">View profile →</a>
   </div>
 
   <% if (verifyInfo) { %>
@@ -351,7 +351,7 @@
       <div class="sr" id="layLive" aria-live="polite"></div>
       <div class="lay-actions">
         <button class="btn primary" type="submit">Save layout</button>
-        <a class="btn" href="/u/<%= username %>/profile?preview=visitor">👁 Preview as visitor</a>
+        <a class="btn" href="/u/<%= username %>?preview=visitor">👁 Preview as visitor</a>
         <button class="btn ghost" type="submit" name="reset" value="1" id="layReset">Reset to default</button>
         <span class="dirty" id="layDirty">Unsaved changes</span>
       </div>

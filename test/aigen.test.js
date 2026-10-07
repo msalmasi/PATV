@@ -208,7 +208,7 @@ test("image: queued -> Pepe starts it -> chunks -> re-encoded attachment flagged
   // the composer's preview
   const v = await get("/api/feed/aigen/" + id, U.alice);
   assert.equal(v.d.job.status, "done");
-  assert.ok(v.d.job.attachment && v.d.job.attachment.url.startsWith("/feed/f/") && !v.d.job.attachment.posted);
+  assert.ok(v.d.job.attachment && v.d.job.attachment.url.startsWith("/media/f/") && !v.d.job.attachment.posted);
   assert.equal((await get("/api/feed/aigen/" + id, U.bob)).status, 404, "only its owner sees a job");
   assert.equal((await fetch(base + v.d.job.attachment.url, { headers: { "x-test-user": U.alice.userId } })).status, 200, "the owner can load the preview");
   assert.equal((await fetch(base + v.d.job.attachment.url, { headers: { "x-test-user": U.bob.userId } })).status, 404, "nobody else (not posted yet)");

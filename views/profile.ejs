@@ -14,9 +14,9 @@
   const hidTag = (id) => L.hidden(id) ? '<span class="pf-hid">\u{1F441} Hidden from visitors</span>' : '';
   const role = (classh || '').toLowerCase();
   const enc = encodeURIComponent(usernameProfile);
-  // Profile URLs in one place: the URL-scheme move maps base -> /u/<name> and tab -> /u/<name>/<tab>.
-  const base = '/u/' + enc + '/profile';
-  const tabHref = (t) => base + '?' + new URLSearchParams(Object.assign(t && t !== 'posts' ? { tab: t } : {}, previewing ? { preview: 'visitor' } : {})).toString();
+  // Profile URLs in one place (1.99dv): the profile is /u/<name>, a tab /u/<name>/<tab> (posts, overview, analytics)
+  const base = '/u/' + enc;
+  const tabHref = (t) => base + (t ? '/' + t : '') + (previewing ? '?preview=visitor' : '');
   // equipped cosmetics (cosmetics.js preloads them for this route)
   const pc = typeof profileCosmetics !== 'undefined' && profileCosmetics ? profileCosmetics : null;
   const cx = (k) => (pc && pc.equipped && pc.equipped[k] ? pc.equipped[k].r : null);
@@ -249,7 +249,7 @@
     </div>
     <div class="actions">
       <% if (isMe) { %>
-        <a class="btn primary" href="/u/<%= username %>/profile/edit">✏️ Edit profile</a>
+        <a class="btn primary" href="/u/<%= encodeURIComponent(username) %>/edit">✏️ Edit profile</a>
         <a class="btn" href="/wallet">👛 Wallet</a>
       <% } else if (!previewing) { %>
         <a class="btn primary" href="/u/<%= enc %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a>
@@ -278,10 +278,10 @@
 
   <% if (previewing) { %>
     <div class="pf-bar preview" role="status"><span>👁 Previewing your profile as a visitor sees it — hidden sections and “only me &amp; admins” panels are left out.</span>
-      <span class="btns"><a class="btn" href="<%= base %>">Back to my view</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span></div>
+      <span class="btns"><a class="btn" href="<%= tabHref(active === 'posts' ? '' : active) %>">Back to my view</a><a class="btn" href="<%= base %>/edit#layout">Edit layout</a></span></div>
   <% } else if (L.seesHidden && L.anyHidden) { %>
     <div class="pf-bar"><span>👁 Greyed-out sections are hidden from visitors<%= isMe ? '' : ' (you see them as an admin)' %>.</span>
-      <% if (isMe) { %><span class="btns"><a class="btn" href="<%= base %>?preview=visitor">Preview as visitor</a><a class="btn" href="/u/<%= usernameProfile %>/profile/edit#layout">Edit layout</a></span><% } %></div>
+      <% if (isMe) { %><span class="btns"><a class="btn" href="<%= base %>?preview=visitor">Preview as visitor</a><a class="btn" href="<%= base %>/edit#layout">Edit layout</a></span><% } %></div>
   <% } %>
 
   <%
@@ -401,6 +401,6 @@
   </div>
 </div>
 <% } %>
-<script src="/public/js/profile-tabs.js?v=1" defer></script>
+<script src="/public/js/profile-tabs.js?v=2" defer></script>
 </body>
 </html>

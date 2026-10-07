@@ -69,11 +69,11 @@ const page = async (p) => (await fetch(base + p)).text();
 
 test("an existing user is linked: display name, profile href, login in the title; 🌐 kept", async () => {
   const h = await page("/markets/27");
-  assert.match(h, /<tr><td><a class="ulink" href="\/u\/pb\/profile" title="foamy1111">Foamy &lt;3<\/a>&nbsp;<span class="ulink-web" title="Made on the website">🌐<\/span><\/td>/);
-  assert.doesNotMatch(h, /\/u\/CFa1b2c3d4\/profile/, "the real account wins over a random CF one on the same login");
+  assert.match(h, /<tr><td><a class="ulink" href="\/u\/pb" title="foamy1111">Foamy &lt;3<\/a>&nbsp;<span class="ulink-web" title="Made on the website">🌐<\/span><\/td>/);
+  assert.doesNotMatch(h, /\/u\/CFa1b2c3d4/, "the real account wins over a random CF one on the same login");
   // the header: creator linked (by Camfrog login), case-insensitive in the trades too
-  assert.match(h, /created by <a class="ulink" href="\/u\/ritchie\/profile" title="ritchiecuh">Ritchie<\/a> in <a class="pad-link" href="\/p\/[a-z0-9_-]+" title="p\/[a-z0-9_-]+">plant_based_chatting<\/a>/);
-  assert.match(h, /<a class="ulink" href="\/u\/ritchie\/profile" title="RitchieCuh">Ritchie<\/a><\/td>/);
+  assert.match(h, /created by <a class="ulink" href="\/u\/ritchie" title="ritchiecuh">Ritchie<\/a> in <a class="pad-link" href="\/p\/[a-z0-9_-]+" title="p\/[a-z0-9_-]+">plant_based_chatting<\/a>/);
+  assert.match(h, /<a class="ulink" href="\/u\/ritchie" title="RitchieCuh">Ritchie<\/a><\/td>/);
 });
 
 test("a missing or archived user stays plain text", async () => {
@@ -88,7 +88,7 @@ test("a missing or archived user stays plain text", async () => {
 test("incognito / anonymised names are never looked up or linked; odd names stay escaped", async () => {
   const h = await page("/markets/27");
   assert.match(h, /<tr><td>someone<\/td>/);
-  assert.doesNotMatch(h, /\/u\/someone\/profile/);
+  assert.doesNotMatch(h, /\/u\/someone/);
   assert.match(h, /<tr><td>&lt;img src=x onerror=alert\(1\)&gt;<\/td>/);
   assert.equal(UL.keyOf("someone"), "");
   assert.equal(UL.keyOf("@Foamy1111"), "foamy1111");

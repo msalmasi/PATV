@@ -368,7 +368,8 @@ test("private media: members only (404 for everyone else), private no-store head
   assert.equal((await fetchFile("/messages/media/../../etc/passwd", U.eli)).status, 404);
   assert.equal((await fetchFile("/messages/media/" + "a".repeat(32) + ".webp", U.eli)).status, 404);
   // the feed's public file route never serves it
-  assert.equal((await fetchFile("/feed/f/" + url.split("/").pop(), U.eli)).status, 404);
+  assert.equal((await fetchFile("/media/f/" + url.split("/").pop(), U.eli)).status, 404);
+  assert.equal((await fetchFile("/feed/f/" + url.split("/").pop(), U.eli)).status, 404, "nor the old /feed/f/ address (it 301s to /media/f/)");
   // clear history hides it from that member only
   await post(`/api/messages/c/${c}/clear`, U.eli, {});
   assert.equal((await fetchFile(thumb, U.eli)).status, 404, "cleared: hidden for eli");
@@ -484,6 +485,10 @@ test("post cards: a PATV post link renders a card; deleted / hidden / removed po
   assert.deepEqual(dmembeds.postIds("see https://publicaccess.tv/feed/p/PostOk01, and http://patv.test/feed/p/PostNsf1 https://evil.example/feed/p/PostDel1 https://publicaccess.tv/feed/p/PostOk01"),
                    ["PostOk01", "PostNsf1"], "known hosts only, de-duplicated");
   assert.deepEqual(dmembeds.postIds("https://publicaccess.tv/feed/p/PostOk01/extra https://publicaccess.tv/p/somepad"), []);
+  // 1.99dv: the new addresses - pad and profile posts, with or without the title slug
+  assert.deepEqual(dmembeds.postIds("https://publicaccess.tv/p/room1/posts/PostOk01/great-clip https://staging.publicaccess.tv/u/ann/posts/PostNsf1 " +
+                                    "https://publicaccess.tv/p/room1/posts/PostDel1/a/b https://publicaccess.tv/p/room1/posts https://publicaccess.tv/u/ann/posts/PostHid1/"),
+                   ["PostOk01", "PostNsf1", "PostHid1"], "old and new post addresses; nothing deeper than the slug");
   dmembeds._clear();
   const g = await group(U.ben, ["cat", "dan"], "Links");
   const s = await sayIn(U.ben, g.d.conversation.id, "https://publicaccess.tv/feed/p/PostOk01 https://publicaccess.tv/feed/p/PostDel1 https://publicaccess.tv/feed/p/PostHid1");
@@ -493,7 +498,8 @@ test("post cards: a PATV post link renders a card; deleted / hidden / removed po
   assert.equal(E[0].title, "Great clip");
   assert.equal(E[0].author.username, "ann");
   assert.equal(E[0].score, 12);
-  assert.equal(E[0].href, "/feed/p/PostOk01");
+  assert.equal(E[0].href, "/p/room1/posts/PostOk01/great-clip", "1.99dv: the card links the canonical address");
+  assert.equal(E[1].href, "/feed/p/PostDel1", "an unavailable post: the short address (no pad, no title)");
   assert.deepEqual(E.slice(1).map((e) => e.unavailable), [true, true]);
   assert.equal(E[1].title, undefined, "nothing about an unavailable post");
   const n = await sayIn(U.ben, g.d.conversation.id, "https://publicaccess.tv/feed/p/PostRem1 https://publicaccess.tv/feed/p/PostNsf1");
@@ -513,7 +519,7 @@ test("the page: share boot data, the new dialogs and the picture button; can't-s
   const html = await r.text();
   for (const id of ["dmNewDlg", "dmMembersDlg", "dmLightbox", "dmAttach", "dmFile", "dmTray", "dmShare"]) assert.ok(html.includes('id="' + id + '"'), id);
   const B = JSON.parse(html.match(/<script type="application\/json" id="dmBoot">([\s\S]*?)<\/script>/)[1]);
-  assert.deepEqual(B.share, { id: "PostNsf1", url: "https://publicaccess.tv/feed/p/PostNsf1" });
+  assert.deepEqual(B.share, { id: "PostNsf1", url: "https://publicaccess.tv/p/room1/posts/PostNsf1/spicy" });
   assert.equal(B.me.pictures, false);
   assert.match(B.me.picturesWhy, /level 2/);
   assert.equal(B.maxPics, 4);

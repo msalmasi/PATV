@@ -198,7 +198,7 @@ test("new-post notices: off by default; on = one inbox notice per post per follo
   const n = await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.carol.userId, "follow-post:" + p2.id]);
   assert.equal(n.length, 1, "followed person AND room: still one notice");
   assert.equal(n[0].kind, "follow");
-  assert.equal(n[0].link, "/feed/p/" + p2.id);
+  assert.equal(n[0].link, "/p/plant-based-chatting/posts/" + p2.id + "/loud-x");
   assert.match(n[0].title, /dave posted in p\/plant-based-chatting/);
   await follows.setPrefs(U.dave, { notify: true });
   await follows.follow(U.dave, "room", ROOM_B, true);
@@ -307,7 +307,7 @@ test("room announcements: 1.99cu each line links the post itself; several posts 
   const a = await store.create(U.alice.userId, { title: "one", rooms: [ROOM_B], announce: [ROOM_B] });
   let m = await store.takeMentions(site);
   assert.equal(m.length, 1);
-  assert.ok(m[0].text.endsWith(`${site}/feed/p/${a.id}`), m[0].text);
+  assert.ok(m[0].text.endsWith(`${site}/p/plant-based-chatting/posts/${a.id}/one`), m[0].text);
   // two posts fit: both links
   await runQuery("DELETE FROM feed_kv WHERE key = ?", ["mention_at:" + ROOM_B]);
   const b = await store.create(U.alice.userId, { title: "two", rooms: [ROOM_B], announce: [ROOM_B] });
@@ -315,7 +315,7 @@ test("room announcements: 1.99cu each line links the post itself; several posts 
   m = await store.takeMentions(site);
   assert.equal(m.length, 1);
   assert.ok(m[0].text.startsWith("📌 2 new posts on p/"), m[0].text);
-  assert.ok(m[0].text.includes(`${site}/feed/p/${b.id}`) && m[0].text.includes(`${site}/feed/p/${c.id}`), m[0].text);
+  assert.ok(m[0].text.includes(`${site}/p/plant-based-chatting/posts/${b.id}/two`) && m[0].text.includes(`${site}/p/plant-based-chatting/posts/${c.id}/three`), m[0].text);
   // too many to fit one line: the newest post + the pad page
   await runQuery("DELETE FROM feed_kv WHERE key = ?", ["mention_at:" + ROOM_B]);
   const ids = [];
@@ -323,7 +323,7 @@ test("room announcements: 1.99cu each line links the post itself; several posts 
   m = await store.takeMentions(site);
   assert.equal(m.length, 1);
   assert.ok(m[0].text.length <= 300, m[0].text.length);
-  assert.ok(m[0].text.includes(`newest: ${site}/feed/p/${ids[8]}`), m[0].text);
+  assert.ok(m[0].text.includes(`newest: ${site}/p/plant-based-chatting/posts/${ids[8]}/bulk-8`), m[0].text);
   assert.ok(m[0].text.includes(`all: ${site}/p/`), m[0].text);
 });
 

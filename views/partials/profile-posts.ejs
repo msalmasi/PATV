@@ -4,19 +4,20 @@
   share, crosspost), sorts, and two views - "All posts" (every post they made, in any pad, as before) and
   "Profile" (only what they posted to their own profile, u/<username>). The owner gets the composer with
   "Your profile" picked and the profile's settings (Pepe answering mentions, who's blocked from commenting).
-  Query: ?psort ?pt ?pp ?pview (profile) - the anchor is #posts. /u/<username> redirects here.
+  Query: ?psort ?pt ?pp ?pview (profile). 1.99dv: its page is /u/<username>/posts (the Posts tab - also the default tab of
+  /u/<username>); the old /u/<username>/profile#posts lands on the tab.
   Locals: social (feedweb.profileSocial), usernameProfile, displayname, isMe
 %><%
   const S_ = social || { posts: [], more: false, sort: 'new', top: 'week', page: 1, view: 'all' };
   const fx_ = S_.fx;
-  const base_ = '/u/' + encodeURIComponent(usernameProfile) + '/profile';
+  const base_ = '/u/' + encodeURIComponent(usernameProfile) + '/posts';
   const pq = (o) => {
     const x = Object.assign({ pview: S_.view === 'profile' ? 'profile' : '', psort: S_.sort === 'new' ? '' : S_.sort, pt: fx_ && fx_.TIMED.has(S_.sort) ? S_.top : '', pp: '' }, o);
     if (x.psort === 'new') x.psort = '';
     if (x.pview === 'all') x.pview = '';
     Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; });
     const s = new URLSearchParams(x).toString();
-    return base_ + (s ? '?' + s : '') + '#posts';
+    return base_ + (s ? '?' + s : '');
   };
   const name_ = displayname || usernameProfile;
 %>
@@ -26,7 +27,7 @@
   <% if (S_.composer) { %>
     <div class="pp-compose" aria-label="Post to your profile">
       <div class="pp-compose-h">✏️ Post to your profile</div>
-      <%- include('feed-composer', { composer: S_.composer, next: base_ + '#posts', fx: fx_ }) %>
+      <%- include('feed-composer', { composer: S_.composer, next: base_, fx: fx_ }) %>
     </div>
   <% } %>
   <h2 id="ppH"><span>📝 Posts · <span class="pp-u">u/<%= usernameProfile %></span></span><a class="pp-all" href="/feed?by=<%= encodeURIComponent(usernameProfile) %>">on the feed ›</a></h2>
@@ -56,7 +57,7 @@
         <h3>Blocked from commenting on your profile</h3>
         <% if (!ST.bans.length) { %><p class="mut">Nobody.</p><% } else { %>
           <ul class="pp-bans">
-            <% ST.bans.forEach((b) => { %><li><a href="/u/<%= encodeURIComponent(b.username || '') %>/profile"><%= b.username %></a><span class="mut"><%= b.until ? ' until ' + new Date(b.until).toISOString().slice(0, 10) : ' · for good' %></span><button type="button" class="btn-g" data-pp-unban="<%= b.userId %>">Unblock</button></li><% }) %>
+            <% ST.bans.forEach((b) => { %><li><a href="/u/<%= encodeURIComponent(b.username || '') %>"><%= b.username %></a><span class="mut"><%= b.until ? ' until ' + new Date(b.until).toISOString().slice(0, 10) : ' · for good' %></span><button type="button" class="btn-g" data-pp-unban="<%= b.userId %>">Unblock</button></li><% }) %>
           </ul>
         <% } %>
         <form class="pp-ban" data-pp-ban novalidate>

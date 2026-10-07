@@ -1,5 +1,6 @@
 // Offline tests for 1.99du: the profile page as a header + tabs.
-//   - Posts is the default tab (and first in the default layout); ?tab= opens another; an unknown tab falls back
+//   - Posts is the default tab (and first in the default layout); the path (1.99dv: /u/<name>/<tab>; was ?tab=) opens
+//     another; an unknown tab falls back
 //   - the owner gets the composer at the top of Posts ("Post to your profile", "Your profile" picked); visitors don't
 //   - privacy: a section hidden in profilelayout drops its tab for visitors (and its data isn't rendered); the owner
 //     sees it greyed; the layout order is the tab order
@@ -104,8 +105,8 @@ async function render(who, opts = {}) {
     gtf: { heistHelp: "/gtf#heists", turfGuide: "/gtf#turf", turfMap: "/gtf#map", gangs: "/gtf#gangs" },
     camfrog: "alicecf", gtfAvatar: { svg, items: opts.items || [] },
     analytics: null, layout: L, profileLayoutMod: layout, profileTab: opts.tab || "",
-    social, previewVisitor: false, avatarActs: owner ? (opts.acts || []) : [], avatarMsg: "", tipJarNew: owner ? 3 : 0,
-    ogBase: "http://test", ogPath: "/u/alice/profile",
+    social, previewVisitor: !!opts.preview, avatarActs: owner ? (opts.acts || []) : [], avatarMsg: "", tipJarNew: owner ? 3 : 0,
+    ogBase: "http://test", ogPath: "/u/alice",
   };
   return ejs.renderFile(path.join(repo, "views", "profile.ejs"), locals);
 }
@@ -189,13 +190,15 @@ test("visitor view: Tip + More (achievements), the feed with sorts, no composer,
   assert.doesNotMatch(html, /New avatar…|Your recent requests/);
 });
 
-test("?tab= opens that tab (deep link); an unknown one falls back to Posts; links are /profile?tab=", async () => {
+test("the tab path opens that tab (deep link); an unknown one falls back to Posts; links are /u/<name>/<tab> (1.99dv)", async () => {
   const html = await render("visitor", { tab: "overview" });
   assert.equal(selected(html), "overview");
   assert.ok(panelOpen(html, "overview"));
   assert.match(html, /id="tab-posts" aria-labelledby="tb-posts" data-panel="posts" hidden>/);
-  assert.match(html, /href="\/u\/alice\/profile\?tab=overview"/);
-  assert.match(html, /href="\/u\/alice\/profile\?" data-tab="posts"/);
+  assert.match(html, /href="\/u\/alice\/overview" data-tab="overview"/);
+  assert.match(html, /href="\/u\/alice\/posts" data-tab="posts"/);
+  assert.doesNotMatch(html, /\/u\/alice\/profile/, "no old profile addresses");
+  assert.match(await render("owner", { tab: "analytics", preview: true }), /href="\/u\/alice\/overview\?preview=visitor"/, "previewing keeps ?preview=visitor on the tabs");
   assert.equal(selected(await render("visitor", { tab: "<script>" })), "posts");
 });
 
@@ -229,7 +232,7 @@ test("GTF popover: configured = wardrobe rows with rarity colours, the heist rol
   assert.match(pop, /Change look/);
   assert.match(pop, /Heist sheet/);
   assert.match(pop, /New avatar…/);
-  assert.match(pop, /name="back" value="\/u\/alice\/profile\?gtf=1"/, "the regen comes back with the popover open");
+  assert.match(pop, /name="back" value="\/u\/alice\?gtf=1"/, "the regen comes back with the popover open");
   // the legacy bare failure reads as a fixed bug; a real reason is shown as sent
   assert.match(pop, /Pepe hit a bug on his side \(since fixed\)/);
   assert.doesNotMatch(pop, />something went wrong</);

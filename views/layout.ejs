@@ -95,7 +95,7 @@
                     <%# 1.99cu: both open the one inbox at /messages - 💬 the conversations, 🔔 its pinned Notices item %>
                     <a href="/messages/notices" id="navBell" class="nav-bell<%= _ib ? ' has' : '' %>" title="Notices<%= _ib ? ' (' + _ib + ' unread)' : '' %>" aria-label="Notices<%= _ib ? ', ' + _ib + ' unread' : '' %>"><span aria-hidden="true">🔔</span><% if (_ib) { %><span class="nav-badge"><%= _ib > 99 ? '99+' : _ib %></span><% } %></a>
                     <div class="avatar">
-                        <a href="/u/<%= user %>/profile" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>
+                        <a href="/u/<%= user %>" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>
                     </div>
                 <% } %>
                 <details class="nav-burger">

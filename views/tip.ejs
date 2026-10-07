@@ -9,7 +9,7 @@
   const cxName = cx('name_color'), cxBorder = cx('profile_border'), cxBanner = cx('profile_banner');
   const showcase = (pc && pc.showcase ? pc.showcase : []).slice(0, 4);
   const av = typeof gtfAvatar !== 'undefined' && gtfAvatar ? gtfAvatar : null;
-  const profileHref = '/u/' + encodeURIComponent(usernameProfile) + '/profile';
+  const profileHref = '/u/' + encodeURIComponent(usernameProfile);
   const tipHref = '/u/' + encodeURIComponent(usernameProfile) + '/tip';
   const signedIn = !!username;
   const canTip = signedIn && !isSelf;
@@ -21,7 +21,7 @@
   const escH = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const nameOf = (u) => !u.username ? 'Someone' : (typeof cosmeticNameHtml === 'function'
     ? cosmeticNameHtml(u.username, u.displayname || u.username) : escH(u.displayname || u.username));
-  const profOf = (u) => '/u/' + encodeURIComponent(u.username) + '/profile';
+  const profOf = (u) => '/u/' + encodeURIComponent(u.username);
   const isFresh = (t) => !!(J && J.seenAt && t.timestamp > J.seenAt);
 %>
 <%- include('partials/cosmetics-css') %>
@@ -427,7 +427,7 @@
     var nm = document.createElement('span'); nm.className = 'nm';
     if (out) { var to = document.createElement('span'); to.className = 'muted'; to.style.fontWeight = 'normal'; to.textContent = 'to '; nm.appendChild(to); }
     if (t.username) {
-      var a = document.createElement('a'); a.href = '/u/' + encodeURIComponent(t.username) + '/profile';
+      var a = document.createElement('a'); a.href = '/u/' + encodeURIComponent(t.username);
       var label = t.displayname || t.username;
       if (t.nameCss) { var c = document.createElement('span'); c.className = 'cx-name'; c.setAttribute('style', t.nameCss); c.textContent = label; a.appendChild(c); }
       else a.textContent = label;

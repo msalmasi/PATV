@@ -185,7 +185,7 @@ test("upload: a real picture goes through the chunked pipeline and becomes a web
   const img = await sharp({ create: { width: 900, height: 600, channels: 3, background: "#468" } }).jpeg({ quality: 95 }).toBuffer();
   const r = await upload(U.alice, "image", img, { chunk: 1000 });
   assert.equal(r.state, "ready", r.error);
-  assert.ok(/^\/feed\/f\/[a-f0-9]{32}_t\.webp$/.test(r.att.url));
+  assert.ok(/^\/media\/f\/[a-f0-9]{32}_t\.webp$/.test(r.att.url));     // 1.99dv: was /feed/f/
   // before it's posted only the uploader (or staff) can fetch it
   assert.equal((await fetch(base + r.att.file, { headers: { "x-test-user": U.alice.userId } })).status, 200);
   assert.equal((await fetch(base + r.att.file, { headers: { "x-test-user": U.bob.userId } })).status, 404);
@@ -328,15 +328,20 @@ test("posting with files: only my own, ready, unposted uploads; at most 4 pictur
   const p = await store.get(ok.d.id, U.alice);
   assert.equal(p.images.length, 1);
   // now public: anyone can fetch it, with safe headers
-  const r = await fetch(base + "/feed/f/" + p.images[0].file);
+  const r = await fetch(base + "/media/f/" + p.images[0].file);
   assert.equal(r.status, 200);
+  // 1.99dv: the old /feed/f/<file> 301s to /media/f/<file>
+  const old = await fetch(base + "/feed/f/" + p.images[0].file + "?v=2", { redirect: "manual" });
+  assert.equal(old.status, 301);
+  assert.equal(old.headers.get("location"), "/media/f/" + p.images[0].file + "?v=2");
   assert.equal(r.headers.get("content-type"), "image/webp");
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
   assert.match(r.headers.get("content-disposition"), /^inline; filename="patv-[a-f0-9]+\.webp"$/);
   assert.match(r.headers.get("content-security-policy"), /sandbox/);
   // bad names never touch the disk
-  assert.equal((await fetch(base + "/feed/f/..%2f..%2fmyapp.db")).status, 404);
-  assert.equal((await fetch(base + "/feed/f/" + "a".repeat(32) + ".html")).status, 404);
+  assert.equal((await fetch(base + "/media/f/..%2f..%2fmyapp.db")).status, 404);
+  assert.equal((await fetch(base + "/media/f/" + "a".repeat(32) + ".html")).status, 404);
+  assert.equal((await fetch(base + "/feed/f/..%2f..%2fmyapp.db")).status, 404, "through the old address's redirect too");
 });
 
 test("permissions: the room owner removes a post from THEIR room only; author edit/delete; admin delete", async () => {
@@ -448,7 +453,7 @@ test("comments: one level of replies, inbox notices to the author and the person
   let n = await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.alice.userId, "feed-c:" + c1.d.id]);
   assert.equal(n.length, 1);
   assert.equal(n[0].kind, "feed");
-  assert.match(n[0].link, new RegExp(`^/feed/p/${P1}#c-`));
+  assert.match(n[0].link, new RegExp(`^/p/[a-z0-9-]+/posts/${P1}/[a-z0-9-]+#c-`));     // 1.99dv: the post's canonical address
   store._gaps.clear();
   const c2 = await post(`/api/feed/posts/${P1}/comments`, U.carol, { body: "agreed", parent: c1.d.id });
   assert.equal((await getQuery("SELECT * FROM inbox WHERE user_id = ? AND ref = ?", [U.bob.userId, "feed-c:" + c2.d.id + ":p"])).length, 1, "bob is told about the reply");
@@ -500,15 +505,15 @@ test("NSFW: author flag, admin override; files need a signed-in viewer", async (
   const x = await post("/api/feed/posts", U.alice, { body: "spicy", attachments: [up.id], nsfw: true });
   const p = await store.get(x.d.id);
   assert.equal(p.nsfw, true);
-  assert.equal((await fetch(base + "/feed/f/" + p.images[0].file)).status, 403, "signed out: refused");
-  assert.equal((await fetch(base + "/feed/f/" + p.images[0].file, { headers: { "x-test-user": U.bob.userId } })).status, 200);
+  assert.equal((await fetch(base + "/media/f/" + p.images[0].file)).status, 403, "signed out: refused");
+  assert.equal((await fetch(base + "/media/f/" + p.images[0].file, { headers: { "x-test-user": U.bob.userId } })).status, 200);
   await post(`/api/feed/posts/${x.d.id}/admin`, U.admin, { nsfw: false });
   assert.equal((await store.get(x.d.id)).nsfw, false, "admin override wins over the author flag");
   assert.equal((await post(`/api/feed/posts/${x.d.id}/admin`, U.bob, { nsfw: true })).status, 403);
   // a deleted post's files are gone for everyone but staff
   await post(`/api/feed/posts/${x.d.id}/delete`, U.alice, {});
-  assert.equal((await fetch(base + "/feed/f/" + p.images[0].file, { headers: { "x-test-user": U.bob.userId } })).status, 404);
-  assert.equal((await fetch(base + "/feed/f/" + p.images[0].file, { headers: { "x-test-user": U.admin.userId } })).status, 200);
+  assert.equal((await fetch(base + "/media/f/" + p.images[0].file, { headers: { "x-test-user": U.bob.userId } })).status, 404);
+  assert.equal((await fetch(base + "/media/f/" + p.images[0].file, { headers: { "x-test-user": U.admin.userId } })).status, 200);
 });
 
 test("cleanup: deleted posts' files purged after the grace period; orphan uploads purged", async () => {
@@ -564,8 +569,8 @@ test("Pepe mentions: an explicit off; the owner's switch; one line per room per 
   assert.equal(m.length, 1);
   assert.equal(m[0].room, ROOM_B);
   // 1.99cu: several posts folded into one line link each post
-  assert.match(m[0].text, /^📌 2 new posts on p\/plant-based-chatting: https?:\/\/\S+\/feed\/p\/\w+ · https?:\/\/\S+\/feed\/p\/\w+$/);
-  assert.ok(m[0].text.includes("/feed/p/" + a.d.id), m[0].text);
+  assert.match(m[0].text, /^📌 2 new posts on p\/plant-based-chatting: https?:\/\/\S+\/p\/plant-based-chatting\/posts\/\w+\/[a-z0-9-]+ · https?:\/\/\S+\/p\/plant-based-chatting\/posts\/\w+\/[a-z0-9-]+$/);
+  assert.ok(m[0].text.includes("/posts/" + a.d.id + "/"), m[0].text);
   assert.equal(m[0].author_login, "bobcf");
   assert.equal((await web.botSync({ feed_mentions: true })).feed_mentions.length, 0, "handed out once");
   store._gaps.clear();

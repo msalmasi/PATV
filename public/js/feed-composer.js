@@ -680,10 +680,11 @@
       errEl.textContent = 'Posted ✔'; errEl.classList.add('ok');
       // stay on a pad page (the new post shows on top of New); elsewhere open the post
       var u = new URL(location.href);
-      // 1.99df: on a profile (the profile feed) - back to its posts
-      if (/^\/u\/[^/]+\/profile\/?$/.test(u.pathname)) { ['psort', 'pp', 'pt'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = 'posts';
+      // 1.99df: on a profile (the profile feed) - back to its posts (1.99dv: the Posts tab, /u/<username>/posts)
+      if (/^\/u\/[^/]+(\/posts)?\/?$/.test(u.pathname)) { ['psort', 'pp', 'pt'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = '';
+        u.pathname = u.pathname.replace(/\/+$/, '').replace(/\/posts$/, '') + '/posts';
         var tp = u.toString();
-        if (tp.split('#')[0] === location.href.split('#')[0]) { location.hash = 'posts'; location.reload(); } else location.href = tp; }
+        if (tp === location.href.split('#')[0]) location.reload(); else location.href = tp; }
       else if (/^\/p\/[^/]+\/?$/.test(u.pathname)) { ['fsort', 'fp', 'sort', 'p', 't', 'ft'].forEach(function (k) { u.searchParams.delete(k); }); u.hash = 'feed';
         var target = u.toString();
         if (target.split('#')[0] === location.href.split('#')[0]) { location.hash = 'feed'; location.reload(); } else location.href = target; }

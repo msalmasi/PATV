@@ -563,14 +563,14 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   const origIds = [...new Set(rows.map((r) => r.crosspost_of).filter(Boolean))];
   const [ORIG, XP] = _inner ? [[], []] : await Promise.all([
     origIds.length ? getQuery(`SELECT * FROM feed_posts WHERE id IN (${origIds.map(() => "?").join(",")})`, origIds) : [],
-    getQuery(`SELECT x.id, x.crosspost_of, pr.room_id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id
+    getQuery(`SELECT x.id, x.crosspost_of, x.title, x.body, pr.room_id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id
               WHERE x.crosspost_of IN (${q}) AND x.deleted_at IS NULL AND x.hidden_at IS NULL AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL`, ids),
   ]);
   const origs = new Map((ORIG.length ? await decorate(ORIG, viewer, { detail, _inner: true }) : []).map((o) => [o.id, o]));
   const staffV = isStaff(viewer);
   const [A, PR, AT, MV, FW] = await Promise.all([
     authors(rows.map((r) => r.author_id)),
-    getQuery(`SELECT post_id, room_id, removed_at, pinned_at, nsfw, hidden_at, pending FROM feed_post_rooms WHERE post_id IN (${q})`, ids),
+    getQuery(`SELECT post_id, room_id, removed_at, pinned_at, nsfw, hidden_at, pending FROM feed_post_rooms WHERE post_id IN (${q}) ORDER BY created, rowid`, ids),
     getQuery(`SELECT * FROM feed_attachments WHERE post_id IN (${q}) AND state = 'ready' ORDER BY sort, created`, ids),
     viewer && viewer.userId ? getQuery(`SELECT post_id, value, w FROM feed_votes WHERE user_id = ? AND post_id IN (${q})`, [viewer.userId, ...ids]) : [],
     // 1.99bz: which of these authors the viewer follows (the author chip's Follow button)
@@ -603,7 +603,10 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     const xps = XP.filter((x) => x.crosspost_of === r.id);
     const crossposts = [...new Map(xps.map((x) => {
       const R = rooms.getCached(x.room_id);
-      return [x.room_id, { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, profile: profileName(R), label: padLabelOf(R, x.room_id) }];
+      const c = { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, profile: profileName(R), label: padLabelOf(R, x.room_id) };
+      // 1.99dv: the crosspost's own address (its pad + its title)
+      c.url = require("./pads").postHref({ id: x.id, title: x.title, body: x.body, roomsAll: [{ id: x.room_id, slug: c.slug, profile: c.profile }] });
+      return [x.room_id, c];
     })).values()];
     const mineRow = !!(viewer && viewer.userId === r.author_id);
     // 1.99di: an AI-generated file carries {prompt (null when the author hid it - they and staff still see it), hidden}
@@ -613,7 +616,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
                                                                                         hidden: !!a.ai_hide_prompt } : null }));
     const link = parseJson(r.link_json);
     const mv = MV.find((v) => v.post_id === r.id);
-    return {
+    const out = {
       id: r.id, title: r.title || "", body: r.body || "", created: r.created, edited: r.edited, score: r.score, comments: r.comments,
       ups: r.ups || 0, downs: r.downs || 0, myVote: mv ? (mv.value > 0 ? 1 : -1) : 0,
       nsfw, nsfwAuthor: !!r.nsfw, nsfwRoom: !!(ctx && ctx.nsfw), pinned: !!(ctx && ctx.pinned), roomHidden: !!(ctx && ctx.hidden), pending: !!(ctx && ctx.pending),
@@ -632,6 +635,8 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       xpost, crossposts, xcount: crossposts.length,
       ai: att.filter((a) => a.ai && a.kind !== "preview"),       // 1.99di: the post's AI-generated files (badge + prompt toggle)
     };
+    out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
+    return out;
   });
 }
 
@@ -772,6 +777,26 @@ async function get(id, viewer, opts = {}) {
   const r = await getRow(id);
   if (!r) return null;
   return (await decorate([r], viewer, opts))[0];
+}
+/** 1.99dv: a post's canonical path (pads.postHref) from its id; `hash` ("#c-<id>", "#comments") is appended. null: no such post. */
+async function postPath(id, hash = "") {
+  const p = await get(id, null, { _inner: true });
+  return p ? p.url + (hash || "") : null;
+}
+/** 1.99dv: many posts' canonical paths at once (admin lists, Pepe's mention lines). -> Map id -> path (missing ids left out). */
+async function postLinks(ids) {
+  const list = [...new Set((ids || []).map(String).filter((x) => ID_RE.test(x)))];
+  const out = new Map();
+  if (!list.length) return out;
+  await init();
+  const rows = await getQuery(`SELECT * FROM feed_posts WHERE id IN (${list.map(() => "?").join(",")})`, list);
+  for (const p of await decorate(rows, null, { _inner: true })) out.set(p.id, p.url);
+  return out;
+}
+/** postPath, never null (a gone post's link is the old short form, which 404s like the post would). */
+async function postLink(id, hash = "") {
+  try { return (await postPath(id, hash)) || "/feed/p/" + encodeURIComponent(String(id || "")) + (hash || ""); }
+  catch (e) { return "/feed/p/" + encodeURIComponent(String(id || "")) + (hash || ""); }
 }
 
 // ── permissions on a post ──
@@ -1027,7 +1052,7 @@ async function crosspostMany(userId, origId, input = {}) {
   for (const [res, R] of go) {
     try {
       const made = await crosspostOne(u, o, R, title, wantsAnnounce(R));
-      Object.assign(res, { status: made.pending ? "pending" : "created", id: made.id, url: "/feed/p/" + made.id });
+      Object.assign(res, { status: made.pending ? "pending" : "created", id: made.id, url: await postLink(made.id) });
     } catch (e) {
       if (!e.refuse) console.error(`[feed] crosspost ${o.id} -> ${R.id}:`, e);
       Object.assign(res, { status: "refused", code: e.refuse ? e.status : 500, error: e.refuse ? e.message : "Something went wrong - it wasn't posted." });
@@ -1090,7 +1115,7 @@ async function hot(viewer = null, limit = 5) {
   return L.posts.map((p) => {
     const R = p.rooms[0] || null;
     const q = p.xpost && p.xpost.post ? p.xpost.post : p;
-    return { id: p.id, url: "/feed/p/" + p.id, title: p.title || q.title || (q.link && q.link.title) || cleanLine(q.body, 90) || "(no title)",
+    return { id: p.id, url: p.url, title: p.title || q.title || (q.link && q.link.title) || cleanLine(q.body, 90) || "(no title)",
              community: R ? { slug: R.slug, title: R.title, platform: R.id ? rooms.platformOf(R.id) : undefined, label: R.label, profile: R.profile || null } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
              thumb: p.nsfw ? null : thumbOf(p), crosspost: !!p.xpost, created: p.created,
              kind: q.video && q.video.length ? "video" : q.images && q.images.length ? "image" : q.audio && q.audio.length ? "audio" : q.link ? "link" : "text" };
@@ -1340,7 +1365,7 @@ async function comment(user, postId, { body, parent } = {}) {
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;
   const what = (p.title || p.body || "your post").replace(/\s+/g, " ").slice(0, 60);
-  const link = `/feed/p/${postId}#c-${id}`;
+  const link = await postLink(postId, "#c-" + id);
   const told = new Set([u.userId]);
   if (par && !told.has(par.author_id)) {
     told.add(par.author_id);
@@ -1382,7 +1407,7 @@ async function removeComment(user, id, reason) {
   if (!own) {
     const why = cleanLine(reason, 200);
     await notify(c.author_id, { title: "Your comment was removed", body: `"${cleanLine(c.body, 80)}" was removed by a moderator${why ? ": " + why : "."}`,
-                                link: `/feed/p/${c.post_id}`, ref: "feed-crm:" + c.id });
+                                link: await postLink(c.post_id), ref: "feed-crm:" + c.id });
     if (!isStaff(user)) {
       for (const r of await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [c.post_id])) {
         if (await rooms.canManage(user, r.room_id)) await rooms.event(r.room_id, "feed-comment-remove", user.username, `${c.id} on ${c.post_id}${why ? ": " + why : ""}`);
@@ -1811,15 +1836,16 @@ async function takeMentions(site) {
     const name = A ? (A.displayname || A.username) : "someone";
     const nsfw = effNsfw(first);
     const what = nsfw ? "(NSFW)" : cleanLine(first.title || first.body || "", 70);
-    // 1.99cu: every line links the post itself (<site>/feed/p/<id>); several posts folded into one line link each
-    // post when they fit in MENTION_LINE_MAX, else the newest post + the pad page
-    const postUrl = (m) => `${site}/feed/p/${m.post_id}`;
+    // 1.99cu: every line links the post itself (1.99dv: its canonical address, <site>/p/<pad>/posts/<id>/<slug>); several
+    // posts folded into one line link each post when they fit in MENTION_LINE_MAX, else the newest post + the pad page
+    const urls = await postLinks(live.map((m) => m.post_id));
+    const postUrl = (m) => site + (urls.get(m.post_id) || "/feed/p/" + m.post_id);
     let text;
     if (live.length === 1) text = `📌 New post on p/${slug} by ${"{author}"}: ${what ? what + " — " : ""}${postUrl(first)}`;
     else {
       text = `📌 ${live.length} new posts on p/${slug}: ${live.map(postUrl).join(" · ")}`;
       if (text.length > MENTION_LINE_MAX) {
-        text = `📌 ${live.length} new posts on p/${slug} — newest: ${postUrl(live[live.length - 1])} · all: ${site}/p/${encodeURIComponent(slug)}#feed`;
+        text = `📌 ${live.length} new posts on p/${slug} — newest: ${postUrl(live[live.length - 1])} · all: ${site}${require("./pads").padHref(R || slug)}#feed`;
       }
     }
     out.push({ room: roomId, text, author: name, author_login: A && A.camfrogUsername ? String(A.camfrogUsername).toLowerCase() : null, post: first.post_id, count: live.length });
@@ -1965,7 +1991,7 @@ async function roomMod(user, roomId, op, a = {}) {
       await runQuery("UPDATE feed_post_rooms SET pending = 0, approved_by = ? WHERE post_id = ? AND room_id = ?", [who, a.post, roomId]);
       if (pl.pending === 1) await queueMention(roomId, a.post);
       const p = await getRow(a.post);
-      if (p) await notify(p.author_id, { title: "Your post was approved", body: `It's live in ${(rooms.getCached(roomId) || {}).title || roomId}.`, link: `/feed/p/${p.id}`, ref: "feed-ok:" + p.id + ":" + roomId });
+      if (p) await notify(p.author_id, { title: "Your post was approved", body: `It's live in ${(rooms.getCached(roomId) || {}).title || roomId}.`, link: await postLink(p.id), ref: "feed-ok:" + p.id + ":" + roomId });
       await log("approve", a.post); return { ok: true };
     }
     case "reject": {
@@ -1973,7 +1999,7 @@ async function roomMod(user, roomId, op, a = {}) {
       await runQuery("UPDATE feed_post_rooms SET pending = 0, removed_at = ?, removed_by = ? WHERE post_id = ? AND room_id = ?", [t, "rejected:" + who, a.post, roomId]);
       const p = await getRow(a.post);
       const why = cleanLine(a.reason, 200);
-      if (p) await notify(p.author_id, { title: "Your post wasn't approved", body: `${(rooms.getCached(roomId) || {}).title || roomId} didn't take it${why ? ": " + why : "."}`, link: `/feed/p/${p.id}`, ref: "feed-no:" + p.id + ":" + roomId });
+      if (p) await notify(p.author_id, { title: "Your post wasn't approved", body: `${(rooms.getCached(roomId) || {}).title || roomId} didn't take it${why ? ": " + why : "."}`, link: await postLink(p.id), ref: "feed-no:" + p.id + ":" + roomId });
       await log("reject", a.post + (why ? ": " + why : "")); return { ok: true };
     }
     case "remove": { await removeFromRoom(user, a.post, roomId); await markDone(roomId, a.post, "", "removed", who); return { ok: true }; }
@@ -2069,6 +2095,7 @@ async function roomAudit(roomId, limit = 100) {
 }
 
 module.exports = {
+  postPath, postLink, postLinks,
   roomMod, roomSettings, roomPostRefusal, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, postBudget, account, isNewAccount, usedBytes,
   list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, crosspostMany, communities, hot, thumbOf, visibleSql, communityOf,

@@ -246,7 +246,7 @@
       <div class="fd-list">
         <% pending.forEach((p) => { %>
           <div class="rm-item" data-post="<%= p.id %>">
-            <div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %></span> <a href="/feed/p/<%= p.id %>">Open ›</a></div>
+            <div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %></span> <a href="<%= p.url %>">Open ›</a></div>
             <div class="fa-acts"><button type="button" class="ok" data-op="approve"><%- fx.icon('check') %>Approve</button><button type="button" class="bad" data-op="reject"><%- fx.icon('x') %>Reject</button></div>
           </div>
         <% }) %>
@@ -260,7 +260,7 @@
           <div class="rm-what">
             <% if (g.comment) { %><span class="tag warn">Comment</span> <b><%= (g.comment.body || '').slice(0, 160) %></b><span class="mut">by <%= g.comment.username || '?' %> · on "<%= (p.title || p.body || '').slice(0, 60) %>"</span>
             <% } else { %><span class="tag warn">Post</span> <b><%= p.title || (p.body || '').slice(0, 160) || '(media post)' %></b><span class="mut">by <%= p.author.display %> · <%= fx.ago(p.created) %><%= p.roomHidden ? ' · hidden in this pad' : '' %></span><% } %>
-            <a href="/feed/p/<%= p.id %><%= g.commentId ? '#c-' + g.commentId : '' %>">Open ›</a>
+            <a href="<%= p.url %><%= g.commentId ? '#c-' + g.commentId : '' %>">Open ›</a>
             <% const ai_ = g.authorInfo; if (ai_) { const d_ = ai_.ageDays; %>
               <%# 1.99cc: owners see the author's account age + linked identities only (no IPs - those are site-admin-only) %>
               <span class="rm-who" title="The author's account - age and linked identities">
@@ -299,7 +299,7 @@
     <div class="fa-card ps-card" id="pins">
       <h3>📌 Pinned posts <span class="n"><%= pins.length %></span></h3>
       <% if (!pins.length) { %><p class="mut">Nothing pinned. Pin a post from its ⋯ menu on the pad page (up to 3).</p><% } %>
-      <% pins.forEach((p) => { %><div class="rm-item" data-post="<%= p.id %>"><div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">pinned by <%= p.pinned_by || '?' %> · <%= dt(p.pinned_at) %></span> <a href="/feed/p/<%= p.id %>">Open ›</a></div>
+      <% pins.forEach((p) => { %><div class="rm-item" data-post="<%= p.id %>"><div class="rm-what"><b><%= p.title || (p.body || '').slice(0, 120) || '(media post)' %></b><span class="mut">pinned by <%= p.pinned_by || '?' %> · <%= dt(p.pinned_at) %></span> <a href="<%= p.url %>">Open ›</a></div>
         <div class="fa-acts"><button type="button" data-op="unpin"><%- fx.icon('pin') %>Unpin</button></div></div><% }) %>
     </div>
     <div class="fa-card ps-card" id="bans">
@@ -360,10 +360,10 @@
   </div>
 </main>
 <script id="rmgState" type="application/json"><%- JSON.stringify(st).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/room-manage.js?v=1" defer></script>
+<script src="/public/js/room-manage.js?v=2" defer></script>
 <script src="/public/js/feed-roommod.js?v=3" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
-<% if (camfrog) { %><script src="/public/js/room-mod.js?v=1" defer></script><% } %>
+<% if (camfrog) { %><script src="/public/js/room-mod.js?v=2" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>
 </body>
 </html>

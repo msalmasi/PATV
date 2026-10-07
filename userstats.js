@@ -3,7 +3,7 @@
 // Pepe keeps the aggregates (pepe_userstats.py in the bot: chat per day / hour / room, mic time,
 // moderation done and received, keyed by the real lowercased Camfrog login) and pushes the users
 // that changed to POST /api/userstats/sync (bot token). We keep the latest copy per login and render
-// it on /u/:username/profile for the account whose camfrogUsername matches.
+// it on /u/:username for the account whose camfrogUsername matches.
 //
 // Privacy (1.99h): each user picks it on their profile layout (profilelayout.js), default Public.
 //   * chat + mic aggregates, mod-action counts, commands: Public or Hidden

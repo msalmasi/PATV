@@ -196,8 +196,8 @@ function view(j, att) {
     refunded: !!j.refunded, nsfw: !!j.nsfw, ref: !!(j.ref_att || j.ref_cam), refCam: camOf(j) ? camOf(j).display : null, created: j.created, started: j.started, secs: j.secs || 0, eta: ETA[j.kind],
     elapsed: live ? Math.max(0, Math.round((NOW() - (j.started || j.created)) / 1000)) : null,
     attachment: att ? { id: att.id, kind: att.kind, w: att.w, h: att.h, secs: att.secs, posted: !!att.post_id,
-                        url: "/feed/f/" + (att.thumb || att.poster || att.file), file: "/feed/f/" + att.file,
-                        poster: att.poster ? "/feed/f/" + att.poster : null, hidePrompt: !!att.ai_hide_prompt } : null,
+                        url: "/media/f/" + (att.thumb || att.poster || att.file), file: "/media/f/" + att.file,
+                        poster: att.poster ? "/media/f/" + att.poster : null, hidePrompt: !!att.ai_hide_prompt } : null,
   };
 }
 async function attOf(j) {

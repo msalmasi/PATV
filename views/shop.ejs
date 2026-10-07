@@ -17,7 +17,7 @@
       <div style="min-width:0">
         <div style="color:#fff;font-weight:bold;font-size:18px"><%= store.displayname || store.username %>'s shop</div>
         <div class="muted">@<%= store.username %> · <%= H.fmt(store.sales) %> sale<%= store.sales === 1 ? '' : 's' %> · <%= H.fmt(total) %> item<%= total === 1 ? '' : 's' %> for sale
-          · <a href="/u/<%= encodeURIComponent(store.username) %>/profile">profile</a></div>
+          · <a href="/u/<%= encodeURIComponent(store.username) %>">profile</a></div>
       </div>
     </div>
   <% } else { %>
