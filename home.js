@@ -125,6 +125,17 @@ function topPads(rows, ranked, boosts, n = 5) {
                    boost: Math.round((boosts && boosts.get && boosts.get(r.id)) || 0) }));
 }
 
+/**
+ * 1.99eo: the front pad's next SCHEDULED stage slot for the homepage's off-air slate ("Next up: ..."), or null.
+ * Only what the stage would show anyway: the display name, the title, the start time - never ids or keys.
+ * Requests still waiting for the owner's OK don't count.
+ */
+async function nextSlot(roomId, t = Date.now()) {
+  const fut = await require("./mainstage").futureSlots(roomId);
+  const s = (fut || []).find((x) => x && x.status === "scheduled" && (Number(x.start_at) || 0) >= t - 60 * 1000);
+  return s ? { display: s.displayname || s.username || "someone", title: s.title || null, start_at: Number(s.start_at) } : null;
+}
+
 function register(app, { addUser, xpForNextLevel }) {
   app.get("/", addUser, async (req, res) => {
     try {
@@ -154,6 +165,8 @@ function register(app, { addUser, xpForNextLevel }) {
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
                                      boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;
       const slots = await require("./mainstage").publicSlots(front.id).catch(() => []);
+      // 1.99eo: the off-air slate's "Next up" - the front pad's next scheduled slot (public facts only)
+      const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
       const room = onStage || rooms.find((r) => r.live) || rooms[0] || null;
       const isStaff = !!(me && (me.class === "Admin" || me.class === "Staff"));
@@ -173,7 +186,7 @@ function register(app, { addUser, xpForNextLevel }) {
         story: { rooms: storyRooms, caps: [], room: null, signed: !!me }, hot, fx: require("./feedweb").fx,
         roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, pepeHere, featuredPrice: require("./mainstage").config().price_per_min,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
-        slots, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
+        slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),
         // kept for anything that still reads the old locals
         displayname: me ? me.displayname : null, classh: me ? me.class : null, level: me ? me.level : null,
         xp: me ? Math.round(me.xp) : null, avatar: me ? me.avatar : null, email: me ? me.email : null,
@@ -194,4 +207,4 @@ function register(app, { addUser, xpForNextLevel }) {
   });
 }
 
-module.exports = { register, stats, topPads };
+module.exports = { register, stats, topPads, nextSlot };

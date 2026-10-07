@@ -44,6 +44,9 @@
   .cg .pill.off { background: #1c1c1c; border: 1px solid #333; color: #999; }
   .cg .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: cgPulse 1.6s ease-in-out infinite; }
   .cg .pill.off .dot { background: #666; animation: none; }
+  /* 1.99eo: a pad's Camfrog room pill is about chat (💬 ROOM ACTIVE); LIVE / ON AIR / ON STAGE = video */
+  .cg .pill.chat { background: #10240f; border: 1px solid #2f6d3a; color: #c9f2cf; }
+  .cg .pill.chat .dot { display: none; }
   @keyframes cgPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
   /* ── pad cards: 3 / 2 / 1 columns; each card is one link with four fixed rows ── */
@@ -195,7 +198,7 @@
             <span class="t"><%= r.title %></span>
             <span class="ch-badges">
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
-              <% if (!r.site_only) { %><span class="pill <%= r.live ? 'on' : 'off' %>" title="The pad's Camfrog room"><span class="dot" aria-hidden="true"></span><%= r.live ? 'LIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
+              <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="The pad's Camfrog room (ON STAGE = a video stream)"><span class="dot" aria-hidden="true"></span><%= r.live ? '💬 ROOM ACTIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
               <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
               <%# 1.99ek: the boost mark (reserved slot since 1.99ed) - only when the pad is boosted %>
               <%- BM(r.boost_pat, 'pill ch-mark') %>

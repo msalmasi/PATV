@@ -40,6 +40,9 @@
   .rm .live.off { background: #1c1c1c; border-color: #333; color: #999; }
   .rm .dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5252; animation: rmPulse 1.6s ease-in-out infinite; }
   .rm .live.off .dot { background: #666; animation: none; }
+  /* 1.99eo: the header pill is about the Camfrog room's CHAT (💬 ROOM ACTIVE / ROOM OFFLINE); ON AIR on the stage = video */
+  .rm .live.chat { background: #10240f; border-color: #2f6d3a; color: #c9f2cf; }
+  .rm .live.chat .dot { display: none; }
   @keyframes rmPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
   .rm .banner { background: #12161d; border: 1px solid #2a3442; border-radius: 10px; padding: 10px 12px; color: #b9c7da; font-size: 13px; line-height: 1.5; }
   .rm .banner b { color: #e3ecf8; }
@@ -315,7 +318,7 @@
     <div class="hd">
       <div class="hd-id">
         <h1 id="rmTitle"><%= room.name %>
-          <% if (!siteOnly_) { %><span class="live<%= room.live ? '' : ' off' %>" id="rmLive" title="Is the Camfrog room live?"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span><% } %>
+          <% if (!siteOnly_) { %><span class="live <%= room.live ? 'chat' : 'off' %>" id="rmLive" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span><% } %>
         </h1>
         <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
           <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
@@ -564,8 +567,8 @@
       document.getElementById('rmCount').textContent = r.count;
       document.getElementById('rmStDot').textContent = r.live ? '🟢' : '⚪';
       var live = document.getElementById('rmLive');
-      live.classList.toggle('off', !r.live);
-      document.getElementById('rmLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
+      live.classList.toggle('off', !r.live); live.classList.toggle('chat', !!r.live);
+      document.getElementById('rmLiveTxt').textContent = r.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE';
       var mk = JSON.stringify(d.mic);
       if (mk !== lastMic) {
         lastMic = mk;

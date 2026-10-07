@@ -13,6 +13,8 @@
   const live = (!!st.active && pepeHere_) || paid.length > 0;
   // 1.99ek: Top Pads (home.topPads: top 5 live pads, the front pick's order) and the shared 🚀 badge (boostmark.js)
   const tops_ = typeof tops !== 'undefined' && Array.isArray(tops) ? tops : [];
+  // 1.99eo: the front pad's next scheduled slot ({display, title, start_at}) for the off-air slate, or null
+  const nextUp_ = typeof nextUp !== 'undefined' && nextUp && Number(nextUp.start_at) > 0 ? nextUp : null;
   const BM = typeof boostMark === 'function' ? boostMark : () => '';
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
@@ -94,9 +96,8 @@
   .hm .stage-admin .btn { padding: 6px 12px; font-size: 13px; }
   .hm .stage-admin #stAdminMsg:empty { display: none; }
   .hm .stage-admin .sa-link { margin-left: auto; white-space: nowrap; }
-  .hm .stage-body { display: none; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); padding: 0 var(--px) var(--px); align-items: start; }
-  .hm .stage.live .stage-body { display: grid; }
-  .hm .stage.live .stage-off { display: none; }
+  /* 1.99eo: one layout on and off air - the player box (or the off-air slate in its place) + the side column */
+  .hm .stage-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--gap); padding: 0 var(--px) var(--px); align-items: start; }
   /* the player column: the video, then its Snap / Clip row at the same width */
   .hm .stage-main { width: 100%; max-width: calc((100vh - 190px) * 16 / 9); min-width: 0; justify-self: center; }
   .hm .player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; border: 1px solid #262626; }
@@ -156,9 +157,42 @@
   .hm .aw-hm .aw-coinbtn .aw-coin { --s: 72px; }
   .hm .aw-hm .aw-status { min-height: 2.4em; font-size: 18px; }
   .hm .aw-hm a.aw-tool { text-align: center; color: var(--aw-text) !important; }
-  .hm .stage-off { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--gap); padding: 0 var(--px) var(--px); }
-  .hm .stage-off > * { flex: 1 1 240px; min-width: 0; }
-  .hm .stage-off > .aw-hm { flex: 0 1 340px; }
+  /* 1.99eo: the off-air slate - fills the player's 16:9 box while nothing plays (the switcher's onAir swaps it
+     for the player when a stream comes back: .stage.live hides it) */
+  .hm .slate { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 14px; text-align: center;
+               background: radial-gradient(90% 120% at 50% 0%, #1b2b1c 0%, #0b0d0b 70%), #0b0d0b; }
+  .hm .slate::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+                       background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); }
+  .hm .stage.live .slate { display: none; }
+  .hm .slate .sl-in { position: relative; display: grid; justify-items: center; gap: 8px; max-width: 460px; min-width: 0; }
+  .hm .slate .sl-pad { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; min-width: 0; }
+  .hm .slate .sl-pad b { font-size: 20px; color: #fff; overflow-wrap: anywhere; }
+  .hm .slate .sl-msg { margin: 0; color: #c9d3c9; font-size: 15px; }
+  .hm .slate .sl-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; align-items: center; margin-top: 4px; }
+  .hm .slate .golive-btn { font-size: 15px; padding: 9px 18px; }
+  .hm .slate .sl-next { font-size: 13px; color: #aab3aa; overflow-wrap: anywhere; }
+  .hm .slate .sl-next b { color: #e8d9a0; }
+  @media (max-width: 520px) {
+    .hm .slate { padding: 8px; }
+    .hm .slate .sl-in { gap: 5px; }
+    .hm .slate .sl-pad b { font-size: 16px; }
+    .hm .slate .sl-msg { font-size: 13px; }
+    .hm .slate .sl-acts { margin-top: 2px; gap: 6px; }
+    .hm .slate .golive-btn { font-size: 13.5px; padding: 7px 14px; }
+    .hm .slate .sl-next, .hm .slate .sl-acts .btn { font-size: 12px; }
+    .hm .slate .sl-acts .btn { padding: 6px 10px; }
+  }
+  /* 1.99eo: the side column runs the player's height on desktop - Top Pads takes the spare room, no void under it */
+  @media (min-width: 1101px) {
+    .hm .stage-body { align-items: stretch; }
+    .hm .stage-main { align-self: start; }
+    .hm .stage-side { display: flex; flex-direction: column; align-self: stretch; }
+    .hm .stage-side > .tp { flex: 1 1 auto; }
+  }
+  /* 1.99eo: the Camfrog room's pill is about CHAT, not video: 💬 ROOM ACTIVE (green) / ROOM OFFLINE - LIVE and
+     ON AIR only ever mean a video stream is playing */
+  .hm .pill.chat { background: #10240f; border: 1px solid #2f6d3a; color: #c9f2cf; }
+  .hm .pill.chat .dot { display: none; }
 
   /* ── you ── */
   .hm .me { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px 16px; align-items: center; background: linear-gradient(90deg, #121a13, #111 60%); }
@@ -408,14 +442,23 @@
           <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
           <div id="twitch" class="hide"></div>
           <div class="embed hide" id="stEmbed"></div>
+          <%# 1.99eo: the off-air slate - the player's own 16:9 box, so the layout never collapses; .stage.live hides it %>
+          <div class="slate" id="stSlate" role="status" aria-label="The stage is off air">
+            <div class="sl-in">
+              <div class="sl-pad"><span class="pill off"><span class="dot" aria-hidden="true"></span>OFF AIR</span><b id="slPad"><%= frontInfo ? frontInfo.title : 'Main Stage' %></b></div>
+              <p class="sl-msg">Nothing on stage right now</p>
+              <div class="sl-acts">
+                <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a>
+                <% if (nextUp_) { %><span class="sl-next" id="slNext">Next up: <b><%= nextUp_.display %></b><%= nextUp_.title ? ' · ' + nextUp_.title : '' %> · <time datetime="<%= new Date(nextUp_.start_at).toISOString() %>" data-local-time="<%= Number(nextUp_.start_at) %>"><%= new Date(nextUp_.start_at).toISOString().slice(11, 16) %> UTC</time></span>
+                <% } else { %><a class="btn" href="/p" id="slBrowse">Browse Top Pads</a><% } %>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="stcap hide" id="stCap" aria-label="Snap or clip this stream"></div>
       </div>
-      <div class="stage-side" id="stageSide"></div>
-    </div>
-    <div class="stage-off" id="stageOff"></div>
-    <!-- the stage widgets render once and move between the live side panel and the off-air strip -->
-    <div class="hide" id="stageWidgets">
+      <%# 1.99eo: the stage widgets sit in the side column on and off air (they used to move to an off-air strip) %>
+      <div class="stage-side" id="stageSide">
       <div class="aw aw-hm" id="wheelBox">
         <% if (me) { %>
         <div class="aw-coinop" id="coinop">
@@ -465,6 +508,7 @@
           </ol>
         </section>
       <% } %>
+      </div>
     </div>
   </section>
 
@@ -505,7 +549,7 @@
   <div class="main">
     <% if (room) { %>
     <section class="card lr-card" aria-labelledby="lrH">
-      <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'on' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? 'LIVE' : 'OFFLINE' %></span></span></span>
+      <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'chat' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span></span>
         <a href="/p/<%= encodeURIComponent(room.slug) %>">Open the pad ›</a></h2>
       <% if (me) { %>
         <div class="lr">
@@ -587,24 +631,22 @@
     function tick() { document.querySelectorAll('[data-until]').forEach(function (e) { e.textContent = left(Number(e.getAttribute('data-until'))); }); }
     tick(); setInterval(tick, 30000);
 
-    // stage widgets: in the side panel while on air, in the strip while off air
+    // 1.99eo: the stage keeps one layout on and off air; .live / .off on #stage swaps the off-air slate
+    // (#stSlate, in the player's box) for the player - the switcher's 10 s poll of /api/stage calls onAir
     var stageEl = document.getElementById('stage');
-    function placeWidgets() {
-      var isLive = stageEl.classList.contains('live');
-      var dest = document.getElementById(isLive ? 'stageSide' : 'stageOff');
-      ['stageWidgets', isLive ? 'stageOff' : 'stageSide'].forEach(function (id) {
-        var src = document.getElementById(id);
-        while (src.firstElementChild) dest.appendChild(src.firstElementChild);
-      });
-    }
-    placeWidgets();
     function setPill(on, how) {
       stageEl.classList.toggle('live', on); stageEl.classList.toggle('off', !on);
       document.getElementById('stPill').className = 'pill ' + (on ? 'on' : 'off');
       document.getElementById('stPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
       if (how) document.getElementById('stSub').textContent = how;
-      placeWidgets();
     }
+    // the slate's "Next up" time in the viewer's own clock (the server writes UTC)
+    document.querySelectorAll('time[data-local-time]').forEach(function (t) {
+      var d = new Date(Number(t.getAttribute('data-local-time')));
+      if (isNaN(d.getTime())) return;
+      var today = new Date().toDateString() === d.toDateString();
+      try { t.textContent = (today ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' ') + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
+    });
 
     // ── the stage (public/js/stage-room.js): the FRONT ROOM's stage - its featured slot by default, else
     // Pepe's stream (Twitch when it's live there, else HLS); tabs switch between every live stream.
@@ -779,8 +821,8 @@
       var r = d.room || {};
       document.getElementById('lrTopic').textContent = r.topic || '—';
       document.getElementById('lrCount').textContent = r.count;
-      document.getElementById('lrLive').className = 'pill ' + (r.live ? 'on' : 'off');
-      document.getElementById('lrLiveTxt').textContent = r.live ? 'LIVE' : 'OFFLINE';
+      document.getElementById('lrLive').className = 'pill ' + (r.live ? 'chat' : 'off');
+      document.getElementById('lrLiveTxt').textContent = r.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE';
       roomAudio.update(d);
       if (roomRelay) roomRelay.update(d);
       if (roomPtt) roomPtt.update(d);
