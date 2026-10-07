@@ -31,11 +31,7 @@ const FEED_KEEP = 200;
 const STALE_MS = 90 * 1000;              // no sync for this long -> the room shows as offline
 const MAX_EVENTS = 500, MAX_ROOMS = 20, MAX_MEMBERS = 400;
 const TRANSCRIPT = "x.pepe.transcript";      // Pepe's mic transcripts (a PCP extension event)
-const CHALLENGE = "x.pepe.challenge";        // 1.99de: a judged mic challenge (score + Pepe's one-liner)
-const FEED_TYPES = new Set(["message", TRANSCRIPT, CHALLENGE, "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
-const CHAL_CATS = new Set(["moan", "sing", "laugh", "fart", "beatbox", "impression"]);
-const CHAL_VERDICTS = new Set(["scored", "not_live", "speechless", "won", "tie"]);
-const score10 = (v) => (v == null || v === "" || !isFinite(Number(v)) ? null : Math.max(0, Math.min(10, Math.round(Number(v) * 10) / 10)));
+const FEED_TYPES = new Set(["message", TRANSCRIPT, "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
 const AUDIO_MAX_LISTENERS = 40, AUDIO_IDLE_MS = 30 * 1000, AUDIO_PRIME = 3;
 
 const ready = (async () => {
@@ -181,16 +177,6 @@ function feedItem(ev) {
     case "room.update": {
       const t = d.changes && typeof d.changes === "object" ? str(d.changes.topic, 200) : "";
       return t ? { k: "topic", ts, text: t } : null;
-    }
-    case CHALLENGE: {
-      // the performer (and a head-to-head opponent) arrive as "someone" when they're !incognito / hidden
-      const u = cleanUser(d.user);
-      const cat = str(d.category, 20), v = str(d.verdict, 12);
-      if (!u || !CHAL_CATS.has(cat) || !CHAL_VERDICTS.has(v)) return null;
-      const it = { k: "chal", ts, u, cat, v, score: score10(d.score), text: str(d.quip, 200) };
-      if (d.vs) { const vs = cleanUser(d.vs); if (vs) { it.vs = vs; it.vsScore = score10(d.vs_score); } }
-      if (Number(d.paid) > 0) it.paid = Math.min(1e9, Math.floor(Number(d.paid)));
-      return it;
     }
     default:
       return null;
