@@ -51,20 +51,32 @@
   <% } else if (m.shares) { %>
     <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
     <div class="info">
-      <%= m.status === 'open' ? 'Trading open — closes ' + new Date(m.closes * 1000).toUTCString()
-         : m.status === 'settled' ? 'Resolved: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '') + ' — each ' + m.result + ' share paid 1 PAT'
-         : m.status === 'void' ? 'Voided — holders got their cost back'
+      <%= m.settle && m.settle.kind === 'won' ? 'Resolved: ' + m.settle.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '') + ' — each ' + m.settle.result + ' share paid 1 PAT' + (m.settle.total ? ' (' + fmt(m.settle.total) + ' PAT paid out)' : '')
+         : m.settle && m.settle.kind === 'void' ? 'Voided' + (m.settle.reason ? ' (' + m.settle.reason + ')' : '') + ' — holders were refunded' + (m.settle.total != null ? ' ' + fmt(m.settle.total) + ' PAT' : '')
+         : m.status === 'open' ? 'Trading open — closes ' + new Date(m.closes * 1000).toUTCString()
+         : m.status === 'settled' || m.status === 'resolved' ? 'Resolved: ' + m.result + (m.settled_by ? ' (by ' + m.settled_by + ')' : '')
+         : m.status === 'void' ? 'Voided — holders were refunded'
          : m.status === 'settling' ? 'Paying out…' : 'Trading closed — waiting for the judge' %><br>
       Volume <%= fmt(m.total) %> PAT · <%= m.betCount %> trade<%= m.betCount === 1 ? '' : 's' %> · <%= m.bettors %> holder<%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · created by <%= m.creator %> in <%= m.room || 'a room' %>
     </div>
+    <% const lastTraded = 'last traded ' + m.options.map((o) => Math.round(o.last * 100)).join('/'); %>
     <div class="opts">
       <% m.options.forEach((o, i) => { %>
-        <div class="opt <%= o.won ? 'won' : '' %>">
+        <div class="opt <%= o.won ? 'won' : '' %> <%= m.settle ? 'final' : '' %>">
           <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
-          <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffd700' : COLORS[i % COLORS.length] %>"></span></div>
-          <div class="num"><span class="price"><%= pc(o.price) %></span> · <%= o.price.toFixed(2) %> PAT/share</div>
+          <% if (m.settle && m.settle.kind === 'won') { %>
+            <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%; background: <%= o.won ? '#ffd700' : COLORS[i % COLORS.length] %>"></span></div>
+            <div class="num"><span class="price"><%= o.won ? '100%' : '0%' %></span> · <%= o.won ? 'paid 1 PAT/share' : 'worth 0' %></div>
+          <% } else if (m.settle && m.settle.kind === 'void') { %>
+            <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
+            <div class="num">void · refunded</div>
+          <% } else { %>
+            <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffd700' : COLORS[i % COLORS.length] %>"></span></div>
+            <div class="num"><span class="price"><%= pc(o.price) %></span> · <%= o.price.toFixed(2) %> PAT/share</div>
+          <% } %>
         </div>
       <% }) %>
+      <% if (m.settle) { %><div class="info">Final result<%= m.settle.kind === 'void' ? ' (void)' : '' %> · <%= lastTraded %> before it closed</div><% } %>
     </div>
     <% if (m.history.length > 1) {
       const W = 600, H = 170, t0 = m.history[0][0], t1 = Math.max(m.history[m.history.length - 1][0], t0 + 1);
@@ -86,7 +98,21 @@
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
     <%- include('partials/aijudge', { m, kind: 'market', inIt: typeof inIt !== 'undefined' && inIt, judgeMe: typeof judgeMe !== 'undefined' && judgeMe, now }) %>
 
-    <% if (m.mine && m.mine.length) { %>
+    <% if (m.mine && m.mine.length && m.settle) { const S = m.settle; %>
+      <h3>Your position</h3>
+      <p class="info settled-line"><% if (S.kind === 'won') { %>Settled <b><%= S.result %></b>: <%= S.result %> shares paid 1 PAT each; <%= m.options.filter((o) => !o.won).map((o) => o.name).join(' / ') %> shares are worth 0.<% } else { %>Voided: trading fees are kept, holders got back what they put in (net of the 2% fee)<%= S.ratio < 1 ? ', scaled to ' + (S.ratio * 100).toFixed(0) + '% because the pot after the Reserve\'s seed couldn\'t cover it all' : '' %>.<% } %></p>
+      <div class="tbl"><table>
+        <tr><th>Outcome</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Now</th><th class="r">Cost</th><th class="r"><%= S.kind === 'void' ? 'Refund' : 'Value' %></th><th class="r">P/L</th><th>Status</th></tr>
+        <% m.mine.forEach((p) => { %>
+          <tr class="<%= p.state %>"><td><b><%= p.option %></b></td><td class="r"><%= fmt(p.shares) %></td>
+              <td class="r"><%= p.entry.toFixed(3) %></td><td class="r"><%= p.price == null ? '—' : p.price === 1 ? '1.000' : '0' %></td>
+              <td class="r"><%= fmt(p.cost) %></td>
+              <td class="r"><%= p.state === 'won' ? 'Paid ' + fmt(p.payout) + ' PAT' : p.state === 'refunded' ? (S.known ? '' : '≈ ') + 'Refunded ' + fmt(p.payout) + ' PAT' : '0' %></td>
+              <td class="r <%= p.pnl >= 0 ? 'up' : 'down' %>"><%= (p.pnl >= 0 ? '+' : '−') + fmt(Math.abs(p.pnl)) %><%= p.cost ? ' (' + (p.pnl / p.cost * 100).toFixed(0) + '%)' : '' %></td>
+              <td><%= p.state === 'won' ? '🏆 Won' : p.state === 'lost' ? 'Lost' : 'Refunded' %></td></tr>
+        <% }) %>
+      </table></div>
+    <% } else if (m.mine && m.mine.length) { %>
       <h3>Your position</h3>
       <div class="tbl"><table>
         <tr><th>Outcome</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Now</th><th class="r">Cost</th><th class="r">Value</th><th class="r">P/L</th><% if (m.status === 'open') { %><th class="r">Sell</th><% } %></tr>

@@ -37,14 +37,20 @@
     <a class="card" href="/markets/<%= m.id %>">
       <div class="top">
         <div class="q"><span class="ref"><%= m.ref %></span> <%= m.question %></div>
-        <span class="pill <%= m.status %>"><%= m.status === 'open' ? 'open · closes in ' + left(m.closes) : m.status === 'settled' ? 'settled: ' + m.result : m.status %></span>
+        <span class="pill <%= m.settle ? (m.settle.kind === 'won' ? 'settled' : 'void') : m.status %>"><%= m.settle && m.settle.kind === 'won' ? 'settled: ' + m.settle.result : m.settle ? 'void' : m.status === 'open' ? 'open · closes in ' + left(m.closes) : m.status === 'settled' ? 'settled: ' + m.result : m.status %></span>
       </div>
       <div class="info"><%= m.shares ? 'Volume' : 'Pool' %> <%= Math.round(m.total).toLocaleString() %> PAT · <%= m.bettors %> <%= m.shares ? 'holder' : 'bettor' %><%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · <%= m.room || '' %></div>
       <div class="opts">
         <% m.options.forEach((o) => { %>
           <div class="opt <%= o.won ? 'won' : '' %>">
             <div><%= o.won ? '🏆 ' : '' %><%= o.name %></div>
-            <% if (m.shares) { %>
+            <% if (m.shares && m.settle && m.settle.kind === 'won') { %>
+              <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%"></span></div>
+              <div class="num"><b><%= o.won ? '100%' : '0%' %></b> · <%= o.won ? 'paid 1 PAT/share' : 'worth 0' %> · last <%= Math.round(o.last * 100) %>%</div>
+            <% } else if (m.shares && m.settle) { %>
+              <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
+              <div class="num">void · refunded · last <%= Math.round(o.last * 100) %>%</div>
+            <% } else if (m.shares) { %>
               <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%"></span></div>
               <div class="num"><b><%= Math.round(o.price * 100) %>%</b> · <%= o.price.toFixed(2) %> PAT/share</div>
             <% } else { %>

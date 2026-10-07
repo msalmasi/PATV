@@ -69,6 +69,9 @@ function marketCard(m) {
     const ex = m.options.map((o) => Math.exp((q[o] || 0) / b - mx));
     const s = ex.reduce((a, v) => a + v, 0);
     opts = m.options.map((o, i) => ({ name: o, p: ex[i] / s }));
+    // 1.99do: a resolved share market shows its result (winner 100%, the rest 0), not the last trade
+    const st = require("./markets").settlement(m);
+    if (st && st.kind === "won") opts = opts.map((o) => ({ ...o, p: o.name === st.result ? 1 : 0 }));
   } else {
     const pools = Object.fromEntries(m.options.map((o) => [o, 0]));
     for (const x of m.bets || []) pools[x.option] = (pools[x.option] || 0) + (Number(x.amount) || 0);
@@ -151,8 +154,12 @@ function forMarket(req, m) {
   } else {
     desc = `Betting pool: ${m.options.join(" / ")}. Winners split the losing side's pot.`;
   }
-  if (m.status === "settled") desc = `Resolved: ${m.result}. ` + desc;
-  return meta(req, { title: `M${m.id}: ${m.question}`, description: desc, image: `/og/market/${m.id}.png?v=${Math.floor((m.ended || m.created || 0) / 60)}` });
+  const st = lmsr ? require("./markets").settlement(m) : null;
+  if (st && st.kind === "won") desc = `Resolved: ${st.result}. Each ${st.result} share paid 1 PAT; the rest are worth 0. Volume ${fmt(m.volume)} PAT.`;
+  else if (st) desc = `Voided: holders were refunded. Volume ${fmt(m.volume)} PAT.`;
+  else if (m.status === "settled") desc = `Resolved: ${m.result}. ` + desc;
+  // v=…s2 (1.99do): busts unfurl caches that kept the last-trade bars of a settled market
+  return meta(req, { title: `M${m.id}: ${m.question}`, description: desc, image: `/og/market/${m.id}.png?v=${Math.floor((m.ended || m.created || 0) / 60)}s2` });
 }
 
 function forBounty(req, b) {

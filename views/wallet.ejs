@@ -357,6 +357,21 @@
     </table></div>
     <p class="info">Entry = what you paid per share (cost ÷ shares). Price = today's market price; a winning share pays 1 PAT.</p>
   <% } %>
+  <% const settledP = typeof settledPositions !== 'undefined' ? settledPositions : []; %>
+  <% if (settledP.length) { %>
+    <h3 style="margin-top:16px">Settled in the last 30 days</h3>
+    <div class="tbl"><table class="settled-pos">
+      <tr><th>Market</th><th>Option</th><th class="r">Shares</th><th class="r">Cost</th><th class="r">Paid</th><th class="r">P/L</th><th>Result</th></tr>
+      <% settledP.forEach((p) => { p.mine.forEach((x, i) => { %>
+        <tr><td><% if (i === 0) { %><a href="/markets/<%= p.id %>"><%= p.ref %></a> <%= p.question %><% } %></td>
+          <td><%= x.option %></td><td class="r"><%= x.shares.toFixed(1) %></td><td class="r"><%= fmt(x.cost) %></td>
+          <td class="r"><%= x.state === 'lost' ? '0' : fmt(x.payout) + ' PAT' %></td>
+          <td class="r <%= x.pnl >= 0 ? 'up' : 'down' %>"><%= (x.pnl >= 0 ? '+' : '') + fmt(x.pnl) %></td>
+          <td><%= x.state === 'won' ? '🏆 Won' : x.state === 'lost' ? 'Lost' : 'Refunded (void)' %></td></tr>
+      <% }) }) %>
+    </table></div>
+    <p class="info">These are paid out and closed: they don't count toward your open positions.</p>
+  <% } %>
 
   <!-- ───────── Admin ───────── -->
   <% if (admin) { %>

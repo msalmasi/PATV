@@ -46,23 +46,66 @@ function lmsrPrices(m) {
   return Object.fromEntries(m.options.map((o) => [o, ex[o] / s]));
 }
 
+const AMM_FEE_PCT = 2;   // pepe_amm.py: of every buy and sell (a void refunds cost basis net of it)
+
+// 1.99do: how a share market ended, or null while it's still trading / waiting for the judge.
+// Pepe's resolve (pepe_amm._amm_resolve) stamps paid_out {at, total, result} BEFORE the status flips
+// from 'settling' to settled/void, so paid_out alone already means the payouts are out.
+//   {kind: "won", result}  each winning share paid 1 PAT, every other share is worth 0
+//   {kind: "void", ratio}  holders got their cost (net of the 2% fee) back, scaled down by `ratio`
+//                          when the pot after the Reserve's seed couldn't cover it all
+function settlement(m) {
+  const po = m.paid_out && typeof m.paid_out === "object" ? m.paid_out : null;
+  if (!po && !["settled", "resolved", "void"].includes(m.status)) return null;
+  const res = String((po && po.result) || m.result || "");
+  if (m.status === "void" || /^void\b/i.test(res)) {
+    const keep = 1 - AMM_FEE_PCT / 100;
+    const owed = Object.values(m.positions || {}).map((p) => Object.values(p.cost || {}).reduce((a, v) => a + (Number(v) || 0), 0) * keep)
+      .filter((v) => v >= 1).reduce((a, v) => a + v, 0);
+    const total = po && Number.isFinite(Number(po.total)) ? Number(po.total) : null;
+    // paid_out.total is the sum of the floored refunds; within a PAT per holder of `owed` means "in full"
+    let ratio = total == null || !owed ? 1 : Math.min(1, total / owed);
+    if (total != null && owed - total <= Object.keys(m.positions || {}).length) ratio = 1;
+    return { kind: "void", ratio, total, known: total != null, reason: m.void_reason || null };
+  }
+  if ((m.options || []).includes(res)) return { kind: "won", result: res, total: po ? Number(po.total) || 0 : null };
+  return null;
+}
+
 function viewShares(m, me) {
   const prices = lmsrPrices(m);
+  const settle = settlement(m);
   const holders = new Set(Object.values(m.positions || {}).filter((p) => Object.values(p.shares || {}).some((v) => v >= 1)).map((p) => p.nick.toLowerCase()));
-  const options = m.options.map((o) => ({ name: o, price: prices[o], won: m.result === o }));
+  // a resolved market shows its result: the winner at 1.00, the rest at 0; `last` keeps the last trading price
+  const options = m.options.map((o) => {
+    const won = settle && settle.kind === "won" ? settle.result === o : m.result === o;
+    const price = settle && settle.kind === "won" ? (won ? 1 : 0) : prices[o];
+    return { name: o, price, last: prices[o], won };
+  });
   let mine = null;
   if (me) {
     const keys = me.map((k) => String(k || "").toLowerCase()).filter(Boolean);
     const pos = Object.entries(m.positions || {}).find(([k]) => keys.includes(k));
     if (pos) {
       const p = pos[1];
-      mine = m.options.filter((o) => (p.shares[o] || 0) >= 0.5).map((o) => {
-        const sh = p.shares[o], cost = p.cost[o] || 0, now = prices[o];
-        return { option: o, shares: sh, entry: cost / sh, cost, price: now, value: sh * now, pnl: sh * now - cost };
+      const keep = 1 - AMM_FEE_PCT / 100;
+      const opts = m.options.filter((o) => (p.shares[o] || 0) >= 0.5 || (settle && settle.kind === "void" && (p.cost[o] || 0) >= 1));
+      mine = opts.map((o) => {
+        const sh = p.shares[o] || 0, cost = p.cost[o] || 0, now = prices[o];
+        const row = { option: o, shares: sh, entry: sh ? cost / sh : 0, cost, price: now, value: sh * now, pnl: sh * now - cost, state: "open" };
+        if (settle && settle.kind === "won") {
+          const win = o === settle.result;
+          const paid = win ? Math.floor(sh) : 0;
+          Object.assign(row, { state: win ? "won" : "lost", price: win ? 1 : 0, value: paid, payout: paid, pnl: paid - cost });
+        } else if (settle && settle.kind === "void") {
+          const back = Math.floor(cost * keep * settle.ratio);
+          Object.assign(row, { state: "refunded", price: null, value: back, payout: back, pnl: back - cost });
+        }
+        return row;
       });
     }
   }
-  return { ...m, ref: `M${m.id}`, shares: true, options, total: m.volume || 0, bettors: holders.size,
+  return { ...m, ref: `M${m.id}`, shares: true, options, total: m.volume || 0, bettors: holders.size, settle,
            betCount: (m.trades || []).length, mine, history: m.history || [], trades: (m.trades || []).slice().reverse() };
 }
 
@@ -103,6 +146,10 @@ function register(app, { isBotToken, addUser }) {
           created: Number(m.created) || 0, closes: Number(m.closes) || 0, result: m.result || null,
           settled_by: m.settled_by || null, fee: Number(m.fee) || 0, ended: Number(m.ended) || null,
           ai_judge: !!m.ai_judge, ai: cleanAi(m.ai), ...(m.model === "pool" ? { model: "pool" } : {}),
+          // 1.99do: Pepe's payout stamp (a share market is paid once this is set) + why it was voided
+          paid_out: m.paid_out && typeof m.paid_out === "object"
+            ? { at: Number(m.paid_out.at) || 0, total: Math.floor(Number(m.paid_out.total) || 0), result: String(m.paid_out.result || "").slice(0, 200) } : null,
+          void_reason: m.void_reason ? String(m.void_reason).slice(0, 200) : null,
           bets: (m.bets || []).map((x) => ({ nick: String(x.nick || ""), option: String(x.option || ""),
                                            amount: Math.floor(Number(x.amount) || 0), ts: Number(x.ts) || 0, web: !!x.web })),
         };
@@ -235,8 +282,8 @@ function register(app, { isBotToken, addUser }) {
     await ready;
     const rows = (await getQuery("SELECT data FROM markets ORDER BY id DESC LIMIT 300")).map((r) => view(JSON.parse(r.data)))
       .filter((m) => m.shares);
-    const live = rows.filter((m) => LIVE.has(m.status)).sort((a, b) => a.closes - b.closes);
-    const done = rows.filter((m) => !LIVE.has(m.status)).sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 40);
+    const live = rows.filter((m) => LIVE.has(m.status) && !m.settle).sort((a, b) => a.closes - b.closes);
+    const done = rows.filter((m) => !LIVE.has(m.status) || m.settle).sort((a, b) => (b.ended || 0) - (a.ended || 0)).slice(0, 40);
     let linked = false, acts = [];
     if (req.user && req.user.userId) {
       const u = await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [req.user.userId]);
@@ -274,4 +321,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, view };
+module.exports = { register, view, settlement, lmsrPrices };

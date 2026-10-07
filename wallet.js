@@ -183,15 +183,21 @@ function register(app, { isBotToken, addUser }) {
       const myRequests = me ? (ln.requests || []).filter((r) => low(r.nick) === me).sort((a, b) => (b.created || 0) - (a.created || 0)).slice(0, 10) : [];
 
       // LMSR market positions
-      let positions = [];
+      // 1.99do: a paid-out market is never an open position (its value is 0 or already paid); the last
+      // 30 days of those go in a separate "settled" table with what each row paid
+      let positions = [], settledPositions = [];
       if (me) {
-        const rows = await getQuery("SELECT data FROM markets WHERE status IN ('open','closed','settling') ORDER BY id DESC LIMIT 300");
+        const rows = await getQuery("SELECT data FROM markets WHERE status IN ('open','closed','settling','settled','resolved','void') ORDER BY id DESC LIMIT 300");
+        const since = Date.now() / 1000 - 30 * 86400;
         for (const r of rows) {
           let m;
           try { m = JSON.parse(r.data); } catch (e) { continue; }
           if (m.model !== "lmsr" || !(m.positions || {})[me]) continue;
           const v = markets.view(m, [camfrog]);
-          if (v.mine && v.mine.length) positions.push({ id: m.id, ref: v.ref, question: m.question, status: m.status, closes: m.closes, mine: v.mine });
+          if (!v.mine || !v.mine.length) continue;
+          const row = { id: m.id, ref: v.ref, question: m.question, status: m.status, closes: m.closes, mine: v.mine, settle: v.settle };
+          if (!v.settle && ["open", "closed", "settling"].includes(m.status)) positions.push(row);
+          else if (v.settle && (m.ended || (m.paid_out || {}).at || 0) >= since) settledPositions.push(row);
         }
       }
 
@@ -219,7 +225,7 @@ function register(app, { isBotToken, addUser }) {
       res.render("wallet", {
         user: u.username, signedIn: true, msg, camfrog, isAdmin, now: Date.now() / 1000,
         bal: Number(u.points_balance) || 0, myStashes, vaults: sk || null, stashesUpdated: st.updated || null,
-        borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, admin,
+        borrowed, lent, loanHistory, myRequests, reserve: ln.reserve ? { ...ln.reserve, limits: undefined } : null, positions, settledPositions, admin,
         myLimit: reserveLimit(ln.reserve || null, camfrog, u.level), // only ever the signed-in user's own
         myCredit: camfrog ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog, u) : null,
         welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
