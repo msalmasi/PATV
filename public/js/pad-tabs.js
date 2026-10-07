@@ -14,10 +14,15 @@
 // whichever tab is showing.
 // The Feed tab carries an "N new" badge: posts newer than this visitor's last look at the feed (a timestamp
 // per pad in localStorage, set whenever the Feed tab is shown). Every storage access is in try/catch.
+// 1.99ec: the badge is a count pill PLUS a dot (#padFeedDot) on the tab while another tab shows; a first visit counts
+// the last 3 days; opening the Feed clears the count for next time, but when the Feed opens WITH new posts (the
+// default tab, a click) the pill stays a few seconds, then fades, and those posts get a "new" edge - so the visitor
+// sees what was new instead of the badge vanishing before it's ever seen. #rules means About (the rules live there
+// since 1.99ec - the Feed tab is one column).
 // The pure helpers (pickTab, defaultTab, requestedTab, newCount) are exported for node tests.
 (function (root) {
   'use strict';
-  var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'feed', about: 'about', info: 'about', schedule: 'live' };
+  var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'about', about: 'about', info: 'about', schedule: 'live' };
   var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp)=/;
   var FIRST_LOOK_MS = 3 * 24 * 3600 * 1000;   // a first visit counts the last 3 days' posts as new
   var FEED_STICKY_MS = 30 * 60 * 1000;        // 1.99eb: a picked Feed beats Live-when-live for this long
@@ -39,7 +44,8 @@
     var m = /(?:^|[?&])tab=([^&#]*)/.exec(s);
     if (m) { var q = ALIAS[decodeURIComponent(m[1]).toLowerCase()]; if (q) return q; }
     if (h && ALIAS[h]) return ALIAS[h];
-    if (/^(?:feed|rules|post-)/.test(h)) return 'feed';
+    if (/^rules/.test(h)) return 'about';
+    if (/^(?:feed|post-)/.test(h)) return 'feed';
     if (FEED_Q.test(s)) return 'feed';
     return null;
   }
@@ -78,6 +84,14 @@
     return n;
   }
 
+  /** The ids of the posts newer than `seen` (same rule as newCount) - the ones the Feed marks "new" when it opens. */
+  function newIds(posts, seen, now) {
+    var since = seen == null || !isFinite(seen) ? (now || Date.now()) - FIRST_LOOK_MS : Number(seen);
+    return (posts || []).filter(function (p) { return p && Number(p.created) > since; }).map(function (p) { return String(p.id); });
+  }
+  /** The pill's text: "3 new", "10+ new" when every post we know of is new and there are more. */
+  function badgeText(n, total, more) { return n ? (n >= total && more ? n + '+' : n) + ' new' : ''; }
+
   function store(key, val) {
     try {
       if (val === undefined) return root.localStorage ? root.localStorage.getItem(key) : null;
@@ -94,14 +108,36 @@
     var tabs = btns.map(function (b) { return b.getAttribute('data-tab'); });
     var keyTab = 'patvPadTab:' + o.slug, keySeen = 'patvPadFeedSeen:' + o.slug;
     var seenRaw = store(keySeen), seen = seenRaw != null && seenRaw !== '' ? Number(seenRaw) : null;
-    var badge = doc.getElementById('padFeedNew');
-    var current = null;
+    var badge = doc.getElementById('padFeedNew'), dot = doc.getElementById('padFeedDot');
+    var current = null, flashTimer = null;
+    var total = (o.posts || []).length;
 
     function paintBadge() {
-      if (!badge) return;
       var n = current === 'feed' ? 0 : newCount(o.posts, seen);
-      badge.hidden = !n;
-      badge.textContent = n ? (n >= (o.posts || []).length && o.more ? n + '+' : n) + ' new' : '';
+      if (badge && !(current === 'feed' && badge.classList.contains('is-flash'))) {
+        badge.hidden = !n;
+        badge.classList.remove('is-flash', 'is-fade');
+        badge.textContent = badgeText(n, total, o.more);
+      }
+      if (dot) dot.hidden = !n;
+      var fb = doc.getElementById('padTab-feed');
+      if (fb) { if (n) fb.setAttribute('aria-label', 'Feed, ' + badgeText(n, total, o.more) + ' post' + (n === 1 ? '' : 's')); else fb.removeAttribute('aria-label'); }
+    }
+    // the Feed just opened with new posts in it: keep the pill a moment and mark those posts, then let it go
+    function flashNew(ids) {
+      if (!ids.length) return;
+      var panel = doc.getElementById('padPanel-feed');
+      ids.forEach(function (id) { var el = panel ? panel.querySelector('#p-' + id.replace(/[^A-Za-z0-9_-]/g, '')) : null; if (el) el.classList.add('fp-new'); });
+      if (!badge) return;
+      badge.textContent = badgeText(ids.length, total, o.more);
+      badge.hidden = false;
+      badge.classList.remove('is-fade');
+      badge.classList.add('is-flash');
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(function () {
+        badge.classList.add('is-fade');
+        flashTimer = setTimeout(function () { badge.classList.remove('is-flash', 'is-fade'); paintBadge(); }, 700);
+      }, 6000);
     }
     function show(t, opts) {
       opts = opts || {};
@@ -114,7 +150,12 @@
         var p = doc.getElementById(b.getAttribute('aria-controls'));
         if (p) p.hidden = !on;
       });
-      if (t === 'feed') { seen = Date.now(); store(keySeen, seen); }
+      if (t === 'feed') {
+        var fresh = newIds(o.posts, seen);
+        var newest = (o.posts || []).reduce(function (m, p) { return Math.max(m, Number(p && p.created) || 0); }, 0);
+        seen = Math.max(Date.now(), newest); store(keySeen, seen);
+        flashNew(fresh);
+      } else if (badge && badge.classList.contains('is-flash')) { clearTimeout(flashTimer); badge.classList.remove('is-flash', 'is-fade'); }
       paintBadge();
       if (opts.remember && REMEMBER[t]) store(keyTab, storedValue(t));   // 1.99eb: never About
       if (opts.url && root.history && root.history.replaceState) {
@@ -158,11 +199,11 @@
 
     var requested = requestedTab(root.location.search, root.location.hash);
     show(pickTab({ tabs: tabs, platform: o.platform, active: o.active, requested: requested, stored: store(keyTab) }), {});
-    if (requested === 'feed' && /^#rules$/i.test(root.location.hash)) { var r = doc.getElementById('rules'); if (r) r.open = true; }
+    if (/^#rules$/i.test(root.location.hash)) { var r = doc.getElementById('rules'); if (r) { r.open = true; try { r.scrollIntoView({ block: 'start' }); } catch (x) { /* */ } } }
     return { show: show, current: function () { return current; } };
   }
 
-  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount,
+  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount, newIds: newIds, badgeText: badgeText,
               parseStored: parseStored, storedValue: storedValue, FEED_STICKY_MS: FEED_STICKY_MS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PATVPadTabs = api;

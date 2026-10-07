@@ -206,6 +206,27 @@ textarea { resize: vertical; }
 /* the composer */
 .fc { background: #111; border: 1px solid #253525; border-radius: 12px; padding: 12px; display: grid; gap: 8px; margin-bottom: 6px; }
 .fc-out { color: #aaa; font-size: 14px; text-align: center; padding: 14px; }
+.fc[hidden], .fc-bar[hidden] { display: none !important; }
+/* 1.99ec: the composer folded into a "Create post" bar: a fake input + quick Picture / Link / Generate */
+.fc-bar { display: flex; align-items: center; gap: 6px; background: #111; border: 1px solid #253525; border-radius: 12px; padding: 8px; margin-bottom: 6px; min-width: 0; box-sizing: border-box; }
+.fc-bar-in { appearance: none; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; text-align: left; padding: 9px 12px; border-radius: 999px;
+  border: 1px solid #2b2b2b; background: #0d0d0d; color: #8d918d; font: inherit; font-size: 14px; cursor: text; }
+.fc-bar-in:hover, .fc-bar-in:focus-visible, a.fc-bar:hover .fc-bar-in { border-color: #3c7a46; color: #cfd8cf; }
+.fc-bar-ph { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-bar-qs { display: flex; gap: 4px; flex: none; }
+.fc-bar-q { appearance: none; display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 38px; height: 38px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid #2b2b2b; background: #161616; color: #ccc; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.fc-bar-q:hover, .fc-bar-q:focus-visible { border-color: #3c7a46; color: #fff; }
+.fc-bar-in:focus-visible, .fc-bar-q:focus-visible, .fc-min:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+a.fc-bar { text-decoration: none; }
+a.fc-bar .fc-bar-in { cursor: pointer; }
+.fc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; color: #e4e4e4; }
+.fc-min { appearance: none; padding: 3px 10px; border-radius: 999px; border: 1px solid #2b2b2b; background: #161616; color: #aaa; font: inherit; font-size: 12px; cursor: pointer; }
+.fc-min:hover { color: #fff; border-color: #3c7a46; }
+@media (max-width: 600px) {
+  .fc-bar-q .lb { display: none; }
+  .fc-bar-q { padding: 0; width: 38px; }
+}
 .fc-tools { display: flex; flex-wrap: wrap; gap: 6px; }
 .fc-tool { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 999px; border: 1px solid #2b2b2b; background: #161616; color: #ccc; font: inherit; font-size: 13px; cursor: pointer; }
 .fc-tool:hover, .fc-tool:focus-within, .fc-tool:focus-visible { border-color: #4caf50; color: #fff; }

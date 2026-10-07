@@ -21,12 +21,11 @@
   };
   const name_ = displayname || usernameProfile;
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=13">
+<link rel="stylesheet" href="/public/css/feed.css?v=14">
 <section class="card rf pp" id="posts" aria-labelledby="ppH">
   <%# 1.99du: the owner's composer heads the Posts tab ("Your profile" picked); visitors get the feed %>
   <% if (S_.composer) { %>
     <div class="pp-compose" aria-label="Post to your profile">
-      <div class="pp-compose-h">✏️ Post to your profile</div>
       <%- include('feed-composer', { composer: S_.composer, next: base_, fx: fx_ }) %>
     </div>
   <% } %>

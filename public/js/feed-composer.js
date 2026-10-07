@@ -18,6 +18,10 @@
 //     (aigen.js camList - incognito / hidden people never), asks Pepe for a fresh snapshot (the bridge's snap job)
 //     and claims it (/api/feed/aigen/camref); the pad page's snapshot popover hands one over with "✨ Use in
 //     Generate" (the `patv:gen-cam` event, or sessionStorage "patvGenCam" when the composer is on another page)
+//   * (1.99ec) collapsed by default to a "✏️ Create post" bar (#fcBar): the fake input opens the form on the text,
+//     🖼 opens it and the picture picker, 🔗 the link row, ✨ the Generate panel - always in place and focused; "Hide ▴"
+//     folds it back (the draft is kept). A restored draft opens it by itself, and so does a cam handed to Generate.
+//     The /submit page renders it open (data-expanded="1", no bar).
 // Page: the pad bar, sort and pager links on /feed and /feed/following (data-swap)
 // swap #fdTop / #fdList in place (fetch + DOMParser) with history entries, so nothing typed in the
 // composer is ever lost.
@@ -112,6 +116,46 @@
   var pv = document.getElementById('fcPv');
   var DRAFT_KEY = 'patvFeedDraft:' + (form.getAttribute('data-user') || '_');
   var DRAFT_TTL = 5 * 3600 * 1000;       // the server drops never-posted uploads after 6 h
+
+  // ── 1.99ec: the collapsed "Create post" bar ──
+  var bar = document.getElementById('fcBar');
+  function isOpen() { return !form.hidden; }
+  function setOpen(on) {
+    form.hidden = !on;
+    if (bar) {
+      bar.hidden = on;
+      Array.prototype.forEach.call(bar.querySelectorAll('[aria-expanded]'), function (b) { b.setAttribute('aria-expanded', on ? 'true' : 'false'); });
+    }
+  }
+  // open the form with `kind` picked: 'text' | 'image' | 'link' | 'gen' (null: just open it, no focus - a restored draft)
+  function expand(kind) {
+    setOpen(true);
+    if (!kind) return;
+    if (kind === 'image') {
+      var pic = form.querySelector('input[type=file][data-kind=image]');
+      form.elements.body.focus();
+      if (pic) pic.click();              // still inside the user's click: the picker opens
+    } else if (kind === 'link') {
+      linkRow.classList.remove('hide'); form.elements.link.focus();
+    } else if (kind === 'gen') {
+      var g = document.getElementById('fcGen'), gt = form.querySelector('[data-tool=gen]');
+      if (g && g.classList.contains('hide') && gt) gt.click(); else if (form.elements.genPrompt) form.elements.genPrompt.focus();
+    } else {
+      form.elements.body.focus();
+    }
+  }
+  if (bar) {
+    bar.addEventListener('click', function (ev) {
+      var b = ev.target.closest('[data-fc-open]');
+      if (b) expand(b.getAttribute('data-fc-open'));
+    });
+  }
+  var minBtn = document.getElementById('fcMin');
+  if (minBtn) minBtn.addEventListener('click', function () {
+    if (typeof saveNow === 'function') saveNow();
+    setOpen(false);
+    var f = bar && bar.querySelector('.fc-bar-in'); if (f) f.focus();
+  });
 
   function setErr(t) { errEl.textContent = t || ''; errEl.classList.remove('ok'); }
   function cost() {
@@ -451,6 +495,7 @@
     // "✨ Use in Generate" from the pad page's snapshot popover (same page), or handed over from another page
     function takeCam(c) {
       if (!c || !c.id || !c.img) return;
+      if (!isOpen()) setOpen(true);       // 1.99ec: the form may be folded into its bar
       var radio = form.querySelector('input[name=community][value="' + String(c.room || '').replace(/["\\]/g, '') + '"]');
       if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
       if (picked() !== c.room) { gen.classList.remove('hide'); setGErr('You can\'t post in that pad, so its cam can\'t be used here.'); return; }
@@ -637,6 +682,7 @@
     restoring = false;
     if (d.link) preview();
     errEl.textContent = 'Draft restored'; errEl.classList.add('ok');
+    setOpen(true);                         // 1.99ec: a draft opens the folded form (no focus, no scroll)
     var clr = document.createElement('button'); clr.type = 'button'; clr.className = 'fc-clear'; clr.textContent = 'Discard draft';
     clr.addEventListener('click', function () {
       files.forEach(function (f) { f.cancel = true; if (f.id) api('/api/feed/uploads/' + f.id + '/discard', {}).catch(function () {}); if (f.el) f.el.li.remove(); });

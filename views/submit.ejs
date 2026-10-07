@@ -1,0 +1,21 @@
+<%- include('layout', { title: pad ? 'Create a post in p/' + pad.slug : 'Create a post', user: user }) %>
+<%# 1.99ec: the create-post page - /submit (any pad) and /p/<pad>/submit (that pad preselected). feedweb.js submitPage:
+    signed in only (else /login?next=). The full composer, already open; posting opens the new post. %>
+<link rel="stylesheet" href="/public/css/feed.css?v=14">
+<style>
+  .sb { max-width: 760px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; box-sizing: border-box; width: 100%; display: grid; gap: 12px; }
+  .sb *, .sb *::before, .sb *::after { box-sizing: border-box; }
+  .sb .crumb { font-size: 13px; color: #888; }
+  .sb a { color: #81c784; text-decoration: none; }
+  .sb a:hover { color: #a5d6a7; }
+  .sb h1 { margin: 0; font-size: 24px; }
+  .sb .sb-sub { margin: 0; color: #9aa59a; font-size: 14px; }
+  .sb .fc { margin: 0; }
+</style>
+<main class="sb">
+  <div class="crumb"><% if (pad) { %><a href="/p">Pads</a> › <a href="<%= pad.href %>">p/<%= pad.slug %></a> › Create post<% } else { %><a href="/feed">Feed</a> › Create post<% } %></div>
+  <h1>✏️ Create a post</h1>
+  <p class="sb-sub"><% if (pad) { %>Posting in <a href="<%= pad.href %>"><b>p/<%= pad.slug %></b></a> — or pick another pad below.<% } else { %>Pick the pad it goes in below. Text, links, pictures, audio, video — or ✨ generate one with Pepe.<% } %></p>
+  <%- include('partials/feed-composer', { composer, next: here, fx, expanded: true }) %>
+</main>
+<%- include('partials/feed-js', { viewer }) %>

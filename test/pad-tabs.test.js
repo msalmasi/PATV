@@ -99,13 +99,14 @@ test("the server default for a live pad is Live (the guide's Open pad link carri
   }
 });
 
-test("requestedTab: ?tab= and #hash deep links (aliases), feed sorts / pages and #rules mean Feed", () => {
+test("requestedTab: ?tab= and #hash deep links (aliases), feed sorts / pages mean Feed; #rules means About (1.99ec)", () => {
   assert.equal(T.requestedTab("?tab=feed", ""), "feed");
   assert.equal(T.requestedTab("?x=1&tab=About", ""), "about");
   assert.equal(T.requestedTab("?tab=stage", ""), "live");
   assert.equal(T.requestedTab("?tab=schedule", ""), "live", "the schedule lives in the Stage card");
   assert.equal(T.requestedTab("", "#feed"), "feed");
-  assert.equal(T.requestedTab("", "#rules"), "feed");
+  assert.equal(T.requestedTab("", "#rules"), "about", "1.99ec: the rules live in About");
+  assert.equal(T.requestedTab("?tab=rules", ""), "about");
   assert.equal(T.requestedTab("", "#live"), "live");
   assert.equal(T.requestedTab("?sort=top&t=week", ""), "feed");
   assert.equal(T.requestedTab("?fp=2", ""), "feed");
@@ -169,14 +170,14 @@ test("page: tab bar, panels hidden (not removed), the Live tab's latest-posts ca
   // the live machinery is all still in the (hidden) Live panel
   const livePanel = html.slice(html.indexOf('id="padPanel-live"'), html.indexOf('id="padPanel-about"'));
   for (const id of ["rmStage", "rmFeed", "rmCompose", "rmMod", "rmMic", "rmPeople", "rdj"]) assert.ok(livePanel.includes('id="' + id + '"'), id + " in the Live panel");
-  assert.match(livePanel, /📝 Latest from the feed/);
+  assert.match(livePanel, /<span class="ht">📝 Latest posts<\/span>/, "1.99ec: a short one-line title");
   assert.match(livePanel, /href="\/feed\/p\/p1">Hello &lt;b&gt;pad&lt;\/b&gt;<\/a>/, "escaped");
   assert.match(livePanel, /🔞 NSFW post/); assert.doesNotMatch(livePanel, /spicy/, "no NSFW text in the teaser");
   assert.match(livePanel, /data-pad-tab="feed">Open feed ›/);
   assert.doesNotMatch(livePanel, /id="joinH"/, "Join the Camfrog room moved to About");
   const about = html.slice(html.indexOf('id="padPanel-about"'));
   assert.match(about, /Join the Camfrog room/); assert.match(about, /Plant Based Chatting/); assert.match(about, /👑 pb/);
-  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=3/); assert.match(html, /room-mod\.css\?v=3/);
+  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=4/); assert.match(html, /room-mod\.css\?v=4/);
   assert.match(html, /collapsible: true/, "the Manage card collapses on the pad page");
   assert.match(html, /PATVPadTabs\.init\(\{"slug":"plant_based_chatting","platform":"camfrog","active":true/);
 });

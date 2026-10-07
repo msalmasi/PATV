@@ -93,8 +93,12 @@
     // ── the panel ──
     host.textContent = '';
     host.classList.add('pm');
-    var h = el('h2', null, 'Manage room'); h.id = 'pmH' + slug; host.setAttribute('aria-labelledby', h.id);
-    var badges = el('small', 'pm-badges'); h.appendChild(badges);
+    // 1.99ec: one header row - the title, then the role chip(s) and the Open toggle kept together (.pm-hr), which
+    // drop below the title as one group on a narrow card; the topic summary line sits underneath
+    var h = el('h2'); h.id = 'pmH' + slug; host.setAttribute('aria-labelledby', h.id);
+    h.appendChild(el('span', 'pm-ht', 'Manage room'));
+    var hr = el('span', 'pm-hr'); h.appendChild(hr);
+    var badges = el('small', 'pm-badges'); hr.appendChild(badges);
     var off = el('p', 'pm-note warn hide', '🛑 Web moderation is off in this room — an admin turns it on in Camfrog with !bridge cmds on.');
     var blocked = el('p', 'pm-note warn hide');
     var body = el('div', 'pm-body');
@@ -105,7 +109,7 @@
       try { isOpen = localStorage.getItem('patvModOpen') === '1'; } catch (e) { isOpen = false; }
       tog = el('button', 'pm-tog'); tog.type = 'button'; tog.setAttribute('aria-controls', 'pmBody' + slug);
       body.id = 'pmBody' + slug;
-      h.appendChild(tog);
+      hr.appendChild(tog);
       sumLine = el('p', 'pm-sum');
       tog.addEventListener('click', function () {
         isOpen = !isOpen;

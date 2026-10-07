@@ -273,6 +273,41 @@ function register(app, { addUser, isBotToken }) {
   });
   app.get("/feed/following", addUser, (req, res) => feedPage(req, res, { mode: "following" }));
 
+  // ── 1.99ec: the create-post page ──
+  // /submit (pick any pad) and /p/<pad>/submit (that pad preselected; the navbar's "✏️ Post" goes there from a pad's
+  // pages). /submit?pad=<slug> 302s to /p/<slug>/submit (one address per pad). An unknown pad is a 404; signed out ->
+  // /login?next=<this page>. The full composer, open (no "Create post" bar); posting lands on the new post's canonical
+  // address (feed-composer.js: off a pad / profile page it opens d.url).
+  app.get("/submit", addUser, async (req, res, next) => {
+    try {
+      const pad = String((req.query || {}).pad || "").trim().toLowerCase().slice(0, 64);
+      if (pad) return res.redirect(302, "/p/" + encodeURIComponent(pad) + "/submit");
+      await submitPage(req, res, null);
+    } catch (e) { next(e); }
+  });
+  app.get("/p/:slug/submit", addUser, async (req, res, next) => {
+    try {
+      const raw = String(req.params.slug || "").toLowerCase().slice(0, 64);
+      const R = (await rooms.bySlug(raw)) || (await require("./roomsweb").resolveRoom(raw));
+      if (!R) {
+        return res.status(404).render("notFound", { user: req.user ? req.user.username : null, heading: "No such pad",
+          message: "There's no pad at p/" + raw + " to post in.", title: "Pad not found" });
+      }
+      await submitPage(req, res, R);
+    } catch (e) { next(e); }
+  });
+  async function submitPage(req, res, R) {
+    await store.init();
+    const here = R ? require("./pads").padHref(R, "submit") : "/submit";
+    if (!req.user || !req.user.userId) return res.redirect(302, "/login?next=" + encodeURIComponent(here));
+    const viewer = await viewerOf(req);
+    if (!viewer) return res.redirect(302, "/login?next=" + encodeURIComponent(here));
+    res.set("X-Robots-Tag", "noindex");
+    res.set("Cache-Control", "private, no-store");
+    const pad = R ? { id: R.id, slug: require("./pads").padSlug(R) || R.slug, title: R.title || R.name || R.slug, href: require("./pads").padHref(R) } : null;
+    res.render("submit", { user: viewer.username, viewer, pad, composer: await composerFor(viewer, R ? R.id : null), here, fx });
+  }
+
   async function feedPage(req, res, { mode, room: R = null }) {
     try {
       await store.init();

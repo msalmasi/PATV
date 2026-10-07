@@ -2,8 +2,11 @@
 .pm[hidden], .pm .hide, .pm-dlg .hide { display: none !important; }
 .pm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .pm { border-color: #5a4a1a !important; background: linear-gradient(180deg, #17140b 0%, #111 120px) !important; }
-.pm h2 { align-items: center; flex-wrap: wrap; }
-.pm-badges { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+/* 1.99ec: one header row - title · role chip · Open toggle; chip + toggle wrap together (.pm-hr), never one per line */
+.pm h2 { align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 6px 6px; letter-spacing: .04em; }
+.pm .pm-ht { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+.pm .pm-hr { display: inline-flex; align-items: center; gap: 5px; flex: none; margin-left: auto; flex-wrap: nowrap; }
+.pm-badges { display: inline-flex; flex-wrap: nowrap; gap: 4px; }
 .pm-badge { font-family: Ubuntu, sans-serif; font-size: 11px; letter-spacing: 0; text-transform: none; padding: 1px 8px; border-radius: 999px;
             border: 1px solid #333; background: #1a1a1a; color: #bbb; white-space: nowrap; }
 .pm-badge.role { border-color: #6b5a20; background: #1d1a0f; color: #f3e3a3; }
@@ -54,8 +57,8 @@
 /* the roster's manage button (views/room.ejs) */
 .rm .people li.pm-can { cursor: pointer; }
 .rm .people li.pm-can:hover { background: #1b1910; }
-.rm .people .pm-mg { appearance: none; background: none; border: 1px solid #3a3420; color: #e8d9a0; border-radius: 6px; padding: 0 6px; font: inherit; font-size: 13px;
-                     line-height: 1.4; cursor: pointer; margin-left: 2px; }
+.rm .people .pm-mg { appearance: none; background: none; border: 1px solid #3a3420; color: #e8d9a0; border-radius: 6px; font: inherit; font-size: 13px;
+                     cursor: pointer; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; margin: 0; line-height: 1; box-sizing: border-box; }
 .rm .people .pm-mg:hover, .rm .people .pm-mg:focus-visible { border-color: #c6a83f; background: #1d1a0f; }
 
 /* dialogs (appended to <body>, outside .rm) */
@@ -99,8 +102,8 @@
 }
 
 /* 1.99dx: the pad page's Manage card collapses to the topic line (room-mod.js opts.collapsible) */
-.pm-tog { appearance: none; margin-left: auto; font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12px; font-weight: bold;
-          padding: 3px 10px; border-radius: 999px; border: 1px solid #6b5a20; background: #1d1a0f; color: #f3e3a3; cursor: pointer; }
+.pm-tog { appearance: none; margin-left: 0; white-space: nowrap; font-family: Ubuntu, sans-serif; letter-spacing: 0; text-transform: none; font-size: 12px; font-weight: bold;
+          padding: 3px 8px; border-radius: 999px; border: 1px solid #6b5a20; background: #1d1a0f; color: #f3e3a3; cursor: pointer; }
 .pm-tog:hover, .pm-tog:focus-visible { border-color: #c6a83f; }
 .pm-tog:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
 .pm.pm-collapsed h2 { margin-bottom: 6px; }

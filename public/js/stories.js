@@ -203,7 +203,11 @@
     V.mute.textContent = V.muted ? '🔇' : '🔊'; V.mute.setAttribute('aria-label', V.muted ? 'Unmute' : 'Mute');
     V.foot.innerHTML = '';
     var openRoom = el('a', 'sv-open-room', 'Open ' + R.title + ' ›'); openRoom.href = R.href; V.foot.appendChild(openRoom);
-    var page = el('a', 'sv-open-item', 'Capture page'); page.href = it.page; V.foot.appendChild(page);
+    // 1.99ec: says what it opens ("Capture page" confused people)
+    var noun = it.kind === 'clip' ? 'clip' : it.kind === 'photo' ? 'snap' : '';
+    var page = el('a', 'sv-open-item', noun ? 'Open ' + noun + ' ›' : 'Open ›'); page.href = it.page;
+    page.setAttribute('aria-label', 'Open this ' + (noun || 'capture') + '\'s page to share or download');
+    V.foot.appendChild(page);
     V.live.textContent = R.title + ': ' + what + ' of ' + (it.subject || 'someone') + ', ' + (ii + 1) + ' of ' + R.items.length;
     // media
     V.stage.innerHTML = '';

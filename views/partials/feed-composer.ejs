@@ -1,12 +1,29 @@
 <%#
-  The post composer (1.99bv). Locals: composer (feedweb.composerFor or null when signed out), next (return path)
-%><% const cp = composer; %>
+  The post composer (1.99bv). Locals: composer (feedweb.composerFor or null when signed out), next (return path),
+  expanded (optional, 1.99ec: true on the /submit page - the full form, no "Create post" bar)
+  1.99ec: collapsed by default (the pad Feed tab, /feed, a profile's Posts tab) to a one-line "✏️ Create post" bar:
+  a fake input "Post something to p/<pad>…" + quick Picture / Link / Generate buttons. Any of them opens the full
+  form in place, focused, with that kind picked (public/js/feed-composer.js); a saved draft opens it by itself.
+%><% const cp = composer; const exp_ = typeof expanded !== 'undefined' && !!expanded; %>
 <% if (!cp) { %>
-  <div class="fc fc-out">✍️ <a href="/login?next=<%= encodeURIComponent(next) %>">Sign in</a> to post to the feed — text, links, pictures, audio or video.</div>
+  <a class="fc-bar fc-bar-out" href="/login?next=<%= encodeURIComponent(next) %>"><span class="fc-bar-in"><span aria-hidden="true">✏️</span><span class="fc-bar-ph">Sign in to post — text, links, pictures, audio or video</span></span></a>
 <% } else if (cp.refusal) { %>
   <div class="fc fc-out">✍️ <%= cp.refusal %></div>
 <% } else { %>
-  <form class="fc" id="fcForm" novalidate data-user="<%= cp.user %>" data-chunk="<%= cp.chunk %>" data-caps="<%= JSON.stringify(cp.caps) %>" data-prices="<%= JSON.stringify(cp.prices) %>" data-max-images="<%= cp.maxImages %>" data-home="<%= cp.room || '' %>">
+  <% const home_ = cp.rooms.find((r) => r.id === cp.room) || null;
+     const where_ = home_ ? (home_.profile ? 'your profile' : (home_.label || 'p/' + home_.slug)) : ''; %>
+  <% if (!exp_) { %>
+  <div class="fc-bar" id="fcBar">
+    <button type="button" class="fc-bar-in" data-fc-open="text" aria-controls="fcForm" aria-expanded="false"><span aria-hidden="true">✏️</span><span class="fc-bar-ph"><%= where_ ? 'Post something to ' + where_ + '…' : 'Create a post…' %></span></button>
+    <span class="fc-bar-qs">
+      <% if (!cp.mediaRefusal) { %><button type="button" class="fc-bar-q" data-fc-open="image" aria-controls="fcForm" title="Post a picture" aria-label="Create a post with a picture">🖼<span class="lb"> Picture</span></button><% } %>
+      <button type="button" class="fc-bar-q" data-fc-open="link" aria-controls="fcForm" title="Post a link" aria-label="Create a post with a link">🔗<span class="lb"> Link</span></button>
+      <% if (!cp.mediaRefusal && cp.aigen) { %><button type="button" class="fc-bar-q" data-fc-open="gen" aria-controls="fcForm" title="Generate a picture or video with Pepe" aria-label="Create a post with a generated picture or video">✨<span class="lb"> Generate</span></button><% } %>
+    </span>
+  </div>
+  <% } %>
+  <form class="fc<%= exp_ ? ' fc-full' : '' %>" id="fcForm" novalidate<%= exp_ ? '' : ' hidden' %> data-expanded="<%= exp_ ? '1' : '' %>" data-user="<%= cp.user %>" data-chunk="<%= cp.chunk %>" data-caps="<%= JSON.stringify(cp.caps) %>" data-prices="<%= JSON.stringify(cp.prices) %>" data-max-images="<%= cp.maxImages %>" data-home="<%= cp.room || '' %>">
+    <% if (!exp_) { %><div class="fc-head"><b>✏️ Create post</b><button type="button" class="fc-min" id="fcMin" aria-controls="fcForm" title="Fold the form away - your draft is kept">Hide ▴</button></div><% } %>
     <div class="fc-row">
       <input name="title" maxlength="140" placeholder="Title (optional)" aria-label="Title" autocomplete="off">
     </div>
@@ -106,7 +123,8 @@
             <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 Posting on <b>your profile</b> (<%= r.label %>): it follows <a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>. Your followers see it in Following.</p>
             <label class="fc-inall ck<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>" title="Off: it stays on your profile and in your followers' Following tab, but not in All"><input type="checkbox" name="inAll" checked> 🌐 Also show in All</label>
           <% return; } %>
-            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 Posting in <b>p/<%= r.slug %></b>: <a href="/p/<%= encodeURIComponent(r.slug) %>#rules" target="_blank" rel="noopener"><% if (r.rules) { %>read its <%= r.rules %> rule<%= r.rules === 1 ? '' : 's' %></a><% } else { %>read the rules</a> (it follows <a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>)<% } %></p>
+            <%# 1.99ec: the rules live in the pad page's About tab; on the pad's own page the link switches tabs in place %>
+            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 Posting in <b>p/<%= r.slug %></b>: <a href="/p/<%= encodeURIComponent(r.slug) %>?tab=about#rules" target="_blank" rel="noopener"<% if (cp.room === r.id) { %> data-pad-tab="about" data-open="rules"<% } %>><% if (r.rules) { %>read its <%= r.rules %> rule<%= r.rules === 1 ? '' : 's' %></a><% } else { %>read the rules</a> (it follows <a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>)<% } %></p>
           <% }) %>
         </div>
       <% } %>
