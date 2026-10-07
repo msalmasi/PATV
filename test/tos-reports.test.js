@@ -314,7 +314,9 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   const t = await get("/terms", null);
   assert.equal(t.status, 200);
   assert.match(t.text, new RegExp("Last updated " + terms.UPDATED));
-  assert.match(t.text, /\[\[CONTACT EMAIL\]\]/);
+  assert.match(t.text, /support@publicaccess\.tv/);                   // 1.99dd: the contact details are filled in
+  assert.match(t.text, /Houseplants LLC/);
+  assert.match(t.text, /\[\[DMCA AGENT POSTAL ADDRESS\]\]/);         // still pending
   assert.match(t.text, /no cash value/);
   assert.match(t.text, /18 years old/);
   const p = await get("/privacy", null);
@@ -380,15 +382,15 @@ test("Terms switch: can't be turned on while [[placeholders]] remain in /terms o
   terms._setPlaceholders(null);                     // the real pages (still the template)
   try {
     const ph = terms.placeholders();
-    assert.ok(ph.length > 5, "the template's markers are found");
-    assert.ok(ph.some((x) => x.page === "terms" && x.text === "CONTACT EMAIL"));
-    assert.ok(ph.some((x) => x.page === "privacy" && x.text === "PRIVACY CONTACT EMAIL"));
+    assert.ok(ph.length >= 1, "the remaining markers are found");
+    assert.ok(ph.some((x) => x.page === "terms" && x.text === "DMCA AGENT POSTAL ADDRESS"));
+    assert.ok(!ph.some((x) => x.text === "CONTACT EMAIL" || x.text === "OPERATOR LEGAL NAME"), "filled-in markers are gone");
     assert.ok(!ph.some((x) => /^PLACEHOLDER$|' \+ s \+ '/.test(x.text)), "the helper and the file comment aren't counted");
     // the API (Admins) refuses with the list; nothing changes
     const r = await post("/api/feed/admin/config", U.admin, { terms_enforced: true });
     assert.equal(r.status, 409, JSON.stringify(r.d));
     assert.match(r.d.error, /placeholder/);
-    assert.match(r.d.error, /OPERATOR LEGAL NAME/);
+    assert.match(r.d.error, /DMCA AGENT POSTAL ADDRESS/);
     assert.equal(store.config().terms_enforced, false);
     assert.equal(terms.enforced(), false);
     await assert.rejects(store.setConfig({ terms_enforced: true }, "test"), /placeholder/);
@@ -398,9 +400,8 @@ test("Terms switch: can't be turned on while [[placeholders]] remain in /terms o
     // the admin page: the switch (disabled) and every remaining marker
     const a = (await get("/feed/admin", U.admin)).text;
     assert.match(a, /name="terms_enforced" disabled/);
-    assert.match(a, /\[\[OPERATOR LEGAL NAME\]\]/);
-    assert.match(a, /\[\[PRIVACY CONTACT EMAIL\]\]/);
-    assert.match(a, new RegExp("<b>" + ph.length + "</b> \\[\\[placeholder\\]\\]s left"));
+    assert.match(a, /\[\[DMCA AGENT POSTAL ADDRESS\]\]/);
+    assert.match(a, new RegExp("<b>" + ph.length + "</b> \\[\\[placeholder\\]\\]s? left"));
     // even if the setting were on (stored before the markers came back), it isn't in force with markers left
     terms.setEnforced(true);
     assert.equal(terms.enforced(), false);
