@@ -142,8 +142,10 @@ const cleanReply = (s) => String(s == null ? "" : s).replace(/[\u0000-\u001f\u00
 /** 1.99ea: the name a web line goes into the room under - the account's PATV display name, or "" to let
  *  Pepe pick (the Camfrog display name, then the login). A display name is display only, so one that is
  *  ANOTHER account's login / username (or Pepe's) is never sent - "🌐 <someone else> (web)" can't happen.
- *  1.99eb: the default lookup here (camfrogUsername first, then username) is a superset of the bridge's
- *  linked-only rule: any name the bridge would show as another account is refused, plus other usernames. */
+ *  1.99eb: refused when it is another account's linked login (what the bridge resolves) OR another account's
+ *  PATV username. 1.99en: lookup() is linked-only everywhere now, so both are checked explicitly (one query,
+ *  userlinks.resolve) - at least as strict as before: a username match on another account refuses even
+ *  when the login match is this account. */
 async function webName(u) {
   let d = "";
   try { d = clean(require("./displaynames").usable(u && u.displayname), 40); } catch (e) { d = ""; }
@@ -152,8 +154,10 @@ async function webName(u) {
     const UL = require("./userlinks");
     const k = UL.keyOf(d);
     if (k) {
-      const acc = (await UL.lookup([d])).get(k);
-      if (acc && String(acc.username).toLowerCase() !== String(u.username || "").toLowerCase()) return "";
+      const found = await UL.resolve({ logins: [d], usernames: [k] });
+      const me = String(u.username || "").toLowerCase();
+      const other = (acc) => !!acc && String(acc.username).toLowerCase() !== me;
+      if (other(found.logins.get(k)) || other(found.usernames.get(k))) return "";
     }
   } catch (e) { return ""; }
   return d;

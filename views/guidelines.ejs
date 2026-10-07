@@ -52,6 +52,20 @@
     </ul>
   </section>
 
+  <%# 1.99en: the AI generation content policy - rendered from guidelines.js AI_POLICY (the composer's Generate help uses it too) %>
+  <% if (G.AI_POLICY) { const A = G.AI_POLICY; %>
+  <section id="ai">
+    <h2>✨ AI pictures and video</h2>
+    <p><%= A.intro %></p>
+    <p><b><%= A.short %></b></p>
+    <ul class="how">
+      <% A.allowed.forEach((t) => { %><li>✅ <%= t %></li><% }) %>
+      <% A.never.forEach((t) => { %><li>⛔ <%= t %></li><% }) %>
+    </ul>
+    <p class="note"><%= A.enforcement %></p>
+  </section>
+  <% } %>
+
   <section id="pads">
     <h2>Pad rules</h2>
     <p>Pad owners can write up to 15 rules of their own. A pad with no rules follows Padiquette. Owners run their own pads — they can approve, hide and remove posts in them and ban people from posting there — but they can't make anything on the hard-limits list OK.</p>

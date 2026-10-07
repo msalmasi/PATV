@@ -151,9 +151,10 @@ test("1.99eb: a login resolves ONLY to an account whose LINKED camfrogUsername i
   assert.ok(!v.mic[0].patv, "mic chips");
   const s = (await bridge.summary(true)).find((r) => r.slug === "names-room");
   assert.deepEqual(s.mic, ["plant guy"], "homepage mic list");
-  // the economy pages' default lookup keeps the username fallback
-  assert.equal((await UL.lookup(["plantbaked"])).get("plantbaked").username, "plantbaked");
+  // 1.99en: linked-only is the default everywhere (economy pages too) - no username fallback, with or without the option
+  assert.equal((await UL.lookup(["plantbaked"])).size, 0);
   assert.equal((await UL.lookup(["plantbaked"], { linkedOnly: true })).size, 0);
+  assert.equal((await UL.lookupUsers(["PlantBaked"])).get("plantbaked").username, "plantbaked", "a PATV username resolves only when asked for as one");
   assert.equal((await UL.lookup(["FOAMY1111"], { linkedOnly: true })).get("foamy1111").username, "plantbaked", "case-insensitive, real over CF auto");
   assert.equal((await UL.lookup(["jardoo"], { linkedOnly: true })).size, 0, "archived never");
 });

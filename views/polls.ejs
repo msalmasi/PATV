@@ -108,7 +108,7 @@
   <% past.forEach((p) => { %>
     <div class="card past">
       <p class="q"><%= p.question %></p>
-      <div class="info">by <%- ul(p.creator || 'someone') %><%= p.created_at ? ' · ' + p.created_at : '' %> · <%= p.total %> vote<%= p.total === 1 ? '' : 's' %></div>
+      <div class="info">by <%- /^🌐/.test(p.creator || '') ? ul(p.creator, { user: p.creator.replace(/^🌐/, '') }) : ul(p.creator || 'someone') %><%= p.created_at ? ' · ' + p.created_at : '' %> · <%= p.total %> vote<%= p.total === 1 ? '' : 's' %></div>
       <% bars(p, false) %>
     </div>
   <% }) %>

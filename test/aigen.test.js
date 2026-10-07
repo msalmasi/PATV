@@ -172,6 +172,33 @@ test("who may: linked name or level >= 2; banned / new unlinked accounts refused
   await clearJobs();
 });
 
+// ───────────────────────────── 1.99en: the content policy ─────────────────────────────
+test("1.99en content policy: explicit prompts refused before queueing (friendly), suggestive / photoreal pass; shown in the composer and Padiquette", async () => {
+  const mk = (prompt) => post("/api/feed/aigen", U.alice, { kind: "image", prompt, pad: LOUNGE });
+  let r = await mk("a fully nude woman on a bed");
+  assert.equal(r.status, 400, "explicit nudity: refused");
+  assert.match(r.d.error, /No explicit nudity.*suggestive is fine/);
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pepe_actions WHERE kind = 'aigen' AND user_id = ?", [U.alice.userId]))[0].n, 0, "nothing queued for Pepe");
+  for (const ok of ["a woman in lingerie, photorealistic", "a bikini model on a yacht", "nude lipstick swatches", "a topless man surfing"]) {
+    assert.equal(AG.explicitTerm(ok), "", "allowed: " + ok);
+  }
+  assert.equal(AG.explicitTerm("HENTAI"), "hentai");
+  assert.equal(AG.explicitTerm("two people having sex"), "having sex");
+  r = await mk("a pin-up in lingerie, photorealistic");
+  assert.equal(r.status, 200, "suggestive + photoreal: queued");
+  await clearJobs();
+  const G = require(path.join(repo, "guidelines"));
+  assert.equal(AG.POLICY, G.AI_POLICY, "one written policy (guidelines.js), aigen.js uses it");
+  assert.match(G.AI_POLICY.short, /No explicit nudity — suggestive is fine/);
+  assert.ok(G.AI_POLICY.never.some((t) => /exposed genitals, exposed female nipples, sex acts/.test(t)));
+  assert.ok(G.AI_POLICY.never.some((t) => /minors/.test(t)) && G.AI_POLICY.never.some((t) => /real, identifiable person/.test(t)));
+  assert.ok(G.AI_POLICY.allowed.some((t) => /Photorealistic/.test(t)) && G.AI_POLICY.allowed.some((t) => /lingerie, swimwear/.test(t)));
+  const html = await (await fetch(base + "/p/" + rooms.getCached(ROOM).slug, { headers: { "x-test-user": U.alice.userId } })).text();
+  assert.match(html, /No explicit nudity — suggestive is fine/, "the Generate help shows the policy");
+  assert.match(html, /href="\/guidelines#ai"/, "...and links the full rules");
+  // the /guidelines page itself: test/feedautomod.test.js ("/guidelines: Padiquette ...")
+});
+
 // ───────────────────────────── a picture, end to end ─────────────────────────────
 test("image: queued -> Pepe starts it -> chunks -> re-encoded attachment flagged ai_generated -> preview -> attached to a post with the badge + prompt", async () => {
   const c = await post("/api/feed/aigen", U.alice, { kind: "image", prompt: "a frog DJ in a neon nightclub", pad: ROOM, price: 40000, back: "/p/plant/#feed" });

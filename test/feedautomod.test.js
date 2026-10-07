@@ -427,6 +427,9 @@ test("/guidelines: Padiquette - the latitude, the hard limits from the same list
   assert.match(r.text, /Padiquette/);
   assert.match(r.text, /wide latitude to free speech and unfiltered language/);
   for (const x of G.RULES) assert.ok(r.text.includes(`id="rule-${x.id}"`), x.id);
+  // 1.99en: the AI generation policy section (guidelines.js AI_POLICY), linked from Terms
+  assert.match(r.text, /<section id="ai">[\s\S]*No explicit nudity — suggestive is fine[\s\S]*exposed female nipples[\s\S]*<\/section>/);
+  assert.match(fs.readFileSync(path.join(repo, "views/terms.ejs"), "utf8"), /href="\/guidelines#ai"/);
   assert.equal((await get("/padiquette", null)).location, "/guidelines");
   assert.match(fs.readFileSync(path.join(repo, "views/layout.ejs"), "utf8"), /href="\/guidelines"/);
   assert.match(fs.readFileSync(path.join(repo, "views/terms.ejs"), "utf8"), /href="\/guidelines">Padiquette/);

@@ -15,7 +15,7 @@
 "use strict";
 
 const NAME = "Padiquette";
-const UPDATED = "2026-10-06";
+const UPDATED = "2026-10-07";
 const PATH = "/guidelines";
 
 const INTRO = "PATV is a bunch of pads full of people who like to talk, joke, argue and hang out - online and in the Camfrog rooms. "
@@ -63,6 +63,24 @@ const SEVERE = Object.freeze(RULES.filter((r) => r.severity === "severe").map((r
 const ALWAYS = Object.freeze(RULES.map((r) => r.id));
 const rule = (id) => RULES.find((r) => r.id === id) || null;
 
+/** 1.99en: THE AI generation content policy (the one written copy on the site): Padiquette's "AI pictures and video"
+ *  section (#ai), the feed composer's Generate help (feedweb.js -> cp.aigen.policy) and aigen.js's explicit-prompt
+ *  check all use it. Pepe enforces the same rules (camfrog-bot pepe_aigen.py AIGEN_POLICY). */
+const AI_POLICY = Object.freeze({
+  short: "No explicit nudity — suggestive is fine. Nothing sexual with minors or real people.",
+  intro: "PATV is adults-only (18+). Pictures and videos made with Pepe (!imagine, !video, the feed's ✨ Generate) follow these rules - the same in chat and on the site:",
+  allowed: Object.freeze([
+    "Photorealistic pictures, including realistic people.",
+    "Sexually suggestive and R-rated content: lingerie, swimwear, innuendo, implied sexuality, R-level violence. Suggestive results are marked 🔞 NSFW automatically, so they're blurred for anyone signed out or not opted in.",
+  ]),
+  never: Object.freeze([
+    "Explicit nudity, for anyone - fictional or real: exposed genitals, exposed female nipples, sex acts.",
+    "Anything sexual or suggestive involving minors, or anyone who looks under 18. Zero tolerance.",
+    "Nude, sexual or sexualised pictures of a real, identifiable person - a named or public person, someone in the room, or the person in a cam / reference photo.",
+  ]),
+  enforcement: "Pepe checks the prompt before anything is charged and the result before it's posted. A refused prompt costs nothing; a refused result is refunded.",
+});
+
 /** One-paragraph statement of the free-speech stance (the automod prompt quotes it verbatim). */
 const SPEECH = "PATV gives WIDE latitude to free speech and unfiltered language. Profanity, crude or dark humour, edgy jokes, "
   + "roasting, insults and trash talk between people who are in on it, hot takes, political and religious opinions, and adult "
@@ -83,4 +101,4 @@ function register(app, { addUser } = {}) {
   app.get("/rules", (req, res) => res.redirect(301, PATH));
 }
 
-module.exports = { NAME, UPDATED, PATH, INTRO, GOOD, LATITUDE, RULES, RULE_IDS, SEVERE, ALWAYS, SPEECH, rule, promptList, register };
+module.exports = { NAME, UPDATED, PATH, INTRO, GOOD, LATITUDE, RULES, AI_POLICY, RULE_IDS, SEVERE, ALWAYS, SPEECH, rule, promptList, register };

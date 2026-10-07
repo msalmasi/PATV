@@ -239,7 +239,7 @@
       <ul class="sched">
         <% sched.slice(0, 30).forEach((n) => { %>
           <li><time data-ts="<%= n.start_at %>" data-long="1"><%= new Date(n.start_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>
-            <span class="w"><b><%- UL(n.username, { text: n.display }) %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
+            <span class="w"><b><%- UL(n.username, { text: n.display, user: true }) %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
         <% }) %>
       </ul>
     <% } %>

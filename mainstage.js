@@ -1021,12 +1021,13 @@ async function roomSchedule(roomId, viewer, manage) {
     .map((s) => ({ ...row(s), start_at: startOf(s), status: s.status === "requested" ? "requested" : "scheduled" }));
   const queue = q.map((e, i) => ({ position: i + 1, display: e.displayname || e.username, username: e.username || null, minutes: e.minutes, featured: !!e.feature,
                                    title: e.title || null, mode: e.mode === "embed" ? "embed" : "stream", mine: !!me && e.userId === me }));
-  // 1.99dt: the booker's profile link (one users lookup for the whole schedule; archived / unknown -> no link)
+  // 1.99dt: the booker's profile link (one users lookup for the whole schedule; archived / unknown -> no link).
+  // 1.99en: a slot's username is the PATV account that booked it (not a Camfrog login): resolved by username.
   try {
     const ul = require("./userlinks");
     const all = [...live, ...upcoming, ...queue];
-    const found = await ul.lookup(all.map((r) => r.username).filter(Boolean));
-    for (const r of all) { const a = r.username ? found.get(ul.keyOf(r.username)) : null; r.href = a ? ul.profileHref(a.username) : null; }
+    const found = await ul.lookupUsers(all.map((r) => r.username).filter(Boolean));
+    for (const r of all) { const a = r.username ? found.get(ul.refKey(r.username).toLowerCase()) : null; r.href = a ? ul.profileHref(a.username) : null; }
   } catch (e) { console.error("[stage] schedule links:", e.message); }
   const out = { live, upcoming, queue };
   if (manage) out.pending = fut.filter((s) => s.status === "requested").length;

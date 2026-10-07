@@ -65,6 +65,8 @@
           <span class="fc-gen-price" id="fcGenPrice"></span>
           <button type="button" class="btn-s" id="fcGenGo">✨ Generate</button>
         </div>
+        <%# 1.99en: the content policy (guidelines.js AI_POLICY, via feedweb cp.aigen.policy) %>
+        <p class="fc-gen-terms fc-gen-policy">🔞 <b><%= (cp.aigen.policy && cp.aigen.policy.short) || 'No explicit nudity — suggestive is fine. Nothing sexual with minors or real people.' %></b> Photorealistic is fine; suggestive results are marked NSFW automatically. <a href="/guidelines#ai">The AI rules</a></p>
         <p class="fc-gen-terms">Charged when it's made · refunded if it fails or is refused · a result you discard is <b>not</b> refunded. A prompt (and optionally a reference picture), with the same rules as chat. Posts with it get a ✨ AI-generated badge.</p>
         <span class="fc-err" id="fcGenErr" role="alert"></span>
         <div class="fc-gen-jobs" id="fcGenJobs" aria-live="polite"></div>

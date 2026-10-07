@@ -1,5 +1,5 @@
-// Clickable names (1.99dt, userlinks.js): a Camfrog login / PATV username on an economy page links to that
-// person's profile - display name as the text, the login in the tooltip - in ONE users lookup per page.
+// Clickable names (1.99dt, userlinks.js): a Camfrog login on an economy page links to that person's profile
+// (1.99en: ONLY through the account's linked camfrogUsername - no PATV-username fallback) - display name as the text, the login in the tooltip - in ONE users lookup per page.
 // No live account (unknown, archived) -> the plain name; anonymised people (!incognito -> "someone") are
 // never looked up; the 🌐 "made on the website" marker stays.
 "use strict";
@@ -33,6 +33,9 @@ const M27 = {
     { ts: now - 3000, nick: "RitchieCuh", side: "buy", option: "No", shares: 20000, pat: 10000 },
     { ts: now - 2000, nick: "someone", side: "buy", option: "No", shares: 100, pat: 50 },
     { ts: now - 1000, nick: "<img src=x onerror=alert(1)>", side: "buy", option: "No", shares: 100, pat: 50 },
+    // 1.99en: "ritchie" is u3's PATV USERNAME (u3's linked login is ritchiecuh) - a Camfrog name that only
+    // matches a username must stay plain text
+    { ts: now - 500, nick: "ritchie", side: "buy", option: "No", shares: 100, pat: 50 },
   ],
   history: [],
 };
@@ -108,10 +111,41 @@ test("one users lookup per page, however many names", async () => {
   } finally { UL._setQuery(null); }
 });
 
-test("lookup() resolves logins and usernames, skips archived accounts", async () => {
+test("1.99en: economy pages link a Camfrog name ONLY through a linked login - never a PATV-username match", async () => {
+  const h = await page("/markets/27");
+  assert.match(h, /<tr><td>ritchie<\/td>/, "a Camfrog name equal to someone's PATV username stays plain");
+  assert.doesNotMatch(h, /title="ritchie">/, "...and is never linked to that account");
+  assert.match(h, /<a class="ulink" href="\/u\/ritchie" title="RitchieCuh">/, "the same person's LINKED login still links");
+});
+
+test("1.99en: values that are PATV accounts resolve by username / user id explicitly", async () => {
+  const html = [
+    UL.ul("Foamy", { user: "PB", text: "Foamy" }),           // a stored PATV username (site booking)
+    UL.ul("ritchie", { user: true }),                          // the name IS the PATV username
+    UL.ul("Ritchie Display", { uid: "u3" }),                   // a stored users.userId (who saved a capture)
+    UL.ul("Gone", { uid: "u4" }),                              // archived: plain
+    UL.ul("someone", { uid: "u1" }),                           // anonymised: never linked, whatever the ref
+    UL.ul("foamy1111", { user: true }),                        // a login passed as a username: no such username -> plain
+  ].join("|");
+  const out = await UL.finish(html);
+  const parts = out.split("|");
+  assert.equal(parts[0], '<a class="ulink" href="/u/pb" title="Foamy">Foamy &lt;3</a>');
+  assert.equal(parts[1], '<a class="ulink" href="/u/ritchie" title="ritchie">Ritchie</a>');
+  assert.equal(parts[2], '<a class="ulink" href="/u/ritchie" title="Ritchie Display">Ritchie</a>');
+  assert.equal(parts[3], "Gone");
+  assert.equal(parts[4], "someone");
+  assert.equal(parts[5], "foamy1111");
+  const r = await UL.resolve({ logins: ["ritchie"], usernames: ["RITCHIE"], ids: ["u3"] });
+  assert.equal(r.logins.size, 0, "a username is not a login");
+  assert.equal(r.usernames.get("ritchie").username, "ritchie");
+  assert.equal(r.ids.get("u3").username, "ritchie");
+});
+
+test("lookup() resolves linked logins only (1.99en), skips archived accounts", async () => {
   const m = await UL.lookup(["foamy1111", "PB", "tsyko", "tsyko_old", "nobody", "someone"]);
   assert.deepEqual(m.get("foamy1111"), { username: "pb", display: "Foamy <3" });
-  assert.deepEqual(m.get("pb"), { username: "pb", display: "Foamy <3" });
+  assert.equal(m.has("pb"), false, "a PATV username is not a Camfrog login - no fallback");
+  assert.equal((await UL.lookup(["pb"], { linkedOnly: false })).size, 0, "no option brings the fallback back");
   assert.equal(m.has("tsyko"), false);
   assert.equal(m.has("tsyko_old"), false);
   assert.equal(m.has("nobody"), false);

@@ -7,9 +7,14 @@
 //   <a class="ulink" href="/u/<username>" title="<login>"><PATV display name></a>
 // or stays the plain, escaped name when there's no live account for it.
 //
-// Resolution (lookup()):
+// Resolution (lookup()) - 1.99en: LINKED LOGINS ONLY, on every page (it was the bridge's rule since 1.99eb):
 //   * the name, minus a leading "@", lowercased; only login-shaped names ([\w.-], 1-40) are looked up
-//   * users.camfrogUsername (case-insensitive) first, then users.username (case-insensitive)
+//   * a Camfrog name links to an account ONLY when it IS that account's linked users.camfrogUsername
+//     (case-insensitive). There is no users.username fallback any more: a Camfrog login that merely equals
+//     someone's PATV username is never shown as that person.
+//   * a value that is a PATV account rather than a Camfrog login (a site booking, a website-made capture)
+//     says so: ul(name, { user: <PATV username> }) or ul(name, { uid: <users.userId> }) - resolved by that,
+//     never through the Camfrog-name path. All three kinds still share ONE users query per page.
 //   * several accounts on one login: one that isn't a random "CF..." auto account wins (as the bridge does)
 //   * archived accounts (users.archived_at) never match - no link to a profile that's gone
 //   * anonymised names (Pepe sends !incognito / !bridge hide people as "someone") are never looked up
@@ -28,7 +33,9 @@ const { getQuery } = require("./dbUtils");
 const NONCE = crypto.randomBytes(6).toString("hex");
 const OPEN = `<!--ul${NONCE}:`;
 const CLOSE = `<!--/ul${NONCE}-->`;
-const MARK_RE = new RegExp(`<!--ul${NONCE}:([^:>]*):([a-z]*)-->([\\s\\S]*?)<!--/ul${NONCE}-->`, "g");
+// <!--ul<nonce>:<raw>:<flags>[:<ref>]--> ; flags: t = custom text, u = ref is a PATV username, i = ref is a userId
+const MARK_RE = new RegExp(`<!--ul${NONCE}:([^:>]*):([a-z]*)(?::([^:>]*))?-->([\\s\\S]*?)<!--/ul${NONCE}-->`, "g");
+const REF_RE = /^[^\u0000-\u001f]{1,64}$/;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const ANON = new Set(["", "someone", "anonymous", "anon", "a guest", "guest", "?", "—", "-"]);
 const MAX_KEYS = 400;                 // per page (2 parameters each, under SQLite's 999)
@@ -45,17 +52,32 @@ function keyOf(name) {
 // a no-break space: the 🌐 never wraps away from its name in a narrow column
 const WEB = '&nbsp;<span class="ulink-web" title="Made on the website">🌐</span>';
 
+/** The lookup key for a PATV username / userId ref (1.99en), or "". */
+function refKey(v) {
+  const s = String(v == null ? "" : v).trim();
+  if (!s || ANON.has(s.toLowerCase())) return "";
+  return REF_RE.test(s) ? s : "";
+}
+
 /**
  * The marker a view prints (via <%- %>). opts: { web } adds the 🌐 marker, { anon } never links,
  * { text } shows this text instead of the name when there's no account (e.g. a display name).
+ * 1.99en: { user: <PATV username> } / { uid: <userId> } - the value is a website account, not a Camfrog
+ * login: resolve it by that (pass `true` to mean "the name itself is the PATV username"). An anonymised
+ * name ("someone") is never linked whatever the ref.
  */
 function ul(name, opts = {}) {
   const raw = String(name == null ? "" : name);
   const shown = opts.text != null ? String(opts.text) : raw;
-  const key = opts.anon ? "" : keyOf(raw);
   const tail = opts.web ? WEB : "";
+  const hidden = opts.anon || ANON.has(raw.trim().toLowerCase()) || (opts.text != null && ANON.has(shown.trim().toLowerCase()));
+  let kind = "", ref = "";
+  if (opts.uid != null && opts.uid !== false) { kind = "i"; ref = refKey(opts.uid); }
+  else if (opts.user != null && opts.user !== false) { kind = "u"; ref = refKey(opts.user === true ? raw : opts.user).toLowerCase(); }
+  const key = hidden ? "" : kind ? ref : keyOf(raw);
   if (!key) return esc(shown) + tail;
-  return `${OPEN}${encodeURIComponent(raw)}:${opts.text != null ? "t" : ""}-->${esc(shown)}${CLOSE}${tail}`;
+  const flags = (opts.text != null ? "t" : "") + kind;
+  return `${OPEN}${encodeURIComponent(raw)}:${flags}${kind ? ":" + encodeURIComponent(ref) : ""}-->${esc(shown)}${CLOSE}${tail}`;
 }
 
 // ── lookup ──
@@ -81,41 +103,65 @@ function displayOf(r) {
 const stats = { lookups: 0 };
 let query = getQuery;
 
-/** Names -> Map(key -> {username, display}) for the ones with a live account. ONE users query.
- *  opts.linkedOnly (1.99eb, the room bridge): a name matches ONLY an account whose linked camfrogUsername
- *  it is - no users.username fallback, so a Camfrog login that merely equals someone's PATV username is
- *  never shown as that person. */
-async function lookup(names, opts = {}) {
-  const linkedOnly = !!(opts && opts.linkedOnly);
-  const keys = [...new Set([...names].map(keyOf).filter(Boolean))].slice(0, MAX_KEYS);
-  const out = new Map();
-  if (!keys.length) return out;
+const accOf = (r) => {
+  const o = { username: r.username, display: displayOf(r) };
+  if (hasAvatar) o.avatar = r.avatar || null;         // 1.99ea: the room bridge shows it
+  return o;
+};
+
+/**
+ * 1.99en: every kind of name in ONE users query. want = { logins, usernames, ids } (any iterable each) ->
+ * { logins: Map(login key -> acc), usernames: Map(lowercased username -> acc), ids: Map(userId -> acc) }.
+ *   logins    - Camfrog names: match ONLY users.camfrogUsername (linked-only; a real account before a CF auto one)
+ *   usernames - PATV usernames (site features that store one): users.username, case-insensitive
+ *   ids       - users.userId
+ * Archived accounts never match.
+ */
+async function resolve(want = {}) {
+  const logins = [...new Set([...(want.logins || [])].map(keyOf).filter(Boolean))].slice(0, MAX_KEYS);
+  const usernames = [...new Set([...(want.usernames || [])].map((v) => refKey(v).toLowerCase()).filter(Boolean))].slice(0, MAX_KEYS);
+  const ids = [...new Set([...(want.ids || [])].map(refKey).filter(Boolean))].slice(0, MAX_KEYS);
+  const out = { logins: new Map(), usernames: new Map(), ids: new Map() };
+  if (!logins.length && !usernames.length && !ids.length) return out;
   const live = (await hasArchived(query)) ? " AND archived_at IS NULL" : "";
-  const ph = keys.map(() => "?").join(",");
+  const ph = (a) => a.map(() => "?").join(",");
+  const where = [];
+  if (logins.length) where.push(`LOWER(camfrogUsername) IN (${ph(logins)})`);
+  if (usernames.length) where.push(`LOWER(username) IN (${ph(usernames)})`);
+  if (ids.length) where.push(`userId IN (${ph(ids)})`);
   stats.lookups++;
   const rows = await query(
-    `SELECT username, displayname, camfrogUsername${hasAvatar ? ", avatar" : ""} FROM users
-      WHERE (LOWER(camfrogUsername) IN (${ph})${linkedOnly ? "" : ` OR LOWER(username) IN (${ph})`})${live}`, linkedOnly ? keys : [...keys, ...keys]);
-  const best = new Map();       // key -> [rank, row]
-  const want = new Set(keys);
-  const offer = (k, rank, r) => {
-    if (!want.has(k)) return;
-    const cur = best.get(k);
-    if (!cur || rank < cur[0]) best.set(k, [rank, r]);
-  };
+    `SELECT userId, username, displayname, camfrogUsername${hasAvatar ? ", avatar" : ""} FROM users
+      WHERE (${where.join(" OR ")})${live}`, [...logins, ...usernames, ...ids]);
+  const best = new Map();       // login key -> [rank, row]
+  const wantL = new Set(logins), wantU = new Set(usernames), wantI = new Set(ids);
   for (const r of rows) {
     if (!r.username) continue;
     const cf = String(r.camfrogUsername || "").toLowerCase();
+    if (cf && wantL.has(cf)) {
+      const rank = isCf(r.username) ? 1 : 0;          // the login: a real account before a CF auto one
+      const cur = best.get(cf);
+      if (!cur || rank < cur[0]) best.set(cf, [rank, r]);
+    }
     const un = String(r.username).toLowerCase();
-    if (cf) offer(cf, isCf(r.username) ? 1 : 0, r);   // the login: a real account before a CF auto one
-    if (!linkedOnly) offer(un, 2, r);                  // a PATV username
+    if (wantU.has(un)) out.usernames.set(un, accOf(r));
+    if (r.userId != null && wantI.has(String(r.userId))) out.ids.set(String(r.userId), accOf(r));
   }
-  for (const [k, [, r]] of best) {
-    const o = { username: r.username, display: displayOf(r) };
-    if (hasAvatar) o.avatar = r.avatar || null;       // 1.99ea: the room bridge shows it
-    out.set(k, o);
-  }
+  for (const [k, [, r]] of best) out.logins.set(k, accOf(r));
   return out;
+}
+
+/** Camfrog names -> Map(key -> {username, display[, avatar]}) for the ones with a live account. ONE users query.
+ *  1.99en: LINKED-ONLY for everyone (the room bridge's 1.99eb rule): a name matches ONLY an account whose
+ *  linked camfrogUsername it is - no users.username fallback. `opts` is accepted for old callers
+ *  ({ linkedOnly: true } is now simply the only behaviour). */
+async function lookup(names, opts = {}) {     // eslint-disable-line no-unused-vars
+  return (await resolve({ logins: names })).logins;
+}
+
+/** 1.99en: PATV usernames -> Map(lowercased username -> acc). For values that are website accounts. */
+async function lookupUsers(usernames) {
+  return (await resolve({ usernames })).usernames;
 }
 
 /** The href of a profile. */
@@ -130,20 +176,31 @@ function linkHtml(raw, acc, shownIfPlain) {
 /** Resolve every marker in a rendered page (one lookup). Markers that can't be resolved become their plain text. */
 async function finish(html) {
   if (typeof html !== "string" || html.indexOf(OPEN) < 0) return html;
-  const names = [];
-  html.replace(MARK_RE, (m, enc) => { try { names.push(decodeURIComponent(enc)); } catch (e) { /* bad marker */ } return m; });
-  let found = new Map();
-  try { found = await lookup(names); } catch (e) { console.error("[userlinks] lookup:", e.message); }
-  return html.replace(MARK_RE, (m, enc, flags, inner) => {
-    let raw = "";
-    try { raw = decodeURIComponent(enc); } catch (e) { return inner; }
-    const acc = found.get(keyOf(raw));
+  const want = { logins: [], usernames: [], ids: [] };
+  const dec = (s) => { try { return decodeURIComponent(s || ""); } catch (e) { return null; } };
+  html.replace(MARK_RE, (m, enc, flags, ref) => {
+    const raw = dec(enc);
+    if (raw == null) return m;
+    if (flags.includes("i")) want.ids.push(dec(ref) || "");
+    else if (flags.includes("u")) want.usernames.push(dec(ref) || "");
+    else want.logins.push(raw);
+    return m;
+  });
+  let found = { logins: new Map(), usernames: new Map(), ids: new Map() };
+  try { found = await resolve(want); } catch (e) { console.error("[userlinks] lookup:", e.message); }
+  return html.replace(MARK_RE, (m, enc, flags, ref, inner) => {
+    const raw = dec(enc);
+    if (raw == null) return inner;
+    const r = dec(ref) || "";
+    const acc = flags.includes("i") ? found.ids.get(refKey(r))
+      : flags.includes("u") ? found.usernames.get(refKey(r).toLowerCase())
+        : found.logins.get(keyOf(raw));
     return acc ? linkHtml(raw, acc) : inner;
   });
 }
 
 /** Strip markers without a lookup (a page that failed to resolve still reads right). */
-const strip = (html) => (typeof html === "string" ? html.replace(MARK_RE, (m, enc, flags, inner) => inner) : html);
+const strip = (html) => (typeof html === "string" ? html.replace(MARK_RE, (m, enc, flags, ref, inner) => inner) : html);
 
 // ── pads ──
 const slugify = (s) => String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
@@ -196,5 +253,5 @@ async function archivedCol(alias = "") {
   return (await hasArchived(query)) ? `${alias ? alias + "." : ""}archived_at` : "NULL";
 }
 
-module.exports = { install, ul, padLink, padFor, lookup, finish, strip, linkHtml, keyOf, profileHref, stats, archivedCol,
+module.exports = { install, ul, padLink, padFor, lookup, lookupUsers, resolve, refKey, finish, strip, linkHtml, keyOf, profileHref, stats, archivedCol,
   _setQuery: (fn) => { query = fn || getQuery; archCol = null; } };

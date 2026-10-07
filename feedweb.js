@@ -199,6 +199,7 @@ async function composerFor(viewer, roomId) {
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK,
            aigen: { prices: aiPrices, global: await aigen.pricesFor(null).catch(() => null), eta: aigen.ETA, promptMax: aigen.PROMPT_MAX,
+                    policy: aigen.POLICY,     // 1.99en: the Generate help shows the content policy
                     refPrices, refGlobal: await aigen.refPriceFor(null).catch(() => aigen.DEFAULT_SURCHARGE),
                     // 1.99dr: pads with a Camfrog room - the panel's "📷 From a cam in this room" shows for these
                     camPads: all.filter((r) => aigen.camfrogRoomOf(r.id)).map((r) => r.id) } };

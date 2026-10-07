@@ -41,7 +41,7 @@
             <span class="gate"><span>🔞 NSFW</span><button type="button" data-reveal>Show (18+)</button></span>
           </a>
           <div class="cap">
-            📺 Stage <%= c.kind === 'clip' ? 'clip' : 'snap' %> of <b><%= c.subject || 'a stream' %></b><%- c.by ? ' by ' + ul(c.by) : '' %><br>
+            📺 Stage <%= c.kind === 'clip' ? 'clip' : 'snap' %> of <b><%= c.subject || 'a stream' %></b><%- c.by ? ' by ' + ul(c.by, { uid: c.byUid || false, anon: !c.byUid }) : '' %><br>
             <span class="mut">on <a href="/p/<%= encodeURIComponent(t.slug) %>"><%= t.title %></a> · <time data-ts="<%= c.created %>"><%= new Date(c.created).toISOString().slice(11, 16) %> UTC</time></span>
           </div>
         </article>

@@ -513,13 +513,24 @@ async function slotSettings(user, slotId, { allow, nsfw } = {}) {
 }
 
 // ── the captures feed ──
-async function feed({ roomId = null, before = null, limit = 30 } = {}) {
+async function feed({ roomId = null, before = null, limit = 30, withUid = false } = {}) {
   await init();
   const where = ["deleted = 0", "source = 'stage'", "expires > ?"], args = [NOW()];
   if (roomId) { where.push("room = ?"); args.push(roomId); }
   if (before) { where.push("created < ?"); args.push(Number(before)); }
   const rows = await getQuery(`SELECT * FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT ?`, [...args, Math.min(60, limit)]);
-  return (await require("./stories").clean(rows));
+  const items = await require("./stories").clean(rows);
+  if (withUid) {
+    // 1.99en: the server-rendered page links "by <name>" through the account that SAVED it (media.by_user_id),
+    // never by matching the shown name (a Camfrog display name / PATV name) against Camfrog logins.
+    // Not in the JSON API (no user ids out); an anonymous save ("someone") has no link.
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    for (const it of items) {
+      const r = byId.get(it.id);
+      it.byUid = r && it.by && !/^someone$/i.test(String(r.by_user || "").trim()) && r.by_user_id ? String(r.by_user_id) : null;
+    }
+  }
+  return items;
 }
 
 // ── housekeeping ──
@@ -666,7 +677,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
       await init();
       const signed = !!(req.user && req.user.userId);
       const R = req.query.pad ? await deps.resolveRoom(String(req.query.pad).slice(0, 128)) : null;
-      const items = signed ? await feed({ roomId: R ? R.id : null, limit: 60 }) : [];
+      const items = signed ? await feed({ roomId: R ? R.id : null, limit: 60, withUid: true }) : [];
       let titles = {};
       try { const rooms = require("./rooms"); for (const it of items) { const x = rooms.getCached(it.room); titles[it.room] = x ? { title: x.title, slug: require("./roomsweb").linkSlug(x) } : { title: it.room, slug: it.room }; } } catch (e) { titles = {}; }
       res.render("stageCaptures", { user: req.user ? req.user.username : null, signed, items, titles, pad: R ? { title: R.title, slug: R.slug } : null });

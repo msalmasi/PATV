@@ -221,7 +221,7 @@
       <p>Pepe's tables aren't on Discord. The Discord server has its own separate games: <code>!bj 500</code> in the #blackjack channel is a solo hand against the Discord dealer bot (up to 5,000 PAT; the High Roller role lifts that), and PokerNow tables in #poker use <code>/buyin</code> and <code>/cashout</code>.</p>
       <% if (focus === 'holdem' && pokerNow && pokerNow.length) { %>
         <p class="info">Discord PokerNow tables from the last 12 hours:</p>
-        <ul><% pokerNow.forEach((g) => { %><li><a href="<%= g.url %>" rel="noopener"><%= g.blinds %></a> — started by <%- ul(g.username, { text: g.displayname || g.username }) %></li><% }) %></ul>
+        <ul><% pokerNow.forEach((g) => { %><li><a href="<%= g.url %>" rel="noopener"><%= g.blinds %></a> — started by <%- ul(g.username, { text: g.displayname || g.username, user: true }) %></li><% }) %></ul>
       <% } %>
     </div>
   </div>

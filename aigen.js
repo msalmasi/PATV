@@ -65,6 +65,29 @@ const rooms = require("./rooms");
 const KINDS = { image: "imagine", video: "video" };
 const DEFAULT_PRICES = { imagine: 25000, video: 50000 };      // Pepe's DEFAULT_PAT_COSTS
 const PROMPT_MIN = 3, PROMPT_MAX = 600;
+
+// 1.99en: the AI generation content policy lives in guidelines.js (AI_POLICY - Padiquette /guidelines#ai and the
+// composer's Generate help are rendered from it). Pepe enforces the same words (camfrog-bot pepe_aigen.py AIGEN_POLICY):
+// a word filter, the prompt guard and the result check. Suggestive results come back flagged NSFW (ai_nsfw -> the post
+// is NSFW: blurred / hidden for signed-out and opted-out viewers).
+const POLICY = require("./guidelines").AI_POLICY;
+// The free first check on the site (Pepe repeats it, then his guard judges the rest): unambiguous explicit phrases
+// only - "nude lipstick", "a topless man" and lingerie / bikini prompts pass. Keep in step with pepe_aigen.AIGEN_EXPLICIT_TERMS.
+const EXPLICIT_TERMS = Object.freeze([
+  "porn", "porno", "pornographic", "pornography", "xxx", "hentai", "explicit nudity", "full frontal", "fully nude",
+  "fully naked", "completely nude", "completely naked", "totally naked", "stark naked", "genitals", "genitalia",
+  "penis", "vagina", "vulva", "areola", "areolas", "bare breasts", "exposed breasts", "exposed nipples",
+  "topless woman", "topless women", "topless girl", "nude woman", "nude women", "naked woman", "naked women",
+  "nude man", "nude men", "naked man", "naked men", "nude body", "naked body", "sex act", "sex scene", "having sex",
+  "intercourse", "blowjob", "handjob", "cumshot", "masturbating", "masturbation", "orgy",
+]);
+const EXPLICIT_RE = new RegExp("(?<![a-z0-9])(" + EXPLICIT_TERMS.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|") + ")(?![a-z0-9])", "i");
+/** 1.99en: the first explicit phrase in a prompt, or "". */
+function explicitTerm(prompt) {
+  const m = EXPLICIT_RE.exec(String(prompt || ""));
+  return m ? m[1].toLowerCase() : "";
+}
+const EXPLICIT_MSG = "No explicit nudity (exposed genitals or nipples, sex acts) — suggestive is fine. Nothing was charged.";
 const MAX_OPEN = 2, MAX_OPEN_VIDEO = 1;
 const QUEUE_TTL = 15 * 60e3;                                    // Pepe never picked it up
 const RUN_TTL = { image: 5 * 60e3, video: 10 * 60e3 };          // started but no result
@@ -274,6 +297,7 @@ async function create(user, b, { queue, audit } = {}) {
   const prompt = String(b.prompt || "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
   if (prompt.length < PROMPT_MIN) throw new Refuse(400, "Describe what to make.");
   if (prompt.length > PROMPT_MAX) throw new Refuse(400, `Keep the prompt under ${PROMPT_MAX} characters.`);
+  if (explicitTerm(prompt)) throw new Refuse(400, EXPLICIT_MSG);      // 1.99en: POLICY - before a job is even queued
   const pad = await normPad(b.pad);
   if (b.pad && !pad) throw new Refuse(400, "That pad isn't on PATV.");
   const why = await refusal(u, pad);
@@ -770,4 +794,5 @@ function register(app, { isBotToken, addUser, noTimers = false, audit = null }) 
 module.exports = { register, init, create, discard, setPromptShown, start, progress, chunk, result, setPrices, sweep, mine, pricesFor, refusal, view,
                    refPriceFor, roomStart, roomGenOn, setRoomGen, optedOut, setOptOut, DEFAULT_SURCHARGE, ROOM_PEPE_PER_DAY, REF_MAX_PX,
                    camfrogRoomOf, normPad, _setClock, _setRoomCmds, KINDS, camList, claimCamRef, camMember, _setBridge, CAMREF_TTL,
-                   _camRefs: camRefs, _camJobFrames: camJobFrames, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse };
+                   _camRefs: camRefs, _camJobFrames: camJobFrames, DEFAULT_PRICES, MAX_OPEN, MAX_OPEN_VIDEO, QUEUE_TTL, RUN_TTL, PROMPT_MAX, ETA, Refuse,
+                   POLICY, EXPLICIT_TERMS, explicitTerm };
