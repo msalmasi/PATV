@@ -374,9 +374,9 @@ test("person story rings: profile page, Following (people I follow first), homep
 // ───────────────────────────── 3. cam clips ─────────────────────────────
 test("cam clip request API: rules, one clip per cam, the bridge job, preview, save, Pepe's fetch", async () => {
   const queued = [];
-  let sw = true;
+  let sw = true, csw = true;
   const priv = new Set(["shycf"]);
-  camclip._setDeps({ snapSwitch: () => sw, privateLogins: async (l) => new Set(l.filter((x) => priv.has(x))),
+  camclip._setDeps({ snapSwitch: () => sw, clipSwitch: () => csw, privateLogins: async (l) => new Set(l.filter((x) => priv.has(x))),
                      queueAction: async (uid, a) => { queued.push({ uid, a }); return 4242; } });
   await runQuery("INSERT INTO pepe_actions (id, user_id, kind, status, message) VALUES (4242, ?, 'camclip.save', 'pending', '')", [U.poster.userId]);
   const url = `/api/rooms/${SLUG}/camclip`;
@@ -390,6 +390,13 @@ test("cam clip request API: rules, one clip per cam, the bridge job, preview, sa
   let r = await post(url, U.poster, { login: "subjcf" });
   assert.equal(r.status, 403); assert.match(r.d.error, /!snap on/);
   sw = true;
+  // 1.99fa: the room's !clip switch - off or unknown refuses the request (E_FEATURE_OFF)
+  for (const v of [false, null]) {
+    csw = v;
+    r = await post(url, U.poster, { login: "subjcf" });
+    assert.equal(r.status, 403, `!clip ${v}`); assert.match(r.d.error, /\(!clip\)/); assert.equal(r.d.code, "E_FEATURE_OFF");
+  }
+  csw = true;
   const noXrw = await fetch(base + url, { method: "POST", headers: { "x-test-user": U.poster.userId, "content-type": "application/json" }, body: JSON.stringify({ login: "subjcf" }) });
   assert.equal(noXrw.status, 400);
   r = await post(url, U.poster, { login: "subjcf", secs: 30 });
@@ -421,6 +428,10 @@ test("cam clip request API: rules, one clip per cam, the bridge job, preview, sa
   assert.equal((await fetch(base + r.d.video, { headers: { "x-test-user": U.stranger.userId } })).status, 404);
   // Pepe can't fetch it before it's being saved
   assert.equal((await post("/api/bridge/camclipdata", null, { password: "bot", id, user: "poster" })).status, 404);
+  csw = false;
+  r = await post(`${url}/${id}/save`, U.poster);
+  assert.equal(r.status, 403, "!clip off: no save either"); assert.equal(r.d.code, "E_FEATURE_OFF"); assert.equal(queued.length, 0);
+  csw = true;
   r = await post(`${url}/${id}/save`, U.poster);
   assert.equal(r.status, 200); assert.equal(r.d.id, 4242);
   assert.equal(queued[0].a.kind, "camclip.save"); assert.deepEqual(queued[0].a.args, [ROOM, "subjcf", id]);
@@ -447,6 +458,19 @@ test("cam clip request API: rules, one clip per cam, the bridge job, preview, sa
   // clipInfo for the popover
   const info = await camclip.clipInfo({ id: ROOM }, U.unlinked.userId, "subjcf");
   assert.match(info.off, /Link your Camfrog name/); assert.deepEqual(info.secs, [10, 20, 30]); assert.equal(info.def, 20);
+  assert.equal((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, null, "both switches on: not greyed");
+  csw = false;
+  assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /\(!clip\)/, "!clip off: greyed with the reason (tooltip)");
+  csw = null;
+  assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /\(!clip\)/, "unknown !clip = off");
+  csw = true;
+  // Pepe's refusal code rides along to the requester's view
+  relay._hits.clear();
+  r = await post(url, U.follower, { login: "subjcf", secs: 10 });
+  assert.equal(r.status, 200, JSON.stringify(r.d));
+  await post("/api/bridge/camclip", null, { password: "bot", id: r.d.id, state: "failed", status: "Clips are switched off in this room (!clip)", code: "E_FEATURE_OFF" });
+  const fc = await get(`${url}/${r.d.id}`, U.follower);
+  assert.equal(fc.d.state, "failed"); assert.equal(fc.d.code, "E_FEATURE_OFF");
   sw = null;
   assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /!snap on/, "unknown switch = off");
 });

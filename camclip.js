@@ -6,7 +6,7 @@
 //      Refused unless: the room is bridged and live with cam snapshots on (!bridge cams on); the person is on cam, not
 //      Pepe, not private (bridge-hidden / !incognito = anon on the roster; an account that hides its activity -
 //      stories.privateLogins); the room's !snap switch is on (bridge.snapSwitch - unknown counts as off, like stage
-//      clips); nobody is already clipping that cam (ONE clip per cam at a time - Pepe enforces it too); the account's
+//      clips) and (1.99fa) its !clip switch too (bridge.clipSwitch - unknown = off; save is refused the same way); nobody is already clipping that cam (ONE clip per cam at a time - Pepe enforces it too); the account's
 //      rate limit (one every CLIP_GAP, CLIP_BURST per CLIP_WINDOW) and open-preview cap.
 //      It becomes a bridge job (kind "camclip", offered ONCE - a re-offer after a lost ack must never start a second
 //      recording) handed to Pepe in his /api/bridge/sync response.
@@ -48,8 +48,11 @@ let NOW = () => Date.now();
 const clips = new Map();   // job id -> {id, roomId, login, userId, username, secs, state, status, ts, done, file, poster, rule, viewerOk, cost, save}
 
 const OFF = "Snaps are off in this room (a mod can turn them on with !snap on).";
+const CLIP_OFF = "Clips are switched off in this room (!clip).";   // 1.99fa: Pepe's E_FEATURE_OFF wording
+const CODE_RE = /^E_[A-Z_]{2,30}$/;
 const deps = {
   snapSwitch: (roomId) => { try { return require("./bridge").snapSwitch(roomId); } catch (e) { return null; } },
+  clipSwitch: (roomId) => { try { return require("./bridge").clipSwitch(roomId); } catch (e) { return null; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
   queueAction: (...a) => require("./actions").queue(...a),
 };
@@ -86,7 +89,7 @@ function view(c, slug) {
   const save = live && c.rule && c.rule !== "no" && c.viewerOk ? { cost: c.cost, id: c.save || null } : null;
   return { ok: true, id: c.id, state: live || c.state !== "ready" ? c.state : "expired", status: c.status || "", secs: c.secs, login: c.login,
            video: live ? base + "/video" : null, poster: live && c.poster ? base + "/poster" : null, until: live ? c.done + PREVIEW_TTL : null, save,
-           saveRule: c.rule || null };
+           saveRule: c.rule || null, ...(c.code ? { code: c.code } : {}) };
 }
 
 /** The popover's "🎬 Clip" for `userId` on `login`'s cam in room R: {secs, def, off: why it's greyed out | null, busy}. */
@@ -95,6 +98,7 @@ async function clipInfo(R, userId, login) {
   let off = null;
   if (!u || !u.camfrogUsername) off = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
   else if (deps.snapSwitch(R.id) !== true) off = OFF;
+  else if (deps.clipSwitch(R.id) !== true) off = CLIP_OFF;
   else if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";
   const b = busyFor(R.id, String(login).toLowerCase());
   return { secs: SECS, def: SECS_DEFAULT, off, busy: b ? (b.userId === userId ? b.id : true) : null };
@@ -133,6 +137,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
       if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF });
+      if (deps.clipSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
       const busy = busyFor(R.id, login);
       if (busy) return res.status(409).json({ ok: false, error: busy.userId === u.userId ? "You're already clipping their cam." : "Pepe is already clipping their cam - try again in a bit.", id: busy.userId === u.userId ? busy.id : undefined });
       const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || c.state === "ready")).length;
@@ -183,6 +188,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       }
     } else {
       c.state = "failed"; c.status = relay.clean(b.status, 160) || "Pepe couldn't clip that cam."; c.done = NOW();
+      if (CODE_RE.test(String(b.code || ""))) c.code = String(b.code);   // 1.99fa: Pepe's error code (E_FEATURE_OFF for !clip off)
     }
     if (j) { j.state = "done"; j.doneAt = NOW(); j.result = { ok: c.state === "ready", msg: c.status }; }
     res.json({ ok: true });
@@ -232,6 +238,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired - record a fresh one." });
       if (!c.rule || c.rule === "no" || !c.viewerOk) return res.status(403).json({ ok: false, error: "Clips of them can't be saved here." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF });
+      if (deps.clipSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
       if (c.save) {
         const a = (await getQuery("SELECT status FROM pepe_actions WHERE id = ? AND user_id = ?", [c.save, u.userId]))[0];
         if (a && a.status !== "failed") return res.json({ ok: true, id: c.save, again: true });       // one save per clip

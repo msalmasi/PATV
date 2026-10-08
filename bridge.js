@@ -249,6 +249,18 @@ function snapSwitch(roomId) {
   if (R && isLive(R) && typeof R.snapOn === "boolean") return R.snapOn;
   return null;
 }
+/** 1.99fa: the Camfrog room's !clip switch as Pepe last reported it: true / false, or null when unknown (same
+ *  sources as snapSwitch). Website cam clips (camclip.js) follow it; unknown counts as OFF, like !snap. */
+function clipSwitch(roomId) {
+  const id = String(roomId || "");
+  if (Date.now() - STAGE.at < STAGE_ROOM_FRESH) {
+    const r = (STAGE.rooms || []).find((x) => x.id === id);
+    if (r && typeof r.clip === "boolean") return r.clip;
+  }
+  const R = rooms.get(id);
+  if (R && isLive(R) && typeof R.clipOn === "boolean") return R.clipOn;
+  return null;
+}
 function stageAdmin() {
   const fresh = Date.now() - STAGE.at < STAGE_ROOM_FRESH;
   return { room: fresh ? STAGE.room : null, pinned: !!STAGE.pinned, rooms: fresh ? STAGE.rooms : [] };
@@ -288,7 +300,8 @@ async function ingest(body) {
     const rid = (v) => (typeof v === "string" && str(v, 128) ? str(v, 128) : null);   // same shape as cleanRoomRef's id
     const roomList = (Array.isArray(g.rooms) ? g.rooms : []).slice(0, MAX_ROOMS)
       .map((r) => (r && rid(r.id) ? { id: rid(r.id), name: str(r.name, 100) || rid(r.id),
-                                      ...(typeof r.snap === "boolean" ? { snap: r.snap } : {}) } : null)).filter(Boolean);   // 1.99cw: the room's !snap switch
+                                      ...(typeof r.snap === "boolean" ? { snap: r.snap } : {}),     // 1.99cw: the room's !snap switch
+                                      ...(typeof r.clip === "boolean" ? { clip: r.clip } : {}) } : null)).filter(Boolean);   // 1.99fa: its !clip switch
     STAGE = { active: !!g.active, unknown: !!g.unknown, since: n(g.since), ended: n(g.ended), at: now,
               room: rid(g.room), roomName: str(g.room_name, 100), pinned: !!g.pinned, rooms: roomList };
   }
@@ -319,6 +332,7 @@ async function ingest(body) {
     R.micRelay = !!s.mic_relay;
     R.cams = !!s.cams;
     R.snapOn = typeof s.snap === "boolean" ? s.snap : null;   // 1.99cw: the room's !snap switch (null = an older Pepe)
+    R.clipOn = typeof s.clip === "boolean" ? s.clip : null;   // 1.99fa: the room's !clip switch (null = an older Pepe)
     R.cmds = relay.cleanCmds(s.cmds);          // chat commands from the relay: {"!topic": price} ({} = off)
     R.mod = require("./padmod").cleanModCaps(s.mod);   // 1.99co: Manage-panel caps per watching mod login ({} = none)
     if (!R.audio) audioClose(R.id);
@@ -692,5 +706,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { register, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { register, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, _nameCache: nameCache };

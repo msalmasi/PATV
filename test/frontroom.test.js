@@ -244,3 +244,17 @@ test("1.99cw: the room's !snap switch as Pepe reports it (stage rooms first, els
   await bridge.ingest({ rooms: [{ room: { id: "Old.Room", name: "Old" }, members: [{ login: "x1" }], mic: [], count: 1, snap: true }], events: [] });
   assert.equal(bridge.snapSwitch("Old.Room"), true);
 });
+
+test("1.99fa: the room's !clip switch as Pepe reports it, next to !snap (unknown = null)", async () => {
+  const bridge = require(path.join(repo, "bridge"));
+  await bridge.ingest({ stage: { active: true, room: HOUSE, rooms: [{ id: HOUSE, name: "Pepe's Pad", snap: true, clip: false },
+                                                                    { id: "DRAMA_CENTRAL", name: "DRAMA", snap: false, clip: true },
+                                                                    { id: "Old.Room", name: "Old", snap: true }] } });
+  assert.equal(bridge.clipSwitch(HOUSE), false);
+  assert.equal(bridge.clipSwitch("DRAMA_CENTRAL"), true);
+  assert.equal(bridge.clipSwitch("Old.Room"), null, "an older Pepe sends no !clip switch");
+  assert.equal(bridge.clipSwitch("Nowhere.Room"), null, "a room Pepe isn't in");
+  assert.equal(bridge.snapSwitch(HOUSE), true, "!snap unaffected");
+  await bridge.ingest({ rooms: [{ room: { id: "Old.Room", name: "Old" }, members: [{ login: "x1" }], mic: [], count: 1, snap: true, clip: true }], events: [] });
+  assert.equal(bridge.clipSwitch("Old.Room"), true, "a bridged room's snapshot carries it too");
+});
