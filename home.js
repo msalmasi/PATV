@@ -146,7 +146,14 @@ function register(app, { addUser, xpForNextLevel }) {
           "SELECT username, displayname, class, level, xp, avatar, email, points_balance, camfrogUsername FROM users WHERE username = ?",
           [username]))[0] || null;
       }
-      const [S, rooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
+      const [S, allRooms, top] = await Promise.all([stats(), bridge.summary(!!me), topFrogs()]);
+      // 1.99fu: pad visibility (padaccess.js) - an Approved pad this viewer is outside of isn't on their homepage at all
+      // (not the featured room, not Top Pads, not the room widget, not a story circle); the front pick itself is
+      // computed from every pad (one site-wide ranking, which never auto-picks an Approved pad - rooms.frontRoom)
+      const PA = require("./padaccess");
+      await PA.init();
+      const viewer = req.user && req.user.userId ? req.user : null;
+      const rooms = PA.visibleRows(viewer, allRooms);
       // 1.99bi: the homepage features the FRONT ROOM (an admin's pick, else auto) - its stage (Pepe's
       // stream + that room's featured / live slots) and, when it's bridged, its live chat panel.
       // Pepe's !activeroom (his Camfrog window) no longer decides this. 1.99cj: "auto" is a fair activity
@@ -155,7 +162,7 @@ function register(app, { addUser, xpForNextLevel }) {
       const reg = require("./rooms");
       const web = require("./roomsweb");
       const stage = bridge.stage();
-      const front = await reg.frontRoom(rooms).catch(() => ({ id: reg.HOUSE_ROOM, pinned: false }));
+      const front = await reg.frontRoom(allRooms, { viewer }).catch(() => ({ id: reg.HOUSE_ROOM, pinned: false }));
       const pepeHere = bridge.pepeIn(front.id) !== false;
       const frontReg = await reg.get(front.id).catch(() => null);
       // 1.99ek: Top Pads (the front pick's score, live pads only) + every pad's active boost PAT for the 🚀 badges
@@ -164,7 +171,7 @@ function register(app, { addUser, xpForNextLevel }) {
       const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
                                      boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;
-      const slots = await require("./mainstage").publicSlots(front.id).catch(() => []);
+      const slots = PA.tokenizeSlots(await require("./mainstage").publicSlots(front.id).catch(() => []), viewer, front.id);
       // 1.99eo: the off-air slate's "Next up" - the front pad's next scheduled slot (public facts only)
       const nextUp = await nextSlot(front.id).catch(() => null);
       const onStage = rooms.find((r) => r.id === front.id) || null;
@@ -174,7 +181,8 @@ function register(app, { addUser, xpForNextLevel }) {
                                      status: await reg.frontStatus().catch(() => null) } : null;
       const mine = me ? await personal(me, S) : null;
       // the room widget renders with its first page of data (signed-in only), then polls
-      const roomLive = me && room ? await bridge.liveFor(room.slug) : null;
+      // 1.99fu: signed-out visitors too when the room's pad is Public (padaccess.full)
+      const roomLive = room && PA.full(viewer, room.id) ? await bridge.liveFor(room.slug) : null;
       // 1.99bz: the story strip (a circle per room with captures from the last 24 h); visitors get the circles only
       const storyRooms = await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
       // 1.99ci: "Hot on PATV" - the top 5 hot posts across every community (no NSFW for signed-out visitors)
@@ -200,7 +208,9 @@ function register(app, { addUser, xpForNextLevel }) {
 
   app.get("/about", addUser, async (req, res) => {
     const S = await stats();
-    const rooms = await bridge.summary(false);
+    const PA = require("./padaccess");
+    await PA.init();
+    const rooms = PA.visibleRows(req.user && req.user.userId ? req.user : null, await bridge.summary(false));    // 1.99fu
     res.locals.og = { title: "About Public Access TV", description: "A community TV station, Camfrog rooms with Pepe the frog, live events, PAT games and more.",
                       image: res.locals.ogBase + "/og/page.png?t=About%20PATV", url: res.locals.ogBase + "/about" };
     res.render("about", { user: req.user ? req.user.username : null, S, room: rooms.find((r) => r.live) || rooms[0] || null });

@@ -73,6 +73,12 @@ async function follow(user, kind, id, on = true) {
   const T = await resolve(kind, id);
   if (!T) throw new Refuse(404, kind === "room" ? "No such pad." : "No such person.");
   if (kind === "user" && T.id === user.userId) throw new Refuse(400, "You can't follow yourself.");
+  // 1.99fu: an Approved pad is followed only from inside it (unfollowing always works)
+  if (on && kind === "room") {
+    const PA = require("./padaccess");
+    await PA.init();
+    if (!PA.canSee(user, T.id)) throw new Refuse(404, "No such pad.");
+  }
   if (burst("f|" + user.userId + "|" + kind + "|" + T.id, 700)) throw new Refuse(429, "Easy there.");
   if (on) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM follows WHERE follower = ?", [user.userId]))[0].n;

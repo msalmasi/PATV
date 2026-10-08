@@ -57,18 +57,30 @@
   }
 
   // What the roster's ⋯ menu offers for user u (1.99dx). Pure, so tests can pin the gating:
-  //   - nothing at all without caps (Pepe gave this viewer no mod powers here), or for anonymous / Pepe / no login
+  //   - nothing for anonymous / Pepe / no login; 1.99fu: without caps (Pepe gave this viewer no mod powers here) a
+  //     signed-in viewer (x.signed) still gets the light menu below, a signed-out one nothing
   //   - View profile (when the Camfrog name is linked to a PATV account), Open cam (when the page can)
+  //   - 1.99fu: 💸 Tip (signed in): u.tip comes from the server (bridge.js tipFor) - {to, href}: a link to the site's own
+  //     tip page for their linked PATV account (presets, confirm, routing, idempotency all there), opened in a new tab
+  //     so the room keeps running; {off}: greyed out with the reason ("not linked to PATV yet"); no u.tip: no item
+  //     (yourself, Pepe, bots, anonymous)
   //   - moderation: exactly the actions Pepe listed in caps.actions that this menu knows, in group order;
   //     never on yourself (the server refuses that too); "unban" is left out for people IN the room;
   //     disabled while web moderation is off in the room; destructive ones flagged (they get a confirm step)
   //   - "More…" (the full Manage dialog: strikes history, roles) whenever there are moderation actions
   function menuItems(caps, u, x) {
     x = x || {};
-    if (!caps || !Array.isArray(caps.actions) || !u || u.anon || u.self || !u.login) return [];
+    if (!u || u.anon || u.self || !u.login) return [];
+    var mod = !!(caps && Array.isArray(caps.actions));
+    if (!mod && !x.signed) return [];
     var out = [];
     if (u.patv && u.patv.username) out.push({ kind: 'link', id: 'profile', group: 'who', label: '👤 View profile', href: '/u/' + encodeURIComponent(u.patv.username) });
     if (x.cam) out.push({ kind: 'cam', id: 'cam', group: 'who', label: '📷 Open cam' });
+    if ((x.signed || mod) && u.tip && !u.bot) {
+      if (u.tip.to && u.tip.href) out.push({ kind: 'link', id: 'tip', group: 'who', label: '💸 Tip', href: u.tip.href, newTab: true, title: 'Tip ' + u.tip.to + ' PAT' });
+      else if (u.tip.off) out.push({ kind: 'off', id: 'tip', group: 'who', label: '💸 Tip', disabled: true, note: u.tip.off, title: "Can't tip: " + u.tip.off });
+    }
+    if (!mod) return out;
     var me = caps.login && String(u.login).toLowerCase() === String(caps.login).toLowerCase();
     if (me) return out;
     var n = 0;
@@ -456,19 +468,20 @@
       extra = extra || {};
       if (pop && pop._login === u.login) { closeMenu(true); return; }      // the same ⋯ again: toggle shut
       closeMenu(false);
-      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: true });
+      var items = menuItems(caps, u, { cam: !!extra.cam, inRoom: !extra.mic, signed: !!opts.signed });
       if (!items.length) return;
       var who = u.display || u.login;
       var p = el('div', 'pm-pop'); p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'Actions for ' + who);
       p._anchor = anchor; p._login = u.login;
+      p._mod = items.some(function (it) { return it.kind === 'act' || it.kind === 'more'; });     // 1.99fu: closes when caps go
       var hd = el('div', 'pm-pop-h');
       var nm = el('div', 'pm-pop-n'); nm.appendChild(el('b', null, who));
       if (u.display && u.display !== u.login) nm.appendChild(el('small', 'pm-login', u.login));
       hd.appendChild(nm);
       var x = btn('pm-x', '×', function () { closeMenu(true); }); x.setAttribute('aria-label', 'Close'); hd.appendChild(x);
       p.appendChild(hd);
-      if (!caps.on) p.appendChild(el('p', 'pm-note warn', '🛑 Web moderation is off in this room.'));
-      else if (caps.blocked) p.appendChild(el('p', 'pm-note warn', '⚠️ Pepe won\'t take commands from you right now: ' + caps.blocked));
+      if (p._mod && !caps.on) p.appendChild(el('p', 'pm-note warn', '🛑 Web moderation is off in this room.'));
+      else if (p._mod && caps.blocked) p.appendChild(el('p', 'pm-note warn', '⚠️ Pepe won\'t take commands from you right now: ' + caps.blocked));
       var list = el('div', 'pm-pop-l'); list.setAttribute('role', 'menu'); list.setAttribute('aria-label', 'Actions for ' + who);
       var conf = el('div', 'pm-pop-c hide');
       var out = el('div', 'pm-out'); out.setAttribute('aria-live', 'polite');
@@ -480,11 +493,20 @@
         if (lastGroup !== null && it.group !== lastGroup) { var sep = el('div', 'pm-pop-sep'); sep.setAttribute('role', 'separator'); list.appendChild(sep); }
         lastGroup = it.group;
         var b;
-        if (it.kind === 'link') { b = el('a', 'pm-pop-i', it.label); b.href = it.href; }
+        if (it.kind === 'link') {
+          b = el('a', 'pm-pop-i', it.label); b.href = it.href;
+          if (it.newTab) { b.target = '_blank'; b.rel = 'noopener'; }          // 1.99fu: 💸 Tip - the room keeps running here
+          if (it.title) b.title = it.title;
+        } else if (it.kind === 'off') {
+          // 1.99fu: a greyed-out item that says why (💸 Tip for someone not linked to PATV yet)
+          b = el('button', 'pm-pop-i off', it.label); b.type = 'button'; b.disabled = true; b.setAttribute('aria-disabled', 'true');
+          if (it.note) b.appendChild(el('small', 'pm-pop-why', ' — ' + it.note));
+          if (it.title) b.title = it.title;
+        }
         else { b = el('button', 'pm-pop-i' + (it.danger ? ' danger' : ''), it.label); b.type = 'button'; if (it.disabled) b.disabled = true; }
         b.setAttribute('role', 'menuitem'); b.tabIndex = -1;
         b.addEventListener('click', function (e) {
-          if (it.kind === 'link') return;                       // a normal link (View profile)
+          if (it.kind === 'link' || it.kind === 'off') return;   // a normal link (View profile, 💸 Tip) / a disabled item
           e.preventDefault();
           if (it.kind === 'cam') { closeMenu(false); extra.cam(); return; }
           if (it.kind === 'more') { closeMenu(false); open(u); return; }
@@ -618,7 +640,8 @@
       caps = d && d.mod ? d.mod : null;
       room = d && d.room ? d.room : null;
       host.hidden = !caps;
-      if (!caps) { closeDlg(); closeMenu(false); lastKey = ''; return; }
+      // 1.99fu: the light ⋯ menu (profile / cam / 💸 Tip) stays open across polls; a moderation one closes with the caps
+      if (!caps) { closeDlg(); if (pop && pop._mod) closeMenu(false); lastKey = ''; return; }
       var k = JSON.stringify(caps);
       if (k !== lastKey) {
         lastKey = k;

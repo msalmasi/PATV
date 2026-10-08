@@ -9,9 +9,10 @@
 %>
 <link rel="stylesheet" href="/public/css/stage.css?v=6">
 <link rel="stylesheet" href="/public/css/feed.css?v=17">
-<link rel="stylesheet" href="/public/css/room-mod.css?v=4">
+<link rel="stylesheet" href="/public/css/room-mod.css?v=5">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=1">
+<link rel="stylesheet" href="/public/css/pad-access.css?v=1">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -65,6 +66,28 @@
       <div class="ps-kv"><span>Platform badge</span><span><%- padBadge(platform) %> <small class="muted"><%= camfrog ? 'Set by the Camfrog room behind this pad.' : 'A pad made on the site - no Camfrog room behind it.' %> The badge follows the platform; ask a site admin to change it.</small></span></div>
       <div class="ps-kv"><span>Address</span><span><a href="<%= href %>">publicaccess.tv/p/<%= slug %></a></span></div>
     </div>
+    <%# 1.99fu: who can see this pad (padaccess.js, public/js/pad-access.js). Server-rendered first, then pad-access.js takes over. %>
+    <% const AC_ = typeof access !== 'undefined' && access ? access : null; %>
+    <% if (AC_) { %>
+    <div class="sb-card ps-card" id="access" data-slug="<%= slug %>">
+      <h3>Who can see this pad</h3>
+      <p class="ps-mini">The pad page and its tabs, its feed and posts, stories, the stage stream, the live Camfrog room chat and analytics. Pepe's Camfrog room itself isn't affected.</p>
+      <fieldset class="pa-levels">
+        <legend>Visibility</legend>
+        <% AC_.levels.forEach((L) => { %>
+        <label class="pa-opt"><input type="radio" name="paLevel" value="<%= L.key %>" data-label="<%= L.label %>"<%= AC_.level === L.key ? ' checked' : '' %>>
+          <b><%= L.icon %> <%= L.label %></b><small><%= L.what %></small></label>
+        <% }) %>
+      </fieldset>
+      <div data-pa="approvedOnly"<%= AC_.level !== 'approved' && !AC_.pending.length && !AC_.members.length ? ' hidden' : '' %>>
+        <h4>Waiting for your OK</h4>
+        <div data-pa="pending"><% if (!AC_.pending.length) { %><p class="pa-empty">Nobody is waiting.</p><% } else { %><ul class="pa-list"><% AC_.pending.forEach((m) => { %><li><span class="pa-who"><%= m.display %></span><% if (m.note) { %><span class="pa-note">“<%= m.note %>”</span><% } %></li><% }) %></ul><% } %></div>
+        <h4>Approved members</h4>
+        <div data-pa="members"><% if (!AC_.members.length) { %><p class="pa-empty">No approved members yet - you, the site admins and staff always have access.</p><% } else { %><ul class="pa-list"><% AC_.members.forEach((m) => { %><li><span class="pa-who"><%= m.display %></span></li><% }) %></ul><% } %></div>
+      </div>
+      <p class="pa-msg pa-out" role="status" aria-live="polite"></p>
+    </div>
+    <% } %>
     <%# 1.99es: the pad's look (padlook.js, public/js/pad-look.js) - free, owner-only %>
     <% const LK = typeof look !== 'undefined' && look ? look : { avatar: null, banner: null, bannerY: 50, accent: null, vars: '' };
        const PAL = typeof PL !== 'undefined' && PL ? PL.PALETTE : [];
@@ -404,9 +427,10 @@
 <script src="/public/js/room-manage.js?v=2" defer></script>
 <script src="/public/js/feed-roommod.js?v=4" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
-<% if (camfrog) { %><script src="/public/js/room-mod.js?v=4" defer></script><% } %>
+<% if (camfrog) { %><script src="/public/js/room-mod.js?v=5" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>
 <script src="/public/js/pad-look.js?v=1" defer></script>
+<script src="/public/js/pad-access.js?v=1" defer></script>
 <script src="/public/js/pad-cosmetics.js?v=1" defer></script>
 </body>
 </html>

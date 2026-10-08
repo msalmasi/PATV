@@ -563,11 +563,12 @@
     <section class="card lr-card" aria-labelledby="lrH">
       <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'chat' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span></span>
         <a href="/p/<%= encodeURIComponent(room.slug) %>">Open the pad ›</a></h2>
-      <% if (me) { %>
+      <%# 1.99fu: signed in, or a Public pad (padaccess.js) - roomLive is only set when this viewer may watch it %>
+      <% if (me || roomLive) { %>
         <div class="lr">
           <div class="lr-log">
             <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat and mic transcripts" tabindex="0"><p class="muted">Loading the room…</p></div>
-            <% if (me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><div id="lrPtt" style="margin-top:6px;display:grid;gap:4px"></div><% } %>
+            <% if (me && me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><div id="lrPtt" style="margin-top:6px;display:grid;gap:4px"></div><% } %>
             <div class="ro">Live from Camfrog — read-only (v1). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
           </div>
           <div class="lr-side">
@@ -779,7 +780,7 @@
 <script src="/public/js/coinop.js?v=aw1" defer></script>
 <% } %>
 
-<% if (me && room) { %>
+<% if ((me || roomLive) && room) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
 <script src="/public/js/room-bridge.js?v=5"></script>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>

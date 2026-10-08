@@ -980,6 +980,13 @@ async function regenKey(user, slotId) {
   return { key, rtmp: { server: RTMP_PUBLIC, key } };
 }
 
+// 1.99fu: pad visibility (padaccess.js) - an Approved pad's stage takes bookings only from the people inside it
+async function seesPad(user, roomId) {
+  const PA = require("./padaccess");
+  await PA.init();
+  return PA.canSee(user || null, roomId);
+}
+
 // ── views ──
 function view(s, t = now()) {
   if (!s) return null;
@@ -1048,7 +1055,8 @@ async function roomStage(roomId, viewer) {
   try { boost = await require("./boosts").status(roomId); } catch (e) { boost = null; }   // 1.99ee: the Stage card's boost line
   return {
     room: { id: roomId, slug: RS.slug, title: RS.title, slot_count: RS.slot_count, slot_price: RS.slot_price, approval: RS.approval },
-    slots: live, open: open.length, free: Math.max(0, RS.slot_count - open.length),
+    // 1.99fu: an Approved pad's HLS / WHEP URLs carry the viewer's read token (padaccess.tokenizeSlots; webrtc.js checks it)
+    slots: require("./padaccess").tokenizeSlots(live, viewer, roomId), open: open.length, free: Math.max(0, RS.slot_count - open.length),
     featured: featured ? { id: featured.id, display: featured.displayname || featured.username, live: isLive(featured, t), by: featured.feature_by } : null,
     upcoming: fut.slice(0, 6).map((s) => ({ id: s.id, display: s.displayname || s.username, username: s.username || null, start_at: startOf(s), minutes: s.max_minutes,
       featured: !!s.featured, title: s.title || null, mode: s.mode || "stream" })),
@@ -1257,7 +1265,10 @@ function register(app, { addUser, isBotToken, noTimers }) {
       twitchUrl = embeds.twitchChannelUrl(me);
       if (me) { delete me.twitchId; delete me.twitchDisplayname; delete me.twitchLogin; }
     }
-    const all = await rooms.list();
+    // 1.99fu: an Approved pad (padaccess.js) is only offered to the people inside it
+    const PA = require("./padaccess");
+    await PA.init();
+    const all = PA.visibleRows(req.user || null, await rooms.list());
     const want = String(req.query.room || "");
     const pick = all.find((r) => r.slug === want || r.id === want) || all.find((r) => r.id === rooms.HOUSE_ROOM) || all[0] || null;
     res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Slots are free on most pads.",
@@ -1274,7 +1285,8 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const m = await mine(req.user.userId);
       const bal = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]))[0];
-      const R = await roomOf(String(req.query.room || ""));
+      let R = await roomOf(String(req.query.room || ""));
+      if (R && !(await seesPad(req.user, R.id))) R = null;              // 1.99fu: an Approved pad, to an outsider
       const roomInfo = R ? await roomStage(R.id, req.user) : null;
       const openMine = m.slots.find((s) => s.status === "waiting" || s.status === "active") || null;
       res.set("Cache-Control", "no-store");
@@ -1287,7 +1299,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const b = req.body || {};
       const R = await roomOf(b.room);
-      if (b.room && !R) throw new Refuse(404, "No such pad.");
+      if (b.room && (!R || !(await seesPad(req.user, R.id)))) throw new Refuse(404, "No such pad.");     // 1.99fu
       res.set("Cache-Control", "no-store");
       res.json({ ok: true, ...(await book(req.user, { ...b, room: R ? R.id : undefined })) });
     } catch (e) { fail(res, e); }
@@ -1296,7 +1308,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       const b = req.body || {};
       const R = await roomOf(b.room);
-      if (!R) throw new Refuse(404, "No such pad.");
+      if (!R || !(await seesPad(req.user, R.id))) throw new Refuse(404, "No such pad.");                  // 1.99fu
       res.json({ ok: true, ...(await joinQueue(req.user, { ...b, room: R.id })) });
     } catch (e) { fail(res, e); }
   });

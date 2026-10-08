@@ -528,7 +528,8 @@
     if (!t || !t.closest('.ss') || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey) return;
     ev.preventDefault();
     var strip = t.closest('.ss');
-    if (strip.getAttribute('data-signed') !== '1') return signInPrompt(strip.getAttribute('data-next'));
+    // 1.99fu: signed out, only a Public pad's circle (data-story-open, its story inlined) opens; the rest ask to sign in
+    if (strip.getAttribute('data-signed') !== '1' && !t.hasAttribute('data-story-open')) return signInPrompt(strip.getAttribute('data-next'));
     // 1.99fn: a pad's capture strip (data-scope = its pad id) opens that pad's story only
     open(t.getAttribute('data-story-room'), t.getAttribute('data-story-item'), t, strip.getAttribute('data-scope') || '');
   });

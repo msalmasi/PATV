@@ -285,13 +285,33 @@ async function migrateCommunities() {
  * SQL (over `feed_posts p`): the post is visible in at least one of its communities - a placement that
  * isn't removed, pending approval or hidden by the room's owner, in a room the author isn't feed-banned
  * from (nor from the whole feed) right now. -> {sql, args}
+ * 1.99fu: `blocked` = Approved pads the viewer is outside of (padaccess.blockedFor): placements there don't count.
  */
-function visibleSql(now = NOW()) {
+function visibleSql(now = NOW(), blocked = []) {
+  const B = Array.isArray(blocked) ? blocked.map(String) : [];
   return {
     sql: `EXISTS (SELECT 1 FROM feed_post_rooms fv WHERE fv.post_id = p.id AND fv.removed_at IS NULL AND fv.pending = 0 AND fv.hidden_at IS NULL
+            ${B.length ? `AND fv.room_id NOT IN (${B.map(() => "?").join(",")})` : ""}
             AND NOT EXISTS (SELECT 1 FROM feed_bans fb WHERE fb.user_id = p.author_id AND (fb.room_id = '' OR fb.room_id = fv.room_id) AND (fb.until IS NULL OR fb.until > ?)))`,
-    args: [now],
+    args: [...B, now],
   };
+}
+// 1.99fu: pad visibility (padaccess.js) - the Approved pads a viewer is outside of
+const PADACCESS = () => require("./padaccess");
+async function blockedFor(viewer) {
+  if (isStaff(viewer)) return [];
+  try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
+}
+/** 1.99fu: may `u` see post row `p` at all, by pad visibility? Staff and the author always; a post with no placement
+ *  left goes by its author; else it needs one placement (not taken out) in a pad `u` can see. */
+async function postSeenBy(u, p) {
+  if (!p) return false;
+  if (isStaff(u) || (u && u.userId && u.userId === p.author_id)) return true;
+  const blocked = new Set(await blockedFor(u));
+  if (!blocked.size) return true;
+  const placed = await getQuery("SELECT room_id, removed_at FROM feed_post_rooms WHERE post_id = ?", [p.id]);
+  if (placed.some((r) => !r.removed_at && !blocked.has(r.room_id))) return true;
+  return !placed.some((r) => blocked.has(r.room_id));
 }
 
 // Reddit's ranking maths (r2/lib/db/_sorts.pyx), seconds since its epoch
@@ -583,8 +603,11 @@ const effNsfw = (p) => (p.nsfw_admin === 0 || p.nsfw_admin === 1 ? !!p.nsfw_admi
  * (xpost: {id, removed, post|null, from: {slug, title}|null, author}) and every post's live crossposts
  * (crossposts: [{id, slug, title}], xcount).
  */
-async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner = false } = {}) {
+async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner = false, access = true } = {}) {
   if (!rows.length) return [];
+  // 1.99fu: Approved pads the viewer is outside of never show up on a post - not as a placement chip, a crosspost chip,
+  // the post's address or an embedded original (access: false = internal callers that need the real canonical URL)
+  const blocked = new Set(access === false ? [] : await blockedFor(viewer));
   const ids = rows.map((r) => r.id);
   const q = ids.map(() => "?").join(",");
   // crossposts: the originals they embed (decorated once, without their own crossposts), and live crossposts of these posts
@@ -594,7 +617,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     getQuery(`SELECT x.id, x.crosspost_of, x.title, x.body, pr.room_id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id
               WHERE x.crosspost_of IN (${q}) AND x.deleted_at IS NULL AND x.hidden_at IS NULL AND pr.removed_at IS NULL AND pr.pending = 0 AND pr.hidden_at IS NULL`, ids),
   ]);
-  const origs = new Map((ORIG.length ? await decorate(ORIG, viewer, { detail, _inner: true }) : []).map((o) => [o.id, o]));
+  const origs = new Map((ORIG.length ? await decorate(ORIG, viewer, { detail, _inner: true, access }) : []).map((o) => [o.id, o]));
   const staffV = isStaff(viewer);
   const [A, PR, AT, MV, FW] = await Promise.all([
     authors(rows.map((r) => r.author_id)),
@@ -612,8 +635,9 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   let QUO = new Map(), VOI = new Map();
   try { QUO = await require("./quotes").forPosts(ids, viewer); } catch (e) { QUO = new Map(); }
   if (!_inner) { try { VOI = await require("./micclip").voicesFor(ids, viewer); } catch (e) { VOI = new Map(); } }
+  const own = (r) => !!(viewer && viewer.userId && viewer.userId === r.author_id);
   return rows.map((r) => {
-    const roomsOf = PR.filter((x) => x.post_id === r.id).map((x) => {
+    const roomsOf = PR.filter((x) => x.post_id === r.id && (own(r) || !blocked.has(x.room_id))).map((x) => {
       const R = rooms.getCached(x.room_id);
       return { id: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null,
                pinned: !!x.pinned_at, nsfw: x.nsfw === 1, hidden: !!x.hidden_at, pending: !!x.pending,
@@ -635,7 +659,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
                 from: from ? { id: from.id, slug: from.slug, title: from.title, profile: from.profile || null, label: from.label } : null, author: o ? o.author : null };
       if (o && o.nsfw) nsfw = true;
     }
-    const xps = XP.filter((x) => x.crosspost_of === r.id);
+    const xps = XP.filter((x) => x.crosspost_of === r.id && !blocked.has(x.room_id));
     const crossposts = [...new Map(xps.map((x) => {
       const R = rooms.getCached(x.room_id);
       const c = { id: x.id, room: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, profile: profileName(R), label: padLabelOf(R, x.room_id) };
@@ -664,7 +688,8 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       mine: !!(viewer && viewer.userId === r.author_id),
       voted: !!(mv && mv.value > 0),
       rooms: roomsOf.filter((x) => (!x.removed && !x.pending && !x.hidden) || staff),
-      roomsAll: roomsOf, homePad: r.home_pad || null,      // 1.99ep: the fixed home pad (canonical URL)
+      // 1.99ep: the fixed home pad (canonical URL); 1.99fu: not when it's an Approved pad this viewer is outside of
+      roomsAll: roomsOf, homePad: r.home_pad && (own(r) || !blocked.has(r.home_pad)) ? r.home_pad : null,
       images: att.filter((a) => a.kind === "image"), audio: att.filter((a) => a.kind === "audio"), video: att.filter((a) => a.kind === "video"),
       link: link && link.url ? { ...link, thumbFile: (att.find((a) => a.kind === "preview") || {}).thumb || null } : null,
       xpost, crossposts, xcount: crossposts.length,
@@ -746,13 +771,16 @@ async function list({ room = null, author = null, following = null, authors: aut
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
   const t = NOW();
   const R = rankSpec(sort, top, t);
+  // 1.99fu: Approved pads this viewer is outside of - their feed is empty, their placements never count
+  const blocked = staff ? [] : await blockedFor(viewer);
+  if (room && blocked.includes(String(room))) return idsOnly ? { ids: [], more: false, page: 1, sort: R.sort } : { posts: [], more: false, page: 1, sort: R.sort };
   const scope = ["p.deleted_at IS NULL"], sargs = [];
   if (!staff) scope.push("p.hidden_at IS NULL");
   let from = "feed_posts p";
   const jargs = [];
   const visible = () => {
     if (staff) scope.push("EXISTS (SELECT 1 FROM feed_post_rooms fv WHERE fv.post_id = p.id AND fv.removed_at IS NULL)");
-    else { const v = visibleSql(t); scope.push(v.sql); sargs.push(...v.args); }
+    else { const v = visibleSql(t, blocked); scope.push(v.sql); sargs.push(...v.args); }
   };
   if (following) {
     // 1.99bz: posts by people `following` follows + posts in rooms they follow (one row per post);
@@ -775,6 +803,14 @@ async function list({ room = null, author = null, following = null, authors: aut
     }
   } else if (author) {
     scope.push("p.author_id = ?"); sargs.push(author);
+    // 1.99fu: someone's posts, minus the ones that live only in Approved pads this viewer is outside of (the author's own
+    // profile view keeps them all)
+    if (blocked.length && !(viewer && viewer.userId === author)) {
+      const ph = blocked.map(() => "?").join(",");
+      scope.push(`(EXISTS (SELECT 1 FROM feed_post_rooms fa WHERE fa.post_id = p.id AND fa.removed_at IS NULL AND fa.room_id NOT IN (${ph}))
+                   OR NOT EXISTS (SELECT 1 FROM feed_post_rooms fb2 WHERE fb2.post_id = p.id AND fb2.room_id IN (${ph})))`);
+      sargs.push(...blocked, ...blocked);
+    }
   } else if (Array.isArray(authorIds)) {
     const ids = authorIds.map(String).slice(0, 2000);
     if (!ids.length) return { posts: [], more: false, page: 1, sort: R.sort };
@@ -834,7 +870,7 @@ async function get(id, viewer, opts = {}) {
 }
 /** 1.99dv: a post's canonical path (pads.postHref) from its id; `hash` ("#c-<id>", "#comments") is appended. null: no such post. */
 async function postPath(id, hash = "") {
-  const p = await get(id, null, { _inner: true });
+  const p = await get(id, null, { _inner: true, access: false });     // 1.99fu: the real canonical address (internal use)
   return p ? p.url + (hash || "") : null;
 }
 /** 1.99dv: many posts' canonical paths at once (admin lists, Pepe's mention lines). -> Map id -> path (missing ids left out). */
@@ -844,7 +880,7 @@ async function postLinks(ids) {
   if (!list.length) return out;
   await init();
   const rows = await getQuery(`SELECT * FROM feed_posts WHERE id IN (${list.map(() => "?").join(",")})`, list);
-  for (const p of await decorate(rows, null, { _inner: true })) out.set(p.id, p.url);
+  for (const p of await decorate(rows, null, { _inner: true, access: false })) out.set(p.id, p.url);
   return out;
 }
 /** postPath, never null (a gone post's link is the old short form, which 404s like the post would). */
@@ -1030,9 +1066,14 @@ async function crosspostOriginal(u, origId) {
   let o = await getRow(origId);
   if (o && o.crosspost_of) o = await getRow(o.crosspost_of);
   if (!o || o.deleted_at || (o.hidden_at && !isStaff(u))) throw new Refuse(404, "No such post.");
+  if (!(await postSeenBy(u, o))) throw new Refuse(404, "No such post.");             // 1.99fu: an Approved pad's post, to an outsider
   const v = visibleSql(NOW());
   const shown = (await getQuery(`SELECT 1 FROM feed_posts p WHERE p.id = ? AND ${v.sql}`, [o.id, ...v.args]))[0];
   if (!shown && !isStaff(u)) throw new Refuse(409, "That post isn't visible in any pad, so it can't be crossposted.");
+  // 1.99fu: a post that lives only in Approved (members-only) pads stays there - a crosspost would show it to everyone
+  await PADACCESS().init();
+  const live = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [o.id])).map((r) => r.room_id);
+  if (live.length && live.every((rid) => PADACCESS().isApproved(rid))) throw new Refuse(403, "Posts in a members-only pad can't be crossposted out of it.");
   return o;
 }
 /** null when `u` may crosspost `o` into pad R, else {status, message} (the rate limits are checked per action). */
@@ -1155,7 +1196,9 @@ async function crosspost(userId, origId, input = {}) {
  */
 async function communities(viewer = null) {
   await init();
-  const list = await rooms.list();
+  // 1.99fu: an Approved pad is listed (pickers, the /feed bar and its search) only for the people inside it
+  const blocked = new Set(await blockedFor(viewer));
+  const list = (await rooms.list()).filter((R) => !blocked.has(R.id));
   if (!list.length) return [];
   await require("./follows").init();
   const [F, P] = await Promise.all([
@@ -1344,6 +1387,7 @@ async function applyVote(u, { table, key, id, authorId, postId }, dir, what) {
 async function vote(user, id, dir, on) {
   const r = await getRow(id);
   if (!r || r.deleted_at || r.hidden_at) throw new Refuse(404, "No such post.");
+  if (!(await postSeenBy(user, r))) throw new Refuse(404, "No such post.");          // 1.99fu: pad visibility
   const u = await voter(user);
   const v = await applyVote(u, { table: "feed_votes", key: "post_id", id, authorId: r.author_id }, cleanDir(dir, on), "post");
   const c = v.changed ? await recountPost(id) : r;
@@ -1356,6 +1400,7 @@ async function voteComment(user, cid, dir) {
   if (!c || c.deleted_at || c.hidden_at) throw new Refuse(404, "No such comment.");
   const p = await getRow(c.post_id);
   if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
+  if (!(await postSeenBy(user, p))) throw new Refuse(404, "No such post.");          // 1.99fu: pad visibility
   const u = await voter(user);
   const v = await applyVote(u, { table: "feed_comment_votes", key: "comment_id", id: c.id, authorId: c.author_id, postId: c.post_id }, cleanDir(dir), "comment");
   const n = v.changed ? await recountComment(c.id) : c;
@@ -1411,6 +1456,7 @@ async function comment(user, postId, { body, parent } = {}) {
   if (!p || p.deleted_at || p.hidden_at) throw new Refuse(404, "No such post.");
   const u = await account(user && user.userId);
   if (!u) throw new Refuse(401, "Sign in to comment.");
+  if (!(await postSeenBy(u, p))) throw new Refuse(404, "No such post.");             // 1.99fu: pad visibility
   if (p.locked_at && !(await canLock(u, p.id))) throw new Refuse(403, "Comments on this post are locked.");
   const roomIds = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ? AND removed_at IS NULL", [postId])).map((r) => r.room_id);
   const refusal = await postRefusal(u, roomIds);
@@ -1996,6 +2042,8 @@ async function roomPostRefusal(u, roomId) {
     return { status: 403, message: `Only ${R && R.profile && R.profile.username ? R.profile.username : "its owner"} can post on their profile.` };
   }
   if (!u || await rooms.canManage(u, roomId)) return null;
+  // 1.99fu: an Approved pad takes posts (and crossposts, stories) only from the people inside it
+  if ((await blockedFor(u)).includes(String(roomId))) return { status: 403, message: "This pad is for approved members - ask its owner for access first." };
   const S = await roomSettings(roomId);
   const R = rooms.getCached(roomId);
   const name = R ? R.title : roomId;
@@ -2185,4 +2233,5 @@ module.exports = {
   notify, urgentNotice, cleanLine,
   setRestricted, mentionOn, setMention, migrateMentionDefault, announceState, _setPepeIn, takeMentions, sweep, hotScore, priceOf, isStaff, burst, _setClock, _gaps: gaps, PEPE_ID, isPepe, effNsfw, kvGet, kvSet,
   TITLE_MAX, BODY_MAX, COMMENT_MAX, MAX_IMAGES, MAX_ATTACH, MAX_ROOMS,
+  blockedFor, postSeenBy,      // 1.99fu: pad visibility (padaccess.js)
 };

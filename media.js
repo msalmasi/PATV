@@ -241,10 +241,22 @@ function register(app, { isBotToken, addUser, noTimers }) {
     return { row: rows[0] };
   }
 
+  // 1.99fu: a capture taken in an Approved pad (padaccess.js) is only for the people inside it - the file, the poster
+  // and the page all 404 for anyone else (the sign-in cookie is only read when it matters)
+  async function padGate(req, res, row) {
+    if (!row || !row.room) return true;
+    const PA = require("./padaccess");
+    await PA.init();
+    if (!PA.isApproved(row.room)) return true;
+    if (req.user === undefined && typeof addUser === "function") await new Promise((r) => addUser(req, res, r));
+    return PA.canSee(req.user || null, row.room);
+  }
+
   // The file itself — Range-aware (206), so phones can play clips
   app.get("/media/:id/raw", async (req, res) => {
     const { row, gone } = await live(req.params.id);
     if (gone) return res.status(gone).send(gone === 410 ? "This capture has expired." : "Not found.");
+    if (!(await padGate(req, res, row))) return res.status(404).send("Not found.");
     res.set("X-Robots-Tag", "noindex");
     res.set("Cache-Control", `private, max-age=${Math.max(0, Math.min(300, Math.floor((row.expires - Date.now()) / 1000)))}`);
     res.set("X-Content-Type-Options", "nosniff");
@@ -260,6 +272,7 @@ function register(app, { isBotToken, addUser, noTimers }) {
     res.set("X-Robots-Tag", "noindex");
     res.set("X-Content-Type-Options", "nosniff");
     if (gone) return res.status(gone).type("text/plain").send(gone === 410 ? "This capture has expired." : "Not found.");
+    if (!(await padGate(req, res, row))) return res.status(404).type("text/plain").send("Not found.");
     if (!hasPoster(row)) {
       res.set("Cache-Control", "no-store");
       if (!posterFailed.has(row.id)) makePoster(row).catch(() => {});   // missed by upload + backfill: make it now for next time
@@ -275,6 +288,7 @@ function register(app, { isBotToken, addUser, noTimers }) {
     const { row, gone } = await live(req.params.id);
     res.set("X-Robots-Tag", "noindex");
     if (gone) return res.status(gone).render("media", { user: req.user ? req.user.username : null, item: null, gone });
+    if (!(await padGate(req, res, row))) return res.status(404).render("media", { user: req.user ? req.user.username : null, item: null, gone: 404 });
     // 1.99cr: the pad it belongs to (a link, not the raw room id) and whether this viewer may delete it
     let pad = null, canDelete = false;
     try {

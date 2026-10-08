@@ -458,22 +458,55 @@ const isLive = (R) => Date.now() - R.updated < STALE_MS;
 // 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
 const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
 
-/** For the homepage / room list. `full` (signed-in) adds who's on the mic. */
+/** For the homepage / room list. `full` (signed-in) adds who's on the mic. 1.99fu: a Public pad's row always has them. */
 async function summary(full) {
   await load();
-  const C = full ? await resolveNames([...rooms.values()].flatMap((R) => R.mic)) : null;   // 1.99ea: names on the mic
+  const PA = require("./padaccess");
+  const open = (R) => full || PA.isPublic(R.id);
+  const C = await resolveNames([...rooms.values()].filter(open).flatMap((R) => R.mic));   // 1.99ea: names on the mic
   return [...rooms.values()].sort((a, b) => b.count - a.count).map((R) => ({
     id: R.id, slug: R.slug, name: titleOf(R), count: R.count, live: isLive(R), micCount: R.mic.length, audio: !!R.audio && isLive(R),
     people: RA.people(R.count, R.members),
-    mic: full ? R.mic.map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
-    topic: full ? R.topic : "",
+    mic: open(R) ? R.mic.map((u) => (u.anon ? "someone" : withPatv(u, C).display)) : [],
+    topic: open(R) ? R.topic : "",
   }));
 }
 
-async function liveView(R, after, userId, login) {
+// ── 1.99fu: 💸 Tip from the pad's user lists ("In the Camfrog room" / "On the mic" ⋯ menus, public/js/room-mod.js) ──
+// Server-side, per signed-in viewer, each roster entry gets `tip`: {to, href} = tip their linked PATV account through the
+// site's own tip page (/u/<username>/tip: the same presets, confirm step, routing and idempotency as every web tip);
+// {off: "..."} = shown greyed out (the site has no pending / held tips, so an unlinked Camfrog login can't be tipped);
+// absent = no Tip at all: anonymised people, Pepe (the bridge's self, or his PATV account), other bots, and yourself.
+const TIP_UNLINKED = "not linked to PATV yet";
+let pepeName = { v: null, at: 0 };
+async function pepeUsername() {
+  if (Date.now() - pepeName.at < 10 * 60e3) return pepeName.v;
+  let v = null;
+  try { const r = (await getQuery("SELECT username FROM users WHERE userId = ?", [require("./feedstore").PEPE_ID]))[0]; v = r && r.username ? String(r.username).toLowerCase() : null; }
+  catch (e) { v = pepeName.v; }
+  pepeName = { v, at: Date.now() };
+  return v;
+}
+/** The Tip item for roster entry `u` (already withPatv'd) as viewer `me` ({userId, username, login}) sees it - null = none. */
+function tipFor(u, me, pepe = null) {
+  if (!me || !me.userId || !u || u.anon || u.self || u.bot || !u.login) return null;
+  const lc = (s) => String(s || "").toLowerCase();
+  if (me.login && lc(u.login) === lc(me.login)) return null;                       // yourself (your Camfrog login)
+  if (!u.patv || !u.patv.username) return { off: TIP_UNLINKED };
+  const name = String(u.patv.username);
+  if (me.username && lc(name) === lc(me.username)) return null;                      // yourself (your PATV account)
+  if (pepe && lc(name) === pepe) return null;                                       // Pepe's PATV account
+  return { to: name, href: "/u/" + encodeURIComponent(name) + "/tip" };
+}
+
+async function liveView(R, after, userId, login, username = null) {
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
   const feed = items.map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
+  // 1.99fu: 💸 Tip (signed-in viewers only)
+  const me = userId ? { userId, username, login } : null;
+  const pepe = me ? await pepeUsername() : null;
+  const withTip = (u) => { const x = withPatv(u, L); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
   return {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
@@ -484,8 +517,8 @@ async function liveView(R, after, userId, login) {
     mine: userId ? relay.mineFor(userId, R.id) : [],
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
     mod: login && isLive(R) ? require("./padmod").viewMod(R, login) : null,
-    members: R.members.map((u) => withPatv(u, L)),
-    mic: R.mic.map((u) => withPatv(u, L)),
+    members: R.members.map(withTip),
+    mic: R.mic.map(withTip),
     feed, cursor,
   };
 }
@@ -541,9 +574,11 @@ function register(app, { isBotToken, addUser }) {
   });
 
   app.get("/p/:slug/audio", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.status(401).send("Sign in to listen.");
     await load();
     const R = bySlug(req.params.slug);
+    // 1.99fu: the room's audio is members-tier (padaccess.full): signed in, or anyone on a Public pad, inside an Approved one
+    if (R && !require("./padaccess").full(req.user, R.id)) return res.status(req.user && req.user.userId ? 403 : 401).send("Sign in to listen.");
+    if (!R && (!req.user || !req.user.userId)) return res.status(401).send("Sign in to listen.");
     if (!R || !R.audio || !isLive(R)) return res.status(404).send("This room's audio isn't on.");
     const a = audioHub(R.id);
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
@@ -556,15 +591,17 @@ function register(app, { isBotToken, addUser }) {
 
   app.get("/api/rooms/:slug/live", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    if (!req.user || !req.user.userId) return res.status(401).json({ error: "Sign in to watch the room." });
     await load();
     const R = bySlug(req.params.slug);
-    if (!R) return res.status(404).json({ error: "No such room." });
+    // 1.99fu: the live room is members-tier (padaccess.full): signed in; anyone on a Public pad; inside an Approved one
+    const signed = !!(req.user && req.user.userId);
+    if (!R) return signed ? res.status(404).json({ error: "No such room." }) : res.status(401).json({ error: "Sign in to watch the room." });
+    if (!require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ error: signed ? "This pad is for approved members." : "Sign in to watch the room." });
     const after = Math.max(0, Number(req.query.after) || 0);
     const pm = require("./padmod");
-    const login = await pm.linkedLogin(req.user.userId);
+    const login = signed ? await pm.linkedLogin(req.user.userId) : null;
     if (login) pm.noteViewer(R.id, login);
-    res.json(await liveView(R, after > cursor ? 0 : after, req.user.userId, login));
+    res.json(await liveView(R, after > cursor ? 0 : after, signed ? req.user.userId : null, login, signed ? req.user.username : null));
   });
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
@@ -581,13 +618,21 @@ function register(app, { isBotToken, addUser }) {
     try {
       const reg = require("./rooms");
       const web = require("./roomsweb");
+      const PA = require("./padaccess");
+      await PA.init();
+      // 1.99fu: who's asking only matters while some pad is Approved (this is polled - no sign-in read otherwise)
+      if (PA.anyApproved() && req.user === undefined) await new Promise((r) => addUser(req, res, r));
       let R = req.query.room ? await web.resolveRoom(String(req.query.room)) : null;
+      // 1.99fu: an Approved pad's stage is for the people inside it
+      if (R && !PA.canSee(req.user, R.id)) return res.status(req.user && req.user.userId ? 403 : 401).json({ ok: false, locked: true, error: "This pad is for approved members." });
       if (!R) {
-        const f = await reg.frontRoom(await summary(false));
-        R = await reg.get(f.id);
+        const f = await reg.frontRoom(await summary(false), { viewer: req.user || null });
+        R = f && f.id ? await reg.get(f.id) : null;
+        if (R && !PA.canSee(req.user, R.id)) R = null;
         if (R) front = { id: R.id, slug: web.linkSlug(R), title: R.title, pinned: f.pinned };
       }
-      if (R) { roomId = R.id; slots = await require("./mainstage").publicSlots(R.id); }
+      // 1.99fu: on an Approved pad the HLS / WHEP URLs carry this viewer's read token (webrtc.js checks it)
+      if (R) { roomId = R.id; slots = PA.tokenizeSlots(await require("./mainstage").publicSlots(R.id), req.user, R.id); }
     } catch (e) { slots = []; }
     // pepe_here: Pepe's stage (his broadcast) belongs to every room he's IN - not just his window room
     const here = roomId ? pepeIn(roomId) : null;
@@ -598,7 +643,7 @@ function register(app, { isBotToken, addUser }) {
   app.get("/p", addUser, async (req, res) => {
     const signedIn = !!(req.user && req.user.userId);
     const reg = require("./rooms");
-    const g = await require("./roomsweb").guideRows(signedIn);
+    const g = await require("./roomsweb").guideRows(signedIn, req.user);
     res.locals.og = { title: "Pads — Public Access TV", description: "Every PATV pad: its feed, what's on its stage now and what's on next, and its Camfrog room live on the web.",
                       image: res.locals.ogBase + "/og/page.png?t=Pad%20Guide", url: res.locals.ogBase + "/p" };
     let owned = [];
@@ -649,12 +694,20 @@ function register(app, { isBotToken, addUser }) {
     res.locals.og = { title: `p/${slug} — ${title} on PATV`, description: (info && info.description) || `${title}: a pad on Public Access TV.`,
                       image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent(("p/" + slug).slice(0, 60)), url: res.locals.ogBase + "/p/" + encodeURIComponent(slug) };
     const manage = await reg.canManage(req.user, R.id);
+    // 1.99fu: who can see this pad (padaccess.js). The page gate already turned anyone outside an Approved pad away;
+    // liveOpen = the members-tier content (the live room, its topic, story pictures, analytics): signed in, or anyone
+    // on a Public pad
+    const PA = require("./padaccess");
+    await PA.init();
+    const liveOpen = PA.full(req.user, R.id);
+    const access = { level: PA.levelOf(R.id), info: PA.INFO[PA.levelOf(R.id)] };
+    if (access.level === "approved") res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
     // the feed's sort / window / page: ?sort= &t= &p= (the feed's own names, so /feed links and old
     // /feed/c/<slug>?sort=... addresses carry over) or the older ?fsort= &ft= &fp=
     const q = req.query || {};
     const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p, view: q.view };      // 1.99fn: ?view=list|gallery (feedgallery.js)
     // 1.99dx: the pad page's tabs (Live/Stage · Feed · About, public/js/pad-tabs.js) - which one opens first
-    const initial = signedIn && !R.offline ? await liveView(R, 0, req.user.userId, login) : null;
+    const initial = liveOpen && !R.offline ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null) : null;
     const roomStage = await require("./mainstage").roomStage(R.id, req.user);
     const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
     const here = pepeIn(R.id), st = stage();
@@ -668,8 +721,8 @@ function register(app, { isBotToken, addUser }) {
     const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: R.count, members: initial ? initial.members : null,
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
-      user: req.user ? req.user.username : null, signedIn, linked,
-      room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: signedIn ? R.topic : "",
+      user: req.user ? req.user.username : null, signedIn, linked, liveOpen, access,
+      room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
@@ -718,4 +771,4 @@ function padTabsFor(o) {
 }
 
 module.exports = { register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, resolveNames, _nameCache: nameCache };
+  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

@@ -358,8 +358,12 @@ async function forPosts(ids, viewer) {
     let su = r.subject_user_id ? await userById(r.subject_user_id) : null;
     if (!su && r.subject_login) su = await userByLogin(r.subject_login);
     const R = rooms.getCached(r.room_id);
+    // 1.99fu: captured in an Approved pad this viewer is outside of - say so without naming it
+    const PA = require("./padaccess");
+    const hid = PA.isReady() && !PA.canSee(viewer, r.room_id);
     out.set(r.post_id, {
-      room: { id: r.room_id, title: (R && R.title) || r.room_title || r.room_id, href: R ? require("./pads").padHref(R) : null },
+      room: hid ? { id: null, title: "a members-only pad", href: null }
+        : { id: r.room_id, title: (R && R.title) || r.room_title || r.room_id, href: R ? require("./pads").padHref(R) : null },
       kind: r.kind, source: r.source, subjectName: r.subject_name || null,
       subject: su ? { username: su.username, display: su.displayname || su.username } : null,
       canRemoveMe: !r.removed_at && subjectMatches(acct, r),

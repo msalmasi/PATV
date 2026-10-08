@@ -19,7 +19,8 @@
 //             (ended, cut, banned) is kicked (POST /v3/webrtc/sessions/kick/<id>).
 //   watch     MediaMTX remuxes the stream to HLS (<WEBRTC_BASE>/<stream>/index.m3u8 - the fallback and the
 //             default player) and serves WHEP (<WEBRTC_BASE>/whep/<stream>) for the ⚡ Low latency toggle.
-//             Reads are public for any open slot (there are no private stages).
+//             Reads are public for any open slot - 1.99fu: except on an Approved pad (padaccess.js), where a read needs
+//             the viewer's signed read token (?pt=, put on the URLs by the stage APIs) or an IP that showed one lately.
 // Pepe's RTMP stream and RTMP slots are untouched: they stay on nginx-rtmp's HLS (no WHEP - MediaMTX can't
 // turn AAC into Opus), and bridge.js still reads /mnt/hls/broadcast.m3u8 freshness for ON AIR.
 //
@@ -200,13 +201,20 @@ async function whipAuth(b, opts = {}) {
   }
   if (action === "read" || action === "playback") {
     if (action === "playback") return 403;                        // no recordings
-    const c = readCache.get(path);
-    if (c && now() - c.at < 2000) return c.ok ? 200 : 403;
-    const s = await S.openSlotByStream(path);
-    const ok = !!s && s.mode !== "embed";
-    readCache.set(path, { at: now(), ok });
-    if (readCache.size > 500) readCache.clear();
-    return ok ? 200 : 403;
+    let c = readCache.get(path);
+    if (!c || now() - c.at >= 2000) {
+      const s = await S.openSlotByStream(path);
+      c = { at: now(), ok: !!s && s.mode !== "embed", room: s ? s.room_id || require("./rooms").HOUSE_ROOM : null };
+      readCache.set(path, c);
+      if (readCache.size > 500) readCache.clear();
+    }
+    if (!c.ok) return 403;
+    // 1.99fu: a stage on an Approved pad (padaccess.js): the viewer's read token (?pt=, from the stage APIs), or an IP
+    // that showed one for this stream lately; the box's own loopback reads stay allowed
+    const PA = require("./padaccess");
+    await PA.init();
+    if (c.room && PA.isApproved(c.room) && !loopbackIp(b.ip)) return (await PA.readAllowed(b, path, c.room)) ? 200 : 403;
+    return 200;
   }
   return 403;                                                     // api / metrics / pprof are excluded in mediamtx.yml
 }

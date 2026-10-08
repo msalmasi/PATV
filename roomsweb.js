@@ -31,9 +31,13 @@ function linkSlug(R) {
   return R.slug;
 }
 
-/** Pads rows: every registered or bridged room (pad) with what's on now and next. */
-async function guideRows(signedIn) {
+/** Pads rows: every registered or bridged room (pad) with what's on now and next.
+ *  1.99fu: `viewer` given (null = signed out) -> an Approved pad is left out for anyone outside it (padaccess.js: the
+ *  guide is a discovery page; an Approved pad is reached by its link), and each row says its level (r.access). */
+async function guideRows(signedIn, viewer) {
   await rooms.init();
+  const PA = require("./padaccess");
+  await PA.init();
   const B = bridge();
   const summary = await B.summary(signedIn);
   const reg = await rooms.list();
@@ -62,7 +66,11 @@ async function guideRows(signedIn) {
       platform: rooms.platformOf(id),            // 1.99x: camfrog | site | twitch | discord (a bridged-only room is camfrog)
       site_only: rooms.isCommunityOnly(id),      // 1.99ck: a pad with no Camfrog room (the Camfrog Lounge)
       boost_pat: Math.round(bpat.get(id) || 0),  // 1.99ek: active (decayed) boost PAT - 0 = not boosted
+      access: PA.levelOf(id),                    // 1.99fu: public | members | approved
     });
+  }
+  if (viewer !== undefined) {
+    for (let i = out.length - 1; i >= 0; i--) if (!PA.canSee(viewer, out[i].id)) out.splice(i, 1);
   }
   out.sort((a, b) => (b.live ? 1 : 0) - (a.live ? 1 : 0) || (b.now.filter((s) => s.live).length - a.now.filter((s) => s.live).length)
     || b.count - a.count || a.title.localeCompare(b.title));
@@ -251,7 +259,7 @@ function register(app, { addUser, isBotToken }) {
   app.get("/pads/admin", addUser, async (req, res) => {
     if (!rooms.isStaff(req.user)) return res.redirect("/login");
     const list = await rooms.list();
-    const g = await guideRows(true);
+    const g = await guideRows(true, req.user);
     const ov = await royalties.overview();
     const names = new Map();
     for (const o of ov) {

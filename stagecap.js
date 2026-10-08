@@ -611,6 +611,13 @@ function register(app, { addUser, isBotToken, noTimers }) {
     noStore(res);
     try {
       const b = req.body || {};
+      // 1.99fu: an Approved pad's stage can only be snapped / clipped from inside it
+      if (b.room) {
+        const PA = require("./padaccess");
+        await PA.init();
+        const R = await deps.resolveRoom(String(b.room).slice(0, 128));
+        if (R && !PA.canSee(req.user, R.id)) return res.status(404).json({ ok: false, error: "No such pad." });
+      }
       const c = await capture(req.user, req, { room: b.room, stream: b.stream, kind: b.kind, secs: b.secs });
       res.json({ ok: true, capture: view(c, c.price) });
     } catch (e) { fail(res, e); }
@@ -681,7 +688,11 @@ function register(app, { addUser, isBotToken, noTimers }) {
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in to see captures." });
     try {
       const R = req.query.pad ? await deps.resolveRoom(String(req.query.pad).slice(0, 128)) : null;
-      res.json({ ok: true, items: await feed({ roomId: R ? R.id : null, before: Number(req.query.before) || null }) });
+      // 1.99fu: an Approved pad's captures are only for the people inside it (padaccess.js)
+      const PA = require("./padaccess");
+      await PA.init();
+      if (R && !PA.canSee(req.user, R.id)) return res.json({ ok: true, items: [] });
+      res.json({ ok: true, items: PA.visibleRows(req.user, await feed({ roomId: R ? R.id : null, before: Number(req.query.before) || null }), "room") });
     } catch (e) { fail(res, e); }
   });
   app.get("/stage/captures", addUser, async (req, res) => {
@@ -689,8 +700,13 @@ function register(app, { addUser, isBotToken, noTimers }) {
     try {
       await init();
       const signed = !!(req.user && req.user.userId);
-      const R = req.query.pad ? await deps.resolveRoom(String(req.query.pad).slice(0, 128)) : null;
-      const items = signed ? await feed({ roomId: R ? R.id : null, limit: 60, withUid: true }) : [];
+      // 1.99fu: an Approved pad's captures are only for the people inside it (padaccess.js)
+      const PA = require("./padaccess");
+      await PA.init();
+      let R = req.query.pad ? await deps.resolveRoom(String(req.query.pad).slice(0, 128)) : null;
+      const hidden = !!(R && !PA.canSee(req.user, R.id));
+      const items = signed && !hidden ? PA.visibleRows(req.user, await feed({ roomId: R ? R.id : null, limit: 60, withUid: true }), "room") : [];
+      if (hidden) R = null;
       let titles = {};
       try { const rooms = require("./rooms"); for (const it of items) { const x = rooms.getCached(it.room); titles[it.room] = x ? { title: x.title, slug: require("./roomsweb").linkSlug(x) } : { title: it.room, slug: it.room }; } } catch (e) { titles = {}; }
       res.render("stageCaptures", { user: req.user ? req.user.username : null, signed, items, titles, pad: R ? { title: R.title, slug: R.slug } : null });

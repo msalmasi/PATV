@@ -168,6 +168,7 @@ const fx = { postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname
 const stories = require("./stories");
 const FG = require("./feedgallery");          // 1.99fn: the ☰ List / ▦ Gallery toggle + the gallery grid
 const follows = require("./follows");
+const PA = () => require("./padaccess");      // 1.99fu: pad visibility
 async function captures(roomId, limit = 12) { return stories.captures(roomId, limit, { windowMs: stories.WINDOW_MS }); }
 
 async function viewerOf(req) {
@@ -242,8 +243,9 @@ async function roomFeed(roomId, reqUser, query = {}) {
   return {
     room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod,
     slug: (rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId),
-    caps: viewer ? await captures(roomId, 24) : [],
+    caps: viewer && PA().full(viewer, roomId) ? await captures(roomId, 24) : [],
     // 1.99bz: signed-out viewers get the room's story circle (sign-in prompt), never the pictures
+    // 1.99fu: ...unless the pad is Public: then the circle carries its pictures and opens (stories.forViewer)
     storyRooms: viewer ? [] : await stories.forViewer(null, { room: roomId }),
     follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
@@ -456,6 +458,8 @@ function register(app, { addUser, isBotToken }) {
                         description: desc, image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent((p.title || "PATV feed").slice(0, 60)),
                         url: res.locals.ogBase + p.url };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");
+      // 1.99fu: a post in an Approved pad (only its members got this far): never indexed, never cached in between
+      if (p.roomsAll.some((r) => PA().isApproved(r.id))) res.set({ "X-Robots-Tag": "noindex", "Cache-Control": "private, no-store" });
       res.render("post", { user: viewer ? viewer.username : null, viewer, p, comments: C, csort, fx, embeds, host: viewOpts(req).host, modRooms, canLock: await store.canLock(viewer, p.id),
                            reasons: store.REASONS, staff, termsEnforced: terms.enforced(), termsNeeded: viewer ? await terms.needs(viewer.userId).catch(() => false) : false,
                            pepeMuted: await require("./pepefeed").isMuted(p.id).catch(() => false) });
@@ -505,6 +509,14 @@ function register(app, { addUser, isBotToken }) {
       const staff = store.isStaff(req.user);
       if (!a.post_id && !(uid && uid === a.owner_id) && !staff) return res.status(404).end();
       if (a.post_id && (a.deleted_at || a.hidden_at) && !staff && !(a.hidden_at && !a.deleted_at && uid === a.author_id)) return res.status(404).end();
+      // 1.99fu: a post that lives only in Approved pads: its members (and its author / staff) only
+      let locked = false;
+      if (a.post_id) {
+        await PA().init();
+        const placed = await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [a.post_id]);
+        locked = placed.some((r) => PA().isApproved(r.room_id));
+        if (locked && !(await store.postSeenBy(req.user, { id: a.post_id, author_id: a.author_id }))) return res.status(404).end();
+      }
       const nsfw = a.nsfw_admin === 0 || a.nsfw_admin === 1 ? !!a.nsfw_admin : !!a.nsfw;
       if (nsfw && !uid) return res.status(403).end();
       const ct = name.endsWith(".webp") ? "image/webp" : name.endsWith(".m4a") ? "audio/mp4" : "video/mp4";
@@ -516,7 +528,7 @@ function register(app, { addUser, isBotToken }) {
         "Content-Security-Policy": "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; sandbox",
         "Cross-Origin-Resource-Policy": "same-origin",
         "X-Robots-Tag": "noindex",
-        "Cache-Control": nsfw || !a.post_id ? "private, max-age=600" : "public, max-age=3600",
+        "Cache-Control": nsfw || locked || !a.post_id ? "private, max-age=600" : "public, max-age=3600",
       });
       res.sendFile(p, { acceptRanges: true, headers: { "Content-Type": ct } }, (err) => { if (err && !res.headersSent) res.status(404).end(); });
     } catch (e) {

@@ -1,0 +1,33 @@
+<%- include('layout', { title: 'p/' + slug + ' · members only', user: user }) %>
+<%#
+  1.99fu (padaccess.js): an Approved pad, seen by someone outside it. Only the address they already have - no title,
+  description, banner, owner, posts or media. Signed in: "Request access" (POST /api/pads/<slug>/access/request,
+  public/js/pad-access.js); signed out: sign in first.
+%>
+<link rel="stylesheet" href="/public/css/pad-access.css?v=1">
+<main class="pa-lock" id="paLock" data-slug="<%= slug %>">
+  <section class="pa-card" aria-labelledby="paH">
+    <div class="pa-ic" aria-hidden="true">🔒</div>
+    <h1 id="paH">p/<%= slug %></h1>
+    <p class="pa-what">This pad is for <b>approved members</b>. Its owner decides who can see it.</p>
+    <% if (!user) { %>
+      <p><a class="pa-btn primary" href="/login?next=<%= encodeURIComponent(next) %>">Sign in to request access</a></p>
+      <p class="pa-mut">No account? <a href="/register">Join PATV</a>, then come back here.</p>
+    <% } else if (st.request === 'pending') { %>
+      <p class="pa-st" role="status">⏳ Your request is waiting for the pad's owner. You'll get a notice when they decide.</p>
+    <% } else if (st.retryAt) { %>
+      <p class="pa-st" role="status">The owner said no for now. You can ask again after <time data-ts="<%= st.retryAt %>"><%= new Date(st.retryAt).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>.</p>
+    <% } else { %>
+      <form class="pa-req" id="paReq" autocomplete="off">
+        <label class="pa-lbl" for="paNote">A note for the owner <small>(optional)</small></label>
+        <textarea id="paNote" name="note" maxlength="<%= noteMax %>" rows="2" placeholder="Who you are, why you'd like in"></textarea>
+        <button type="submit" class="pa-btn primary">🔑 Request access</button>
+        <p class="pa-msg" id="paMsg" role="status" aria-live="polite"></p>
+      </form>
+    <% } %>
+    <p class="pa-mut"><a href="/p">← All pads</a></p>
+  </section>
+</main>
+<% if (user) { %><script src="/public/js/pad-access.js?v=1" defer></script><% } %>
+</body>
+</html>

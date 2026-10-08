@@ -479,7 +479,9 @@ async function evaluateAuto(summary, { force = false, actor = "auto", now = nowM
     if (CFG.boost && CFG.boost.on) {
       try { bmap = await require("./boosts").activeMap(now, CFG.boost.half_min); } catch (e) { console.error("[rooms] boosts:", e.message); bmap = null; }
     }
-    const ranked = FR.rank(withAct(summary, CFG, now, bmap), CFG, now);
+    // 1.99fu: an Approved (members-only) pad is never the automatic pick - the homepage's featured room is for everyone
+    try { await require("./padaccess").init(); } catch (e) { /* no levels loaded: nothing is Approved */ }
+    const ranked = FR.rank(withAct(notApproved(summary), CFG, now, bmap), CFG, now);
     const { state, switched } = FR.decide(AUTO, ranked, CFG, now, { force });
     state.ranked = ranked.slice(0, 8).map((r) => ({ id: r.id, score: r.score, activity: r.activity, boost: r.boost, parts: r.parts, dead: r.dead, lastAt: r.lastAt }));
     if (state.id) {
@@ -499,16 +501,32 @@ async function evaluateAuto(summary, { force = false, actor = "auto", now = nowM
 
 /** The room the homepage features: an admin's pinned pick, else the automatic pick (above), else -
  *  only when nothing has ever been live - the house room. `summary` = bridge.summary() rows.
- *  (The old second argument - Pepe's window room - is ignored on purpose.) */
+ *  (The old second argument - Pepe's window room - is ignored on purpose.)
+ *  1.99fu (padaccess.js): opts.viewer = who's looking (null = signed out). The automatic pick never lands on an Approved
+ *  pad (evaluateAuto leaves them out); an admin may still PIN one - its members get it, everyone else gets the
+ *  automatic pick (or the house room / the best-ranked pad they can see). Without opts.viewer (the bridge's minute tick,
+ *  admin views) the setting itself is returned. */
 async function frontRoom(summary, opts = {}) {
   await init();
   const o = opts && typeof opts === "object" && !("id" in opts) ? opts : {};
   const pin = CACHE.front;
   let auto = null;
   try { auto = await evaluateAuto(summary, { now: o.now != null ? o.now : nowMs() }); } catch (e) { console.error("[rooms] front auto:", e.message); auto = AUTO; }
-  if (pin && pin !== "auto" && CACHE.byId.has(pin)) return { id: pin, pinned: true };
-  if (auto && auto.id) return { id: auto.id, pinned: false };
-  return { id: HOUSE_ROOM, pinned: false };
+  const forViewer = Object.prototype.hasOwnProperty.call(o, "viewer");
+  let PA = null;
+  if (forViewer) { try { PA = require("./padaccess"); await PA.init(); } catch (e) { PA = null; } }
+  const sees = (id) => !PA || PA.canSee(o.viewer || null, id);
+  if (pin && pin !== "auto" && CACHE.byId.has(pin) && sees(pin)) return { id: pin, pinned: true };
+  if (auto && auto.id && sees(auto.id)) return { id: auto.id, pinned: false };
+  if (sees(HOUSE_ROOM)) return { id: HOUSE_ROOM, pinned: false };
+  const alt = ((auto && auto.ranked) || []).find((r) => r && r.id && sees(r.id)) || listCached().find((r) => sees(r.id));
+  return { id: alt ? alt.id : HOUSE_ROOM, pinned: false };
+}
+/** 1.99fu: summary rows minus Approved pads (padaccess.js) - they never take part in the automatic front pick. */
+function notApproved(rows) {
+  let PA = null;
+  try { PA = require("./padaccess"); } catch (e) { return rows || []; }
+  return (rows || []).filter((r) => !(r && r.id && PA.isApproved(r.id)));
 }
 /** Admin: pick the top room now (hold ignored), logged with who asked. */
 async function frontReevaluate(summary, actor) {

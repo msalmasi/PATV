@@ -469,13 +469,25 @@ function register(app, { isBotToken, addUser }) {
     }
     const slug = String(req.params.slug).toLowerCase();
     res.set("Cache-Control", "private, no-store");
+    // 1.99fu: analytics are members-tier (padaccess.full): signed in, or anyone on a Public pad (an Approved pad's
+    // outsiders never get here - padaccess.js's page gate)
+    let pad = null;
+    try { pad = await require("./roomsweb").resolveRoom(slug); } catch (e) { pad = null; }
+    const PA = require("./padaccess");
+    await PA.init();
+    const padId = pad ? pad.id : r.room;
+    if (PA.isApproved(padId) && !PA.canSee(req.user, padId)) {      // any other address of the same room
+      return res.status(404).render("notFound", { user, heading: "No analytics for that pad", message: "There's nothing here.", title: "Pad not found" });
+    }
+    const open = PA.full(req.user, padId);
+    if (PA.isApproved(padId)) res.set("X-Robots-Tag", "noindex");
     let a = null;
-    if (signedIn) {
+    if (open) {
       try { a = await forRoom(r, slug); } catch (e) { console.error("[roomstats] view:", e); a = null; }
     }
     let bridged = false;
     try { const b = bridgeMod(); bridged = !!(b && b._rooms && [...b._rooms.values()].some((x) => x.id === r.room)); } catch (e) { bridged = false; }
-    res.render("room-analytics", { user, signedIn, room: { name: r.name, slug, bridged }, a });
+    res.render("room-analytics", { user, signedIn: open, room: { name: r.name, slug, bridged }, a });
   });
 }
 

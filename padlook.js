@@ -480,9 +480,17 @@ function register(app, { addUser }) {
     if (!p) return res.status(404).end();
     try {
       await init();
-      const used = [...CACHE.values()].some((r) => r.avatar === name || r.banner === name || (r.avatar_anim && (r.avatar_anim === name || stillOf(r.avatar_anim) === name)));
-      if (!used) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
-      const H = { "Content-Type": "image/webp", "X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=31536000, immutable",
+      const owner = [...CACHE.values()].find((r) => r.avatar === name || r.banner === name || (r.avatar_anim && (r.avatar_anim === name || stillOf(r.avatar_anim) === name)));
+      if (!owner) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
+      // 1.99fu: an Approved pad's avatar / banner is for the people inside it (padaccess.js), and never shared-cached
+      const PA = require("./padaccess");
+      await PA.init();
+      const locked = PA.isApproved(owner.room_id);
+      if (locked) {
+        if (req.user === undefined && typeof addUser === "function") await new Promise((r) => addUser(req, res, r));
+        if (!PA.canSee(req.user || null, owner.room_id)) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
+      }
+      const H = { "Content-Type": "image/webp", "X-Content-Type-Options": "nosniff", "Cache-Control": locked ? "private, max-age=600" : "public, max-age=31536000, immutable",
                   "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox", "Cross-Origin-Resource-Policy": "same-origin",
                   "Content-Disposition": `inline; filename="patv-pad-${name.slice(0, 8)}.webp"` };
       res.set(H);

@@ -1084,6 +1084,8 @@ app.get("/info", addUser, (req, res) => {
 // user posts to the main feed and to rooms, plus these captures.
 // 1.99ck: "pads" (p/<slug>) - the 301s from the old /rooms/..., /feed/c/<slug> addresses come first
 require("./pads").register(app);
+// 1.99fu: who can see a pad (Public / Members / Approved) - its page + API gates run before every pad route below
+require("./padaccess").register(app, { addUser });
 require("./feedweb").register(app, { isBotToken, addUser });
 require("./aigen").register(app, { isBotToken, addUser });   // 1.99di: AI pictures / videos for posts (Pepe's !imagine / !video from the composer)
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)

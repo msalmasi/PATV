@@ -37,9 +37,9 @@
       </button>
     <% } %>
     <% (S.rooms || []).forEach((r) => { %>
-      <button type="button" role="listitem" class="ss-c<%= r.unseen ? ' unseen' : ' seen' %>" data-story-room="<%= r.id %>" data-latest="<%= r.latest %>"
+      <button type="button" role="listitem" class="ss-c<%= r.unseen ? ' unseen' : ' seen' %>" data-story-room="<%= r.id %>" data-latest="<%= r.latest %>"<%= !S.signed && r.open ? ' data-story-open=1' : '' %>
               aria-label="<%= r.title %>: <%= r.person ? 'story, ' : '' %><%= r.count %> <%= r.person ? 'item' : 'capture' %><%= r.count === 1 ? '' : 's' %><%= r.unseen ? ', new' : '' %>">
-        <span class="ss-ring"><span class="ss-av<%= r.person ? ' ss-person' : '' %>"><% if (r.person && r.avatar) { %><img src="<%= r.avatar %>" alt="" loading="lazy" onerror="this.remove()"><% } else { %><% if (S.signed && r.cover) { %><img src="<%= r.cover %>" alt="" loading="lazy" onerror="this.remove()"><% } %><% const pav_ = r.person ? null : padAvSrc_(r.id); if (pav_) { %><img class="ss-pav" src="<%= pav_ %>" alt="" loading="lazy"><% } else { %><span class="ss-mono" aria-hidden="true"><%= mono(r.title) %></span><% } %><% } %></span></span>
+        <span class="ss-ring"><span class="ss-av<%= r.person ? ' ss-person' : '' %>"><% if (r.person && r.avatar) { %><img src="<%= r.avatar %>" alt="" loading="lazy" onerror="this.remove()"><% } else { %><% if ((S.signed || r.open) && r.cover) { %><img src="<%= r.cover %>" alt="" loading="lazy" onerror="this.remove()"><% } %><% const pav_ = r.person ? null : padAvSrc_(r.id); if (pav_) { %><img class="ss-pav" src="<%= pav_ %>" alt="" loading="lazy"><% } else { %><span class="ss-mono" aria-hidden="true"><%= mono(r.title) %></span><% } %><% } %></span></span>
         <span class="ss-n"><%= r.title %></span>
         <span class="ss-k" aria-hidden="true"><%= r.count %></span>
       </button>
@@ -59,7 +59,9 @@
   <button type="button" class="ss-arr next" tabindex="-1" aria-label="Scroll for more" hidden>›</button>
   </div>
 </section>
-<% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=9" defer></script>
+<%# 1.99fu: signed out, a Public pad's story (r.open, padaccess.js) is inlined too, so its circle opens %>
+<% const inl_ = S.signed ? (S.rooms || []) : (S.rooms || []).filter((r) => r.open && Array.isArray(r.items)); %>
+<% if (showRooms && inl_.length) { %><script type="application/json" class="ss-data"><%- JSON.stringify(inl_).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
+<script src="/public/js/stories.js?v=10" defer></script>
 <% if (compose_) { %><script src="/public/js/story-compose.js?v=1" defer></script><% } %>
 <% } %>

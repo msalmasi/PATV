@@ -12,7 +12,9 @@
 //
 // Rules (same as the captures always had):
 //   * captures are for signed-in members: visitors get the circles (room name + count, no pictures)
-//     and a sign-in prompt instead of the viewer; GET /api/stories is 401 for them
+//     and a sign-in prompt instead of the viewer; GET /api/stories is 401 for them. 1.99fu (padaccess.js): a PUBLIC
+//     pad's circle carries its pictures for visitors too (open: true; the strip inlines it and the viewer opens);
+//     an APPROVED pad's captures reach only the people inside it (no circle at all for anyone else)
 //   * a capture whose subject Pepe flagged private (media.anon: !incognito / !bridge hide), or whose
 //     linked PATV account hides its Analytics or Rooms panel (the room-analytics rule, roomstats.js),
 //     is shown as "someone" - the same for the "taken by" name
@@ -159,7 +161,10 @@ async function forViewer(viewer, { room = null, people = null } = {}) {
   }
   // 1.99ez: profile-pad stories (room user:<id>) are PERSON stories (userstories.js), never pad circles;
   // 1.99fn: with `room`, strictly that pad's rows
-  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room && (!room || c.room === room));
+  // 1.99fu: an Approved pad's story is for the people inside it only - no circle, no count, no title for anyone else
+  const PA = require("./padaccess");
+  await PA.init();
+  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room && (!room || c.room === room) && PA.canSee(viewer, c.room));
   const signed = !!(viewer && viewer.userId);
   const seen = signed ? await seenMap(viewer.userId) : new Map();
   // 1.99eq: what this viewer may do with each capture (📌 Post to pad / 🔖 Save - storykeep.js; the server re-checks)
@@ -182,6 +187,8 @@ async function forViewer(viewer, { room = null, people = null } = {}) {
     const cover = cv ? (cv.kind === "photo" ? cv.src : cv.poster) : null;
     const base = { ...roomInfo(rid), latest, count: list.length, unseen: latest > upto };
     if (signed) out.push({ ...base, seen: upto, cover, items: list.map(({ room: _r, ...x }) => x) });
+    // 1.99fu: a Public pad's story opens for signed-out visitors too (its pictures, a cover; no 📌 / 🔖 / 🗑 - those are signed-in)
+    else if (PA.isPublic(rid)) out.push({ ...base, unseen: true, open: true, cover, items: list.map(({ room: _r, ...x }) => x) });
     else out.push({ ...base, unseen: true, cover: null });
   }
   out.sort((a, b) => (b.unseen - a.unseen) || (b.latest - a.latest));

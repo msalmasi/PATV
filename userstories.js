@@ -205,7 +205,10 @@ async function people(viewer, uids, { seen = null } = {}) {
     if (!info) continue;
     const rows = await personRows(uid);
     if (!rows.length) continue;
-    const items = await stories.clean(rows);
+    // 1.99fu: a capture taken in an Approved pad stays inside it (not in the person's story for anyone outside)
+    const PA = require("./padaccess");
+    await PA.init();
+    const items = (await stories.clean(rows)).filter((c) => !c.room || PA.canSee(viewer, c.room));
     if (!items.length) continue;
     items.sort((a, b) => a.created - b.created);
     for (const c of items) {

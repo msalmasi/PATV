@@ -209,6 +209,7 @@
             <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.title %></span><%- fx_ ? fx_.badges : '' %><%- BM(r.boost_pat, 'pill ch-mark') %></span>
             <span class="ch-badges">
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
+              <% if (r.access === 'approved') { %><span class="pill" title="Only members the owner approved can see this pad">🔒 Approved</span><% } else if (r.access === 'public') { %><span class="pill" title="Anyone can see this pad, signed in or not">🌐 Public</span><% } %>
               <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="The pad's Camfrog room (ON STAGE = a video stream)"><span class="dot" aria-hidden="true"></span><%= r.live ? '💬 ROOM ACTIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
               <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
             </span>

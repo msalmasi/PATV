@@ -20,6 +20,10 @@
 <% const pepeHere_ = typeof pepeHere !== 'undefined' && pepeHere, manage_ = typeof manage !== 'undefined' && manage, roomStage_ = typeof roomStage !== 'undefined' ? roomStage : null, schedule_ = typeof schedule !== 'undefined' ? schedule : null, bridged_ = room.bridged !== false, siteOnly_ = !!room.siteOnly, feed_ = typeof feed !== 'undefined' && feed ? feed : null, dms_ = typeof dms !== 'undefined' && !!dms;
    const PT_ = typeof padTabs !== 'undefined' && padTabs ? padTabs : { tabs: ['live'].concat(feed_ ? ['feed'] : [], ['about']), initial: 'live', active: false, camfrog: !siteOnly_, posts: [] };
    const latest_ = typeof latest !== 'undefined' && latest ? latest : [];
+   // 1.99fu: pad visibility (padaccess.js) - liveOpen = this viewer gets the members-tier content (the live room, story
+   // pictures, analytics): signed in, or anyone on a Public pad; access.level = public | members | approved
+   const liveOpen_ = typeof liveOpen !== 'undefined' ? !!liveOpen : (typeof signedIn !== 'undefined' && !!signedIn);
+   const access_ = typeof access !== 'undefined' && access ? access : { level: 'members' };
    const tabOn_ = (t) => PT_.initial === t;
    const liveLabel_ = PT_.camfrog ? 'Live' : 'Stage'; %>
 <%# 1.99x: the platform badge (pads.js padBadge via fx or app.locals; a plain fallback when rendered bare) %>
@@ -110,7 +114,7 @@
   .rm .ic { display: inline-flex; gap: 4px; font-size: 13px; }
   .rm .ic .off { opacity: .25; filter: grayscale(1); }
   .rm .mic { display: grid; gap: 6px; }
-  .rm .mic .holder { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; background: #0f1a10; border: 1px solid #234d2a; border-radius: 10px; padding: 6px 8px; min-width: 0; }
+  .rm .mic .holder { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; background: #0f1a10; border: 1px solid #234d2a; border-radius: 10px; padding: 6px 8px; min-width: 0; }
   /* 1.99ex: a long unbroken login on the mic used to widen the whole page (sideways scroll on phones) - it ellipses now */
   .rm .mic .holder .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rm .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
@@ -363,6 +367,7 @@
         </h1>
         <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
           <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
+          <% if (access_.level === 'approved') { %><span class="htag" title="Only members the owner approved can see this pad">🔒 Approved members</span><% } else if (access_.level === 'public') { %><span class="htag" title="Anyone can see this pad, signed in or not">🌐 Public</span><% } %>
           <% if (room.house) { %><span class="htag own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="htag own" href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 Pad owner: <%= room.owner %></a><% } %>
         </span></div>
         <div class="topic" id="rmTopic" data-desc="<%= desc_ %>"><%= topic_ && !sameTxt_(topic_, desc_) ? topic_ : '' %></div>
@@ -487,7 +492,7 @@
 
 <% if (!bridged_ || siteOnly_) { %>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
-<% } else if (!signedIn) { %>
+<% } else if (!liveOpen_) { %>
   <section class="card tease">
     <div class="big" aria-hidden="true">🐸</div>
     <h2 style="justify-content:center">Sign in to watch the Camfrog room live</h2>
@@ -505,7 +510,9 @@
       <button class="jump" id="rmJump" type="button">New messages ↓</button>
       <div id="rmClip"></div><%# 1.99fp: ✂️ Clip chat + 🔊 mic clips (public/js/chat-clip.js) %>
       <div class="compose hide" id="rmCompose">
-        <% if (!linked) { %>
+        <% if (!signedIn) { %>
+          <p class="muted" style="margin:0">💬 This Camfrog room takes messages from the website. <a href="/login?next=<%= encodeURIComponent('/p/' + room.slug) %>">Sign in</a> and link your Camfrog name to join in.</p>
+        <% } else if (!linked) { %>
           <p class="muted" style="margin:0">💬 This Camfrog room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
         <% } else { %>
           <div id="rmRelay"></div>
@@ -533,8 +540,8 @@
   <script src="/public/js/room-bridge.js?v=5"></script>
   <link rel="stylesheet" href="/public/css/quotes.css?v=1">
   <script src="/public/js/chat-clip.js?v=1"></script>
-  <link rel="stylesheet" href="/public/css/room-mod.css?v=4">
-  <script src="/public/js/room-mod.js?v=4"></script>
+  <link rel="stylesheet" href="/public/css/room-mod.css?v=5">
+  <script src="/public/js/room-mod.js?v=5"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -543,7 +550,18 @@
     var data = JSON.parse(document.getElementById('rmInit').textContent);
     var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
     var cursor = 0, timer = null, fails = 0, lastPeople = '', lastMic = '';
-    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %>, collapsible: true }) : null;
+    // 1.99fu: signed = the light ⋯ menu (View profile / Open cam / 💸 Tip) for every signed-in viewer, not just mods
+    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %>, collapsible: true, signed: <%= signedIn ? 'true' : 'false' %> }) : null;
+    var signedIn = <%= signedIn ? 'true' : 'false' %>;
+    // the ⋯ button next to someone (the people list and, 1.99fu, the mic list): mods get their actions too
+    function moreBtn(u, canCam, onMic) {
+      var mg = el('button', 'pm-mg', '⋯'); mg.type = 'button';
+      mg.title = 'Actions for ' + label(u); mg.setAttribute('aria-label', 'Actions for ' + label(u));
+      mg.setAttribute('aria-haspopup', 'menu'); mg.setAttribute('data-login', u.login);
+      mg.addEventListener('click', function () { roomMod.menu(u, mg, { cam: canCam ? function () { snapOpen(u); } : null, mic: !!onMic }); });
+      return mg;
+    }
+    function wantsMore(u) { return !!(roomMod && (roomMod.active() || signedIn) && u && !u.self && !u.anon && u.login); }
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
@@ -622,7 +640,7 @@
       var live = document.getElementById('rmLive');
       live.classList.toggle('off', !r.live); live.classList.toggle('chat', !!r.live);
       document.getElementById('rmLiveTxt').textContent = r.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE';
-      var mk = JSON.stringify(d.mic);
+      var mk = JSON.stringify(d.mic) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (mk !== lastMic) {
         lastMic = mk;
         var mic = document.getElementById('rmMic'); mic.textContent = '';
@@ -632,7 +650,10 @@
           var n = el('span', 'nm'); n.appendChild(name(u)); h.appendChild(n);
           var eq = el('span', 'eq'); eq.setAttribute('aria-label', 'talking');
           if (!reduce) { eq.appendChild(el('i')); eq.appendChild(el('i')); eq.appendChild(el('i')); } else eq.textContent = '🎙️';
-          h.appendChild(eq); mic.appendChild(h);
+          h.appendChild(eq);
+          // 1.99fu: the same ⋯ menu as the people list (View profile / Open cam / 💸 Tip; mods: their actions)
+          if (wantsMore(u)) h.appendChild(moreBtn(u, !!(r.cams && u.on_cam), true));
+          mic.appendChild(h);
         });
       }
       var pk = JSON.stringify(d.members) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
@@ -661,16 +682,9 @@
           ic.appendChild(cam);
           // 1.99dx: moderators (Pepe sent caps for this viewer) get a ⋯ menu next to the cam icon: the actions
           // Pepe allows them on this person (room-mod.js menuItems; the server re-checks every one). The name
-          // itself stays the link to the person's profile.
-          if (roomMod && roomMod.active() && !u.self && !u.anon && u.login) {
-            var mg = el('button', 'pm-mg', '⋯'); mg.type = 'button';
-            mg.title = 'Actions for ' + label(u); mg.setAttribute('aria-label', 'Actions for ' + label(u));
-            mg.setAttribute('aria-haspopup', 'menu'); mg.setAttribute('data-login', u.login);
-            (function (who, b, canCam) {
-              b.addEventListener('click', function () { roomMod.menu(who, b, { cam: canCam ? function () { snapOpen(who); } : null }); });
-            })(u, mg, !!(r.cams && u.on_cam));
-            ic.appendChild(mg);
-          }
+          // itself stays the link to the person's profile. 1.99fu: every signed-in viewer gets the ⋯ too - the light
+          // menu (View profile / Open cam / 💸 Tip); mods keep their moderation actions in it.
+          if (wantsMore(u)) ic.appendChild(moreBtn(u, !!(r.cams && u.on_cam), false));
           var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
           li.appendChild(ic); ul.appendChild(li);
         });
@@ -983,7 +997,7 @@
     <%# 1.99el: Analytics is its own card (was an "Analytics: Pad analytics ›" row above): the 30-day headline numbers
         from roomstats.preview (cached), for signed-in viewers only - visitors get the analytics page's sign-in prompt %>
     <% const anCard_ = typeof roomAnalyticsCard !== 'undefined' && roomAnalyticsCard ? roomAnalyticsCard : null;
-       const anSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user);
+       const anSigned_ = liveOpen_;      // 1.99fu: members-tier - signed in, or anyone on a Public pad
        const anS_ = anCard_ && anSigned_ ? anCard_.stats : null; %>
     <% if (analytics_) { %>
     <section class="card an-card" aria-labelledby="anH">

@@ -177,7 +177,7 @@ test("page: tab bar, panels hidden (not removed), the Live tab's latest-posts ca
   assert.doesNotMatch(livePanel, /id="joinH"/, "Join the Camfrog room moved to About");
   const about = html.slice(html.indexOf('id="padPanel-about"'));
   assert.match(about, /Join the Camfrog room/); assert.match(about, /Plant Based Chatting/); assert.match(about, /👑 pb/);
-  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=4/); assert.match(html, /room-mod\.css\?v=4/);
+  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=5/); assert.match(html, /room-mod\.css\?v=5/);
   assert.match(html, /collapsible: true/, "the Manage card collapses on the pad page");
   assert.match(html, /PATVPadTabs\.init\(\{"slug":"plant_based_chatting","platform":"camfrog","active":true/);
 });
@@ -223,13 +223,22 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   assert.match(site, /🌐 Site Pad/);
 });
 
-test("people list: the name stays the profile link; ⋯ only when the mod panel is active, next to the cam icon, opening the menu", async () => {
+test("people list: the name stays the profile link; ⋯ for mods and (1.99fu) every signed-in viewer, next to the cam icon, opening the menu", async () => {
   const html = await renderRoom({});
   const js = html.slice(html.indexOf("function renderRoom(d)"), html.indexOf("function listNote"));
-  assert.match(js, /if \(roomMod && roomMod\.active\(\) && !u\.self && !u\.anon && u\.login\)/);
-  assert.match(js, /roomMod\.menu\(who, b, \{ cam: canCam/);
+  assert.match(html, /function wantsMore\(u\) \{ return !!\(roomMod && \(roomMod\.active\(\) \|\| signedIn\) && u && !u\.self && !u\.anon && u\.login\); \}/);
+  assert.match(html, /roomMod\.menu\(u, mg, \{ cam: canCam/);
+  assert.match(html, /collapsible: true, signed: true/, "the menu knows the viewer is signed in");
+  // a signed-out visitor on a Public pad watches the room (liveOpen) without a ⋯
+  const out = await renderRoom({ signedIn: false, user: null, linked: false, liveOpen: true, access: { level: "public" } });
+  assert.match(out, /collapsible: true, signed: false/);
+  assert.match(out, /Sign in<\/a> and link your Camfrog name to join in\./, "the compose box asks a visitor to sign in");
+  assert.match(out, /🌐 Public/);
+  assert.doesNotMatch(await renderRoom({ signedIn: false, user: null, linked: false }), /id="rmFeed"/, "Members pad, signed out: still the sign-in teaser");
   assert.doesNotMatch(js, /roomMod\.open\(who\)/, "a click on the row no longer opens the dialog");
-  assert.ok(js.indexOf("ic.appendChild(cam)") < js.indexOf("ic.appendChild(mg)") && js.indexOf("ic.appendChild(mg)") < js.indexOf("ic.appendChild(m)"), "📷 ⋯ 🎙️");
+  assert.ok(js.indexOf("ic.appendChild(cam)") < js.indexOf("ic.appendChild(moreBtn(") && js.indexOf("ic.appendChild(moreBtn(") < js.indexOf("ic.appendChild(m)"), "📷 ⋯ 🎙️");
+  // 1.99fu: the mic list gets the same ⋯ (after the talking bars)
+  assert.match(js, /h\.appendChild\(eq\);\s*\/\/ 1\.99fu[^\n]*\n\s*if \(wantsMore\(u\)\) h\.appendChild\(moreBtn\(u, !!\(r\.cams && u\.on_cam\), true\)\);/);
   assert.match(js, /n\.href = '\/u\/' \+ encodeURIComponent\(u\.patv\.username\) \+ '\/profile'|name\(u\)/);
 });
 

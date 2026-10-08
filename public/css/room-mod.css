@@ -57,9 +57,9 @@
 /* the roster's manage button (views/room.ejs) */
 .rm .people li.pm-can { cursor: pointer; }
 .rm .people li.pm-can:hover { background: #1b1910; }
-.rm .people .pm-mg { appearance: none; background: none; border: 1px solid #3a3420; color: #e8d9a0; border-radius: 6px; font: inherit; font-size: 13px;
+.rm .people .pm-mg, .rm .mic .pm-mg { appearance: none; background: none; border: 1px solid #3a3420; color: #e8d9a0; border-radius: 6px; font: inherit; font-size: 13px;
                      cursor: pointer; display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; margin: 0; line-height: 1; box-sizing: border-box; }
-.rm .people .pm-mg:hover, .rm .people .pm-mg:focus-visible { border-color: #c6a83f; background: #1d1a0f; }
+.rm .people .pm-mg:hover, .rm .people .pm-mg:focus-visible, .rm .mic .pm-mg:hover, .rm .mic .pm-mg:focus-visible { border-color: #c6a83f; background: #1d1a0f; }
 
 /* dialogs (appended to <body>, outside .rm) */
 .pm-dlg { padding: 0; border: 1px solid #3a3420; border-radius: 14px; background: #131313; color: #e6e6e6; width: min(520px, calc(100vw - 32px));
@@ -129,11 +129,14 @@
 .pm-pop-i.danger { color: #ffcdcd !important; }
 .pm-pop-i.danger:hover, .pm-pop-i.danger:focus-visible { background: #2a1010; border-color: #7a2222; }
 .pm-pop-i[disabled] { opacity: .45; cursor: not-allowed; }
+/* 1.99fu: a greyed-out item that says why (💸 Tip: "not linked to PATV yet") - readable, not faded to nothing */
+.pm-pop-i.off[disabled] { opacity: .75; }
+.pm-pop-i .pm-pop-why { color: #a9a9a9; font-size: 12px; font-weight: normal; }
 .pm-pop-sep { height: 1px; background: #242424; margin: 3px 4px; }
 .pm-pop .pm-note { font-size: 12.5px; }
 .pm-pop .pm-cform input, .pm-pop .pm-cform select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; width: 100%; }
 .pm-pop .pm-q { font-size: 14px; }
-.rm .people .pm-mg { min-width: 26px; }
+.rm .people .pm-mg, .rm .mic .pm-mg { min-width: 26px; }
 @media (max-width: 520px) {
   /* a bottom sheet on phones */
   .pm-pop { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100vw; max-height: 80vh; border-radius: 14px 14px 0 0; padding: 10px 12px 16px; }
