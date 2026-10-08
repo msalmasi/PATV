@@ -47,7 +47,7 @@ test.before(async () => {
 });
 test.afterEach(async () => { await flag(false); W._setApi(null); delete process.env.PEPE_WHIP_KEY_VERSION; delete process.env.WHIP_AUTH_PEER; });
 
-test("1.99fe parked: without PEPE_WHIP=on Pepe's paths are refused, no bot route, no ⚡; MediaMTX templates untouched", async () => {
+test("1.99fe parked: without PEPE_WHIP=on Pepe's paths are refused, no bot route, no ⚡ (the MediaMTX templates carry the relay since 1.99fg)", async () => {
   delete process.env.PEPE_WHIP;
   await flag(true);
   for (const b of [{ action: "publish", protocol: "webrtc", path: "pepe", token: KEY() }, { action: "read", protocol: "rtsp", path: "pepe", ip: "127.0.0.1" },
@@ -67,9 +67,11 @@ test("1.99fe parked: without PEPE_WHIP=on Pepe's paths are refused, no bot route
     assert.equal(r.status, 404);
   } finally { srv.close(); }
   const yml = fs.readFileSync(path.join(repo, "deploy", "webrtc", "mediamtx.yml"), "utf8");
-  assert.match(yml, /^rtsp: false$/m, "MediaMTX: RTSP stays off");
-  assert.doesNotMatch(yml, /^\s+pepe:/m, "MediaMTX: no pepe path");
-  assert.ok(!fs.existsSync(path.join(repo, "deploy", "webrtc", "pepe-relay.sh")), "no relay shipped");
+  // 1.99fg: the MediaMTX templates ship the relay again (the env flag alone decides; a site without it refuses the path)
+  assert.match(yml, /^rtsp: true\r?$/m, "MediaMTX: RTSP on for the relay");
+  assert.match(yml, /^rtspAddress: 127\.0\.0\.1:8554\r?$/m, "MediaMTX: RTSP on loopback only");
+  assert.match(yml, /^\s+pepe:\s+source: publisher\s+runOnAvailable: \/usr\/local\/lib\/patv-webrtc\/pepe-relay\.sh\r?$/m, "MediaMTX: pepe path + relay");
+  assert.ok(fs.existsSync(path.join(repo, "deploy", "webrtc", "pepe-relay.sh")), "relay shipped");
   process.env.PEPE_WHIP = "on";                       // the rest of this file tests the parked code itself
 });
 

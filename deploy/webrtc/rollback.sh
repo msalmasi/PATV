@@ -36,6 +36,14 @@ code() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@" || true; }
 [ "$(id -u)" = 0 ] || die "run as root"
 [ -f "$STATE/changes" ] || warn "no $STATE/changes - removing the known paths only (coturn, .env lines and the cert are left alone)"
 PEPE_WAS_LIVE=0; if hls_fresh; then PEPE_WAS_LIVE=1; fi
+# 1.99fd: Pepe's main stream may be coming in over WHIP (MediaMTX path "pepe" -> pepe-relay.sh -> nginx-rtmp). Taking
+# MediaMTX away would take his stream off air: switch his OBS back to RTMP first (python obs_control.py via rtmp).
+if curl -fsS --max-time 5 http://127.0.0.1:9997/v3/paths/get/pepe 2>/dev/null | grep -qE '"(ready|available)": *true'; then
+  if [ "${FORCE_PEPE_OFF_AIR:-0}" != 1 ]; then
+    die "Pepe's main stream is on WHIP right now - switch his OBS back to RTMP first (on pepe-prod: python obs_control.py via rtmp), or FORCE_PEPE_OFF_AIR=1"
+  fi
+  warn "Pepe's main stream is on WHIP - it goes off air now (FORCE_PEPE_OFF_AIR=1)"
+fi
 
 say "Backups -> $BK"
 install -d -m 0700 "$BK"
@@ -43,7 +51,7 @@ tar -czf "$BK/etc-nginx.tgz" -C / etc/nginx
 iptables-save > "$BK/iptables.rules"
 ufw status verbose > "$BK/ufw-status.txt" 2>&1 || true
 for d in "$PROD_DIR" "$STAGING_DIR"; do if [ -f "$d/.env" ]; then install -m 0600 "$d/.env" "$BK/$(basename "$d").env"; fi; done
-for f in /etc/mediamtx/mediamtx.yml /etc/patv-turn/turnserver.conf; do if [ -f "$f" ]; then install -m 0600 "$f" "$BK/$(echo "$f" | tr / _)"; fi; done
+for f in /etc/mediamtx/mediamtx.yml /etc/mediamtx/pepe-relay.conf /etc/patv-turn/turnserver.conf; do if [ -f "$f" ]; then install -m 0600 "$f" "$BK/$(echo "$f" | tr / _)"; fi; done
 ok "done"
 
 say "Services"
@@ -121,7 +129,7 @@ rm -rf /etc/patv-turn
 
 say "MediaMTX"
 rm -f /usr/local/bin/mediamtx
-rm -rf /opt/mediamtx /etc/mediamtx /var/lib/mediamtx
+rm -rf /opt/mediamtx /etc/mediamtx /var/lib/mediamtx /usr/local/lib/patv-webrtc     # 1.99fd: + pepe-relay.sh / .conf
 if has user-mediamtx && id mediamtx >/dev/null 2>&1; then userdel mediamtx; ok "user mediamtx removed"; fi
 ok "binary, config and state removed"
 

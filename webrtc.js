@@ -26,6 +26,8 @@
 // 1.99fe: PARKED - everything below about Pepe's main stream over WHIP is OFF unless PEPE_WHIP=on is in the .env
 // (default off: his paths are refused like any unknown path, no bot route, no ⚡ for his stage). MediaMTX has no
 // "pepe" path and no relay yet (deploy/webrtc is unchanged); this is the site half, kept for the revisit.
+// 1.99fg: switched on - deploy/webrtc ships the "pepe" path + pepe-relay.sh again (1.99fd templates); the env flag
+// PEPE_WHIP=on still decides per site (prod has it, staging doesn't).
 // 1.99fd: Pepe's MAIN stream can come in over WHIP too (⚡ for his stage). His OBS publishes H.264 + Opus to
 // <WEBRTC_BASE>/whip/<PEPE_PATH> ("pepe" on prod, "stg-pepe" on staging) with Pepe's own bearer (pepeWhipKey: an
 // HMAC of SECRET_KEY - nothing new to store; the bot fetches it with its token, POST /api/stage/pepe-whip). MediaMTX

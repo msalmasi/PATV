@@ -175,6 +175,65 @@ restarts a service only when that service's binary, unit or config changed. It d
 5. **If anything is off,** untick the flag in `/stage/admin`. That turns WebRTC off for everyone at once,
    and the servers can stay.
 
+## Pepe's main stream over WHIP (1.99fd)
+
+Pepe's OBS can publish his main stream over WHIP (H.264 + Opus) instead of RTMP, so viewers get ⚡ on his
+stage too. Everything that reads `/mnt/hls` keeps working, because MediaMTX hands the stream straight back
+to nginx-rtmp:
+
+```
+OBS (profile "PepeWHIP": WHIP, Opus) --WHIP--> MediaMTX path "pepe" --WHEP--> ⚡ viewers
+                                                 | runOnAvailable: pepe-relay.sh (as mediamtx)
+                                                 |   ffmpeg: RTSP 127.0.0.1:8554 in, H.264 copy, Opus -> AAC
+                                                 v
+                                   nginx-rtmp live/<his RTMP name> (on_publish: his key, as today)
+                                                 v
+                                   /mnt/hls/broadcast.m3u8 -> ON AIR, snaps, clips, the HLS player
+```
+
+- **Auth.** The hook allows `pepe` publishes over WHIP with Pepe's bearer only. The bearer is an HMAC of
+  the prod site's `SECRET_KEY`, so there is nothing new to store. Rotate it with `PEPE_WHIP_KEY_VERSION`
+  in the prod `.env`, or set that to `off` to refuse it. The relay's loopback RTSP read is always allowed.
+  The same read from anywhere else is refused, and WHEP/HLS reads of `pepe` need `webrtc_enabled`.
+  Pepe's publish doesn't need the flag, because it is his main stream.
+- **Site.** The 5-second MediaMTX sync notes that `pepe` is up, and never treats it as a slot.
+  `/api/stage` then carries `whep`, and the stage player shows ⚡ for his stream. The bot fetches the
+  bearer with its token: `POST /api/stage/pepe-whip`.
+- **OBS (`camfrog-bot/obs_control.py`).** It uses two profiles. The RTMP one stays untouched as the
+  fallback. The "PepeWHIP" copy has the WHIP service and the Opus stream audio encoder. Switching stops
+  the stream and the virtual camera for about 10 s, because OBS only rebuilds the audio encoder when no
+  output is active.
+- **Fallbacks.** If WHIP won't go live, or the site's HLS stays off air, for 3 watchdog passes, the
+  watchdog switches back to RTMP by itself and posts one admin notice. The setting is
+  `obs_whip_fallback`. To switch by hand, use `!stream via rtmp` / `!stream via whip`, or
+  `python obs_control.py via rtmp|whip` on the VM.
+
+**Cut-over (prod), in order.**
+
+1. **Ship the site (1.99fd) to prod and check it.** Promote staging. Then confirm that
+   `curl -s -X POST -H 'Content-Type: application/json' -d '{"action":"read","protocol":"rtsp","path":"pepe","ip":"127.0.0.1"}' http://127.0.0.1:3000/api/stage/whip-auth -o /dev/null -w '%{http_code}'`
+   returns `200`.
+2. **Install the MediaMTX side.** Run `AUTH_SITE=prod bash /home/PATV/deploy/webrtc/install.sh`. It
+   restarts MediaMTX, so live WHIP slots and WHEP viewers reconnect after a few seconds. It doesn't touch
+   nginx-rtmp, and Pepe stays on RTMP. It writes `/etc/mediamtx/pepe-relay.conf` once, and checks that
+   RTSP is on loopback only and that the hook knows `pepe`.
+3. **Switch OBS, on pepe-prod.**
+   1. First check that no extra OBS output (Aitum Multistream / multi-RTMP Twitch target) *shares* the
+      main stream's audio encoder.
+   2. Then run `python C:\PATV\camfrog-bot\obs_control.py setup-whip`. It backs up every profile to
+      `C:\PATV\obs-backups\obs-profiles-<ts>.zip`, clones the RTMP profile to "PepeWHIP", and fetches the
+      bearer. It then closes OBS cleanly and relaunches it once, because OBS only reads its profile list
+      at start, then switches and goes live.
+4. **Verify.** Check that:
+   - `/mnt/hls/broadcast.m3u8` keeps updating;
+   - the journal shows `journalctl -u mediamtx | grep pepe-relay`;
+   - the ⚡ button shows on Pepe's stage;
+   - a stage snap and a clip of "pepe" work.
+
+**Rollback, one command.** Use `!stream via rtmp` in Camfrog, or
+`python C:\PATV\camfrog-bot\obs_control.py via rtmp` on pepe-prod. Nothing on the VPS needs to change,
+because the `pepe` path just goes idle. `rollback.sh` refuses to run while Pepe is on WHIP.
+
 ## Roll back
 
 ```bash
