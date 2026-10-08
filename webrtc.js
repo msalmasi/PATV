@@ -23,6 +23,16 @@
 // Pepe's RTMP stream and RTMP slots are untouched: they stay on nginx-rtmp's HLS (no WHEP - MediaMTX can't
 // turn AAC into Opus), and bridge.js still reads /mnt/hls/broadcast.m3u8 freshness for ON AIR.
 //
+// 1.99fd: Pepe's MAIN stream can come in over WHIP too (⚡ for his stage). His OBS publishes H.264 + Opus to
+// <WEBRTC_BASE>/whip/<PEPE_PATH> ("pepe" on prod, "stg-pepe" on staging) with Pepe's own bearer (pepeWhipKey: an
+// HMAC of SECRET_KEY - nothing new to store; the bot fetches it with its token, POST /api/stage/pepe-whip). MediaMTX
+// runs deploy/webrtc/pepe-relay.sh while the path is up: it reads the stream back over loopback RTSP and pushes it
+// to nginx-rtmp (H.264 copied, Opus -> AAC) under his usual RTMP name, so /mnt/hls/broadcast.m3u8 and everything on
+// it (ON AIR, snaps, clips, the HLS player) are unchanged. Pepe's path is NOT a slot: the sync never beats or kicks
+// it, it only notes that it's up (pepeWhep() -> bridge.stage().whep -> the ⚡ toggle on his stage). His publish and
+// the relay's loopback read work with webrtc_enabled off as well (it's his main stream); viewers' WHEP / HLS reads
+// of it need the flag, like every other WebRTC read.
+//
 // env (all optional; defaults match deploy/webrtc/):
 //   WEBRTC_BASE     public base of MediaMTX behind nginx                 https://stream.publicaccess.tv
 //   MEDIAMTX_API    MediaMTX control API, loopback only                  http://127.0.0.1:9997
@@ -31,6 +41,7 @@
 //   TURN_TTL        TURN credential lifetime, seconds                    3600
 //   WHIP_AUTH_PEER  the OTHER site's whip-auth URL. One MediaMTX serves prod ("stage-") and staging ("stg-")
 //                   paths but has one auth hook; the site it calls forwards the other prefix to its peer.
+//   PEPE_WHIP_KEY_VERSION  bump to rotate Pepe's WHIP bearer (default 1); "off" refuses his WHIP publish
 "use strict";
 const crypto = require("crypto");
 const http = require("http");
@@ -45,6 +56,11 @@ const TOKEN_TTL_MS = 10 * 60 * 1000;
 // a stage stream name: prod "stage-<16 hex>", staging "stg-<16 hex>" (mainstage.book)
 const PATH_RE = /^(stage|stg)-[0-9a-f]{16}$/;
 const SYNC_MS = 5000;
+// 1.99fd: Pepe's main-stream WHIP path - prod "pepe", staging "stg-pepe" (the other one belongs to the peer site)
+const PEPE_PATHS = { prod: "pepe", staging: "stg-pepe" };
+const pepePath = () => (process.env.STAGING ? PEPE_PATHS.staging : PEPE_PATHS.prod);
+const isPepePath = (p) => p === PEPE_PATHS.prod || p === PEPE_PATHS.staging;
+let pepeSeen = { ready: false, at: 0 };          // from the sync: is his path up right now?
 
 let clock = () => Date.now();
 const now = () => clock();
@@ -113,6 +129,41 @@ function parseWhipToken(tok, t = now()) {
   return a.length === b.length && crypto.timingSafeEqual(a, b) ? m[1] : null;
 }
 
+// ── 1.99fd: Pepe's main-stream WHIP bearer: "pw" + an HMAC of SECRET_KEY (per site: prod and staging differ) ──
+function pepeWhipKey() {
+  const v = String(process.env.PEPE_WHIP_KEY_VERSION || "1").trim();
+  if (!v || v === "off") return null;
+  return "pw" + crypto.createHmac("sha256", TOKEN_SECRET).update("pepe-whip:" + pepePath() + ":" + v).digest("base64url").slice(0, 40);
+}
+function sameSecret(got, want) {
+  if (!want) return false;
+  const a = crypto.createHash("sha256").update(String(got)).digest(), b = crypto.createHash("sha256").update(want).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+const loopbackIp = (a) => /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i.test(String(a || ""));
+/** The auth hook for THIS site's Pepe path. Publish: WHIP with Pepe's bearer (works with the flag off - it's his
+ *  main stream). Read: the relay (loopback RTSP, pepe-relay.sh) always; viewers (WHEP / MediaMTX HLS) only while
+ *  webrtc_enabled is on. */
+function pepeAuth(b, action, proto) {
+  if (action === "publish") {
+    if (proto !== "webrtc") return 403;
+    const cred = String(b.token || b.password || "").trim();
+    if (!cred) return 401;
+    return sameSecret(cred, pepeWhipKey()) ? 200 : 403;
+  }
+  if (action === "read") {
+    if (proto === "rtsp") return loopbackIp(b.ip) ? 200 : 403;
+    if (!enabled()) return 403;
+    return proto === "webrtc" || proto === "hls" ? 200 : 403;
+  }
+  return 403;
+}
+/** ⚡ for Pepe's stage: his WHEP URL while his WHIP path is up (seen by a sync in the last 15 s) and the flag is on. */
+function pepeWhep() {
+  if (!enabled() || !pepeSeen.ready || now() - pepeSeen.at > 15000) return null;
+  return whepUrl(pepePath());
+}
+
 // ── the MediaMTX auth hook (authMethod: http) ──
 // Request: POST JSON {user, password, token, ip, action, path, protocol, id, query, userAgent}; any 2xx =
 // allowed, anything else = refused (MediaMTX answers the client 401). The Bearer header arrives as `token`.
@@ -120,6 +171,10 @@ const readCache = new Map();   // path -> {at, ok}
 async function whipAuth(b, opts = {}) {
   b = b || {};
   const action = String(b.action || ""), path = String(b.path || ""), proto = String(b.protocol || "");
+  if (isPepePath(path)) {                                         // 1.99fd: Pepe's main stream (not a slot)
+    if (path === pepePath()) return pepeAuth(b, action, proto);
+    return peer() && !opts.forwarded ? forward(b) : 403;          // the other site's Pepe path
+  }
   if (!PATH_RE.test(path)) return 403;
   const S = ms();
   if (!path.startsWith(S.STREAM_PREFIX)) {                       // the other site's path (prod <-> staging)
@@ -182,14 +237,17 @@ let apiImpl = function (method, p) {
 };
 let lastApiError = 0;
 async function sync() {
-  if (!enabled()) return { skipped: true };
+  if (!enabled()) { pepeSeen = { ready: false, at: 0 }; return { skipped: true }; }
   let list;
   try { list = await apiImpl("GET", "/v3/paths/list?itemsPerPage=1000"); } catch (e) {
+    pepeSeen = { ready: false, at: 0 };
     if (now() - lastApiError > 10 * 60 * 1000) { lastApiError = now(); console.error("[webrtc] MediaMTX API:", e.message); }
     return { error: true };       // MediaMTX down: no beats, so WHIP slots age off air like a dropped RTMP stream
   }
   const S = ms();
   const ready = new Map();
+  // 1.99fd: Pepe's path is only noted (⚡ on his stage) - PATH_RE below keeps it out of the slot beats / kicks
+  pepeSeen = { ready: ((list && list.items) || []).some((p) => p && p.name === pepePath() && (p.ready || p.available)), at: now() };
   for (const p of (list && list.items) || []) {
     if (p && (p.ready || p.available) && typeof p.name === "string" && PATH_RE.test(p.name) && p.name.startsWith(S.STREAM_PREFIX)) ready.set(p.name, p);
   }
@@ -222,9 +280,19 @@ const isLoopback = (a) => /^(127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1
 function clientIp(req) {
   try { return require("./middleware/authGuard").clientIp(req); } catch (e) { return (req.socket && req.socket.remoteAddress) || "?"; }
 }
-function register(app, { addUser, noTimers } = {}) {
+function register(app, { addUser, isBotToken, noTimers } = {}) {
   app.locals.webrtcCfg = webrtcCfg;
   if (!noTimers) start();
+
+  // 1.99fd: Pepe (bot token) fetches his main-stream WHIP URL + bearer to put into his OBS (obs_control.py)
+  app.post("/api/stage/pepe-whip", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const b = req.body || {};
+    if (typeof isBotToken !== "function" || !isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    const token = pepeWhipKey();
+    if (!token) return res.status(409).json({ ok: false, error: "Pepe's WHIP publish is switched off (PEPE_WHIP_KEY_VERSION=off)." });
+    res.json({ ok: true, url: whipUrl(pepePath()), token, path: pepePath(), whep: whepUrl(pepePath()) });
+  });
 
   // MediaMTX's auth hook: only straight from the box (no proxy headers = not through the public nginx)
   app.post("/api/stage/whip-auth", async (req, res) => {
@@ -269,6 +337,7 @@ function register(app, { addUser, noTimers } = {}) {
 module.exports = {
   register, start, sync, soon, enabled, webrtcCfg, whipAuth, turnCredentials, iceServers, whipToken, parseWhipToken,
   whipUrl, whepUrl, hlsUrl, limiter, PATH_RE, BASE, TURN_LIMIT,
+  pepePath, pepeWhipKey, pepeWhep, PEPE_PATHS,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setApi: (fn) => { apiImpl = fn; },
   _resetLimits: () => { turnUserHit = limiter(TURN_LIMIT.user, TURN_LIMIT.windowMs); turnIpHit = limiter(TURN_LIMIT.anon, TURN_LIMIT.windowMs); readCache.clear(); },

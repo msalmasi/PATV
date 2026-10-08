@@ -1212,7 +1212,7 @@ function register(app, { addUser, isBotToken, noTimers }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   const express = require("express");
   if (!noTimers) start();
-  require("./webrtc").register(app, { addUser, noTimers });   // 1.99et: WHIP auth hook, /api/turn, browser WHIP (flag webrtc_enabled)
+  require("./webrtc").register(app, { addUser, isBotToken, noTimers });   // 1.99et: WHIP auth hook, /api/turn, browser WHIP (flag webrtc_enabled); 1.99fd: Pepe's WHIP bearer (bot)
   const isStaff = rooms.isStaff;
   const fail = (res, e) => {
     if (e && (e.refuse || (e.status && e.status < 500 && e.message))) return res.status(e.status).json({ ok: false, error: e.message });

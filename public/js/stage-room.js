@@ -6,6 +6,8 @@
 //     api: '/api/stage' | '/api/stage?room=<slug>',            what to poll (every 10 s)
 //     slots: [...], pepeOn: bool, manage: bool,                first render (server-side data)
 //     pepeHere: bool                                           Pepe is IN this room (default true)
+//     pepeWhep: url | null                                     (1.99fd) Pepe's WHEP URL while his main stream comes
+//                                                              in over WHIP - the ⚡ Low latency toggle on his stream
 //     onAir(on, sub)                                           the page's ON AIR pill / subtitle
 //     onShow(sel)                                              (1.99cr) what's selected, for the Snap / Clip
 //                                                              bar (stage-capture.js): null | {stream, label, embed, capture, nsfw}
@@ -35,6 +37,7 @@
   function switcher(o) {
     var slots = Array.isArray(o.slots) ? o.slots : [];
     var pepeOn = !!o.pepeOn, pepeHere = o.pepeHere !== false, twitchLive = false, chosen = false;
+    var pepeWhep = typeof o.pepeWhep === 'string' && o.pepeWhep ? o.pepeWhep : null;   // 1.99fd
     var view = 'pepe';
     var player = PATVStage.player({ wrap: o.wrap, reconnect: o.reconnect, unmute: o.unmute, src: PEPE_HLS });
     // 1.99et: ⚡ Low latency (stage-lowlat.js, on the page only while webrtc_enabled is on) wraps the HLS player;
@@ -74,7 +77,7 @@
         o.onAir && o.onAir(true, 'live on Twitch');
       } else if (pepeOn && pepeHere) {
         setEmbed(null); if (tw) tw.classList.add('hide');
-        player.setSrc(PEPE_HLS, null); if (loaded) player.start();
+        player.setSrc(PEPE_HLS, pepeWhep); if (loaded) player.start();
         o.onAir && o.onAir(true, null);
       } else {
         setEmbed(null); if (tw) tw.classList.add('hide'); player.stop();
@@ -138,6 +141,7 @@
       return fetch(o.api, { cache: 'no-store', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (g) {
         var was = cur(), wasF = featured();
         pepeOn = !!g.active;
+        pepeWhep = typeof g.whep === 'string' && g.whep ? g.whep : null;            // 1.99fd: ⚡ for Pepe's WHIP stream
         if (typeof g.pepe_here === 'boolean') pepeHere = g.pepe_here;
         slots = Array.isArray(g.slots) ? g.slots : [];
         var f = featured();

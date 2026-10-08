@@ -265,11 +265,18 @@ function stageAdmin() {
   const fresh = Date.now() - STAGE.at < STAGE_ROOM_FRESH;
   return { room: fresh ? STAGE.room : null, pinned: !!STAGE.pinned, rooms: fresh ? STAGE.rooms : [] };
 }
+/** 1.99fd: Pepe's WHEP URL while his main stream comes in over WHIP (webrtc.js), else null. */
+function pepeWhep() {
+  try { return require("./webrtc").pepeWhep(); } catch (e) { return null; }
+}
 function stage() {
   const fresh = Date.now() - STAGE.at < 120 * 1000;
   const room = stageRoom();
   if (HLS.live !== null) {
-    return { active: HLS.live, since: HLS.live ? HLS.since : null, ended: HLS.ended || STAGE.ended || null, known: true, source: "hls", room };
+    // 1.99fd: whep = the ⚡ Low latency toggle on Pepe's stage (only while his HLS is on air too)
+    const whep = HLS.live ? pepeWhep() : null;
+    return { active: HLS.live, since: HLS.live ? HLS.since : null, ended: HLS.ended || STAGE.ended || null, known: true, source: "hls", room,
+             ...(whep ? { whep } : {}) };
   }
   return { active: fresh && !!STAGE.active, since: STAGE.since || null, ended: STAGE.ended || null, known: fresh && !STAGE.unknown, source: "obs", room };
 }

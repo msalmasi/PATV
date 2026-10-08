@@ -402,12 +402,12 @@
      const fmtT = (ms) => new Date(ms).toISOString(); %>
   <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
   <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-  <script src="/public/js/stage-player.js?v=4"></script>
+  <script src="/public/js/stage-player.js?v=5"></script>
   <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=2">
   <script src="/public/js/webrtc-client.js?v=1"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <% } %><script src="/public/js/stage-room.js?v=5"></script>
+  <% } %><script src="/public/js/stage-room.js?v=6"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
   <script src="/public/js/stage-capture.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
@@ -471,7 +471,7 @@
       tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'),
       reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
       api: '/api/stage?room=' + encodeURIComponent(padSlug), onShow: function (sel) { cap.update(sel); },
-      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, manage: <%= manage_ ? 'true' : 'false' %>,
+      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, manage: <%= manage_ ? 'true' : 'false' %>,
       onAir: function (on) {
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
         document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');

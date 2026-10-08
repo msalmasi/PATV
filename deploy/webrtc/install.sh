@@ -3,6 +3,10 @@
 # Run as root on patv-vps, from a checkout that has this folder:
 #     bash /home/PATV-staging/deploy/webrtc/install.sh            (auth hook -> staging, the first install)
 #     AUTH_SITE=prod bash /home/PATV/deploy/webrtc/install.sh     (the promote: auth hook -> prod)
+# 1.99fd: also Pepe's main stream over WHIP - MediaMTX path "pepe", RTSP on 127.0.0.1:8554 (TCP only) and
+# pepe-relay.sh (-> /usr/local/lib/patv-webrtc/) with its RTMP target in /etc/mediamtx/pepe-relay.conf (written once,
+# root:mediamtx 0640, never printed). PEPE_RTMP_NAME=<name> overrides his RTMP stream name (default: the first of
+# STAGE_PEPE_KEYS in the prod .env, else "broadcast"). Needs ffmpeg (opus decoder, aac encoder, rtsp + flv).
 # Idempotent: every step checks first, a re-run only changes what differs. Stops at the first error
 # (nothing after it runs); undo everything with rollback.sh next to it. Never prints the TURN secret.
 # See INSTALL.md.
@@ -53,7 +57,7 @@ put() {      # put <src> <dest> <owner> <group> <mode> <flagvar>: install when d
 say "Preflight"
 [ "$(id -u)" = 0 ] || die "run as root"
 [ "$(uname -m)" = x86_64 ] || die "expects x86_64 (MediaMTX linux_amd64)"
-for c in curl openssl sha256sum tar nginx certbot ss awk sed cmp python3 systemctl install getent ip dpkg-query apt-get iptables-save; do
+for c in curl openssl sha256sum tar nginx certbot ss awk sed cmp python3 systemctl install getent ip dpkg-query apt-get iptables-save ffmpeg runuser; do
   command -v "$c" >/dev/null || die "missing command: $c"
 done
 case "$AUTH_SITE" in
@@ -73,8 +77,18 @@ DNS_IP="$(getent ahostsv4 "$HOST" | awk 'NR == 1 { print $1 }')"
 [ "$DNS_IP" = "$PUBLIC_IP" ] || die "$HOST resolves to '${DNS_IP:-nothing}', not this box ($PUBLIC_IP). It must be a DNS-only (grey cloud) A record: ICE and TURN need the real IP."
 ok "public IP $PUBLIC_IP, $HOST points here, auth hook -> $AUTH_SITE ($AUTH_URL)"
 # nothing else may own our ports
-busy="$(ss -Hlnptu 2>/dev/null | awk '$5 ~ /:(8189|3478|5349|8888|8889|9997)$/' | grep -vE '"(mediamtx|turnserver)"' || true)"
+busy="$(ss -Hlnptu 2>/dev/null | awk '$5 ~ /:(8189|3478|5349|8888|8889|9997|8554)$/' | grep -vE '"(mediamtx|turnserver)"' || true)"
 [ -z "$busy" ] || die "ports already in use by something else: $busy"
+# 1.99fd: Pepe's WHIP relay (pepe-relay.sh) is ffmpeg: RTSP in, Opus decoded, AAC encoded, FLV (RTMP) out
+ffmpeg -hide_banner -decoders 2>/dev/null | grep -qE '^ A[.A-Z]{5} opus ' || die "ffmpeg has no opus decoder (Pepe's WHIP relay needs it)"
+ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE '^ A[.A-Z]{5} aac ' || die "ffmpeg has no aac encoder (Pepe's WHIP relay needs it)"
+ffmpeg -hide_banner -formats 2>/dev/null | grep -qE '^ D[E ] rtsp ' || die "ffmpeg can't read rtsp (Pepe's WHIP relay needs it)"
+ffmpeg -hide_banner -formats 2>/dev/null | grep -qE '^ [D ]E flv ' || die "ffmpeg can't write flv (Pepe's WHIP relay needs it)"
+ok "ffmpeg $(ffmpeg -hide_banner -version | awk 'NR == 1 { print $3 }'): opus decoder, aac encoder, rtsp in, flv out"
+# a config change below restarts MediaMTX: every WHIP publisher / WHEP viewer reconnects (OBS does it by itself)
+if live="$(curl -fsS --max-time 5 http://127.0.0.1:9997/v3/paths/list 2>/dev/null | python3 -c 'import json, sys; print(" ".join(p["name"] for p in json.load(sys.stdin).get("items", []) if p.get("ready") or p.get("available")))' 2>/dev/null)" && [ -n "$live" ]; then
+  warn "live on MediaMTX right now: $live - a MediaMTX restart below drops them for a few seconds"
+fi
 if systemctl is-active --quiet coturn 2>/dev/null; then die "a coturn.service is already running on this box - not ours, not touching it"; fi
 PEPE_WAS_LIVE=0
 if hls_fresh; then PEPE_WAS_LIVE=1; ok "Pepe's RTMP -> /mnt/hls is live right now (re-checked at the end)"; else warn "Pepe's /mnt/hls/broadcast.m3u8 isn't fresh right now - the final check can't prove it still works"; fi
@@ -223,6 +237,27 @@ put "$HERE/mediamtx.service" /etc/systemd/system/mediamtx.service root root 0644
 put "$HERE/patv-turn.service" /etc/systemd/system/patv-turn.service root root 0644 CHANGED_TURN
 systemctl daemon-reload
 
+# 1.99fd: Pepe's WHIP relay - the script (MediaMTX runs it, as mediamtx) + its RTMP target (written once, never shown)
+CHANGED_RELAY=0
+install -d -m 0755 -o root -g root /usr/local/lib/patv-webrtc
+put "$HERE/pepe-relay.sh" /usr/local/lib/patv-webrtc/pepe-relay.sh root root 0755 CHANGED_RELAY
+RELAY_CONF=/etc/mediamtx/pepe-relay.conf
+if [ ! -s "$RELAY_CONF" ]; then
+  pname="${PEPE_RTMP_NAME:-$(awk -F= '/^STAGE_PEPE_KEYS=/ { sub(/^STAGE_PEPE_KEYS=/, ""); split($0, a, ","); print a[1] }' "$PROD_DIR/.env" | tr -d ' "' | head -1)}"
+  pname="${pname:-broadcast}"
+  [[ "$pname" =~ ^[A-Za-z0-9._?=\&-]+$ ]] || die "PEPE_RTMP_NAME / STAGE_PEPE_KEYS has characters an RTMP stream name can't have"
+  ( umask 027
+    { echo "# Pepe's WHIP relay target (deploy/webrtc/install.sh $TS) - root:mediamtx 0640, never print it"
+      echo "RTMP_TARGET=rtmp://127.0.0.1/live/$pname"
+      echo "AUDIO_BITRATE=160k"; } > "$RELAY_CONF" )
+  mark pepe-relay-conf
+  ok "$RELAY_CONF written (his RTMP name, not shown)"
+else
+  grep -qE '^RTMP_TARGET=rtmp://(127\.0\.0\.1|localhost)(:[0-9]+)?/' "$RELAY_CONF" || die "$RELAY_CONF has no loopback RTMP_TARGET - fix it by hand (never print it)"
+  ok "$RELAY_CONF exists (kept)"
+fi
+chown root:mediamtx "$RELAY_CONF"; chmod 0640 "$RELAY_CONF"
+
 # ───────────────────────────────── nginx (own file; reload, never restart) ─────────────────────────────────
 say "nginx"
 put "$HERE/nginx-stream.publicaccess.tv.conf" /etc/nginx/sites-available/stream.publicaccess.tv root root 0644 CHANGED_NGINX
@@ -296,6 +331,20 @@ whip_up() { local c; c="$(code -X POST -H 'Content-Type: application/sdp' --data
 check "WHIP through nginx reaches MediaMTX (https://$HOST/whip/...)" whip_up
 listening() { ss -Hln"$1" "sport = :$2" | grep -q .; }
 check "ICE udp 8189 listening" listening u 8189
+# 1.99fd: Pepe's WHIP relay
+rtsp_local() { ss -Hlnt "sport = :8554" | awk '{ print $4 }' | grep -qx '127.0.0.1:8554' && ! ss -Hlnt "sport = :8554" | awk '{ print $4 }' | grep -vqx '127.0.0.1:8554' && ! ss -Hlnu | awk '{ print $4 }' | grep -qE ':(8000|8001)$'; }
+check "RTSP on 127.0.0.1:8554 only (TCP; no UDP RTP / RTCP)" rtsp_local
+relay_ready() { runuser -u mediamtx -- test -r /etc/mediamtx/pepe-relay.conf && runuser -u mediamtx -- test -x /usr/local/lib/patv-webrtc/pepe-relay.sh; }
+check "pepe-relay.sh + its target readable by mediamtx" relay_ready
+pepe_hook() {   # the relay's loopback RTSP read of "pepe" is allowed, the same read from outside isn't, a bad WHIP bearer isn't
+  local a b c
+  a="$(code -X POST -H 'Content-Type: application/json' -d '{"action":"read","protocol":"rtsp","path":"pepe","ip":"127.0.0.1"}' "$AUTH_URL")"
+  b="$(code -X POST -H 'Content-Type: application/json' -d '{"action":"read","protocol":"rtsp","path":"pepe","ip":"203.0.113.9"}' "$AUTH_URL")"
+  c="$(code -X POST -H 'Content-Type: application/json' -d '{"action":"publish","protocol":"webrtc","path":"pepe","token":"not-the-key","ip":"203.0.113.9"}' "$AUTH_URL")"
+  [ "$a" = 200 ] && [ "$b" = 403 ] && [ "$c" = 403 ] && return 0
+  echo "   (relay read $a, outside read $b, bad bearer $c - needs site 1.99fd on prod)" >&2; return 1
+}
+check "the auth hook knows Pepe's WHIP path (site 1.99fd)" pepe_hook
 check "ICE tcp 8189 listening" listening t 8189
 check "TURN udp 3478 listening" listening u 3478
 check "TURN tcp 3478 listening" listening t 3478
@@ -332,4 +381,5 @@ fi
 cat <<EOF
    All checks passed. Backups: $BK   State: $STATE
    Next: turn it on for $AUTH_SITE in /stage/admin (⚡ WebRTC ultra-low latency) and run the smoke tests in INSTALL.md.
+   Pepe's main stream over WHIP (1.99fd): see "Pepe's main stream over WHIP" in INSTALL.md (OBS -> WHIP is a separate step).
 EOF
