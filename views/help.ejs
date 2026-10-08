@@ -1,0 +1,199 @@
+<%- include('layout', { title: "Pepe's commands", user: user, ogPath: '/help' }) %>
+<%#
+  views/help.ejs - Pepe's command help (1.99fq, help.js). The data is Pepe's (camfrog-bot help/catalog.json, published
+  by Pepe with live prices). Cards: id="cmd-<id>" (deep links; /help#cmd-<any command or alias> is resolved by
+  help-page.js). The "ask" box ranks locally first (helpsearch.js), then asks Pepe (signed in) via POST /api/help/ask.
+%>
+<%
+  const ROLE_LABEL = { mod: 'Mods', owner: 'Pad owners', admin: 'Admins' };
+  const copyText = (s) => { const m = /^[^\[<@{]*/.exec(String(s)); const t = (m ? m[0] : String(s)).trim(); return t + (t.length < String(s).trim().length ? ' ' : ''); };
+  const asOf = M.at ? new Date(M.at).toISOString().slice(0, 10) : null;
+%>
+<style>
+  .hlp { max-width: 1080px; width: 100%; min-width: 0; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
+  .hlp *, .hlp *::before, .hlp *::after { box-sizing: border-box; }
+  .hlp h1 { text-align: center; margin: 6px 0 4px; }
+  .hlp .sub { text-align: center; color: #9a9; margin: 0 auto 20px; max-width: 66ch; line-height: 1.55; }
+  .hlp a { color: #81c784; text-decoration: none; }
+  .hlp a:hover { color: #a5d6a7; }
+  .hlp code { background: #1c1c1c; border: 1px solid #262626; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; color: #e8f5e9; white-space: pre-wrap; overflow-wrap: anywhere; font-family: Consolas, 'Courier New', monospace; }
+
+  /* the ask box */
+  .hlp .ask { background: #111; border: 1px solid #2e4d2f; border-radius: 12px; padding: 16px; margin: 0 0 18px; }
+  .hlp .ask h2 { margin: 0 0 4px; color: #ffd700; font-size: 20px; }
+  .hlp .ask p.hint { margin: 0 0 10px; color: #9a9; font-size: 14px; }
+  .hlp .ask form { display: flex; gap: 8px; }
+  .hlp .ask input { flex: 1 1 auto; min-width: 0; background: #0c0c0c; border: 1px solid #333; border-radius: 8px; color: #eee; padding: 10px 12px; font: 15px Ubuntu, sans-serif; }
+  .hlp .ask input:focus { outline: none; border-color: #4caf50; }
+  .hlp .ask button { flex: 0 0 auto; background: #12301a; border: 1px solid #3c7a46; color: #d7f5dc; border-radius: 8px; padding: 0 16px; font: bold 14px Ubuntu, sans-serif; cursor: pointer; }
+  .hlp .ask button:hover, .hlp .ask button:focus-visible { border-color: #4caf50; }
+  .hlp .ask .eg { margin: 8px 0 0; font-size: 13px; color: #888; }
+  .hlp .ask .eg button { background: none; border: 0; padding: 0; color: #81c784; font: inherit; cursor: pointer; text-decoration: underline dotted; }
+  .hlp .ans { margin-top: 12px; display: grid; gap: 8px; }
+  .hlp .ans[hidden] { display: none; }
+  .hlp .pepe { border: 1px solid #4caf50; background: #13200f; border-radius: 10px; padding: 10px 12px; color: #cfe8cf; font-size: 14.5px; line-height: 1.55; }
+  .hlp .pepe .who { font-weight: bold; color: #81c784; margin-right: 4px; }
+  .hlp .pepe.wait { border-color: #2a2a2a; background: #141414; color: #999; }
+  .hlp .pepe.note { border-color: #2a2a2a; background: #141414; color: #aaa; }
+  .hlp .hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .hlp .hits a { display: block; background: #161616; border: 1px solid #262626; border-radius: 8px; padding: 8px 10px; color: #ddd; }
+  .hlp .hits a:hover, .hlp .hits a:focus-visible { border-color: #4caf50; }
+  .hlp .hits code { color: #a5d6a7; }
+  .hlp .hits small { display: block; color: #999; margin-top: 2px; font-size: 13px; }
+
+  /* filter + contents */
+  .hlp .bar { background: #111; border: 1px solid #222; border-radius: 10px; padding: 10px 12px; margin-bottom: 22px; display: grid; gap: 10px; }
+  @media (min-width: 900px) { .hlp .bar { position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.55); } }
+  .hlp .bar .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hlp .bar input[type=search] { flex: 1 1 220px; min-width: 0; background: #0c0c0c; border: 1px solid #333; border-radius: 8px; color: #eee; padding: 8px 10px; font: 14px Ubuntu, sans-serif; }
+  .hlp .bar input[type=search]:focus { outline: none; border-color: #4caf50; }
+  .hlp .bar select { background: #0c0c0c; border: 1px solid #333; border-radius: 8px; color: #ddd; padding: 7px 8px; font: 14px Ubuntu, sans-serif; max-width: 100%; }
+  .hlp .bar .n { color: #888; font-size: 13px; white-space: nowrap; }
+  .hlp .toc { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .hlp .toc a { display: inline-block; padding: 4px 10px; border: 1px solid #2a2a2a; border-radius: 14px; font-size: 13px; background: #161616; }
+  .hlp .toc a:hover { border-color: #4caf50; }
+  .hlp .toc a.dim { opacity: .4; }
+
+  /* sections + cards */
+  .hlp section.cat { margin: 0 0 34px; scroll-margin-top: 150px; }
+  .hlp section.cat[hidden] { display: none; }
+  .hlp .kicker { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #4caf50; letter-spacing: .5px; margin-bottom: 6px; }
+  .hlp h2.ch { color: #ffd700; margin: 0 0 4px; font-size: 22px; }
+  .hlp .lead { color: #bbb; margin: 0 0 12px; line-height: 1.55; }
+  .hlp .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+  .hlp .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; min-width: 0; scroll-margin-top: 150px; display: flex; flex-direction: column; gap: 7px; }
+  .hlp .card:hover { border-color: #2e4d2f; }
+  .hlp .card[hidden] { display: none; }
+  .hlp .card.hl { border-color: #ffd700; box-shadow: 0 0 0 2px rgba(255,215,0,.25); }
+  .hlp .syn { display: flex; align-items: flex-start; gap: 6px; }
+  .hlp .syn code { flex: 1 1 auto; min-width: 0; font-size: 14px; color: #a5d6a7; background: #0c0c0c; border-color: #233; padding: 4px 7px; font-weight: bold; }
+  .hlp .cp { flex: 0 0 auto; background: #1a1a1a; border: 1px solid #333; color: #bbb; border-radius: 6px; padding: 3px 7px; font: 12px Ubuntu, sans-serif; cursor: pointer; }
+  .hlp .cp:hover, .hlp .cp:focus-visible { border-color: #4caf50; color: #fff; }
+  .hlp .cp.ok { border-color: #4caf50; color: #9be3a6; }
+  .hlp .bdg { display: flex; flex-wrap: wrap; gap: 5px; }
+  .hlp .b { display: inline-block; font-size: 11.5px; border-radius: 8px; padding: 1px 7px; border: 1px solid #333; color: #bbb; background: #161616; white-space: nowrap; }
+  .hlp .b.cost { color: #ffd700; border-color: #5a4a10; background: #1a1708; }
+  .hlp .b.mod { color: #8ec9ff; border-color: #1e3a5a; background: #0e1a28; }
+  .hlp .b.owner { color: #e2c4ff; border-color: #4b3a6a; background: #1b1426; }
+  .hlp .b.admin { color: #ff8a80; border-color: #5a1e1e; background: #241010; }
+  .hlp .b.gate { color: #c9b98a; border-color: #3a3420; }
+  .hlp .b.web { color: #9be3a6; border-color: #24402a; }
+  .hlp .card p.s { margin: 0; color: #ccc; font-size: 14px; line-height: 1.55; }
+  .hlp .al { font-size: 12.5px; color: #888; }
+  .hlp .ex { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12.5px; color: #888; }
+  .hlp .ex button { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; max-width: 100%; }
+  .hlp .ex button code { display: inline-block; font-size: 12.5px; color: #cfe8cf; }
+  .hlp .ex button:hover code, .hlp .ex button:focus-visible code { border-color: #4caf50; }
+  .hlp .webeq { font-size: 13px; }
+  .hlp details { font-size: 13.5px; color: #bbb; line-height: 1.6; }
+  .hlp details summary { cursor: pointer; color: #81c784; font-size: 13px; list-style: none; }
+  .hlp details summary::-webkit-details-marker { display: none; }
+  .hlp details summary::before { content: '▸ '; }
+  .hlp details[open] summary::before { content: '▾ '; }
+  .hlp details .d { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #2a2a2a; }
+  .hlp .ft { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: auto; }
+  .hlp .lnk { font-size: 12px; color: #555; }
+  .hlp .lnk:hover { color: #81c784; }
+  .hlp .none { text-align: center; color: #888; padding: 24px 0; }
+  .hlp .top { font-size: 12px; color: #666; text-align: right; margin-top: 8px; }
+  .hlp .top a { color: #666; }
+  .hlp .foot { color: #777; font-size: 13px; text-align: center; margin-top: 30px; line-height: 1.6; }
+  .hlp .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  @media (max-width: 520px) {
+    .hlp .ask form { flex-direction: column; }
+    .hlp .ask button { padding: 10px; }
+    .hlp h2.ch { font-size: 19px; }
+  }
+</style>
+<div class="hlp" id="top">
+  <h1>🐸 Pepe's commands</h1>
+  <p class="sub">Everything PepeFrog does in the Camfrog rooms. Type these in a room's chat (most work in a pad page's chat on
+    the website too). New here? Start with <a href="#cmd-verify">linking your account</a> and <a href="#cmd-balance">!balance</a>,
+    and see <a href="/economy">how PAT works</a>.</p>
+
+  <section class="ask" aria-labelledby="askT">
+    <h2 id="askT">🤔 Ask how to do something</h2>
+    <p class="hint">Say what you want to do and get the command for it.<% if (!signedIn) { %> <a href="/login?next=/help">Sign in</a> and Pepe answers in his own words too.<% } %></p>
+    <form id="askForm" role="search" autocomplete="off">
+      <label class="sr" for="askQ">What do you want to do?</label>
+      <input id="askQ" name="q" type="text" maxlength="200" placeholder="e.g. how do I bet on a market" value="<%= q %>">
+      <button type="submit">Ask</button>
+    </form>
+    <p class="eg">Try: <button type="button" data-ask="how do I bet on a market">bet on a market</button> ·
+      <button type="button" data-ask="send PAT to a friend">send PAT to a friend</button> ·
+      <button type="button" data-ask="save a picture of someone's cam">save someone's cam</button> ·
+      <button type="button" data-ask="play a song">play a song</button></p>
+    <div class="ans" id="askOut" aria-live="polite" hidden>
+      <div class="pepe" id="askPepe" hidden></div>
+      <ul class="hits" id="askHits"></ul>
+    </div>
+  </section>
+
+  <nav class="bar" aria-label="Filter and contents">
+    <div class="row">
+      <label class="sr" for="flt">Filter commands</label>
+      <input id="flt" type="search" placeholder="Filter <%= M.count %> commands…" autocomplete="off">
+      <label class="sr" for="role">Who can use it</label>
+      <select id="role">
+        <option value="">All roles</option>
+        <option value="everyone">Only what anyone can use</option>
+        <option value="mod">Mods</option>
+        <option value="owner">Pad owners</option>
+        <option value="admin">Admins</option>
+      </select>
+      <span class="n" id="fltN" aria-live="polite"></span>
+    </div>
+    <ul class="toc">
+      <% M.cats.forEach((c) => { %><li><a href="#cat-<%= c.id %>" data-cat="<%= c.id %>"><%= c.icon %> <%= c.label %></a></li><% }) %>
+    </ul>
+  </nav>
+
+  <% M.cats.forEach((c) => { %>
+  <section class="cat" id="cat-<%= c.id %>" aria-labelledby="h-<%= c.id %>">
+    <div class="kicker"><%= c.entries.length %> COMMAND<%= c.entries.length === 1 ? '' : 'S' %></div>
+    <h2 class="ch" id="h-<%= c.id %>"><%= c.icon %> <%= c.label %></h2>
+    <% if (c.blurb) { %><p class="lead"><%= c.blurb %></p><% } %>
+    <div class="grid">
+      <% c.entries.forEach((e) => { const more = e.details && e.details.trim() !== e.summary.trim(); %>
+      <article class="card" id="cmd-<%= e.id %>" data-role="<%= e.role %>" data-cmds="<%= [].concat(e.commands, e.aliases || []).join(' ') %>">
+        <% e.syntax.forEach((s) => { %>
+        <div class="syn"><code><%= s %></code><button type="button" class="cp" data-copy="<%= copyText(s) %>" aria-label="Copy <%= copyText(s).trim() %>">Copy</button></div>
+        <% }) %>
+        <div class="bdg">
+          <% if (e.role !== 'everyone') { %><span class="b <%= e.role %>"><%= ROLE_LABEL[e.role] || e.role %></span><% } %>
+          <% if (e.cost) { %><span class="b cost"><%= fmt(e.cost) %> PAT</span><% } %>
+          <% if (e.gates && e.gates.length) { %><span class="b gate" title="A room can switch this off: <%= e.gates.map((g) => M.gates[g] || g).join(', ') %>">room can switch off</span><% } %>
+          <% if (e.webchat) { %><span class="b web" title="Also works typed into a pad page's chat on publicaccess.tv">works on the website</span><% } %>
+        </div>
+        <p class="s"><%- md(e.summary) %></p>
+        <% if (e.aliases && e.aliases.length) { %><div class="al">Also: <%= e.aliases.join(' · ') %></div><% } %>
+        <% if (e.examples && e.examples.length) { %>
+        <div class="ex"><span>e.g.</span><% e.examples.forEach((x) => { %><button type="button" class="cpx" data-copy="<%= x %>" title="Copy"><code><%= x %></code></button><% }) %></div>
+        <% } %>
+        <% if (e.web) { %><div class="webeq">🌐 <a href="<%= e.web.url %>"<%- /^https:/.test(e.web.url) ? ' rel="noopener"' : '' %>><%= e.web.label %> ›</a></div><% } %>
+        <div class="ft">
+          <% if (more) { %><details><summary>More</summary><div class="d"><%- md(e.details) %></div></details><% } else { %><span></span><% } %>
+          <a class="lnk" href="#cmd-<%= e.id %>" aria-label="Link to <%= e.syntax[0] %>">#</a>
+        </div>
+      </article>
+      <% }) %>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+  <% }) %>
+  <p class="none" id="noneMsg" hidden>No command matches that. Try fewer words, or ask above.</p>
+
+  <p class="foot">
+    <% if (M.version) { %>Pepe <%= M.version %><% if (asOf) { %> · updated <%= asOf %><% } %> · <% } %>
+    Prices shown are the defaults; a room's owner or the admins can change some. Commands marked
+    <span class="b gate">room can switch off</span> may be off in a particular room.<br>
+    <a href="https://pepe.publicaccess.tv/patchnotes" rel="noopener">Patch notes</a> · <a href="/economy">How PAT works</a> ·
+    <a href="/gtf">Grand Theft Frogger</a> · <a href="https://pepe.publicaccess.tv/turfwars" rel="noopener">Turf Wars guide</a>
+  </p>
+</div>
+<script type="application/json" id="helpIdx"><%- JSON.stringify(M.index).replace(/</g, '\\u003c') %></script>
+<script>window.HELP_SIGNED_IN = <%- signedIn ? 'true' : 'false' %>;</script>
+<script src="/public/js/helpsearch.js?v=1" defer></script>
+<script src="/public/js/help-page.js?v=1" defer></script>
+</body>
+</html>

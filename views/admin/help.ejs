@@ -1,0 +1,74 @@
+<%- include('../partials/admin-open', { title: 'Help questions', user, section: 'help', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/help.ejs - /help (1.99fq, help.js): questions the help couldn't answer well (to improve the help), the
+  prompter's AI switch, and where the help data came from. Admins only.
+%>
+<%
+  const when = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const WHY = { 'signed-out': 'signed out (search only)', 'ai-off': 'AI answers off', 'no-match': 'nothing matched', 'pepe-offline': 'Pepe offline',
+                'limited': 'over the limit', busy: 'queue full', 'pepe-slow': 'Pepe too slow', 'pepe-error': 'Pepe gave no usable answer',
+                'pepe-none': 'Pepe: no command for it' };
+%>
+<div class="adm-head">
+  <h1>📖 Help questions</h1>
+  <p>What people asked the <a href="/help">/help</a> page's "Ask how to do something" box that the help couldn't answer well:
+     the search's best match was weak and Pepe didn't name a command. Use these to add keywords or cards to the help
+     (camfrog-bot <code>help/catalog.json</code>, then <code>python tools/build_help.py</code>; Pepe publishes it on his next deploy).</p>
+</div>
+
+<section class="adm-card" aria-labelledby="stT">
+  <h2 id="stT">Status</h2>
+  <div class="adm-kv">
+    <div><b>Help data</b><span><%= cur.count %> cards · <%= cur.source === 'pepe' ? ('published by Pepe ' + (cur.version || '') + ' at ' + when(cur.at)) : (cur.source === 'bundled' ? "the site's bundled copy (Pepe hasn't published yet)" : 'none') %></span></div>
+    <div><b>Pepe</b><span><%= pepe.online ? 'online (pulling questions)' : 'offline' %><%= pepe.lastPull ? ' · last pull ' + when(pepe.lastPull) : '' %> · <%= pepe.queued %> waiting</span></div>
+    <% if (cur.undocumented.length) { %><div><b>Commands with no card</b><span><%= cur.undocumented.join(' ') %></span></div><% } %>
+  </div>
+  <form class="adm-form" id="aiForm">
+    <label class="ck"><span>AI answers</span><span><input type="checkbox" name="ai"<%= C.ai ? ' checked' : '' %>> Pepe answers signed-in users' questions with his model (the "help" function on Pepe's admin panel, cheap tier)</span></label>
+    <div class="adm-actions"><button type="submit">Save</button><span id="aiMsg" class="adm-msg" role="status"></span></div>
+  </form>
+</section>
+
+<section class="adm-card" id="misses" aria-labelledby="mT">
+  <h2 id="mT">Unanswered questions <span class="adm-pill"><%= rows.length %></span></h2>
+  <p class="adm-help"><%= all ? 'All questions from the last 90 days.' : 'Open ones, newest first.' %> <a href="/admin/help<%= all ? '' : '?all=1' %>"><%= all ? 'Show open only' : 'Show resolved too' %></a></p>
+  <div class="adm-tbl"><table aria-label="Unanswered help questions">
+    <thead><tr><th>When</th><th>Question</th><th>Who</th><th>Best match</th><th>Why</th><th></th></tr></thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="6" class="empty">Nothing to improve right now.</td></tr><% } %>
+      <% rows.forEach((r) => { %>
+      <tr<%- r.resolved ? ' class="done"' : '' %>>
+        <td><%= when(r.at) %></td>
+        <td><%= r.q %></td>
+        <td><%= r.username || '-' %></td>
+        <td><%= r.top ? r.top + ' (' + Math.round(r.score || 0) + ')' : '-' %></td>
+        <td><%= WHY[r.why] || r.why %></td>
+        <td><button type="button" class="adm-btn ghost" data-resolve="<%= r.id %>" data-to="<%= r.resolved ? 'false' : 'true' %>"><%= r.resolved ? 'Reopen' : 'Done' %></button></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table></div>
+</section>
+<script>
+(function () {
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); });
+  }
+  var f = document.getElementById('aiForm'), msg = document.getElementById('aiMsg');
+  f.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    post('/admin/help/config', { ai: f.ai.checked }).then(function (d) { msg.textContent = d.ok ? 'Saved.' : (d.error || 'Failed.'); }, function () { msg.textContent = 'Failed.'; });
+  });
+  document.querySelectorAll('[data-resolve]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      post('/admin/help/misses/' + b.getAttribute('data-resolve') + '/resolve', { resolved: b.getAttribute('data-to') === 'true' }).then(function (d) {
+        if (d.ok) location.reload();
+      });
+    });
+  });
+})();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

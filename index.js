@@ -1092,6 +1092,7 @@ require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules
 require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settings hub /p/:slug/settings (was /manage + /mod)
 require("./imagesafety").register(app, { isBotToken, addUser });   // 1.99fc: image safety checks via Pepe's vision (OFF by default; /admin/imagesafety)
 require("./imagesafety").install();   // 1.99fc: padlook / stories / feed posts / DM pictures go through it (a pass-through while it's off)
+require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp });   // 1.99fq: /help (Pepe's commands, published by Pepe) + its "ask how to do something" prompter
 require("./padlook").register(app, { addUser });       // 1.99es: a pad's look - avatar, banner, accent (/api/rooms/:slug/look, /media/pad/<file>)
 require("./padcosmetics").register(app, { addUser });   // 1.99ew: premium pad cosmetics - frames, glows, badges, animated avatar (/api/rooms/:slug/cosmetics; 100% Fort Knox / gift 50/50)
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people

@@ -8,8 +8,8 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS heist_sheets (
   camfrog TEXT PRIMARY KEY, display TEXT, url TEXT NOT NULL, cls TEXT, updated INTEGER)`).catch(() => {});
 
 const LINKS = {
-  heistHelp: "https://pepe.publicaccess.tv/help#games",
-  turfHelp: "https://pepe.publicaccess.tv/help#turf",
+  heistHelp: "/help#cat-heists",
+  turfHelp: "/help#cat-heists",
   turfGuide: "https://pepe.publicaccess.tv/turfwars",
   turfMap: "https://pepe.publicaccess.tv/turf",
   gangs: "https://pepe.publicaccess.tv/gangs",

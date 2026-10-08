@@ -53,7 +53,7 @@
     <p class="lead">PATV is a community: people hanging out on cam in Camfrog rooms, a live stream, events, and Pepe — the frog who deals the cards, runs the heists, DJs, remembers everyone and keeps the score. PAT is the points everyone plays with, in the rooms and here on the site, and the same account works in both.</p>
     <div class="ctas">
       <% if (!user) { %><a class="btn primary" href="/register">Join PATV</a><a class="btn" href="/login">Sign in</a><% } else { %><a class="btn primary" href="/">Back to the homepage</a><% } %>
-      <a class="btn" href="https://pepe.publicaccess.tv" rel="noopener">🐸 Pepe's commands</a>
+      <a class="btn" href="/help">🐸 Pepe's commands</a>
     </div>
   </section>
 
@@ -81,7 +81,7 @@
     <ol class="steps">
       <li><a href="/register">Make an account</a> on publicaccess.tv.</li>
       <li>In a Camfrog room with Pepe, type <code>!verify</code> to link your Camfrog name — your PAT, level and achievements then follow you between the rooms and the site.</li>
-      <li>Say <code>!help</code> to Pepe, or browse <a href="https://pepe.publicaccess.tv" rel="noopener">everything he can do</a>.</li>
+      <li>Say <code>!help</code> to Pepe, or browse <a href="/help">everything he can do</a>.</li>
       <li>Want to stay off the website's live room view? Type <code>!bridge hide</code> (or <code>!incognito on</code>) in the room.</li>
     </ol>
     <p style="color:#888;font-size:13px;margin:12px 0 0"><%= fmt(S0.members) %> members and counting.</p>
