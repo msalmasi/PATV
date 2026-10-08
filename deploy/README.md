@@ -72,7 +72,7 @@ nginx-rtmp (loopback) to Twitch. Staging's worker only accepts loopback targets 
   then `INST=prod bash /home/PATV/deploy/restream/install.sh`. It adds `RESTREAM_SECRET` + `RESTREAM_TOKEN` to the site's `.env`.
 - A key from a file (e.g. Pepe's, read out of OBS): `cd /home/PATV && node deploy/restream/set-key.js --owner @main --file <0600 file with KEY=/SERVER=> --shred`.
 - **Emergency stop of every relay:** `systemctl stop patv-restream@prod` (its ffmpegs die with it). Undo the install: `INST=prod UNINSTALL=1 bash .../install.sh`.
-- The stream key is an ffmpeg argument, so root on the VPS can see it in the process list (`/proc/<pid>/cmdline`); it never reaches a log.
+- The stream key is an ffmpeg argument, so it is in the VPS's process list (`ps`, `/proc/<pid>/cmdline` - readable by any local account, there's no hidepid); it never reaches a log.
 
 ## Refreshing staging's data
 

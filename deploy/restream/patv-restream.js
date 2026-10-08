@@ -9,8 +9,8 @@
 // 60 s, reset after 60 s of clean running); one whose frame counter stalls for STALL_MS is killed and restarted.
 // Site unreachable: what runs keeps running for HOLD_MS (a site restart doesn't cut Twitch), then everything stops.
 //
-// Secrets: the target URL (it holds the stream key) is passed to ffmpeg as an argument - visible in /proc to root and
-// to the patv-restream user only on this box (hidepid isn't on; the URL is in the process list) - and NEVER logged:
+// Secrets: the target URL (it holds the stream key) is passed to ffmpeg as an argument, so it is in the process list:
+// /proc/<pid>/cmdline is readable by every local account on the box (no hidepid mount) - and it is NEVER logged:
 // ffmpeg's messages and our own lines go through redact(), which blanks every rtmp(s):// URL and the key itself.
 // Config (environment, from /etc/patv-restream/<inst>.env):
 //   SITE_URL=http://127.0.0.1:3000   RESTREAM_TOKEN=<shared token>   FFMPEG=ffmpeg   ALLOW_TARGETS=twitch|loopback|any
