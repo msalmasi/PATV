@@ -7,6 +7,12 @@
 .player .lowlat[aria-pressed=true] { border-color: #c6e94f; color: #c6e94f; }
 .player .lowlat.on { background: #c6e94f; color: #111; border-color: #c6e94f; }
 .player .lowlat.hide { display: none; }
+/* 1.99ey: auto-hide with the video controls (stage-lowlat.js sets .idle) - the same 1 s fade-out / quick fade-in as
+   video.js's control bar; still focusable while hidden, and focus brings it back */
+.player .lowlat { opacity: 1; transition: opacity .15s ease; }
+.player .lowlat.idle { opacity: 0; pointer-events: none; transition-duration: 1s; }
+.player .lowlat.idle:focus-visible { opacity: 1; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .player .lowlat, .player .lowlat.idle { transition: none; } }
 .player .rtc-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; z-index: 1; display: block; }
 .sb .whip { margin-top: 16px; padding-top: 12px; border-top: 1px dashed #333; }
 .sb .whip h3 { margin: 0 0 6px; font-size: 15px; color: #c6e94f; }

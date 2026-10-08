@@ -329,18 +329,37 @@ function loadLowlat() {
   vm.runInContext(src, ctx);
   return ctx.window.PATVStage.rtcWrap;
 }
-function rig(storage) {
+// a fake clock for the auto-hide timers (1.99ey)
+function fakeClock() {
+  let t = 1000, seq = 0;
+  const q = new Map();
+  return { now: () => t, set(f, ms) { const id = ++seq; q.set(id, { at: t + ms, f }); return id; }, clear(id) { q.delete(id); },
+    advance(ms) {
+      const end = t + ms;
+      for (;;) {
+        let next = null;
+        for (const [id, x] of q) if (x.at <= end && (!next || x.at < next[1].at)) next = [id, x];
+        if (!next) break;
+        q.delete(next[0]); t = next[1].at; next[1].f();
+      }
+      t = end;
+    } };
+}
+function rig(storage, extra = {}) {
   const wrap = loadLowlat();
   const { el, document } = fakeDom();
   const box = el("div"), vw = el("div"); box.appendChild(vw);
+  const clock = extra.timers || fakeClock();
+  if (extra.querySelector) vw.querySelector = extra.querySelector;
   const reconnect = el("div"), unmute = el("button");
   const log = [];
   const hls = { cur: "pepe.m3u8", src() { return this.cur; }, setSrc(u) { this.cur = u; log.push("hls.setSrc " + u); },
                 start() { log.push("hls.start"); }, stop() { log.push("hls.stop"); }, state() { return { playing: true, time: 1, muted: true }; } };
   const plays = [];
   const rtc = { play(url, video) { let res, rej; const p = new Promise((a, b) => { res = a; rej = b; }); plays.push({ url, video, res, rej }); return p; } };
-  const p = wrap(hls, { wrap: vw, reconnect, unmute }, { document, storage, rtc });
-  return { p, hls, log, plays, box, vw, btn: p.button };
+  const p = wrap(hls, { wrap: vw, reconnect, unmute }, { document, storage, rtc, timers: clock, inactivity: extra.inactivity,
+                                                         MutationObserver: extra.MutationObserver || null });
+  return { p, hls, log, plays, box, vw, btn: p.button, clock };
 }
 const mem = (init = {}) => { const m = { ...init }; return { getItem: (k) => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, m }; };
 const tickP = () => new Promise((r) => setImmediate(r));
@@ -420,6 +439,103 @@ test("lowlat: storage that throws (private mode) = off, and nothing breaks", asy
   assert.equal(r2.p.mode(), "hls");
 });
 
+// ── 1.99ey: the button auto-hides with the video controls ──
+const fire = (el, type, ev = {}) => (el.listeners[type] || []).forEach((f) => f(ev));
+const idle = (btn) => btn.classList.contains("idle");
+
+test("lowlat auto-hide (WebRTC): activity shows it, hides after the inactivity delay; hover / focus / pause keep it", async () => {
+  const store = mem({ "patv.lowLatency": "1" });
+  const { p, plays, btn, box, vw, clock } = rig(store);
+  p.setSrc("w.m3u8", "https://x/whep/stage-1"); p.start();
+  plays[0].res({ close() {}, onfail: null });
+  await tickP();
+  assert.equal(p.mode(), "rtc");
+  const video = vw.children.find((c) => c.tag === "video");
+  assert.ok(!idle(btn), "shown when playback starts");
+  clock.advance(1999); assert.ok(!idle(btn));
+  clock.advance(1); assert.ok(idle(btn), "hidden after video.js's 2 s inactivityTimeout");
+  fire(box, "mousemove"); assert.ok(!idle(btn), "mousemove shows it");
+  clock.advance(1500); fire(box, "mousemove"); clock.advance(1500);
+  assert.ok(!idle(btn), "each move restarts the timer");
+  clock.advance(500); assert.ok(idle(btn));
+  // hovered: stays however long
+  fire(box, "mousemove"); fire(btn, "mouseenter"); clock.advance(30000);
+  assert.ok(!idle(btn), "hovered = stays");
+  fire(btn, "mouseleave"); clock.advance(1999); assert.ok(!idle(btn)); clock.advance(1); assert.ok(idle(btn));
+  // keyboard: focusing the (hidden) button shows it, and it stays while focused
+  fire(btn, "focus"); assert.ok(!idle(btn), "focus shows it");
+  clock.advance(30000); assert.ok(!idle(btn));
+  fire(btn, "blur"); clock.advance(2000); assert.ok(idle(btn));
+  fire(box, "focusin"); assert.ok(!idle(btn), "focus anywhere in the player shows it");
+  clock.advance(2000); assert.ok(idle(btn));
+  // paused: stays up
+  video.paused = true; fire(video, "pause"); assert.ok(!idle(btn), "paused = shown");
+  clock.advance(60000); assert.ok(!idle(btn));
+  video.paused = false; fire(video, "play"); clock.advance(2000); assert.ok(idle(btn), "playing again = hides again");
+});
+
+test("lowlat auto-hide: the tap that wakes the controls never toggles low latency; a later tap / keyboard does", async () => {
+  const store = mem({ "patv.lowLatency": "1" });
+  const { p, plays, btn, box, clock } = rig(store);
+  p.setSrc("w.m3u8", "https://x/whep/stage-1"); p.start();
+  plays[0].res({ close() {}, onfail: null });
+  await tickP();
+  clock.advance(2000); assert.ok(idle(btn));
+  fire(box, "touchstart"); assert.ok(!idle(btn), "a tap on the video shows it");
+  fire(btn, "click", { detail: 1 });                       // the same tap's synthetic click
+  assert.equal(store.m["patv.lowLatency"], "1", "not toggled");
+  assert.equal(p.mode(), "rtc");
+  assert.equal(plays.length, 1);
+  clock.advance(700);
+  fire(box, "touchstart");                                 // visible now: a real tap on the button
+  fire(btn, "click", { detail: 1 });
+  assert.equal(store.m["patv.lowLatency"], "0", "a deliberate tap toggles");
+  assert.equal(p.mode(), "hls");
+  // a keyboard press (detail 0) right after a revealing tap still counts
+  const r = rig(mem({ "patv.lowLatency": "1" }));
+  r.p.setSrc("w.m3u8", "https://x/whep/stage-1"); r.p.start();
+  r.plays[0].res({ close() {}, onfail: null });
+  await tickP();
+  r.clock.advance(2000); assert.ok(idle(r.btn));
+  fire(r.box, "touchstart");
+  fire(r.btn, "click", { detail: 0 });
+  assert.equal(r.p.mode(), "hls", "keyboard click works");
+});
+
+test("lowlat auto-hide (HLS): follows video.js vjs-user-inactive / vjs-paused; a fallback keeps it up for its error title", async () => {
+  const cls = new Set(["video-js", "vjs-user-active"]);
+  const vjs = { classList: { contains: (c) => cls.has(c) } };
+  let observed = null;
+  function MO(cb) { this.observe = (target, opts) => { observed = { cb, target, opts }; }; }
+  const store = mem();
+  const { p, plays, btn, vw, clock } = rig(store, { MutationObserver: MO, querySelector: (s) => (s === ".video-js" ? vjs : null) });
+  assert.equal(observed.target, vw, "watches the player's class changes");
+  assert.ok(observed.opts.attributes && observed.opts.subtree);
+  p.setSrc("w.m3u8", "https://x/whep/stage-1"); p.start();
+  assert.ok(!idle(btn));
+  cls.delete("vjs-user-active"); cls.add("vjs-user-inactive"); observed.cb();
+  assert.ok(idle(btn), "video.js went inactive = hidden");
+  cls.add("vjs-paused"); observed.cb();
+  assert.ok(!idle(btn), "paused keeps the controls (and the button)");
+  cls.delete("vjs-paused"); observed.cb();
+  assert.ok(idle(btn));
+  fire(btn, "focus"); assert.ok(!idle(btn), "focus shows it on HLS too");
+  fire(btn, "blur"); assert.ok(idle(btn));
+  cls.delete("vjs-user-inactive"); cls.add("vjs-user-active"); observed.cb();
+  assert.ok(!idle(btn), "active again = shown");
+  // turn it on, it fails -> back on HLS with the error title, pinned while the notice is fresh
+  fire(btn, "click", { detail: 1 });
+  plays[0].rej(new Error("Low latency timed out"));
+  await tickP();
+  assert.equal(p.mode(), "hls");
+  assert.match(btn.title, /isn't available/, "the error title is kept");
+  cls.delete("vjs-user-active"); cls.add("vjs-user-inactive"); observed.cb();
+  assert.ok(!idle(btn), "the fallback notice keeps it up");
+  clock.advance(6001);
+  assert.ok(idle(btn), "then it hides with the controls");
+  assert.match(btn.title, /isn't available/);
+});
+
 // ── flag off: no WebRTC UI anywhere ──
 const ejs = require("ejs");
 const RTC = /webrtc-client\.js|stage-lowlat\.js|stage-golive-rtc\.js|webrtc\.css|⚡|paneRtc|whipUrl|WHIP/;
@@ -456,10 +572,10 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(off, RTC, name + ": no WebRTC while off");
     const html = await render(on);
     assert.match(html, /webrtc-client\.js\?v=1/, name);
-    assert.match(html, /webrtc\.css\?v=1/, name);
+    assert.match(html, /webrtc\.css\?v=2/, name);
   }
-  assert.match(await renderHome(on), /stage-lowlat\.js\?v=1"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=5/);
-  assert.match(await renderRoom(on), /stage-lowlat\.js\?v=1/);
+  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=5/);
+  assert.match(await renderRoom(on), /stage-lowlat\.js\?v=2/);
   const book = await renderBook(on);
   assert.match(book, /id="tabRtc"[^>]*>⚡ Browser · ultra-low latency/);
   assert.match(book, /Go live from your browser \(camera \/ screen\) — ultra-low latency/);

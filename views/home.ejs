@@ -46,9 +46,9 @@
 <script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
 <script src="/public/js/stage-player.js?v=4"></script>
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
-<% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=1">
+<% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=2">
 <script src="/public/js/webrtc-client.js?v=1"></script>
-<script src="/public/js/stage-lowlat.js?v=1"></script>
+<script src="/public/js/stage-lowlat.js?v=2"></script>
 <% } %><script src="/public/js/stage-room.js?v=5"></script>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
 <link rel="stylesheet" href="/public/css/padfx.css?v=1">
