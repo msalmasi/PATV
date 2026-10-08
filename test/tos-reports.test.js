@@ -316,7 +316,28 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(t.text, new RegExp("Last updated " + terms.UPDATED));
   assert.match(t.text, /support@publicaccess\.tv/);                   // 1.99dd: the contact details are filled in
   assert.match(t.text, /Houseplants LLC/);
-  assert.match(t.text, /228 Park Ave S, New York, NY 10003/);       // 1.99dk: the last placeholder is filled
+  // 2026-10-08: the registered DMCA designated agent (CopyByte) replaced the old postal address
+  assert.doesNotMatch(t.text, /Park Ave/);
+  assert.equal(terms.VERSION, "2026-10-08");
+  const s12 = (t.text.match(/<section id="reporting">[\s\S]*?<\/section>/) || [""])[0];
+  assert.match(s12, /id="dmca"/);
+  assert.match(s12, /Houseplants LLC respects the intellectual property rights of others\. Per the DMCA, we will respond expeditiously/);
+  assert.match(s12, /we will take whatever action we deem appropriate within our sole discretion/);
+  const items = (s12.match(/<ol class="dmca-items">([\s\S]*?)<\/ol>/) || ["", ""])[1].match(/<li>[\s\S]*?<\/li>/g) || [];
+  assert.equal(items.length, 6);
+  assert.match(items[0], /description of the copyrighted work or other intellectual property that you claim has been infringed/);
+  assert.match(items[1], /description of where the material that you claim is infringing is located on the Site/);
+  assert.match(items[2], /address, telephone number, and email address where we can contact you/);
+  assert.match(items[3], /good-faith belief that the use is not authorized by the copyright owner/);
+  assert.match(items[4], /under penalty of perjury that the information in your notice is accurate/);
+  assert.match(items[5], /Your electronic or physical signature\./);
+  assert.match(s12, /Pursuant to 17 U\.S\.C\. 512\(c\), Houseplants LLC's designated Copyright Agent is:/);
+  const agent = (s12.match(/<address class="dmca-agent"[^>]*>([\s\S]*?)<\/address>/) || ["", ""])[1];
+  assert.equal(agent, 'Jonathan Bailey<br>CopyByte<br>3157 Gentilly Blvd Suite # 2254<br>New Orleans, LA 70122<br>Phone: 1-504-356-4555<br>' +
+                      'Email: <a href="mailto:publicaccess-dmca@copybyte.com">publicaccess-dmca@copybyte.com</a>');
+  assert.doesNotMatch(s12, /Designated Copyright Agent, Houseplants LLC/);   // the old block (copyright@ as the agent) is gone
+  assert.match(s12, /General copyright questions that aren't notices can also go to/);
+  assert.match(fs.readFileSync(path.join(repo, "views", "layout.ejs"), "utf8"), /href="\/terms#reporting">Report abuse &amp; copyright/);
   assert.doesNotMatch(t.text, /\[\[[A-Z]/);
   assert.match(t.text, /no cash value/);
   assert.match(t.text, /18 years old/);
@@ -334,7 +355,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(s7, /must be marked NSFW/);
   assert.match(s7, /never show a real, identifiable person nude or in a sexual or sexualised way/);
   assert.match(s7, /under 18/);
-  assert.equal(terms.VERSION, "2026-10-06", "the §7 carve-out does not force re-acceptance");
+  assert.equal(terms.VERSION, "2026-10-08", "the §7 carve-out did not bump VERSION; the 2026-10-08 DMCA agent update + enforcement did");
   assert.match(t.text, /id="siteFootTpl"/, "footer links on every layout page");
   assert.match(t.text, /href="\/privacy">Privacy Policy/);
   assert.doesNotMatch(t.text, /class="draft"/, "no Draft banner while enforced");

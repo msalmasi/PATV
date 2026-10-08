@@ -19,8 +19,8 @@ const fs = require("fs");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const VERSION = "2026-10-06";
-const UPDATED = "6 October 2026";
+const VERSION = "2026-10-08";
+const UPDATED = "8 October 2026";
 
 let ready = null;
 function init() {
