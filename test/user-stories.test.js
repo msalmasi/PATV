@@ -475,6 +475,57 @@ test("cam clip request API: rules, one clip per cam, the bridge job, preview, sa
   assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /!snap on/, "unknown switch = off");
 });
 
+// 1.99fb: admins still clip from the website while !clip is off (like chat !clip); Pepe makes the final call
+test("cam clips with !clip off: site admins + Pepe room mods get through with a hint, members are refused", async () => {
+  const padmod = require(path.join(repo, "padmod"));
+  const queued = [];
+  let csw = false;
+  const R_MOD = { mod: padmod.cleanModCaps({ modcf: { actions: ["kick", "ban"], roles: ["admin"] } }) };
+  camclip._setDeps({ snapSwitch: () => true, clipSwitch: () => csw, privateLogins: async () => new Set(),
+                     modCaps: (R, login) => padmod.capsFor(R_MOD, login),
+                     queueAction: async (uid, a) => { queued.push({ uid, a }); return 4343; } });
+  const url = `/api/rooms/${SLUG}/camclip`;
+  const fresh = () => { relay._hits.clear(); camclip._clips.clear(); };
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from("ftypisom"), Buffer.alloc(200)]);
+  const linked = new Map([[U.admin.userId, "bossfrog"], [U.mod.userId, "modcf"]]);
+  for (const v of [false, null]) {
+    csw = v;
+    // a member: refused with E_FEATURE_OFF, the button greyed with the reason
+    fresh();
+    let r = await post(url, U.stranger, { login: "subjcf", secs: 10 });
+    assert.equal(r.status, 403, `member, !clip ${v}`); assert.equal(r.d.code, "E_FEATURE_OFF");
+    let info = await camclip.clipInfo({ id: ROOM }, U.stranger.userId, "subjcf");
+    assert.match(info.off, /\(!clip\)/, `member greyed (!clip ${v})`); assert.equal(info.hint, undefined);
+    // a site admin, and a viewer Pepe gave room-mod caps: enabled + the admin hint, the request reaches Pepe
+    for (const who of [U.admin, U.mod]) {
+      fresh();
+      info = await camclip.clipInfo({ id: ROOM }, who.userId, "subjcf");
+      assert.equal(info.off, null, `${who.username} not greyed (!clip ${v})`);
+      assert.equal(info.hint, camclip.ADMIN_HINT); assert.match(info.hint, /off for members \(!clip\).*as an admin/);
+      r = await post(url, who, { login: "subjcf", secs: 10 });
+      assert.equal(r.status, 200, `${who.username} (!clip ${v}): ${JSON.stringify(r.d)}`);
+      const j = relay.takeJobs(new Set([ROOM])).find((x) => x.id === r.d.id);
+      assert.ok(j && j.kind === "camclip" && j.camfrog === linked.get(who.userId), "handed to Pepe as their linked login");
+      // the save goes on to Pepe too (he re-checks)
+      await post("/api/bridge/camclip", null, { password: "bot", id: r.d.id, state: "ok", data: mp4.toString("base64"), save: "on", viewer_ok: true, cost: 0 });
+      const s = await post(`${url}/${r.d.id}/save`, who);
+      assert.equal(s.status, 200, `${who.username} save (!clip ${v}): ${JSON.stringify(s.d)}`);
+    }
+  }
+  assert.equal(queued.length, 4);
+  // !clip on: nobody gets the hint
+  csw = true;
+  assert.equal((await camclip.clipInfo({ id: ROOM }, U.admin.userId, "subjcf")).hint, undefined);
+  assert.equal((await camclip.clipInfo({ id: ROOM }, U.stranger.userId, "subjcf")).off, null);
+  // clipAdmin: the Admin class, or Pepe's mod caps on the linked login
+  assert.equal(camclip.clipAdmin({}, { class: "Admin" }), true);
+  assert.equal(camclip.clipAdmin({}, { class: "pleb", camfrogUsername: "ModCF" }), true);
+  assert.equal(camclip.clipAdmin({}, { class: "pleb", camfrogUsername: "strangercf" }), false);
+  assert.equal(camclip.clipAdmin({}, { class: "pleb" }), false);
+  assert.equal(camclip.clipAdmin({}, null), false);
+  fresh();
+});
+
 test("media upload stores the subject's login (never for an anon subject)", async () => {
   let r = await post("/api/media", null, { password: "bot", id: "abcdef0123456789", kind: "photo", ct: "image/jpeg", image: jpg.toString("base64"),
                                            subject: "Sub By", subject_login: "SubjCF", by: "x", room: ROOM });

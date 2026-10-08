@@ -1,3 +1,6 @@
+// 1.99fb: the SQLite connections wait up to 5 s for a lock (busy_timeout) on libuv pool threads; give the pool room so
+// a waiting statement can't starve the one holding the lock (default 4). Must be set before anything uses the pool.
+if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = "16";
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -161,6 +164,8 @@ const db = new sqlite3.Database("./myapp.db", (err) => {
     createTables();
   }
 });
+require("./sqlitecfg").tune(db, { label: "index" });   // 1.99fb: busy_timeout + WAL (sqlitecfg.js)
+require("./dbUtils").startCheckpoints();               // hourly wal_checkpoint(TRUNCATE) so myapp.db-wal stays small
 
 module.exports = db;
 
@@ -3289,7 +3294,7 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
       display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
     });
   } catch (error) {
-    await runQuery("ROLLBACK");
+    await runQuery("ROLLBACK").catch(() => {});   // 1.99fb: nothing open (BEGIN itself failed) must not hide the error
     console.error("Failed to finalize spin:", error);
     res
       .status(500)
@@ -3522,7 +3527,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
       display: spinDisplay({ segment_index: outcome.segmentIndex, payout: outcome.payout, jackpot_pct: outcome.jackpotPct }),
     });
   } catch (error) {
-    await runQuery("ROLLBACK");
+    await runQuery("ROLLBACK").catch(() => {});   // 1.99fb: nothing open (BEGIN itself failed) must not hide the error
     console.error("Failed to finalize spin:", error);
     res
       .status(500)

@@ -2,6 +2,7 @@
 // Run from the app directory on the server:  node migrate-casino-ban.js
 const sqlite3 = require("sqlite3");
 const db = new sqlite3.Database("./myapp.db");
+require("./sqlitecfg").tune(db, { label: "migrate" });   // 1.99fb: busy_timeout + WAL like the site
 
 db.all("PRAGMA table_info(users)", (e, rows) => {
   if (e) { console.error("pragma error:", e.message); return db.close(); }

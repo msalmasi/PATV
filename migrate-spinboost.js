@@ -3,6 +3,7 @@
 // re-run). Run from the app directory on the server:  node migrate-spinboost.js
 const sqlite3 = require("sqlite3");
 const db = new sqlite3.Database("./myapp.db");
+require("./sqlitecfg").tune(db, { label: "migrate" });   // 1.99fb: busy_timeout + WAL like the site
 
 function addPrize() {
   db.get("SELECT prizeId FROM prizes WHERE prizeId = 'spinboost100'", (e, row) => {

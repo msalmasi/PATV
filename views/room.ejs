@@ -88,6 +88,7 @@
   .rm .snap .res { font-size: 12.5px; color: #aaa; overflow-wrap: anywhere; }
   .rm .snap .res.ok { color: #9be3a6; }
   .rm .snap .res.bad { color: #e6a07a; }
+  .rm .snap .res.hint { color: #c9b98a; font-style: italic; }
   .rm .snap .res a { color: #8fd19a; font-weight: bold; }
   /* 1.99ez: 🎬 Clip (camclip.js) */
   .rm .snap button.clip { background: #2a1616; border-color: #7a3030; color: #ffd9d9; font-weight: bold; }
@@ -734,11 +735,12 @@
       var b = el('button', 'clip', '🎬 Clip'); b.type = 'button';
       var sel = el('select', 'clip-secs'); sel.setAttribute('aria-label', 'Clip length');
       (s.clip.secs || [10, 20, 30]).forEach(function (n) { var o = el('option', null, n + ' s'); o.value = n; if (n === s.clip.def) o.selected = true; sel.appendChild(o); });
-      b.title = s.clip.off || ('Pepe records ' + label(who) + '\'s cam - you see it first and only pay if you save it');
+      b.title = s.clip.off || s.clip.hint || ('Pepe records ' + label(who) + '\'s cam - you see it first and only pay if you save it');
       if (s.clip.off) { b.disabled = true; sel.disabled = true; }
       acts.appendChild(b); acts.appendChild(sel);
       box.appendChild(acts); box.appendChild(vid); box.appendChild(res);
       if (s.clip.off) { res.textContent = s.clip.off; }
+      else if (s.clip.hint) { res.className = 'res hint'; res.textContent = s.clip.hint; }   // 1.99fb: an admin while !clip is off
       function say(text, cls, href) {
         res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text;
         if (href) { var a = el('a', null, 'Open it ›'); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }

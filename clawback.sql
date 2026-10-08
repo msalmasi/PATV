@@ -1,5 +1,5 @@
 -- PAT tip-exploit claw-back (d0g3-origin, scripting from 2026-07-16)
--- BACK UP THE DB FIRST:   cp myapp.db myapp.db.bak
+-- BACK UP THE DB FIRST:   sqlite3 myapp.db "VACUUM INTO 'myapp.db.bak'"   (WAL mode since 1.99fb: never cp myapp.db)
 -- Then run:               sqlite3 myapp.db < clawback.sql
 --
 -- Net: removes 72,000,567 minted PAT; 10,000,000 of it is re-seeded into the jackpot.

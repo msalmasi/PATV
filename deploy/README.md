@@ -66,6 +66,22 @@ Staging, and staging Pepe (which writes to it), drift from prod over time. On th
 `bash /home/PATV/deploy/refresh-staging-db.sh` replaces staging's database with a fresh copy of
 prod's. It keeps the old copy as `myapp.db.previous`.
 
+## The database is in WAL mode (1.99fb)
+
+Every connection sets `journal_mode=WAL`, `busy_timeout=5000` and `synchronous=NORMAL` (`sqlitecfg.js`).
+WAL mode is stored in the file, so the first start of 1.99fb switches the database for good. Recent commits
+sit in `myapp.db-wal` until a checkpoint. The site checkpoints every hour, and `backup-db.js` checkpoints after
+the nightly backup.
+
+- **Never copy `myapp.db` by itself** (`cp`, `scp`, `fs.copyFile`): the copy can miss data. Back up through
+  SQLite instead: `node backup-db.js --db=... --dir=...` (online backup API, verified), or
+  `sqlite3 myapp.db "VACUUM INTO '/path/copy.db'"`, or `sqlite3 myapp.db ".backup '/path/copy.db'"`.
+- Don't delete `myapp.db-wal` / `myapp.db-shm` while anything has the database open.
+- Read-only inspection is fine: `sqlite3 -readonly myapp.db`.
+- Roll back to the old journal: stop the site (`pm2 stop index`, the only app with the database open), revert the WAL line in
+  `sqlitecfg.js`, run `sqlite3 /home/PATV/myapp.db "PRAGMA journal_mode=DELETE;"` (it must print `delete`),
+  then start the site.
+
 ## DNS
 
 `python deploy/cfdns.py list | set A name ip [--proxied] | delete name` manages publicaccess.tv records. The token is read from `~/.config/cloudflare/publicaccess.token`; never commit it.

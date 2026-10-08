@@ -1,5 +1,6 @@
 // dbUtils.js
 const sqlite3 = require('sqlite3').verbose();
+const sqlitecfg = require('./sqlitecfg');
 
 // Connect to SQLite database
 const db = new sqlite3.Database('./myapp.db', (err) => {
@@ -9,6 +10,10 @@ const db = new sqlite3.Database('./myapp.db', (err) => {
         console.log('Database connected.');
     }
 });
+// 1.99fb: busy_timeout 5 s + WAL + synchronous=NORMAL on this connection (sqlitecfg.js - and why a plain file copy of
+// myapp.db is no longer a backup). `ready` resolves with what the connection ended up with.
+const ready = sqlitecfg.tune(db, { label: 'dbUtils' });
+ready.then((m) => { if (m.journal_mode !== 'memory') console.log(`[sqlite] journal_mode=${m.journal_mode} synchronous=${m.synchronous} busy_timeout=${m.busy_timeout}`); });
 
 // Setup DB
 function createTables() {
@@ -324,9 +329,10 @@ function createTables() {
       });
 }
 
-// Utility functions for inserting and updating data
+// Utility functions for inserting and updating data. 1.99fb: a statement that still hits SQLITE_BUSY after the 5 s
+// busy_timeout is tried again (3 attempts in all, jittered) - a BUSY statement never ran, so a retry is safe.
 function runQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return sqlitecfg.withBusyRetry(() => new Promise((resolve, reject) => {
         db.run(sql, params, function(err) {
             if (err) {
                 reject(err);
@@ -334,11 +340,11 @@ function runQuery(sql, params = []) {
                 resolve({ id: this.lastID, changes: this.changes });
             }
         });
-    });
+    }));
 }
 
 function getQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return sqlitecfg.withBusyRetry(() => new Promise((resolve, reject) => {
         db.all(sql, params, (err, results) => {
             if (err) {
                 reject(err);
@@ -346,7 +352,12 @@ function getQuery(sql, params = []) {
                 resolve(results);
             }
         });
-    });
+    }));
+}
+
+/** 1.99fb: fold the WAL back into myapp.db every hour (the site process only - index.js calls it). */
+function startCheckpoints() {
+    return sqlitecfg.startCheckpoints(db, { label: 'myapp.db' });
 }
 
 // Close the database connection when the Node.js process terminates
@@ -360,4 +371,4 @@ process.on('SIGINT', () => {
     });
   });
 
-module.exports = { createTables, runQuery, getQuery };
+module.exports = { createTables, runQuery, getQuery, startCheckpoints, ready, db };

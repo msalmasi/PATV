@@ -1,6 +1,12 @@
 # ignore all .a files
 *.db
 *.sqlite
+# SQLite WAL mode (1.99fb) + journals: live side files of myapp.db - never commit them
+*.db-wal
+*.db-shm
+*.db-journal
+*.db.part
+*.db.gz.part
 
 # ignore .env
 .env

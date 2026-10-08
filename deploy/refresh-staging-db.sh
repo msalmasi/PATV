@@ -13,11 +13,17 @@ set +u; . "$NVM_DIR/nvm.sh" >/dev/null; nvm use --silent 20 >/dev/null; set -u
 S=/home/PATV-staging
 [ -f "$S/myapp.db" ] || { echo "no staging checkout at $S"; exit 1; }
 
-# Take the copy first, while staging still runs: .backup is consistent even with prod writing.
-sqlite3 /home/PATV/myapp.db ".backup '$S/myapp.db.new'"
+# Take the copy first, while staging still runs. 1.99fb: prod's DB is in WAL mode (recent commits sit in myapp.db-wal),
+# so copy it through SQLite - VACUUM INTO is one consistent read (a busy prod can't restart it the way it can restart a
+# page-by-page .backup), waits up to 30 s for a lock, and writes a single self-contained file. Never copy the file itself.
+rm -f "$S/myapp.db.new" "$S/myapp.db.new-wal" "$S/myapp.db.new-shm"
+sqlite3 -cmd ".timeout 30000" /home/PATV/myapp.db "VACUUM INTO '$S/myapp.db.new';"
+[ "$(sqlite3 "$S/myapp.db.new" 'PRAGMA integrity_check;')" = "ok" ] || { echo "the copy failed integrity_check - staging untouched"; rm -f "$S/myapp.db.new"; exit 1; }
 echo "prod copied: $(du -h "$S/myapp.db.new" | cut -f1), $(sqlite3 "$S/myapp.db.new" 'select count(*) from users') users"
 
 pm2 stop patv-staging >/dev/null
+# fold staging's own WAL into its file before it's kept as .previous (its -wal / -shm are deleted below)
+sqlite3 -cmd ".timeout 10000" "$S/myapp.db" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null || true
 mv -f "$S/myapp.db" "$S/myapp.db.previous"
 rm -f "$S/myapp.db-wal" "$S/myapp.db-shm" "$S/myapp.db.previous-wal" "$S/myapp.db.previous-shm"
 mv "$S/myapp.db.new" "$S/myapp.db"

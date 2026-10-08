@@ -36,6 +36,7 @@ const db = new sqlite3.Database('./myapp.db', (err) => {
       console.log('Database connected.');
   }
 });
+require('./sqlitecfg').tune(db, { label: 'user.controller' });   // 1.99fb: busy_timeout + WAL (sqlitecfg.js)
 
 // ---------------------------------------------------------------------------------------------
 // Sign-up and sign-in (views/register.ejs, views/login.ejs)

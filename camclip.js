@@ -6,7 +6,10 @@
 //      Refused unless: the room is bridged and live with cam snapshots on (!bridge cams on); the person is on cam, not
 //      Pepe, not private (bridge-hidden / !incognito = anon on the roster; an account that hides its activity -
 //      stories.privateLogins); the room's !snap switch is on (bridge.snapSwitch - unknown counts as off, like stage
-//      clips) and (1.99fa) its !clip switch too (bridge.clipSwitch - unknown = off; save is refused the same way); nobody is already clipping that cam (ONE clip per cam at a time - Pepe enforces it too); the account's
+//      clips) and (1.99fa) its !clip switch too (bridge.clipSwitch - unknown = off; save is refused the same way) - except
+//      (1.99fb) for admins, like chat !clip: a viewer with Pepe's room-moderation caps (the pad's ⋯ menu, padmod.capsFor
+//      on their linked login) or a site admin is let through while it's off / unknown and Pepe makes the final call
+//      (his chat !clip admin check on the linked login); nobody is already clipping that cam (ONE clip per cam at a time - Pepe enforces it too); the account's
 //      rate limit (one every CLIP_GAP, CLIP_BURST per CLIP_WINDOW) and open-preview cap.
 //      It becomes a bridge job (kind "camclip", offered ONCE - a re-offer after a lost ack must never start a second
 //      recording) handed to Pepe in his /api/bridge/sync response.
@@ -50,12 +53,21 @@ const clips = new Map();   // job id -> {id, roomId, login, userId, username, se
 const OFF = "Snaps are off in this room (a mod can turn them on with !snap on).";
 const CLIP_OFF = "Clips are switched off in this room (!clip).";   // 1.99fa: Pepe's E_FEATURE_OFF wording
 const CODE_RE = /^E_[A-Z_]{2,30}$/;
+const ADMIN_HINT = "Clips are off for members (!clip) — you can still clip as an admin";   // 1.99fb
 const deps = {
   snapSwitch: (roomId) => { try { return require("./bridge").snapSwitch(roomId); } catch (e) { return null; } },
   clipSwitch: (roomId) => { try { return require("./bridge").clipSwitch(roomId); } catch (e) { return null; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
+  modCaps: (R, login) => { try { return require("./padmod").capsFor(R, login); } catch (e) { return null; } },
   queueAction: (...a) => require("./actions").queue(...a),
 };
+/** 1.99fb: may this account clip while the room's !clip is off / unknown? Site admins, and anyone Pepe gave
+ *  room-moderation caps on their linked login (the ⋯ menu's source). Pepe re-checks with chat !clip's admin rule. */
+function clipAdmin(R, u) {
+  if (!u) return false;
+  if (u.class === "Admin") return true;
+  return !!(u.camfrogUsername && deps.modCaps(R, u.camfrogUsername));
+}
 function _setDeps(d) { Object.assign(deps, d || {}); }
 function _setClock(fn) { NOW = fn; }
 function _setDir(d) { PENDING_DIR = d; }
@@ -92,23 +104,25 @@ function view(c, slug) {
            saveRule: c.rule || null, ...(c.code ? { code: c.code } : {}) };
 }
 
-/** The popover's "🎬 Clip" for `userId` on `login`'s cam in room R: {secs, def, off: why it's greyed out | null, busy}. */
+/** The popover's "🎬 Clip" for `userId` on `login`'s cam in room R: {secs, def, off: why it's greyed out | null, busy,
+ *  hint: a note shown with an enabled button (1.99fb: an admin while !clip is off)}. */
 async function clipInfo(R, userId, login) {
-  const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
-  let off = null;
+  const u = (await getQuery("SELECT camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
+  let off = null, hint = null;
   if (!u || !u.camfrogUsername) off = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
   else if (deps.snapSwitch(R.id) !== true) off = OFF;
-  else if (deps.clipSwitch(R.id) !== true) off = CLIP_OFF;
+  else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF;
   else if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";
   const b = busyFor(R.id, String(login).toLowerCase());
-  return { secs: SECS, def: SECS_DEFAULT, off, busy: b ? (b.userId === userId ? b.id : true) : null };
+  if (!off && deps.clipSwitch(R.id) !== true) hint = ADMIN_HINT;
+  return { secs: SECS, def: SECS_DEFAULT, off, busy: b ? (b.userId === userId ? b.id : true) : null, ...(hint ? { hint } : {}) };
 }
 
 function register(app, { isBotToken, addUser, bySlug, isLive }) {
   try { fs.mkdirSync(PENDING_DIR, { recursive: true }); } catch (e) { /* exists */ }
   const me = async (req) => {
     if (!req.user || !req.user.userId) return null;
-    return (await getQuery("SELECT userId, username, displayname, camfrogUsername FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
+    return (await getQuery("SELECT userId, username, displayname, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0] || null;
   };
   const jsonOnly = (req, res) => {
     if (!req.is("application/json") || req.get("X-Requested-With") !== "fetch") { res.status(400).json({ ok: false, error: "Bad request." }); return false; }
@@ -137,7 +151,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
       if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF });
-      if (deps.clipSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
+      if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
       const busy = busyFor(R.id, login);
       if (busy) return res.status(409).json({ ok: false, error: busy.userId === u.userId ? "You're already clipping their cam." : "Pepe is already clipping their cam - try again in a bit.", id: busy.userId === u.userId ? busy.id : undefined });
       const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || c.state === "ready")).length;
@@ -238,7 +252,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired - record a fresh one." });
       if (!c.rule || c.rule === "no" || !c.viewerOk) return res.status(403).json({ ok: false, error: "Clips of them can't be saved here." });
       if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF });
-      if (deps.clipSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
+      if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
       if (c.save) {
         const a = (await getQuery("SELECT status FROM pepe_actions WHERE id = ? AND user_id = ?", [c.save, u.userId]))[0];
         if (a && a.status !== "failed") return res.json({ ok: true, id: c.save, again: true });       // one save per clip
@@ -277,4 +291,4 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
   });
 }
 
-module.exports = { register, sweep, busyFor, clipInfo, SECS, SECS_DEFAULT, PREVIEW_TTL, _clips: clips, _setDeps, _setClock, _setDir, fileOf };
+module.exports = { register, sweep, busyFor, clipInfo, clipAdmin, ADMIN_HINT, SECS, SECS_DEFAULT, PREVIEW_TTL, _clips: clips, _setDeps, _setClock, _setDir, fileOf };
