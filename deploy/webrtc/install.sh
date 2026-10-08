@@ -80,10 +80,15 @@ ok "public IP $PUBLIC_IP, $HOST points here, auth hook -> $AUTH_SITE ($AUTH_URL)
 busy="$(ss -Hlnptu 2>/dev/null | awk '$5 ~ /:(8189|3478|5349|8888|8889|9997|8554)$/' | grep -vE '"(mediamtx|turnserver)"' || true)"
 [ -z "$busy" ] || die "ports already in use by something else: $busy"
 # 1.99fd: Pepe's WHIP relay (pepe-relay.sh) is ffmpeg: RTSP in, Opus decoded, AAC encoded, FLV (RTMP) out
-ffmpeg -hide_banner -decoders 2>/dev/null | grep -qE '^ A[.A-Z]{5} opus ' || die "ffmpeg has no opus decoder (Pepe's WHIP relay needs it)"
-ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE '^ A[.A-Z]{5} aac ' || die "ffmpeg has no aac encoder (Pepe's WHIP relay needs it)"
-ffmpeg -hide_banner -formats 2>/dev/null | grep -qE '^ D[E ] rtsp ' || die "ffmpeg can't read rtsp (Pepe's WHIP relay needs it)"
-ffmpeg -hide_banner -formats 2>/dev/null | grep -qE '^ [D ]E flv ' || die "ffmpeg can't write flv (Pepe's WHIP relay needs it)"
+# 1.99fh: the lists are read in full first - `ffmpeg ... | grep -q` under pipefail fails at random (grep -q exits at
+# the first match, ffmpeg gets SIGPIPE writing the rest, the pipeline returns 141)
+FF_DEC="$(ffmpeg -hide_banner -decoders 2>/dev/null || true)"
+FF_ENC="$(ffmpeg -hide_banner -encoders 2>/dev/null || true)"
+FF_FMT="$(ffmpeg -hide_banner -formats 2>/dev/null || true)"
+grep -qE '^ A[.A-Z]{5} opus ' <<<"$FF_DEC" || die "ffmpeg has no opus decoder (Pepe's WHIP relay needs it)"
+grep -qE '^ A[.A-Z]{5} aac ' <<<"$FF_ENC" || die "ffmpeg has no aac encoder (Pepe's WHIP relay needs it)"
+grep -qE '^ D[E ] rtsp ' <<<"$FF_FMT" || die "ffmpeg can't read rtsp (Pepe's WHIP relay needs it)"
+grep -qE '^ [D ]E flv ' <<<"$FF_FMT" || die "ffmpeg can't write flv (Pepe's WHIP relay needs it)"
 ok "ffmpeg $(ffmpeg -hide_banner -version | awk 'NR == 1 { print $3 }'): opus decoder, aac encoder, rtsp in, flv out"
 # a config change below restarts MediaMTX: every WHIP publisher / WHEP viewer reconnects (OBS does it by itself)
 if live="$(curl -fsS --max-time 5 http://127.0.0.1:9997/v3/paths/list 2>/dev/null | python3 -c 'import json, sys; print(" ".join(p["name"] for p in json.load(sys.stdin).get("items", []) if p.get("ready") or p.get("available")))' 2>/dev/null)" && [ -n "$live" ]; then
