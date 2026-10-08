@@ -82,6 +82,38 @@ the nightly backup.
   `sqlitecfg.js`, run `sqlite3 /home/PATV/myapp.db "PRAGMA journal_mode=DELETE;"` (it must print `delete`),
   then start the site.
 
+## Database backups (daily, 14-day retention)
+
+Root's crontab runs `/usr/bin/node /home/PATV/backup-db.js` at 03:00 (log: `/home/PATV/backups/backup.log`).
+Each run takes a verified copy (online backup API + `integrity_check`), gzips it to `*.gz.part` and renames it into place:
+
+| File | Written | Kept |
+|---|---|---|
+| `backups/daily/database_backup_daily_YYYY-MM-DD.db.gz` | every night | 14 days; `backup-db.js` prunes older ones **after a successful backup only**, and always keeps the 14 newest |
+| `backups/database_backup_YYYY-MM.db.gz` | the month's **first** good backup; never overwritten (re-made if missing or 0 bytes) | 365 days (`/etc/cron.d/patv-backup-prune`) |
+
+- The cron prune uses `find ... -maxdepth 1`, so it never touches `daily/`; the 14-day rule never touches the monthly
+  files or anything else in `backups/` (`myapp-pre-*.db` snapshots, `*-keep-*` files).
+- It refuses to run (nothing written, nothing pruned, exit 1) with under 2 GB free in the backup folder.
+- One log line per run: daily file + size, monthly `created` / `kept` / `replaced 0-byte file`, `pruned=N`, free space.
+- Disk use: about 14 x 52 MB dailies + one ~52 MB file per month.
+- Options: `--db=PATH` / `--db=staging` (= `/home/PATV-staging/myapp.db`, default `--dir=/root/staging-backups`),
+  `--dir=DIR`, `--date=YYYY-MM-DD` (test hook: pretend it's that day), `--name=x.db` (one-off `DIR/x.db.gz` only).
+  Try it without touching prod's folder: `/usr/bin/node /home/PATV/backup-db.js --db=staging --dir=/tmp/bk-test`.
+
+### Restoring
+
+1. Pick the file and unpack it somewhere else first:
+   `gunzip -c /home/PATV/backups/daily/database_backup_daily_2026-10-08.db.gz > /root/restore.db`
+2. Check it: `sqlite3 -readonly /root/restore.db "PRAGMA integrity_check;"` must print `ok`.
+3. Keep the current database: `sqlite3 /home/PATV/myapp.db "VACUUM INTO '/home/PATV/backups/myapp-pre-restore-$(date +%Y%m%d-%H%M%S).db'"`.
+4. Stop the site: `pm2 stop index` (the only app with the database open).
+5. Either
+   - copy it into place: `cp /root/restore.db /home/PATV/myapp.db && rm -f /home/PATV/myapp.db-wal /home/PATV/myapp.db-shm`
+     (only with the site stopped - a leftover `-wal` from the old database must not be kept), or
+   - let SQLite do it: `sqlite3 /home/PATV/myapp.db ".restore '/root/restore.db'"`.
+6. `pm2 start index`, check the site, then delete `/root/restore.db`.
+
 ## DNS
 
 `python deploy/cfdns.py list | set A name ip [--proxied] | delete name` manages publicaccess.tv records. The token is read from `~/.config/cloudflare/publicaccess.token`; never commit it.
