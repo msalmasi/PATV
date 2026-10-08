@@ -371,6 +371,14 @@ test("the page has no horizontal overflow rules missing (mobile) and its scripts
   for (const f of ["help-page.js", "helpsearch.js"]) new Function(fs.readFileSync(path.join(repo, "public", "js", f), "utf8"));
 });
 
+test("the site's global JSON parser (100 kb) skips the help sync - the data is ~250 kb, help.js parses it with 3 mb", () => {
+  const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
+  const line = src.split(/\r?\n/).find((l) => l.includes("? next() : express.json()(req, res, next)"));
+  assert.ok(line, "the skip list");
+  assert.ok(line.includes('req.path === "/api/pepe/help/sync"'));
+  assert.ok(Buffer.byteLength(JSON.stringify(BUNDLED)) > 100 * 1024, "(why: bigger than the default limit)");
+});
+
 test("navbar + footer + guides point at /help, not Netlify", () => {
   const layout = fs.readFileSync(path.join(repo, "views", "layout.ejs"), "utf8");
   assert.match(layout, /\['\/help', '<img src="\/public\/img\/pepe.png" height="16" alt="">', 'PepeFrog commands'\]/);
