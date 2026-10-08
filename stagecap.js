@@ -475,6 +475,13 @@ async function canDelete(user, m) {
   if (!user || !user.userId || !m) return false;
   if (deps.isStaff(user)) return true;
   if (m.room && (await deps.canManage(user, m.room))) return true;
+  // 1.99ez: a member's own story upload (userstories.js): the uploader, or a mod of the pad's Camfrog room
+  if (m.source === "user") {
+    if (m.by_user_id && m.by_user_id === user.userId) return true;
+    if (!m.room) return false;
+    const acct = user.camfrogUsername !== undefined ? user : await require("./feedstore").account(user.userId).catch(() => null);
+    return !!acct && require("./storykeep").isPadMod(acct, m.room);
+  }
   if (m.source !== "stage") return false;
   if (m.by_user_id && m.by_user_id === user.userId) return true;
   if (m.slot_id) {
@@ -488,7 +495,10 @@ async function remove(user, mediaId) {
   if (!/^[a-f0-9]{8,32}$/i.test(String(mediaId || ""))) throw refuse(404, "No such capture.");
   const m = (await getQuery("SELECT * FROM media WHERE id = ? AND deleted = 0", [String(mediaId)]))[0];
   if (!m) throw refuse(404, "No such capture.");
-  if (!(await canDelete(user, m))) throw refuse(403, "Only the pad's owner, an admin, the person who took it or the streamer can delete this.");
+  if (!(await canDelete(user, m))) {
+    throw refuse(403, m.source === "user" ? "Only the person who posted this story, the pad's owner or mods, or an admin can remove it."
+      : "Only the pad's owner, an admin, the person who took it or the streamer can delete this.");
+  }
   try { fs.unlinkSync(path.join(media.DIR, m.file)); } catch (e) { /* gone */ }
   media.removePoster(m.id);
   await runQuery("UPDATE media SET deleted = 1 WHERE id = ?", [m.id]);

@@ -123,7 +123,8 @@ function limited(key, gap, burst, windowMs) {
 function sweep(now) {
   for (const [id, j] of jobs) {
     const open = j.state !== "done";
-    if (open ? now - j.at > (j.kind === "clip" ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
+    // 1.99ez: a cam clip (camclip.js) records for up to 30 s after Pepe gets to it - kept like a mic clip
+    if (open ? now - j.at > (j.kind === "clip" || j.kind === "camclip" ? CLIP_TTL : JOB_TTL) : now - (j.doneAt || j.at) > JOB_TTL) jobs.delete(id);
   }
   for (const [k, s] of snaps) if (now - s.ts > SNAP_TTL) snaps.delete(k);
   for (const [k, f] of frames) if (now - f.ts > FRAME_TTL) frames.delete(k);
@@ -176,7 +177,8 @@ function takeJobs(liveRoomIds) {
     if (!liveRoomIds.has(j.roomId)) continue;
     // A command is offered ONCE: a re-offer after a lost ack (or a Pepe restart, which forgets the job
     // ids it has seen) could run a paid command twice. Chat lines / clips / snaps may be retried.
-    const due = j.state === "pending" || (j.kind !== "cmd" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    // 1.99ez: a cam clip is offered once too - a re-offer must never start a second recording of the same cam
+    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
@@ -189,6 +191,7 @@ function takeJobs(liveRoomIds) {
     // 1.99ea: the PATV display name for "🌐 <name> (web)" (Pepe falls back to the Camfrog display name, then the login)
     if ((j.kind === "say" || j.kind === "clip") && j.display) base.display = j.display;
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
+    if (j.kind === "camclip") { base.target = j.target; base.viewer = j.username; base.secs = j.secs; }
     out.push(base);
     if (out.length >= 10) break;
   }
@@ -223,7 +226,7 @@ function applyAcks(acks) {
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
-    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "modinfo" || j.gui || j.setting) continue;   // panel jobs: padmod.js
+    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.gui || j.setting) continue;   // panel jobs: padmod.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
     out.push(o);
@@ -395,7 +398,10 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       // 1.99dr: "✨ Use in Generate" - any viewer shown this frame may use it as an AI reference picture
       // (aigen.js claims it by sid, re-checking the room and the person; priced like chat's -cam)
       const gen = s.ok && s.img && s.viewers && s.viewers.has(req.user.userId) ? { sid: s.sid, until: s.ts + SNAP_TTL } : null;
-      return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save, gen,
+      // 1.99ez: "🎬 Clip" (camclip.js) - the lengths, and why it's greyed out here (null = it isn't)
+      let clip = null;
+      if (s.ok && s.img) { try { clip = await require("./camclip").clipInfo(R, req.user.userId, login); } catch (e) { clip = null; } }
+      return res.json({ state: s.ok ? "ok" : "refused", ts: s.ts, status: s.status, save, gen, clip,
         img: s.img ? "data:image/jpeg;base64," + s.img.toString("base64") : null });
     }
     res.json({ state: pending ? "pending" : "none" });

@@ -349,8 +349,8 @@ test("story strip: no native scrollbar (scrollbar-width none + ::-webkit-scrollb
   assert.match(css, /\.ss-scroll\.ovf\.at-start \.ss-arr\.prev, \.ss-scroll\.ovf\.at-end \.ss-arr\.next \{ display: none; \}/);
   const part = rd(path.join(repo, "views", "partials", "story-strip.ejs"));
   assert.match(part, /<div class="ss-scroll">\s*<button type="button" class="ss-arr prev" tabindex="-1"/);
-  assert.match(part, /stories\.css\?v=5/);
-  assert.match(part, /stories\.js\?v=7/);
+  assert.match(part, /stories\.css\?v=6/);
+  assert.match(part, /stories\.js\?v=8/);
   const js = rd(path.join(repo, "public", "js", "stories.js"));
   assert.match(js, /function initStrips\(\)/);
   assert.doesNotMatch(js, /addEventListener\('wheel'/, "the vertical wheel is never hijacked");

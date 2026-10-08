@@ -396,7 +396,7 @@
 </style>
 
 <main class="hm">
-  <% if (typeof story !== 'undefined' && story && story.rooms.length) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the pads', next: '/' }) %></div><% } %>
+  <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the pads', next: '/' }) %></div><% } %>
 
   <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
   <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">

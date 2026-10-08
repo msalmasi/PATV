@@ -640,7 +640,8 @@ async function sync(body = {}) {
   for (const id of autoScopes) {
     if (!id) continue;
     try {
-      const caps = await require("./stories").captures(id, 12, { windowMs: DAY });
+      // 1.99ez: Pepe's recaps are about captures - members' own story uploads (source "user") stay out
+      const caps = (await require("./stories").captures(id, 12, { windowMs: DAY })).filter((c) => c.source !== "user");
       if (caps.length) res.snaps[id] = caps.map((c) => ({ kind: c.kind, subject: c.subject || null, at: c.created, page: SITE() + c.page }));
     } catch (e) { /* none */ }
   }

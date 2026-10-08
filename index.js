@@ -1091,6 +1091,7 @@ messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + 
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
 require("./feedseen").register(app, { addUser });  // 1.99ex: the feed's "N new" seen state per account (GET/POST /api/feed/seen)
 require("./storykeep").register(app, { addUser });   // 1.99eq: stories -> 📌 Post to pad / 🔖 Save (/u/<me>/saved), "Remove me"
+require("./userstories").register(app, { addUser });  // 1.99ez: your own story (pad / profile), captures of you in your story
 require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen media viewer (/hop, /p/<pad>/hop, /u/<user>/hop, /api/hop)
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
@@ -1351,6 +1352,14 @@ app.post("/logout", (req, res) => {
 // 1.99dv: the profile is /u/<username> (was /u/<username>/profile) - its default tab (Posts) - and each tab is a path:
 // /u/<username>/posts, /u/<username>/overview, /u/<username>/analytics; the editor is /u/<username>/edit. The old
 // addresses (/profile, /profile?tab=, /profile/edit) 301 (pads.js).
+// 1.99ez: the profile's story strip - the member's person story (signed in: items; signed out: the circle only)
+async function profileStoryFor(user, viewer, owner) {
+  const US = require("./userstories");
+  const signed = !!(viewer && viewer.userId);
+  const st = await US.personStory(signed ? viewer : null, user.userId);
+  return { rooms: st ? [st] : [], signed, owner, prefs: owner ? await US.prefs(user.userId) : null, uid: user.userId };
+}
+
 // Get user profile
 app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
@@ -1411,6 +1420,9 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser
         social: await require("./feedweb").profileSocial(user, preview ? null : req.user, { show: L.show("posts"), query: req.query, host: req.hostname || "publicaccess.tv" })
           .catch((e) => { console.error("profile social:", e.message); return null; }),
         previewVisitor: preview,
+        // 1.99ez: their story ring (own uploads + captures of them, userstories.js); the owner also gets "＋ Your story"
+        // and the "Show captures of me in my story" switch
+        profileStory: await profileStoryFor(user, preview ? null : req.user, isOwner && !preview).catch((e) => { console.error("profile story:", e.message); return null; }),
         // the owner's recent "New avatar" requests (website action queue, tag "avatar")
         avatarActs: isOwner && !preview ? await require("./actions").recentFor(req.user.userId, "avatar", 3) : [],
         avatarMsg: isOwner && !preview ? String(req.query.msg || "").slice(0, 200) : "",

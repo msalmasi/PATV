@@ -296,6 +296,31 @@
     <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
 
+  <%# 1.99ez: their story ring (own uploads + captures of them, userstories.js); the owner adds stories and picks whether
+      captures of them show here %>
+  <% const pst_ = typeof profileStory !== 'undefined' && profileStory ? profileStory : null; %>
+  <% if (pst_ && (pst_.rooms.length || pst_.owner)) { %>
+    <section class="card pf-story" aria-label="Story">
+      <%- include('partials/story-strip', { story: { rooms: pst_.rooms, caps: [], room: null, signed: pst_.signed, compose: pst_.owner, pad: 'profile' }, heading: '📸 Story', next: base }) %>
+      <% if (pst_.owner && pst_.prefs) { %>
+        <label class="pf-story-set"><input type="checkbox" data-story-pref="capturesOfMe"<%= pst_.prefs.capturesOfMe ? ' checked' : '' %>> Show captures of me in my story (snaps and clips of my cam or my stream from the last 24 h)</label>
+        <script>
+          (function () {
+            var c = document.querySelector('[data-story-pref="capturesOfMe"]');
+            if (!c) return;
+            c.addEventListener('change', function () {
+              c.disabled = true;
+              fetch('/api/stories/prefs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+                body: JSON.stringify({ capturesOfMe: c.checked }) }).then(function (r) { return r.json(); })
+                .then(function (d) { c.disabled = false; if (!d.ok) { c.checked = !c.checked; alert(d.error || 'Not saved.'); } else location.reload(); })
+                .catch(function () { c.disabled = false; c.checked = !c.checked; });
+            });
+          })();
+        </script>
+      <% } %>
+    </section>
+  <% } %>
+
   <% if (previewing) { %>
     <div class="pf-bar preview" role="status"><span>👁 Previewing your profile as a visitor sees it — hidden sections and “only me &amp; admins” panels are left out.</span>
       <span class="btns"><a class="btn" href="<%= tabHref(active === 'posts' ? '' : active) %>">Back to my view</a><a class="btn" href="<%= base %>/edit#layout">Edit layout</a></span></div>

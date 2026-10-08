@@ -545,6 +545,7 @@ function register(app, { isBotToken, addUser }) {
   });
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
+  require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive });   // 1.99ez: 🎬 cam clips from the snapshot popover
   require("./padmod").register(app, { addUser, bySlug, isLive });     // 1.99co: the pad Manage panel
 
   // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that

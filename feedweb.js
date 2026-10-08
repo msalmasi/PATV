@@ -367,8 +367,11 @@ function register(app, { addUser, isBotToken }) {
       const story = {
         room: R ? R.id : null,
         caps: viewer && R ? await captures(R.id, 24) : [],
-        rooms: viewer && R ? [] : await stories.forViewer(viewer, { room: R ? R.id : null }),
+        // 1.99ez: Following leads with the stories of the people the viewer follows (their uploads + captures of them)
+        rooms: viewer && R ? [] : await stories.forViewer(viewer, { room: R ? R.id : null,
+          people: mode === "following" && follow ? follow.people.map((p) => p.id) : null }),
         signed: !!viewer,
+        compose: !!viewer,                  // 1.99ez: "＋ Your story" (story-compose.js)
       };
       res.set("X-Robots-Tag", "noindex");
       res.render("feed", {
@@ -526,7 +529,13 @@ function register(app, { addUser, isBotToken }) {
       const kind = ["image", "audio", "video"].includes(b.kind) ? b.kind : null;
       const size = Math.floor(Number(b.size));
       if (!kind) return res.status(400).json({ ok: false, error: "Only pictures, audio and video." });
-      const capMb = { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb }[kind];
+      // 1.99ez: a story upload (userstories.js) - a picture or a video only, smaller caps, the 30 s cap at processing
+      const story = b.purpose === "story";
+      if (story && kind === "audio") return res.status(400).json({ ok: false, error: "Stories are a picture or a short video." });
+      const US = story ? require("./userstories") : null;
+      if (US) await US.init();
+      const capMb = story ? Math.min(kind === "image" ? US.STORY_MAX_IMAGE_MB : US.STORY_MAX_VIDEO_MB, kind === "image" ? C.max_image_mb : C.max_video_mb)
+        : { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb }[kind];
       if (!Number.isFinite(size) || size < 12) return res.status(400).json({ ok: false, error: "That file is empty." });
       if (size > capMb * 1024 * 1024) return res.status(413).json({ ok: false, error: `${kind === "image" ? "Pictures" : kind === "audio" ? "Audio files" : "Videos"} can be up to ${capMb} MB.` });
       const refusal = await store.postRefusal(u, [], { media: true });
@@ -548,8 +557,13 @@ function register(app, { addUser, isBotToken }) {
         return res.status(507).json({ ok: false, error: "The feed's storage is full right now - try again later." });
       }
       const id = require("crypto").randomBytes(12).toString("hex");
-      await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received) VALUES (?, ?, ?, 'uploading', ?, ?, 0)`,
-                     [id, u.userId, kind, t, size]);
+      if (story) {
+        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received, purpose) VALUES (?, ?, ?, 'uploading', ?, ?, 0, 'story')`,
+                       [id, u.userId, kind, t, size]);
+      } else {
+        await runQuery(`INSERT INTO feed_attachments (id, owner_id, kind, state, created, size_declared, received) VALUES (?, ?, ?, 'uploading', ?, ?, 0)`,
+                       [id, u.userId, kind, t, size]);
+      }
       fs.writeFileSync(media.tmpPath(id), Buffer.alloc(0), { flag: "wx" });
       res.json({ ok: true, id, chunk: media.CHUNK });
     } catch (e) { fail(res, e); }
@@ -613,7 +627,12 @@ function register(app, { addUser, isBotToken }) {
       fs.closeSync(fd);
       const sn = media.sniff(head);                       // again, on the assembled file
       if (sn.bad) throw new media.MediaError(sn.bad);
-      const C = store.config();
+      let C = store.config();
+      // 1.99ez: story uploads - video up to userstories.STORY_MAX_SECS; never audio
+      if (a.purpose === "story") {
+        C = { ...C, max_video_secs: Math.min(C.max_video_secs, require("./userstories").STORY_MAX_SECS) };
+        if (sn.kind === "audio") throw new media.MediaError("Stories are a picture or a short video.");
+      }
       const out = sn.kind === "image" ? await media.processImage(tmp, sn.fmt)
         : await media.processAv(tmp, { ...sn, kind: sn.kind === "av" ? a.kind : sn.kind }, C);
       if (a.kind === "image" && out.kind !== "image") throw new media.MediaError("That file isn't a picture.");

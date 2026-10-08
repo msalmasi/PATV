@@ -20,6 +20,12 @@
 //     NSFW rules don't apply here. 1.99cr: STAGE captures (stagecap.js, source "stage") of a slot its
 //     streamer marked NSFW are nsfw: blurred behind a tap in the viewer, never a story cover
 //   * rows whose file is gone are skipped (they used to render as broken images)
+//
+// 1.99ez (userstories.js): members' own stories (media source "user": a picture / short video they uploaded to a pad
+// or their profile) sit in the same strips, credited to the uploader; a PERSON story (id user:<userId>, the profile
+// pad's id) is a member's profile uploads + the captures of them (unless they turned that off, went private or hid
+// one). The homepage / /feed strip gets a person circle for each member with a profile upload (and the viewer's own);
+// the Following tab's strip leads with the people the viewer follows (forViewer {people}).
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
@@ -77,7 +83,8 @@ async function privateLogins(logins) {
  */
 async function clean(rows) {
   const live = rows.filter((r) => media.fileExists(r));
-  const priv = await privateLogins(live.flatMap((r) => [r.subject, r.by_user]));
+  // 1.99ez: a member's own upload (source "user") is credited to their PATV display name - not a Camfrog login
+  const priv = await privateLogins(live.flatMap((r) => (r.source === "user" ? [] : [r.subject, r.by_user])));
   const name = (s, anon) => {
     const n = String(s || "").trim();
     if (!n || anon || priv.has(n.toLowerCase())) return null;
@@ -85,17 +92,19 @@ async function clean(rows) {
   };
   return live.map((r) => ({
     id: r.id, kind: r.kind === "clip" || r.kind === "audio" ? r.kind : "photo", src: "/media/" + encodeURIComponent(r.id) + "/raw",
-    page: "/media/" + encodeURIComponent(r.id), subject: name(r.subject, r.anon), by: name(r.by_user, false),
+    page: "/media/" + encodeURIComponent(r.id), subject: r.source === "user" ? null : name(r.subject, r.anon),
+    by: r.source === "user" ? String(r.by_user || "").trim().slice(0, 60) || null : name(r.by_user, false),
     room: r.room || "", created: Number(r.created) || 0, expires: Number(r.expires) || 0, secs: Number(r.secs) || 0,
     // 1.99cr: stage captures (stagecap.js) read "📺 Stage snap/clip of <stream> by <user>"; NSFW comes from the slot
-    source: r.source === "stage" ? "stage" : "cam", nsfw: !!Number(r.nsfw || 0),
+    // 1.99ez: "user" = a member's own story upload (userstories.js); NSFW = their tick or the safety check
+    source: r.source === "stage" ? "stage" : r.source === "user" ? "user" : "cam", nsfw: !!Number(r.nsfw || 0),
     // 1.99dq: a clip's poster frame / an audio capture's waveform card (media.js) - null until it's made
     poster: media.hasPoster(r) ? "/media/" + encodeURIComponent(r.id) + "/poster" : null,
   }));
 }
 
 /** Live captures (newest first), optionally one room. Used by the room feed strip and /feed. */
-async function captures(roomId, limit = 12, { windowMs = null } = {}) {
+async function captures(roomId, limit = 12, { windowMs = null, noProfiles = false } = {}) {
   try {
     await init();
     const C = await mediaCols();
@@ -104,6 +113,7 @@ async function captures(roomId, limit = 12, { windowMs = null } = {}) {
     if (windowMs) { where.push("created > ?"); args.push(t - windowMs); }
     if (roomId) { where.push("room = ?"); args.push(roomId); }
     const opt = (c, d) => (C.has(c) ? c : `${d} AS ${c}`);
+    if (noProfiles) where.push("room NOT LIKE 'user:%'");
     const rows = await getQuery(`SELECT id, kind, file, subject, by_user, room, created, expires, secs, ${opt("anon", "0")}, ${opt("source", "NULL")}, ${opt("nsfw", "0")}
                                  FROM media WHERE ${where.join(" AND ")} ORDER BY created DESC LIMIT ?`, [...args, Math.min(MAX_ITEMS, limit)]);
     return await clean(rows);
@@ -115,6 +125,10 @@ async function captures(roomId, limit = 12, { windowMs = null } = {}) {
 
 function roomInfo(roomId) {
   const R = rooms.getCached(roomId);
+  if (R && rooms.isProfile(roomId)) {             // 1.99ez: not reached by forViewer (person stories), kept safe anyway
+    const href = require("./pads").padHref(R);
+    return { id: roomId, title: R.title, href, feed: href };
+  }
   let slug = R ? R.slug : null;
   if (R) { try { slug = require("./roomsweb").linkSlug(R); } catch (e) { /* registry slug */ } }
   return {
@@ -136,13 +150,16 @@ async function seenMap(userId) {
  * seen state, a cover (the newest photo or clip poster). Signed out: rooms and counts only.
  * Order: unseen rooms first, then by the newest capture.
  */
-async function forViewer(viewer, { room = null } = {}) {
+async function forViewer(viewer, { room = null, people = null } = {}) {
   await rooms.init();
-  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS })).filter((c) => c.room);
+  // 1.99ez: profile-pad stories (room user:<id>) are PERSON stories (userstories.js), never pad circles
+  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room);
   const signed = !!(viewer && viewer.userId);
   const seen = signed ? await seenMap(viewer.userId) : new Map();
   // 1.99eq: what this viewer may do with each capture (📌 Post to pad / 🔖 Save - storykeep.js; the server re-checks)
   if (signed) { try { await require("./storykeep").annotate(viewer, items); } catch (e) { console.error("[stories] annotate:", e.message); } }
+  // 1.99ez: 🗑 on members' own story uploads (the uploader, the pad's owner / mods, staff)
+  if (signed) { try { await require("./userstories").annotate(viewer, items); } catch (e) { console.error("[stories] annotate (user):", e.message); } }
   const by = new Map();
   for (const c of items) {
     if (!by.has(c.room)) by.set(c.room, []);
@@ -162,6 +179,22 @@ async function forViewer(viewer, { room = null } = {}) {
     else out.push({ ...base, unseen: true, cover: null });
   }
   out.sort((a, b) => (b.unseen - a.unseen) || (b.latest - a.latest));
+  // 1.99ez: person stories - the Following strip's people first (people = their user ids), then (no pad filter) members
+  // with a profile upload and the viewer themselves
+  if (!room) {
+    let lead = [], rest = [];
+    try {
+      const US = require("./userstories");
+      const follow = Array.isArray(people) ? people : [];
+      const extra = (await US.profileUploaders()).concat(signed ? [viewer.userId] : []).filter((u) => !follow.includes(u));
+      lead = follow.length ? await US.people(viewer, follow, { seen }) : [];
+      rest = await US.people(viewer, extra, { seen });
+    } catch (e) { console.error("[stories] people:", e.message); }
+    const ord = (a, b) => (b.unseen - a.unseen) || (b.latest - a.latest);
+    lead.sort(ord);
+    const merged = out.concat(rest).sort(ord);
+    return lead.concat(merged);
+  }
   return out;
 }
 

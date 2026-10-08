@@ -183,7 +183,7 @@ function register(app, { addUser, xpForNextLevel }) {
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top, tops, boostMark: require("./boostmark").boostMark,
-        story: { rooms: storyRooms, caps: [], room: null, signed: !!me }, hot, fx: require("./feedweb").fx,
+        story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx,
         roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, pepeHere,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),

@@ -185,3 +185,30 @@ html.sv-open, html.sv-open body { overflow: hidden; }
 /* 1.99cr: NSFW stage captures wait, blurred, behind a "Show it (18+)" button */
 .sv-stage.nsfw .sv-img, .sv-stage.nsfw .sv-vid { filter: blur(28px); }
 .sv-nsfw { position: absolute; inset: 0; z-index: 3; display: grid; place-content: center; justify-items: center; gap: 10px; background: rgba(0,0,0,.45); color: #fff; font: 15px Ubuntu, sans-serif; text-align: center; padding: 16px; }
+/* 1.99ez: "＋ Your story" (story-compose.js), person circles, the compose dialog, profile story card */
+.ss-c.ss-add .ss-ring { background: repeating-conic-gradient(#4caf50 0 10deg, transparent 10deg 20deg); }
+.ss-c.ss-add .ss-av { background: #142014; }
+.ss-plus { font: 700 30px/1 Ubuntu, sans-serif; color: #c6e94f; }
+.ss-av.ss-person { background: #20202a; }
+.sc-dlg { position: fixed; inset: 0; z-index: 2100; display: grid; place-items: center; background: rgba(0,0,0,.72); padding: 16px; }
+.sc-card { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: #121212; border: 1px solid #2a2a2a; border-radius: 14px; padding: 16px;
+           display: grid; gap: 12px; color: #ddd; font: 14px Ubuntu, sans-serif; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+.sc-card h2 { margin: 0; font-size: 18px; color: #fff; text-transform: none; letter-spacing: 0; }
+.sc-card label { display: grid; gap: 5px; font-size: 13px; color: #bbb; }
+.sc-card select, .sc-card input[type=file] { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #0b0b0b; color: #fff; font: 14px Ubuntu, sans-serif; }
+.sc-card .sc-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sc-card .sc-chk { display: flex; gap: 8px; align-items: center; color: #ddd; }
+.sc-card .sc-chk input { accent-color: #4caf50; }
+.sc-prev { max-height: 260px; border-radius: 10px; overflow: hidden; background: #000; display: grid; place-items: center; }
+.sc-prev img, .sc-prev video { max-width: 100%; max-height: 260px; display: block; }
+.sc-note { font-size: 12px; color: #999; margin: 0; }
+.sc-msg { font-size: 13px; margin: 0; }
+.sc-msg.bad { color: #ef9a9a; }
+.sc-msg.ok { color: #a5d6a7; }
+.sc-msg:empty { display: none; }
+.sc-bar { height: 6px; border-radius: 3px; background: #222; overflow: hidden; }
+.sc-bar i { display: block; height: 100%; width: 0; background: #4caf50; transition: width .2s; }
+.pf-story .ss { margin: 0; }
+.pf-story .pf-story-set { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #bbb; margin-top: 8px; }
+.pf-story .pf-story-set input { accent-color: #4caf50; }
+.sv-where { color: #c6e94f !important; text-decoration: none; }

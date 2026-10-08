@@ -14,6 +14,9 @@
 // 1.99eq: keeping a capture (storykeep.js) - "📌 Post to pad" (a permanent post in its pad, credited to whoever took it;
 // optional caption) and "🔖 Save" (the member's private /u/<me>/saved). Shown per item from its `can` / `saved` /
 // `posted` flags (forViewer); the server checks everything again (who may post, private subjects, removed / expired).
+// 1.99ez: members' own stories (source "user": "<name>'s story", 🗑 Delete for the uploader / the pad's owner / mods /
+// staff - can.del) and person stories (a member's uploads + captures of them; each capture says which pad it's from;
+// the member themselves gets "🙈 Hide from my story" on captures - it doesn't delete the capture).
 (function () {
   'use strict';
   if (window.__patvStories) return;
@@ -197,8 +200,11 @@
     V.room.textContent = R.title; V.room.href = R.href;
     // 1.99cr: stage captures (a stream on the pad's stage, not a Camfrog cam) say so
     var what = it.source === 'stage' ? (it.kind === 'clip' ? '📺 Stage clip' : '📺 Stage snap')
+             : it.source === 'user' ? '✨ Story'
              : it.kind === 'photo' ? '📸 Snap' : it.kind === 'clip' ? '📹 Clip' : '🔊 Audio';
-    V.who.textContent = what + ' of ' + (it.subject || 'someone') + (it.by ? (it.source === 'stage' ? ' by ' : ' · by ') + it.by : '') + (it.nsfw ? ' · NSFW' : '');
+    V.who.textContent = (it.source === 'user' ? '✨ ' + (it.by || 'someone') + '’s story'
+      : what + ' of ' + (it.subject || 'someone') + (it.by ? (it.source === 'stage' ? ' by ' : ' · by ') + it.by : ''))
+      + (it.where && it.where.title ? ' · in ' + it.where.title : '') + (it.nsfw ? ' · NSFW' : '');
     V.when.textContent = ago(it.created);
     V.when.title = new Date(it.created).toLocaleString();
     V.prevRoom.disabled = ri === 0; V.nextRoom.disabled = ri === rooms.length - 1;
@@ -208,11 +214,11 @@
     V.foot.innerHTML = '';
     var openRoom = el('a', 'sv-open-room', 'Open ' + R.title + ' ›'); openRoom.href = R.href; V.foot.appendChild(openRoom);
     // 1.99ec: says what it opens ("Capture page" confused people)
-    var noun = it.kind === 'clip' ? 'clip' : it.kind === 'photo' ? 'snap' : '';
+    var noun = it.source === 'user' ? 'story' : it.kind === 'clip' ? 'clip' : it.kind === 'photo' ? 'snap' : '';
     var page = el('a', 'sv-open-item', noun ? 'Open ' + noun + ' ›' : 'Open ›'); page.href = it.page;
     page.setAttribute('aria-label', 'Open this ' + (noun || 'capture') + '\'s page to share or download');
     V.foot.appendChild(page);
-    V.live.textContent = R.title + ': ' + what + ' of ' + (it.subject || 'someone') + ', ' + (ii + 1) + ' of ' + R.items.length;
+    V.live.textContent = R.title + ': ' + (it.source === 'user' ? (it.by || 'someone') + '’s story' : what + ' of ' + (it.subject || 'someone')) + ', ' + (ii + 1) + ' of ' + R.items.length;
     closePanel(true);
     paintActs(R, it);
     // media
@@ -224,7 +230,7 @@
     var spin = el('div', 'sv-spin'); spin.setAttribute('aria-hidden', 'true'); V.stage.appendChild(spin);
     if (V.gated) {
       var gate = el('div', 'sv-nsfw');
-      gate.appendChild(el('span', null, '🔞 Marked NSFW by the streamer'));
+      gate.appendChild(el('span', null, it.source === 'user' ? '🔞 Marked NSFW' : '🔞 Marked NSFW by the streamer'));
       var show18 = el('button', 'sv-btn primary', 'Show it (18+)'); show18.type = 'button';
       show18.addEventListener('click', function () {
         V.nsfwOk = true; V.gated = false; V.stage.classList.remove('nsfw'); gate.remove();
@@ -242,7 +248,7 @@
     };
     if (it.kind === 'photo') {
       var img = new Image();
-      img.alt = what.replace(/^\S+ /, '') + ' of ' + (it.subject || 'someone') + ' in ' + R.title;
+      img.alt = it.source === 'user' ? (it.by || 'Someone') + '’s story' : what.replace(/^\S+ /, '') + ' of ' + (it.subject || 'someone') + ' in ' + R.title;
       img.className = 'sv-img'; img.decoding = 'async';
       img.onload = function () { if (V.ri !== ri || V.ii !== ii) return; spin.remove(); V.waiting = !!V.gated; V.last = performance.now(); };
       img.onerror = failed;
@@ -334,7 +340,47 @@
       });
       V.acts.appendChild(sb);
     }
+    // 1.99ez: 🗑 a member's own story (the uploader, the pad's owner / mods, staff) / 🙈 hide a capture of me from my story
+    if (can.del) {
+      var db = el('button', 'sv-act', '🗑 ' + (it.mine ? 'Delete' : 'Remove')); db.type = 'button';
+      db.setAttribute('aria-label', it.mine ? 'Delete your story' : 'Remove this story from the pad');
+      db.addEventListener('click', function () {
+        if (!window.confirm(it.mine ? 'Delete this story?' : 'Remove this story?')) return;
+        db.disabled = true;
+        api('/api/stories/' + encodeURIComponent(it.id) + '/delete', {}).then(function () { dropItem(R, it, it.mine ? 'Story deleted' : 'Story removed'); })
+          .catch(function (e) { db.disabled = false; toast(e.message); });
+      });
+      V.acts.appendChild(db);
+    }
+    if (it.hideable) {
+      var hb = el('button', 'sv-act', '🙈 Hide from my story'); hb.type = 'button';
+      hb.setAttribute('aria-label', 'Hide this capture from your story (it stays in its pad)');
+      hb.addEventListener('click', function () {
+        hb.disabled = true;
+        api('/api/stories/' + encodeURIComponent(it.id) + '/hide', {}).then(function () { dropItem(R, it, 'Hidden from your story'); })
+          .catch(function (e) { hb.disabled = false; toast(e.message); });
+      });
+      V.acts.appendChild(hb);
+    }
     V.acts.classList.toggle('hide', !V.acts.children.length);
+  }
+  // take an item out of a story (deleted / hidden) and carry on with the next one
+  function dropItem(R, it, msg) {
+    var k = R.items.indexOf(it);
+    if (k < 0) return;
+    R.items.splice(k, 1);
+    R.count = R.items.length;
+    if (!R.items.length) {
+      var ri = data.indexOf(R);
+      data.splice(ri, 1);
+      document.querySelectorAll('.ss-c[data-story-room]').forEach(function (b) { if (b.getAttribute('data-story-room') === R.id) b.remove(); });
+      document.querySelectorAll('.ss-t[data-story-item]').forEach(function (b) { if (b.getAttribute('data-story-item') === it.id) b.remove(); });
+      if (ri < data.length) show(ri, firstUnseen(data[ri])); else close();
+      return;
+    }
+    document.querySelectorAll('.ss-t[data-story-item]').forEach(function (b) { if (b.getAttribute('data-story-item') === it.id) b.remove(); });
+    show(V.ri, Math.min(k, R.items.length - 1));
+    toast(msg);
   }
   function toast(msg) {
     var t = el('div', 'sv-toast', msg); t.setAttribute('role', 'status');

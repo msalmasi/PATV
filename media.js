@@ -28,6 +28,9 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS media (
   .then(() => runQuery("ALTER TABLE media ADD COLUMN nsfw INTEGER DEFAULT 0").catch(() => {}))
   .then(() => runQuery("ALTER TABLE media ADD COLUMN by_user_id TEXT").catch(() => {}))
   .then(() => runQuery("ALTER TABLE media ADD COLUMN slot_id TEXT").catch(() => {}))
+  // 1.99ez: the subject's Camfrog LOGIN (Pepe sends it with each capture; `subject` is their display name) - how a
+  // capture of someone reaches their profile story (userstories.js). Source "user" = a member's own story upload.
+  .then(() => runQuery("ALTER TABLE media ADD COLUMN subject_login TEXT").catch(() => {}))
   .catch(() => {});
 
 /** Is this capture's file still on disk? (A row can outlive its file: a staging DB refreshed from prod,
@@ -177,10 +180,13 @@ function register(app, { isBotToken, addUser, noTimers }) {
       await ready;
       fs.writeFileSync(path.join(DIR, file), buf);
       const anon = b.anon === true || b.anon === 1 || b.anon === "1";
-      await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      // 1.99ez: subject_login (a Camfrog login, lower-case) - never stored for a private (anon) subject
+      const sl = String(b.subject_login || "").trim().toLowerCase();
+      const subjectLogin = !anon && /^[\w.\-]{1,40}$/.test(sl) ? sl : null;
+      await runQuery(`INSERT OR REPLACE INTO media (id, kind, ct, file, bytes, secs, subject, by_user, room, created, expires, deleted, anon, subject_login)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
         [id, kind, ct, file, buf.length, Number(b.secs) || 0, anon ? "" : String(b.subject || "").slice(0, 60),
-         String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires, anon ? 1 : 0]);
+         String(b.by || "").slice(0, 60), String(b.room || "").slice(0, 80), Number(b.created) || now, expires, anon ? 1 : 0, subjectLogin]);
       res.json({ success: true, id, expires, url: `/media/${id}` });
       // the poster frame / waveform card, in the ffmpeg queue (an INSERT OR REPLACE re-upload gets a fresh one)
       if (kind === "clip" || kind === "audio") {
@@ -218,7 +224,7 @@ function register(app, { isBotToken, addUser, noTimers }) {
     for (const it of items) {
       const id = String((it && it.id) || "");
       if (!/^[a-f0-9]{8,32}$/i.test(id) || !(it.subject || it.by)) continue;
-      if (it.subject) await runQuery("UPDATE media SET anon = 1, subject = '' WHERE id = ?", [id]);
+      if (it.subject) await runQuery("UPDATE media SET anon = 1, subject = '', subject_login = NULL WHERE id = ?", [id]);
       // 1.99eq: the subject went private - Saved copies of them go, a post of them is hidden (storykeep.js)
       if (it.subject) await require("./storykeep").onCaptureRemoved(id, { reason: "private" }).catch((e) => console.error("[media] keep cascade:", e.message));
       if (it.by) await runQuery("UPDATE media SET by_user = 'someone' WHERE id = ?", [id]);

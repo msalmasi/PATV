@@ -89,6 +89,12 @@
   .rm .snap .res.ok { color: #9be3a6; }
   .rm .snap .res.bad { color: #e6a07a; }
   .rm .snap .res a { color: #8fd19a; font-weight: bold; }
+  /* 1.99ez: 🎬 Clip (camclip.js) */
+  .rm .snap button.clip { background: #2a1616; border-color: #7a3030; color: #ffd9d9; font-weight: bold; }
+  .rm .snap button.clip:hover, .rm .snap button.clip:focus-visible { border-color: #e57373; }
+  .rm .snap button.clip:disabled { opacity: .55; cursor: default; }
+  .rm .snap select.clip-secs { background: #222; color: #ddd; border: 1px solid #333; border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .rm .snap video { width: 100%; border-radius: 8px; background: #000; display: block; }
   .rm .sys { color: #8a8a8a; font-size: 12.5px; padding: 3px 6px 3px 42px; overflow-wrap: anywhere; }
   .rm .sys.topic { color: #c9b46a; }
   .rm .av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: bold; color: #0d0d0d; object-fit: cover; flex: none; overflow: hidden; }
@@ -378,7 +384,7 @@
     </div>
   </section>
   <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
-    <section class="card rm-story" aria-label="Fresh captures from this pad"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer }, heading: '📸 Fresh captures', next: '/p/' + encodeURIComponent(room.slug) }) %></section>
+    <section class="card rm-story" aria-label="Fresh captures from this pad"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: '📸 Fresh captures', next: '/p/' + encodeURIComponent(room.slug) }) %></section>
   <% } %>
   <nav class="ptabs" id="padTabs" role="tablist" aria-label="Pad sections">
     <% PT_.tabs.forEach((t) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= t %>" data-tab="<%= t %>" aria-controls="padPanel-<%= t %>" aria-selected="<%= tabOn_(t) ? 'true' : 'false' %>" tabindex="<%= tabOn_(t) ? 0 : -1 %>">
@@ -689,7 +695,7 @@
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
-    function snapClose() { clearTimeout(snapTimer); clearTimeout(saveTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
+    function snapClose() { clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(clipTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
     function snapBox(text) {
       if (!snapEl) {
         snapEl = el('div', 'snap'); snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', 'Cam snapshot');
@@ -718,6 +724,90 @@
       // 1.99dr: "✨ Use in Generate" - this frame as the composer's AI reference picture (aigen.js claimCamRef:
       // priced like chat's -cam, the person's opt-out and the room's switches re-checked, never stored)
       if (s.state === 'ok' && s.img && s.gen) snapGenRow(box, s);
+      // 1.99ez: 🎬 Clip - Pepe records 10 / 20 / 30 s of this cam (camclip.js); a free preview, pay only to save it
+      if (s.state === 'ok' && s.img && s.clip) snapClipRow(box, s);
+    }
+    var clipTimer = null;
+    function snapClipRow(box, s) {
+      var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res'), vid = el('div');
+      res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
+      var b = el('button', 'clip', '🎬 Clip'); b.type = 'button';
+      var sel = el('select', 'clip-secs'); sel.setAttribute('aria-label', 'Clip length');
+      (s.clip.secs || [10, 20, 30]).forEach(function (n) { var o = el('option', null, n + ' s'); o.value = n; if (n === s.clip.def) o.selected = true; sel.appendChild(o); });
+      b.title = s.clip.off || ('Pepe records ' + label(who) + '\'s cam - you see it first and only pay if you save it');
+      if (s.clip.off) { b.disabled = true; sel.disabled = true; }
+      acts.appendChild(b); acts.appendChild(sel);
+      box.appendChild(acts); box.appendChild(vid); box.appendChild(res);
+      if (s.clip.off) { res.textContent = s.clip.off; }
+      function say(text, cls, href) {
+        res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text;
+        if (href) { var a = el('a', null, 'Open it ›'); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }
+      }
+      function alive() { return snapWho === who && res.isConnected; }
+      var base = '/api/rooms/' + encodeURIComponent(slug) + '/camclip/';
+      function post(url, body) {
+        return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
+          .then(function (r) { return r.json(); });
+      }
+      function watchSave(id, n) {
+        clearTimeout(clipTimer);
+        fetch(base + encodeURIComponent(id) + '/save', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (a) {
+          if (!alive()) return;
+          if (a.status === 'done') return say('Saved to the pad\'s story.', 'ok', a.url || null);
+          if (a.status === 'failed') return say(a.message ? a.message.charAt(0).toUpperCase() + a.message.slice(1) + '.' : 'Pepe couldn\'t save it.', 'bad');
+          if (n > 60) return say('Pepe hasn\'t answered yet - check the pad\'s story in a minute.');
+          clipTimer = setTimeout(function () { watchSave(id, n + 1); }, 1500);
+        }).catch(function () { if (alive()) say('Couldn\'t reach the site.', 'bad'); });
+      }
+      function ready(c) {
+        vid.textContent = '';
+        var v = el('video'); v.controls = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
+        if (c.poster) v.poster = c.poster;
+        v.src = c.video; vid.appendChild(v);
+        var row = el('div', 'acts');
+        if (c.save) {
+          var sv = el('button', 'save', '💾 Save clip' + (c.save.cost ? ' · ' + Number(c.save.cost).toLocaleString() + ' PAT' : ''));
+          sv.type = 'button'; sv.title = 'Put this clip in the pad\'s story as a !clip by you' + (c.save.cost ? ' (' + Number(c.save.cost).toLocaleString() + ' PAT, like !clip)' : '');
+          sv.addEventListener('click', function () {
+            sv.disabled = true; say('Sending to Pepe…');
+            post(base + encodeURIComponent(c.id) + '/save', {}).then(function (d) {
+              if (!alive()) return;
+              if (!d.ok) { sv.disabled = false; return say(d.error || 'Not right now.', 'bad'); }
+              say('Pepe is saving it…'); watchSave(c.id, 0);
+            }).catch(function () { sv.disabled = false; say('Couldn\'t reach the site.', 'bad'); });
+          });
+          row.appendChild(sv);
+          if (c.save.id) { sv.disabled = true; watchSave(c.id, 0); }
+        }
+        var dc = el('button', null, 'Discard'); dc.type = 'button';
+        dc.addEventListener('click', function () { post(base + encodeURIComponent(c.id) + '/discard', {}).then(function () { if (alive()) { vid.textContent = ''; row.remove(); say('Discarded.'); b.disabled = false; sel.disabled = false; } }); });
+        row.appendChild(dc);
+        vid.appendChild(row);
+        if (!c.save) say(c.saveRule === 'no' ? 'They\'ve opted out - this clip can\'t be saved.' : 'Only you see this preview. You can\'t save clips of them here.');
+        else if (!c.save.id) say('Only you see this preview (for 10 minutes). Save it to put it in the pad\'s story.');
+      }
+      function poll(id, n) {
+        clearTimeout(clipTimer);
+        fetch(base + encodeURIComponent(id), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (c) {
+          if (!alive()) return;
+          if (!c.ok) { b.disabled = false; sel.disabled = false; return say(c.error || 'That clip is gone.', 'bad'); }
+          if (c.state === 'ready') return ready(c);
+          if (c.state === 'failed' || c.state === 'expired') { b.disabled = false; sel.disabled = false; return say(c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : 'Pepe couldn\'t clip that cam.', 'bad'); }
+          say(c.state === 'recording' ? '🔴 Pepe is recording ' + c.secs + ' s…' : c.state === 'encoding' ? 'Encoding the clip…' : 'Asking Pepe to record…');
+          if (n > 200) return say('Pepe hasn\'t finished yet - try again later.', 'bad');
+          clipTimer = setTimeout(function () { poll(id, n + 1); }, 1500);
+        }).catch(function () { if (alive()) clipTimer = setTimeout(function () { poll(id, n + 1); }, 3000); });
+      }
+      b.addEventListener('click', function () {
+        b.disabled = true; sel.disabled = true; vid.textContent = ''; say('Asking Pepe to record…');
+        post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', { login: who.login, secs: Number(sel.value) }).then(function (d) {
+          if (!alive()) return;
+          if (!d.ok) { if (d.id) return poll(d.id, 0); b.disabled = false; sel.disabled = false; return say(d.error || 'Not right now.', 'bad'); }
+          poll(d.id, 0);
+        }).catch(function () { b.disabled = false; sel.disabled = false; say('Couldn\'t reach the site.', 'bad'); });
+      });
+      if (typeof s.clip.busy === 'string') { b.disabled = true; sel.disabled = true; poll(s.clip.busy, 0); }
+      else if (s.clip.busy) { b.disabled = true; sel.disabled = true; say('Pepe is already clipping their cam - try again in a bit.'); }
     }
     function snapGenRow(box, s) {
       var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res');

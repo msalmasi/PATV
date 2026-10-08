@@ -14,7 +14,7 @@
 <section class="card rf" id="feed" aria-labelledby="rfH">
   <h2 id="rfH"><span>📝 p/<%= room.slug %> feed</span><small><a href="/feed">All pads ›</a></small></h2>
   <%# 1.99bz: Pepe's fresh captures from this pad's Camfrog room - tap one for the story viewer %>
-  <% if (!noStory_) { %><%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer }, heading: '📸 Fresh captures', next: here_ + '#feed' }) %><% } %>
+  <% if (!noStory_) { %><%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer, compose: !!F.viewer }, heading: '📸 Fresh captures', next: here_ + '#feed' }) %><% } %>
   <%# 1.99dc: the pad's rules (padrules.js) - its own, or Padiquette; owners edit them in the settings hub. Moderation
       and the announce switch moved there too (the header's "⚙ Pad settings"). %>
   <% if (!noRules_) { %><%- include('pad-rules', { fx, rules: F.rules, slug: room.slug, canEdit: !!(F.mod.owner || F.mod.admin), id: 'rules' }) %><% } %>

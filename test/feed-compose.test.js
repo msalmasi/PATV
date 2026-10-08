@@ -194,7 +194,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   // the navbar
   assert.match(html, new RegExp('<a href="/p/' + s + '/submit" class="nav-post" title="Create a post in p/' + s + '">'));
   assert.ok(html.indexOf('class="nav-post"') < html.indexOf('class="nav-golive"'), "Post sits before Go live");
-  assert.match(html, /feed\.css\?v=17/); assert.match(html, /feed-composer\.js\?v=13/); assert.match(html, /stories\.js\?v=7/);
+  assert.match(html, /feed\.css\?v=17/); assert.match(html, /feed-composer\.js\?v=13/); assert.match(html, /stories\.js\?v=8/);
 });
 
 test("pad page signed out: a sign-in bar instead of the composer; About's analytics link is a button", async () => {
@@ -296,7 +296,7 @@ test("Live side cards: one-line titles; Manage card header is title · chip · t
 test("story viewer: the footer button says what it opens", () => {
   const js = fs.readFileSync(path.join(repo, "public", "js", "stories.js"), "utf8");
   assert.doesNotMatch(js, /'Capture page'/);
-  assert.match(js, /var noun = it\.kind === 'clip' \? 'clip' : it\.kind === 'photo' \? 'snap' : '';/);
+  assert.match(js, /var noun = it\.source === 'user' \? 'story' : it\.kind === 'clip' \? 'clip' : it\.kind === 'photo' \? 'snap' : '';/);
   assert.match(js, /noun \? 'Open ' \+ noun \+ ' ›' : 'Open ›'/);
   assert.match(js, /'s page to share or download'/);
 });

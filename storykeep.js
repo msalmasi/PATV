@@ -129,6 +129,7 @@ async function privacyBlocks(rows) {
   const out = new Map();
   const logins = [], uids = [], slots = new Map();
   for (const r of rows) {
+    if (r.source === "user") continue;
     if (r.source === "stage") {
       if (r.by_user_id) uids.push(r.by_user_id);
       const su = await slotUser(r.slot_id);
@@ -140,6 +141,8 @@ async function privacyBlocks(rows) {
   const hid = await hiddenUsers(uids);
   for (const r of rows) {
     const by = String(r.by_user || "").trim();
+    // 1.99ez: a member's own story upload (userstories.js) is theirs - nobody else posts or saves it
+    if (r.source === "user") { out.set(r.id, "This is someone's own story, so it can't be kept."); continue; }
     if (Number(r.anon)) out.set(r.id, "The person in this capture is private (incognito or hidden), so it can't be kept.");
     else if (!by || lc(by) === "someone") out.set(r.id, "This capture was taken privately, so it can't be kept.");
     else if (r.source === "stage") {
@@ -565,5 +568,8 @@ function register(app, { addUser }) {
   });
 }
 
+/** 1.99ez: is `acct` (with camfrogUsername) a mod of `roomId`'s Camfrog room (userstories: removing members' stories)? */
+function isPadMod(acct, roomId) { try { return !!modCheck(acct, roomId); } catch (e) { return false; } }
+
 module.exports = { init, register, postToPad, removeMe, forPosts, save, unsave, savedFor, onCaptureRemoved, annotate, privacyBlocks, mayPost, subjectOf,
-                   Refuse, _setClock, _setModCheck, _setPersistImpl, defaultPersist };
+                   isPadMod, Refuse, _setClock, _setModCheck, _setPersistImpl, defaultPersist };
