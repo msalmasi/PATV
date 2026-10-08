@@ -310,3 +310,11 @@ body.dm-page > .dm { flex: 1 1 0; height: auto; min-height: 0; }
   .dm-lb-nav { width: 38px; height: 54px; font-size: 28px; }
   .dm-lb img { max-width: calc(100vw - 24px); }
 }
+
+/* 1.99ex: profile photos over the monogram (userlook.js / messages.js photoOn) + equipped name styles */
+.dm .av-ph, .dm .av-grp > .av-ph { position: relative; overflow: hidden; }
+.dm .av-ph > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; background: #1a1a1a; }
+.dm .av-grp > .av-ph > img { border-radius: 0; }
+.dm .cx-name { font-weight: 700; }
+@keyframes cx-shift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+@media (prefers-reduced-motion: reduce) { .dm .cx-name { animation: none !important; } }

@@ -130,11 +130,19 @@
     var info = el('div', 'hop-info');
     if (it.pad) { var pad = el('a', 'hop-pad', it.pad.label); pad.href = it.pad.href; info.appendChild(pad); }
     if (it.capture) info.appendChild(el('span', 'hop-capt', '📸 Captured from ' + it.capture.room));
-    if (it.url) { var t = el('a', 'hop-title', it.title || 'View the post'); t.href = it.url; info.appendChild(t); }
-    else if (it.title) info.appendChild(el('span', 'hop-title', it.title));
+    if (it.url) { var t = el('a', 'hop-title' + (it.titleFallback ? ' fb' : ''), it.title || 'View the post'); t.href = it.url; info.appendChild(t); }
+    else if (it.title) info.appendChild(el('span', 'hop-title' + (it.titleFallback ? ' fb' : ''), it.title));
     if (it.author) {
       var by = el('span', 'hop-by'); by.appendChild(document.createTextNode('by '));
-      var a = el('a', null, it.author.bot ? '🤖 Pepe' : it.author.display); a.href = '/u/' + encodeURIComponent(it.author.username); by.appendChild(a);
+      // 1.99ex: the author's photo (over the monogram) and name style, as in the feed
+      if (!it.author.bot && it.author.avatar && /^(https:\/\/|\/)/.test(it.author.avatar)) {
+        var av = el('span', 'hop-av'); var im = document.createElement('img'); im.alt = ''; im.loading = 'lazy'; im.referrerPolicy = 'no-referrer';
+        im.onerror = function () { av.remove(); }; im.src = it.author.avatar; av.appendChild(im); by.appendChild(av);
+      }
+      var a = el('a', null); a.href = '/u/' + encodeURIComponent(it.author.username);
+      var nm = el('span', !it.author.bot && it.author.nameCss ? 'cx-name' : null, it.author.bot ? '🤖 Pepe' : it.author.display);
+      if (!it.author.bot && it.author.nameCss) nm.setAttribute('style', it.author.nameCss);
+      a.appendChild(nm); by.appendChild(a);
       info.appendChild(by);
     } else if (it.sub) info.appendChild(el('span', 'hop-by', it.sub));
     col.appendChild(info);

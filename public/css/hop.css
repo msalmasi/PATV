@@ -40,6 +40,9 @@ html.hop-open, html.hop-open body { overflow: hidden; }
 .hop-title { color: #fff !important; font-size: 16px; font-weight: 700; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere;
              display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .hop-title:hover, .hop-pad:hover { text-decoration: underline; }
+.hop-title.fb { font-weight: 500; color: #d6d6d6 !important; }       /* 1.99ex: a fallback label (postlabel.js) */
+.hop-av { display: inline-block; width: 18px; height: 18px; border-radius: 50%; overflow: hidden; vertical-align: -4px; margin-right: 5px; background: #222; }
+.hop-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hop-by { font-size: 13px; color: #ddd; }
 .hop-by a { color: #fff !important; font-weight: 600; text-decoration: none; }
 .hop-rail { position: absolute; right: 8px; bottom: max(22px, env(safe-area-inset-bottom)); z-index: 3; display: grid; gap: 14px; justify-items: center; }

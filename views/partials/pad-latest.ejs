@@ -10,7 +10,7 @@
   <% } else { %>
     <ul class="plf-l">
       <% L_.forEach((p) => { %><li>
-        <a class="plf-t" href="<%= p.url || ('/feed/p/' + encodeURIComponent(p.id)) %>"><%= p.nsfw ? '🔞 ' + (p.title || 'NSFW post') : (p.title || p.text || 'A post') %></a>
+        <a class="plf-t<%= p.titleFallback && !p.nsfw ? ' plf-fb' : '' %>" href="<%= p.url || ('/feed/p/' + encodeURIComponent(p.id)) %>"><%= p.nsfw ? '🔞 ' + (p.title && !p.titleFallback ? p.title : 'NSFW post') : (p.title || p.text || 'A post') %></a>
         <small><%= p.author %> · <time datetime="<%= new Date(p.created).toISOString() %>"><%= ago_(p.created) %></time></small>
       </li><% }) %>
     </ul>

@@ -554,11 +554,17 @@ async function authors(ids) {
   const want = [...new Set(ids.filter(Boolean))];
   if (!want.length) return new Map();
   const C = await userCols();
-  const rows = await getQuery(`SELECT userId, username, ${C.has("displayname") ? "displayname" : "NULL AS displayname"}, class
+  // 1.99ex: + the profile photo and the equipped name style (userlook.js) - still ONE users query per page
+  const rows = await getQuery(`SELECT userId, username, ${C.has("displayname") ? "displayname" : "NULL AS displayname"}, class, ${C.has("avatar") ? "avatar" : "NULL AS avatar"}
                                FROM users WHERE userId IN (${want.map(() => "?").join(",")})`, want);
+  const UL = require("./userlook");
+  const css = await UL.nameStyles(rows.filter((r) => r.userId !== PEPE_ID).map((r) => r.username));
   const m = new Map();
-  for (const r of rows) m.set(r.userId, { userId: r.userId, username: r.username, display: r.displayname || r.username, staff: r.class === "Admin" || r.class === "Staff",
-                                          bot: r.userId === PEPE_ID });
+  for (const r of rows) {
+    const bot = r.userId === PEPE_ID;
+    m.set(r.userId, { userId: r.userId, username: r.username, display: r.displayname || r.username, staff: r.class === "Admin" || r.class === "Staff",
+                      bot, avatar: bot ? null : UL.avatarOf(r.avatar), nameCss: bot ? "" : css[r.username] || "" });
+  }
   return m;
 }
 
@@ -1148,7 +1154,8 @@ async function hot(viewer = null, limit = 5) {
   return L.posts.map((p) => {
     const R = p.rooms[0] || null;
     const q = p.xpost && p.xpost.post ? p.xpost.post : p;
-    return { id: p.id, url: p.url, title: p.title || q.title || (q.link && q.link.title) || cleanLine(q.body, 90) || "(no title)",
+    const lab = require("./postlabel").labelOf(p);      // 1.99ex: never a "no title" placeholder
+    return { id: p.id, url: p.url, title: lab.text, titleFallback: lab.fallback,
              community: R ? { slug: R.slug, title: R.title, platform: R.id ? rooms.platformOf(R.id) : undefined, label: R.label, profile: R.profile || null } : null, score: p.score, comments: p.comments, nsfw: p.nsfw,
              thumb: p.nsfw ? null : thumbOf(p), crosspost: !!p.xpost, created: p.created,
              kind: q.video && q.video.length ? "video" : q.images && q.images.length ? "image" : q.audio && q.audio.length ? "audio" : q.link ? "link" : "text" };

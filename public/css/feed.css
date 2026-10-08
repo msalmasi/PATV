@@ -83,6 +83,12 @@
 .av { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff;
   background: hsl(var(--h, 120) 38% 34%); flex: none; line-height: 1; user-select: none; }
 .av-del { background: #2a2a2a; }
+/* 1.99ex: the profile photo sits over the monogram (userlook.avHtml); a photo that fails to load removes itself */
+.av-ph { position: relative; overflow: hidden; }
+.av-ph > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; background: #1a1a1a; }
+.fp-author .cx-name, .cm-head .cx-name { font-weight: 700; }
+@keyframes cx-shift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+@media (prefers-reduced-motion: reduce) { .cx-name { animation: none !important; } }
 .fp-author { font-weight: 700; color: var(--fp-text) !important; overflow: hidden; text-overflow: ellipsis; max-width: 18ch; }
 .fp-author:hover { text-decoration: underline; }
 .fd .fp-where, .rf .fp-where { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -99,6 +105,10 @@
 .fp.is-detail .fp-title { font-size: 21px; }
 .fp-title a { color: #f4f4f4 !important; }
 .fp-title a:visited { color: #c9c9c9 !important; }
+/* 1.99ex: a fallback label (postlabel.js) describes the post rather than titling it */
+.fp-title.fp-fb { font-weight: 500; font-size: 15px; }
+.fp-title.fp-fb, .fp-title.fp-fb a, .fp-title.fp-fb a:visited { color: #b5b5b5 !important; }
+.fp.is-detail .fp-title.fp-fb { font-size: 17px; }
 .tag { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 4px; letter-spacing: .05em; text-transform: uppercase; line-height: 16px; }
 .tag.nsfw { background: #d03b3b; color: #fff; }
 .tag.warn { background: #3a3014; color: #f3e3a3; border: 1px solid #6b5a20; }

@@ -172,7 +172,7 @@ async function notifyNewPost(post, authorName) {
                                  LIMIT ?`, [post.author.userId, post.author.userId, ...roomIds, NOTIFY_MAX]);
     if (!rows.length) return 0;
     const inbox = require("./inbox");
-    const what = post.nsfw ? "an NSFW post" : (post.title || post.body || (post.link && post.link.title) || "a new post").replace(/\s+/g, " ").slice(0, 80);
+    const what = post.nsfw ? "an NSFW post" : require("./postlabel").postLabel({ ...post, author: post.author || { display: authorName } }).slice(0, 80);
     // 1.99df: a profile post reads "X posted on their profile"
     const where = (post.rooms || []).some((r) => r.profile) ? " on their profile"
       : (post.rooms || []).length ? " in " + post.rooms.map((r) => (r.slug ? "p/" + r.slug : r.title)).slice(0, 2).join(", ") : "";

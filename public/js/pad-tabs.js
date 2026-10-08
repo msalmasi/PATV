@@ -14,6 +14,9 @@
 // whichever tab is showing.
 // The Feed tab carries an "N new" badge: posts newer than this visitor's last look at the feed (a timestamp
 // per pad in localStorage, set whenever the Feed tab is shown). Every storage access is in try/catch.
+// 1.99ex: signed in, the seen time belongs to the ACCOUNT (feedseen.js; o.account = {scope, upto} rendered with the
+// page): this browser's local value is merged in (max) and sent up when newer, and each Feed view syncs it (debounced
+// POST /api/feed/seen). Signed out it's localStorage only, as before. The remembered TAB stays per browser.
 // 1.99ec: the badge is a count pill PLUS a dot (#padFeedDot) on the tab while another tab shows; a first visit counts
 // the last 3 days; opening the Feed clears the count for next time, but when the Feed opens WITH new posts (the
 // default tab, a click) the pill stays a few seconds, then fades, and those posts get a "new" edge - so the visitor
@@ -89,6 +92,20 @@
     var since = seen == null || !isFinite(seen) ? (now || Date.now()) - FIRST_LOOK_MS : Number(seen);
     return (posts || []).filter(function (p) { return p && Number(p.created) > since; }).map(function (p) { return String(p.id); });
   }
+  /** 1.99ex: a member's seen time = the later of the account's (server) and this browser's (local) - so signing in
+   *  merges what this browser had already seen. null when neither is known. */
+  function mergeSeen(server, local) {
+    var a = server != null && server !== '' && isFinite(server) ? Number(server) : null;
+    var b = local != null && local !== '' && isFinite(local) ? Number(local) : null;
+    return a == null ? b : b == null ? a : Math.max(a, b);
+  }
+  /** Should this browser's value be sent up (it's newer than what the account has)? */
+  function needsPush(server, local) {
+    var b = local != null && local !== '' && isFinite(local) ? Number(local) : null;
+    if (b == null || b <= 0) return false;
+    return server == null || server === '' || !isFinite(server) || b > Number(server);
+  }
+
   /** The pill's text: "3 new", "10+ new" when every post we know of is new and there are more. */
   function badgeText(n, total, more) { return n ? (n >= total && more ? n + '+' : n) + ' new' : ''; }
 
@@ -108,6 +125,29 @@
     var tabs = btns.map(function (b) { return b.getAttribute('data-tab'); });
     var keyTab = 'patvPadTab:' + o.slug, keySeen = 'patvPadFeedSeen:' + o.slug;
     var seenRaw = store(keySeen), seen = seenRaw != null && seenRaw !== '' ? Number(seenRaw) : null;
+    // 1.99ex: signed in, the seen time is the ACCOUNT's (feedseen.js, rendered with the page); this browser's
+    // localStorage value is merged in (max) and sent up when it's newer, then every Feed view syncs (debounced)
+    var acct = o.account && o.account.scope ? o.account : null;
+    var syncTimer = null, pendingUpto = 0;
+    function pushSeen(now) {
+      clearTimeout(syncTimer); syncTimer = null;
+      if (!acct || !pendingUpto || !root.fetch) return;
+      var body = JSON.stringify({ scope: acct.scope, upto: pendingUpto }); pendingUpto = 0;
+      try {
+        root.fetch('/api/feed/seen', { method: 'POST', credentials: 'same-origin', keepalive: !!now,
+          headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: body }).catch(function () { /* offline: next view retries */ });
+      } catch (e) { /* old browser */ }
+    }
+    function syncSeen(upto) {
+      if (!acct) return;
+      pendingUpto = Math.max(pendingUpto, Number(upto) || 0);
+      clearTimeout(syncTimer); syncTimer = setTimeout(pushSeen, 1500);
+    }
+    if (acct) {
+      if (needsPush(acct.upto, seen)) syncSeen(seen);
+      seen = mergeSeen(acct.upto, seen);
+      root.addEventListener('pagehide', function () { if (pendingUpto) pushSeen(true); });
+    }
     var badge = doc.getElementById('padFeedNew'), dot = doc.getElementById('padFeedDot');
     var current = null, flashTimer = null;
     var total = (o.posts || []).length;
@@ -153,7 +193,7 @@
       if (t === 'feed') {
         var fresh = newIds(o.posts, seen);
         var newest = (o.posts || []).reduce(function (m, p) { return Math.max(m, Number(p && p.created) || 0); }, 0);
-        seen = Math.max(Date.now(), newest); store(keySeen, seen);
+        seen = Math.max(Date.now(), newest); store(keySeen, seen); syncSeen(seen);
         flashNew(fresh);
       } else if (badge && badge.classList.contains('is-flash')) { clearTimeout(flashTimer); badge.classList.remove('is-flash', 'is-fade'); }
       paintBadge();
@@ -203,7 +243,7 @@
     return { show: show, current: function () { return current; } };
   }
 
-  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount, newIds: newIds, badgeText: badgeText,
+  var api = { init: init, pickTab: pickTab, defaultTab: defaultTab, requestedTab: requestedTab, newCount: newCount, newIds: newIds, badgeText: badgeText, mergeSeen: mergeSeen, needsPush: needsPush,
               parseStored: parseStored, storedValue: storedValue, FEED_STICKY_MS: FEED_STICKY_MS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PATVPadTabs = api;

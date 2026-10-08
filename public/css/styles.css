@@ -689,3 +689,15 @@ height: 1.5rem;
 a.ulink[href], a.pad-link[href] { color: inherit; text-decoration: underline dotted; text-decoration-color: rgba(255,255,255,.35); text-underline-offset: 3px; }
 a.ulink[href]:hover, a.pad-link[href]:hover, a.ulink[href]:focus-visible, a.pad-link[href]:focus-visible { color: #81c784; text-decoration: underline solid; }
 .ulink-web { cursor: help; }
+
+/* 1.99ex: phones - iOS Safari zooms the page into any focused field whose font-size is under 16px (and the zoomed
+   page then scrolls sideways). Every text field is at least 16px at phone widths / on touch screens, site-wide and
+   over page CSS (feed.css's !important composer, messages.css, room-bridge.css, room-mod.css, stage.css, inline
+   styles...): the html:not(#patv-16px) prefix gives the rule id-level specificity so class selectors can't undercut it.
+   User zoom stays ON: never maximum-scale=1 / user-scalable=no (an accessibility violation). test/mobile-ux.test.js. */
+@media (max-width: 820px), (pointer: coarse) {
+  html:not(#patv-16px) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]):not([type="hidden"]),
+  html:not(#patv-16px) textarea, html:not(#patv-16px) select, html:not(#patv-16px) [contenteditable]:not([contenteditable="false"]) {
+    font-size: max(16px, 1em) !important;
+  }
+}

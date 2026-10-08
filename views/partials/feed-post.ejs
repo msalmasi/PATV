@@ -36,8 +36,8 @@
         <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22" aria-hidden="true">
         <a class="fp-author bot-badge" href="/u/<%= encodeURIComponent(p.author.username) %>" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
       <% } else { %>
-      <span class="av" style="--h:<%= fx.hue(p.author.username) %>" aria-hidden="true"><%= fx.initial(p.author.display) %></span>
-      <a class="fp-author" href="/u/<%= encodeURIComponent(p.author.username) %>"><%= p.author.display %></a>
+      <%- fx.uav(p.author, { size: 22 }) %>
+      <%- fx.uname(p.author, { href: '/u/' + encodeURIComponent(p.author.username), cls: 'fp-author' }) %>
       <% } %>
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length) { %>
@@ -48,9 +48,12 @@
       <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a>
       <% if (p.edited) { %><span class="fp-ed" title="edited <%= new Date(p.edited).toUTCString() %>">(edited)</span><% } %>
     </div>
-    <% if (p.title || p.nsfw || p.hidden || p.deleted || p.pending || p.roomHidden || p.locked || (p.mine && p.onProfile && !p.inAll)) { %>
+    <%# 1.99ex: no title -> the shared label (postlabel.js), muted, when the card has nothing else that names it (a
+        picture / video / audio / capture only post); a body or link card already says what it is %>
+    <% const lab_ = p.title ? null : fx.labelOf(p); const fbT_ = lab_ && lab_.level >= 4 && !p.deleted ? lab_.text : ''; %>
+    <% if (p.title || fbT_ || p.nsfw || p.hidden || p.deleted || p.pending || p.roomHidden || p.locked || (p.mine && p.onProfile && !p.inAll)) { %>
       <div class="fp-titlerow">
-        <% if (p.title) { %><h3 class="fp-title"><% if (detail_) { %><%= p.title %><% } else { %><a href="<%= url_ %>"><%= p.title %></a><% } %></h3><% } %>
+        <% if (p.title) { %><h3 class="fp-title"><% if (detail_) { %><%= p.title %><% } else { %><a href="<%= url_ %>"><%= p.title %></a><% } %></h3><% } else if (fbT_) { %><h3 class="fp-title fp-fb"><% if (detail_) { %><%= fbT_ %><% } else { %><a href="<%= url_ %>"><%= fbT_ %></a><% } %></h3><% } %>
         <% if (p.nsfw) { %><span class="tag nsfw">NSFW</span><% } %>
         <% if (p.hidden) { %><span class="tag warn" title="Hidden after reports - an admin will review it">Hidden · in review</span><% } %>
         <% if (p.deleted) { %><span class="tag warn">Deleted<%= p.deleteReason ? ': ' + p.deleteReason : '' %></span><% } %>

@@ -633,6 +633,12 @@ function register(app, { isBotToken, addUser }) {
     const feed = await require("./feedweb").roomFeed(R.id, req.user, fq).catch((e) => { console.error("[feed] room feed:", e.message); return null; });
     const here = pepeIn(R.id), st = stage();
     const latest = feed ? await padLatest(R.id, req.user, feed) : [];
+    // 1.99ex: the Feed tab's seen state is per account for members (feedseen.js); signed out it stays in localStorage
+    let feedSeen;
+    if (feed && req.user && req.user.userId) {
+      try { feedSeen = { scope: require("./feedseen").padScope(R.id), upto: await require("./feedseen").one(req.user.userId, require("./feedseen").padScope(R.id)) }; }
+      catch (e) { feedSeen = undefined; }
+    }
     const padTabs = padTabsFor({ platform, live: !R.offline && isLive(R), count: R.count, members: initial ? initial.members : null,
       pepeHere: here, pepeOn: !!st.active, slots: roomStage && roomStage.slots, feed: !!feed, query: req.originalUrl || req.url || "", latest });
     res.render("room", {
@@ -641,7 +647,7 @@ function register(app, { isBotToken, addUser }) {
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
               house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
-      initial, padTabs, latest,
+      initial, padTabs, latest, feedSeen,
       dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
       pepeHere: here, stage: st,
       roomStage,
@@ -664,7 +670,7 @@ async function padLatest(roomId, user, feed) {
   }
   return (posts || []).filter((p) => p && !p.deleted && !p.hidden && !p.pending && !p.roomHidden)
     .sort((a, b) => Number(b.created) - Number(a.created)).slice(0, 10)
-    .map((p) => ({ id: p.id, url: typeof p.url === "string" && /^\/(?![/\\])/.test(p.url) ? p.url : null, created: Number(p.created) || 0, title: String(p.title || "").slice(0, 120),
+    .map((p) => ({ id: p.id, url: typeof p.url === "string" && /^\/(?![/\\])/.test(p.url) ? p.url : null, created: Number(p.created) || 0, title: require("./postlabel").postLabel(p).slice(0, 120), titleFallback: require("./postlabel").labelOf(p).fallback,
                    text: String(p.body || "").replace(/\s+/g, " ").trim().slice(0, 140), nsfw: !!p.nsfw,
                    author: p.author ? (p.author.bot ? "Pepe" : p.author.display || p.author.username || "") : "" }));
 }

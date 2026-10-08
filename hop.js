@@ -77,6 +77,7 @@ function decCursor(c) {
 
 // ── items ──
 /** A decorated post -> the viewer's item, or null (no picture / video to show). */
+const PL = require("./postlabel");
 function itemOf(p) {
   const q = p.xpost ? (p.xpost.removed ? null : p.xpost.post) : p;
   if (!q || p.deleted) return null;
@@ -87,7 +88,9 @@ function itemOf(p) {
   const home = (p.rooms || []).find((r) => !r.removed && !r.pending && !r.hidden) || (p.rooms || [])[0] || null;
   const pad = home ? { label: home.label || "p/" + home.slug, href: home.profile ? "/u/" + encodeURIComponent(home.profile) : "/p/" + encodeURIComponent(home.slug) } : null;
   return {
-    id: p.id, url: p.url, title: p.title || (q !== p ? q.title : "") || "", author: { username: p.author.username, display: p.author.display, bot: !!p.author.bot },
+    // 1.99ex: the shared label (never empty, never a "no title" placeholder) + the author's photo and name style (feedstore.authors)
+    id: p.id, url: p.url, title: PL.postLabel(p), titleFallback: PL.labelOf(p).fallback,
+    author: { username: p.author.username, display: p.author.display, bot: !!p.author.bot, avatar: p.author.avatar || null, nameCss: p.author.nameCss || "" },
     pad, score: p.score, comments: p.comments, myVote: p.myVote || 0, mine: !!p.mine, nsfw: !!p.nsfw, created: p.created, media,
     capture: p.capture ? { room: p.capture.room.title } : null, xpost: !!p.xpost,
   };

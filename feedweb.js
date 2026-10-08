@@ -158,7 +158,9 @@ function padChip(c, size = "", badge = null) {
   const inner = L && L.avatar ? `<img src="${esc(L.avatar)}" alt="" loading="lazy">` : esc(badge != null ? badge : cBadge(c));
   return `<span class="${cls}" style="${st}" aria-hidden="true">${inner}</span>`;
 }
-const fx = { esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+// 1.99ex: the shared post label (never a "no title" placeholder) and a person's look (photo + name style) - postlabel.js / userlook.js
+const PL = require("./postlabel"), UL = require("./userlook");
+const fx = { postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
@@ -441,7 +443,7 @@ function register(app, { addUser, isBotToken }) {
       const csort = store.cleanCSort(req.query.csort);
       const C = await store.comments(p.id, viewer, csort);
       const desc = (p.nsfw ? "NSFW post" : (p.body || (p.link && p.link.title) || "")).replace(/\s+/g, " ").slice(0, 180) || "A post on the PATV feed";
-      res.locals.og = { title: (p.nsfw ? "[NSFW] " : "") + (p.title || (p.link && p.link.title) || `Post by ${p.author.display}`).slice(0, 90) + " — PATV feed",
+      res.locals.og = { title: (p.nsfw ? "[NSFW] " : "") + require("./postlabel").postLabel(p).slice(0, 90) + " — PATV feed",
                         description: desc, image: res.locals.ogBase + "/og/page.png?t=" + encodeURIComponent((p.title || "PATV feed").slice(0, 60)),
                         url: res.locals.ogBase + p.url };
       if (p.nsfw || p.hidden) res.set("X-Robots-Tag", "noindex");

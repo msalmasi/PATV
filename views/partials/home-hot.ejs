@@ -12,7 +12,7 @@
           <span class="hh-th<%= h.thumb ? '' : ' ph' %>"<% if (h.thumb) { %> style="background-image:url('<%= fx.fileUrl(h.thumb) %>')"<% } %> aria-hidden="true"><% if (!h.thumb) { %><%= h.nsfw ? '🔞' : h.kind === 'link' ? '🔗' : h.kind === 'audio' ? '🔊' : h.kind === 'video' ? '🎬' : '📝' %><% } %></span>
           <span class="hh-t">
             <span class="hh-c"><% if (h.community) { %><%- fx.padBadge(h.community, { compact: true }) %> <% } %><%= h.community ? (h.community.label || 'p/' + h.community.slug) : '' %><%= h.crosspost ? ' · crosspost' : '' %></span>
-            <b><%= h.title %></b><% if (h.nsfw) { %> <span class="hh-n">NSFW</span><% } %>
+            <b<%- h.titleFallback ? ' class="hh-fb"' : '' %>><%= h.title %></b><% if (h.nsfw) { %> <span class="hh-n">NSFW</span><% } %>
             <span class="hh-m"><span title="Score">▲ <%= fx.num(h.score) %></span><span>💬 <%= fx.num(h.comments) %></span><span><%= fx.ago(h.created) %></span></span>
           </span>
         </a></li>

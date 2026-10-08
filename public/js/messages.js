@@ -60,17 +60,27 @@
   }
   function hue(s) { var h = 0; Array.from(String(s || '')).forEach(function (ch) { h = (h * 31 + ch.codePointAt(0)) >>> 0; }); return h % 360; }
   function initial(s) { var t = Array.from(String(s || '?').replace(/^[^\p{L}\p{N}]+/u, ''))[0] || '?'; return t.toUpperCase(); }
-  function avatar(username, disp, extra) { return el('span', { cls: 'av' + (extra ? ' ' + extra : ''), style: '--h:' + hue(username), 'aria-hidden': 'true', text: initial(disp || username) }); }
+  // 1.99ex: a profile photo (server: userlook.js) sits over the monogram; one that fails to load removes itself
+  function okPhoto(src) { return typeof src === 'string' && /^(https:\/\/[^\s"'<>()]+|\/[A-Za-z0-9\/_.\-]+)$/.test(src); }
+  function photoOn(a, src) {
+    if (!okPhoto(src)) return a;
+    var im = document.createElement('img'); im.alt = ''; im.loading = 'lazy'; im.decoding = 'async'; im.referrerPolicy = 'no-referrer';
+    im.onerror = function () { im.remove(); a.classList.remove('av-ph'); }; im.src = src;
+    a.classList.add('av-ph'); a.appendChild(im); return a;
+  }
+  function avatar(username, disp, extra, photo) { return photoOn(el('span', { cls: 'av' + (extra ? ' ' + extra : ''), style: '--h:' + hue(username), 'aria-hidden': 'true', text: initial(disp || username) }), photo); }
+  // 1.99ex: a name in the person's equipped name style (cosmetics name colour / gradient)
+  function nameNode(text, css) { var s = el('span', { text: text }); if (css) { s.className = 'cx-name'; s.setAttribute('style', css); } return s; }
   // a group's default picture: the initials of (up to) two members, on two halves
   function groupAvatar(members, extra) {
     var m = (members || []).slice(0, 2);
     var a = el('span', { cls: 'av av-grp' + (extra ? ' ' + extra : ''), 'aria-hidden': 'true' });
     if (!m.length) { a.textContent = '👥'; return a; }
-    m.forEach(function (p) { a.appendChild(el('span', { style: '--h:' + hue(p.username), text: initial(p.display || p.username) })); });
+    m.forEach(function (p) { a.appendChild(photoOn(el('span', { style: '--h:' + hue(p.username), text: initial(p.display || p.username) }), p.avatar)); });
     if (m.length === 1) a.classList.add('one');
     return a;
   }
-  function convAvatar(c, extra) { return c.kind === 'group' ? groupAvatar(c.members, extra) : avatar((c.with || {}).username, (c.with || {}).display, extra); }
+  function convAvatar(c, extra) { return c.kind === 'group' ? groupAvatar(c.members, extra) : avatar((c.with || {}).username, (c.with || {}).display, extra, (c.with || {}).avatar); }
   function dayKey(ms) { var d = new Date(ms); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
   function dayLabel(ms) {
     var d = new Date(ms), t = new Date(), y = new Date(Date.now() - 86400e3);
@@ -148,7 +158,7 @@
         else if (c.last.blocked) sn.appendChild(el('i', { text: 'message from someone you blocked' }));
         else sn.textContent = (c.last.mine ? 'You: ' : c.last.from ? c.last.from + ': ' : '') + c.last.text;
       }
-      var nm = el('span', { cls: 'nm' }, [c.kind === 'group' ? (c.title || w.display || 'Group') : (w.display || '[gone]')]);
+      var nm = el('span', { cls: 'nm' }, [c.kind === 'group' ? (c.title || w.display || 'Group') : nameNode(w.display || '[gone]', w.nameCss)]);
       if (c.muted) nm.appendChild(el('span', { cls: 'mu', title: 'Muted', text: ' 🔕' }));
       var a = el('a', { cls: 'dm-it' + (c.id === S.open ? ' on' : '') + (c.unread ? ' unread' : '') + (c.blocked ? ' blocked' : '') + (c.muted ? ' muted' : ''), href: '/messages/c/' + c.id, 'data-c': c.id },
         [convAvatar(c), nm, el('span', { cls: 'tm', text: shortWhen(c.at) }), sn,
@@ -185,9 +195,10 @@
     if (grp) {
       var others = (h.members || []).filter(function (m) { return !m.you; });
       var g = groupAvatar(others, 'av-l'); av.className = g.className; while (g.firstChild) av.appendChild(g.firstChild); if (!others.length) av.textContent = '👥';
-    } else { av.textContent = initial(w.display || w.username); av.style.setProperty('--h', hue(w.username)); }
+    } else { av.textContent = initial(w.display || w.username); av.style.setProperty('--h', hue(w.username)); photoOn(av, w.avatar); }
     var href = !grp && w.username ? '/u/' + encodeURIComponent(w.username) : '#';
-    $('dmHeadName').textContent = grp ? h.title : (w.display || '[gone]');
+    $('dmHeadName').textContent = '';
+    $('dmHeadName').appendChild(grp ? document.createTextNode(h.title) : nameNode(w.display || '[gone]', w.nameCss));
     $('dmHeadName').href = href;
     $('dmMProfile').href = href;
     $('dmHeadHandle').textContent = grp ? (h.members || []).length + ' members' + (h.owner ? ' · you own it' : '') : (w.username ? '@' + w.username : '');
@@ -234,7 +245,7 @@
     E.forEach(function (e) {
       if (e.unavailable) { box.appendChild(el('div', { cls: 'dm-card gone', text: 'Post unavailable - it was removed or hidden.' })); return; }
       var meta = el('div', { cls: 'cm' }, [e.pad ? el('span', { cls: 'pad', text: e.pad.label || ('p/' + e.pad.slug) }) : null,
-        e.author ? el('span', { text: 'u/' + e.author.username }) : null,
+        e.author ? el('span', null, [nameNode('u/' + e.author.username, e.author.nameCss)]) : null,
         el('span', { text: (e.score || 0) + ' point' + (e.score === 1 ? '' : 's') + ' · ' + (e.comments || 0) + ' comment' + (e.comments === 1 ? '' : 's') })]);
       var tx = el('div', { cls: 'ct' }, [meta, el('div', { cls: 'tt' }, [e.nsfw ? el('span', { cls: 'tag', text: 'NSFW' }) : null, e.title || 'Post'])]);
       var th = e.thumb ? el('span', { cls: 'th' + (e.nsfw ? ' nsfw' : '') }, [el('img', { src: e.thumb, alt: '', loading: 'lazy' })]) : el('span', { cls: 'th none', 'aria-hidden': 'true', text: '📰' });
@@ -277,9 +288,9 @@
       }
       if (!g || !prev || prev.from !== m.from || m.at - prev.at > 7 * 60e3) {
         var mine = m.from === me.username;
-        var body = el('div', { cls: 'dm-gb' }, [el('div', { cls: 'dm-gh' }, [el('b', { text: m.blocked && !S.shown[m.id] ? 'Blocked' : (m.fromDisplay || m.from || '[gone]') }),
+        var body = el('div', { cls: 'dm-gb' }, [el('div', { cls: 'dm-gh' }, [m.blocked && !S.shown[m.id] ? el('b', { text: 'Blocked' }) : el('b', null, [nameNode(m.fromDisplay || m.from || '[gone]', m.fromCss)]),
           el('time', { datetime: new Date(m.at).toISOString(), title: new Date(m.at).toLocaleString(), text: hm(m.at) })])]);
-        g = el('div', { cls: 'dm-g' + (mine ? ' mine' : '') }, [m.blocked && !S.shown[m.id] ? el('span', { cls: 'av av-blk', 'aria-hidden': 'true', text: '⊘' }) : avatar(m.from, m.fromDisplay), body]);
+        g = el('div', { cls: 'dm-g' + (mine ? ' mine' : '') }, [m.blocked && !S.shown[m.id] ? el('span', { cls: 'av av-blk', 'aria-hidden': 'true', text: '⊘' }) : avatar(m.from, m.fromDisplay, null, m.fromAvatar), body]);
         msgsEl.appendChild(g);
       }
       g.lastChild.appendChild(msgNode(m));
@@ -638,7 +649,7 @@
     if (pics.length) { payload.pictures = pics.map(function (p) { return p.id; }); payload.nsfw = pics.filter(function (p) { return p.nsfw; }).map(function (p) { return p.id; }); }
     S.sending = true; updateSend();
     // shown at once, greyed until the server has it
-    var temp = { id: tmpId--, from: me.username, fromDisplay: me.display, at: Date.now(), html: '', text: body, images: [] };
+    var temp = { id: tmpId--, from: me.username, fromDisplay: me.display, fromAvatar: me.avatar || null, fromCss: me.nameCss || '', at: Date.now(), html: '', text: body, images: [] };
     temp.html = body.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }).replace(/\n/g, '<br>');
     if (pics.length && !body) temp.html = '<i>sending ' + pics.length + ' picture' + (pics.length === 1 ? '' : 's') + '…</i>';
     S.msgs.push(temp); renderMsgs(); toBottom();
@@ -890,7 +901,7 @@
         acts.appendChild(el('button', { type: 'button', 'data-mblock': m.username, 'data-on': m.blocked ? '0' : '1', text: m.blocked ? 'Unblock' : 'Block' }));
         if (h.owner) acts.appendChild(el('button', { type: 'button', cls: 'danger', 'data-mremove': m.username, text: 'Remove' }));
       }
-      ul.appendChild(el('li', { cls: 'ok' }, [avatar(m.username, m.display, 'av-s'),
+      ul.appendChild(el('li', { cls: 'ok' }, [avatar(m.username, m.display, 'av-s', m.avatar),
         el('span', { cls: 'pn' }, [el('b', { text: (m.display || m.username || '[gone]') + (m.you ? ' (you)' : '') }),
           el('small', { text: (m.username ? '@' + m.username : '') + (m.role === 'owner' ? ' · owner' : '') + (m.blocked ? ' · blocked by you' : '') })]), acts]));
     });

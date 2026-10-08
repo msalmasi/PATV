@@ -16,13 +16,13 @@
     <% if (c.author.bot) { %>
       <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="26" height="26" aria-hidden="true">
     <% } else { %>
-    <span class="av" style="--h:<%= fx.hue(c.author.username) %>" aria-hidden="true"><%= fx.initial(c.author.display) %></span>
+    <%- fx.uav(c.author, { size: 26 }) %>
     <% } %>
     <div class="cm-head">
       <% if (c.author.bot) { %>
         <a href="/u/<%= encodeURIComponent(c.author.username) %>" class="fp-author bot-badge" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
       <% } else { %>
-      <a href="/u/<%= encodeURIComponent(c.author.username) %>" class="fp-author"><%= c.author.display %></a>
+      <%- fx.uname(c.author, { href: '/u/' + encodeURIComponent(c.author.username), cls: 'fp-author' }) %>
       <% } %>
       <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="Wrote the post">OP</span><% } %>
       <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>

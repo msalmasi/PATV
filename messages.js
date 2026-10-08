@@ -67,6 +67,7 @@ const jwt = require("jsonwebtoken");
 const { runQuery, getQuery } = require("./dbUtils");
 const dmmedia = require("./dmmedia");
 const dmembeds = require("./dmembeds");
+const userlook = require("./userlook");
 
 let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; dmmedia._setClock(fn); dmembeds._setClock(fn); }
@@ -522,13 +523,14 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
   if (ctx) { try { await require("./contentaudit").record(ctx, { kind: "message", id: mid, postId: conv.id, user: me }); } catch (e) { /* logged there */ } }
   const recipients = group ? (await activeMembers(conv.id)).filter((m) => m.user_id !== me.userId) : [{ user_id: other.userId, muted: 0 }];
   const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: me.userId, body: text, kind: "text", created_at: t });
+  const theirHead = headFor(conv, group ? null : me), head = headFor(conv, other);
+  await dress({ msgs: [msg], people: [theirHead.with, head.with] });          // 1.99ex: photos + name styles in the live event
   for (const r of recipients) {
     const theyBlock = !!(await getQuery("SELECT 1 FROM dm_blocks WHERE blocker_id = ? AND blocked_id = ?", [r.user_id, me.userId]))[0];
     const ra = group ? await account(r.user_id) : other;
     if (ra && ra.camfrogUsername && !r.muted && !theyBlock) await queueAlert(r.user_id, conv.id, t, mid);
-    emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...msg, blocked: true } : msg, conv: headFor(conv, group ? null : me) });
+    emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...msg, blocked: true } : msg, conv: theirHead });
   }
-  const head = headFor(conv, other);
   emit(me.userId, { t: "msg", c: conv.id, m: msg, conv: head });
   return { message: msg, conversation: head, created };
 }
@@ -695,6 +697,23 @@ async function unreadTotal(userId) {
   return r[0] ? r[0].n : 0;
 }
 
+// ── 1.99ex: people's looks (profile photo + name style, userlook.js) - ONE users query per response ──
+/** people: [{username}] get {avatar, nameCss, bot?}; msgs: [{from}] get {fromAvatar, fromCss, fromBot}. */
+async function dress({ people = [], msgs = [] } = {}) {
+  const P = people.filter((p) => p && p.username), M = msgs.filter((m) => m && m.from);
+  if (!P.length && !M.length) return;
+  let L;
+  try { L = await userlook.looks({ usernames: [...P.map((p) => p.username), ...M.map((m) => m.from)] }); } catch (e) { return; }
+  userlook.apply(L, P);
+  for (const m of M) {
+    const v = L.get(String(m.from).toLowerCase());
+    m.fromBot = !!(v && v.bot);
+    m.fromAvatar = v && !v.bot ? v.avatar : null;
+    m.fromCss = v && !v.bot ? v.nameCss : "";
+  }
+}
+const listPeople = (items) => items.flatMap((c) => [c.with, ...(c.members || [])]);
+
 /** The conversation list: newest activity first, with the other person (or the group), last message and unread count. */
 async function list(userId) {
   await init();
@@ -729,6 +748,7 @@ async function list(userId) {
     }
     out.push(item);
   }
+  await dress({ people: listPeople(out) });
   return out;
 }
 
@@ -753,6 +773,7 @@ async function history(user, conversationId, { before = null, after = null, limi
   const ctx = { media: await dmmedia.forMessages(rows.map((r) => r.id)), blocks: await blockSet(user.userId) };
   const out = [];
   for (const r of rows) out.push(await shape(r, ctx));
+  await dress({ msgs: out });
   return { messages: out, more };
 }
 
@@ -771,6 +792,7 @@ async function header(user, conversationId) {
       members.push({ username: w.username, display: w.display, role: x.role, you: x.user_id === user.userId, blocked: blocks.has(x.user_id) });
     }
     const no = await groupRefusal(me, conv);
+    await dress({ people: members });
     return { id: conv.id, kind: "group", title: conv.title, with: { username: null, display: conv.title }, members, owner: m.role === "owner",
              muted: !!m.muted, max: LIMITS.group_max, youBlocked: false, canSend: !no, refusal: no ? no.message : null, refusalCode: no ? no.code || null : null };
   }
@@ -778,7 +800,9 @@ async function header(user, conversationId) {
   const other = o ? await account(o.user_id) : null;
   const no = other ? await refusal(me, other, conv) : new Refuse(404, "This account is gone.");
   const b = other ? await blocked(user.userId, other.userId) : [];
-  return { id: conv.id, kind: conv.kind, with: other ? { username: other.username, display: display(other) } : { username: null, display: "[gone]" }, muted: !!m.muted,
+  const with_ = other ? { username: other.username, display: display(other) } : { username: null, display: "[gone]" };
+  await dress({ people: [with_] });
+  return { id: conv.id, kind: conv.kind, with: with_, muted: !!m.muted,
            youBlocked: b.some((x) => x.blocker_id === user.userId), canSend: !no, refusal: no ? no.message : null, refusalCode: no ? no.code || null : null };
 }
 
@@ -1104,6 +1128,8 @@ function register(app, { isBotToken, addUser }) {
       const inbox = require("./inbox");
       if (me.camfrogUsername) await inbox.attachPendingSafe(me.userId, me.camfrogUsername);   // notices Pepe filed before the link
       const convs = await list(me.userId);
+      const meLook = { username: me.username };
+      await dress({ people: [meLook] });           // 1.99ex: my own photo + name style for my optimistic bubbles
       const notices = req.path === "/messages/notices";
       const open = !notices && req.params.id && ID_RE.test(req.params.id) && (await membership(req.params.id, me.userId)) ? req.params.id : null;
       const to = !notices && !open && req.query.to ? String(req.query.to).slice(0, 64) : null;
@@ -1117,7 +1143,7 @@ function register(app, { isBotToken, addUser }) {
       res.render("messages", {
         title: notices ? (nt.unread ? `Notices (${nt.unread})` : "Notices") : (unread ? `Messages (${unread})` : "Messages"),
         user: me.username, dmUnread: unread, inboxUnread: nt.unread,
-        boot: { me: { username: me.username, display: display(me), camfrog: !!me.camfrogUsername, isNew: isNewAccount(me), pictures: !picsWhy, picturesWhy: picsWhy },
+        boot: { me: { username: me.username, display: display(me), avatar: meLook.avatar || null, nameCss: meLook.nameCss || "", camfrog: !!me.camfrogUsername, isNew: isNewAccount(me), pictures: !picsWhy, picturesWhy: picsWhy },
                 conversations: convs, open, to, view: notices ? "notices" : null, prefs: await prefs(me.userId), blocks: await blockList(me.userId),
                 maxLen: LIMITS.max_len, reasons: reasons().menu, levelOk: LIMITS.level_ok,
                 maxPics: dmmedia.MAX_PER_MESSAGE, groupMax: LIMITS.group_max, groupMin: LIMITS.group_min_others + 1, titleMax: LIMITS.title_max,
