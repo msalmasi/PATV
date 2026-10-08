@@ -203,7 +203,7 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   // 1.99fo: the base picker + extras grid, with a thumbnail per base and per kawaii modifier
   assert.match(html, /id="plBases"/);
   assert.match(html, /id="plMods"/);
-  for (const id of ["base-pixel", "base-kawaii", "mod-bow", "mod-flowercrown", "mod-catears", "mod-strawberryhat", "mod-sparkles", "mod-headset"]) {
+  for (const id of ["base-pixel", "base-kawaii", "mod-bow", "mod-flowercrown", "mod-catears", "mod-strawberryhat", "mod-sparkles", "mod-headset", "mod-hearts"]) {
     assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
   }
 });
