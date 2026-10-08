@@ -88,7 +88,7 @@
         </a>
         <div class="body">
           <a class="t" href="/shop/item/<%= it.prizeId %>" style="color:#fff;text-decoration:none"><%= it.prize %></a>
-          <div class="price"><%= H.fmt(it.cost) %> PAT</div>
+          <div class="price"><%= H.fmt(it.cost) %> PAT<% if (it.escalating) { %> <span class="muted" style="font-size:12px;font-weight:normal"><%= me ? 'your price' : 'first one' %></span><% } %></div>
           <div class="meta">
             <% if (official) { %><span class="pill official">Official</span><% } else { %>by <a href="/shop/seller/<%= encodeURIComponent(it.seller_name || '') %>"><%= it.seller_name %></a><% } %>
           </div>

@@ -94,7 +94,7 @@
             <h2 id="rulesTitle">WHEEL RULES</h2>
             <ul>
                 <li>Each spin costs 5,000 <a href="/info#PAT">PAT</a>. Press the coin to insert it; the wheel decides your prize.</li>
-                <li>You get <strong>10 spins per day for each of your levels</strong>. Want more? Buy <strong>+100 Daily Gold Spins</strong> in the <a href="/shop">shop</a>.</li>
+                <li>You get <strong>100 spins a day, plus 25 for each of your levels</strong> (level 10: 350 a day). Want more? Buy <strong>+100 Daily Gold Spins</strong> in the <a href="/shop">shop</a>: 3M PAT for your first, +1M for each one you already own.</li>
                 <li>Keep this window open until the wheel stops, or the spin won't count and you'll need to wait to spin again.</li>
                 <li>One wheel at a time. If something looks stuck, refresh the page.</li>
                 <li>Land the thin gold slice to roll for a share of the jackpot pot.</li>
@@ -104,7 +104,7 @@
 </main>
 
 <script>
-    // Live "spins left today" counter (10/level/day + purchased boosts).
+    // Live "spins left today" counter (100 + 25/level a day + purchased boosts; goldwheel.js).
     // Global so script.js / coinop.js can refresh it right after a spin.
     window.wheelSpinsLeft = null;
     function updateSpinsLeft() {

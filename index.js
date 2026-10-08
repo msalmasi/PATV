@@ -33,6 +33,7 @@ const {
   generateUniqueUsername
 } = require("./user.controller");
 const { createTables, runQuery, getQuery } = require("./dbUtils");
+const { goldDailyLimit, GOLD_BASE, GOLD_PER_LEVEL } = require("./goldwheel");   // 1.99fj: gold wheel limit = 100 + 25 x level + boosts
 const authenticateToken = require("./middleware/authenticateToken");
 const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCookie");
 const guard = require("./middleware/authGuard");
@@ -2598,7 +2599,7 @@ app.get("/g/wheel", addUser, (req, res) => {
   // Proceed with fetching user data and generating wheel
 });
 
-// Remaining gold spins for the day (10 per user level, plus any purchased +100 boosts).
+// Remaining gold spins for the day (goldwheel.js: 100 + 25 per level, plus any purchased +100 boosts).
 app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res) => {
   try {
     const username = req.params.username;
@@ -2608,13 +2609,14 @@ app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res)
       [username]
     );
     if (!user.length) return res.status(404).json({ error: "User not found" });
-    const limit = 10 * (user[0].level || 1) + (user[0].extra_daily_spins || 0);
+    const limit = goldDailyLimit(user[0].level, user[0].extra_daily_spins);
     const cnt = await getQuery(
       "SELECT COUNT(*) AS c FROM wheel_spins WHERE userId = ? AND type = 'gold' AND result != 'FAILED' AND date(timestamp) = date('now');",
       [user[0].userId]
     );
     const used = cnt[0].c;
-    res.json({ used, limit, left: Math.max(0, limit - used) });
+    res.json({ used, limit, left: Math.max(0, limit - used),
+               level: user[0].level || 0, extra: user[0].extra_daily_spins || 0, base: GOLD_BASE, per_level: GOLD_PER_LEVEL });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3193,8 +3195,8 @@ app.post("/api/u/:username/wheel/spin", authenticateToken, async (req, res) => {
       return res.status(403).send("You are banned from the casino.");
     }
 
-    // Daily gold-spin cap: 10 per user level, plus any purchased "+100 Daily Gold Spins" boosts.
-    const dailyLimit = 10 * (user[0].level || 1) + (user[0].extra_daily_spins || 0);
+    // Daily gold-spin cap (goldwheel.js): 100 + 25 per level, plus any purchased "+100 Daily Gold Spins" boosts.
+    const dailyLimit = goldDailyLimit(user[0].level, user[0].extra_daily_spins);
     const spunToday = await getQuery(
       `SELECT COUNT(*) AS c FROM wheel_spins WHERE userId = ? AND type = 'gold' AND result != 'FAILED' AND date(timestamp) = date('now');`,
       [user[0].userId]

@@ -27,6 +27,10 @@
           <% if (p.category) { %><a class="chip" href="/shop?cat=<%= encodeURIComponent(p.category) %>"><%= p.category %></a><% } %>
         </div>
       </div>
+      <% if (p.escalating) { %>
+        <p class="muted" style="margin:0"><%= me ? 'Your price.' : '' %> <%= H.fmt(p.list_cost) %> PAT for your first, +1,000,000 for each one you already own (3M, 4M, 5M…).
+          Every copy adds 100 gold spins a day for good. The PAT goes to the House, the casino jackpot.</p>
+      <% } %>
       <div class="muted"><span class="<%= p.quantity > 0 ? '' : 'oos' %>" data-stock="<%= p.prizeId %>"><%= p.quantity > 0 ? H.fmt(p.quantity) + ' left' : 'Out of stock' %></span><%= p.sold ? ' · ' + H.fmt(p.sold) + ' sold' : '' %>
         · <%= official ? 'Delivered instantly' : 'The seller delivers it — your PAT is held until they do' %></div>
 

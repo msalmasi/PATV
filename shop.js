@@ -6,6 +6,10 @@
 //  * OFFICIAL items (prizes.seller_id IS NULL) behave exactly as they always have: the buyer pays,
 //    the PAT goes to the store owner's account (STORE_OWNER_USERNAME, default "pb"), role prizes
 //    and the spin boost take effect at once. Each one is also recorded as a COMPLETED order.
+//    Exception (1.99fj): "+100 Daily Gold Spins" (spinboost100) is priced per buyer - 3M for the
+//    first copy, +1M for every copy they already own (spinboostPrice) - always computed here, never
+//    taken from the client, and its PAT goes to the House (a jackpot_rakes row, like wheel wagers),
+//    not to the store owner. The buyer's debit equals the House credit exactly.
 //  * USER listings (seller_id = a user) are escrowed orders: the buyer is charged at once and the
 //    order is "paid"; the seller fulfils it (a note/code for the buyer) and is credited the price
 //    minus the shop fee right then, with the fee going to Pepe's Federal Reserve as a NEGATIVE
@@ -29,6 +33,15 @@ const actions = require("./actions");
 const inbox = require("./inbox");
 
 const STORE_OWNER_USERNAME = process.env.STORE_OWNER_USERNAME || "pb";
+
+// "+100 Daily Gold Spins" (1.99fj): escalating per-buyer price, proceeds to the House.
+const SPINBOOST_ID = "spinboost100";
+const SPINBOOST_SPINS = 100;          // extra daily gold spins per copy (users.extra_daily_spins)
+const SPINBOOST_BASE = 3000000;       // the first copy
+const SPINBOOST_STEP = 1000000;       // + this for every copy the buyer already owns (3M, 4M, 5M, ...)
+const spinboostOwned = (extraDailySpins) => Math.max(0, Math.floor((Number(extraDailySpins) || 0) / SPINBOOST_SPINS));
+const spinboostPrice = (owned) => SPINBOOST_BASE + SPINBOOST_STEP * Math.max(0, Math.floor(Number(owned) || 0));
+const isSpinboost = (prize) => !!prize && prize.prizeId === SPINBOOST_ID && !prize.seller_id;
 const SITE = String(process.env.PUBLIC_BASE_URL || "https://publicaccess.tv").replace(/\/+$/, "");
 const MAIL_FROM = process.env.SHOP_FROM_EMAIL || "no-reply@publicaccess.tv";
 
@@ -107,6 +120,11 @@ const ready = (async () => {
     "CREATE INDEX IF NOT EXISTS idx_shop_orders_status ON shop_orders (status, updated)",
     "CREATE INDEX IF NOT EXISTS idx_shop_events_order ON shop_order_events (order_id, id)",
   ]) await runQuery(sql);
+  // 1.99fj: the spin boost's list price is its first-copy price; what a buyer pays is spinboostPrice().
+  try { await runQuery("ALTER TABLE users ADD COLUMN extra_daily_spins INTEGER DEFAULT 0"); }
+  catch (e) { /* already there (or no users table yet - dbUtils creates it) */ }
+  await runQuery("UPDATE prizes SET cost = ? WHERE prizeId = ? AND seller_id IS NULL AND cost != ?",
+                 [SPINBOOST_BASE, SPINBOOST_ID, SPINBOOST_BASE]);
   await loadSettings();
   await backfillHistory();
 })().catch((e) => console.error("[shop] schema:", e));
@@ -279,11 +297,13 @@ async function purchasePrize({ userId, username, prizeId, source, buyerInput, ex
       return { success: false, status: 400, message: `${prizes[0].prize} isn't for sale right now.` };
     }
     // The website sends the price the buyer saw; a price edit in between must not charge them more.
-    if (expectedCost != null && expectedCost !== "" && Number(expectedCost) !== prizes[0].cost) {
+    // Official items check it inside buyOfficial, against the price the server computes for this
+    // buyer at that moment (the spin boost's price depends on how many they own).
+    if (prizes[0].seller_id && expectedCost != null && expectedCost !== "" && Number(expectedCost) !== prizes[0].cost) {
       return { success: false, status: 409, message: `The price of ${prizes[0].prize} just changed to ${prizes[0].cost.toLocaleString()} PAT — check it and try again. You have not been charged.` };
     }
     return prizes[0].seller_id ? await buyListing(prizes[0], { userId, username, source, buyerInput })
-                               : await buyOfficial(prizes[0], { userId, username, source });
+                               : await buyOfficial(prizes[0], { userId, username, source, expectedCost });
   } catch (error) {
     console.error("Shop purchase error:", error);
     return { success: false, status: 500, message: "Something went wrong buying that — you have not been charged." };
@@ -296,15 +316,40 @@ async function userRoles(userId) {
   return rows.map((r) => r.role);
 }
 
+// What this buyer pays for an official item: the list price, except the spin boost (per buyer).
+async function priceFor(prize, userId) {
+  if (!isSpinboost(prize)) return prize.cost;
+  if (!userId) return SPINBOOST_BASE;
+  const u = (await getQuery("SELECT extra_daily_spins FROM users WHERE userId = ?", [userId]))[0];
+  return spinboostPrice(spinboostOwned(u && u.extra_daily_spins));
+}
+// Rows for a page: show the signed-in buyer their own spin-boost price (cost), keep list_cost.
+async function personalise(rows, userId) {
+  for (const r of rows || []) {
+    if (r && isSpinboost(r)) { r.list_cost = r.cost; r.cost = await priceFor(r, userId); r.escalating = true; }
+  }
+  return rows;
+}
+
 // The official store: identical to the pre-marketplace purchase, plus a completed order row.
-function buyOfficial(listed, { userId, username, source }) {
+// The spin boost is priced per buyer and paid to the House (see the header).
+function buyOfficial(listed, { userId, username, source, expectedCost }) {
   return serial(async () => {
     const prize = (await getQuery("SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?", [listed.prizeId]))[0];
     if (!prize) return { success: false, status: 404, message: "That item isn't in the shop any more." };
+    const boost = isSpinboost(prize);
     const users = await getQuery(
-      "SELECT points_balance, discordId, camfrogUsername FROM users WHERE userId = ?", [userId]);
+      `SELECT points_balance, discordId, camfrogUsername${boost ? ", COALESCE(extra_daily_spins, 0) AS extra_daily_spins" : ""} FROM users WHERE userId = ?`, [userId]);
     if (users.length === 0) {
       return { success: false, status: 404, message: "We couldn't find your account." };
+    }
+    // The server's price, never the client's: the list price, or the spin boost's per-buyer price.
+    const owned = boost ? spinboostOwned(users[0].extra_daily_spins) : 0;
+    prize.cost = boost ? spinboostPrice(owned) : prize.cost;
+    if (expectedCost != null && expectedCost !== "" && Number(expectedCost) !== prize.cost) {
+      return { success: false, status: 409, cost: prize.cost,
+               message: boost ? `${prize.prize} costs you ${prize.cost.toLocaleString()} PAT (you own ${owned}) — check it and try again. You have not been charged.`
+                              : `The price of ${prize.prize} just changed to ${prize.cost.toLocaleString()} PAT — check it and try again. You have not been charged.` };
     }
     if (prize.quantity <= 0) {
       return { success: false, status: 400, message: `${prize.prize} is out of stock — check back later.` };
@@ -323,9 +368,10 @@ function buyOfficial(listed, { userId, username, source }) {
                  `${balance.toLocaleString()} — ${short.toLocaleString()} short.`,
       };
     }
-    const owners = await getQuery("SELECT userId, username FROM users WHERE username = ?", [STORE_OWNER_USERNAME]);
+    // Proceeds: the House (casino jackpot) for the spin boost, else the store owner.
+    const owners = boost ? [] : await getQuery("SELECT userId, username FROM users WHERE username = ?", [STORE_OWNER_USERNAME]);
     const owner = owners[0] || null;
-    if (!owner) {
+    if (!owner && !boost) {
       console.error(`STORE OWNER '${STORE_OWNER_USERNAME}' not found — sale proceeds go nowhere`);
     }
 
@@ -341,11 +387,13 @@ function buyOfficial(listed, { userId, username, source }) {
         [prize.prizeId]);
       if (!stock.changes) throw new Error("sold out mid-purchase");
       // Digital prize effect: the spin boost permanently raises this user's daily gold-spin
-      // cap by 100 (stackable — buy it again for another +100/day).
-      if (prize.prizeId === "spinboost100") {
-        await runQuery(
-          "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + 100 WHERE userId = ?",
-          [userId]);
+      // cap by 100 (stackable — buy it again for another +100/day, at +1M each time). Conditional
+      // on the count it was priced from, so a concurrent purchase can't buy at the old price.
+      if (boost) {
+        const up = await runQuery(
+          "UPDATE users SET extra_daily_spins = COALESCE(extra_daily_spins, 0) + ? WHERE userId = ? AND COALESCE(extra_daily_spins, 0) = ?",
+          [SPINBOOST_SPINS, userId, users[0].extra_daily_spins]);
+        if (!up.changes) throw new Error("boost count changed mid-purchase");
       }
       if (role) {
         await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)",
@@ -368,7 +416,13 @@ function buyOfficial(listed, { userId, username, source }) {
         VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?)`,
         [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now]);
       orderId = o.id;
-      await event(orderId, "completed", username, "Official store item — delivered instantly");
+      if (boost) {
+        // to the House, the same place gold-wheel wagers go: debit == credit, nothing minted or burned
+        await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                       [uuidv4(), `shop-order:${orderId}`, userId, prize.cost]);
+      }
+      await event(orderId, "completed", username, boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
+                                                        : "Official store item — delivered instantly");
       await runQuery("COMMIT");
     } catch (error) {
       try { await runQuery("ROLLBACK"); } catch (e) { /* nothing open */ }
@@ -380,6 +434,9 @@ function buyOfficial(listed, { userId, username, source }) {
                        : "Something went wrong buying that — you have not been charged.",
       };
     }
+
+    // E-0 telemetry (econ.js), best effort after the commit: the spin boost is a House inflow.
+    if (boost) houseTelemetry(orderId, prize.cost, users[0].camfrogUsername || username, source);
 
     // Notifications are not part of the purchase: an outage must never turn a completed, charged
     // purchase into a reported failure.
@@ -405,11 +462,22 @@ function buyOfficial(listed, { userId, username, source }) {
     return {
       success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost,
       balance: remaining, remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
-      owner: owner ? owner.username : null, role, discord_role, order_id: orderId,
+      owner: boost ? "House" : (owner ? owner.username : null), role, discord_role, order_id: orderId,
+      ...(boost ? { owned: owned + 1, next_cost: spinboostPrice(owned + 1) } : {}),
       message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
                `Balance: ${remaining.toLocaleString()} PAT.`,
     };
   });
+}
+
+// E-0 (econ.js): journal a House inflow as a "game" flow, like Pepe's casino flows. Never throws.
+function houseTelemetry(orderId, amount, login, source) {
+  try {
+    const econ = require("./econ");
+    econ.config().then((c) => c.economy_e0 ? econ.ingestCharges([{ ref: `shop-spinboost-${orderId}`, ts: Date.now(), room: "",
+      flow: "spinboost", kind: "game", payer: login || "", payer_kind: "other", amount,
+      via: source === "website" ? "web" : "chat" }]) : 0).catch(() => {});
+  } catch (e) { /* telemetry only */ }
 }
 
 // A user listing: charge the buyer, take one from stock, open a "paid" order, tell the seller.
@@ -925,7 +993,9 @@ function register(app, deps) {
     try {
       await ready;
       const rows = await getQuery("SELECT prizeId, prize, cost, quantity FROM prizes WHERE seller_id IS NULL AND status = 'active'");
-      res.json(rows.map((row) => ({ prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity })));
+      // the spin boost's cost here is its first-copy price; buying it charges the buyer's own price
+      res.json(rows.map((row) => ({ prize: row.prize, cost: row.cost, prizeId: row.prizeId, quantity: row.quantity,
+        ...(row.prizeId === SPINBOOST_ID ? { cost_note: `${SPINBOOST_BASE.toLocaleString()} for your first, +${SPINBOOST_STEP.toLocaleString()} for each one you own` } : {}) })));
     } catch (error) {
       console.error(error);
       res.status(500).send("Failed to retrieve prizes.");
@@ -937,6 +1007,7 @@ function register(app, deps) {
     try {
       const me = await meOf(req);
       const data = await browse(req.query);
+      await personalise(data.items, me && me.userId);
       res.render("shop", base(req, me, { ...data, store: null }));
     } catch (e) {
       console.error("[shop] browse:", e);
@@ -951,10 +1022,12 @@ function register(app, deps) {
       const p = await getListing(req.params.id);
       const canSee = p && (p.status === "active" || (me && (me.staff || me.userId === p.seller_id)));
       if (!canSee) return res.status(404).render("shopItem", base(req, me, { p: null, sales: 0, more: [] }));
+      await personalise([p], me && me.userId);
       const sales = p.seller_id ? await sellerSales(p.seller_id) : 0;
       const more = await getQuery(`SELECT prizeId, prize, cost, quantity, image_url FROM prizes WHERE status = 'active' AND prizeId != ?
         AND ${p.seller_id ? "seller_id = ?" : "seller_id IS NULL"} ORDER BY COALESCE(sold,0) DESC LIMIT 6`,
         p.seller_id ? [p.prizeId, p.seller_id] : [p.prizeId]);
+      if (!p.seller_id) await personalise(more, me && me.userId);
       res.render("shopItem", base(req, me, { p, sales, more }));
     } catch (e) {
       console.error("[shop] item:", e);
@@ -1179,4 +1252,5 @@ function register(app, deps) {
 }
 
 module.exports = { register, purchasePrize, orderAction, createListing, editListing, listingStatus, sweep, settings, saveSettings,
-                   ready, ROLE_PRIZES, STORE_OWNER_USERNAME, notify };
+                   ready, ROLE_PRIZES, STORE_OWNER_USERNAME, notify,
+                   SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise };

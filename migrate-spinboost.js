@@ -10,9 +10,9 @@ function addPrize() {
     if (e) { console.error("prize check error:", e.message); return db.close(); }
     if (row) { console.log("• prize spinboost100 already exists"); return db.close(); }
     db.run(
-      "INSERT INTO prizes (prizeId, prize, cost, quantity) VALUES ('spinboost100', '+100 Daily Gold Spins', 25000000, 999999)",
+      "INSERT INTO prizes (prizeId, prize, cost, quantity) VALUES ('spinboost100', '+100 Daily Gold Spins', 3000000, 999999)",
       (er) => {
-        console.log(er ? "INSERT error: " + er.message : "• inserted prize spinboost100 (25,000,000 PAT)");
+        console.log(er ? "INSERT error: " + er.message : "• inserted prize spinboost100 (3,000,000 PAT list price; shop.js prices it per buyer, 1.99fj)");
         db.close();
       }
     );
