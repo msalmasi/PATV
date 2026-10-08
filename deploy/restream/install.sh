@@ -129,7 +129,8 @@ say "Health"
 sleep 8
 systemctl is-active --quiet "$SVC" || die "$SVC isn't running: journalctl -u $SVC -n 50"
 ok "$SVC active"
-if journalctl -u "$SVC" --since "-20s" --no-pager -q | grep -q "site sync failed"; then
+# the worker logs "site sync failed" once when it starts failing and "site reachable again" when it recovers
+if journalctl -u "$SVC" -n 200 --no-pager -q -o cat | grep -E "site sync failed|site reachable again|^patv-restream " | tail -1 | grep -q "site sync failed"; then
   warn "the worker can't sync with the site yet (expected until the site with restream.js is deployed): journalctl -u $SVC -n 20"
 else
   ok "worker syncing with $SITE_URL"

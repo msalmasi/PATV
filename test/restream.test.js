@@ -221,6 +221,12 @@ test("HTTP: owner-only, CSRF on writes, keys never returned, loopback + token wo
     assert.equal(res.status, 200);
     const j = await res.json();
     assert.ok(Array.isArray(j.relays));
+    const S2 = (hdr) => fetch(base + "/api/restream/worker/state", { method: "POST", headers: { "Content-Type": "application/json", ...hdr }, body: "{}" });
+    assert.equal((await S2({})).status, 403, "state needs the token too");
+    res = await S2({ "X-Restream-Token": process.env.RESTREAM_TOKEN });
+    txt = await res.text();
+    assert.equal(res.status, 200);
+    assert.ok(txt.includes('"main"') && !txt.includes(KEY), "masked state for ops");
     await R.setToggle(R.MAIN, false);
     await R.deleteDest(R.MAIN_OWNER);
   } finally { srv.close(); }

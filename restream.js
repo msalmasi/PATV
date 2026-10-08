@@ -312,14 +312,23 @@ function register(app, { addUser }) {
   const noStore = (res) => res.set("Cache-Control", "no-store");
 
   // the relay worker: straight from the box (no proxy headers) and with the shared token
-  app.post("/api/restream/worker/sync", async (req, res) => {
-    noStore(res);
+  const workerAuth = (req) => {
     const ra = req.socket.remoteAddress;
     const loop = ra === "127.0.0.1" || ra === "::1" || ra === "::ffff:127.0.0.1";
-    if (!loop || req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.headers["cf-connecting-ip"]) return res.status(403).json({ ok: false });
+    if (!loop || req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.headers["cf-connecting-ip"]) return false;
     const want = workerToken(), got = String(req.get("x-restream-token") || "");
-    if (want.length < 16 || got.length !== want.length || !crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want))) return res.status(403).json({ ok: false });
+    return want.length >= 16 && got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+  };
+  app.post("/api/restream/worker/sync", async (req, res) => {
+    noStore(res);
+    if (!workerAuth(req)) return res.status(403).json({ ok: false });
     try { res.json({ ok: true, ...(await workerSync(req.body || {})) }); } catch (e) { fail(res, e); }
+  });
+  // 1.99fl: the same masked state /stage/admin shows, for ops on the box (curl with the worker token)
+  app.post("/api/restream/worker/state", async (req, res) => {
+    noStore(res);
+    if (!workerAuth(req)) return res.status(403).json({ ok: false });
+    try { res.json({ ok: true, ...(await adminState()) }); } catch (e) { fail(res, e); }
   });
 
   // ── the streamer (/stage) ──

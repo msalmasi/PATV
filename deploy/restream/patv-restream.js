@@ -19,7 +19,7 @@
 const http = require("http");
 const { spawn } = require("child_process");
 
-const VERSION = "1.99fk";
+const VERSION = "1.99fl";
 const SYNC_MS = 3000;
 const HOLD_MS = 60 * 1000;
 const STALL_MS = 25 * 1000;
