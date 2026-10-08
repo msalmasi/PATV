@@ -335,6 +335,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   const agent = (s12.match(/<address class="dmca-agent"[^>]*>([\s\S]*?)<\/address>/) || ["", ""])[1];
   assert.equal(agent, 'Jonathan Bailey<br>CopyByte<br>3157 Gentilly Blvd Suite # 2254<br>New Orleans, LA 70122<br>Phone: 1-504-356-4555<br>' +
                       'Email: <a href="mailto:publicaccess-dmca@copybyte.com">publicaccess-dmca@copybyte.com</a>');
+  assert.match(s12, /<!--email_off--><address class="dmca-agent"/, "Cloudflare email obfuscation must not hide the agent's email");
   assert.doesNotMatch(s12, /Designated Copyright Agent, Houseplants LLC/);   // the old block (copyright@ as the agent) is gone
   assert.match(s12, /General copyright questions that aren't notices can also go to/);
   assert.match(fs.readFileSync(path.join(repo, "views", "layout.ejs"), "utf8"), /href="\/terms#reporting">Report abuse &amp; copyright/);
