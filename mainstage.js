@@ -88,7 +88,18 @@ const DEFAULTS = {
   // 1.99et: ultra-low-latency WebRTC (webrtc.js: WHIP ingest, WHEP ⚡ playback, TURN) - OFF until the
   // MediaMTX / coturn install (deploy/webrtc/) is live; off = nothing WebRTC anywhere
   webrtc_enabled: false,
+  // 1.99fv: what Pepe's main stage plays. null = his own stream (HLS + the ⚡ WHEP toggle) - the default.
+  // An admin may put a YouTube / Twitch embed there instead ({p,t,id}, the same parse/clean as a slot's
+  // link - stageembed.js). Twitch being live no longer swaps anything by itself (Twitch is a relay of
+  // his stream since 1.99fk). Live detection, snaps / clips and the front-pad pick stay on his HLS.
+  pepe_embed: null,
 };
+// 1.99fv: Pepe's Twitch channel (the "Use Twitch" shortcut on /stage/admin + the viewers' "Watch on Twitch" link)
+const TW_LOGIN_RE = /^[A-Za-z0-9_]{3,25}$/;
+function pepeTwitchChannel() {
+  const c = String(process.env.PEPE_TWITCH_CHANNEL || "publicaccess_ttv").trim();
+  return TW_LOGIN_RE.test(c) ? c.toLowerCase() : "publicaccess_ttv";
+}
 const OPEN = "('waiting','active')";
 const FUTURE = "('requested','scheduled')";
 const BEAT_STALE_MS = 30 * 1000;     // on_update comes every 10 s; 3 missed = not live
@@ -285,13 +296,48 @@ function cleanConfig(c) {
     stagecap_snaps: onOff(c.stagecap_snaps, DEFAULTS.stagecap_snaps),
     stagecap_clips: onOff(c.stagecap_clips, DEFAULTS.stagecap_clips),
     webrtc_enabled: onOff(c.webrtc_enabled, DEFAULTS.webrtc_enabled),
+    pepe_embed: (() => { try { return pepeEmbedFrom(c.pepe_embed); } catch (e) { return null; } })(),
   };
   if (o.max_minutes < o.min_minutes) o.max_minutes = o.min_minutes;
   return o;
 }
+/** 1.99fv: Pepe's stage source from an admin's input -> null (his own stream) or a clean {p,t,id}.
+ *  Accepts a stored {p,t,id}, "" / "pepe" / "hls" / "stream" (back to his stream), a bare Twitch channel
+ *  name, or any YouTube / Twitch link a slot accepts (stageembed.parse). Throws a 400 Refuse otherwise. */
+function pepeEmbedFrom(v) {
+  if (v === undefined || v === null || v === false) return null;
+  if (typeof v === "object") {
+    const c = embeds.clean(v);
+    if (!c) throw new Refuse(400, "That isn't a YouTube or Twitch embed we can play.");
+    return c;
+  }
+  const s = String(v).trim();
+  if (!s || /^(pepe|hls|stream|none|off)$/i.test(s)) return null;
+  if (/^twitch$/i.test(s)) return { p: "twitch", t: "channel", id: pepeTwitchChannel() };
+  if (TW_LOGIN_RE.test(s)) return { p: "twitch", t: "channel", id: s.toLowerCase() };        // a bare channel name
+  try { return embeds.parse(s); } catch (e) { throw new Refuse(400, e.message || "That isn't a YouTube or Twitch link we can play."); }
+}
+/** 1.99fv: what Pepe's main stage shows - {mode: 'stream'} (HLS + ⚡) or {mode: 'embed', embed, label, url};
+ *  plus his Twitch channel for the viewers' "Watch on Twitch" link (twitch_live = our relay to it is running). */
+function pepeSource(cfg = CONFIG) {
+  const e = embeds.clean(cfg && cfg.pepe_embed);
+  let twLive = false;
+  try { twLive = require("./restream").mainRelayLive(); } catch (err) { /* the relay is optional */ }
+  const twitch = { login: pepeTwitchChannel(), url: "https://www.twitch.tv/" + pepeTwitchChannel(), live: twLive };
+  return e ? { mode: "embed", embed: e, label: embeds.label(e), url: embedUrl(e), twitch } : { mode: "stream", twitch };
+}
+/** 1.99fv: the player Pepe's stage uses, from his stream state (bridge.stage()) and the source above. The
+ *  page (stage-room.js) does the same. Live = HLS only: Twitch never turns it on or swaps it in by itself. */
+function pepePlayer(st, src = pepeSource()) {
+  if (!st || !st.active) return { kind: "off" };
+  if (src && src.mode === "embed" && embeds.clean(src.embed)) return { kind: "embed", embed: embeds.clean(src.embed) };
+  return { kind: "hls", hls: "https://publicaccess.tv/hls/broadcast.m3u8", whep: typeof st.whep === "string" && st.whep ? st.whep : null };
+}
 async function setConfig(patch, actor) {
   await init();
-  const next = cleanConfig({ ...CONFIG, ...(patch || {}) });
+  patch = { ...(patch || {}) };
+  if ("pepe_embed" in patch) patch.pepe_embed = pepeEmbedFrom(patch.pepe_embed);    // a bad link -> 400 (never silently "stream")
+  const next = cleanConfig({ ...CONFIG, ...patch });
   for (const k of Object.keys(DEFAULTS)) {
     await runQuery("INSERT INTO stage_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                    [k, JSON.stringify(next[k])]);
@@ -1192,7 +1238,7 @@ async function adminState() {
   const log = (await getQuery("SELECT * FROM stage_slots ORDER BY created DESC LIMIT 50")).map((s) => view(s, t));
   const bans = await getQuery("SELECT userId, username, reason, by, at FROM stage_bans ORDER BY at DESC");
   const events = await getQuery("SELECT slot_id, ts, what, actor, detail, room_id FROM stage_events ORDER BY ts DESC LIMIT 60");
-  return { config: config(), open, upcoming, log, bans, events, rtmp_app: RTMP_APP + " -> " + OUT_APP, relays: relays.size };
+  return { config: config(), open, upcoming, log, bans, events, rtmp_app: RTMP_APP + " -> " + OUT_APP, relays: relays.size, pepe_src: pepeSource() };
 }
 /** What a room owner sees on the manage page. */
 async function ownerState(roomId) {
@@ -1429,6 +1475,7 @@ module.exports = {
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
+  pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,

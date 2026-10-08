@@ -240,6 +240,11 @@ async function workerSync(body = {}, t = now()) {
   }
   return { relays };
 }
+/** 1.99fv: our relay of Pepe's main stream to Twitch is running right now (info only - the "also on Twitch" link). */
+function mainRelayLive(t = now()) {
+  const s = STATUS.get(MAIN);
+  return !!(s && s.state === "live" && workerUp(t) && t - s.at < STATUS_STALE_MS);
+}
 function workerUp(t = now()) { return !!workerAt && t - workerAt < STATUS_STALE_MS; }
 /** {state, detail, kbps, ...} for one relay id as the UI shows it: live / starting / error / off / waiting. */
 function statusOf(id, wanted, t = now()) {
@@ -387,6 +392,7 @@ function register(app, { addUser }) {
 }
 
 module.exports = {
+  mainRelayLive,
   register, init, encrypt, decrypt, mask, cleanKey, cleanServer, saveDest, deleteDest, destRow, destView, toggleOf, setToggle,
   noteMain, mainLive, desired, workerSync, statusOf, me, adminState, forMain, configured, Refuse,
   MAIN, MAIN_OWNER, DEFAULT_SERVER, TWITCH_MAX_KBPS,

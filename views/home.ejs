@@ -43,13 +43,12 @@
 %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
 <script src="https://vjs.zencdn.net/8.3.0/video.min.js" defer></script>
-<script src="https://player.twitch.tv/js/embed/v1.js" defer></script>
 <script src="/public/js/stage-player.js?v=7"></script>
 <%# 1.99et: ⚡ Low latency (WebRTC / WHEP) - only while the stage setting webrtc_enabled is on (webrtc.js) %>
 <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=2">
 <script src="/public/js/webrtc-client.js?v=1"></script>
 <script src="/public/js/stage-lowlat.js?v=2"></script>
-<% } %><script src="/public/js/stage-room.js?v=6"></script>
+<% } %><script src="/public/js/stage-room.js?v=7"></script>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
 <link rel="stylesheet" href="/public/css/padfx.css?v=1">
 <script src="/public/js/stage-capture.js?v=2"></script>
@@ -118,8 +117,6 @@
   .hm .player .video-js { width: 100%; height: 100%; }
   .hm .player #videoOverlay { position: absolute; inset: 0; display: grid; place-items: center; grid-template-rows: none; grid-template-columns: none; cursor: pointer; z-index: 3; background: rgba(0,0,0,.45); }
   .hm .player #videoOverlay img { grid-column: auto; grid-row: auto; width: 56px; height: auto; opacity: .9; }
-  .hm .player #twitch { position: absolute; inset: 0; padding: 0; height: auto; }
-  .hm .player #twitch iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
   .hm .hide { display: none !important; }
   .hm .stage-side { display: grid; gap: var(--gap); align-content: start; align-self: start; min-width: 0; }
   .hm .stage-side > * { margin-top: 0; }
@@ -358,6 +355,9 @@
   .hm .stab .dot { flex: none; }
   .hm .stab.off .dot { background: #666; animation: none; }
   .hm .stabs .adm { display: inline-flex; gap: 6px; margin-left: auto; }
+  /* 1.99fv: subtle extras next to Pepe's tab - "Watch on Twitch" (info + link) / his own stream vs an admin embed */
+  .hm .stabs .stx { padding: 4px 9px; border-radius: 999px; border: 1px solid #2b2b2b; background: transparent; color: #a99bc9; font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; }
+  .hm .stabs .stx:hover, .hm .stabs .stx:focus-visible { border-color: #6b4fa8; color: #e4dcf5; }
   .hm .stabs .adm button { padding: 5px 10px; border-radius: 8px; border: 1px solid #5a2222; background: #2a1010; color: #ffb4b4; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
   .hm .stabs .adm button:hover { border-color: #ff5252; }
   @media (max-width: 520px) { .hm .stabs .adm { margin-left: 0; } }
@@ -450,7 +450,6 @@
           <div id="videoWrapper"></div>
           <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
           <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
-          <div id="twitch" class="hide"></div>
           <div class="embed hide" id="stEmbed"></div>
           <%# 1.99eo: the off-air slate - the player's own 16:9 box, so the layout never collapses; .stage.live hides it %>
           <div class="slate" id="stSlate" role="status" aria-label="The stage is off air">
@@ -662,7 +661,8 @@
     });
 
     // ── the stage (public/js/stage-room.js): the FRONT ROOM's stage - its featured slot by default, else
-    // Pepe's stream (Twitch when it's live there, else HLS); tabs switch between every live stream.
+    // Pepe's stream (his HLS + low-latency WHEP, or an admin-chosen YouTube / Twitch embed - 1.99fv: never an automatic
+    // Twitch swap); tabs switch between every live stream.
     var initSlots = <%- JSON.stringify(paid).replace(/</g, '\\u003c') %>;
     // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js) - it goes to the FRONT pad's story
     var frontSlug = <%- JSON.stringify(frontInfo ? frontInfo.slug : '').replace(/</g, '\\u003c') %>;
@@ -670,10 +670,10 @@
     PATVStage.switcher({
       tabs: document.getElementById('stTabs'), wrap: document.getElementById('videoWrapper'),
       reconnect: document.getElementById('stReconnect'), unmute: document.getElementById('stUnmute'),
-      embedHost: document.getElementById('stEmbed'), twitchHost: document.getElementById('twitch'),
+      embedHost: document.getElementById('stEmbed'),
       onShow: function (sel) { stCap.update(frontSlug ? sel : null); },
       onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
-      api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
+      api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
       onAir: function (on, sub) { setPill(on, sub || (on ? 'live now' : 'nothing streaming right now')); }
     });
 

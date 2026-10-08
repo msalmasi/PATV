@@ -15,6 +15,23 @@
       <tbody id="openRows"></tbody></table></div>
   </section>
 
+  <!-- 1.99fv: what Pepe's main stage plays (stage setting pepe_embed; null = his own stream) -->
+  <% const PS = state.pepe_src || { mode: 'stream' }; const twCh = PS.twitch && PS.twitch.login; %>
+  <section class="sb-card" id="pepeSrc" aria-labelledby="psT">
+    <h2 id="psT">🐸 Pepe's main stage source</h2>
+    <p id="psNow" role="status"><% if (PS.mode === 'embed') { %>Showing an embed: <b><%= PS.label %></b><% if (PS.url) { %> · <a href="<%= PS.url %>" target="_blank" rel="noopener noreferrer"><%= PS.url %></a><% } %><% } else { %>Showing <b>Pepe's stream (HLS + ⚡)</b> - the default.<% } %></p>
+    <div class="row">
+      <button type="button" class="btn primary" data-ps="pepe" <%= PS.mode === 'embed' ? '' : 'disabled' %>>↩ Back to Pepe's stream</button>
+      <% if (twCh) { %><button type="button" class="btn" data-ps="twitch">🟣 Twitch embed (twitch.tv/<%= twCh %>)</button><% } %>
+    </div>
+    <form id="psForm" class="row" autocomplete="off">
+      <input type="text" name="pepe_embed" maxlength="300" spellcheck="false" style="flex:1 1 280px" aria-label="Twitch channel or YouTube / Twitch link"
+             placeholder="Twitch name or link, or a YouTube video / live link">
+      <button type="submit" class="btn">Use this embed</button><span class="msg" id="psMsg" role="status"></span>
+    </form>
+    <p class="muted">Pepe's stream is the default: lowest delay, ⚡ WebRTC, snaps / clips. Twitch going live never switches it by itself (Twitch is a relay of his stream). An embed takes the same links as a streamer's slot. Either way, ON AIR, snaps / clips and the front-pad pick follow Pepe's own stream; viewers can still pick "Pepe's own stream" next to his tab.</p>
+  </section>
+
   <!-- 1.99fk: 🟣 Twitch relays (restream.js) -->
   <section class="sb-card" id="rsCard" data-mode="admin" aria-labelledby="rsT">
     <h2 id="rsT">🟣 Twitch relays</h2>
@@ -82,7 +99,7 @@
   </section>
 </main>
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/stage-admin.js?v=2" defer></script>
+<script src="/public/js/stage-admin.js?v=3" defer></script>
 <script src="/public/js/restream.js?v=1" defer></script>
 <%- include('partials/admin-close') %>
 </body>

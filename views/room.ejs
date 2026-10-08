@@ -159,6 +159,9 @@
   .rm .stab .src { font-size: 11px; color: #9fb3c8; border: 1px solid #2a3442; border-radius: 999px; padding: 0 6px; }
   .rm .stab.feat { border-color: #6b5a20; }
   .rm .stabs .adm { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  /* 1.99fv: subtle extras next to Pepe's tab - "Watch on Twitch" (info + link) / his own stream vs an admin embed */
+  .rm .stabs .stx { padding: 4px 9px; border-radius: 999px; border: 1px solid #2b2b2b; background: transparent; color: #a99bc9; font: inherit; font-size: 12px; cursor: pointer; text-decoration: none; }
+  .rm .stabs .stx:hover, .rm .stabs .stx:focus-visible { border-color: #6b4fa8; color: #e4dcf5; }
   .rm .stabs .adm button { padding: 5px 10px; border-radius: 8px; border: 1px solid #5a2222; background: #2a1010; color: #ffb4b4; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
   .rm .stabs .adm button[data-act=feature], .rm .stabs .adm button[data-act=unfeature] { border-color: #6b5a20; background: #1d1a0f; color: #e8d9a0; }
   .rm .stage .player .embed { position: absolute; inset: 0; z-index: 2; background: #000; }
@@ -412,7 +415,7 @@
   <% if (typeof locals.webrtcCfg === 'function' && locals.webrtcCfg()) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=2">
   <script src="/public/js/webrtc-client.js?v=1"></script>
   <script src="/public/js/stage-lowlat.js?v=2"></script>
-  <% } %><script src="/public/js/stage-room.js?v=6"></script>
+  <% } %><script src="/public/js/stage-room.js?v=7"></script>
   <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
   <script src="/public/js/stage-capture.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
@@ -476,7 +479,7 @@
       tabs: document.getElementById('rmTabs'), wrap: document.getElementById('rmVideo'),
       reconnect: document.getElementById('rmStReconnect'), unmute: document.getElementById('rmStUnmute'), embedHost: document.getElementById('rmEmbed'),
       api: '/api/stage?room=' + encodeURIComponent(padSlug), onShow: function (sel) { cap.update(sel); },
-      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, manage: <%= manage_ ? 'true' : 'false' %>,
+      slots: <%- JSON.stringify(RS.slots || []).replace(/</g, '\\u003c') %>, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ === false ? 'false' : 'true' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= manage_ ? 'true' : 'false' %>,
       onAir: function (on) {
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
         document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');
