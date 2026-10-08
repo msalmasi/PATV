@@ -23,6 +23,9 @@
 // Pepe's RTMP stream and RTMP slots are untouched: they stay on nginx-rtmp's HLS (no WHEP - MediaMTX can't
 // turn AAC into Opus), and bridge.js still reads /mnt/hls/broadcast.m3u8 freshness for ON AIR.
 //
+// 1.99fe: PARKED - everything below about Pepe's main stream over WHIP is OFF unless PEPE_WHIP=on is in the .env
+// (default off: his paths are refused like any unknown path, no bot route, no ⚡ for his stage). MediaMTX has no
+// "pepe" path and no relay yet (deploy/webrtc is unchanged); this is the site half, kept for the revisit.
 // 1.99fd: Pepe's MAIN stream can come in over WHIP too (⚡ for his stage). His OBS publishes H.264 + Opus to
 // <WEBRTC_BASE>/whip/<PEPE_PATH> ("pepe" on prod, "stg-pepe" on staging) with Pepe's own bearer (pepeWhipKey: an
 // HMAC of SECRET_KEY - nothing new to store; the bot fetches it with its token, POST /api/stage/pepe-whip). MediaMTX
@@ -41,6 +44,7 @@
 //   TURN_TTL        TURN credential lifetime, seconds                    3600
 //   WHIP_AUTH_PEER  the OTHER site's whip-auth URL. One MediaMTX serves prod ("stage-") and staging ("stg-")
 //                   paths but has one auth hook; the site it calls forwards the other prefix to its peer.
+//   PEPE_WHIP       "on" turns Pepe's main-stream WHIP handling on (1.99fe: parked, default off)
 //   PEPE_WHIP_KEY_VERSION  bump to rotate Pepe's WHIP bearer (default 1); "off" refuses his WHIP publish
 "use strict";
 const crypto = require("crypto");
@@ -60,6 +64,7 @@ const SYNC_MS = 5000;
 const PEPE_PATHS = { prod: "pepe", staging: "stg-pepe" };
 const pepePath = () => (process.env.STAGING ? PEPE_PATHS.staging : PEPE_PATHS.prod);
 const isPepePath = (p) => p === PEPE_PATHS.prod || p === PEPE_PATHS.staging;
+const pepeWhipOn = () => String(process.env.PEPE_WHIP || "").trim().toLowerCase() === "on";   // 1.99fe: parked, off
 let pepeSeen = { ready: false, at: 0 };          // from the sync: is his path up right now?
 
 let clock = () => Date.now();
@@ -160,7 +165,7 @@ function pepeAuth(b, action, proto) {
 }
 /** ⚡ for Pepe's stage: his WHEP URL while his WHIP path is up (seen by a sync in the last 15 s) and the flag is on. */
 function pepeWhep() {
-  if (!enabled() || !pepeSeen.ready || now() - pepeSeen.at > 15000) return null;
+  if (!pepeWhipOn() || !enabled() || !pepeSeen.ready || now() - pepeSeen.at > 15000) return null;
   return whepUrl(pepePath());
 }
 
@@ -172,6 +177,7 @@ async function whipAuth(b, opts = {}) {
   b = b || {};
   const action = String(b.action || ""), path = String(b.path || ""), proto = String(b.protocol || "");
   if (isPepePath(path)) {                                         // 1.99fd: Pepe's main stream (not a slot)
+    if (!pepeWhipOn()) return 403;                                // 1.99fe: parked - refused like any unknown path
     if (path === pepePath()) return pepeAuth(b, action, proto);
     return peer() && !opts.forwarded ? forward(b) : 403;          // the other site's Pepe path
   }
@@ -287,6 +293,7 @@ function register(app, { addUser, isBotToken, noTimers } = {}) {
   // 1.99fd: Pepe (bot token) fetches his main-stream WHIP URL + bearer to put into his OBS (obs_control.py)
   app.post("/api/stage/pepe-whip", (req, res) => {
     res.set("Cache-Control", "no-store");
+    if (!pepeWhipOn()) return res.status(404).json({ ok: false, error: "Not found." });   // 1.99fe: parked
     const b = req.body || {};
     if (typeof isBotToken !== "function" || !isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     const token = pepeWhipKey();

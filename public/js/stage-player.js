@@ -20,8 +20,9 @@
 // (= the newest segment VHS has downloaded) that the next segment always lands in time:
 //   lead    bufferedEnd - currentTime, sampled every 250 ms; low = the smallest lead over the last 2 TD + 1 s,
 //           i.e. the lead just before a segment lands - where a stall would happen
-//   goal    low sits at `margin` (1.0 s to start; +0.5 s after every rebuffer, up to 2 TD - a shaky connection
-//           settles further back by itself)
+//   goal    low sits at `margin`: 1.0 s to start; +0.5 s per rebuffer (stalls within 10 s of each other count once
+//           - an upstream gap fires several), up to 2 TD, so a shaky connection settles further back by itself;
+//           -0.25 s per 30 s without a stall, back down to 1.0 s (one bad moment doesn't cost latency for good)
 //   start   the first sample after playback starts jumps to bufferedEnd - (TD + margin) (VHS starts ~3 TD back)
 //   low > margin + 0.6 s     -> playbackRate 1.05 (pitch is kept) until low <= margin + 0.2 s
 //   low < margin / 2         -> playbackRate 0.96 until low >= margin (ease off before it runs dry)
@@ -29,7 +30,7 @@
 // Only for live playlists; VOD / ended streams are left alone.
 (function () {
   'use strict';
-  var LIVE = { tick: 250, margin0: 1.0, marginStep: 0.5, fast: 1.05, slow: 0.96, jumpEvery: 5000 };
+  var LIVE = { tick: 250, margin0: 1.0, marginStep: 0.5, growEvery: 10000, decayStep: 0.25, decayEvery: 30000, fast: 1.05, slow: 0.96, jumpEvery: 5000 };
 
   // one tick of the controller (pure, so it can be tested): st = liveState(), o = the sample
   //   o = { now, td, lead, bufEnd, playing } -> { rate, seekTo } (seekTo null = no jump)
@@ -38,6 +39,10 @@
     var out = { rate: st.rate, seekTo: null };
     st.td = td; st.lead = o.lead;
     if (!o.playing) return out;
+    if (st.margin > LIVE.margin0 && o.now - st.lastRebuf >= LIVE.decayEvery && o.now - st.lastDecay >= LIVE.decayEvery) {
+      st.margin = Math.max(LIVE.margin0, st.margin - LIVE.decayStep);
+      st.lastDecay = o.now;
+    }
     function jump() {
       st.lastJump = o.now; st.jumps++; st.samples = []; st.low = null;
       out.seekTo = o.bufEnd - (td + st.margin);
@@ -67,12 +72,17 @@
     return out;
   }
   function liveState() {
-    return { samples: [], rate: 1, margin: LIVE.margin0, rebuffers: 0, jumps: 0, lastJump: -1e12, primed: false, low: null, lead: null, td: null };
+    return { samples: [], rate: 1, margin: LIVE.margin0, rebuffers: 0, jumps: 0, lastJump: -1e12, lastRebuf: -1e12, lastGrow: -1e12,
+             lastDecay: -1e12, primed: false, low: null, lead: null, td: null };
   }
-  /** a rebuffer: count it and sit a bit further back from now on */
-  function rebuffered(st) {
+  /** a rebuffer: count it and sit a bit further back for a while */
+  function rebuffered(st, now) {
     st.rebuffers++;
-    st.margin = Math.min(st.margin + LIVE.marginStep, 2 * (st.td || 2));
+    if (now - st.lastGrow >= LIVE.growEvery) {
+      st.margin = Math.min(st.margin + LIVE.marginStep, 2 * (st.td || 2));
+      st.lastGrow = now;
+    }
+    st.lastRebuf = now;
     st.rate = 1;
     st.samples = [];
   }
@@ -101,7 +111,7 @@
     p.on('seeked', function () { ourSeek = false; });
     p.on('waiting', function () {
       if (!started || ourSeek || p.seeking()) return;    // start-up / our own jump isn't a rebuffer
-      rebuffered(st);
+      rebuffered(st, T.now());
     });
     timer = T.set(sample, LIVE.tick);
     p.on('dispose', function () { if (timer) T.clear(timer); timer = null; });

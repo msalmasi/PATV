@@ -9,6 +9,7 @@
 //     gives his stream the ⚡ URL from the first render and every poll
 //   * liveStep: start-up jump, catch-up / ease-off rates with hysteresis, the big-drift jump (rate-limited), rebuffer
 //     margin growth (capped), idle while paused; cache-busters bumped
+//   1.99fe: Pepe over WHIP is PARKED (off unless PEPE_WHIP=on) - the first test checks it is inert.
 //   NODE_PATH=../node_modules node --test test/pepe-whip.test.js      (uses a temp DB)
 "use strict";
 const test = require("node:test");
@@ -45,6 +46,32 @@ test.before(async () => {
   await S.init();
 });
 test.afterEach(async () => { await flag(false); W._setApi(null); delete process.env.PEPE_WHIP_KEY_VERSION; delete process.env.WHIP_AUTH_PEER; });
+
+test("1.99fe parked: without PEPE_WHIP=on Pepe's paths are refused, no bot route, no ⚡; MediaMTX templates untouched", async () => {
+  delete process.env.PEPE_WHIP;
+  await flag(true);
+  for (const b of [{ action: "publish", protocol: "webrtc", path: "pepe", token: KEY() }, { action: "read", protocol: "rtsp", path: "pepe", ip: "127.0.0.1" },
+                   { action: "read", protocol: "webrtc", path: "pepe" }, { action: "publish", protocol: "webrtc", path: "stg-pepe", token: "x" }]) {
+    assert.equal(await auth(b), 403, JSON.stringify(b));
+  }
+  W._setApi(async () => ({ items: [{ name: "pepe", ready: true }] }));
+  await W.sync();
+  assert.equal(W.pepeWhep(), null, "no ⚡ while parked");
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  S.register(app, { addUser: (q, r, n) => n(), isBotToken: (t) => t === "bot-tok", noTimers: true });
+  const srv = await new Promise((ok) => { const x = app.listen(0, "127.0.0.1", () => ok(x)); });
+  try {
+    const r = await fetch("http://127.0.0.1:" + srv.address().port + "/api/stage/pepe-whip", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "bot-tok" }) });
+    assert.equal(r.status, 404);
+  } finally { srv.close(); }
+  const yml = fs.readFileSync(path.join(repo, "deploy", "webrtc", "mediamtx.yml"), "utf8");
+  assert.match(yml, /^rtsp: false$/m, "MediaMTX: RTSP stays off");
+  assert.doesNotMatch(yml, /^\s+pepe:/m, "MediaMTX: no pepe path");
+  assert.ok(!fs.existsSync(path.join(repo, "deploy", "webrtc", "pepe-relay.sh")), "no relay shipped");
+  process.env.PEPE_WHIP = "on";                       // the rest of this file tests the parked code itself
+});
 
 test("Pepe's bearer: 'pw' + an HMAC of SECRET_KEY for this site's path; rotatable; 'off' = none", () => {
   assert.equal(W.pepePath(), "pepe");
@@ -271,14 +298,37 @@ test("liveStep: rates with hysteresis on the lowest lead over 2 TD + 1 s; a big 
   assert.equal(st.jumps, jumpsBefore, "the window refills first (and never twice inside 5 s)");
 });
 
-test("rebuffered: counted, margin +0.5 s up to 2 TD, rate back to 1", () => {
+test("rebuffered: counted; margin +0.5 s (stalls within 10 s count once), up to 2 TD; rate back to 1", () => {
   const L = live();
   const st = L.state();
   st.td = 2; st.rate = 1.05;
-  L.rebuffered(st);
+  L.rebuffered(st, 0);
   assert.equal(st.rebuffers, 1); assert.equal(st.margin, 1.5); assert.equal(st.rate, 1);
-  for (let i = 0; i < 10; i++) L.rebuffered(st);
+  for (let i = 1; i <= 4; i++) L.rebuffered(st, i * 1000);
+  assert.equal(st.rebuffers, 5);
+  assert.equal(st.margin, 1.5, "an upstream gap fires several 'waiting' - one step");
+  for (let i = 0; i < 10; i++) L.rebuffered(st, 20000 + i * 11000);
   assert.equal(st.margin, 4, "capped at 2 TD");
+});
+
+test("margin decay: -0.25 s per 30 s without a stall, back down to the 1.0 s start - only while playing", () => {
+  const L = live();
+  const st = L.state();
+  st.primed = true;
+  L.rebuffered(st, 0);
+  L.rebuffered(st, 20000);
+  assert.equal(st.margin, 2);
+  const tick = (t, playing = true) => L.step(st, { now: t, td: 2, lead: 2, bufEnd: 500, playing });
+  tick(40000);
+  assert.equal(st.margin, 2, "only 20 s since the last stall");
+  tick(50000, false);
+  assert.equal(st.margin, 2, "paused: no change");
+  tick(50000);
+  assert.equal(st.margin, 1.75);
+  tick(60000);
+  assert.equal(st.margin, 1.75, "one step per 30 s");
+  for (let t = 80000; t <= 400000; t += 10000) tick(t);
+  assert.equal(st.margin, 1, "never below the start margin");
 });
 
 test("stage-player.js: VHS may play inside the live window; the controller runs for every player", () => {
