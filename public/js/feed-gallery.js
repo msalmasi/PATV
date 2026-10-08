@@ -51,7 +51,11 @@
     var ic = x.clip ? ['📹', 'captured clip'] : x.video ? ['▶', 'video'] : x.multi ? ['❐', x.multi + ' pictures'] : null;
     a.setAttribute('aria-label', (x.title || 'Post') + (ic ? ' (' + ic[1] + ')' : '') + (x.ai ? ' (AI-generated)' : '') + (x.nsfw ? ' (NSFW)' : '') +
       ' - ' + (Number(x.score) || 0) + ' votes, ' + (Number(x.comments) || 0) + ' comments');
-    if (x.thumb) {
+    if (x.quote) {          // 1.99fp: a chat quote tile (its first line)
+      var q = el('span', 'fg-q'); q.setAttribute('aria-hidden', 'true');
+      q.appendChild(el('b', null, '<' + x.quote.name + '>')); q.appendChild(document.createTextNode(' ' + (x.quote.mic ? '🎙 ' : '') + x.quote.text));
+      a.appendChild(q); var qi = el('span', 'fg-ic', '💬'); qi.setAttribute('aria-hidden', 'true'); a.appendChild(qi);
+    } else if (x.thumb) {
       var img = el('img'); img.alt = ''; img.loading = 'lazy'; img.decoding = 'async'; img.src = x.thumb;
       img.addEventListener('error', function () { img.remove(); });
       a.appendChild(img);

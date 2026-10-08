@@ -84,6 +84,10 @@ function itemOf(p) {
   const media = [];
   for (const im of q.images || []) { const src = fileUrl(im.file); if (src) media.push({ kind: "image", src, thumb: fileUrl(im.thumb), w: im.w || 0, h: im.h || 0, ai: !!im.ai }); }
   for (const v of q.video || []) { const src = fileUrl(v.file); if (src) media.push({ kind: "video", src, poster: fileUrl(v.poster), w: v.w || 0, h: v.h || 0, secs: v.secs || 0, ai: !!v.ai }); }
+  // 1.99fp: a chat quote is a card of its lines (quotes.forPosts)
+  if (!media.length && q.quote && q.quote.lines && q.quote.lines.length) {
+    media.push({ kind: "quote", lines: q.quote.lines.slice(0, 12).map((l) => ({ name: l.name, text: l.text, mic: !!l.mic })), more: Math.max(0, q.quote.lines.length - 12) });
+  }
   if (!media.length) return null;
   const home = (p.rooms || []).find((r) => !r.removed && !r.pending && !r.hidden) || (p.rooms || [])[0] || null;
   const pad = home ? { label: home.label || "p/" + home.slug, href: home.profile ? "/u/" + encodeURIComponent(home.profile) : "/p/" + encodeURIComponent(home.slug) } : null;
@@ -110,7 +114,7 @@ async function page(viewer, S, { sort = "hot", t = "week", cursor = null, post =
   await store.init();
   const signed = !!(viewer && viewer.userId);
   if (S.kind === "following" && !signed) return { items: [], next: null, signin: true };
-  const base = { ...listArgs(S, viewer), sort: SORTS.has(sort) ? sort : "hot", top: TOPS.has(t) ? t : "week", viewer, media: true, sfw: !signed };
+  const base = { ...listArgs(S, viewer), sort: SORTS.has(sort) ? sort : "hot", top: TOPS.has(t) ? t : "week", viewer, media: true, quotesToo: true, sfw: !signed };
   let off = decCursor(cursor);
   let lead = null;
   if (post && !cursor && /^[A-Za-z0-9]{8,16}$/.test(String(post))) {

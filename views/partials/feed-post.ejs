@@ -69,6 +69,15 @@
       <p class="fp-cap"><span aria-hidden="true">📸</span><span>Captured from <% if (c_.room.href) { %><a href="<%= c_.room.href %>"><%= c_.room.title %></a><% } else { %><%= c_.room.title %><% } %><% if (c_.subject) { %> · with <a href="/u/<%= encodeURIComponent(c_.subject.username) %>">u/<%= c_.subject.username %></a><% } else if (c_.subjectName) { %> · with <%= c_.subjectName %><% } %></span>
         <% if (c_.canRemoveMe && !p.deleted) { %><button type="button" class="fp-rmme" data-act="remove-me" title="You're in this capture: take the post down (the poster is told)">Remove me</button><% } %></p>
     <% } %>
+    <%# 1.99fp: someone quoted / heard in it: one click anonymises them in the quote (quotes.js) or takes the clip down (micclip.js) %>
+    <% if (p.quote && (p.quote.canRemoveMe || p.quote.removedMe) && !p.deleted) { %>
+      <p class="fp-cap fq-you"><span aria-hidden="true">💬</span><span><%= p.quote.canRemoveMe ? 'You\'re quoted in this.' : 'You removed yourself from this quote.' %></span>
+        <% if (p.quote.canRemoveMe) { %><button type="button" class="fp-rmme" data-act="quote-rm" title="Show your lines as “someone” (the quote stays)">Remove me</button><% } %></p>
+    <% } %>
+    <% if (p.voice && p.voice.canRemoveMe && !p.deleted && !(p.capture && p.capture.canRemoveMe)) { %>
+      <p class="fp-cap"><span aria-hidden="true">🎙</span><span>You're heard in this clip.</span>
+        <button type="button" class="fp-rmme" data-act="voice-rm" title="Take the post down (the person who clipped it is told)">Remove me</button></p>
+    <% } %>
     <% if (xp_) { %>
       <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from && xp_.from.profile) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/u/<%= encodeURIComponent(xp_.from.profile) %>">u/<%= xp_.from.profile %></a><% } else if (xp_.from) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>">u/<%= xp_.author.username %></a><% } %></span></p>
     <% } %>

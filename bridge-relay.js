@@ -178,7 +178,8 @@ function takeJobs(liveRoomIds) {
     // A command is offered ONCE: a re-offer after a lost ack (or a Pepe restart, which forgets the job
     // ids it has seen) could run a paid command twice. Chat lines / clips / snaps may be retried.
     // 1.99ez: a cam clip is offered once too - a re-offer must never start a second recording of the same cam
-    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    // 1.99fp: a mic clip preview too (once is enough - the browser asks again)
+    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
@@ -192,6 +193,7 @@ function takeJobs(liveRoomIds) {
     if ((j.kind === "say" || j.kind === "clip") && j.display) base.display = j.display;
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
     if (j.kind === "camclip") { base.target = j.target; base.viewer = j.username; base.secs = j.secs; }
+    if (j.kind === "micclip") { base.target = j.target; base.viewer = j.username; base.tx = j.tx; }   // 1.99fp: 🔊 Clip on a 🎙 line
     out.push(base);
     if (out.length >= 10) break;
   }

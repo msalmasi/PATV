@@ -503,6 +503,7 @@
       <h2 id="chatH">Chat <small id="rmStatus" class="status" aria-live="polite"></small></h2>
       <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Camfrog room chat"></div>
       <button class="jump" id="rmJump" type="button">New messages ↓</button>
+      <div id="rmClip"></div><%# 1.99fp: ✂️ Clip chat + 🔊 mic clips (public/js/chat-clip.js) %>
       <div class="compose hide" id="rmCompose">
         <% if (!linked) { %>
           <p class="muted" style="margin:0">💬 This Camfrog room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
@@ -530,6 +531,8 @@
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
   <script src="/public/js/room-bridge.js?v=5"></script>
+  <link rel="stylesheet" href="/public/css/quotes.css?v=1">
+  <script src="/public/js/chat-clip.js?v=1"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=4">
   <script src="/public/js/room-mod.js?v=4"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
@@ -569,6 +572,10 @@
       if (it.k === 'msg' || it.k === 'tx') {
         var row = el('div', 'line' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
         if (it.k === 'tx') row.title = 'Said on the mic (auto-transcribed)';
+        // 1.99fp: what ✂️ Clip chat / 🔊 Clip read (public/js/chat-clip.js) - the server re-reads its own copy by id
+        if (it.c) row.setAttribute('data-c', it.c);
+        row.setAttribute('data-k', it.k); row.setAttribute('data-name', label(it.u)); row.setAttribute('data-text', it.text);
+        if (it.k === 'tx' && it.id) row.setAttribute('data-tx', it.id);
         row.appendChild(avatar(it.u));
         var b = el('div', 'body');
         b.appendChild(name(it.u));
@@ -693,6 +700,7 @@
     }
 
     var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug);
+    var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked ? 'true' : 'false' %> }) : null;   // 1.99fp
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
     var snapEl = null, snapTimer = null, snapWho = null;
@@ -922,6 +930,7 @@
       roomAudio.update(d);
       if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
       addFeed(d.feed, first);
+      if (chatClip) chatClip.update(d);
       cursor = Math.max(cursor, d.cursor);
     }
 

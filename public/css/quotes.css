@@ -1,0 +1,82 @@
+/* quotes.css (1.99fp) — chat quote cards (feed, post page, Hop, /p/<pad>/quotes), the Live tab's ✂️ Clip chat and
+   🔊 mic clip panels, and the waveform card on audio posts. The site is dark-only; colours follow feed.css's tokens. */
+.fq { margin: 2px 0 8px; padding: 10px 12px 8px; background: #0f120f; border: 1px solid #22302a; border-left: 3px solid #5fd06b;
+      border-radius: 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 13.5px;
+      line-height: 1.5; color: #e4e4e4; min-width: 0; }
+.fq-lines { margin: 0; padding: 0; }
+.fq-l { margin: 0 0 2px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.fq-n { color: #9be7a1; font-weight: 700; }
+.fq-l.anon .fq-n { color: #8d918d; font-style: italic; font-weight: 400; }
+.fq-l.mic .fq-t { color: #d7c9ff; }
+.fq-l.me .fq-n { text-decoration: underline dotted; }
+.fq-mic { font-size: 12px; }
+.fq-ts { color: #6f736f; font-size: 11px; margin-left: 4px; }
+.fq-more { margin: 4px 0 0; font-size: 12.5px; }
+.fq-more a { color: #81c784; }
+.fq-cap { margin: 6px 0 0; font-family: Ubuntu, sans-serif; font-size: 12px; color: #8d918d; }
+.fq.is-detail { font-size: 14.5px; padding: 14px 16px 10px; }
+.fq-hop { width: min(92vw, 560px); max-height: 70vh; overflow-y: auto; margin: auto; box-sizing: border-box; font-size: 15px; }
+.hop-m.k-quote { display: flex; align-items: center; justify-content: center; }
+
+/* audio posts: the waveform card above the player */
+.fp-audio.has-wave { flex-wrap: wrap; }
+.fp-wave { display: block; width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px; }
+
+/* /p/<pad>/quotes */
+.qp { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; font-family: Ubuntu, sans-serif; color: #e4e4e4; }
+.qp h1 { font-size: 22px; margin: 4px 0 2px; overflow-wrap: anywhere; }
+.qp .sub { color: #8d918d; margin: 0 0 14px; font-size: 14px; }
+.qp .back { color: #81c784; text-decoration: none; font-size: 14px; }
+.qp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.qp-tabs a { padding: 6px 12px; border-radius: 999px; border: 1px solid #303030; color: #b9bdb9; text-decoration: none; font-size: 13px; }
+.qp-tabs a.on { background: #1e3a22; border-color: #2f6d3a; color: #fff; }
+.qp-qotd { margin: 0 0 16px; padding: 12px; border: 1px solid #3a3420; background: #15130b; border-radius: 12px; }
+.qp-qotd h2 { margin: 0 0 8px; font-size: 15px; color: #ffd54f; }
+.qp-list { display: grid; gap: 10px; }
+.qp-empty { color: #8d918d; }
+.qp-pager { display: flex; justify-content: space-between; margin-top: 14px; }
+.qp-pager a { color: #81c784; }
+
+/* the Live tab: ✂️ Clip chat (public/js/chat-clip.js) */
+.cc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; font-size: 12.5px; color: #8d918d; }
+.cc-toggle { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 5px 10px; font: inherit;
+             font-size: 13px; cursor: pointer; }
+.cc-toggle[aria-pressed="true"] { background: #1e3a22; border-color: #4caf50; color: #fff; }
+.cc-toggle:focus-visible, .cc-btn:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+.cc-on .line { cursor: pointer; border-radius: 6px; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.cc-on .line:hover { background: rgba(95, 208, 107, .07); }
+.cc-on .line.cc-sel { background: rgba(95, 208, 107, .18); box-shadow: inset 3px 0 0 #5fd06b; }
+.cc-on .line.cc-no { opacity: .45; cursor: not-allowed; }
+.cc-panel { margin: 8px 0 0; padding: 10px; border: 1px solid #22302a; border-radius: 10px; background: #0d0f0d; display: grid; gap: 8px; min-width: 0; }
+.cc-panel[hidden] { display: none; }
+.cc-panel .fq { margin: 0; max-height: 260px; overflow-y: auto; }
+.cc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cc-row input[type="text"] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px;
+                             font: inherit; font-size: 14px; }
+.cc-ck { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #ccc; }
+.cc-btn { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.cc-btn.primary { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: 700; }
+.cc-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.cc-msg { font-size: 12.5px; color: #8d918d; min-height: 1em; overflow-wrap: anywhere; }
+.cc-msg.bad { color: #ff8a80; }
+.cc-msg a { color: #81c784; }
+.cc-hint { font-size: 12px; color: #6f8f72; }
+
+/* 🔊 Clip on a 🎙 line */
+.line .mc-btn { appearance: none; margin-left: 6px; padding: 1px 6px; border-radius: 6px; border: 1px solid #2f2a45; background: #15121f; color: #d7c9ff;
+                font: inherit; font-size: 11.5px; cursor: pointer; vertical-align: 1px; }
+.line .mc-btn:hover, .line .mc-btn:focus-visible { border-color: #8b7bd8; }
+.cc-on .line .mc-btn { display: none; }
+.mc-panel audio { width: 100%; height: 36px; }
+.mc-trim { display: grid; grid-template-columns: auto minmax(0, 1fr) 4.5em; gap: 4px 8px; align-items: center; font-size: 12.5px; color: #bbb; }
+.mc-trim input[type="range"] { width: 100%; accent-color: #8b7bd8; }
+.mc-trim output { font-variant-numeric: tabular-nums; text-align: right; }
+.mc-text { font-size: 13px; color: #d7c9ff; overflow-wrap: anywhere; max-height: 6.5em; overflow-y: auto; }
+@media (max-width: 480px) { .fq { font-size: 13px; padding: 8px 10px; } }
+
+/* the feeds' Gallery: a chat quote tile shows its first line (feedgallery.js) */
+.fg-q { position: absolute; inset: 0; padding: 10px 10px 8px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6;
+        font-family: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 1.4; color: #e4e4e4;
+        background: linear-gradient(160deg, #13201a, #0d0f0d); border-left: 3px solid #5fd06b; overflow-wrap: anywhere; text-align: left; }
+.fg-q b { color: #9be7a1; }
+@media (max-width: 480px) { .fg-q { font-size: 10.5px; padding: 6px; -webkit-line-clamp: 7; } }

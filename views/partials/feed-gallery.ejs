@@ -18,7 +18,8 @@
     <% tiles_.forEach((x) => { const ic = ic_(x); %>
       <li class="fg-t<%= x.nsfw ? ' nsfw' : '' %>" data-id="<%= x.id %>"><a class="fg-a" href="<%= x.hop %>" data-fg-post="<%= x.id %>"
          aria-label="<%= x.title %><%= ic ? ' (' + ic.l + ')' : '' %><%= x.ai ? ' (AI-generated)' : '' %><%= x.nsfw ? ' (NSFW)' : '' %> - <%= x.score %> votes, <%= x.comments %> comments">
-        <% if (x.thumb) { %><img src="<%= x.thumb %>" alt="" loading="lazy" decoding="async" onerror="this.remove()"><% } else { %><span class="fg-ph" aria-hidden="true">▶</span><% } %>
+        <% if (x.quote) { %><span class="fg-q" aria-hidden="true"><b>&lt;<%= x.quote.name %>&gt;</b> <%= x.quote.mic ? '🎙 ' : '' %><%= x.quote.text %></span><span class="fg-ic" aria-hidden="true">💬</span><%# 1.99fp: a chat quote tile %>
+        <% } else if (x.thumb) { %><img src="<%= x.thumb %>" alt="" loading="lazy" decoding="async" onerror="this.remove()"><% } else { %><span class="fg-ph" aria-hidden="true">▶</span><% } %>
         <% if (ic) { %><span class="fg-ic" aria-hidden="true"><%= ic.i %></span><% } %>
         <% if (x.nsfw) { %><span class="fg-18" aria-hidden="true">18+</span><% } %>
         <span class="fg-ov" aria-hidden="true"><span>▲ <%= num_(x.score) %></span><span>💬 <%= num_(x.comments) %></span></span>
@@ -30,4 +31,4 @@
   <div class="fg-sentinel" aria-hidden="true"></div>
   <% if (G.next) { %><noscript><a class="fg-nojs" href="<%= G.tiles && tiles_.length ? tiles_[tiles_.length - 1].hop : '#' %>">Keep going in Hop ›</a></noscript><% } %>
 </div>
-<script src="/public/js/feed-gallery.js?v=1" defer></script>
+<script src="/public/js/feed-gallery.js?v=2" defer></script>

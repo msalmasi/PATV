@@ -87,6 +87,18 @@
 
   function mediaEl(m, it, k) {
     var box = el('div', 'hop-m k-' + m.kind);
+    if (m.kind === 'quote') {          // 1.99fp: a chat quote card (hop.js itemOf)
+      var fq = el('blockquote', 'fq fq-hop');
+      (m.lines || []).forEach(function (l) {
+        var p = el('p', 'fq-l' + (l.mic ? ' mic' : '') + (l.name === 'someone' ? ' anon' : ''));
+        p.appendChild(el('span', 'fq-n', '<' + l.name + '>')); p.appendChild(document.createTextNode(' '));
+        if (l.mic) { p.appendChild(el('span', 'fq-mic', '🎙')); p.appendChild(document.createTextNode(' ')); }
+        p.appendChild(el('span', 'fq-t', l.text)); fq.appendChild(p);
+      });
+      if (m.more) fq.appendChild(el('p', 'fq-more', '+ ' + m.more + ' more'));
+      box.appendChild(fq);
+      return box;
+    }
     if (m.kind === 'image') {
       var img = el('img', 'hop-img'); img.alt = (it.title ? it.title + ': ' : '') + 'picture' + (it.media.length > 1 ? ' ' + (k + 1) + ' of ' + it.media.length : '');
       img.decoding = 'async'; img.setAttribute('data-src', m.src);

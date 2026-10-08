@@ -158,6 +158,13 @@ function init() {
       await addCol("feed_attachments", "ai_hide_prompt", "INTEGER NOT NULL DEFAULT 0");
       await addCol("feed_attachments", "ai_job", "TEXT");
       await migrateHomePad();
+      // 1.99fp: chat quotes (quotes.js) - a quote post's lines; list({quotes}) / Hop filter on it
+      await runQuery(`CREATE TABLE IF NOT EXISTS feed_quotes (post_id TEXT PRIMARY KEY, room_id TEXT, source TEXT, lines TEXT NOT NULL,
+        logins TEXT, removed TEXT, created_by TEXT, created INTEGER)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS feed_quotes_room ON feed_quotes (room_id, created)");
+      // 1.99fp: mic clips (micclip.js) - who is heard in an audio post, for their "Remove me"
+      await runQuery(`CREATE TABLE IF NOT EXISTS feed_voices (post_id TEXT PRIMARY KEY, room_id TEXT, media_id TEXT, logins TEXT, by_login TEXT,
+        created INTEGER, removed_at INTEGER, removed_by TEXT)`);
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -601,6 +608,10 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   // 1.99eq: posts made from a story capture (storykeep.js): "📸 Captured from <room>", the subject's profile, "Remove me"
   let CAP = new Map();
   if (!_inner) { try { CAP = await require("./storykeep").forPosts(ids, viewer); } catch (e) { CAP = new Map(); } }
+  // 1.99fp: chat quotes (quotes.js) and who is heard in a mic clip (micclip.js) - crosspost embeds (_inner) show quotes too
+  let QUO = new Map(), VOI = new Map();
+  try { QUO = await require("./quotes").forPosts(ids, viewer); } catch (e) { QUO = new Map(); }
+  if (!_inner) { try { VOI = await require("./micclip").voicesFor(ids, viewer); } catch (e) { VOI = new Map(); } }
   return rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id).map((x) => {
       const R = rooms.getCached(x.room_id);
@@ -659,6 +670,8 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       xpost, crossposts, xcount: crossposts.length,
       ai: att.filter((a) => a.ai && a.kind !== "preview"),       // 1.99di: the post's AI-generated files (badge + prompt toggle)
       capture: CAP.get(r.id) || null,                            // 1.99eq: made from a story capture (storykeep.forPosts)
+      quote: QUO.get(r.id) || null,                              // 1.99fp: a chat quote (quotes.forPosts)
+      voice: VOI.get(r.id) || null,                              // 1.99fp: a mic clip's speakers (micclip.voicesFor)
     };
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;
@@ -727,7 +740,7 @@ function rankSpec(sort, t = "all", now = NOW()) {
  * Deleted posts never show; report-hidden ones only to staff.
  */
 async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false,
-                      media = false, textOnly = false, offset = null, idsOnly = false } = {}) {
+                      media = false, textOnly = false, offset = null, idsOnly = false, quotes = false, quotesToo = false } = {}) {
   await init();
   const staff = isStaff(viewer);
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
@@ -780,9 +793,11 @@ async function list({ room = null, author = null, following = null, authors: aut
                  AND NOT EXISTS (SELECT 1 FROM feed_post_rooms fo WHERE fo.post_id = o.id AND fo.nsfw = 1 AND fo.removed_at IS NULL)))`);
   }
   // 1.99eq: Hop (hop.js) - media posts only: a ready picture or video on the post, or (a crosspost) on its original
-  if (media) scope.push(MEDIA_SQL);
+  // 1.99fp: quotesToo (Hop, the gallery) = media posts AND chat quotes; quotes = chat quotes only (/p/<pad>/quotes)
+  if (media) scope.push(quotesToo ? `(${MEDIA_SQL} OR ${QUOTE_SQL})` : MEDIA_SQL);
   // 1.99fn: the gallery's "N text posts hidden" count - the posts the media filter leaves out
-  else if (textOnly) scope.push("NOT " + MEDIA_SQL);
+  else if (textOnly) scope.push(quotesToo ? `NOT (${MEDIA_SQL} OR ${QUOTE_SQL})` : "NOT " + MEDIA_SQL);
+  if (quotes) scope.push(QUOTE_SQL);
   page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
   // placeholders in text order: select (rising) -> join -> scope -> sort filters
   const selArgs = R.select ? [R.args[0]] : [], sortArgs = R.select ? R.args.slice(1) : R.args;
@@ -804,6 +819,8 @@ async function list({ room = null, author = null, following = null, authors: aut
 
 // 1.99eq: "this post shows a picture or a video" (its own files, or a crosspost's original's)
 const MEDIA_SQL = `EXISTS (SELECT 1 FROM feed_attachments fa WHERE fa.post_id = COALESCE(p.crosspost_of, p.id) AND fa.state = 'ready' AND fa.kind IN ('image', 'video'))`;
+// 1.99fp: "this post is a chat quote" (its own, or a crosspost's original)
+const QUOTE_SQL = `EXISTS (SELECT 1 FROM feed_quotes fq WHERE fq.post_id = COALESCE(p.crosspost_of, p.id))`;
 
 async function getRow(id) {
   if (!ID_RE.test(String(id || ""))) return null;
@@ -1184,7 +1201,9 @@ async function edit(user, id, patch) {
   if (!r || r.deleted_at) throw new Refuse(404, "No such post.");
   if (!user || user.userId !== r.author_id) throw new Refuse(403, "Only the author can edit a post.");
   const title = patch.title != null ? cleanLine(patch.title, TITLE_MAX) : r.title;
-  const body = patch.body != null ? cleanText(patch.body, BODY_MAX) : r.body;
+  // 1.99fp: a chat quote's text is what was said - only its title can be edited
+  const isQuote = (await getQuery("SELECT 1 FROM feed_quotes WHERE post_id = ?", [id]).catch(() => [])).length > 0;
+  const body = patch.body != null && !isQuote ? cleanText(patch.body, BODY_MAX) : r.body;
   const nsfw = patch.nsfw != null ? (patch.nsfw === true || patch.nsfw === 1 || patch.nsfw === "1" || patch.nsfw === "on" ? 1 : 0) : r.nsfw;
   if (!title && !body && !r.link_url && !r.crosspost_of && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
     throw new Refuse(400, "A post can't be empty.");
@@ -2159,7 +2178,7 @@ module.exports = {
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, postBudget, account, isNewAccount, usedBytes,
   list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, crosspostMany, communities, hot, thumbOf, visibleSql, communityOf,
   communitiesPlan, migrateCommunities, kvGet, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,
-  hotRank, controversy, wilson, rankSpec, MEDIA_SQL, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
+  hotRank, controversy, wilson, rankSpec, MEDIA_SQL, QUOTE_SQL, recountPost, recountComment, rehotAll, SORTS, WINDOWS, TIMED, CSORTS, cleanSort, cleanWindow, cleanCSort,
   downCounts, HOT_EPOCH, _votes: voteLog,
   comments, comment, editComment, removeComment, report, reports, resolveReports, REASONS, ban, unban, bans,
   reportUser, userReports, userReportAction, reportAction, reportMenu, OFFERED, USER_OFFERED, ADMIN_ONLY, URGENT, ACTIONS, HINTS,

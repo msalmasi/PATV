@@ -13,7 +13,16 @@
 <% if (hide_) { %>
   <div class="fp-nsfw-gate">This post is marked NSFW. <a href="/login?next=<%= encodeURIComponent(url_) %>">Sign in</a> to see it.</div>
 <% } else { %>
-  <% if (q.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(q.body) %></div><% } %>
+  <%# 1.99fp: a chat quote (quotes.js) shows as the quote card instead of its plain-text body %>
+  <% if (q.quote && q.quote.lines && q.quote.lines.length) { const ql_ = detail_ ? q.quote.lines : q.quote.lines.slice(0, 8); %>
+    <figure class="fq<%= detail_ ? ' is-detail' : '' %>" aria-label="Quote from the Camfrog room">
+      <blockquote class="fq-lines">
+        <% ql_.forEach((l) => { %><p class="fq-l<%= l.mic ? ' mic' : '' %><%= l.name === 'someone' ? ' anon' : '' %><%= l.me ? ' me' : '' %>"><span class="fq-n">&lt;<%= l.name %>&gt;</span> <% if (l.mic) { %><span class="fq-mic" title="Said on the mic (auto-transcribed)" aria-label="on the mic">🎙</span> <% } %><span class="fq-t"><%= l.text %></span><% if (detail_ && l.ts) { %> <time class="fq-ts" datetime="<%= new Date(l.ts).toISOString() %>"><%= new Date(l.ts).toISOString().slice(11, 16) %></time><% } %></p><% }) %>
+        <% if (q.quote.lines.length > ql_.length) { %><p class="fq-more"><a href="<%= url_ %>">+ <%= q.quote.lines.length - ql_.length %> more line<%= q.quote.lines.length - ql_.length === 1 ? '' : 's' %></a></p><% } %>
+      </blockquote>
+      <figcaption class="fq-cap">💬 <%= q.quote.speakers %> <%= q.quote.speakers === 1 ? 'person' : 'people' %> · <%= q.quote.lines.length %> line<%= q.quote.lines.length === 1 ? '' : 's' %><%= q.quote.source === 'chat' ? ' · clipped with !quote' : '' %></figcaption>
+    </figure>
+  <% } else if (q.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(q.body) %></div><% } %>
   <% if (q.images.length) { %>
     <div class="fp-imgs n<%= Math.min(q.images.length, 4) %>">
       <% q.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"<%- im.ai ? ' class="ai"' : '' %><%- detail_ ? '' : ' data-hop' %>><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="<%= im.ai ? 'AI-generated picture' : 'Picture' %> in <%= q.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>><% if (im.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></a><% }) %>
@@ -26,7 +35,8 @@
     <div class="fp-video<%= v.ai ? ' ai' : '' %>"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video><% if (v.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></div>
   <% }) %>
   <% q.audio.forEach((a) => { %>
-    <div class="fp-audio"><audio src="<%= fx.fileUrl(a.file) %>" controls preload="none"></audio><span class="mut"><%= a.secs ? fx.fmtSecs(a.secs) : '' %></span></div>
+    <%# 1.99fp: an audio capture's waveform card (media.js) rides along as its poster %>
+    <div class="fp-audio<%= a.poster ? ' has-wave' : '' %>"><% if (a.poster) { %><img class="fp-wave" src="<%= fx.fileUrl(a.poster) %>" alt="" loading="lazy"><% } %><audio src="<%= fx.fileUrl(a.file) %>" controls preload="none"></audio><span class="mut"><%= a.secs ? fx.fmtSecs(a.secs) : '' %></span></div>
   <% }) %>
   <%# 1.99di: AI-generated files (aigen.js): the badge is on the file; the prompt sits under a "prompt" toggle unless the
       author hid it (they can switch it here) %>

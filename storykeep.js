@@ -144,7 +144,7 @@ async function privacyBlocks(rows) {
       const su = await slotUser(r.slot_id);
       slots.set(r.id, su);
       if (su) uids.push(su);
-    } else logins.push(r.subject, r.by_user);
+    } else logins.push(r.subject, r.by_user, r.subject_login);
   }
   const priv = await require("./stories").privateLogins(logins);
   const hid = await hiddenUsers(uids);
@@ -157,7 +157,7 @@ async function privacyBlocks(rows) {
     else if (!by || lc(by) === "someone") out.set(r.id, "This capture was taken privately, so it can't be kept.");
     else if (r.source === "stage") {
       if ((r.by_user_id && hid.has(r.by_user_id)) || (slots.get(r.id) && hid.has(slots.get(r.id)))) out.set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
-    } else if (priv.has(lc(r.subject)) || priv.has(lc(r.by_user))) out.set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
+    } else if (priv.has(lc(r.subject)) || priv.has(lc(r.by_user)) || (r.subject_login && priv.has(lc(r.subject_login)))) out.set(r.id, "Someone in this capture keeps their activity private, so it can't be kept.");
   }
   return out;
 }
@@ -181,7 +181,7 @@ async function subjectOf(row) {
     const uid = await slotUser(row.slot_id);
     return { userId: uid, login: null, name: String(row.subject || "").slice(0, 60) || null };
   }
-  const login = lc(row.subject) || null;
+  const login = lc(row.subject_login) || lc(row.subject) || null;      // 1.99fp: the subject's LOGIN when Pepe sent one
   const u = login ? await userByLogin(login) : null;
   return { userId: u ? u.userId : null, login, name: String(row.subject || "").slice(0, 60) || null };
 }
@@ -223,7 +223,7 @@ const defaultPersist = async (row) => {
   const file = base + (clip ? ".mp4" : ".m4a");
   fs.copyFileSync(src, feedSub(file));
   let poster = null, bytes = fs.statSync(feedSub(file)).size;
-  const pf = clip ? media.posterFile(row.id) : null;
+  const pf = media.posterFile(row.id);          // a clip's poster frame, or (1.99fp) an audio capture's waveform card
   if (pf && fs.existsSync(pf)) {
     poster = base + "_p.webp";
     fs.copyFileSync(pf, feedSub(poster));
@@ -245,7 +245,7 @@ const KIND_NOUN = { photo: "Snap", clip: "Clip", audio: "Audio clip" };
  * Post capture `captureId` to its pad. -> {post: {id, url}, again: bool}. Idempotent: a capture has at most one
  * permanent post; asking again returns it.
  */
-async function postToPad(user, captureId, { caption = "" } = {}) {
+async function postToPad(user, captureId, { caption = "", body = "" } = {}) {
   await init();
   const acct = await accountOf(user);
   if (!acct) throw new Refuse(401, "Sign in first.");
@@ -286,7 +286,7 @@ async function postToPad(user, captureId, { caption = "" } = {}) {
     const cap = S.cleanLine(caption, CAPTION_MAX);
     const what = row.source === "stage" ? (row.kind === "clip" ? "Stage clip" : "Stage snap") : KIND_NOUN[row.kind] || "Capture";
     const title = cap || `${what}${subj.name ? " of " + subj.name : ""} in ${R.title || R.id}`.slice(0, CAPTION_MAX);
-    made = await S.create(authorId, { title, community: R.id, attachments: [att], nsfw: !!Number(row.nsfw), announce: [] },
+    made = await S.create(authorId, { title, body: String(body || "").slice(0, 2000) || undefined, community: R.id, attachments: [att], nsfw: !!Number(row.nsfw), announce: [] },
                           { free: true, onBehalf: authorId !== acct.userId || isStaff(acct) || (await rooms.canManage(acct, R.id)) });
     await runQuery(`UPDATE story_posts SET post_id = ?, author_id = ?, subject_user_id = ?, subject_login = ?, subject_name = ?, room_title = ? WHERE capture_id = ?`,
                    [made.id, authorId, subj.userId, subj.login, subj.name, R.title || R.id, row.id]);

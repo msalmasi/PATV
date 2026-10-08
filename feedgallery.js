@@ -96,6 +96,8 @@ function tileOf(it, S, { sort, t }) {
   const m0 = it.media[0];
   const thumb = m0.kind === "image" ? m0.thumb || m0.src : m0.poster || null;
   const video = it.media.some((x) => x.kind === "video");
+  // 1.99fp: a chat quote is a text tile - its first line (quotes.js, via Hop's item)
+  const q0 = m0.kind === "quote" && m0.lines && m0.lines[0] ? { name: String(m0.lines[0].name || "").slice(0, 40), text: String(m0.lines[0].text || "").slice(0, 160), mic: !!m0.lines[0].mic } : null;
   return {
     id: it.id, url: it.url, title: it.title,
     hop: hop.hopHref(S.base, { post: it.id, sort, t: store.TIMED.has(sort) ? t : "" }),
@@ -103,6 +105,7 @@ function tileOf(it, S, { sort, t }) {
     multi: it.media.length > 1 ? it.media.length : 0,
     score: Number(it.score) || 0, comments: Number(it.comments) || 0, nsfw: !!it.nsfw,
     author: it.author ? it.author.display || it.author.username : null,
+    ...(q0 ? { quote: q0 } : {}),
   };
 }
 
@@ -117,11 +120,11 @@ async function page(viewer, S, { sort = "hot", t = "week", cursor = null, limit 
   const base = { ...listArgs(S, viewer), sort: so, top: tw, viewer, sfw: !signed };
   const off = hop.decCursor(cursor);
   const n = Math.max(3, Math.min(48, Number(limit) || PAGE));
-  const L = await store.list({ ...base, media: true, offset: off, limit: n });
+  const L = await store.list({ ...base, media: true, quotesToo: true, offset: off, limit: n });   // 1.99fp: + chat quotes, as in Hop
   const tiles = L.posts.map(hop.itemOf).map((it) => tileOf(it, S, { sort: so, t: tw })).filter(Boolean);
   let text = null;
   if (!cursor) {
-    const T = await store.list({ ...base, textOnly: true, offset: 0, limit: TEXT_MAX, idsOnly: true });
+    const T = await store.list({ ...base, textOnly: true, quotesToo: true, offset: 0, limit: TEXT_MAX, idsOnly: true });
     text = { n: T.ids.length, more: !!T.more };
   }
   return { tiles, next: L.more ? hop.encCursor(off + n) : null, text };

@@ -479,6 +479,7 @@ async function liveView(R, after, userId, login) {
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
             transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
+            clip: clipSwitch(R.id),       // 1.99fp: the room's !clip switch (true / false / null = unknown) - 🔊 Clip on 🎙 lines
             cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null },
     mine: userId ? relay.mineFor(userId, R.id) : [],
     // 1.99co: the Manage panel - only when Pepe says this viewer's linked login has mod powers here
@@ -510,6 +511,7 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
       relay.applyAcks(body.acks);
+      require("./quotes").setHidden(body.hidden_h);   // 1.99fp: who is private right now (hashes) - quotes never name them
       const r = await ingest(body);
       const liveIds = new Set([...rooms.values()].filter(isLive).map((R) => R.id));
       // 1.99co: the linked logins watching each pad -> Pepe sends their Manage-panel caps (padmod.js)
@@ -567,6 +569,8 @@ function register(app, { isBotToken, addUser }) {
 
   relay.register(app, { isBotToken, addUser, bySlug, isLive });
   require("./camclip").register(app, { isBotToken, addUser, bySlug, isLive });   // 1.99ez: 🎬 cam clips from the snapshot popover
+  require("./quotes").register(app, { isBotToken, addUser, bySlug });            // 1.99fp: ✂️ chat quotes (web + Pepe's !quote)
+  require("./micclip").register(app, { isBotToken, addUser, bySlug, isLive });   // 1.99fp: 🔊 mic clips (web + Pepe's !clipmic)
   require("./padmod").register(app, { addUser, bySlug, isLive });     // 1.99co: the pad Manage panel
 
   // The stage of one room (?room=<slug>), else the homepage's front room: Pepe's stream state + that
@@ -713,5 +717,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { register, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, _nameCache: nameCache };

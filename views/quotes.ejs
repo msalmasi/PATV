@@ -1,0 +1,40 @@
+<%- include('layout', { title: 'Quotes · p/' + pad.slug + ' — ' + pad.title, user }) %>
+<%#
+  /p/<pad>/quotes (1.99fp, quotes.js): a pad's chat quotes - Top (this week by default; ?t=day|week|month|year|all) or New -
+  with the "Quote of the day" (the best-voted quote of the last 24 h, else of the week) on top of page 1.
+  Locals: pad {id, title, slug, href}, posts, more, page, sort, top, qotd, viewer, fx, embeds, host, modRooms
+%><%
+  const href = (o) => { const x = Object.assign({ sort, t: top, p: 1 }, o); const q = []; if (x.sort !== 'top') q.push('sort=' + x.sort); if (x.sort === 'top' && x.t !== 'week') q.push('t=' + x.t); if (x.p > 1) q.push('p=' + x.p); return pad.href + '/quotes' + (q.length ? '?' + q.join('&') : ''); };
+%>
+<link rel="stylesheet" href="/public/css/feed.css?v=17">
+<main class="qp">
+  <a class="back" href="<%= pad.href %>">‹ p/<%= pad.slug %></a>
+  <h1>💬 Quotes from <%= pad.title %></h1>
+  <p class="sub">Moments from the Camfrog room, clipped with ✂️ Clip chat on the pad's Live tab or <code>!quote</code> in the room. Vote for the best.</p>
+  <nav class="qp-tabs" aria-label="Sort quotes">
+    <a href="<%= href({ sort: 'top', t: 'day' }) %>" class="<%= sort === 'top' && top === 'day' ? 'on' : '' %>">Top today</a>
+    <a href="<%= href({ sort: 'top', t: 'week' }) %>" class="<%= sort === 'top' && top === 'week' ? 'on' : '' %>">Top this week</a>
+    <a href="<%= href({ sort: 'top', t: 'all' }) %>" class="<%= sort === 'top' && top === 'all' ? 'on' : '' %>">Top of all time</a>
+    <a href="<%= href({ sort: 'new' }) %>" class="<%= sort === 'new' ? 'on' : '' %>">New</a>
+  </nav>
+  <% if (qotd && qotd.post) { %>
+    <section class="qp-qotd" aria-labelledby="qpQotd">
+      <h2 id="qpQotd">🏆 Quote of the <%= qotd.window === 'day' ? 'day' : 'week' %></h2>
+      <%- include('partials/feed-post', { p: qotd.post, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: pad.id }) %>
+    </section>
+  <% } %>
+  <% if (!posts.length) { %>
+    <p class="qp-empty"><%= page > 1 ? 'No more quotes.' : 'No quotes here yet — pick a few lines on the pad\'s Live tab (✂️ Clip chat) or type !quote last 5 in the room.' %></p>
+  <% } else { %>
+    <div class="qp-list fd-list">
+      <% posts.forEach((p) => { %><%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: pad.id }) %><% }) %>
+    </div>
+  <% } %>
+  <nav class="qp-pager">
+    <% if (page > 1) { %><a href="<%= href({ p: page - 1 }) %>">‹ Back</a><% } else { %><span></span><% } %>
+    <% if (more) { %><a href="<%= href({ p: page + 1 }) %>">More ›</a><% } %>
+  </nav>
+</main>
+<%- include('partials/feed-js', { viewer }) %>
+</body>
+</html>
