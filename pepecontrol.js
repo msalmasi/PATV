@@ -22,6 +22,9 @@
 // panel shows his reply. Guards: Admin class + CSRF (no step-up password: cosmetic only), values
 // checked against the lists Pepe himself reports in the heartbeat (status.pepe.look), refused while
 // Pepe is offline, 20 per minute per admin, every change and its result in the audit log.
+// 1.99fo (experimental): the avatar BASE (pixel | kawaii -> !pepebase) and the active base's
+// modifiers (-> !pepemod <id>|off), checked against Pepe's own bases/modlist; a modifier drawn for
+// another base is refused here too, before it reaches him.
 "use strict";
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
@@ -43,7 +46,8 @@ const TERMINAL = new Set(["done", "failed", "expired", "superseded"]);
 const ACK_STATES = new Set(["accepted", "running", "waiting", "done", "failed", "superseded"]);
 
 // Pepe's look: verb -> the chat command it runs (shown in the panel + audit log)
-const LOOK_VERBS = { costume: "!costume", persona: "!persona", voice: "!persona voice", link: "!persona link", reset: "!avatar reset" };
+const LOOK_VERBS = { costume: "!costume", persona: "!persona", voice: "!persona voice", link: "!persona link", reset: "!avatar reset",
+  base: "!pepebase", mod: "!pepemod" };
 const LOOK_RATE = { max: 20, windowMs: 60 * 1000 };
 const LIVE_MS = 150 * 1000;               // Pepe's own live-file age (the VM forwards it while < 120 s) + slack
 
@@ -228,7 +232,8 @@ async function heartbeat(data) {
   await runQuery("INSERT INTO pepe_control_status (id, at, data) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET at = excluded.at, data = excluded.data", [now(), s]);
   const lk = data && data.pepe && data.pepe.look;
   if (lk && typeof lk === "object" && (Array.isArray(lk.costumes) || Array.isArray(lk.personas))) {
-    const lists = JSON.stringify({ costumes: Array.isArray(lk.costumes) ? lk.costumes : [], personas: Array.isArray(lk.personas) ? lk.personas : [] });
+    const arr = (x) => (Array.isArray(x) ? x : []);
+    const lists = JSON.stringify({ costumes: arr(lk.costumes), personas: arr(lk.personas), bases: arr(lk.bases), modlist: arr(lk.modlist) });
     await runQuery("INSERT INTO pepe_control_lastlook (id, at, data) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET at = excluded.at, data = excluded.data", [now(), lists]);
   }
   return { ok: true };
@@ -267,6 +272,17 @@ async function lookRequest(user, { verb, value }, ip) {
   if (verb === "costume") ok = v === "off" || idSet(look.costumes).has(v);
   else if (verb === "persona") ok = v === "off" || idSet(look.personas).has(v);
   else if (verb === "voice" || verb === "link") ok = v === "on" || v === "off";
+  else if (verb === "base") ok = idSet(look.bases).has(v);
+  else if (verb === "mod") {
+    if (v === "off") ok = Array.isArray(look.modlist);
+    else {
+      const m = (Array.isArray(look.modlist) ? look.modlist : []).find((x) => x && x.id === v);
+      if (m && !(Array.isArray(m.bases) && m.bases.includes(look.base))) {
+        throw fail(400, "That one is for " + (Array.isArray(m.bases) ? m.bases.join("/") : "another") + " Pepe - switch his base first.");
+      }
+      ok = !!m;
+    }
+  }
   else ok = v === "";
   if (!ok) throw fail(400, "Pepe doesn't have that one.");
   const who = userKey(user);

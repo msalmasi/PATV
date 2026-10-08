@@ -152,6 +152,42 @@ test("rate limit: 20 look changes a minute per admin", async () => {
   assert.equal((await look("costume", "dracula")).status, 200, "another admin isn't limited");
 });
 
+test("1.99fo avatar bases: base + the active base's modifiers, checked against Pepe's lists", async () => {
+  const MODLIST = [{ id: "bow", name: "Bow", bases: ["kawaii"], slot: "side" }, { id: "headset", name: "Tiny headset", bases: ["kawaii"], slot: "ears" }];
+  const BASES = [{ id: "pixel", name: "Pixel Pepe" }, { id: "kawaii", name: "Kawaii Pepe" }];
+  await beat({ look: Object.assign({}, LOOK, { base: "pixel", mods: [], bases: BASES, modlist: MODLIST }) });
+  let r = await look("base", "kawaii");
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.action.label, "!pepebase kawaii");
+  let row = (await getQuery("SELECT args FROM pepe_actions WHERE id = ?", [r.body.action.id]))[0];
+  assert.deepEqual(JSON.parse(row.args), ["base", "kawaii"]);
+  r = await look("mod", "bow");
+  assert.equal(r.status, 400, "a kawaii modifier while Pepe is pixel");
+  assert.match(r.body.error, /kawaii Pepe - switch his base first/);
+  assert.equal((await look("base", "vaporwave")).status, 400, "unknown base");
+  await runQuery("UPDATE pepe_actions SET status = 'done'");
+  await beat({ look: Object.assign({}, LOOK, { base: "kawaii", mods: ["bow"], bases: BASES, modlist: MODLIST }) });
+  for (const v of ["bow", "Headset", "off"]) {
+    r = await look("mod", v);
+    assert.equal(r.status, 200, v + ": " + JSON.stringify(r.body));
+    row = (await getQuery("SELECT args FROM pepe_actions WHERE id = ?", [r.body.action.id]))[0];
+    assert.deepEqual(JSON.parse(row.args), ["mod", v.toLowerCase()]);
+    await runQuery("UPDATE pepe_actions SET status = 'done'");
+  }
+  for (const v of ["cape", "bow; !reloadbot", ""]) assert.equal((await look("mod", v)).status, 400, "mod " + JSON.stringify(v));
+  // an older Pepe without the base lists: base/mod refused, everything else unchanged
+  await beat();
+  assert.equal((await look("base", "kawaii")).status, 400);
+  assert.equal((await look("mod", "off")).status, 400);
+  assert.equal((await look("costume", "dracula")).status, 200);
+  // the offline fallback keeps the base lists too
+  await beat({ look: Object.assign({}, LOOK, { base: "kawaii", mods: [], bases: BASES, modlist: MODLIST }) });
+  await beat({ running: false });
+  const known = (await call("/api/pepe/control/status", "a1")).body.look_known;
+  assert.equal(known.bases.length, 2);
+  assert.equal(known.modlist.length, 2);
+});
+
 test("panel markup: Pepe's look section for admins only, thumbnails exist for every costume", async () => {
   const file = path.join(repo, "views", "partials", "pepe-control.ejs");
   const html = await ejs.renderFile(file, { me: { username: "boss", class: "Admin" }, pepeCtlCsrf: P.csrfToken });
@@ -162,6 +198,12 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   assert.equal((await ejs.renderFile(file, { me: { username: "pleb", class: "pleb" }, pepeCtlCsrf: P.csrfToken })).trim(), "");
   const dir = path.join(repo, "public", "img", "pepe-looks");
   for (const id of ["pepe", "dolly", "dracula", "frankenstein", "mummy", "freddy", "jason", "pennywise", "werewolf", "pinhead", "pedro", "flirty", "gothmommy"]) {
+    assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
+  }
+  // 1.99fo: the base picker + extras grid, with a thumbnail per base and per kawaii modifier
+  assert.match(html, /id="plBases"/);
+  assert.match(html, /id="plMods"/);
+  for (const id of ["base-pixel", "base-kawaii", "mod-bow", "mod-flowercrown", "mod-catears", "mod-strawberryhat", "mod-sparkles", "mod-headset"]) {
     assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
   }
 });
