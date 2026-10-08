@@ -175,6 +175,7 @@
           <select name="who"><% WHO.forEach((w) => { %><option value="<%= w %>"<%= settings.who === w ? ' selected' : '' %>><%= whoLabel[w] %></option><% }) %></select></label>
         <label class="ck"><input type="checkbox" name="approval"<%= settings.approval ? ' checked' : '' %>> Posts need my approval before they show in the pad (the approval queue is in Moderation)</label>
         <label><span>Posts per person per day in this pad (0 = no pad limit)</span><input type="number" name="per_day" min="0" max="1000" value="<%= settings.per_day %>"></label>
+        <label class="ck"><input type="checkbox" name="allow_nsfw"<%= settings.allow_nsfw !== false ? ' checked' : '' %>> Allow 🔞 NSFW pictures and videos (explicit media must be tagged NSFW; when the site's automatic image check is on, explicit media is refused in a pad that doesn't allow it)</label>
         <p class="fc-note">You and site admins can always post. Site-wide limits (posting speed, new accounts) apply on top.</p>
         <div class="cm-row"><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Save</button></div>
       </form>
@@ -401,7 +402,7 @@
 </main>
 <script id="rmgState" type="application/json"><%- JSON.stringify(st).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/room-manage.js?v=2" defer></script>
-<script src="/public/js/feed-roommod.js?v=3" defer></script>
+<script src="/public/js/feed-roommod.js?v=4" defer></script>
 <script src="/public/js/pepe-feed.js?v=7" defer></script>
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=4" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>

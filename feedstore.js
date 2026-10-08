@@ -873,6 +873,10 @@ function priceOf(C, { images, audio, video, link }) {
  * chat); deps.roomGen - that post, made by Pepe on a room member's behalf: the pad's who-can-post rules are about
  * people, so they don't stop Pepe there (the pad's own "post room generations" switch does)
  */
+// 1.99fc: the media safety hook (imagesafety.install sets it). fn({atts, roomId, userId}) -> {ok:true, nsfw?} | {ok:false, reason}
+let MEDIA_SAFETY = async () => ({ ok: true });
+function setMediaSafetyCheck(fn) { MEDIA_SAFETY = typeof fn === "function" ? fn : async () => ({ ok: true }); }
+
 async function create(userId, input, deps = {}) {
   await init();
   const C = CONFIG;
@@ -933,8 +937,18 @@ async function create(userId, input, deps = {}) {
     previewAtt = pv.thumb || null;
   }
   const cost = deps.free ? 0 : priceOf(C, { ...counts, link: !!link });
+  // 1.99fc: the image safety check (imagesafety.js; a pass-through while it's switched off). Pepe's own posts and
+  // posts made on someone's behalf (room generations, story keeps) aren't uploads by that person - not checked.
+  let safetyNsfw = false;
+  if (atts.length && !deps.roomGen && !deps.onBehalf && !isPepe(u)) {
+    let sv;
+    try { sv = await MEDIA_SAFETY({ atts, roomId: roomIds[0], userId: u.userId }); }
+    catch (e) { sv = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
+    if (!sv || sv.ok !== true) throw new Refuse(422, (sv && sv.reason) || "That file can't be posted here.");
+    safetyNsfw = sv.nsfw === true;
+  }
   // 1.99di: a file Pepe's result check called NSFW makes the post NSFW whatever the author ticked
-  const aiNsfw = atts.some((a) => a.ai_nsfw);
+  const aiNsfw = atts.some((a) => a.ai_nsfw) || safetyNsfw;
   const id = newId();
   const label = `feed post ${id}`;
   // 1.99df: "Also show in All" - only a profile post can opt out (default: shown)
@@ -1928,12 +1942,15 @@ async function sweep(media) {
 // only when every community the post lives in is theirs; removing a comment on a post
 // in their room (as in 1.99bw), with an optional reason in the author's inbox. Every action -> room_events.
 const WHO = Object.freeze(["everyone", "linked", "followers", "approved"]);
-const ROOM_DEFAULTS = Object.freeze({ who: "everyone", approval: false, per_day: 0 });
+// 1.99fc allow_nsfw: may NSFW-tagged media be posted here (default yes, as before). Only the image safety check reads it
+// today: with the check on, explicit media is refused in a pad that says no (and marked NSFW where it says yes).
+const ROOM_DEFAULTS = Object.freeze({ who: "everyone", approval: false, per_day: 0, allow_nsfw: true });
 function cleanRoomSettings(c) {
   const o = { ...ROOM_DEFAULTS };
   if (c && WHO.includes(c.who)) o.who = c.who;
   if (c && c.approval != null) o.approval = c.approval === true || c.approval === 1 || c.approval === "1" || c.approval === "on" || c.approval === "true";
   if (c && c.per_day != null && c.per_day !== "") { const n = Math.floor(Number(c.per_day)); if (Number.isFinite(n)) o.per_day = Math.min(1000, Math.max(0, n)); }
+  if (c && c.allow_nsfw != null) o.allow_nsfw = !(c.allow_nsfw === false || c.allow_nsfw === 0 || c.allow_nsfw === "0" || c.allow_nsfw === "off" || c.allow_nsfw === "false");
   return o;
 }
 async function roomSettings(roomId) {
@@ -2136,7 +2153,7 @@ async function roomAudit(roomId, limit = 100) {
 
 module.exports = {
   postPath, postLink, postLinks,
-  roomMod, roomSettings, roomPostRefusal, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
+  roomMod, roomSettings, roomPostRefusal, setMediaSafetyCheck, roomReports, roomPending, roomMembers, roomAudit, canLock, setFollowerCheck, WHO, ROOM_DEFAULTS, MAX_PINS,
   init, config, setConfig, loadConfig, DEFAULTS, LIMITS, Refuse, postRefusal, postRate, postBudget, account, isNewAccount, usedBytes,
   list, get, getRow, decorate, canModerate, create, edit, remove, crosspost, crosspostMany, communities, hot, thumbOf, visibleSql, communityOf,
   communitiesPlan, migrateCommunities, kvGet, removeFromRoom, restoreToRoom, adminSet, vote, voteComment,

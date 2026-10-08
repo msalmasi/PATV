@@ -1,0 +1,156 @@
+<%- include('../partials/admin-open', { title: 'Image safety', user, section: 'imagesafety', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/imagesafety.ejs - automated image safety checks (1.99fc, imagesafety.js): the switches, the policy and the
+  admins' review of recent checks (thumbnails are served admin-only by /admin/imagesafety/thumb/<id>). Admins only.
+%>
+<%
+  const when = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const pct = (x) => x == null ? '-' : Math.round(x * 100) + '%';
+  const ACTION_LABEL = { allow: 'allow', flag: 'allow + flag', nsfw: 'mark NSFW', nsfw_pad: "mark NSFW (refuse if the pad says no)", refuse: 'refuse', refuse_flag: 'refuse + flag + alert admins' };
+  const KEY_LABEL = { nudity_explicit: 'Explicit nudity', sexual: 'Sexual activity', suggestive: 'Suggestive', minor_risk: 'Possible minor (sexual / suggestive context)', gore: 'Gore', hate_symbols: 'Hate symbols', nsfw_level: "Model's overall call is NSFW / refuse" };
+  const mode = C.shadow ? 'shadow' : C.enabled ? 'on' : 'off';
+  const D = stats.day || {};
+  const Q = stats.queue || {};
+%>
+<div class="adm-head">
+  <h1>🖼️ Image safety</h1>
+  <p>Automatic checks of uploaded pictures and videos (a few frames), classified by Pepe's vision model (his model registry's
+     <b>safety</b> function, set on Pepe's admin panel). The site holds no model keys. It's <b>off</b> until you switch it on here; try
+     <b>shadow mode</b> first - it classifies and records but never blocks or marks anything. AI generations aren't checked here
+     (Pepe's own AI post-check already ran on them).</p>
+</div>
+
+<section class="adm-card" aria-labelledby="stT">
+  <h2 id="stT">Status
+    <span class="adm-pill <%= mode === 'on' ? 'ok' : mode === 'shadow' ? 'admin' : '' %>"><%= mode === 'on' ? 'ON (enforcing)' : mode === 'shadow' ? 'SHADOW (recording only)' : 'OFF (pass-through)' %></span>
+  </h2>
+  <div class="adm-kv">
+    <div><b>Last 24 h</b><span><%= D.n %> checks · <%= D.refused %> refused · <%= D.marked %> marked NSFW · <%= D.flagged %> flagged · <%= D.unchecked %> unchecked</span></div>
+    <div><b>Reviews (24 h)</b><span><%= D.fp %> false positives · <%= D.fn %> false negatives</span></div>
+    <div><b>Pepe's spend (24 h)</b><span>$<%= Number(D.cost || 0).toFixed(4) %></span></div>
+    <div><b>Queue</b><span><%= Q.queued %> waiting for Pepe<%= Q.lastPull ? ' · Pepe last asked ' + when(Q.lastPull) : ' · Pepe hasn\'t asked since the site started' %></span></div>
+  </div>
+</section>
+
+<section class="adm-card" id="settings" aria-labelledby="setT">
+  <h2 id="setT">Settings</h2>
+  <p class="adm-help">While the master switch and shadow mode are both off, every upload goes through exactly as before and nothing is sent to Pepe.
+     Shadow mode wins over the master switch: while it's on nothing is ever blocked or marked.</p>
+  <form class="adm-form" id="isfSettings">
+    <label class="ck"><span>Master switch (<code>image_safety_enabled</code>)</span><span><input type="checkbox" name="image_safety_enabled"<%= C.enabled ? ' checked' : '' %>> enforce the policy below</span></label>
+    <label class="ck"><span>Shadow mode (<code>image_safety_shadow</code>)</span><span><input type="checkbox" name="image_safety_shadow"<%= C.shadow ? ' checked' : '' %>> classify + record only, never block or mark</span></label>
+    <label><span>When Pepe doesn't answer (<code>image_safety_fail_mode</code>)</span>
+      <select name="image_safety_fail_mode">
+        <option value="open"<%= C.fail_mode !== 'closed' ? ' selected' : '' %>>Fail open: allow it, flag it for review</option>
+        <option value="closed"<%= C.fail_mode === 'closed' ? ' selected' : '' %>>Fail closed: refuse it ("try again")</option>
+      </select></label>
+    <label><span>Wait for Pepe, seconds (<code>image_safety_timeout_secs</code>)</span><input type="number" name="image_safety_timeout_secs" min="1" max="120" step="1" value="<%= C.timeout_secs %>"></label>
+    <label><span>Video frames to look at (<code>image_safety_video_frames</code>)</span><input type="number" name="image_safety_video_frames" min="1" max="6" value="<%= C.video_frames %>"></label>
+    <label><span>Keep checks + thumbnails, days (<code>image_safety_retention_days</code>)</span><input type="number" name="image_safety_retention_days" min="1" max="365" value="<%= C.retention_days %>"></label>
+    <label class="ck"><span>Admin alerts (<code>image_safety_notify_minor</code>)</span><span><input type="checkbox" name="image_safety_notify_minor"<%= C.notify_minor ? ' checked' : '' %>> inbox alert to every admin on a possible-minor flag</span></label>
+
+    <fieldset class="isf-fs" style="grid-column:1/-1">
+      <legend>Surfaces (<code>image_safety_surfaces</code>)</legend>
+      <% SURFACES.forEach((s) => { %><label class="ck isf-ck"><input type="checkbox" name="surface" value="<%= s %>"<%= C.surfaces[s] ? ' checked' : '' %>> <%= SURFACE_LABEL[s] %></label><% }) %>
+    </fieldset>
+
+    <fieldset class="isf-fs" style="grid-column:1/-1">
+      <legend>Thresholds: a category counts at this score or above, 0-1 (<code>image_safety_thresholds</code>)</legend>
+      <div class="isf-grid">
+      <% CATEGORIES.forEach((k) => { %><label><span><%= KEY_LABEL[k] %></span><input type="number" name="th_<%= k %>" min="0.05" max="1" step="0.05" value="<%= C.thresholds[k] %>"></label><% }) %>
+      </div>
+    </fieldset>
+
+    <fieldset class="isf-fs" style="grid-column:1/-1">
+      <legend>Policy (<code>image_safety_policy</code>)</legend>
+      <div class="isf-table-wrap">
+      <table class="isf-table">
+        <thead><tr><th scope="col">Found</th><th scope="col">Pad avatar / banner, profile photo</th><th scope="col">Feed posts, stories, DM pictures</th></tr></thead>
+        <tbody>
+        <% POLICY_KEYS.forEach((k) => { %>
+          <tr><th scope="row"><%= KEY_LABEL[k] %></th>
+          <% ['profile', 'media'].forEach((g) => { %>
+            <td><select name="pol_<%= g %>_<%= k %>" aria-label="<%= KEY_LABEL[k] %> - <%= g %>">
+              <% ACTIONS.forEach((a) => { %><option value="<%= a %>"<%= C.policy[g][k] === a ? ' selected' : '' %>><%= ACTION_LABEL[a] %><%= DEFAULTS.policy[g][k] === a ? ' (default)' : '' %></option><% }) %>
+            </select></td>
+          <% }) %></tr>
+        <% }) %>
+        </tbody>
+      </table>
+      </div>
+      <p class="adm-help">On a profile surface "mark NSFW" means refuse (a pad avatar or profile photo can't be NSFW). A DM has no pad: NSFW is always allowed there (marked).
+         A pad allows NSFW unless its owner unticks "Allow NSFW" in the pad's Feed settings.</p>
+    </fieldset>
+    <div class="adm-actions"><button type="submit">Save settings</button><span class="adm-msg" role="status"></span></div>
+  </form>
+</section>
+
+<section class="adm-card" id="review" aria-labelledby="revT">
+  <h2 id="revT">Review recent checks</h2>
+  <p class="adm-help">Mark each check: <b>false positive</b> (it acted or flagged, but the picture is fine), <b>false negative</b> (it let something through it
+     shouldn't have) or <b>correct</b>. Thumbnails are admins-only; a possible-minor thumbnail is stored blurred, and DM pictures are only kept when the
+     check acted on them. Checks are deleted after <%= C.retention_days %> days.</p>
+  <nav class="isf-filters" aria-label="Filter checks">
+    <% [['all', 'All'], ['flagged', 'Flagged'], ['blocked', 'Refused / marked'], ['unchecked', 'Unchecked (Pepe timed out)'], ['shadow', 'Shadow'], ['unreviewed', 'Not reviewed']].forEach((f) => { %>
+      <a href="/admin/imagesafety?f=<%= f[0] %>#review"<%- filter === f[0] ? ' aria-current="true" class="on"' : '' %>><%= f[1] %></a>
+    <% }) %>
+  </nav>
+  <% if (!rows.length) { %><p class="adm-help" id="flagged">Nothing here yet.</p><% } %>
+  <ul class="isf-list" id="<%= filter === 'flagged' ? 'flagged' : 'isfList' %>">
+    <% rows.forEach((r) => { %>
+      <li class="isf-row<%= r.flagged ? ' is-flag' : '' %>" data-id="<%= r.id %>">
+        <div class="isf-th"><% if (r.thumb) { %><img src="<%= r.thumb %>" alt="Check #<%= r.id %>" loading="lazy" decoding="async" referrerpolicy="no-referrer"><% } else { %><span class="isf-none">no thumbnail</span><% } %></div>
+        <div class="isf-info">
+          <div class="isf-top"><b>#<%= r.id %></b> <%= r.surfaceLabel %><%= r.kind === 'video' ? ' (video)' : '' %> · <%= when(r.at) %>
+            <% if (r.user) { %>· by <%= r.user %><% } %>
+            <% if (r.room) { %>· pad <%= r.room %><% } %>
+          </div>
+          <div>
+            <span class="adm-pill <%= r.action === 'refuse' || r.action === 'failclosed' ? 'bad' : r.action === 'allow' ? 'ok' : 'admin' %>"><%= r.action %></span>
+            <% if (r.mode === 'shadow') { %><span class="adm-pill">would: <%= r.would || '?' %></span><% } %>
+            <% if (r.flagged) { %><span class="adm-pill bad">flagged</span><% } %>
+            <% if (r.late) { %><span class="adm-pill">late verdict<%= r.would ? ': would ' + r.would : '' %></span><% } %>
+            <% if (r.verdict) { %><span class="adm-pill">model: <%= r.verdict %> (<%= pct(r.confidence) %>)</span><% } %>
+          </div>
+          <% if (r.categories.length) { %><div class="isf-cats"><%= r.categories.map((k) => (KEY_LABEL[k] || k) + ' ' + pct(r.scores[k])).join(' · ') %></div><% } %>
+          <% if (r.reason) { %><div class="adm-help isf-reason"><%= r.reason %></div><% } %>
+          <div class="adm-help"><%= r.model ? r.model : '' %><%= r.ms != null ? ' · ' + (r.ms / 1000).toFixed(1) + ' s' : '' %></div>
+          <div class="isf-rev" role="group" aria-label="Review check #<%= r.id %>">
+            <% [['fp', 'False positive'], ['fn', 'False negative'], ['ok', 'Correct']].forEach((m) => { %>
+              <button type="button" class="adm-btn ghost<%= r.review === m[0] ? ' on' : '' %>" data-mark="<%= m[0] %>" aria-pressed="<%= r.review === m[0] ? 'true' : 'false' %>"><%= m[1] %></button>
+            <% }) %>
+            <span class="adm-msg" role="status"><%= r.review ? 'Marked by ' + r.reviewedBy : '' %></span>
+          </div>
+        </div>
+      </li>
+    <% }) %>
+  </ul>
+</section>
+<style>
+  .isf-fs { border: 1px solid var(--adm-line); border-radius: 10px; padding: 10px 12px; margin: 0; min-width: 0; }
+  .isf-fs legend { color: #c6e94f; font-size: 13px; padding: 0 6px; }
+  .isf-ck { display: inline-flex !important; align-items: center; gap: 6px; margin: 4px 14px 4px 0 !important; }
+  .isf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 12px; }
+  .isf-table-wrap { overflow-x: auto; }
+  .isf-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .isf-table th, .isf-table td { border-bottom: 1px solid var(--adm-line); padding: 6px 8px; text-align: left; vertical-align: middle; }
+  .isf-table th[scope=row] { font-weight: normal; color: #ddd; }
+  .isf-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+  .isf-filters a { border: 1px solid var(--adm-line2); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+  .isf-filters a.on { background: var(--adm-accent-bg); border-color: var(--adm-accent); color: #fff; }
+  .isf-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .isf-row { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 12px; padding: 10px; border: 1px solid var(--adm-line); border-radius: 10px; background: var(--adm-panel2); }
+  .isf-row.is-flag { border-color: #6b2a2a; }
+  .isf-th img { width: 128px; height: 128px; object-fit: contain; background: #000; border-radius: 8px; display: block; }
+  .isf-none { display: grid; place-items: center; width: 128px; height: 128px; border-radius: 8px; background: #0c0c0f; color: var(--adm-muted); font-size: 12px; text-align: center; }
+  .isf-info { display: grid; gap: 5px; min-width: 0; font-size: 13.5px; }
+  .isf-cats { color: #ffd27a; font-size: 13px; }
+  .isf-rev { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .isf-rev .adm-btn { padding: 5px 10px; font-size: 13px; }
+  .isf-rev .adm-btn.on { border-color: var(--adm-accent); background: var(--adm-accent-bg); }
+  @media (max-width: 600px) { .isf-row { grid-template-columns: 84px minmax(0, 1fr); } .isf-th img, .isf-none { width: 84px; height: 84px; } }
+</style>
+<script src="/public/js/imagesafety-admin.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

@@ -170,6 +170,9 @@ async function chunk(userId, id, offset, buf) {
   if (!r.changes) throw new MediaRefuse(409, "Out of order.");
   return off + buf.length;
 }
+// 1.99fc: the safety hook (imagesafety.install sets it). fn({file, userId, ref}) -> {ok:true, nsfw?} | {ok:false, reason}
+let SAFETY = async () => ({ ok: true });
+function setSafetyCheck(fn) { SAFETY = typeof fn === "function" ? fn : async () => ({ ok: true }); }
 async function processUpload(a) {
   const tmp = tmpPath(a.id);
   try {
@@ -180,8 +183,17 @@ async function processUpload(a) {
     const sn = media.sniff(head);                         // again, on the assembled file
     if (sn.bad || sn.kind !== "image") throw new media.MediaError(sn.bad || "That file isn't a picture.");
     const out = await media.processImage(tmp, sn.fmt, { outDir: dir(), tmpDir: path.join(dir(), "tmp") });
-    await runQuery("UPDATE dm_media SET state = 'ready', file = ?, thumb = ?, w = ?, h = ?, bytes = ?, error = NULL WHERE id = ? AND state = 'processing'",
-                   [out.file, out.thumb, out.w, out.h, out.bytes, a.id]);
+    // 1.99fc: the image safety check (imagesafety.js; a pass-through while it's off): refused -> the upload fails;
+    // NSFW -> the picture is marked NSFW (blurred until clicked), like the sender's own mark
+    let sv;
+    try { sv = await SAFETY({ file: filePath(out.file), userId: a.owner_id, ref: "dm:" + a.id }); }
+    catch (e) { sv = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
+    if (!sv || sv.ok !== true) {
+      removeFiles([out.file, out.thumb].filter(Boolean));
+      throw new media.MediaError((sv && sv.reason) || "That picture can't be sent.");
+    }
+    await runQuery("UPDATE dm_media SET state = 'ready', file = ?, thumb = ?, w = ?, h = ?, bytes = ?, error = NULL, nsfw = CASE WHEN ? THEN 1 ELSE nsfw END WHERE id = ? AND state = 'processing'",
+                   [out.file, out.thumb, out.w, out.h, out.bytes, sv.nsfw === true ? 1 : 0, a.id]);
   } catch (e) {
     const msg = e && e.refuse ? e.message : "That picture couldn't be processed.";
     if (!(e && e.refuse)) console.error("[dm] process", a.id, e && e.message);
@@ -367,5 +379,5 @@ function register(app, { addUser, guard, fail, account }) {
   init().then(() => runQuery("UPDATE dm_media SET state = 'failed', error = 'The server restarted while processing - add it again.' WHERE state = 'processing'")).catch(() => {});
 }
 
-module.exports = { init, register, open, chunk, finish, status, discard, checkAttach, attach, forMessages, countFor, viewable, sendFile, sweep, pictureRefusal,
+module.exports = { init, register, open, chunk, finish, status, discard, checkAttach, attach, forMessages, countFor, viewable, sendFile, sweep, pictureRefusal, setSafetyCheck,
                    usedBytes, dir, _setDir, filePath, url, MAX_PER_MESSAGE, LIMITS, FILE_RE, DELETED_GRACE_MS, ORPHAN_TTL, PRIVATE_HEADERS, MediaRefuse, _setClock };

@@ -12,9 +12,9 @@
 // in, first frame only), avatar = a 256 px square (smart crop), banner = 1600 px wide, cropped to between 4:1 and 2:1
 // around the focal point (so the focal point can still move later without a re-upload). 5 MB cap on the original.
 // Then the SAFETY CHECK (setSafetyCheck; the same hook for avatar and banner): the Terms forbid adult content in pad
-// listings, so an image the check flags as NSFW is REFUSED (nothing is stored). The site has no image classifier of
-// its own today (feed media relies on the uploader's NSFW mark, reports and admins): the default check passes
-// everything, and a site admin can still remove a pad's avatar / banner from its settings hub (staff manage any pad).
+// listings, so an image the check flags as NSFW is REFUSED (nothing is stored). 1.99fc: index.js installs imagesafety.js
+// here (Pepe's vision, surface "pad_look"); it ships switched off, and while it's off the check passes everything, as
+// before. A site admin can still remove a pad's avatar / banner from its settings hub (staff manage any pad).
 // Files: PAD_DIR (default /var/lib/patv[-staging]/pad; off Linux a folder next to the code tree), random 32-hex names,
 // served by GET /media/pad/<file> ONLY while a pad uses it (a replaced file 404s even before it's deleted), immutable
 // cache headers (a new upload = a new name). The old file is deleted on replace / remove.

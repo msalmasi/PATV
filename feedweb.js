@@ -639,6 +639,11 @@ function register(app, { addUser, isBotToken }) {
       if (a.kind !== "image" && out.kind === "image") throw new media.MediaError("That file is a picture, not " + a.kind + ".");
       await runQuery(`UPDATE feed_attachments SET state = 'ready', kind = ?, ct = ?, file = ?, thumb = ?, poster = ?, w = ?, h = ?, secs = ?, bytes = ?, error = NULL
                       WHERE id = ? AND state = 'processing'`, [out.kind, out.ct, out.file, out.thumb, out.poster, out.w, out.h, out.secs, out.bytes, a.id]);
+      // 1.99fc: start the image safety classification now (only while it's switched on), so the post / story finds it ready
+      if (out.kind === "image" || out.kind === "video") {
+        require("./imagesafety").prefetch({ surface: a.purpose === "story" ? "story" : "feed", kind: out.kind, file: media.filePath(out.file),
+                                            poster: out.poster ? media.filePath(out.poster) : null, secs: out.secs }).catch(() => {});
+      }
     } catch (e) {
       const msg = e && e.refuse ? e.message : "That file couldn't be processed.";
       if (!(e && e.refuse)) console.error("[feed] process", a.id, e);

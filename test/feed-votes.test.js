@@ -523,7 +523,7 @@ test("room owners: who can post (linked / approved / followers), per-user daily 
   store.setFollowerCheck(null);
   assert.equal((await mod(U.ownerB, slugB, { op: "member-remove", userId: U.carol.userId })).status, 200);
   await mod(U.ownerB, slugB, { op: "settings", settings: { who: "everyone", per_day: 2, junk: "<x>" } });
-  assert.deepEqual(await store.roomSettings(ROOM_B), { who: "everyone", approval: false, per_day: 2 });
+  assert.deepEqual(await store.roomSettings(ROOM_B), { who: "everyone", approval: false, per_day: 2, allow_nsfw: true });
   await runQuery("DELETE FROM feed_post_rooms WHERE room_id = ? AND post_id IN (SELECT id FROM feed_posts WHERE author_id = ?)", [ROOM_B, U.lvl.userId]);
   assert.equal((await post("/api/feed/posts", U.lvl, { body: "1", rooms: [ROOM_B], global: false })).status, 200);
   assert.equal((await post("/api/feed/posts", U.lvl, { body: "2", rooms: [ROOM_B], global: false })).status, 200);

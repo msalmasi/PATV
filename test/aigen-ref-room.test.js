@@ -286,7 +286,7 @@ test("Pad settings -> Feed shows the switch (Camfrog pads); the profile settings
   assert.equal(r.status, 200, html.slice(0, 300));
   assert.match(html, /<input type="checkbox" id="rmAigenRoom" checked>/, "on by default");
   assert.match(html, /Post room generations to the feed/);
-  assert.match(html, /feed-roommod\.js\?v=3/);
+  assert.match(html, /feed-roommod\.js\?v=4/);
   const pp = fs.readFileSync(path.join(repo, "views", "partials", "profile-posts.ejs"), "utf8");
   assert.match(pp, /data-pp-roomgen/);
   assert.match(pp, /Don't post my room generations/);

@@ -349,6 +349,16 @@ async function updateAvatar (req, res) {
           .jpeg({ quality: 90 })
           .toBuffer();
 
+      // 1.99fc: the image safety check (imagesafety.js; a pass-through while it's switched off). Profile photos must be
+      // safe for work (Terms) - a refused picture is never uploaded.
+      let sv;
+      try { sv = await require('./imagesafety').check({ surface: 'profile_photo', kind: 'image', buf: resizedImage, userId, ref: 'profile:' + userId }); }
+      catch (e) { sv = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
+      if (!sv || sv.ok !== true) {
+          fs.unlink(filePath, () => {});
+          return res.status(422).json({ success: false, message: (sv && sv.reason) || "That picture can't be used." });
+      }
+
       // Upload to S3
       const s3Response = await s3.upload({
           Bucket: process.env.S3_BUCKET_NAME,

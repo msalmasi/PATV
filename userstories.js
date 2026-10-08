@@ -324,7 +324,7 @@ async function create(user, { attachment, pad, nsfw } = {}) {
   // the safety check
   let verdict;
   try {
-    verdict = await SAFETY({ file: src, kind: a.kind, poster: a.poster ? fm().filePath(a.poster) : null, roomId: rid, userId: u.userId });
+    verdict = await SAFETY({ file: src, kind: a.kind, poster: a.poster ? fm().filePath(a.poster) : null, secs: Number(a.secs) || 0, roomId: rid, userId: u.userId });
   } catch (e) { verdict = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
   if (!verdict || verdict.ok !== true) throw new Refuse(422, (verdict && verdict.reason) || "That file can't be used.");
   // claim the upload (one story per upload, even with two clicks at once)

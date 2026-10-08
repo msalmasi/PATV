@@ -59,7 +59,8 @@
     });
   }
   form('rmSettings', function (f) {
-    return mod({ op: 'settings', settings: { who: f.elements.who.value, approval: f.elements.approval.checked, per_day: f.elements.per_day.value } });
+    return mod({ op: 'settings', settings: { who: f.elements.who.value, approval: f.elements.approval.checked, per_day: f.elements.per_day.value,
+                                        allow_nsfw: f.elements.allow_nsfw ? f.elements.allow_nsfw.checked : true } });
   });
   form('rmMember', function (f) { return mod({ op: 'member-add', user: f.elements.user.value }); });
   form('rmBan', function (f) {
