@@ -1,6 +1,6 @@
 <%- include('partials/admin-open', { title: 'Stage admin', user: user, section: 'stage', admIsAdmin: !!(typeof isAdmin !== 'undefined' && isAdmin) }) %>
 <!-- views/stageAdmin.ejs — paid Main Stage slots: settings, open slots (cut), bans, booking log. -->
-<link rel="stylesheet" href="/public/css/stage.css?v=5">
+<link rel="stylesheet" href="/public/css/stage.css?v=6">
 <% const C = state.config; %>
 <main class="sb" id="sa">
   <div class="sb-head">
@@ -13,6 +13,27 @@
     <div class="row"><button type="button" class="btn danger" id="cutAll">✂ Cut everything to Pepe</button></div>
     <div class="tblwrap"><table><thead><tr><th>Who</th><th>Status</th><th class="num">Live</th><th class="num">Charged / held</th><th>Booked</th><th></th></tr></thead>
       <tbody id="openRows"></tbody></table></div>
+  </section>
+
+  <!-- 1.99fk: 🟣 Twitch relays (restream.js) -->
+  <section class="sb-card" id="rsCard" data-mode="admin" aria-labelledby="rsT">
+    <h2 id="rsT">🟣 Twitch relays</h2>
+    <p id="rsWorker" class="muted">Loading…</p>
+    <h3>Pepe's main stream</h3>
+    <div id="rsMain"></div>
+    <% if (isAdmin) { %>
+    <details class="adm-adv"><summary>Set / replace Pepe's Twitch key</summary>
+      <form id="rsForm" class="settings" autocomplete="off">
+        <label>Twitch stream key<input type="password" name="key" autocomplete="new-password" spellcheck="false" maxlength="200" placeholder="live_…"></label>
+        <label>Ingest server <span class="muted">(optional)</span><input type="text" name="server" spellcheck="false" maxlength="200" placeholder="auto (rtmp://live.twitch.tv/app)"></label>
+        <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save</button>
+          <button type="button" class="btn danger hide" data-rs-del>Delete key</button><span class="msg" id="rsMsg" role="status"></span></div>
+      </form>
+    </details>
+    <% } %>
+    <h3>Streamers</h3>
+    <div class="tblwrap"><table><thead><tr><th>Who</th><th>Key</th><th>Relay</th><th></th></tr></thead><tbody id="rsRows"></tbody></table></div>
+    <p class="muted">A relay runs only while the stream is live, its switch is on and a key is saved; it copies the stream (no re-encode). Admins can switch any relay off. Emergency stop of every relay: <code>systemctl stop patv-restream@prod</code> on the VPS.</p>
   </section>
 
   <section class="sb-card" id="settings" aria-labelledby="setT">
@@ -62,6 +83,7 @@
 </main>
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
 <script src="/public/js/stage-admin.js?v=2" defer></script>
+<script src="/public/js/restream.js?v=1" defer></script>
 <%- include('partials/admin-close') %>
 </body>
 </html>

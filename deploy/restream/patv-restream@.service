@@ -1,0 +1,38 @@
+# deploy/restream/patv-restream@.service - PATV 1.99fk: the "Also stream to Twitch" relay worker, one per site:
+#   patv-restream@prod     -> the prod site    (http://127.0.0.1:3000), Twitch targets only
+#   patv-restream@staging  -> the staging site (http://127.0.0.1:3100), loopback test targets only
+# Installed by deploy/restream/install.sh. Config: /etc/patv-restream/%i.env (root:patv-restream 0640).
+# Emergency stop of every relay of a site:  systemctl stop patv-restream@prod   (its ffmpegs die with it)
+[Unit]
+Description=PATV restream relay worker (%i)
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=patv-restream
+Group=patv-restream
+EnvironmentFile=/etc/patv-restream/%i.env
+ExecStart=/usr/bin/node /usr/local/lib/patv-restream/patv-restream.js
+Restart=always
+RestartSec=5
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=15
+SyslogIdentifier=patv-restream-%i
+# hardening: it only needs loopback + outbound RTMP and the ffmpeg binary
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

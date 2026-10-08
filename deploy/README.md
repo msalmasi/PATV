@@ -60,6 +60,20 @@ MediaMTX and coturn for the stages' ultra-low-latency streaming are installed se
 `deploy/webrtc/install.sh` (undo: `rollback.sh`). See `deploy/webrtc/INSTALL.md`. The site side is behind
 the stage setting `webrtc_enabled` (off by default).
 
+## Twitch restream relay (1.99fk)
+
+"Also stream to Twitch" (`restream.js`): streamers save a Twitch key on /stage (encrypted with `RESTREAM_SECRET`,
+shown only as ••••last4) and switch it per slot; admins run Pepe's main stream's relay on /stage/admin. The worker
+`deploy/restream/patv-restream.js` runs as systemd `patv-restream@prod` / `@staging` (user `patv-restream`), polls
+`POST /api/restream/worker/sync` on loopback with `RESTREAM_TOKEN`, and runs one `ffmpeg -c copy` per relay from
+nginx-rtmp (loopback) to Twitch. Staging's worker only accepts loopback targets (a test sink), prod's only Twitch.
+
+- Install / update (idempotent, backs up first, never prints secrets): `INST=staging bash /home/PATV-staging/deploy/restream/install.sh`,
+  then `INST=prod bash /home/PATV/deploy/restream/install.sh`. It adds `RESTREAM_SECRET` + `RESTREAM_TOKEN` to the site's `.env`.
+- A key from a file (e.g. Pepe's, read out of OBS): `cd /home/PATV && node deploy/restream/set-key.js --owner @main --file <0600 file with KEY=/SERVER=> --shred`.
+- **Emergency stop of every relay:** `systemctl stop patv-restream@prod` (its ffmpegs die with it). Undo the install: `INST=prod UNINSTALL=1 bash .../install.sh`.
+- The stream key is an ffmpeg argument, so root on the VPS can see it in the process list (`/proc/<pid>/cmdline`); it never reaches a log.
+
 ## Refreshing staging's data
 
 Staging, and staging Pepe (which writes to it), drift from prod over time. On the VPS,

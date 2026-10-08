@@ -795,7 +795,10 @@ async function rtmpCallback(f) {
 
   // ── the HLS application: Pepe's key, and the local pushes of open slots ──
   if (app === OUT_APP) {
-    if (PEPE_KEYS.has(name)) return { status: 200 };
+    if (PEPE_KEYS.has(name)) {
+      try { require("./restream").noteMain(call, t); } catch (e) { /* the relay is optional */ }   // 1.99fk: Twitch relay liveness
+      return { status: 200 };
+    }
     if (call === "publish_done") return { status: 200 };
     if (!name.startsWith(STREAM_PREFIX)) return { status: 403 };
     if (call === "publish" && !isLoopback(f.addr)) return { status: 403 };

@@ -135,3 +135,10 @@
 .sb .capopts legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
 .sb .capopts label { font-size: 14px; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; line-height: 1.4; }
 .sb .capopts input { margin-top: 3px; accent-color: #4caf50; }
+/* 1.99fk: 🟣 Also stream to Twitch (restream.js) */
+.sb .rs-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 8px 0; }
+.sb .rs-badge { display: inline-block; border: 1px solid #3a2a5c; background: #1a1229; color: #c9b5ff; border-radius: 999px; padding: 3px 10px; font-size: 13px; overflow-wrap: anywhere; }
+.sb .rs-badge.rs-live { border-color: #9146ff; background: #2a1650; color: #fff; }
+.sb .rs-badge.rs-error { border-color: var(--red); color: #ffb3b3; background: #2a1212; }
+.sb .rs-warn { color: var(--gold); font-size: 13px; }
+.sb #rsSaved { margin: 0 0 10px; overflow-wrap: anywhere; }
