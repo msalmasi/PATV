@@ -20,7 +20,7 @@
 // (= the newest segment VHS has downloaded) that the next segment always lands in time:
 //   lead    bufferedEnd - currentTime, sampled every 250 ms; low = the smallest lead over the last 2 TD + 1 s,
 //           i.e. the lead just before a segment lands - where a stall would happen
-//   goal    low sits at `margin` (0.6 s to start; +0.5 s after every rebuffer, up to 2 TD - a shaky connection
+//   goal    low sits at `margin` (1.0 s to start; +0.5 s after every rebuffer, up to 2 TD - a shaky connection
 //           settles further back by itself)
 //   start   the first sample after playback starts jumps to bufferedEnd - (TD + margin) (VHS starts ~3 TD back)
 //   low > margin + 0.6 s     -> playbackRate 1.05 (pitch is kept) until low <= margin + 0.2 s
@@ -29,7 +29,7 @@
 // Only for live playlists; VOD / ended streams are left alone.
 (function () {
   'use strict';
-  var LIVE = { tick: 250, margin0: 0.6, marginStep: 0.5, fast: 1.05, slow: 0.96, jumpEvery: 5000 };
+  var LIVE = { tick: 250, margin0: 1.0, marginStep: 0.5, fast: 1.05, slow: 0.96, jumpEvery: 5000 };
 
   // one tick of the controller (pure, so it can be tested): st = liveState(), o = the sample
   //   o = { now, td, lead, bufEnd, playing } -> { rate, seekTo } (seekTo null = no jump)

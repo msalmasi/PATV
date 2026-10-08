@@ -194,7 +194,7 @@ test("pages + stage-room.js: Pepe's stream gets the ⚡ URL from the first rende
   for (const v of ["home.ejs", "room.ejs"]) {
     const src = fs.readFileSync(path.join(repo, "views", v), "utf8");
     assert.ok(src.includes("pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\\\u003c') %>"), v + " passes st.whep (escaped)");
-    assert.match(src, /stage-player\.js\?v=5/, v + " cache-buster");
+    assert.match(src, /stage-player\.js\?v=6/, v + " cache-buster");
     assert.match(src, /stage-room\.js\?v=6/, v + " cache-buster");
   }
   const src = fs.readFileSync(path.join(repo, "public", "js", "stage-room.js"), "utf8");
@@ -235,12 +235,12 @@ test("liveStep: start-up jump to bufferedEnd - (TD + margin) (VHS starts ~3 TD b
   let r = L.step(st, { now: 0, td: 2, lead: 6.4, bufEnd: 100, playing: false });
   assert.equal(r.seekTo, null, "paused / not started: hands off");
   r = L.step(st, { now: 250, td: 2, lead: 6.4, bufEnd: 100, playing: true });
-  assert.equal(r.seekTo, 100 - 2.6);
+  assert.equal(r.seekTo, 100 - 3, "TD 2 + margin 1.0");
   assert.equal(st.jumps, 1);
-  r = L.step(st, { now: 500, td: 2, lead: 2.6, bufEnd: 100, playing: true });
+  r = L.step(st, { now: 500, td: 2, lead: 3, bufEnd: 100, playing: true });
   assert.equal(r.seekTo, null);
   const st2 = L.state();
-  assert.equal(L.step(st2, { now: 0, td: 2, lead: 2.5, bufEnd: 50, playing: true }).seekTo, null, "already close: no jump");
+  assert.equal(L.step(st2, { now: 0, td: 2, lead: 3.9, bufEnd: 50, playing: true }).seekTo, null, "already close (<= TD + margin + 1): no jump");
 });
 
 test("liveStep: rates with hysteresis on the lowest lead over 2 TD + 1 s; a big drift jumps (once per 5 s)", () => {
@@ -249,19 +249,19 @@ test("liveStep: rates with hysteresis on the lowest lead over 2 TD + 1 s; a big 
   st.primed = true;
   let t = 0;
   const feed = (lead, ms) => { let r; for (const end = t + ms; t < end; t += 250) r = L.step(st, { now: t, td: 2, lead, bufEnd: 1000, playing: true }); return r; };
-  let r = feed(1.0, 4000);
+  let r = feed(1.2, 4000);
   assert.equal(r.rate, 1, "window not full yet");
-  r = feed(1.5, 6000);
-  assert.equal(r.rate, 1.05, "low 1.5 > margin 0.6 + 0.6 -> catch up");
-  r = feed(1.0, 6000);
-  assert.equal(r.rate, 1.05, "hysteresis: 1.0 is still above margin + 0.2");
-  r = feed(0.75, 6000);
+  r = feed(2.0, 6000);
+  assert.equal(r.rate, 1.05, "low 2.0 > margin 1.0 + 0.6 -> catch up");
+  r = feed(1.4, 6000);
+  assert.equal(r.rate, 1.05, "hysteresis: 1.4 is still above margin + 0.2");
+  r = feed(1.1, 6000);
   assert.equal(r.rate, 1, "low <= margin + 0.2 -> normal speed");
-  r = feed(0.2, 6000);
+  r = feed(0.3, 6000);
   assert.equal(r.rate, 0.96, "low < margin / 2 -> ease off before it runs dry");
-  r = feed(0.5, 6000);
+  r = feed(0.8, 6000);
   assert.equal(r.rate, 0.96, "until low >= margin");
-  r = feed(0.7, 6000);
+  r = feed(1.05, 6000);
   assert.equal(r.rate, 1);
   r = feed(6, 5250);
   assert.equal(st.jumps, 1, "low > margin + TD + 2 -> jump");
@@ -276,7 +276,7 @@ test("rebuffered: counted, margin +0.5 s up to 2 TD, rate back to 1", () => {
   const st = L.state();
   st.td = 2; st.rate = 1.05;
   L.rebuffered(st);
-  assert.equal(st.rebuffers, 1); assert.equal(st.margin, 1.1); assert.equal(st.rate, 1);
+  assert.equal(st.rebuffers, 1); assert.equal(st.margin, 1.5); assert.equal(st.rate, 1);
   for (let i = 0; i < 10; i++) L.rebuffered(st);
   assert.equal(st.margin, 4, "capped at 2 TD");
 });
