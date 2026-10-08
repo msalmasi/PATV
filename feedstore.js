@@ -727,7 +727,7 @@ function rankSpec(sort, t = "all", now = NOW()) {
  * Deleted posts never show; report-hidden ones only to staff.
  */
 async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false,
-                      media = false, offset = null, idsOnly = false } = {}) {
+                      media = false, textOnly = false, offset = null, idsOnly = false } = {}) {
   await init();
   const staff = isStaff(viewer);
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
@@ -781,6 +781,8 @@ async function list({ room = null, author = null, following = null, authors: aut
   }
   // 1.99eq: Hop (hop.js) - media posts only: a ready picture or video on the post, or (a crosspost) on its original
   if (media) scope.push(MEDIA_SQL);
+  // 1.99fn: the gallery's "N text posts hidden" count - the posts the media filter leaves out
+  else if (textOnly) scope.push("NOT " + MEDIA_SQL);
   page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
   // placeholders in text order: select (rising) -> join -> scope -> sort filters
   const selArgs = R.select ? [R.args[0]] : [], sortArgs = R.select ? R.args.slice(1) : R.args;

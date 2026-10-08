@@ -1101,6 +1101,7 @@ require("./feedseen").register(app, { addUser });  // 1.99ex: the feed's "N new"
 require("./storykeep").register(app, { addUser });   // 1.99eq: stories -> 📌 Post to pad / 🔖 Save (/u/<me>/saved), "Remove me"
 require("./userstories").register(app, { addUser });  // 1.99ez: your own story (pad / profile), captures of you in your story
 require("./hop").register(app, { addUser });   // 1.99eq: Hop - the full-screen media viewer (/hop, /p/<pad>/hop, /u/<user>/hop, /api/hop)
+require("./feedgallery").register(app, { addUser });   // 1.99fn: the feeds' Gallery view (/api/feed/gallery) + the per-account List / Gallery choice (/api/feed/view)
 require("./media").register(app, { isBotToken, addUser });
 require("./markets").register(app, { isBotToken, addUser });
 const gtf = require("./gtf");

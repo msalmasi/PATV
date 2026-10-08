@@ -28,6 +28,11 @@
 //     the streamer) or later marked private (Pepe's /api/media/anon) takes every Saved copy with it at once
 //     (onCaptureRemoved). Posts made from it are hidden too, unless the capturer deleted their own capture.
 //   * Every action is idempotent: posting twice returns the same post, saving twice / unsaving twice is a no-op.
+//   * 1.99fn: members' own stories (userstories.js, media.source "user") can be 🔖 SAVED by any signed-in member when
+//     they're a snap or a clip - media.kind "photo" (a picture story) or "clip" (a video story); see SAVE_USER_KINDS.
+//     Same private collection, same one-copy persistence. The uploader deleting the story, or a pad owner / mod /
+//     staff removing it (stagecap.remove), drops every saved copy (onCaptureRemoved), exactly like a capture.
+//     📌 Post to pad stays closed for them (a member's story is never re-posted by anyone).
 //
 // Data
 //   story_posts  capture_id (PK: one permanent post per capture), post_id, room_id, author_id (credited),
@@ -49,6 +54,10 @@ function _setClock(fn) { NOW = fn; }
 const CID_RE = /^[a-f0-9]{8,32}$/i;
 const POST_RE = /^[A-Za-z0-9]{8,16}$/;
 const CAPTION_MAX = 140;
+// 1.99fn: the kinds of a member's own story (source "user") that may be 🔖 saved: snaps (picture stories, kind "photo")
+// and clips (video stories, kind "clip"). Anything else from a member (there's no audio story today) stays unsaveable.
+const SAVE_USER_KINDS = new Set(["photo", "clip"]);
+const userSaveable = (r) => !!r && r.source === "user" && SAVE_USER_KINDS.has(r.kind);
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 
@@ -141,8 +150,9 @@ async function privacyBlocks(rows) {
   const hid = await hiddenUsers(uids);
   for (const r of rows) {
     const by = String(r.by_user || "").trim();
-    // 1.99ez: a member's own story upload (userstories.js) is theirs - nobody else posts or saves it
-    if (r.source === "user") { out.set(r.id, "This is someone's own story, so it can't be kept."); continue; }
+    // 1.99ez: a member's own story upload (userstories.js) is theirs; 1.99fn: a snap / clip story may be SAVED (never
+    // posted - postToPad refuses source "user" on its own), anything else can't be kept
+    if (r.source === "user") { if (!userSaveable(r)) out.set(r.id, "This is someone's own story, so it can't be kept."); continue; }
     if (Number(r.anon)) out.set(r.id, "The person in this capture is private (incognito or hidden), so it can't be kept.");
     else if (!by || lc(by) === "someone") out.set(r.id, "This capture was taken privately, so it can't be kept.");
     else if (r.source === "stage") {
@@ -241,6 +251,8 @@ async function postToPad(user, captureId, { caption = "" } = {}) {
   if (!acct) throw new Refuse(401, "Sign in first.");
   const row = await captureRow(captureId);
   if (!row) throw new Refuse(404, "No such capture.");
+  // 1.99ez / 1.99fn: a member's own story is never posted to a pad (only saved, when it's a snap / clip)
+  if (row.source === "user") throw new Refuse(403, "This is someone's own story, so it can't be posted to a pad.");
   if (!(await mayPost(acct, row))) throw new Refuse(403, "Only the person who took this capture, the pad's owner or mods, or an admin can post it.");
   const R = row.room ? rooms.getCached(row.room) || (await rooms.get(row.room)) : null;
   if (!R) throw new Refuse(409, "This capture's room has no pad to post it in.");
@@ -394,7 +406,8 @@ async function save(user, captureId) {
   await runQuery(`INSERT OR IGNORE INTO story_saves (user_id, capture_id, created, kind, room_id, room_title, subject, by_name, source, nsfw, captured)
                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                  [acct.userId, row.id, NOW(), row.kind, row.room || null, R ? R.title : row.room || null, String(row.subject || "").slice(0, 60) || null,
-                  String(row.by_user || "").slice(0, 60) || null, row.source === "stage" ? "stage" : "cam", Number(row.nsfw) ? 1 : 0, Number(row.created) || null]);
+                  String(row.by_user || "").slice(0, 60) || null, row.source === "stage" ? "stage" : row.source === "user" ? "user" : "cam",
+                  Number(row.nsfw) ? 1 : 0, Number(row.created) || null]);
   return { saved: true, again: false };
 }
 async function purgeKeep(captureId, reason) {
@@ -490,7 +503,7 @@ async function annotate(viewer, items) {
     const hasPad = !!(r.room && rooms.getCached(r.room));
     c.saved = saved.has(r.id);
     c.posted = sp && sp.post_id && !sp.removed_at ? links.get(sp.post_id) || null : null;
-    c.can = { post: !priv && live && hasPad && !(sp && sp.removed_at) && canMap.get(key), save: !priv && live };
+    c.can = { post: r.source !== "user" && !priv && live && hasPad && !(sp && sp.removed_at) && canMap.get(key), save: !priv && live };
     if (priv) c.private = true;
   }
   return items;
@@ -571,5 +584,5 @@ function register(app, { addUser }) {
 /** 1.99ez: is `acct` (with camfrogUsername) a mod of `roomId`'s Camfrog room (userstories: removing members' stories)? */
 function isPadMod(acct, roomId) { try { return !!modCheck(acct, roomId); } catch (e) { return false; } }
 
-module.exports = { init, register, postToPad, removeMe, forPosts, save, unsave, savedFor, onCaptureRemoved, annotate, privacyBlocks, mayPost, subjectOf,
+module.exports = { SAVE_USER_KINDS, userSaveable, init, register, postToPad, removeMe, forPosts, save, unsave, savedFor, onCaptureRemoved, annotate, privacyBlocks, mayPost, subjectOf,
                    isPadMod, Refuse, _setClock, _setModCheck, _setPersistImpl, defaultPersist };

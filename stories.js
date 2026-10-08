@@ -152,8 +152,14 @@ async function seenMap(userId) {
  */
 async function forViewer(viewer, { room = null, people = null } = {}) {
   await rooms.init();
-  // 1.99ez: profile-pad stories (room user:<id>) are PERSON stories (userstories.js), never pad circles
-  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room);
+  // 1.99fn: a profile pad's own story is its member's PERSON story - never a pad circle, never mixed into a pad's
+  if (room && rooms.isProfile(room)) {
+    const st = await require("./userstories").personStory(viewer, String(room).slice(rooms.PROFILE_PREFIX.length)).catch(() => null);
+    return st ? [st] : [];
+  }
+  // 1.99ez: profile-pad stories (room user:<id>) are PERSON stories (userstories.js), never pad circles;
+  // 1.99fn: with `room`, strictly that pad's rows
+  const items = (await captures(room, MAX_ITEMS, { windowMs: WINDOW_MS, noProfiles: true })).filter((c) => c.room && (!room || c.room === room));
   const signed = !!(viewer && viewer.userId);
   const seen = signed ? await seenMap(viewer.userId) : new Map();
   // 1.99eq: what this viewer may do with each capture (📌 Post to pad / 🔖 Save - storykeep.js; the server re-checks)
@@ -229,7 +235,12 @@ function register(app, { addUser }) {
     res.set("Cache-Control", "private, no-store");
     res.set("X-Robots-Tag", "noindex");
     if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in to see captures." });
-    try { res.json({ ok: true, rooms: await forViewer(req.user) }); } catch (e) {
+    // 1.99fn: ?room=<pad id> - ONE pad's story (its room captures, stage captures, members' stories posted to it) and
+    // nothing else: the viewer opened from a pad's capture strip must not run on into other pads' or members' person
+    // (profile) stories. A profile pad id (user:<id>) is that member's person story.
+    const room = req.query.room != null ? String(req.query.room).slice(0, 128) : null;
+    if (room !== null && !ROOM_RE.test(room)) return res.status(400).json({ ok: false, error: "Bad room." });
+    try { res.json({ ok: true, rooms: await forViewer(req.user, room ? { room } : {}) }); } catch (e) {
       console.error("[stories] api:", e);
       res.status(500).json({ ok: false, error: "Something went wrong." });
     }

@@ -63,7 +63,7 @@
         <p class="login">⭐ Follow pads and people to get a feed of just their posts. <a href="/login?next=<%= encodeURIComponent(here) %>">Sign in</a> to see yours.</p>
       <% } else { %>
         <% if (mode === 'following') { %><%- include('partials/following-panel', { follow, here }) %><% } %>
-        <%- include('partials/feed-sort', { fx, sort, top, swap: true, href: (s, t) => q({ sort: s, t: t || '', p: '' }),
+        <%- include('partials/feed-sort', { fx, sort, top, swap: true, href: (s, t) => q({ sort: s, t: t || '', p: '' }), gallery: typeof gallery !== 'undefined' ? gallery : null,
                                              hop: mode === 'following' ? 'following' : room ? 'p/' + room.slug : author ? 'u/' + author.username : 'all' }) %>
         <% if (!posts.length) { %>
           <p class="empty"><%= page > 1 ? 'No more posts.' : mode === 'following' ? ((follow && (follow.rooms.length || follow.people.length)) ? 'Nothing new from the people and pads you follow.' : 'You don\'t follow anyone yet — tap “+ Follow” on a pad, a profile or a post\'s author.') : room ? 'Nothing posted in ' + room.title + ' yet — be the first.' : 'Nothing posted yet — be the first.' %></p>
@@ -80,7 +80,7 @@
     </div>
   </div>
 </main>
-<script src="/public/js/stories.js?v=8" defer></script>
+<script src="/public/js/stories.js?v=9" defer></script>
 <%- include('partials/feed-js', { viewer }) %>
 </body>
 </html>

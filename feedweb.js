@@ -166,6 +166,7 @@ const fx = { postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
 // 1.99bz: stories.js owns them (privacy: anonymous subjects, missing files skipped) ──
 const stories = require("./stories");
+const FG = require("./feedgallery");          // 1.99fn: the ☰ List / ▦ Gallery toggle + the gallery grid
 const follows = require("./follows");
 async function captures(roomId, limit = 12) { return stories.captures(roomId, limit, { windowMs: stories.WINDOW_MS }); }
 
@@ -246,6 +247,8 @@ async function roomFeed(roomId, reqUser, query = {}) {
     storyRooms: viewer ? [] : await stories.forViewer(null, { room: roomId }),
     follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
+    // 1.99fn: List / Gallery (?view= wins, then the account's choice; the first grid page when it's Gallery)
+    gallery: await FG.forFeed(viewer, "p/" + ((rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId)), { query, sort, t: top }),
     rules: await require("./padrules").effective(roomId),                   // 1.99dc: the pad page's Rules card
     mention: mod.owner ? await store.mentionOn(roomId) : null,
     queue: mod.owner || mod.admin ? (await store.roomReports(roomId)).length + (await store.roomPending(roomId, viewer)).length : 0,
@@ -289,7 +292,7 @@ function register(app, { addUser, isBotToken }) {
           path = R ? require("./pads").padHref(R) : "/p/" + encodeURIComponent(raw);
         }
         const keep = new URLSearchParams();
-        for (const k of ["sort", "t", "p", "by"]) if (q[k] && !(k === "by" && path !== "/feed")) keep.set(k, String(q[k]).slice(0, 64));
+        for (const k of ["sort", "t", "p", "by", "view"]) if (q[k] && !(k === "by" && path !== "/feed")) keep.set(k, String(q[k]).slice(0, 64));
         const qs = keep.toString();
         return res.redirect(301, path + (qs ? "?" + qs : ""));
       }
@@ -363,6 +366,9 @@ function register(app, { addUser, isBotToken }) {
                    followers: c.followers, posts: c.posts, following: viewer ? await follows.isFollowing(viewer.userId, "room", R.id) : false,
                    roomHref: require("./pads").padHref(R), mod: viewer ? await rooms.canManage(viewer, R.id) : false };
       }
+      // 1.99fn: List / Gallery for this feed (the same scope as its Hop button)
+      const gallery = mode === "following" && !viewer ? null
+        : await FG.forFeed(viewer, mode === "following" ? "following" : R ? "p/" + R.slug : author ? "u/" + author.username : "all", { query: req.query, sort, t: top });
       // the story strip: one room's captures as thumbnails, or a circle per room with fresh ones
       const story = {
         room: R ? R.id : null,
@@ -375,7 +381,7 @@ function register(app, { addUser, isBotToken }) {
       };
       res.set("X-Robots-Tag", "noindex");
       res.render("feed", {
-        user: viewer ? viewer.username : null, viewer, mode, tab: mode === "following" ? "following" : "posts", sort, top, page, room: R, header, author, story, follow,
+        user: viewer ? viewer.username : null, viewer, mode, tab: mode === "following" ? "following" : "posts", sort, top, page, room: R, header, author, story, follow, gallery,
         rooms: roomList, communities: comms, posts: L.posts, more: L.more, fx, embeds, host: viewOpts(req).host,
         authorFollow: author && viewer && author.userId !== viewer.userId ? await follows.isFollowing(viewer.userId, "user", author.userId) : null,
         composer: await composerFor(viewer, R ? R.id : null),
@@ -997,6 +1003,8 @@ async function profileSocial(profileUser, reqUser, { show = true, query = {}, ho
     signed: !!viewer, viewer, modRooms, host, fx, embeds, settings,
     padId: pad ? pad.id : null,
     composer: self && show ? await composerFor(viewer, "profile") : null,
+    // 1.99fn: List / Gallery ("Profile only" grids just their profile pad)
+    gallery: show && profileUser.username ? await FG.forFeed(viewer, "u/" + profileUser.username + (view === "profile" ? "/profile" : ""), { query: q, sort, t: top }) : null,
   };
 }
 

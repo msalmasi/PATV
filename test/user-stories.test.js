@@ -170,14 +170,15 @@ test("create: a picture to a pad and a video to my profile; credited to me; 24 h
   assert.equal(att.state, "deleted", "the upload is consumed");
   r = await post("/api/stories/mine", U.poster, { attachment: img, pad: ROOM });
   assert.equal(r.status, 409, "an upload makes one story");
-  // in the pad's strip, credited to the uploader, viewer-annotated (uploader can delete, nobody can post / save it)
+  // in the pad's strip, credited to the uploader, viewer-annotated (uploader can delete, nobody can post it; 1.99fn: a
+  // picture story can be saved)
   const caps = await stories.captures(ROOM, 50, { windowMs: stories.WINDOW_MS });
   const c = caps.find((x) => x.id === m.id);
   assert.ok(c && c.source === "user" && c.by === "Post Er" && c.subject === null);
   const fv = await stories.forViewer(U.poster);
   const pad = fv.find((x) => x.id === ROOM);
   const it = pad.items.find((x) => x.id === m.id);
-  assert.equal(it.can.del, true); assert.equal(it.can.post, false); assert.equal(it.can.save, false); assert.equal(it.mine, true);
+  assert.equal(it.can.del, true); assert.equal(it.can.post, false); assert.equal(it.can.save, true); assert.equal(it.mine, true);
   const fvS = await stories.forViewer(U.stranger);
   assert.equal(fvS.find((x) => x.id === ROOM).items.find((x) => x.id === m.id).can.del, false);
   // video to my profile (30 s ok, 45 s refused)
@@ -279,10 +280,10 @@ test("delete: the uploader, the pad owner, a pad mod and staff may; a stranger m
   assert.equal((await post(`/api/stories/${ids[2]}/delete`, U.mod)).status, 200, "a pad mod");
   assert.equal((await post(`/api/stories/${ids[3]}/delete`, U.admin)).status, 200, "staff");
   for (const id of ids) assert.equal((await getQuery("SELECT deleted FROM media WHERE id = ?", [id]))[0].deleted, 1);
-  // a member's own story can't be 📌 posted or 🔖 saved by anyone else
+  // a member's own story can't be 📌 posted by anyone (1.99fn: a snap / clip story CAN be 🔖 saved - feed-gallery.test.js)
   const r = await post("/api/stories/mine", U.shy, { attachment: await upload(U.shy), pad: ROOM }).catch(() => null);
   if (r && r.status === 200) {
-    assert.equal((await post(`/api/stories/${r.d.story.id}/save`, U.stranger)).status, 403);
+    assert.equal((await post(`/api/stories/${r.d.story.id}/save`, U.stranger)).status, 200);
     assert.equal((await post(`/api/stories/${r.d.story.id}/post`, U.owner)).status, 403);
   }
 });

@@ -7,6 +7,9 @@
 %><%
   const kindIc = { photo: '📸', clip: '📹', audio: '🔊' };
   const kindName = (it) => it.source === 'stage' ? (it.kind === 'clip' ? 'Stage clip' : 'Stage snap') : it.kind === 'photo' ? 'Snap' : it.kind === 'clip' ? 'Clip' : 'Audio';
+  // 1.99fn: a member's own snap / clip story (source "user") reads "<name>'s story", not "Snap of <subject>"
+  const label_ = (it) => it.source === 'user' ? (it.by || 'someone') + "'s story" + (it.kind === 'clip' ? ' (clip)' : '') : kindName(it) + (it.subject ? ' of ' + it.subject : '');
+  const who_ = (it) => it.source === 'user' ? (it.by || 'someone') : (it.subject || 'someone');
 %>
 <%- include('partials/hop-boot', { HOP }) %>
 <style>
@@ -32,17 +35,17 @@
 <main class="sv-saved" data-signed="1">
   <a class="back" href="/u/<%= encodeURIComponent(me) %>">‹ Your profile</a>
   <h1>🔖 Saved</h1>
-  <p class="sub">Story snaps and clips you saved. Only you can see this page. They stay after the story's 24 hours; one taken down or made private by the person in it disappears from here too.</p>
+  <p class="sub">Story snaps and clips you saved. Only you can see this page. They stay after the story's 24 hours; one taken down or made private by the person in it, or a member's story its poster deleted, disappears from here too.</p>
   <% if (!items.length) { %>
     <p class="svd-empty">Nothing saved yet. Open a story and tap <b>🔖 Save</b> to keep a snap or clip.</p>
   <% } else { %>
     <ul class="svd-grid" id="svdGrid">
       <% items.forEach((it) => { %>
         <li class="svd-it" data-id="<%= it.id %>">
-          <button type="button" class="svd-open<%= it.nsfw ? ' nsfw' : '' %>" data-svd-open="<%= it.id %>" aria-label="<%= kindName(it) %><%= it.subject ? ' of ' + it.subject : '' %> in <%= it.room.title %><%= it.nsfw ? ' (NSFW)' : '' %>">
+          <button type="button" class="svd-open<%= it.nsfw ? ' nsfw' : '' %>" data-svd-open="<%= it.id %>" aria-label="<%= label_(it) %> in <%= it.room.title %><%= it.nsfw ? ' (NSFW)' : '' %>">
             <% if (it.thumb) { %><img src="<%= it.thumb %>" alt="" loading="lazy"><% } else { %><span class="svd-big" aria-hidden="true"><%= kindIc[it.kind] || '📸' %></span><% } %>
             <span class="svd-ic" aria-hidden="true"><%= it.nsfw ? '🔞' : kindIc[it.kind] || '📸' %></span>
-            <span class="svd-cap"><b><%= it.subject || 'someone' %></b><%= it.room.title %><%= it.captured ? ' · ' + new Date(it.captured).toISOString().slice(0, 10) : '' %></span>
+            <span class="svd-cap"><b><%= who_(it) %></b><%= it.room.title %><%= it.captured ? ' · ' + new Date(it.captured).toISOString().slice(0, 10) : '' %></span>
           </button>
           <button type="button" class="svd-un" data-svd-unsave="<%= it.id %>" aria-label="Unsave">✕ Unsave</button>
         </li>
@@ -59,7 +62,7 @@
   function name(it) { return it.source === 'stage' ? (it.kind === 'clip' ? 'Stage clip' : 'Stage snap') : it.kind === 'photo' ? 'Snap' : it.kind === 'clip' ? 'Clip' : 'Audio'; }
   function hopItem(it) {
     var m = it.mediaKind === 'image' ? { kind: 'image', src: it.src, w: it.w, h: it.h } : { kind: 'video', src: it.src, poster: it.poster };
-    return { id: it.id, title: name(it) + ' of ' + (it.subject || 'someone'), sub: 'Saved' + (it.captured ? ' · captured ' + new Date(it.captured).toLocaleDateString() : ''),
+    return { id: it.id, title: it.source === 'user' ? (it.by || 'someone') + "'s story" : name(it) + ' of ' + (it.subject || 'someone'), sub: 'Saved' + (it.captured ? ' · captured ' + new Date(it.captured).toLocaleDateString() : ''),
              pad: it.room && it.room.href ? { label: it.room.title, href: it.room.href } : null, media: [m], nsfw: !!it.nsfw,
              actions: [{ id: 'unsave', icon: '✕', label: 'Unsave' }] };
   }

@@ -34,7 +34,7 @@
     <a class="pp-view<%= S_.view === 'all' ? ' on' : '' %>" href="<%= pq({ pview: 'all', pp: '' }) %>"<%- S_.view === 'all' ? ' aria-current="page"' : '' %>>All posts</a>
     <a class="pp-view<%= S_.view === 'profile' ? ' on' : '' %>" href="<%= pq({ pview: 'profile', pp: '' }) %>"<%- S_.view === 'profile' ? ' aria-current="page"' : '' %>>👤 Profile only</a>
   </nav>
-  <% if (fx_) { %><%- include('feed-sort', { fx: fx_, sort: S_.sort, top: S_.top, href: (s, t) => pq({ psort: s, pt: t || '', pp: '' }), label: 'Sort ' + name_ + '\'s posts', hop: 'u/' + usernameProfile }) %><% } %>
+  <% if (fx_) { %><%- include('feed-sort', { fx: fx_, sort: S_.sort, top: S_.top, href: (s, t) => pq({ psort: s, pt: t || '', pp: '' }), label: 'Sort ' + name_ + '\'s posts', hop: 'u/' + usernameProfile, gallery: S_.gallery || null }) %><% } %>
   <% if (!S_.posts.length) { %>
     <p class="empty"><%= S_.page > 1 ? 'No more posts.' : isMe ? (S_.view === 'profile' ? 'Nothing on your profile yet - write something above with "Your profile" picked.' : 'You haven\'t posted yet.') : (S_.view === 'profile' ? name_ + ' hasn\'t posted to their profile yet.' : 'No posts yet.') %></p>
   <% } else { %>

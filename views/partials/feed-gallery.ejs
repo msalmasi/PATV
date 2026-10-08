@@ -1,0 +1,33 @@
+<%#
+  The feed's Gallery grid (1.99fn, feedgallery.js; public/js/feed-gallery.js pages it and switches views). Rendered by
+  feed-sort.ejs right after the sort bar, as a SIBLING of the post list, so the bar's data-view decides which one shows
+  (feed-gallery.css). Locals: G (feedgallery.forFeed: scope, view, tiles (first page, Gallery only), next, text), hop
+  (this feed's Hop scope), sort, t.
+  A tile: the post's picture thumbnail / video or clip poster, a corner icon for a video / captured clip / several
+  pictures, the votes and comments on hover; NSFW blurred (feed rule). A tap opens Hop at the post (no JS: Hop's page).
+%><%
+  const tiles_ = G.tiles || [];
+  const num_ = (n) => { n = Number(n) || 0; const a = Math.abs(n); return a < 1000 ? String(n) : a < 1e6 ? (n / 1000).toFixed(a < 1e4 ? 1 : 0).replace(/\.0$/, '') + 'k' : (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'm'; };
+  const ic_ = (x) => x.clip ? { i: '📹', l: 'captured clip' } : x.video ? { i: '▶', l: 'video' } : x.multi ? { i: '❐', l: x.multi + ' pictures' } : null;
+  const text_ = G.text && G.text.n ? G.text : null;
+%>
+<link rel="stylesheet" href="/public/css/feed-gallery.css?v=1">
+<div class="fg" data-fg data-fg-scope="<%= G.scope %>" data-fg-hop="<%= hop %>" data-fg-sort="<%= sort %>" data-fg-t="<%= t %>" data-fg-next="<%= G.next || '' %>"<%- G.tiles ? ' data-fg-loaded="1"' : '' %>>
+  <p class="fg-text"<%- text_ ? '' : ' hidden' %>><button type="button" class="fg-tl" data-fv="list"><span data-fg-textn><%= text_ ? text_.n + (text_.more ? '+' : '') + ' text post' + (text_.n === 1 && !text_.more ? '' : 's') : '' %></span> hidden in gallery · <u>show the list</u></button></p>
+  <ul class="fg-grid" role="list" aria-label="Pictures and videos">
+    <% tiles_.forEach((x) => { const ic = ic_(x); %>
+      <li class="fg-t<%= x.nsfw ? ' nsfw' : '' %>" data-id="<%= x.id %>"><a class="fg-a" href="<%= x.hop %>" data-fg-post="<%= x.id %>"
+         aria-label="<%= x.title %><%= ic ? ' (' + ic.l + ')' : '' %><%= x.ai ? ' (AI-generated)' : '' %><%= x.nsfw ? ' (NSFW)' : '' %> - <%= x.score %> votes, <%= x.comments %> comments">
+        <% if (x.thumb) { %><img src="<%= x.thumb %>" alt="" loading="lazy" decoding="async" onerror="this.remove()"><% } else { %><span class="fg-ph" aria-hidden="true">▶</span><% } %>
+        <% if (ic) { %><span class="fg-ic" aria-hidden="true"><%= ic.i %></span><% } %>
+        <% if (x.nsfw) { %><span class="fg-18" aria-hidden="true">18+</span><% } %>
+        <span class="fg-ov" aria-hidden="true"><span>▲ <%= num_(x.score) %></span><span>💬 <%= num_(x.comments) %></span></span>
+      </a></li>
+    <% }) %>
+  </ul>
+  <p class="fg-empty"<%- G.tiles && !tiles_.length ? '' : ' hidden' %>>No pictures or videos here yet.</p>
+  <p class="fg-status" role="status" aria-live="polite"></p>
+  <div class="fg-sentinel" aria-hidden="true"></div>
+  <% if (G.next) { %><noscript><a class="fg-nojs" href="<%= G.tiles && tiles_.length ? tiles_[tiles_.length - 1].hop : '#' %>">Keep going in Hop ›</a></noscript><% } %>
+</div>
+<script src="/public/js/feed-gallery.js?v=1" defer></script>

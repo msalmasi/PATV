@@ -16,12 +16,15 @@
   const mmss = (s) => { s = Math.round(Number(s) || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const showRooms = (S.rooms || []).length > 0, showCaps = (S.caps || []).length > 0, compose_ = !!(S.signed && S.compose);
   const composePad_ = S.pad || S.room || '';
+  // 1.99fn: one pad's capture strip (thumbnails, no circles) - the viewer loads THAT pad's story only (/api/stories?room=),
+  // so it never runs on into other pads or members' profile stories
+  const scope_ = S.room && !showRooms ? S.room : '';
   // 1.99es: a pad's avatar (padlook.js) under the capture cover - what signed-out visitors see instead of the monogram
   const padAvSrc_ = (id) => { try { const L = typeof padLook === 'function' ? padLook(id) : null; return L && L.avatar ? L.avatar : null; } catch (e) { return null; } };
 %>
 <% if (showRooms || showCaps || compose_) { %>
 <link rel="stylesheet" href="/public/css/stories.css?v=6">
-<section class="ss" aria-label="Stories: snaps and clips from the pads' Camfrog rooms and stages, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>">
+<section class="ss" aria-label="Stories: snaps and clips from the pads' Camfrog rooms and stages, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>"<% if (scope_) { %> data-scope="<%= scope_ %>"<% } %>>
   <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
   <%# 1.99es: no native scrollbar - a fade at the edge that has more, and ‹ › buttons on hover-capable pointers (stories.js) %>
   <div class="ss-scroll">
@@ -57,6 +60,6 @@
   </div>
 </section>
 <% if (S.signed && showRooms) { %><script type="application/json" class="ss-data"><%- JSON.stringify(S.rooms).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script><% } %>
-<script src="/public/js/stories.js?v=8" defer></script>
+<script src="/public/js/stories.js?v=9" defer></script>
 <% if (compose_) { %><script src="/public/js/story-compose.js?v=1" defer></script><% } %>
 <% } %>

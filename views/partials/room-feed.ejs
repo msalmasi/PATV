@@ -19,7 +19,7 @@
       and the announce switch moved there too (the header's "⚙ Pad settings"). %>
   <% if (!noRules_) { %><%- include('pad-rules', { fx, rules: F.rules, slug: room.slug, canEdit: !!(F.mod.owner || F.mod.admin), id: 'rules' }) %><% } %>
   <%- include('feed-composer', { composer: F.composer, next: here_ + '#feed' }) %>
-  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: 'p/' + room.slug }) %>
+  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: 'p/' + room.slug, gallery: F.gallery || null }) %>
   <% if (!F.posts.length) { %>
     <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this pad yet. Be the first!' %></p>
   <% } else { %>

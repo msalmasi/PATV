@@ -17,13 +17,20 @@
 // 1.99ez: members' own stories (source "user": "<name>'s story", 🗑 Delete for the uploader / the pad's owner / mods /
 // staff - can.del) and person stories (a member's uploads + captures of them; each capture says which pad it's from;
 // the member themselves gets "🙈 Hide from my story" on captures - it doesn't delete the capture).
+// 1.99fn: a pad's capture strip (.ss[data-scope=<pad id>]) opens /api/stories?room=<pad id> - that pad's story alone -
+// instead of the site-wide list (which ran on from the pad into other pads and members' profile stories). Members' snap /
+// clip stories now show 🔖 Save too (can.save from the server).
 (function () {
   'use strict';
   if (window.__patvStories) return;
   window.__patvStories = true;
 
   var PHOTO_MS = 5000, LS_KEY = 'patvStorySeen';
-  var data = null, loading = null;            // [{id, title, href, latest, seen, items: [...]}]
+  var data = null;                            // the list the viewer is on: [{id, title, href, latest, seen, items: [...]}]
+  // 1.99fn: lists per SCOPE - '' = the page's inline list / the site-wide /api/stories, '<pad id>' = that one pad's story
+  // (/api/stories?room=). A pad's capture strip opens its own scope, so the viewer never runs on into other pads or into
+  // members' profile (person) stories.
+  var cache = {}, loads = {};
   var V = null;                               // the viewer's DOM + state
 
   // ── seen state ──
@@ -77,16 +84,19 @@
     if (!el) return null;
     try { return JSON.parse(el.textContent); } catch (e) { return null; }
   }
-  function load() {
-    if (data) return Promise.resolve(data);
-    var d = inline();
-    if (d) { data = applyLocal(d); paintRings(); return Promise.resolve(data); }
-    if (!loading) loading = fetch('/api/stories', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
+  function load(scope) {
+    scope = scope || '';
+    if (cache[scope]) return Promise.resolve(cache[scope]);
+    if (!scope) {
+      var d = inline();
+      if (d) { cache[''] = applyLocal(d); return Promise.resolve(cache['']); }
+    }
+    if (!loads[scope]) loads[scope] = fetch('/api/stories' + (scope ? '?room=' + encodeURIComponent(scope) : ''), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
       if (r.status === 401) throw Object.assign(new Error('signin'), { signin: true });
       return r.json();
-    }).then(function (j) { if (!j.ok) throw new Error(j.error || 'failed'); data = applyLocal(j.rooms || []); paintRings(); return data; })
-      .catch(function (e) { loading = null; throw e; });
-    return loading;
+    }).then(function (j) { if (!j.ok) throw new Error(j.error || 'failed'); cache[scope] = applyLocal(j.rooms || []); return cache[scope]; })
+      .catch(function (e) { loads[scope] = null; throw e; });
+    return loads[scope];
   }
 
   // ── the sign-in prompt (signed-out visitors) ──
@@ -138,8 +148,10 @@
              live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom, acts: acts };
   }
 
-  function open(roomId, itemId, opener) {
-    load().then(function (rooms) {
+  function open(roomId, itemId, opener, scope) {
+    load(scope).then(function (rooms) {
+      if (V && V.root.parentNode) return;     // already open
+      data = rooms; paintRings();
       var ri = rooms.findIndex(function (r) { return r.id === roomId; });
       if (ri < 0) { if (opener && opener.href) location.href = opener.href; return; }
       var R = rooms[ri], ii = 0;
@@ -517,12 +529,13 @@
     ev.preventDefault();
     var strip = t.closest('.ss');
     if (strip.getAttribute('data-signed') !== '1') return signInPrompt(strip.getAttribute('data-next'));
-    open(t.getAttribute('data-story-room'), t.getAttribute('data-story-item'), t);
+    // 1.99fn: a pad's capture strip (data-scope = its pad id) opens that pad's story only
+    open(t.getAttribute('data-story-room'), t.getAttribute('data-story-item'), t, strip.getAttribute('data-scope') || '');
   });
   // rings: apply the local seen map to server-rendered circles (and again after /feed swaps the list)
   function initRings() {
     var d = inline();
-    if (d) { data = applyLocal(d); paintRings(); }
+    if (d) { data = cache[''] = applyLocal(d); paintRings(); }
   }
   // 1.99es: the strip's scroller - no native scrollbar (stories.css), so: which edges have more (the fade), and
   // ‹ › buttons (hover-capable pointers only, CSS) that page by about one viewport. Touch / trackpad / shift + wheel /
@@ -559,6 +572,6 @@
   }
   function initAll() { initRings(); initStrips(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initAll); else initAll();
-  document.addEventListener('patv:feed-swapped', function () { data = null; loading = null; initRings(); initStrips(); });
+  document.addEventListener('patv:feed-swapped', function () { data = null; cache = {}; loads = {}; initRings(); initStrips(); });
   window.patvStories = { open: open, _state: function () { return V; } };
 })();

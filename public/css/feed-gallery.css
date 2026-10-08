@@ -1,0 +1,60 @@
+/* feed-gallery.css — 1.99fn: the feeds' ☰ List / ▦ Gallery toggle and the gallery grid (feedgallery.js,
+   views/partials/feed-gallery.ejs, public/js/feed-gallery.js). The sort bar (.fs) carries data-view; the grid and the
+   post list are its siblings, so one rule picks which shows - no flash of the other on load. */
+
+/* which one shows */
+.fs[data-view="gallery"] ~ .fd-list,
+.fs[data-view="gallery"] ~ .fd-pager,
+.fs[data-view="gallery"] ~ .empty { display: none !important; }
+.fs:not([data-view="gallery"]) ~ .fg { display: none; }
+
+/* the toggle (by the Hop button) */
+.fv { margin-left: auto; display: inline-flex; align-items: center; height: 34px; padding: 2px; border-radius: 999px; border: 1px solid var(--fp-line2, #333);
+      background: rgba(255, 255, 255, .02); flex: 0 0 auto; }
+.fv + .fs-hop { margin-left: 0; }
+.fv-b { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 13px; font-weight: 600;
+        color: var(--fp-dim, #aaa) !important; text-decoration: none !important; white-space: nowrap; }
+.fv-b:hover { background: var(--fp-hover, #222); color: var(--fp-text, #eee) !important; }
+.fv-b:focus-visible { outline: 2px solid #4caf50; outline-offset: 1px; }
+.fv-b.on { background: #1f2a1f; color: #e9f7ea !important; }
+
+/* the grid: three square tiles across, desktop and phones, small gaps */
+.fg { margin: 4px 0 12px; min-width: 0; }
+.fg-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.fg-t { position: relative; aspect-ratio: 1 / 1; overflow: hidden; background: #141414; min-width: 0; }
+@supports not (aspect-ratio: 1 / 1) { .fg-t { height: 0; padding-bottom: 100%; } }
+.fg-a { position: absolute; inset: 0; display: block; color: #fff !important; text-decoration: none !important; }
+.fg-a:focus-visible { outline: 3px solid #4caf50; outline-offset: -3px; z-index: 1; }
+.fg-a img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s ease; }
+.fg-ph { position: absolute; inset: 0; display: grid; place-items: center; font-size: 28px; color: #777; background: linear-gradient(135deg, #1b1b1b, #101010); }
+.fg-ic { position: absolute; top: 6px; right: 6px; font-size: 13px; line-height: 1; padding: 4px 5px; border-radius: 6px; background: rgba(0, 0, 0, .55);
+         text-shadow: 0 1px 2px #000; pointer-events: none; }
+.fg-18 { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 12px; font-weight: 800; padding: 3px 8px; border-radius: 999px;
+         background: rgba(183, 28, 28, .85); pointer-events: none; }
+.fg-ov { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; font-weight: 700; font-size: 14px;
+         background: rgba(0, 0, 0, .45); opacity: 0; transition: opacity .15s ease; pointer-events: none; }
+@media (hover: hover) {
+  .fg-a:hover .fg-ov, .fg-a:focus-visible .fg-ov { opacity: 1; }
+  .fg-a:hover img { transform: scale(1.03); }
+}
+/* NSFW: blurred (the feed rule - feed-gallery.js lifts it for members who chose "always show") */
+.fg-t.nsfw img { filter: blur(18px) brightness(.8); transform: scale(1.1); }
+.fg.fg-nsfw-ok .fg-t.nsfw img { filter: none; transform: none; }
+.fg.fg-nsfw-ok .fg-18 { display: none; }
+
+.fg-text { margin: 0 0 8px; text-align: center; }
+.fg-tl { background: none; border: 0; padding: 4px 6px; color: var(--fp-dim, #999); font: inherit; font-size: 12.5px; cursor: pointer; }
+.fg-tl:hover, .fg-tl:focus-visible { color: var(--fp-text, #ddd); }
+.fg-empty { color: var(--fp-dim, #aaa); text-align: center; padding: 24px 8px; margin: 0; }
+.fg-status { color: var(--fp-dim, #999); text-align: center; font-size: 13px; margin: 8px 0 0; min-height: 1em; }
+.fg-status button { background: none; border: 1px solid #333; color: #ddd; border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; }
+.fg-sentinel { height: 1px; }
+.fg-nojs { display: block; text-align: center; margin-top: 8px; }
+
+@media (max-width: 560px) {
+  .fg-grid { gap: 2px; }
+  .fv-b { padding: 0 9px; }
+  .fv-b .fv-l { display: none; }
+  .fg-ic { top: 4px; right: 4px; font-size: 11px; padding: 3px 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .fg-a img, .fg-ov { transition: none; } }

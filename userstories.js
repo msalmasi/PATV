@@ -18,8 +18,9 @@
 //    user:<userId>), expires = created + 24 h - so the strips, the viewer, seen state, the expiry purge and the poster
 //    backfill treat it exactly like a capture. Removing it: the uploader, the pad's owner (rooms.canManage, which is the
 //    member themselves on a profile pad), the pad's mods (Camfrog mod powers, storykeep's check) and site staff
-//    (stagecap.canDelete / remove -> POST /api/stories/:id/delete). Stories can't be 📌 posted or 🔖 saved by others
-//    (storykeep.privacyBlocks).
+//    (stagecap.canDelete / remove -> POST /api/stories/:id/delete). Stories can't be 📌 posted to a pad; 1.99fn: a snap
+//    or clip story (kind photo / clip) CAN be 🔖 saved by any member (storykeep.SAVE_USER_KINDS) - removing the story
+//    drops the saved copies too (storykeep.onCaptureRemoved).
 //
 // 2. Captures of me. A member's PERSON story (id "user:<userId>", the same id as their profile pad, so one seen state)
 //    is their own profile uploads plus, unless they turned it off, the last 24 h of:
@@ -245,7 +246,9 @@ async function annotate(viewer, items) {
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const c of mine) {
     const r = byId.get(c.id);
-    c.can = Object.assign({}, c.can || {}, { post: false, save: false, del: !!r && (await require("./stagecap").canDelete(viewer, r).catch(() => false)) });
+    // 1.99fn: save comes from storykeep.annotate (snap / clip stories are saveable); post never
+    c.can = Object.assign({}, c.can || {}, { post: false, save: !!(c.can && c.can.save) && !!r && require("./storykeep").userSaveable(r),
+                                             del: !!r && (await require("./stagecap").canDelete(viewer, r).catch(() => false)) });
     c.mine = !!r && r.by_user_id === viewer.userId;
   }
   return items;
