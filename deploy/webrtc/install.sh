@@ -334,6 +334,9 @@ hook_up() { local c; c="$(code -X POST -H 'Content-Type: application/json' -d '{
 check "the $AUTH_SITE site answers MediaMTX's auth hook (needs 1.99et deployed there)" hook_up
 whip_up() { local c; c="$(code -X POST -H 'Content-Type: application/sdp' --data-binary 'v=0' --resolve "$HOST:443:127.0.0.1" "https://$HOST/whip/stg-0000000000000000")"; case "$c" in 400|401|403) return 0 ;; *) echo "   (answer: $c)" >&2; return 1 ;; esac; }
 check "WHIP through nginx reaches MediaMTX (https://$HOST/whip/...)" whip_up
+# 1.99fi: Pepe's own path has to get through nginx too (the 1.99fd template only let stage slot names through -> 404)
+pepe_whip_up() { local c; c="$(code -X POST -H 'Content-Type: application/sdp' --data-binary 'v=0' --resolve "$HOST:443:127.0.0.1" "https://$HOST/whip/pepe")"; case "$c" in 400|401|403) return 0 ;; *) echo "   (answer: $c)" >&2; return 1 ;; esac; }
+check "Pepe's WHIP path through nginx reaches MediaMTX (https://$HOST/whip/pepe)" pepe_whip_up
 listening() { ss -Hln"$1" "sport = :$2" | grep -q .; }
 check "ICE udp 8189 listening" listening u 8189
 # 1.99fd: Pepe's WHIP relay

@@ -72,6 +72,13 @@ test("1.99fe parked: without PEPE_WHIP=on Pepe's paths are refused, no bot route
   assert.match(yml, /^rtspAddress: 127\.0\.0\.1:8554\r?$/m, "MediaMTX: RTSP on loopback only");
   assert.match(yml, /^\s+pepe:\s+source: publisher\s+runOnAvailable: \/usr\/local\/lib\/patv-webrtc\/pepe-relay\.sh\r?$/m, "MediaMTX: pepe path + relay");
   assert.ok(fs.existsSync(path.join(repo, "deploy", "webrtc", "pepe-relay.sh")), "relay shipped");
+  // 1.99fi: nginx lets /whip/pepe, /whep/pepe, /pepe/whip|whep/<session> and /pepe/ (HLS) through to MediaMTX
+  const ngx = fs.readFileSync(path.join(repo, "deploy", "webrtc", "nginx-stream.publicaccess.tv.conf"), "utf8");
+  const locs = [...ngx.matchAll(/location ~ "([^"]+)"/g)].map((m) => new RegExp(m[1]));
+  for (const p of ["/whip/pepe", "/whep/pepe", "/pepe/whip", "/pepe/whep/0b6c2f4e-1d2a-4c3b-9e8f-123456789abc", "/pepe/index.m3u8", "/whip/stage-0123456789abcdef"]) {
+    assert.ok(locs.some((r) => r.test(p)), "nginx routes " + p);
+  }
+  for (const p of ["/whip/pepe2", "/whip/Pepe", "/pepex/index.m3u8", "/whip/stg-pepe"]) assert.ok(!locs.some((r) => r.test(p)), "nginx refuses " + p);
   process.env.PEPE_WHIP = "on";                       // the rest of this file tests the parked code itself
 });
 
