@@ -5,7 +5,9 @@
    const TXT = (n, d) => escapeFn(d != null && d !== '' ? d : (n == null ? '' : n));
    /* 1.99ek: the shared 🚀 boost badge (boostmark.js) - "" when a pad isn't boosted */
    const BM = typeof boostMark === 'function' ? boostMark : () => '';
-   const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js) %>
+   const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js)
+   const PFX_ = typeof padFx === 'function' ? padFx : () => null;   // 1.99ew: premium pad cosmetics (padcosmetics.fx) %>
+<link rel="stylesheet" href="/public/css/padfx.css?v=1">
 <!-- views/rooms.ejs — the Pads (1.99bi as the channel guide; /p since 1.99ck): every pad, what's on its stage now and
      what's booked next, plus the schedule across rooms. Data: roomsweb.guideRows().
      1.99ed: a pad card is ONE link (a.ch) with no buttons and no links inside; fixed rows (head / meta /
@@ -71,6 +73,7 @@
   .cg .ch-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .cg .ch-name .pill.ch-mark { flex: none; }
   .cg .ch-name .t { min-width: 0; }
+  .cg .ch-name .pfx-bs { flex: 0 1 auto; flex-wrap: nowrap; overflow: hidden; }   /* 1.99ew: pad badges by the name */
   .cg .pad-av { width: 28px; height: 28px; flex: none; border-radius: 8px; overflow: hidden; display: inline-grid; place-items: center; background: #1c2a1c; border: 1px solid #2c3a2d; font-size: 13px; font-weight: bold; color: #fff; }
   .cg .pad-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cg .tr-list .tn { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex: 1 1 8em; }
@@ -199,10 +202,11 @@
     <div class="grid">
       <% rows.forEach((r) => { const liveNow = r.now.filter((s) => s.live); const desc = r.description || r.topic || '';
            const pepeTip = "Pepe is in this room — his stream plays here"; %>
-        <a class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>">
+        <% const fx_ = PFX_(r.id); %>
+        <a class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %><%= fx_ && fx_.cls ? ' ' + fx_.cls : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>"><%- fx_ ? fx_.layer : '' %>
           <div class="ch-head">
             <%# 1.99es: avatar, name, then the 🚀 badge by the name (it used to trail the status pills) %>
-            <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t"><%= r.title %></span><%- BM(r.boost_pat, 'pill ch-mark') %></span>
+            <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.title %></span><%- fx_ ? fx_.badges : '' %><%- BM(r.boost_pat, 'pill ch-mark') %></span>
             <span class="ch-badges">
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
               <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="The pad's Camfrog room (ON STAGE = a video stream)"><span class="dot" aria-hidden="true"></span><%= r.live ? '💬 ROOM ACTIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>

@@ -596,7 +596,9 @@ async function pageData(req) {
     user: req.user ? req.user.username : null, me: null, inv: null, badges: [], showcase: [], acts: [], seed: null,
     msg: req.query.msg ? String(req.query.msg).slice(0, 200) : null, ACCOUNT_KINDS, GTF_KINDS, counts: {},
     myListings: new Set(), equippedR: {}, achName: ACH_NAME,
+    padCat: [],                                  // 1.99ew: premium PAD cosmetics (padcosmetics.js) - the "Pad" group
   };
+  try { d.padCat = require("./padcosmetics").catalog(now).filter((i) => i.sale); } catch (e) { d.padCat = []; }
   for (const it of ITEMS) d.counts[it.kind] = (d.counts[it.kind] || 0) + 1;
   if (req.user && req.user.userId) {
     const me = await resolveUser({ userId: req.user.userId });

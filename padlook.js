@@ -24,6 +24,14 @@
 // borders on the dark theme and as a button background, so it must reach 4.5:1 against the page (#0d0d0d); a custom
 // colour that doesn't is LIGHTENED until it does (the owner is told), and the ink on accent buttons is whichever of
 // near-black / white reads better (>= 4.5:1 too).
+//
+// 1.99ew premium pad cosmetics (padcosmetics.js): pad_looks.cosmetics holds what's EQUIPPED ({pad_frame, pad_glow,
+// pad_avatar: item id, pad_badge: [up to 3 ids]}; what a pad owns is padcosmetics' pad_cosmetic_items). The ANIMATED
+// AVATAR (item pa_animated, kind pad_avatar) is one more upload kind, "avatar_anim", through this same pipeline (chunks,
+// magic-byte sniff, the same safety hook): animated GIF / WebP only, re-encoded by sharp to a 256 px square ANIMATED
+// webp (metadata stripped, at most ANIM_MAX_FRAMES frames, the output capped at ANIM_MAX_OUT - quality steps down,
+// then it's refused) plus a still of its first frame (<hex>_w.webp) that reduced-motion viewers get (<picture>).
+// Only a pad that owns pa_animated can upload one; it shows while pad_avatar is equipped (else the normal avatar).
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -35,8 +43,10 @@ const CHUNK = 512 * 1024, CHUNK_MAX = 768 * 1024;
 const AVATAR_PX = 256, BANNER_W = 1600, BANNER_MIN_H = 400, BANNER_MAX_H = 800;
 const MAX_INPUT_PIXELS = 60e6;
 const UPLOAD_TTL = 15 * 60e3, OPEN_PER_USER = 2;
-const KINDS = Object.freeze(["avatar", "banner"]);
-const FILE_RE = /^[a-f0-9]{32}_(a|b)\.webp$/;
+const KINDS = Object.freeze(["avatar", "banner", "avatar_anim"]);
+const FILE_RE = /^[a-f0-9]{32}_(a|b|v|w)\.webp$/;
+const ANIM_MAX_OUT = 1024 * 1024, ANIM_MAX_FRAMES = 150, ANIM_ITEM = "pa_animated";   // 1.99ew: the animated avatar
+const stillOf = (anim) => (anim && /_v\.webp$/.test(anim) ? anim.replace(/_v\.webp$/, "_w.webp") : null);
 const HEX_RE = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const BG = "#0d0d0d", INK_DARK = "#0b0b0b", INK_LIGHT = "#ffffff", MIN_CONTRAST = 4.5;
 // 12 presets, every one >= 4.5:1 on the dark theme (test/pad-look.test.js checks)
@@ -48,10 +58,8 @@ const PALETTE = Object.freeze([
   { id: "red", name: "Red", hex: "#ef5350" }, { id: "orange", name: "Orange", hex: "#ff8a50" },
   { id: "amber", name: "Amber", hex: "#ffca28" }, { id: "slate", name: "Slate", hex: "#b0bec5" },
 ]);
-// Premium pad cosmetics (not sold yet - the price + PAT routing is an economy decision). cosmetics.json can carry
-// items of kinds "pad_frame" / "pad_glow" / "pad_badge" (catalog "group": "Pad"); a pad's equipped ones would live in
-// pad_looks.cosmetics as {slot: item id}. Nothing reads or charges for them today.
-const COSMETIC_SLOTS = Object.freeze({ pad_frame: "Animated banner frame", pad_glow: "Name glow", pad_badge: "Pad badge" });
+// Premium pad cosmetics (1.99ew, padcosmetics.js + padcosmetics.json): a pad's equipped ones live in pad_looks.cosmetics.
+const COSMETIC_SLOTS = Object.freeze({ pad_frame: "Banner frame", pad_glow: "Name glow", pad_badge: "Pad badge", pad_avatar: "Animated avatar" });
 let NOW = () => Date.now();
 
 class LookRefuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
@@ -126,6 +134,7 @@ function init() {
     ready = (async () => {
       await runQuery(`CREATE TABLE IF NOT EXISTS pad_looks (room_id TEXT PRIMARY KEY, avatar TEXT, banner TEXT, banner_y INTEGER NOT NULL DEFAULT 50,
         accent TEXT, cosmetics TEXT, updated INTEGER, updated_by TEXT)`);
+      try { await runQuery("ALTER TABLE pad_looks ADD COLUMN avatar_anim TEXT"); } catch (e) { /* 1.99ew: already there */ }
       await loadCache();
     })().catch((e) => { console.error("[padlook] init:", e.message); ready = null; throw e; });
   }
@@ -138,11 +147,33 @@ async function loadCache() {
 }
 const clampY = (v) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 50; };
 
-/** A pad's look for views: {avatar, banner (urls or null), bannerY, accent, ink, vars (a safe style string)}. Sync. */
+/** The equipped pad cosmetics (pad_looks.cosmetics), parsed: {pad_frame, pad_glow, pad_avatar: id|null, pad_badge: [ids]}. Sync. */
+function cosmeticsOf(roomId) {
+  const r = CACHE.get(String(roomId || ""));
+  return parseCosmetics(r && r.cosmetics);
+}
+function parseCosmetics(raw) {
+  let c = null;
+  try { c = raw ? JSON.parse(raw) : null; } catch (e) { c = null; }
+  const id = (v) => (typeof v === "string" && /^[a-z0-9_]{1,40}$/.test(v) ? v : null);
+  const o = { pad_frame: null, pad_glow: null, pad_avatar: null, pad_badge: [] };
+  if (c && typeof c === "object") {
+    o.pad_frame = id(c.pad_frame); o.pad_glow = id(c.pad_glow); o.pad_avatar = id(c.pad_avatar);
+    o.pad_badge = Array.isArray(c.pad_badge) ? [...new Set(c.pad_badge.map(id).filter(Boolean))].slice(0, 3) : [];
+  }
+  return o;
+}
+/** A pad's look for views: {avatar, banner (urls or null), bannerY, accent, ink, vars (a safe style string), avatarAnim /
+ *  avatarStill (the animated avatar + its still, only while pad_avatar is equipped), hasAnim (uploaded at all)}. Sync. */
 function look(roomId) {
   const r = CACHE.get(String(roomId || ""));
   const accent = r ? normHex(r.accent) : null;
   const L = { avatar: r ? url(r.avatar) : null, banner: r ? url(r.banner) : null, bannerY: r ? clampY(r.banner_y) : 50, accent, ink: accent ? inkFor(accent) : null };
+  const anim = r && FILE_RE.test(String(r.avatar_anim || "")) ? r.avatar_anim : null;
+  L.hasAnim = !!anim;
+  L.avatarAnim = anim && cosmeticsOf(roomId).pad_avatar ? url(anim) : null;
+  L.avatarStill = L.avatarAnim ? url(stillOf(anim)) : null;
+  if (!L.avatar && L.avatarStill) L.avatar = L.avatarStill;        // anything that shows a plain <img> gets the still
   L.vars = cssVars(L);
   return L;
 }
@@ -169,6 +200,11 @@ function monogram(p) {
 function avatarHtml(roomId, opts = {}) {
   const L = look(roomId);
   const cls = esc(("pad-av " + (opts.cls || "")).trim());
+  if (L.avatarAnim) {
+    // 1.99ew: the animated avatar; reduced-motion viewers get its first frame
+    return `<span class="${cls} has-img is-anim" aria-hidden="true"><picture><source media="(prefers-reduced-motion: reduce)" srcset="${L.avatarStill}">` +
+           `<img src="${L.avatarAnim}" alt="" loading="lazy" decoding="async"></picture></span>`;
+  }
   if (L.avatar) return `<span class="${cls} has-img" aria-hidden="true"><img src="${L.avatar}" alt="" loading="lazy" decoding="async"></span>`;
   if (opts.fallback != null) return opts.fallback;
   let P = opts.pad || null;
@@ -227,49 +263,89 @@ async function encode(buf, kind, bannerY = 50) {
   } finally { cleanup(); }
 }
 
+/**
+ * 1.99ew: the animated avatar. GIF / WebP with 2+ frames -> {anim: a 256 px square animated webp (<= ANIM_MAX_OUT),
+ * still: its first frame as a webp}. Metadata stripped (sharp writes none unless asked).
+ */
+async function encodeAnim(buf) {
+  const media = require("./feedmedia");
+  const sn = media.sniff(buf);
+  if (sn.bad || sn.kind !== "image" || !["gif", "webp"].includes(sn.fmt)) throw new LookRefuse(415, "Animated avatars are an animated WebP or GIF.");
+  const sharp = require("sharp");
+  let meta;
+  try { meta = await sharp(buf, { animated: true, limitInputPixels: MAX_INPUT_PIXELS }).metadata(); } catch (e) { throw new LookRefuse(415, "That picture couldn't be read."); }
+  if (!meta || meta.format !== sn.fmt) throw new LookRefuse(415, "That picture's contents don't match its type.");
+  const pages = Number(meta.pages) || 1;
+  if (pages < 2) throw new LookRefuse(415, "That picture isn't animated - upload it as the normal avatar instead.");
+  if (pages > ANIM_MAX_FRAMES) throw new LookRefuse(413, `Animated avatars can have up to ${ANIM_MAX_FRAMES} frames.`);
+  try {
+    const opts = { animated: true, limitInputPixels: MAX_INPUT_PIXELS };
+    let anim = null;
+    for (const q of [70, 55, 40]) {
+      const out = await sharp(buf, opts).resize({ width: AVATAR_PX, height: AVATAR_PX, fit: "cover", position: "centre" })
+        .webp({ quality: q, effort: 4, loop: 0 }).toBuffer({ resolveWithObject: true });
+      if (out.info.size <= ANIM_MAX_OUT) { anim = out; break; }
+    }
+    if (!anim) throw new LookRefuse(413, `That animation is too big even at 256 px - keep it under ${ANIM_MAX_OUT / 1024 / 1024} MB (fewer frames or colours).`);
+    const still = await sharp(buf, { pages: 1, limitInputPixels: MAX_INPUT_PIXELS }).resize({ width: AVATAR_PX, height: AVATAR_PX, fit: "cover", position: "centre" })
+      .webp({ quality: 84 }).toBuffer({ resolveWithObject: true });
+    return { buf: anim.data, still: still.data, w: anim.info.width, h: anim.info.pageHeight || anim.info.height, bytes: anim.info.size, frames: pages };
+  } catch (e) {
+    if (e && e.refuse) throw e;
+    throw new LookRefuse(415, "That picture couldn't be processed.");
+  }
+}
+
 // ── writes ──
 async function row(roomId) { await init(); return (await getQuery("SELECT * FROM pad_looks WHERE room_id = ?", [roomId]))[0] || null; }
 async function upsert(roomId, patch, actor) {
   await init();
-  const cur = (await row(roomId)) || { avatar: null, banner: null, banner_y: 50, accent: null, cosmetics: null };
+  const cur = (await row(roomId)) || { avatar: null, banner: null, banner_y: 50, accent: null, cosmetics: null, avatar_anim: null };
   const next = { ...cur, ...patch };
-  await runQuery(`INSERT INTO pad_looks (room_id, avatar, banner, banner_y, accent, cosmetics, updated, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  await runQuery(`INSERT INTO pad_looks (room_id, avatar, banner, banner_y, accent, cosmetics, avatar_anim, updated, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(room_id) DO UPDATE SET avatar = excluded.avatar, banner = excluded.banner, banner_y = excluded.banner_y,
-                  accent = excluded.accent, cosmetics = excluded.cosmetics, updated = excluded.updated, updated_by = excluded.updated_by`,
-                 [roomId, next.avatar || null, next.banner || null, clampY(next.banner_y), next.accent || null, next.cosmetics || null, NOW(), String(actor || "?").slice(0, 60)]);
+                  accent = excluded.accent, cosmetics = excluded.cosmetics, avatar_anim = excluded.avatar_anim, updated = excluded.updated, updated_by = excluded.updated_by`,
+                 [roomId, next.avatar || null, next.banner || null, clampY(next.banner_y), next.accent || null, next.cosmetics || null, next.avatar_anim || null, NOW(), String(actor || "?").slice(0, 60)]);
   CACHE.set(roomId, { room_id: roomId, ...next, banner_y: clampY(next.banner_y) });
   return cur;
 }
-/** Store a checked, re-encoded picture as the pad's avatar / banner; the old file goes. -> look(roomId) */
+/** Can this pad upload an animated avatar? (it owns pa_animated - padcosmetics) */
+async function animAllowed(roomId) {
+  try { return await require("./padcosmetics").hasItem(roomId, ANIM_ITEM); } catch (e) { return false; }
+}
+/** Store a checked, re-encoded picture as the pad's avatar / banner / animated avatar; the old file goes. -> look(roomId) */
 async function setImage(roomId, kind, buf, { userId, actor, bannerY } = {}) {
   if (!KINDS.includes(kind)) throw new LookRefuse(400, "Avatar or banner only.");
   if (!Buffer.isBuffer(buf) || buf.length < 12) throw new LookRefuse(400, "That file is empty.");
   if (buf.length > MAX_BYTES) throw new LookRefuse(413, `Pictures can be up to ${MAX_BYTES / 1024 / 1024} MB.`);
+  if (kind === "avatar_anim" && !(await animAllowed(roomId))) throw new LookRefuse(403, "Animated avatars are a pad cosmetic - get one in ✨ Cosmetics first.");
   const y = clampY(bannerY);
-  const enc = await encode(buf, kind, y);
+  const enc = kind === "avatar_anim" ? await encodeAnim(buf) : await encode(buf, kind, y);
   let verdict;
-  try { verdict = await SAFETY({ buf: enc.buf, kind, roomId, userId }); } catch (e) { verdict = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
+  try { verdict = await SAFETY({ buf: enc.buf, still: enc.still || null, kind, roomId, userId }); } catch (e) { verdict = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
   if (!verdict || verdict.ok !== true) {
     const msg = verdict && verdict.nsfw ? "That picture looks like adult content - pad avatars and banners must be safe for work (Terms)."
       : (verdict && verdict.reason) || "That picture can't be used.";
     throw new LookRefuse(422, msg);
   }
-  const name = crypto.randomBytes(16).toString("hex") + (kind === "avatar" ? "_a" : "_b") + ".webp";
+  const name = crypto.randomBytes(16).toString("hex") + ({ avatar: "_a", banner: "_b", avatar_anim: "_v" }[kind]) + ".webp";
   const p = filePath(name);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, enc.buf, { flag: "wx" });
+  if (kind === "avatar_anim") fs.writeFileSync(filePath(stillOf(name)), enc.still, { flag: "wx" });
+  const dropNew = () => { removeFile(name); if (kind === "avatar_anim") removeFile(stillOf(name)); };
   let old;
-  try { old = await upsert(roomId, kind === "avatar" ? { avatar: name } : { banner: name, banner_y: y }, actor); }
-  catch (e) { removeFile(name); throw e; }
+  try { old = await upsert(roomId, kind === "avatar" ? { avatar: name } : kind === "avatar_anim" ? { avatar_anim: name } : { banner: name, banner_y: y }, actor); }
+  catch (e) { dropNew(); throw e; }
   const prev = old && old[kind];
-  if (prev && prev !== name) removeFile(prev);
+  if (prev && prev !== name) { removeFile(prev); if (kind === "avatar_anim") removeFile(stillOf(prev)); }
   await event(roomId, "look-" + kind, actor, `${enc.w}x${enc.h} ${enc.bytes} B`);
   return look(roomId);
 }
 async function removeImage(roomId, kind, actor) {
   if (!KINDS.includes(kind)) throw new LookRefuse(400, "Avatar or banner only.");
   const old = await upsert(roomId, { [kind]: null }, actor);
-  if (old && old[kind]) removeFile(old[kind]);
+  if (old && old[kind]) { removeFile(old[kind]); if (kind === "avatar_anim") removeFile(stillOf(old[kind])); }
   await event(roomId, "look-" + kind + "-remove", actor, "");
   return look(roomId);
 }
@@ -292,6 +368,13 @@ async function setStyle(roomId, b, actor) {
   await upsert(roomId, patch, actor);
   await event(roomId, "look-style", actor, JSON.stringify(patch).slice(0, 200));
   return { look: look(roomId), adjusted, requested };
+}
+/** 1.99ew: write the equipped pad cosmetics (padcosmetics.equip validates first). -> the parsed set */
+async function setCosmetics(roomId, cos, actor) {
+  const c = parseCosmetics(JSON.stringify(cos || {}));
+  const empty = !c.pad_frame && !c.pad_glow && !c.pad_avatar && !c.pad_badge.length;
+  await upsert(roomId, { cosmetics: empty ? null : JSON.stringify(c) }, actor);
+  return c;
 }
 async function event(roomId, what, actor, detail) {
   try { await runQuery("INSERT INTO room_events (room_id, ts, what, actor, detail) VALUES (?, ?, ?, ?, ?)", [roomId, NOW(), what, actor || "?", detail || ""]); } catch (e) { /* no table in a bare test DB */ }
@@ -320,6 +403,7 @@ function chunkUpload(roomId, userId, id, offset, buf) {
   if (u.received === 0) {
     const sn = require("./feedmedia").sniff(buf);
     if (sn.bad || sn.kind !== "image") { UP.delete(u.id); throw new LookRefuse(415, "Pictures only: JPEG, PNG, GIF, WebP, AVIF or HEIC."); }
+    if (u.kind === "avatar_anim" && !["gif", "webp"].includes(sn.fmt)) { UP.delete(u.id); throw new LookRefuse(415, "Animated avatars are an animated WebP or GIF."); }
   }
   u.parts.push(Buffer.from(buf));
   u.received += buf.length;
@@ -371,8 +455,11 @@ function register(app, { addUser }) {
   };
   const who = (req) => req.user.username || "?";
   const B = "/api/rooms/:slug/look";
-  app.post(B + "/uploads", addUser, owner(true), (req, res) => {
-    try { res.json({ ok: true, ...openUpload(req.pad.id, req.user.userId, req.body || {}) }); } catch (e) { fail(res, e); }
+  app.post(B + "/uploads", addUser, owner(true), async (req, res) => {
+    try {
+      if ((req.body || {}).kind === "avatar_anim" && !(await animAllowed(req.pad.id))) throw new LookRefuse(403, "Animated avatars are a pad cosmetic - get one in ✨ Cosmetics first.");
+      res.json({ ok: true, ...openUpload(req.pad.id, req.user.userId, req.body || {}) });
+    } catch (e) { fail(res, e); }
   });
   app.put(B + "/uploads/:id", addUser, owner(false), rawChunk, (req, res) => {
     try { res.json({ ok: true, received: chunkUpload(req.pad.id, req.user.userId, req.params.id, req.query.offset, req.body) }); } catch (e) { fail(res, e); }
@@ -393,7 +480,7 @@ function register(app, { addUser }) {
     if (!p) return res.status(404).end();
     try {
       await init();
-      const used = [...CACHE.values()].some((r) => r.avatar === name || r.banner === name);
+      const used = [...CACHE.values()].some((r) => r.avatar === name || r.banner === name || (r.avatar_anim && (r.avatar_anim === name || stillOf(r.avatar_anim) === name)));
       if (!used) { res.set("Cache-Control", "no-store"); return res.status(404).end(); }
       const H = { "Content-Type": "image/webp", "X-Content-Type-Options": "nosniff", "Cache-Control": "public, max-age=31536000, immutable",
                   "Content-Security-Policy": "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox", "Cross-Origin-Resource-Policy": "same-origin",
@@ -408,7 +495,7 @@ function register(app, { addUser }) {
   setInterval(() => sweepUploads(), 5 * 60e3).unref();
 }
 
-module.exports = { init, register, look, cssVars, avatarHtml, monogram, normHex, contrast, luminance, inkFor, guardAccent, setImage, removeImage, setStyle,
+module.exports = { init, register, look, cssVars, cosmeticsOf, parseCosmetics, setCosmetics, encodeAnim, stillOf, ANIM_MAX_OUT, ANIM_MAX_FRAMES, ANIM_ITEM, avatarHtml, monogram, normHex, contrast, luminance, inkFor, guardAccent, setImage, removeImage, setStyle,
                    openUpload, chunkUpload, finishUpload, encode, setSafetyCheck, filePath, url, dir, _setDir, loadCache, PALETTE, COSMETIC_SLOTS, KINDS,
                    MAX_BYTES, CHUNK, AVATAR_PX, BANNER_W, BANNER_MIN_H, BANNER_MAX_H, MIN_CONTRAST, BG, FILE_RE, LookRefuse,
                    _setClock: (fn) => { NOW = fn; }, _uploads: UP };

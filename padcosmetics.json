@@ -1,0 +1,24 @@
+{
+  "_doc": "PATV premium PAD cosmetics catalog (padcosmetics.js, 1.99ew). Items belong to a PAD (not a user): its owner buys them for 100% Fort Knox, anyone signed in can gift one (50% Fort Knox / 50% the pad's room vault). Keep ids stable - owned copies point at them. price: PAT; when it's missing the item costs its rarity's price in cosmetics.json's rarities table (common 25k, uncommon 75k, rare 250k, epic 750k). season {from, to (UTC dates, to exclusive), label}: a time-limited item - it sells only inside that window (a pad that bought one keeps it). retired: true stops sales without touching owned copies. style.fx is the CSS effect (public/css/padfx.css: pfx-f-<fx> frames, pfx-g-<fx> glows); badges carry their text + icon. animated: true = the effect moves (it stops under prefers-reduced-motion).",
+  "slots": {
+    "pad_frame": { "label": "Banner frame", "emoji": "🖼️", "max": 1, "where": "Around the pad's header, its /p card and its Top Pads row" },
+    "pad_glow": { "label": "Name glow", "emoji": "✨", "max": 1, "where": "On the pad's name: header, /p card, Top Pads" },
+    "pad_badge": { "label": "Pad badge", "emoji": "🏷️", "max": 3, "where": "Small pills next to the pad's name (up to 3)" },
+    "pad_avatar": { "label": "Animated avatar", "emoji": "🎞️", "max": 1, "where": "Unlocks an animated avatar upload (WebP or GIF, 256 px)" }
+  },
+  "items": [
+    { "id": "pf_neon", "kind": "pad_frame", "name": "Neon frame", "rarity": "uncommon", "desc": "A clean neon edge in the pad's accent colour.", "style": { "fx": "neon" } },
+    { "id": "pf_pixel", "kind": "pad_frame", "name": "Pixel frame", "rarity": "uncommon", "desc": "Chunky 8-bit border, square corners.", "style": { "fx": "pixel" } },
+    { "id": "pf_embers", "kind": "pad_frame", "name": "Embers", "rarity": "rare", "animated": true, "desc": "Warm sparks drifting up the header.", "style": { "fx": "embers" } },
+    { "id": "pf_snow", "kind": "pad_frame", "name": "Snowfall", "rarity": "rare", "animated": true, "desc": "A slow, quiet snowfall.", "style": { "fx": "snow" } },
+    { "id": "pf_pride", "kind": "pad_frame", "name": "Pride shimmer", "rarity": "rare", "animated": true, "desc": "A rainbow edge that slowly shimmers round.", "style": { "fx": "pride" } },
+    { "id": "pf_matrix", "kind": "pad_frame", "name": "Matrix rain", "rarity": "rare", "animated": true, "desc": "Faint green code raining down.", "style": { "fx": "matrix" } },
+    { "id": "pg_soft", "kind": "pad_glow", "name": "Soft glow", "rarity": "uncommon", "desc": "A gentle glow in the pad's accent colour.", "style": { "fx": "soft" } },
+    { "id": "pg_rainbow", "kind": "pad_glow", "name": "Rainbow glow", "rarity": "epic", "animated": true, "desc": "The pad's name in a slowly flowing rainbow.", "style": { "fx": "rainbow" } },
+    { "id": "pg_gold", "kind": "pad_glow", "name": "Gold glow", "rarity": "epic", "animated": true, "desc": "Polished gold with a light that sweeps across.", "style": { "fx": "gold" } },
+    { "id": "pb_est2026", "kind": "pad_badge", "name": "Est. 2026", "rarity": "common", "desc": "Here from the start.", "style": { "icon": "📅", "text": "Est. 2026" } },
+    { "id": "pb_community", "kind": "pad_badge", "name": "Community", "rarity": "common", "desc": "Run by and for its regulars.", "style": { "icon": "🌱", "text": "Community" } },
+    { "id": "pb_talk", "kind": "pad_badge", "name": "Talk", "rarity": "common", "desc": "Come for the conversation.", "style": { "icon": "🎙", "text": "Talk" } },
+    { "id": "pa_animated", "kind": "pad_avatar", "name": "Animated avatar", "rarity": "epic", "animated": true, "desc": "Upload a moving avatar: an animated WebP or GIF, re-encoded to a 256 px animated WebP.", "style": { "fx": "anim" } }
+  ]
+}

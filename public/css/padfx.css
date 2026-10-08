@@ -1,0 +1,134 @@
+/* padfx.css — premium pad cosmetics (1.99ew, padcosmetics.js / padcosmetics.json). CSS only.
+   Frames: the framed box gets .pfx .pfx-f-<fx> and a first child <span class="pfx-l"> (the effect layer: absolute,
+   under the content - which is lifted to z-index 1 - clipped to the box's corners, never catching clicks). Glows: the element holding the pad's
+   name gets .pfx-g .pfx-g-<fx>. Badges: .pfx-bs > .pfx-b pills by the name.
+   Motion is subtle and cheap (transform / background-position on small boxes, long loops) and stops entirely under
+   prefers-reduced-motion (each effect keeps a still look). --pfx-c = the pad's accent (or the site green). */
+.pfx { position: relative; --pfx-c: var(--pad-accent, #66bb6a); }
+.pfx > .pfx-l { position: absolute; inset: 0; z-index: 0; border-radius: inherit; overflow: hidden; pointer-events: none; }
+.pfx > :not(.pfx-l) { position: relative; z-index: 1; }      /* the content stays above the effect layer */
+.pfx > .pfx-l::before, .pfx > .pfx-l::after { content: ""; position: absolute; pointer-events: none; }
+
+/* neon: a clean glowing edge in the accent */
+.pfx-f-neon { box-shadow: 0 0 0 1px var(--pfx-c), 0 0 10px color-mix(in srgb, var(--pfx-c) 45%, transparent), inset 0 0 12px color-mix(in srgb, var(--pfx-c) 22%, transparent); }
+
+/* pixel: chunky 8-bit border, square corners */
+.pfx-f-pixel { border-radius: 0 !important; }
+.pfx-f-pixel > .pfx-l::before { inset: 0; border: 4px solid transparent;
+  border-image: repeating-linear-gradient(90deg, var(--pfx-c) 0 8px, color-mix(in srgb, var(--pfx-c) 35%, #000) 8px 16px) 4; image-rendering: pixelated; }
+
+/* embers: warm sparks drifting up (one tile of dots moved by exactly its own height: a seamless loop) */
+.pfx-f-embers { box-shadow: 0 0 0 1px rgba(255, 138, 60, .45), inset 0 -18px 30px -18px rgba(255, 110, 40, .35); }
+.pfx-f-embers > .pfx-l { -webkit-mask-image: linear-gradient(to top, #000 0%, rgba(0,0,0,.6) 45%, transparent 85%); mask-image: linear-gradient(to top, #000 0%, rgba(0,0,0,.6) 45%, transparent 85%); }
+.pfx-f-embers > .pfx-l::before { left: 0; right: 0; top: 0; height: calc(100% + 140px);
+  background-image: radial-gradient(1.6px 1.6px at 12% 20%, #ffb46b 99%, transparent), radial-gradient(1.2px 1.2px at 37% 64%, #ff8a3c 99%, transparent),
+    radial-gradient(2px 2px at 61% 38%, #ffd08a 99%, transparent), radial-gradient(1.4px 1.4px at 83% 81%, #ff7a2e 99%, transparent),
+    radial-gradient(1.2px 1.2px at 92% 12%, #ffc070 99%, transparent);
+  background-size: 140px 140px; animation: pfx-rise 9s linear infinite; will-change: transform; }
+
+/* snow: a slow, quiet snowfall */
+.pfx-f-snow { box-shadow: 0 0 0 1px rgba(220, 235, 255, .35); }
+.pfx-f-snow > .pfx-l::before { left: 0; right: 0; top: -150px; height: calc(100% + 150px);
+  background-image: radial-gradient(1.8px 1.8px at 10% 15%, rgba(255,255,255,.85) 99%, transparent), radial-gradient(1.3px 1.3px at 30% 55%, rgba(255,255,255,.7) 99%, transparent),
+    radial-gradient(2.2px 2.2px at 55% 30%, rgba(255,255,255,.8) 99%, transparent), radial-gradient(1.4px 1.4px at 75% 75%, rgba(255,255,255,.65) 99%, transparent),
+    radial-gradient(1.6px 1.6px at 90% 45%, rgba(255,255,255,.75) 99%, transparent);
+  background-size: 150px 150px; animation: pfx-fall 14s linear infinite; will-change: transform; opacity: .8; }
+
+/* pride: a rainbow edge that slowly shimmers round (the ring is a mask; the gradient behind it slides) */
+.pfx-f-pride > .pfx-l { padding: 2px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.pfx-f-pride > .pfx-l::before { top: 0; bottom: 0; left: 0; width: 200%;
+  background: linear-gradient(90deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982, #e40303);
+  animation: pfx-slide 12s linear infinite; will-change: transform; }
+.pfx-f-pride { box-shadow: 0 0 12px rgba(255, 140, 0, .12); }
+
+/* matrix: faint green code raining down */
+.pfx-f-matrix { box-shadow: 0 0 0 1px rgba(0, 255, 102, .35), inset 0 0 18px rgba(0, 255, 102, .08); }
+.pfx-f-matrix > .pfx-l::before { left: 0; right: 0; top: -132px; height: calc(100% + 132px); opacity: .32;
+  background: repeating-linear-gradient(180deg, #00ff66 0 3px, transparent 3px 11px);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 17px, #000 17px 18px, transparent 18px 29px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 17px, #000 17px 18px, transparent 18px 29px);
+  animation: pfx-rain 4s linear infinite; will-change: transform; }
+
+@keyframes pfx-rise { from { transform: translateY(0); } to { transform: translateY(-140px); } }
+@keyframes pfx-fall { from { transform: translateY(0); } to { transform: translateY(150px); } }
+@keyframes pfx-rain { from { transform: translateY(0); } to { transform: translateY(132px); } }
+@keyframes pfx-slide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* glows on the pad's name */
+.pfx-g-soft { text-shadow: 0 0 10px color-mix(in srgb, var(--pad-accent, #66bb6a) 70%, transparent), 0 0 2px color-mix(in srgb, var(--pad-accent, #66bb6a) 60%, transparent); }
+.pfx-g-rainbow, .pfx-g-gold { -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; }
+.pfx-g-rainbow { background-image: linear-gradient(90deg, #ff6b6b, #ffb36b, #ffe66b, #7dff8a, #6bd5ff, #b36bff, #ff6b6b); background-size: 300% 100%;
+  filter: drop-shadow(0 0 6px rgba(180, 140, 255, .35)); animation: pfx-shift 10s linear infinite; }
+.pfx-g-gold { background-image: linear-gradient(100deg, #b8860b 0%, #ffd700 35%, #fff4c2 50%, #ffd700 65%, #b8860b 100%); background-size: 250% 100%;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 60, .35)); animation: pfx-shift 7s ease-in-out infinite alternate; }
+@keyframes pfx-shift { from { background-position: 0% 50%; } to { background-position: 100% 50%; } }
+
+/* badges by the pad's name */
+.pfx-bs { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; vertical-align: middle; min-width: 0; }
+.pfx-b { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 999px; font: 600 11px/1.5 Ubuntu, sans-serif; letter-spacing: .01em;
+  color: #e8f5e9; background: color-mix(in srgb, var(--pad-accent, #66bb6a) 18%, #151515); border: 1px solid color-mix(in srgb, var(--pad-accent, #66bb6a) 45%, #2a2a2a);
+  white-space: nowrap; text-shadow: none; -webkit-text-fill-color: currentColor; }
+.pfx-b.mini { padding: 0 4px; font-size: 10.5px; }
+.pfx-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* the pad page's 🎁 entries (About card button, ⋯ menu item) */
+.rm .about button.ab-btn { cursor: pointer; font-family: inherit; }
+.rm .ab-gift { display: grid; gap: 6px; }
+
+/* the animated avatar's <picture> sits in the avatar box like a plain <img> */
+.pad-av picture { display: contents; }
+
+/* ✨ Cosmetics (settings Look card) + 🎁 the gift dialog (public/js/pad-cosmetics.js) */
+.pc { margin-top: 18px; padding-top: 14px; border-top: 1px solid #262626; display: grid; gap: 8px; min-width: 0; }
+.pc-h { margin: 0; font-size: 16px; color: #fff; }
+.pc-sh { margin: 10px 0 2px; font-size: 14px; color: #e6e6e6; }
+.pc-sh small { color: #9aa09a; font-weight: normal; }
+.pc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; min-width: 0; }
+.pc-card { background: #0f0f0f; border: 1px solid #242424; border-radius: 12px; padding: 10px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.pc-card.eq { border-color: color-mix(in srgb, var(--pad-accent, #66bb6a) 60%, #242424); }
+.pc-card.gift { border-color: #6d5a1f; background: #14120a; }
+.pc-pv { position: relative; border-radius: 10px; background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--pad-accent, #66bb6a) 26%, #111) 0%, #111 60%);
+  border: 1px solid #222; padding: 14px 10px; min-height: 58px; display: grid; align-items: center; overflow: visible; }
+.pc-pv-in { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.pc-pv-av { width: 30px; height: 30px; flex: none; border-radius: 9px; overflow: hidden; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--pad-accent, #66bb6a) 40%, #1a1a1a); color: #fff; font: 700 14px Ubuntu, sans-serif; }
+.pc-pv-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pc-pv-av.pc-anim { font-size: 17px; }
+.pc-pv-n { color: #fff; font-size: 15px; min-width: 0; overflow-wrap: anywhere; }
+.pc-t { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: #eee; }
+.pc-rar { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--rc); border: 1px solid color-mix(in srgb, var(--rc) 50%, transparent); border-radius: 999px; padding: 0 6px; }
+.pc-tag { font-size: 11px; color: #bbb; border: 1px solid #333; border-radius: 999px; padding: 0 6px; }
+.pc-d { margin: 0; color: #a9aea9; font-size: 13px; }
+.pc-st { font-size: 13px; color: #cfd8cf; font-weight: bold; }
+.pc-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-btns .btn { padding: 5px 10px; font-size: 13px; }
+.pc-confirm { border: 1px solid #3a3a3a; background: #141414; border-radius: 10px; padding: 10px; display: grid; gap: 6px; font-size: 13.5px; color: #ddd; }
+.pc-confirm p { margin: 0; }
+.pc-route b { color: #9be39f; }
+.pc-final { color: #f2d48a; }
+.pc-bal.short { color: #ff8a80; }
+.pc-err { color: #ff8a80; display: block; }
+.pc-err small { color: #c9a19c; }
+.pc-err .pc-code { color: #888; font-family: ui-monospace, monospace; }
+.pc-ok { color: #9be39f; }
+.pc-gifts { margin: 0; color: #f2d48a; font-weight: bold; }
+.pc-off { color: #f2d48a; }
+.pc-anim-up { display: grid; gap: 8px; margin-top: 8px; }
+.pc-dlg { width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid #2a2a2a; border-radius: 14px; background: #101010; color: #ddd; box-sizing: border-box; }
+.pc-dlg::backdrop { background: rgba(0, 0, 0, .7); }
+.pc-dlg-in { padding: 14px 16px 18px; display: grid; gap: 10px; font-family: Ubuntu, sans-serif; }
+.pc-dlg-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.pc-dlg-h h2 { margin: 0; font-size: 19px; color: #fff; }
+.pc-x { background: none; border: 1px solid #333; color: #ccc; border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 15px; }
+.pc-lede { margin: 0; font-size: 14px; color: #ccc; }
+.pc-dlg .btn { cursor: pointer; border-radius: 8px; border: 1px solid #2f6b3a; background: #12301a; color: #c8efcf; font: bold 13px Ubuntu, sans-serif; padding: 6px 12px; }
+.pc-dlg .btn.primary { background: #2e7d32; border-color: #43a047; color: #fff; }
+.pc-dlg .btn.ghost { background: none; border-color: #444; color: #ccc; }
+.pc-dlg .btn:disabled { opacity: .55; cursor: default; }
+@media (max-width: 520px) { .pc-grid { grid-template-columns: minmax(0, 1fr); } .pc-dlg-in { padding: 12px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pfx > .pfx-l::before, .pfx > .pfx-l::after, .pfx-g-rainbow, .pfx-g-gold { animation: none !important; }
+  .pfx-g-rainbow { background-position: 0% 50%; }
+  .pfx-g-gold { background-position: 50% 50%; }
+}

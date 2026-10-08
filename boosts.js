@@ -27,7 +27,7 @@
 // Stage SLOT fees (an owner may price their pad's slots; free by default) use the same route when
 // the slot settles (mainstage.end) - the old 20% owner royalty accrual is not applied to them.
 //
-//   room_flow_ledger  one row per room-flow charge: ref (unique - idempotency), kind boost|slot_fee,
+//   room_flow_ledger  one row per room-flow charge: ref (unique - idempotency), kind boost|slot_fee|pad_cosmetic (1.99ew, padcosmetics.js),
 //                     room_id, payer id / name, amount, fortknox (sent to the Reserve), room_vault
 //                     (held in escrow), via web|chat, created, detail, migrated (E-1 / E-3 fill it),
 //                     fk_to (E-1: 'fortknox' = the half was booked straight into Fort Knox; NULL = the Reserve)
@@ -160,16 +160,20 @@ async function routeInTx({ ref, kind, room_id, payer_id, payer_name, amount, own
     // E-1 / with the layers off, his Federal Reserve as Fort Knox's stand-in
     const base = flow || kind;
     await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
-                   [uuidv4(), fk ? "fortknox:" + base : base, payer_id || null, `${kind === "boost" ? "boost" : "stage slot fee"} ${room_id}: Fort Knox half`.slice(0, 120), -sp.fortknox]);
+                   [uuidv4(), fk ? "fortknox:" + base : base, payer_id || null, `${KIND_LABEL[kind] || "stage slot fee"} ${room_id}: Fort Knox half`.slice(0, 120), -sp.fortknox]);
   }
   return { ref, kind, room_id, payer_name: payer_name || null, amount: a, ...sp, owner_self: !!owner_self, created: t, fk_to: fk ? "fortknox" : null };
 }
 
 /** E-0 telemetry (econ.js): the charge as a "room" flow - best effort, after the commit. */
+// ledger kind -> its routing flow (the reserve_claims flow / econ_charges flow) and the claim's label
+const KIND_FLOW = Object.freeze({ boost: "boost", slot_fee: "stage_slot", pad_cosmetic: "pad_cosmetics" });   // 1.99ew: pad cosmetics
+const KIND_LABEL = Object.freeze({ boost: "boost", slot_fee: "stage slot fee", pad_cosmetic: "pad cosmetic" });
+const ROOM_FLOWS = Object.freeze(Object.values(KIND_FLOW));
 function telemetry(row, login, via) {
   try {
     const ref = String(row.ref).replace(/[^A-Za-z0-9_-]/g, "_").slice(-64);
-    require("./econ").ingestCharges([{ ref, ts: row.created, room: row.room_id, flow: row.kind === "boost" ? "boost" : "stage_slot", kind: "room",
+    require("./econ").ingestCharges([{ ref, ts: row.created, room: row.room_id, flow: KIND_FLOW[row.kind] || "stage_slot", kind: "room",
       payer: login || "", payer_kind: row.owner_self ? "owner" : "other", amount: row.amount, via: via === "chat" ? "chat" : "web" }]).catch(() => {});
   } catch (e) { /* telemetry only */ }
 }
@@ -274,7 +278,7 @@ async function fkMigrationSummary() {
   await init();
   const r = (await getQuery(`SELECT COALESCE(SUM(fortknox), 0) AS amount, COUNT(*) AS rows, COALESCE(MAX(id), 0) AS max_id
                              FROM room_flow_ledger WHERE ${FK_WHERE}`))[0];
-  const p = (await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE settled = 0 AND flow IN ('boost', 'stage_slot')"))[0];
+  const p = (await getQuery(`SELECT COUNT(*) AS n FROM reserve_claims WHERE settled = 0 AND flow IN (${ROOM_FLOWS.map(() => "?").join(", ")})`, ROOM_FLOWS))[0];
   return { amount: Number(r.amount) || 0, rows: Number(r.rows) || 0, max_id: Number(r.max_id) || 0, pending_claims: Number(p.n) || 0 };
 }
 /** Stamp migrated_fk on exactly the rows Pepe moved (id <= max_id, still unmoved), once per batch. The rows'
@@ -385,7 +389,7 @@ function register(app, { addUser, isBotToken }) {
 }
 
 module.exports = {
-  init, config, setConfig, split, activePat, routeInTx, telemetry, boost, recent, activeMap, status, escrow, register, clearCache, Refuse, DEFAULTS,
+  init, config, setConfig, split, activePat, routeInTx, telemetry, tx, KIND_FLOW, ROOM_FLOWS, boost, recent, activeMap, status, escrow, register, clearCache, Refuse, DEFAULTS,
   fkMigrationSummary, fkMigrationMark,
   _setClock: (fn) => { clock = fn || (() => Date.now()); clearCache(); },
 };

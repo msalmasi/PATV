@@ -328,7 +328,7 @@ test("Your show: the homepage card is one line + Go live / Pads (no bullets); /p
 
 test("/p cards + Trending: the 🚀 badge right after the pad's name, never among the status pills / stat tags", () => {
   const src = rd(path.join(repo, "views", "rooms.ejs"));
-  assert.match(src, /<span class="ch-name"><%- PAV_\(r\.id[^%]*%><span class="t"><%= r\.title %><\/span><%- BM\(r\.boost_pat, 'pill ch-mark'\) %><\/span>/);
+  assert.match(src, /<span class="ch-name"><%- PAV_\(r\.id[^%]*%><span class="t[^"]*"><%= r\.title %><\/span>(<%- fx_ \? fx_\.badges : '' %>)?<%- BM\(r\.boost_pat, 'pill ch-mark'\) %><\/span>/);
   const badges = src.slice(src.indexOf('<span class="ch-badges">'), src.indexOf("</span>\n          </div>", src.indexOf('<span class="ch-badges">')));
   assert.doesNotMatch(badges, /BM\(/);
   assert.match(src, /<span class="tn"><a class="t" href="[^"]*"><%= r\.title %><\/a><%- BM\(r\.boost_pat, 'tg boost'\) %><\/span>/);
@@ -356,8 +356,8 @@ test("story strip: no native scrollbar (scrollbar-width none + ::-webkit-scrollb
   assert.doesNotMatch(js, /addEventListener\('wheel'/, "the vertical wheel is never hijacked");
 });
 
-test("pad cosmetics are structured but not sold: slots listed, nothing priced, no PAT anywhere in padlook", () => {
-  assert.deepEqual(Object.keys(PL.COSMETIC_SLOTS), ["pad_frame", "pad_glow", "pad_badge"]);
+test("pad cosmetics: the slots are listed here, the selling is padcosmetics.js (1.99ew) - no PAT anywhere in padlook", () => {
+  assert.deepEqual(Object.keys(PL.COSMETIC_SLOTS), ["pad_frame", "pad_glow", "pad_badge", "pad_avatar"]);
   const src = fs.readFileSync(path.join(repo, "padlook.js"), "utf8");
   assert.doesNotMatch(src, /points_balance|transactions|charge\(|\/api\/actions/);
 });

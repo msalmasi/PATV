@@ -323,7 +323,12 @@
     an uploaded banner inside the header (behind a scrim, its focal point as object-position), the avatar by the name.
     A pad with no look renders exactly as before (the old link banner above the header). %>
 <% const LK_ = typeof padLook === 'function' ? padLook(room.id) : null;
-   const avHtml_ = typeof padAv === 'function' ? padAv(room.id, { cls: 'rm-av', fallback: '' }) : ''; %>
+   const avHtml_ = typeof padAv === 'function' ? padAv(room.id, { cls: 'rm-av', fallback: '' }) : '';
+   // 1.99ew: premium pad cosmetics (padcosmetics.fx): frame on the header, glow on the name, badges by it; 🎁 gifting for non-owners
+   const PFX_ = typeof padFx === 'function' ? padFx(room.id) : null;
+   const isOwner_ = !!(room.ownerUser && typeof user !== 'undefined' && user && String(room.ownerUser).toLowerCase() === String(user).toLowerCase());
+   const giftSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
+<link rel="stylesheet" href="/public/css/padfx.css?v=1">
 <main class="rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p">Pads</a> › p/<%= room.slug %></div>
   <% if (room.banner && !(LK_ && LK_.banner)) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
@@ -337,11 +342,11 @@
      const queue_ = feed_ && feed_.queue ? feed_.queue : 0, pending_ = schedule_ && schedule_.pending ? schedule_.pending : 0;
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
      const psTitle_ = 'Pad settings: page, stage, feed, Pepe, rules, moderation' + (queue_ ? ' · ' + queue_ + ' waiting in Moderation' : '') + (pending_ ? ' · ' + pending_ + ' to approve' : ''); %>
-  <section class="hero<%= LK_ && LK_.banner ? ' has-bn' : '' %>" aria-labelledby="rmTitle">
+  <section class="hero<%= LK_ && LK_.banner ? ' has-bn' : '' %><%= PFX_ && PFX_.cls ? ' ' + PFX_.cls : '' %>" aria-labelledby="rmTitle"><%- PFX_ ? PFX_.layer : '' %>
     <% if (LK_ && LK_.banner) { %><div class="hero-bn" aria-hidden="true"><img src="<%= LK_.banner %>" alt="" decoding="async"></div><% } %>
     <div class="hd">
       <div class="hd-id">
-        <h1 id="rmTitle"><%- avHtml_ %><%= room.name %>
+        <h1 id="rmTitle"><%- avHtml_ %><% if (PFX_ && PFX_.glow) { %><span class="rm-nm <%= PFX_.glow %>"><%= room.name %></span><% } else { %><%= room.name %><% } %><%- PFX_ ? PFX_.badges : '' %>
           <% if (!siteOnly_) { %><span class="live <%= room.live ? 'chat' : 'off' %>" id="rmLive" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span><% } %>
         </h1>
         <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
@@ -361,6 +366,7 @@
             <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules</a><% } %>
             <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>">📈 Pad analytics</a><% } %>
             <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>">🔗 Copy link</button>
+            <% if (!isOwner_) { %><% if (giftSigned_) { %><button type="button" role="menuitem" data-pad-gift="<%= room.slug %>">🎁 Gift a cosmetic</button><% } else { %><a role="menuitem" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>">🎁 Gift a cosmetic</a><% } %><% } %>
           </div>
         </details>
       </div>
@@ -858,6 +864,16 @@
         <% if (manage_) { %><dt>Settings</dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings">⚙ Pad settings ›</a></dd><% } %>
       </dl>
     </section>
+    <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
+    <section class="card ab-gift" id="gift" aria-labelledby="giftH">
+      <h2 id="giftH"><span>🎁 Pad cosmetics</span></h2>
+      <% if (isOwner_) { %>
+        <p class="muted" style="margin:0">Frames, name glows, badges and an animated avatar for your pad: <a href="/p/<%= encodeURIComponent(room.slug) %>/settings#cosmetics">✨ Cosmetics in your pad's settings ›</a></p>
+      <% } else { %>
+        <p class="muted" style="margin:0 0 10px">Treat <b><%= room.name %></b> to a banner frame, a name glow or a badge. Half of what you pay goes to this pad's room vault, half to Fort Knox. The owner can equip it or decline it — gifts are never refunded.</p>
+        <% if (giftSigned_) { %><button type="button" class="ab-btn" data-pad-gift="<%= room.slug %>">🎁 Gift a cosmetic</button><% } else { %><a class="ab-btn" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>">🎁 Sign in to gift a cosmetic</a><% } %>
+      <% } %>
+    </section>
     <%# 1.99el: Analytics is its own card (was an "Analytics: Pad analytics ›" row above): the 30-day headline numbers
         from roomstats.preview (cached), for signed-in viewers only - visitors get the analytics page's sign-in prompt %>
     <% const anCard_ = typeof roomAnalyticsCard !== 'undefined' && roomAnalyticsCard ? roomAnalyticsCard : null;
@@ -893,6 +909,7 @@
     <% } %>
   </section>
   <script src="/public/js/pad-tabs.js?v=3"></script>
+  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=1" defer></script><% } %>
   <script>
   // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address
   (function () {

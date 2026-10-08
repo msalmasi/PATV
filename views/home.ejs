@@ -17,6 +17,7 @@
   const nextUp_ = typeof nextUp !== 'undefined' && nextUp && Number(nextUp.start_at) > 0 ? nextUp : null;
   const BM = typeof boostMark === 'function' ? boostMark : () => '';
   const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js), '' when rendered bare
+  const PFX_ = typeof padFx === 'function' ? padFx : () => null;   // 1.99ew: premium pad cosmetics (padcosmetics.fx), null when rendered bare
   const feat = S0.featured;
   const need = me ? xpForNextLevel(me.level) : 1;
   const pct = me ? Math.max(0, Math.min(100, need ? (me.xp / need) * 100 : 0)) : 0;
@@ -50,6 +51,7 @@
 <script src="/public/js/stage-lowlat.js?v=1"></script>
 <% } %><script src="/public/js/stage-room.js?v=5"></script>
 <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
+<link rel="stylesheet" href="/public/css/padfx.css?v=1">
 <script src="/public/js/stage-capture.js?v=2"></script>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/public/css/arcade-wheel.css?v=aw2">
@@ -132,6 +134,8 @@
   .hm .tp .rooms-mini .n { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 auto; }
   .hm .tp .rooms-mini .nt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hm .tp .rooms-mini .n .bm { flex: none; }
+  .hm .tp .rooms-mini .n .pfx-bs { flex: none; }   /* 1.99ew: pad badges (icons) by the name */
+  .hm .tp .rooms-mini a.pfx { border-radius: 8px; }
   .hm .tp .rooms-mini .v > span { display: inline-block; min-width: 3.2em; text-align: right; }
   .hm .pad-av { width: 20px; height: 20px; flex: none; border-radius: 6px; overflow: hidden; display: inline-grid; place-items: center; background: #1c2a1c; font-size: 11px; font-weight: bold; color: #fff; }
   .hm .pad-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -509,7 +513,8 @@
           <ol class="rooms-mini">
             <% tops_.forEach((r) => { %>
               <%# 1.99es: the 🚀 badge sits by the NAME (not among the counts), so the 👥 / 🎙 columns line up boosted or not; the pad's avatar (padlook.js) first %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt"><%= r.name %></span><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span></span></a></li>
+              <% const fx_ = PFX_(r.id); %>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span></span></a></li>
             <% }) %>
           </ol>
         </section>

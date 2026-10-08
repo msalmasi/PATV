@@ -122,6 +122,7 @@
         <button type="button" class="on" data-ftype="">All</button>
         <button type="button" data-ftype="group:Profile">👤 Profile</button>
         <button type="button" data-ftype="group:GTF avatar">🐸 GTF avatar</button>
+        <% if (typeof padCat !== 'undefined' && padCat.length) { %><button type="button" data-ftype="group:Pad">🛋️ Pad</button><% } %>
         <select data-fkind aria-label="Filter by slot">
           <option value="">Any slot</option>
           <% Object.keys(kinds).forEach((k) => { %><option value="<%= k %>"><%= kindEmoji(k) %> <%= typeText(k) %></option><% }) %>
@@ -205,6 +206,8 @@
   .cxp-chip { font-size: 11px; line-height: 1.5; padding: 1px 7px; border-radius: 8px; border: 1px solid #333; color: #ccc; background: #161616; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .cxp-chip-type.prof { border-color: #2f5b7a; color: #8fcaf0; background: #0f1a22; }
   .cxp-chip-type.gtf { border-color: #2f6b34; color: #9ad69e; background: #0f1a10; }
+  .cxp-chip-type.pad { border-color: #6a4a1a; color: #ffd27f; background: #1d150a; }
+  .cxp-pad .pc-pv { width: 100%; }
   .cxp-chip-season { border-color: #6a4a1a; color: #ffcc80; background: #1d150a; }
   .cxp-chip-season.upcoming { border-color: #4a4a6a; color: #c5cae9; background: #12121d; }
   .cxp-chip-season.over { border-color: #444; color: #999; background: #151515; }
@@ -278,6 +281,30 @@
         </div>
       </section>
     <% }) %>
+    <%# 1.99ew: premium PAD cosmetics (padcosmetics.js): they belong to a pad - bought from its ⚙ settings (owner) or gifted from its page %>
+    <% if (typeof padCat !== 'undefined' && padCat.length) {
+         const PSLOT = { pad_frame: ['🖼️', 'Banner frame'], pad_glow: ['✨', 'Name glow'], pad_badge: ['🏷️', 'Pad badge'], pad_avatar: ['🎞️', 'Animated avatar'] }; %>
+      <link rel="stylesheet" href="/public/css/padfx.css?v=1">
+      <section class="cxp-fsec cxp-pad">
+        <h2 id="k-pad">🛋️ Pad cosmetics <span class="cxp-h2where">on a pad — its header, its /p card and Top Pads</span></h2>
+        <p class="cxp-muted">These belong to a <b>pad</b>, not to you. A pad's owner buys them from <b>⚙ Pad settings → General → ✨ Cosmetics</b> (100% to Fort Knox); anyone can <b>🎁 gift</b> one from a pad's page (half to Fort Knox, half to that pad's room vault). The owner can equip or decline a gift — no refunds.</p>
+        <div class="grid">
+          <% padCat.forEach((it) => { const st = it.style || {}; const sl = PSLOT[it.kind] || ['🛋️', it.kind]; %>
+            <div class="cxp-card" style="--rc: <%= RC(it.rarity) %>" data-kind="<%= it.kind %>" data-group="Pad" data-tags="">
+              <div class="cxp-prev"><div class="pc-pv<%= it.kind === 'pad_frame' ? ' pfx pfx-f-' + st.fx : '' %>" aria-hidden="true"><% if (it.kind === 'pad_frame') { %><span class="pfx-l"></span><% } %>
+                <div class="pc-pv-in"><span class="pc-pv-av<%= it.kind === 'pad_avatar' ? ' pc-anim' : '' %>"><%= it.kind === 'pad_avatar' ? '🎞️' : 'P' %></span>
+                  <b class="pc-pv-n<%= it.kind === 'pad_glow' ? ' pfx-g pfx-g-' + st.fx : '' %>">Your pad</b>
+                  <% if (it.kind === 'pad_badge') { %><span class="pfx-bs"><span class="pfx-b"><% if (st.icon) { %><span aria-hidden="true"><%= st.icon %></span><% } %><%= st.text %></span></span><% } %></div></div></div>
+              <div class="cxp-title"><b><%= it.name %></b><span class="cxp-rar"><%= it.rarity %></span></div>
+              <div class="cxp-chips"><span class="cxp-chip cxp-chip-type pad"><%= sl[0] %> Pad · <%= sl[1] %></span><% if (it.animated) { %><span class="cxp-chip">animated</span><% } %><% if (it.season) { %><span class="cxp-chip cxp-chip-season"><%= it.season.label %></span><% } %></div>
+              <div class="cxp-desc"><%= it.desc %></div>
+              <div class="cxp-price"><%= fmt(it.price) %> PAT</div>
+              <div class="cxp-muted">Buy it for your pad in ⚙ Pad settings, or 🎁 gift it from any pad's page (⋯ menu or About).</div>
+            </div>
+          <% }) %>
+        </div>
+      </section>
+    <% } %>
     <p class="cxp-muted cxp-fempty" hidden style="text-align:center">Nothing matches those filters.</p>
   <% } %>
 

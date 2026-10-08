@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="/public/css/feed.css?v=16">
 <link rel="stylesheet" href="/public/css/room-mod.css?v=4">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=2">
+<link rel="stylesheet" href="/public/css/padfx.css?v=1">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -95,6 +96,13 @@
         <p class="ps-mini">Colours too dark to read on the site's dark background are lightened automatically.</p>
       </fieldset>
       <div class="cm-row"><span class="fc-err" id="plMsg" role="status" aria-live="polite"></span><button type="button" class="btn primary" id="plSave">Save colour &amp; focal point</button></div>
+      <%# 1.99ew: premium pad cosmetics (padcosmetics.js, public/js/pad-cosmetics.js) - catalog with live previews, owned /
+          equipped, equip / take off, decline gifts, buy (confirm with price + routing), the animated avatar upload %>
+      <div class="pc" id="cosmetics" data-mode="manage" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/cosmetics" data-look="/api/rooms/<%= encodeURIComponent(slug) %>/look">
+        <h4 class="pc-h">✨ Cosmetics</h4>
+        <div class="pc-body" aria-live="polite"><p class="ps-mini">Loading the catalog…</p></div>
+        <noscript><p class="ps-mini">Pad cosmetics need JavaScript.</p></noscript>
+      </div>
     </div>
     <div class="sb-card ps-card" id="royalties">
       <h3>Royalties</h3>
@@ -398,5 +406,6 @@
 <% if (camfrog) { %><script src="/public/js/room-mod.js?v=4" defer></script><% } %>
 <script src="/public/js/pad-settings.js?v=1" defer></script>
 <script src="/public/js/pad-look.js?v=1" defer></script>
+<script src="/public/js/pad-cosmetics.js?v=1" defer></script>
 </body>
 </html>
