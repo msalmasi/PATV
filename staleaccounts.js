@@ -200,12 +200,14 @@ function botFacts(bot) {
 }
 
 /** Everything classify() needs, per account. */
-async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.welcomeDays } = {}) {
+async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.welcomeDays, only = null } = {}) {
+  // only: one userId (holdsFor) - its own row and ledger, not the whole database (cpRefs / Camfrog
+  // "seen" times are then incomplete; the holds are not)
   // read-only: works on a database that has never had the archive column (dry runs write nothing)
   const arch = (await hasColumn("users", "archived_at")) ? "archived_at" : "NULL AS archived_at";
   const hasNames = (await hasColumn("users", "twitchDisplayname")) && (await hasColumn("users", "discordUsername"));
   const users = await getQuery(`SELECT userId, username, class, email, isEmailVerified, discordId, twitchId, camfrogUsername,
-    ${hasNames ? "twitchDisplayname, discordUsername," : ""} points_balance, created_at, ${arch} FROM users`);
+    ${hasNames ? "twitchDisplayname, discordUsername," : ""} points_balance, created_at, ${arch} FROM users${only ? " WHERE userId = ?" : ""}`, only ? [only] : []);
   const F = new Map();
   for (const u of users) {
     const email = emailCategory(u.email);
@@ -224,9 +226,9 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     });
   }
   const bw = new Map();
-  if (await tableExists("bonus_winners")) for (const r of await getQuery("SELECT transactionId, type FROM bonus_winners")) bw.set(r.transactionId, r.type);
+  if (await tableExists("bonus_winners")) for (const r of await getQuery(`SELECT transactionId, type FROM bonus_winners${only ? " WHERE userId = ?" : ""}`, only ? [only] : [])) bw.set(r.transactionId, r.type);
   const hasCp = await hasColumn("transactions", "counterparty");
-  const txs = await getQuery(`SELECT transactionId, userId, type, points, timestamp${hasCp ? ", counterparty" : ""} FROM transactions`);
+  const txs = await getQuery(`SELECT transactionId, userId, type, points, timestamp${hasCp ? ", counterparty" : ""} FROM transactions${only ? " WHERE userId = ?" : ""}`, only ? [only] : []);
   for (const t of txs) {
     const f = F.get(t.userId);
     if (t.counterparty && F.has(t.counterparty) && t.counterparty !== t.userId) F.get(t.counterparty).cpRefs++;
@@ -277,7 +279,7 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     }
   }
   const facts = [botFacts(siteBot), botFacts(bot)];
-  if (await tableExists("camfrog_userstats")) {
+  if (!only && (await tableExists("camfrog_userstats"))) {
     for (const r of await getQuery("SELECT login, data FROM camfrog_userstats")) {
       const d = safeJson(r.data, {}); const l = String(r.login || "").toLowerCase();
       const t = Math.max(ms(d.last), ms(d.c && d.c.last), ms(d.m && d.m.last));
@@ -333,6 +335,14 @@ async function gather({ now = Date.now(), bot = null, welcomeDays = DEFAULTS.wel
     }
   }
   return [...F.values()].map((f) => Object.assign(f, { activeDays: f.activeDays.size }));
+}
+
+/** 1.99fy: what one account has in flight (the same holds gather() finds: room ownership, stage slots,
+ *  loans / escrow / stashes, market / bounty / wager positions, open shop orders...). [] when none. */
+async function holdsFor(userId, { now = Date.now(), bot = null } = {}) {
+  if (!userId) return [];
+  const f = (await gather({ now, bot, only: userId })).find((x) => x.userId === userId);
+  return f ? [...f.holds] : [];
 }
 
 /** Tier for one account: {tier, why}. */
@@ -740,6 +750,6 @@ function noticeMiddleware(getUserId) {
 /** SQL condition for "shown on leaderboards / counted as a member" ("1 = 1" until the column exists). */
 const LIVE = (alias) => (columnReady ? `${alias ? alias + "." : ""}archived_at IS NULL` : "1 = 1");
 
-module.exports = { DEFAULTS, DEFAULT_TIERS, CF_RANDOM, emailCategory, ms, ensure, gather, classify, plan, supply, botFacts,
+module.exports = { DEFAULTS, DEFAULT_TIERS, CF_RANDOM, emailCategory, ms, ensure, gather, holdsFor, tx, classify, plan, supply, botFacts,
   archiveOne, restore, touch, purge, mergeDuplicate, dupSplit, LIVE, PURGE_TABLES,
   ensureNotice, reloadNotice, startNoticeTimers, noticeMeta, startNotice, clearNotice, pendingLogins, seenLogin, refreshNotice, noticeSummary, noticeMiddleware };

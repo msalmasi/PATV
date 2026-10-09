@@ -38,6 +38,7 @@ const authenticateToken = require("./middleware/authenticateToken");
 const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCookie");
 const guard = require("./middleware/authGuard");
 const { moveUserRows } = require("./accountMerge");
+const providerMerge = require("./providermerge");      // 1.99fy: Twitch / Discord account merges (security)
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
 stale.ensure();
@@ -46,6 +47,7 @@ const twitchLogin = require("./twitchlogin");       // 1.99bu: users.twitchLogin
 twitchLogin.ensure();
 stale.startNoticeTimers();
 setTimeout(() => require("./accountMerge").ensureCamfrogUnique(), 3000);   // 1.99bs: one account per Camfrog login
+setTimeout(() => require("./userlookup").ensureProviderUnique().catch(() => {}), 3500);   // 1.99fy: one account per Twitch / Discord id
 setTimeout(() => displaynames.ready().catch((e) => console.error("[displaynames] schema:", e.message)), 2000);
 const cookieParser = require("cookie-parser");
 const session = require("express-session");
@@ -499,9 +501,15 @@ app.get("/auth/twitch/callback", async (req, res) => {
         // No user found, check if there is a user with the same email.
         // (Twitch only reports a verified email address)
         const existingTwitchEmail = twitchUser.email ? await getQuery(
-          "SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
+          "SELECT userId, username, class, isEmailVerified, twitchId FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
           [twitchUser.email]
         ) : [];
+        // 1.99fy: auto-link only into an account whose email it has VERIFIED and which has no other
+        // Twitch - else anyone could register a PATV account under someone's address and have their
+        // Twitch sign-in land in it (or take over an account already linked to another Twitch)
+        if (existingTwitchEmail.length > 0 && !providerMerge.emailLinkable(existingTwitchEmail[0], "twitchId", twitchUser.id)) {
+          return oauthFail(req, res, "An account with this email already exists. Sign in to it, then link Twitch from your profile.");
+        }
         if (existingTwitchEmail.length > 0) {
           const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]);
           if (bonus[0].twitchBonus === 0) {
@@ -638,42 +646,33 @@ async function mergeConflict(req, res, provider) {
   }
   const fromId = c.existingUserId, toId = c.currentUserId;
   try {
-    const from = (await getQuery("SELECT * FROM users WHERE userId = ?", [fromId]))[0];
-    const to = (await getQuery(`SELECT ${L.otherIdCol} AS otherId, camfrogUsername FROM users WHERE userId = ?`, [toId]))[0];
-    if (!from || !to || fromId === toId) {
-      req.flash("error", "That account no longer exists - nothing to merge.");
+    // 1.99fy: one transaction, a guarded balance move, holds refused, archived PAT restored first
+    // (providermerge.js) - a double-submit or a crash partway can no longer duplicate PAT
+    const r = await providerMerge.mergeProviderAccount({ provider, L, fromId, toId, linkId: L.id(c), linkName: L.name(c) });
+    if (!r.ok) {
+      const why = {
+        busy: "That merge is already running - give it a moment and check your profile.",
+        holds: `The other account has PAT or items in flight (${(r.holds || []).join(", ")}), so it can't be merged automatically - please contact staff to merge it.`,
+        negative: "The other account has a negative balance - please contact staff to merge it.",
+        archived: "The other account is archived - please contact staff to merge it.",
+      }[r.code] || "That account no longer exists or has changed - nothing to merge.";
+      req.flash("error", why);
       return res.redirect(edit);
     }
-    // the other provider's link and the Camfrog name come along when this account has none
-    if (!to.otherId && from[L.otherIdCol]) {
-      await runQuery(`UPDATE users SET ${L.otherIdCol} = ?, ${L.otherNameCol} = ? WHERE userId = ?`, [from[L.otherIdCol], from[L.otherNameCol], toId]);
-    }
-    if (!to.camfrogUsername && from.camfrogUsername) {
-      await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [fromId]);
-      await runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [from.camfrogUsername, toId]);
-    }
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [Number(from.points_balance) || 0, toId]);
-    await runQuery(`UPDATE users SET ${L.idCol} = ?, ${L.nameCol} = ? WHERE userId = ?`, [L.id(c), L.name(c), toId]);
     // 1.99bu: the Twitch login comes along with the Twitch id (this sign-in's, else the merged account's)
     if (provider === "twitch" && c.twitchLogin) await twitchLogin.save(L.id(c), c.twitchLogin);
-    else if (from.twitchLogin && from.twitchId) await twitchLogin.save(from.twitchId, from.twitchLogin);
-    // keep the merged account's PAT history with the balance it brings (else /history can't add up),
-    // and everything else it owned (badges, cosmetics, spins, orders... - accountMerge.js)
-    await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [toId, fromId]);
-    const moved = await moveUserRows(fromId, toId);
-    console.log(`[auth] ${provider} merge ${fromId} -> ${toId}: +${Number(from.points_balance) || 0} PAT, ${JSON.stringify(moved)}`);
-    await runQuery("DELETE FROM users WHERE userId = ?", [fromId]);
+    else if (r.twitch) await twitchLogin.save(r.twitch.id, r.twitch.login);
     const bonus = await getQuery(`SELECT ${L.bonusCol} AS b FROM users WHERE userId = ?`, [toId]);
     if (bonus[0] && bonus[0].b === 0) {
       try { await awardBadge(toId, L.badge); } catch (e) { /* already has it */ }
       await welcome.connectBonus(toId, provider, L.id(c), awardBonus);
     }
     await runQuery(`UPDATE users SET ${L.bonusCol} = 1, ${L.bonusCol}_at = CURRENT_TIMESTAMP WHERE userId = ?`, [toId]);
-    req.flash("success", `Accounts merged - ${L.label} is linked here now and ${(Number(from.points_balance) || 0).toLocaleString("en-US")} PAT came with it.`);
+    req.flash("success", `Accounts merged - ${L.label} is linked here now and ${r.amount.toLocaleString("en-US")} PAT came with it.`);
     res.redirect(edit);
   } catch (error) {
     console.error(`[auth] ${provider} merge failed:`, error && error.message);
-    req.flash("error", "Merging the accounts failed partway - please ask staff to check your account.");
+    req.flash("error", "Merging the accounts failed - nothing was changed. Please try again or ask staff.");
     res.redirect(edit);
   }
 }
@@ -792,9 +791,14 @@ app.get("/auth/discord/callback", async (req, res) => {
       } else {
         // No user found, check if there is a user with the same email.
         const existingDiscordEmail = discordEmail ? await getQuery(
-          "SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
+          "SELECT userId, username, class, isEmailVerified, discordId FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1",
           [discordEmail]
         ) : [];
+        // 1.99fy: auto-link only into an account whose email it has VERIFIED and which has no other
+        // Discord (see the Twitch callback)
+        if (existingDiscordEmail.length > 0 && !providerMerge.emailLinkable(existingDiscordEmail[0], "discordId", discordUser.id)) {
+          return oauthFail(req, res, "An account with this email already exists. Sign in to it, then link Discord from your profile.");
+        }
         if (existingDiscordEmail.length > 0) {
           const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]);
           if (bonus[0].discordBonus === 0) {
@@ -1454,58 +1458,9 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser
   }
 });
 
-// This endpoint checks if a user with the given discordId exists.
-app.get('/api/users/discord/:discordId', async (req, res) => {
-    const { discordId } = req.params;
-    try {
-      let user = await getQuery('SELECT * FROM users WHERE discordId = ?', [discordId]);
-
-      if (user.length === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      if (await stale.touch(user[0], "discord")) user = await getQuery('SELECT * FROM users WHERE discordId = ?', [discordId]);
-
-      res.json({ user: user[0] });
-
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to retrieve user' });
-    }
-  });
-
-// This endpoint checks if a user with the given twitchId exists.
-app.get('/api/users/twitch/:twitchId', async (req, res) => {
-    const { twitchId } = req.params;
-    try {
-      let user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
-      if (user.length === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      if (await stale.touch(user[0], "twitch")) user = await getQuery('SELECT * FROM users WHERE twitchId = ?', [twitchId]);
-
-      res.json({ user: user[0] });
-
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to retrieve user' });
-    }
-  });
-
-// Endpoint to get user by Twitch display name
-app.get("/api/users/twitch/displayname/:displayName", async (req, res) => {
-    const { displayName } = req.params;
-  
-    try {
-      const user = await getQuery("SELECT * FROM users WHERE twitchDisplayname = ?", [displayName]);
-  
-      if (user.length === 0) {
-        return res.status(404).json({ message: "User not found" });
-      }
-  
-      res.json({ user: user[0] });
-    } catch (error) {
-      console.error("Error fetching user by Twitch display name:", error);
-      res.status(500).json({ message: "Failed to retrieve user" });
-    }
-  });
+// 1.99fy (security): the Discord / Twitch bot user lookups - bot token required (X-Bot-Token header),
+// a minimal field set (never password / email / tokens), touch() only for the bot. userlookup.js.
+require("./userlookup").register(app, { isPlatformBot, stale });
 
 // This endpoint checks if a user with the given username exists.
 app.get('/api/users/username/:username', async (req, res) => {
@@ -1541,10 +1496,16 @@ app.post('/api/users/twitch/register', async (req, res) => {
       if (had) return res.json({ user: had, existing: true });
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
-      await runQuery(
-        'INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, username, displayname, email, hashedPassword, twitchId, twitchDisplayname, avatar, points_balance]
-      );
+      try {
+        await runQuery(
+          'INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [userId, username, displayname, email, hashedPassword, twitchId, twitchDisplayname, avatar, points_balance]
+        );
+      } catch (e) {   // 1.99fy: the unique twitchId index caught a true race - hand back the winner
+        const won = /UNIQUE/i.test(e.message) && twitchId ? (await getQuery("SELECT userId, username, displayname, points_balance FROM users WHERE twitchId = ? LIMIT 1", [String(twitchId)]))[0] : null;
+        if (won) return res.json({ user: won, existing: true });
+        throw e;
+      }
       await displaynames.markNewAccount(userId).catch(() => {});
       const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [userId]);
       if (bonus[0].twitchBonus === 0) {
@@ -1582,10 +1543,16 @@ app.post('/api/users/discord/register', async (req, res) => {
       if (had) return res.json({ user: had, existing: true });
       const password = Math.random().toString(36).substring(2, 15);
       const hashedPassword = await bcrypt.hash(password, 12);
-      await runQuery(
-        'INSERT INTO users (userId, username, displayname, email, password, discordId, discordUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [userId, username, displayname, email, hashedPassword, discordId, discordUsername, avatar, points_balance]
-      );
+      try {
+        await runQuery(
+          'INSERT INTO users (userId, username, displayname, email, password, discordId, discordUsername, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [userId, username, displayname, email, hashedPassword, discordId, discordUsername, avatar, points_balance]
+        );
+      } catch (e) {   // 1.99fy: the unique discordId index caught a true race - hand back the winner
+        const won = /UNIQUE/i.test(e.message) && discordId ? (await getQuery("SELECT userId, username, displayname, points_balance FROM users WHERE discordId = ? LIMIT 1", [String(discordId)]))[0] : null;
+        if (won) return res.json({ user: won, existing: true });
+        throw e;
+      }
       await displaynames.markNewAccount(userId).catch(() => {});
       const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [userId]);
       if (bonus[0].discordBonus === 0) {

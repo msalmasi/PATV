@@ -9,6 +9,7 @@ const {
 } = require("discord.js");
 const { token } = require("./config.json");
 const axios = require("axios");
+require("./backendAuth");   // 1.99fy: the bot token on PATV user lookups (bot-only now)
 require("dotenv").config();
 const { findOrCreateDiscordUser, findUserBalance } = require("./userUtils"); // Helper function to find or create user
 const botBridge = require("./botBridge"); // local HTTP bridge: prize store + PokerNow (botBridge.js)

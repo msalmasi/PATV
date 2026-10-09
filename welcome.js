@@ -346,9 +346,13 @@ async function connectBonus(userId, platform, platformId, award, created) {
   if (created || !userId) return "none";
   const k = hash("conn-" + platform, String(platformId || ""));
   if (platformId) {
-    const seen = await getQuery("SELECT userId FROM welcome_keys WHERE k = ? LIMIT 1", [k]);
-    if (seen[0]) return "dup";                             // that Discord/Twitch id already earned one
-    await addKeys(userId, [["conn", k]]);
+    // 1.99fy: claim the id and check it in ONE statement - pay only when this call inserted the key.
+    // (A look-then-insert let two racing sign-ins / merges both pass the check and both get paid;
+    // the key's primary key is (k, userId), so INSERT OR IGNORE alone would let a second account in.)
+    const ins = await runQuery(`INSERT OR IGNORE INTO welcome_keys (k, userId, kind, created)
+                                SELECT ?, ?, 'conn', ? WHERE NOT EXISTS (SELECT 1 FROM welcome_keys WHERE k = ?)`,
+                               [k, userId, Date.now(), k]);
+    if (!ins || ins.changes !== 1) return "dup";           // that Discord/Twitch id already earned one
   }
   const row = (await getQuery("SELECT state FROM welcome_bonus WHERE userId = ?", [userId]))[0];
   if (row && !["paid", "legacy"].includes(row.state)) {

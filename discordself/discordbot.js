@@ -9,6 +9,22 @@ const BACKEND = process.env.BACKEND_BASE_URL || 'https://publicaccess.tv';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// 1.99fy: the PATV user lookups (/api/users/...) are bot-only now. This selfbot has no .env of its
+// own, so the token comes from the environment, else the Discord bot's .env next door, else the
+// site's .env (the same shared bot token). Sent as an X-Bot-Token header to BACKEND only; never logged.
+function readEnvKey(file, key) {
+  try {
+    const re = new RegExp('^\\s*' + key + '\\s*=\\s*(.*?)\\s*$', 'm');
+    const m = re.exec(require('fs').readFileSync(file, 'utf8'));
+    return m && m[1] ? m[1].replace(/^(['"])(.*)\1$/, '$2') : null;
+  } catch (e) { return null; }
+}
+const path = require('path');
+const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
+  || readEnvKey(path.join(__dirname, '..', 'discord-bot', '.env'), 'DISCORD_BOT_TOKEN')
+  || readEnvKey(path.join(__dirname, '..', '.env'), 'TWITCH_BOT_TOKEN');
+if (!BOT_TOKEN) console.error('[discordself] no bot token found - PATV user lookups will be refused');
+
 // ── PokerNow new-game registration ─────────────────────────────────────────────
 // The selfbot invokes /new-game, so it (not the PATV bot) reliably sees the result —
 // even if PokerNow replies ephemerally. We register the game directly against the
@@ -27,6 +43,7 @@ function httpsJson(method, url, body) {
       headers: { 'Content-Type': 'application/json' },
     };
     if (data) opts.headers['Content-Length'] = Buffer.byteLength(data);
+    if (BOT_TOKEN && url.startsWith(BACKEND.replace(/\/+$/, '') + '/api/users/')) opts.headers['X-Bot-Token'] = BOT_TOKEN;
     const req = https.request(opts, (res) => {
       let buf = '';
       res.on('data', (c) => (buf += c));

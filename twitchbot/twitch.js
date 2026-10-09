@@ -3,6 +3,20 @@ const tmi = require("tmi.js");
 const { runQuery, getQuery } = require("../dbUtils");
 const sqlite3 = require("sqlite3").verbose();
 const axios = require("axios");
+// 1.99fy: the PATV user lookups (/api/users/twitch/...) are bot-only now - send the bot token as an
+// X-Bot-Token header on calls to BACKEND_BASE_URL/api/users/ (and nowhere else). server.js uses this too.
+if (!axios.__patvBotAuth) {
+  axios.__patvBotAuth = true;
+  axios.interceptors.request.use((cfg) => {
+    const base = String(process.env.BACKEND_BASE_URL || "").replace(/\/+$/, "");
+    const t = process.env.TWITCH_BOT_TOKEN;
+    if (base && t && String(cfg.url || "").startsWith(base + "/api/users/")) {
+      if (cfg.headers && typeof cfg.headers.set === "function") cfg.headers.set("X-Bot-Token", t);
+      else cfg.headers = Object.assign({}, cfg.headers, { "X-Bot-Token": t });
+    }
+    return cfg;
+  });
+}
 const bcrypt = require("bcrypt");
 const EventSource = require("eventsource");
 const {

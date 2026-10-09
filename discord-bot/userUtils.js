@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const axios = require("axios");
+require("./backendAuth");   // 1.99fy: the bot token on PATV user lookups (bot-only now)
 
 // Creates a new user with Discord
 async function createDiscordUser(discordId, discordUsername, profileImage) {
