@@ -34,7 +34,7 @@ test("signed-in navbar keeps the bell and avatar, and has the narrow-phone fit r
   assert.match(n, /id="navBell"/);
   assert.match(n, /id="userAvatar"/);
   const src = fs.readFileSync(layout, "utf8");
-  assert.match(src, /@media \(max-width: 500px\) \{ \.nav-golive \.lb, \.nav-post \.lb \{ display: none; \}/);
+  assert.match(src, /@media \(max-width: 500px\) \{ \.nav-golive \.nav-lbl, \.nav-post \.nav-lbl \{ display: none; \}/);
   // 1.99ek: icon-only they're equal squares (34px; 32px under 420px)
   assert.match(src, /@media \(max-width: 500px\) \{[^\n]*\.navbar a\.nav-post, \.navbar a\.nav-golive \{ width: 34px; min-width: 0; padding: 0; \}/);
   assert.match(src, /@media \(max-width: 420px\) \{[\s\S]*?\.navbar a\.nav-post, \.navbar a\.nav-golive \{ width: 32px; height: 32px; \}/);
@@ -60,6 +60,6 @@ test("Post and Go live share one pill base: same height, padding, font, radius, 
   assert.match(src, /\.navbar a\.nav-post \{ border-color: #3c7a46; background: #12301a;/, "Post keeps its green outline");
   assert.doesNotMatch(src, /\.nav-post \{ padding: 5px|\.nav-golive \{ padding: 6px/, "no old per-button paddings left");
   const n = nav(await render({ user: "someuser" }));
-  assert.match(n, /class="nav-post"[^>]*><span class="cta-ic" aria-hidden="true">✏️<\/span><span class="lb">Post<\/span>/);
-  assert.match(n, /class="nav-golive"[^>]*><span class="cta-ic" aria-hidden="true">🎥<\/span><span class="lb">Go live<\/span>/);
+  assert.match(n, /class="nav-post"[^>]*><span class="cta-ic" aria-hidden="true">✏️<\/span><span class="nav-lbl">Post<\/span>/);
+  assert.match(n, /class="nav-golive"[^>]*><span class="cta-ic" aria-hidden="true">🎥<\/span><span class="nav-lbl">Go live<\/span>/);
 });
