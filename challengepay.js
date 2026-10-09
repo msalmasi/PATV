@@ -41,10 +41,10 @@ const { runQuery, getQuery } = require("./dbUtils");
 const DEFAULTS = Object.freeze({
   on: true,             // switch: off = every payout answers "off" (the challenge runs for glory)
   pct: 5,               // default % of the room's escrow prizes may take per 24 h (Pepe sends his own)
-  cap: 25000,           // default absolute PAT per room per 24 h
+  cap: 60000,           // default absolute PAT per room per 24 h
   pct_max: 10,          // ceilings: whatever Pepe asks for is clamped to these
-  cap_max: 100000,
-  payout_max: 10000,    // one prize, at most
+  cap_max: 150000,
+  payout_max: 25000,    // one prize, at most (Pepe's max is 20,000 = 10/10 x 2,000)
 });
 const DAY = 24 * 3600 * 1000;
 const REF_RE = /^[A-Za-z0-9_.:-]{3,80}$/;

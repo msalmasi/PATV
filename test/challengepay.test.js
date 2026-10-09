@@ -72,7 +72,10 @@ test("budget: 5% of the room's escrow per 24 h, capped, clamped to the site's ce
   b = await CP.budget(PLANT, { pct: 10, cap: 3000 });
   assert.equal(b.cap, 3000, "the absolute cap");
   b = await CP.budget(PLANT, {});
-  assert.equal(b.cap, 5000, "defaults when Pepe sends nothing");
+  assert.equal(b.cap, 5000, "defaults when Pepe sends nothing (5% of 100k, under the 60,000 cap)");
+  assert.deepEqual([CP.DEFAULTS.pct, CP.DEFAULTS.cap, CP.DEFAULTS.pct_max, CP.DEFAULTS.cap_max, CP.DEFAULTS.payout_max],
+                   [5, 60000, 10, 150000, 25000], "site defaults + ceilings");
+  assert.equal((await CP.budget(PLANT, { pct: 5, cap: 999999 })).cap, 5000, "a cap over 150,000 is clamped, 5% still binds");
   assert.equal((await CP.budget(EMPTY, {})).left, 0);
 });
 
@@ -122,7 +125,7 @@ test("payout: the 24 h cap trims the prize, then refuses ('cap'), and frees up a
   assert.equal(b.paid24, 0);
   assert.equal(b.cap, Math.floor(b.balance * 5 / 100), "a new day: 5% of what's left (the escrow decays at most 5%/day)");
   r = await CP.payout(PLANT, { ref: ref(), userId: singer.userId, amount: 20000, min: 500, pct: 5, cap: 25000 });
-  assert.equal(r.paid, Math.min(10000, b.left), "one prize is at most payout_max (10,000) and today's budget");
+  assert.equal(r.paid, Math.min(25000, b.left), "one prize is at most payout_max (25,000) and today's budget");
 });
 
 test("payout: insufficient / empty escrow, no pad, unknown account, bad input, switched off - nothing moves", async () => {
