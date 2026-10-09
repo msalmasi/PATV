@@ -6,7 +6,7 @@
 %>
 <link rel="stylesheet" href="/public/css/feed.css?v=17">
 <link rel="stylesheet" href="/public/css/tags.css?v=1">
-<link rel="stylesheet" href="/public/css/search.css?v=1">
+<link rel="stylesheet" href="/public/css/search.css?v=2">
 <%
   const tabs_ = [['all', 'All'], ['people', 'People'], ['posts', 'Posts'], ['pads', 'Pads']];
   const C_ = R ? R.counts : { people: 0, posts: 0, pads: 0 };
@@ -14,7 +14,7 @@
   const cnt_ = (k) => k === 'all' ? '' : num_(C_[k], k === 'posts' ? 400 : k === 'people' ? 100 : 0);
   const sorts_ = [['relevance', 'Best match'], ['new', 'New'], ['top', 'Top']];
 %>
-<main class="fd sr">
+<main class="fd srch">
   <h1 class="sr-h">Search</h1>
   <form class="sr-form" action="/search" method="get" role="search">
     <label class="sr-box"><%- fx.icon('search') %>
