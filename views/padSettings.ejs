@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="/public/css/feed.css?v=17">
 <link rel="stylesheet" href="/public/css/room-mod.css?v=6">
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=2">
-<link rel="stylesheet" href="/public/css/padfx.css?v=1">
+<link rel="stylesheet" href="/public/css/padfx.css?v=2">
 <link rel="stylesheet" href="/public/css/pad-access.css?v=1">
 <link rel="stylesheet" href="/public/css/flair.css?v=1"><%# 1.99ir: the Flair tab (padflair.js) %>
 <link rel="stylesheet" href="/public/css/tags.css?v=1">
@@ -172,7 +172,7 @@
     <div class="sb-card ps-card">
       <h3>Slots, prices &amp; approval</h3>
       <form id="stageForm" class="settings ps-form">
-        <label>User slots (1–<%= C.max_slots_per_room %>)<input type="number" name="slot_count" min="1" max="<%= C.max_slots_per_room %>" value="<%= room.slot_count %>"></label>
+        <% const ptSlots_ = typeof premiumPadPerks === 'function' ? (premiumPadPerks(room.id).extraSlots || 0) : 0; %><label>User slots (1–<%= C.max_slots_per_room + ptSlots_ %><%= ptSlots_ ? ' · 📺 Prime Time +' + ptSlots_ : '' %>)<input type="number" name="slot_count" min="1" max="<%= C.max_slots_per_room + ptSlots_ %>" value="<%= room.slot_count %>"></label>
         <label>Slot price <small>PAT per live minute, 0 = free (the default); max <%= fmt(C.price_per_min) %></small><input type="number" name="slot_price" min="0" max="<%= C.price_per_min %>" value="<%= room.slot_price %>"></label>
         <label class="chk"><input type="checkbox" name="approval" <%= room.approval ? 'checked' : '' %>> Bookings for later need my approval</label>
         <div class="row"><button type="submit" class="btn primary">Save stage settings</button><span class="msg" id="stageMsg" role="status"></span></div>
@@ -481,7 +481,7 @@
 <script src="/public/js/pad-settings.js?v=1" defer></script>
 <script src="/public/js/pad-look.js?v=1" defer></script>
 <script src="/public/js/pad-access.js?v=1" defer></script>
-<script src="/public/js/pad-cosmetics.js?v=1" defer></script>
+<script src="/public/js/pad-cosmetics.js?v=2" defer></script>
 <% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=1" defer></script><% } %>
 </body>
 </html>

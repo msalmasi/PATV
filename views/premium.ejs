@@ -1,0 +1,248 @@
+<%- include('layout', { title: 'Prime Time & Season Pass', user: user }) %>
+<%
+  // 1.99iv: /premium - the two paid tiers (premium.js) + 🧸 sticker packs (stickers.js). S = premium.state(), stickers = stickers.pageData()
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const day = (ms) => ms ? new Date(ms).toISOString().slice(0, 10) : '';
+  const V = S.viewer || {}, PASS = V.pass, PAD = S.pad, ST = S.stripe || { enabled: false };
+  const STK = stickers || { packs: [], signed: false, allowance: null };
+  const statusTxt = (s) => !s ? '' : s.status === 'comped' ? '🎁 Comped (free, no end date)' : s.status === 'active' ? '✅ Active until ' + day(s.paid_through)
+    : s.status === 'grace' ? '⏳ Renewal due - perks stay on until ' + day(s.ends) : s.status === 'lapsed' ? '⚪ Ended ' + day(s.paid_through) : '⚪ Not active';
+  const PT_PERKS = [
+    ['📺', 'The “Prime Time” badge', 'Next to the pad\'s name on its page, the Pads list and Top Pads.', 'live'],
+    ['🖼️', 'Prime Time theme pack', 'An animated on-air banner frame, a gold-to-red name glow and two extra badges (On Air, Premiere) - equip them in the pad\'s ✨ Cosmetics.', 'live'],
+    ['🎬', 'Pad intro animation', 'A short “PRIME TIME” sweep when someone opens the pad.', 'live'],
+    ['🏷️', '+' + S.perks.prime_extra_badges + ' badge slots', 'Show up to ' + (3 + S.perks.prime_extra_badges) + ' pad badges at once.', 'live'],
+    ['🎤', '+' + S.perks.prime_extra_slots + ' stage slots', 'More people on the pad\'s stage at once than the usual cap.', 'live'],
+    ['⚡', 'Low-latency room audio & stage', 'The pad is flagged Prime Time for the low-latency pipeline as it rolls out.', 'soon'],
+    ['⏱️', 'Longer stage slots', 'Book longer sets on a Prime Time pad.', 'soon'],
+    ['🏦', 'Bigger room-vault cap', 'More room in the pad\'s vault (economy v2 room vaults).', 'soon'],
+    ['🧸', 'A custom sticker pack slot', 'The pad\'s own sticker pack for its members.', 'soon'],
+    ['📈', 'Analytics extras', 'Deeper pad analytics: retention, peak hours, top contributors.', 'soon'],
+  ];
+  const SP_PERKS = [
+    ['🌈', '“Season Pass” name style', 'Your name in a slow gold-pink-violet shimmer everywhere names are shown.', 'live'],
+    ['💫', 'Animated avatar ring', 'A spinning ticket-gold ring round your avatar.', 'live'],
+    ['🏞️', 'Season Pass profile banner', 'A midnight-to-violet banner for your profile.', 'live'],
+    ['🧸', S.perks.sp_sticker_packs + ' free sticker pack' + (S.perks.sp_sticker_packs === 1 ? '' : 's') + ' a month', 'Claim it below - it\'s yours to keep.', 'live'],
+    ['📤', S.perks.sp_upload_mult + '× upload limits', 'Bigger pictures, audio and video on the feed, a bigger daily allowance and more space.', 'live'],
+    ['🎟️', 'The Season Pass chip', 'On your profile.', 'live'],
+    ['🎨', 'Custom tag / flair colour', 'Pick your own flair colour.', 'soon'],
+    ['🐸', 'Priority in Pepe\'s queue', 'Your requests jump ahead in Pepe\'s queues.', 'soon'],
+  ];
+  const routeRow = (r) => r.shares.map((x) => x.pct + '% ' + x.label).join(' · ') + (r.rest ? ' · ' + r.rest + '% 🏛️ Federal Reserve' : '');
+%>
+<link rel="stylesheet" href="/public/css/padfx.css?v=2">
+<style>
+  .pm { max-width: 1100px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; display: grid; gap: 18px; box-sizing: border-box; width: 100%; }
+  .pm *, .pm *::before, .pm *::after { box-sizing: border-box; }
+  .pm a { color: #81c784; text-decoration: none; }
+  .pm a:hover { text-decoration: underline; }
+  .pm .hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 22px; }
+  .pm .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; }
+  .pm h1 { font-size: clamp(26px, 4.2vw, 40px); line-height: 1.1; margin: 10px 0; }
+  .pm h1 em { font-style: normal; background: linear-gradient(90deg, #ffcf40, #ff6a4d 50%, #9b5de5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .pm .lead { color: #d3d3c9; font-size: 16px; line-height: 1.6; margin: 0; max-width: 66ch; }
+  .pm h2 { margin: 0 0 12px; letter-spacing: .1em; text-transform: uppercase; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; line-height: 1.6; }
+  .pm .tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .pm .card { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .pm .tier.pt { border-color: #5a4210; background: linear-gradient(180deg, #1d1606 0%, #121212 40%); }
+  .pm .tier.sp { border-color: #3d2466; background: linear-gradient(180deg, #170f28 0%, #121212 40%); }
+  .pm .tier h3 { margin: 0; font-size: 22px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pm .tag { font-size: 11px; font-weight: bold; padding: 2px 8px; border-radius: 999px; background: #222; color: #bbb; letter-spacing: .02em; }
+  .pm .price { font-size: 26px; font-weight: 800; color: #fff; }
+  .pm .price small { font-size: 13px; color: #aaa; font-weight: normal; }
+  .pm .perks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .pm .perks li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; font-size: 14px; line-height: 1.45; }
+  .pm .perks li b { color: #f2f2f2; }
+  .pm .perks li span.d { color: #a9aea9; display: block; font-size: 13px; }
+  .pm .perks li.soon { opacity: .72; }
+  .pm .soon-tag { font-size: 10px; font-weight: bold; color: #f2d48a; border: 1px solid #5a4a20; border-radius: 999px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+  .pm .stat { font-size: 14px; color: #ddd; background: #181818; border: 1px solid #2a2a2a; border-radius: 10px; padding: 10px 12px; }
+  .pm .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .pm .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 13px; border-radius: 9px; border: 1px solid #2b2b2b; background: #1a1a1a; color: #ddd; font: bold 14px Ubuntu, sans-serif; cursor: pointer; }
+  .pm .btn.gold { background: linear-gradient(90deg, #ffcf40, #ff8a3d); color: #2a1600; border-color: #ffcf40; }
+  .pm .btn.violet { background: linear-gradient(90deg, #9b5de5, #ff6ad5); color: #fff; border-color: #b77cf0; }
+  .pm .btn.ghost { background: none; }
+  .pm .btn:disabled { opacity: .5; cursor: default; }
+  .pm input[type=text], .pm input[type=number] { background: #0d0d0d; border: 1px solid #333; color: #eee; border-radius: 8px; padding: 8px 10px; font: 14px Ubuntu, sans-serif; min-width: 0; }
+  .pm .mut { color: #999; font-size: 13px; }
+  .pm .msg { font-size: 14px; min-height: 1em; }
+  .pm .msg.ok { color: #9be39f; } .pm .msg.err { color: #ff8a80; }
+  .pm .contrib { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  .pm .contrib li { font-size: 12px; background: #1d1d1d; border: 1px solid #2a2a2a; border-radius: 999px; padding: 2px 8px; }
+  .pm .packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+  .pm .pack .sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .pm .pack .sheet img { width: 100%; aspect-ratio: 1; image-rendering: pixelated; background: #1a1a1a; border-radius: 8px; padding: 4px; }
+  .pm table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .pm td, .pm th { text-align: left; padding: 8px 6px; border-bottom: 1px solid #222; vertical-align: top; }
+  .pm th { color: #aaa; font-weight: normal; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .pm .rules { margin: 0; padding-left: 18px; color: #ccc; line-height: 1.6; font-size: 14px; }
+  .pm .card-pay { border-top: 1px dashed #333; padding-top: 10px; }
+  @media (max-width: 520px) { .pm .hero, .pm .card { padding: 14px; } .pm .price { font-size: 22px; } }
+</style>
+<main class="pm" id="pm" data-pad="<%= PAD ? PAD.slug : '' %>">
+  <section class="hero">
+    <div class="eyebrow">PATV PREMIUM</div>
+    <h1><em>Prime Time</em> for pads, a <em>Season Pass</em> for you</h1>
+    <p class="lead">Two ways to back PATV with PAT. <b>📺 Prime Time</b> lights up a whole pad - anyone can chip in, so a pad's regulars can keep it on air together. <b>🎟️ Season Pass</b> is yours: a name style, an avatar ring, a banner, free stickers and bigger uploads. Both run for <%= S.period_days %> days at a time and can renew themselves.</p>
+    <% if (!S.sales) { %><p class="lead" style="color:#f2d48a;margin-top:10px">Sales are paused right now - existing subscriptions keep running.</p><% } %>
+  </section>
+
+  <div class="tiers">
+    <section class="card tier pt" aria-labelledby="ptH">
+      <h3 id="ptH">📺 Prime Time <span class="tag">pad tier</span></h3>
+      <div class="price"><%= fmt(S.prices.prime_time) %> PAT <small>per <%= S.period_days %> days · or chip in from <%= fmt(S.day_price.prime_time) %> PAT (one day)</small></div>
+      <ul class="perks">
+        <% PT_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span aria-hidden="true"><%= p[0] %></span><span><b><%= p[1] %></b><% if (p[3] === 'soon') { %><span class="soon-tag">coming soon</span><% } %><span class="d"><%= p[2] %></span></span></li><% }) %>
+      </ul>
+      <% if (PAD) { %>
+        <div class="stat" id="ptState">
+          <div><b>p/<%= PAD.slug %></b><% if (PAD.title && PAD.title !== PAD.slug) { %> · <%= PAD.title %><% } %></div>
+          <div><%= statusTxt(PAD) %><% if (PAD.renewing && PAD.status !== 'comped') { %> · 🔁 renews<% } %></div>
+          <% if (PAD.contributors && PAD.contributors.length) { %><div class="mut" style="margin-top:6px">Backed by:</div><ul class="contrib"><% PAD.contributors.forEach((c) => { %><li><%= c.name %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
+        </div>
+        <% if (PAD.status !== 'comped') { %>
+          <% if (V.signed) { %>
+            <div class="row">
+              <button type="button" class="btn gold" data-buy="prime_time" data-months="1"><%= PAD.mine ? 'Get' : 'Gift' %> 1 period · <%= fmt(S.prices.prime_time) %></button>
+              <button type="button" class="btn ghost" data-buy="prime_time" data-months="3">3 periods · <%= fmt(S.prices.prime_time * 3) %></button>
+            </div>
+            <div class="row"><label class="mut" for="ptAmt">Chip in</label><input type="number" id="ptAmt" min="<%= S.day_price.prime_time %>" step="1000" value="<%= S.day_price.prime_time * 7 %>" style="width:150px"> <span class="mut">PAT</span>
+              <button type="button" class="btn" data-chip="1">🤝 Chip in</button></div>
+            <div class="row"><label class="mut"><input type="checkbox" id="ptRenew"<%= PAD.renewer_me ? ' checked' : '' %>> 🔁 Renew it every <%= S.period_days %> days from my balance</label></div>
+            <% if (ST.enabled && ST.tiers && ST.tiers.prime_time && PAD.mine) { %><div class="row card-pay"><button type="button" class="btn" data-card="prime_time">💳 Pay by card instead<%= ST.test ? ' (TEST MODE)' : '' %></button><% if (PAD.stripe) { %><button type="button" class="btn ghost" data-portal="prime_time">Manage card subscription</button><% } %></div><% } %>
+          <% } else { %><p><a href="/login?next=<%= encodeURIComponent('/premium?pad=' + PAD.slug) %>">Sign in</a> to back this pad.</p><% } %>
+        <% } %>
+        <p class="mut"><a href="/p/<%= encodeURIComponent(PAD.slug) %>">← back to p/<%= PAD.slug %></a> · <a href="/premium">pick another pad</a></p>
+      <% } else { %>
+        <form class="row" action="/premium" method="GET"><label class="mut" for="ptPad">Which pad?</label><input type="text" id="ptPad" name="pad" placeholder="p/your-pad" autocomplete="off" style="flex:1"><button class="btn gold">Go</button></form>
+        <p class="mut">Or open a pad and use <b>⋯ → 📺 Prime Time</b>.</p>
+      <% } %>
+    </section>
+
+    <section class="card tier sp" aria-labelledby="spH">
+      <h3 id="spH">🎟️ Season Pass <span class="tag">personal</span></h3>
+      <div class="price"><%= fmt(S.prices.season_pass) %> PAT <small>per <%= S.period_days %> days</small></div>
+      <ul class="perks">
+        <% SP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span aria-hidden="true"><%= p[0] %></span><span><b><%= p[1] %></b><% if (p[3] === 'soon') { %><span class="soon-tag">coming soon</span><% } %><span class="d"><%= p[2] %></span></span></li><% }) %>
+      </ul>
+      <% if (V.signed) { %>
+        <div class="stat">Yours: <%= statusTxt(PASS) %><% if (PASS && PASS.renewing && PASS.status !== 'comped') { %> · 🔁 renews<% } %><% if (PASS && PASS.active) { %> · <a href="/cosmetics?tab=mine#tabs">equip your Season Pass looks</a><% } %></div>
+        <% if (!PASS || PASS.status !== 'comped') { %>
+          <div class="row">
+            <button type="button" class="btn violet" data-buy="season_pass" data-months="1">Get 1 period · <%= fmt(S.prices.season_pass) %></button>
+            <button type="button" class="btn ghost" data-buy="season_pass" data-months="3">3 periods · <%= fmt(S.prices.season_pass * 3) %></button>
+          </div>
+          <div class="row"><label class="mut"><input type="checkbox" id="spRenew"<%= PASS && PASS.renewer_me ? ' checked' : '' %>> 🔁 Renew it every <%= S.period_days %> days from my balance</label></div>
+          <% if (ST.enabled && ST.tiers && ST.tiers.season_pass) { %><div class="row card-pay"><button type="button" class="btn" data-card="season_pass">💳 Pay by card instead<%= ST.test ? ' (TEST MODE)' : '' %></button><% if (PASS && PASS.stripe) { %><button type="button" class="btn ghost" data-portal="season_pass">Manage card subscription</button><% } %></div><% } %>
+        <% } %>
+        <div class="row"><label class="mut" for="spGift">🎁 Gift one period to</label><input type="text" id="spGift" placeholder="username" autocomplete="off" style="width:160px"><button type="button" class="btn" data-gift="season_pass">Gift · <%= fmt(S.prices.season_pass) %></button></div>
+      <% } else { %><p><a href="/login?next=/premium">Sign in</a> to get a Season Pass.</p><% } %>
+    </section>
+  </div>
+  <% if (V.signed) { %><p class="msg" id="pmMsg" role="status" aria-live="polite"></p><% } %>
+
+  <section class="card" id="stickers" aria-labelledby="stkH">
+    <h2 id="stkH">🧸 Sticker packs</h2>
+    <p class="mut" style="margin:0">Pixel stickers for your messages and posts - the 🧸 button in the composer. A pack is yours for good. <%= fmt(S.prices.sticker_pack) %> PAT a pack<% if (STK.allowance && STK.allowance.per) { %> · your 🎟️ Season Pass has <b><%= STK.allowance.left %></b> free pack<%= STK.allowance.left === 1 ? '' : 's' %> left this month<% } else { %> · a 🎟️ Season Pass includes <%= S.perks.sp_sticker_packs %> free a month<% } %>.</p>
+    <div class="packs">
+      <% STK.packs.forEach((p) => { %>
+        <div class="card pack">
+          <h3 style="margin:0;font-size:17px"><%= p.emoji %> <%= p.name %><% if (p.owned) { %> <span class="tag">✅ yours</span><% } %></h3>
+          <p class="mut" style="margin:0"><%= p.desc %></p>
+          <div class="sheet"><% p.stickers.forEach((s) => { %><img src="<%= s.url %>" alt="<%= s.name %>" title="<%= s.name %>" loading="lazy"><% }) %></div>
+          <% if (STK.signed) { %><div class="row">
+            <% if (!p.owned) { %>
+              <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="btn violet" data-stk="<%= p.id %>" data-free="1">🎟️ Claim free</button><% } %>
+              <button type="button" class="btn" data-stk="<%= p.id %>">Buy · <%= fmt(p.price) %></button>
+            <% } %>
+            <button type="button" class="btn ghost" data-stk-gift="<%= p.id %>">🎁 Gift</button>
+          </div><% } %>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="rtH">
+    <h2 id="rtH">Where your PAT goes</h2>
+    <table>
+      <tr><th>What</th><th>Routing</th></tr>
+      <% Object.keys(S.routes).forEach((k) => { const r = S.routes[k]; %><tr><td><%= r.label %></td><td><%= routeRow(r) %></td></tr><% }) %>
+    </table>
+    <p class="mut">Nothing is burned. The pad's room-vault share goes to Fort Knox when the pad's owner pays for their own pad (you never feed your own vault) or when the pad can't have a vault. Room vaults and Fort Knox are part of <a href="/economy">PATV's economy</a>.</p>
+  </section>
+
+  <section class="card" aria-labelledby="rlH">
+    <h2 id="rlH">How it works</h2>
+    <ul class="rules">
+      <li>Every payment adds time: a period is <%= S.period_days %> days, a chip-in adds its share of a period. You can pay up to about a year ahead.</li>
+      <li><b>Renewing:</b> tick 🔁 and the daily run takes one period from your balance when it's due. For a pad, one person is the renewer (the owner can always take it over).</li>
+      <li><b>Grace:</b> if the renewal can't be paid, the perks stay on for <%= S.grace_days %> day<%= S.grace_days === 1 ? '' : 's' %> while anyone tops it up. Then it <b>lapses</b>: the perks switch off and the renewer is cleared. Nothing is lost - the looks come back when it's renewed.</li>
+      <li>Gifts and chip-ins tell the pad's owner (or the person you gifted) in their notices. All payments are final - no refunds.</li>
+      <li>Site admins' own accounts and pads have both tiers comped.</li>
+    </ul>
+  </section>
+</main>
+<% if (V.signed) { %>
+<script>
+(function () {
+  var root = document.getElementById('pm'), msg = document.getElementById('pmMsg'), pad = root.getAttribute('data-pad');
+  function ref() { var a = new Uint8Array(12); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+  function say(t, ok) { msg.textContent = t; msg.className = 'msg ' + (ok ? 'ok' : 'err'); msg.scrollIntoView({ block: 'nearest' }); }
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Something went wrong.' }; }); });
+  }
+  function fmt(n) { return Math.round(Number(n) || 0).toLocaleString('en-US'); }
+  function done(j, okText) { if (j.ok) { say(okText, true); setTimeout(function () { location.reload(); }, 1100); } else say((j.error || 'That didn’t work.') + (j.hint ? ' ' + j.hint : ''), false); }
+  root.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b || !root.contains(b)) return;
+    var tier = b.getAttribute('data-buy') || b.getAttribute('data-gift');
+    if (b.hasAttribute('data-buy')) {
+      var months = Number(b.getAttribute('data-months')) || 1;
+      var renewEl = document.getElementById(tier === 'prime_time' ? 'ptRenew' : 'spRenew');
+      if (!confirm('Pay ' + b.textContent.split('·').pop().trim() + ' PAT for ' + months + ' period' + (months > 1 ? 's' : '') + '? Payments are final.')) return;
+      b.disabled = true;
+      post('/api/premium/buy', { tier: tier, pad: pad || undefined, months: months, ref: ref(), renew: !!(renewEl && renewEl.checked) })
+        .then(function (j) { b.disabled = false; done(j, 'Done - paid through ' + (j.paid_through ? new Date(j.paid_through).toISOString().slice(0, 10) : '') + '.'); });
+    } else if (b.hasAttribute('data-chip')) {
+      var amt = Math.floor(Number(document.getElementById('ptAmt').value));
+      if (!confirm('Chip in ' + fmt(amt) + ' PAT to p/' + pad + '’s Prime Time? Payments are final.')) return;
+      b.disabled = true;
+      post('/api/premium/buy', { tier: 'prime_time', pad: pad, amount: amt, ref: ref() }).then(function (j) { b.disabled = false; done(j, 'Thanks - p/' + pad + ' is on air a little longer.'); });
+    } else if (b.hasAttribute('data-gift')) {
+      var to = document.getElementById('spGift').value.trim();
+      if (!to) return say('Type a username first.', false);
+      if (!confirm('Gift a Season Pass period to ' + to + '? Payments are final.')) return;
+      b.disabled = true;
+      post('/api/premium/buy', { tier: 'season_pass', user: to, months: 1, ref: ref() }).then(function (j) { b.disabled = false; done(j, 'Gifted to ' + to + ' 🎁'); });
+    } else if (b.hasAttribute('data-stk')) {
+      var free = b.hasAttribute('data-free');
+      if (!free && !confirm('Buy this sticker pack for ' + b.textContent.split('·').pop().trim() + ' PAT?')) return;
+      b.disabled = true;
+      post('/api/stickers/buy', { pack: b.getAttribute('data-stk'), ref: ref(), allowance: free }).then(function (j) { b.disabled = false; done(j, 'It’s yours - find it under 🧸 in the composer.'); });
+    } else if (b.hasAttribute('data-stk-gift')) {
+      var who = prompt('Gift this sticker pack to (username):');
+      if (!who) return;
+      b.disabled = true;
+      post('/api/stickers/buy', { pack: b.getAttribute('data-stk-gift'), ref: ref(), to: who.trim() }).then(function (j) { b.disabled = false; done(j, 'Gifted to ' + who.trim() + ' 🎁'); });
+    } else if (b.hasAttribute('data-card') || b.hasAttribute('data-portal')) {
+      var card = b.hasAttribute('data-card');
+      b.disabled = true;
+      post(card ? '/api/premium/stripe/checkout' : '/api/premium/stripe/portal', { tier: b.getAttribute(card ? 'data-card' : 'data-portal'), pad: pad || undefined })
+        .then(function (j) { b.disabled = false; if (j.ok && j.url) location.href = j.url; else say(j.error || 'Card payments aren’t available.', false); });
+    }
+  });
+  root.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id !== 'ptRenew' && t.id !== 'spRenew') return;
+    var tier = t.id === 'ptRenew' ? 'prime_time' : 'season_pass';
+    post('/api/premium/renew', { tier: tier, pad: pad || undefined, on: t.checked }).then(function (j) {
+      if (j.ok) say(t.checked ? '🔁 It renews from your balance now.' : 'Renewal switched off.', true);
+      else { t.checked = !t.checked; say(j.error || 'That didn’t work.', false); }
+    });
+  });
+})();
+</script>
+<% } %>

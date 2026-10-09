@@ -3,6 +3,9 @@
 // room, and the bot-token endpoints Pepe uses (owners sync, owner !stage commands, royalty spend).
 // Data lives in rooms.js (registry), mainstage.js (stages) and royalties.js.
 "use strict";
+
+// 1.99iv: a 📺 Prime Time pad may have more stage slots than the site cap (premium padPerks().extraSlots)
+const primeSlots = (roomId) => { try { return require("./premium").padPerks(roomId).extraSlots || 0; } catch (e) { return 0; } };
 const { getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
 const stage = require("./mainstage");
@@ -177,8 +180,8 @@ function register(app, { addUser, isBotToken }) {
       }
       if (verb === "slots") {
         const n = Math.floor(Number(arg));
-        if (!Number.isFinite(n) || n < 1) return res.json({ ok: false, message: `say how many: 1-${stage.config().max_slots_per_room}` });
-        const R2 = await rooms.setStage(R.id, { slot_count: n }, who, { maxSlots: stage.config().max_slots_per_room, maxPrice: stage.config().price_per_min });
+        if (!Number.isFinite(n) || n < 1) return res.json({ ok: false, message: `say how many: 1-${stage.config().max_slots_per_room + primeSlots(R.id)}` });
+        const R2 = await rooms.setStage(R.id, { slot_count: n }, who, { maxSlots: stage.config().max_slots_per_room + primeSlots(R.id), maxPrice: stage.config().price_per_min });
         return res.json({ ok: true, message: `${R.title} has ${R2.slot_count} stage slot${R2.slot_count === 1 ? "" : "s"} now` });
       }
       res.json({ ok: false, message: "usage: !stage · !stage cut [#n|name|all] · !stage feature <#n|name> · !stage unfeature · !stage slots <n>" });
@@ -211,7 +214,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const R = await manageable(req, res); if (!R) return;
       const C = stage.config();
-      res.json({ ok: true, room: await rooms.setStage(R.id, req.body || {}, actor(req), { maxSlots: C.max_slots_per_room, maxPrice: C.price_per_min }) });
+      res.json({ ok: true, room: await rooms.setStage(R.id, req.body || {}, actor(req), { maxSlots: C.max_slots_per_room + primeSlots(R.id), maxPrice: C.price_per_min }) });
     } catch (e) { fail(res, e); }
   });
   app.get("/api/rooms/:slug/owner-state", addUser, needUser, async (req, res) => {

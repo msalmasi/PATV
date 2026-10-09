@@ -78,11 +78,16 @@
     var body = root.querySelector('.pc-body');
     var S = null;
     function load() { return api(base).then(function (j) { if (!j.ok) { body.innerHTML = errHtml(j); return; } S = j; draw(); }); }
-    function ownedRow(itemId) { for (var i = 0; i < S.items.length; i++) if (S.items[i].item_id === itemId) return S.items[i]; return null; }
+    function ownedRow(itemId) {
+      for (var i = 0; i < S.items.length; i++) if (S.items[i].item_id === itemId) return S.items[i];
+      // 1.99iv: Prime Time perk items are the pad's while it has Prime Time
+      for (var j = 0; j < S.catalog.length; j++) if (S.catalog[j].id === itemId && S.catalog[j].perk && S.prime && S.prime.on) return { item_id: itemId, state: 'owned', perk: true };
+      return null;
+    }
     function isEq(it) { var e = S.equipped || {}; return it.kind === 'pad_badge' ? (e.pad_badge || []).indexOf(it.id) >= 0 : e[it.kind] === it.id; }
     function card(it) {
       var own = ownedRow(it.id), eq = own && isEq(it);
-      var stateTxt = !own ? (it.sale ? fmt(it.price) + ' PAT' : 'Not on sale') : eq ? '✅ Equipped' : own.state === 'gift' ? '🎁 Gift from ' + esc(own.from || 'someone') : 'Owned';
+      var stateTxt = !own ? (it.perk ? '📺 Comes with <a href="' + esc((S.prime && S.prime.link) || '/premium') + '">Prime Time</a>' : it.sale ? fmt(it.price) + ' PAT' : 'Not on sale') : eq ? '✅ Equipped' : own.state === 'gift' ? '🎁 Gift from ' + esc(own.from || 'someone') : 'Owned';
       var acts = '';
       if (own) {
         acts += eq ? '<button type="button" class="btn ghost" data-pc-eq="' + esc(it.id) + '" data-on="0">Take off</button>'
@@ -103,12 +108,13 @@
     function draw() {
       var gifts = S.items.filter(function (x) { return x.state === 'gift'; }).length;
       var h = '<p class="ps-mini">Bought by you: <b>' + esc(S.routing.owner) + '</b>. Others can 🎁 gift your pad one (' + esc(S.routing.gift) +
-        ') — you can equip it or decline it. Purchases are final, no refunds. One frame, one glow and up to 3 badges at a time.' +
+        ') — you can equip it or decline it. Purchases are final, no refunds. One frame, one glow and up to ' + ((S.slots.pad_badge && S.slots.pad_badge.max) || 3) + ' badges at a time.' +
+        (S.prime && S.prime.on ? ' 📺 <b>Prime Time</b> is on: its frame, glow and badge are yours to equip, plus the automatic Prime Time badge.' : ' 📺 <a href="' + esc((S.prime && S.prime.link) || '/premium') + '">Prime Time</a> adds its own animated frame, glow and badges.') +
         (S.viewer.balance != null ? ' Your balance: <b>' + fmt(S.viewer.balance) + ' PAT</b>.' : '') + '</p>';
       if (!S.pay) h += '<p class="ps-mini pc-off">Pad cosmetics aren’t on sale right now — you can still equip what the pad has.</p>';
       if (gifts) h += '<p class="pc-gifts">🎁 ' + gifts + ' gift' + (gifts === 1 ? '' : 's') + ' waiting for you below.</p>';
       SLOT_ORDER.forEach(function (k) {
-        var list = S.catalog.filter(function (it) { return it.kind === k && (it.sale || ownedRow(it.id)); });
+        var list = S.catalog.filter(function (it) { return it.kind === k && (it.sale || it.perk || ownedRow(it.id)); });
         if (!list.length) return;
         var sl = S.slots[k] || {};
         h += '<h5 class="pc-sh">' + esc(sl.emoji || '') + ' ' + esc(sl.label || k) + (k === 'pad_badge' ? ' <small>up to ' + (sl.max || 3) + '</small>' : '') + '</h5>';

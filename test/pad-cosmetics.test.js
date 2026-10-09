@@ -134,7 +134,8 @@ test("catalog: the proposal's items and prices (from the rarity table), slots, a
   assert.deepEqual(C.items.map((i) => i.kind).filter((v, i, a) => a.indexOf(v) === i), ["pad_frame", "pad_glow", "pad_badge", "pad_avatar"]);
   assert.deepEqual(C.byId.pb_community.style, { fx: null, text: "Community", icon: "🌱" });
   assert.ok(C.items.every((i) => !i.season), "no seasonal items ship now");
-  assert.ok(C.items.every((i) => PC.onSale(i)));
+  assert.ok(C.items.filter((i) => !i.perk).every((i) => PC.onSale(i)));
+  assert.ok(C.items.filter((i) => i.perk).every((i) => !PC.onSale(i) && i.perk === "prime_time"), "1.99iv: Prime Time perk items are never sold");
   // the season flag: sells only inside its window; a broken item is skipped, never a crash
   const T = Date.UTC(2026, 9, 10);
   const c2 = PC.buildCatalog({ items: [
@@ -444,7 +445,9 @@ test("padfx.css: every catalog effect has CSS; animations stop under prefers-red
   // every animation in the file is on something the reduced-motion block switches off
   const animated = [...css.matchAll(/([^{}]+)\{[^}]*animation:\s*pfx-/g)].map((m) => m[1].trim().split("\n").pop().trim());
   assert.ok(animated.length >= 6);
-  for (const sel of animated) assert.ok(/pfx-l::before|pfx-g-rainbow|pfx-g-gold/.test(sel), "covered: " + sel);
+  for (const sel of animated) assert.ok(/pfx-l::before|pfx-g-rainbow|pfx-g-gold|pfx-g-primetime/.test(sel), "covered: " + sel);
+  // 1.99iv: the Prime Time glow and the pad intro stop too
+  assert.match(css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)")), /\.pfx-g-primetime \{ animation: none !important; \}[\s\S]*\.pt-intro \{ display: none; \}/);
   // cheap: transforms / background-position only (no animated box-shadow / filter / width)
   for (const kf of css.matchAll(/@keyframes [\w-]+ \{([^@]*?)\}\s*\}/g)) assert.doesNotMatch(kf[1], /box-shadow|filter|width|height|top|left/, kf[0]);
 });
@@ -460,12 +463,12 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   }, extra);
   const page = async (u) => (await ejs.renderFile(path.join(repo, "views", "room.ejs"), roomLocals(u))).replace(/\r\n/g, "\n");
   let html = await page("fan");
-  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=1">/);
+  assert.match(html, /<link rel="stylesheet" href="\/public\/css\/padfx\.css\?v=2">/);
   assert.match(html, /<section class="hero pfx pfx-f-pride is-anim" aria-labelledby="rmTitle"><span class="pfx-l" aria-hidden="true"><\/span>/);
   assert.match(html, /<span class="rm-nm pfx-g pfx-g-rainbow">Houseplants<\/span><span class="pfx-bs">/);
   assert.match(html, /role="menuitem" data-pad-gift="[^"]+">🎁 Gift a cosmetic<\/button>/, "⋯ menu for a non-owner");
   assert.match(html, /<section class="card ab-gift" id="gift"[\s\S]*?never refunded[\s\S]*?data-pad-gift=/, "About tab entry + the no-refund rule");
-  assert.match(html, /\/public\/js\/pad-cosmetics\.js\?v=1/);
+  assert.match(html, /\/public\/js\/pad-cosmetics\.js\?v=2/);
   html = await page("plantowner");
   assert.doesNotMatch(html, /data-pad-gift/, "the owner buys from settings, not by gifting");
   assert.match(html, /settings#cosmetics">✨ Cosmetics in your pad's settings/);
@@ -480,13 +483,13 @@ test("pages: the pad header (frame + glow + badges + 🎁 for non-owners), /p ca
   assert.match(rooms_, /<span class="t<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>"><%= r\.title %><\/span><%- fx_ \? fx_\.badges : '' %>/);
   const home = rd("views/home.ejs");
   assert.match(home, /<span class="nt<%= fx_ && fx_\.glow \? ' ' \+ fx_\.glow : '' %>"><%= r\.name %><\/span><%- fx_ \? fx_\.badgesMini : '' %>/);
-  assert.match(home, /padfx\.css\?v=1/);
+  assert.match(home, /padfx\.css\?v=2/);
   // settings: the ✨ Cosmetics section inside the 🎨 Look card
   const ps = rd("views/padSettings.ejs");
   const look = ps.slice(ps.indexOf('<h3>🎨 Look</h3>'), ps.indexOf('id="royalties"'));
   assert.match(look, /<div class="pc" id="cosmetics" data-mode="manage" data-url="\/api\/rooms\/<%= encodeURIComponent\(slug\) %>\/cosmetics"/);
   assert.match(look, /<h4 class="pc-h">✨ Cosmetics<\/h4>/);
-  assert.match(ps, /pad-cosmetics\.js\?v=1/);
+  assert.match(ps, /pad-cosmetics\.js\?v=2/);
   const js = rd("public/js/pad-cosmetics.js");
   assert.match(js, /Where the PAT goes/); assert.match(js, /no refund/i); assert.match(js, /newRef\(\)/);
   // /cosmetics: a Pad group

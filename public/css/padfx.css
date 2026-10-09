@@ -132,3 +132,27 @@
   .pfx-g-rainbow { background-position: 0% 50%; }
   .pfx-g-gold { background-position: 50% 50%; }
 }
+
+/* 1.99iv 📺 PRIME TIME (premium.js): a broadcast frame - a gold/red "on air" ring sweeping round + faint scanlines;
+   the gold-to-red glow; the automatic Prime Time badge; and the pad page's one-time intro bar (room.ejs .pt-intro) */
+.pfx-f-primetime { box-shadow: 0 0 0 1px rgba(255, 196, 64, .55), 0 0 16px rgba(255, 80, 60, .22); }
+.pfx-f-primetime > .pfx-l { padding: 2px; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.pfx-f-primetime > .pfx-l::before { top: 0; bottom: 0; left: 0; width: 200%;
+  background: linear-gradient(90deg, #ffcf40, #ff4d3d, #ffcf40 25%, #b8860b 50%, #ffcf40, #ff4d3d, #ffcf40 75%, #b8860b);
+  animation: pfx-slide 6s linear infinite; will-change: transform; }
+.pfx-f-primetime::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 0;
+  background: repeating-linear-gradient(180deg, rgba(255, 255, 255, .025) 0 1px, transparent 1px 3px); }
+.pfx-g-primetime { -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; text-shadow: none;
+  background-image: linear-gradient(100deg, #ffcf40 0%, #fff1b8 30%, #ff6a4d 60%, #ffcf40 100%); background-size: 250% 100%;
+  filter: drop-shadow(0 0 6px rgba(255, 120, 60, .35)); animation: pfx-shift 8s ease-in-out infinite alternate; }
+.pfx-b.pfx-b-pt { color: #2a1600; background: linear-gradient(90deg, #ffcf40, #ff8a3d); border-color: #ffcf40; }
+.pt-intro { position: fixed; z-index: 50; top: 72px; left: 50%; padding: 9px 22px; border-radius: 999px; pointer-events: none; opacity: 0;
+  font: 800 13px/1 Ubuntu, sans-serif; letter-spacing: .2em; color: #2a1600; background: linear-gradient(90deg, #ffcf40, #ff6a4d, #ffcf40);
+  box-shadow: 0 6px 24px rgba(255, 106, 77, .35); transform: translate(-50%, -12px); animation: pt-intro 2.6s ease-out .2s 1 both; }
+@keyframes pt-intro { 0% { opacity: 0; transform: translate(-50%, -12px); } 15%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -12px); } }
+@media (prefers-reduced-motion: reduce) {
+  .pfx-f-primetime > .pfx-l::before { animation: none !important; }
+  .pfx-g-primetime { animation: none !important; }
+  .pt-intro { display: none; }
+}

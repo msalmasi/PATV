@@ -374,10 +374,13 @@
    // 1.99ew: premium pad cosmetics (padcosmetics.fx): frame on the header, glow on the name, badges by it; 🎁 gifting for non-owners
    const PFX_ = typeof padFx === 'function' ? padFx(room.id) : null;
    const isOwner_ = !!(room.ownerUser && typeof user !== 'undefined' && user && String(room.ownerUser).toLowerCase() === String(user).toLowerCase());
-   const giftSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
-<link rel="stylesheet" href="/public/css/padfx.css?v=1">
+   const giftSigned_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user);
+   // 1.99iv: 📺 Prime Time (premium.js) - the intro sweep on open + the ⋯ menu entry
+   const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
+<link rel="stylesheet" href="/public/css/padfx.css?v=2">
 <main class="rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
   <div class="crumb"><a href="/p">Pads</a> › p/<%= room.slug %></div>
+  <% if (primeOn_) { %><div class="pt-intro" aria-hidden="true">📺 PRIME TIME</div><% } %>
   <% if (room.banner && !(LK_ && LK_.banner)) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
   <%# 1.99ef: the header is three zones - identity (left: name + LIVE, p/slug + quiet type tags, one description line),
       actions (right: Follow + the follower count as plain text, ⚙ settings with the moderation / approvals badge,
@@ -414,6 +417,7 @@
             <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules</a><% } %>
             <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>">📈 Pad analytics</a><% } %>
             <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>">🔗 Copy link</button>
+            <a role="menuitem" href="/premium?pad=<%= encodeURIComponent(room.slug) %>"><%= primeOn_ ? '📺 Prime Time is on' : '📺 Prime Time' %></a>
             <% if (!isOwner_) { %><% if (giftSigned_) { %><button type="button" role="menuitem" data-pad-gift="<%= room.slug %>">🎁 Gift a cosmetic</button><% } else { %><a role="menuitem" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>">🎁 Gift a cosmetic</a><% } %><% } %>
           </div>
         </details>
@@ -1146,7 +1150,7 @@
     <% } %>
   </section>
   <script src="/public/js/pad-tabs.js?v=5"></script>
-  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=1" defer></script><% } %>
+  <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=2" defer></script><% } %>
   <% if (typeof roomVault !== 'undefined' && roomVault && roomVault.can_set_rate) { %><script src="/public/js/pad-vault.js?v=1" defer></script><% } %>
   <script src="/public/js/pad-launch.js?v=1" defer></script>
   <script>

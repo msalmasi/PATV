@@ -271,8 +271,11 @@ function view(r) {
     // 1.99df: a profile pad: whose profile (the label is u/<username>, the link /u/<username>)
     profile: cleanPlatform(r.platform, r.room_id) === "profile" && r.owner_user_id ? { userId: r.owner_user_id, username: r.owner_username || null } : null,
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
+    // 1.99iv: pad.primeTime - the pad has 📺 Prime Time right now (premium.js; low-latency audio / stage key off it)
+    primeTime: primeOf(r.room_id),
   };
 }
+function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
 // the cache also refreshes itself once a minute (a row changed outside this process, e.g. a cleanup)
 let refreshing = null;
 function maybeRefresh() {

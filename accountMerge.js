@@ -48,7 +48,7 @@ const CANDIDATE = [
 const isCandidate = (col) => CANDIDATE.some((r) => r.test(String(col)));
 
 // Columns that hold a userId although their name doesn't say so.
-const EXTRA = ["rooms_kv.value"];   // "seeded:<room>" -> the owner it was seeded for
+const EXTRA = ["rooms_kv.value", "premium_subs.renewer_id", "premium_subs.stripe_user"];   // "seeded:<room>" -> the owner it was seeded for
 
 // Columns that hold a ROOM id: a profile pad's id is "user:<userId>" (rooms.js PROFILE_PREFIX).
 const ROOM_COLUMNS = /^(room_id|home_pad|room|pad)$/i;
@@ -98,6 +98,11 @@ const RULES = {
   "cosmetic_listings.seller_id": M(), "cosmetic_listings.buyer_id": M(),
   "pad_cosmetic_items.buyer_id": M(), "pad_cosmetic_items.decided_by": M(), "pad_cosmetic_items.buyer_name": { deny: NAME },
   "pad_cosmetic_items.owner_self": { deny: FLAG },
+  // 1.99iv premium.js (Prime Time / Season Pass): a Season Pass row's target IS the userId (a Prime Time row's is a room
+  // id, which never equals a userId, so the move leaves it alone); both accounts with a pass: the later dates win
+  "premium_subs.target": M({ key: ["tier"], merge: { paid_through: "MAX", stripe_through: "MAX", comped: "MAX" } }),
+  "premium_subs.renewer_id": M(), "premium_subs.stripe_user": M(), "premium_subs.comp_by": { deny: NAME },
+  "premium_ledger.target": M(), "premium_ledger.payer_id": M(), "premium_ledger.payer_name": { deny: NAME },
   // shop / markets / bounties / Pepe
   "shop_orders.buyer_id": M(), "shop_orders.seller_id": M(), "shop_orders.buyer_input": { deny: TEXT },
   "shop_orders.seller_note": { deny: TEXT }, "shop_orders.seller_paid": { deny: FLAG }, "shop_orders.dispute_from": { deny: FLAG },

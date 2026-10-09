@@ -47,6 +47,8 @@ function linkify(text) {
   return out + padText(s.slice(last));
 }
 const body = (text) => linkify(text).replace(/\n/g, "<br>");
+// 1.99iv: a 🎟️ Season Pass multiplies the feed's upload size caps, daily allowance and space (premium sp_upload_mult)
+const spMult = (userId) => { try { return Math.max(1, require("./premium").userPerks(userId).uploadMult || 1); } catch (e) { return 1; } };
 function ago(ms, now = Date.now()) {
   const s = Math.max(0, Math.round((now - ms) / 1000));
   if (s < 60) return "just now";
@@ -234,7 +236,7 @@ async function composerFor(viewer, roomId) {
            tags: { max: TAGS.MAX_TAGS, len: TAGS.TAG_MAX, suggest: tagSuggest },
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
-           caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
+           caps: (() => { const m = spMult(viewer.userId); return { image: C.max_image_mb * m, audio: C.max_audio_mb * m, video: C.max_video_mb * m, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs, seasonPass: m > 1 }; })(),
            prices, paid: Object.values(prices).some((p) => p > 0), maxImages: store.MAX_IMAGES, maxRooms: store.MAX_ROOMS, chunk: media.CHUNK,
            aigen: { prices: aiPrices, global: await aigen.pricesFor(null).catch(() => null), eta: aigen.ETA, promptMax: aigen.PROMPT_MAX,
                     policy: aigen.POLICY,     // 1.99en: the Generate help shows the content policy
@@ -571,7 +573,7 @@ function register(app, { addUser, isBotToken }) {
       const US = story ? require("./userstories") : null;
       if (US) await US.init();
       const capMb = story ? Math.min(kind === "image" ? US.STORY_MAX_IMAGE_MB : US.STORY_MAX_VIDEO_MB, kind === "image" ? C.max_image_mb : C.max_video_mb)
-        : { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb }[kind];
+        : { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb }[kind] * spMult(u.userId);   // 1.99iv: a Season Pass multiplies it
       if (!Number.isFinite(size) || size < 12) return res.status(400).json({ ok: false, error: "That file is empty." });
       if (size > capMb * 1024 * 1024) return res.status(413).json({ ok: false, error: `${kind === "image" ? "Pictures" : kind === "audio" ? "Audio files" : "Videos"} can be up to ${capMb} MB.` });
       const refusal = await store.postRefusal(u, [], { media: true });
@@ -581,11 +583,11 @@ function register(app, { addUser, isBotToken }) {
         const recent = await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND created > ?", [u.userId, t - 3600e3]);
         if (recent[0].n >= C.uploads_per_hour) return res.status(429).json({ ok: false, error: "You've uploaded a lot this hour - try again later." });
         const day = await getQuery("SELECT COALESCE(SUM(size_declared), 0) AS b FROM feed_attachments WHERE owner_id = ? AND kind != 'preview' AND created > ?", [u.userId, t - 86400e3]);
-        if (day[0].b + size > C.upload_mb_per_day * 1024 * 1024) return res.status(429).json({ ok: false, error: "You've hit today's upload allowance." });
+        if (day[0].b + size > C.upload_mb_per_day * spMult(u.userId) * 1024 * 1024) return res.status(429).json({ ok: false, error: "You've hit today's upload allowance." });
         const open = await getQuery("SELECT COUNT(*) AS n FROM feed_attachments WHERE owner_id = ? AND state IN ('uploading','processing')", [u.userId]);
         if (open[0].n >= 4) return res.status(429).json({ ok: false, error: "Finish the uploads you have going first." });
-        if ((await store.usedBytes(u.userId)) + size > C.user_quota_mb * 1024 * 1024) {
-          return res.status(413).json({ ok: false, error: `You're using your ${C.user_quota_mb} MB of space - delete some old posts to make room.` });
+        if ((await store.usedBytes(u.userId)) + size > C.user_quota_mb * spMult(u.userId) * 1024 * 1024) {
+          return res.status(413).json({ ok: false, error: `You're using your ${C.user_quota_mb * spMult(u.userId)} MB of space - delete some old posts to make room.` });
         }
       }
       if ((await store.usedBytes(null)) + size > C.global_quota_gb * 1024 ** 3 || media.diskFreeBytes() - size * 2 < C.min_free_gb * 1024 ** 3) {

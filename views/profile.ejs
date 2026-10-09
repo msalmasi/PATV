@@ -242,6 +242,7 @@
       <div class="handle">@<%= usernameProfile %><% if (cf) { %> · 🐸 <%= cf %> on Camfrog<% } %></div>
       <div class="chips">
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
+        <% if (pc && pc.seasonPass) { %><a class="chip" href="/premium" title="Has a Season Pass" style="background:linear-gradient(90deg,#9b5de5,#ff6ad5);color:#fff;text-decoration:none">🎟️ Season Pass</a><% } %>
         <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%= gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
       </div>
       <% if (cxShow.length) { %>
@@ -281,6 +282,7 @@
             <% if (soc) { %><a role="menuitem" href="/feed/following">⭐ Your follow lists</a><% } %>
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
             <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
+            <a role="menuitem" href="/premium">🎟️ Season Pass &amp; stickers</a>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar &amp; wardrobe</button><% } %>
             <hr>
             <form action="/logout" method="POST"><button type="submit" role="menuitem">↪ Log out</button></form>

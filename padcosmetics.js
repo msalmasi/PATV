@@ -29,6 +29,10 @@
 //   POST /api/rooms/:slug/cosmetics/equip     {item, on}          owner / site admin
 //   POST /api/rooms/:slug/cosmetics/decline   {id}                owner / site admin: decline a gift (no refund)
 //   GET|POST /api/pad-cosmetics/admin         {pay}               staff: the sales switch
+//
+// 1.99iv PRIME TIME (premium.js): items with "perk": "prime_time" are never sold - a pad has them while it has 📺 Prime
+// Time (equip like any other; they stop rendering when it lapses and come back with it). A Prime Time pad also gets
+// the automatic "📺 Prime Time" badge (not counted) and premium padPerks().extraBadges more badge slots.
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -40,8 +44,8 @@ const REF_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const SLOT_KINDS = Object.freeze(["pad_frame", "pad_glow", "pad_badge", "pad_avatar"]);
 const MAX_BADGES = 3;
 const FX = Object.freeze({
-  pad_frame: ["neon", "pixel", "embers", "snow", "pride", "matrix"],
-  pad_glow: ["soft", "rainbow", "gold"],
+  pad_frame: ["neon", "pixel", "embers", "snow", "pride", "matrix", "primetime"],
+  pad_glow: ["soft", "rainbow", "gold", "primetime"],
   pad_avatar: ["anim"],
 });
 const ROUTING = Object.freeze({ owner: "100% Fort Knox", gift: "50% Fort Knox · 50% this pad's vault" });
@@ -70,8 +74,9 @@ function buildCatalog(raw, rarities) {
     const st = it.style || {};
     if (FX[it.kind] && !FX[it.kind].includes(st.fx)) { console.error(`[padcosmetics] ${it.id}: unknown fx ${st.fx}`); continue; }
     if (it.kind === "pad_badge" && !(typeof st.text === "string" && st.text.trim())) { console.error(`[padcosmetics] ${it.id}: a badge needs style.text`); continue; }
-    const price = Number(it.price) > 0 ? Math.floor(Number(it.price)) : Math.floor(Number((R[it.rarity] || {}).price) || 0);
-    if (!(price > 0)) { console.error(`[padcosmetics] ${it.id}: no price (rarity ${it.rarity})`); continue; }
+    const perk = it.perk === "prime_time" ? "prime_time" : null;      // 1.99iv: comes with Prime Time, never sold
+    const price = perk ? 0 : Number(it.price) > 0 ? Math.floor(Number(it.price)) : Math.floor(Number((R[it.rarity] || {}).price) || 0);
+    if (!(price > 0) && !perk) { console.error(`[padcosmetics] ${it.id}: no price (rarity ${it.rarity})`); continue; }
     let season = null;
     if (it.season) {
       const from = Date.parse(String(it.season.from) + "T00:00:00Z"), to = Date.parse(String(it.season.to) + "T00:00:00Z");
@@ -79,7 +84,7 @@ function buildCatalog(raw, rarities) {
       season = { from, to, label: String(it.season.label || "Limited").slice(0, 40) };
     }
     items.push(Object.freeze({ id: it.id, kind: it.kind, name: String(it.name || it.id).slice(0, 60), rarity: String(it.rarity || "common"), price,
-      desc: String(it.desc || "").slice(0, 200), animated: !!it.animated, retired: !!it.retired, season,
+      desc: String(it.desc || "").slice(0, 200), animated: !!it.animated, retired: !!it.retired, season, perk,
       style: Object.freeze({ fx: st.fx || null, text: st.text ? String(st.text).slice(0, 24) : null, icon: st.icon ? String(st.icon).slice(0, 8) : null }) }));
   }
   const byId = Object.fromEntries(items.map((i) => [i.id, i]));
@@ -98,7 +103,11 @@ function seasonState(item, t = now()) {
   if (!item || !item.season) return null;
   return t < item.season.from ? "upcoming" : t >= item.season.to ? "over" : "active";
 }
-const onSale = (item, t = now()) => !!item && !item.retired && item.price > 0 && (!item.season || seasonState(item, t) === "active");
+const onSale = (item, t = now()) => !!item && !item.perk && !item.retired && item.price > 0 && (!item.season || seasonState(item, t) === "active");
+// 1.99iv: Prime Time (premium.js) - perk items + extra badge slots while the pad has it
+const isPrime = (roomId) => { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } };
+const maxBadges = (roomId) => { try { return MAX_BADGES + require("./premium").padPerks(roomId).extraBadges; } catch (e) { return MAX_BADGES; } };
+const perkOk = (item, roomId) => !item.perk || (item.perk === "prime_time" && isPrime(roomId));
 
 // ── tables + config ──
 let ready = null;
@@ -161,6 +170,7 @@ async function buy(user, roomId, itemId, opts = {}) {
   if (R.profile) throw new Refuse(400, "Profiles have their own cosmetics (/cosmetics).", "E_UNSUPPORTED");
   const item = CAT.byId[String(itemId || "")];
   if (!item) throw new Refuse(404, "No such pad cosmetic.");
+  if (item.perk) throw new Refuse(403, `${item.name} comes with 📺 Prime Time - it isn't sold on its own.`);
   if (!onSale(item)) throw new Refuse(410, seasonState(item) === "upcoming" ? "That one isn't on sale yet." : "That one isn't on sale any more.");
   const rawRef = String(opts.ref || "");
   if (!REF_RE.test(rawRef)) throw new Refuse(400, "Bad request (ref).");
@@ -232,15 +242,21 @@ async function equip(user, roomId, itemId, on = true) {
     await event(roomId, "cosmetic-unequip", actor, item.id);
     return c;
   }
-  const inv = (await getQuery(`SELECT id, state FROM pad_cosmetic_items WHERE room_id = ? AND item_id = ? AND ${LIVE} ORDER BY id LIMIT 1`, [roomId, item.id]))[0];
-  if (!inv) throw new Refuse(404, "This pad doesn't have that one - buy it first.");
+  let inv = null;
+  if (item.perk) {
+    if (!perkOk(item, roomId)) throw new Refuse(403, `${item.name} comes with 📺 Prime Time - this pad doesn't have it right now.`);
+  } else {
+    inv = (await getQuery(`SELECT id, state FROM pad_cosmetic_items WHERE room_id = ? AND item_id = ? AND ${LIVE} ORDER BY id LIMIT 1`, [roomId, item.id]))[0];
+    if (!inv) throw new Refuse(404, "This pad doesn't have that one - buy it first.");
+  }
   if (item.kind === "pad_badge") {
     if (!cur.pad_badge.includes(item.id)) {
-      if (cur.pad_badge.length >= MAX_BADGES) throw new Refuse(409, `Up to ${MAX_BADGES} badges at a time - take one off first.`, "E_BAD_ARGS");
+      const mb = maxBadges(roomId);
+      if (cur.pad_badge.length >= mb) throw new Refuse(409, `Up to ${mb} badges at a time - take one off first.`, "E_BAD_ARGS");
       cur.pad_badge.push(item.id);
     }
   } else cur[item.kind] = item.id;                                // one per slot: it replaces what was there
-  if (inv.state === "gift") await runQuery("UPDATE pad_cosmetic_items SET state = 'owned', decided = ?, decided_by = ? WHERE id = ? AND state = 'gift'", [now(), actor, inv.id]);
+  if (inv && inv.state === "gift") await runQuery("UPDATE pad_cosmetic_items SET state = 'owned', decided = ?, decided_by = ? WHERE id = ? AND state = 'gift'", [now(), actor, inv.id]);
   const c = await PL.setCosmetics(roomId, cur, actor);
   await event(roomId, "cosmetic-equip", actor, item.id);
   return c;
@@ -269,8 +285,9 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":
 function badgeHtml(item, mini) {
   if (!item || item.kind !== "pad_badge") return "";
   const ic = item.style.icon ? `<span aria-hidden="true">${esc(item.style.icon)}</span>` : "";
-  if (mini) return `<span class="pfx-b mini" title="${esc(item.style.text)}">${ic || esc(item.style.text.slice(0, 1))}<span class="pfx-sr">${esc(item.style.text)}</span></span>`;
-  return `<span class="pfx-b">${ic}${esc(item.style.text)}</span>`;
+  const pt = item.id === "prime_time" ? " pfx-b-pt" : "";
+  if (mini) return `<span class="pfx-b mini${pt}" title="${esc(item.style.text)}">${ic || esc(item.style.text.slice(0, 1))}<span class="pfx-sr">${esc(item.style.text)}</span></span>`;
+  return `<span class="pfx-b${pt}">${ic}${esc(item.style.text)}</span>`;
 }
 /**
  * What a view needs to draw a pad's equipped cosmetics, sync (padlook's cache):
@@ -283,13 +300,16 @@ function fx(roomId) {
   const out = { cls: "", layer: "", glow: "", badges: "", badgesMini: "", any: false };
   let c;
   try { c = require("./padlook").cosmeticsOf(roomId); } catch (e) { return out; }
-  const fr = c.pad_frame && CAT.byId[c.pad_frame], gl = c.pad_glow && CAT.byId[c.pad_glow];
+  const prime = isPrime(roomId);
+  const live = (id) => { const it = id && CAT.byId[id]; return it && (!it.perk || prime) ? it : null; };   // perk items only while Prime Time
+  const fr = live(c.pad_frame), gl = live(c.pad_glow);
   if (fr && fr.kind === "pad_frame") {
     out.cls = `pfx pfx-f-${fr.style.fx}${fr.animated ? " is-anim" : ""}`;
     out.layer = '<span class="pfx-l" aria-hidden="true"></span>';
   }
   if (gl && gl.kind === "pad_glow") out.glow = `pfx-g pfx-g-${gl.style.fx}`;
-  const bs = c.pad_badge.map((id) => CAT.byId[id]).filter((i) => i && i.kind === "pad_badge");
+  const bs = c.pad_badge.map(live).filter((i) => i && i.kind === "pad_badge").slice(0, prime ? maxBadges(roomId) : MAX_BADGES);
+  if (prime) bs.unshift(PRIME_BADGE);
   if (bs.length) {
     out.badges = `<span class="pfx-bs">${bs.map((b) => badgeHtml(b, false)).join("")}</span>`;
     out.badgesMini = `<span class="pfx-bs mini">${bs.map((b) => badgeHtml(b, true)).join("")}</span>`;
@@ -298,10 +318,13 @@ function fx(roomId) {
   return out;
 }
 
+// the automatic badge of a Prime Time pad (not an item: it isn't equipped, bought or counted)
+const PRIME_BADGE = Object.freeze({ id: "prime_time", kind: "pad_badge", name: "Prime Time", style: Object.freeze({ icon: "📺", text: "Prime Time" }) });
+
 /** The catalog for pages / the API (prices resolved, sale state). */
 function catalog(t = now()) {
   return CAT.items.map((i) => ({ id: i.id, kind: i.kind, name: i.name, rarity: i.rarity, price: i.price, desc: i.desc, animated: i.animated,
-    style: i.style, sale: onSale(i, t), season: i.season ? { label: i.season.label, from: i.season.from, to: i.season.to, state: seasonState(i, t) } : null }));
+    style: i.style, perk: i.perk || null, sale: onSale(i, t), season: i.season ? { label: i.season.label, from: i.season.from, to: i.season.to, state: seasonState(i, t) } : null }));
 }
 
 /** GET data: catalog + the pad's items + equipped + the viewer. */
@@ -313,12 +336,14 @@ async function state(R, viewer) {
   let balance = null;
   if (signed) { const b = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [viewer.userId]))[0]; balance = b ? b.points_balance : 0; }
   const items = await padItems(R.id);
+  const prime = isPrime(R.id);
   const PL = require("./padlook");
   const L = PL.look(R.id);
   return {
-    pay: PAY, catalog: catalog(), slots: Object.fromEntries(SLOT_KINDS.map((k) => [k, { ...(CAT.slots[k] || {}), max: k === "pad_badge" ? MAX_BADGES : 1 }])),
+    pay: PAY, catalog: catalog(), slots: Object.fromEntries(SLOT_KINDS.map((k) => [k, { ...(CAT.slots[k] || {}), max: k === "pad_badge" ? (prime ? maxBadges(R.id) : MAX_BADGES) : 1 }])),
     rarities: Object.fromEntries(Object.entries(CAT.rarities).map(([k, v]) => [k, { color: v && v.color }])),
-    has: [...new Set(items.map((i) => i.item_id))],
+    has: [...new Set([...items.map((i) => i.item_id), ...(prime ? CAT.items.filter((i) => i.perk === "prime_time").map((i) => i.id) : [])])],
+    prime: { on: prime, link: `/premium?pad=${encodeURIComponent(R.slug || R.id)}` },
     // who gave what is for the people who run the pad
     items: manage ? items.map((i) => ({ id: i.id, item_id: i.item_id, kind: i.kind, state: i.state, from: i.owner_self ? null : i.buyer_name, created: i.created })) : [],
     equipped: PL.cosmeticsOf(R.id),
