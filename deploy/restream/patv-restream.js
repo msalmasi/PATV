@@ -7,6 +7,12 @@
 //     ffmpeg -i <source: rtmp://127.0.0.1/...> -c copy -f flv <target: Twitch ingest/<key>>
 // (copy only - no re-encode). A relay that exits while still wanted is restarted with backoff (2 s doubling to
 // 60 s, reset after 60 s of clean running); one whose frame counter stalls for STALL_MS is killed and restarted.
+// 1.99gp: one whose INPUT timestamps jump backwards by >= TS_JUMP_MS is killed and restarted too. That happens when
+// the publisher behind the loopback source reconnects (Pepe's WHIP/OBS reconnect -> MediaMTX relay republishes, its
+// RTMP timestamps restart near 0) while our ffmpeg keeps its old play session: ffmpeg then clamps every DTS to the
+// last pre-reconnect value ("Non-monotonous DTS ... changing to"), so Twitch gets thousands of frames with one frozen
+// timestamp, its transmuxer stops producing a playlist (usher media playlist 404 -> player "Error #2000") and the
+// broadcast never recovers - observed 2026-10-08 20:04 for ~4 h. A fresh ffmpeg = a fresh Twitch broadcast.
 // Site unreachable: what runs keeps running for HOLD_MS (a site restart doesn't cut Twitch), then everything stops.
 //
 // Secrets: the target URL (it holds the stream key) is passed to ffmpeg as an argument, so it is in the process list:
@@ -19,7 +25,8 @@
 const http = require("http");
 const { spawn } = require("child_process");
 
-const VERSION = "1.99fl";
+const VERSION = "1.99gp";
+const TS_JUMP_MS = 1000;               // input DTS going back this far (FLV ms) = the publisher restarted: restart
 const SYNC_MS = 3000;
 const HOLD_MS = 60 * 1000;
 const STALL_MS = 25 * 1000;
@@ -31,6 +38,15 @@ function redact(line, secrets = []) {
   let s = String(line == null ? "" : line);
   for (const k of secrets) if (k && k.length >= 4) s = s.split(k).join("<key>");
   return s.replace(/rtmps?:\/\/[^\s'"]+/gi, "<url>").replace(/live_[A-Za-z0-9_]{6,}/g, "<key>");
+}
+/** How far (ms, FLV timebase) an ffmpeg warning says the timestamps went backwards; 0 when the line isn't one. */
+function tsRegression(line) {
+  const s = String(line || "");
+  let m = /Non-monotonous DTS in output stream[^;]*; previous: (-?\d+), current: (-?\d+)/.exec(s);
+  if (m) return Math.max(0, Number(m[1]) - Number(m[2]));
+  m = /DTS (-?\d+) < (-?\d+) out of order/.exec(s);
+  if (m) return Math.max(0, Number(m[2]) - Number(m[1]));
+  return 0;
 }
 function keyOf(target) {
   const i = String(target).lastIndexOf("/");
@@ -117,6 +133,8 @@ class Supervisor {
         if (!line) continue;
         r.lastErr = line;
         this.log(`[${r.id}] ffmpeg: ${line}`);
+        const jump = tsRegression(line);
+        if (jump >= TS_JUMP_MS && r.proc === proc && !r.stopping) { this.resync(r, jump); return; }
       }
       if (ebuf.length > 8192) ebuf = "";
     });
@@ -169,6 +187,17 @@ class Supervisor {
         this.failed(r, r.frames > 0 ? "stalled (no frames moving)" : `no frames within ${Math.round(limit / 1000)} s${r.lastErr ? ": " + r.lastErr : ""}`);
       }
     }
+  }
+  /** The source's timestamps went backwards (its publisher restarted): kill this ffmpeg so the next start opens a
+   *  fresh session on both ends - Twitch can't play a stream whose timestamps froze. */
+  resync(r, jumpMs) {
+    const p = r.proc;
+    if (!p) return;
+    r.proc = null;
+    this.log(`[${r.id}] source timestamps jumped back ${Math.round(jumpMs / 1000)} s (publisher restarted) - restarting`);
+    try { p.kill("SIGKILL"); } catch (e) { /* gone */ }
+    if (this.now() - r.startedAt >= STABLE_MS) r.backoff = BACKOFF_MIN;
+    this.failed(r, "source restarted (timestamps jumped back)");
   }
   stop(id, why) {
     const r = this.relays.get(id);
@@ -249,4 +278,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { Supervisor, redact, allowed, allowedSource, ffmpegArgs, keyOf, BACKOFF_MIN, BACKOFF_MAX, STALL_MS, START_GRACE_MS, STABLE_MS };
+module.exports = { Supervisor, redact, tsRegression, TS_JUMP_MS, allowed, allowedSource, ffmpegArgs, keyOf, BACKOFF_MIN, BACKOFF_MAX, STALL_MS, START_GRACE_MS, STABLE_MS };
