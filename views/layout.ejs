@@ -83,6 +83,9 @@
                 <details class="nav-more">
                     <summary>More <span aria-hidden="true">▾</span></summary>
                     <div class="nav-pop">
+                        <%# 1.99is: search (search.js) - in both menus, so every width has it %>
+                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="Search people, posts, pads" aria-label="Search people, posts and pads" autocomplete="off"><button type="submit" aria-label="Search">🔍</button></form>
+                        <div class="nav-sep"></div>
                         <%- more.map((l) => item(l, true)).join('') %>
                         <div class="nav-sep"></div>
                         <%- ext.map((l) => item(l, true)).join('') %>
@@ -90,6 +93,9 @@
                 </details>
             </div>
             <div class="navbar-right">
+                <%# 1.99is: search - a box on wide screens, a 🔍 button on medium ones; narrower, it's in the ☰ / More menus %>
+                <form class="nav-search" action="/search" method="get" role="search"><span class="nav-s-ic" aria-hidden="true">🔍</span><input type="search" name="q" maxlength="100" placeholder="Search" aria-label="Search people, posts and pads" autocomplete="off"></form>
+                <a href="/search" class="nav-sbtn" title="Search people, posts and pads" aria-label="Search"><span aria-hidden="true">🔍</span></a>
                 <%# 1.99ec: "✏️ Post" - the create-post page; on a pad's pages (/p/<pad>/...) it preselects that pad %>
                 <% const _pm = typeof ogPath !== 'undefined' && ogPath ? /^\/p\/([A-Za-z0-9._~%-]+)/.exec(ogPath) : null; %>
                 <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="Create a post<%= _pm ? ' in p/' + _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() : '' %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="nav-lbl">Post</span></a>
@@ -107,6 +113,8 @@
                 <details class="nav-burger">
                     <summary aria-label="Menu">☰</summary>
                     <div class="nav-pop">
+                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="Search people, posts, pads" aria-label="Search people, posts and pads" autocomplete="off"><button type="submit" aria-label="Search">🔍</button></form>
+                        <div class="nav-sep"></div>
                         <%- main.map((l) => item(l, true)).join('') %>
                         <div class="nav-sep"></div>
                         <%- more.map((l) => item(l, true)).join('') %>
@@ -187,6 +195,25 @@
                 .nav-burger > summary { padding: 6px 7px; }
                 .navbar .avatar img { width: 36px; height: 36px; }
             }
+        </style>
+        <style>
+            /* 1.99is: search in the navbar (search.js). Hidden by default; the box from 1280px, the 🔍 button 1000-1279px;
+               narrower it lives at the top of the ☰ menu (and of More) so the bar's fit rules above are untouched */
+            .nav-search { display: none; position: relative; align-items: center; margin: 0; }
+            .nav-search input { width: 150px; height: 34px; box-sizing: border-box; padding: 0 12px 0 32px; border-radius: 999px; border: 1px solid #3a3a42;
+                                background: #18181c; color: #eee; font: 14px Ubuntu, sans-serif; transition: width .15s ease; }
+            .nav-search input:focus { outline: none; border-color: #4caf50; width: 210px; }
+            .nav-s-ic { position: absolute; left: 11px; font-size: 13px; line-height: 1; pointer-events: none; filter: grayscale(.7); }
+            .navbar a.nav-sbtn { display: none; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 8px; font-size: 18px; line-height: 1; filter: grayscale(.6); }
+            .navbar a.nav-sbtn:hover, .navbar a.nav-sbtn:focus-visible { background: #24242a; filter: none; }
+            @media (min-width: 1000px) and (max-width: 1279px) { .navbar a.nav-sbtn { display: inline-flex; } }
+            @media (min-width: 1280px) { .nav-search { display: inline-flex; } }
+            @media (prefers-reduced-motion: reduce) { .nav-search input { transition: none; } }
+            .nav-psearch { display: flex; gap: 6px; padding: 4px 4px 2px; }
+            .nav-psearch input { flex: 1 1 auto; min-width: 0; height: 36px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid #3a3a42;
+                                 background: #121215; color: #eee; font: 16px Ubuntu, sans-serif; }
+            .nav-psearch input:focus { outline: none; border-color: #4caf50; }
+            .nav-psearch button { flex: none; width: 40px; height: 36px; border-radius: 8px; border: 1px solid #3a3a42; background: #24242a; cursor: pointer; font-size: 15px; }
         </style>
         <style>
             /* 1.99cc: the site footer (Terms / Privacy on every page). Built here, moved to the end of <body> below. */

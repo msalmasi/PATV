@@ -1,0 +1,137 @@
+<%- include('layout', { title: title, user: user }) %>
+<%#
+  /search (1.99is, search.js): one box, tabs All / People / Posts / Pads. Everything here already passed the site's
+  visibility rules (search.js); this view only draws it. NSFW posts (signed in only) keep their picture blurred and their
+  text hidden until the reader taps, or chose "always show" on the feed (localStorage patvFeedNsfw).
+%>
+<link rel="stylesheet" href="/public/css/feed.css?v=17">
+<link rel="stylesheet" href="/public/css/tags.css?v=1">
+<link rel="stylesheet" href="/public/css/search.css?v=1">
+<%
+  const tabs_ = [['all', 'All'], ['people', 'People'], ['posts', 'Posts'], ['pads', 'Pads']];
+  const C_ = R ? R.counts : { people: 0, posts: 0, pads: 0 };
+  const num_ = (n, cap) => (cap && n >= cap ? n + '+' : String(n));
+  const cnt_ = (k) => k === 'all' ? '' : num_(C_[k], k === 'posts' ? 400 : k === 'people' ? 100 : 0);
+  const sorts_ = [['relevance', 'Best match'], ['new', 'New'], ['top', 'Top']];
+%>
+<main class="fd sr">
+  <h1 class="sr-h">Search</h1>
+  <form class="sr-form" action="/search" method="get" role="search">
+    <label class="sr-box"><%- fx.icon('search') %>
+      <input type="search" name="q" value="<%= q %>" maxlength="100" placeholder="People, posts, pads — or #tag" aria-label="Search PATV" autocomplete="off" spellcheck="false"<%= q ? '' : ' autofocus' %>></label>
+    <% if (kind !== 'all') { %><input type="hidden" name="type" value="<%= kind %>"><% } %>
+    <button type="submit" class="btn-s">Search</button>
+  </form>
+
+  <% if (wait) { %>
+    <p class="sr-empty" role="alert">You're searching very fast — try again in <%= wait %> second<%= wait === 1 ? '' : 's' %>.</p>
+  <% } else if (!q) { %>
+    <p class="sr-hint">Find people by their name, username or Camfrog name; posts by what they say; pads by their name. Start with <b>#</b> to list a tag's posts.</p>
+    <% if (popular && popular.length) { %>
+      <nav class="ftg sr-pop" aria-label="Popular tags"><span class="ftg-k">Popular tags</span><span class="ftg-list"><% popular.forEach((t) => { %><a class="ftag" href="<%= url({ q: '#' + t.tag, kind: 'posts' }) %>">#<%= t.tag %></a><% }) %></span></nav>
+    <% } %>
+  <% } else { %>
+    <nav class="sr-tabs" aria-label="What to show">
+      <% tabs_.forEach((t) => { if (R.tag && (t[0] === 'people' || t[0] === 'pads')) return; %>
+        <a class="sr-tab<%= kind === t[0] ? ' on' : '' %>" href="<%= url({ q, kind: t[0] }) %>"<%- kind === t[0] ? ' aria-current="page"' : '' %>><%= t[1] %><% if (t[0] !== 'all') { %> <span class="sr-n"><%= cnt_(t[0]) %></span><% } %></a>
+      <% }) %>
+    </nav>
+    <% if (R.tag) { %><p class="sr-sub">Posts tagged <a class="ftag on" href="<%= fx.tagHref(R.tag) %>">#<%= R.tag %></a> · <a href="<%= fx.tagHref(R.tag) %>">open in the feed ›</a></p><% } %>
+    <% const none_ = !R.people.length && !R.pads.length && !R.posts.length; %>
+    <% if (none_) { %><p class="sr-empty">Nothing found for “<%= q %>”<%= kind !== 'all' ? ' in ' + kind : '' %>.<% if (kind !== 'all') { %> <a href="<%= url({ q }) %>">Search everything</a><% } %></p><% } %>
+
+    <%# ── people ── %>
+    <% if (R.people.length && (kind === 'all' || kind === 'people')) { %>
+      <section class="sr-sec" aria-labelledby="srPeople">
+        <h2 id="srPeople">People<% if (kind === 'all' && C_.people > R.people.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'people' }) %>">See all <%= cnt_('people') %> ›</a><% } %></h2>
+        <ul class="sr-people">
+          <% R.people.forEach((u) => { %>
+            <li><a class="sr-person" href="<%= u.href %>">
+              <% if (u.bot) { %><img class="av av-pepe sr-av" src="/public/img/pepe.png" alt="" width="40" height="40"><% } else { %><%- fx.uav(u, { size: 40, cls: 'sr-av' }) %><% } %>
+              <span class="sr-pt">
+                <b class="sr-name"><% if (u.nameCss && !u.bot) { %><span class="cx-name" style="<%= u.nameCss %>"><%- highlight(u.display, terms) %></span><% } else { %><%- highlight(u.display, terms) %><% } %><% if (u.bot) { %> <span class="bot-badge">🤖 bot</span><% } %></b>
+                <small>@<%- highlight(u.username, terms) %><% if (u.camfrog) { %> · 🐸 <%- highlight(u.camfrog, terms) %><% } %></small>
+              </span>
+            </a></li>
+          <% }) %>
+        </ul>
+      </section>
+    <% } %>
+
+    <%# ── pads ── %>
+    <% if (R.pads.length && (kind === 'all' || kind === 'pads')) { %>
+      <section class="sr-sec" aria-labelledby="srPads">
+        <h2 id="srPads">Pads<% if (kind === 'all' && C_.pads > R.pads.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'pads' }) %>">See all <%= C_.pads %> ›</a><% } %></h2>
+        <ul class="sr-pads">
+          <% R.pads.forEach((c) => { %>
+            <li><a class="sr-pad" href="<%= c.href %>">
+              <%- fx.padChip(c, 'lg') %>
+              <span class="sr-pt">
+                <b><%- highlight(c.title, terms) %> <%- fx.padBadge(c, { compact: true }) %></b>
+                <small>p/<%- highlight(c.slug, terms) %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small>
+                <% if (c.description) { %><span class="sr-desc"><%- highlight(c.description.length > 160 ? c.description.slice(0, 157) + '…' : c.description, terms) %></span><% } %>
+              </span>
+            </a></li>
+          <% }) %>
+        </ul>
+      </section>
+    <% } %>
+
+    <%# ── posts ── %>
+    <% if (R.posts.length && (kind === 'all' || kind === 'posts')) { %>
+      <section class="sr-sec" aria-labelledby="srPosts">
+        <h2 id="srPosts">Posts<% if (kind === 'all' && C_.posts > R.posts.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'posts' }) %>">See all <%= cnt_('posts') %> ›</a><% } %></h2>
+        <% if (kind === 'posts') { %>
+          <nav class="sr-sorts" aria-label="Sort posts"><% sorts_.forEach((s) => { if (R.tag && s[0] === 'relevance') return; %><a class="fs-pill<%= sort === s[0] || (R.tag && sort === 'relevance' && s[0] === 'new') ? ' on' : '' %>" href="<%= url({ q, kind: 'posts', sort: s[0] }) %>"><%= s[1] %></a><% }) %></nav>
+        <% } %>
+        <ul class="sr-posts">
+          <% R.posts.forEach((p) => {
+               const lab_ = fx.labelOf(p);
+               const th_ = thumbOf(p);
+               const thUrl_ = th_ ? fx.fileUrl(th_) : null;
+               const pad_ = p.rooms[0] || null;
+               const sn_ = p.snip || null;
+               const titleHtml_ = sn_ && sn_.title && /\u0001/.test(sn_.title) ? snippetHtml(sn_.title) : fx.esc(lab_.text);
+               const bodyHtml_ = sn_ && sn_.body && /\u0001/.test(sn_.body) ? snippetHtml(sn_.body) : (p.body ? fx.esc(p.body.length > 180 ? p.body.slice(0, 177) + '…' : p.body) : ''); %>
+            <li class="sr-post<%= p.nsfw ? ' is-nsfw' : '' %>">
+              <% if (thUrl_) { %><a class="sr-th" href="<%= p.url %>" tabindex="-1" aria-hidden="true"><img src="<%= thUrl_ %>" alt="" loading="lazy"></a><% } %>
+              <div class="sr-pt">
+                <a class="sr-title<%= lab_.fallback ? ' fb' : '' %>" href="<%= p.url %>"><%- titleHtml_ %></a><% if (p.nsfw) { %> <span class="tag nsfw">NSFW</span><% } %>
+                <% if (bodyHtml_) { %><p class="sr-snip"><%- bodyHtml_ %></p><% } %>
+                <% if (p.nsfw) { %><button type="button" class="sr-reveal" data-sr-reveal>NSFW — tap to show</button><% } %>
+                <% if (p.tags && p.tags.length) { %><p class="fp-tags"><% p.tags.slice(0, 5).forEach((t) => { %><a class="ftag" href="<%= fx.tagHref(t) %>">#<%= t %></a><% }) %></p><% } %>
+                <span class="sr-meta">
+                  <% if (pad_) { %><a href="<%= pad_.profile ? '/u/' + encodeURIComponent(pad_.profile) : '/p/' + encodeURIComponent(pad_.slug) %>"><%= pad_.label %></a><span class="dot" aria-hidden="true">·</span><% } %>
+                  <% if (p.author && p.author.bot) { %><span>🤖 Pepe</span><% } else if (p.author) { %><%- fx.uav(p.author, { size: 18 }) %><%- fx.uname(p.author, { href: '/u/' + encodeURIComponent(p.author.username), cls: 'sr-author' }) %><% } %>
+                  <span class="dot" aria-hidden="true">·</span><time datetime="<%= new Date(p.created).toISOString() %>"><%= fx.ago(p.created) %></time>
+                  <span class="dot" aria-hidden="true">·</span><span><%= fx.num(p.score) %> point<%= p.score === 1 ? '' : 's' %></span>
+                  <span class="dot" aria-hidden="true">·</span><a href="<%= p.url %>#comments"><%= fx.num(p.comments) %> comment<%= p.comments === 1 ? '' : 's' %></a>
+                </span>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+        <% if (kind === 'posts' && (R.page > 1 || R.more)) { %>
+          <nav class="fd-pager">
+            <% if (R.page > 1) { %><a href="<%= url({ q, kind: 'posts', sort, page: R.page - 1 }) %>">‹ Previous</a><% } %>
+            <% if (R.more) { %><a href="<%= url({ q, kind: 'posts', sort, page: R.page + 1 }) %>">More ›</a><% } %>
+          </nav>
+        <% } %>
+      </section>
+    <% } %>
+  <% } %>
+</main>
+<script>
+  // NSFW results: blurred until tapped, unless this device chose "always show" on the feed (a convenience, never security)
+  (function () {
+    var always = false;
+    try { always = localStorage.getItem('patvFeedNsfw') === '1'; } catch (e) { always = false; }
+    document.querySelectorAll('.sr-post.is-nsfw').forEach(function (li) {
+      if (always) { li.classList.add('shown'); return; }
+      var b = li.querySelector('[data-sr-reveal]');
+      if (b) b.addEventListener('click', function () { li.classList.add('shown'); b.remove(); });
+    });
+  })();
+</script>
+</body>
+</html>
