@@ -206,4 +206,9 @@ test("panel markup: Pepe's look section for admins only, thumbnails exist for ev
   for (const id of ["base-pixel", "base-kawaii", "mod-bow", "mod-flowercrown", "mod-catears", "mod-strawberryhat", "mod-sparkles", "mod-headset", "mod-hearts"]) {
     assert.ok(fs.existsSync(path.join(dir, id + ".png")), id + ".png");
   }
+  // 1.99gn: the read-only "Automatic looks" strip (kawaii heist mask, game outfits, bottle service)
+  assert.match(html, /id="plAuto"/);
+  for (const id of ["dealer", "host", "professor", "fighter", "artist", "cowboy", "bandana", "balaclava", "bottleservice"]) {
+    assert.ok(fs.existsSync(path.join(dir, "klook-" + id + ".png")), "klook-" + id + ".png");
+  }
 });

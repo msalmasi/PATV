@@ -62,6 +62,9 @@
   .pc .pl-lab small { text-transform: none; letter-spacing: 0; }
   .pc .pl-note { font-size: 12px; color: var(--pc-muted); margin: -2px 0 6px; }
   .pc .pl-c span.n { overflow-wrap: anywhere; }
+  .pc .pl-auto { border: 1px solid var(--pc-line); border-radius: 8px; background: #121614; color: #ccc; }
+  .pc .pl-auto small { color: var(--pc-muted); font-size: 10.5px; }
+  .pc .pl-auto.on { border-color: var(--pc-ok); background: #1d2a21; color: #fff; }
   .pc .pl-row { display: flex; flex-wrap: wrap; gap: 6px; }
   .pc .pl-p { font-size: 12.5px; font-weight: normal; padding: 6px 10px; }
   .pc .pl-p small { color: var(--pc-muted); margin-left: 4px; }
@@ -112,6 +115,7 @@
       <div class="pl-now" id="plNow" aria-live="polite"><span class="pl-chip">loading…</span></div>
       <div><div class="pl-lab" id="plBaseLab">Avatar base <small>(experimental)</small></div><div class="pl-grid" id="plBases" role="group" aria-labelledby="plBaseLab"></div></div>
       <div id="plModsWrap" hidden><div class="pl-lab" id="plModLab">Extras for this base</div><div class="pl-grid" id="plMods" role="group" aria-labelledby="plModLab"></div></div>
+      <div id="plAutoWrap" hidden><div class="pl-lab" id="plAutoLab">Automatic looks <small>(put on by the games themselves)</small></div><div class="pl-grid" id="plAuto" role="list" aria-labelledby="plAutoLab"></div></div>
       <div><div class="pl-lab" id="plCosLab">Costume</div><div class="pl-note" id="plCosNote" hidden>Costumes are drawn for pixel Pepe only: switch the base back to Pixel to change them. One already on waits, hidden, until then.</div><div class="pl-grid" id="plCostumes" role="group" aria-labelledby="plCosLab"></div></div>
       <div><div class="pl-lab" id="plPerLab">Persona</div><div class="pl-row" id="plPersonas" role="group" aria-labelledby="plPerLab"></div></div>
       <div class="pl-row">
@@ -238,7 +242,7 @@
     // costume + persona pickers: rebuilt only when Pepe's lists change (keeps focus between polls)
     var lists = look || d.look_known || {};       // offline: his last known lists, shown disabled
     var curBase = (look && look.base) || 'pixel';
-    var sig = JSON.stringify([lists.costumes, lists.personas, lists.bases, lists.modlist, curBase]);
+    var sig = JSON.stringify([lists.costumes, lists.personas, lists.bases, lists.modlist, lists.autolooks, curBase]);
     if (sig !== lookSig) {
       lookSig = sig;
       // 1.99fo: avatar bases + the extras drawn for the active one
@@ -260,6 +264,17 @@
         clr.appendChild(thumb('base-' + curBase, '∅', curBase !== 'pixel')); clr.appendChild(el('span', 'n', 'No extras')); mg.appendChild(clr);
       }
       $('plModsWrap').hidden = !mine.length;
+      // 1.99gn: what the games dress kawaii Pepe in (read-only; the outfit that's on now is lit)
+      var ag = $('plAuto'); ag.textContent = '';
+      var autos = curBase === 'kawaii' ? (lists.autolooks || []) : [];
+      autos.forEach(function (a) {
+        var it = el('div', 'pl-c pl-auto'); it.setAttribute('role', 'listitem'); it.setAttribute('data-auto', a.id);
+        it.title = (a.name || a.id) + ' (' + (a.when || '') + ')';
+        it.appendChild(thumb('klook-' + a.id, (a.name || a.id).charAt(0), true));
+        it.appendChild(el('span', 'n', a.name || a.id)); it.appendChild(el('small', null, a.when || ''));
+        ag.appendChild(it);
+      });
+      $('plAutoWrap').hidden = !autos.length;
       var g = $('plCostumes'); g.textContent = '';
       var none = el('button', 'pl-c'); none.type = 'button'; none.setAttribute('data-verb', 'costume'); none.setAttribute('data-value', 'off');
       none.appendChild(thumb('pepe', '🐸')); none.appendChild(el('span', 'n', 'No costume')); none.title = 'Plain Pepe (!costume off)';
@@ -287,6 +302,10 @@
     $('plVoice').textContent = 'Persona voice: ' + (look ? (look.persona_voice ? 'on' : 'off') : '—');
     $('plLink').setAttribute('aria-pressed', String(!!(look && look.follow_costume)));
     $('plLink').textContent = 'Costume ↔ persona link: ' + (look ? (look.follow_costume ? 'on' : 'off') : '—');
+    box.querySelectorAll('#plAuto .pl-auto').forEach(function (it) {
+      var id = it.getAttribute('data-auto');
+      it.classList.toggle('on', !!look && (look.game_look === id || (id === 'balaclava' && !!look.balaclava) || (id === 'bottleservice' && !!look.bottleservice)));
+    });
     box.querySelectorAll('#plBases .pl-c').forEach(function (b) { b.setAttribute('aria-pressed', String(!!look && curBase === b.getAttribute('data-value'))); });
     box.querySelectorAll('#plMods .pl-c').forEach(function (b) {
       var v = b.getAttribute('data-value'), on = (look && look.mods) || [];
