@@ -201,3 +201,85 @@ test("/economy explains the budget only while it's live", async () => {
   assert.match(on, /1,234,567 PAT/);
   assert.doesNotMatch(on, /Coming soon/);
 });
+
+// ── 1.99gq: the user's decisions on the E-2 open questions (2026-10-09) ──
+const GROUPS2 = Object.assign({}, GROUPS, { room_owner: "royalties" });
+const B2 = { welcome: 1500000, levelup: 1400000, achievements: 2100000, misc: 350000, royalties: 300000,
+             roomgames: 3500000, turf: 500000 };
+function v2(balance, remaining, opts = {}) {
+  F.sync({ reserve: opts.reserve === undefined ? 5000000 : opts.reserve,
+           flows: Object.assign({}, opts.treasury === false ? Object.fromEntries(Object.keys(GROUPS).map((f) => [f, "reserve"])) : FLOWS,
+                               { room_owner: "incentives", wheel_shortfall: "jackpot" }),   // Pepe sends every website flow
+           fortknox: 0,
+           incentives: { balance, week: "W2026-10-05", remaining: Object.assign({}, B2, remaining), budgets: B2, groups: GROUPS2,
+                         share: null, release_per_day: null, treasury: opts.treasury !== false } });
+}
+const pot = async () => (await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes"))[0].t;
+const reserveClaims = async () => (await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow NOT LIKE 'incentives:%' AND settled = 0"))[0].t;
+
+test("1.99gq: pad owner royalties settle against the budget (group 'royalties'), also while only Pepe's layers are on", async () => {
+  await pepeSettle();
+  v2(1000000, { royalties: 50000 }, { treasury: false });
+  assert.equal(F.treasuryLive(), true, "the budget is reported (routing)");
+  assert.equal(F.treasuryOn(), false, "...but the Treasury itself isn't on (display)");
+  assert.equal(F.vaultFor("room_owner"), "incentives");
+  assert.equal(F.vaultFor("levelup"), "reserve", "layers only: the E-2 grants stay on the Reserve");
+  await F.drainQueue(); await pepeSettle();             // (grants queued by earlier tests drain first)
+  assert.equal(await F.fundable("room_owner"), 50000, "fundable = the royalties group's room this week");
+  const o = await mkUser();
+  const w0 = await wallets();
+  assert.equal(await F.fundPayout(o, 40000, "room_owner", "pad owner royalties: x"), true);
+  assert.deepEqual((await F.claims()).map((c) => [c.flow, c.amount]), [["incentives:room_owner", 40000]], "an incentives claim, not a Reserve one");
+  assert.equal(await F.fundable("room_owner"), 10000, "minus what's paid but not settled yet");
+  const s = await pepeSettle();
+  assert.equal(await wallets() - w0, s.reduce((t, x) => t + x.amount, 0), "CONSERVATION: the owner's credit == what Pepe settles from the budget");
+  v2(1000000, { royalties: 50000 });
+  assert.equal(F.treasuryOn(), true);
+  assert.equal(F.vaultFor("levelup"), "incentives", "both flags: grants too");
+  F.sync({ reserve: 5000000, flows: { room_owner: "reserve" } });
+  assert.equal(F.vaultFor("room_owner"), "reserve", "layers off: royalties back on the Reserve (v1)");
+});
+
+test("1.99gq wheel shortfall: v1 the Reserve backstops what the pot can't cover", async () => {
+  await runQuery("DELETE FROM jackpot_rakes");
+  await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES ('seed-v1', NULL, NULL, 1000)");
+  F.sync({ reserve: 5000000, flows: { wheel_shortfall: "reserve" } });
+  assert.equal(F.houseBacked(), false);
+  const rc0 = await reserveClaims();
+  const d = await F.wheelDraw(5000, "spin-v1", "u-spin");
+  assert.deepEqual([d.paid, d.fromHouse, d.short, d.refused, d.backstop], [5000, 1000, 4000, 0, "reserve"]);
+  assert.equal(await pot(), 0, "the pot paid all it had");
+  assert.equal(await reserveClaims() - rc0, 4000, "the rest is a Reserve claim (Pepe settles it)");
+  assert.equal(await F.wheelReseed("spin-v1", "u-spin", 100000), 100000, "v1: the pot is topped back up to the floor from the Reserve");
+  assert.equal(await pot(), 100000);
+  assert.equal(await reserveClaims() - rc0, 104000);
+  await pepeSettle();
+});
+
+test("1.99gq wheel shortfall: economy v2 - the HOUSE backstops it; refused only when the House can't cover it; no Reserve, no reseed", async () => {
+  await runQuery("DELETE FROM jackpot_rakes");
+  await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES ('seed-v2', NULL, NULL, 25000)");
+  v2(0, {});
+  assert.equal(F.houseBacked(), true);
+  const rc0 = await reserveClaims();
+  const nClaims0 = (await getQuery("SELECT COUNT(*) AS n FROM reserve_claims"))[0].n;
+  // a prize the House covers: drawn from it in full
+  let d = await F.wheelDraw(20000, "spin-a", "u-spin");
+  assert.deepEqual([d.paid, d.fromHouse, d.short, d.refused, d.backstop], [20000, 20000, 0, 0, "house"]);
+  assert.equal(await pot(), 5000);
+  // a prize bigger than the pot: the House pays all it has, the uncovered part is refused
+  d = await F.wheelDraw(9200, "spin-b", "u-spin");
+  assert.deepEqual([d.paid, d.fromHouse, d.short, d.refused], [5000, 5000, 4200, 4200]);
+  assert.equal(await pot(), 0, "the House is empty, never negative");
+  assert.equal(await F.canFund("wheel_shortfall", 1), false, "an empty House covers nothing");
+  // an empty House: nothing paid, nothing drawn from anywhere else
+  d = await F.wheelDraw(700, "spin-c", "u-spin");
+  assert.deepEqual([d.paid, d.refused], [0, 700]);
+  assert.equal(await F.wheelReseed("spin-c", "u-spin", 100000), 0, "no reseed: the pot is the House");
+  assert.equal(await pot(), 0);
+  assert.equal(await reserveClaims(), rc0, "the Reserve is never touched");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims"))[0].n, nClaims0, "no claim of any kind");
+  // CONSERVATION: what left the House == what the spins paid (25,000 = 20,000 + 5,000 + 0)
+  assert.equal(25000 - await pot(), 20000 + 5000 + 0);
+  await runQuery("DELETE FROM jackpot_rakes");
+});

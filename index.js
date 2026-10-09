@@ -1150,7 +1150,7 @@ cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, 
 app.get("/economy", addUser, (req, res) => {
   // economy v2 E-2: the incentive budget + weekly waterfall section renders only while Pepe's treasury is live
   const f = require("./funding");
-  res.render("economy", { user: req.user ? req.user.username : null, treasury: f.treasuryLive() ? f.state.incentives : null });
+  res.render("economy", { user: req.user ? req.user.username : null, treasury: f.treasuryOn() ? f.state.incentives : null });
 });
 
 const history = require("./history");
@@ -3695,8 +3695,9 @@ const refundUser = (userId, spinId) => {
 // Monte Carlo (Oct 2026, real spin mix): regular slices 90% + jackpot ~4.6% => ~95% total payback,
 // pot grows ~1.5M / 2 weeks from the wheel alone; a hit is ~400k typical, 1 in 10 >= ~1.9M.
 const WHEEL_JACKPOT_CAP = 5000000;
-// Floor: if a win ever leaves the pot below this, it's topped back up (minted) so the wheel
-// always shows a live jackpot. With the cap, a win can only empty the pot when it's under 5M.
+// Floor: if a win ever leaves the pot below this, it's topped back up from the Reserve (funding.wheelReseed) so the
+// wheel always shows a live jackpot. With the cap, a win can only empty the pot when it's under 5M. Economy v2
+// (1.99gq, Pepe's layers on): the House backstops the wheel and there is no Reserve top-up.
 const JACKPOT_MINIMUM = 100000;
 
 // Landing the jackpot slice rolls what PERCENT of the wheel jackpot you win. Skewed low so most hits are modest and the full 100% (GRAND) is
@@ -3838,14 +3839,11 @@ async function settleSpin(spinId) {
   let payout = spin.payout || 0;
   if (!isJackpot && payout > 0) {
     // Regular prizes are paid out of the casino jackpot (the house bank). Whatever the pot can't
-    // cover comes from the "wheel_shortfall" vault (the Reserve) - or isn't paid; never minted.
-    const fromPot = Math.min(payout, Math.max(0, await getJackpotPot()));
-    if (fromPot > 0) {
-      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -fromPot]);
-    }
-    const short = payout - fromPot;
-    if (short > 0 && !(await funding.takeFunds("wheel_shortfall", short, spin.userId, "wheel prize shortfall"))) {
-      payout = fromPot;
+    // cover comes from the "wheel_shortfall" vault - v1 the Reserve, economy v2 (1.99gq) the House itself
+    // (funding.wheelDraw) - or isn't paid; never minted.
+    const d = await funding.wheelDraw(payout, spinId, spin.userId);
+    if (d.paid !== payout) {
+      payout = d.paid;
       await runQuery("UPDATE wheel_spins SET payout = ? WHERE spinId = ?", [payout, spinId]);
     }
   }
@@ -3856,11 +3854,9 @@ async function settleSpin(spinId) {
   if (!credited.ok) console.error(`[wheel] spin ${spinId}: payout ${payout} not credited (${credited.code})`);
   if (isJackpot && payout > 0) {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -payout]);
-    const left = await getJackpotPot();
-    if (left < JACKPOT_MINIMUM && await funding.takeFunds("wheel_shortfall", JACKPOT_MINIMUM - left, spin.userId, "wheel jackpot reseed")) {
-      // the reseed comes from the Reserve (a claim Pepe settles), not from nowhere
-      await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, JACKPOT_MINIMUM - left]);
-    }
+    // back up to the floor: v1 from the Reserve (a claim Pepe settles); v2 (1.99gq, House-backed) not at all -
+    // the pot IS the House, so there is nothing else to refill it from
+    await funding.wheelReseed(spinId, spin.userId, JACKPOT_MINIMUM);
   }
 
   const xp = payout * 0.005;

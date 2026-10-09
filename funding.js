@@ -21,6 +21,16 @@
 // room (credited through ledger.post with a deterministic transaction id, so a crash mid-pay is
 // recovered, never paid twice). takeFunds() callers (redeem codes, Discord/Twitch rewards) keep their
 // refuse-when-short behaviour. Pepe only ever sees claims with queued = 0.
+//
+// 1.99gq (the user's E-2 decisions, 2026-10-09; Pepe's routing `v2` defaults while his econ_layers is on):
+//   * pad owner royalties (room_owner) settle against the incentive budget too - group "royalties", and the
+//     sync carries the budget whenever Pepe's layers are on (incentives.treasury = false while only the layers
+//     are on: then the E-2 grants stay on the Reserve, only room_owner is routed to "incentives").
+//     royalties.js asks fundable() first and releases at most what the group can pay now (the rest waits).
+//   * the wheel shortfall is backstopped by the HOUSE: Pepe routes "wheel_shortfall" to "jackpot". The wheel's
+//     pot and the House are the same money (jackpot_rakes), so wheelDraw() pays a prize from the House up to
+//     its whole balance and refuses only what the House can't cover - never a Reserve claim; wheelReseed()
+//     doesn't top the pot back up to its 100k floor (that would move House money into the House).
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -56,7 +66,9 @@ let ready = runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
     await runQuery("CREATE INDEX IF NOT EXISTS reserve_claims_queue ON reserve_claims (queued, created)");
   }).catch((e) => console.error("[funding] table:", e));
 
+// the budget is reported (routing / queue); treasuryOn = the E-2 Treasury itself is live (display)
 const treasuryLive = () => state.incentives !== null;
+const treasuryOn = () => treasuryLive() && state.incentives.treasury !== false;
 const groupOf = (flow) => (state.incentives && state.incentives.groups && state.incentives.groups[flow]) || null;
 
 function vaultFor(flow) {
@@ -104,6 +116,68 @@ async function unsettledReserve() {
 async function jackpotPot() {
   const r = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
   return (r[0] && r[0].t) || 0;
+}
+
+// 1.99gq: how much `flow` could be paid right now (incentive flows: what its group and the budget can cover,
+// 0 while the group has a queue; the House: its balance; the Reserve: its balance net of unsettled claims)
+async function fundable(flow) {
+  const v = vaultFor(flow);
+  if (v === "jackpot") return Math.max(0, await jackpotPot());
+  if (v === "incentives") {
+    const inc = state.incentives;
+    const g = groupOf(flow);
+    if (!inc || !g || (await queuedCount(g)) > 0) return 0;
+    const left = (Number((inc.remaining || {})[g]) || 0) - (await unsettledIncentives(g));
+    const bal = (Number(inc.balance) || 0) - (await unsettledIncentives());
+    return Math.max(0, Math.floor(Math.min(left, bal)));
+  }
+  if (state.reserve === null) return 0;
+  return Math.max(0, state.reserve - (await unsettledReserve()));
+}
+
+// 1.99gq: is the wheel shortfall backstopped by the House (Pepe's economy v2 layers) instead of the Reserve?
+const houseBacked = () => vaultFor("wheel_shortfall") === "jackpot";
+
+// Pay a wheel prize out of the House (the casino pot). -> {paid, fromHouse, short, refused, backstop}
+// v1: what the pot can't cover is a "wheel_shortfall" claim on the Reserve (or refused if it can't cover it).
+// v2 (houseBacked): the pot IS the House, so the prize is drawn from the House up to its whole balance and only
+// what the House can't cover is refused - nothing is drawn from the Reserve. Never minted either way.
+async function wheelDraw(payout, spinId, userId) {
+  payout = Math.max(0, Math.floor(Number(payout) || 0));
+  const out = { paid: 0, fromHouse: 0, short: 0, refused: 0, backstop: houseBacked() ? "house" : "reserve" };
+  if (!payout) return out;
+  const fromPot = Math.min(payout, Math.max(0, await jackpotPot()));
+  if (fromPot > 0) {
+    await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                   [uuidv4(), spinId || null, userId || null, -fromPot]);
+  }
+  out.fromHouse = fromPot;
+  out.short = payout - fromPot;
+  if (out.short <= 0) { out.paid = payout; return out; }
+  if (out.backstop === "house") {
+    out.refused = out.short;                     // the House is empty: nothing else may pay it
+    out.paid = fromPot;
+    console.log(`[funding] wheel_shortfall: the House can't cover ${out.short} of a ${payout} prize (spin ${spinId}) - refused`);
+    return out;
+  }
+  const ok = await takeFunds("wheel_shortfall", out.short, userId, "wheel prize shortfall");
+  out.refused = ok ? 0 : out.short;
+  out.paid = ok ? payout : fromPot;
+  return out;
+}
+
+// Top the wheel's pot back up to `floor` after a jackpot win. v1: from the Reserve (a "wheel_shortfall" claim).
+// v2 (houseBacked): the pot is the House - a top-up from the House into the House moves nothing, so none is made.
+async function wheelReseed(spinId, userId, floor) {
+  const left = await jackpotPot();
+  if (left >= floor) return 0;
+  if (houseBacked()) return 0;
+  const amt = floor - left;
+  if (!(await takeFunds("wheel_shortfall", amt, userId, "wheel jackpot reseed"))) return 0;
+  // the reseed comes from the Reserve (a claim Pepe settles), not from nowhere
+  await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                 [uuidv4(), spinId || null, userId || null, amt]);
+  return amt;
 }
 
 // Can `flow`'s vault cover `amount` right now? (A Reserve that was never synced covers nothing.)
@@ -275,6 +349,7 @@ function cleanIncentives(x) {
     if (typeof v === "string") groups[String(k).slice(0, 32)] = v.slice(0, 32);
   }
   return { balance: Math.max(0, Math.floor(x.balance)), week: String(x.week || "").slice(0, 16), remaining: num(x.remaining),
+           treasury: x.treasury !== false,           // 1.99gq: false = only Pepe's layers are on (royalties use it)
            budgets: num(x.budgets), groups, share: typeof x.share === "number" ? Math.floor(x.share) : null,
            release_per_day: typeof x.release_per_day === "number" ? Math.floor(x.release_per_day) : null };
 }
@@ -311,4 +386,5 @@ async function settle(ids) {
 }
 
 module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive,
-                   treasuryLive, vaultFor, queueClaim, drainQueue, queueSummary, groupOf };
+                   treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable,
+                   houseBacked, wheelDraw, wheelReseed };

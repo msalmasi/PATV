@@ -236,7 +236,10 @@
             <li><b>1. Vault floors.</b> Fort Knox and the Casino vault are topped back up to 2M each day, so heists always
               have something to rob.</li>
             <li><b>2. Rewards.</b> Weekly budgets: welcome PAT 1.5M, level-ups 1.4M, achievements 2.1M, connect bonuses /
-              codes / platform rewards 0.35M. Rewards over budget wait in line.</li>
+              codes / platform rewards 0.35M, pad owner royalties 0.3M. Rewards over budget wait in line.</li>
+            <li><b>Room games.</b> Until rooms get their own vaults, the chat raffle, top mic of the hour, pictionary and
+              !beg are paid from the budget too, within 3.5M a week (paced: at most 1/7 of it per day), and turf income
+              within 0.5M. A prize over that is skipped, as it was when the Federal Reserve ran dry.</li>
           </ul>
           <p>Fort Knox above 15M and the Casino vault above 10M overflow into the House, which becomes next week's surplus.</p>
         </div>
@@ -246,7 +249,7 @@
             <li>Incentive budget: <b><%= _f(_tr.balance) %> PAT</b></li>
             <% if (_tr.share !== null && _tr.share !== undefined) { %><li>From this week's settlement: <%= _f(_tr.share) %> PAT (about <%= _f(_tr.release_per_day) %> a day)</li><% } %>
             <% Object.keys(_tr.budgets || {}).forEach((g) => { %>
-              <li><%= ({ welcome: 'Welcome PAT', levelup: 'Level-ups', achievements: 'Achievements', misc: 'Connect bonuses, codes, platform rewards' })[g] || g %>:
+              <li><%= ({ welcome: 'Welcome PAT', levelup: 'Level-ups', achievements: 'Achievements', misc: 'Connect bonuses, codes, platform rewards', royalties: 'Pad owner royalties', roomgames: 'Room games (raffle, top mic, pictionary, !beg)', turf: 'Turf income' })[g] || g %>:
                 <%= _f((_tr.remaining || {})[g]) %> of <%= _f(_tr.budgets[g]) %> left</li>
             <% }) %>
           </ul>

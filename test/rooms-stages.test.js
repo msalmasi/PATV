@@ -574,11 +574,59 @@ test("HTTP: owner-only routes, Pepe's owner sync + !stage act, front room needs 
   } finally { srv.close(); }
 });
 
+test("royalties (1.99gq): with Pepe's economy v2 layers on they are paid by the incentive budget, within its 'royalties' group", async () => {
+  const o3 = await mkUser(START, { username: "roomowner3", camfrog: "ro3" });
+  await rooms.addRoom("inc_room", "Incentive Room", "boss");
+  await rooms.setOwner("inc_room", "roomowner3", "boss");
+  T = Date.UTC(2027, 0, 4, 10, 0, 0);                       // a Monday
+  const P0 = ROY.periodOf(T);
+  await ROY.spendBatch([{ room: "inc_room", amount: 90000, base: 900000, share: true, login: "someone", ref: "inc-1" }]);
+  for (const day of [0, 1, 2]) {
+    for (let m = 0; m < 61; m++) await rooms.noteActivity("inc_room", 3, 1, T + day * 86400000 + m * 60000);
+  }
+  assert.ok(await ROY.activeDays("inc_room", P0) >= 3);
+  const groups = { room_owner: "royalties" };
+  const sync = (balance, left) => funding.sync({ reserve: 10000000, flows: { room_owner: "incentives" },
+    incentives: { balance, week: "W2027-01-04", remaining: { royalties: left }, budgets: { royalties: 300000 }, groups, treasury: false } });
+  T += 7 * 86400000;
+  // the group has 60k left this week: 60k of the 90k is released, from the budget, the rest waits
+  sync(1000000, 60000);
+  const bal0 = await balance(o3.userId);
+  const r0 = (await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'room_owner'"))[0].t;
+  let out = await ROY.releaseTick();
+  assert.deepEqual(out.find((x) => x.room === "inc_room"), { room: "inc_room", owner: o3.userId, outcome: "released", amount: 60000 });
+  assert.equal(await balance(o3.userId), bal0 + 60000);
+  const c = await getQuery("SELECT flow, amount FROM reserve_claims WHERE flow = 'incentives:room_owner'");
+  assert.deepEqual(c.map((x) => [x.flow, x.amount]), [["incentives:room_owner", 60000]], "an incentive-budget claim Pepe settles");
+  assert.equal((await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'room_owner'"))[0].t, r0, "nothing from the Reserve");
+  const rel = await getQuery("SELECT source FROM royalty_ledger WHERE kind = 'release' AND room_id = 'inc_room'");
+  assert.deepEqual(rel.map((x) => x.source), ["incentives"]);
+  let st = await ROY.status("inc_room", o3.userId);
+  assert.equal(st.pending, 30000, "the other 30k waits for the next release");
+  const note = (await getQuery("SELECT body FROM inbox WHERE user_id = ? AND title LIKE '+60,000%'", [o3.userId]))[0];
+  assert.match(note.body, /incentive budget/);
+  // next period, the group is spent out: unfunded (retried), nothing taken
+  T += 7 * 86400000;
+  for (let m = 0; m < 61; m++) for (const day of [0, 1, 2]) await rooms.noteActivity("inc_room", 3, 1, T - 7 * 86400000 + day * 86400000 + m * 60000);
+  sync(1000000, 60000 - 60000);
+  out = await ROY.releaseTick();
+  assert.equal(out.find((x) => x.room === "inc_room").outcome, "unfunded");
+  // the budget refills: the rest is released on the retry
+  sync(1000000, 300000);
+  out = await ROY.releaseTick();
+  assert.equal(out.find((x) => x.room === "inc_room").amount, 30000);
+  st = await ROY.status("inc_room", o3.userId);
+  assert.equal(st.paid, 90000); assert.equal(st.pending, 0);
+  funding.sync({ reserve: 10000000, flows: { room_owner: "reserve" } });          // back to v1 for the rest
+  T = Date.UTC(2026, 9, 6, 12, 0, 0) + 800 * 86400000;
+});
+
 test("money is conserved across stages: balances + held + revenue = what everyone started with", async () => {
   const users = await getQuery("SELECT SUM(points_balance) AS b FROM users");
   const open = await getQuery("SELECT COALESCE(SUM(held),0) AS h FROM stage_slots WHERE settled = 0");
   const rev = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'stage_slot'");
-  const paidOut = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow = 'room_owner'");
+  // royalties paid by the Reserve (v1) or by the incentive budget (1.99gq): both come from a pool outside the wallets
+  const paidOut = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims WHERE flow IN ('room_owner', 'incentives:room_owner')");
   const escrow = await getQuery("SELECT COALESCE(SUM(room_vault),0) AS t FROM room_flow_ledger WHERE kind = 'slot_fee'");   // 1.99ee: the room-vault half
   const started = (await getQuery("SELECT COUNT(*) AS n FROM users"))[0].n * START;
   assert.equal(users[0].b + open[0].h + (-rev[0].t) + escrow[0].t - paidOut[0].t, started);

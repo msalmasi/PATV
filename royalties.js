@@ -281,12 +281,17 @@ async function releaseTick() {
       out.push({ room, owner, outcome: "missed", days });
       continue;
     }
-    const amount = CONFIG.cap_per_period > 0 ? Math.min(pending, CONFIG.cap_per_period) : pending;
-    const paid = await funding.fundPayout(owner, amount, "room_owner", `pad owner royalties: ${title}`);
+    let amount = CONFIG.cap_per_period > 0 ? Math.min(pending, CONFIG.cap_per_period) : pending;
+    // 1.99gq: with Pepe's economy v2 layers on, royalties are paid by the incentive budget (group "royalties",
+    // a weekly budget): release what it can pay now; the rest waits for the next release, as over the cap
+    const fromBudget = funding.vaultFor("room_owner") === "incentives";
+    const payer = fromBudget ? "the incentive budget" : "the Federal Reserve";
+    if (fromBudget) amount = Math.min(amount, await funding.fundable("room_owner"));
+    const paid = amount > 0 && await funding.fundPayout(owner, amount, "room_owner", `pad owner royalties: ${title}`);
     if (!paid) {
       if (!run) {
         require("./rooms").notify(owner, { kind: "room", title: `Royalties for ${title} are delayed`,
-          body: `The Federal Reserve can't cover ${amount.toLocaleString("en-US")} PAT right now - it's paid as soon as it can.`,
+          body: `${payer[0].toUpperCase() + payer.slice(1)} can't cover ${(amount || pending).toLocaleString("en-US")} PAT right now - it's paid as soon as it can.`,
           link: R ? `/p/${encodeURIComponent(R.slug)}/settings#royalties` : "/messages/notices", ref: `roy-late:${room}:${P}`, pm: false }).catch(() => {});
       }
       await setRun("unfunded", amount);
@@ -294,11 +299,14 @@ async function releaseTick() {
       continue;
     }
     await runQuery(`INSERT OR IGNORE INTO royalty_ledger (room_id, owner_user_id, kind, source, amount, period, ref, created, detail)
-                    VALUES (?, ?, 'release', 'reserve', ?, ?, ?, ?, ?)`,
-                   [room, owner, amount, P, `release:${room}:${owner}:${P}`, t, `${days} active days`]);
+                    VALUES (?, ?, 'release', ?, ?, ?, ?, ?, ?)`,
+                   [room, owner, fromBudget ? "incentives" : "reserve", amount, P, `release:${room}:${owner}:${P}`, t,
+                    `${days} active days` + (paid === "queued" ? " (queued for the incentive budget)" : "")]);
     await setRun("released", amount);
     require("./rooms").notify(owner, { kind: "room", title: `+${amount.toLocaleString("en-US")} PAT pad owner royalties for ${title}`,
-      body: `Paid by the Federal Reserve for last period (${days} active days).` + (pending > amount ? ` ${(pending - amount).toLocaleString("en-US")} PAT over the cap waits for the next release.` : ""),
+      body: (paid === "queued" ? `Owed by ${payer} for last period (${days} active days) - it lands in your wallet as soon as its weekly budget has room.`
+                               : `Paid by ${payer} for last period (${days} active days).`)
+            + (pending > amount ? ` ${(pending - amount).toLocaleString("en-US")} PAT waits for the next release.` : ""),
       link: R ? `/p/${encodeURIComponent(R.slug)}/settings#royalties` : "/wallet", ref: `roy-paid:${room}:${P}` }).catch(() => {});
     out.push({ room, owner, outcome: "released", amount });
   }
