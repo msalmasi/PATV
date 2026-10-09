@@ -135,7 +135,7 @@ if journalctl -u "$SVC" -n 200 --no-pager -q -o cat | grep -E "site sync failed|
 else
   ok "worker syncing with $SITE_URL"
 fi
-# 1.99gn: the worker publishes to the target itself - no relay ffmpeg may carry a target (and its key) in argv
+# 1.99go: the worker publishes to the target itself - no relay ffmpeg may carry a target (and its key) in argv
 ARGV_TARGETS=0
 for p in $(pgrep -u "$USER_" -x ffmpeg || true); do
   tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | tail -1 | grep -qx 'pipe:1' || ARGV_TARGETS=$((ARGV_TARGETS + 1))

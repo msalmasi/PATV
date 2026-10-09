@@ -72,9 +72,9 @@ nginx-rtmp (loopback) to Twitch. Staging's worker only accepts loopback targets 
   then `INST=prod bash /home/PATV/deploy/restream/install.sh`. It adds `RESTREAM_SECRET` + `RESTREAM_TOKEN` to the site's `.env`.
 - A key from a file (e.g. Pepe's, read out of OBS): `cd /home/PATV && node deploy/restream/set-key.js --owner @main --file <0600 file with KEY=/SERVER=> --shred`.
 - **Emergency stop of every relay:** `systemctl stop patv-restream@prod` (its ffmpegs die with it). Undo the install: `INST=prod UNINSTALL=1 bash .../install.sh`.
-- The stream key is in no process's arguments (1.99gn): ffmpeg only gets the loopback source and writes FLV to a pipe
+- The stream key is in no process's arguments (1.99go): ffmpeg only gets the loopback source and writes FLV to a pipe
   (`... -f flv pipe:1`, progress on fd 3); the worker publishes it to Twitch with its own small RTMP client, the key
-  only in its memory (from the site over loopback, never argv/env). Before 1.99gn the target URL was an ffmpeg argument
+  only in its memory (from the site over loopback, never argv/env). Before 1.99go the target URL was an ffmpeg argument
   and `/proc/<pid>/cmdline` showed it to every local account (no hidepid). It never reaches a log either way.
   `RELAY_MODE=argv` in `/etc/patv-restream/<inst>.env` brings the old ffmpeg-pushes-itself mode back (key in argv) as
   an emergency fallback; install.sh warns when any relay ffmpeg still has a target in its arguments.

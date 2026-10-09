@@ -1,4 +1,4 @@
-// Offline tests for the relay worker's own RTMP publisher (deploy/restream/patv-restream.js, 1.99gn): a fake RTMP
+// Offline tests for the relay worker's own RTMP publisher (deploy/restream/patv-restream.js, 1.99go): a fake RTMP
 // server on loopback checks the handshake, connect/createStream/publish with the stream name ONLY in the publish
 // commands, @setDataFrame metadata, chunked big messages, extended timestamps, ping answers, and refusals.
 //   node --test test/restream-rtmp.test.js

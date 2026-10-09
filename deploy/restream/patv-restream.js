@@ -6,11 +6,11 @@
 // and gets back the relays it should run: [{id, source, target}]. One ffmpeg per relay:
 //     ffmpeg -i <source: rtmp://127.0.0.1/...> -c copy -f flv pipe:1      (copy only - no re-encode)
 // and THIS process publishes ffmpeg's FLV to the target (Twitch ingest/<key>) with its own small RTMP client
-// (RtmpPublisher below, 1.99gn). A relay that exits while still wanted is restarted with backoff (2 s doubling to
+// (RtmpPublisher below, 1.99go). A relay that exits while still wanted is restarted with backoff (2 s doubling to
 // 60 s, reset after 60 s of clean running); one whose frame counter stalls for STALL_MS is killed and restarted.
 // Site unreachable: what runs keeps running for HOLD_MS (a site restart doesn't cut Twitch), then everything stops.
 //
-// Secrets (1.99gn): the stream key is never in any process's arguments. Before, ffmpeg got the target URL as an
+// Secrets (1.99go): the stream key is never in any process's arguments. Before, ffmpeg got the target URL as an
 // argument, so /proc/<pid>/cmdline showed it to every local account (no hidepid). Now ffmpeg only sees the loopback
 // source and writes FLV to a pipe; the key lives in this worker's memory (it comes from the site over loopback HTTP,
 // never from argv or the env file) and goes out only inside the RTMP publish command. It is NEVER logged either:
@@ -28,7 +28,7 @@ const crypto = require("crypto");
 const { EventEmitter } = require("events");
 const { spawn } = require("child_process");
 
-const VERSION = "1.99gn";
+const VERSION = "1.99go";
 const SYNC_MS = 3000;
 const HOLD_MS = 60 * 1000;
 const STALL_MS = 25 * 1000;
@@ -65,14 +65,14 @@ function ffmpegArgs(source, target) {
           "-progress", "pipe:1",
           "-f", "flv", "-flvflags", "no_duration_filesize", target];
 }
-/** 1.99gn: the same ffmpeg without the target - FLV to stdout (fd 1), progress to fd 3. No URL with a key in it. */
+/** 1.99go: the same ffmpeg without the target - FLV to stdout (fd 1), progress to fd 3. No URL with a key in it. */
 function ffmpegPipeArgs(source) {
   const a = ffmpegArgs(source, "pipe:1");
   a[a.indexOf("-progress") + 1] = "pipe:3";
   return a;
 }
 
-// ── a minimal RTMP publisher (1.99gn) - just enough of the protocol to push FLV tags to an ingest ──
+// ── a minimal RTMP publisher (1.99go) - just enough of the protocol to push FLV tags to an ingest ──
 // AMF0
 function amfEnc(v) {
   if (v === null || v === undefined) return Buffer.from([0x05]);
@@ -575,7 +575,7 @@ function main() {
       else sup.watchdog();
     } finally { busy = false; }
   };
-  // 1.99gn: no more ticks once stopping (a tick in the exit window used to start the relays again)
+  // 1.99go: no more ticks once stopping (a tick in the exit window used to start the relays again)
   const shutdown = (sig) => { if (stopping) return; stopping = true; clearInterval(timer); console.log(`${sig}: stopping`); sup.stopAll(sig); setTimeout(() => process.exit(0), 1500); };
   process.on("SIGTERM", () => shutdown("SIGTERM"));
   process.on("SIGINT", () => shutdown("SIGINT"));

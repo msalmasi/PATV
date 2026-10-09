@@ -46,7 +46,7 @@ function progress(p, frame, kbps) {     // pipe mode: progress on fd 3; argv mod
   (p.args.includes("pipe:3") ? p.progress : p.stdout).write(`frame=${frame}\nfps=30.0\nbitrate=${kbps}kbits/s\ntotal_size=1\nprogress=continue\n`);
 }
 
-test("pipe args (1.99gn): no target, no key, nothing rtmp but the loopback source; FLV to stdout, progress on fd 3", () => {
+test("pipe args (1.99go): no target, no key, nothing rtmp but the loopback source; FLV to stdout, progress on fd 3", () => {
   const a = W.ffmpegPipeArgs(SRC);
   assert.ok(!a.join(" ").includes(KEY) && !a.join(" ").includes("twitch"), "no key / ingest in argv");
   assert.deepEqual(a.filter((x) => /rtmps?:/i.test(x)), [SRC]);
