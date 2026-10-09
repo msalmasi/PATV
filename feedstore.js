@@ -913,8 +913,8 @@ async function chargeFor(u, cost, label) {
 }
 async function refund(u, cost, label) {
   if (cost <= 0) return;
-  await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [cost, u.userId]);
-  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), u.userId, label, cost]);
+  const r = await require("./ledger").post(u.userId, cost, label, { resolveMerged: true, source: "feed refund" });   // 1.99ga
+  if (!r.ok) { console.error(`[feed] refund ${cost} for ${u.userId} not credited (${r.code})`); return; }
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)", [uuidv4(), "feed_post", u.userId, label, cost]).catch(() => {});
 }
 function priceOf(C, { images, audio, video, link }) {

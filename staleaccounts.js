@@ -577,6 +577,7 @@ async function mergeDuplicate(dupId, primaryId) {
     }
     await runQuery("INSERT INTO transactions (transactionId, userId, type, points, note) VALUES (?, ?, ?, ?, ?)",
                    [uuidv4(), primaryId, "account merge", 0, `duplicate ${d.username} merged (${toMain} PAT here, ${toReserve} PAT duplicate welcome mint to the Reserve, ${xp} XP)`]);
+    await require("./ledger").recordMerge(dupId, primaryId, "duplicate merge");   // 1.99ga
     await runQuery("DELETE FROM users WHERE userId = ?", [dupId]);
     return { dup: d.username, into: p.username, balance: bal, toMain, toReserve, xp, moved };
   });

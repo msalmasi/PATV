@@ -199,10 +199,10 @@ class Refuse extends Error {
   constructor(status, message) { super(message); this.status = status; this.refuse = true; }
 }
 
+// 1.99ga: through the ledger - only an account that exists (a credit follows a merge), else it throws
+// and the surrounding tx() rolls the whole order step back
 async function move(userId, amount, label) {
-  await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
-  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                 [uuidv4(), userId, label, amount]);
+  await require("./ledger").postOrThrow(userId, amount, label, { resolveMerged: amount > 0, source: "shop" });
 }
 async function event(orderId, status, actor, note) {
   await runQuery("INSERT INTO shop_order_events (order_id, ts, status, actor, note) VALUES (?, ?, ?, ?, ?)",
@@ -404,11 +404,8 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
         "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
         [uuidv4(), userId, `purchase of ${prize.prize}`, -prize.cost]);
       if (owner) {
-        await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-                       [prize.cost, owner.userId]);
-        await runQuery(
-          "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-          [uuidv4(), owner.userId, `store sale: ${prize.prize} to ${username} (${source})`, prize.cost]);
+        await require("./ledger").postOrThrow(owner.userId, prize.cost, `store sale: ${prize.prize} to ${username} (${source})`,
+                                              { resolveMerged: true, source: "shop sale" });
       }
       const now = Date.now();
       const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,

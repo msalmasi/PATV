@@ -9,6 +9,7 @@ const sgMail = require('@sendgrid/mail');
 const crypto = require('crypto');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
 const funding = require('./funding');
+const ledger = require('./ledger');   // 1.99ga
 const { moveUserRows, copyCamfrogBadges } = require('./accountMerge');
 const inbox = require('./inbox');
 const displaynames = require('./displaynames');
@@ -474,6 +475,7 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     // active (the auto account had them from the quiet backfill).
     const moved = await moveUserRows(auto.userId, userId);
     console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(moved)}`);
+    await ledger.recordMerge(auto.userId, userId, 'camfrog link');   // 1.99ga: late credits follow it here
     await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
 
     await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
@@ -833,25 +835,30 @@ async function awardBonus(userId, type, amount) {
     // 1.63: bonuses are paid OUT of a vault (connect bonuses: "connect_bonus"; anything else:
     // "platform_rewards") and skipped when it can't cover them - never minted.
     const flow = /connect/i.test(String(type)) ? "connect_bonus" : "platform_rewards";
-    if (!(await funding.takeFunds(flow, amount, userId, type))) return;
+    // 1.99ga: nothing is taken from a vault for an account that isn't there
+    if (!(await ledger.userExists(userId))) {
+      console.warn(`[bonus] ${type} ${amount} for missing account ${userId} - skipped (${ledger.E_TARGET_NOT_FOUND})`);
+      return { success: false, code: ledger.E_TARGET_NOT_FOUND };
+    }
+    const take = await funding.takeFundsRef(flow, amount, userId, type);
+    if (!take.ok) return;
     // Start a transaction
     const transactionId = uuidv4();
     const bonusId = uuidv4();
     await runQuery("BEGIN TRANSACTION");
 
-    // Add points to the winner's points balance
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+    // Add points to the winner's points balance - logged only when it really moved (1.99ga)
+    const posted = await ledger.post(userId, Number(amount), "bonus win", { transactionId, resolveMerged: true, source: `bonus ${type}` });
+    if (!posted.ok) {
+      await runQuery("ROLLBACK");
+      await take.undo();
+      return { success: false, code: posted.code };
+    }
 
-    // Insert into bonus_winners table   
+    // Insert into bonus_winners table
     await runQuery(
       "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-      [bonusId, type, userId, transactionId, amount]
-    );
-
-    // Log the transaction
-    await runQuery(
-      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-      [transactionId, userId, "bonus win", amount]
+      [bonusId, type, posted.userId, transactionId, amount]
     );
 
     // Commit the transaction

@@ -255,6 +255,15 @@ app.get("/api/admin/stale", addUser, async (req, res) => {
     res.json(await stale.noticeSummary());
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
+// 1.99ga: transaction rows whose account no longer exists (orphantx.js) - who, how many, how much, and the
+// account they were merged into when that is known (the one-shot fix-orphan-transactions.js re-homes those).
+app.get("/api/admin/ledger/orphans", addUser, async (req, res) => {
+  try {
+    if (!(await welcomeAdmin(req))) return res.status(403).json({ error: "admins only" });
+    const rows = await require("./orphantx").report(getQuery);
+    res.json({ ids: rows.length, rows: rows.reduce((t, r) => t + r.rows, 0), net: rows.reduce((t, r) => t + r.net, 0), orphans: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 // Pepe: the Camfrog logins still warned (he PMs them when he sees them), and "I saw this login"
 // (they're active again: the warning is cleared).
 app.get("/api/stale/notice-logins", async (req, res) => {
@@ -1771,30 +1780,22 @@ async function transferPat(senderUsername, recipientUsername, rawAmount, note = 
 
   // Atomic conditional debit: the balance check and the deduction are the SAME statement.
   // If the balance is insufficient, no row changes and nothing is deducted.
-  const debit = await runQuery(
-    "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
-    [amount, sender.userId, amount]
-  );
-  if (!debit || debit.changes === 0) {
-    return { ok: false, status: 400, msg: "Insufficient balance" };
-  }
-
-  // Credit recipient (atomic single statement).
-  await runQuery(
-    "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-    [amount, recipient.userId]
-  );
-
-  // Ledger entries (note = the optional web-tip message, null otherwise).
+  // 1.99ga: through the ledger - each leg is logged only when its balance really moved, and a
+  // recipient that vanished in the meantime (merged / deleted) puts the sender's PAT back.
   await tipNoteReady;
-  await runQuery(
-    "INSERT INTO transactions (transactionId, userId, type, points, counterparty, note) VALUES (?, ?, ?, ?, ?, ?)",
-    [uuidv4(), sender.userId, "tip sent", -amount, recipient.userId, note]
-  );
-  await runQuery(
-    "INSERT INTO transactions (transactionId, userId, type, points, counterparty, note) VALUES (?, ?, ?, ?, ?, ?)",
-    [uuidv4(), recipient.userId, "tip received", amount, sender.userId, note]
-  );
+  const debit = await ledger.post(sender.userId, -amount, "tip sent",
+                                  { requireCover: true, counterparty: recipient.userId, note, source: "tip" });
+  if (!debit.ok) {
+    return debit.code === ledger.E_INSUFFICIENT
+      ? { ok: false, status: 400, msg: "Insufficient balance" }
+      : { ok: false, status: 404, msg: "One or both users not found" };
+  }
+  const credit = await ledger.post(recipient.userId, amount, "tip received",
+                                   { counterparty: sender.userId, note, resolveMerged: true, source: "tip" });
+  if (!credit.ok) {
+    await ledger.reverse(debit, -amount);
+    return { ok: false, status: 404, msg: "One or both users not found" };
+  }
 
   // the recipient's inbox (1.99au): who, how much, and the note if there was one
   inbox.addSafe(recipient.userId, { kind: "tip", title: `${sender.username} tipped you PAT ${amount.toLocaleString("en-US")}`,
@@ -1926,14 +1927,14 @@ app.post("/api/wager/charge", async (req, res) => {
     if (users[0].casino_banned && /^(blackjack|holdem|poker|wheel)/i.test(reason)) {
       return reply(403, { ok: false, error: "casino_banned" });
     }
-    // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW.
-    const debit = await runQuery(
-      "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
-      [amount, userId, amount]
-    );
-    if (!debit || debit.changes === 0) return reply(402, { ok: false, error: "insufficient" });
+    // Atomic conditional debit: only succeeds if the balance covers it RIGHT NOW (1.99ga: ledger.post).
     const cp = await resolveCounterparty(req.body.counterparty);
-    await runQuery("INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)", [uuidv4(), userId, reason, -amount, cp]);
+    const debit = await ledger.post(userId, -amount, reason, { requireCover: true, counterparty: cp, source: "wager/charge" });
+    if (!debit.ok) {
+      return debit.code === ledger.E_INSUFFICIENT
+        ? reply(402, { ok: false, error: "insufficient" })
+        : reply(404, { ok: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND });
+    }
     reply(200, { ok: true });
   } catch (e) {
     idem.fail();
@@ -1953,9 +1954,13 @@ app.post("/api/wager/payout", async (req, res) => {
   try {
     const users = await getQuery("SELECT userId FROM users WHERE username = ?", [username]);
     if (!users.length) { idem.done(404, { ok: false, error: "no_user" }); return res.status(404).json({ ok: false, error: "no_user" }); }
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, users[0].userId]);
     const cp = await resolveCounterparty(req.body.counterparty);
-    await runQuery("INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)", [uuidv4(), users[0].userId, reason, amount, cp]);
+    const paid = await ledger.post(users[0].userId, amount, reason, { counterparty: cp, resolveMerged: true, source: "wager/payout" });
+    if (!paid.ok) {
+      const body = { ok: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND };
+      idem.done(404, body);
+      return res.status(404).json(body);
+    }
     idem.done(200, { ok: true });
     res.json({ ok: true });
   } catch (e) {
@@ -2264,6 +2269,8 @@ app.post("/api/users/camfrog/rename", async (req, res) => {
 // Bot-only routes: the caller must present the bot token. An unset token
 // never matches, so a server without one (staging) refuses them all.
 const funding = require("./funding");
+const ledger = require("./ledger");   // 1.99ga: credits/debits only to accounts that exist
+ledger.ensure();   // account_merges + the transactions_user_must_exist trigger (no-op until the tables exist)
 
 // ── Funded payouts (1.63): Pepe syncs the Reserve balance + which vault pays each website payout
 // flow, and settles the Reserve claims the website records. See funding.js.
@@ -2658,23 +2665,10 @@ app.post(
       db.serialize(async () => {
         db.run("BEGIN TRANSACTION");
         try {
-          // Update user's balance
-          let sql = `UPDATE users SET points_balance = points_balance + ? WHERE username = ?`;
-          await runQuery(sql, [amount, username]);
-
-          // Log the transaction
-          sql = `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)`;
-          const user = await getQuery(
-            `SELECT userId FROM users WHERE username = ?`,
-            [username]
-          );
-          console.log(user);
-          await runQuery(sql, [
-            transactionId,
-            user[0].userId,
-            "staff transfer",
-            amount,
-          ]);
+          // 1.99ga: balance + ledger row together, only for an account that exists
+          const user = await getQuery(`SELECT userId FROM users WHERE username = ?`, [username]);
+          if (!user.length) throw Object.assign(new Error(`${ledger.E_TARGET_NOT_FOUND}: ${username}`), { code: ledger.E_TARGET_NOT_FOUND });
+          await ledger.postOrThrow(user[0].userId, Math.trunc(Number(amount)), "staff transfer", { transactionId, source: "admin transfer" });
 
           db.run("COMMIT");
           res.json({ message: "Points transferred successfully." });
@@ -2896,12 +2890,8 @@ app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
         }
         await runQuery("BEGIN TRANSACTION");
         await runQuery("INSERT INTO user_redemptions (userId, code) VALUES (?, ?)", [userId, code]);
-        await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [codeData[0].points, userId]);
+        await ledger.postOrThrow(userId, codeData[0].points, `redemption (${codeData[0].code})`, { transactionId, source: "redeem" });
         await runQuery("UPDATE redemption_codes SET uses_remaining = uses_remaining - 1 WHERE code = ?", [code]);
-        await runQuery(
-            "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-            [transactionId, userId, `redemption (${codeData[0].code})`, codeData[0].points]
-          );
         await runQuery("COMMIT");
         
         const gained = codeData[0].points || 0;
@@ -3030,18 +3020,10 @@ app.post("/api/blackjack/wager", async (req, res) => {
       }
       // Deduct the wager from the user's balance
       const transactionId = uuidv4();
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance - ? WHERE userId = ?",
-        [wager, userId]
-      );
+      // balance + ledger row together (1.99ga), for an account that exists
+      await ledger.postOrThrow(userId, -Number(wager), "blackjack wager", { transactionId, source: "blackjack" });
       await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
                      [uuidv4(), null, userId, Number(wager)]);
-  
-      // Log the transaction for the wager
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionId, userId, "blackjack wager", -wager]
-      );
   
       // Create a new blackjack row
       const blackjackId = uuidv4();
@@ -3079,16 +3061,9 @@ app.post("/api/blackjack/result", async (req, res) => {
   
       // Log the payout transaction
       const transactionId = uuidv4();
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [transactionId, userId, "blackjack payout", payout]
-      );
-  
-      // Add the payout to the user's balance - paid OUT of the casino jackpot (1.63)
-      await runQuery(
-        "UPDATE users SET points_balance = points_balance + ? WHERE userId = ?",
-        [payout, userId]
-      );
+      // Add the payout to the user's balance - paid OUT of the casino jackpot (1.63); logged only
+      // when the account exists (1.99ga - else the catch rolls the whole result back)
+      await ledger.postOrThrow(userId, Number(payout), "blackjack payout", { transactionId, source: "blackjack" });
       if (Number(payout) > 0) {
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
                        [uuidv4(), null, userId, -Number(payout)]);
@@ -3244,14 +3219,7 @@ app.post("/api/u/acknowledge-spin", authenticateToken, async (req, res) => {
 
     await runQuery("BEGIN TRANSACTION");
 
-    await runQuery(
-      `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`,
-      [spinDetails[0].userId]
-    );
-    await runQuery(
-      `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
-      [transactionId, spinDetails[0].userId, "Wager: Gold Spin", -5000]
-    );
+    await ledger.postOrThrow(spinDetails[0].userId, -5000, "Wager: Gold Spin", { transactionId, source: "gold spin" });
     await runQuery(
       `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
       [jackpotId, spinId, spinDetails[0].userId, 5000]
@@ -3466,14 +3434,7 @@ app.post("/api/g/acknowledge-spin", async (req, res) => {
 
     await runQuery("BEGIN TRANSACTION");
 
-    await runQuery(
-      `UPDATE users SET points_balance = points_balance - 5000 WHERE userId = ?`,
-      [spinDetails[0].userId]
-    );
-    await runQuery(
-      `INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?);`,
-      [transactionId, spinDetails[0].userId, "Wager: Public Spin", -5000]
-    );
+    await ledger.postOrThrow(spinDetails[0].userId, -5000, "Wager: Public Spin", { transactionId, source: "public spin" });
     await runQuery(
       `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?);`,
       [jackpotId, spinId, spinDetails[0].userId, 5000]
@@ -3873,6 +3834,17 @@ async function settleSpin(spinId) {
   let spin = rows[0];
   if (spin.result === 'SETTLED') return { ok: true, already: true, ...spinDisplay(spin) };
   if (spin.result !== 'PENDING') return { ok: false, status: 409, error: 'not_pending' };
+  // 1.99ga: the spinner's account as it is NOW - a spin started before a merge pays the account it
+  // was merged into; one whose account is gone stays PENDING (nothing taken, nothing logged)
+  const owner = await ledger.resolveUserId(spin.userId);
+  if (!owner) {
+    console.warn(`[wheel] spin ${spinId}: account ${spin.userId} is gone - not settled (${ledger.E_TARGET_NOT_FOUND})`);
+    return { ok: false, status: 404, error: 'no_user', code: ledger.E_TARGET_NOT_FOUND };
+  }
+  if (owner !== spin.userId) {
+    await runQuery("UPDATE wheel_spins SET userId = ? WHERE spinId = ?", [owner, spinId]);
+    spin = { ...spin, userId: owner };
+  }
 
   const claim = await runQuery("UPDATE wheel_spins SET result = 'SETTLED' WHERE spinId = ? AND result = 'PENDING'", [spinId]);
   if (!claim || claim.changes === 0) {
@@ -3897,9 +3869,11 @@ async function settleSpin(spinId) {
       await runQuery("UPDATE wheel_spins SET payout = ? WHERE spinId = ?", [payout, spinId]);
     }
   }
-  if (payout > 0) {
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [payout, spin.userId]);
-  }
+  const txnType = isJackpot
+    ? (grand ? "Jackpot Win" : "Jackpot Win (partial)")
+    : (spin.type === 'gold' ? "Reward: Gold Spin" : "Reward: Public Spin");
+  const credited = await ledger.post(spin.userId, payout, txnType, { resolveMerged: true, source: "wheel settle" });
+  if (!credited.ok) console.error(`[wheel] spin ${spinId}: payout ${payout} not credited (${credited.code})`);
   if (isJackpot && payout > 0) {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, -payout]);
     const left = await getJackpotPot();
@@ -3908,10 +3882,6 @@ async function settleSpin(spinId) {
       await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)", [uuidv4(), spinId, spin.userId, JACKPOT_MINIMUM - left]);
     }
   }
-  const txnType = isJackpot
-    ? (grand ? "Jackpot Win" : "Jackpot Win (partial)")
-    : (spin.type === 'gold' ? "Reward: Gold Spin" : "Reward: Public Spin");
-  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)", [uuidv4(), spin.userId, txnType, payout]);
 
   const xp = payout * 0.005;
   const levelUpInfo = await updateLevel(spin.userId, xp);
@@ -4010,6 +3980,11 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
     }
     // 1.63: Discord/Twitch rewards are paid OUT of a vault ("platform_rewards"), never minted.
     // (Pepe's own credits through here are already paid for on his side.)
+    // 1.99ga: an account that doesn't exist is refused BEFORE any vault is touched
+    if (!(await ledger.userExists(userId))) {
+      console.warn(`[bonus] ${type} ${amount} for missing account ${userId} - refused (${ledger.E_TARGET_NOT_FOUND})`);
+      return res.status(404).json({ success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND });
+    }
     if (Number(amount) > 0 && /^(discord|twitch)-/i.test(String(type))) {
       if (!(await funding.takeFunds("platform_rewards", amount, userId, type))) {
         return res.status(409).json({ success: false, skipped: true, message: "the bank can't cover it" });
@@ -4026,28 +4001,22 @@ app.post("/api/bonus/chatwinner", async (req, res) => {
       await runQuery("BEGIN TRANSACTION");
   
       // Credit, or debit only what the balance covers: a deduction can never take anyone below zero.
+      // 1.99ga: balance and ledger row move together, only for an account that exists.
       const amt = Number(amount);
-      const upd = amt < 0
-        ? await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ? AND points_balance >= ?", [amt, userId, -amt])
-        : await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amt, userId]);
-      if (!upd || upd.changes === 0) {
+      const posted = await ledger.post(userId, amt, "bonus win", { requireCover: true, counterparty: cp, transactionId, source: `bonus ${type}` });
+      if (!posted.ok) {
         await runQuery("ROLLBACK");
-        const body = amt < 0 ? { success: false, error: "insufficient" } : { success: false, error: "no_user" };
-        const status = amt < 0 ? 402 : 404;
+        const body = posted.code === ledger.E_INSUFFICIENT ? { success: false, error: "insufficient" }
+                                                           : { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND };
+        const status = posted.code === ledger.E_INSUFFICIENT ? 402 : 404;
         idem.done(status, body);
         return res.status(status).json(body);
       }
-  
-      // Insert into bonus_winners table   
+
+      // Insert into bonus_winners table
       await runQuery(
         "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
         [bonusId, type, userId, transactionId, amount]
-      );
-  
-      // Log the transaction
-      await runQuery(
-        "INSERT INTO transactions (transactionId, userId, type, points, counterparty) VALUES (?, ?, ?, ?, ?)",
-        [transactionId, userId, "bonus win", amount, cp]
       );
   
       // Commit the transaction
@@ -4129,19 +4098,13 @@ app.post("/api/bonus/winner", authenticateToken, addUser, async (req, res) => {
     const bonusId = uuidv4();
     await runQuery("BEGIN TRANSACTION");
 
-    // Add points to the winner's points balance
-    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
+    // Add points to the winner's points balance (1.99ga: logged only when it really moved)
+    await ledger.postOrThrow(userId, Number(amount), "bonus win", { transactionId, source: "bonus/winner" });
 
-    // Insert into bonus_winners table   
+    // Insert into bonus_winners table
     await runQuery(
       "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
       [bonusId, type, userId, transactionId, amount]
-    );
-
-    // Log the transaction
-    await runQuery(
-      "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-      [transactionId, userId, "bonus win", amount]
     );
 
     // Commit the transaction

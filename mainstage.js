@@ -549,10 +549,10 @@ async function end(slotId, reason, actor) {
                               end_reason = ?, ended_by = ?, key_hash = NULL, publishing = 0, featured = 0 WHERE id = ? AND settled = 0`,
                              [charged, refund, now(), String(reason || "ended"), actor || null, s.id]);
     if (!r.changes) return null;
-    if (refund > 0) {
-      await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [refund, s.userId]);
-      await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                     [uuidv4(), s.userId, `stage slot refund (${billedMinutes(s.live_ms)} of ${s.max_minutes} min used)`, refund]);
+    if (refund > 0) {   // 1.99ga: logged only when it really moved (a merged-away booker's refund follows the merge)
+      const r2 = await require("./ledger").post(s.userId, refund, `stage slot refund (${billedMinutes(s.live_ms)} of ${s.max_minutes} min used)`,
+                                                { resolveMerged: true, source: "stage refund" });
+      if (!r2.ok) console.error(`[stage] slot ${s.id}: refund ${refund} not credited (${r2.code})`);
     }
     if (charged > 0) {
       // 1.99ee: a slot fee is a room flow - half to the Reserve (the Fort Knox half), half held for the pad's room vault

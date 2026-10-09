@@ -123,6 +123,7 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
                         snapshot = excluded.snapshot`,
                      [fromId, `merge-${provider}-${uuidv4().slice(0, 8)}`, `merged into ${to.username} (${L.label} link)`.slice(0, 300),
                       now, bal, now, JSON.stringify(snap)]);
+      await require("./ledger").recordMerge(fromId, toId, `${provider} merge`);   // 1.99ga: late credits follow it to toId
       const d = await runQuery("DELETE FROM users WHERE userId = ?", [fromId]);
       if (!d || d.changes !== 1) throw new Error("merge: the old account could not be removed");
       console.log(`[auth] ${provider} merge ${fromId} -> ${toId}: +${bal} PAT, +${xp} XP, ${JSON.stringify(moved)}`);

@@ -63,30 +63,48 @@ async function canFund(flow, amount) {
 // Take `amount` for `flow` out of its vault and record it. Does NOT credit the user - the caller
 // does that (so it can keep its own transaction/bonus bookkeeping). Returns true when funded.
 async function takeFunds(flow, amount, userId, type) {
+  return (await takeFundsRef(flow, amount, userId, type)).ok;
+}
+
+// takeFunds() that also says how to put the money back ({ok, undo}) - for a credit that then fails.
+async function takeFundsRef(flow, amount, userId, type) {
   amount = Math.floor(Number(amount) || 0);
-  if (amount <= 0) return true;
+  if (amount <= 0) return { ok: true, undo: async () => {} };
   if (!(await canFund(flow, amount))) {
     console.log(`[funding] ${flow}: ${vaultFor(flow)} can't cover ${amount} for ${userId} - skipped`);
-    return false;
+    return { ok: false, undo: async () => {} };
   }
+  const id = uuidv4();
   if (vaultFor(flow) === "jackpot") {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-                   [uuidv4(), null, userId || null, -amount]);
-  } else {
-    await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
-                   [uuidv4(), flow, userId || null, type || flow, amount]);
+                   [id, null, userId || null, -amount]);
+    return { ok: true, undo: () => runQuery("DELETE FROM jackpot_rakes WHERE jackpotId = ?", [id]) };
   }
-  return true;
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
+                 [id, flow, userId || null, type || flow, amount]);
+  return { ok: true, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
 }
 
 // Fund AND credit: the usual "pay this user a reward" path, with a logged transaction row.
+// 1.99ga: the account must exist (ledger.post) - a payout to a deleted / merged-away account used to
+// take the funds, credit nobody (0-row UPDATE) and still log a transaction row. Now it is followed to
+// the account it was merged into (resolveMerged), else nothing is taken and false is returned.
 async function fundPayout(userId, amount, flow, type) {
   amount = Math.floor(Number(amount) || 0);
   if (!userId || amount <= 0) return false;
-  if (!(await takeFunds(flow, amount, userId, type))) return false;
-  await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [amount, userId]);
-  await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-                 [uuidv4(), userId, type || flow, amount]);
+  const ledger = require("./ledger");
+  const target = await ledger.resolveUserId(userId);
+  if (!target) {
+    console.warn(`[funding] ${flow}: ${amount} for missing account ${userId} - skipped (E_TARGET_NOT_FOUND)`);
+    return false;
+  }
+  const take = await takeFundsRef(flow, amount, target, type);
+  if (!take.ok) return false;
+  const r = await ledger.post(target, amount, type || flow, { resolveMerged: true, source: `funding:${flow}` });
+  if (!r.ok) {
+    try { await take.undo(); } catch (e) { console.error(`[funding] ${flow}: undo failed:`, e.message); }
+    return false;
+  }
   return true;
 }
 
@@ -115,4 +133,4 @@ async function settle(ids) {
   return n;
 }
 
-module.exports = { fundPayout, takeFunds, canFund, sync, claims, settle, state, fortknoxLive };
+module.exports = { fundPayout, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive };
