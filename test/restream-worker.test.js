@@ -206,3 +206,43 @@ test("RELAY_MODE=argv still works (emergency fallback): target is ffmpeg's last 
   assert.equal(h.procs[0].args[h.procs[0].args.length - 1], TGT);
   assert.equal(h.pubs.length, 0);
 });
+
+// 1.99gp: the publisher behind the source reconnected (timestamps restart near 0) -> ffmpeg clamps every DTS and
+// Twitch's playlist dies (Error #2000). The worker must restart ffmpeg for a fresh Twitch session.
+test("tsRegression: parses ffmpeg's backwards-timestamp warnings, ignores everything else", () => {
+  assert.equal(W.tsRegression("[flv @ 0x55] DTS 980 < 2632274 out of order"), 2631294);
+  assert.equal(W.tsRegression("[flv @ 0x55] Non-monotonous DTS in output stream 0:0; previous: 2632274, current: 2631814; changing to 2632274. This may result in incorrect timestamps in the output file."), 460);
+  assert.equal(W.tsRegression("[flv @ 0x55] Non-monotonous DTS in output stream 0:1; previous: 1000, current: 999; changing to 1000."), 1);
+  assert.equal(W.tsRegression("Error writing trailer of <url> Immediate exit requested"), 0);
+  assert.equal(W.tsRegression(""), 0);
+});
+
+test("source timestamps jump back -> ffmpeg killed and restarted (small jitter ignored)", async () => {
+  const h = harness();
+  h.sup.sync([{ id: "main", source: SRC, target: TGT }]);
+  progress(h.procs[0], 120, "5990"); await tick();
+  assert.equal(h.sup.status().main.state, "live");
+  h.procs[0].stderr.write("[flv @ 0x1] Non-monotonous DTS in output stream 0:1; previous: 5000, current: 4990; changing to 5000.\n");
+  await tick();
+  assert.equal(h.procs[0].killed, null, "a few ms of A/V interleave jitter is not a restart");
+  h.procs[0].stderr.write("[flv @ 0x1] DTS 980 < 2632274 out of order\n");
+  await tick(); await tick();
+  assert.equal(h.procs[0].killed, "SIGKILL");
+  const st = h.sup.status().main;
+  assert.equal(st.state, "error"); assert.match(st.detail, /source restarted/); assert.equal(st.restarts, 1);
+  assert.ok(h.logs.some((l) => /jumped back 2631 s/.test(l)), h.logs.join("\n"));
+  h.adv(W.BACKOFF_MIN);
+  h.sup.sync([{ id: "main", source: SRC, target: TGT }]);
+  assert.equal(h.procs.length, 2, "restarted after the backoff");
+  for (const l of h.logs) assert.ok(!l.includes(KEY) && !l.includes("twitch.tv"), l);
+});
+
+test("pipe mode: a timestamp jump-back also tears the publisher down (fresh Twitch session on restart)", async () => {
+  const h = harness({ mode: "pipe" });
+  h.sup.sync([{ id: "main", source: SRC, target: TGT }]);
+  progress(h.procs[0], 120, "5990"); await tick();
+  h.procs[0].stderr.write("[flv @ 0x1] DTS 980 < 2632274 out of order\n");
+  await tick(); await tick();
+  assert.equal(h.procs[0].killed, "SIGKILL");
+  assert.equal(h.sup.status().main.state, "error");
+});
