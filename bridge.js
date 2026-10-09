@@ -349,6 +349,10 @@ async function ingest(body) {
     R.joinedAt = Number(s.joined_at) ? Number(s.joined_at) * 1000 : null;
     R.transcripts = s.transcripts !== false;
     R.audio = !!s.audio;
+    // 1.99ia: the room's audio SWITCH (the pad's toggle) apart from whether it streams right now, and why it
+    // can't when it's on (e.g. "loopback mode streams only the audio room"). An older Pepe sends only `audio`.
+    R.audioOn = typeof s.audio_on === "boolean" ? s.audio_on : !!s.audio;
+    R.audioWhy = R.audioOn && !R.audio ? str(s.audio_why, 160) : "";
     R.relay = !!s.relay;
     R.micRelay = !!s.mic_relay;
     R.cams = !!s.cams;
@@ -525,6 +529,8 @@ async function liveView(R, after, userId, login, username = null) {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
             transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
+            // 1.99ia: switched on but not streaming -> the player says why instead of just "audio relay off"
+            audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
             clip: clipSwitch(R.id),       // 1.99fp: the room's !clip switch (true / false / null = unknown) - 🔊 Clip on 🎙 lines
             cmds: R.relay && isLive(R) && R.cmds && Object.keys(R.cmds).length ? R.cmds : null },

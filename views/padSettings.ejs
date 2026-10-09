@@ -418,6 +418,9 @@
               <button type="button" class="btn" data-sw="<%= t[0] %>" data-on="<%= t[2] ? 0 : 1 %>"><%= t[2] ? 'Turn off' : 'Turn on' %></button></div>
           <% }) %>
         </div>
+        <% if (bridge.audio && !bridge.audioLive) { %>
+          <p class="muted" id="brAudioWhy">Room audio is switched on but isn't streaming right now<%= bridge.audioWhy ? ': ' + bridge.audioWhy : '' %>.</p>
+        <% } %>
         <p class="msg" id="brMsg" role="status" aria-live="polite"></p>
       <% } %>
     </div>

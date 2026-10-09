@@ -86,6 +86,17 @@ test("pad page: while the audio relay is off the player stays visible, greyed, a
   assert.equal(find(host, "rb-play").disabled, false, "listen enabled once the relay is on");
 });
 
+test("1.99ia pad page: audio switched on but not streaming -> the player says why", () => {
+  const R = loadBridge();
+  const host = fakeEl("div");
+  const p = R.audio(host, "beta", { showOff: true });
+  p.update({ room: { audio: false, live: true, audioWhy: "loopback mode streams only the audio room (Alpha)" } });
+  assert.equal(find(host).classList.contains("off"), true, "greyed");
+  assert.match(find(host, "rb-state").textContent, /audio unavailable: loopback mode streams only the audio room/);
+  p.update({ room: { audio: false, live: true, audioWhy: "" } });
+  assert.match(find(host, "rb-state").textContent, /audio relay off/);
+});
+
 test("homepage (no showOff): the player stays hidden while the relay is off, as before", () => {
   const R = loadBridge();
   const host = fakeEl("div");
@@ -143,7 +154,7 @@ test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on 
   assert.match(btn("c"), /disabled/);
   assert.match(btn("c"), /sign in to listen/);
   assert.match(html, /<div id="tpAudioBox"><\/div>/);
-  assert.match(html, /room-bridge\.js\?v=8/, "the player script loads for the 🎧 even without the room widget");
+  assert.match(html, /room-bridge\.js\?v=9/, "the player script loads for the 🎧 even without the room widget");
   assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
   const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
   assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");
@@ -168,7 +179,7 @@ test("player: 0.75 s cushion; catch-up to the live edge (1.05x above 1.3 s, 0.96
   assert.match(js, /setInterval\(edge, 500\)/);
   assert.match(js, /isTypeSupported\('audio\/mpeg'\)/, "MSE where the browser can, plain stream URL otherwise (iOS)");
   for (const v of ["home.ejs", "room.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=8/, v + " loads the new player");
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=9/, v + " loads the new player");
   }
 });
 

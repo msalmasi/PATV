@@ -268,7 +268,9 @@
     };
     var painted = false, offWhy = null;
     function offReason(d) {
-      return d && d.room && d.room.live === false ? 'room offline' : 'audio relay off';
+      if (d && d.room && d.room.live === false) return 'room offline';
+      // 1.99ia: switched on but not streaming (e.g. loopback mode streams only the audio room) - say why
+      return d && d.room && d.room.audioWhy ? 'audio unavailable: ' + String(d.room.audioWhy).slice(0, 120) : 'audio relay off';
     }
     function enable(on) {
       box.classList.toggle('off', !on);
