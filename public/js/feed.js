@@ -273,7 +273,8 @@
       api('/api/feed/comments/' + f.closest('.cm').getAttribute('data-id') + '/edit', { body: f.elements.body.value }).then(function () { location.reload(); }).catch(fail);
     } else if (act === 'edit-save') {
       api('/api/feed/posts/' + postOf(f) + '/edit', { title: f.elements.title.value, body: f.elements.body.value, nsfw: f.elements.nsfw.checked,
-        inAll: f.elements.inAll ? f.elements.inAll.checked : undefined }).then(function () { location.reload(); }).catch(fail);
+        inAll: f.elements.inAll ? f.elements.inAll.checked : undefined,
+        tags: f.elements.tags ? f.elements.tags.value : undefined }).then(function () { location.reload(); }).catch(fail);      // 1.99iq: tags
     }
   });
 

@@ -32,6 +32,12 @@
       <input name="link" type="url" inputmode="url" placeholder="https://… (YouTube and Twitch links play right here)" aria-label="Link" autocomplete="off">
       <div class="fc-pv" id="fcPv" aria-live="polite"></div>
     </div>
+    <%# 1.99iq: content tags (feedtags.js) - free text, normalised on the server; chips suggest the picked pad's popular tags %>
+    <% const tg_ = cp.tags || { max: 5, len: 24, suggest: {} }; %>
+    <div class="fc-tags">
+      <input name="tags" maxlength="200" placeholder="Tags (optional): plants, diy — up to <%= tg_.max %>" aria-label="Tags, comma-separated" autocomplete="off" spellcheck="false">
+      <div class="fc-tagsug" data-tag-suggest="<%= JSON.stringify(tg_.suggest || {}) %>" data-max="<%= tg_.max %>" aria-label="Suggested tags" hidden></div>
+    </div>
     <ul class="fc-files" id="fcFiles" aria-live="polite"></ul>
     <%# 1.99di: "✨ Generate" - Pepe's !imagine / !video as you (aigen.js): the same price, filters and refunds as chat %>
     <% if (!cp.mediaRefusal && cp.aigen) { %>

@@ -129,6 +129,7 @@ const RULES = {
   "feed_post_rooms.removed_by": M(), "feed_post_rooms.pinned_by": M(), "feed_post_rooms.hidden_by": M(), "feed_post_rooms.approved_by": M(),
   "feed_quotes.created_by": M(), "feed_quotes.logins": { deny: NAME },
   "feed_voices.removed_by": M(), "feed_voices.by_login": { deny: NAME }, "feed_voices.logins": { deny: NAME },
+  "feed_post_tags.removed_by": { deny: NAME },       // 1.99iq: the mod's username (feedtags.js)
   "feed_reports.reporter_id": M({ key: ["post_id", "comment_id"] }), "feed_reports.resolved_by": M(),
   "feed_seen.user_id": M({ key: ["scope"], merge: { upto: "MAX" } }), "feed_view.user_id": M({ key: ["scope"] }),
   "pepe_feed_log.by": M(), "pepe_feed_log.target": M(), "pepe_feed_mutes.by": M(), "pepe_feed_seen.target": M({ key: [] }),

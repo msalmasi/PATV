@@ -165,6 +165,7 @@ function init() {
       // 1.99fp: mic clips (micclip.js) - who is heard in an audio post, for their "Remove me"
       await runQuery(`CREATE TABLE IF NOT EXISTS feed_voices (post_id TEXT PRIMARY KEY, room_id TEXT, media_id TEXT, logins TEXT, by_login TEXT,
         created INTEGER, removed_at INTEGER, removed_by TEXT)`);
+      await TAGS().init();          // 1.99iq: content tags (feedtags.js)
     })().catch((e) => { console.error("[feed] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -298,6 +299,7 @@ function visibleSql(now = NOW(), blocked = []) {
 }
 // 1.99fu: pad visibility (padaccess.js) - the Approved pads a viewer is outside of
 const PADACCESS = () => require("./padaccess");
+const TAGS = () => require("./feedtags");          // 1.99iq: content tags
 async function blockedFor(viewer) {
   if (isStaff(viewer)) return [];
   try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
@@ -636,6 +638,9 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   try { QUO = await require("./quotes").forPosts(ids, viewer); } catch (e) { QUO = new Map(); }
   if (!_inner) { try { VOI = await require("./micclip").voicesFor(ids, viewer); } catch (e) { VOI = new Map(); } }
   const own = (r) => !!(viewer && viewer.userId && viewer.userId === r.author_id);
+  // 1.99iq: content tags (feedtags.js) - live ones, one query
+  let TG = new Map();
+  try { TG = await TAGS().tagsFor(ids); } catch (e) { TG = new Map(); }
   return rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id && (own(r) || !blocked.has(x.room_id))).map((x) => {
       const R = rooms.getCached(x.room_id);
@@ -697,6 +702,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       capture: CAP.get(r.id) || null,                            // 1.99eq: made from a story capture (storykeep.forPosts)
       quote: QUO.get(r.id) || null,                              // 1.99fp: a chat quote (quotes.forPosts)
       voice: VOI.get(r.id) || null,                              // 1.99fp: a mic clip's speakers (micclip.voicesFor)
+      tags: TG.get(r.id) || [],                                  // 1.99iq: content tags (feedtags.js)
     };
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;
@@ -765,7 +771,7 @@ function rankSpec(sort, t = "all", now = NOW()) {
  * Deleted posts never show; report-hidden ones only to staff.
  */
 async function list({ room = null, author = null, following = null, authors: authorIds = null, sort = "new", page = 1, top = "all", viewer = null, limit = PAGE, pins: pinsOn = true, sfw = false,
-                      media = false, textOnly = false, offset = null, idsOnly = false, quotes = false, quotesToo = false } = {}) {
+                      media = false, textOnly = false, offset = null, idsOnly = false, quotes = false, quotesToo = false, tag = null, ids = null } = {}) {
   await init();
   const staff = isStaff(viewer);
   const roomMod = room ? await rooms.canManage(viewer, room) : false;
@@ -834,6 +840,14 @@ async function list({ room = null, author = null, following = null, authors: aut
   // 1.99fn: the gallery's "N text posts hidden" count - the posts the media filter leaves out
   else if (textOnly) scope.push(quotesToo ? `NOT (${MEDIA_SQL} OR ${QUOTE_SQL})` : "NOT " + MEDIA_SQL);
   if (quotes) scope.push(QUOTE_SQL);
+  // 1.99iq: ?tag= - posts carrying this (live) tag
+  if (tag) { const tf = TAGS().filterSql(String(tag)); scope.push(tf.sql); sargs.push(...tf.args); }
+  // 1.99iq: only these posts (search hits - search.js orders them itself)
+  if (Array.isArray(ids)) {
+    const want = [...new Set(ids.map(String))].slice(0, 500);
+    if (!want.length) return idsOnly ? { ids: [], more: false, page: 1, sort: R.sort } : { posts: [], more: false, page: 1, sort: R.sort };
+    scope.push(`p.id IN (${want.map(() => "?").join(",")})`); sargs.push(...want);
+  }
   page = Math.max(1, Math.min(200, Math.floor(Number(page)) || 1));
   // placeholders in text order: select (rising) -> join -> scope -> sort filters
   const selArgs = R.select ? [R.args[0]] : [], sortArgs = R.select ? R.args.slice(1) : R.args;
@@ -955,6 +969,7 @@ async function create(userId, input, deps = {}) {
   if (roomIds.length > MAX_ROOMS) throw new Refuse(400, "Post to one pad - then use Crosspost to share it in another.");
   if (!roomIds.length) throw new Refuse(400, "Choose a pad to post in.");
   if (!title && !body && !linkIn && !attIds.length) throw new Refuse(400, "Write something, add a link or attach a file.");
+  const tags = TAGS().parseTags(input.tags);           // 1.99iq: refused before anything is charged
   const refusal = await postRefusal(u, roomIds, { media: attIds.length > 0 });
   if (refusal) throw new Refuse(refusal.status, refusal.message);
   // 1.99eq: deps.onBehalf - a story capture posted to its pad (storykeep.js) by the pad's owner / a mod / an admin and
@@ -1032,8 +1047,10 @@ async function create(userId, input, deps = {}) {
     }
     // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote) - never Pepe's
     if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
+    if (tags.length) await TAGS().setTags(id, tags);
     await recountPost(id);
   } catch (e) {
+    await runQuery("DELETE FROM feed_post_tags WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("UPDATE feed_attachments SET post_id = NULL WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_post_rooms WHERE post_id = ?", [id]).catch(() => {});
@@ -1101,8 +1118,10 @@ async function crosspostOne(u, o, R, title, announce = true) {
     await runQuery("INSERT INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, R.id, t, pending ? (announce ? 1 : 2) : 0]);
     if (!pending && announce) await queueMention(R.id, id);
     await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
+    await TAGS().copyTags(o.id, id);              // 1.99iq: a crosspost starts with the original's tags
     await recountPost(id);
   } catch (e) {
+    await runQuery("DELETE FROM feed_post_tags WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_post_rooms WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_posts WHERE id = ?", [id]).catch(() => {});
@@ -1256,6 +1275,8 @@ async function edit(user, id, patch) {
     const onProfile = (await getQuery("SELECT room_id FROM feed_post_rooms WHERE post_id = ?", [id])).some((x) => rooms.isProfile(x.room_id));
     if (onProfile) await runQuery("UPDATE feed_posts SET in_all = ? WHERE id = ?", [offFlag(patch.inAll) ? 0 : 1, id]);
   }
+  // 1.99iq: the post's tags (the Edit form's tag box; a tag a pad mod removed stays removed) - not an edit of the text
+  if (patch.tags !== undefined && patch.tags !== null) await TAGS().setTags(id, TAGS().parseTags(patch.tags));
   const onlyInAll = patch.title == null && patch.body == null && patch.nsfw == null;
   if (!onlyInAll) await runQuery("UPDATE feed_posts SET title = ?, body = ?, nsfw = ?, edited = ? WHERE id = ?", [title || null, body || null, nsfw, NOW(), id]);
   return get(id, user);

@@ -26,7 +26,7 @@
 (function (root) {
   'use strict';
   var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'about', about: 'about', info: 'about', schedule: 'live' };
-  var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp)=/;
+  var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp|tag)=/;      // 1.99iq: + ?tag= (a tag filter is the Feed's)
   var FIRST_LOOK_MS = 3 * 24 * 3600 * 1000;   // a first visit counts the last 3 days' posts as new
   var FEED_STICKY_MS = 30 * 60 * 1000;        // 1.99eb: a picked Feed beats Live-when-live for this long
   var REMEMBER = { live: true, feed: true };   // 1.99eb: About is never remembered

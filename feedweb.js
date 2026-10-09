@@ -124,7 +124,7 @@ const CSORT_LABELS = { best: "Best", top: "Top", new: "New", controversial: "Con
 function feedUrl(where, params = {}) {
   const path = !where || where === "all" ? "/feed" : where === "following" ? "/feed/following" : "/p/" + encodeURIComponent(where);
   const qs = new URLSearchParams();
-  for (const k of ["sort", "t", "p", "by"]) {
+  for (const k of ["sort", "t", "p", "by", "tag"]) {         // 1.99iq: + ?tag= (feedtags.js)
     const v = params[k];
     if (v === undefined || v === null || v === "" || (k === "sort" && v === "hot") || (k === "p" && Number(v) <= 1)) continue;
     qs.set(k, String(v));
@@ -160,7 +160,10 @@ function padChip(c, size = "", badge = null) {
 }
 // 1.99ex: the shared post label (never a "no title" placeholder) and a person's look (photo + name style) - postlabel.js / userlook.js
 const PL = require("./postlabel"), UL = require("./userlook");
-const fx = { postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+// 1.99iq: a tag's filter address - in a pad's own feed (ctx = the pad's slug) it stays in the pad, else /feed?tag=
+const TAGS = require("./feedtags");
+const tagHref = (tag, padSlug = null) => (padSlug ? "/p/" + encodeURIComponent(padSlug) + "?tag=" + encodeURIComponent(tag) + "#feed" : "/feed?tag=" + encodeURIComponent(tag));
+const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
@@ -219,7 +222,15 @@ async function composerFor(viewer, roomId) {
   for (const r of all) aiPrices[r.id] = await aigen.pricesFor(r.id).catch(() => ({ image: aigen.DEFAULT_PRICES.imagine, video: aigen.DEFAULT_PRICES.video }));
   // 1.99dn: + a reference picture = Pepe's -cam surcharge (the pad's room's, else global)
   for (const r of all) refPrices[r.id] = await aigen.refPriceFor(r.id).catch(() => aigen.DEFAULT_SURCHARGE);
+  // 1.99iq: tag suggestions per pad (its popular tags) + the site's popular ones
+  const tagSuggest = {};
+  try {
+    const per = await TAGS.popularMany(all.filter((r) => !r.profile).map((r) => r.id), { viewer, limit: 8 });
+    for (const [id, list] of per) if (list.length) tagSuggest[id] = list;
+    tagSuggest[""] = (await TAGS.popular(null, { viewer, limit: 8 })).map((r) => r.tag);
+  } catch (e) { /* suggestions are a convenience */ }
   return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all,
+           tags: { max: TAGS.MAX_TAGS, len: TAGS.TAG_MAX, suggest: tagSuggest },
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
            caps: { image: C.max_image_mb, audio: C.max_audio_mb, video: C.max_video_mb, audioSecs: C.max_audio_secs, videoSecs: C.max_video_secs },
@@ -238,10 +249,12 @@ async function roomFeed(roomId, reqUser, query = {}) {
   const sort = SORTS.has(query.fsort) ? query.fsort : "new";
   const top = TOPS.has(query.ft) ? query.ft : "week";
   const page = Math.max(1, parseInt(query.fp, 10) || 1);
-  const L = await store.list({ room: roomId, sort, top, page, viewer, limit: 10 });
+  const tag = query.tag ? TAGS.normTag(String(query.tag).slice(0, 80)) : null;          // 1.99iq: ?tag=
+  const L = await store.list({ room: roomId, sort, top, page, viewer, limit: 10, tag });
   const mod = viewer ? { admin: store.isStaff(viewer), owner: await rooms.canManage(viewer, roomId) } : { admin: false, owner: false };
   return {
-    room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod,
+    room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod, tag,
+    popularTags: await TAGS.popular(roomId, { viewer, limit: 10 }).catch(() => []),     // 1.99iq
     slug: (rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId),
     caps: viewer && PA().full(viewer, roomId) ? await captures(roomId, 24) : [],
     // 1.99bz: signed-out viewers get the room's story circle (sign-in prompt), never the pictures
@@ -250,7 +263,7 @@ async function roomFeed(roomId, reqUser, query = {}) {
     follow: { following: viewer ? await follows.isFollowing(viewer.userId, "room", roomId) : false, followers: await follows.followers("room", roomId) },
     composer: await composerFor(viewer, roomId),
     // 1.99fn: List / Gallery (?view= wins, then the account's choice; the first grid page when it's Gallery)
-    gallery: await FG.forFeed(viewer, "p/" + ((rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId)), { query, sort, t: top }),
+    gallery: tag ? null : await FG.forFeed(viewer, "p/" + ((rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId)), { query, sort, t: top }),
     rules: await require("./padrules").effective(roomId),                   // 1.99dc: the pad page's Rules card
     mention: mod.owner ? await store.mentionOn(roomId) : null,
     queue: mod.owner || mod.admin ? (await store.roomReports(roomId)).length + (await store.roomPending(roomId, viewer)).length : 0,
@@ -345,6 +358,7 @@ function register(app, { addUser, isBotToken }) {
       const sort = SORTS.has(req.query.sort) ? req.query.sort : "hot";
       const top = TOPS.has(req.query.t) ? req.query.t : "week";
       const page = Math.max(1, parseInt(req.query.p, 10) || 1);
+      const tag = req.query.tag ? TAGS.normTag(String(req.query.tag).slice(0, 80)) : null;     // 1.99iq: ?tag=
       const roomList = await rooms.list();
       let author = null;
       if (req.query.by && mode === "all") author = await rooms.findUser(String(req.query.by).slice(0, 60));
@@ -352,11 +366,11 @@ function register(app, { addUser, isBotToken }) {
       let follow = null;
       if (mode === "following") {
         if (viewer) {
-          L = await store.list({ following: viewer.userId, sort, page, top, viewer });
+          L = await store.list({ following: viewer.userId, sort, page, top, viewer, tag });
           follow = { ...(await follows.lists(viewer.userId)), prefs: await follows.prefs(viewer.userId) };
         }
       } else {
-        L = await store.list({ room: R ? R.id : null, author: !R && author ? author.userId : null, sort, page, top, viewer });
+        L = await store.list({ room: R ? R.id : null, author: !R && author ? author.userId : null, sort, page, top, viewer, tag });
       }
       // the community bar: All, Following, then every community (icon, followers, posts)
       const comms = await store.communities(viewer);
@@ -369,7 +383,7 @@ function register(app, { addUser, isBotToken }) {
                    roomHref: require("./pads").padHref(R), mod: viewer ? await rooms.canManage(viewer, R.id) : false };
       }
       // 1.99fn: List / Gallery for this feed (the same scope as its Hop button)
-      const gallery = mode === "following" && !viewer ? null
+      const gallery = (mode === "following" && !viewer) || tag ? null
         : await FG.forFeed(viewer, mode === "following" ? "following" : R ? "p/" + R.slug : author ? "u/" + author.username : "all", { query: req.query, sort, t: top });
       // the story strip: one room's captures as thumbnails, or a circle per room with fresh ones
       const story = {
@@ -384,6 +398,7 @@ function register(app, { addUser, isBotToken }) {
       res.set("X-Robots-Tag", "noindex");
       res.render("feed", {
         user: viewer ? viewer.username : null, viewer, mode, tab: mode === "following" ? "following" : "posts", sort, top, page, room: R, header, author, story, follow, gallery,
+        tag, popularTags: mode === "all" && !author ? await TAGS.popular(null, { viewer, limit: 12 }).catch(() => []) : [],     // 1.99iq
         rooms: roomList, communities: comms, posts: L.posts, more: L.more, fx, embeds, host: viewOpts(req).host,
         authorFollow: author && viewer && author.userId !== viewer.userId ? await follows.isFollowing(viewer.userId, "user", author.userId) : null,
         composer: await composerFor(viewer, R ? R.id : null),

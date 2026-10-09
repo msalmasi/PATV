@@ -808,7 +808,8 @@ function register(app, { isBotToken, addUser }) {
     // the feed's sort / window / page: ?sort= &t= &p= (the feed's own names, so /feed links and old
     // /feed/c/<slug>?sort=... addresses carry over) or the older ?fsort= &ft= &fp=
     const q = req.query || {};
-    const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p, view: q.view };      // 1.99fn: ?view=list|gallery (feedgallery.js)
+    const fq = { fsort: q.fsort || q.sort, ft: q.ft || q.t, fp: q.fp || q.p, view: q.view,      // 1.99fn: ?view=list|gallery (feedgallery.js)
+                 tag: typeof q.tag === "string" ? q.tag : "" };              // 1.99iq: ?tag= (feedtags.js)
     // 1.99dx: the pad page's tabs (Live/Stage · Feed · About, public/js/pad-tabs.js) - which one opens first
     const initial = liveOpen && !R.offline ? await liveView(R, 0, signedIn ? req.user.userId : null, login, signedIn ? req.user.username : null) : null;
     const roomStage = await require("./mainstage").roomStage(R.id, req.user);

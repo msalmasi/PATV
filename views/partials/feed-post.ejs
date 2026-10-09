@@ -101,6 +101,11 @@
     <% if (p.xcount) { %>
       <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> pad<%= p.xcount === 1 ? '' : 's' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="<%= x.url %>"><%= x.label || 'p/' + x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
     <% } %>
+    <%# 1.99iq: content tags (feedtags.js) - each one filters the feed (in this pad when the card is in a pad's feed); a mod of a
+        pad it's in (or staff) gets a ✕ to take a tag off %>
+    <% if (p.tags && p.tags.length && !p.deleted) { const tpad_ = ctx_ ? (p.roomsAll.find((r) => r.id === ctx_) || null) : null; const tmod_ = staff_ || myRooms.length > 0; %>
+      <p class="fp-tags" aria-label="Tags"><% p.tags.forEach((t) => { %><span class="ftag-w"><a class="ftag" href="<%= fx.tagHref(t, tpad_ && !tpad_.profile ? tpad_.slug : null) %>">#<%= t %></a><% if (tmod_) { %><button type="button" class="ftag-x" data-tagrm="<%= t %>" data-room="<%= ctx_ && mods_.has(ctx_) ? ctx_ : '' %>" title="Remove the tag #<%= t %> from this post (mods)" aria-label="Remove tag <%= t %>">✕</button><% } %></span><% }) %></p>
+    <% } %>
     <div class="bar fp-bar">
       <a class="act" href="<%= url_ %>#comments"><%- fx.icon('comment') %><span><%= fx.num(p.comments) %><span class="lg"> comment<%= p.comments === 1 ? '' : 's' %></span></span></a>
       <button type="button" class="act" data-act="share" data-url="<%= url_ %>"><%- fx.icon('share') %><span class="lbl">Share</span></button>
@@ -159,6 +164,7 @@
       <form class="fp-editf hide" data-act="edit-save">
         <input name="title" maxlength="140" value="<%= p.title %>" placeholder="Title (optional)" aria-label="Title">
         <textarea name="body" maxlength="5000" rows="4" aria-label="Text"><%= p.body %></textarea>
+        <input name="tags" maxlength="200" value="<%= (p.tags || []).join(', ') %>" placeholder="Tags, comma-separated (up to <%= fx.MAX_TAGS || 5 %>)" aria-label="Tags" autocomplete="off">
         <div class="row"><label class="ck"><input type="checkbox" name="nsfw"<%= p.nsfwAuthor ? ' checked' : '' %>> NSFW</label>
           <% if (p.onProfile) { %><label class="ck" title="Off: only on your profile and in your followers' Following"><input type="checkbox" name="inAll"<%= p.inAll ? ' checked' : '' %>> Also show in All</label><% } %>
           <span class="grow"></span><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="edit-cancel">Cancel</button><button type="submit" class="btn-s">Save</button></div>

@@ -4,7 +4,7 @@
   (the page's pad view)
 %><%
   const F = feed;
-  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
+  const fq = (o) => { const x = Object.assign({ fsort: F.sort === 'new' ? '' : F.sort, ft: fx.TIMED.has(F.sort) ? F.top : '', fp: '', tag: F.tag || '' }, o); if (x.fsort === 'new') x.fsort = ''; Object.keys(x).forEach((k) => { if (!x[k] || x[k] === 1) delete x[k]; }); const s = new URLSearchParams(x).toString(); return (s ? '?' + s : '?') + '#feed'; };
   const mods = new Set(F.mod.owner || F.mod.admin ? [F.room] : []);
   const here_ = '/p/' + encodeURIComponent(room.slug);
   // 1.99dx: the tabbed pad page renders the story strip under its header and the Rules card in the Feed tab's side column
@@ -19,9 +19,11 @@
       and the announce switch moved there too (the header's "⚙ Pad settings"). %>
   <% if (!noRules_) { %><%- include('pad-rules', { fx, rules: F.rules, slug: room.slug, canEdit: !!(F.mod.owner || F.mod.admin), id: 'rules' }) %><% } %>
   <%- include('feed-composer', { composer: F.composer, next: here_ + '#feed' }) %>
-  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: 'p/' + room.slug, gallery: F.gallery || null }) %>
+  <%# 1.99iq: content tags - this pad's ?tag= filter and its popular tags (feedtags.js) %>
+  <%- include('feed-tagbar', { fx, tag: F.tag || null, popular: F.popularTags || [], href: (t) => fq({ tag: t, fp: '' }), swap: false }) %>
+  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: F.tag ? null : 'p/' + room.slug, gallery: F.gallery || null }) %>
   <% if (!F.posts.length) { %>
-    <p class="empty"><%= F.page > 1 ? 'No more posts.' : 'Nobody has posted in this pad yet. Be the first!' %></p>
+    <p class="empty"><%= F.page > 1 ? 'No more posts.' : F.tag ? 'No posts tagged #' + F.tag + ' in this pad yet.' : 'Nobody has posted in this pad yet. Be the first!' %></p>
   <% } else { %>
     <div class="fd-list">
       <% F.posts.forEach((p) => { %><%- include('feed-post', { p, fx, embeds, host, viewer: F.viewer, modRooms: mods, detail: false, ctxRoom: F.room }) %><% }) %>

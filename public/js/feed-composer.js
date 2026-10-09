@@ -179,6 +179,7 @@
       v: 1, at: Date.now(), path: location.pathname,
       title: form.elements.title.value, body: form.elements.body.value, link: form.elements.link.value, nsfw: form.elements.nsfw.checked,
       community: picked(), announceOff: announceOff(),
+      tags: form.elements.tags ? form.elements.tags.value : '',          // 1.99iq
       files: files.filter(function (f) { return (f.state === 'ready' || f.restoring) && f.id; }).map(function (f) { return { id: f.id, kind: f.kind, name: f.name, url: f.url || null, ai: !!f.ai }; })
     };
   }
@@ -667,6 +668,7 @@
     if (d.body) form.elements.body.value = String(d.body).slice(0, 5000);
     if (d.link) { form.elements.link.value = String(d.link).slice(0, 2000); linkRow.classList.remove('hide'); }
     form.elements.nsfw.checked = !!d.nsfw;
+    if (d.tags && form.elements.tags) form.elements.tags.value = String(d.tags).slice(0, 200);     // 1.99iq
     // the community: kept unless this page has its own (a room page / community view preselects it)
     if (d.community && !form.getAttribute('data-home')) {
       form.querySelectorAll('input[name=community]').forEach(function (x) { x.checked = x.value === d.community; });
@@ -692,6 +694,7 @@
       files.forEach(function (f) { f.cancel = true; if (f.id) api('/api/feed/uploads/' + f.id + '/discard', {}).catch(function () {}); if (f.el) f.el.li.remove(); });
       files = [];
       form.elements.title.value = ''; form.elements.body.value = ''; form.elements.link.value = ''; form.elements.nsfw.checked = false; pv.textContent = '';
+      if (form.elements.tags) form.elements.tags.value = '';
       clearDraft(); setErr(''); clr.remove(); refreshGo();
     });
     errEl.parentNode.insertBefore(clr, errEl.nextSibling);
@@ -710,6 +713,7 @@
       community: roomsSel[0], announce: announce,
       // 1.99df: a profile post's "Also show in All" (the box only exists for the profile choice)
       inAll: form.elements.inAll ? form.elements.inAll.checked : undefined,
+      tags: form.elements.tags ? form.elements.tags.value : undefined,      // 1.99iq: content tags (the server normalises)
       attachments: files.filter(function (f) { return f.state === 'ready'; }).map(function (f) { return f.id; })
     };
     // 1.99cc: the Terms tick box (shown until this account accepted the current version)
