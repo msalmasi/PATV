@@ -36,6 +36,9 @@
 <main class="sb fd fd-admin fd-rmod ps" id="rmg" data-slug="<%= slug %>" data-tab="<%= tab %>">
   <nav class="crumb ps-crumb" aria-label="Breadcrumb"><a href="/p">Pads</a> › <a href="<%= href %>">p/<%= slug %></a> › Settings</nav>
   <header class="ps-head">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
+    <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
     <h1>⚙ Pad settings <span class="ps-pad"><%= room.title %></span></h1>
     <p class="lede"><% if (room.house) { %>🐸 House pad — run by Pepe and the site admins.<% } else if (room.owner) { %>👑 Owned by <b><%= room.owner.display || room.owner.username %></b>.<% } else { %>No owner yet.<% } %>
       Everything you can change about <b>p/<%= slug %></b> is on this page.</p>

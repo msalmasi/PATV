@@ -208,6 +208,12 @@ let clients = []; // Keep track of connected clients for SSE
 
 // Serve static files from the public directory
 app.use("/public", express.static("public"));
+// 1.99hl: the site icon - the pixel Pepe (public/favicon.ico 16/32/48 + PNGs). Browsers ask for /favicon.ico and
+// /apple-touch-icon.png at the root whether or not a page links them, so serve both there (they were 404s).
+const ICON_CACHE = { maxAge: "7d" };
+app.get("/favicon.ico", (req, res) => res.sendFile(path.join(__dirname, "public", "favicon.ico"), ICON_CACHE));
+app.get(["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"], (req, res) =>
+  res.sendFile(path.join(__dirname, "public", "img", "apple-touch-icon.png"), ICON_CACHE));
 // Cosmetics: res.locals.cosmeticName(username) for name colors on any page, + the profile's equipped items
 const cosmetics = require("./cosmetics");
 cosmetics.locals(app);
