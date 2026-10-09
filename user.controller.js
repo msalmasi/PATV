@@ -822,8 +822,9 @@ async function _payOwedMilestones(userId) {
     const take = await runQuery("UPDATE levelup_milestones SET paid = 1, paid_at = CURRENT_TIMESTAMP WHERE userId = ? AND level = ? AND paid = 0",
                                 [userId, m.level]);
     if (!take || !take.changes) continue;
-    if (await funding.fundPayout(userId, m.amount, "levelup", `Level ${m.level} milestone`)) {
-      total += m.amount;
+    const fr = await funding.fundPayout(userId, m.amount, "levelup", `Level ${m.level} milestone`);
+    if (fr) {
+      if (fr !== "queued") total += m.amount;            // E-2: a queued milestone is owed, paid by the queue
     } else {
       await runQuery("UPDATE levelup_milestones SET paid = 0, paid_at = NULL WHERE userId = ? AND level = ?", [userId, m.level]);
       break;                                            // the Reserve is short - try again next time
@@ -858,8 +859,10 @@ async function _updateLevelLocked(userId, additionalXp) {
     const claim = await runQuery("INSERT OR IGNORE INTO levelup_rewards (userId, level, amount) VALUES (?, ?, ?)",
                                  [userId, level, LEVELUP_BASE_REWARD]);
     if (claim && claim.changes) {
-      if (await funding.fundPayout(userId, LEVELUP_BASE_REWARD, "levelup", `Level-up reward (Lv ${level})`)) {
-        totalBonusPoints += LEVELUP_BASE_REWARD;
+      const fr = await funding.fundPayout(userId, LEVELUP_BASE_REWARD, "levelup", `Level-up reward (Lv ${level})`);
+      if (fr) {
+        // E-2: "queued" = owed by the incentive budget (its queue pays it); recorded as handled, not counted as paid now
+        if (fr !== "queued") totalBonusPoints += LEVELUP_BASE_REWARD;
         await runQuery("UPDATE levelup_rewards SET paid = 1 WHERE userId = ? AND level = ?", [userId, level]);
       }
     } else {
@@ -928,7 +931,14 @@ async function awardBonus(userId, type, amount) {
       return { success: false, code: ledger.E_TARGET_NOT_FOUND };
     }
     const take = await funding.takeFundsRef(flow, amount, userId, type);
-    if (!take.ok) return;
+    if (!take.ok) {
+      // E-2: a connect bonus / platform reward the incentive budget can't pay yet waits in its queue
+      if (funding.vaultFor && funding.vaultFor(flow) === "incentives") {
+        const claimId = await funding.queueClaim(userId, amount, flow, type);
+        if (claimId) return { success: true, queued: true, claimId };
+      }
+      return;
+    }
     // Start a transaction
     const transactionId = uuidv4();
     const bonusId = uuidv4();

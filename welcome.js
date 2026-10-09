@@ -274,11 +274,13 @@ async function payout(userId, force) {
   if (!claim || !claim.changes) return { ok: false, why: "not pending" };
   const amount = cfg.amount;
   const ok = amount > 0 ? await funding.fundPayout(userId, amount, "new_account", "Welcome PAT") : true;
+  const queued = ok === "queued";             // E-2: owed by the incentive budget; its queue credits it
   if (!ok) {
     await runQuery("UPDATE welcome_bonus SET state = 'pending', reason = ? WHERE userId = ?", ["the Federal Reserve can't cover it right now - retrying", userId]);
     return { ok: false, why: "reserve" };
   }
-  await setState(userId, "paid", { amount, reason: force ? "paid by an admin" : "vested" });
+  await setState(userId, "paid", { amount, reason: (force ? "paid by an admin" : "vested")
+    + (queued ? " - queued: paid when the weekly incentive budget has room" : "") });
   const row = (await getQuery("SELECT connect_owed FROM welcome_bonus WHERE userId = ?", [userId]))[0] || {};
   const owed = Number(row.connect_owed) || 0;
   if (owed > 0) {
@@ -288,7 +290,8 @@ async function payout(userId, force) {
   }
   console.log(`[welcome] paid ${userId} ${amount}${owed ? ` + ${owed} held connect bonus(es)` : ""}${force ? " (admin)" : ""}`);
   await require("./inbox").addSafe(userId, { kind: "system", title: `Welcome bonus: PAT ${amount.toLocaleString("en-US")}`,
-    body: "Thanks for sticking around - your welcome bonus is in your wallet.", link: "/wallet", ref: `welcome:${userId}` });
+    body: queued ? "Thanks for sticking around - your welcome bonus is in line for this week's incentive budget and lands in your wallet as soon as it has room."
+                 : "Thanks for sticking around - your welcome bonus is in your wallet.", link: "/wallet", ref: `welcome:${userId}` });
   return { ok: true, amount };
 }
 

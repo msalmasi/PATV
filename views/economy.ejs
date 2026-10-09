@@ -75,6 +75,7 @@
       <li><a href="#pat">🪙 What is PAT</a></li>
       <li><a href="#flow">🏛️ Where PAT goes</a></li>
       <li><a href="#protocol">⚙️ How the protocol works</a></li>
+      <li><a href="#incentives">🎁 Incentive budget</a></li>
       <li><a href="#burned">🔥 Burned</a></li>
       <li><a href="#casino">🎰 Casino</a></li>
       <li><a href="#betting">🤝 Wagers &amp; pools</a></li>
@@ -196,6 +197,62 @@
     <div class="flow" aria-hidden="true">
       <span>You spend PAT</span><span class="arr">→</span><span>Reserve · House · Lotto pot · Bank · Market maker · Turf</span><span class="arr">→</span><span>Prizes · Loot · Rewards · Staker profits</span><span class="arr">→</span><span>Your wallet</span>
     </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+
+  <!-- 2a0. Incentive budget + weekly surplus waterfall (economy v2 E-2): explained only while it's live -->
+  <%
+    const _tr = (typeof treasury !== 'undefined') ? treasury : null;
+    const _f = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
+  %>
+  <section id="incentives">
+    <div class="kicker">REWARDS HAVE A BUDGET</div>
+    <h2>🎁 The incentive budget</h2>
+    <% if (!_tr) { %>
+      <p class="lead">Coming soon: rewards (level-ups, welcome PAT, achievements, connect bonuses) will be paid from an
+        <b>incentive budget</b> that the protocol fills every week out of its real profit, instead of from the Federal
+        Reserve. <span class="cfg">Not switched on yet: rewards are still paid the way they are today.</span></p>
+    <% } else { %>
+      <p class="lead">Rewards aren't printed. Every week the protocol settles its profit, and the incentive budget gets its
+        share. Level-ups, welcome PAT, achievements and connect bonuses are paid from it, each with a weekly budget.
+        If a budget runs out, your reward <b>waits in line</b> (first come, first paid) and lands in your wallet as soon as
+        it refills. Nothing is ever skipped.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>📅 The weekly settlement</h3>
+          <p>Every Monday at 04:00 UTC the House, the Bank and the Market maker each keep a target bankroll (House 15M,
+            Bank 2M or twice its busiest lending, Market maker 1M or 1.5× its market seeds). The protocol's profit above
+            that target is the <b>surplus</b>, and it is split:</p>
+          <ul>
+            <li><b>20%</b> to stakers in that vault, pro rata, capped at <b>25% APR</b> on what they staked (anything over
+              the cap rejoins the rest);</li>
+            <li>the rest: while the Federal Reserve is below its <b>25M</b> target, half to the Reserve and half to the
+              incentive budget; once it's at 25M, <b>all of it</b> to the incentive budget.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>🧮 What the budget pays, in order</h3>
+          <ul>
+            <li><b>1. Vault floors.</b> Fort Knox and the Casino vault are topped back up to 2M each day, so heists always
+              have something to rob.</li>
+            <li><b>2. Rewards.</b> Weekly budgets: welcome PAT 1.5M, level-ups 1.4M, achievements 2.1M, connect bonuses /
+              codes / platform rewards 0.35M. Rewards over budget wait in line.</li>
+          </ul>
+          <p>Fort Knox above 15M and the Casino vault above 10M overflow into the House, which becomes next week's surplus.</p>
+        </div>
+        <div class="card">
+          <h3>📊 This week</h3>
+          <ul>
+            <li>Incentive budget: <b><%= _f(_tr.balance) %> PAT</b></li>
+            <% if (_tr.share !== null && _tr.share !== undefined) { %><li>From this week's settlement: <%= _f(_tr.share) %> PAT (about <%= _f(_tr.release_per_day) %> a day)</li><% } %>
+            <% Object.keys(_tr.budgets || {}).forEach((g) => { %>
+              <li><%= ({ welcome: 'Welcome PAT', levelup: 'Level-ups', achievements: 'Achievements', misc: 'Connect bonuses, codes, platform rewards' })[g] || g %>:
+                <%= _f((_tr.remaining || {})[g]) %> of <%= _f(_tr.budgets[g]) %> left</li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+    <% } %>
     <div class="top"><a href="#top">↑ top</a></div>
   </section>
 

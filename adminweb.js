@@ -60,10 +60,15 @@ async function reserveStatus() {
   const funding = require("./funding");
   const today = await getQuery(`SELECT flow, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS t FROM reserve_claims
                                 WHERE created >= date('now') GROUP BY flow ORDER BY t DESC`);
-  const uns = (await getQuery("SELECT COALESCE(SUM(amount), 0) AS t FROM reserve_claims WHERE settled = 0"))[0].t;
+  const uns = (await getQuery(`SELECT COALESCE(SUM(amount), 0) AS t FROM reserve_claims
+                               WHERE settled = 0 AND COALESCE(queued, 0) = 0 AND flow NOT LIKE 'incentives:%'`))[0].t;
   const jp = await safe(async () => (await getQuery("SELECT COALESCE(SUM(amount), 0) AS t FROM jackpot_rakes"))[0].t, null);
   return { balance: funding.state.reserve, syncedAt: funding.state.syncedAt || 0, today, todayTotal: today.reduce((a, r) => a + (r.t || 0), 0),
            unsettled: uns, jackpot: jp };
+}
+// economy v2 E-2: the incentive budget Pepe syncs + the website's queue of grants waiting for it
+async function incentiveStatus() {
+  return require("./funding").queueSummary(25);
 }
 async function loanStatus() {
   const r = (await getQuery("SELECT data, updated FROM wallet_snapshots WHERE key = 'loans'"))[0];
@@ -194,7 +199,8 @@ function register(app, { addUser }) {
   app.get("/admin/economy", addUser, gate, page("economy", "Admin · Economy", async (req, me) => {
     const isAdmin = !!me && me.class === "Admin";
     const roy = await safe(() => require("./royalties").summary(), null);
-    return { reserve: isAdmin ? await safe(reserveStatus) : null, loans: isAdmin ? await safe(loanStatus) : null, roy, shop: await safe(shopStatus) };
+    return { reserve: isAdmin ? await safe(reserveStatus) : null, loans: isAdmin ? await safe(loanStatus) : null, roy, shop: await safe(shopStatus),
+             inc: isAdmin ? await safe(incentiveStatus) : null };
   }));
   app.get("/admin/games", addUser, gate, page("games", "Admin · Games"));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));

@@ -75,9 +75,11 @@ async function award(who, badgeId, updateLevel, { silent = false } = {}) {
   // 1.99ga: fundPayout pays the account as it is now - if a !verify merge took this one away while the
   // award was in flight (2026-10-08: a 5,000 PAT payout logged against a deleted account, nobody paid),
   // the payout follows the merge; with no live account nothing is taken or logged
-  const patPaid = a.pat ? await funding.fundPayout(user.userId, a.pat, "achievements", `Achievement: ${a.name}`) : false;
+  const fr = a.pat ? await funding.fundPayout(user.userId, a.pat, "achievements", `Achievement: ${a.name}`) : false;
+  const patPaid = fr === true;                // E-2: "queued" = owed by the incentive budget, paid by its queue
+  const patQueued = fr === "queued";
   return { ok: true, awarded: true, id: a.id, name: a.name, emoji: a.emoji, desc: a.desc, tier: a.tier,
-           xp: a.xp || 0, pat: a.pat || 0, patPaid, levelUp, username: user.username };
+           xp: a.xp || 0, pat: a.pat || 0, patPaid, patQueued, levelUp, username: user.username };
 }
 
 // ── Website-awarded achievements: things only the website sees (wheel spins, tips, levels, roles).

@@ -30,6 +30,41 @@
   <% } %>
 </section>
 
+<section class="adm-card" id="incentives" aria-labelledby="incT">
+  <h2 id="incT">🎁 Incentive budget &amp; grant queue <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Economy v2 E-2. While Pepe's treasury is on (<code>!econ treasury on</code>, with <code>!econ layers on</code>), the weekly surplus waterfall fills the incentive budget and the site pays welcome PAT, level-ups, achievements and connect bonuses from it, each group within its weekly budget. A grant that doesn't fit waits here (FIFO per group) and is paid when a sync shows room; Pepe only settles paid claims. Preview the week with <code>!econ waterfall preview</code>.</p>
+  <% const I = typeof inc !== 'undefined' ? inc : null; %>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!I) { %><p class="adm-help">Couldn't read the queue.</p><% } else { %>
+    <div class="adm-kv">
+      <div><b>Status</b><span><%= I.live ? 'live (grants paid from the incentive budget)' : 'off: grants are paid from the Reserve' %></span></div>
+      <% if (I.incentives) { %>
+        <div><b>Budget (from Pepe)</b><span><%= fmt(I.incentives.balance) %> PAT</span></div>
+        <div><b>Week</b><span><%= I.incentives.week %><%= I.incentives.share !== null ? ' · share ' + fmt(I.incentives.share) + ' (' + fmt(I.incentives.release_per_day) + '/day)' : '' %></span></div>
+      <% } %>
+      <div><b>Paid, not yet settled by Pepe</b><span><%= fmt(I.unsettled) %> PAT</span></div>
+    </div>
+    <div class="adm-tbl"><table aria-label="Grant budgets and queue by group">
+      <thead><tr><th>Group</th><th class="num">Left this week</th><th class="num">Weekly budget</th><th class="num">Queued</th><th class="num">Queued PAT</th><th>Oldest</th></tr></thead>
+      <tbody>
+        <% const gs = Array.from(new Set(Object.keys((I.incentives && I.incentives.budgets) || {}).concat(Object.keys(I.groups || {})))); %>
+        <% if (!gs.length) { %><tr><td colspan="6" class="empty">Nothing queued, and no budgets synced.</td></tr><% } %>
+        <% gs.forEach((g) => { const q = (I.groups || {})[g] || { n: 0, t: 0, oldest: null }; const b = I.incentives || { remaining: {}, budgets: {} }; %>
+          <tr><td><code><%= g %></code></td><td class="num"><%= b.remaining[g] !== undefined ? fmt(b.remaining[g]) : '–' %></td>
+            <td class="num"><%= b.budgets[g] !== undefined ? fmt(b.budgets[g]) : '–' %></td><td class="num"><%= fmt(q.n) %></td>
+            <td class="num"><%= fmt(q.t) %></td><td><%= q.oldest || '–' %></td></tr>
+        <% }) %>
+      </tbody>
+    </table></div>
+    <div class="adm-tbl"><table aria-label="Oldest queued grants">
+      <thead><tr><th>Queued (UTC)</th><th>User</th><th>Grant</th><th class="num">PAT</th></tr></thead>
+      <tbody>
+        <% if (!I.items.length) { %><tr><td colspan="4" class="empty">No grants waiting.</td></tr><% } %>
+        <% I.items.forEach((c) => { %><tr><td><%= c.created %></td><td><%= c.username || '(gone)' %></td><td><%= c.type %></td><td class="num"><%= fmt(c.amount) %></td></tr><% }) %>
+      </tbody>
+    </table></div>
+  <% } %>
+</section>
+
 <section class="adm-card" id="burn" aria-labelledby="burnT">
   <h2 id="burnT">🔥 Burn reserve <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The last step of the weekly surplus waterfall: once the incentive buffer and the Reserve's 25M target are full, the leftover moves into Pepe's burn reserve and is destroyed (total supply goes down). Nothing else feeds it and no other pool can be burned. In <b>accrual</b> mode Pepe burns it at his next burn tick; in <b>batch</b> mode it waits for a burn here (or <code>!burn</code> in chat). Mode and caps are on Pepe's admin panel. Public log: <a href="/economy#burned">/economy#burned</a>.</p>

@@ -1143,7 +1143,11 @@ bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
-app.get("/economy", addUser, (req, res) => res.render("economy", { user: req.user ? req.user.username : null }));
+app.get("/economy", addUser, (req, res) => {
+  // economy v2 E-2: the incentive budget + weekly waterfall section renders only while Pepe's treasury is live
+  const f = require("./funding");
+  res.render("economy", { user: req.user ? req.user.username : null, treasury: f.treasuryLive() ? f.state.incentives : null });
+});
 
 const history = require("./history");
 app.get("/history", addUser, async (req, res) => {
