@@ -153,9 +153,9 @@ test("a merge moves a row from EVERY user-linked table, folds collisions, and le
   assert.deepStrictEqual(lostRooms, [], "the profile pad's rows moved to the target's pad");
   assert.equal((await getQuery("SELECT owner_user_id FROM rooms_registry WHERE room_id = ?", ["user:" + NEW]))[0].owner_user_id, NEW, "the old pad became the target's");
 
-  // users row: xp added, higher level, liked added, older created_at, the avatar and the VERIFIED email
+  // users row: cumulative xp added (1.99gg: Lv5+50 and Lv3+700 = 55,050 + 14,700 = Lv5 + 14,750), liked added, older created_at, the avatar and the VERIFIED email
   const u = (await getQuery("SELECT * FROM users WHERE userId = ?", [NEW]))[0];
-  assert.equal(u.xp, 750); assert.equal(u.level, 5); assert.equal(u.liked, 5);
+  assert.equal(u.xp, 14750); assert.equal(u.level, 5); assert.equal(u.liked, 5);
   assert.equal(u.created_at, "2025-01-01 00:00:00"); assert.equal(u.avatar, "https://x/old.png");
   assert.equal(u.email, "old@example.org"); assert.equal(u.isEmailVerified, 1);
 

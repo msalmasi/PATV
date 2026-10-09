@@ -544,8 +544,10 @@ async function dupSplit(dupId) {
 /**
  * Merge a duplicate account into its primary (1.99bs, admin decision 2026-10-06): the copy's duplicate
  * welcome mint goes to the Federal Reserve ("stale-reclaim" + a negative stale_reclaim claim); the rest
- * of its balance, its XP, history and owned rows move to the primary; the copy goes. No level-up
- * rewards fire (levelup records are carried over, the primary's own win).
+ * of its balance, its XP, history and owned rows move to the primary; the copy goes. Levelup records are
+ * carried over (a level either account was paid for never pays again); 1.99gg: the two cumulative XP totals
+ * are added (user.controller mergeXpOf), and a level above both that the sum reaches pays its normal level-up
+ * reward (afterMerge -> updateLevel).
  */
 async function mergeDuplicate(dupId, primaryId) {
   if (!dupId || !primaryId || dupId === primaryId) return null;
@@ -568,7 +570,7 @@ async function mergeDuplicate(dupId, primaryId) {
                      [uuidv4(), dupId, `duplicate welcome mint (${d.username} merged into ${p.username})`, -toReserve]);
     }
     await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [toMain, primaryId]);
-    // xp added + the higher level, liked, spins, a verified email the primary lacks... (accountMerge.carryUserFields)
+    // cumulative xp added (1.99gg), liked, spins, a verified email the primary lacks... (accountMerge.carryUserFields)
     const carried = await AM.carryUserFields(d, primaryId);
     const xp = carried.xp;
     await runQuery("UPDATE users SET points_balance = 0, xp = 0 WHERE userId = ?", [dupId]);

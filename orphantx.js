@@ -3,7 +3,8 @@
 // 2026-10-08 audit: 2,604 rows / 59 ids. Most are history of accounts deleted or merged by hand before
 // merges moved history (spring 2026); one was a live race (an achievement payout logged against a
 // Camfrog auto-account a !verify merge had just deleted). ledger.js stops new ones; this file
-//   * reports what is left (report(): admin panel / GET /api/admin/ledger/orphans), and
+//   * reports what is left (report(): admin panel / GET /api/admin/ledger/orphans; rows staff made good
+//     are RESOLVED - listed by resolved(), counted nowhere else), and
 //   * plans + applies the one-shot clean-up (fix-orphan-transactions.js): rows of a merged-away account
 //     whose survivor is known (account_merges, the site log's [CF-MERGE] / [auth] merge lines, or a
 //     staff-made map) move to the survivor with a note suffix. Balances never change:
@@ -80,20 +81,49 @@ function parseMap(text) {
 async function hasTable(q, t) { return (await q("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [t])).length > 0; }
 async function hasColumn(q, t, c) { return (await q(`SELECT name FROM pragma_table_info('${t}')`)).some((r) => r.name === c); }
 
-/** Every orphan id: rows, net, date range, types, and whether it sits in account_archive. */
+// 1.99gg: an orphan row staff have already made good (the credit was paid to the right account by hand) is
+// RESOLVED: its note says "(made good to <user> <id> via <ref>)". Resolved rows stay where they are, are listed
+// separately (resolved()), and count nowhere else - not in report()'s ids / rows / net, not in plan().
+const MADE_GOOD = "made good to";
+/** SQL condition (on alias `t`) for "not resolved"; "" when transactions has no note column. */
+async function unresolvedSql(q) {
+  return (await hasColumn(q, "transactions", "note")) ? ` AND (t.note IS NULL OR instr(LOWER(t.note), '${MADE_GOOD}') = 0)` : "";
+}
+
+/** Every orphan id with UNRESOLVED rows: rows, net, date range, types, and whether it sits in account_archive.
+ *  (Made-good rows are excluded here - see resolved().) */
 async function report(q) {
+  const open = await unresolvedSql(q);
   const ids = await q(`SELECT t.userId, COUNT(*) AS rows, COALESCE(SUM(t.points), 0) AS net,
                               MIN(t.timestamp) AS first, MAX(t.timestamp) AS last
                        FROM transactions t LEFT JOIN users u ON u.userId = t.userId
-                       WHERE u.userId IS NULL GROUP BY t.userId ORDER BY last DESC`);
+                       WHERE u.userId IS NULL${open} GROUP BY t.userId ORDER BY last DESC`);
   const arch = (await hasTable(q, "account_archive")) ? new Set((await q("SELECT userId FROM account_archive")).map((r) => r.userId)) : new Set();
   const merges = (await hasTable(q, "account_merges")) ? new Map((await q("SELECT old_id, new_id FROM account_merges")).map((r) => [r.old_id, r.new_id])) : new Map();
   for (const r of ids) {
     r.archived = arch.has(r.userId);
     r.mergedInto = merges.get(r.userId) || null;
-    r.types = await q("SELECT type, COUNT(*) AS rows, COALESCE(SUM(points), 0) AS net FROM transactions WHERE userId = ? GROUP BY type ORDER BY rows DESC", [r.userId]);
+    r.types = await q(`SELECT type, COUNT(*) AS rows, COALESCE(SUM(points), 0) AS net FROM transactions t WHERE userId = ?${open}
+                       GROUP BY type ORDER BY rows DESC`, [r.userId]);
   }
   return ids;
+}
+
+/** The RESOLVED orphan rows (made good by staff), one entry per row, newest first. */
+async function resolved(q) {
+  if (!(await hasColumn(q, "transactions", "note"))) return [];
+  const rows = await q(`SELECT t.transactionId, t.userId, t.type, t.points, t.timestamp, t.note
+                        FROM transactions t LEFT JOIN users u ON u.userId = t.userId
+                        WHERE u.userId IS NULL AND instr(LOWER(t.note), '${MADE_GOOD}') > 0
+                        ORDER BY t.timestamp DESC, t.transactionId`);
+  for (const r of rows) {
+    const m = /made good to\s+(\S+)(?:\s+([0-9a-f-]{6,}))?(?:\s+via\s+([^)\s]+))?/i.exec(String(r.note || ""));
+    r.points = Number(r.points) || 0;
+    r.madeGoodTo = m ? m[1] : null;
+    r.madeGoodId = m && m[2] ? m[2] : null;
+    r.ref = m && m[3] ? m[3] : null;
+  }
+  return rows;
 }
 
 /** old -> {new, via, after, before, at, oldBalance}: account_merges first, then the extra sources (later wins). */
@@ -154,7 +184,8 @@ async function plan(q, extraMerges) {
     const s = await survivorOf(q, map, o.userId);
     if (!s) { noSurvivor.push(o); continue; }
     const m = s.merge;
-    const rows = await q("SELECT transactionId, type, points, timestamp FROM transactions WHERE userId = ? ORDER BY timestamp, transactionId", [o.userId]);
+    const rows = await q(`SELECT transactionId, type, points, timestamp FROM transactions t WHERE userId = ?${await unresolvedSql(q)}
+                          ORDER BY timestamp, transactionId`, [o.userId]);   // made-good rows stay put (resolved)
     let entry = bySurvivor.get(s.userId);
     if (!entry) {
       const sum = (await q("SELECT COALESCE(SUM(points), 0) AS s FROM transactions WHERE userId = ?", [s.userId]))[0].s;
@@ -241,4 +272,4 @@ async function apply(q, run, p) {
   return { moved, offsets, counterparties: cps };
 }
 
-module.exports = { parseMergeLog, mergeLogParser, parseMap, report, plan, apply, mergeMap, SUFFIX, OFFSET_PREFIX, sqlTime };
+module.exports = { parseMergeLog, mergeLogParser, parseMap, report, resolved, MADE_GOOD, plan, apply, mergeMap, SUFFIX, OFFSET_PREFIX, sqlTime };

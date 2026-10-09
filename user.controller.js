@@ -459,10 +459,12 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     const auto = autoAccounts[0];
     const me = await getQuery('SELECT points_balance, xp, level FROM users WHERE userId = ?', [userId]);
     const mergedBalance = (me[0]?.points_balance || 0) + (auto.points_balance || 0);
-    const mergedXp = (me[0]?.xp || 0) + (auto.xp || 0);
-    const mergedLevel = Math.max(me[0]?.level || 1, auto.level || 1);
+    // 1.99gg: the cumulative XP of both (mergeXpOf); new levels are paid by afterMerge below
+    const mx = mergeXpOf(me[0], auto);
+    const mergedXp = mx.store.xp;
+    const mergedLevel = mx.store.level;
 
-    console.log(`[CF-MERGE] Merging auto account ${auto.userId} into ${userId}: +PAT ${auto.points_balance}, +XP ${auto.xp}`);
+    console.log(`[CF-MERGE] Merging auto account ${auto.userId} into ${userId}: +PAT ${auto.points_balance}, +XP ${mx.otherTotal} (Lv ${auto.level || 0})`);
     // 1.99bs: the login is unique (users_camfrog_login) - free it on the auto account first
     for (const a of autoAccounts) await runQuery('UPDATE users SET camfrogUsername = NULL WHERE userId = ?', [a.userId]);
 
@@ -492,14 +494,14 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(report.moved)}${Object.keys(report.left).length ? ` LEFT ${JSON.stringify(report.left)}` : ""}`);
     try {
       await archiveMerged(autoRow, meRow, { via: "camfrog link", balance: auto.points_balance || 0 });
-      await logMerge({ via: "camfrog link", from: autoRow || { userId: auto.userId }, to: meRow || { userId }, pat: auto.points_balance || 0, xp: auto.xp || 0, report });
+      await logMerge({ via: "camfrog link", from: autoRow || { userId: auto.userId }, to: meRow || { userId }, pat: auto.points_balance || 0, xp: mx.otherTotal, report });
     } catch (e) { console.error("[CF-MERGE] merge record:", e.message); }
     await ledger.recordMerge(auto.userId, userId, 'camfrog link');   // 1.99ga: late credits follow it here
     await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
     await afterMerge(userId, report);
 
     await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
-    return { merged: true, addedBalance: auto.points_balance || 0, addedXp: auto.xp || 0, unlinkedFrom };
+    return { merged: true, addedBalance: auto.points_balance || 0, addedXp: mx.otherTotal, unlinkedFrom };
   } else {
     await runQuery('UPDATE users SET camfrogUsername = ? WHERE userId = ?', [cfLower, userId]);
     await inbox.attachPendingSafe(userId, cfLower);
@@ -662,6 +664,31 @@ function levelOfTotal(total) {
   let level = 0, xp = Math.max(0, Math.floor(total));
   while (level < 100000 && xp >= xpForNextLevel(level)) { xp -= xpForNextLevel(level); level++; }
   return { level, xp };
+}
+/**
+ * 1.99gg: the XP of two accounts being merged - EVERY account merge uses this (accountMerge.carryUserFields:
+ * the duplicate merge + the Twitch/Discord provider merge; completeCamfrogLink: the Camfrog !verify merge).
+ * `xp` is "into the current level", so a merge adds the two CUMULATIVE totals. It used to keep the higher
+ * level and add only the two in-level amounts, which dropped all the XP the lower account had spent reaching
+ * its level (32 past !verify merges: 144,000 XP short).
+ * -> {total, level, xp (= levelOfTotal(total)), maxLevel, otherTotal (what `other` brings), store: {level, xp}}
+ * `store` is what the merge writes inside its transaction: the higher of the two levels and the rest of the
+ * total as in-level XP. When that's enough for further levels, accountMerge.afterMerge() runs the normal
+ * updateLevel(id, 0) once the merge has committed: it settles to exactly {level, xp} and pays those NEW
+ * levels' rewards through levelup_rewards / levelup_milestones (deduped - a level either account was already
+ * paid for isn't paid again, and levels up to the higher of the two never pay). Should that step not run,
+ * the next XP award settles it the same way.
+ */
+function mergeXpOf(survivor, other) {
+  const n = (x) => Math.max(0, Math.floor(Number(x) || 0));
+  const s = { level: n(survivor && survivor.level), xp: n(survivor && survivor.xp) };
+  const o = { level: n(other && other.level), xp: n(other && other.xp) };
+  const otherTotal = totalXpOf(o.level, o.xp);
+  const total = totalXpOf(s.level, s.xp) + otherTotal;
+  const maxLevel = Math.max(s.level, o.level);
+  const settled = levelOfTotal(total);
+  return { total, level: settled.level, xp: settled.xp, maxLevel, otherTotal,
+           store: { level: maxLevel, xp: total - totalXpOf(maxLevel, 0) } };
 }
 /** Check an admin adjustment's input. -> {mode, amount} or throws {status:400, message}. */
 function checkXpAdjust(mode, amount) {
@@ -893,6 +920,7 @@ module.exports = {
   checkXpAdjust,
   totalXpOf,
   levelOfTotal,
+  mergeXpOf,
   levelReward,
   milestoneReward,
   LEVELUP_BASE_REWARD,

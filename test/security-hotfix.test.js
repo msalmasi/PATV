@@ -117,7 +117,7 @@ test("merge: a parallel double submit credits once; a later replay finds nothing
   assert.equal(again.ok, false);
   const to = await row("to1");
   assert.equal(to.points_balance, 1100);
-  assert.equal(to.xp, 55);
+  assert.equal(to.xp, 1055);                       // 1.99gg: cumulative - Lv1+5 (1,005) + Lv3+50 (14,050) = Lv3 + 1,055
   assert.equal(to.level, 3);
   assert.equal(to.liked, 3);
   assert.equal(to.twitchId, "T300");

@@ -261,8 +261,11 @@ app.get("/api/admin/stale", addUser, async (req, res) => {
 app.get("/api/admin/ledger/orphans", addUser, async (req, res) => {
   try {
     if (!(await welcomeAdmin(req))) return res.status(403).json({ error: "admins only" });
-    const rows = await require("./orphantx").report(getQuery);
-    res.json({ ids: rows.length, rows: rows.reduce((t, r) => t + r.rows, 0), net: rows.reduce((t, r) => t + r.net, 0), orphans: rows });
+    const ot = require("./orphantx");
+    const rows = await ot.report(getQuery);          // unresolved only (1.99gg)
+    const done = await ot.resolved(getQuery);        // made good by staff: listed separately, counted nowhere else
+    res.json({ ids: rows.length, rows: rows.reduce((t, r) => t + r.rows, 0), net: rows.reduce((t, r) => t + r.net, 0), orphans: rows,
+               resolved: { rows: done.length, ids: new Set(done.map((r) => r.userId)).size, net: done.reduce((t, r) => t + r.points, 0), list: done } });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 // Pepe: the Camfrog logins still warned (he PMs them when he sees them), and "I saw this login"

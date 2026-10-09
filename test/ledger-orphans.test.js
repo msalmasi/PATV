@@ -202,6 +202,42 @@ test("re-homing: history moves with a note, the late row is listed as lost, bala
   await new Promise((r) => db.close(r));
 });
 
+test("1.99gg: rows staff made good are RESOLVED - listed separately, out of every unresolved count", async () => {
+  await setup;
+  const file = path.join(dir, "resolved.db");
+  const { db, q, run } = scratchDb(file);
+  await run(`CREATE TABLE users (userId TEXT PRIMARY KEY, username TEXT, points_balance INTEGER DEFAULT 0)`);
+  await run(`CREATE TABLE transactions (transactionId TEXT PRIMARY KEY, userId TEXT NOT NULL, type TEXT, points INTEGER,
+             timestamp DATETIME, counterparty TEXT, note TEXT)`);
+  await run("INSERT INTO users VALUES ('S9', 'ashmarie', 5000)");
+  // C1: no survivor, still open
+  await run("INSERT INTO transactions VALUES ('c1a', 'C1', 'bonus win', 50000, '2026-03-25 21:31:09', NULL, NULL)");
+  // D1 (like acae42ba): its one orphan row was made good to the survivor by hand
+  await run(`INSERT INTO transactions VALUES ('d1a', 'D1', 'Achievement: Pepe, Do a Thing', 5000, '2026-10-08 14:46:55', NULL,
+             'Achievement: Pepe, Do a Thing (made good to ashmarie 7f353d2f via makegood-ach-cf_cmd_1-7f353d2f-20261008)')`);
+  // E1: one made-good row, one still open
+  await run("INSERT INTO transactions VALUES ('e1a', 'E1', 'bonus win', 300, '2026-10-01 00:00:00', NULL, '(Made Good to bob 1234abcd via mg-1)')");
+  await run("INSERT INTO transactions VALUES ('e1b', 'E1', 'tip sent', -20, '2026-10-02 00:00:00', NULL, 'unrelated note')");
+
+  const open = await ot.report(q);
+  assert.deepStrictEqual(open.map((r) => r.userId).sort(), ["C1", "E1"], "D1 is fully resolved: off the main list");
+  const e1 = open.find((r) => r.userId === "E1");
+  assert.deepStrictEqual([e1.rows, e1.net], [1, -20], "E1 counts only its open row");
+  assert.deepStrictEqual(e1.types.map((t) => t.type), ["tip sent"]);
+
+  const done = await ot.resolved(q);
+  assert.deepStrictEqual(done.map((r) => r.transactionId), ["d1a", "e1a"]);
+  assert.deepStrictEqual([done[0].userId, done[0].points, done[0].madeGoodTo, done[0].madeGoodId, done[0].ref],
+                         ["D1", 5000, "ashmarie", "7f353d2f", "makegood-ach-cf_cmd_1-7f353d2f-20261008"]);
+
+  // the clean-up plan never touches a resolved row either (D1 isn't even "no survivor" any more)
+  const p = await ot.plan(q, ot.parseMap("E1 S9\n"));
+  assert.deepStrictEqual(p.noSurvivor.map((o) => o.userId), ["C1"]);
+  assert.deepStrictEqual(p.survivors[0].olds[0].rows, ["e1b"]);
+  assert.strictEqual(p.totals.orphanRows, 2);
+  await new Promise((r) => db.close(r));
+});
+
 test("the script: dry run opens read-only and writes nothing; --apply backs up, applies once", async () => {
   await setup;
   const file = path.join(dir, "cli.db");

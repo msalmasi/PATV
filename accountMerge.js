@@ -448,19 +448,21 @@ const DEFAULT_AVATAR = /(^|\/)avatar\.png$/i;
 const placeholderEmail = (e) => !e || !String(e).includes("@");
 /**
  * Carry the old account's own fields onto the target (inside the caller's transaction; the old row must
- * still exist): xp added and the higher level kept (what mergeDuplicate always did - xp is "into the
- * current level", so the next XP award levels up as usual; levelup_rewards moved with the rows, so no level
- * is paid twice), liked and extra spins added, the stricter casino ban, the older creation date, the
+ * still exist): the two CUMULATIVE XP totals added (1.99gg, user.controller mergeXpOf - it used to add only
+ * the in-level xp and keep the higher level, losing the lower account's levels; levels above both are paid
+ * by afterMerge through the normal level-up path, deduped by levelup_rewards, which moved with the rows),
+ * liked and extra spins added, the stricter casino ban, the older creation date, the
  * connect-bonus flags, and an avatar / stream id / VERIFIED email the target lacks. Balance, the Twitch /
- * Discord / Camfrog ids and the username are the caller's. -> {xp, level, emailMoved, fields}
+ * Discord / Camfrog ids and the username are the caller's.
+ * -> {xp (the old account's cumulative XP carried over), level, emailMoved, fields}
  */
 async function carryUserFields(from, toId) {
   const cols = new Set(await columnsOf("users"));
   const to = (await getQuery("SELECT * FROM users WHERE userId = ?", [toId]))[0];
   if (!from || !to) return { xp: 0, level: 0, emailMoved: false, fields: [] };
   const set = {}, n = (x) => Number(x) || 0;
-  if (cols.has("xp")) set.xp = n(to.xp) + n(from.xp);
-  if (cols.has("level")) set.level = Math.max(n(to.level), n(from.level));
+  const mx = require("./user.controller").mergeXpOf(to, from);
+  if (cols.has("xp") && cols.has("level")) { set.xp = mx.store.xp; set.level = mx.store.level; }
   if (cols.has("liked")) set.liked = n(to.liked) + n(from.liked);
   if (cols.has("extra_daily_spins")) set.extra_daily_spins = n(to.extra_daily_spins) + n(from.extra_daily_spins);
   if (cols.has("casino_banned")) set.casino_banned = Math.max(n(to.casino_banned), n(from.casino_banned));
@@ -481,7 +483,7 @@ async function carryUserFields(from, toId) {
   }
   const keys = Object.keys(set);
   if (keys.length) await runQuery(`UPDATE users SET ${keys.map((k) => `${q(k)} = ?`).join(", ")} WHERE userId = ?`, keys.map((k) => set[k]).concat([toId]));
-  return { xp: n(from.xp), level: n(from.level), emailMoved, fields: keys.filter((k) => k !== "email") };
+  return { xp: mx.otherTotal, level: n(from.level), emailMoved, fields: keys.filter((k) => k !== "email") };
 }
 
 // ── the record of a merge ─────────────────────────────────────────────────────────────────────────────────
@@ -543,6 +545,14 @@ async function afterMerge(toId, report = {}) {
       }
     }
   } catch (e) { console.error("[MERGE] held connect bonus:", e.message); }
+  // 1.99gg: the merged XP may reach levels above both accounts' (user.controller mergeXpOf stores the higher
+  // level + the rest as in-level XP): settle it through the normal level-up path, which pays only levels
+  // neither account was paid for (levelup_rewards / levelup_milestones moved with the rows)
+  try {
+    const uc = require("./user.controller");
+    const u = (await getQuery("SELECT xp, level FROM users WHERE userId = ?", [toId]))[0];
+    if (u && (Number(u.xp) || 0) >= uc.xpForNextLevel(Number(u.level) || 0)) await uc.updateLevel(toId, 0);
+  } catch (e) { console.error("[MERGE] level-up after merge:", e.message); }
 }
 
 /** A Camfrog name moving from one real account to another takes its Camfrog achievements (cf_*)
