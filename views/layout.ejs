@@ -75,7 +75,7 @@
               const item = (l, labelled) => '<a href="' + l[0] + '" class="nav-link' + (l[3] ? ' ' + l[3] : '') + '"'
                 + (l[3] === 'adminLink' ? ' hidden' : '') + (l[0].startsWith('http') ? ' rel="noopener"' : '')
                 + ' title="' + l[2].replace(/&/g, '&amp;') + '"><span class="ic">' + l[1] + '</span>'
-                + (labelled ? '<span class="lb">' + l[2].replace(/&/g, '&amp;') + '</span>' : '') + '</a>';
+                + (labelled ? '<span class="nav-lbl">' + l[2].replace(/&/g, '&amp;') + '</span>' : '') + '</a>';
             %>
             <div class="navbar-left">
                 <a href="/" id="logo"><span class="logo-full">publicaccess.tv</span><span class="logo-short">PATV</span></a>
@@ -92,8 +92,8 @@
             <div class="navbar-right">
                 <%# 1.99ec: "✏️ Post" - the create-post page; on a pad's pages (/p/<pad>/...) it preselects that pad %>
                 <% const _pm = typeof ogPath !== 'undefined' && ogPath ? /^\/p\/([A-Za-z0-9._~%-]+)/.exec(ogPath) : null; %>
-                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="Create a post<%= _pm ? ' in p/' + _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() : '' %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="lb">Post</span></a>
-                <a href="/stage" class="nav-golive" title="Go live: stream to a pad's stage"><span class="cta-ic" aria-hidden="true">🎥</span><span class="lb">Go live</span></a>
+                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="Create a post<%= _pm ? ' in p/' + _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() : '' %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="nav-lbl">Post</span></a>
+                <a href="/stage" class="nav-golive" title="Go live: stream to a pad's stage"><span class="cta-ic" aria-hidden="true">🎥</span><span class="nav-lbl">Go live</span></a>
                 <% if (typeof user == 'undefined' || !user) { %>
                     <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
                 <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; const _dm = (typeof dmUnread !== 'undefined' && dmUnread > 0) ? dmUnread : 0; %>
@@ -155,7 +155,7 @@
             .navbar a.nav-post { border-color: #3c7a46; background: #12301a; color: #c8efcf !important; }
             .navbar a.nav-post:hover, .navbar a.nav-post:focus-visible { border-color: #4caf50; color: #fff !important; }
             /* 1.99ej: icon-only up to 500px (was 420 - signed in, 421-485px still overflowed with the labels); 1.99ek: equal squares */
-            @media (max-width: 500px) { .nav-golive .lb, .nav-post .lb { display: none; } .navbar a.nav-post, .navbar a.nav-golive { width: 34px; min-width: 0; padding: 0; } }
+            @media (max-width: 500px) { .nav-golive .nav-lbl, .nav-post .nav-lbl { display: none; } .navbar a.nav-post, .navbar a.nav-golive { width: 34px; min-width: 0; padding: 0; } }
             .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
             .navbar .avatar img { margin-left: 0; }
             .nav-bell { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px;
