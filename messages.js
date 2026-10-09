@@ -1088,6 +1088,45 @@ async function claimAlerts({ limit = 50 } = {}) {
   return out;
 }
 
+// ── 1.99ij: a message sent from Camfrog through Pepe (`!message <PATV user or Camfrog name> <text>`, or the same as a
+// PM to Pepe). The sender is the account the Camfrog login is LINKED to (Pepe's auto "CF…" accounts don't count:
+// nobody signs in to those, so they could never read the reply). The recipient is a linked Camfrog login first (in a
+// room people know each other by those), else a PATV username; "u/<name>" forces the PATV username. Then it is an
+// ordinary send(): blocks, "who can message me", the new-account rule and every rate limit apply as on the site. ──
+const CF_AUTO = /^cf[a-z0-9]{8}$/i;
+const LOGIN_RE = /^[\w.\-]{1,40}$/;
+/** The account a Camfrog login is linked to: a real one before a "CF…" auto one. null = none; {auto: true} = only an auto one. */
+async function linkedAccount(login) {
+  const k = String(login || "").trim().replace(/^@/, "").toLowerCase();
+  if (!LOGIN_RE.test(k)) return null;
+  const rows = await getQuery("SELECT userId, username FROM users WHERE LOWER(camfrogUsername) = ?", [k]);
+  let auto = false;
+  for (const r of rows.sort((a, b) => Number(CF_AUTO.test(a.username)) - Number(CF_AUTO.test(b.username)))) {
+    const acc = await account(r.userId);
+    if (!acc || acc.archived_at) continue;
+    if (CF_AUTO.test(acc.username)) { auto = true; continue; }
+    return acc;
+  }
+  return auto ? { auto: true } : null;
+}
+async function fromCamfrog({ from, to, text } = {}) {
+  await init();
+  const sender = await linkedAccount(from);
+  if (!sender || sender.auto) throw new Refuse(403, "Link your Camfrog name to PATV first.", "unlinked");
+  const raw = String(to || "").trim().replace(/^@/, "").slice(0, 64);
+  if (!raw) throw new Refuse(400, "Who to?", "gone");
+  let target = null;
+  if (/^u\//i.test(raw)) target = await byUsername(raw.slice(2));
+  else {
+    const t = await linkedAccount(raw);
+    target = t && !t.auto ? t : await byUsername(raw);
+  }
+  if (!target || target.archived_at) throw new Refuse(404, `There's no PATV account for ${cleanLine(raw, 40)}.`, "gone");
+  if (target.userId === PEPE_ID) throw new Refuse(400, "That's Pepe - just talk to him in the room.", "bot");
+  const r = await send({ userId: sender.userId }, { to: target.username, body: text }, { ip: null, via: "pepe", ua: "Camfrog !message (Pepe)", bot: true });
+  return { to: { username: target.username, display: display(target) }, from: { username: sender.username }, conversation: r.conversation.id, created: r.created };
+}
+
 // ── nav count middleware (the 💬 next to the 🔔) ──
 function navCount(req, res, next) {
   if (req.method !== "GET" || /^\/(api|public|og|uploads|events)\b|^\/healthz|^\/messages\/media\//.test(req.path)) return next();
@@ -1258,9 +1297,15 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json({ ok: true, alerts: await claimAlerts({ limit: Number(b.limit) || 50 }) }); } catch (e) { fail(res, e); }
   });
+  // 1.99ij: Pepe delivers a Camfrog `!message` (bot token) -> {ok, to, conversation} | {ok: false, error, code}
+  app.post("/api/messages/from-camfrog", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try { res.json({ ok: true, ...(await fromCamfrog({ from: b.from, to: b.to, text: b.text })) }); } catch (e) { fail(res, e); }
+  });
 }
 
 module.exports = { init, register, sse, navCount, send, list, history, header, check, markRead, deleteMessage, clear, setBlock, blockList,
-                   prefs, setPrefs, refusal, report, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
+                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
                    createGroup, addMembers, leaveGroup, removeMember, renameGroup, setMute,
                    emit, Refuse, LIMITS, WHO, ALERT_GAP_MS, ALERT_GRACE_MS, _setClock, _gaps: gaps, _streams: streams };

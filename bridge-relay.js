@@ -63,7 +63,7 @@ const CMD_DENY = new Set(("!update !reload !reloadbot !vm !wheelfix !test !sniff
   "!perms !role !roles !botadmin !botadmins !redlist !admin !mod !moderator !friend !unrole !demote !removerole !ignore " +
   "!transcript !globalunblock !mute !unmute !roomaudio !bridge !chatty !chattycam !chattydepth !autotopic !lookmode " +
   "!lookpublic !greeter !greet !persona !personas !convo !campause !camresume !costume !costumes !dressup !votemodmode " +
-  "!msg !dm !dms !inbox !verify !patv !patvname !incognito !forgetme !alias !log !history !modlog !search !userlist " +
+  "!msg !message !patvmsg !dm !dms !inbox !verify !patv !patvname !incognito !forgetme !alias !log !history !modlog !search !userlist " +
   "!unames !analytics !activity !mystats !watchlist !cam !cams !opencam !camwatch !whowatching !activeroom !audioroom " +
   "!microom !joinroom !leaveroom !switchroom !roomswitch !winroom !wintrace !winlist !stream !scene !scenes !schedule " +
   "!sched !schedules !rec !record !autoclip !alerts !alert !web !epstein").split(" "));
