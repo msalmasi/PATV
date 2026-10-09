@@ -102,6 +102,13 @@ function init() {
       await runQuery(`UPDATE rooms_registry SET platform = CASE WHEN room_id LIKE 'patv:%' THEN 'site' WHEN room_id LIKE 'twitch:%' THEN 'twitch'
                       WHEN room_id LIKE 'discord:%' THEN 'discord' WHEN room_id LIKE 'user:%' THEN 'profile' ELSE 'camfrog' END WHERE platform IS NULL OR platform = ''`);
       await runQuery("CREATE INDEX IF NOT EXISTS rooms_registry_owner ON rooms_registry (owner_user_id)");
+      // 1.99iy: pad addresses - slug_set = the slug was chosen (renamed / picked at creation), so links use it rather than the
+      // bridge's display-name slug; slug_changed_at = the last rename (the owner's once-per-N-days limit). Additive columns.
+      if (!cols.has("slug_set")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slug_set INTEGER NOT NULL DEFAULT 0");
+      if (!cols.has("slug_changed_at")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slug_changed_at INTEGER");
+      // every slug a pad gave up: /p/<old>[/...] 301s to the pad's current address, and nobody else can take it
+      await runQuery("CREATE TABLE IF NOT EXISTS pad_slug_aliases (slug TEXT PRIMARY KEY, room_id TEXT NOT NULL, created INTEGER, by TEXT)");
+      await runQuery("CREATE INDEX IF NOT EXISTS pad_slug_aliases_room ON pad_slug_aliases (room_id)");
       await runQuery("CREATE TABLE IF NOT EXISTS rooms_kv (key TEXT PRIMARY KEY, value TEXT)");
       await runQuery("CREATE TABLE IF NOT EXISTS room_events (room_id TEXT, ts INTEGER, what TEXT, actor TEXT, detail TEXT)");
       await runQuery("CREATE INDEX IF NOT EXISTS room_events_room ON room_events (room_id, ts)");
@@ -126,7 +133,7 @@ async function userCols() {
 const ucol = (cols, c, alias = "") => (cols.has(c) ? `${alias}${c}` : "NULL");
 
 // ── cache: the registry is small and read on every page; reloaded after each write ──
-let CACHE = { byId: new Map(), bySlug: new Map(), front: "auto", at: 0 };
+let CACHE = { byId: new Map(), bySlug: new Map(), aliases: new Map(), front: "auto", at: 0 };
 async function loadCache() {
   const C = await userCols();
   const rows = await getQuery(`SELECT r.*, u.username AS owner_username, ${ucol(C, "displayname", "u.")} AS owner_display,
@@ -135,7 +142,10 @@ async function loadCache() {
   const byId = new Map(), bySlug = new Map();
   for (const r of rows) { byId.set(r.room_id, r); bySlug.set(r.slug, r); bySlug.set(slugify(r.room_id), r); }
   const f = (await getQuery("SELECT value FROM rooms_kv WHERE key = 'front_room'"))[0];
-  CACHE = { byId, bySlug, front: f ? String(f.value) : "auto", at: Date.now() };
+  // 1.99iy: retired slugs -> the pad that had them (only for pads that still exist)
+  const aliases = new Map();
+  for (const a of await getQuery("SELECT slug, room_id FROM pad_slug_aliases")) if (byId.has(a.room_id)) aliases.set(a.slug, a.room_id);
+  CACHE = { byId, bySlug, aliases, front: f ? String(f.value) : "auto", at: Date.now() };
   return CACHE;
 }
 
@@ -273,6 +283,7 @@ function view(r) {
     slot_count: Math.max(1, Number(r.slot_count) || 1), approval: !!r.approval, slot_price: Math.max(0, Number(r.slot_price) || 0),
     // 1.99iv: pad.primeTime - the pad has 📺 Prime Time right now (premium.js; low-latency audio / stage key off it)
     primeTime: primeOf(r.room_id),
+    slug_set: !!r.slug_set, slug_changed_at: Number(r.slug_changed_at) || null,      // 1.99iy: a chosen address + its last change
   };
 }
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
@@ -284,13 +295,27 @@ function maybeRefresh() {
   }
 }
 async function get(roomId) { await init(); maybeRefresh(); return view(CACHE.byId.get(String(roomId || ""))); }
-async function bySlug(slug) { await init(); return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
+/** 1.99iy: a slug -> the registry row: a pad's current slug (or slugified id), else a slug a pad gave up (an alias). */
+function rowBySlug(slug) {
+  const s = String(slug || "").toLowerCase();
+  const r = CACHE.bySlug.get(s);
+  if (r) return r;
+  const id = CACHE.aliases && CACHE.aliases.get(s);
+  return id ? CACHE.byId.get(id) || null : null;
+}
+async function bySlug(slug) { await init(); return view(rowBySlug(slug)); }
 // 1.99df: list() and listCached() never include profile pads (profilePads() does)
 const notProfile = (r) => cleanPlatform(r.platform, r.room_id) !== "profile";
 async function list() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter(notProfile).map(view).sort((a, b) => a.title.localeCompare(b.title)); }
 function getCached(roomId) { return view(CACHE.byId.get(String(roomId || ""))); }
 /** 1.99ck: a pad by slug from the cache, synchronously (pads.js autolinks p/<slug> while rendering). */
-function bySlugCached(slug) { return view(CACHE.bySlug.get(String(slug || "").toLowerCase())); }
+function bySlugCached(slug) { return view(rowBySlug(slug)); }
+/** 1.99iy: the pad id a RETIRED slug points at (null for a slug some pad uses now, or an unknown one). */
+function aliasTarget(slug) {
+  const s = String(slug || "").toLowerCase();
+  if (CACHE.bySlug.has(s)) return null;
+  return (CACHE.aliases && CACHE.aliases.get(s)) || null;
+}
 function listCached() { return [...CACHE.byId.values()].filter(notProfile).map(view); }
 /** 1.99df: every profile pad (the automod's "profiles" switch). */
 async function profilePads() { await init(); maybeRefresh(); return [...CACHE.byId.values()].filter((r) => !notProfile(r)).map(view); }
@@ -605,7 +630,7 @@ async function activity(roomId, fromMs, toMs) {
 // ── for Pepe: the owner of every room, so chat commands can respect them ──
 async function ownersForPepe() {
   await init();
-  return listCached().map((r) => ({ id: r.id, slug: r.slug, title: r.title, owner_kind: r.owner_kind,
+  return listCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: !!r.slug_set, title: r.title, owner_kind: r.owner_kind,   // 1.99iy: slug_set = links use this slug
     owner: r.owner ? { username: r.owner.username, camfrog: r.owner.camfrog ? String(r.owner.camfrog).toLowerCase() : null } : null,
     slot_count: r.slot_count }));
 }
@@ -642,4 +667,5 @@ module.exports = {
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,
+  aliasTarget,                                                        // 1.99iy: pad addresses (padaddress.js)
 };

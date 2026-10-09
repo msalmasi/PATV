@@ -97,7 +97,15 @@ function qsOf(req) {
 /** 1.99x: a retired slug's pad's current slug, or null when `slug` isn't a retired one (or still is the pad's slug). */
 function currentSlugFor(slug) {
   const s = String(slug || "").toLowerCase();
-  if (!Object.prototype.hasOwnProperty.call(OLD_SLUGS, s)) return null;
+  // 1.99iy: a slug a pad gave up when its owner changed its address (rooms.js pad_slug_aliases)
+  if (!Object.prototype.hasOwnProperty.call(OLD_SLUGS, s)) {
+    let id = null;
+    try { id = require("./rooms").aliasTarget(s); } catch (e) { id = null; }
+    if (!id) return null;
+    const A = require("./rooms").getCached(id);
+    const cur = A ? padSlug(A) : null;
+    return cur && cur !== s ? cur : null;
+  }
   let R = null;
   try { R = require("./rooms").getCached(OLD_SLUGS[s]); } catch (e) { R = null; }
   return R && R.slug && R.slug !== s ? R.slug : null;
@@ -126,7 +134,8 @@ function padRefs(html, known = padBySlugSync) {
     if (!R) return m;
     const s = slug.toLowerCase();
     // 1.99x: an old slug (p/patv-lounge in older posts) keeps its text and links to the pad's current address
-    const href = OLD_SLUGS[s] && R.slug && R.slug !== s ? R.slug : s;
+    const cur = currentSlugFor(s);                                   // 1.99iy: any retired slug (OLD_SLUGS or a renamed pad's)
+    const href = cur || s;
     return `${pre}<a class="pad-ref" href="/p/${encodeURIComponent(href)}">p/${s}</a>`;
   });
 }

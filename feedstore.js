@@ -2271,7 +2271,8 @@ async function roomMembers(roomId) {
 /** The room's feed audit trail (room_events rows starting feed-). */
 async function roomAudit(roomId, limit = 100) {
   await init();
-  return getQuery("SELECT * FROM room_events WHERE room_id = ? AND what LIKE 'feed-%' ORDER BY ts DESC LIMIT ?", [roomId, limit]);
+  // 1.99iy: + the pad's own changes ("pad-*": its address, its platform connections)
+  return getQuery("SELECT * FROM room_events WHERE room_id = ? AND (what LIKE 'feed-%' OR what LIKE 'pad-%') ORDER BY ts DESC LIMIT ?", [roomId, limit]);
 }
 
 module.exports = {

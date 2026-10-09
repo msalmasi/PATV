@@ -89,9 +89,12 @@ function roomFor(ref) {
     rooms.set(ref.id, R);
   }
   if (ref.name && ref.name !== R.name) R.name = ref.name;
-  // slug from the display name; another room already holding it gets the id-based one
-  let slug = slugify(R.name);
-  for (const o of rooms.values()) if (o !== R && o.slug === slug) slug = slugify(R.id);
+  // slug from the display name; another room already holding it gets the id-based one.
+  // 1.99iy: a pad whose address was CHOSEN (renamed / picked at creation - rooms.js slug_set) uses that one
+  let reg = null;
+  try { reg = require("./rooms").getCached(R.id); } catch (e) { reg = null; }
+  let slug = reg && reg.slug_set && reg.slug ? reg.slug : slugify(R.name);
+  if (!(reg && reg.slug_set)) for (const o of rooms.values()) if (o !== R && o.slug === slug) slug = slugify(R.id);
   R.slug = slug;
   return R;
 }
@@ -631,6 +634,11 @@ async function liveFor(slug) {
 function bySlug(slug) {
   const s = String(slug || "").toLowerCase();
   for (const R of rooms.values()) if (R.slug === s || slugify(R.id) === s) return R;
+  // 1.99iy: the pad's registry address (a chosen slug, or one it gave up) -> its live room
+  try {
+    const reg = require("./rooms").bySlugCached(s);
+    if (reg && rooms.has(reg.id)) return rooms.get(reg.id);
+  } catch (e) { /* no registry */ }
   return null;
 }
 

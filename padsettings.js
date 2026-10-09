@@ -22,13 +22,21 @@ const { getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
 const store = require("./feedstore");
 
-const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog", "flair"]);      // 1.99ir: + flair
+const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog", "flair", "address"]);      // 1.99ir: + flair; 1.99iy: + address (padaddress.js)
 
 async function pins(roomId) {
   const rows = await getQuery(`SELECT p.id, p.title, p.body, pr.pinned_at, pr.pinned_by FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
                    WHERE pr.room_id = ? AND pr.pinned_at IS NOT NULL AND pr.removed_at IS NULL AND p.deleted_at IS NULL ORDER BY pr.pinned_at DESC`, [roomId]);
   for (const r of rows) r.url = await store.postLink(r.id);     // 1.99dv: the post's canonical address
   return rows;
+}
+
+/** 1.99iy: the "Address" section's data. */
+async function addressData(R, viewer) {
+  const PAD = require("./padaddress");
+  const C = await require("./padcfg").get();
+  return { aliases: await PAD.aliasesOf(R.id), next_at: await PAD.nextRenameAt(viewer, R), rename_days: C.rename_days,
+           staff: rooms.isStaff(viewer), min: PAD.MIN_LEN, max: PAD.MAX_LEN };
 }
 
 /** Everything the hub shows for one pad (the viewer may manage it). */
@@ -73,6 +81,8 @@ async function hubData(R, viewer, app) {
     // 1.99ir: Flair & tags - the pad's flairs + who wears them (padflair.js), its popular tags (feedtags.js)
     flair: R.profile ? null : await require("./padflair").manageView(R.id),
     popularTags: R.profile ? [] : await require("./feedtags").popular(R.id, { viewer, limit: 20 }).catch(() => []),
+    // 1.99iy: the pad's address (padaddress.js) - its old slugs, when the owner may change it next
+    address: R.profile ? null : await addressData(R, viewer),
   };
 }
 

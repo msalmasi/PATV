@@ -27,6 +27,7 @@ async function resolveRoom(slug) {
 }
 /** The slug links should use: the bridge's (what Pepe's !bridge posts) when it's bridged, else ours. */
 function linkSlug(R) {
+  if (R && R.slug_set && R.slug) return R.slug;      // 1.99iy: a chosen address always wins
   try {
     const B = bridge()._rooms.get(R.id);
     if (B && B.slug) return B.slug;
@@ -58,7 +59,7 @@ async function guideRows(signedIn, viewer) {
     const r = x.reg, b = x.br;
     const slots = g.get(id) || { now: [], next: [] };
     out.push({
-      id, slug: b ? b.slug : r.slug, title: (r && r.title) || (b && b.name) || id,
+      id, slug: r ? linkSlug(r) : b.slug, title: (r && r.title) || (b && b.name) || id,
       owner: r && r.owner ? (r.owner.display || r.owner.username) : null, ownerUser: r && r.owner ? r.owner.username || null : null, house: !!(r && r.house),
       bridged: !!b, live: !!(b && b.live), count: b ? b.count : 0, micCount: b ? b.micCount : 0,
       topic: b ? b.topic : "", description: r ? r.description : "",
@@ -277,7 +278,7 @@ function register(app, { addUser, isBotToken }) {
     const sum = await royalties.summary();
     const fp = await rooms.frontStatus().catch(() => null);
     res.render("roomsAdmin", { user: req.user.username, isAdmin: req.user.class === "Admin", list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
-      sum,
+      sum, padsCfg: { config: await require("./padcfg").get(), fields: require("./padcfg").FIELDS, limits: require("./padcfg").LIMITS },   // 1.99iy
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });
   app.post("/api/rooms/admin/owner", addUser, needStaff, jsonOnly, async (req, res) => {

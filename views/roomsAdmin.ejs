@@ -73,6 +73,9 @@
     <p class="muted">Pads for the Camfrog rooms Pepe bridges are added automatically (no owner). Owner = one PATV account (matched by username, display name or Camfrog/Discord/Twitch name); <code>house</code> = Pepe's (site admins run it, no royalties). Owners sync to Pepe within ~2 minutes for chat <code>!stage</code> commands.</p>
   </section>
 
+  <%# 1.99iy: pad addresses (+ 1.99iz creation, 1.99ja connections) - padcfg.js %>
+  <% if (typeof padsCfg !== 'undefined' && padsCfg) { %><%- include('partials/pads-admin-cfg', { padsCfg, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %><% } %>
+
   <section class="sb-card" id="royalties" aria-labelledby="royT">
     <h2 id="royT">Pad owner royalties</h2>
     <form id="royForm" class="settings">

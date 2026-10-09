@@ -1,0 +1,36 @@
+<%# 1.99iy: /pads/admin "Pad addresses & creation" (padcfg.js). Locals: padsCfg {config, fields, limits}, isAdmin.
+    Fields: {key, label, help, type: int (default) | bool | select (options: [[value, label]]), money}. Site admins save. %>
+<section class="sb-card" id="padscfg" aria-labelledby="padsCfgT">
+  <h2 id="padsCfgT">🧱 Pad addresses &amp; creation</h2>
+  <p class="muted">How often owners can change a pad's address<% if (padsCfg.fields.some((f) => f.key === 'create_on')) { %>, who can create pads, how many and what it costs<% } %>. Settings marked 💰 move PAT: they're the owner's call.</p>
+  <form id="padsCfgForm" class="settings">
+    <% padsCfg.fields.forEach((f) => { const v = padsCfg.config[f.key]; const L = padsCfg.limits[f.key]; %>
+      <% if (f.type === 'bool') { %>
+        <label class="chk"><input type="checkbox" name="<%= f.key %>"<%= v ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> <%= f.money ? '💰 ' : '' %><%= f.label %></label>
+      <% } else if (f.type === 'select') { %>
+        <label class="fld"><%= f.money ? '💰 ' : '' %><%= f.label %>
+          <select name="<%= f.key %>"<%= isAdmin ? '' : ' disabled' %>><% (f.options || []).forEach((o) => { %><option value="<%= o[0] %>"<%= String(v) === String(o[0]) ? ' selected' : '' %>><%= o[1] %></option><% }) %></select></label>
+      <% } else { %>
+        <label class="fld"><%= f.money ? '💰 ' : '' %><%= f.label %>
+          <input type="number" name="<%= f.key %>" value="<%= v %>"<% if (L) { %> min="<%= L[0] %>" max="<%= L[1] %>"<% } %> step="1"<%= isAdmin ? '' : ' disabled' %>></label>
+      <% } %>
+      <% if (f.help) { %><small class="muted" style="display:block;margin:-4px 0 8px"><%= f.help %></small><% } %>
+    <% }) %>
+    <div class="row"><% if (isAdmin) { %><button type="submit" class="btn primary">Save</button><% } else { %><span class="muted">Site admins change these.</span><% } %><span class="msg" id="padsCfgMsg" role="status" aria-live="polite"></span></div>
+  </form>
+</section>
+<script>
+(function () {
+  'use strict';
+  var f = document.getElementById('padsCfgForm');
+  if (!f) return;
+  f.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var o = {};
+    Array.prototype.forEach.call(f.elements, function (el) { if (el.name) o[el.name] = el.type === 'checkbox' ? el.checked : el.value; });
+    fetch('/api/pads/admin/config', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); })
+      .then(function (j) { document.getElementById('padsCfgMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Not saved.'); });
+  });
+})();
+</script>

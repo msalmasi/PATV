@@ -1110,6 +1110,7 @@ require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe 
 require("./feedautomod").register(app, { isBotToken, addUser });   // 1.99dc: Pepe's feed automod (verdicts, settings, reversals, notices)
 require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules (else Padiquette)
 require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settings hub /p/:slug/settings (was /manage + /mod)
+require("./padaddress").register(app, { addUser });   // 1.99iy: change a pad's address (/api/rooms/:slug/address; old slugs 301 - pads.js)
 require("./imagesafety").register(app, { isBotToken, addUser });   // 1.99fc: image safety checks via Pepe's vision (OFF by default; /admin/imagesafety)
 require("./imagesafety").install();   // 1.99fc: padlook / stories / feed posts / DM pictures go through it (a pass-through while it's off)
 require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp });   // 1.99fq: /help (Pepe's commands, published by Pepe) + its "ask how to do something" prompter
