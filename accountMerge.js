@@ -110,6 +110,7 @@ const RULES = {
   // inbox / prefs / onboarding
   "inbox.user_id": M({ key: ["ref"] }), "inbox_prefs.user_id": M({ key: ["kind"] }),
   "profile_layout.user_id": M({ key: [] }), "tipjar_seen.userId": M({ key: [] }),
+  "mention_prefs.user_id": M({ key: [] }), "mention_words.user_id": M({ key: ["phrase", "room_id"] }),   // 1.99ii: mentions.js
   "welcome_bonus.userId": { special: "welcome bonus states are combined (mergeWelcome)" },
   "welcome_keys.userId": M({ key: ["k"], merge: { created: "MIN" } }),
   "welcome_activity.userId": M({ key: ["day"] }),

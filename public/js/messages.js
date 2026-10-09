@@ -978,7 +978,7 @@
     var np = $('dmNtPrefs'); np.textContent = '';
     var PM = S.nt.pm || {};
     (S.nt.kinds || []).forEach(function (k) {
-      if (k.key === 'dm') return;
+      if (k.key === 'dm' || k.key === 'mention') return;     // 1.99ii: mention alerts are 🔔-only (never a Camfrog PM)
       var cb = el('input', { type: 'checkbox', name: 'pm_' + k.key, 'data-pm': k.key });
       cb.checked = !PM[k.key] || PM[k.key].pm !== false;
       np.appendChild(el('label', null, [cb, ' ' + k.icon + ' ' + k.label]));

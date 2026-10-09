@@ -118,6 +118,10 @@
         <p class="mut" style="margin:6px 0 0">Shop emails and PMs also follow your <a href="/shop/seller#notify">shop settings</a>.</p>
       </fieldset>
       <fieldset>
+        <legend>Room mentions</legend>
+        <p class="mut" style="margin:2px 0 0">📣 Get a 🔔 notice when someone says your name (or words you pick) in a Camfrog room Pepe bridges: <a href="/settings/mentions">Mention alerts</a>.</p>
+      </fieldset>
+      <fieldset>
         <legend>Blocked</legend>
         <ul class="dm-blocks" id="dmBlocks"></ul>
         <p class="mut">Blocking stops messages both ways. They aren't told.</p>
@@ -180,6 +184,6 @@
 </main>
 <script>document.body.classList.add('dm-page');   /* messages.css: the page is one viewport-high app screen, no footer */</script>
 <script type="application/json" id="dmBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-<script src="/public/js/messages.js?v=6" defer></script>
+<script src="/public/js/messages.js?v=7" defer></script>
 </body>
 </html>

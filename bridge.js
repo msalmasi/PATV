@@ -399,6 +399,13 @@ async function ingest(body) {
     const { c, ...rest } = it;
     await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, rid, it.ts, JSON.stringify(rest)]);
   }
+  // 1.99ii: room mention alerts (mentions.js) - this batch's new chat lines, matched off the sync (queued, never awaited)
+  const said = newItems.filter(([, it]) => it.k === "msg");
+  if (said.length) {
+    try {
+      require("./mentions").onLines(said.map(([rid, it]) => { const R = rooms.get(rid); return { roomId: rid, slug: R ? R.slug : "", name: R ? titleOf(R) : rid, it }; }));
+    } catch (e) { console.error("[bridge] mentions:", e.message); }
+  }
   for (const R of touched) {
     if (rooms.get(R.id) !== R) continue;
     await persistRoom(R);

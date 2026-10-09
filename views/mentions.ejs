@@ -1,0 +1,148 @@
+<%# /settings/mentions — 📣 room mention alerts (1.99ii, mentions.js). Locals: user, title, boot {prefs, words, names, linked, rooms, wordsMax}.
+    Everything user-entered goes back in with textContent / .value; the JSON boot is < -escaped. %>
+<%- include('layout', { title: title, user: user }) %>
+<%- include('partials/legal-css') %>
+<style>
+  .mn .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
+  .mn .card h2 { border: 0; padding: 0; margin: 0 0 6px; font-size: 18px; }
+  .mn .mut { color: #9a9a9a; font-size: 13.5px; }
+  .mn label.ck { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: 15px; }
+  .mn .names { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0 26px; }
+  .mn .chip { padding: 2px 10px; border-radius: 999px; background: #1b1b1b; border: 1px solid #333; font-size: 13px; color: #ddd; }
+  .mn .words { display: grid; gap: 8px; margin: 8px 0; }
+  .mn .w { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 200px) auto; gap: 8px; align-items: center; }
+  .mn input[type=text], .mn select, .mn input[type=time] { width: 100%; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid #333; background: #0d0d0d; color: #eee; font: inherit; font-size: 15px; }
+  .mn button { padding: 8px 14px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14px; cursor: pointer; }
+  .mn button.pri { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+  .mn button.x { padding: 6px 10px; }
+  .mn .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .mn .q { display: grid; grid-template-columns: auto minmax(0, 140px) auto minmax(0, 140px); gap: 8px; align-items: center; margin: 6px 0 0 26px; }
+  .mn .msg { min-height: 1.4em; font-size: 14px; }
+  .mn .msg.bad { color: #ff9e9e; } .mn .msg.ok { color: #a5d6a7; }
+  .mn .muted-on { color: #f1e2a6; }
+  @media (max-width: 560px) { .mn .w { grid-template-columns: minmax(0, 1fr) auto; } .mn .w select { grid-column: 1 / -1; grid-row: 2; } .mn .q { grid-template-columns: auto minmax(0, 1fr); margin-left: 0; } }
+</style>
+<main class="lg mn">
+  <header class="hero">
+    <div class="eyebrow">📣 SETTINGS · MENTIONS</div>
+    <h1>Room mention alerts</h1>
+    <p class="lead">Get a 🔔 notice when someone says your name, or a word you pick, in a Camfrog room Pepe bridges to the site. Open the notice to jump to that line in the pad's live chat.</p>
+    <p class="note">Only rooms Pepe <b>bridges</b> to PATV can alert (other rooms have no live feed here). Never for lines from people who are <code>!incognito</code> or hidden from the bridge, or in pads you can't see. At most one alert per room a minute and <%= boot.hourMax %> an hour.</p>
+  </header>
+
+  <form id="mnForm" autocomplete="off">
+    <section class="card" aria-labelledby="mnOnH">
+      <h2 id="mnOnH">Alerts</h2>
+      <label class="ck"><input type="checkbox" id="mnOn"> <span>Alert me about room mentions</span></label>
+      <label class="ck"><input type="checkbox" id="mnNames"> <span>Match my own names</span></label>
+      <div class="names" id="mnNameList" aria-label="Your names"></div>
+      <p class="mut" id="mnNoLink" hidden>Link your Camfrog name (type <code>!verify</code> in a room with Pepe) so your own lines never alert you and your Camfrog login counts as one of your names.</p>
+    </section>
+
+    <section class="card" aria-labelledby="mnWH">
+      <h2 id="mnWH">Words and phrases</h2>
+      <p class="mut">Whole words, any case: <i>bob</i> matches "hey Bob!" but not "bobby". Up to <span id="mnMax"></span>, each for every room or one room.</p>
+      <div class="words" id="mnWords"></div>
+      <button type="button" id="mnAdd">+ Add a word or phrase</button>
+    </section>
+
+    <section class="card" aria-labelledby="mnQH">
+      <h2 id="mnQH">Quiet hours and mute</h2>
+      <label class="ck"><input type="checkbox" id="mnQuiet"> <span>Quiet hours (no alerts, none saved for later)</span></label>
+      <div class="q" id="mnQ">
+        <label for="mnFrom">From</label><input type="time" id="mnFrom" value="23:00">
+        <label for="mnTo">to</label><input type="time" id="mnTo" value="08:00">
+      </div>
+      <p class="mut" style="margin:6px 0 0 26px">Your time zone: <b id="mnTz"></b></p>
+      <div class="row" role="group" aria-label="Mute">
+        <span id="mnMuteTxt" class="mut"></span>
+        <button type="button" data-mute="60">Mute 1 hour</button>
+        <button type="button" data-mute="480">8 hours</button>
+        <button type="button" data-mute="1440">24 hours</button>
+        <button type="button" data-mute="10080">1 week</button>
+        <button type="button" data-mute="0" id="mnUnmute" hidden>Unmute</button>
+      </div>
+    </section>
+
+    <div class="row">
+      <button type="submit" class="pri">Save</button>
+      <span class="msg" id="mnMsg" role="status" aria-live="polite"></span>
+    </div>
+  </form>
+</main>
+<script type="application/json" id="mnBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
+<script>
+(function () {
+  'use strict';
+  var B = JSON.parse(document.getElementById('mnBoot').textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  var tz = (B.prefs.quiet && B.prefs.quiet.tz) || B.prefs.tz || '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz || 'UTC'; } catch (e) { tz = tz || 'UTC'; }
+  $('mnTz').textContent = tz;
+  $('mnMax').textContent = B.wordsMax;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function hm(min) { return ('0' + Math.floor(min / 60)).slice(-2) + ':' + ('0' + (min % 60)).slice(-2); }
+  function mins(v) { var m = /^(\d{1,2}):(\d{2})/.exec(v || ''); return m ? (Number(m[1]) % 24) * 60 + Number(m[2]) : null; }
+  function say(t, c) { var m = $('mnMsg'); m.textContent = t || ''; m.className = 'msg' + (c ? ' ' + c : ''); }
+  function api(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }); })
+      .then(function (d) { if (!d.ok) throw new Error(d.error || 'Something went wrong.'); return d; });
+  }
+  function wordRow(w) {
+    var row = el('div', 'w');
+    var inp = el('input'); inp.type = 'text'; inp.maxLength = 60; inp.placeholder = 'a word or phrase'; inp.value = w.phrase || ''; inp.setAttribute('aria-label', 'Word or phrase');
+    var sel = el('select'); sel.setAttribute('aria-label', 'Which rooms');
+    sel.appendChild(new Option('Every room', ''));
+    (B.rooms || []).forEach(function (r) { sel.appendChild(new Option(r.name, r.id)); });
+    if (w.room && !(B.rooms || []).some(function (r) { return r.id === w.room; })) sel.appendChild(new Option('(a room no longer bridged)', w.room));
+    sel.value = w.room || '';
+    var x = el('button', 'x', '✕'); x.type = 'button'; x.setAttribute('aria-label', 'Remove'); x.addEventListener('click', function () { row.remove(); });
+    row.appendChild(inp); row.appendChild(sel); row.appendChild(x);
+    return row;
+  }
+  function paint(d) {
+    $('mnOn').checked = !!d.prefs.enabled;
+    $('mnNames').checked = d.prefs.names !== false;
+    var nl = $('mnNameList'); nl.textContent = '';
+    (d.names || []).forEach(function (n) { nl.appendChild(el('span', 'chip', n)); });
+    $('mnNoLink').hidden = !!d.linked;
+    var ws = $('mnWords'); ws.textContent = '';
+    (d.words || []).forEach(function (w) { ws.appendChild(wordRow(w)); });
+    var q = d.prefs.quiet;
+    $('mnQuiet').checked = !!q;
+    if (q) { $('mnFrom').value = hm(q.from); $('mnTo').value = hm(q.to); }
+    $('mnQ').style.opacity = q ? '1' : '.55';
+    var mu = d.prefs.mutedUntil;
+    $('mnMuteTxt').textContent = mu ? '🔕 Muted until ' + new Date(mu).toLocaleString() : 'Not muted.';
+    $('mnMuteTxt').className = mu ? 'muted-on' : 'mut';
+    $('mnUnmute').hidden = !mu;
+  }
+  paint(B);
+  $('mnQuiet').addEventListener('change', function () { $('mnQ').style.opacity = this.checked ? '1' : '.55'; });
+  $('mnAdd').addEventListener('click', function () {
+    if ($('mnWords').children.length >= B.wordsMax) { say('Up to ' + B.wordsMax + ' words or phrases.', 'bad'); return; }
+    var r = wordRow({}); $('mnWords').appendChild(r); r.querySelector('input').focus();
+  });
+  $('mnForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var words = Array.prototype.map.call($('mnWords').children, function (r) { return { phrase: r.querySelector('input').value, room: r.querySelector('select').value }; })
+      .filter(function (w) { return w.phrase.trim(); });
+    var quiet = { from: null, to: null, tz: tz };
+    if ($('mnQuiet').checked) { quiet.from = mins($('mnFrom').value); quiet.to = mins($('mnTo').value); }
+    say('Saving…');
+    api('/api/mentions', { enabled: $('mnOn').checked, names: $('mnNames').checked, words: words, quiet: quiet })
+      .then(function (d) { paint(d); say('Saved.', 'ok'); })
+      .catch(function (x) { say(x.message, 'bad'); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mute]'), function (b) {
+    b.addEventListener('click', function () {
+      api('/api/mentions/mute', { minutes: Number(b.getAttribute('data-mute')) })
+        .then(function (d) { paint(d); say(Number(b.getAttribute('data-mute')) ? 'Muted.' : 'Unmuted.', 'ok'); })
+        .catch(function (x) { say(x.message, 'bad'); });
+    });
+  });
+})();
+</script>
+</body>
+</html>

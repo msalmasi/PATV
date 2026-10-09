@@ -43,6 +43,7 @@ const KINDS = {
   feed:        { icon: "📝", label: "Feed posts & comments", link: "/feed" },
   follow:      { icon: "⭐", label: "New posts from people & pads you follow", link: "/feed/following" },
   dm:          { icon: "💬", label: "Direct messages (a Camfrog alert from Pepe)", link: "/messages" },   // 1.99cp: messages.js; never filed here
+  mention:     { icon: "📣", label: "Room mentions (your name or words in a Camfrog room)", link: "/settings/mentions" },   // 1.99ii: mentions.js; site-only
   admin:       { icon: "🛠️", label: "Admin", link: null },
   system:      { icon: "🐸", label: "Pepe", link: null },
 };

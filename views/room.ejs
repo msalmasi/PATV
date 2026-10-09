@@ -61,6 +61,7 @@
   .rm .line .who { font-weight: bold; margin-right: 6px; }
   .rm .line .when { color: #666; font-size: 11px; margin-left: 4px; white-space: nowrap; }
   .rm .line.pepe { background: #0f1a10; }
+  .rm .line.hl { background: #2a2410; box-shadow: inset 3px 0 0 #e0b400; }   /* 1.99ii: the line a 📣 mention alert points at */
   .rm .line.tx { border-left: 3px solid #4f7fa8; background: #0f141b; }
   .rm .line.tx .body { font-style: italic; color: #c8d6e5; }
   .rm .line.tx .who { font-style: normal; }
@@ -630,6 +631,21 @@
     }
 
     function nearBottom() { return feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 80; }
+    // 1.99ii: ?line=<cursor> (a 📣 mention alert, mentions.js) - that chat line, highlighted and scrolled to, while
+    // it is still in the live chat (the room keeps its last 200 items)
+    var wantLine = (function () { var m = /[?&]line=(\d{1,12})(?:&|$)/.exec(location.search); return m ? m[1] : null; })();
+    function showLine() {
+      if (!wantLine) return false;
+      var n = feedEl.querySelector('.line[data-c="' + wantLine + '"]');
+      if (!n) return false;
+      n.classList.add('hl');
+      if (!feedEl.clientHeight) return true;            // the Live tab is hidden: scrolled when it shows (patv:padtab)
+      feedEl.style.scrollBehavior = 'auto';
+      feedEl.scrollTop += n.getBoundingClientRect().top - feedEl.getBoundingClientRect().top - feedEl.clientHeight / 3;
+      feedEl.style.scrollBehavior = '';
+      jump.style.display = 'block';
+      return true;
+    }
     function addFeed(items, first) {
       if (!items || !items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', 'Nothing said yet — it shows up here the moment someone talks.')); return; }
       var stick = first || nearBottom();
@@ -638,6 +654,11 @@
       items.forEach(function (it) { var n = item(it); if (n) frag.appendChild(n); });
       feedEl.appendChild(frag);
       while (feedEl.childNodes.length > 300) feedEl.removeChild(feedEl.firstChild);
+      if (first && wantLine) {
+        if (showLine()) return;
+        feedEl.appendChild(el('div', 'sys', 'The line you were mentioned in has scrolled out of the live chat.'));
+        wantLine = null;
+      }
       if (stick) { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
       else jump.style.display = 'block';
     }
@@ -645,6 +666,7 @@
     feedEl.addEventListener('scroll', function () { if (nearBottom()) jump.style.display = 'none'; });
     // 1.99dx: the chat fills in while its tab is hidden (no height to scroll) - land on the newest line when it shows
     document.addEventListener('patv:padtab', function (e) {
+      if (e.detail && e.detail.tab === 'live' && wantLine && feedEl.clientHeight) { if (showLine()) { wantLine = null; return; } }
       if (e.detail && e.detail.tab === 'live') { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
     });
 
