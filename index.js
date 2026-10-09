@@ -1095,7 +1095,8 @@ require("./pads").register(app);
 // 1.99fu: who can see a pad (Public / Members / Approved) - its page + API gates run before every pad route below
 require("./padaccess").register(app, { addUser });
 require("./feedweb").register(app, { isBotToken, addUser });
-require("./aigen").register(app, { isBotToken, addUser });   // 1.99di: AI pictures / videos for posts (Pepe's !imagine / !video from the composer)
+require("./aigen").register(app, { isBotToken, addUser });
+require("./jackpotflows").register(app, { isBotToken });   // 1.99gx: the House's site-side flows per day (wheel spins/prizes...) for Pepe's vault flow table   // 1.99di: AI pictures / videos for posts (Pepe's !imagine / !video from the composer)
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)
 require("./feedautomod").register(app, { isBotToken, addUser });   // 1.99dc: Pepe's feed automod (verdicts, settings, reversals, notices)
 require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules (else Padiquette)
@@ -2585,7 +2586,7 @@ app.post("/api/g/wheel/jackpot", addUser, requireUser, async (req, res) => {
   const { amount } = req.body;
   const userId = req.user.userId; // guaranteed by requireUser
   const jackpotId = uuidv4(); // Function to generate a UUID v4
-  const spinId = uuidv4();
+  const spinId = "admin:" + uuidv4();   // 1.99gx: tagged - an admin's adjustment, itemised in Pepe's flow table (jackpotflows.js)
   const userType = req.user ? req.user.class : null;
   const username = req.user ? req.user.username : null;
   if (userType === "Admin" || userType === "Staff") {
@@ -3002,7 +3003,7 @@ app.post("/api/blackjack/wager", async (req, res) => {
       // balance + ledger row together (1.99ga), for an account that exists
       await ledger.postOrThrow(userId, -Number(wager), "blackjack wager", { transactionId, source: "blackjack" });
       await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-                     [uuidv4(), null, userId, Number(wager)]);
+                     [uuidv4(), "bj:" + transactionId, userId, Number(wager)]);   // 1.99gx: tagged (jackpotflows.js)
   
       // Create a new blackjack row
       const blackjackId = uuidv4();
@@ -3045,7 +3046,7 @@ app.post("/api/blackjack/result", async (req, res) => {
       await ledger.postOrThrow(userId, Number(payout), "blackjack payout", { transactionId, source: "blackjack" });
       if (Number(payout) > 0) {
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-                       [uuidv4(), null, userId, -Number(payout)]);
+                       [uuidv4(), "bj:" + transactionId, userId, -Number(payout)]);   // 1.99gx: tagged (jackpotflows.js)
       }
   
       // Update the blackjack row with the payout and result
@@ -4041,7 +4042,7 @@ app.post("/api/g/heist/jackpot-adjust", async (req, res) => {
   }
   try {
     const jackpotId = uuidv4();
-    const spinId = uuidv4();
+    const spinId = "bot:" + uuidv4();     // 1.99gx: tagged - Pepe logs these himself (jackpotflows.js keeps them apart)
     await runQuery(
       "INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
       [jackpotId, spinId, userId || null, Math.round(Number(amount))]

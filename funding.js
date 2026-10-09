@@ -207,7 +207,7 @@ async function takeFundsRef(flow, amount, userId, type) {
   const id = uuidv4();
   if (vaultFor(flow) === "jackpot") {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-                   [id, null, userId || null, -amount]);
+                   [id, "fund:" + flow, userId || null, -amount]);     // 1.99gx: tagged (jackpotflows.js)
     return { ok: true, undo: () => runQuery("DELETE FROM jackpot_rakes WHERE jackpotId = ?", [id]) };
   }
   const claimFlow = vaultFor(flow) === "incentives" ? INC + flow : flow;
