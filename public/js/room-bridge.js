@@ -1,7 +1,9 @@
 // room-bridge.js — shared pieces of the Camfrog room bridge UI, used by the room page (views/room.ejs)
 // and the homepage's live room panel (views/home.ejs):
 //   PATVRoom.audio(el, slug)   mini player for the room's live audio (play/pause, volume + mute,
-//                              live / buffering state, jump to live, level meter)
+//                              live / buffering state, jump to live, level meter); .listen(slug, name)
+//                              switches it to another pad (the homepage's 🎧 buttons). One room plays
+//                              at a time across every player on the page.
 //   PATVRoom.relay(el, slug)   the "say something" box (Pepe relays it into the room as "🌐 you (web)");
 //                              a "!" line is a command Pepe runs as your Camfrog name (autocomplete + your private answers)
 //   PATVRoom.ptt(el, slug)     hold-to-talk: a voice clip (20 s max) Pepe plays on the room's mic when
@@ -61,6 +63,7 @@
   // saying why - instead of disappearing (1.99hj). The homepage keeps hiding it.
   function audio(host, slug, opts) {
     var showOff = !!(opts && opts.showOff);
+    var home = slug, cur = slug, curName = null;     // the pad this player belongs to / the one it plays now
     var box = el('div', 'rb-audio hide');
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Room audio');
     var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', 'Listen live');
@@ -121,7 +124,8 @@
     function start() {
       clearInterval(waitTimer); startedAt = 0;
       au.preload = 'auto';
-      au.src = '/p/' + encodeURIComponent(slug) + '/audio?t=' + Date.now();
+      shared.players.forEach(function (p) { if (p !== me) p.halt(); });   // one room at a time on the page
+      au.src = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now();
       au.load();
       wireMeter();
       if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
@@ -146,8 +150,11 @@
     function stop(msg) {
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer);
       au.pause(); au.removeAttribute('src'); au.load();
-      jump.classList.add('hide'); paint(); setState(msg || 'Room audio', '');
+      jump.classList.add('hide'); paint(); setState(msg || (curName ? curName + ' · audio' : 'Room audio'), '');
+      notify();
     }
+    var listeners = [];
+    function notify() { listeners.forEach(function (f) { try { f(playing ? cur : null); } catch (e) { /* a listener can't break the player */ } }); }
     play.addEventListener('click', function () { if (playing) { stop(); store('patvRoomAudio', 0); } else start(); });
     mute.addEventListener('click', function () { userMuted = !userMuted; store('patvRoomMuted', userMuted ? 1 : 0); applyVolume(); paint(); });
     vol.addEventListener('input', function () {
@@ -166,7 +173,8 @@
       if (behind >= 6 && state.textContent === 'LIVE') setState('LIVE · catching up…', 'wait');
     }, 2000);
     paint();
-    shared.players.push({
+    var me = {
+      halt: function () { if (playing) { stop(); } },
       wantsPlay: function () { return playing; },
       // after a clip (runs inside the gesture that ended it): the user's own volume / mute again, and
       // if the system paused the room meanwhile, play it again - a gesture is what iOS needs for that
@@ -177,7 +185,8 @@
             .catch(function () { setState('tap ▶ to resume', ''); playing = false; paint(); });
         }
       },
-    });
+    };
+    shared.players.push(me);
     box.rbDebug = function () {                 // for diagnosing "I can't hear it" from the console
       var lvl = null;
       if (analyser) { var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d); lvl = Math.max.apply(null, d); }
@@ -189,16 +198,35 @@
     function offReason(d) {
       return d && d.room && d.room.live === false ? 'room offline' : 'audio relay off';
     }
+    function enable(on) {
+      box.classList.toggle('off', !on);
+      [play, mute, vol].forEach(function (x) { x.disabled = !on; });
+    }
     return {
+      // play another pad's audio in this player (or stop it when that pad is already playing); returns
+      // whether it is playing now. The pad's own updates are ignored while it plays someone else.
+      listen: function (s, name) {
+        if (playing && cur === s) { stop(); store('patvRoomAudio', 0); return false; }
+        if (playing) stop();
+        cur = s; curName = s === home ? null : (name || s);
+        box.classList.remove('hide'); enable(true); play.title = '';
+        start();
+        if (curName) setState('connecting to ' + curName + '…', 'wait');
+        notify();
+        return true;
+      },
+      playingSlug: function () { return playing ? cur : null; },
+      onChange: function (f) { listeners.push(f); },
       update: function (d) {
+        if (cur !== home && playing) return;          // playing another pad: that pad's state isn't this one's
+        if (cur !== home) { cur = home; curName = null; painted = false; }
         var on = !!(d && d.room && d.room.audio);
         var why = on ? null : offReason(d);
         if (painted && on === available && why === offWhy) return;
         var was = available;
         painted = true; available = on; offWhy = why;
         box.classList.toggle('hide', !on && !showOff);
-        box.classList.toggle('off', !on);
-        [play, mute, vol].forEach(function (x) { x.disabled = !on; });
+        enable(on);
         play.title = on ? '' : (why === 'room offline' ? 'The Camfrog room isn\'t live right now' : 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)');
         if (!on) { if (was) stop(); setState('🔇 ' + why, ''); }
         else if (store('patvRoomAudio') === '1') setState('▶ to resume listening', '');

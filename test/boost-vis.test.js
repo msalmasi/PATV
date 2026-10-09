@@ -64,7 +64,7 @@ test("topPads: live pads only, at most 5, in the ranking's order (unranked live 
   assert.equal(t.length, 5, "the top 5");
   assert.deepEqual(t.map((r) => r.id), ["E", "B", "A", "C", "F"], "ranking order, not headcount");
   assert.ok(!t.some((r) => r.id === "Off"), "an offline pad never shows");
-  assert.deepEqual(t[1], { id: "B", slug: "b", name: "B", count: 2, micCount: 0, boost: 12400 });
+  assert.deepEqual(t[1], { id: "B", slug: "b", name: "B", count: 2, micCount: 0, audio: false, boost: 12400 });
   assert.equal(t[0].boost, 0);
   assert.deepEqual(home.topPads([sum("X", 1), sum("Y", 8)], [], new Map()).map((r) => r.id), ["Y", "X"], "unranked: by headcount");
   assert.deepEqual(home.topPads([sum("Off", 9, 0, false)], [], new Map()), [], "nothing live -> empty (the card hides)");

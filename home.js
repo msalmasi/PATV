@@ -121,7 +121,7 @@ function topPads(rows, ranked, boosts, n = 5) {
   const at = (r) => (pos.has(r.id) ? pos.get(r.id) : Infinity);
   return live.slice().sort((a, b) => at(a) - at(b) || (b.count || 0) - (a.count || 0) || String(a.name).localeCompare(String(b.name)))
     .slice(0, n)
-    .map((r) => ({ id: r.id, slug: r.slug, name: r.name, count: r.count || 0, micCount: r.micCount || 0,
+    .map((r) => ({ id: r.id, slug: r.slug, name: r.name, count: r.count || 0, micCount: r.micCount || 0, audio: !!r.audio,
                    boost: Math.round((boosts && boosts.get && boosts.get(r.id)) || 0) }));
 }
 
@@ -168,6 +168,8 @@ function register(app, { addUser, xpForNextLevel }) {
       // 1.99ek: Top Pads (the front pick's score, live pads only) + every pad's active boost PAT for the 🚀 badges
       const RL = await reg.rankLive(rooms).catch((e) => { console.error("[home] top pads:", e.message); return { ranked: [], boosts: new Map() }; });
       const tops = topPads(rooms, RL.ranked, RL.boosts, 5);
+      // 1.99hm: 🎧 listen from the homepage - may this viewer hear the pad (padaccess.full, same as /p/<slug>/audio)?
+      for (const t of tops) t.listen = PA.full(viewer, t.id);
       const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
                                      boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;

@@ -13,6 +13,9 @@
   const live = (!!st.active && pepeHere_) || paid.length > 0;
   // 1.99ek: Top Pads (home.topPads: top 5 live pads, the front pick's order) and the shared 🚀 badge (boostmark.js)
   const tops_ = typeof tops !== 'undefined' && Array.isArray(tops) ? tops : [];
+  // 1.99hm: 🎧 on Top Pads rows - room-bridge.js is loaded whenever a row or the room widget needs it
+  const tpListen_ = tops_.some((r) => r.audio && r.listen);
+  const rbJs_ = tpListen_ || ((typeof me !== 'undefined' && me) || (typeof roomLive !== 'undefined' && roomLive)) && (typeof room !== 'undefined' && room);
   // 1.99eo: the front pad's next scheduled slot ({display, title, start_at}) for the off-air slate, or null
   const nextUp_ = typeof nextUp !== 'undefined' && nextUp && Number(nextUp.start_at) > 0 ? nextUp : null;
   const BM = typeof boostMark === 'function' ? boostMark : () => '';
@@ -133,6 +136,15 @@
   .hm .tp .rooms-mini .n .bm { flex: none; }
   .hm .tp .rooms-mini .n .pfx-bs { flex: none; }   /* 1.99ew: pad badges (icons) by the name */
   .hm .tp .rooms-mini a.pfx { border-radius: 8px; }
+  /* 1.99hm: 🎧 listen to a pad from the homepage (one room at a time; greyed when its audio relay is off) */
+  .hm .tp .rooms-mini li { display: flex; align-items: center; gap: 6px; }
+  .hm .tp .rooms-mini li > a { flex: 1 1 auto; min-width: 0; }
+  .hm .tp-ls { flex: none; width: 30px; height: 26px; border-radius: 8px; border: 1px solid #2a3a2c; background: #0d0d0d; color: #ddd; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+  .hm .tp-ls:hover:not([disabled]) { border-color: #4caf50; }
+  .hm .tp-ls[aria-pressed="true"] { background: #1d3a24; border-color: #4caf50; }
+  .hm .tp-ls[disabled] { opacity: .45; cursor: not-allowed; }
+  .hm #tpAudioBox:empty { display: none; }
+  .hm #tpAudioBox { margin-top: 8px; }
   .hm .tp .rooms-mini .v > span { display: inline-block; min-width: 3.2em; text-align: right; }
   .hm .pad-av { width: 20px; height: 20px; flex: none; border-radius: 6px; overflow: hidden; display: inline-grid; place-items: center; background: #1c2a1c; font-size: 11px; font-weight: bold; color: #fff; }
   .hm .pad-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -514,9 +526,10 @@
             <% tops_.forEach((r) => { %>
               <%# 1.99es: the 🚀 badge sits by the NAME (not among the counts), so the 👥 / 🎙 columns line up boosted or not; the pad's avatar (padlook.js) first %>
               <% const fx_ = PFX_(r.id); %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span></span></a></li>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? 'audio relay off' : !r.listen ? (me ? 'members of this pad only' : 'sign in to listen') : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%= lsWhy_ ? 'Listen to ' + r.name + ' (' + lsWhy_ + ')' : 'Listen to ' + r.name + ' live' %>" title="<%= lsWhy_ ? '🔇 ' + lsWhy_ : 'Listen live' %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button></li>
             <% }) %>
           </ol>
+          <div id="tpAudioBox"></div>
         </section>
       <% } %>
       </div>
@@ -780,9 +793,11 @@
 <script src="/public/js/coinop.js?v=aw1" defer></script>
 <% } %>
 
-<% if ((me || roomLive) && room) { %>
+<% if (rbJs_) { %>
 <link rel="stylesheet" href="/public/css/room-bridge.css?v=5">
-<script src="/public/js/room-bridge.js?v=6"></script>
+<script src="/public/js/room-bridge.js?v=7"></script>
+<% } %>
+<% if ((me || roomLive) && room) { %>
 <script id="lrInit" type="application/json"><%- JSON.stringify(roomLive).replace(/</g, '\\u003c') %></script>
 <script>
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).
@@ -817,7 +832,8 @@
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
     function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
-    var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug);
+    var roomAudio = PATVRoom.audio(document.getElementById('lrAudioBox'), slug, { showOff: true });
+    window.PATVHomeAudio = roomAudio;            // the Top Pads 🎧 buttons play through this player (one room at a time)
     var relayHost = document.getElementById('lrRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     var pttHost = document.getElementById('lrPtt'), roomPtt = pttHost ? PATVRoom.ptt(pttHost, slug) : null;
     function apply(d) {
@@ -863,6 +879,39 @@
     var init = JSON.parse(document.getElementById('lrInit').textContent);
     if (init) apply(init);
     timer = setTimeout(poll, 3000);
+  })();
+</script>
+<% } %>
+<% if (tpListen_) { %>
+<script>
+  // 1.99hm: 🎧 on Top Pads - listen to a pad from the homepage. Plays through the room widget's player when
+  // there is one (so it shows the volume / live state), else a player under Top Pads; one room at a time.
+  (function () {
+    'use strict';
+    var btns = [].slice.call(document.querySelectorAll('.tp-ls[data-listen]'));
+    if (!btns.length || !window.PATVRoom) return;
+    var player = null;
+    function get() {
+      if (player) return player;
+      player = window.PATVHomeAudio || PATVRoom.audio(document.getElementById('tpAudioBox'), btns[0].getAttribute('data-listen'));
+      player.onChange(paint);
+      return player;
+    }
+    function paint(now) {
+      btns.forEach(function (b) {
+        var on = !!now && b.getAttribute('data-listen') === now;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.textContent = on ? '❚❚' : '🎧';
+        if (!b.disabled) b.title = on ? 'Stop listening' : 'Listen live';
+      });
+    }
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        get().listen(b.getAttribute('data-listen'), b.getAttribute('data-name'));
+      });
+    });
+    if (window.PATVHomeAudio) get();          // the room widget's own ▶ lights its row too
   })();
 </script>
 <% } %>

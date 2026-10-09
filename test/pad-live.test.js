@@ -95,3 +95,56 @@ test("homepage (no showOff): the player stays hidden while the relay is off, as 
   p.update({ room: { audio: true, live: true } });
   assert.equal(find(host).classList.contains("hide"), false);
 });
+
+// ── 1.99hm: 🎧 listen to pads from the homepage ──
+test("player.listen: switches pads, toggles off on the same pad, and only one player on the page plays", () => {
+  const R = loadBridge();
+  const h1 = fakeEl("div"), h2 = fakeEl("div");
+  const a = R.audio(h1, "front", { showOff: true });
+  const b = R.audio(h2, "other");
+  a.update({ room: { audio: false, live: true } });
+  const seen = [];
+  a.onChange((s) => seen.push(s));
+  assert.equal(a.listen("third", "Third Room"), true, "plays another pad");
+  assert.equal(a.playingSlug(), "third");
+  assert.equal(find(h1, "rb-play").disabled, false, "the greyed front player is enabled while it plays another pad");
+  const au = find(h1).children.find((c) => c.tagName === "audio");
+  assert.match(au.src, /^\/p\/third\/audio\?t=/);
+  a.update({ room: { audio: false, live: true } });
+  assert.equal(a.playingSlug(), "third", "the front room's own poll doesn't stop another pad's audio");
+  assert.equal(b.listen("other"), true);
+  assert.equal(a.playingSlug(), null, "starting another player stops this one (one room at a time)");
+  assert.equal(b.listen("other"), false, "the same pad again = stop");
+  assert.equal(b.playingSlug(), null);
+  assert.deepEqual(seen, ["third", null]);
+});
+
+const BM = require(path.join(repo, "boostmark"));
+const UL = require(path.join(repo, "userlinks"));
+function renderHome(locals = {}) {
+  return require("ejs").renderFile(path.join(repo, "views", "home.ejs"), Object.assign({
+    username: null, me: null, mine: null, S: {}, rooms: [], room: null, roomLive: null, stage: { active: false }, top: [], tops: [],
+    story: { rooms: [], caps: [], room: null, signed: false }, hot: null, fx: {}, roomOnStage: false, stageAdmin: null,
+    frontInfo: { id: "Alpha", slug: "alpha", title: "Alpha", pinned: false, owner: null, boost: 0 }, pepeHere: true, featuredPrice: 0,
+    slots: [], staff: false, xpForNextLevel: () => 100, cosmeticName: () => "", boostMark: BM.boostMark, ul: UL,
+  }, locals));
+}
+
+test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on and the viewer may listen, greyed with the reason otherwise", async () => {
+  const tops = [{ id: "A", slug: "a", name: "Ay", count: 3, micCount: 1, boost: 0, audio: true, listen: true },
+                { id: "B", slug: "b", name: "Bee", count: 2, micCount: 0, boost: 0, audio: false, listen: true },
+                { id: "C", slug: "c", name: "Cee", count: 2, micCount: 0, boost: 0, audio: true, listen: false }];
+  const html = await renderHome({ tops });
+  const btn = (s) => (html.match(new RegExp(`<button type="button" class="tp-ls" data-listen="${s}"[^>]*>`)) || [""])[0];
+  assert.doesNotMatch(btn("a"), /disabled/);
+  assert.match(btn("a"), /title="Listen live"/);
+  assert.match(btn("b"), /disabled/);
+  assert.match(btn("b"), /audio relay off/);
+  assert.match(btn("c"), /disabled/);
+  assert.match(btn("c"), /sign in to listen/);
+  assert.match(html, /<div id="tpAudioBox"><\/div>/);
+  assert.match(html, /room-bridge\.js\?v=7/, "the player script loads for the 🎧 even without the room widget");
+  assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
+  const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
+  assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");
+});
