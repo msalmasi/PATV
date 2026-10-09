@@ -7,6 +7,9 @@
 //                                          video is actually playing; rejects on any error or the timeout.
 //   PATVRtc.publish(whipUrl, mediaStream, {token, maxKbps, timeout})   WHIP, send-only, H.264 + Opus (H.264
 //                                          so MediaMTX can also make HLS of it). Resolves once connected.
+//   PATVRtc.listen(whepUrl, audio, {timeout})        1.99il: WHEP, audio only (a pad's room audio, roomrtc.js). The
+//                                          room's path appears a moment after the ticket (Pepe starts publishing when
+//                                          asked), so a 404 is retried until the timeout. Resolves once it plays.
 //   session.close()     ends it (and DELETEs the WHIP / WHEP resource)
 //   session.onfail      called once if the connection is lost after it started
 //   session.setCap(kbps) / session.replace(track)     (publish) bitrate cap / swap a camera or mic live
@@ -103,6 +106,33 @@
     });
   }
 
+  function listen(url, audio, o) {
+    o = o || {};
+    if (!window.RTCPeerConnection || !window.MediaStream) return Promise.reject(new Error('This browser has no WebRTC'));
+    var deadline = Date.now() + (o.timeout || 9000);
+    return ice().then(function (servers) {
+      function attempt() {
+        var pc = new RTCPeerConnection({ iceServers: servers }), resource = null;
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        var ms = new MediaStream();
+        pc.ontrack = function (e) { ms.addTrack(e.track); if (audio.srcObject !== ms) audio.srcObject = ms; };
+        var go = negotiate(pc, url, null).then(function (loc) { resource = loc; return connected(pc); }).then(function () {
+          var p = audio.play();
+          return p && p.then ? p.catch(function (err) { var e = new Error('Playback was blocked'); e.blocked = true; e.cause = err; throw e; }) : null;
+        });
+        var left = Math.max(1000, deadline - Date.now());
+        return timeout(go, left, 'Low latency audio').then(function () { return session(pc, resource); }, function (e) {
+          closeQuietly(pc, resource);
+          if (e && e.status === 404 && Date.now() + 800 < deadline) {          // not published yet: try again shortly
+            return new Promise(function (res) { setTimeout(res, 700); }).then(attempt);
+          }
+          throw e;
+        });
+      }
+      return attempt();
+    });
+  }
+
   function preferH264(tr) {
     if (!tr.setCodecPreferences || !window.RTCRtpSender || !RTCRtpSender.getCapabilities) return;
     var caps = RTCRtpSender.getCapabilities('video');
@@ -145,5 +175,5 @@
       }, function (e) { closeQuietly(pc, resource); throw e; });
     });
   }
-  window.PATVRtc = { ice: ice, play: play, publish: publish };
+  window.PATVRtc = { ice: ice, play: play, publish: publish, listen: listen };
 })();

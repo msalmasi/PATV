@@ -154,7 +154,7 @@ test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on 
   assert.match(btn("c"), /disabled/);
   assert.match(btn("c"), /sign in to listen/);
   assert.match(html, /<div id="tpAudioBox"><\/div>/);
-  assert.match(html, /room-bridge\.js\?v=9/, "the player script loads for the 🎧 even without the room widget");
+  assert.match(html, /room-bridge\.js\?v=10/, "the player script loads for the 🎧 even without the room widget");
   assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
   const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
   assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");
@@ -179,7 +179,7 @@ test("player: 0.75 s cushion; catch-up to the live edge (1.05x above 1.3 s, 0.96
   assert.match(js, /setInterval\(edge, 500\)/);
   assert.match(js, /isTypeSupported\('audio\/mpeg'\)/, "MSE where the browser can, plain stream URL otherwise (iOS)");
   for (const v of ["home.ejs", "room.ejs"]) {
-    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=9/, v + " loads the new player");
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=10/, v + " loads the new player");
   }
 });
 

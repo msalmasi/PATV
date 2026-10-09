@@ -16,6 +16,10 @@
 .rb-state.live { color: #ff8a80; }
 .rb-state.live::before { content: "● "; }
 .rb-state.wait { color: #ffd54f; }
+/* 1.99il: which way the room audio comes in - ⚡ WebRTC (low latency) or the standard MP3 relay */
+.rb-mode { font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid #333; color: #9a9a9a; white-space: nowrap; }
+.rb-mode.rtc { color: #4AFFEF; border-color: #1f6f6a; }
+.rb-mode.hide { display: none; }
 .rb-meter { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; width: 24px; }
 .rb-meter i { display: block; width: 3px; height: 2px; background: #4caf50; border-radius: 1px; transition: height .08s linear; }
 .rb-mute { padding: 4px 6px; }

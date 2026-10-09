@@ -571,7 +571,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.doesNotMatch(plain, RTC, name + ": no WebRTC without the setting");
     assert.doesNotMatch(off, RTC, name + ": no WebRTC while off");
     const html = await render(on);
-    assert.match(html, /webrtc-client\.js\?v=1/, name);
+    assert.match(html, /webrtc-client\.js\?v=2/, name);   // 1.99il: listen() for the room audio
     assert.match(html, /webrtc\.css\?v=2/, name);
   }
   assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=7/);

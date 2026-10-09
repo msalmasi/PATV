@@ -1,7 +1,7 @@
 // room-bridge.js — shared pieces of the Camfrog room bridge UI, used by the room page (views/room.ejs)
 // and the homepage's live room panel (views/home.ejs):
 //   PATVRoom.audio(el, slug)   mini player for the room's live audio (play/pause, volume + mute,
-//                              live / buffering state, jump to live, level meter); .listen(slug, name)
+//                              live / buffering state, jump to live, level meter, "⚡ live" / "standard"); .listen(slug, name)
 //                              switches it to another pad (the homepage's 🎧 buttons). One room plays
 //                              at a time across every player on the page.
 //   PATVRoom.relay(el, slug)   the "say something" box (Pepe relays it into the room as "🌐 you (web)");
@@ -58,6 +58,33 @@
     },
   };
 
+  // ── 1.99il: ⚡ low-latency room audio (WebRTC / WHEP, roomrtc.js on the site) ──
+  // Where the pad has it (Prime Time pads, or every pad - the site's room_rtc setting) and the page has the WebRTC
+  // client (webrtc-client.js, only while the site's WebRTC is on), ▶ first asks the site for a WHEP ticket, then plays
+  // the room over WebRTC (~0.5 s behind the room). ANY failure - no ticket (off / busy: the TURN cap / not eligible),
+  // no WebRTC, ICE / UDP blocked, Pepe not publishing in time, a connection lost later - plays the MP3 relay instead,
+  // the same way as before 1.99il. A connection failure is remembered for RTC_RETRY_MS so a network that blocks
+  // WebRTC goes straight to MP3 next time. The badge says which: "⚡ live" or "standard".
+  var RTC_RETRY_MS = 10 * 60 * 1000, RTC_TIMEOUT_MS = 9000;
+  // reasons that are NOT this network's fault (no 10-minute "go straight to MP3" memory for them)
+  var RTC_SOFT = { off: 1, 'not-eligible': 1, busy: 1, 'no-audio': 1, denied: 1, rate: 1, stale: 1, error: 1,
+                   'not-published': 1, http: 1, blocked: 1, lost: 1 };   // lost: also Pepe restarting his publish
+  function rtcWhy(e) {
+    if (typeof e === 'string') return e;
+    if (e && e.blocked) return 'blocked';                 // autoplay refused the play() - not a connection problem
+    if (e && e.status === 404) return 'not-published';    // Pepe didn't start publishing in time
+    if (e && e.status) return 'http';
+    return 'failed';                                      // no WebRTC / ICE (UDP + TURN) didn't connect / timed out
+  }
+  function rtcFailedRecently() {
+    var t = 0; try { t = Number(sessionStorage.getItem('patvRoomRtcFail')) || 0; } catch (e) { t = 0; }
+    return t && Date.now() - t < RTC_RETRY_MS;
+  }
+  function noteRtcFail(why) {
+    if (RTC_SOFT[why]) return;                     // the site said no (or busy) - not this network's fault
+    try { sessionStorage.setItem('patvRoomRtcFail', String(Date.now())); } catch (e) { /* private mode */ }
+  }
+
   // ── room audio mini player ──
   // opts.showOff (the pad page): while the room's audio relay is off the player stays visible, greyed out,
   // saying why - instead of disappearing (1.99hj). The homepage keeps hiding it.
@@ -68,23 +95,37 @@
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Room audio');
     var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', 'Listen live');
     var state = el('span', 'rb-state', 'Room audio');
+    var modeEl = el('span', 'rb-mode hide');        // 1.99il: "⚡ live" (WebRTC) / "standard" (the MP3 relay)
     var meter = el('span', 'rb-meter'); meter.setAttribute('aria-hidden', 'true');
     var bars = [el('i'), el('i'), el('i'), el('i'), el('i')]; bars.forEach(function (b) { meter.appendChild(b); });
     var mute = el('button', 'rb-btn rb-mute', '🔊'); mute.type = 'button'; mute.setAttribute('aria-label', 'Mute');
     var vol = el('input', 'rb-vol'); vol.type = 'range'; vol.min = '0'; vol.max = '100'; vol.step = '5'; vol.setAttribute('aria-label', 'Volume');
     var jump = el('button', 'rb-btn rb-jump hide', 'Jump to live'); jump.type = 'button';
     var au = el('audio'); au.preload = 'none'; au.setAttribute('playsinline', '');
+    // 1.99il: the WebRTC stream plays in its own element (never routed through Web Audio - the meter only taps it)
+    var rau = el('audio'); rau.setAttribute('playsinline', ''); rau.autoplay = true;
     if (IOS) { meter.style.display = 'none'; vol.style.display = 'none'; }
-    [play, state, meter, mute, vol, jump, au].forEach(function (x) { box.appendChild(x); });
+    [play, state, modeEl, meter, mute, vol, jump, au, rau].forEach(function (x) { box.appendChild(x); });
     host.appendChild(box);
 
     var playing = false, startedAt = 0, analyser = null, raf = null, available = false;
+    var mode = null, rtcSess = null, rtcAnalyser = null, startGen = 0, rtcHint = null;   // 1.99il
     var v0 = Number(store('patvRoomVol')); vol.value = isFinite(v0) && store('patvRoomVol') !== null ? Math.max(0, Math.min(100, v0)) : 80;
     // What the USER set. The only source of truth for volume / mute - see the session notes above.
     var userVol = vol.value / 100, userMuted = store('patvRoomMuted') === '1';
     function applyVolume() {
-      au.muted = userMuted;
-      if (!IOS) { try { au.volume = userVol; } catch (e) { /* read-only */ } }
+      [au, rau].forEach(function (x) {            // 1.99il: both players (MP3 relay / WebRTC) follow the user's volume + mute
+        x.muted = userMuted;
+        if (!IOS) { try { x.volume = userVol; } catch (e) { /* read-only */ } }
+      });
+    }
+    function setMode(m) {
+      mode = m;
+      modeEl.classList.toggle('hide', !m);
+      modeEl.classList.toggle('rtc', m === 'rtc');
+      modeEl.textContent = m === 'rtc' ? '⚡ live' : m === 'mp3' ? 'standard' : '';
+      modeEl.title = m === 'rtc' ? 'Low latency (WebRTC): about half a second behind the room'
+        : m === 'mp3' ? 'Standard relay: about 1.5 s behind the room' : '';
     }
     applyVolume();
     function paint() {
@@ -98,8 +139,9 @@
     }
     function setState(t, cls) { state.textContent = t; state.className = 'rb-state' + (cls ? ' ' + cls : ''); }
     function meterLoop() {
-      if (!analyser || !playing) { bars.forEach(function (b) { b.style.height = ''; }); return; }
-      var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d);
+      var an = mode === 'rtc' ? rtcAnalyser : analyser;
+      if (!an || !playing) { bars.forEach(function (b) { b.style.height = ''; }); return; }
+      var d = new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d);
       var n = bars.length, span = Math.max(1, Math.floor(d.length / n));
       for (var i = 0; i < n; i++) {
         var v = 0; for (var k = i * span; k < (i + 1) * span && k < d.length; k++) v = Math.max(v, d[k]);
@@ -172,10 +214,72 @@
         }).catch(function () { if (mse === m && playing) stop('audio stopped — ▶ to retry'); });
       });
     }
+    function rtcWanted() {
+      return !!(window.PATVRtc && window.PATVRtc.listen && window.fetch && rtcHint !== false && !rtcFailedRecently());
+    }
+    function wireRtcMeter(stream) {
+      rtcAnalyser = null;
+      if (reduce || IOS || !stream) return;
+      try {
+        var c = ctx(); if (!c) return;
+        var src = c.createMediaStreamSource(stream);   // a tap only - the element plays it
+        rtcAnalyser = c.createAnalyser(); rtcAnalyser.fftSize = 64;
+        src.connect(rtcAnalyser);
+      } catch (e) { rtcAnalyser = null; }
+    }
+    function rtcClose() {
+      var s = rtcSess; rtcSess = null; rtcAnalyser = null;
+      if (s) { try { s.close(); } catch (e) { /* gone */ } }
+      try { rau.pause(); rau.srcObject = null; } catch (e) { /* no srcObject */ }
+    }
+    // ⚡: ticket -> WHEP; resolves when it plays, rejects with the reason (the caller falls back to MP3)
+    function startRtc(gen) {
+      return fetch('/api/rooms/' + encodeURIComponent(cur) + '/audio/rtc', { method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: '{}' })
+        .then(function (r) { return r.json().catch(function () { return null; }); })
+        .then(function (j) {
+          if (gen !== startGen || !playing) throw 'stale';
+          if (!j || !j.ok || !j.whep) throw (j && j.fallback) || 'error';
+          setState(j.ready ? 'connecting ⚡…' : 'starting ⚡…', 'wait');
+          return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS });
+        })
+        .then(function (sess) {
+          if (gen !== startGen || !playing) { sess.close(); throw 'stale'; }
+          rtcSess = sess;
+          setMode('rtc'); applyVolume(); wireRtcMeter(rau.srcObject);
+          if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
+          startedAt = Date.now(); setState('LIVE', 'live'); meterLoop();
+          sess.onfail = function () {                 // lost after it started: carry on with the MP3 relay
+            if (rtcSess !== sess) return;
+            rtcSess = null; noteRtcFail('lost');
+            if (playing && gen === startGen) { setState('reconnecting…', 'wait'); startMp3(); }
+          };
+        });
+    }
     function start() {
       clearInterval(waitTimer); startedAt = 0;
-      au.preload = 'auto';
       shared.players.forEach(function (p) { if (p !== me) p.halt(); });   // one room at a time on the page
+      var gen = ++startGen;
+      rtcClose(); mseStop(); setMode(null);
+      playing = true; paint(); store('patvRoomAudio', 1);
+      if (rtcWanted()) {
+        try { var pp = rau.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) { /* unlock in the gesture (iOS) */ }
+        setState('connecting ⚡…', 'wait');
+        startRtc(gen).catch(function (e) {
+          var why = rtcWhy(e);
+          if (gen !== startGen || !playing || why === 'stale') return;
+          noteRtcFail(why);
+          rtcClose();
+          startMp3();
+        });
+        return;
+      }
+      startMp3();
+    }
+    function startMp3() {
+      clearInterval(waitTimer); startedAt = 0;
+      rtcClose(); setMode('mp3');
+      au.preload = 'auto';
       var url = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now();
       mseStop();
       if (useMse) mseStart(url);
@@ -202,6 +306,7 @@
     }
     function stop(msg) {
       playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
+      startGen++; rtcClose(); setMode(null);
       mseStop();
       au.pause(); au.removeAttribute('src'); au.load();
       jump.classList.add('hide'); paint(); setState(msg || (curName ? curName + ' · audio' : 'Room audio'), '');
@@ -219,11 +324,12 @@
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
     au.addEventListener('waiting', function () { if (playing) setState('LIVE · buffering…', 'wait'); });
     au.addEventListener('playing', function () { setState('LIVE', 'live'); });
-    au.addEventListener('error', function () { if (playing) stop('audio stopped — ▶ to retry'); });
+    au.addEventListener('error', function () { if (playing && mode === 'mp3') stop('audio stopped — ▶ to retry'); });
+    rau.addEventListener('playing', function () { if (playing && mode === 'rtc') setState('LIVE', 'live'); });
     function setRate(r) { try { if (au.playbackRate !== r) au.playbackRate = r; } catch (e) { /* fixed rate */ } }
     var lastEdge = 0;
     function edge() {
-      if (!playing || !startedAt || au.paused) { setRate(1); return; }
+      if (!playing || !startedAt || au.paused || mode !== 'mp3') { setRate(1); return; }
       var a = ahead(), now = Date.now();
       if (a > EDGE_JUMP && now - lastEdge > 3000) {
         lastEdge = now;
@@ -252,7 +358,9 @@
       // if the system paused the room meanwhile, play it again - a gesture is what iOS needs for that
       afterRec: function () {
         applyVolume(); paint();
-        if (playing && startedAt && au.paused) {          // (still cushioning: start() plays it)
+        if (playing && mode === 'rtc' && rau.paused) {     // 1.99il: the WebRTC player, the same way
+          var rp = rau.play(); if (rp && rp.catch) rp.catch(function () { setState('tap ▶ to resume', ''); });
+        } else if (playing && mode === 'mp3' && startedAt && au.paused) {          // (still cushioning: start() plays it)
           au.play().then(function () { setState('LIVE', 'live'); })
             .catch(function () { setState('tap ▶ to resume', ''); playing = false; paint(); });
         }
@@ -263,7 +371,7 @@
       var lvl = null;
       if (analyser) { var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d); lvl = Math.max.apply(null, d); }
       var sess = null; try { sess = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) { sess = null; }
-      return { ios: IOS, mse: useMse, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
+      return { ios: IOS, mse: useMse, mode: mode, rtc: !!rtcSess, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
         ahead: ahead(), rate: au.playbackRate, paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
     };
     var painted = false, offWhy = null;
@@ -282,6 +390,7 @@
       listen: function (s, name) {
         if (playing && cur === s) { stop(); store('patvRoomAudio', 0); return false; }
         if (playing) stop();
+        if (cur !== s) rtcHint = null;                 // another pad: the site's ticket decides
         cur = s; curName = s === home ? null : (name || s);
         box.classList.remove('hide'); enable(true); play.title = '';
         start();
@@ -295,6 +404,7 @@
         if (cur !== home && playing) return;          // playing another pad: that pad's state isn't this one's
         if (cur !== home) { cur = home; curName = null; painted = false; }
         var on = !!(d && d.room && d.room.audio);
+        rtcHint = d && d.room && typeof d.room.rtc === 'boolean' ? d.room.rtc : null;   // 1.99il: try ⚡ first?
         var why = on ? null : offReason(d);
         if (painted && on === available && why === offWhy) return;
         var was = available;
