@@ -867,8 +867,12 @@
             if (!d.ok) { res.className = 'res bad'; res.textContent = d.error || 'Not right now.'; return; }
             var c = { id: d.id, display: d.display, room: d.room, img: s.img, until: d.until };
             if (document.getElementById('fcGen')) {
-              document.dispatchEvent(new CustomEvent('patv:gen-cam', { detail: c }));
+              // 1.99ih: the composer lives in the pad's Feed tab - switch there first (the snapshot popover is on
+              // the Live tab, so the frame used to land in a hidden composer and nothing seemed to happen)
+              var feedTab = document.querySelector('[role="tab"][data-tab="feed"]') || document.querySelector('[data-tab="feed"]');
+              if (feedTab && feedTab.getAttribute('aria-selected') !== 'true') feedTab.click();
               snapClose();
+              setTimeout(function () { document.dispatchEvent(new CustomEvent('patv:gen-cam', { detail: c })); }, 0);
             } else {
               // no composer on this page (signed-out view, feed off): hand it to /feed's composer
               try { sessionStorage.setItem('patvGenCam', JSON.stringify(c)); } catch (e) { /* too big / blocked */ }
