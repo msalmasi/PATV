@@ -163,6 +163,7 @@ const RULES = {
   "restream_toggles.target": M({ key: [] }), "restream_toggles.by": M(),
   "econ_watch.streamer_id": M(), "econ_watch.viewer_id": M({ key: ["day", "stream"], merge: { secs: "SUM", muted_secs: "SUM", beats: "SUM" } }),
   "econ_watch_keys.viewer_id": M({ key: ["day", "stream", "k"] }),
+  "room_vault_settings.changed_by": M(), "room_vault_rate_log.by": M(),      // economy v2 E-3 (roomvaults.js): who set a pad's payout rate
   // direct messages
   "conversations.created_by": M(),
   "conversation_members.user_id": { special: "DM conversations and memberships are merged first (mergeConversations)" },

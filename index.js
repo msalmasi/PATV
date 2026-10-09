@@ -1148,10 +1148,15 @@ bridge.register(app, { isBotToken, addUser });   // Camfrog rooms live on PATV (
 require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the room pages' DJ panel (/api/dj/sync, /api/rooms/:slug/dj)
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
-app.get("/economy", addUser, (req, res) => {
+app.get("/economy", addUser, async (req, res) => {
   // economy v2 E-2: the incentive budget + weekly waterfall section renders only while Pepe's treasury is live
   const f = require("./funding");
-  res.render("economy", { user: req.user ? req.user.username : null, treasury: f.treasuryOn() ? f.state.incentives : null });
+  // economy v2 E-3: the room vaults section, only while Pepe's room vaults are live (roomvaults.js)
+  let roomVaults = null;
+  if (f.roomVaultsLive()) {
+    try { roomVaults = await require("./roomvaults").overview(10); } catch (e) { roomVaults = null; }
+  }
+  res.render("economy", { user: req.user ? req.user.username : null, treasury: f.treasuryOn() ? f.state.incentives : null, roomVaults });
 });
 
 const history = require("./history");
@@ -1303,7 +1308,8 @@ const supplyReady = runQuery(`CREATE TABLE IF NOT EXISTS supply_snapshot (
 app.post("/api/stats/supply", async (req, res) => {
   if ((req.body || {}).password !== process.env.TWITCH_BOT_TOKEN) return res.status(403).json({ ok: false });
   const pools = Array.isArray(req.body.pools) ? req.body.pools : [];
-  const clean = pools.slice(0, 50).map((p) => ({ key: String(p.key || "").slice(0, 40), label: String(p.label || "").slice(0, 80),
+  // economy v2 E-3: Pepe lists up to 40 room vaults (room:<room id>) on top of his ~20 pools -> room for 150 rows, longer keys
+  const clean = pools.slice(0, 150).map((p) => ({ key: String(p.key || "").slice(0, 80), label: String(p.label || "").slice(0, 80),
                                                  amount: Math.max(0, Math.floor(Number(p.amount) || 0)) }));
   try {
     await supplyReady;

@@ -37,8 +37,16 @@
 //       one-time move (Pepe "!econ fortknox migrate", dry run first) reads it from POST /api/g/fortknox-migration,
 //       moves it Reserve -> Fort Knox, then POST /api/g/fortknox-migration/mark stamps migrated_fk on exactly
 //       those rows (batch-keyed in fk_migrations, amount-checked, a replay is a no-op)
-//     room vault escrow to move at E-3: SUM(room_vault) WHERE migrated_rv IS NULL  (per room_id) - NET of the challenge
-//       payouts (their room_vault is negative); E-3 stamps migrated_rv on those rows too
+//     room vault escrow to move at E-3: SUM(room_vault) WHERE migrated_rv IS NULL AND rv_to IS NULL (per room_id) - NET of
+//       the challenge payouts (their room_vault is negative); E-3 stamps migrated_rv on those rows too
+//
+// Economy v2 E-3 (Pepe's pepe_roomvault.py, flag econ_room_vaults): while Pepe reports room vaults live on
+// /api/g/funding-sync (funding.roomVaultsLive()), the ROOM half is no longer held here: it is a negative reserve_claims
+// row with flow "room:<flow>:<room id>" that Pepe credits to that pad's vault room:<id> (ledger row rv_to = 'room', not
+// part of the escrow sum). A pad that can't have a vault (not a registered Camfrog pad, e.g. a site pad) sends the whole
+// amount to Fort Knox, as an unresolved room does in Pepe. The one-time move of the escrow that was held before E-3:
+// POST /api/g/roomvault-migration (per-room net escrow) + /api/g/roomvault-migration/mark (Pepe moved it; stamps
+// migrated_rv on exactly those rows, batch-keyed in rv_migrations, amount-checked per room, a replay is a no-op).
 //
 // Flags (boost_config, admin): pay (on: PAT moves; off: boosting is refused, nothing charged) - the
 // scoring switch is frontroom's cfg.boost.on.
@@ -79,6 +87,10 @@ function init() {
       try { await runQuery("ALTER TABLE room_flow_ledger ADD COLUMN fk_to TEXT"); } catch (e) { /* already there */ }
       await runQuery(`CREATE TABLE IF NOT EXISTS fk_migrations (batch TEXT PRIMARY KEY, max_id INTEGER NOT NULL,
         amount INTEGER NOT NULL, rows INTEGER NOT NULL, created INTEGER NOT NULL)`);
+      // E-3: where the room half went ('room' = credited straight to Pepe's room:<id> vault; NULL = held in this escrow)
+      try { await runQuery("ALTER TABLE room_flow_ledger ADD COLUMN rv_to TEXT"); } catch (e) { /* already there */ }
+      await runQuery(`CREATE TABLE IF NOT EXISTS rv_migrations (batch TEXT PRIMARY KEY, max_id INTEGER NOT NULL,
+        amount INTEGER NOT NULL, rows INTEGER NOT NULL, rooms TEXT NOT NULL, created INTEGER NOT NULL)`);
       await runQuery("CREATE TABLE IF NOT EXISTS boost_config (key TEXT PRIMARY KEY, value TEXT)");
       await runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
         claimId TEXT PRIMARY KEY, flow TEXT NOT NULL, userId TEXT, type TEXT, amount INTEGER NOT NULL,
@@ -147,25 +159,43 @@ function activePat(rows, t, halfMin = 60) {
  * debited in it). Inserts the ledger row (unique ref: a replay throws, the transaction rolls back)
  * and the Reserve claim for the Fort Knox half. Returns the row.
  */
+/** E-3: can this pad have a room vault? A registered Camfrog pad (Pepe's Pad and PepeLab included, doc 6.4). */
+async function vaultEligible(roomId) {
+  const rooms = require("./rooms");
+  if (rooms.platformOf(roomId) !== "camfrog") return false;
+  return !!(await rooms.get(String(roomId || "")));
+}
+
 async function routeInTx({ ref, kind, room_id, payer_id, payer_name, amount, owner_self, via, detail, flow }) {
   const a = Math.floor(Number(amount) || 0);
   if (!(a > 0)) throw new Refuse(400, "Nothing to route.");
-  const sp = split(a, owner_self);
+  const funding = require("./funding");
+  // E-3: room vaults live in Pepe -> the room half is a claim Pepe credits to room:<id>; a pad without a vault: all Fort Knox
+  const rvLive = funding.roomVaultsLive();
+  const noVault = rvLive && !owner_self && !(await vaultEligible(room_id));
+  const sp = split(a, owner_self || noVault);
+  const rv = rvLive && sp.room_vault > 0;
   const t = now();
   // E-1: Fort Knox is live in Pepe -> book the half straight into it; else the Reserve (migrated later)
-  const fk = sp.fortknox > 0 && require("./funding").fortknoxLive();
-  await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail, fk_to)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  const fk = sp.fortknox > 0 && funding.fortknoxLive();
+  await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail, fk_to, rv_to)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                  [ref, kind, room_id, payer_id || null, payer_name || null, a, sp.fortknox, sp.room_vault, owner_self ? 1 : 0, via || "web", t,
-                  detail ? String(detail).slice(0, 200) : null, fk ? "fortknox" : null]);
+                  detail ? String(detail).slice(0, 200) : null, fk ? "fortknox" : null, rv ? "room" : null]);
+  const base = flow || kind;
   if (sp.fortknox > 0) {
     // negative = the website collected it: Pepe's funding tick credits Fort Knox ("fortknox:<flow>") or, before
     // E-1 / with the layers off, his Federal Reserve as Fort Knox's stand-in
-    const base = flow || kind;
     await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
                    [uuidv4(), fk ? "fortknox:" + base : base, payer_id || null, `${KIND_LABEL[kind] || "stage slot fee"} ${room_id}: Fort Knox half`.slice(0, 120), -sp.fortknox]);
   }
-  return { ref, kind, room_id, payer_name: payer_name || null, amount: a, ...sp, owner_self: !!owner_self, created: t, fk_to: fk ? "fortknox" : null };
+  if (rv) {
+    // E-3: the room half goes straight to the pad's vault in Pepe (credited once per claim id)
+    await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
+                   [uuidv4(), `room:${base}:${room_id}`, payer_id || null, `${KIND_LABEL[kind] || "stage slot fee"} ${room_id}: room vault half`.slice(0, 120), -sp.room_vault]);
+  }
+  return { ref, kind, room_id, payer_name: payer_name || null, amount: a, ...sp, owner_self: !!owner_self, created: t,
+           fk_to: fk ? "fortknox" : null, rv_to: rv ? "room" : null };
 }
 
 /** E-0 telemetry (econ.js): the charge as a "room" flow - best effort, after the commit. */
@@ -266,7 +296,7 @@ async function status(roomId, t = now(), halfMin = 60) {
  *  (fortknox: booked before E-1, not moved yet) and the half booked straight into Fort Knox (fortknox_direct). */
 async function escrow() {
   await init();
-  const rows = await getQuery(`SELECT room_id, SUM(CASE WHEN migrated_rv IS NULL THEN room_vault ELSE 0 END) AS room_vault,
+  const rows = await getQuery(`SELECT room_id, SUM(CASE WHEN migrated_rv IS NULL AND rv_to IS NULL THEN room_vault ELSE 0 END) AS room_vault,
                                SUM(CASE WHEN fk_to IS NULL AND migrated_fk IS NULL THEN fortknox ELSE 0 END) AS fortknox,
                                SUM(CASE WHEN fk_to = 'fortknox' OR migrated_fk IS NOT NULL THEN fortknox ELSE 0 END) AS fortknox_done,
                                SUM(amount) AS total, COUNT(*) AS n
@@ -305,6 +335,51 @@ async function fkMigrationMark({ batch, max_id, amount }) {
     const t = now();
     const u = await runQuery(`UPDATE room_flow_ledger SET migrated_fk = ? WHERE id <= ? AND ${FK_WHERE}`, [t, maxId]);
     await runQuery("INSERT INTO fk_migrations (batch, max_id, amount, rows, created) VALUES (?, ?, ?, ?, ?)", [b, maxId, amt, u.changes || 0, t]);
+    return { dup: false, rows: u.changes || 0, amount: amt };
+  });
+}
+
+// ── E-3: the one-time move of the room-vault escrow into Pepe's room:<id> vaults ──
+const RV_WHERE = "migrated_rv IS NULL AND rv_to IS NULL";
+/** What Pepe's "!econ roomvaults migrate" would move: the NET escrow per pad (challenge prizes already subtracted).
+ *  {amount, rows, max_id, rooms: [{room_id, amount, rows, eligible}]} */
+async function rvMigrationSummary() {
+  await init();
+  const per = await getQuery(`SELECT room_id, COALESCE(SUM(room_vault), 0) AS amount, COUNT(*) AS rows, MAX(id) AS max_id
+                              FROM room_flow_ledger WHERE ${RV_WHERE} GROUP BY room_id ORDER BY room_id`);
+  const rooms = [];
+  for (const r of per) rooms.push({ room_id: r.room_id, amount: Number(r.amount) || 0, rows: Number(r.rows) || 0, eligible: await vaultEligible(r.room_id) });
+  // pads whose rows net to 0 (an all-Fort-Knox row, a fully paid-out escrow) move nothing: not listed (their rows are
+  // still stamped with the batch)
+  return { amount: rooms.reduce((s, r) => s + r.amount, 0), rows: rooms.reduce((s, r) => s + r.rows, 0),
+           max_id: per.reduce((m, r) => Math.max(m, Number(r.max_id) || 0), 0), rooms: rooms.filter((r) => r.amount !== 0) };
+}
+/** Stamp migrated_rv on exactly the rows Pepe moved (id <= max_id, still unmoved), once per batch. Every room's sum must
+ *  equal what Pepe moved for it (rooms: {room_id: amount}), or nothing is stamped. A replayed batch returns the first result. */
+async function rvMigrationMark({ batch, max_id, amount, rooms }) {
+  await init();
+  const b = String(batch || "");
+  const maxId = Math.floor(Number(max_id));
+  const amt = Math.floor(Number(amount));
+  const want = {};
+  for (const [k, v] of Object.entries(rooms && typeof rooms === "object" ? rooms : {})) want[String(k)] = Math.floor(Number(v));
+  if (!/^rvm[0-9]{1,12}$/.test(b) || !(maxId > 0) || !(amt > 0) || !Object.keys(want).length) throw new Refuse(400, "bad batch");
+  return tx(async () => {
+    const had = (await getQuery("SELECT * FROM rv_migrations WHERE batch = ?", [b]))[0];
+    if (had) {
+      if (had.amount !== amt || had.max_id !== maxId) throw new Refuse(409, "that batch was marked with different numbers");
+      return { dup: true, rows: had.rows, amount: had.amount };
+    }
+    const per = await getQuery(`SELECT room_id, COALESCE(SUM(room_vault), 0) AS amount FROM room_flow_ledger WHERE id <= ? AND ${RV_WHERE} GROUP BY room_id`, [maxId]);
+    const have = {};
+    for (const r of per) if (Number(r.amount)) have[r.room_id] = Number(r.amount);
+    const total = Object.values(have).reduce((s, x) => s + x, 0);
+    const same = Object.keys(have).length === Object.keys(want).length && Object.entries(have).every(([k, v]) => want[k] === v);
+    if (!same || total !== amt) throw new Refuse(409, `amount mismatch: the ledger has ${total} (${JSON.stringify(have)}), Pepe moved ${amt}`);
+    const t = now();
+    const u = await runQuery(`UPDATE room_flow_ledger SET migrated_rv = ? WHERE id <= ? AND ${RV_WHERE}`, [t, maxId]);
+    await runQuery("INSERT INTO rv_migrations (batch, max_id, amount, rows, rooms, created) VALUES (?, ?, ?, ?, ?, ?)",
+                   [b, maxId, amt, u.changes || 0, JSON.stringify(want), t]);
     return { dup: false, rows: u.changes || 0, amount: amt };
   });
 }
@@ -377,6 +452,16 @@ function register(app, { addUser, isBotToken }) {
     if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
     try { res.json({ ok: true, ...(await fkMigrationMark(b)) }); } catch (e) { fail(res, e); }
   });
+  // E-3 (bot only): the one-time room-vault escrow move - Pepe reads the per-pad totals, moves them, then has the rows stamped
+  app.post("/api/g/roomvault-migration", async (req, res) => {
+    if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
+    try { res.json({ ok: true, ...(await rvMigrationSummary()) }); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/g/roomvault-migration/mark", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ error: "unauthorized" });
+    try { res.json({ ok: true, ...(await rvMigrationMark(b)) }); } catch (e) { fail(res, e); }
+  });
   app.post("/api/boost/admin", addUser, jsonOnly, async (req, res) => {
     try {
       if (!require("./rooms").isStaff(req.user)) throw new Refuse(403, "Admins only.");
@@ -395,6 +480,6 @@ function register(app, { addUser, isBotToken }) {
 
 module.exports = {
   init, config, setConfig, split, activePat, routeInTx, telemetry, tx, KIND_FLOW, ROOM_FLOWS, boost, recent, activeMap, status, escrow, register, clearCache, Refuse, DEFAULTS,
-  fkMigrationSummary, fkMigrationMark,
+  fkMigrationSummary, fkMigrationMark, rvMigrationSummary, rvMigrationMark, vaultEligible,
   _setClock: (fn) => { clock = fn || (() => Date.now()); clearCache(); },
 };

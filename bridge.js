@@ -739,6 +739,9 @@ function register(app, { isBotToken, addUser }) {
       manage,
       schedule: await require("./mainstage").roomSchedule(R.id, req.user, manage).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
       analytics: reg.hasRoute(app, "/p/:slug/analytics"),
+      // economy v2 E-3: the room vault card (About tab), Camfrog pads only (roomvaults.js)
+      roomVault: siteOnly ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage, staff: reg.isStaff(req.user) })
+        .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
       feed,
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });

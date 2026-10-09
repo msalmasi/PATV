@@ -35,6 +35,13 @@
 // already paid. E-3 migrates each room's NET remaining balance - SUM(room_vault) WHERE migrated_rv IS NULL,
 // which already subtracts every challenge payout - into room:<id>, and stamps migrated_rv on every row it
 // counted, payouts included. Nothing is paid twice and nothing paid out is migrated.
+//
+// E-3 AS BUILT (section 9 "At E-3": the payout endpoint debits room:<id> instead of the escrow, same caps, same refs):
+// while Pepe's room vaults are live he sends vault = "room" and the vault's balance (it lives in Pepe). The budget is
+// then computed on that balance (the 24 h paid figure still counts every challenge row of the room, escrow-paid ones
+// included), the row is written with rv_to = 'room' (so the escrow sum ignores it) and Pepe debits room:<id> by `paid`
+// once per ref after the answer (the answer echoes vault). While room vaults are live an ESCROW-mode prize is refused
+// (code "moved"): the escrow is being / has been migrated into the vault, so paying from it could pay twice.
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -100,16 +107,19 @@ class Refuse extends Error {
 /** The room's escrow and today's prize budget. Call inside the tx when it decides a payout. */
 async function budget(roomId, opts = {}) {
   const C = CONFIG;
+  const roomMode = opts.vault === "room";
   const pct = Math.min(C.pct_max, Math.max(0, Number.isFinite(Number(opts.pct)) && opts.pct !== null && opts.pct !== undefined ? Number(opts.pct) : C.pct));
   const cap = Math.min(C.cap_max, Math.max(0, Number.isFinite(Number(opts.cap)) && opts.cap !== null && opts.cap !== undefined ? Math.floor(Number(opts.cap)) : C.cap));
-  const r = (await getQuery(`SELECT COALESCE(SUM(room_vault), 0) AS bal FROM room_flow_ledger WHERE room_id = ? AND migrated_rv IS NULL`, [roomId]))[0];
+  // E-3: the room vault's balance comes from Pepe (room:<id>); else this pad's escrow (unmigrated rows held here)
+  const r = roomMode ? { bal: Math.max(0, Math.floor(Number(opts.balance) || 0)) }
+    : (await getQuery(`SELECT COALESCE(SUM(room_vault), 0) AS bal FROM room_flow_ledger WHERE room_id = ? AND migrated_rv IS NULL AND rv_to IS NULL`, [roomId]))[0];
   const p = (await getQuery(`SELECT COALESCE(-SUM(room_vault), 0) AS paid FROM room_flow_ledger WHERE room_id = ? AND kind = 'challenge' AND created > ?`,
                             [roomId, now() - DAY]))[0];
   const balance = Math.max(0, Math.floor(Number(r.bal) || 0));
   const paid24 = Math.max(0, Math.floor(Number(p.paid) || 0));
   const capAmt = Math.min(cap, Math.floor(((balance + paid24) * pct) / 100));
   const left = Math.max(0, Math.min(balance, capAmt - paid24));
-  return { balance, paid24, cap: capAmt, left, pct };
+  return { balance, paid24, cap: capAmt, left, pct, ...(roomMode ? { vault: "room" } : {}) };
 }
 
 async function vault(roomId, opts = {}) {
@@ -136,7 +146,9 @@ async function payout(roomId, b = {}) {
   try {
     return await require("./boosts").tx(async () => {
       const had = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", [ref]))[0];
-      if (had) return { ok: true, dup: true, paid: -had.room_vault, room: had.room_id };
+      if (had) return { ok: true, dup: true, paid: -had.room_vault, room: had.room_id, ...(had.rv_to === "room" ? { vault: "room" } : {}) };
+      const roomMode = b.vault === "room";
+      if (!roomMode && require("./funding").roomVaultsLive()) throw new Refuse("moved");     // E-3: see the header
       const uid = await ledger.resolveUserId(String(b.userId));
       if (!uid) throw new Refuse("no_account");
       const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [uid]))[0];
@@ -147,12 +159,14 @@ async function payout(roomId, b = {}) {
       const t = now();
       const cat = String(b.cat || "").replace(/[^a-z]/g, "").slice(0, 12);
       const score = Number.isFinite(Number(b.score)) ? Math.max(0, Math.min(10, Number(b.score))) : null;
-      await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail)
-                      VALUES (?, 'challenge', ?, ?, ?, ?, 0, ?, 0, 'chat', ?, ?)`,
+      await runQuery(`INSERT INTO room_flow_ledger (ref, kind, room_id, payer_id, payer_name, amount, fortknox, room_vault, owner_self, via, created, detail, rv_to)
+                      VALUES (?, 'challenge', ?, ?, ?, ?, 0, ?, 0, 'chat', ?, ?, ?)`,
                      [ref, R.id, uid, u ? u.username : null, -pay, -pay, t,
-                      `mic challenge ${cat || "?"}${score !== null ? " " + score + "/10" : ""}${b.login ? " by " + String(b.login).slice(0, 40) : ""}`.slice(0, 200)]);
+                      `mic challenge ${cat || "?"}${score !== null ? " " + score + "/10" : ""}${b.login ? " by " + String(b.login).slice(0, 40) : ""}`.slice(0, 200),
+                      roomMode ? "room" : null]);
       await ledger.postOrThrow(uid, pay, `🎤 mic challenge prize p/${R.slug}`.slice(0, 120), { source: "challengepay" });
-      return { ok: true, dup: false, paid: pay, balance: bud.balance - pay, left: bud.left - pay, room: R.id, username: u ? u.username : null };
+      return { ok: true, dup: false, paid: pay, balance: bud.balance - pay, left: bud.left - pay, room: R.id, username: u ? u.username : null,
+               ...(roomMode ? { vault: "room" } : {}) };
     });
   } catch (e) {
     if (e && e.refuse) return { ok: false, code: e.code, paid: 0 };
@@ -196,7 +210,7 @@ function register(app, { addUser, isBotToken }) {
     try {
       const r = await payout(req.params.room, req.body || {});
       if (r.ok && !r.dup) {
-        try { await require("./rooms").event(r.room, "challenge-prize", r.username || "", `${r.paid} PAT from the room vault escrow`); } catch (e) { /* audit only */ }
+        try { await require("./rooms").event(r.room, "challenge-prize", r.username || "", `${r.paid} PAT from the room vault${r.vault === "room" ? "" : " escrow"}`); } catch (e) { /* audit only */ }
       }
       res.json(r);
     } catch (e) { fail(res, e); }

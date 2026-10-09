@@ -75,6 +75,7 @@
       <li><a href="#pat">🪙 What is PAT</a></li>
       <li><a href="#flow">🏛️ Where PAT goes</a></li>
       <li><a href="#protocol">⚙️ How the protocol works</a></li>
+      <% if (typeof roomVaults !== 'undefined' && roomVaults) { %><li><a href="#roomvaults">🏦 Room vaults</a></li><% } %>
       <li><a href="#incentives">🎁 Incentive budget</a></li>
       <li><a href="#burned">🔥 Burned</a></li>
       <li><a href="#casino">🎰 Casino</a></li>
@@ -199,6 +200,38 @@
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
   </section>
+
+  <!-- 2a-1. Room vaults (economy v2 E-3): only while they're live -->
+  <% const _rv = (typeof roomVaults !== 'undefined') ? roomVaults : null;
+     const _rf = (x) => Math.round(Number(x) || 0).toLocaleString('en-US'); %>
+  <% if (_rv) { %>
+  <section id="roomvaults">
+    <div class="kicker">REVENUE FOLLOWS THE ROOM</div>
+    <h2>🏦 Room vaults</h2>
+    <p class="lead">Every pad with a Camfrog room has its own vault. Half of what's spent in a room (paid commands, songs,
+      voices, heist gear, boosts, stage slots, pad cosmetic gifts) goes to that room's vault and half to Fort Knox; on
+      commands in a pad with an owner, the owner's 10% royalty comes first. Spending with no room goes all to Fort Knox, and
+      so does the pad owner's (or the controlling gang's) spending in their own room. A vault holds at most
+      <%= _rf(_rv.cap) %> PAT; anything above goes to Fort Knox. Anyone can add to a vault with
+      <code>!roomvault deposit &lt;amount&gt;</code> (deposits never count as the room's income).
+      <span class="cfg">The vaults are filling up: paying out to each room's owner, streamers and regulars comes next.</span></p>
+    <div class="grid">
+      <div class="card wide">
+        <h3>📊 Room vaults now: <%= _rf(_rv.total) %> PAT</h3>
+        <% if (_rv.rooms.length) { %>
+        <ul>
+          <% _rv.rooms.forEach((r) => { %>
+            <li><% if (r.slug) { %><a href="/p/<%= encodeURIComponent(r.slug) %>?tab=about#vault"><%= r.title %></a><% } else { %><%= r.title %><% } %>:
+              <b><%= _rf(r.balance) %></b> PAT (<%= _rf(r.inflow7) %> in over the last 7 days)</li>
+          <% }) %>
+        </ul>
+        <% } else { %><p>Nothing in them yet.</p><% } %>
+        <div class="cmd"><code>!roomvault</code> · <code>!roomvault history</code> · <code>!roomvault all</code></div>
+      </div>
+    </div>
+    <div class="top"><a href="#top">↑ top</a></div>
+  </section>
+  <% } %>
 
   <!-- 2a0. Incentive budget + weekly surplus waterfall (economy v2 E-2): explained only while it's live -->
   <%

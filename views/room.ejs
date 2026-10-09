@@ -314,6 +314,20 @@
   .rm .an-t .up { color: #81c784; } .rm .an-t .down { color: #ef9a9a; }
   .rm .an-gate { margin: 0; color: #bbb; font-size: 14px; line-height: 1.6; }
   @media (max-width: 400px) { .rm .an-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* economy v2 E-3: the room vault card (roomvaults.js) - tiles, a 7-day strip, latest moves, the owner's rate */
+  .rm .rv-card { display: grid; gap: 12px; }
+  .rm .rv-card > h2 { margin: 0; flex-wrap: wrap; align-items: baseline; }
+  .rm .rv-card .rv-what { margin: 0; color: #bbb; font-size: 13.5px; line-height: 1.55; }
+  .rm .rv-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; align-items: end; height: 54px; }
+  .rm .rv-days .b { background: #1d3a24; border-radius: 3px 3px 0 0; min-height: 2px; }
+  .rm .rv-days .b.dep { background: #2a3550; }
+  .rm .rv-hist { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; color: #ccc; }
+  .rm .rv-hist li { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid #1a1a1a; padding: 3px 0; }
+  .rm .rv-hist .amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rm .rv-rate { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13.5px; color: #ccc; }
+  .rm .rv-rate input { width: 5.5em; padding: 6px 8px; border-radius: 8px; border: 1px solid #333; background: #0d0d0d; color: #fff; font: inherit; }
+  .rm .rv-rate .rv-msg { min-height: 1em; font-size: 13px; color: #c6e94f; flex-basis: 100%; margin: 0; }
+  .rm .rv-rate .rv-msg.err { color: #ff8a80; }
   /* 1.99ec: the Live tab's side cards - the title stays on one line; its action (link / count) sits right of it,
      or drops below it as a whole on a narrow card, never splitting the title */
   .rm .side .card > h2 { flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
@@ -997,6 +1011,47 @@
         <% if (giftSigned_) { %><button type="button" class="ab-btn" data-pad-gift="<%= room.slug %>">🎁 Gift a cosmetic</button><% } else { %><a class="ab-btn" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>">🎁 Sign in to gift a cosmetic</a><% } %>
       <% } %>
     </section>
+    <%# economy v2 E-3: 🏦 the room vault (roomvaults.js; Pepe's pepe_roomvault.py). Accumulate only: balance, the last
+        7 days' inflow (the room's own activity) and deposits (never inflow), latest moves, and the owner's daily payout
+        rate - stored for the payout recipe that comes later. Camfrog pads only. %>
+    <% const RV_ = typeof roomVault !== 'undefined' && roomVault ? roomVault : null;
+       const rvf_ = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+       const rvKind_ = { flow: 'room spending', site: 'website (boost / slot / gift)', deposit: 'deposit', migration: 'escrow moved in', refund: 'refund', challenge: 'mic challenge prize' }; %>
+    <% if (RV_ && (RV_.live || RV_.balance > 0)) { %>
+    <section class="card rv-card" id="vault" aria-labelledby="rvH">
+      <h2 id="rvH"><span>🏦 Room vault</span><small><%= RV_.live ? 'filling up' : 'paused' %></small></h2>
+      <p class="rv-what">Half of what's spent in <b><%= room.name %></b> (paid commands, songs, voices, heist gear, boosts, stage slots, gifts) lands here; the other half goes to Fort Knox. The owner or the controlling gang spending in their own room sends it all to Fort Knox. The vault holds at most <%= rvf_(RV_.cap) %> PAT. Payouts to the owner, streamers and regulars come in a later update.<% if (!siteOnly_) { %> In the room: <code>!roomvault</code> · <code>!roomvault deposit 5000</code>.<% } %></p>
+      <div class="an-tiles">
+        <div class="an-t"><div class="k">Balance</div><div class="v"><%= rvf_(RV_.balance) %></div><div class="s">PAT</div></div>
+        <div class="an-t"><div class="k">Inflow</div><div class="v"><%= rvf_(RV_.inflow7) %></div><div class="s">last 7 days, from the room</div></div>
+        <div class="an-t"><div class="k">Deposits</div><div class="v"><%= rvf_(RV_.deposits7) %></div><div class="s">last 7 days (not counted as inflow)</div></div>
+        <div class="an-t"><div class="k">Payout rate</div><div class="v"><%= RV_.rate %>%</div><div class="s">a day, once payouts start<%= RV_.rate_default ? ' (default)' : '' %></div></div>
+      </div>
+      <% if (RV_.days && RV_.days.length) { const mx_ = Math.max(1, ...RV_.days.map((d) => Math.max(0, d.in) + Math.max(0, d.dep))); %>
+      <div class="rv-days" role="img" aria-label="Inflow and deposits over the last 7 days">
+        <% RV_.days.forEach((d) => { const h_ = Math.round(100 * (Math.max(0, d.in) + Math.max(0, d.dep)) / mx_); %>
+          <div class="b<%= d.dep > d.in ? ' dep' : '' %>" style="height:<%= h_ %>%" title="<%= d.day %>: inflow <%= rvf_(d.in) %>, deposits <%= rvf_(d.dep) %>"></div>
+        <% }) %>
+      </div>
+      <% } %>
+      <% if (RV_.history && RV_.history.length) { %>
+      <ul class="rv-hist" aria-label="Latest moves">
+        <% RV_.history.slice(0, 6).forEach((e) => { %>
+          <li><span><%= new Date(e.ts * 1000).toISOString().slice(5, 16).replace('T', ' ') %> · <%= rvKind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %></span>
+              <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= rvf_(Math.abs(e.amount)) %><%= e.overflow ? ' (+' + rvf_(e.overflow) + ' to Fort Knox)' : '' %></span></li>
+        <% }) %>
+      </ul>
+      <% } %>
+      <% if (RV_.can_set_rate) { %>
+      <form class="rv-rate" id="rvRate" data-slug="<%= room.slug %>" autocomplete="off">
+        <label for="rvRateIn">Daily payout rate</label>
+        <input id="rvRateIn" type="number" name="rate" min="<%= RV_.rate_bounds.min %>" max="<%= RV_.rate_bounds.max %>" step="0.5" value="<%= RV_.rate %>"<%= RV_.rate_locked_until ? ' disabled' : '' %>> %
+        <button type="submit" class="ab-btn"<%= RV_.rate_locked_until ? ' disabled' : '' %>>Save</button>
+        <p class="rv-msg" id="rvRateMsg" role="status" aria-live="polite"><%= RV_.rate_locked_until ? 'You can change it again on ' + new Date(RV_.rate_locked_until).toISOString().slice(0, 10) + ' (once a week).' : 'Between ' + RV_.rate_bounds.min + '% and ' + RV_.rate_bounds.max + '% of the balance a day, once a week. Saved now, used when payouts start.' %></p>
+      </form>
+      <% } %>
+    </section>
+    <% } %>
     <%# 1.99el: Analytics is its own card (was an "Analytics: Pad analytics ›" row above): the 30-day headline numbers
         from roomstats.preview (cached), for signed-in viewers only - visitors get the analytics page's sign-in prompt %>
     <% const anCard_ = typeof roomAnalyticsCard !== 'undefined' && roomAnalyticsCard ? roomAnalyticsCard : null;
@@ -1033,6 +1088,7 @@
   </section>
   <script src="/public/js/pad-tabs.js?v=4"></script>
   <% if (!isOwner_ && giftSigned_) { %><script src="/public/js/pad-cosmetics.js?v=1" defer></script><% } %>
+  <% if (typeof roomVault !== 'undefined' && roomVault && roomVault.can_set_rate) { %><script src="/public/js/pad-vault.js?v=1" defer></script><% } %>
   <script>
   // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address
   (function () {

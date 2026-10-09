@@ -31,6 +31,11 @@
 //     pot and the House are the same money (jackpot_rakes), so wheelDraw() pays a prize from the House up to
 //     its whole balance and refuses only what the House can't cover - never a Reserve claim; wheelReseed()
 //     doesn't top the pot back up to its 100k floor (that would move House money into the House).
+//
+// Economy v2 E-3 (Pepe's pepe_roomvault.py, flag econ_room_vaults): while Pepe reports room vaults live (sync body
+// room_vaults = {on, cap}), boosts.routeInTx books the ROOM half of a boost / slot fee / pad cosmetic / challenge fee
+// as a "room:<flow>:<room id>" claim (negative: the site collected it) that Pepe credits to that pad's vault. Those
+// claims are neither the Reserve's nor the incentive budget's.
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -46,6 +51,8 @@ const state = {
   // economy v2 E-2: the incentive budget while Pepe's treasury is live, else null (grants stay on the Reserve).
   // {balance, week, remaining: {group: PAT left this week}, budgets, groups: {flow: group}, share, release_per_day}
   incentives: null,
+  // economy v2 E-3: {on: true, cap} while Pepe's room vaults are live, else null (room halves stay in the site escrow)
+  room_vaults: null,
 };
 const INC = "incentives:";
 
@@ -109,7 +116,7 @@ async function unsettledReserve() {
   await ready;
   // E-2: the incentive budget's claims (and queued grants) aren't the Reserve's
   const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims
-                            WHERE settled = 0 AND COALESCE(queued,0) = 0 AND flow NOT LIKE 'incentives:%'`);
+                            WHERE settled = 0 AND COALESCE(queued,0) = 0 AND flow NOT LIKE 'incentives:%' AND flow NOT LIKE 'room:%'`);
   return (r[0] && r[0].t) || 0;
 }
 
@@ -364,10 +371,15 @@ function sync(body) {
   state.fortknox = typeof body.fortknox === "number" && isFinite(body.fortknox) ? Math.max(0, Math.floor(body.fortknox)) : null;
   // E-2: every sync sets it - a sync without it (an older Pepe, the treasury off) puts the grants back on the Reserve
   state.incentives = cleanIncentives(body.incentives);
+  // E-3: every sync sets it - a sync without it (an older Pepe, room vaults off) keeps the room halves in the escrow
+  const rv = body.room_vaults;
+  state.room_vaults = rv && typeof rv === "object" && rv.on === true
+    ? { on: true, cap: Number.isFinite(Number(rv.cap)) ? Math.max(0, Math.floor(Number(rv.cap))) : null } : null;
   state.syncedAt = Date.now();
   if (state.incentives) drainQueue().catch((e) => console.error("[funding] drain:", e.message));
 }
 const fortknoxLive = () => state.fortknox !== null;
+const roomVaultsLive = () => state.room_vaults !== null;
 
 async function claims() {
   await ready;
@@ -385,6 +397,6 @@ async function settle(ids) {
   return n;
 }
 
-module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive,
+module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive, roomVaultsLive,
                    treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable,
                    houseBacked, wheelDraw, wheelReseed };
