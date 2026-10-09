@@ -76,6 +76,10 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 let MemoryStore = session.MemoryStore;
 
+// 1.99gk: nginx's auth_request for RTMP-slot HLS on Approved pads (hlsauth.js) - before the session / body middleware,
+// so the per-segment check stays cheap and never makes a session
+require("./hlsauth").register(app);
+
 // Cookie Parser Middleware
 app.use(cookieParser(process.env.APP_SESSION_SECRET));
 

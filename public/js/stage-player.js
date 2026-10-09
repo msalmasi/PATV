@@ -28,8 +28,47 @@
 //   low < margin / 2         -> playbackRate 0.96 until low >= margin (ease off before it runs dry)
 //   low > margin + TD + 2 s  -> jump again (a tab that was in the background, a long stall); one jump per 5 s at most
 // Only for live playlists; VOD / ended streams are left alone.
+//
+// 1.99gk: an Approved pad's slot URL carries the viewer's read token (?pt=, padaccess.tokenizeSlots). VHS resolves
+// child playlists and segments relative to the playlist and DROPS its query, so nginx's auth_request (hlsauth.js) and
+// MediaMTX would only see the token on the first request. Every VHS request for that stream gets it back here
+// (withPt: an xhr onRequest hook per player, plus the older global beforeRequest - idempotent, so both are safe).
 (function () {
   'use strict';
+  var PT = {};                                                 // stream name -> its read token
+  var STREAM = /\/((?:stage|stg)-[0-9a-f]{16})(?=[\/.?-]|$)/;
+  function notePt(url) {
+    var s = STREAM.exec(String(url || '')), m = /[?&]pt=([^&#]+)/.exec(String(url || ''));
+    if (s && m) { try { PT[s[1]] = decodeURIComponent(m[1]); } catch (e) { PT[s[1]] = m[1]; } }
+  }
+  function withPt(uri) {
+    if (!uri || /[?&]pt=/.test(uri)) return uri;
+    var s = STREAM.exec(uri);
+    if (!s || !PT[s[1]]) return uri;
+    var h = uri.indexOf('#'), tail = h < 0 ? '' : uri.slice(h), u = h < 0 ? uri : uri.slice(0, h);
+    return u + (u.indexOf('?') < 0 ? '?' : '&') + 'pt=' + encodeURIComponent(PT[s[1]]) + tail;
+  }
+  function addQ(url, kv) { return url + (url.indexOf('?') < 0 ? '?' : '&') + kv; }
+  var globalHooked = false;
+  function hookGlobal() {
+    var X = window.videojs && window.videojs.Vhs && window.videojs.Vhs.xhr;
+    if (globalHooked || !X) return;
+    globalHooked = true;
+    var prev = X.beforeRequest;
+    X.beforeRequest = function (o) {
+      if (typeof prev === 'function') o = prev(o) || o;
+      if (o && o.uri) o.uri = withPt(o.uri);
+      return o;
+    };
+  }
+  function hookPlayer(p) {
+    p.on('xhr-hooks-ready', function () {
+      try {
+        var t = p.tech({ IWillNotUseThisInPlugins: true }), x = t && t.vhs && t.vhs.xhr;
+        if (x && typeof x.onRequest === 'function') x.onRequest(function (o) { if (o && o.uri) o.uri = withPt(o.uri); return o; });
+      } catch (e) {}
+    });
+  }
   var LIVE = { tick: 250, margin0: 1.0, marginStep: 0.5, growEvery: 10000, decayStep: 0.25, decayEvery: 30000, fast: 1.05, slow: 0.96, jumpEvery: 5000 };
 
   // one tick of the controller (pure, so it can be tested): st = liveState(), o = the sample
@@ -121,13 +160,14 @@
   function player(o) {
     var SRC = o.src || 'https://publicaccess.tv/hls/broadcast.m3u8';
     var p = null, retry = null, sync = null;
+    notePt(SRC);
     function reconnecting(on) { if (o.reconnect) o.reconnect.classList.toggle('hide', !on); }
     function scheduleRetry() {
       reconnecting(true);
       clearTimeout(retry);
       retry = setTimeout(function () {
         if (!p) return;
-        try { p.src({ src: SRC + '?r=' + Date.now(), type: 'application/x-mpegURL' }); p.play().catch(function () {}); } catch (e) {}
+        try { p.src({ src: addQ(SRC, 'r=' + Date.now()), type: 'application/x-mpegURL' }); p.play().catch(function () {}); } catch (e) {}
         scheduleRetry();                                   // cleared again by 'playing'
       }, 10000);
     }
@@ -142,6 +182,7 @@
                        // 1.99fd: VHS may play inside the last 3 segments; liveSync decides how close
                        html5: { vhs: { overrideNative: true, enableLowInitialPlaylist: true, allowSeeksWithinUnsafeLiveWindow: true } } });
       sync = liveSync(p);
+      hookGlobal(); hookPlayer(p);
       p.src({ src: SRC, type: 'application/x-mpegURL' });
       p.on('error', scheduleRetry);
       p.on('stalled', function () { if (!retry) scheduleRetry(); });
@@ -165,6 +206,7 @@
     function setSrc(url) {
       if (!url || url === SRC) return;
       SRC = url;
+      notePt(SRC);
       if (p) { stop(); start(); }
     }
     // economy E-0: what the viewer is actually getting, for the watch-minute heartbeat (stage-room.js)
@@ -181,5 +223,6 @@
   window.PATVStage = window.PATVStage || {};
   window.PATVStage.player = player;
   window.PATVStage.liveSync = liveSync;
+  window.PATVStage._pt = { withPt: withPt, notePt: notePt, addQ: addQ };   // tests
   window.PATVStage._live = { step: liveStep, state: liveState, rebuffered: rebuffered, LIVE: LIVE };   // tests
 })();

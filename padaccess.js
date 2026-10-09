@@ -29,6 +29,9 @@
 // stage gets a signed read token (readToken: bound to the stream name + their user id, 12 h) on the slot's HLS / WHEP
 // URLs (?pt=...). The hook checks it (still a member?), and a viewer whose token checked out may fetch that stream's
 // HLS parts from the same IP for READ_IP_MS without it (players drop the query on segment URLs).
+// 1.99gk: RTMP slots' HLS (nginx-rtmp, /hls/...) is checked the same way through nginx auth_request (hlsauth.js), which
+// also accepts the viewer's login cookie; the player now keeps ?pt= on every request. Any level / member change
+// forgets the remembered IPs (bump).
 "use strict";
 const crypto = require("crypto");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -262,7 +265,7 @@ async function remove(actor, R, userId) {
 // Anything that caches per-pad results (the stage read cache) listens here.
 const listeners = new Set();
 function onChange(fn) { listeners.add(fn); }
-function bump() { for (const fn of listeners) { try { fn(); } catch (e) { /* a listener's problem */ } } }
+function bump() { ipOk.clear(); for (const fn of listeners) { try { fn(); } catch (e) { /* a listener's problem */ } } }
 
 // ── stage read tokens (webrtc.js) ──
 const b64 = (s) => Buffer.from(String(s)).toString("base64url");
@@ -331,6 +334,19 @@ async function readAllowed(b, stream, roomId) {
   }
   const until = ipOk.get(ipKey);
   return !!until && until > NOW();
+}
+/** 1.99gk (hlsauth.js): is this signed-in account inside the pad (owner / staff / approved)? Class from a 60 s cache. */
+async function userInside(userId, roomId) {
+  if (!userId) return false;
+  await init();
+  const u = await accountLite(String(userId));
+  return !!u && inside(u, roomId);
+}
+/** 1.99gk: remember an IP that proved itself another way (a session cookie) for this stream's HLS parts. */
+function rememberIp(ip, stream) {
+  if (!ip || !stream) return;
+  ipOk.set(String(ip) + "|" + stream, NOW() + READ_IP_MS);
+  if (ipOk.size > 20000) ipOk.clear();
 }
 
 // ── routes ──
@@ -450,6 +466,6 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, load, register, LEVELS, DEFAULT, INFO, levelOf, isPublic, isApproved, anyApproved, inside, canSee, full, blockedFor, visibleRows,
-  state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, Refuse, NOTE_MAX, RETRY_MS,
+  state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
   READ_IP_MS, isReady: () => loaded, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => { ready = null; loaded = false; LEVEL = new Map(); MEMBERS = new Map(); ipOk.clear(); classCache.clear(); },
 };
