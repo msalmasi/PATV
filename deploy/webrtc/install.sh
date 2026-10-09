@@ -42,6 +42,10 @@ pm2_do() {   # pm2 lives in root's nvm (as in deploy/patv-update.sh)
 hls_fresh() { local f=/mnt/hls/broadcast.m3u8; [ -f "$f" ] && [ $(( $(date +%s) - $(stat -c %Y "$f") )) -lt 30 ]; }
 code() { curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$@" || true; }
 CHANGED_MTX=0; CHANGED_TURN=0; CHANGED_NGINX=0; CHANGED_STAGING_ENV=0
+# 1.99il: mediamtx.yml alone changing is NOT a restart - MediaMTX hot-reloads its config file and only touches what
+# changed (a new path entry leaves Pepe's live "pepe" path, its relay and every WHEP viewer connected). The binary or
+# the unit changing still restarts it.
+CHANGED_MTX_CONF=0
 put() {      # put <src> <dest> <owner> <group> <mode> <flagvar>: install when different (old copy -> backup)
   local src=$1 dst=$2
   if [ -f "$dst" ] && cmp -s "$src" "$dst"; then
@@ -228,7 +232,11 @@ say "Configs and units"
 TMPR="$(mktemp -d)"; chmod 0700 "$TMPR"
 sed -e "s|@PUBLIC_IP@|$PUBLIC_IP|g" -e "s|@AUTH_URL@|$AUTH_URL|g" "$HERE/mediamtx.yml" > "$TMPR/mediamtx.yml"
 install -d -m 0750 -o root -g mediamtx /etc/mediamtx
-put "$TMPR/mediamtx.yml" /etc/mediamtx/mediamtx.yml root mediamtx 0640 CHANGED_MTX
+# 1.99il: the live "pepe" path before a config change (the hot reload below must leave it exactly as it is)
+PEPE_BEFORE="$(curl -fsS --max-time 5 http://127.0.0.1:9997/v3/paths/get/pepe 2>/dev/null | python3 -c 'import json, sys; p = json.load(sys.stdin); print(p.get("readyTime") or "") if p.get("ready") else print("")' 2>/dev/null || true)"
+MTX_PID_BEFORE="$(systemctl show -p MainPID --value mediamtx 2>/dev/null || echo 0)"
+RELOAD_SINCE="$(date '+%Y-%m-%d %H:%M:%S')"
+put "$TMPR/mediamtx.yml" /etc/mediamtx/mediamtx.yml root mediamtx 0640 CHANGED_MTX_CONF
 # turnserver.conf: public placeholders by sed, the secret by awk reading the file (never an argument)
 sed -e "s|@PUBLIC_IP@|$PUBLIC_IP|g" -e "s|@TURN_HOST@|$HOST|g" "$HERE/turnserver.conf" > "$TMPR/turn.1"
 ( umask 077; awk -v sf="$SECRET_FILE" 'BEGIN { getline s < sf } { gsub(/@TURN_SECRET@/, s); print }' "$TMPR/turn.1" > "$TMPR/turnserver.conf" )
@@ -302,7 +310,21 @@ fi
 # ───────────────────────────────── services ─────────────────────────────────
 say "Services"
 systemctl enable mediamtx.service patv-turn.service >/dev/null 2>&1
-if [ "$CHANGED_MTX" = 1 ] || ! systemctl is-active --quiet mediamtx; then systemctl restart mediamtx; ok "mediamtx (re)started"; else ok "mediamtx unchanged and running"; fi
+if [ "$CHANGED_MTX" = 1 ] || ! systemctl is-active --quiet mediamtx; then systemctl restart mediamtx; ok "mediamtx (re)started"
+elif [ "$CHANGED_MTX_CONF" = 1 ]; then
+  # 1.99il: hot reload - MediaMTX watches the file; wait for it to say so and to list the room-audio paths
+  reloaded=0
+  for _ in $(seq 1 20); do
+    if journalctl -u mediamtx --since "$RELOAD_SINCE" --no-pager 2>/dev/null | grep -q 'reloading configuration'        && curl -fsS --max-time 5 'http://127.0.0.1:9997/v3/config/paths/list?itemsPerPage=1000' 2>/dev/null | grep -qF '(room|stgr)-'; then reloaded=1; break; fi
+    sleep 1
+  done
+  if journalctl -u mediamtx --since "$RELOAD_SINCE" --no-pager 2>/dev/null | grep -qE ' ERR .*(conf|reload)'; then
+    die "MediaMTX refused the new mediamtx.yml (journalctl -u mediamtx) - it keeps running on the old config; fix the template and re-run"
+  fi
+  [ "$reloaded" = 1 ] || die "MediaMTX didn't hot-reload mediamtx.yml within 20 s (journalctl -u mediamtx). Not restarting it by itself: that would drop Pepe's WHIP stream for a few seconds - restart it by hand at a quiet moment (systemctl restart mediamtx), then re-run"
+  [ "$(systemctl show -p MainPID --value mediamtx)" = "$MTX_PID_BEFORE" ] || warn "mediamtx's PID changed during the reload"
+  ok "mediamtx hot-reloaded its config (no restart: live publishers and viewers stayed connected)"
+else ok "mediamtx unchanged and running"; fi
 if [ "$CHANGED_TURN" = 1 ] || ! systemctl is-active --quiet patv-turn; then systemctl restart patv-turn; ok "patv-turn (re)started"; else ok "patv-turn unchanged and running"; fi
 if [ "$CHANGED_STAGING_ENV" = 1 ]; then
   # a plain restart: the site reads .env itself (dotenv) at start
@@ -354,6 +376,20 @@ pepe_hook() {   # the relay's loopback RTSP read of "pepe" is allowed, the same 
 }
 check "the auth hook knows Pepe's WHIP path (site 1.99fd)" pepe_hook
 check "ICE tcp 8189 listening" listening t 8189
+# 1.99il: room audio paths (roomrtc.js) reach MediaMTX through nginx, and the hook answers for them; Pepe's live
+# "pepe" path came through the config change untouched
+room_whep_up() { local c; c="$(code -X POST -H 'Content-Type: application/sdp' --data-binary 'v=0' --resolve "$HOST:443:127.0.0.1" "https://$HOST/whep/room-0000000000000000")"; case "$c" in 400|401|403) return 0 ;; *) echo "   (answer: $c)" >&2; return 1 ;; esac; }
+check "room audio WHEP through nginx reaches MediaMTX (https://$HOST/whep/room-...)" room_whep_up
+room_hook() { local c; c="$(code -X POST -H 'Content-Type: application/json' -d '{"action":"read","protocol":"webrtc","path":"room-0000000000000000","ip":"203.0.113.9"}' "$AUTH_URL")"; [ "$c" = 403 ] || [ "$c" = 401 ]; }
+check "the auth hook refuses an unknown room audio path" room_hook
+pepe_kept() {
+  [ -n "$PEPE_BEFORE" ] || return 0
+  local after; after="$(curl -fsS --max-time 5 http://127.0.0.1:9997/v3/paths/get/pepe 2>/dev/null | python3 -c 'import json, sys; p = json.load(sys.stdin); print(p.get("readyTime") or "") if p.get("ready") else print("")' 2>/dev/null || true)"
+  [ "$after" = "$PEPE_BEFORE" ] && return 0
+  [ "$CHANGED_MTX" = 1 ] && { echo "   (MediaMTX was restarted on purpose - binary / unit changed - so Pepe's WHIP reconnected)" >&2; return 0; }
+  echo "   (pepe readyTime $PEPE_BEFORE -> ${after:-gone})" >&2; return 1
+}
+check "Pepe's live WHIP path \"pepe\" was not interrupted" pepe_kept
 check "TURN udp 3478 listening" listening u 3478
 check "TURN tcp 3478 listening" listening t 3478
 check "TURNS tcp 5349 listening" listening t 5349

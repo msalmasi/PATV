@@ -21,6 +21,8 @@
 //             default player) and serves WHEP (<WEBRTC_BASE>/whep/<stream>) for the ⚡ Low latency toggle.
 //             Reads are public for any open slot - 1.99fu: except on an Approved pad (padaccess.js), where a read needs
 //             the viewer's signed read token (?pt=, put on the URLs by the stage APIs) or an IP that showed one lately.
+// 1.99il: room audio paths ("room-" prod / "stg" + "r-" staging + 16 hex) are roomrtc.js's: Pepe publishes a bridged
+// room's audio there (WHIP, Opus) and the pad's room player listens over WHEP; the hook below hands them to roomrtc.auth.
 // Pepe's RTMP stream and RTMP slots are untouched: they stay on nginx-rtmp's HLS (no WHEP - MediaMTX can't
 // turn AAC into Opus), and bridge.js still reads /mnt/hls/broadcast.m3u8 freshness for ON AIR.
 //
@@ -73,6 +75,7 @@ let pepeSeen = { ready: false, at: 0 };          // from the sync: is his path u
 let clock = () => Date.now();
 const now = () => clock();
 const ms = () => require("./mainstage");
+const RR = () => require("./roomrtc");          // 1.99il: room audio over WebRTC
 const turnSecret = () => String(process.env.TURN_SECRET || "");   // read per call: never cached, never logged
 
 function enabled() {
@@ -184,6 +187,10 @@ async function whipAuth(b, opts = {}) {
     if (path === pepePath()) return pepeAuth(b, action, proto);
     return peer() && !opts.forwarded ? forward(b) : 403;          // the other site's Pepe path
   }
+  if (RR().PATH_RE.test(path)) {                                 // 1.99il: a room's audio (roomrtc.js)
+    if (!path.startsWith(RR().PREFIX)) return peer() && !opts.forwarded ? forward(b) : 403;   // the other site's
+    return RR().auth(b, action, proto);
+  }
   if (!PATH_RE.test(path)) return 403;
   const S = ms();
   if (!path.startsWith(S.STREAM_PREFIX)) {                       // the other site's path (prod <-> staging)
@@ -264,6 +271,8 @@ async function sync() {
   const ready = new Map();
   // 1.99fd: Pepe's path is only noted (⚡ on his stage) - PATH_RE below keeps it out of the slot beats / kicks
   pepeSeen = { ready: ((list && list.items) || []).some((p) => p && p.name === pepePath() && (p.ready || p.available)), at: now() };
+  // 1.99il: room audio paths - their readers keep a room published (roomrtc.js); never slots (PATH_RE below)
+  try { RR().noteSync((list && list.items) || []); } catch (e) { console.error("[webrtc] room audio sync:", e.message); }
   for (const p of (list && list.items) || []) {
     if (p && (p.ready || p.available) && typeof p.name === "string" && PATH_RE.test(p.name) && p.name.startsWith(S.STREAM_PREFIX)) ready.set(p.name, p);
   }

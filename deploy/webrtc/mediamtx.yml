@@ -94,7 +94,7 @@ pathDefaults:
   record: false
 
 # Only stage slot stream names exist: prod "stage-<16 hex>", staging "stg-<16 hex>" (mainstage.js), plus Pepe's
-# main stream "pepe" (1.99fd). Any other path is refused before auth is even asked.
+# main stream "pepe" (1.99fd) and the pads' room audio "room-" / "stgr-" + 16 hex (1.99il). Any other path is refused before auth is even asked.
 paths:
   # 1.99fd: Pepe's main stream (OBS WHIP, H.264 + Opus). pepe-relay.sh runs while it's up (SIGINT when it goes away,
   # restarted if it dies); its RTMP target is in /etc/mediamtx/pepe-relay.conf (root:mediamtx 0640, never printed).
@@ -103,4 +103,8 @@ paths:
     runOnAvailable: /usr/local/lib/patv-webrtc/pepe-relay.sh
     runOnAvailableRestart: yes
   "~^(stage|stg)-[0-9a-f]{16}$":
+    source: publisher
+  # 1.99il: a pad's Camfrog room audio (roomrtc.js) - Pepe publishes Opus over WHIP while the site says someone listens,
+  # viewers play it over WHEP. Prod "room-<16 hex>", staging "stgr-<16 hex>". The hook allows WebRTC reads only.
+  "~^(room|stgr)-[0-9a-f]{16}$":
     source: publisher

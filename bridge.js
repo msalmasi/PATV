@@ -480,6 +480,7 @@ function withPatv(u, C) {
 }
 
 const isLive = (R) => Date.now() - R.updated < STALE_MS;
+const rtcHint = (R) => { try { return require("./roomrtc").hint(R); } catch (e) { return false; } };
 // 1.99bi: the room's PATV title (owner-editable, rooms.js) when it has one, else what Pepe calls it
 const titleOf = (R) => { try { const r = require("./rooms").getCached(R.id); return (r && r.title) || R.name; } catch (e) { return R.name; } };
 
@@ -584,6 +585,7 @@ async function liveView(R, after, userId, login, username = null) {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,
             transcripts: R.transcripts !== false, audio: !!R.audio && isLive(R),
+            rtc: !!R.audio && isLive(R) && rtcHint(R),       // 1.99il: the player tries ⚡ WebRTC first (roomrtc.js)
             // 1.99ia: switched on but not streaming -> the player says why instead of just "audio relay off"
             audioWhy: R.audioOn && !R.audio && isLive(R) ? R.audioWhy || "" : "",
             relay: !!R.relay && isLive(R), micRelay: !!R.micRelay && isLive(R), cams: !!R.cams && isLive(R),
@@ -636,14 +638,41 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     await load();
     const R = rooms.get(String(body.room || ""));
-    if (!R || !R.audio) return res.json({ success: true, listeners: 0 });
+    if (!R || !R.audio) return res.json({ success: true, listeners: 0, rtc: null });
+    // 1.99il: a Pepe that can publish the room over WebRTC says so on every post (rtc_cap); the answer's `rtc` tells
+    // him to publish (url + bearer) or stop (null), rtc_beat: 1 = heartbeat every second while the room could be asked
+    if (body.rtc_cap === true) { try { require("./roomrtc").noteCap(R); } catch (e) { /* optional */ } }
+    if (typeof body.rtc_state === "string") R.rtcState = str(body.rtc_state, 80);
     const a = audioHub(R.id);
     const buf = typeof body.data === "string" && body.data ? Buffer.from(body.data, "base64") : null;
     if (buf && buf.length) {
       audioRemember(a, buf, Date.now());
       for (const l of a.listeners) { try { l.write(buf); } catch (e) { a.listeners.delete(l); } }
     }
-    res.json({ success: true, listeners: a.listeners.size });
+    let rtc = { rtc: null };
+    try { rtc = require("./roomrtc").forBot(R); } catch (e) { console.error("[bridge] room rtc:", e.message); }
+    res.json({ success: true, listeners: a.listeners.size, ...rtc });
+  });
+
+  // 1.99il: ⚡ low-latency room audio (roomrtc.js) - the page asks for a WHEP read ticket first; anything other than
+  // {ok: true} means "play the MP3 relay" (/p/:slug/audio). Same access rule as the MP3 relay (padaccess.full).
+  const rtcHit = require("./webrtc").limiter(30, 60 * 1000);
+  app.post("/api/rooms/:slug/audio/rtc", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    await load();
+    const R = bySlug(req.params.slug);
+    const signed = !!(req.user && req.user.userId);
+    if (R && !require("./padaccess").full(req.user, R.id)) return res.status(signed ? 403 : 401).json({ ok: false, fallback: "denied" });
+    if (!R && !signed) return res.status(401).json({ ok: false, fallback: "denied" });
+    if (!R || !R.audio || !isLive(R)) return res.status(404).json({ ok: false, fallback: "no-audio" });
+    let ip = "?";
+    try { ip = require("./middleware/authGuard").clientIp(req); } catch (e) { ip = (req.socket && req.socket.remoteAddress) || "?"; }
+    const wait = rtcHit(signed ? "u:" + req.user.userId : "ip:" + ip);
+    if (wait) { res.set("Retry-After", String(wait)); return res.status(429).json({ ok: false, fallback: "rate" }); }
+    try { res.json(require("./roomrtc").ticket(req.user, R)); } catch (e) {
+      console.error("[bridge] room rtc ticket:", e.message);
+      res.json({ ok: false, fallback: "error" });
+    }
   });
 
   app.get("/p/:slug/audio", addUser, async (req, res) => {

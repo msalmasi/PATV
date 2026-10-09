@@ -342,6 +342,14 @@ async function userInside(userId, roomId) {
   const u = await accountLite(String(userId));
   return !!u && inside(u, roomId);
 }
+/** 1.99il (roomrtc.js): may this account (null = signed out) hear the pad's live room - padaccess.full - right now?
+ *  Class from a 60 s cache, like userInside. */
+async function fullFor(userId, roomId) {
+  await init();
+  if (!userId) return full(null, roomId);
+  const u = await accountLite(String(userId));
+  return full(u || null, roomId);
+}
 /** 1.99gk: remember an IP that proved itself another way (a session cookie) for this stream's HLS parts. */
 function rememberIp(ip, stream) {
   if (!ip || !stream) return;
@@ -466,6 +474,6 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, load, register, LEVELS, DEFAULT, INFO, levelOf, isPublic, isApproved, anyApproved, inside, canSee, full, blockedFor, visibleRows,
-  state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
+  state, request, listFor, setLevel, decide, remove, onChange, readToken, checkReadToken, tokenizeSlots, readAllowed, userInside, fullFor, rememberIp, Refuse, NOTE_MAX, RETRY_MS,
   READ_IP_MS, isReady: () => loaded, _setClock: (fn) => { NOW = fn || (() => Date.now()); }, _reset: () => { ready = null; loaded = false; LEVEL = new Map(); MEMBERS = new Map(); ipOk.clear(); classCache.clear(); },
 };

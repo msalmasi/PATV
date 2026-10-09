@@ -234,6 +234,44 @@ OBS (profile "PepeWHIP": WHIP, Opus) --WHIP--> MediaMTX path "pepe" --WHEP--> �
 `python C:\PATV\camfrog-bot\obs_control.py via rtmp` on pepe-prod. Nothing on the VPS needs to change,
 because the `pepe` path just goes idle. `rollback.sh` refuses to run while Pepe is on WHIP.
 
+## Room audio over WebRTC (1.99il)
+
+A pad's Camfrog room audio can reach the website about half a second behind the room, instead of ~1.5 s for the
+MP3 relay. The relay stays as the automatic fallback.
+
+```
+Pepe (net_audio mix) --ffmpeg: Opus, WHIP--> MediaMTX path room-<16 hex> (prod) / stgr-<16 hex> (staging) --WHEP--> pad player
+                         ^ only while the site says someone listens (the `rtc` field of /api/bridge/audio)
+```
+
+- **Site.** `roomrtc.js`. The stage setting **"⚡ Room audio over WebRTC"** (`room_rtc`) is `off` (the default),
+  `prime` (Prime Time pads, `pad.primeTime`, plus comped admin pads, the house pad included) or `all`. It also needs
+  `webrtc_enabled`. **"⚡ Room audio WebRTC listeners, max"** (`room_rtc_cap`, default 25) caps WebRTC room
+  listeners site-wide, to leave TURN relay room for the stages. Over the cap, new listeners get the MP3 relay.
+- **Auth.** The hook allows a room path's publish only with Pepe's bearer for that path. It is an HMAC of
+  `SECRET_KEY`, so there is nothing new to store; rotate it with `ROOM_RTC_KEY_VERSION`. A read needs a WebRTC (WHEP)
+  read plus a 2-minute ticket from `POST /api/rooms/<slug>/audio/rtc`. The ticket is checked again against the
+  pad's access level (`padaccess.full`, the same rule as `/p/<slug>/audio`). There is no HLS of room audio.
+- **Lifecycle.** A ticket, a hook read or a MediaMTX reader keeps a room wanted for 30 s. Pepe heartbeats every
+  second for rooms that could be asked, starts ffmpeg when the answer carries `rtc`, and stops 5 s after it doesn't.
+- **Player.** `room-bridge.js` + `webrtc-client.js` `listen()`. It shows **⚡ live** or **standard**. Any failure falls
+  back to the MP3 relay: no ticket, no WebRTC, ICE/TURN never connecting, Pepe not publishing within 9 s, or a
+  connection lost later. A connection that never comes up sends that tab straight to MP3 for 10 minutes.
+
+**Install (once, then on any template change).** These are the same scripts. `mediamtx.yml` only gains a path
+entry, so **MediaMTX hot-reloads it and is not restarted**: Pepe's live `pepe` WHIP path, its relay and WHEP viewers
+stay connected. The script checks for that ("Pepe's live WHIP path "pepe" was not interrupted"). nginx is reloaded,
+never restarted. Keep the hook on prod:
+
+```bash
+AUTH_SITE=prod bash /home/PATV-staging/deploy/webrtc/install.sh   # needs the 1.99il site on prod (it forwards stgr- to staging)
+```
+
+**Turn it on.** In `/stage/admin`, set "⚡ Room audio over WebRTC" to `all` on staging to test, or `prime` on prod.
+**Turn it off.** Set it to `off`: every pad goes back to the MP3 relay, and Pepe stops publishing within about 35 s.
+On Pepe's side, the per-room setting `bridge_rtc` (default on) refuses it too. The bot needs ffmpeg 8+ with the WHIP
+muxer and libopus; the VMs run gyan.dev 9.0.2.
+
 ## Roll back
 
 ```bash

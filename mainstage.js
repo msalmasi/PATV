@@ -88,6 +88,11 @@ const DEFAULTS = {
   // 1.99et: ultra-low-latency WebRTC (webrtc.js: WHIP ingest, WHEP ⚡ playback, TURN) - OFF until the
   // MediaMTX / coturn install (deploy/webrtc/) is live; off = nothing WebRTC anywhere
   webrtc_enabled: false,
+  // 1.99il: the pads' room audio over WebRTC (roomrtc.js; needs webrtc_enabled): "off" | "prime" (Prime Time pads +
+  // comped admin pads) | "all". Anything that can't use it plays the MP3 relay, as before. room_rtc_cap = WebRTC room
+  // listeners site-wide (TURN relay capacity); over it, new listeners get the MP3 relay.
+  room_rtc: "off",
+  room_rtc_cap: 25,
   // 1.99fv: what Pepe's main stage plays. null = his own stream (HLS + the ⚡ WHEP toggle) - the default.
   // An admin may put a YouTube / Twitch embed there instead ({p,t,id}, the same parse/clean as a slot's
   // link - stageembed.js). Twitch being live no longer swaps anything by itself (Twitch is a relay of
@@ -296,6 +301,8 @@ function cleanConfig(c) {
     stagecap_snaps: onOff(c.stagecap_snaps, DEFAULTS.stagecap_snaps),
     stagecap_clips: onOff(c.stagecap_clips, DEFAULTS.stagecap_clips),
     webrtc_enabled: onOff(c.webrtc_enabled, DEFAULTS.webrtc_enabled),
+    room_rtc: ["off", "prime", "all"].includes(String(c.room_rtc)) ? String(c.room_rtc) : DEFAULTS.room_rtc,
+    room_rtc_cap: int(c.room_rtc_cap, 0, 500, DEFAULTS.room_rtc_cap),
     pepe_embed: (() => { try { return pepeEmbedFrom(c.pepe_embed); } catch (e) { return null; } })(),
   };
   if (o.max_minutes < o.min_minutes) o.max_minutes = o.min_minutes;
