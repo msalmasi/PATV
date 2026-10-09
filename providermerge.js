@@ -50,6 +50,15 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
   if (busy.has(fromId) || busy.has(toId)) return { ok: false, code: "busy" };
   busy.add(fromId); busy.add(toId);
   try {
+    // 1.99gi: both accounts' level locks (sorted) for the whole merge + the afterMerge settle
+    return await require("./user.controller").withLevelLocks([fromId, toId],
+      () => _mergeLocked({ provider, L, fromId, toId, linkId, linkName }));
+  } finally {
+    busy.delete(fromId); busy.delete(toId);
+  }
+}
+async function _mergeLocked({ provider, L, fromId, toId, linkId, linkName }) {
+  {
     // an archived account gets its PAT back first (restore() runs its own transaction)
     await stale.touch(fromId, `${provider} merge`);
     const holds = (await stale.holdsFor(fromId)).filter((h) => !NON_BLOCKING.has(h));
@@ -117,8 +126,6 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
     });
     if (r && r.ok) await afterMerge(toId, r.report);   // caches + held connect bonuses, after the commit
     return r;
-  } finally {
-    busy.delete(fromId); busy.delete(toId);
   }
 }
 

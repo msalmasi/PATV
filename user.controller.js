@@ -425,7 +425,24 @@ async function updateTwitchId(req, res) {
 //   2. Another non-CF account already claims this camfrog username → unlink it (no merge, it's a different user's account)
 //   3. No existing account → just set the link
 // Assumes ownership has been verified (via chat code).
+// 1.99gi: runs holding the level lock of this account AND of every account on that Camfrog name (sorted -
+// withLevelLocks), through the merge and its afterMerge settle, so a game XP award can't interleave with
+// the xp/level write. The set is re-read under the locks; if it changed meanwhile, the locks are re-taken.
 async function completeCamfrogLink(userId, camfrogUsername) {
+  const cfLower = camfrogUsername.toLowerCase().trim();
+  const idsOnName = async () => (await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId]))
+    .map((r) => String(r.userId)).sort();
+  for (let attempt = 0; ; attempt++) {
+    const ids = await idsOnName();
+    const RETRY = {};
+    const out = await withLevelLocks([userId, ...ids], async () => {
+      if (attempt < 5 && (await idsOnName()).join("\n") !== ids.join("\n")) return RETRY;
+      return _completeCamfrogLinkLocked(userId, camfrogUsername);
+    });
+    if (out !== RETRY) return out;
+  }
+}
+async function _completeCamfrogLinkLocked(userId, camfrogUsername) {
   const cfLower = camfrogUsername.toLowerCase().trim();
   // 1.99bm: an archived account on this name gets its balance back first, so the merge below carries it
   for (const r of await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?) AND userId != ?", [cfLower, userId])) {
@@ -630,17 +647,56 @@ function xpForNextLevel(currentLevel) {
 // writes back - two concurrent calls for one user (e.g. an achievement + a spin in the same second)
 // both saw the old values, BOTH paid the level-up reward and one overwrote the other's XP
 // (CFi00snkcl got "Level-up reward (Lv 4)" twice at 23:23:17 on 2026-10-05).
+// 1.99gi: the lock is RE-ENTRANT per async context (AsyncLocalStorage holds the ids this call chain already
+// holds), so a merge that holds both accounts' locks can run afterMerge -> updateLevel(survivor) without
+// queueing behind itself. Every account merge holds BOTH accounts' locks (withLevelLocks, sorted ids) for
+// its whole transaction + the afterMerge settle, so a game XP award for either account waits for the merge
+// instead of being overwritten by it (or landing on the old row mid-merge).
+const { AsyncLocalStorage } = require("async_hooks");
+const _levelHeld = new AsyncLocalStorage();
 const _levelLocks = new Map();
 function _withLevelLock(userId, fn) {
-  const prev = _levelLocks.get(userId) || Promise.resolve();
-  const run = prev.catch(() => {}).then(fn);
+  const key = String(userId);
+  const held = _levelHeld.getStore();
+  // re-entrant only while the holding call is still running: fire-and-forget work started under the lock
+  // (achievements.checkWeb...) inherits the context but runs after the release, so it must queue normally
+  const mine = held && held.get(key);
+  if (mine && mine.active) return Promise.resolve().then(fn);
+  const prev = _levelLocks.get(key) || Promise.resolve();
+  const token = { active: true };
+  const inner = new Map(held || []); inner.set(key, token);
+  const run = prev.catch(() => {}).then(() => _levelHeld.run(inner, fn)).finally(() => { token.active = false; });
   const tail = run.catch(() => {});
-  _levelLocks.set(userId, tail);
-  tail.then(() => { if (_levelLocks.get(userId) === tail) _levelLocks.delete(userId); });
+  _levelLocks.set(key, tail);
+  tail.then(() => { if (_levelLocks.get(key) === tail) _levelLocks.delete(key); });
   return run;
 }
-function updateLevel(userId, additionalXp) {
-  return _withLevelLock(userId, () => _updateLevelLocked(userId, additionalXp));
+/**
+ * Hold the level lock of every id in `ids` while fn runs (account merges: the survivor AND the source).
+ * Taken one at a time in sorted order, so two merges sharing an account can't deadlock whichever way
+ * round they name it.
+ */
+function withLevelLocks(ids, fn) {
+  const sorted = [...new Set((ids || []).filter(Boolean).map(String))].sort();
+  const step = (i) => (i >= sorted.length ? Promise.resolve().then(fn) : _withLevelLock(sorted[i], () => step(i + 1)));
+  return step(0);
+}
+/** The ids of the level locks this async call chain holds (tests / assertions). */
+function heldLevelLocks() { return [...(_levelHeld.getStore() || new Map())].filter(([, t]) => t.active).map(([k]) => k); }
+
+// An award for an account that a merge has since deleted follows ledger account_merges to the account it
+// was merged into (1.99gi; it used to log "User not found" and drop the XP). The redirect runs AFTER the
+// old id's lock is released, so it never holds one lock while waiting for another out of order.
+const _MERGED = Symbol("merged");
+async function updateLevel(userId, additionalXp) {
+  let id = userId;
+  for (let hop = 0; hop < 6; hop++) {
+    const r = await _withLevelLock(id, () => _updateLevelLocked(id, additionalXp));
+    if (!r || !r[_MERGED]) return r;
+    console.log(`[levelup] ${additionalXp} XP for merged account ${id} -> ${r[_MERGED]}`);
+    id = r[_MERGED];
+  }
+  return null;
 }
 
 // ── Admin XP / level adjustments (1.99cy: the Users & Accounts "XP" card, POST /api/admin/update-level) ──
@@ -780,7 +836,10 @@ async function _updateLevelLocked(userId, additionalXp) {
   await _levelRewardsReady;
   const userDetails = await getQuery("SELECT xp, level FROM users WHERE userId = ?", [userId]);
   if (userDetails.length === 0) {
-    console.error("User not found");
+    // merged away (ledger account_merges)? updateLevel re-runs the award on the survivor once this lock is released
+    const to = await ledger.resolveUserId(userId).catch(() => null);
+    if (to && to !== String(userId)) return { [_MERGED]: to };
+    console.error(`[levelup] user ${userId} not found - ${additionalXp} XP dropped`);
     return null;
   }
 
@@ -916,6 +975,8 @@ module.exports = {
   awardBadge,
   xpForNextLevel,
   updateLevel,
+  withLevelLocks,
+  heldLevelLocks,
   adminAdjustXp,
   checkXpAdjust,
   totalXpOf,

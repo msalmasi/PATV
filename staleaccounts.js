@@ -549,8 +549,13 @@ async function dupSplit(dupId) {
  * are added (user.controller mergeXpOf), and a level above both that the sum reaches pays its normal level-up
  * reward (afterMerge -> updateLevel).
  */
+// 1.99gi: holds BOTH accounts' level locks (user.controller withLevelLocks, sorted ids) for the transaction
+// and the afterMerge settle, so a game XP award for either can't interleave with the xp/level write.
 async function mergeDuplicate(dupId, primaryId) {
   if (!dupId || !primaryId || dupId === primaryId) return null;
+  return require("./user.controller").withLevelLocks([dupId, primaryId], () => _mergeDuplicateLocked(dupId, primaryId));
+}
+async function _mergeDuplicateLocked(dupId, primaryId) {
   const AM = require("./accountMerge");
   const out = await tx(async () => {
     const d = (await getQuery("SELECT * FROM users WHERE userId = ?", [dupId]))[0];
