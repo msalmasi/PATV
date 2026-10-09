@@ -95,6 +95,7 @@ function register(app, { addUser, isBotToken }) {
   const needStaff = (req, res, next) => (rooms.isStaff(req.user) ? next() : res.status(403).json({ ok: false, error: "Admins only." }));
   const actor = (req) => (req.user && req.user.username) || "?";
   require("./boosts").register(app, { addUser, isBotToken });     // 1.99ee: 🚀 pad boosts (web + Pepe's !boost)
+  require("./challengepay").register(app, { addUser, isBotToken });   // mic challenge prizes out of a pad's room-vault escrow
   const manageable = async (req, res) => {
     const R = await resolveRoom(req.params.slug);
     if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }

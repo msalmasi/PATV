@@ -91,7 +91,8 @@
   "game_brawl_enabled": "brawls",
   "game_arena_enabled": "the arena",
   "game_showdown_enabled": "showdown",
-  "game_pictionary_enabled": "pictionary"
+  "game_pictionary_enabled": "pictionary",
+  "challenge_enabled": "mic challenges"
  },
  "entries": [
   {
@@ -528,6 +529,40 @@
    "cost_key": "topic",
    "cost": 1000,
    "webchat": true
+  },
+  {
+   "id": "quote",
+   "title": "!quote last N | @user N | from <words> to <words>",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!quote"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!quote last 5",
+    "!quote @user 3",
+    "!quote from <words> to <words>",
+    "!quote last 5 | a title"
+   ],
+   "summary": "Turn a bit of the room's chat into a quote post on its pad (bash.org style). Free.",
+   "details": "Pepe turns the room's recent lines - chat and 🎙 mic transcripts - into a **quote post** on the room's pad and posts the link. `!quote last 5` takes the last 5 lines (commands left out), `!quote @user 3` that person's last 3 lines with the lines around them, `!quote from <words> to <words>` everything from the line with the first words to the line with the second. Add `| a title` at the end for a title. Up to 20 lines.\n\nOnly lines the website already shows can be quoted - never private messages, and people who are `!incognito` or typed `!bridge hide` show as \"someone\". Anyone quoted can tap **Remove me** on the website to show their lines as \"someone\". The room must be bridged to its pad (`!bridge on`). Free, a few per half hour. A pad's best quotes: publicaccess.tv/p/<pad>/quotes (with the Quote of the day).",
+   "examples": [
+    "!quote last 5",
+    "!quote @moxier 3",
+    "!quote from did you see to no way"
+   ],
+   "keywords": [
+    "quote",
+    "bash",
+    "save chat",
+    "screenshot chat",
+    "funny lines"
+   ],
+   "web": {
+    "label": "On the pad page's Live tab, tap ✂️ Clip chat and pick the lines",
+    "url": "/p"
+   }
   },
   {
    "id": "ask",
@@ -2059,6 +2094,79 @@
    "webchat": true
   },
   {
+   "id": "challenge",
+   "title": "!challenge — mic challenges",
+   "category": "games",
+   "role": "owner",
+   "commands": [
+    "!challenge"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!challenge <moan|sing|laugh|fart|beatbox|impression> [@user] [impression target]",
+    "!challenge open <category> [2m] [impression target]",
+    "!challenge <category> @a @b [stake]",
+    "!challenge top <category> [week] · !challenge vault",
+    "!challenge cancel [@user|ACn] · !challenge close"
+   ],
+   "summary": "A room's owner or an admin starts a mic performance; Pepe's AI judges score it out of 10, and good scores win PAT from that room's vault.",
+   "details": "Only the room's **owner** or a Pepe **admin** can start one. `!challenge sing @bob` counts Bob in: he grabs the mic within 60 s and the judges (an audio AI) score the performance out of 10 with a one-liner. `!challenge open sing 2m` opens a round anyone in the room can enter once with `!sing`. `!challenge sing @a @b 10k` is a head-to-head: both must `!accept` within 60 s, both stakes are held, both perform in turn and the higher score takes the pot minus 5% (half to Fort Knox, half to the room's vault). Ties, no-shows, cancels and judge failures refund the stakes. **Prizes** for solo and open-round goes come from **this room's vault escrow** on publicaccess.tv (the room half of boosts, slot fees and pad gifts): score × 500 PAT from 5/10 (laugh and fart 300), up to 5,000, and a room pays at most 5% of its vault (max 25,000) a day. An empty vault means you play for glory: the score still counts on `!challenge top`. No prize when you start your own challenge or perform in your own room. Recordings, music and TTS are disqualified. Clips are judged in memory and never stored; incognito users can't perform. `!challenge vault` shows this room's prize budget. Admins: `!challenge on|off`, `!challenge status`, `!challenge set <key> <value>`, `!challenge set pay <category> <per point> [min score] [max]`; owners can switch it on or off for their own room.",
+   "examples": [
+    "!challenge sing @bob",
+    "!challenge open moan 3m",
+    "!challenge beatbox @ann @bob 10k",
+    "!challenge impression @bob Trump",
+    "!challenge top sing week"
+   ],
+   "keywords": [
+    "mic challenge",
+    "singing contest",
+    "talent show",
+    "judge my singing",
+    "moan",
+    "karaoke",
+    "sing off"
+   ],
+   "gates": [
+    "challenge_enabled"
+   ]
+  },
+  {
+   "id": "challenge-perform",
+   "title": "!sing, !moan, !laugh, !fart, !beatbox, !impression — take your turn",
+   "category": "games",
+   "role": "everyone",
+   "commands": [
+    "!sing",
+    "!moan",
+    "!laugh",
+    "!fart",
+    "!beatbox",
+    "!impression"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!sing",
+    "!impression <who>"
+   ],
+   "summary": "Enter the room's open mic-challenge round and get scored by Pepe's judges.",
+   "details": "When the room's owner or an admin opens a round (`!challenge open sing`), type the category's command to take your turn: Pepe counts you in, you grab the mic, and the judges score you out of 10. One go per round; good scores win PAT from the room's vault while its daily prize budget lasts. For an owner or admin the same commands start a solo for themselves (`!sing`) or for someone else (`!sing @bob`). `!accept` / `!decline` answer a head-to-head you've been put in.",
+   "examples": [
+    "!sing",
+    "!moan",
+    "!impression Trump"
+   ],
+   "keywords": [
+    "sing",
+    "open mic",
+    "perform",
+    "talent show"
+   ],
+   "gates": [
+    "challenge_enabled"
+   ]
+  },
+  {
    "id": "reserve",
    "title": "!reserve",
    "category": "wallet",
@@ -3481,6 +3589,39 @@
    "gates": [
     "clip_enabled"
    ]
+  },
+  {
+   "id": "clipmic",
+   "title": "!clipmic [@user | N]",
+   "category": "stage",
+   "role": "everyone",
+   "commands": [
+    "!clipmic"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!clipmic",
+    "!clipmic @user",
+    "!clipmic 3"
+   ],
+   "summary": "Post the audio of a recent mic-up to the room's pad, with its transcript - the room's !clip price.",
+   "details": "Pepe keeps the last few **mic-ups** of the room he's listening to (the last 30 per room, up to **15 minutes**). `!clipmic` posts the **last** one to the room's pad as an audio post, with its transcript as the caption; `!clipmic @user` posts that person's last mic-up; `!clipmic 3` merges the last 3 (up to 5). It follows the room's `!clip` switch (admins can still use it while it's off) and costs the room's `!clip` price (admins free) - refunded if posting fails.\n\nNever anyone who is `!incognito` or typed `!bridge hide`: Pepe doesn't keep their audio at all. Anyone heard in a posted clip can tap **Remove me** on it on the website. Admins: `!clipmic status`.",
+   "examples": [
+    "!clipmic",
+    "!clipmic @moxier",
+    "!clipmic 3"
+   ],
+   "keywords": [
+    "clip mic",
+    "audio clip",
+    "record what they said",
+    "mic clip",
+    "voice clip"
+   ],
+   "web": {
+    "label": "On the pad page's Live tab, tap 🔊 Clip on a 🎙 line: a free preview you can trim, you pay only to post it",
+    "url": "/p"
+   }
   },
   {
    "id": "snap-list-snap-delete",
@@ -5596,6 +5737,25 @@
    "keywords": []
   },
   {
+   "id": "stt",
+   "title": "!stt [status|reset|fallback]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!stt"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!stt",
+    "!stt reset",
+    "!stt fallback <url|off>"
+   ],
+   "summary": "Pepe's mic transcription server (pepe-stt) failover: status and controls.",
+   "details": "`!stt` shows which transcription server is active, the breaker state, the last failover and how many mic-ups each server handled. `reset` goes back to the primary, `fallback <url|off>` sets or clears the backup server.",
+   "examples": [],
+   "keywords": []
+  },
+  {
    "id": "sniff",
    "title": "!sniff on|off (also !pktsniff)",
    "category": "admin",
@@ -6140,5 +6300,5 @@
   }
  ],
  "undocumented": [],
- "hash": "9cddc1e4432555c5"
+ "hash": "303312295dd05804"
 }

@@ -27,7 +27,9 @@
 // Stage SLOT fees (an owner may price their pad's slots; free by default) use the same route when
 // the slot settles (mainstage.end) - the old 20% owner royalty accrual is not applied to them.
 //
-//   room_flow_ledger  one row per room-flow charge: ref (unique - idempotency), kind boost|slot_fee|pad_cosmetic (1.99ew, padcosmetics.js),
+//   room_flow_ledger  one row per room-flow charge: ref (unique - idempotency), kind boost|slot_fee|pad_cosmetic (1.99ew, padcosmetics.js)
+//                     |challenge_fee (a staked mic-challenge fee, challengepay.js) - and kind "challenge": a PAYOUT out of the
+//                     escrow (a mic challenge prize; amount = room_vault = -paid, fortknox 0, payer_* = the winner),
 //                     room_id, payer id / name, amount, fortknox (sent to the Reserve), room_vault
 //                     (held in escrow), via web|chat, created, detail, migrated (E-1 / E-3 fill it),
 //                     fk_to (E-1: 'fortknox' = the half was booked straight into Fort Knox; NULL = the Reserve)
@@ -35,7 +37,8 @@
 //       one-time move (Pepe "!econ fortknox migrate", dry run first) reads it from POST /api/g/fortknox-migration,
 //       moves it Reserve -> Fort Knox, then POST /api/g/fortknox-migration/mark stamps migrated_fk on exactly
 //       those rows (batch-keyed in fk_migrations, amount-checked, a replay is a no-op)
-//     room vault escrow to move at E-3: SUM(room_vault) WHERE migrated_rv IS NULL  (per room_id)
+//     room vault escrow to move at E-3: SUM(room_vault) WHERE migrated_rv IS NULL  (per room_id) - NET of the challenge
+//       payouts (their room_vault is negative); E-3 stamps migrated_rv on those rows too
 //
 // Flags (boost_config, admin): pay (on: PAT moves; off: boosting is refused, nothing charged) - the
 // scoring switch is frontroom's cfg.boost.on.
@@ -167,8 +170,10 @@ async function routeInTx({ ref, kind, room_id, payer_id, payer_name, amount, own
 
 /** E-0 telemetry (econ.js): the charge as a "room" flow - best effort, after the commit. */
 // ledger kind -> its routing flow (the reserve_claims flow / econ_charges flow) and the claim's label
-const KIND_FLOW = Object.freeze({ boost: "boost", slot_fee: "stage_slot", pad_cosmetic: "pad_cosmetics" });   // 1.99ew: pad cosmetics
-const KIND_LABEL = Object.freeze({ boost: "boost", slot_fee: "stage slot fee", pad_cosmetic: "pad cosmetic" });
+// challenge_fee: a staked mic-challenge head-to-head's fee (challengepay.js). Kind "challenge" (a prize PAID OUT of the
+// escrow, room_vault negative) never goes through routeInTx, so it has no flow.
+const KIND_FLOW = Object.freeze({ boost: "boost", slot_fee: "stage_slot", pad_cosmetic: "pad_cosmetics", challenge_fee: "challenge_fee" });   // 1.99ew: pad cosmetics
+const KIND_LABEL = Object.freeze({ boost: "boost", slot_fee: "stage slot fee", pad_cosmetic: "pad cosmetic", challenge_fee: "mic challenge fee" });
 const ROOM_FLOWS = Object.freeze(Object.values(KIND_FLOW));
 function telemetry(row, login, via) {
   try {
