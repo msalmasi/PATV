@@ -207,7 +207,7 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   assert.match(hero, /<div class="topic" id="rmTopic" data-desc="Plants and chat"><\/div>/, "a tagline that repeats the description is not shown");
   assert.equal((hero.match(/class="desc"/g) || []).length, 1, "one description line");
   const live = own.slice(own.indexOf('id="padPanel-live"'), own.indexOf('id="padPanel-about"'));
-  assert.match(live.slice(0, 900), /<p class="lstat" id="rmStatus"><span id="rmStDot" aria-hidden="true">🟢<\/span>\s*<span><b id="rmCount">2<\/b> in <b>Plant Based Chatting<\/b><\/span>[\s\S]*🐸 Pepe is here<\/span><\/p>/, "status line at the top of Live");
+  assert.match(live.slice(0, 900), /<p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true">🟢<\/span>\s*<span><b id="rmCount">2<\/b> in <b>Plant Based Chatting<\/b><\/span>[\s\S]*🐸 Pepe is here<\/span><\/p>/, "status line at the top of Live");
   const about = own.slice(own.indexOf('id="padPanel-about"'));
   assert.match(about, /<dt>Camfrog room<\/dt><dd>Plant Based Chatting<\/dd>/);
   assert.match(about, /📈 Analytics[\s\S]*See full analytics ›/, "1.99el: About's Analytics card");
@@ -219,7 +219,7 @@ test("1.99ef header zones: identity (name, p/slug + quiet type tags, one descrip
   assert.match(pub, /data-copy-link=/, "everyone gets ⋯ (Copy link)");
   // site pads: no status line
   const site = await renderRoom({ room: { name: "Lounge", slug: "lounge", count: 0, live: false, topic: "", platform: "site", siteOnly: true, bridged: false } });
-  assert.doesNotMatch(site, /id="rmStatus"/);
+  assert.doesNotMatch(site, /id="rmLiveStat"/);
   assert.match(site, /🌐 Site Pad/);
 });
 

@@ -415,7 +415,7 @@
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <%# 1.99ef: the room's live status (was header chips): who's in the Camfrog room, Pepe is here %>
-  <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmStatus"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
+  <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
     <% if (bridged_) { %><span><b id="rmCount"><%= room.count %></b> in <b><%= cfName_ %></b></span><% } else { %><span>📡 Camfrog room <b><%= cfName_ %></b></span><% } %>
     <% if (pepeHere_ === true) { %><span class="ls-sep" aria-hidden="true">·</span><span title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %></p><% } %>
   <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <b>Live from the Camfrog room — read-only (v1).</b> What the Camfrog room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div><% } %>
@@ -553,8 +553,8 @@
       </section>
     </aside>
   </div>
-  <link rel="stylesheet" href="/public/css/room-bridge.css?v=4">
-  <script src="/public/js/room-bridge.js?v=5"></script>
+  <link rel="stylesheet" href="/public/css/room-bridge.css?v=5">
+  <script src="/public/js/room-bridge.js?v=6"></script>
   <link rel="stylesheet" href="/public/css/quotes.css?v=1">
   <script src="/public/js/chat-clip.js?v=1"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=5">
@@ -652,8 +652,8 @@
       var r = d.room;
       var tpEl = document.getElementById('rmTopic'), tpTxt = (r.topic || '').trim(), norm = function (x) { return String(x || '').replace(/\s+/g, ' ').trim().toLowerCase(); };
       tpEl.textContent = norm(tpTxt) === norm(tpEl.getAttribute('data-desc')) ? '' : tpTxt;   // 1.99ef: no tagline that repeats the description
-      document.getElementById('rmCount').textContent = r.count;
-      document.getElementById('rmStDot').textContent = r.live ? '🟢' : '⚪';
+      var cntEl = document.getElementById('rmCount'); if (cntEl) cntEl.textContent = r.count;
+      var dotEl = document.getElementById('rmStDot'); if (dotEl) dotEl.textContent = r.live ? '🟢' : '⚪';
       var live = document.getElementById('rmLive');
       live.classList.toggle('off', !r.live); live.classList.toggle('chat', !!r.live);
       document.getElementById('rmLiveTxt').textContent = r.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE';
@@ -730,7 +730,7 @@
       return 'Pepe can\'t read this room\'s participant list right now — showing people seen arriving or active in the last ' + ttl + '.';
     }
 
-    var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug);
+    var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true });   // greyed while the relay is off
     var chatClip = window.PATVChatClip ? PATVChatClip.init({ feed: feedEl, host: document.getElementById('rmClip'), slug: slug, linked: <%= linked ? 'true' : 'false' %> }) : null;   // 1.99fp
     var relayHost = document.getElementById('rmRelay'), roomRelay = relayHost ? PATVRoom.relay(relayHost, slug) : null;
     // ── cam snapshot popover (click the 📷 of someone on cam) ──
@@ -954,14 +954,20 @@
       if (roomPtt) roomPtt.update(d);
     }
 
+    // 1.99hj: every widget updates on its own - one that throws (a missing element, a bad field) is logged
+    // and skipped, and can no longer freeze the whole pad (chat, mic, people) until a reload
+    var applyErr = {};
+    function safe(name, fn) {
+      try { fn(); } catch (e) { if (!applyErr[name]) { applyErr[name] = 1; console.error('[pad] ' + name + ' update failed:', e); } }
+    }
     function apply(d, first) {
-      if (roomMod) roomMod.update(d);          // before the people list: it adds the manage buttons
-      renderRoom(d);
-      renderCompose(d);
-      roomAudio.update(d);
+      safe('mod', function () { if (roomMod) roomMod.update(d); });          // before the people list: it adds the manage buttons
+      safe('room', function () { renderRoom(d); });
+      safe('compose', function () { renderCompose(d); });
+      safe('audio', function () { roomAudio.update(d); });
       if (d.cursor < cursor) { feedEl.textContent = ''; cursor = 0; first = true; }   // the site restarted
-      addFeed(d.feed, first);
-      if (chatClip) chatClip.update(d);
+      safe('feed', function () { addFeed(d.feed, first); });
+      safe('clip', function () { if (chatClip) chatClip.update(d); });
       cursor = Math.max(cursor, d.cursor);
     }
 
@@ -974,12 +980,11 @@
         .catch(function () { fails++; setStatus(fails > 2 ? 'reconnecting…' : '', fails > 2); })
         .then(function () { schedule(); });
     }
-    function setStatus(t, err) { var s = document.getElementById('rmStatus'); s.textContent = t; s.classList.toggle('err', !!err); }
+    function setStatus(t, err) { var s = document.getElementById('rmStatus'); if (!s) return; s.textContent = t; s.classList.toggle('err', !!err); }
     function schedule() { if (!timer && !document.hidden) timer = setTimeout(poll, fails ? Math.min(15000, 1500 * Math.pow(2, fails)) : 1500); }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) { clearTimeout(timer); timer = null; poll(); } });
 
-    apply(data, true);
-    schedule();
+    try { apply(data, true); } finally { schedule(); }   // the poll always starts
   })();
   </script>
 <% } %>

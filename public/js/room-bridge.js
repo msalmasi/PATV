@@ -57,7 +57,10 @@
   };
 
   // ── room audio mini player ──
-  function audio(host, slug) {
+  // opts.showOff (the pad page): while the room's audio relay is off the player stays visible, greyed out,
+  // saying why - instead of disappearing (1.99hj). The homepage keeps hiding it.
+  function audio(host, slug, opts) {
+    var showOff = !!(opts && opts.showOff);
     var box = el('div', 'rb-audio hide');
     box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Room audio');
     var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', 'Listen live');
@@ -182,14 +185,24 @@
       return { ios: IOS, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
         ahead: ahead(), paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
     };
+    var painted = false, offWhy = null;
+    function offReason(d) {
+      return d && d.room && d.room.live === false ? 'room offline' : 'audio relay off';
+    }
     return {
       update: function (d) {
         var on = !!(d && d.room && d.room.audio);
-        if (on === available) return;
-        available = on;
-        box.classList.toggle('hide', !on);
-        if (!on) stop();
+        var why = on ? null : offReason(d);
+        if (painted && on === available && why === offWhy) return;
+        var was = available;
+        painted = true; available = on; offWhy = why;
+        box.classList.toggle('hide', !on && !showOff);
+        box.classList.toggle('off', !on);
+        [play, mute, vol].forEach(function (x) { x.disabled = !on; });
+        play.title = on ? '' : (why === 'room offline' ? 'The Camfrog room isn\'t live right now' : 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)');
+        if (!on) { if (was) stop(); setState('🔇 ' + why, ''); }
         else if (store('patvRoomAudio') === '1') setState('▶ to resume listening', '');
+        else setState('Room audio', '');
       },
     };
   }

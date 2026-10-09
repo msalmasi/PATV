@@ -10,6 +10,7 @@
 .rb-audio { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; background: #0d0d0d; border: 1px solid #1f2a20;
             border-radius: 10px; padding: 6px 8px; font-family: Ubuntu, sans-serif; color: #ccc; }
 .rb-audio.on { border-color: #2f6d3a; }
+.rb-audio.off { opacity: .6; }
 .rb-play { width: 34px; height: 30px; padding: 0; background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
 .rb-state { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .06em; color: #8a8a8a; min-width: 0; flex: 1 1 90px; }
 .rb-state.live { color: #ff8a80; }
