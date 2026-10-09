@@ -360,14 +360,15 @@ function startCheckpoints() {
     return sqlitecfg.startCheckpoints(db, { label: 'myapp.db' });
 }
 
-// Close the database connection when the Node.js process terminates
-process.on('SIGINT', () => {
+// Close the database connection when the Node.js process terminates. 1.99gd: via shutdown.js, so the site first
+// answers its open long-polls (Pepe's /api/pepe/*/pull) instead of cutting them (nginx 502s on every restart).
+require('./shutdown').onExit((done) => {
     db.close((err) => {
       if (err) {
         console.error('Error closing the database', err.message);
       }
       console.log('Database connection closed.');
-      process.exit(0);
+      done();
     });
   });
 

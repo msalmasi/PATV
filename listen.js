@@ -25,6 +25,8 @@ function listen(app, port, label, cb) {
     main.once("listening", () => s6.listen({ port: main.address().port, host: "::1", ipv6Only: true }));
     servers.push(s6);
   }
+  // 1.99gd: stop accepting on SIGINT/SIGTERM while the open requests finish (see shutdown.js)
+  for (const s of servers) require("./shutdown").addServer(s);
   return servers;
 }
 

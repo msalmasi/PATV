@@ -29,6 +29,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
 const HS = require("./public/js/helpsearch");
 
@@ -208,6 +209,7 @@ const JOBS = new Map();
 const PULLERS = [];
 let LAST_PULL = 0;
 function wake() { while (PULLERS.length) { try { PULLERS.shift()(); } catch (e) { /* gone */ } } }
+SHUTDOWN.onDrain(wake);   // 1.99gd: on a restart, answer the waiting long-polls (no work) instead of cutting them -> no nginx 502
 function expire(t = NOW()) {
   for (const [id, j] of JOBS) if (t - j.created > JOB_TTL) { JOBS.delete(id); j.reject(Object.assign(new Error("expired"), { code: "expired" })); }
 }
@@ -228,7 +230,7 @@ async function pull(waitMs = 0) {
   LAST_PULL = NOW();
   expire();
   let list = claimable();
-  if (!list.length && waitMs > 0) {
+  if (!list.length && waitMs > 0 && !SHUTDOWN.isDraining()) {   // 1.99gd: a stopping site doesn't hold a long-poll
     await new Promise((res) => {
       const t = setTimeout(() => { const i = PULLERS.indexOf(done); if (i >= 0) PULLERS.splice(i, 1); res(); }, Math.min(PULL_WAIT_MAX, waitMs));
       function done() { clearTimeout(t); res(); }
