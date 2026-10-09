@@ -273,12 +273,18 @@ async function recent(t = now()) {
   return rows;
 }
 function clearCache() { mapCache = { at: 0, rows: null }; }
-/** room id -> active (decayed) boost PAT */
-async function activeMap(t = now(), halfMin = 60) {
+/** room id -> active (decayed) boost PAT. opts.credits: + the launchpad's boost credit for new pads (launchpad.js:
+ *  virtual boost PAT, nothing paid - the front-page ranking only, never the 🚀 badges or the boost card). */
+async function activeMap(t = now(), halfMin = 60, opts = {}) {
   const by = new Map();
   for (const r of await recent(t)) { if (!by.has(r.room_id)) by.set(r.room_id, []); by.get(r.room_id).push(r); }
   const out = new Map();
   for (const [id, rows] of by) out.set(id, activePat(rows, t, halfMin));
+  if (opts && opts.credits) {
+    try {
+      for (const [id, pat] of require("./launchpad").boostCredits()) out.set(id, (out.get(id) || 0) + Math.max(0, Number(pat) || 0));
+    } catch (e) { /* no launchpad: no credit */ }
+  }
   return out;
 }
 /** A pad's boost line for its Stage card: PAT and boosters in the last hour, active PAT now. */

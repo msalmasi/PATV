@@ -52,11 +52,11 @@ function cleanDays(d) {
   const out = {};
   for (const [k, v] of Object.entries(d && typeof d === "object" ? d : {}).slice(0, 40)) {
     if (!DAY_RE.test(k) || !v || typeof v !== "object") continue;
-    out[k] = { in: int(v.in), dep: int(v.dep), mig: int(v.mig), out: int(v.out), ovf: int(v.ovf) };
+    out[k] = { in: int(v.in), dep: int(v.dep), mig: int(v.mig), out: int(v.out), ovf: int(v.ovf), lp: int(v.lp) };   // lp: launchpad grants + owner match
   }
   return out;
 }
-const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge"];
+const KINDS = ["flow", "site", "deposit", "migration", "refund", "challenge", "launch", "match"];   // launch / match: the launchpad
 function cleanHistory(h) {
   return (Array.isArray(h) ? h : []).slice(0, 12).map((e) => ({
     ts: int(e && e.ts), kind: KINDS.includes(e && e.kind) ? e.kind : "flow",
@@ -128,7 +128,7 @@ async function card(roomId, user, opts = {}) {
   return {
     live: meta.on === true, synced: meta.synced || null, cap: meta.cap || 50000000, deposit_min: meta.deposit_min || 1000,
     balance: st ? int(st.balance) : 0,
-    inflow7: sum("in"), deposits7: sum("dep"), migrated7: sum("mig"), paid7: sum("out"), overflow7: sum("ovf"),
+    inflow7: sum("in"), deposits7: sum("dep"), migrated7: sum("mig"), paid7: sum("out"), overflow7: sum("ovf"), launch7: sum("lp"),
     days: keys.map((k) => ({ day: k, in: int(days[k].in), dep: int(days[k].dep), mig: int(days[k].mig), out: int(days[k].out) })),
     history: history.slice(0, 8),
     rate: set ? Number(set.rate) : RATE.default, rate_default: !set, rate_changed: changedAt,

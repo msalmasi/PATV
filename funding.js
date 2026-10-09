@@ -53,6 +53,8 @@ const state = {
   incentives: null,
   // economy v2 E-3: {on: true, cap} while Pepe's room vaults are live, else null (room halves stay in the site escrow)
   room_vaults: null,
+  // the pad launchpad: Pepe's {on, live, room_vaults, cfg, budget, spendable, matched, paid} (launchpad.cleanState), else null
+  launchpad: null,
 };
 const INC = "incentives:";
 
@@ -371,6 +373,9 @@ function sync(body) {
   state.fortknox = typeof body.fortknox === "number" && isFinite(body.fortknox) ? Math.max(0, Math.floor(body.fortknox)) : null;
   // E-2: every sync sets it - a sync without it (an older Pepe, the treasury off) puts the grants back on the Reserve
   state.incentives = cleanIncentives(body.incentives);
+  // the pad launchpad (launchpad.js / Pepe's pepe_launchpad.py): every sync sets it - null = off (no welcomes, no
+  // launch progress, no boost credit)
+  try { state.launchpad = require("./launchpad").cleanState(body.launchpad); } catch (e) { state.launchpad = null; }
   // E-3: every sync sets it - a sync without it (an older Pepe, room vaults off) keeps the room halves in the escrow
   const rv = body.room_vaults;
   state.room_vaults = rv && typeof rv === "object" && rv.on === true
@@ -398,5 +403,5 @@ async function settle(ids) {
 }
 
 module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive, roomVaultsLive,
-                   treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable,
+                   treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
                    houseBacked, wheelDraw, wheelReseed };

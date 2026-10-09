@@ -168,6 +168,9 @@ const RULES = {
   "econ_watch.streamer_id": M(), "econ_watch.viewer_id": M({ key: ["day", "stream"], merge: { secs: "SUM", muted_secs: "SUM", beats: "SUM" } }),
   "econ_watch_keys.viewer_id": M({ key: ["day", "stream", "k"] }),
   "room_vault_settings.changed_by": M(), "room_vault_rate_log.by": M(),      // economy v2 E-3 (roomvaults.js): who set a pad's payout rate
+  // the pad launchpad (launchpad.js): one newcomer welcome per person (folded), visits per pad per day; admins by name
+  "launchpad_welcomes.user_id": M({ key: [] }), "launchpad_visits.user_id": M({ key: ["room_id", "day"] }),
+  "launchpad_pads.enrolled_by": { deny: NAME }, "launchpad_grads.decided_by": { deny: NAME },
   // direct messages
   "conversations.created_by": M(),
   "conversation_members.user_id": { special: "DM conversations and memberships are merged first (mergeConversations)" },

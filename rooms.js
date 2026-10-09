@@ -477,7 +477,8 @@ async function evaluateAuto(summary, { force = false, actor = "auto", now = nowM
   evaluating = (async () => {
     let bmap = null;
     if (CFG.boost && CFG.boost.on) {
-      try { bmap = await require("./boosts").activeMap(now, CFG.boost.half_min); } catch (e) { console.error("[rooms] boosts:", e.message); bmap = null; }
+      // + the launchpad's boost credit for new pads (no PAT behind it; launchpad.js)
+      try { bmap = await require("./boosts").activeMap(now, CFG.boost.half_min, { credits: true }); } catch (e) { console.error("[rooms] boosts:", e.message); bmap = null; }
     }
     // 1.99fu: an Approved (members-only) pad is never the automatic pick - the homepage's featured room is for everyone
     try { await require("./padaccess").init(); } catch (e) { /* no levels loaded: nothing is Approved */ }
@@ -570,7 +571,9 @@ async function boostPats(now = nowMs()) {
 async function rankLive(summary, { now = nowMs() } = {}) {
   const cfg = await frontCfg();
   const boosts = await boostPats(now);
-  const ranked = FR.rank(withAct(summary, cfg, now, cfg.boost && cfg.boost.on ? boosts : null), cfg, now);
+  let scored = boosts;                 // the ranking also counts the launchpad's boost credit; the 🚀 badges don't
+  try { scored = await require("./boosts").activeMap(now, (cfg.boost && cfg.boost.half_min) || 60, { credits: true }); } catch (e) { scored = boosts; }
+  const ranked = FR.rank(withAct(summary, cfg, now, cfg.boost && cfg.boost.on ? scored : null), cfg, now);
   return { ranked, boosts };
 }
 

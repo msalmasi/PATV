@@ -65,6 +65,21 @@
   <% } %>
 </section>
 
+<section class="adm-card" id="launchpad" aria-labelledby="lpT">
+  <h2 id="lpT">🚀 Pad launchpad <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">New pads build momentum (regulars: real, linked, aged accounts active on 2+ days, never the owner or alts) toward launch tiers. A tier that is reached waits here for review; once approved, Pepe pays <b>his</b> tier amount from the incentive budget's <code>launchpad</code> group into the pad's room vault (needs <code>!econ roomvaults on</code>). Newcomer welcomes, owner deposit matching and front-page boost credit come from the same group. Every number is a Pepe setting: <code>!econ launchpad</code> · <code>!econ launchpad set &lt;key&gt; &lt;value&gt;</code> · <code>!econ launchpad tier &lt;n&gt; &lt;regulars&gt; &lt;days&gt; &lt;grant&gt;</code> · <code>!econ launchpad on|off</code>.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="lpAdmin" aria-live="polite"><p class="adm-help">Loading…</p></div>
+    <form id="lpEnroll" class="adm-form" autocomplete="off">
+      <label for="lpRoom">Pad (slug or room id)</label> <input id="lpRoom" name="room" required>
+      <select name="action" aria-label="Action"><option value="enroll">enroll (launch starts now)</option><option value="exclude">exclude</option><option value="include">include again</option></select>
+      <input name="note" placeholder="note" aria-label="Note">
+      <button type="submit">Apply</button>
+    </form>
+    <script src="/public/js/launchpad-admin.js?v=1" defer></script>
+  <% } %>
+</section>
+
 <section class="adm-card" id="burn" aria-labelledby="burnT">
   <h2 id="burnT">🔥 Burn reserve <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The last step of the weekly surplus waterfall: once the incentive buffer and the Reserve's 25M target are full, the leftover moves into Pepe's burn reserve and is destroyed (total supply goes down). Nothing else feeds it and no other pool can be burned. In <b>accrual</b> mode Pepe burns it at his next burn tick; in <b>batch</b> mode it waits for a burn here (or <code>!burn</code> in chat). Mode and caps are on Pepe's admin panel. Public log: <a href="/economy#burned">/economy#burned</a>.</p>

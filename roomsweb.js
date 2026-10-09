@@ -96,7 +96,8 @@ function register(app, { addUser, isBotToken }) {
   const actor = (req) => (req.user && req.user.username) || "?";
   require("./boosts").register(app, { addUser, isBotToken });     // 1.99ee: 🚀 pad boosts (web + Pepe's !boost)
   require("./challengepay").register(app, { addUser, isBotToken });   // mic challenge prizes out of a pad's room-vault escrow
-  require("./roomvaults").register(app, { addUser, isBotToken });     // economy v2 E-3: room vaults (Pepe's sync, the pad card, the owner's rate)
+  require("./roomvaults").register(app, { addUser, isBotToken });
+  require("./launchpad").register(app, { addUser, isBotToken });     // the pad launchpad: momentum, launch grants review, welcomes, boost credit     // economy v2 E-3: room vaults (Pepe's sync, the pad card, the owner's rate)
   const manageable = async (req, res) => {
     const R = await resolveRoom(req.params.slug);
     if (!R) { res.status(404).json({ ok: false, error: "No such pad." }); return null; }
