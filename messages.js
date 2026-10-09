@@ -139,6 +139,10 @@ function init() {
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS dm_reports_once ON dm_reports (message_id, reporter_id)");
       await runQuery("CREATE INDEX IF NOT EXISTS dm_reports_open ON dm_reports (resolved_at, created)");
       await runQuery("CREATE INDEX IF NOT EXISTS dm_reports_reporter ON dm_reports (reporter_id, created)");
+      // 1.99ik: messages to Pepe waiting for his answer (one row per message; claimed per conversation)
+      await runQuery(`CREATE TABLE IF NOT EXISTS pepe_dm_jobs (message_id INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL, user_id TEXT NOT NULL,
+        created INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'pending', claimed_at INTEGER, tries INTEGER NOT NULL DEFAULT 0)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS pepe_dm_jobs_state ON pepe_dm_jobs (state, created)");
       await dmmedia.init();
     })().catch((e) => { console.error("[dm] init:", e.message); ready = null; throw e; });
   }
@@ -263,16 +267,18 @@ async function hasWritten(conversationId, userId) {
  * Order: account states, blocks, then consent (they wrote to you) before the recipient's setting and the
  * new-account rule. Adding someone to a group goes through this too (with their 1:1 conversation, if any).
  */
-async function refusal(sender, recipient, conv = null) {
+async function refusal(sender, recipient, conv = null, opts = {}) {
   if (!sender) return new Refuse(401, "Sign in first.");
   if (!recipient || recipient.archived_at) return new Refuse(404, "No such person.", "gone");
   if (recipient.userId === sender.userId) return new Refuse(400, "You can't message yourself.", "self");
-  if (recipient.userId === PEPE_ID) return new Refuse(400, "Pepe doesn't read DMs here - talk to him in a Camfrog room or mention him on the feed.", "bot");
+  // 1.99ik: Pepe takes 1:1 messages (he answers in character - pepeClaim / pepeReply); never in groups
+  if (recipient.userId === PEPE_ID && opts.group) return new Refuse(400, "Pepe can't be added to groups - message him on his own.", "bot");
   if (sender.archived_at) return new Refuse(403, "This account is archived.", "archived");
   if (await feedBanned(sender.userId)) return new Refuse(403, "You can't send messages right now.", "banned");
   const b = await blocked(sender.userId, recipient.userId);
   if (b.some((x) => x.blocker_id === sender.userId)) return new Refuse(403, `You've blocked ${display(recipient)}. Unblock them to send a message.`, "you_blocked");
   if (b.length) return new Refuse(403, `You can't message ${display(recipient)}.`, "blocked");
+  if (recipient.userId === PEPE_ID) return null;          // no "who can message me" / new-account rule for the bot (his price + limits cover it)
   if (conv && await hasWritten(conv.id, recipient.userId)) return null;            // they wrote to you: replies are always fine
   const P = await prefs(recipient.userId);
   if (P.who === "nobody") return new Refuse(403, `${display(recipient)} isn't taking new messages.`, "closed");
@@ -528,6 +534,11 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
   for (const r of recipients) {
     const theyBlock = !!(await getQuery("SELECT 1 FROM dm_blocks WHERE blocker_id = ? AND blocked_id = ?", [r.user_id, me.userId]))[0];
     const ra = group ? await account(r.user_id) : other;
+    if (ra && ra.userId === PEPE_ID) {
+      // 1.99ik: a message to Pepe waits for his answer (pepeClaim) - never a Camfrog alert to himself
+      if (!theyBlock) await runQuery("INSERT OR IGNORE INTO pepe_dm_jobs (message_id, conversation_id, user_id, created) VALUES (?, ?, ?, ?)", [mid, conv.id, me.userId, t]);
+      continue;
+    }
     if (ra && ra.camfrogUsername && !r.muted && !theyBlock) await queueAlert(r.user_id, conv.id, t, mid);
     emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...msg, blocked: true } : msg, conv: theirHead });
   }
@@ -562,7 +573,7 @@ async function vet(me, names, skipIds = new Set()) {
     if (o.userId === me.userId) continue;                         // you're in it anyway
     if (skipIds.has(o.userId)) { refused.push({ username: o.username, display: display(o), error: `${display(o)} is already in this group.`, code: "member" }); continue; }
     if (ok.some((x) => x.userId === o.userId)) continue;
-    const no = await refusal(me, o, await dmBetween(me.userId, o.userId));
+    const no = await refusal(me, o, await dmBetween(me.userId, o.userId), { group: true });
     if (no) refused.push({ username: o.username, display: display(o), error: no.message, code: no.code || null });
     else ok.push(o);
   }
@@ -802,7 +813,7 @@ async function header(user, conversationId) {
   const b = other ? await blocked(user.userId, other.userId) : [];
   const with_ = other ? { username: other.username, display: display(other) } : { username: null, display: "[gone]" };
   await dress({ people: [with_] });
-  return { id: conv.id, kind: conv.kind, with: with_, muted: !!m.muted,
+  return { id: conv.id, kind: conv.kind, with: with_, muted: !!m.muted, pepe: other && other.userId === PEPE_ID ? pepeNote() : undefined,
            youBlocked: b.some((x) => x.blocker_id === user.userId), canSend: !no, refusal: no ? no.message : null, refusalCode: no ? no.code || null : null };
 }
 
@@ -816,7 +827,7 @@ async function check(user, username) {
   const mine = conv ? await membership(conv.id, me.userId) : null;
   const no = await refusal(me, other, conv);
   return { user: { username: other.username, display: display(other) }, conversation: conv && mine ? conv.id : null, canSend: !no,
-           refusal: no ? no.message : null, refusalCode: no ? no.code || null : null };
+           refusal: no ? no.message : null, refusalCode: no ? no.code || null : null, pepe: other.userId === PEPE_ID ? pepeNote() : undefined };
 }
 
 /** Mark read up to `upTo` (default: everything). Also cancels a pending Camfrog alert for it. -> unread total */
@@ -1127,6 +1138,89 @@ async function fromCamfrog({ from, to, text } = {}) {
   return { to: { username: target.username, display: display(target) }, from: { username: sender.username }, conversation: r.conversation.id, created: r.created };
 }
 
+// ── 1.99ik: talking to Pepe here. A message to Pepe's account queues a pepe_dm_jobs row; Pepe claims due ones per
+// conversation (POST /api/messages/pepe/claim, bot token - his poll every few seconds), answers in character through
+// his LLM path (same persona as a Camfrog PM, priced like !ask - he charges and refunds on his side) and posts the
+// answer back (POST /api/messages/pepe/reply), which lands in the conversation as a message from Pepe. The claim
+// carries the member's PATV identity (username, display name, linked Camfrog login) and the conversation's last
+// PEPE_HISTORY text messages, so his context is the conversation itself (the site keeps it; Pepe's own memory follows
+// his Camfrog-PM rules for linked logins). Unanswered messages older than PEPE_JOB_MAX_MS are dropped (he was away);
+// a claim he never answers is offered again after PEPE_RECLAIM_MS, at most twice. Pepe's answers raise no Camfrog
+// alert. Pepe reports his price with each claim; the conversation header shows it. ──
+const PEPE_HISTORY = 12, PEPE_JOB_MAX_MS = 15 * 60e3, PEPE_RECLAIM_MS = 120e3, PEPE_ONLINE_MS = 90e3;
+let PEPE_STATE = { price: null, at: 0 };
+/** What the conversation header says about Pepe (null for anyone else). */
+function pepeNote() {
+  const online = NOW() - PEPE_STATE.at < PEPE_ONLINE_MS;
+  const price = PEPE_STATE.price;
+  const cost = price > 0 ? ` Each answer costs ${Number(price).toLocaleString("en-US")} PAT, like !ask in a room.` : price === 0 ? " Answers are free right now." : "";
+  return { online, price, note: "🐸 Pepe answers in character, like a PM in Camfrog." + cost + (online ? "" : " He's away right now - he'll answer when he's back (within 15 minutes, or not at all).") };
+}
+async function pepeClaim({ limit = 10, price = null } = {}) {
+  await init();
+  const t = NOW();
+  if (price != null && Number.isFinite(Number(price))) PEPE_STATE.price = Math.max(0, Math.floor(Number(price)));
+  PEPE_STATE.at = t;
+  await runQuery("UPDATE pepe_dm_jobs SET state = 'expired' WHERE state IN ('pending', 'claimed') AND created < ?", [t - PEPE_JOB_MAX_MS]);
+  const convs = await getQuery(`SELECT conversation_id, user_id, MIN(created) AS first FROM pepe_dm_jobs
+                                WHERE state = 'pending' OR (state = 'claimed' AND claimed_at < ? AND tries < 2)
+                                GROUP BY conversation_id ORDER BY first LIMIT ?`, [t - PEPE_RECLAIM_MS, Math.max(1, Math.min(25, Number(limit) || 10))]);
+  const out = [];
+  for (const c of convs) {
+    const jobs = await getQuery(`SELECT message_id FROM pepe_dm_jobs WHERE conversation_id = ? AND (state = 'pending' OR (state = 'claimed' AND claimed_at < ? AND tries < 2))
+                                 ORDER BY message_id`, [c.conversation_id, t - PEPE_RECLAIM_MS]);
+    if (!jobs.length) continue;
+    const ids = jobs.map((j) => j.message_id);
+    await runQuery(`UPDATE pepe_dm_jobs SET state = 'claimed', claimed_at = ?, tries = tries + 1 WHERE message_id IN (${ids.map(() => "?").join(",")})`, [t, ...ids]);
+    const u = await account(c.user_id);
+    if (!u || u.archived_at || !(await membership(c.conversation_id, PEPE_ID))) { await pepeDone(c.conversation_id, Math.max(...ids), "dropped"); continue; }
+    const upto = Math.max(...ids);
+    const msgs = await getQuery(`SELECT id, sender_id, body, created_at FROM messages WHERE conversation_id = ? AND id <= ? AND kind = 'text' AND deleted_at IS NULL
+                                 ORDER BY id DESC LIMIT ?`, [c.conversation_id, upto, PEPE_HISTORY]);
+    const pics = new Map();
+    for (const m of msgs) if (!m.body) pics.set(m.id, await dmmedia.countFor(m.id));
+    const line = (m) => m.body ? m.body.slice(0, LIMITS.max_len) : pics.get(m.id) ? `[sent ${pics.get(m.id) === 1 ? "a photo" : pics.get(m.id) + " photos"}]` : "";
+    const fresh = msgs.filter((m) => ids.includes(m.id) && m.sender_id !== PEPE_ID).reverse();
+    if (!fresh.length) { await pepeDone(c.conversation_id, upto, "dropped"); continue; }       // they deleted what they asked
+    out.push({
+      conversation: c.conversation_id, upto,
+      user: { username: u.username, display: display(u), camfrog: u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : null,
+              level: Number(u.level) || 0, staff: isStaff(u), admin: isAdmin(u) },
+      messages: fresh.map((m) => ({ id: m.id, text: line(m), at: m.created_at })),
+      history: msgs.reverse().map((m) => ({ from: m.sender_id === PEPE_ID ? "pepe" : "them", text: line(m), at: m.created_at })),
+    });
+  }
+  return out;
+}
+async function pepeDone(conversationId, upto, state = "done") {
+  await runQuery("UPDATE pepe_dm_jobs SET state = ? WHERE conversation_id = ? AND message_id <= ? AND state IN ('pending', 'claimed')", [state, conversationId, upto]);
+}
+/** Pepe's answer (or "" = no answer, just close the jobs). -> {message} | {skipped} */
+async function pepeReply({ conversation, upto, text } = {}) {
+  await init();
+  const conv = await conversationRow(conversation);
+  if (!conv || conv.kind !== "dm" || !(await membership(conv.id, PEPE_ID))) throw new Refuse(404, "No such conversation.");
+  const other = (await otherMembers(conv.id, PEPE_ID))[0];
+  const u = other ? await account(other.user_id) : null;
+  const up = Math.max(0, parseInt(upto, 10) || 0);
+  const body = cleanBody(text).slice(0, LIMITS.max_len);
+  if (!u || u.archived_at || !body || (await blocked(PEPE_ID, u.userId)).length) {
+    await pepeDone(conv.id, up || conv.last_msg_id, body ? "dropped" : "done");
+    return { skipped: true };
+  }
+  const t = NOW();
+  await runQuery("UPDATE conversation_members SET left_at = NULL, hidden = 0 WHERE conversation_id = ? AND user_id = ?", [conv.id, u.userId]);
+  const mid = await writeMessage(conv.id, PEPE_ID, body, "text", t);
+  await runQuery("UPDATE conversation_members SET last_read_id = ? WHERE conversation_id = ? AND user_id = ?", [mid, conv.id, PEPE_ID]);
+  await pepeDone(conv.id, up || mid);
+  const msg = await shape({ id: mid, conversation_id: conv.id, sender_id: PEPE_ID, body, kind: "text", created_at: t });
+  const pepeAcc = await account(PEPE_ID);
+  const head = headFor(conv, pepeAcc);
+  await dress({ msgs: [msg], people: [head.with] });
+  emit(u.userId, { t: "msg", c: conv.id, m: msg, conv: head });
+  return { message: { id: mid } };
+}
+
 // ── nav count middleware (the 💬 next to the 🔔) ──
 function navCount(req, res, next) {
   if (req.method !== "GET" || /^\/(api|public|og|uploads|events)\b|^\/healthz|^\/messages\/media\//.test(req.path)) return next();
@@ -1178,12 +1272,14 @@ function register(app, { isBotToken, addUser }) {
       // 1.99cu: the notices (inbox.js) are the pinned "🔔 Notices" item of this page; their first page comes with the boot data
       const nt = await inbox.feed(me.userId, notices ? { page: req.query.page, kind: String(req.query.kind || "") || null } : {});
       const picsWhy = dmmedia.pictureRefusal(me);
+      const pepeAcc = await account(PEPE_ID);            // 1.99ik: the 🐸 "Message Pepe" button
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
       res.render("messages", {
         title: notices ? (nt.unread ? `Notices (${nt.unread})` : "Notices") : (unread ? `Messages (${unread})` : "Messages"),
         user: me.username, dmUnread: unread, inboxUnread: nt.unread,
         boot: { me: { username: me.username, display: display(me), avatar: meLook.avatar || null, nameCss: meLook.nameCss || "", camfrog: !!me.camfrogUsername, isNew: isNewAccount(me), pictures: !picsWhy, picturesWhy: picsWhy },
                 conversations: convs, open, to, view: notices ? "notices" : null, prefs: await prefs(me.userId), blocks: await blockList(me.userId),
+                pepe: pepeAcc && !pepeAcc.archived_at ? { username: pepeAcc.username } : null,
                 maxLen: LIMITS.max_len, reasons: reasons().menu, levelOk: LIMITS.level_ok,
                 maxPics: dmmedia.MAX_PER_MESSAGE, groupMax: LIMITS.group_max, groupMin: LIMITS.group_min_others + 1, titleMax: LIMITS.title_max,
                 share: shareId ? { id: shareId, url: `https://${siteHost()}${await require("./feedstore").postLink(shareId)}` } : null,     // 1.99dv: its canonical address
@@ -1297,6 +1393,17 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
     try { res.json({ ok: true, alerts: await claimAlerts({ limit: Number(b.limit) || 50 }) }); } catch (e) { fail(res, e); }
   });
+  // 1.99ik: Pepe's own DMs - due conversations ({password, limit, price}) and his answers ({password, conversation, upto, text})
+  app.post("/api/messages/pepe/claim", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try { res.json({ ok: true, conversations: await pepeClaim({ limit: b.limit, price: b.price }) }); } catch (e) { fail(res, e); }
+  });
+  app.post("/api/messages/pepe/reply", async (req, res) => {
+    const b = req.body || {};
+    if (!isBotToken(b.password)) return res.status(403).json({ ok: false, error: "unauthorized" });
+    try { res.json({ ok: true, ...(await pepeReply({ conversation: String(b.conversation || ""), upto: b.upto, text: b.text })) }); } catch (e) { fail(res, e); }
+  });
   // 1.99ij: Pepe delivers a Camfrog `!message` (bot token) -> {ok, to, conversation} | {ok: false, error, code}
   app.post("/api/messages/from-camfrog", async (req, res) => {
     const b = req.body || {};
@@ -1306,6 +1413,6 @@ function register(app, { isBotToken, addUser }) {
 }
 
 module.exports = { init, register, sse, navCount, send, list, history, header, check, markRead, deleteMessage, clear, setBlock, blockList,
-                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
+                   prefs, setPrefs, refusal, report, fromCamfrog, linkedAccount, pepeClaim, pepeReply, pepeNote, PEPE_ID, reportQueue, reportDetail, reportMedia, reportAction, claimAlerts, unreadTotal, render, isNewAccount,
                    createGroup, addMembers, leaveGroup, removeMember, renameGroup, setMute,
-                   emit, Refuse, LIMITS, WHO, ALERT_GAP_MS, ALERT_GRACE_MS, _setClock, _gaps: gaps, _streams: streams };
+                   emit, Refuse, LIMITS, WHO, ALERT_GAP_MS, ALERT_GRACE_MS, _setClock, _gaps: gaps, _streams: streams, _pepeState: (v) => { if (v) PEPE_STATE = v; return PEPE_STATE; } };

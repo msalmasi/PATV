@@ -3,13 +3,14 @@
     with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
     1.99cz: groups (the ✎ "New conversation" dialog, the members dialog), pictures (the 🖼 tray, the lightbox) and post cards. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=4">
+<link rel="stylesheet" href="/public/css/messages.css?v=5">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="Conversations">
     <div class="dm-sh">
       <h1>Messages</h1>
       <button type="button" class="dm-ib" id="dmNewBtn" title="New conversation or group" aria-label="New conversation or group"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/></svg></button>
+      <% if (boot.pepe) { %><a class="dm-ib dm-pepe-btn" id="dmPepeBtn" href="/messages?to=<%= encodeURIComponent(boot.pepe.username) %>" title="Message Pepe - he answers in character" aria-label="Message Pepe">🐸</a><% } %>
       <button type="button" class="dm-ib" id="dmGearBtn" title="Settings" aria-label="Message and notice settings"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
     </div>
     <div class="dm-share" id="dmShare" role="status" hidden>
@@ -66,6 +67,7 @@
       <div class="dm-msgs" id="dmMsgs" role="log" aria-live="polite" aria-relevant="additions"></div>
     </div>
     <form class="dm-compose" id="dmCompose" hidden autocomplete="off">
+      <div class="dm-pepe" id="dmPepeNote" role="note" hidden></div>
       <div class="dm-refuse" id="dmRefuse" role="status" hidden></div>
       <ul class="dm-tray" id="dmTray" aria-label="Pictures to send" hidden></ul>
       <div class="dm-cbox">
@@ -184,6 +186,6 @@
 </main>
 <script>document.body.classList.add('dm-page');   /* messages.css: the page is one viewport-high app screen, no footer */</script>
 <script type="application/json" id="dmBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-<script src="/public/js/messages.js?v=7" defer></script>
+<script src="/public/js/messages.js?v=8" defer></script>
 </body>
 </html>

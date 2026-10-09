@@ -175,6 +175,7 @@ const RULES = {
   "dm_alerts.user_id": M({ key: ["conversation_id"], merge: { pending: "SUM", first_at: "MIN", last_msg_id: "MAX", last_alert_at: "MAX" } }),
   "dm_reports.sender_id": M(), "dm_reports.reporter_id": M({ key: ["message_id"] }), "dm_reports.resolved_by": M(),
   "dm_media.owner_id": M(),
+  "pepe_dm_jobs.user_id": M(),               // 1.99ik: messages to Pepe waiting for his answer
 };
 
 /** The rule for one column: its RULES entry, else null (an unclassified candidate). */

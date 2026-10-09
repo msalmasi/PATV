@@ -140,9 +140,9 @@ test("send starts one conversation per pair; only its members can read, mark, de
   assert.equal(await dm.unreadTotal(U.alice.userId), 0);
 });
 
-test("refusals: yourself, Pepe, unknown people, empty and over-long messages", async () => {
+test("refusals: yourself, unknown people, empty and over-long messages", async () => {
   assert.equal((await say(U.alice, U.alice)).status, 400);
-  assert.equal((await say(U.alice, { username: "Pepe" })).status, 400);
+  // 1.99ik: Pepe takes 1:1 messages now (he answers in character) - test/messages-pepe.test.js
   assert.equal((await say(U.alice, { username: "nobody-here" })).status, 404);
   assert.equal((await say(U.alice, U.carol, "   ")).status, 400);
   assert.equal((await say(U.alice, U.carol, "x".repeat(2001))).status, 400);

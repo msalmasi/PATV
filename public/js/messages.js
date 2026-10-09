@@ -212,6 +212,9 @@
     root.querySelectorAll('[data-dm="clear"], [data-dm="hide"]').forEach(function (b) { b.hidden = !S.open; });
     var can = h ? h.canSend : (S.draft && S.draft.canSend);
     var why = h ? h.refusal : (S.draft && S.draft.refusal);
+    var pn = h ? h.pepe : (S.draft && S.draft.pepe);          // 1.99ik: talking to Pepe - his price / away note
+    $('dmPepeNote').hidden = !(pn && pn.note);
+    $('dmPepeNote').textContent = pn && pn.note ? pn.note : '';
     $('dmRefuse').hidden = !!can;
     $('dmRefuse').textContent = can ? '' : (why || "You can't send messages here.");
     form.classList.toggle('off', !can);
@@ -360,7 +363,7 @@
     return api('/api/messages/check?to=' + encodeURIComponent(username)).then(function (d) {
       if (d.conversation) return openConv(d.conversation, true);
       S.open = null; S.head = null; S.msgs = []; S.more = false;
-      S.draft = { username: d.user.username, display: d.user.display, canSend: d.canSend, refusal: d.refusal };
+      S.draft = { username: d.user.username, display: d.user.display, canSend: d.canSend, refusal: d.refusal, pepe: d.pepe || null };
       showChat(true); setView('chat'); renderList(); renderHead(); renderMsgs();
       if (push) history.pushState({ to: d.user.username }, '', '/messages?to=' + encodeURIComponent(d.user.username));
       if (d.canSend) { useShare(); text.focus(); }
