@@ -9,7 +9,11 @@ const LOGICAL = canvas.width;
 const HIDPI = 2;
 canvas.width = LOGICAL * HIDPI;
 canvas.height = LOGICAL * HIDPI;
-ctx.scale(HIDPI, HIDPI);
+// The 2x transform is applied at the top of every drawWheel(), not once here: when Chromium/CEF
+// loses the 2D context (GPU/renderer crash, out of memory) and restores it, ALL context state is
+// reset - a one-off ctx.scale() is gone and the wheel came back drawn at 500px in the 1000px
+// backing store: a quarter-size disc in the top-left of the ring.
+canvas.addEventListener('contextrestored', () => drawWheel());
 
 // Load the audio file at the start of the script
 const tickerSound = new Audio('/public/wheel.ogg');
@@ -69,6 +73,7 @@ let isSpinning = false;
 
 // Draws the Wheel
 function drawWheel() {
+  ctx.setTransform(HIDPI, 0, 0, HIDPI, 0, 0);
   ctx.clearRect(0, 0, LOGICAL, LOGICAL);
 
   const totalSize = segments.reduce((acc, seg) => acc + seg.size, 0);
