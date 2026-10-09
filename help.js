@@ -391,7 +391,10 @@ function register(app, { addUser, isBotToken, clientIp = (req) => req.ip || "?" 
       const c = await config();
       if (!c.ai) { LAST_PULL = NOW(); return res.json({ ok: true, enabled: false, hash, jobs: [], idle: 60 }); }
       const wait = Math.min(PULL_WAIT_MAX, Math.max(0, Number((req.body || {}).wait) * 1000 || 0));
-      res.json({ ok: true, enabled: true, hash, jobs: await pull(wait) });
+      const jobs = await pull(wait);
+      // 1.99ge: stopping (a restart) -> tell Pepe to pull again in a few s, not at once into a refused port (nginx
+      // would then park the upstream for 10 s and 502 everyone)
+      res.json({ ok: true, enabled: true, hash, jobs, ...(SHUTDOWN.isDraining() && !jobs.length ? { retry: true, idle: 5 } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/pepe/help/answer", small, bot, async (req, res) => {

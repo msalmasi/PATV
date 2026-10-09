@@ -1,4 +1,4 @@
-// Offline tests for 1.99gd: a graceful stop (shutdown.js). pm2 restarts the site with SIGINT; the open long-polls
+// Offline tests for 1.99gd/ge: a graceful stop (shutdown.js). pm2 restarts the site with SIGINT; the open long-polls
 // (Pepe's /api/pepe/help/pull + /api/pepe/imagesafety/pull) must be ANSWERED (no work), not cut - a cut one is an
 // nginx 502 ("upstream prematurely closed connection") that staging Pepe's router read as "site down".
 //   * stop(): a waiting help / imagesafety long-poll returns [] at once; a new one doesn't wait; servers stop
@@ -34,7 +34,17 @@ test("stop(): open long-polls answer at once, new ones don't wait, servers close
   const closed = [];
   SHUTDOWN.addServer({ close() { closed.push("s"); } });
 
+  // the real /api/pepe/help/pull route (AI answers on), so the drained answer's retry hint is checked too
+  await HELP.setConfig({ ai: true });
+  const app = require("express")();
+  HELP.register(app, { addUser: (req, res, next) => next(), isBotToken: (t) => t === "bot", clientIp: () => "10.0.0.1" });
+  const srv = app.listen(0);
+  const base = "http://127.0.0.1:" + srv.address().port;
+  const pullRoute = () => fetch(base + "/api/pepe/help/pull", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: "bot", wait: 8 }) }).then(async (r) => ({ status: r.status, json: await r.json() }));
+
   const t0 = Date.now();
+  const routePoll = pullRoute();
   const helpPoll = HELP.pull(8000);
   const isfPoll = ISF.pull(8000);
   await new Promise((r) => setTimeout(r, 50));
@@ -45,6 +55,15 @@ test("stop(): open long-polls answer at once, new ones don't wait, servers close
   assert.ok(Date.now() - t0 < 1000, "drained long-polls answer at once, not after the 8 s wait");
   assert.equal(SHUTDOWN.isDraining(), true);
   assert.deepEqual(closed, ["s"], "the servers stop accepting");
+  const rp = await routePoll;
+  assert.equal(rp.status, 200);
+  assert.deepEqual(rp.json.jobs, []);
+  assert.equal(rp.json.retry, true, "the drained route answer says: pull again in a few s");
+  assert.equal(rp.json.idle, 5);
+  const late = await pullRoute();
+  assert.equal(late.status, 200);
+  assert.equal(late.json.retry, true, "a pull while stopping gets the retry hint at once");
+  srv.close();
 
   const t1 = Date.now();
   assert.deepEqual(await HELP.pull(8000), [], "a long-poll that arrives while stopping doesn't wait");

@@ -659,7 +659,9 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
       const on = (c.enabled || c.shadow) && SURFACES.some((s) => c.surfaces[s]);
       if (!on) { LAST_PULL = NOW(); return res.json({ ok: true, enabled: false, jobs: [], idle: 60 }); }
       const wait = Math.min(PULL_WAIT_MAX, Math.max(0, Number((req.body || {}).wait) * 1000 || 0));
-      res.json({ ok: true, enabled: true, jobs: await pull(wait), categories: CATEGORIES });
+      const jobs = await pull(wait);
+      // 1.99ge: stopping (a restart) -> Pepe pulls again in a few s, not at once into a refused port
+      res.json({ ok: true, enabled: true, jobs, categories: CATEGORIES, ...(SHUTDOWN.isDraining() && !jobs.length ? { retry: true, idle: 5 } : {}) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/pepe/imagesafety/verdict", json, bot, async (req, res) => {
