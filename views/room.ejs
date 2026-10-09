@@ -558,8 +558,9 @@
   <script src="/public/js/room-bridge.js?v=9"></script>
   <link rel="stylesheet" href="/public/css/quotes.css?v=1">
   <script src="/public/js/chat-clip.js?v=1"></script>
-  <link rel="stylesheet" href="/public/css/room-mod.css?v=5">
-  <script src="/public/js/room-mod.js?v=5"></script>
+  <link rel="stylesheet" href="/public/css/room-mod.css?v=6">
+  <script src="/public/js/room-mod.js?v=6"></script>
+  <script src="/public/js/pad-tip.js?v=1"></script>
   <script id="rmInit" type="application/json"><%- JSON.stringify(initial).replace(/</g, '\\u003c') %></script>
   <script>
   (function () {
@@ -569,7 +570,7 @@
     var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
     var cursor = 0, timer = null, fails = 0, lastPeople = '', lastMic = '';
     // 1.99fu: signed = the light ⋯ menu (View profile / Open cam / 💸 Tip) for every signed-in viewer, not just mods
-    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %>, collapsible: true, signed: <%= signedIn ? 'true' : 'false' %> }) : null;
+    var roomMod = window.PATVRoom && PATVRoom.mod ? PATVRoom.mod(document.getElementById('rmMod'), slug, { dms: <%- JSON.stringify(dms_) %>, collapsible: true, signed: <%= signedIn ? 'true' : 'false' %>, me: <%- JSON.stringify(signedIn && user ? user : null).replace(/</g, '\\u003c') %> }) : null;
     var signedIn = <%= signedIn ? 'true' : 'false' %>;
     // the ⋯ button next to someone (the people list and, 1.99fu, the mic list): mods get their actions too
     function moreBtn(u, canCam, onMic) {

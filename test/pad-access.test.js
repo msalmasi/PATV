@@ -527,7 +527,8 @@ test("tip menu (room-mod.js): a light ⋯ for every signed-in viewer; mods keep 
   const stranger = { login: "strangercf", display: "Stranger", tip: { off: "not linked to PATV yet" } };
   assert.deepEqual(ids(MI(null, alice, { signed: true, cam: true })), ["profile", "cam", "tip"]);
   const tip = MI(null, alice, { signed: true }).find((x) => x.id === "tip");
-  assert.equal(tip.kind, "link"); assert.equal(tip.href, "/u/alice/tip"); assert.equal(tip.newTab, true);
+  // 1.99il: the Tip opens the modal on the pad (pad-tip.js); the tip page stays as the fallback href
+  assert.equal(tip.kind, "tip"); assert.equal(tip.to, "alice"); assert.equal(tip.href, "/u/alice/tip");
   const off = MI(null, stranger, { signed: true }).find((x) => x.id === "tip");
   assert.equal(off.kind, "off"); assert.equal(off.disabled, true); assert.equal(off.note, "not linked to PATV yet");
   assert.deepEqual(MI(null, alice, { signed: false, cam: true }), [], "signed out: no menu");
@@ -538,9 +539,10 @@ test("tip menu (room-mod.js): a light ⋯ for every signed-in viewer; mods keep 
   const caps = { actions: ["kick", "djban"], on: true, login: "modcf" };
   assert.deepEqual(ids(MI(caps, alice, { signed: true, inRoom: true })), ["profile", "tip", "kick", "djban", "more"], "mods: tip + their actions");
   assert.deepEqual(ids(MI(caps, { ...alice, login: "modcf" }, { signed: true })), ["profile", "tip"], "a mod's own row: no moderation");
-  // the page wires it: the ⋯ shows for signed-in viewers, on both lists, and the tip opens in a new tab
+  // the page wires it: the ⋯ shows for signed-in viewers, on both lists, and the tip opens the modal
   const src = fs.readFileSync(path.join(repo, "public", "js", "room-mod.js"), "utf8");
-  assert.match(src, /if \(it\.newTab\) \{ b\.target = '_blank'; b\.rel = 'noopener'; \}/);
+  assert.match(src, /if \(P\.tipModal\) P\.tipModal\(\{ to: it\.to, display: u\.display \|\| u\.login, slug: slug, me: opts\.me \|\| null \}\);/);
+  assert.match(src, /else window\.open\(it\.href, '_blank', 'noopener'\);/, "no modal script: the tip page in a new tab");
   assert.match(src, /if \(!caps\) \{ closeDlg\(\); if \(pop && pop\._mod\) closeMenu\(false\);/, "the light menu survives the 1.5 s polls");
 });
 

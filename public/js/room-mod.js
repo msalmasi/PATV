@@ -60,10 +60,10 @@
   //   - nothing for anonymous / Pepe / no login; 1.99fu: without caps (Pepe gave this viewer no mod powers here) a
   //     signed-in viewer (x.signed) still gets the light menu below, a signed-out one nothing
   //   - View profile (when the Camfrog name is linked to a PATV account), Open cam (when the page can)
-  //   - 1.99fu: 💸 Tip (signed in): u.tip comes from the server (bridge.js tipFor) - {to, href}: a link to the site's own
-  //     tip page for their linked PATV account (presets, confirm, routing, idempotency all there), opened in a new tab
-  //     so the room keeps running; {off}: greyed out with the reason ("not linked to PATV yet"); no u.tip: no item
-  //     (yourself, Pepe, bots, anonymous)
+  //   - 1.99fu: 💸 Tip (signed in): u.tip comes from the server (bridge.js tipFor) - {to, href}: 1.99il: opens the tip
+  //     modal on the pad (pad-tip.js: amount, note, confirm - you never leave the stream; Pepe announces it in the room
+  //     when the recipient is there), with href = the site's own tip page as the fallback; {off}: greyed out with the
+  //     reason ("not linked to PATV yet"); no u.tip: no item (yourself, Pepe, bots, anonymous)
   //   - moderation: exactly the actions Pepe listed in caps.actions that this menu knows, in group order;
   //     never on yourself (the server refuses that too); "unban" is left out for people IN the room;
   //     disabled while web moderation is off in the room; destructive ones flagged (they get a confirm step)
@@ -77,7 +77,7 @@
     if (u.patv && u.patv.username) out.push({ kind: 'link', id: 'profile', group: 'who', label: '👤 View profile', href: '/u/' + encodeURIComponent(u.patv.username) });
     if (x.cam) out.push({ kind: 'cam', id: 'cam', group: 'who', label: '📷 Open cam' });
     if ((x.signed || mod) && u.tip && !u.bot) {
-      if (u.tip.to && u.tip.href) out.push({ kind: 'link', id: 'tip', group: 'who', label: '💸 Tip', href: u.tip.href, newTab: true, title: 'Tip ' + u.tip.to + ' PAT' });
+      if (u.tip.to && u.tip.href) out.push({ kind: 'tip', id: 'tip', group: 'who', label: '💸 Tip', to: u.tip.to, href: u.tip.href, title: 'Tip ' + u.tip.to + ' PAT' });
       else if (u.tip.off) out.push({ kind: 'off', id: 'tip', group: 'who', label: '💸 Tip', disabled: true, note: u.tip.off, title: "Can't tip: " + u.tip.off });
     }
     if (!mod) return out;
@@ -503,12 +503,19 @@
           if (it.note) b.appendChild(el('small', 'pm-pop-why', ' — ' + it.note));
           if (it.title) b.title = it.title;
         }
-        else { b = el('button', 'pm-pop-i' + (it.danger ? ' danger' : ''), it.label); b.type = 'button'; if (it.disabled) b.disabled = true; }
+        else { b = el('button', 'pm-pop-i' + (it.danger ? ' danger' : ''), it.label); b.type = 'button'; if (it.disabled) b.disabled = true; if (it.title) b.title = it.title; }
         b.setAttribute('role', 'menuitem'); b.tabIndex = -1;
         b.addEventListener('click', function (e) {
           if (it.kind === 'link' || it.kind === 'off') return;   // a normal link (View profile, 💸 Tip) / a disabled item
           e.preventDefault();
           if (it.kind === 'cam') { closeMenu(false); extra.cam(); return; }
+          // 1.99il: 💸 Tip - the modal on this page (pad-tip.js); without it, the tip page in a new tab as before
+          if (it.kind === 'tip') {
+            closeMenu(false);
+            if (P.tipModal) P.tipModal({ to: it.to, display: u.display || u.login, slug: slug, me: opts.me || null });
+            else window.open(it.href, '_blank', 'noopener');
+            return;
+          }
           if (it.kind === 'more') { closeMenu(false); open(u); return; }
           if (!A[it.id].confirm) {
             sayIn(out, 'Sending ' + preview(it.id, u.login, {}) + '…');

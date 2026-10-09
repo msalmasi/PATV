@@ -177,7 +177,7 @@ test("page: tab bar, panels hidden (not removed), the Live tab's latest-posts ca
   assert.doesNotMatch(livePanel, /id="joinH"/, "Join the Camfrog room moved to About");
   const about = html.slice(html.indexOf('id="padPanel-about"'));
   assert.match(about, /Join the Camfrog room/); assert.match(about, /Plant Based Chatting/); assert.match(about, /👑 pb/);
-  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=5/); assert.match(html, /room-mod\.css\?v=5/);
+  assert.match(html, /pad-tabs\.js\?v=\d+/); assert.match(html, /room-mod\.js\?v=6/); assert.match(html, /room-mod\.css\?v=6/); assert.match(html, /pad-tip\.js\?v=1/);
   assert.match(html, /collapsible: true/, "the Manage card collapses on the pad page");
   assert.match(html, /PATVPadTabs\.init\(\{"slug":"plant_based_chatting","platform":"camfrog","active":true/);
 });

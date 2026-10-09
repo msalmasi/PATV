@@ -179,7 +179,8 @@ function takeJobs(liveRoomIds) {
     // ids it has seen) could run a paid command twice. Chat lines / clips / snaps may be retried.
     // 1.99ez: a cam clip is offered once too - a re-offer must never start a second recording of the same cam
     // 1.99fp: a mic clip preview too (once is enough - the browser asks again)
-    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
+    // 1.99il: a tip announcement too (a re-offer could say it twice)
+    const due = j.state === "pending" || (j.kind !== "cmd" && j.kind !== "camclip" && j.kind !== "micclip" && j.kind !== "tipnote" && j.state === "claimed" && now - j.claimed > CLAIM_RETRY && j.tries < 2);
     if (!due) continue;
     j.state = "claimed"; j.claimed = now; j.tries++;
     const base = { id: j.id, kind: j.kind, room: j.roomId, user: j.username, camfrog: j.camfrog || "" };
@@ -194,6 +195,8 @@ function takeJobs(liveRoomIds) {
     if (j.kind === "snap") { base.target = j.target; base.viewer = j.username; }
     if (j.kind === "camclip") { base.target = j.target; base.viewer = j.username; base.secs = j.secs; }
     if (j.kind === "micclip") { base.target = j.target; base.viewer = j.username; base.tx = j.tx; }   // 1.99fp: 🔊 Clip on a 🎙 line
+    // 1.99il: 💸 a tip made from this pad's page - Pepe says it in the room (target = the recipient's login)
+    if (j.kind === "tipnote") { base.target = j.target; base.amount = j.amount; if (j.display) base.display = j.display; }
     out.push(base);
     if (out.length >= 10) break;
   }
@@ -228,7 +231,7 @@ function applyAcks(acks) {
 function mineFor(userId, roomId) {
   const out = [];
   for (const j of jobs.values()) {
-    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.gui || j.setting) continue;   // panel jobs: padmod.js
+    if (j.userId !== userId || j.roomId !== roomId || j.kind === "snap" || j.kind === "camclip" || j.kind === "modinfo" || j.kind === "tipnote" || j.gui || j.setting) continue;   // panel jobs: padmod.js
     const o = { id: j.id, kind: j.kind, state: j.state, ok: j.result ? j.result.ok : null, msg: j.result ? j.result.msg : "", at: j.at };
     if (j.kind === "cmd") { o.text = j.text; o.replies = (j.result && j.result.replies) || []; }
     out.push(o);

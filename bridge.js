@@ -524,6 +524,54 @@ function tipFor(u, me, pepe = null) {
   return { to: name, href: "/u/" + encodeURIComponent(name) + "/tip" };
 }
 
+// ── 1.99il: 💸 a tip made from a pad's page (the tip modal, public/js/pad-tip.js) is announced in the Camfrog room by
+// Pepe ("💸 @alice tipped PAT 5,000 to bob from the website!") - only when the room is live, the tipper can see the
+// pad, the recipient's LINKED login is in the room right now (the roster only carries people who aren't hidden -
+// !incognito / !bridge hide are "someone" without a login), and neither of them is on Pepe's hidden list. One per
+// tipper per TIP_ANN_GAP_MS and TIP_ANN_ROOM_MAX per room a minute; Pepe re-checks hiding and has his own limit.
+const TIP_ANN_GAP_MS = 30 * 1000, TIP_ANN_ROOM_MAX = 6;
+const tipAnnHits = new Map();          // "u:<userId>" | "r:<roomId>" -> [ms]
+function tipAnnRate(userId, roomId, now) {
+  const u = (tipAnnHits.get("u:" + userId) || []).filter((t) => now - t < TIP_ANN_GAP_MS);
+  const r = (tipAnnHits.get("r:" + roomId) || []).filter((t) => now - t < 60 * 1000);
+  if (u.length || r.length >= TIP_ANN_ROOM_MAX) return false;
+  u.push(now); r.push(now);
+  tipAnnHits.set("u:" + userId, u); tipAnnHits.set("r:" + roomId, r);
+  if (tipAnnHits.size > 5000) tipAnnHits.clear();
+  return true;
+}
+/** -> {queued: true} | {queued: false, why}. Never throws (a tip is never undone by its announcement). */
+async function tipAnnounce({ slug, senderId, recipient, amount } = {}) {
+  try {
+    await load();
+    const R = bySlug(slug);
+    if (!R || !isLive(R)) return { queued: false, why: "room offline" };
+    const n = Math.floor(Number(amount));
+    if (!(n > 0)) return { queued: false, why: "amount" };
+    const sender = (await getQuery("SELECT userId, username, displayname, class, camfrogUsername FROM users WHERE userId = ?", [String(senderId || "")]))[0];
+    if (!sender) return { queued: false, why: "sender" };
+    const PA = require("./padaccess");
+    await PA.init();
+    if (!PA.full({ userId: sender.userId, class: sender.class }, R.id)) return { queued: false, why: "pad" };
+    const rc = (await getQuery("SELECT username, camfrogUsername FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [String(recipient || "")]))[0];
+    const to = rc && rc.camfrogUsername ? String(rc.camfrogUsername).toLowerCase() : "";
+    if (!to || !LOGIN_RE.test(to)) return { queued: false, why: "recipient not linked" };
+    if (!R.members.some((u) => u && !u.anon && u.login && String(u.login).toLowerCase() === to)) return { queued: false, why: "recipient not in the room" };
+    const Q = require("./quotes");
+    const from = sender.camfrogUsername ? String(sender.camfrogUsername).toLowerCase() : "";
+    if (Q.isHidden(to) || (from && Q.isHidden(from))) return { queued: false, why: "private" };
+    if (!tipAnnRate(sender.userId, R.id, Date.now())) return { queued: false, why: "rate" };
+    let display = "";
+    try { display = await relay.webName(sender); } catch (e) { display = ""; }
+    relay.newJob({ kind: "tipnote", roomId: R.id, userId: sender.userId, username: sender.username, camfrog: from && LOGIN_RE.test(from) ? from : "",
+                   display, target: to, amount: n });
+    return { queued: true };
+  } catch (e) {
+    console.error("[bridge] tip announce:", e.message);
+    return { queued: false, why: "error" };
+  }
+}
+
 async function liveView(R, after, userId, login, username = null) {
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
@@ -800,4 +848,4 @@ function padTabsFor(o) {
 }
 
 module.exports = { _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };
+  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

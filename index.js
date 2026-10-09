@@ -1862,6 +1862,11 @@ app.post("/u/:username/tip", authenticateToken, addUser, async (req, res) => {
     const r = await transferPat(senderUsername, req.params.username, req.body.amount, cleanTipNote(req.body.note));
     if (!r.ok) { idem.fail(); return res.status(r.status).send(r.msg); }
     const body = { message: r.msg, amount: r.amount, balance: r.balance };
+    // 1.99il: made from a pad's page (the tip modal): Pepe announces it in that Camfrog room when the recipient is in it
+    if (req.body.room && typeof req.body.room === "string") {
+      const a = await require("./bridge").tipAnnounce({ slug: req.body.room.slice(0, 128), senderId: req.userId, recipient: req.params.username, amount: r.amount });
+      body.announce = !!a.queued;
+    }
     idem.done(200, body);
     res.json(body);
   } catch (error) {
