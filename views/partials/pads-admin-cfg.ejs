@@ -16,6 +16,7 @@
       <% } %>
       <% if (f.help) { %><small class="muted" style="display:block;margin:-4px 0 8px"><%= f.help %></small><% } %>
     <% }) %>
+    <% if (padsCfg.reclaimable != null) { %><p class="muted">Empty member-made pads past the reclaim age right now: <b><%= padsCfg.reclaimable %></b><%= padsCfg.config.reclaim_on ? ' (the sweep runs every 6 hours)' : ' (reclaiming is off - nothing is removed)' %>.</p><% } %>
     <div class="row"><% if (isAdmin) { %><button type="submit" class="btn primary">Save</button><% } else { %><span class="muted">Site admins change these.</span><% } %><span class="msg" id="padsCfgMsg" role="status" aria-live="polite"></span></div>
   </form>
 </section>

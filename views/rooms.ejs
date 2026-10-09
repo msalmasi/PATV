@@ -151,7 +151,7 @@
       <%# 1.99es: one line, like the homepage's card (the three steps are gone) %>
       <span class="muted" style="font-size:14px;color:#d9c9c3"><b>Anyone can go live.</b> Stream to a pad's stage from OBS or your browser, or put a YouTube / Twitch link on it.</span>
     </div>
-    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a></div>
+    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="btn" href="<%= signedIn ? '/pads/new' : '/login?next=%2Fpads%2Fnew' %>" style="text-align:center">🧱 Create a pad</a></div>
   </section>
 
   <div class="pepe" role="status">

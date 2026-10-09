@@ -175,6 +175,7 @@ const RULES = {
   "econ_watch.streamer_id": M(), "econ_watch.viewer_id": M({ key: ["day", "stream"], merge: { secs: "SUM", muted_secs: "SUM", beats: "SUM" } }),
   "econ_watch_keys.viewer_id": M({ key: ["day", "stream", "k"] }),
   "pad_slug_aliases.by": M(),      // 1.99iy: who changed a pad's address (padaddress.js) - a username, moved like the other "by"s
+  "rooms_registry.created_by": M(),   // 1.99iz: who made a member-made pad (padcreate.js); the owner column has its own rule
   "room_vault_settings.changed_by": M(), "room_vault_rate_log.by": M(),      // economy v2 E-3 (roomvaults.js): who set a pad's payout rate
   // the pad launchpad (launchpad.js): one newcomer welcome per person (folded), visits per pad per day; admins by name
   "launchpad_welcomes.user_id": M({ key: [] }), "launchpad_visits.user_id": M({ key: ["room_id", "day"] }),

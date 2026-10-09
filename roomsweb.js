@@ -278,7 +278,8 @@ function register(app, { addUser, isBotToken }) {
     const sum = await royalties.summary();
     const fp = await rooms.frontStatus().catch(() => null);
     res.render("roomsAdmin", { user: req.user.username, isAdmin: req.user.class === "Admin", list, guide: g.rows, front: rooms.frontSetting(), fp, roy: royalties.config(),
-      sum, padsCfg: { config: await require("./padcfg").get(), fields: require("./padcfg").FIELDS, limits: require("./padcfg").LIMITS },   // 1.99iy
+      sum, padsCfg: { config: await require("./padcfg").get(), fields: require("./padcfg").FIELDS, limits: require("./padcfg").LIMITS,   // 1.99iy
+                      reclaimable: await require("./padcreate").reclaimCandidates().then((r) => r.length).catch(() => null) },          // 1.99iz
       overview: ov.map((o) => ({ ...o, owner: names.get(o.owner_user_id), title: (list.find((r) => r.id === o.room_id) || {}).title || o.room_id })) });
   });
   app.post("/api/rooms/admin/owner", addUser, needStaff, jsonOnly, async (req, res) => {

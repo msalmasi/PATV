@@ -106,6 +106,9 @@ function init() {
       // bridge's display-name slug; slug_changed_at = the last rename (the owner's once-per-N-days limit). Additive columns.
       if (!cols.has("slug_set")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slug_set INTEGER NOT NULL DEFAULT 0");
       if (!cols.has("slug_changed_at")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN slug_changed_at INTEGER");
+      // 1.99iz: user-made pads (padcreate.js): origin 'user' + who made it (NULL = the bridge / a seed / an admin made it)
+      if (!cols.has("origin")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN origin TEXT");
+      if (!cols.has("created_by")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN created_by TEXT");
       // every slug a pad gave up: /p/<old>[/...] 301s to the pad's current address, and nobody else can take it
       await runQuery("CREATE TABLE IF NOT EXISTS pad_slug_aliases (slug TEXT PRIMARY KEY, room_id TEXT NOT NULL, created INTEGER, by TEXT)");
       await runQuery("CREATE INDEX IF NOT EXISTS pad_slug_aliases_room ON pad_slug_aliases (room_id)");
@@ -284,6 +287,7 @@ function view(r) {
     // 1.99iv: pad.primeTime - the pad has 📺 Prime Time right now (premium.js; low-latency audio / stage key off it)
     primeTime: primeOf(r.room_id),
     slug_set: !!r.slug_set, slug_changed_at: Number(r.slug_changed_at) || null,      // 1.99iy: a chosen address + its last change
+    origin: r.origin || null, created_by: r.created_by || null, created: Number(r.created) || null, updated: Number(r.updated) || null,   // 1.99iz
   };
 }
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }

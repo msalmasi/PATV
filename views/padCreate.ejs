@@ -1,0 +1,73 @@
+<%- include('layout', { title: 'Create a pad', user: user }) %>
+<%# 1.99iz: /pads/new - create a pad (padcreate.js). Locals: el (eligibility: ok, staff, reasons, fee, made, max, balance),
+    levels [{key, icon, label, what}], def (the default level), min / max (address length). %>
+<link rel="stylesheet" href="/public/css/stage.css?v=6">
+<% const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
+<style>
+  .pc-wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 56px; display: grid; gap: 14px; box-sizing: border-box; width: 100%; }
+  .pc-wrap .fld { display: grid; gap: 6px; margin: 0 0 12px; }
+  .pc-wrap input[type=text], .pc-wrap textarea { width: 100%; box-sizing: border-box; }
+  .pc-addr { display: flex; align-items: stretch; max-width: 100%; }
+  .pc-addr span { display: flex; align-items: center; padding: 0 8px; border: 1px solid #333; border-right: 0; border-radius: 8px 0 0 8px; color: #999; font-size: .9em; white-space: nowrap; }
+  .pc-addr input { flex: 1; min-width: 0; border-radius: 0 8px 8px 0 !important; }
+  .pc-vis { display: grid; gap: 8px; margin: 0 0 12px; border: 0; padding: 0; }
+  .pc-vis label { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: start; padding: 10px 12px; border: 1px solid #2a2a2a; border-radius: 10px; cursor: pointer; }
+  .pc-vis label:has(input:checked) { border-color: #4caf50; background: #0f1a10; }
+  .pc-vis small { grid-column: 2; color: #9a9a9a; }
+  .pc-why { margin: 0; padding-left: 20px; color: #ffcc80; line-height: 1.6; }
+  .pc-ok { color: #a5d6a7; }
+  .pc-bad { color: #ef9a9a; }
+  .pc-steps { margin: 6px 0 0; padding-left: 20px; color: #bbb; line-height: 1.6; font-size: 14px; }
+  @media (max-width: 520px) { .pc-addr span { display: none; } .pc-addr input { border-radius: 8px !important; } }
+</style>
+<main class="sb pc-wrap" id="padCreate" data-min="<%= min %>" data-max="<%= max %>">
+  <nav class="crumb" aria-label="Breadcrumb"><a href="/p">Pads</a> › Create a pad</nav>
+  <div class="sb-head">
+    <h1>🧱 Create a pad</h1>
+    <p class="lede">A pad is your own corner of PATV: a feed, a stage anyone can stream to, and its own address, p/<i>name</i>. It starts as a <b>🌐 Site Pad</b> (everything on the website). You can connect it to your Camfrog room or Twitch channel later from its settings.</p>
+  </div>
+
+  <% if (!el.ok) { %>
+    <section class="sb-card">
+      <h2>Not yet</h2>
+      <ul class="pc-why"><% el.reasons.forEach((r) => { %><li><%= r %></li><% }) %></ul>
+      <p class="muted" style="margin-top:10px"><a href="/p">← Back to the pads</a></p>
+    </section>
+  <% } else { %>
+    <section class="sb-card">
+      <form id="pcForm" autocomplete="off" novalidate>
+        <label class="fld">Name
+          <input type="text" name="title" id="pcTitle" maxlength="60" minlength="3" required placeholder="e.g. Night Owls"></label>
+        <label class="fld">Address
+          <span class="pc-addr"><span aria-hidden="true">publicaccess.tv/p/</span><input type="text" name="slug" id="pcSlug" minlength="<%= min %>" maxlength="<%= max %>" spellcheck="false" autocapitalize="off" aria-describedby="pcSlugMsg" placeholder="night-owls"></span>
+          <small class="muted" id="pcSlugMsg" role="status" aria-live="polite"><%= min %>-<%= max %> characters: letters, digits and single hyphens. You can change it later (once a month).</small></label>
+        <label class="fld">Description <small class="muted">optional</small>
+          <textarea name="description" maxlength="500" rows="3" placeholder="What's this pad about?"></textarea></label>
+        <fieldset class="pc-vis"><legend>Who can see it</legend>
+          <% levels.forEach((l) => { %><label><input type="radio" name="visibility" value="<%= l.key %>"<%= l.key === def ? ' checked' : '' %>><span><%= l.icon %> <b><%= l.label %></b></span><small><%= l.what %></small></label><% }) %>
+        </fieldset>
+        <label class="fld">Banner link <small class="muted">optional: an https:// image link - or upload an avatar and banner in the pad's settings right after</small>
+          <input type="text" name="banner" maxlength="300" placeholder="https://…"></label>
+        <p class="muted">
+          <% if (el.staff) { %>🛠 Site staff: no limits, no fee.<% } else { %>
+            You own <b><%= el.made %></b> of the <b><%= el.max %></b> pad<%= el.max === 1 ? '' : 's' %> a member can make.
+            <% if (el.fee > 0) { %> Creating it costs <b><%= fmt(el.fee) %> PAT</b> (you have <%= fmt(el.balance) %>).<% } else { %> It's free.<% } %>
+          <% } %>
+          Pads follow <a href="/guidelines">Padiquette</a>.
+        </p>
+        <div class="row"><button type="submit" class="btn primary" id="pcGo">Create pad<%= el.fee > 0 && !el.staff ? ' · ' + fmt(el.fee) + ' PAT' : '' %></button><span class="msg" id="pcMsg" role="status" aria-live="polite"></span></div>
+      </form>
+    </section>
+    <section class="sb-card">
+      <h2>After that</h2>
+      <ol class="pc-steps">
+        <li>Add an avatar, a banner and a colour (Settings → General → Look).</li>
+        <li>Write your rules, pick who can post, invite people.</li>
+        <li>Got a Camfrog room or a Twitch channel? Connect it under Settings → Address &amp; platform.</li>
+      </ol>
+    </section>
+  <% } %>
+</main>
+<script src="/public/js/pad-create.js?v=1" defer></script>
+</body>
+</html>
