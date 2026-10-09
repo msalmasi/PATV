@@ -549,38 +549,42 @@ async function dupSplit(dupId) {
  */
 async function mergeDuplicate(dupId, primaryId) {
   if (!dupId || !primaryId || dupId === primaryId) return null;
-  const { moveUserRows } = require("./accountMerge");
-  return tx(async () => {
-    const d = (await getQuery("SELECT userId, username, camfrogUsername, points_balance, xp, level FROM users WHERE userId = ?", [dupId]))[0];
-    const p = (await getQuery("SELECT userId, username FROM users WHERE userId = ?", [primaryId]))[0];
+  const AM = require("./accountMerge");
+  const out = await tx(async () => {
+    const d = (await getQuery("SELECT * FROM users WHERE userId = ?", [dupId]))[0];
+    const p = (await getQuery("SELECT * FROM users WHERE userId = ?", [primaryId]))[0];
     if (!d || !p) return null;
     const { balance: bal, toReserve, toMain } = await dupSplit(dupId);
-    const xp = Number(d.xp) || 0;
     if (toMain < 0) return null;
-    await runQuery("UPDATE users SET camfrogUsername = NULL WHERE userId = ?", [dupId]);   // never resolved again, even mid-merge
+    // ids leave the copy before they land on the primary (unique Camfrog / Twitch / Discord indexes);
+    // the copy's Camfrog login is never resolved again, even mid-merge
+    const ids = [["discordId", "discordUsername"], ["twitchId", "twitchDisplayname"]].filter(([c]) => c in d && d[c] && !p[c]);
+    await runQuery(`UPDATE users SET camfrogUsername = NULL${ids.map(([c]) => `, ${c} = NULL`).join("")} WHERE userId = ?`, [dupId]);
+    for (const [c, n] of ids) await runQuery(`UPDATE users SET ${c} = ?, ${n} = ? WHERE userId = ?`, [d[c], d[n] || null, primaryId]);
     if (toReserve > 0) {
       const note = `duplicate welcome mint of ${d.username} -> Federal Reserve (copy merged into ${p.username})`;
       await runQuery("INSERT INTO transactions (transactionId, userId, type, points, note) VALUES (?, ?, 'stale-reclaim', ?, ?)", [uuidv4(), dupId, -toReserve, note]);
       await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, 'stale_reclaim', ?, ?, ?)",
                      [uuidv4(), dupId, `duplicate welcome mint (${d.username} merged into ${p.username})`, -toReserve]);
     }
-    await runQuery("UPDATE users SET points_balance = points_balance + ?, xp = xp + ?, level = MAX(COALESCE(level, 0), ?) WHERE userId = ?",
-                   [toMain, xp, Number(d.level) || 0, primaryId]);
+    await runQuery("UPDATE users SET points_balance = points_balance + ? WHERE userId = ?", [toMain, primaryId]);
+    // xp added + the higher level, liked, spins, a verified email the primary lacks... (accountMerge.carryUserFields)
+    const carried = await AM.carryUserFields(d, primaryId);
+    const xp = carried.xp;
     await runQuery("UPDATE users SET points_balance = 0, xp = 0 WHERE userId = ?", [dupId]);
-    await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [primaryId, dupId]);
-    if (await hasColumn("transactions", "counterparty")) await runQuery("UPDATE transactions SET counterparty = ? WHERE counterparty = ?", [primaryId, dupId]);
-    const moved = await moveUserRows(dupId, primaryId);
-    for (const t of ["levelup_rewards", "levelup_milestones"]) {
-      if (!(await hasColumn(t, "userId"))) continue;
-      await runQuery(`UPDATE OR IGNORE ${t} SET userId = ? WHERE userId = ?`, [primaryId, dupId]);
-      await runQuery(`DELETE FROM ${t} WHERE userId = ?`, [dupId]);
-    }
+    // history + every row it owned (1.99gb: every user column of every table, levelup records included)
+    const report = await AM.moveUserRows(dupId, primaryId, { fromUsername: d.username, toUsername: p.username });
     await runQuery("INSERT INTO transactions (transactionId, userId, type, points, note) VALUES (?, ?, ?, ?, ?)",
                    [uuidv4(), primaryId, "account merge", 0, `duplicate ${d.username} merged (${toMain} PAT here, ${toReserve} PAT duplicate welcome mint to the Reserve, ${xp} XP)`]);
+    await AM.archiveMerged(d, p, { via: "duplicate", balance: bal });
+    const logId = await AM.logMerge({ via: "duplicate", from: d, to: p, pat: toMain, xp, report,
+                                      note: `${toReserve} PAT duplicate welcome mint to the Reserve` });
     await require("./ledger").recordMerge(dupId, primaryId, "duplicate merge");   // 1.99ga
     await runQuery("DELETE FROM users WHERE userId = ?", [dupId]);
-    return { dup: d.username, into: p.username, balance: bal, toMain, toReserve, xp, moved };
+    return { dup: d.username, into: p.username, balance: bal, toMain, toReserve, xp, moved: report.moved, report, logId };
   });
+  if (out) await AM.afterMerge(primaryId, out.report);
+  return out;
 }
 
 // ── the warning window (1.99bs) ──────────────────────────────────────────────────────────────────

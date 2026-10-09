@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const { createTables, runQuery, getQuery } = require('./dbUtils');
 const funding = require('./funding');
 const ledger = require('./ledger');   // 1.99ga
-const { moveUserRows, copyCamfrogBadges } = require('./accountMerge');
+const { moveUserRows, copyCamfrogBadges, archiveMerged, logMerge, afterMerge } = require('./accountMerge');
 const inbox = require('./inbox');
 const displaynames = require('./displaynames');
 const fs = require('fs');
@@ -146,27 +146,40 @@ function generateValidationToken() {
   return crypto.randomBytes(20).toString('hex');
 }
 
-// In case of username collision, generate a unique username.
+// 1.99gb: a username from a Twitch / Discord name, by the register form's rules (authGuard.checkUsername:
+// [A-Za-z0-9._-], 3-24 characters, no dot / dash / underscore at either end, no reserved "CF" prefix).
+// Accents are dropped ("José" -> "Jose"), spaces become "_", anything else outside the set goes, a leading
+// "cf" / "CF" is stripped (Pepe's automatic Camfrog accounts are "CF..."). null when nothing usable is left.
+const USERNAME_MAX = 24;
+function normaliseUsername(raw) {
+  let s = String(raw == null ? "" : raw).normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  s = s.trim().replace(/\s+/g, "_").replace(/[^A-Za-z0-9._-]/g, "");
+  const trim = (x) => x.replace(/^[._-]+/, "").replace(/[._-]+$/, "");
+  s = trim(s);
+  while (/^cf/i.test(s)) s = trim(s.slice(2));
+  s = trim(s.slice(0, USERNAME_MAX));
+  return s.length >= 3 && !guard.checkUsername(s) ? s : null;
+}
+
+// A free username for an account made from a Twitch / Discord sign-in: the normalised name, then name1,
+// name2... (cut to fit 24 characters), else user#### - free in ANY letter case (the register form and
+// /api/users/username check case-insensitively too).
 async function generateUniqueUsername(baseUsername) {
-  let username = baseUsername;
-  let isUnique = false;
-  let counter = 1;
-
-  while (!isUnique) {
-    // Check if the username already exists in the database
-    const existingUser = await getQuery("SELECT xp, level FROM users WHERE username = ?", [username]);
-
-    if (existingUser[0]) {
-      // Username exists, append a number and check again
-      username = `${baseUsername}${counter}`;
-      counter++;
-    } else {
-      // Username is unique
-      isUnique = true;
+  const taken = async (u) => (await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [u])).length > 0;
+  const base = normaliseUsername(baseUsername);
+  if (base) {
+    if (!(await taken(base))) return base;
+    for (let n = 1; n < 1000; n++) {
+      const suffix = String(n);
+      const u = base.slice(0, USERNAME_MAX - suffix.length).replace(/[._-]+$/, "") + suffix;
+      if (u.length >= 3 && !guard.checkUsername(u) && !(await taken(u))) return u;
     }
   }
-
-  return username; // Return the unique username
+  for (let i = 0; i < 200; i++) {
+    const u = "user" + String(Math.floor(Math.random() * (i < 100 ? 10000 : 100000000))).padStart(4, "0");
+    if (!(await taken(u))) return u;
+  }
+  return "user" + crypto.randomBytes(6).toString("hex");
 }
 
 // Funtion to add email validation token to a user
@@ -473,10 +486,17 @@ async function completeCamfrogLink(userId, camfrogUsername) {
     // Everything else the auto account owned (badges, cosmetics, roles, spins, orders…) moves too.
     // Badges left behind used to be awarded AGAIN, with full XP + PAT, once the merged account was
     // active (the auto account had them from the quiet backfill).
-    const moved = await moveUserRows(auto.userId, userId);
-    console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(moved)}`);
+    const autoRow = (await getQuery('SELECT * FROM users WHERE userId = ?', [auto.userId]))[0];
+    const meRow = (await getQuery('SELECT userId, username FROM users WHERE userId = ?', [userId]))[0];
+    const report = await moveUserRows(auto.userId, userId);
+    console.log(`[CF-MERGE] moved from ${auto.userId}: ${JSON.stringify(report.moved)}${Object.keys(report.left).length ? ` LEFT ${JSON.stringify(report.left)}` : ""}`);
+    try {
+      await archiveMerged(autoRow, meRow, { via: "camfrog link", balance: auto.points_balance || 0 });
+      await logMerge({ via: "camfrog link", from: autoRow || { userId: auto.userId }, to: meRow || { userId }, pat: auto.points_balance || 0, xp: auto.xp || 0, report });
+    } catch (e) { console.error("[CF-MERGE] merge record:", e.message); }
     await ledger.recordMerge(auto.userId, userId, 'camfrog link');   // 1.99ga: late credits follow it here
     await runQuery('DELETE FROM users WHERE userId = ?', [auto.userId]);
+    await afterMerge(userId, report);
 
     await inbox.attachPendingSafe(userId, cfLower);   // notices Pepe sent this name before it had an account
     return { merged: true, addedBalance: auto.points_balance || 0, addedXp: auto.xp || 0, unlinkedFrom };
@@ -787,41 +807,22 @@ async function _updateLevelLocked(userId, additionalXp) {
 
 
 // Function to Award Badges
+// 1.99gb: idempotent - INSERT OR IGNORE, and the badge's XP is paid only by the call that inserted it. It
+// used to throw "Badge already awarded" (which aborted Twitch / Discord linking before the id was saved),
+// ran a raw BEGIN on the shared connection (any other request's writes landed in it) and didn't await the
+// XP. -> {success: true, awarded: true} when given now, {success: false, awarded: false, already: true} when
+// the user already had it. Throws only for an unknown badge.
 async function awardBadge(userId, badgeId) {
-  try {
-    // Check if the badge exists
-    const badgeDetails = await getQuery("SELECT points FROM badges WHERE badgeId = ?", [badgeId]);
-    if (badgeDetails.length === 0) {
-      throw new Error('Badge not found'); // Throw an error if the badge doesn't exist
-    }
-
-    // Check if the badge has already been awarded
-    const existingBadge = await getQuery("SELECT * FROM user_badges WHERE userId = ? AND badgeId = ?", [userId, badgeId]);
-    if (existingBadge.length > 0) {
-      console.log(`User ${userId} already has badge ${badgeId}. No badge awarded.`);
-      throw new Error('Badge already awarded'); // Throw an error if the badge has already been awarded
-    }
-
-    await runQuery("BEGIN TRANSACTION"); // Begin transaction
-
-    const points = badgeDetails[0].points;
-
-    // Update the user's points
-    updateLevel(userId, points);
-
-    // Insert the badge award into the user_badges table
-    const sqlInsertBadge = "INSERT INTO user_badges (userId, badgeId) VALUES (?, ?)";
-    await runQuery(sqlInsertBadge, [userId, badgeId]);
-
-    await runQuery("COMMIT"); // Commit the transaction
-
-    console.log(`Badge ${badgeId} awarded to user ${userId} with ${points} XP added.`);
-    return { success: true, message: `Badge ${badgeId} awarded to user ${userId}.` };
-  } catch (error) {
-    await runQuery("ROLLBACK"); // Rollback in case of error
-    console.error(`Error awarding badge: ${error.message}`);
-    throw error; // Rethrow the error so the calling function can handle it
+  const badge = (await getQuery("SELECT points FROM badges WHERE badgeId = ?", [badgeId]))[0];
+  if (!badge) throw new Error('Badge not found');
+  const r = await runQuery("INSERT OR IGNORE INTO user_badges (userId, badgeId) VALUES (?, ?)", [userId, badgeId]);
+  if (!r || r.changes !== 1) {
+    return { success: false, awarded: false, already: true, message: `User ${userId} already has badge ${badgeId}.` };
   }
+  const points = Number(badge.points) || 0;
+  if (points) await updateLevel(userId, points);
+  console.log(`Badge ${badgeId} awarded to user ${userId} with ${points} XP added.`);
+  return { success: true, awarded: true, message: `Badge ${badgeId} awarded to user ${userId}.` };
 };
 
 // Function to Award Bonus PAT
@@ -897,5 +898,6 @@ module.exports = {
   LEVELUP_BASE_REWARD,
   LEVELUP_MILESTONE_UNIT,
   awardBonus,
-  generateUniqueUsername
+  generateUniqueUsername,
+  normaliseUsername
 };

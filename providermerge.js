@@ -15,19 +15,18 @@
 //     market / bounty / wager positions, open shop orders - staleaccounts.holdsFor) is refused:
 //     staff merge those by hand;
 //   * xp, level and liked move like mergeDuplicate / the Camfrog !verify merge; the history and every
-//     owned row move (accountMerge.moveUserRows); an "account merge" ledger row on the new account and
+//     owned row move (accountMerge.moveUserRows - 1.99gb: every user column of every table); an "account merge"
+//     ledger row on the new account, an account_merge_log row with the counts per table, and
 //     an account_archive snapshot of the old row (tier "MERGE", no password / email / tokens) record it.
 "use strict";
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 const stale = require("./staleaccounts");
-const { moveUserRows } = require("./accountMerge");
+const { moveUserRows, carryUserFields, archiveMerged, logMerge, afterMerge } = require("./accountMerge");
 
 // holds that don't stop a merge: a pending welcome bonus (most bot-made accounts have one) and a
 // pending Camfrog link code
 const NON_BLOCKING = new Set(["pending welcome bonus", "pending Camfrog link"]);
-// never copied into the archive snapshot
-const SECRET = /password|email|token|reset|secret/i;
 
 const busy = new Set();
 
@@ -56,11 +55,9 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
     const holds = (await stale.holdsFor(fromId)).filter((h) => !NON_BLOCKING.has(h));
     if (holds.length) return { ok: false, code: "holds", holds };
     await stale.ensure();
-    const hasLiked = await hasColumn("users", "liked");
-    const hasCp = await hasColumn("transactions", "counterparty");
     const hasNote = await hasColumn("transactions", "note");
 
-    return await stale.tx(async () => {
+    const r = await stale.tx(async () => {
       const from = (await getQuery("SELECT * FROM users WHERE userId = ?", [fromId]))[0];
       const to = (await getQuery("SELECT * FROM users WHERE userId = ?", [toId]))[0];
       if (!from || !to) return { ok: false, code: "gone" };
@@ -86,25 +83,20 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
       }
       if (moveCf) await runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", [from.camfrogUsername, toId]);
 
-      const xp = Number(from.xp) || 0, liked = Number(from.liked) || 0;
-      const c = await runQuery(`UPDATE users SET points_balance = points_balance + ?, xp = COALESCE(xp, 0) + ?,
-                                  level = MAX(COALESCE(level, 0), ?)${hasLiked ? ", liked = COALESCE(liked, 0) + ?" : ""},
-                                  ${L.idCol} = ?, ${L.nameCol} = ? WHERE userId = ?`,
-                               [bal, xp, Number(from.level) || 0].concat(hasLiked ? [liked] : [], [String(linkId), linkName || null, toId]));
+      // the balance and the linked id land on the new account; xp / level / liked / spins / a verified
+      // email it lacks... come along (accountMerge.carryUserFields - the same rules as mergeDuplicate)
+      const c = await runQuery(`UPDATE users SET points_balance = points_balance + ?, ${L.idCol} = ?, ${L.nameCol} = ? WHERE userId = ?`,
+                               [bal, String(linkId), linkName || null, toId]);
       if (!c || c.changes !== 1) throw new Error("merge: the new account is gone");
+      const carried = await carryUserFields(from, toId);
+      const xp = carried.xp;
 
-      // the history comes along with the balance (so /history still adds up), and everything it owned
-      await runQuery("UPDATE transactions SET userId = ? WHERE userId = ?", [toId, fromId]);
-      if (hasCp) await runQuery("UPDATE transactions SET counterparty = ? WHERE counterparty = ?", [toId, fromId]);
       // the old account's archive warning doesn't follow it (alt_merge.js does the same)
       if (await tableExists("stale_notice")) await runQuery("DELETE FROM stale_notice WHERE userId = ?", [fromId]);
       if (await hasColumn("inbox", "ref")) await runQuery("DELETE FROM inbox WHERE user_id = ? AND ref LIKE 'stale-notice:%'", [fromId]);
-      const moved = await moveUserRows(fromId, toId);
-      for (const t of ["levelup_rewards", "levelup_milestones"]) {
-        if (!(await hasColumn(t, "userId"))) continue;
-        await runQuery(`UPDATE OR IGNORE ${t} SET userId = ? WHERE userId = ?`, [toId, fromId]);
-        await runQuery(`DELETE FROM ${t} WHERE userId = ?`, [fromId]);
-      }
+      // the history comes along with the balance (so /history still adds up), and EVERYTHING it owned
+      // (1.99gb: every user column of every table - accountMerge.js)
+      const report = await moveUserRows(fromId, toId, { fromUsername: from.username, toUsername: to.username });
 
       const note = `${L.label} merge: ${from.username} merged in (${bal} PAT, ${xp} XP)`;
       if (hasNote) {
@@ -112,24 +104,19 @@ async function mergeProviderAccount({ provider, L, fromId, toId, linkId, linkNam
       } else {
         await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, 'account merge', 0)", [uuidv4(), toId]);
       }
-      const snap = {};
-      for (const [k, v] of Object.entries(from)) if (!SECRET.test(k)) snap[k] = v;
-      snap.merged_into = toId;
-      const now = Date.now();
-      await runQuery(`INSERT INTO account_archive (userId, run_id, tier, reason, archived_at, balance, reclaimed, purged_at, snapshot)
-                      VALUES (?, ?, 'MERGE', ?, ?, ?, 0, ?, ?)
-                      ON CONFLICT(userId) DO UPDATE SET run_id = excluded.run_id, tier = excluded.tier, reason = excluded.reason,
-                        archived_at = excluded.archived_at, balance = excluded.balance, reclaimed = 0, purged_at = excluded.purged_at,
-                        snapshot = excluded.snapshot`,
-                     [fromId, `merge-${provider}-${uuidv4().slice(0, 8)}`, `merged into ${to.username} (${L.label} link)`.slice(0, 300),
-                      now, bal, now, JSON.stringify(snap)]);
+      await archiveMerged(from, to, { via: `${provider} link`, runId: `merge-${provider}-${uuidv4().slice(0, 8)}`, balance: bal });
+      const logId = await logMerge({ via: `${provider} link`, from, to, pat: bal, xp, report,
+                                     note: carried.emailMoved ? "verified email carried over" : null });
       await require("./ledger").recordMerge(fromId, toId, `${provider} merge`);   // 1.99ga: late credits follow it to toId
       const d = await runQuery("DELETE FROM users WHERE userId = ?", [fromId]);
       if (!d || d.changes !== 1) throw new Error("merge: the old account could not be removed");
-      console.log(`[auth] ${provider} merge ${fromId} -> ${toId}: +${bal} PAT, +${xp} XP, ${JSON.stringify(moved)}`);
-      return { ok: true, amount: bal, xp, from: from.username, moved, otherMoved: moveOther,
+      console.log(`[auth] ${provider} merge ${fromId} -> ${toId}: +${bal} PAT, +${xp} XP, merge log #${logId}, ` +
+                  `${Object.keys(report.moved).length} column(s) moved${Object.keys(report.left).length ? `, LEFT ${JSON.stringify(report.left)}` : ""}`);
+      return { ok: true, amount: bal, xp, from: from.username, moved: report.moved, report, logId, otherMoved: moveOther,
                twitch: from.twitchId && from.twitchLogin ? { id: from.twitchId, login: from.twitchLogin } : null };
     });
+    if (r && r.ok) await afterMerge(toId, r.report);   // caches + held connect bonuses, after the commit
+    return r;
   } finally {
     busy.delete(fromId); busy.delete(toId);
   }

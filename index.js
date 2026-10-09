@@ -39,6 +39,7 @@ const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCook
 const guard = require("./middleware/authGuard");
 const { moveUserRows } = require("./accountMerge");
 const providerMerge = require("./providermerge");      // 1.99fy: Twitch / Discord account merges (security)
+const oauthLink = require("./oauthlink");              // 1.99gb: link rewards, provider email capture, Twitch headers
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
 stale.ensure();
@@ -376,8 +377,7 @@ app.get("/verify-email", async (req, res) => {
     const updateResult = await runQuery(updateSql, [result.userId]);
     if (updateResult.changes > 0) {
       // Award badge for email verification
-      const badgeId = 'ilovespam'; // Replace with your actual badge ID
-      await awardBadge(result.userId, badgeId);
+      await oauthLink.safeBadge(result.userId, 'ilovespam');   // 1.99gb: a badge problem never fails the verification
       req.flash("success", "Email verified successfully!");
     } else {
       req.flash("error", "No changes made to the database.");
@@ -400,7 +400,7 @@ app.get("/auth/twitch", (req, res) => {
       client_id: process.env.TWITCH_CLIENT_ID,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: "user:read:email user:read:subscriptions",
+      scope: oauthLink.TWITCH_SCOPE,        // 1.99gb: user:read:email only (subscriptions was never used)
       state: oauthBegin(req, "twitch"),
     }
   )}`;
@@ -438,10 +438,7 @@ app.get("/auth/twitch/callback", async (req, res) => {
     const userProfileResponse = await axios.get(
       "https://api.twitch.tv/helix/users",
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Client-ID": "bkwg34x1vqv51507a603f0e0clpg4b",
-        },
+        headers: oauthLink.twitchHeaders(accessToken),   // 1.99gb: Client-ID from TWITCH_CLIENT_ID (was hard-coded)
       }
     );
 
@@ -478,22 +475,22 @@ app.get("/auth/twitch/callback", async (req, res) => {
           twitchId: twitchUser.id,
           twitchDisplayname: twitchUser.display_name,
           twitchLogin: twitchLogin.clean(twitchUser.login),
+          email: twitchUser.email || null,          // 1.99gb: added to the account after a merge (captureEmail)
+          emailVerified: !!twitchUser.email,        // Twitch only reports a verified address
         };
         return res.redirect("/resolve-twitch-conflict"); // Redirect to a page to handle the decision
       } else {
-        // No conflict, update current user with Twitch ID
-        const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUser.userId]);
-        if (bonus[0].twitchBonus === 0) {
-          const badgeId = 'twitch-user'; // Replace with your actual badge ID
-          await awardBadge(currentUser.userId, badgeId);
-          await welcome.connectBonus(currentUser.userId, "twitch", twitchUser.id, awardBonus)
-        }
+        // No conflict, update current user with Twitch ID. 1.99gb: the id is saved FIRST - the badge / bonus
+        // come after and can't block it (oauthlink.linkRewards; the legacy flag alone no longer blocks them)
+        const prior = (await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [currentUser.userId]))[0];
         await runQuery(
           "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
           [twitchUser.id, twitchUser.display_name, 1, currentUser.userId]
         );
         await twitchLogin.save(twitchUser.id, twitchUser.login);
-        // Award Badge
+        await oauthLink.linkRewards({ userId: currentUser.userId, provider: "twitch", providerId: twitchUser.id, priorFlag: prior ? prior.twitchBonus : 1 });
+        await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "twitch",
+                                                email: twitchUser.email, verified: !!twitchUser.email });
         return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
       }
     } else {
@@ -506,6 +503,9 @@ app.get("/auth/twitch/callback", async (req, res) => {
       // Returning User Found
       if (existingUser.length > 0) {
         currentUser = existingUser[0];
+        // 1.99gb: an account with no / a placeholder / an unverified email gets Twitch's verified one
+        await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "twitch",
+                                                email: twitchUser.email, verified: !!twitchUser.email });
       } else {
         // No user found, check if there is a user with the same email.
         // (Twitch only reports a verified email address)
@@ -520,16 +520,12 @@ app.get("/auth/twitch/callback", async (req, res) => {
           return oauthFail(req, res, "An account with this email already exists. Sign in to it, then link Twitch from your profile.");
         }
         if (existingTwitchEmail.length > 0) {
-          const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]);
-          if (bonus[0].twitchBonus === 0) {
-            const badgeId = 'twitch-user'; // Replace with your actual badge ID
-            await awardBadge(existingTwitchEmail[0].userId, badgeId);
-            await welcome.connectBonus(existingTwitchEmail[0].userId, "twitch", twitchUser.id, awardBonus)
-          }
+          const prior = (await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [existingTwitchEmail[0].userId]))[0];
           await runQuery(
             "UPDATE users SET twitchId = ?, twitchDisplayname = ?, twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [twitchUser.id, twitchUser.display_name, 1, existingTwitchEmail[0].userId]
           );
+          await oauthLink.linkRewards({ userId: existingTwitchEmail[0].userId, provider: "twitch", providerId: twitchUser.id, priorFlag: prior ? prior.twitchBonus : 1 });
           currentUser = existingTwitchEmail[0];
         } else {
           //create a new user
@@ -548,12 +544,13 @@ app.get("/auth/twitch/callback", async (req, res) => {
             points_balance: 0,          // 1.99bg: the welcome bonus vests instead (welcome.js)
           };
           await runQuery(
-            "INSERT INTO users (userId, username, displayname, email, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (userId, username, displayname, email, isEmailVerified, password, twitchId, twitchDisplayname, avatar, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
               newUser.userId,
               newUser.username,
               newUser.displayname,
-              newUser.email,
+              newUser.email || null,
+              newUser.email ? 1 : 0,          // 1.99gb: Twitch only reports a verified address
               newUser.password,
               newUser.twitchId,
               newUser.twitchDisplayname,
@@ -562,13 +559,8 @@ app.get("/auth/twitch/callback", async (req, res) => {
             ]
           );
           await displaynames.markNewAccount(newUser.userId).catch(() => {});
-          const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [newUser.userId]);
-          if (bonus[0].twitchBonus === 0) {
-            const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
-            await awardBadge(newUser.userId, newUserBadgeId);
-            const badgeId = 'twitch-user'; // Replace with your actual badge ID
-            await awardBadge(newUser.userId, badgeId);
-          }
+          await oauthLink.safeBadge(newUser.userId, 'fresh_meat');
+          await oauthLink.safeBadge(newUser.userId, 'twitch-user');
           // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
           await welcome.enroll(newUser.userId, "twitch", req, res);
           await runQuery(
@@ -671,12 +663,12 @@ async function mergeConflict(req, res, provider) {
     // 1.99bu: the Twitch login comes along with the Twitch id (this sign-in's, else the merged account's)
     if (provider === "twitch" && c.twitchLogin) await twitchLogin.save(L.id(c), c.twitchLogin);
     else if (r.twitch) await twitchLogin.save(r.twitch.id, r.twitch.login);
-    const bonus = await getQuery(`SELECT ${L.bonusCol} AS b FROM users WHERE userId = ?`, [toId]);
-    if (bonus[0] && bonus[0].b === 0) {
-      try { await awardBadge(toId, L.badge); } catch (e) { /* already has it */ }
-      await welcome.connectBonus(toId, provider, L.id(c), awardBonus);
-    }
-    await runQuery(`UPDATE users SET ${L.bonusCol} = 1, ${L.bonusCol}_at = CURRENT_TIMESTAMP WHERE userId = ?`, [toId]);
+    const prior = (await getQuery(`SELECT ${L.bonusCol} AS b FROM users WHERE userId = ?`, [toId]))[0];
+    await runQuery(`UPDATE users SET ${L.bonusCol} = 1, ${L.bonusCol}_at = COALESCE(${L.bonusCol}_at, CURRENT_TIMESTAMP) WHERE userId = ?`, [toId]);
+    // 1.99gb: badge + connect bonus never throw (oauthlink.linkRewards); the provider's verified email onto
+    // an account without a verified one
+    await oauthLink.linkRewards({ userId: toId, provider, providerId: L.id(c), priorFlag: prior ? prior.b : 1 });
+    await oauthLink.captureAndNotify(req, { userId: toId, username: req.user.username, provider, email: c.email, verified: !!c.emailVerified });
     req.flash("success", `Accounts merged - ${L.label} is linked here now and ${r.amount.toLocaleString("en-US")} PAT came with it.`);
     res.redirect(edit);
   } catch (error) {
@@ -774,19 +766,20 @@ app.get("/auth/discord/callback", async (req, res) => {
           currentUserUsername: currentUser.username,
           discordId: discordUser.id,
           discordUsername: discordUser.username,
+          email: discordEmail,                       // 1.99gb: verified only - added after a merge (captureEmail)
+          emailVerified: !!discordEmail,
         };
         return res.redirect("/resolve-discord-conflict");
       } else {
-        const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUser.userId]);
-        if (bonus[0].discordBonus === 0) {
-          const badgeId = 'discord-user'; // Replace with your actual badge ID
-          await awardBadge(currentUser.userId, badgeId);
-          await welcome.connectBonus(currentUser.userId, "discord", discordUser.id, awardBonus)
-        }
+        // 1.99gb: the id is saved FIRST - badge / bonus after, never blocking it (oauthlink.linkRewards)
+        const prior = (await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [currentUser.userId]))[0];
         await runQuery(
           "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
           [discordUser.id, discordUser.username, 1, currentUser.userId]
         );
+        await oauthLink.linkRewards({ userId: currentUser.userId, provider: "discord", providerId: discordUser.id, priorFlag: prior ? prior.discordBonus : 1 });
+        await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "discord",
+                                                email: discordEmail, verified: !!discordEmail });
         return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
       }
     } else {
@@ -797,6 +790,9 @@ app.get("/auth/discord/callback", async (req, res) => {
       );
       if (existingUser.length > 0) {
         currentUser = existingUser[0];
+        // 1.99gb: an account with no / a placeholder / an unverified email gets Discord's verified one
+        await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "discord",
+                                                email: discordEmail, verified: !!discordEmail });
       } else {
         // No user found, check if there is a user with the same email.
         const existingDiscordEmail = discordEmail ? await getQuery(
@@ -809,16 +805,12 @@ app.get("/auth/discord/callback", async (req, res) => {
           return oauthFail(req, res, "An account with this email already exists. Sign in to it, then link Discord from your profile.");
         }
         if (existingDiscordEmail.length > 0) {
-          const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]);
-          if (bonus[0].discordBonus === 0) {
-            const badgeId = 'discord-user'; // Replace with your actual badge ID
-            await awardBadge(existingDiscordEmail[0].userId, badgeId);
-            await welcome.connectBonus(existingDiscordEmail[0].userId, "discord", discordUser.id, awardBonus)
-          }
+          const prior = (await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [existingDiscordEmail[0].userId]))[0];
           await runQuery(
             "UPDATE users SET discordId = ?, discordUsername = ?, discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
             [discordUser.id, discordUser.username, 1, existingDiscordEmail[0].userId]
           );
+          await oauthLink.linkRewards({ userId: existingDiscordEmail[0].userId, provider: "discord", providerId: discordUser.id, priorFlag: prior ? prior.discordBonus : 1 });
           currentUser = existingDiscordEmail[0];
         } else {
           // Create a new user
@@ -839,12 +831,13 @@ app.get("/auth/discord/callback", async (req, res) => {
           };
           
           await runQuery(
-            "INSERT INTO users (userId, username, displayname, email, password, avatar, discordId, discordUsername, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (userId, username, displayname, email, isEmailVerified, password, avatar, discordId, discordUsername, points_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
               newUser.userId,
               newUser.username,
               newUser.displayname,
-              newUser.email,
+              newUser.email || null,
+              newUser.email ? 1 : 0,          // 1.99gb: discordEmail is Discord-verified only
               newUser.password,
               newUser.avatar,
               newUser.discordId,
@@ -853,13 +846,8 @@ app.get("/auth/discord/callback", async (req, res) => {
             ]
           );
           await displaynames.markNewAccount(newUser.userId).catch(() => {});
-          const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [newUser.userId]);
-          if (bonus[0].discordBonus === 0) {
-            const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
-            await awardBadge(newUser.userId, newUserBadgeId);
-            const badgeId = 'discord-user'; // Replace with your actual badge ID
-            await awardBadge(newUser.userId, badgeId);
-          }
+          await oauthLink.safeBadge(newUser.userId, 'fresh_meat');
+          await oauthLink.safeBadge(newUser.userId, 'discord-user');
           // 1.99bg: no connect bonus for an account this sign-in created - its welcome bonus vests
           await welcome.enroll(newUser.userId, "discord", req, res);
           await runQuery(
@@ -1494,7 +1482,12 @@ app.post('/api/users/twitch/register', async (req, res) => {
     if (!isPlatformBot((req.body || {}).botToken)) {
       return res.status(403).json({ error: "unauthorized" });
     }
-    const { username, email, twitchId, profileImage, twitchDisplayname, avatar } = req.body;
+    const { email, twitchId, profileImage, twitchDisplayname, avatar } = req.body;
+    // 1.99gb: the bot's name goes through the register form's rules here too (charset, 3-24, no "CF" prefix,
+    // free in any letter case) - a raw Discord / Twitch name used to become the username as-is
+    let username;
+    try { username = await generateUniqueUsername(req.body.username || twitchDisplayname); }
+    catch (e) { return res.status(500).json({ error: 'Failed to create new user' }); }
     const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(twitchDisplayname) || username;
     const points_balance = 0;
     const userId = uuidv4();
@@ -1516,13 +1509,8 @@ app.post('/api/users/twitch/register', async (req, res) => {
         throw e;
       }
       await displaynames.markNewAccount(userId).catch(() => {});
-      const bonus = await getQuery(`SELECT twitchBonus FROM users WHERE userId = ?`, [userId]);
-      if (bonus[0].twitchBonus === 0) {
-        const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
-        await awardBadge(userId, newUserBadgeId);
-        const badgeId = 'twitch-user'; // Replace with your actual badge ID
-        await awardBadge(userId, badgeId);
-      }
+      await oauthLink.safeBadge(userId, 'fresh_meat');
+      await oauthLink.safeBadge(userId, 'twitch-user');
       await welcome.enroll(userId, "twitch-bot");    // 1.99bg: the welcome bonus vests (no instant connect bonus)
       await runQuery(
         "UPDATE users SET twitchBonus = ?, twitchBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -1541,7 +1529,12 @@ app.post('/api/users/discord/register', async (req, res) => {
     if (!isPlatformBot((req.body || {}).botToken)) {
       return res.status(403).json({ error: "unauthorized" });
     }
-    const { username, email, discordId, profileImage, discordUsername, avatar } = req.body;
+    const { email, discordId, profileImage, discordUsername, avatar } = req.body;
+    // 1.99gb: the bot's name goes through the register form's rules here too (charset, 3-24, no "CF" prefix,
+    // free in any letter case) - a raw Discord / Twitch name used to become the username as-is
+    let username;
+    try { username = await generateUniqueUsername(req.body.username || discordUsername); }
+    catch (e) { return res.status(500).json({ error: 'Failed to create new user' }); }
     const displayname = displaynames.usable(req.body.displayname) || displaynames.usable(discordUsername) || username;
     const points_balance = 0;
     const userId = uuidv4();
@@ -1563,13 +1556,8 @@ app.post('/api/users/discord/register', async (req, res) => {
         throw e;
       }
       await displaynames.markNewAccount(userId).catch(() => {});
-      const bonus = await getQuery(`SELECT discordBonus FROM users WHERE userId = ?`, [userId]);
-      if (bonus[0].discordBonus === 0) {
-        const newUserBadgeId = 'fresh_meat'; // Ensure this ID matches the one in your badges table
-        await awardBadge(userId, newUserBadgeId);
-        const badgeId = 'discord-user'; // Replace with your actual badge ID
-        await awardBadge(userId, badgeId);
-      }
+      await oauthLink.safeBadge(userId, 'fresh_meat');
+      await oauthLink.safeBadge(userId, 'discord-user');
       await welcome.enroll(userId, "discord-bot");   // 1.99bg: the welcome bonus vests (no instant connect bonus)
       await runQuery(
         "UPDATE users SET discordBonus = ?, discordBonus_at = CURRENT_TIMESTAMP WHERE userId = ?",
@@ -2339,8 +2327,7 @@ app.post('/api/users/camfrog/register', async (req, res) => {
     // the account has really been used, once per person - welcome.js. `identity` is Pepe's alias
     // identity for this login (one person, several Camfrog logins). points_balance is ignored.
     await welcome.enroll(userId, "camfrog", null, null, typeof req.body.identity === "string" ? req.body.identity.slice(0, 60) : null);
-    const newUserBadgeId = 'fresh_meat';
-    await awardBadge(userId, newUserBadgeId);
+    await oauthLink.safeBadge(userId, 'fresh_meat');
     await inbox.attachPendingSafe(userId, camfrogUsername);   // notices Pepe sent before the account existed
     res.json({ user: { userId, username, displayname, camfrogUsername, points_balance: 0 } });
   } catch (error) {
@@ -3104,7 +3091,8 @@ app.post("/api/award-badge", async (req, res) => {
       // Call the awardBadge function to award the badge
       const result = await awardBadge(userId, badgeId);
   
-      // Respond with success
+      // 1.99gb: awardBadge no longer throws for a badge the user has (the bots read success == false)
+      if (result && result.already) return res.status(400).json({ success: false, message: "Badge already awarded" });
       return res.json(result);
     } catch (error) {
       if (error.message === 'Badge not found') {

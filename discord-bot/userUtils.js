@@ -40,9 +40,10 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
     let isUnique = false;
     let counter = 1;
     while (!isUnique) {
-      // Check if the username already exists in the database
+      // Check if the username already exists in the database (1.99gb: encoded - a name with "/", "?", "#"
+      // or spaces broke the URL; the site also normalises the name when it registers the account)
       const existingUserResponse = await axios.get(
-        process.env.BACKEND_BASE_URL+`/api/users/username/${username}`
+        process.env.BACKEND_BASE_URL+`/api/users/username/${encodeURIComponent(username)}`
       );
       if (existingUserResponse.data && existingUserResponse.data.exists) {
         // Username exists, append a number and check again
@@ -71,7 +72,10 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
       }
     } catch (error) {
       if (error.response && error.response.status === 404) {
-        // User not found, create a new one
+        // User not found, create a new one (1.99gb: only with a real name - never "undefined" / "[object Object]")
+        if (typeof discordUsername !== "string" || !discordUsername.trim()) {
+          throw new Error(`Discord user ${discordId} not found and no name to create one with - not creating`);
+        }
         console.log(`Discord user with ID ${discordId} not found. Creating new user...`);
         const newUser = await createDiscordUser(discordId, discordUsername, avatarUrl);
         if (newUser) {
@@ -85,6 +89,18 @@ async function createDiscordUser(discordId, discordUsername, profileImage) {
         console.error("Error finding or creating Discord user:", error.message);
         throw error;
       }
+    }
+  }
+
+  // 1.99gb: look a Discord user up WITHOUT creating one (null when there's no account) - for callers
+  // that only have an id (a PokerNow cash-out: creating there made accounts named "undefined")
+  async function findDiscordUser(discordId) {
+    try {
+      const r = await axios.get(process.env.BACKEND_BASE_URL + `/api/users/discord/${encodeURIComponent(discordId)}`);
+      return (r.data && r.data.user) || null;
+    } catch (error) {
+      if (error.response && error.response.status === 404) return null;
+      throw error;
     }
   }
 
@@ -116,5 +132,6 @@ async function findUserBalance(discordId) {
 
   module.exports = {
     findOrCreateDiscordUser,
+    findDiscordUser,
     findUserBalance
   };

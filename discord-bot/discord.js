@@ -11,7 +11,7 @@ const { token } = require("./config.json");
 const axios = require("axios");
 require("./backendAuth");   // 1.99fy: the bot token on PATV user lookups (bot-only now)
 require("dotenv").config();
-const { findOrCreateDiscordUser, findUserBalance } = require("./userUtils"); // Helper function to find or create user
+const { findOrCreateDiscordUser, findDiscordUser, findUserBalance } = require("./userUtils"); // Helper function to find or create user
 const botBridge = require("./botBridge"); // local HTTP bridge: prize store + PokerNow (botBridge.js)
 
 // Create a new Discord client instance
@@ -277,7 +277,8 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
         const pokerNowId = match[3];
         console.log(newMessage.mentions.members.first());
         const discordId = newMessage.mentions.members.first().id;
-        const displayName = newMessage.mentions.members.first();
+        // 1.99gb: the member's Discord username (a string) - the GuildMember object stringified to "<@id>"
+        const displayName = newMessage.mentions.members.first().user.username;
         const avatar = newMessage.mentions.members.first().displayAvatarURL()
         const discordUser = await findOrCreateDiscordUser(discordId, displayName, avatar);
         console.log("di "+discordUser);
@@ -305,7 +306,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
   ) {
     console.log(newMessage.mentions.members.last().id);
     const discordId = newMessage.mentions.members.last().id;
-    const discordUsername = newMessage.mentions.members.last();
+    const discordUsername = newMessage.mentions.members.last().displayName;   // 1.99gb: a string, not the GuildMember
     const pokerMessage = newMessage.content;
     const splitMessage = pokerMessage.split(" ");
     const amount = splitMessage[4];
@@ -402,7 +403,10 @@ const DISCORD_DEGEN_BADGE_ID = 'discord-degen'; // The badgeId for "discord-dege
 });
 
 async function processCashout(discordId, amount, discordUsername) {
-    const user = await findOrCreateDiscordUser(discordId)
+    // 1.99gb: look up only - a cash-out never creates an account (it used to make one named "undefined")
+    let user = null;
+    try { user = await findDiscordUser(discordId); } catch (e) { console.error(`Cash-out lookup for ${discordId}:`, e.message); return; }
+    if (!user) { console.error(`Cash-out for ${discordId}: no PATV account - nothing to cash out to`); return; }
     const balance = await findUserBalance(discordId);
         // Call the backend API to perform the cash-out
         try {
@@ -412,7 +416,7 @@ async function processCashout(discordId, amount, discordUsername) {
             action: 'cashout'
           });
           if (response && response.data.message) {
-            client.channels.cache.get('1192942161747001344').send(`${discordUsername} your cashout of ${amount} poker chips was successful. You now have PAT ${balance}.`);
+            client.channels.cache.get('1192942161747001344').send(`<@${discordId}> your cashout of ${amount} poker chips was successful. You now have PAT ${balance}.`);
           }
         }
         catch (error) {

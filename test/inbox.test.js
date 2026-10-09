@@ -129,7 +129,7 @@ test("pending notices also attach when an auto (CF…) account is merged on link
   await inbox.add("u4", { kind: "wager", body: "same notice, already here", ref: "w:1" });      // dup ref on the target
   await inbox.add("cf1", { kind: "loan", body: "only on the auto account", ref: "l:9" });
   const moved = await moveUserRows("cf1", "u4");
-  assert.ok(moved["inbox.user_id"] >= 1);
+  assert.ok(moved.moved["inbox.user_id"] >= 1);
   const d = await rows("u4");
   assert.equal(d.length, 2, "the duplicate ref stays once, the other moves");
   assert.equal((await rows("cf1")).length, 0);
