@@ -154,7 +154,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
       const busy = busyFor(R.id, login);
       if (busy) return res.status(409).json({ ok: false, error: busy.userId === u.userId ? "You're already clipping their cam." : "Pepe is already clipping their cam - try again in a bit.", id: busy.userId === u.userId ? busy.id : undefined });
-      const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || c.state === "ready")).length;
+      // 1.99ia: only a request still in flight or a preview you can still post counts (an expired one didn't)
+      const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || (c.state === "ready" && NOW() - c.done < PREVIEW_TTL))).length;
       if (open >= OPEN_PER_USER) return res.status(429).json({ ok: false, error: "Save or discard the clips you have first." });
       const lim = relay.limited("camclip|" + u.userId, CLIP_GAP, CLIP_BURST, CLIP_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });

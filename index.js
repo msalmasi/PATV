@@ -180,7 +180,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");

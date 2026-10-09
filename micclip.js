@@ -168,7 +168,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       for (const c of clips.values()) {
         if (c.userId === u.userId && c.tx === tx && (isOpen(c) || (c.state === "ready" && NOW() - c.done < PREVIEW_TTL))) return res.json({ ok: true, id: c.id, again: true });
       }
-      const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || c.state === "ready")).length;
+      // 1.99ia: only a request still in flight or a preview you can still post counts (an expired one didn't)
+      const open = [...clips.values()].filter((c) => c.userId === u.userId && (isOpen(c) || (c.state === "ready" && NOW() - c.done < PREVIEW_TTL))).length;
       if (open >= OPEN_PER_USER) return res.status(429).json({ ok: false, error: "Post or discard the clips you have first." });
       const lim = relay.limited("micclip|" + u.userId, REQ_GAP, REQ_BURST, REQ_WINDOW);
       if (lim) return res.status(429).json({ ok: false, error: lim });
