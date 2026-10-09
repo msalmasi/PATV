@@ -116,17 +116,70 @@
         src.connect(analyser); analyser.connect(c.destination);
       } catch (e) { analyser = null; }
     }
-    // The room arrives in ~1 s pieces in real time, so playing the moment the first bytes land means
-    // stuttering forever. Fill a small cushion first (CUSHION s of audio, or give up waiting after
-    // 20 s and play what there is), then play.
-    var CUSHION = 2.5, waitTimer = null;
+    // The room arrives in ~0.25 s pieces in real time (1.99hp), so playing the moment the first bytes land
+    // means stuttering. Fill a small cushion first (CUSHION s of audio, or give up waiting after 20 s and
+    // play what there is), then play. 1.99hq: 0.75 s (was 2.5 s) + live-edge catch-up below.
+    var CUSHION = 0.75, waitTimer = null;
+    // Live edge (mirrors stage-player.js): more than EDGE_HI s buffered ahead -> play at 1.05x (pitch kept)
+    // until back under EDGE_LO; more than EDGE_JUMP ahead -> jump to EDGE_KEEP s before the newest audio.
+    var EDGE_LO = 0.9, EDGE_HI = 1.3, EDGE_JUMP = 4, EDGE_KEEP = 0.6, RATE_UP = 1.05;
+    // ...and under EDGE_DRY s ahead -> 0.96x until EDGE_LO again, easing off before the buffer runs dry
+    var EDGE_DRY = 0.3, RATE_DOWN = 0.96;
     function ahead() { var b = au.buffered; return b.length ? b.end(b.length - 1) - au.currentTime : 0; }
+    // 1.99hq: where the browser can, the stream is fed through Media Source Extensions: the <audio> element's
+    // own progressive loader takes the MP3 in ~2-3 s gulps (so playback stalled and ran 2-3 s behind however
+    // small Pepe's chunks were), while appending each chunk as it arrives keeps the buffer smooth. Browsers
+    // without MSE for audio/mpeg (older iOS) keep the plain stream URL, exactly as before.
+    var MS = window.MediaSource || window.ManagedMediaSource;
+    var useMse = !!(MS && MS.isTypeSupported && MS.isTypeSupported('audio/mpeg') && window.fetch && window.URL && URL.createObjectURL);
+    var mse = null;
+    function mseStop() {
+      if (!mse) return;
+      var m = mse; mse = null;
+      try { m.ctl.abort(); } catch (e) { /* done already */ }
+      try { URL.revokeObjectURL(m.url); } catch (e) { /* revoked */ }
+    }
+    function mseStart(url) {
+      var m = mse = { ctl: window.AbortController ? new AbortController() : { abort: function () {}, signal: undefined }, q: [], sb: null };
+      var ms = new MS();
+      m.url = URL.createObjectURL(ms);
+      if (window.ManagedMediaSource && MS === window.ManagedMediaSource) au.disableRemotePlayback = true;
+      au.src = m.url;
+      function pump() {
+        if (mse !== m || !m.sb || m.sb.updating || !m.q.length) return;
+        try {
+          var b = au.buffered;
+          if (b.length && au.currentTime - b.start(0) > 30) { m.sb.remove(0, au.currentTime - 10); return; }   // keep memory small
+          m.sb.appendBuffer(m.q.shift());
+        } catch (e) { if (e && e.name === 'QuotaExceededError') m.q.length = 0; }
+      }
+      ms.addEventListener('sourceopen', function () {
+        if (mse !== m) return;
+        try { m.sb = ms.addSourceBuffer('audio/mpeg'); } catch (e) { stop('this browser can\'t play the room audio'); return; }
+        m.sb.addEventListener('updateend', pump);
+        fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: m.ctl.signal }).then(function (r) {
+          if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+          var rd = r.body.getReader();
+          function next() {
+            return rd.read().then(function (x) {
+              if (mse !== m) { try { rd.cancel(); } catch (e) { /* gone */ } return; }
+              if (x.done) { if (playing) stop('audio stopped — ▶ to retry'); return; }
+              m.q.push(x.value); pump();
+              return next();
+            });
+          }
+          return next();
+        }).catch(function () { if (mse === m && playing) stop('audio stopped — ▶ to retry'); });
+      });
+    }
     function start() {
       clearInterval(waitTimer); startedAt = 0;
       au.preload = 'auto';
       shared.players.forEach(function (p) { if (p !== me) p.halt(); });   // one room at a time on the page
-      au.src = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now();
-      au.load();
+      var url = '/p/' + encodeURIComponent(cur) + '/audio?t=' + Date.now();
+      mseStop();
+      if (useMse) mseStart(url);
+      else { au.src = url; au.load(); }
       wireMeter();
       if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
       applyVolume();
@@ -139,7 +192,7 @@
         if (got > 0.2) setState('buffering ' + Math.min(100, Math.round(got / CUSHION * 100)) + '%', 'wait');
         // a paused element stops fetching after a couple of seconds - so "it stopped growing" counts as full too
         if (got > lastGot + 0.05) { lastGot = got; grewAt = Date.now(); }
-        var full = got >= CUSHION || (got > 0.8 && Date.now() - grewAt > 1500);
+        var full = got >= CUSHION || (got > 0.3 && Date.now() - grewAt > 1500);
         if (!full && Date.now() - t0 < 20000) return;
         clearInterval(waitTimer);
         if (got <= 0) { stop('no audio from the room right now — ▶ to retry'); return; }
@@ -148,7 +201,8 @@
       }, 250);
     }
     function stop(msg) {
-      playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer);
+      playing = false; cancelAnimationFrame(raf); clearInterval(waitTimer); setRate(1);
+      mseStop();
       au.pause(); au.removeAttribute('src'); au.load();
       jump.classList.add('hide'); paint(); setState(msg || (curName ? curName + ' · audio' : 'Room audio'), '');
       notify();
@@ -166,12 +220,30 @@
     au.addEventListener('waiting', function () { if (playing) setState('LIVE · buffering…', 'wait'); });
     au.addEventListener('playing', function () { setState('LIVE', 'live'); });
     au.addEventListener('error', function () { if (playing) stop('audio stopped — ▶ to retry'); });
-    setInterval(function () {
-      if (!playing || !startedAt) return;
-      var behind = (Date.now() - startedAt) / 1000 - au.currentTime;    // time lost to stalls
+    function setRate(r) { try { if (au.playbackRate !== r) au.playbackRate = r; } catch (e) { /* fixed rate */ } }
+    var lastEdge = 0;
+    function edge() {
+      if (!playing || !startedAt || au.paused) { setRate(1); return; }
+      var a = ahead(), now = Date.now();
+      if (a > EDGE_JUMP && now - lastEdge > 3000) {
+        lastEdge = now;
+        var b = au.buffered, end = b.length ? b.end(b.length - 1) : 0;
+        try { au.currentTime = Math.max(0, end - EDGE_KEEP); } catch (e) { stop(); start(); return; }
+        startedAt = now - au.currentTime * 1000;       // the stall clock restarts at the new position
+        setRate(1);
+        return;
+      }
+      if (a > EDGE_HI) setRate(RATE_UP);
+      else if (a < EDGE_DRY) setRate(RATE_DOWN);
+      else if ((au.playbackRate > 1 && a <= EDGE_LO) || (au.playbackRate < 1 && a >= EDGE_LO)) setRate(1);
+      var behind = (now - startedAt) / 1000 - au.currentTime;          // time lost to stalls (catch-up shrinks it)
+      var lagging = behind >= 6 || a > EDGE_JUMP / 2;
       jump.classList.toggle('hide', behind < 6);
-      if (behind >= 6 && state.textContent === 'LIVE') setState('LIVE · catching up…', 'wait');
-    }, 2000);
+      if (lagging && state.textContent === 'LIVE') setState('LIVE · catching up…', 'wait');
+      else if (!lagging && state.textContent === 'LIVE · catching up…') setState('LIVE', 'live');
+    }
+    setInterval(edge, 500);
+    box.rbEdge = edge;                          // tests drive it directly
     paint();
     var me = {
       halt: function () { if (playing) { stop(); } },
@@ -191,8 +263,8 @@
       var lvl = null;
       if (analyser) { var d = new Uint8Array(analyser.frequencyBinCount); analyser.getByteFrequencyData(d); lvl = Math.max.apply(null, d); }
       var sess = null; try { sess = navigator.audioSession ? navigator.audioSession.type : null; } catch (e) { sess = null; }
-      return { ios: IOS, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
-        ahead: ahead(), paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
+      return { ios: IOS, mse: useMse, session: sess, ctx: shared.ctx ? shared.ctx.state : null, meter: !!analyser, level: lvl, t: au.currentTime,
+        ahead: ahead(), rate: au.playbackRate, paused: au.paused, muted: au.muted, volume: au.volume, userMuted: userMuted, userVol: userVol };
     };
     var painted = false, offWhy = null;
     function offReason(d) {

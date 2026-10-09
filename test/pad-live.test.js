@@ -143,8 +143,32 @@ test("home: Top Pads rows get a 🎧 - enabled when the pad's audio relay is on 
   assert.match(btn("c"), /disabled/);
   assert.match(btn("c"), /sign in to listen/);
   assert.match(html, /<div id="tpAudioBox"><\/div>/);
-  assert.match(html, /room-bridge\.js\?v=7/, "the player script loads for the 🎧 even without the room widget");
+  assert.match(html, /room-bridge\.js\?v=8/, "the player script loads for the 🎧 even without the room widget");
   assert.match(html, /get\(\)\.listen\(b\.getAttribute\('data-listen'\)/);
   const none = await renderHome({ tops: tops.map((t) => Object.assign({}, t, { audio: false })) });
   assert.doesNotMatch(none, /room-bridge\.js/, "nothing to listen to and no room widget: no player script");
 });
+
+// ── 1.99hq: lower-latency room audio (~1.5 s behind the room, was 4-5 s) ──
+test("site: a new listener is primed with only the last ~0.5 s of audio (always the newest chunk)", () => {
+  const { _audioRemember, AUDIO_PRIME_MS } = require(path.join(repo, "bridge"));
+  assert.equal(AUDIO_PRIME_MS, 500);
+  const a = { recent: [], at: 0 };
+  for (let i = 0; i < 10; i++) _audioRemember(a, Buffer.from([i]), 1000 + i * 250);   // 0.25 s chunks
+  assert.deepEqual(a.recent.map((r) => r.buf[0]), [7, 8, 9], "the last 0.5 s");
+  _audioRemember(a, Buffer.from([42]), 99999);                                    // after a long gap
+  assert.deepEqual(a.recent.map((r) => r.buf[0]), [42], "never empty: the newest one stays");
+});
+
+test("player: 0.75 s cushion; catch-up to the live edge (1.05x above 1.3 s, 0.96x under 0.3 s, jump over 4 s)", () => {
+  const js = fs.readFileSync(path.join(repo, "public", "js", "room-bridge.js"), "utf8");
+  assert.match(js, /var CUSHION = 0\.75,/);
+  assert.match(js, /var EDGE_LO = 0\.9, EDGE_HI = 1\.3, EDGE_JUMP = 4, EDGE_KEEP = 0\.6, RATE_UP = 1\.05;/);
+  assert.match(js, /var EDGE_DRY = 0\.3, RATE_DOWN = 0\.96;/);
+  assert.match(js, /setInterval\(edge, 500\)/);
+  assert.match(js, /isTypeSupported\('audio\/mpeg'\)/, "MSE where the browser can, plain stream URL otherwise (iOS)");
+  for (const v of ["home.ejs", "room.ejs"]) {
+    assert.match(fs.readFileSync(path.join(repo, "views", v), "utf8"), /room-bridge\.js\?v=8/, v + " loads the new player");
+  }
+});
+

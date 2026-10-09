@@ -32,7 +32,9 @@ const STALE_MS = 90 * 1000;              // no sync for this long -> the room sh
 const MAX_EVENTS = 500, MAX_ROOMS = 20, MAX_MEMBERS = 400;
 const TRANSCRIPT = "x.pepe.transcript";      // Pepe's mic transcripts (a PCP extension event)
 const FEED_TYPES = new Set(["message", TRANSCRIPT, "member.join", "member.leave", "mic.grab", "mic.release", "room.update"]);
-const AUDIO_MAX_LISTENERS = 40, AUDIO_IDLE_MS = 30 * 1000, AUDIO_PRIME = 3;
+// 1.99hq: a new listener is primed with only the last ~0.5 s (was the last 3 chunks = ~3 s of old audio); Pepe
+// sends ~0.25 s chunks now, so that is 2-3 chunks (always at least the newest one)
+const AUDIO_MAX_LISTENERS = 40, AUDIO_IDLE_MS = 30 * 1000, AUDIO_PRIME_MS = 500;
 
 const ready = (async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS bridge_rooms (
@@ -287,12 +289,18 @@ function stage() {
            pepe_src: pepeSrc() };
 }
 
-// ── room audio relay: Pepe POSTs ~1s MP3 chunks, we pass them to signed-in listeners. Nothing kept. ──
-const audio = new Map();                 // room id -> {listeners:Set(res), recent:[Buffer], at}
+// ── room audio relay: Pepe POSTs ~0.25 s MP3 chunks (1.99hp; was ~1 s), we pass them to signed-in listeners. Nothing kept. ──
+const audio = new Map();                 // room id -> {listeners:Set(res), recent:[{buf, at}], at}
 function audioHub(id) {
   let a = audio.get(id);
   if (!a) { a = { listeners: new Set(), recent: [], at: 0 }; audio.set(id, a); }
   return a;
+}
+/** Keep `buf` (arrived at `now`) as recent audio; drop what is older than AUDIO_PRIME_MS, always keeping the newest. */
+function audioRemember(a, buf, now) {
+  a.at = now;
+  a.recent.push({ buf, at: now });
+  while (a.recent.length > 1 && now - a.recent[0].at > AUDIO_PRIME_MS) a.recent.shift();
 }
 function audioClose(id) {
   const a = audio.get(id);
@@ -571,9 +579,7 @@ function register(app, { isBotToken, addUser }) {
     const a = audioHub(R.id);
     const buf = typeof body.data === "string" && body.data ? Buffer.from(body.data, "base64") : null;
     if (buf && buf.length) {
-      a.at = Date.now();
-      a.recent.push(buf);
-      if (a.recent.length > AUDIO_PRIME) a.recent.shift();
+      audioRemember(a, buf, Date.now());
       for (const l of a.listeners) { try { l.write(buf); } catch (e) { a.listeners.delete(l); } }
     }
     res.json({ success: true, listeners: a.listeners.size });
@@ -590,7 +596,8 @@ function register(app, { isBotToken, addUser }) {
     if (a.listeners.size >= AUDIO_MAX_LISTENERS) return res.status(503).send("Too many listeners right now.");
     res.status(200).set({ "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Accel-Buffering": "no", Connection: "keep-alive" });
     res.flushHeaders();
-    for (const b of a.recent) res.write(b);
+    try { req.socket.setNoDelay(true); } catch (e) { /* not a TCP socket */ }
+    for (const r of a.recent) res.write(r.buf);
     a.listeners.add(res);
     req.on("close", () => { a.listeners.delete(res); });
   });
@@ -779,5 +786,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };
