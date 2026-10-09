@@ -18,24 +18,46 @@ function harness(o = {}) {
   let T = 1_000_000;
   const procs = [];
   const logs = [];
+  const pubs = [];
   const sup = new W.Supervisor({
-    now: () => T, log: (m) => logs.push(m), allowTargets: o.allow || "twitch",
+    now: () => T, log: (m) => logs.push(m), allowTargets: o.allow || "twitch", mode: o.mode,
+    publisher: (target) => {
+      const pub = new EventEmitter();
+      pub.target = target; pub.got = []; pub.ended = false; pub.destroyed = false; pub.full = false;
+      pub.write = (d) => { pub.got.push(Buffer.from(d)); return !pub.full; };
+      pub.end = () => { pub.ended = true; };
+      pub.destroy = () => { pub.destroyed = true; };
+      pubs.push(pub);
+      return pub;
+    },
     spawn: (args) => {
       const p = new EventEmitter();
-      p.args = args; p.stdout = new PassThrough(); p.stderr = new PassThrough(); p.killed = null;
+      p.args = args; p.stdout = new PassThrough(); p.stderr = new PassThrough(); p.progress = new PassThrough(); p.killed = null;
+      p.stdio = [null, p.stdout, p.stderr, p.progress];
       p.kill = (sig) => { p.killed = sig; setImmediate(() => p.emit("exit", null, sig)); };
       procs.push(p);
       return p;
     },
   });
-  return { sup, procs, logs, adv: (ms) => { T += ms; }, now: () => T };
+  return { sup, procs, pubs, logs, adv: (ms) => { T += ms; }, now: () => T };
 }
 const tick = () => new Promise((r) => setImmediate(r));
-function progress(p, frame, kbps) {
-  p.stdout.write(`frame=${frame}\nfps=30.0\nbitrate=${kbps}kbits/s\ntotal_size=1\nprogress=continue\n`);
+function progress(p, frame, kbps) {     // pipe mode: progress on fd 3; argv mode: on stdout
+  (p.args.includes("pipe:3") ? p.progress : p.stdout).write(`frame=${frame}\nfps=30.0\nbitrate=${kbps}kbits/s\ntotal_size=1\nprogress=continue\n`);
 }
 
-test("args: loopback source, copy only, progress on stdout, flv to the target", () => {
+test("pipe args (1.99gn): no target, no key, nothing rtmp but the loopback source; FLV to stdout, progress on fd 3", () => {
+  const a = W.ffmpegPipeArgs(SRC);
+  assert.ok(!a.join(" ").includes(KEY) && !a.join(" ").includes("twitch"), "no key / ingest in argv");
+  assert.deepEqual(a.filter((x) => /rtmps?:/i.test(x)), [SRC]);
+  assert.equal(a[a.indexOf("-i") + 1], SRC);
+  assert.equal(a[a.length - 1], "pipe:1");
+  assert.equal(a[a.indexOf("-progress") + 1], "pipe:3");
+  assert.equal(a[a.indexOf("-f") + 1], "flv");
+  assert.ok(a.includes("copy") && !a.includes("libx264"), "no re-encode");
+});
+
+test("legacy argv args (RELAY_MODE=argv): loopback source, copy only, progress on stdout, flv to the target", () => {
   const a = W.ffmpegArgs(SRC, TGT);
   assert.ok(a.includes("copy") && !a.includes("libx264"), "no re-encode");
   assert.equal(a[a.indexOf("-i") + 1], SRC);
@@ -136,9 +158,51 @@ test("a changed destination restarts the relay; refused targets never spawn", as
   h.sup.sync([{ id: "main", source: SRC, target: TGT.replace("live-jfk", "live-iad") }]);
   assert.equal(h.procs[0].killed, "SIGINT");
   assert.equal(h.procs.length, 2);
-  assert.equal(h.procs[1].args[h.procs[1].args.length - 1], TGT.replace("live-jfk", "live-iad"));
+  assert.equal(h.pubs[1].target, TGT.replace("live-jfk", "live-iad"));
+  assert.ok(!h.procs[1].args.join(" ").includes(KEY), "never in argv");
   const h2 = harness();
   h2.sup.sync([{ id: "x", source: SRC, target: "rtmp://evil.example/app/" + KEY }, { id: "y", source: "rtmp://8.8.8.8/live/a", target: TGT }]);
   assert.equal(h2.procs.length, 0);
   assert.ok(!h2.logs.join("\n").includes(KEY));
+});
+
+test("pipe mode: ffmpeg's stdout waits for Publish.Start, follows backpressure, reaches the publisher; clean end", async () => {
+  const h = harness();
+  h.sup.sync([{ id: "main", source: SRC, target: TGT }]);
+  const p = h.procs[0], pub = h.pubs[0];
+  assert.equal(pub.target, TGT);
+  assert.ok(!p.args.join(" ").includes(KEY));
+  p.stdout.write(Buffer.from("FLV-early")); await tick();
+  assert.equal(pub.got.length, 0, "nothing flows before ready");
+  pub.emit("ready"); await tick();
+  assert.equal(Buffer.concat(pub.got).toString(), "FLV-early");
+  pub.full = true; p.stdout.write(Buffer.from("a")); await tick();
+  assert.equal(p.stdout.isPaused(), true, "paused on backpressure");
+  pub.full = false; pub.emit("drain"); await tick();
+  assert.equal(p.stdout.isPaused(), false);
+  p.stdout.end(); await tick();
+  assert.equal(pub.ended, true, "ffmpeg's end -> unpublish");
+});
+
+test("pipe mode: a publisher error kills that ffmpeg and restarts with backoff; the key never reaches logs/status", async () => {
+  const h = harness();
+  const want = [{ id: "main", source: SRC, target: TGT }];
+  h.sup.sync(want);
+  h.pubs[0].emit("error", new Error(`publish refused: NetStream.Publish.BadName ${KEY} at ${TGT}`));
+  assert.equal(h.procs[0].killed, "SIGKILL");
+  await tick(); await tick();
+  const st = h.sup.status().main;
+  assert.equal(st.state, "error");
+  assert.match(st.detail, /rtmp: publish refused/);
+  h.adv(W.BACKOFF_MIN); h.sup.sync(want);
+  assert.equal(h.procs.length, 2); assert.equal(h.pubs.length, 2);
+  const all = h.logs.join("\n") + JSON.stringify(h.sup.status());
+  assert.ok(!all.includes(KEY) && !all.includes("twitch.tv"), all);
+});
+
+test("RELAY_MODE=argv still works (emergency fallback): target is ffmpeg's last argument, no publisher", () => {
+  const h = harness({ mode: "argv" });
+  h.sup.sync([{ id: "main", source: SRC, target: TGT }]);
+  assert.equal(h.procs[0].args[h.procs[0].args.length - 1], TGT);
+  assert.equal(h.pubs.length, 0);
 });
