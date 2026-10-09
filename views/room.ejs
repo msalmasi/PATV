@@ -556,6 +556,7 @@
   </div>
   <link rel="stylesheet" href="/public/css/room-bridge.css?v=6">
   <script src="/public/js/room-bridge.js?v=10"></script>
+  <link rel="stylesheet" href="/public/css/flair.css?v=1"><%# 1.99ir: pad flair chips on the chat %>
   <link rel="stylesheet" href="/public/css/quotes.css?v=1">
   <script src="/public/js/chat-clip.js?v=1"></script>
   <link rel="stylesheet" href="/public/css/room-mod.css?v=6">
@@ -601,6 +602,17 @@
       if (u.self) n.title = 'Pepe'; else if (u.display && u.login && u.display.toLowerCase() !== u.login.toLowerCase()) n.title = u.login;
       return n;
     }
+    // 1.99ir: their flair in this pad (padflair.js) - text only, colours must be strict hex
+    function flairEl(u) {
+      var f = u && !u.anon && u.patv && u.patv.flair;
+      if (!f || !f.name) return null;
+      var s = el('span', 'ufl', f.name);
+      s.title = 'Pad flair: ' + f.name;
+      if (f.emoji) s.insertBefore(el('span', 'ufl-e', f.emoji), s.firstChild);
+      if (/^#[0-9a-f]{6}$/.test(f.color || '')) s.style.setProperty('--fl', f.color);
+      if (/^#[0-9a-f]{6}$/.test(f.ink || '')) s.style.setProperty('--fli', f.ink);
+      return s;
+    }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function dur(ms) { var s = Math.round(ms / 1000); return s < 60 ? s + 's' : s < 3600 ? Math.round(s / 60) + 'm' : (s / 3600).toFixed(1) + 'h'; }
     function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
@@ -616,6 +628,7 @@
         row.appendChild(avatar(it.u));
         var b = el('div', 'body');
         b.appendChild(name(it.u));
+        var fl_ = flairEl(it.u); if (fl_) { b.appendChild(fl_); b.appendChild(document.createTextNode(' ')); }
         b.appendChild(document.createTextNode(it.k === 'tx' ? '\u201c' + it.text + '\u201d' : it.text));
         var t = el('time', 'when', hhmm(it.ts)); t.dateTime = new Date(it.ts).toISOString();
         b.appendChild(t);

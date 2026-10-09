@@ -22,7 +22,7 @@ const { getQuery } = require("./dbUtils");
 const rooms = require("./rooms");
 const store = require("./feedstore");
 
-const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog"]);
+const TABS = Object.freeze(["general", "stage", "feed", "pepe", "rules", "moderation", "camfrog", "flair"]);      // 1.99ir: + flair
 
 async function pins(roomId) {
   const rows = await getQuery(`SELECT p.id, p.title, p.body, pr.pinned_at, pr.pinned_by FROM feed_post_rooms pr JOIN feed_posts p ON p.id = pr.post_id
@@ -70,6 +70,9 @@ async function hubData(R, viewer, app) {
     look: await require("./padlook").init().then(() => require("./padlook").look(R.id)), PL: require("./padlook"),
     // 1.99fu: who can see this pad (padaccess.js) - the level, the requests waiting, the approved members
     access: R.profile ? null : await require("./padaccess").listFor(R.id),
+    // 1.99ir: Flair & tags - the pad's flairs + who wears them (padflair.js), its popular tags (feedtags.js)
+    flair: R.profile ? null : await require("./padflair").manageView(R.id),
+    popularTags: R.profile ? [] : await require("./feedtags").popular(R.id, { viewer, limit: 20 }).catch(() => []),
   };
 }
 

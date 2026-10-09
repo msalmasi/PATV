@@ -19,6 +19,20 @@
       and the announce switch moved there too (the header's "⚙ Pad settings"). %>
   <% if (!noRules_) { %><%- include('pad-rules', { fx, rules: F.rules, slug: room.slug, canEdit: !!(F.mod.owner || F.mod.admin), id: 'rules' }) %><% } %>
   <%- include('feed-composer', { composer: F.composer, next: here_ + '#feed' }) %>
+  <%# 1.99ir: "Your flair here" (padflair.js): the viewer's flair in this pad, and a picker for the ones members choose themselves %>
+  <% const MF_ = F.flair || null; %>
+  <% if (MF_ && (MF_.flair || MF_.choices.length)) { %>
+    <div class="pfl" data-pfl="<%= room.slug %>">
+      <span>🎖️ Your flair here:</span>
+      <span data-pfl-cur><% if (MF_.flair) { %><%- fx.flair(MF_.flair) %><% } else { %><span class="mut">none</span><% } %></span>
+      <% if (MF_.locked) { %><small class="mut">given by a mod</small>
+      <% } else if (MF_.choices.length) { %>
+        <select data-pfl-pick aria-label="Pick your flair in this pad"><option value="">No flair</option><% MF_.choices.forEach((c) => { %><option value="<%= c.id %>"<%= MF_.flair && MF_.flair.id === c.id ? ' selected' : '' %>><%= c.emoji ? c.emoji + ' ' : '' %><%= c.name %></option><% }) %></select>
+        <span class="pfl-msg" role="status" aria-live="polite"></span>
+      <% } %>
+    </div>
+    <script src="/public/js/pad-flair.js?v=1" defer></script>
+  <% } %>
   <%# 1.99iq: content tags - this pad's ?tag= filter and its popular tags (feedtags.js) %>
   <%- include('feed-tagbar', { fx, tag: F.tag || null, popular: F.popularTags || [], href: (t) => fq({ tag: t, fp: '' }), swap: false }) %>
   <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: F.tag ? null : 'p/' + room.slug, gallery: F.gallery || null }) %>

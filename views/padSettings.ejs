@@ -13,6 +13,8 @@
 <link rel="stylesheet" href="/public/css/pad-settings.css?v=2">
 <link rel="stylesheet" href="/public/css/padfx.css?v=1">
 <link rel="stylesheet" href="/public/css/pad-access.css?v=1">
+<link rel="stylesheet" href="/public/css/flair.css?v=1"><%# 1.99ir: the Flair tab (padflair.js) %>
+<link rel="stylesheet" href="/public/css/tags.css?v=1">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -24,6 +26,8 @@
     ['general', '🏷️', 'General'], ['stage', '📺', 'Stage'], ['feed', '📝', 'Feed'], ['pepe', '🐸', 'Pepe'],
     ['rules', '📜', 'Rules'], ['moderation', '🛡️', 'Moderation'], ['camfrog', '📡', 'Camfrog room'],
   ].filter((t) => t[0] !== 'camfrog' || camfrog);
+  // 1.99ir: Flair & tags (padflair.js / feedtags.js) - its section is the last one on the page (not on profile pads)
+  if (typeof flair !== 'undefined' && flair) tabs.push(['flair', '🎖️', 'Flair & tags']);
   const amLabel = { none: 'Do nothing', flag: 'Flag it for me', hide: 'Hide it until I review', remove: 'Remove it (clear-cut only)' };
   const sevInfo = {
     minor: ['Minor', 'Spam, a missing NSFW tag, or a small break of one of your pad rules.'],
@@ -426,6 +430,46 @@
     </div>
   </section>
   <% } %>
+
+  <%# ─────────────── Flair & tags (1.99ir, padflair.js + feedtags.js; public/js/pad-flair.js draws it) ─────────────── %>
+  <% if (typeof flair !== 'undefined' && flair) { %>
+  <section class="ps-sec" id="flair" role="tabpanel" aria-labelledby="tab-flair">
+    <h2 class="ps-h">🎖️ Flair &amp; tags</h2>
+    <p class="ps-what">Flair is a little badge next to someone's name in this pad - on its feed, in comments on its posts, and in the live room chat on the pad page. You and the site admins create them and give them out; ones you mark "members can pick it" anyone can choose for themselves from the pad's Feed tab. Tags are the #topics people put on posts.</p>
+    <div class="sb-card ps-card" id="flairMgr" data-slug="<%= slug %>" data-state="<%= JSON.stringify(flair) %>">
+      <h3>Flairs <small class="mut" data-fl="count"></small></h3>
+      <ul class="fl-list" data-fl="list" aria-live="polite"><% flair.flairs.forEach((f) => { %><li class="fl-row"><%- fx.flair ? fx.flair(f) : '' %></li><% }) %></ul>
+      <form class="fl-form" data-fl="form" autocomplete="off">
+        <div class="fl-fields">
+          <label>Name <input type="text" name="name" maxlength="<%= flair.nameMax %>" required placeholder="e.g. Regular"></label>
+          <label>Emoji <input type="text" name="emoji" maxlength="16" placeholder="🌱" aria-label="Emoji (optional)"></label>
+          <label>Colour <input type="color" name="color" value="#66bb6a"></label>
+        </div>
+        <div class="fl-sw" aria-label="Colour presets"></div>
+        <label class="ck"><input type="checkbox" name="self"> Members can pick this one themselves</label>
+        <div class="cm-row"><span class="fl-msg" data-fl="msg" role="status" aria-live="polite"></span><button type="button" class="btn-s ghost" data-fl="cancel" hidden>Cancel</button><button type="submit" class="btn-s" data-fl="save">Add flair</button></div>
+      </form>
+      <noscript><p class="ps-mini">Managing flair needs JavaScript.</p></noscript>
+    </div>
+    <div class="sb-card ps-card" id="flairPeople">
+      <h3>Give someone flair</h3>
+      <form class="fa-inline" data-fl="give" autocomplete="off">
+        <input name="user" placeholder="username or Camfrog name" required aria-label="Who">
+        <select name="flair" aria-label="Which flair"></select>
+        <button type="submit" class="btn-s">Save</button>
+      </form>
+      <p class="fl-msg" data-fl="givemsg" role="status" aria-live="polite"></p>
+      <div class="fa-scroll"><table class="fl-people"><tbody data-fl="people"></tbody></table></div>
+    </div>
+    <div class="sb-card ps-card" id="tags">
+      <h3>Tags in this pad</h3>
+      <p class="ps-mini">People can add up to 5 tags to a post. A tag filters the pad's feed (<code>/p/<%= slug %>?tag=…</code>). To take a tag off a post, use the ✕ next to it on the post - you see it on posts in this pad; the author can't put it back. Removals go in the audit log.</p>
+      <% const pt_ = typeof popularTags !== 'undefined' && popularTags ? popularTags : []; %>
+      <% if (pt_.length) { %><p class="fp-tags"><% pt_.forEach((t) => { %><a class="ftag" href="<%= fx.tagHref ? fx.tagHref(t.tag, slug) : '#' %>" title="<%= t.n %> post<%= t.n === 1 ? '' : 's' %>">#<%= t.tag %></a><% }) %></p>
+      <% } else { %><p class="mut">No tagged posts here yet.</p><% } %>
+    </div>
+  </section>
+  <% } %>
   </div>
   </div>
 </main>
@@ -438,5 +482,6 @@
 <script src="/public/js/pad-look.js?v=1" defer></script>
 <script src="/public/js/pad-access.js?v=1" defer></script>
 <script src="/public/js/pad-cosmetics.js?v=1" defer></script>
+<% if (typeof flair !== 'undefined' && flair) { %><script src="/public/js/pad-flair.js?v=1" defer></script><% } %>
 </body>
 </html>

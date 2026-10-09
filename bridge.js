@@ -465,7 +465,7 @@ const safeImg = (u) => (typeof u === "string" && (/^https:\/\/[^\s"'<>]+$/.test(
  *  account (+ `patv` for the profile link / avatar / name colour), else the Camfrog display name,
  *  else the login. `login` stays (the tooltip); `cf` = the Camfrog display name when it isn't the
  *  login. Pepe himself keeps the name Pepe gave. Anonymised users pass through untouched. */
-function withPatv(u, C) {
+function withPatv(u, C, F = null) {
   if (!u || u.anon) return u;
   const login = String(u.login || "");
   const cfName = plain(u.display, 40);
@@ -475,6 +475,9 @@ function withPatv(u, C) {
   const acc = hit && hit.acc;
   if (!acc) return out;
   out.patv = { username: acc.username, avatar: safeImg(acc.avatar), style: cosmetics.nameStyle(acc.username) || "" };
+  // 1.99ir: their flair in this pad (padflair.js; F = the pad's flairs by lowercased username)
+  const fl = F && acc.username ? F.get(String(acc.username).toLowerCase()) : null;
+  if (fl) out.patv.flair = require("./padflair").plain(fl);
   if (!u.self) out.display = str(acc.display, 40) || out.display;
   return out;
 }
@@ -576,11 +579,12 @@ async function tipAnnounce({ slug, senderId, recipient, amount } = {}) {
 async function liveView(R, after, userId, login, username = null) {
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
-  const feed = items.map((it) => (it.u ? { ...it, u: withPatv(it.u, L) } : it));
+  const F = await require("./padflair").byUsername(R.id).catch(() => null);          // 1.99ir: pad flair on the chat
+  const feed = items.map((it) => (it.u ? { ...it, u: withPatv(it.u, L, F) } : it));
   // 1.99fu: 💸 Tip (signed-in viewers only)
   const me = userId ? { userId, username, login } : null;
   const pepe = me ? await pepeUsername() : null;
-  const withTip = (u) => { const x = withPatv(u, L); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
+  const withTip = (u) => { const x = withPatv(u, L, F); const t = tipFor(x, me, pepe); return t ? { ...x, tip: t } : x; };
   return {
     room: { name: R.name, slug: R.slug, topic: R.topic, count: R.count, live: isLive(R), updated: R.updated, listAt: R.listAt,
             listFresh: R.listFresh == null ? null : R.listFresh, seenTtl: R.seenTtl || null, listStaleAfter: R.listStaleAfter || null,

@@ -1102,6 +1102,7 @@ require("./pads").register(app);
 require("./padaccess").register(app, { addUser });
 require("./feedweb").register(app, { isBotToken, addUser });
 require("./feedtags").register(app, { addUser });   // 1.99iq: content tags - a pad mod removes a tag, popular tags (/api/feed/tags)
+require("./padflair").register(app, { addUser });   // 1.99ir: user flair per pad (/api/pads/:slug/flair...)
 require("./aigen").register(app, { isBotToken, addUser });
 require("./jackpotflows").register(app, { isBotToken });   // 1.99gx: the House's site-side flows per day (wheel spins/prizes...) for Pepe's vault flow table   // 1.99di: AI pictures / videos for posts (Pepe's !imagine / !video from the composer)
 require("./pepefeed").register(app, { isBotToken, addUser });   // 1.99cg: Pepe answers mentions / takes part on the feed (bot API + settings)

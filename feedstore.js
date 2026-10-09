@@ -641,6 +641,22 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
   // 1.99iq: content tags (feedtags.js) - live ones, one query
   let TG = new Map();
   try { TG = await TAGS().tagsFor(ids); } catch (e) { TG = new Map(); }
+  // 1.99ir: pad flair (padflair.js) - in a pad's own feed (ctxRoom), and on a post's page for its home pad
+  const FL = new Map();
+  if (!_inner) {
+    try {
+      const PF = require("./padflair");
+      const byRoom = new Map();
+      for (const r of rows) {
+        const rid = ctxRoom || (detail ? r.home_pad : null);
+        if (rid) { if (!byRoom.has(rid)) byRoom.set(rid, []); byRoom.get(rid).push(r); }
+      }
+      for (const [rid, rs] of byRoom) {
+        const m = await PF.forUsers(rid, rs.map((r) => r.author_id));
+        for (const r of rs) { const f = m.get(String(r.author_id)); if (f) FL.set(r.id, f); }
+      }
+    } catch (e) { /* flair is decoration */ }
+  }
   return rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id && (own(r) || !blocked.has(x.room_id))).map((x) => {
       const R = rooms.getCached(x.room_id);
@@ -703,6 +719,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       quote: QUO.get(r.id) || null,                              // 1.99fp: a chat quote (quotes.forPosts)
       voice: VOI.get(r.id) || null,                              // 1.99fp: a mic clip's speakers (micclip.voicesFor)
       tags: TG.get(r.id) || [],                                  // 1.99iq: content tags (feedtags.js)
+      flair: FL.get(r.id) || null,                               // 1.99ir: the author's flair in this pad (padflair.js)
     };
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;
@@ -1455,6 +1472,14 @@ async function comments(postId, viewer, sort = "best") {
     author: gone(c) ? null : A.get(c.author_id) || { username: "[gone]", display: "[deleted account]" },
     ups: c.ups || 0, downs: c.downs || 0, score: c.score || 0, myVote: mine.get(c.id) || 0,
     mine: !!(viewer && viewer.userId === c.author_id && !gone(c)), replies: [] }));
+  // 1.99ir: the commenters' flair in the post's home pad (padflair.js)
+  try {
+    const home = (await getQuery("SELECT home_pad FROM feed_posts WHERE id = ?", [postId]))[0];
+    if (home && home.home_pad) {
+      const m = await require("./padflair").forUsers(home.home_pad, rows.map((r) => r.author_id));
+      if (m.size) for (const c of all) { const r = rows.find((x) => x.id === c.id); if (c.author && r) c.flair = m.get(String(r.author_id)) || null; }
+    }
+  } catch (e) { /* flair is decoration */ }
   const top = [], byId = new Map(all.map((c) => [c.id, c]));
   for (const c of all) {
     if (c.parent && byId.has(c.parent)) byId.get(c.parent).replies.push(c);

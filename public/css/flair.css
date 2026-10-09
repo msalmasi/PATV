@@ -1,0 +1,31 @@
+/* flair.css — pad flair (1.99ir, padflair.js): the chip next to a name, the pad's "Your flair here" card, the settings hub's Flair tab */
+.ufl { display: inline-flex; align-items: center; gap: 3px; max-width: 14em; margin: 0 2px 0 4px; padding: 0 7px; border-radius: 999px;
+       background: var(--fl, #66bb6a); color: var(--fli, #111) !important; font: 600 11px/18px Ubuntu, sans-serif; letter-spacing: 0;
+       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; text-transform: none; }
+.ufl-e { font-size: 12px; line-height: 1; }
+.pfl { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid #262b28; border-radius: 10px; background: #121513; display: flex; flex-wrap: wrap;
+       align-items: center; gap: 8px 12px; font: 13px/1.5 Ubuntu, sans-serif; color: #bbb; }
+.pfl b { color: #ddd; }
+.pfl select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 4px 6px; font: inherit; max-width: 100%; }
+.pfl .pfl-msg { color: #9a9; font-size: 12px; }
+.pfl .pfl-msg.err { color: #ff8a80; }
+/* the settings hub */
+.fl-list { display: grid; gap: 8px; margin: 8px 0 12px; padding: 0; list-style: none; }
+.fl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border: 1px solid #262626; border-radius: 8px; background: #111; }
+.fl-row .fl-meta { color: #888; font-size: 12px; }
+.fl-row .grow { flex: 1 1 auto; }
+.fl-form { display: grid; gap: 8px; }
+.fl-form .fl-fields { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.fl-form label { display: grid; gap: 3px; font-size: 12px; color: #aaa; min-width: 0; }
+.fl-form input[type=text] { min-width: 0; width: 12em; max-width: 100%; }
+.fl-form input[name=emoji] { width: 4.5em; }
+.fl-form input[type=color] { width: 44px; height: 32px; padding: 0; border: 1px solid #333; border-radius: 6px; background: none; }
+.fl-form .ck { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #ccc; }
+.fl-sw { display: flex; flex-wrap: wrap; gap: 5px; }
+.fl-sw button { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; background: var(--c); cursor: pointer; padding: 0; }
+.fl-sw button:focus-visible, .fl-sw button:hover { border-color: #fff; }
+.fl-people { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fl-people td { padding: 6px 4px; border-top: 1px solid #222; vertical-align: middle; }
+.fl-msg { min-height: 1.2em; font-size: 13px; color: #9a9; }
+.fl-msg.err { color: #ff8a80; }
+@media (max-width: 520px) { .fl-form input[type=text] { width: 100%; } .fl-form .fl-fields > label { flex: 1 1 100%; } }

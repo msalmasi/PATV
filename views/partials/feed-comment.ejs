@@ -24,6 +24,7 @@
       <% } else { %>
       <%- fx.uname(c.author, { href: '/u/' + encodeURIComponent(c.author.username), cls: 'fp-author' }) %>
       <% } %>
+      <% if (c.flair && fx.flair) { %><%- fx.flair(c.flair) %><% } %><%# 1.99ir: their flair in the post's pad (padflair.js) %>
       <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="Wrote the post">OP</span><% } %>
       <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>
       <% if (c.edited) { %><span class="fp-ed">(edited)</span><% } %>

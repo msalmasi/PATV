@@ -39,6 +39,7 @@
       <%- fx.uav(p.author, { size: 22 }) %>
       <%- fx.uname(p.author, { href: '/u/' + encodeURIComponent(p.author.username), cls: 'fp-author' }) %>
       <% } %>
+      <% if (p.flair && fx.flair) { %><%- fx.flair(p.flair) %><% } %><%# 1.99ir: their flair in this pad (padflair.js) %>
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length) { %>
         <span class="dot" aria-hidden="true">·</span>

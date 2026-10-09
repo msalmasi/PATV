@@ -163,7 +163,8 @@ const PL = require("./postlabel"), UL = require("./userlook");
 // 1.99iq: a tag's filter address - in a pad's own feed (ctx = the pad's slug) it stays in the pad, else /feed?tag=
 const TAGS = require("./feedtags");
 const tagHref = (tag, padSlug = null) => (padSlug ? "/p/" + encodeURIComponent(padSlug) + "?tag=" + encodeURIComponent(tag) + "#feed" : "/feed?tag=" + encodeURIComponent(tag));
-const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
+// 1.99ir: a person's flair in a pad (padflair.js) - the chip next to their name
+const fx = { tagHref, TAG_MAX: TAGS.TAG_MAX, MAX_TAGS: TAGS.MAX_TAGS, flair: (f) => require("./padflair").html(f), postLabel: PL.postLabel, labelOf: PL.labelOf, uav: UL.avHtml, uname: UL.nameHtml, esc, body, ago, fileUrl, HOP: HOPM.HOP, hopHref, fmtSecs: media.fmtSecs, icon, hue, initial, num, feedUrl, cBadge, padChip, padBadge, SORT_LABELS, WINDOW_LABELS, CSORT_LABELS,
              SORTS: store.SORTS, WINDOWS: Object.keys(store.WINDOWS), TIMED: store.TIMED, CSORTS: store.CSORTS };
 
 // ── captures (Pepe's !snap / !clip, media.js) for a room: signed-in only, like /feed always was.
@@ -255,6 +256,8 @@ async function roomFeed(roomId, reqUser, query = {}) {
   return {
     room: roomId, sort, top, page, posts: L.posts, more: L.more, viewer, mod, tag,
     popularTags: await TAGS.popular(roomId, { viewer, limit: 10 }).catch(() => []),     // 1.99iq
+    // 1.99ir: "Your flair here" - the viewer's flair and the pad's self-assignable ones (padflair.js)
+    flair: viewer ? await require("./padflair").mine(viewer, roomId).catch(() => null) : null,
     slug: (rooms.getCached(roomId) || {}).slug || rooms.slugify(roomId),
     caps: viewer && PA().full(viewer, roomId) ? await captures(roomId, 24) : [],
     // 1.99bz: signed-out viewers get the room's story circle (sign-in prompt), never the pictures
