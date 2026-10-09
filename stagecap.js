@@ -221,6 +221,7 @@ let deps = {
   isStaff: (u) => require("./rooms").isStaff(u),
   config: () => require("./mainstage").config(),
   snapSwitch: (roomId) => { try { return require("./bridge").snapSwitch(roomId); } catch (e) { return null; } },
+  snapOffText: (roomId) => require("./bridge").snapOffText(roomId),
   siteOnly: (roomId) => require("./rooms").isCommunityOnly(roomId),
 };
 function _setDeps(d) { deps = { ...deps, ...d }; }
@@ -241,7 +242,8 @@ function eligibility(u) {
   return `Snapping and clipping the stage needs a linked Camfrog name (type !verify in a Camfrog room with Pepe) or level ${MIN_LEVEL}.`;
 }
 // ── switches (1.99cw) ──
-const ROOM_OFF = "Snaps are off in this room (a mod can turn them on with !snap on).";
+// 1.99iu: names the pad's Camfrog room and the chat switch a room mod types there (bridge.snapOffText)
+const ROOM_OFF = "Snaps are off in this room (a mod can type !snap on there).";   // fallback wording
 /** The admin's switches -> {on, snap, clip} (each kind is on only while the master switch is). */
 function switches() {
   let c = {};
@@ -263,7 +265,8 @@ function camfrogRoom(roomId) {
 /** null if the pad's Camfrog room lets stage captures through, else why not. */
 function roomOff(roomId) {
   if (!roomId || !camfrogRoom(roomId)) return null;
-  return deps.snapSwitch(roomId) === true ? null : ROOM_OFF;
+  if (deps.snapSwitch(roomId) === true) return null;
+  try { return deps.snapOffText(roomId) || ROOM_OFF; } catch (e) { return ROOM_OFF; }
 }
 
 /** The price shown before saving: the room's !snap / !clip price as Pepe reported it, else his default. */

@@ -263,6 +263,23 @@ function clipSwitch(roomId) {
   if (R && isLive(R) && typeof R.clipOn === "boolean") return R.clipOn;
   return null;
 }
+/** 1.99iu: the Camfrog room's name for the switch messages ("Snaps are off in Players__lounge"): the bridged
+ *  room's name, else the name in Pepe's stage room list, else the id. */
+function camfrogName(roomId) {
+  const id = String(roomId || "");
+  const R = rooms.get(id);
+  if (R && R.name) return R.name;
+  const r = (STAGE.rooms || []).find((x) => x && x.id === id);
+  return (r && r.name) || id || "this room";
+}
+/** 1.99iu: why a website capture is refused while the room's !snap / !clip switch is off - names the room and the
+ *  chat command a room mod types there (Pepe's `!snap on|off` / `!clip on|off`). */
+function snapOffText(roomId) {
+  return `Snaps are off in ${camfrogName(roomId)} (a mod can type !snap on there).`;
+}
+function clipOffText(roomId) {
+  return `Clips are switched off in ${camfrogName(roomId)} (a mod can type !clip on there).`;
+}
 function stageAdmin() {
   const fresh = Date.now() - STAGE.at < STAGE_ROOM_FRESH;
   return { room: fresh ? STAGE.room : null, pinned: !!STAGE.pinned, rooms: fresh ? STAGE.rooms : [] };
@@ -881,5 +898,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

@@ -395,7 +395,7 @@ test("cam clip request API: rules, one clip per cam, the bridge job, preview, sa
   for (const v of [false, null]) {
     csw = v;
     r = await post(url, U.poster, { login: "subjcf" });
-    assert.equal(r.status, 403, `!clip ${v}`); assert.match(r.d.error, /\(!clip\)/); assert.equal(r.d.code, "E_FEATURE_OFF");
+    assert.equal(r.status, 403, `!clip ${v}`); assert.match(r.d.error, /Clips are switched off in .+ \(a mod can type !clip on there\)/); assert.equal(r.d.code, "E_FEATURE_OFF");
   }
   csw = true;
   const noXrw = await fetch(base + url, { method: "POST", headers: { "x-test-user": U.poster.userId, "content-type": "application/json" }, body: JSON.stringify({ login: "subjcf" }) });
@@ -461,9 +461,9 @@ test("cam clip request API: rules, one clip per cam, the bridge job, preview, sa
   assert.match(info.off, /Link your Camfrog name/); assert.deepEqual(info.secs, [10, 20, 30]); assert.equal(info.def, 20);
   assert.equal((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, null, "both switches on: not greyed");
   csw = false;
-  assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /\(!clip\)/, "!clip off: greyed with the reason (tooltip)");
+  assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /Clips are switched off in .+ \(a mod can type !clip on there\)/, "!clip off: greyed with the reason (tooltip)");
   csw = null;
-  assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /\(!clip\)/, "unknown !clip = off");
+  assert.match((await camclip.clipInfo({ id: ROOM }, U.poster.userId, "subjcf")).off, /Clips are switched off in .+ \(a mod can type !clip on there\)/, "unknown !clip = off");
   csw = true;
   // Pepe's refusal code rides along to the requester's view
   relay._hits.clear();
@@ -496,7 +496,7 @@ test("cam clips with !clip off: site admins + Pepe room mods get through with a 
     let r = await post(url, U.stranger, { login: "subjcf", secs: 10 });
     assert.equal(r.status, 403, `member, !clip ${v}`); assert.equal(r.d.code, "E_FEATURE_OFF");
     let info = await camclip.clipInfo({ id: ROOM }, U.stranger.userId, "subjcf");
-    assert.match(info.off, /\(!clip\)/, `member greyed (!clip ${v})`); assert.equal(info.hint, undefined);
+    assert.match(info.off, /Clips are switched off in .+ \(a mod can type !clip on there\)/, `member greyed (!clip ${v})`); assert.equal(info.hint, undefined);
     // a site admin, and a viewer Pepe gave room-mod caps: enabled + the admin hint, the request reaches Pepe
     for (const who of [U.admin, U.mod]) {
       fresh();

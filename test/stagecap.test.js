@@ -381,18 +381,18 @@ test("room switch: off (or not reported) in the pad's Camfrog room -> greyed + r
   adv(70000);
   roomSnap[ROOM.id] = false;
   const me = (await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d;
-  assert.equal(me.room_off, SC.ROOM_OFF);
-  assert.match(me.room_off, /Snaps are off in this room/);
+  // 1.99iu: names the pad's Camfrog room (bridge.camfrogName: its bridged name, else the id) and what a mod types there
+  assert.equal(me.room_off, "Snaps are off in " + ROOM.id + " (a mod can type !snap on there).");
   assert.match(me.room_off, /!snap on/);
   assert.deepEqual(me.enabled, { snap: true, clip: true }, "the buttons still show (greyed) - only the admin switch hides them");
   const r = await snap(U.linked, "pepe");
   assert.equal(r.status, 403);
-  assert.match(r.d.error, /Snaps are off in this room/);
+  assert.ok(r.d.error.startsWith("Snaps are off in " + ROOM.id + " "), r.d.error);
   const c = await post("/api/stage/capture", { room: ROOM.slug, stream: slotLive.id, kind: "clip", secs: 4 }, U.linked);
   assert.equal(c.status, 403, "clips too");
   delete roomSnap[ROOM.id];                        // Pepe hasn't said: the switch's own default (off)
   assert.equal((await snap(U.linked, "pepe")).status, 403);
-  assert.equal((await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d.room_off, SC.ROOM_OFF);
+  assert.match((await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d.room_off, /^Snaps are off in .+!snap on there/);
   roomSnap[ROOM.id] = true;
   assert.equal((await get("/api/stage/captures/me?room=" + ROOM.slug, U.linked)).d.room_off, null);
   const ok = await snap(U.linked, "pepe");
@@ -490,4 +490,18 @@ test("sweep: unsaved previews expire and their files go", async () => {
   assert.ok(!fs.existsSync(f));
   assert.equal((await getQuery("SELECT state FROM stage_captures WHERE id = ?", [s.d.capture.id]))[0].state, "expired");
   T0 = 0;
+});
+
+// ───────────────────────────── 1.99iu: the refusals name the Camfrog room ─────────────────────────────
+test("switch messages name the Camfrog room and the chat command a mod types there", () => {
+  const B = require(path.join(repo, "bridge"));
+  const id = "Players__lounge.test";
+  assert.equal(B.camfrogName(id), id, "unknown room -> its id");
+  B._rooms.set(id, { id, name: "Players__lounge" });
+  try {
+    assert.equal(B.snapOffText(id), "Snaps are off in Players__lounge (a mod can type !snap on there).");
+    assert.equal(B.clipOffText(id), "Clips are switched off in Players__lounge (a mod can type !clip on there).");
+  } finally {
+    B._rooms.delete(id);
+  }
 });

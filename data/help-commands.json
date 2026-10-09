@@ -129,6 +129,32 @@
    "webchat": true
   },
   {
+   "id": "intro",
+   "title": "!intro",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!intro"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!intro"
+   ],
+   "summary": "Pepe introduces himself to the whole room: who he is, what PAT is, and where to start.",
+   "details": "Two short lines in the room: Pepe is the room's frog bot (games, heists, music, voice, the PublicAccess economy), PAT is the room's coin you earn by hanging out, chatting and playing, and `!balance`, `!spin` and `!help` are good first commands. Anyone can use it; once per room every 10 minutes (inside that, Pepe answers you by PM instead).",
+   "examples": [
+    "!intro"
+   ],
+   "keywords": [
+    "introduce",
+    "who is pepe",
+    "what is pat",
+    "new here",
+    "about",
+    "welcome"
+   ]
+  },
+  {
    "id": "time",
    "title": "!time [place|user] · !time set [zone]",
    "category": "start",
@@ -849,7 +875,7 @@
     "!bridge [hide|show]"
    ],
    "summary": "Is this room live on its PATV pad?",
-   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to signed-in users on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there. `!bridge hide` makes you \"someone\" on the website (no name, your lines not shown); `!incognito on` does the same. Mic transcripts show in the feed too. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room).",
+   "details": "Is this room live on its PATV pad? Bridged rooms (Pepe's Pad by default) show their public chat, who's here, who's on the mic and the topic, read-only, to signed-in users on their pad at `publicaccess.tv/p/<name>` (all pads: `publicaccess.tv/p`). PMs never go there. `!bridge hide` makes you \"someone\" on the website (no name, your lines not shown); `!incognito on` does the same. Mic transcripts show in the feed too. Admins: `!bridge on|off`, `!bridge transcripts on|off`, and `!bridge audio on|off` (off by default: streams the room's audio live to signed-in members, nothing recorded; Pepe announces it in the room). With net audio each room with audio on streams its own sound; without it only the `!audioroom` room can, and `!bridge` says why a room's audio isn't streaming.",
    "examples": [
     "!bridge hide",
     "!incognito on",
@@ -2179,7 +2205,7 @@
     "!reserve"
    ],
    "summary": "The 🏛️ Federal Reserve — the bank heist's vault, and the only pool Pepe can print into.",
-   "details": "The **🏛️ Federal Reserve** — the bank heist's vault, and the only pool Pepe can print into. Anyone can check the balance; admins get `!reserve mint <amount>` to print PAT into it on the spot (announced in every room — silently minting money is exactly what shouldn't be invisible), plus `!reserve auto on|off` and `!reserve floor <amount>` to have the daily tick top it back up to a floor. Auto is **off by default**.",
+   "details": "The **🏛️ Federal Reserve** — the bank heist's vault, and the only pool Pepe can print into. Anyone can check the balance; admins get `!reserve mint <amount>` to print PAT into it on the spot (announced in every room — silently minting money is exactly what shouldn't be invisible), plus `!reserve auto on|off` and `!reserve floor <amount>` to have the daily tick top it back up to a floor. Auto is **off by default**. **Economy v2** (layers on): the Fed is the untouchable backstop - nobody robs it, it pays no rewards and moves nothing into pools; it only makes liquidity loans to the Treasury vaults (House, Bank, Market maker: `!econ fedloan`) or restores archived accounts, and mints only by written policy: `!reserve mint <amount> loan|restore <reason>`. `!reserve pay` / `!reserve fund` and automint are off while the layers are on.",
    "examples": [
     "!reserve mint <amount>",
     "!reserve auto on|off",
@@ -2226,8 +2252,8 @@
    "syntax": [
     "!econ"
    ],
-   "summary": "The economy layers at a glance: the Federal Reserve, Fort Knox and the incentive budget.",
-   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ check`.",
+   "summary": "The economy layers at a glance: the Federal Reserve (and its loans to the Treasury vaults), Fort Knox and the incentive budget.",
+   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Loans are repaid first from that vault's weekly surplus. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`. `!econ` also shows the Fed loans outstanding.",
    "examples": [
     "!econ"
    ],
@@ -2535,6 +2561,35 @@
     "!tip pepe 10k"
    ],
    "keywords": []
+  },
+  {
+   "id": "roomvault",
+   "title": "!roomvault · !roomvault deposit <amount> · !roomvault history",
+   "category": "wallet",
+   "role": "everyone",
+   "commands": [
+    "!roomvault",
+    "!roomvaults"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!roomvault",
+    "!roomvault deposit <amount>",
+    "!roomvault history",
+    "!roomvault all"
+   ],
+   "summary": "This room's vault: what the room has earned, what it took in over the last 7 days, and deposits.",
+   "details": "Every pad with a Camfrog room has a **room vault**. Paid commands, songs, voices, heist gear and other spending in the room go half to the room's vault and half to Fort Knox (on commands in a pad with an owner, the owner's 10% royalty comes first). Boosts, stage-slot fees and pad cosmetic gifts on the website do the same. The pad owner, or the gang that controls the room, spending in their own room sends it all to Fort Knox, and a vault holds at most 50M (anything above goes to Fort Knox). `!roomvault` shows the balance, the last 7 days' inflow and deposits; `!roomvault deposit 5000` adds your own PAT (minimum 1,000; deposits never count as the room's income); `!roomvault history` lists the latest moves; `!roomvault all` lists the biggest vaults. The vaults only fill up for now: paying out to the room's owner, streamers and regulars comes in a later update (the owner already picks the daily rate on the pad page). Also on the pad page's About tab.",
+   "examples": [
+    "!roomvault",
+    "!roomvault deposit 5k",
+    "!roomvault history"
+   ],
+   "keywords": [
+    "room vault",
+    "pad vault",
+    "room earnings"
+   ]
   },
   {
    "id": "cosmetics",
@@ -3505,18 +3560,23 @@
     "!unsnap"
    ],
    "syntax": [
-    "!snap <user> [-e <hours>]"
+    "!snap <user> [-e <hours>]",
+    "!snap on|off|status"
    ],
    "summary": "Grabs a still from someone's cam and posts a link that expires — 25,000 PAT (admins free).",
-   "details": "Grabs a still from someone's cam and posts a **link that expires** — **25,000 PAT** (admins free). The default life is **24 hours**; once it's up the image is deleted and the link is dead. Shorten it for one shot with `-e` (`!snap moxier -e 2` = two hours; 5 minutes minimum, 7 days maximum). A copy is also saved on the bot machine, which the expiry doesn't touch.\n\nUnlike `!look` this leaves a picture on the web, so it ships **switched off** and each room opts in — while it's off, only admins can use it. Needs the cam window (see `!activeroom`).",
+   "details": "Grabs a still from someone's cam and posts a **link that expires** — **25,000 PAT** (admins free). The default life is **24 hours**; once it's up the image is deleted and the link is dead. Shorten it for one shot with `-e` (`!snap moxier -e 2` = two hours; 5 minutes minimum, 7 days maximum). A copy is also saved on the bot machine, which the expiry doesn't touch.\n\nUnlike `!look` this leaves a picture on the web, so it ships **switched off** and each room opts in — while it's off, only admins can use it. **Room mods switch it** by typing `!snap on` / `!snap off` in that room (`enable` / `disable` work too; mods = Pepe admins, the room's owner and its red list); `!snap status` shows it for anyone. The same switch gates the website's stage snaps and clips of Pepe's stream. To snap someone actually named \"on\", write `!snap @on`. Needs the cam window (see `!activeroom`).",
    "examples": [
-    "!snap moxier -e 2"
+    "!snap moxier -e 2",
+    "!snap on",
+    "!snap status"
    ],
    "keywords": [
     "screenshot",
     "save a cam",
     "picture of cam",
-    "photo"
+    "photo",
+    "turn snaps on",
+    "enable snap"
    ],
    "cost_key": "snap",
    "cost": 25000,
@@ -3542,19 +3602,23 @@
     "!record"
    ],
    "syntax": [
-    "!clip <user> [-t <secs>] [-e <hours>] [-na | -ao]"
+    "!clip <user> [-t <secs>] [-e <hours>] [-na | -ao]",
+    "!clip on|off|status"
    ],
    "summary": "Same as !snap but a short video — 50,000 PAT (admins free).",
-   "details": "Same as `!snap` but a short **video** — **50,000 PAT** (admins free). Records **40 seconds** by default; `-t` sets the length up to **60s** (`!clip moxier -t 30`). Pepe posts \"recording X for 40s…\" in the room before he starts. Same **24-hour** expiry as a snap, same `-e` to shorten it, same local copy kept on the bot machine. Aliases `!rec`, `!record`.\n\n**Sound is on by default** — the room's audio is recorded into the clip. Two things have to be true, or it records silently and says which failed: the room must be the one Pepe is listening to (see `!audioroom` — the loopback carries one room at a time), and **someone must be on the mic**. `-na` (or `-mute`) records video only; `-ao` records **sound only** — an audio clip of whoever's on the mic, with its own player page.\n\nClips are downscaled and compressed to stay postable; if someone's cam is too busy to fit even at the smallest setting, Pepe says so and refunds rather than posting a broken link. Ships **switched off** per room like `!snap`.",
+   "details": "Same as `!snap` but a short **video** — **50,000 PAT** (admins free). Records **40 seconds** by default; `-t` sets the length up to **60s** (`!clip moxier -t 30`). Pepe posts \"recording X for 40s…\" in the room before he starts. Same **24-hour** expiry as a snap, same `-e` to shorten it, same local copy kept on the bot machine. Aliases `!rec`, `!record`.\n\n**Sound is on by default** — the room's audio is recorded into the clip. Two things have to be true, or it records silently and says which failed: the room must be the one Pepe is listening to (see `!audioroom` — the loopback carries one room at a time), and **someone must be on the mic**. `-na` (or `-mute`) records video only; `-ao` records **sound only** — an audio clip of whoever's on the mic, with its own player page.\n\nClips are downscaled and compressed to stay postable; if someone's cam is too busy to fit even at the smallest setting, Pepe says so and refunds rather than posting a broken link. Ships **switched off** per room like `!snap`: room mods type `!clip on` / `!clip off` there (`!clip status` for anyone); the website's 🎬 Clip follows the same switch. `!clip @on` clips a user named \"on\".",
    "examples": [
     "!clip moxier -t 30",
+    "!clip on",
     "!rec",
     "!record"
    ],
    "keywords": [
     "record cam",
     "video of cam",
-    "clip"
+    "clip",
+    "turn clips on",
+    "enable clip"
    ],
    "cost_key": "clip",
    "cost": 50000,
@@ -5269,12 +5333,35 @@
     "!audioroom [room]",
     "all"
    ],
-   "summary": "When Pepe is in more than one room, set which room's audio is live.",
-   "details": "When Pepe is in more than one room, set which room's **audio** is live. Loopback captures a single audio stream, so only the chosen room's mic-ups get recorded/transcribed — the others are skipped to avoid misattributing what was said. `!audioroom` alone shows the current room and the rooms seen; `!audioroom all` (or `off`) records every room. (Alias: `!microom`.)\n**Automatic switching:** once the speaker control is recorded with `!audiobtn`, this actually **moves the audio in the client** — mutes the room that currently has it, switches to the target's tab, then unmutes that one, all in the background with no focus stolen. If any step fails the previous room is unmuted again and the setting is left alone, so you never end up with two rooms feeding one stream, or none. Add `-noswitch` to record the setting **without** touching the client — for when the audio is already where you want it and only the bot's idea of it was wrong. (Also `-nomove` / `-setonly`.)",
+   "summary": "Pick which rooms Pepe listens to: one room (the rest muted) or all of them.",
+   "details": "When Pepe is in more than one room, set which room's **audio** is live. Loopback captures a single audio stream, so only the chosen room's mic-ups get recorded/transcribed — the others are skipped to avoid misattributing what was said. `!audioroom` alone shows the current room and the rooms seen; `!audioroom all` (or `off`) records every room. (Alias: `!microom`.)\n**Automatic switching:** once the speaker control is recorded with `!audiobtn`, this actually **moves the audio in the client** — mutes the room that currently has it, switches to the target's tab, then unmutes that one, all in the background with no focus stolen. If any step fails the previous room is unmuted again and the setting is left alone, so you never end up with two rooms feeding one stream, or none. Add `-noswitch` to record the setting **without** touching the client — for when the audio is already where you want it and only the bot's idea of it was wrong. (Also `-nomove` / `-setonly`.)\n**With net audio on (`!netaudio on`)** Pepe hears every room separately from its own audio connection, so nothing has to be muted for him to transcribe. `!audioroom all` (the default) transcribes **every** room and **unmutes every room's speaker**, so the stream / desktop audio hears them all. Naming rooms works like before: `!audioroom DRAMA_CENTRAL` (or `RoomA, RoomB`) keeps those rooms audible and transcribed and **mutes the others**, which are then not transcribed either; `!audioroom +Room` adds a room (unmuted, transcribed), `-Room` removes one (muted, not transcribed). Muting is always your choice: only `all` unmutes everything. The speaker states are remembered and put back whenever Pepe rejoins a room; a room he joins later follows the current choice. `!audioroom` is one choice for the whole bot, never a per-room setting. The website's room audio (`!bridge audio`) streams **every** bridged room that has it switched on, each from its own audio; with net audio off only the `!audioroom` room can stream (the loopback is one mix).",
    "examples": [
     "!audioroom",
     "!audioroom all",
     "!microom"
+   ],
+   "keywords": []
+  },
+  {
+   "id": "netaudio",
+   "title": "!netaudio [on · off]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!netaudio"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!netaudio",
+    "on",
+    "off"
+   ],
+   "summary": "Transcribe every room Pepe is in at once, from each room's own audio.",
+   "details": "Camfrog plays all of Pepe's rooms through one mixed sound stream, which is why `!audioroom` normally has to pick one room. With **net audio** on, Pepe takes each room's voice straight from that room's own audio connection instead, so mic-ups in every room are recorded and transcribed separately, each tagged with its room (and with the person who was actually talking when he can tell). `!clip` sound, mic clips and the website's room audio work per room too. While it is on, the old speaker capture (the loopback) is closed completely; `!audioroom all` then unmutes every room. `!netaudio` shows the state (rooms found, speakers, decode errors, the transcription queue, whether the loopback is open); `on` / `off` switch it. `off` reopens the loopback and, if an `!audioroom` room is set, makes that the one audible room again. Ships **off**.",
+   "examples": [
+    "!netaudio",
+    "!netaudio on",
+    "!netaudio off"
    ],
    "keywords": []
   },
@@ -5756,6 +5843,26 @@
    "keywords": []
   },
   {
+   "id": "debuglog",
+   "title": "!debuglog [category on|off]",
+   "category": "admin",
+   "role": "admin",
+   "commands": [
+    "!debuglog"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!debuglog",
+    "!debuglog <raw|userlist|api|memory|stt|xp|all> on|off"
+   ],
+   "summary": "Switch Pepe's debug-only console lines on or off (all off by default).",
+   "details": "`raw` prints every message from the Camfrog hook (every packet - heavy, for reverse-engineering), the others the per-user / per-mic-up lines that used to fill the console. On until the next restart; `PEPE_DEBUG_LOG=raw,api` in the environment turns them on at start.",
+   "examples": [
+    "!debuglog raw on"
+   ],
+   "keywords": []
+  },
+  {
    "id": "sniff",
    "title": "!sniff on|off (also !pktsniff)",
    "category": "admin",
@@ -5956,7 +6063,7 @@
     "!reserve fund casino|lotto|house [amount]"
    ],
    "summary": "Top up the Casino vault (what casino heists rob), the Lotto pot or the House from the Federal Reserve — a transfer, not a mint, and the Reserve always keeps 1M.",
-   "details": "Top up the **Casino vault** (what casino heists rob), the **Lotto pot** or the **House** from the Federal Reserve — a transfer, not a mint, and the Reserve always keeps 1M. It's tagged “reserve fund”: never counted as House profit, and shown with the mints in the vault-flow table. Also a button under Automint in the admin panel.",
+   "details": "Top up the **Casino vault** (what casino heists rob), the **Lotto pot** or the **House** from the Federal Reserve — a transfer, not a mint, and the Reserve always keeps 1M. It's tagged “reserve fund”: never counted as House profit, and shown with the mints in the vault-flow table. Also a button under Automint in the admin panel. **Off under economy v2** (layers on): the Fed is the untouchable backstop, so casino pools refill from the incentive budget (floors) or player donations (`!donate casino|lotto|house`).",
    "examples": [],
    "keywords": []
   },
@@ -5973,7 +6080,7 @@
     "!reserve pay [user] [amount]"
    ],
    "summary": "Pay a player out of the Federal Reserve (the bank heist's vault).",
-   "details": "Pay a player out of the **Federal Reserve** (the bank heist's vault). It moves PAT that's already in the vault — nothing is created — and it can't pay out more than the Reserve holds. Amounts take `k`/`m` (`50k`, `1.5m`).",
+   "details": "Pay a player out of the **Federal Reserve** (the bank heist's vault). It moves PAT that's already in the vault — nothing is created — and it can't pay out more than the Reserve holds. Amounts take `k`/`m` (`50k`, `1.5m`). **Off under economy v2** (layers on): the Fed is the untouchable backstop and pays no one.",
    "examples": [],
    "keywords": []
   },
@@ -6013,6 +6120,36 @@
    "details": "Pepe sends them a private message.",
    "examples": [],
    "keywords": []
+  },
+  {
+   "id": "message",
+   "title": "!message [user] [text]",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!message",
+    "!patvmsg"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!message [PATV user or Camfrog name] [text]"
+   ],
+   "summary": "Send someone a PATV direct message from Camfrog.",
+   "details": "Send someone a **PATV direct message** without leaving Camfrog. It goes out from your linked PATV account into their website messages, so their blocks and \"who can message me\" settings apply. Name them by Camfrog name or PATV username (`u/name` for the username). Works the same in a PM to Pepe. Your Camfrog name must be linked to PATV first: get a code on your PATV profile, then type `!verify CODE`.",
+   "examples": [
+    "!message bob are you coming to the heist?",
+    "!message u/alice thanks for the tip!"
+   ],
+   "keywords": [
+    "dm",
+    "direct message",
+    "website message",
+    "send a message"
+   ],
+   "web": {
+    "label": "Your messages on the website",
+    "url": "/messages"
+   }
   },
   {
    "id": "update",
@@ -6300,5 +6437,5 @@
   }
  ],
  "undocumented": [],
- "hash": "7b83316ddf398bef"
+ "hash": "06e39fd66e2fcb13"
 }

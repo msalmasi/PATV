@@ -39,7 +39,8 @@ const ID_RE = /^w[a-f0-9]{16}$/;
 const TX_RE = /^tx-[0-9a-f]{8,32}$/;
 const LOGIN_RE = /^[\w.\-]{1,40}$/;
 const POST_RE = /^[A-Za-z0-9]{8,16}$/;
-const CLIP_OFF = "Clips are switched off in this room (!clip).";
+// 1.99iu: names the Camfrog room and the chat switch (bridge.clipOffText)
+const CLIP_OFF = (roomId) => deps.clipOffText(roomId);
 const CODE_RE = /^E_[A-Z_]{2,30}$/;
 let PENDING_DIR = process.env.MICCLIP_DIR ? path.resolve(process.env.MICCLIP_DIR) : path.join(os.tmpdir(), "patv-micclip");
 let NOW = () => Date.now();
@@ -48,6 +49,7 @@ const clips = new Map();   // job id -> {id, roomId, tx, login, userId, username
 
 const deps = {
   clipSwitch: (roomId) => { try { return require("./bridge").clipSwitch(roomId); } catch (e) { return null; } },
+  clipOffText: (roomId) => { try { return require("./bridge").clipOffText(roomId); } catch (e) { return "Clips are switched off in this room (a mod can type !clip on there)."; } },
   clipAdmin: (R, u) => { try { return require("./camclip").clipAdmin(R, u); } catch (e) { return false; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
   queueAction: (...a) => require("./actions").queue(...a),
@@ -83,7 +85,7 @@ function view(c, slug) {
 
 /** Is the room's !clip on for this account? -> null when OK, else the refusal. */
 function clipGate(R, u) {
-  return deps.clipSwitch(R.id) === true || deps.clipAdmin(R, u) ? null : CLIP_OFF;
+  return deps.clipSwitch(R.id) === true || deps.clipAdmin(R, u) ? null : CLIP_OFF(R.id);
 }
 
 // ── who is heard in a posted clip (feed_voices) + their "Remove me" ──

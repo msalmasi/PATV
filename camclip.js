@@ -50,13 +50,16 @@ let NOW = () => Date.now();
 
 const clips = new Map();   // job id -> {id, roomId, login, userId, username, secs, state, status, ts, done, file, poster, rule, viewerOk, cost, save}
 
-const OFF = "Snaps are off in this room (a mod can turn them on with !snap on).";
-const CLIP_OFF = "Clips are switched off in this room (!clip).";   // 1.99fa: Pepe's E_FEATURE_OFF wording
+// 1.99iu: the refusals name the Camfrog room and the chat switch a room mod types there (bridge.snapOffText / clipOffText)
+const OFF = (roomId) => deps.snapOffText(roomId);
+const CLIP_OFF = (roomId) => deps.clipOffText(roomId);   // "switched off" -> E_FEATURE_OFF
 const CODE_RE = /^E_[A-Z_]{2,30}$/;
 const ADMIN_HINT = "Clips are off for members (!clip) — you can still clip as an admin";   // 1.99fb
 const deps = {
   snapSwitch: (roomId) => { try { return require("./bridge").snapSwitch(roomId); } catch (e) { return null; } },
   clipSwitch: (roomId) => { try { return require("./bridge").clipSwitch(roomId); } catch (e) { return null; } },
+  snapOffText: (roomId) => { try { return require("./bridge").snapOffText(roomId); } catch (e) { return "Snaps are off in this room (a mod can type !snap on there)."; } },
+  clipOffText: (roomId) => { try { return require("./bridge").clipOffText(roomId); } catch (e) { return "Clips are switched off in this room (a mod can type !clip on there)."; } },
   privateLogins: (list) => require("./stories").privateLogins(list),
   modCaps: (R, login) => { try { return require("./padmod").capsFor(R, login); } catch (e) { return null; } },
   queueAction: (...a) => require("./actions").queue(...a),
@@ -110,8 +113,8 @@ async function clipInfo(R, userId, login) {
   const u = (await getQuery("SELECT camfrogUsername, class FROM users WHERE userId = ?", [userId]))[0];
   let off = null, hint = null;
   if (!u || !u.camfrogUsername) off = "Link your Camfrog name first: type !verify in a Camfrog room with Pepe.";
-  else if (deps.snapSwitch(R.id) !== true) off = OFF;
-  else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF;
+  else if (deps.snapSwitch(R.id) !== true) off = OFF(R.id);
+  else if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) off = CLIP_OFF(R.id);
   else if ((await deps.privateLogins([login])).has(String(login).toLowerCase())) off = "They keep their activity private, so their cam can't be clipped.";
   const b = busyFor(R.id, String(login).toLowerCase());
   if (!off && deps.clipSwitch(R.id) !== true) hint = ADMIN_HINT;
@@ -150,8 +153,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       const m = LOGIN_RE.test(login) ? (R.members || []).find((x) => !x.anon && String(x.login || "").toLowerCase() === login) : null;
       if (!m || !m.on_cam || m.self) return res.status(400).json({ ok: false, error: "They aren't on cam." });
       if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their cam can't be clipped." });
-      if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF });
-      if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
+      if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
+      if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });
       const busy = busyFor(R.id, login);
       if (busy) return res.status(409).json({ ok: false, error: busy.userId === u.userId ? "You're already clipping their cam." : "Pepe is already clipping their cam - try again in a bit.", id: busy.userId === u.userId ? busy.id : undefined });
       // 1.99ia: only a request still in flight or a preview you can still post counts (an expired one didn't)
@@ -252,8 +255,8 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!u || !u.camfrogUsername) return res.status(403).json({ ok: false, error: "Link your Camfrog name first: type !verify in a Camfrog room with Pepe." });
       if (c.state !== "ready" || NOW() - c.done >= PREVIEW_TTL) return res.status(410).json({ ok: false, error: "That clip expired - record a fresh one." });
       if (!c.rule || c.rule === "no" || !c.viewerOk) return res.status(403).json({ ok: false, error: "Clips of them can't be saved here." });
-      if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF });
-      if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF, code: "E_FEATURE_OFF" });
+      if (deps.snapSwitch(R.id) !== true) return res.status(403).json({ ok: false, error: OFF(R.id) });
+      if (deps.clipSwitch(R.id) !== true && !clipAdmin(R, u)) return res.status(403).json({ ok: false, error: CLIP_OFF(R.id), code: "E_FEATURE_OFF" });
       if (c.save) {
         const a = (await getQuery("SELECT status FROM pepe_actions WHERE id = ? AND user_id = ?", [c.save, u.userId]))[0];
         if (a && a.status !== "failed") return res.json({ ok: true, id: c.save, again: true });       // one save per clip
