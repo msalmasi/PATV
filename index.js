@@ -1457,7 +1457,8 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser
 
 // 1.99fy (security): the Discord / Twitch bot user lookups - bot token required (X-Bot-Token header),
 // a minimal field set (never password / email / tokens), touch() only for the bot. userlookup.js.
-require("./userlookup").register(app, { isPlatformBot, stale });
+// 1.99fz: also GET /api/users/camfrog/:login (Pepe), the same way.
+require("./userlookup").register(app, { isPlatformBot, stale, userRoles });
 
 // This endpoint checks if a user with the given username exists.
 app.get('/api/users/username/:username', async (req, res) => {
@@ -2193,28 +2194,8 @@ app.post("/api/users/zero-balance", async (req, res) => {
   }
 });
 
-// Lookup user by Camfrog username
-app.get("/api/users/camfrog/:camfrogUsername", async (req, res) => {
-  const { camfrogUsername } = req.params;
-  try {
-    const sql = "SELECT userId, username, displayname, camfrogUsername, discordId, discordUsername, points_balance, xp, level, created_at FROM users WHERE LOWER(camfrogUsername) = LOWER(?)";
-    let results = await getQuery(sql, [camfrogUsername]);
-    // Pepe looks a login up when the person is active in a room again: an archived account comes back
-    // with its balance (1.99bm)
-    let restored = false;
-    for (const r of results) if (await stale.touch(r.userId, "camfrog")) restored = true;
-    if (restored) results = await getQuery(sql, [camfrogUsername]);
-    if (results.length > 0) {
-      // roles: what they own from the store (Pepe reads "high roller" for uncapped blackjack)
-      res.json({ user: { ...results[0], roles: await userRoles(results[0].userId) } });
-    } else {
-      res.status(404).json({ message: "User not found" });
-    }
-  } catch (error) {
-    console.error("Error finding Camfrog user:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
+// GET /api/users/camfrog/:camfrogUsername (lookup by Camfrog login) lives in userlookup.js since
+// 1.99fz: bot token required, minimal field set, touch() only for the bot.
 
 // Bot-only: rename the publicaccess.tv username of the account linked to a Camfrog login.
 // Used by Pepe's !patv set (a player renaming themselves, or an admin renaming a player). The

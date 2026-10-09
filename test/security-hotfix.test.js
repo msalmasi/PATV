@@ -262,5 +262,5 @@ test("index.js: the old open SELECT * lookups are gone", () => {
   const src = fs.readFileSync(path.join(repo, "index.js"), "utf8");
   assert.ok(!/app\.get\(['"]\/api\/users\/(discord|twitch)\//.test(src));
   assert.ok(!/SELECT \* FROM users WHERE twitchDisplayname/.test(src));
-  assert.ok(src.includes('require("./userlookup").register(app, { isPlatformBot, stale })'));
+  assert.ok(src.includes('require("./userlookup").register(app, { isPlatformBot, stale'));   // 1.99fz: + userRoles
 });

@@ -13,6 +13,11 @@
 //     discordId / discordUsername, twitchId / twitchDisplayname / twitchLogin.
 //   * touch() (restore an archived account, clear its notice) only runs behind that check.
 //
+// 1.99fz: GET /api/users/camfrog/:login (Pepe's account lookup by Camfrog login; also the Discord bot's
+// PokerNow bridge) gets the same treatment: bot token required, only CAMFROG_FIELDS (+ roles) go back -
+// no balance, xp or discordUsername - and touch() (which is how Pepe brings an archived account back
+// when the person is active in a room again) only runs for the bot. No browser code calls it.
+//
 // ensureProviderUnique(): partial unique indexes on users.twitchId / users.discordId (one PATV
 // account per Twitch / Discord id). If duplicates exist the index isn't built - it logs and moves on.
 "use strict";
@@ -20,6 +25,11 @@ const { runQuery, getQuery } = require("./dbUtils");
 
 const LOOKUP_FIELDS = ["userId", "username", "displayname", "points_balance", "discordId", "discordUsername",
   "twitchId", "twitchDisplayname", "twitchLogin"];
+
+// GET /api/users/camfrog/:login - what Pepe reads (userId, username, displayname, camfrogUsername;
+// level + created_at for !credit) and the PokerNow bridge (discordId). Plus roles (store roles: Pepe's
+// "high roller" blackjack cap).
+const CAMFROG_FIELDS = ["userId", "username", "displayname", "camfrogUsername", "discordId", "level", "created_at"];
 
 // the users columns this database has, of LOOKUP_FIELDS (twitchLogin arrived in 1.99bu)
 async function lookupCols() {
@@ -60,8 +70,38 @@ function requireBot(isPlatformBot) {
   };
 }
 
-function register(app, { isPlatformBot, stale }) {
+/** The minimal Camfrog-lookup row for a login (case-insensitive), or null. */
+async function camfrogRow(login) {
+  const rows = await getQuery(`SELECT ${CAMFROG_FIELDS.join(", ")} FROM users WHERE LOWER(camfrogUsername) = LOWER(?) LIMIT 1`,
+    [String(login)]);
+  if (!rows[0]) return null;
+  const out = {};
+  for (const k of CAMFROG_FIELDS) out[k] = rows[0][k];
+  return out;
+}
+
+function register(app, { isPlatformBot, stale, userRoles }) {
   const bot = requireBot(isPlatformBot);
+
+  // by Camfrog login (Pepe): a person active in a room again brings an archived account back (1.99bm)
+  app.get("/api/users/camfrog/:camfrogUsername", bot, async (req, res) => {
+    const login = String(req.params.camfrogUsername || "");
+    try {
+      let user = await camfrogRow(login);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (stale) {
+        let restored = false;   // every account on that login, as before (duplicates were merged 2026-10-06)
+        const ids = await getQuery("SELECT userId FROM users WHERE LOWER(camfrogUsername) = LOWER(?)", [login]);
+        for (const r of ids) if (await stale.touch(r.userId, "camfrog")) restored = true;
+        if (restored) user = (await camfrogRow(login)) || user;
+      }
+      // roles: what they own from the store (Pepe reads "high roller" for uncapped blackjack)
+      res.json({ user: { ...user, roles: userRoles ? await userRoles(user.userId) : [] } });
+    } catch (e) {
+      console.error("[users] camfrog lookup:", e.message);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // by Discord / Twitch id: a bot seeing the person again brings an archived account back (1.99bm)
   const byId = (col, via) => async (req, res) => {
@@ -112,4 +152,4 @@ async function ensureProviderUnique() {
   return out;
 }
 
-module.exports = { LOOKUP_FIELDS, lookupRow, minimal, botTokenOf, requireBot, register, ensureProviderUnique };
+module.exports = { LOOKUP_FIELDS, CAMFROG_FIELDS, camfrogRow, lookupRow, minimal, botTokenOf, requireBot, register, ensureProviderUnique };
