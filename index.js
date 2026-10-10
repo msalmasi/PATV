@@ -2689,29 +2689,18 @@ app.post(
   authenticateToken,
   addUser,
   async (req, res) => {
-    const amount = req.body.amount;
-    const username = req.params.username;
     const userType = req.user ? req.user.class : null;
-    const transactionId = uuidv4(); // Function to generate a UUID v4
 
     if (userType === "Admin" || userType === "Staff") {
-      // Begin transaction to ensure atomicity
-      db.serialize(async () => {
-        db.run("BEGIN TRANSACTION");
-        try {
-          // 1.99ga: balance + ledger row together, only for an account that exists
-          const user = await getQuery(`SELECT userId FROM users WHERE username = ?`, [username]);
-          if (!user.length) throw Object.assign(new Error(`${ledger.E_TARGET_NOT_FOUND}: ${username}`), { code: ledger.E_TARGET_NOT_FOUND });
-          await ledger.postOrThrow(user[0].userId, Math.trunc(Number(amount)), "staff transfer", { transactionId, source: "admin transfer" });
-
-          db.run("COMMIT");
-          res.json({ message: "Points transferred successfully." });
-        } catch (error) {
-          db.run("ROLLBACK");
-          console.error(error);
-          res.status(500).send("Failed to transfer points.");
-        }
-      });
+      // 1.99jt: paid by the Federal Reserve (a staff_grant claim Pepe settles), refused when it can't cover it -
+      // never minted (staffgrant.js)
+      try {
+        const r = await require("./staffgrant").grant(req.params.username, req.body && req.body.amount, req.user.username);
+        res.status(r.status).json(r.body);
+      } catch (error) {
+        console.error("[staffgrant]", error);
+        res.status(500).json({ message: "Failed to transfer points." });
+      }
     } else {
       req.flash(
         "error",

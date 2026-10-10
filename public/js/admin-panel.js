@@ -226,9 +226,15 @@
     grant.addEventListener('submit', function (e) {
       e.preventDefault();
       var username = $('pointsUsername').value;
-      legacy(fetch(grant.getAttribute('action').replace('username', encodeURIComponent(username)), {
+      // 1.99jt: paid by the Federal Reserve - a refusal (Reserve short, unknown user, bad amount) says why
+      fetch(grant.getAttribute('action').replace('username', encodeURIComponent(username)), {
         headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: $('pointsAmount').value }), method: 'POST',
-      }), 'PAT transferred successfully.', 'Transfer failed. Check the username.', 'transferStatus');
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          if (r.ok) say('transferStatus', true, 'PAT transferred from the Federal Reserve.');
+          else say('transferStatus', false, (d && d.message) || 'Transfer failed. Check the username.');
+        });
+      }).catch(function () { say('transferStatus', false, 'Could not reach the server.'); });
     });
   }
 

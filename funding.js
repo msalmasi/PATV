@@ -225,6 +225,29 @@ async function takeFundsRef(flow, amount, userId, type) {
   return { ok: true, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
 }
 
+// 1.99jt: what the Federal Reserve could pay right now (its synced balance net of unsettled claims), or null
+// when Pepe has never synced it.
+async function reserveAvailable() {
+  if (state.reserve === null) return null;
+  return Math.max(0, state.reserve - (await unsettledReserve()));
+}
+
+// 1.99jt: a Reserve claim for `flow` that ignores the PAT Routing table (the staff PAT grant is ALWAYS the
+// Reserve's). amount > 0 = paid out of the Reserve (refused when it can't cover it); amount < 0 = collected for it
+// (Pepe credits the Reserve). Does NOT move the user's balance. -> {ok, available, undo}
+async function takeReserveRef(flow, amount, userId, type) {
+  await ready;
+  amount = Math.trunc(Number(amount) || 0);
+  const none = async () => {};
+  if (amount === 0) return { ok: true, undo: none };
+  const available = await reserveAvailable();
+  if (amount > 0 && (available === null || available < amount)) return { ok: false, available, undo: none };
+  const id = uuidv4();
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
+                 [id, flow, userId || null, type || flow, amount]);
+  return { ok: true, available, claimId: id, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
+}
+
 // E-2: record a grant the incentive budget can't pay yet. The user is NOT credited now; drainQueue pays it.
 async function queueClaim(userId, amount, flow, type) {
   await ready;
@@ -404,4 +427,4 @@ async function settle(ids) {
 
 module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive, roomVaultsLive,
                    treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
-                   houseBacked, wheelDraw, wheelReseed };
+                   houseBacked, wheelDraw, wheelReseed, reserveAvailable, takeReserveRef };

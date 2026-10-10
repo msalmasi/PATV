@@ -130,7 +130,7 @@
 <div class="adm-cols">
   <section class="adm-card" id="grants" aria-labelledby="grantsT">
     <h2 id="grantsT">PAT grant</h2>
-    <p class="adm-help">Adds PAT straight to an account's balance as a "staff transfer" in their history (the old "Points panel"). It doesn't come out of the Reserve.</p>
+    <p class="adm-help">Paid from the Federal Reserve: adds PAT to an account's balance as a "Staff transfer" in their history (the old "Points panel"). Refused if the Reserve can't cover it. A negative amount takes PAT back into the Reserve.</p>
     <form id="pointsTransferForm" class="adm-form" action="/api/admin/transfer/username" method="POST">
       <label for="pointsUsername">Username<input type="text" id="pointsUsername" name="username" required autocomplete="off"></label>
       <label for="pointsAmount">Amount (PAT)<input type="number" id="pointsAmount" name="amount" required></label>
