@@ -41,7 +41,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -184,10 +184,11 @@ function makePlex(cfg, req = request) {
   }
   async function tv(method, p) {
     if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
-    const r = await req((cfg.plexTv || "https://plex.tv") + p, { method, headers: { ...headers(), Accept: "application/xml" } });
+    // raw: the whole XML body (request() keeps only 500 characters of a non-JSON answer)
+    const r = await req((cfg.plexTv || "https://plex.tv") + p, { method, headers: { ...headers(), Accept: "application/xml" }, raw: true });
     if (r.status === 401) { const e = new Error("plex.tv refused the token"); e.status = 502; throw e; }
     if (r.status >= 400 && method === "GET") { const e = new Error(`plex.tv answered ${r.status}`); e.status = 502; throw e; }
-    return r;
+    return { status: r.status, text: r.body != null ? Buffer.from(r.body).toString("utf8") : String(r.text || "") };
   }
   /** -> [{share_id, plex_id, username, title, email, invited_at, accepted_at, pending, all_libraries}] (no tokens) */
   async function shares() {

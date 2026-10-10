@@ -400,7 +400,11 @@ test("1.2.0: Plex shares from plex.tv (ids, names, no tokens) and removing one o
   const fake = async (url, o) => {
     seen.push({ url, method: o.method || "GET", token: o.headers["X-Plex-Token"] });
     if (url.endsWith("/identity")) return { status: 200, json: { MediaContainer: { machineIdentifier: "abcdef0123456789" } } };
-    if (/\/api\/servers\/abcdef0123456789\/shared_servers$/.test(url) && (o.method || "GET") === "GET") return { status: 200, json: null, text: xml };
+    if (/\/api\/servers\/abcdef0123456789\/shared_servers$/.test(url) && (o.method || "GET") === "GET") {
+      // the real request() keeps only 500 characters of a non-JSON answer: the share list must be read raw
+      const long = " ".repeat(2000) + xml;
+      return o.raw ? { status: 200, headers: {}, body: Buffer.from(long) } : { status: 200, json: null, text: long.slice(0, 500) };
+    }
     if (/shared_servers\/40000001$/.test(url) && o.method === "DELETE") return { status: 200, json: null, text: "" };
     return { status: 404, json: null, text: "" };
   };
