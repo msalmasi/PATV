@@ -519,7 +519,9 @@ async function mine(userId) {
 // ── self-link: Plex's own sign-in (PIN flow) proves which Plex account is yours ──
 const PIN_TTL = 15 * 60 * 1000;
 const pins = new Map();          // pin id -> {userId, at}
-const SITE = () => String(process.env.PUBLIC_BASE_URL || "https://publicaccess.tv").replace(/\/+$/, "");
+// 1.99jr: staging is its own site (Plex sends people back to the host that has their session) - SITE_URL / STAGING like feedweb.js
+const SITE = () => String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL ||
+  (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv")).replace(/\/+$/, "");
 const CLIENT_ID = () => "patv-" + crypto.createHash("sha256").update(SITE()).digest("hex").slice(0, 16);
 const plexHdr = (extra) => ({ Accept: "application/json", "X-Plex-Product": "PATV", "X-Plex-Client-Identifier": CLIENT_ID(), ...(extra || {}) });
 let plexTv = async (method, p, hdr) => {
