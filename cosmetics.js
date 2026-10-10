@@ -763,6 +763,8 @@ function register(app, { isBotToken, addUser }) {
   app.get("/cosmetics", addUser, async (req, res) => {
     try {
       const d = await pageData(req);
+      d.stickerPacks = null;                     // 1.99iw: the "Sticker packs" part of My items
+      if (d.tab === "mine" && d.me) { try { d.stickerPacks = await require("./stickers").pageData(req.user); } catch (e) { d.stickerPacks = null; } }
       res.locals.og = require("./og").forPage(req, "PATV Cosmetics", "Name colors, profile banners, borders, effects and Grand Theft Frogger avatar gear. Buy, earn, trade.");
       res.render("cosmetics", d);
     } catch (e) {

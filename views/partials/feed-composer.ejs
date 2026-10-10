@@ -28,6 +28,7 @@
       <input name="title" maxlength="140" placeholder="Title (optional)" aria-label="Title" autocomplete="off">
     </div>
     <textarea name="body" maxlength="5000" rows="3" placeholder="<%= cp.room && /^u\//.test(cp.room) ? 'Post something to your profile…' : cp.room ? 'Post something to this pad…' : 'What\'s going on?' %>" aria-label="Text"></textarea>
+    <div class="fc-stk" style="margin:2px 0 6px"><button type="button" class="fc-bar-q" data-sticker-picker="#fcForm textarea[name=body]" aria-expanded="false" title="Add a sticker" aria-label="Add a sticker">🧸<span class="lb"> Sticker</span></button></div>
     <div class="fc-link hide" id="fcLinkRow">
       <input name="link" type="url" inputmode="url" placeholder="https://… (YouTube and Twitch links play right here)" aria-label="Link" autocomplete="off">
       <div class="fc-pv" id="fcPv" aria-live="polite"></div>
@@ -149,4 +150,5 @@
     </div>
     <p class="fc-note">Pictures up to <%= cp.caps.image %> MB, audio up to <%= cp.caps.audio %> MB (<%= Math.round(cp.caps.audioSecs / 60) %> min), video up to <%= cp.caps.video %> MB (<%= Math.round(cp.caps.videoSecs / 60) %> min). Files are re-encoded and their metadata (camera, GPS location) is removed. iPhone HEIC photos are fine. Your draft is kept on this device until you post it.</p>
   </form>
+  <script src="/public/js/stickers.js?v=1" defer></script>
 <% } %>

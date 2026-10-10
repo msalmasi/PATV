@@ -337,7 +337,9 @@ async function groupRate(me, { newGroup = false, adding = 0 } = {}) {
 const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]);
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
-const padText = (t) => { try { const P = require("./pads"); return P.userRefs(P.padRefs(esc(t))); } catch (e) { return esc(t); } };   // 1.99df: + u/<name>
+const padText = (t) => { try { const P = require("./pads"); return stickerHtml(P.userRefs(P.padRefs(esc(t)))); } catch (e) { return esc(t); } };   // 1.99df: + u/<name>
+// 1.99iw: [sticker:<pack>/<id>] -> the sticker (stickers.js; the sender's ownership was checked when it was sent)
+const stickerHtml = (h) => { try { return require("./stickers").inline(h); } catch (e) { return h; } };
 /** Escape, link bare http(s) URLs (nofollow ugc, new tab) and known p/<slug> pads, keep line breaks. */
 function render(text) {
   const s = String(text == null ? "" : text);
@@ -488,6 +490,7 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
   const pics = Array.isArray(pictures) ? pictures : [];
   if (!text && !pics.length) throw new Refuse(400, "Type a message first.", "empty");
   if (text.length > LIMITS.max_len) throw new Refuse(400, `Messages can be up to ${LIMITS.max_len} characters.`, "long");
+  try { await require("./stickers").validate(me.userId, text); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message, "sticker"); throw e; }   // 1.99iw
   let conv = null, other = null;
   if (conversation) {
     if (!(await membership(conversation, me.userId))) throw new Refuse(404, "No such conversation.");

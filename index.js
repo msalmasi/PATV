@@ -1116,6 +1116,7 @@ require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp 
 require("./padlook").register(app, { addUser });       // 1.99es: a pad's look - avatar, banner, accent (/api/rooms/:slug/look, /media/pad/<file>)
 require("./padcosmetics").register(app, { addUser });   // 1.99ew: premium pad cosmetics - frames, glows, badges, animated avatar (/api/rooms/:slug/cosmetics; 100% Fort Knox / gift 50/50)
 require("./premium").register(app, { addUser });        // 1.99iv: Prime Time (pad tier) + Season Pass (personal tier) - /premium, PAT subscriptions, daily renewals, admin comps
+require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories

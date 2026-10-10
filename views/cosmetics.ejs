@@ -360,6 +360,15 @@
         </div>
         <% { const L = {}; GTF_KINDS.forEach((k) => { if (equippedR[k]) L[equippedR[k].opt] = equippedR[k].layer; }); gtfBox(L, 96); } %>
       </div>
+      <%# 1.99iw: sticker packs (stickers.js) live in the inventory too %>
+      <% if (typeof stickerPacks !== 'undefined' && stickerPacks) { const own_ = stickerPacks.packs.filter((p) => p.owned); %>
+        <h2>🧸 Sticker packs</h2>
+        <% if (own_.length) { %><div style="display:flex;flex-wrap:wrap;gap:10px"><% own_.forEach((p) => { %>
+          <div class="cxp-muted" style="border:1px solid #2a2a2a;border-radius:10px;padding:8px;display:grid;gap:6px;max-width:260px"><b style="color:#eee"><%= p.emoji %> <%= p.name %></b>
+            <span style="display:flex;gap:4px;flex-wrap:wrap"><% p.stickers.forEach((s) => { %><img src="<%= s.url %>" alt="<%= s.name %>" title="<%= s.name %>" width="40" height="40" style="image-rendering:pixelated" loading="lazy"><% }) %></span></div>
+        <% }) %></div><p class="cxp-muted">Use them with the 🧸 button in messages and posts. <a href="/premium#stickers">More packs</a></p>
+        <% } else { %><p class="cxp-muted">None yet - <a href="/premium#stickers">get a sticker pack</a><%= stickerPacks.allowance && stickerPacks.allowance.left ? ' (your 🎟️ Season Pass has a free one)' : '' %>.</p><% } %>
+      <% } %>
       <% if (!inv.count) { %>
         <p class="cxp-muted" style="text-align:center;margin-top:18px">No items yet. Grab something from the <a href="/cosmetics?tab=shop#tabs">shop</a>, run a heist for a drop, or level up.</p>
       <% } %>

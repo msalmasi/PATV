@@ -95,6 +95,10 @@ let NOW = () => Date.now();
 function _setClock(fn) { NOW = fn; }
 
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
+// 1.99iw: stickers in a post / comment must come from packs the writer owns (stickers.js)
+async function stickerCheck(userId, text) {
+  try { await require("./stickers").validate(userId, text); } catch (e) { if (e.refuse) throw new Refuse(e.status, e.message); throw e; }
+}
 
 let ready = null;
 let CONFIG = { ...DEFAULTS };
@@ -970,6 +974,7 @@ async function create(userId, input, deps = {}) {
   if (!u) throw new Refuse(401, "Sign in to post.");
   const title = cleanLine(input.title, TITLE_MAX);
   const body = cleanText(input.body, BODY_MAX);
+  await stickerCheck(u.userId, body);
   const linkIn = String(input.link || "").trim();
   const attIds = [...new Set((Array.isArray(input.attachments) ? input.attachments : []).map(String))].slice(0, MAX_ATTACH + 1);
   if (attIds.length > MAX_ATTACH) throw new Refuse(400, `At most ${MAX_ATTACH} files per post.`);
@@ -1283,6 +1288,7 @@ async function edit(user, id, patch) {
   // 1.99fp: a chat quote's text is what was said - only its title can be edited
   const isQuote = (await getQuery("SELECT 1 FROM feed_quotes WHERE post_id = ?", [id]).catch(() => [])).length > 0;
   const body = patch.body != null && !isQuote ? cleanText(patch.body, BODY_MAX) : r.body;
+  if (body !== r.body) await stickerCheck(user.userId, body);
   const nsfw = patch.nsfw != null ? (patch.nsfw === true || patch.nsfw === 1 || patch.nsfw === "1" || patch.nsfw === "on" ? 1 : 0) : r.nsfw;
   if (!title && !body && !r.link_url && !r.crosspost_of && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
     throw new Refuse(400, "A post can't be empty.");
@@ -1509,6 +1515,7 @@ async function comment(user, postId, { body, parent } = {}) {
   if (refusal) throw new Refuse(refusal.status, refusal.message.replace("to post", "to comment"));
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "Write something first.");
+  await stickerCheck(u.userId, text);
   if (!isStaff(u) && !isPepe(u)) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM feed_comments WHERE author_id = ? AND created > ?", [u.userId, NOW() - 3600e3]))[0].n;
     if (n >= CONFIG.comments_per_hour) throw new Refuse(429, "You've commented a lot this hour - try again later.");
@@ -1553,6 +1560,7 @@ async function editComment(user, id, body) {
   if (!user || user.userId !== c.author_id) throw new Refuse(403, "Only the author can edit a comment.");
   const text = cleanText(body, COMMENT_MAX);
   if (!text) throw new Refuse(400, "A comment can't be empty.");
+  await stickerCheck(user.userId, text);
   await runQuery("UPDATE feed_comments SET body = ?, edited = ? WHERE id = ?", [text, NOW(), c.id]);
   return true;
 }

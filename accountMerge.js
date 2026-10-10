@@ -103,6 +103,8 @@ const RULES = {
   "premium_subs.target": M({ key: ["tier"], merge: { paid_through: "MAX", stripe_through: "MAX", comped: "MAX" } }),
   "premium_subs.renewer_id": M(), "premium_subs.stripe_user": M(), "premium_subs.comp_by": { deny: NAME },
   "premium_ledger.target": M(), "premium_ledger.payer_id": M(), "premium_ledger.payer_name": { deny: NAME },
+  // 1.99iw stickers.js: packs owned (both own a pack: one row stays)
+  "user_sticker_packs.user_id": M({ key: ["pack_id"] }), "user_sticker_packs.payer_id": M(),
   // shop / markets / bounties / Pepe
   "shop_orders.buyer_id": M(), "shop_orders.seller_id": M(), "shop_orders.buyer_input": { deny: TEXT },
   "shop_orders.seller_note": { deny: TEXT }, "shop_orders.seller_paid": { deny: FLAG }, "shop_orders.dispute_from": { deny: FLAG },
