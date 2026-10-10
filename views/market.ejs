@@ -44,6 +44,8 @@
   .mk .settled .s-rule { margin: 10px 0 0; font-size: 15px; color: #eee; }
   .mk .settled .s-why { margin: 10px 0 0; padding: 8px 10px; background: #0d0d0d; border-left: 3px solid #3a4a7a; border-radius: 4px; font-size: 13px; color: #ccc; }
   .mk .settled .s-why a { white-space: nowrap; }
+  .mk .settled .s-rs { border-left-color: #e0a030; color: #eee; }
+  .mk .settled .s-rs-sub { color: #aaa; font-size: 12px; }
   .mk .s-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 10px; font-size: 13px; color: #999; }
   .mk .s-stats b { display: block; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; }
   .mk .myres { border-radius: 12px; padding: 14px 16px; margin: 16px 0; border: 1px solid #333; background: #111; }
@@ -98,6 +100,10 @@
         <p class="s-rule"><% if (S.kind === 'won') { %>Each <b><%= S.result %></b> share paid <b>1 PAT</b>; <%= m.options.filter((o) => !o.won).map((o) => o.name).join(' / ') %> shares are worth 0.<% } else { %><%= S.reason ? 'Reason: ' + S.reason + '. ' : '' %>Trading fees are kept; holders got back what they put in (net of the 2% fee)<%= S.ratio < 1 ? ', scaled to ' + (S.ratio * 100).toFixed(0) + '% because the pot after the Reserve\'s seed couldn\'t cover it all' : '' %>.<% } %></p>
         <% if (S.why) { %>
           <p class="s-why">🤖 <%= S.why %> <a href="#judgement">Full judgement ›</a></p>
+        <% } %>
+        <% if (S.resettle) { const RS = S.resettle; %>
+          <p class="s-why s-rs" id="resettle">⚖ <b>Re-settled <%= RS.to %></b> by <%- ul(RS.by) %><%- RS.at ? ' · ' + when(RS.at) : '' %>: <%= RS.reason %>
+            <br><span class="s-rs-sub">It was first settled <%= RS.from %>. Taken back: <%= RS.clawback.map((c) => c.nick + ' ' + fmt(c.amount)).join(', ') || 'nothing' %><%= RS.funder_back ? ' · ' + fmt(RS.funder_back) + ' from the ' + RS.funder + ' vault' : '' %>. Paid: <%= RS.payouts.map((p) => p.nick + ' +' + fmt(p.amount)).join(', ') || 'nobody' %><%= RS.leftover ? ' · ' + fmt(RS.leftover) + ' back to the ' + RS.funder + ' vault' : '' %>.</span></p>
         <% } %>
         <div class="s-stats">
           <span><b><%= fmt(S.paid || 0) %></b><%= S.kind === 'void' ? 'PAT refunded' : 'PAT paid out' %></span>

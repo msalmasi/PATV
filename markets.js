@@ -17,6 +17,14 @@ function cleanPrice(p) {
            high: n(p.high), high_at: n(p.high_at), low: n(p.low), low_at: n(p.low_at), last: n(p.last),
            start: n(p.start), end: n(p.end), cov_start: n(p.cov_start), cov_end: n(p.cov_end) };
 }
+function cleanResettle(r) {
+  if (!r || typeof r !== "object") return null;
+  const n = (v) => Math.floor(Number(v) || 0);
+  const rows = (a) => (Array.isArray(a) ? a : []).slice(0, 50).map((x) => ({ nick: String((x && x.nick) || "").slice(0, 60), amount: n(x && x.amount) }));
+  return { at: Number(r.at) || 0, by: String(r.by || "").slice(0, 60), from: String(r.from || "").slice(0, 60), to: String(r.to || "").slice(0, 60),
+           reason: String(r.reason || "").slice(0, 240), clawback: rows(r.clawback), payouts: rows(r.payouts), paid: n(r.paid),
+           funder: String(r.funder || "").slice(0, 20), funder_back: n(r.funder_back), leftover: n(r.leftover) };
+}
 function cleanAi(ai) {
   if (!ai || typeof ai !== "object") return null;
   return { state: String(ai.state || ""), result: ai.result == null ? null : String(ai.result).slice(0, 60),
@@ -137,7 +145,7 @@ function settleDetail(m, settle) {
   const po = m.paid_out && typeof m.paid_out === "object" ? m.paid_out : null;
   const ai = m.ai || null;
   const res = settle.kind === "won" ? settle.result : null;
-  const byAi = !!(m.ai_judge && ai && ai.state === "final"
+  const byAi = !m.resettle && !!(m.ai_judge && ai && ai.state === "final"
                   && (settle.kind === "void" ? /^void/i.test(String(ai.result || "")) : ai.result === res));
   const keep = 1 - AMM_FEE_PCT / 100;
   const payouts = [];
@@ -155,6 +163,7 @@ function settleDetail(m, settle) {
   return {
     at: (po && po.at) || m.ended || 0, by: m.settled_by || null, byAi,
     why: byAi ? ai.reason || "" : "", evidence: byAi ? ai.evidence || "" : "", confidence: byAi ? ai.confidence || 0 : 0,
+    resettle: m.resettle || null,
     payouts, winners: payouts.length, approx: settle.kind === "void" && settle.ratio < 1,
     paid: settle.total != null ? settle.total : payouts.reduce((a, p) => a + p.amount, 0),
   };
@@ -239,6 +248,8 @@ function register(app, { isBotToken, addUser }) {
           paid_out: m.paid_out && typeof m.paid_out === "object"
             ? { at: Number(m.paid_out.at) || 0, total: Math.floor(Number(m.paid_out.total) || 0), result: String(m.paid_out.result || "").slice(0, 200) } : null,
           void_reason: m.void_reason ? String(m.void_reason).slice(0, 200) : null,
+          // 1.99ka: an admin re-settle (pepe_mktresettle): who, when, from -> to, why, and the PAT it moved
+          resettle: cleanResettle(m.resettle),
           bets: (m.bets || []).map((x) => ({ nick: String(x.nick || ""), option: String(x.option || ""),
                                            amount: Math.floor(Number(x.amount) || 0), ts: Number(x.ts) || 0, web: !!x.web })),
         };

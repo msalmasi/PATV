@@ -43,6 +43,7 @@
       <% } %>
     <% } else if (ai.state === 'final' && !live && ai.result) { %>
       <%# 1.99dy: his ruling stays on the page after it paid out (the settlement banner links here) %>
+      <% if (m.resettle) { %><p class="aij-rs">⚖ <b>Re-settled <%= m.resettle.to %></b> by an admin (<%= m.resettle.by %>): <%= m.resettle.reason %> Pepe's ruling below was wrong.</p><% } %>
       <p id="judgement">Pepe ruled <b><%= ai.result %></b><%= ai.confidence ? ' (' + Math.round(ai.confidence * 100) + '% sure)' : '' %> — <%= ai.reason %></p>
       <% if (evidenceHtml()) { %><p class="aij-sub aij-ev"><%- evidenceHtml() %></p><% } %>
       <% if ((ai.disputes || []).length) { %><p class="aij-sub"><%= ai.disputes.length %> dispute<%= ai.disputes.length === 1 ? ' was' : 's were' %> raised:</p>
@@ -80,6 +81,7 @@
     .aij-head { font-weight: bold; }
     .aij-tag { font-size: 11px; color: #9fb3ff; border: 1px solid #3a4a7a; border-radius: 10px; padding: 1px 8px; margin-left: 6px; font-weight: normal; }
     .aij-sub { color: #999; font-size: 13px; }
+    .aij-rs { color: #ffe082; }
     .aij-ev time { color: #ccc; white-space: nowrap; }
     .aij-forms form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .aij-forms input[type=text] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 10px; }

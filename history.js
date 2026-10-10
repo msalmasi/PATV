@@ -59,6 +59,10 @@ const RULES = [
   [/^loan-repayment$/i, "casino", "💳", (a, m, r) => r.points < 0 ? `Repaid a loan` : `Loan repayment`, (r) => r.points < 0 ? "to" : "from"],
   [/^market-stake$/i, "casino", "🔮", () => `Bet on a prediction market`],
   [/^market-win$/i, "casino", "🔮", () => `Won a prediction market bet`],
+  // 1.99ka: an admin re-settled a market (pepe_mktresettle): the wrong payout taken back, the right one paid
+  [/^market-win \(re-settled\)$/i, "casino", "🔮", () => `Won a prediction market bet (re-settled)`],
+  [/^market-resettle-clawback$/i, "casino", "⚖️", () => `Market payout taken back (re-settled)`],
+  [/^market-resettle-undo$/i, "casino", "↩️", () => `Market re-settle undone - payout returned`],
   [/^loan-/i, "casino", "💳", (a, m, r) => cap(nice(r.type))],
   [/^heist-buyin$/i, "heist", "🥷", () => `Joined a heist`],
   [/^heist-gear$/i, "heist", "🧰", () => `Bought heist gear`],
