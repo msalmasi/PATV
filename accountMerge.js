@@ -95,6 +95,10 @@ const RULES = {
   "user_badge_showcase.user_id": M({ key: [] }),
   // 1.99jo i18n.js: the saved site language (one per account; both have one: the target's stays)
   "user_language.userId": M({ key: [] }),
+  // 1.99kf i18nfeedback.js: translation suggestions follow their author (rate limit + history); the reviewer / override
+  // author columns hold an admin's username
+  "translation_suggestions.userId": M({ name: "username" }), "translation_suggestions.reviewed_by": { deny: NAME },
+  "translation_overrides.by": { deny: NAME },
   // 1.99jx tz.js: the saved time zone (one per account; both have one: the target's stays)
   "user_timezone.userId": M({ key: [] }),
   "achievement_feed.userId": M(),

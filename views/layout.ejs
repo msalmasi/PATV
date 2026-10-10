@@ -265,7 +265,9 @@
                     <select aria-label="<%- t('foot.language') %>" onchange="location.href='/lang/' + this.value + '?next=' + encodeURIComponent(location.pathname + location.search)">
                         <% for (const L of (locals.i18nLangs || [{ code: 'en', name: 'English' }])) { %><option value="<%= L.code %>"<%= L.code === t.lang ? ' selected' : '' %>><%= L.name %></option><% } %>
                     </select></label>
-                    <a href="/language<%= _here ? '?next=' + encodeURIComponent(_here) : '' %>"><%- t('foot.all_languages') %></a></div>
+                    <a href="/language<%= _here ? '?next=' + encodeURIComponent(_here) : '' %>"><%- t('foot.all_languages') %></a>
+                    <%# 1.99kf: "Suggest a better translation" (i18nfeedback.js) - only when the page isn't in English %>
+                    <% if (t.lang !== 'en') { %><a href="/translate" class="site-lang-suggest"><%- t('foot.suggest_translation') %></a><% } %></div>
             </footer>
         </template>
         <script>

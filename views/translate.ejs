@@ -1,0 +1,97 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('translate.title') + ' · Public Access TV', user: user, ogPath: '/translate' }) %>
+<%#
+  views/translate.ejs - 1.99kf: "Suggest a better translation" (i18nfeedback.js). The strings of the page the user just
+  left + a search; each row shows English, the current translation and a plain form (works without JS).
+  Catalog values are trusted HTML-safe text (printed raw like every view does); js.* strings are plain text (escaped).
+%>
+<%
+  const _lang = t.lang;
+  const _dirAttr = t.dir === 'rtl' ? ' dir="rtl"' : '';
+  const _show = (it, v) => v == null ? '' : (typeof v === 'object' ? Object.keys(v).map((c) => c + ': ' + (it.js ? t.esc(v[c]) : v[c])).join(' · ') : (it.js ? t.esc(v) : v));
+  const _err = locals.error || null;
+  const _row = (it) => {
+    const mine = _err && _err.key === it.key ? _err : null;
+    const prev = (c) => mine && mine.body ? (c ? mine.body['text_' + c] : mine.body.text) : (it.cur == null ? '' : (c ? (typeof it.cur === 'object' ? it.cur[c] || '' : '') : (typeof it.cur === 'string' ? it.cur : '')));
+    let h = '<li class="tr-item" id="k-' + t.esc(it.key) + '"><div class="tr-key"><code>' + t.esc(it.key) + '</code>'
+      + (it.improved ? ' <span class="tr-tag">✓ ' + t('translate.improved') + '</span>' : '') + '</div>'
+      + '<div class="tr-pair"><div><b>' + t('translate.english') + '</b><span lang="en" dir="ltr">' + _show(it, it.en) + '</span></div>'
+      + '<div><b>' + t('translate.current') + '</b><span lang="' + t.esc(_lang) + '"' + _dirAttr + '>' + (it.cur == null ? '<i>' + t('translate.fallback') + '</i>' : _show(it, it.cur)) + '</span></div></div>';
+    if (locals.sent && locals.sent === it.key) h += '<p class="tr-ok" role="status">' + t('translate.sent') + '</p>';
+    if (mine) {
+      h += '<div class="tr-err" role="alert">' + t.esc(mine.message || '') + (mine.problems && mine.problems.length ? '<ul>' + mine.problems.map((p) => '<li lang="en">' + t.esc(p) + '</li>').join('') + '</ul>' : '') + '</div>';
+    }
+    if (!signedIn) return h + '</li>';
+    h += '<details' + (mine ? ' open' : '') + '><summary>' + t('translate.suggest_btn') + '</summary>'
+      + '<form method="post" action="/translate/suggest" class="tr-form">'
+      + '<input type="hidden" name="lang" value="' + t.esc(_lang) + '"><input type="hidden" name="key" value="' + t.esc(it.key) + '">'
+      + '<input type="hidden" name="page" value="' + t.esc(locals.pagePath || '') + '"><input type="hidden" name="q" value="' + t.esc(locals.q || '') + '">';
+    if (it.plural) {
+      for (const c of it.cats.indexOf('other') >= 0 ? it.cats : it.cats.concat(['other'])) {
+        h += '<label>' + t('translate.plural_form', { cat: c }) + '<textarea name="text_' + t.esc(c) + '" rows="2" lang="' + t.esc(_lang) + '"' + _dirAttr + ' maxlength="2000">' + t.esc(prev(c)) + '</textarea></label>';
+      }
+    } else {
+      h += '<label>' + t('translate.yours') + '<textarea name="text" rows="3" lang="' + t.esc(_lang) + '"' + _dirAttr + ' maxlength="2000" required>' + t.esc(prev('')) + '</textarea></label>';
+    }
+    h += '<label>' + t('translate.note') + '<input type="text" name="note" maxlength="300" placeholder="' + t('translate.note_ph') + '" value="' + t.esc(mine && mine.body ? mine.body.note || '' : '') + '"></label>'
+      + '<p class="tr-hint">' + t('translate.hint') + '</p>'
+      + '<button type="submit">' + t('translate.submit') + '</button></form></details></li>';
+    return h;
+  };
+%>
+<style>
+  .trp { max-width: 860px; margin: 0 auto; padding: 22px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; box-sizing: border-box; }
+  .trp h1 { margin: 6px 0 8px; font-size: 26px; }
+  .trp h2 { font-size: 17px; margin: 26px 0 10px; color: #cfcfcf; }
+  .trp p { color: #bbb; line-height: 1.55; margin: 0 0 14px; }
+  .trp a { color: #7fd6a3; }
+  .tr-search { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .tr-search input { flex: 1 1 240px; min-width: 0; padding: 10px 12px; border-radius: 9px; border: 1px solid #333; background: #111; color: #eee; font: inherit; }
+  .trp button { padding: 10px 16px; border-radius: 9px; border: 1px solid #3CC47C; background: #1f2b22; color: #fff; font: inherit; cursor: pointer; min-height: 44px; }
+  .tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .tr-item { border: 1px solid #2b2b2b; background: #161618; border-radius: 10px; padding: 12px; overflow-wrap: anywhere; }
+  .tr-key code { font-size: 11px; color: #888; }
+  .tr-tag { font-size: 12px; color: #3CC47C; }
+  .tr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+  .tr-pair b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a8a8a; margin-bottom: 2px; }
+  @media (max-width: 600px) { .tr-pair { grid-template-columns: 1fr; } }
+  .tr-item details { margin-top: 8px; }
+  .tr-item summary { cursor: pointer; color: #7fd6a3; min-height: 32px; display: flex; align-items: center; }
+  .tr-form { display: grid; gap: 8px; margin-top: 6px; }
+  .tr-form label { display: grid; gap: 4px; font-size: 13px; color: #aaa; }
+  .tr-form textarea, .tr-form input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #0f0f10; color: #eee; font: inherit; }
+  .tr-hint { font-size: 12px; color: #888; margin: 0; }
+  .tr-ok { color: #3CC47C; margin: 8px 0 0; }
+  .tr-err { color: #ff8a80; margin: 8px 0 0; font-size: 14px; }
+  .tr-err ul { margin: 4px 0 0; padding-inline-start: 18px; }
+</style>
+<div class="trp">
+  <h1><span aria-hidden="true">🌐</span> <%- t('translate.heading') %></h1>
+  <p><%- t('translate.intro') %></p>
+  <% if (isEn) { %>
+    <p><%- t('translate.en_only') %> <a href="/language?next=%2Ftranslate"><%- t('translate.choose_language') %></a></p>
+  <% } else { %>
+    <% if (!signedIn) { %><p><%- t('translate.signin', { link: '<a href="/login?next=%2Ftranslate">' + t('translate.signin_link') + '</a>' }) %></p><% } %>
+    <form class="tr-search" method="get" action="/translate" role="search">
+      <label class="sr-only" for="trQ"><%- t('translate.search_label') %></label>
+      <input id="trQ" type="search" name="q" value="<%= q %>" minlength="2" maxlength="80" placeholder="<%- t('translate.search_ph') %>" aria-label="<%- t('translate.search_label') %>">
+      <button type="submit"><%- t('translate.search_btn') %></button>
+    </form>
+    <% if (one.length) { %>
+      <ul class="tr-list" style="margin-top:14px"><%- one.map(_row).join('') %></ul>
+    <% } %>
+    <% if (q) { %>
+      <h2><%- t('translate.results', { count: results.length }) %></h2>
+      <% if (!results.length) { %><p><%- t('translate.no_results') %></p><% } else { %><ul class="tr-list"><%- results.map(_row).join('') %></ul><% } %>
+    <% } else if (!one.length) { %>
+      <% if (pageItems.length) { %>
+        <h2><%- t('translate.from_page', { page: pagePath }) %></h2>
+        <ul class="tr-list"><%- pageItems.map(_row).join('') %></ul>
+      <% } else { %>
+        <p><%- t('translate.from_page_none') %></p>
+      <% } %>
+    <% } %>
+  <% } %>
+</div>
+</body>
+</html>

@@ -178,6 +178,37 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   exit 1
 fi
 
+# 1.99kf: a push that adds or changes English strings (locales/en.json) is followed within a few minutes by the i18n
+# bot's commit with the translations (.github/workflows/i18n-sync.yml). Wait for it - up to I18N_HOLD_SECS (default
+# 480) after this updater first saw the commit - instead of deploying twice. 0 turns it off. Without the bot (no
+# ANTHROPIC_API_KEY secret) the commit deploys when the wait runs out; the strings show in English until translated.
+I18N_HOLD_SECS="${I18N_HOLD_SECS:-480}"
+i18n_pending() {  # true when NEW changes locales/en.json and its catalogs aren't in step with it yet
+  git diff --quiet "$CUR" "$NEW" -- locales/en.json 2>/dev/null && return 1
+  local tmp rc
+  tmp=$(mktemp -d) || return 1
+  if ! git archive "$NEW" locales tools/i18n-sync.js i18n-check.js 2>/dev/null | tar -x -C "$tmp" 2>/dev/null \
+     || [ ! -f "$tmp/tools/i18n-sync.js" ]; then
+    rm -rf "$tmp"; return 1
+  fi
+  node "$tmp/tools/i18n-sync.js" --root="$tmp" --check --strict >/dev/null 2>&1; rc=$?
+  rm -rf "$tmp"
+  [ "$rc" -eq 3 ]
+}
+if [ "$I18N_HOLD_SECS" -gt 0 ] 2>/dev/null && i18n_pending; then
+  seen=$(awk -v s="$NEW" '$1 == s { print $2 }' "$STATE/i18n-seen" 2>/dev/null)
+  [ -n "$seen" ] || { seen=$(date +%s); echo "$NEW $seen" > "$STATE/i18n-seen"; }
+  waited=$(( $(date +%s) - seen ))
+  if [ "$waited" -lt "$I18N_HOLD_SECS" ]; then
+    if [ "$(cat "$STATE/last-note" 2>/dev/null)" != "i18n-$NEW" ]; then
+      echo "i18n-$NEW" > "$STATE/last-note"
+      log "holding $(short "$NEW") up to $((I18N_HOLD_SECS / 60)) min for the i18n bot's translations"
+    fi
+    exit 0
+  fi
+  log "no translations for $(short "$NEW") after $((waited / 60)) min - deploying it anyway (English shows for the new strings)"
+fi
+
 log "new commit $(short "$NEW"): $(subject "$NEW") - checking"
 if ! check_commit "$NEW"; then
   echo "$NEW" >> "$BAD"

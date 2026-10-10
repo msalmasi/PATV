@@ -19,6 +19,8 @@ jobs:
             node --check "$f" || fail=1
           done
           exit $fail
+      - name: Translations in step with en.json (warning only - English shows until the i18n sync runs)
+        run: node tools/i18n-sync.js --check --github
       - name: Lockfiles install cleanly
         run: |
           for d in . discord-bot discordself twitchbot blackjack; do

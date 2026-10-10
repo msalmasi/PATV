@@ -1,0 +1,99 @@
+# 1.99kf: translate new / changed English strings automatically (tools/i18n-sync.js, locales/README.md).
+#
+# push to staging that touches locales/en.json (or the glossary) -> translate what's missing or stale in every
+#   catalog with the model -> run the i18n tests -> commit the catalogs back to staging as ONE follow-up commit.
+#   The VPS updater holds a commit that changed en.json for a few minutes so the two land as one deploy
+#   (deploy/patv-update.sh, I18N_HOLD_SECS). Promoting staging -> main then carries the translations along.
+# pull requests -> report only (a warning annotation listing what has no translation yet).
+# workflow_dispatch -> run the sync by hand (all languages, or a list).
+#
+# Needs the repository secret ANTHROPIC_API_KEY (Settings -> Secrets and variables -> Actions). Without it the job
+# skips with a notice and the new strings show in English (the site falls back to en.json).
+# Optional repository variable I18N_MODEL (default claude-haiku-5-5).
+#
+# No loops: the bot's commit only changes catalogs + state (not en.json), it is pushed with GITHUB_TOKEN (which never
+# triggers workflows) and says [skip ci].
+name: i18n sync
+
+on:
+  push:
+    branches: [staging]
+    paths: ["locales/en.json", "locales/glossary.json"]
+  pull_request:
+    paths: ["locales/**"]
+  workflow_dispatch:
+    inputs:
+      lang:
+        description: "Languages, comma-separated (es,fr) or all"
+        default: "all"
+
+concurrency:
+  group: i18n-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: What has no translation yet
+        run: node tools/i18n-sync.js --check --github --verbose
+
+  sync:
+    # staging only: translations reach main by promoting staging, like every other change
+    if: github.event_name != 'pull_request' && github.ref_name == 'staging'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      I18N_MODEL: ${{ vars.I18N_MODEL }}
+      LANGS: ${{ github.event.inputs.lang || 'all' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: No API key - skip
+        if: env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "::notice title=i18n sync skipped::The repository secret ANTHROPIC_API_KEY is not set (Settings > Secrets and variables > Actions > New repository secret). New strings show in English until it is added and this workflow runs again (Actions > i18n sync > Run workflow)."
+          node tools/i18n-sync.js --check --github
+
+      - name: Translate
+        if: env.ANTHROPIC_API_KEY != ''
+        run: |
+          case "$LANGS" in
+            all|"") set -- --all ;;
+            *) printf '%s' "$LANGS" | grep -Eq '^[A-Za-z,-]+$' || { echo "bad language list"; exit 1; }; set -- "--lang=$LANGS" ;;
+          esac
+          node tools/i18n-sync.js "$@"
+
+      - name: Check the catalogs (the site's i18n tests)
+        if: env.ANTHROPIC_API_KEY != ''
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --test test/i18n.test.js test/i18n-sync.test.js
+
+      - name: Commit the translations
+        if: env.ANTHROPIC_API_KEY != ''
+        run: |
+          git add locales/
+          if git diff --cached --quiet; then echo "nothing new to commit"; exit 0; fi
+          git config user.name "patv-i18n-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "i18n: translate new strings for $(git rev-parse --short HEAD) [skip ci]" -m "tools/i18n-sync.js (${I18N_MODEL:-claude-haiku-5-5}), machine translation - suggestions welcome at /translate."
+          for i in 1 2 3; do
+            git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            sleep 10
+          done
+          echo "::error::could not push the translations"; exit 1

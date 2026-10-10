@@ -38,6 +38,8 @@ git fetch origin && git push origin origin/staging:main
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the same syntax checks, plus a clean `npm ci` of every lockfile, on each push.
 
+**Translation hold (1.99kf).** A commit that changes `locales/en.json` while its catalogs still lack the new strings is held for up to `I18N_HOLD_SECS` (default 480; set it in `/etc/patv-deploy/<instance>.env`, and 0 turns the hold off). The updater counts that time from when it first sees the commit. During the hold, the i18n bot's follow-up commit with the translations (`.github/workflows/i18n-sync.yml`) can land, so both go out as one deploy. If no follow-up arrives, the commit deploys when the hold runs out. See `locales/README.md`.
+
 ## On the server
 
 | What               | Where                                                        |

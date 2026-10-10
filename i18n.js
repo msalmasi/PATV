@@ -1,4 +1,7 @@
 // i18n.js - 1.99jo: the site in many languages.
+// 1.99kf: translation_overrides (accepted "Suggest a better translation" entries, i18nfeedback.js) are layered over
+// the catalogs at runtime (setOverrides), and the keys a signed-in user's last page used are remembered for /translate.
+// New strings are translated automatically by tools/i18n-sync.js (CI: .github/workflows/i18n-sync.yml); locales/README.md.
 //
 // Catalogs: locales/<code>.json, flat "area.name" keys -> HTML-safe text (see i18n-core.js for the format).
 // English (locales/en.json) is the source and the fallback; the others are machine translations
@@ -46,6 +49,19 @@ const LANGS = [
 const COOKIE = "patv_lang";
 const DIR = path.join(__dirname, "locales");
 let catalogs = {};
+// 1.99kf: accepted translation suggestions (i18nfeedback.js, table translation_overrides) sit on top of the catalogs:
+// effective[lang] = the catalog with the overrides layered over it (a prototype chain, so a catalog edit shows
+// through). setOverrides() only takes values that pass i18n-check.js against today's English.
+let overrides = {};
+let effective = {};
+function rebuild() {
+  const next = {};
+  for (const [code, cat] of Object.entries(catalogs)) {
+    const o = code !== "en" && overrides[code];
+    next[code] = o && Object.keys(o).length ? Object.assign(Object.create(cat), o) : cat;
+  }
+  effective = next;
+}
 
 /** (Re)load every catalog in locales/. A broken file is skipped (that language falls back to English). */
 function load() {
@@ -63,6 +79,7 @@ function load() {
   }
   next.en = next.en || {};
   catalogs = next;
+  rebuild();
   return catalogs;
 }
 load();
@@ -102,13 +119,34 @@ function negotiate({ user, cookie, accept } = {}) {
   return match(user) || match(cookie) || fromAccept(accept)[0] || "en";
 }
 
-const tFor = (lang) => makeT(catalogs[lang] || catalogs.en, catalogs.en, catalogs[lang] ? lang : "en");
+/**
+ * Replace the overlay: {lang: {key: text}}. Each value is checked against the English it translates (i18n-check.js);
+ * a bad or unknown one is dropped. Returns how many were applied.
+ */
+function setOverrides(map) {
+  const check = require("./i18n-check");
+  const next = {};
+  let n = 0;
+  for (const [lang, o] of Object.entries(map || {})) {
+    if (lang === "en" || !catalogs[lang] || !o) continue;
+    for (const [k, v] of Object.entries(o)) {
+      if (catalogs.en[k] == null || check.check(k, catalogs.en[k], v).length) continue;
+      (next[lang] = next[lang] || {})[k] = v;
+      n++;
+    }
+  }
+  overrides = next;
+  rebuild();
+  return n;
+}
+
+const tFor = (lang) => makeT(effective[lang] || effective.en, catalogs.en, catalogs[lang] ? lang : "en");
 const info = (lang) => LANGS.find((l) => l.code === lang) || LANGS[0];
 
 /** The "js.*" strings (or those under the given prefixes) for client code, English filled in for missing keys. */
 function clientStrings(lang, prefixes) {
   const pre = prefixes && prefixes.length ? prefixes : ["js."];
-  const en = catalogs.en, c = catalogs[lang] || en, out = {};
+  const en = catalogs.en, c = effective[lang] || en, out = {};
   for (const k of Object.keys(en)) {
     if (!pre.some((p) => k.startsWith(p))) continue;
     out[k] = c[k] != null && c[k] !== "" ? c[k] : en[k];
@@ -152,6 +190,23 @@ async function savePref(userId, lang) {
 }
 const getPref = (userId) => (userId && prefs.get(userId)) || null;
 
+// ---- which strings a signed-in user just saw (1.99kf, for "Suggest a better translation") -------------------------
+// For a signed-in user browsing in another language, the keys the last page they viewed used (t() calls while
+// rendering), so /translate can offer exactly those. In memory only, the newest RECENT_MAX users.
+const RECENT_MAX = 2000;
+const recent = new Map();   // userId -> { path, keys: [...], at }
+function rememberPage(uid, pathName, keys) {
+  if (!uid || !keys.size) return;
+  recent.delete(uid);
+  recent.set(uid, { path: pathName, keys: [...keys].slice(0, 400), at: Date.now() });
+  if (recent.size > RECENT_MAX) recent.delete(recent.keys().next().value);
+}
+const recentPage = (uid) => (uid && recent.get(uid)) || null;
+function tracking(t, used) {
+  const w = function (key, vars) { used.add(key); return t(key, vars); };
+  return Object.assign(w, t);
+}
+
 // ---- express -----------------------------------------------------------------------------------------------
 /** Sets req.lang / req.t and res.locals.t (+ i18nT), lang, dir, langInfo, i18nLangs, i18nClient(prefixes). */
 function middleware(cookieUserId) {
@@ -163,7 +218,13 @@ function middleware(cookieUserId) {
     try { uid = cookieUserId ? cookieUserId(req) : null; } catch (e) { uid = null; }
     const cookie = req.cookies && req.cookies[COOKIE];
     const lang = negotiate({ user: getPref(uid), cookie, accept: req.headers["accept-language"] });
-    const t = tFor(lang);
+    let t = tFor(lang);
+    const dest = req.headers["sec-fetch-dest"];     // page navigations only, not a script's fetch of a fragment
+    if (uid && lang !== "en" && req.method === "GET" && (!dest || dest === "document") && !/^\/(translate|api|i18n|admin|public|lang)\b/.test(req.path || "")) {
+      const used = new Set();
+      t = tracking(t, used);
+      if (typeof res.on === "function") res.on("finish", () => { if (res.statusCode === 200 && used.size) rememberPage(uid, req.originalUrl || req.path, used); });
+    }
     req.lang = lang; req.t = t;
     res.locals.t = t;
     res.locals.i18nT = t;      // what the views use: a page may pass its own `t` local (hop.js does)
@@ -221,4 +282,5 @@ function register(app, { addUser, cookieUserId }) {
 }
 
 module.exports = { LANGS, COOKIE, load, match, fromAccept, negotiate, tFor, info, supported, clientStrings, clientJson, middleware, register,
-  ensure, savePref, getPref, safeNext, catalogs: () => catalogs, _prefs: prefs };
+  ensure, savePref, getPref, safeNext, catalogs: () => catalogs, _prefs: prefs,
+  setOverrides, overrides: () => overrides, recentPage, rememberPage, _recent: recent };

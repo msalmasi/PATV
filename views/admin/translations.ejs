@@ -1,0 +1,151 @@
+<%- include('../partials/admin-open', { title: 'Translations', user, section: 'translations', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/translations.ejs - /admin/translations (1.99kf, i18nfeedback.js): users' "Suggest a better translation"
+  entries. Accept (as-is or edited) makes a live override on top of the catalog at once; Export + the fold script put
+  accepted overrides into locales/<code>.json as human-reviewed, so the automatic sync never overwrites them.
+  Suggestions are user text: always printed escaped here.
+%>
+<%
+  const when = (ts) => ts ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(ts, 'datetime') : '';
+  const show = (v) => v == null ? '' : (typeof v === 'object' ? Object.keys(v).map((c) => c + ': ' + v[c]).join('  |  ') : String(v));
+  const pending = stats.pending || 0;
+%>
+<div class="adm-head">
+  <h1>🌐 Translations</h1>
+  <p>Suggestions from people browsing in another language (footer → "Suggest a better translation", <a href="/translate">/translate</a>).
+     Accepting one puts it live at once as an <b>override</b> on top of the machine translation. To make it permanent, export the
+     overrides and fold them into the catalogs (<code>node tools/i18n-overrides.js fold &lt;file&gt;</code>, commit, deploy): they are then
+     marked human-reviewed, so the automatic sync never overwrites them. See <code>locales/README.md</code>.</p>
+</div>
+
+<section class="adm-card" id="pending" aria-labelledby="pT">
+  <h2 id="pT">Suggestions <span class="adm-pill"><%= pending %> pending</span></h2>
+  <form class="adm-form tr-filter" method="get" action="/admin/translations">
+    <label><span>Status</span><select name="status">
+      <% ['pending', 'accepted', 'rejected', 'superseded', 'all'].forEach((s) => { %><option value="<%= s %>"<%= s === status ? ' selected' : '' %>><%= s %><%= stats[s] != null ? ' (' + stats[s] + ')' : '' %></option><% }) %>
+    </select></label>
+    <label><span>Language</span><select name="lang">
+      <option value="">all</option>
+      <% langs.forEach((l) => { %><option value="<%= l.code %>"<%= l.code === lang ? ' selected' : '' %>><%= l.english %> (<%= l.code %>)</option><% }) %>
+    </select></label>
+    <div class="adm-actions"><button type="submit">Show</button></div>
+  </form>
+  <div class="adm-tbl"><table aria-label="Translation suggestions" id="sugRows">
+    <thead><tr><th>When</th><th>Lang</th><th>String</th><th>Suggestion</th><th>Who</th><th></th></tr></thead>
+    <tbody>
+      <% if (!rows.length) { %><tr><td colspan="6" class="empty">Nothing here.</td></tr><% } %>
+      <% rows.forEach((r) => { const plural = r.en && typeof r.en === 'object'; %>
+      <tr data-id="<%= r.id %>">
+        <td><%= when(r.created_at) %></td>
+        <td><%= r.lang %></td>
+        <td class="tr-cell"><code><%= r.key %></code>
+          <div class="tr-sub"><b>EN</b> <%= show(r.en) %></div>
+          <div class="tr-sub"><b>Now</b> <span lang="<%= r.lang %>"><%= r.current == null ? '(English)' : show(r.current) %></span></div>
+          <% if (r.page) { %><div class="tr-sub"><b>Page</b> <%= r.page %></div><% } %>
+          <% if (r.stale) { %><div class="tr-sub warn">English changed since this was suggested</div><% } %>
+        </td>
+        <td class="tr-cell" lang="<%= r.lang %>">
+          <% if (r.status === 'pending') { %>
+            <% if (plural) { const v = r.value || {}; pluralCats(r.lang).concat(Object.keys(v)).filter((c, i, a) => a.indexOf(c) === i).forEach((c) => { %>
+              <label class="tr-pl"><span><%= c %></span><textarea data-cat="<%= c %>" rows="2"><%= v[c] || '' %></textarea></label>
+            <% }) } else { %>
+              <textarea data-text rows="3"><%= r.value %></textarea>
+            <% } %>
+          <% } else { %>
+            <%= show(r.final || r.value) %>
+            <div class="tr-sub"><%= r.status %><%= r.reviewed_by ? ' by ' + r.reviewed_by : '' %> <%= when(r.reviewed_at) %></div>
+          <% } %>
+          <% if (r.note) { %><div class="tr-sub"><b>Note</b> <%= r.note %></div><% } %>
+        </td>
+        <td><%= r.username || '-' %></td>
+        <td><% if (r.status === 'pending') { %>
+          <button type="button" class="adm-btn" data-accept="<%= r.id %>" data-plural="<%= plural ? 1 : 0 %>">Accept</button>
+          <button type="button" class="adm-btn ghost" data-reject="<%= r.id %>">Reject</button>
+          <span class="adm-msg" role="status"></span>
+        <% } %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="overrides" aria-labelledby="oT">
+  <h2 id="oT">Live overrides <span class="adm-pill"><%= overrides.length %></span></h2>
+  <p class="adm-help">Accepted text the site shows instead of the catalog. <b>stale</b>: the English changed, so it is no longer applied.
+     <b>in catalog</b>: already folded into locales/ - safe to clear.</p>
+  <div class="adm-actions"><button type="button" class="adm-btn ghost" id="pruneBtn">Clear the ones already in the catalogs</button><span class="adm-msg" id="pruneMsg" role="status"></span></div>
+  <div class="adm-tbl"><table aria-label="Live translation overrides">
+    <thead><tr><th>Lang</th><th>Key</th><th>Text</th><th>By</th><th>State</th><th></th></tr></thead>
+    <tbody>
+      <% if (!overrides.length) { %><tr><td colspan="6" class="empty">No overrides.</td></tr><% } %>
+      <% overrides.forEach((o) => { %>
+      <tr>
+        <td><%= o.lang %></td><td><code><%= o.key %></code></td><td lang="<%= o.lang %>"><%= show(o.value) %></td><td><%= o.by || '-' %></td>
+        <td><%= o.folded ? 'in catalog' : (o.stale ? 'stale' : 'live') %></td>
+        <td><button type="button" class="adm-btn ghost" data-del-lang="<%= o.lang %>" data-del-key="<%= o.key %>">Remove</button></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="adm-card" id="export" aria-labelledby="eT">
+  <h2 id="eT">Export → catalogs</h2>
+  <ol class="adm-help">
+    <li><a href="/admin/translations/export.json" download>Download the overrides</a> (the ones not yet in the catalogs).</li>
+    <li>In a checkout of the site: <code>node tools/i18n-overrides.js fold translation-overrides-&lt;date&gt;.json</code> - writes them into
+        <code>locales/&lt;code&gt;.json</code> and marks them human-reviewed in <code>locales/.i18n-state.json</code>.</li>
+    <li>Commit, push to <code>staging</code>, promote. Then press "Clear the ones already in the catalogs" above.</li>
+  </ol>
+</section>
+<style>
+  .tr-filter { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .tr-cell { min-width: 220px; overflow-wrap: anywhere; }
+  .tr-sub { font-size: 12px; color: #9a9a9a; margin-top: 3px; }
+  .tr-sub.warn { color: #ffb74d; }
+  .tr-cell textarea { width: 100%; box-sizing: border-box; min-width: 200px; background: #0f0f10; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 6px; font: inherit; }
+  .tr-pl { display: grid; gap: 2px; font-size: 12px; color: #999; margin-bottom: 4px; }
+</style>
+<script>
+(function () {
+  function post(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json(); });
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button');
+    if (!b) return;
+    var row = b.closest('tr'), msg = row && row.querySelector('.adm-msg');
+    var done = function (j) {
+      if (j && j.ok) { if (msg) msg.textContent = 'Done'; setTimeout(function () { location.reload(); }, 400); }
+      else if (msg) msg.textContent = (j && j.error) || 'Failed';
+      else alert((j && j.error) || 'Failed');
+    };
+    if (b.dataset.accept) {
+      var value;
+      if (b.dataset.plural === '1') {
+        value = {};
+        row.querySelectorAll('textarea[data-cat]').forEach(function (t) { if (t.value.trim()) value[t.dataset.cat] = t.value.trim(); });
+      } else {
+        var t = row.querySelector('textarea[data-text]');
+        value = t ? t.value : null;
+      }
+      b.disabled = true;
+      post('/api/admin/translations/' + b.dataset.accept + '/accept', { value: value }).then(done, function () { done(null); }).then(function () { b.disabled = false; });
+    } else if (b.dataset.reject) {
+      post('/api/admin/translations/' + b.dataset.reject + '/reject').then(done, function () { done(null); });
+    } else if (b.dataset.delKey) {
+      if (!confirm('Remove this override? The machine translation shows again.')) return;
+      post('/api/admin/translations/override/delete', { lang: b.dataset.delLang, key: b.dataset.delKey }).then(done, function () { done(null); });
+    } else if (b.id === 'pruneBtn') {
+      post('/api/admin/translations/prune').then(function (j) {
+        document.getElementById('pruneMsg').textContent = j && j.ok ? 'Removed ' + j.removed : ((j && j.error) || 'Failed');
+        if (j && j.ok && j.removed) setTimeout(function () { location.reload(); }, 600);
+      });
+    }
+  });
+})();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>
