@@ -3130,5 +3130,12 @@
   "market.price.rule_touch": "到達系の質問は、期間中のどこかで価格が目標に触れれば、最後に反対側で終わっても「はい」です。",
   "market.price.rule_close": "終値の質問は期間終了時の価格を使います: {last}。",
   "market.price.partial": "価格データはまだ期間の一部しかカバーしていません。",
-  "market.price.unread": "Pepe はこの価格の質問を読み取れなかったため、管理者が価格チャートから精算します。"
+  "market.price.unread": "Pepe はこの価格の質問を読み取れなかったため、管理者が価格チャートから精算します。",
+  "settings.timezone": "タイムゾーン",
+  "settings.timezone.lede": "PATV のすべての時刻を表示するタイムゾーンです。「自動」はブラウザのタイムゾーンに従います（不明な場合は UTC）。",
+  "settings.timezone.label": "時刻の表示",
+  "settings.timezone.auto": "自動（ブラウザのタイムゾーン）",
+  "js.settings.timezone.now": "現在: {time}（{zone}）",
+  "js.settings.timezone.failed": "タイムゾーンを保存できませんでした。もう一度お試しください。",
+  "err.bad_timezone": "そのタイムゾーンは不明です。"
 }

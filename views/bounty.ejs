@@ -47,7 +47,8 @@
   .bt form.mini button { padding: 6px 12px; font-size: 13px; }
 </style>
 <%
-  const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  // 1.99jx: in the viewer's zone with its label (tz.js)
+  const when = (ts) => ts ? (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ts, 'datetime') : '';
   const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
 %>
 <div class="bt">
@@ -59,9 +60,9 @@
     <h1><span class="ref"><%= b.ref %></span> <%= b.task %></h1>
     <div class="pot"><%= b.total.toLocaleString() %> PAT</div>
     <div class="info">
-      Posted by <b><%- ul(b.creator) %></b> in <%- padLink(b.room, 'a room') %> · <%= when(b.created) %> UTC<br>
-      <%- b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).map((h) => ul(h)).join(', ') + ulEsc(b.resolved ? ' · ' + when(b.resolved) + ' UTC' : '') : ulEsc(b.status === 'open' ? (open ? 'Open — ends in ' + left(b.deadline) + ' (' + when(b.deadline) + ' UTC)' : 'Expired — refunds on the way')
-         : b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).join(', ') + (b.resolved ? ' · ' + when(b.resolved) + ' UTC' : '')
+      Posted by <b><%- ul(b.creator) %></b> in <%- padLink(b.room, 'a room') %> · <%= when(b.created) %><br>
+      <%- b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).map((h) => ul(h)).join(', ') + ulEsc(b.resolved ? ' · ' + when(b.resolved) : '') : ulEsc(b.status === 'open' ? (open ? 'Open — ends in ' + left(b.deadline) + ' (' + when(b.deadline) + ' UTC)' : 'Expired — refunds on the way')
+         : b.status === 'resolved' ? 'Paid to ' + (b.hunters || []).join(', ') + (b.resolved ? ' · ' + when(b.resolved) : '')
          : b.status === 'cancelled' ? 'Cancelled — everyone who chipped in was refunded'
          : b.status === 'expired' ? 'Expired unpaid — everyone who chipped in was refunded' : b.status) %>
     </div>
@@ -134,7 +135,7 @@
         <div class="claim<%= won ? ' won' : '' %>">
           <div class="top">
             <span class="who"><%= won ? '🏆 ' : '' %><%- ul(c.nick) %></span>
-            <span class="info"><%= when(c.ts) %> UTC
+            <span class="info"><%= when(c.ts) %>
               <% if (c.rejected) { %> <span class="flag">rejected<%= c.rejected.by ? ' by ' + c.rejected.by : '' %></span><% } %>
               <% if (c.disputed) { %> <span class="flag disp">disputed: admins</span><% } %></span>
           </div>

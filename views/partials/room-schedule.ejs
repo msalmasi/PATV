@@ -9,7 +9,9 @@
 <%
   const S = schedule || { live: [], upcoming: [], queue: [] };
   const iso = (ms) => new Date(Number(ms)).toISOString();
-  const utc = (ms) => iso(ms).slice(0, 10) + ' ' + iso(ms).slice(11, 16) + ' UTC';
+  // 1.99jx: the server's text is already in the viewer's zone with its label (tz.js); room-schedule.js keeps it current
+  const tzF_ = (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt);
+  const utc = (ms) => tzF_(ms, 'full');
   const src = (r) => r.mode === 'embed' ? '▶ ' + (r.embed_label ? t.esc(r.embed_label) : t('pad.sched.video_link')) : t('pad.sched.stream');
 %>
 <style>
@@ -43,7 +45,7 @@
       <ul id="rsLive" aria-labelledby="rsLiveH">
         <% if (!S.live.length) { %><li class="empty"><%- t('pad.sched.nothing_now') %></li><% } %>
         <% S.live.forEach((r) => { %><li class="srow<%= r.live ? ' live' : '' %><%= r.mine ? ' mine' : '' %>">
-          <span class="when"><%- r.live ? t('pad.sched.live') : t('pad.sched.starting') %> · <%- t('pad.sched.until') %> <time data-ts="<%= r.ends_by %>" data-fmt="t" datetime="<%= iso(r.ends_by) %>"><%= iso(r.ends_by).slice(11, 16) %> UTC</time></span>
+          <span class="when"><%- r.live ? t('pad.sched.live') : t('pad.sched.starting') %> · <%- t('pad.sched.until') %> <time data-ts="<%= r.ends_by %>" data-fmt="t" datetime="<%= iso(r.ends_by) %>"><%= tzF_(r.ends_by, 'time') %></time></span>
           <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
           <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%- r.featured ? t('pad.sched.featured') : t('pad.sched.ordinary') %></span><span class="tg"><%- src(r) %></span><% if (r.mine) { %><span class="tg you"><%- t('pad.sched.you') %></span><% } %></span>
         </li><% }) %>

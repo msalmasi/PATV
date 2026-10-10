@@ -67,10 +67,11 @@ test("home off air with a booking: 'Next up' (name, title, time) replaces Browse
   const at = Date.UTC(2026, 9, 7, 22, 30);
   const html = await renderHome({ tops, nextUp: { display: "Alice <3", title: "Plant talk", start_at: at } });
   const slate = between(html, 'id="stSlate"', '<div class="stcap');
-  assert.match(slate, /Next up: <b>Alice &lt;3<\/b> · Plant talk · <time datetime="2026-10-07T22:30:00.000Z" data-local-time="\d+">22:30 UTC<\/time>/);
+  // 1.99jx: a tz.js tag - the viewer's zone with its label (UTC here: no zone), re-localised by public/js/localtime.js
+  assert.match(slate, /Next up: <b>Alice &lt;3<\/b> · Plant talk · <time datetime="2026-10-07T22:30:00.000Z" data-tz="full" title="2026-10-07 22:30:00 UTC">Wed, Oct 7, 10:30 PM UTC<\/time>/);
   assert.doesNotMatch(slate, /Browse Top Pads/);
   assert.match(slate, /🎥 Go live/);
-  assert.match(html, /querySelectorAll\('time\[data-local-time\]'\)/);
+  assert.match(html, /<script src="\/public\/js\/localtime\.js\?v=\d+"><\/script>/);
 });
 
 test("home live: the stage is .live (slate hidden by CSS), ON AIR pill; the slate markup stays for a later drop", async () => {

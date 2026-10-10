@@ -2,7 +2,7 @@
   1.99jx: a market's times as absolute timestamps in the viewer's own time zone (UTC on hover), and the question's
   window spelled out when it says "next 24 hours" / "today". Pass { m, now, compact }. M49 ("climb back to $83,000
   in the next 24 hours") showed only "closes <UTC string>", so traders couldn't tell what "24 hours" meant.
-  The server writes UTC; partials/mk-times-script (once per page) rewrites every time[data-mkt-ts] in local time.
+  tz.js formats them for the viewer's zone (saved choice > browser cookie > UTC); public/js/localtime.js re-does it in the browser.
 %>
 <% const T_ = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
    const mt_ = locals.m || {};
@@ -11,12 +11,9 @@
    const S_ = mt_.settle || null;
    const settledAt_ = Number((S_ && S_.at) || mt_.ended || 0);
    const ai_ = mt_.ai || null;
-   const D_ = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], M_ = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-   const p2_ = (n) => String(n).padStart(2, '0');
-   const tm_ = (ts) => { const d = new Date(ts * 1000);
-     const fb = D_[d.getUTCDay()] + ' ' + M_[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + p2_(d.getUTCHours()) + ':' + p2_(d.getUTCMinutes()) + ' UTC';
-     const full = d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
-     return '<time datetime="' + d.toISOString() + '" data-mkt-ts="' + Math.round(ts) + '" title="' + full + '">' + fb + '</time>'; };
+   // tz.js: formatted in the viewer's zone with its label (UTC without the site's middleware, e.g. in tests)
+   const tzT_ = locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time;
+   const tm_ = (ts) => tzT_(ts, 'full');
    const left_ = (t) => { const s = Math.max(0, Math.round(t - now_)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.max(1, Math.floor(s / 60)) + 'm'; };
    const open_ = mt_.status === 'open' && closes_ > now_;
    const relQ_ = /\b(?:(?:in|within|over)\s+(?:the\s+)?(?:next\s+)?\d+\s*(?:h|hrs?|hours?|d|days?|mins?|minutes?|weeks?|wks?)\b|next\s+\d+\s*(?:h|hrs?|hours?|d|days?|mins?|minutes?|weeks?)\b|24\s*h|today|tonight|tomorrow|this\s+(?:week|weekend|month)|by\s+(?:the\s+)?(?:deadline|close))/i.test(String(mt_.question || ''));

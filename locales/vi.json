@@ -3130,5 +3130,12 @@
   "market.price.rule_touch": "Câu hỏi chạm giá là Có nếu giá chạm mục tiêu vào bất kỳ lúc nào trong khung, kể cả khi kết thúc ở phía bên kia.",
   "market.price.rule_close": "Câu hỏi giá đóng cửa dùng giá ở cuối khung thời gian: {last}.",
   "market.price.partial": "Dữ liệu giá hiện mới bao phủ một phần khung thời gian.",
-  "market.price.unread": "Pepe không đọc được câu hỏi về giá này, nên admin sẽ tất toán dựa trên biểu đồ giá."
+  "market.price.unread": "Pepe không đọc được câu hỏi về giá này, nên admin sẽ tất toán dựa trên biểu đồ giá.",
+  "settings.timezone": "Múi giờ",
+  "settings.timezone.lede": "Múi giờ dùng để hiển thị mọi thời gian trên PATV. Tự động theo múi giờ của trình duyệt (UTC nếu không xác định được).",
+  "settings.timezone.label": "Hiển thị thời gian theo",
+  "settings.timezone.auto": "Tự động (múi giờ trình duyệt)",
+  "js.settings.timezone.now": "Bây giờ: {time} ({zone})",
+  "js.settings.timezone.failed": "Không lưu được múi giờ - hãy thử lại.",
+  "err.bad_timezone": "Chúng tôi không biết múi giờ đó."
 }

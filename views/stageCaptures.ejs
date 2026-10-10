@@ -53,7 +53,8 @@
 (function () {
   document.querySelectorAll('.sc time[data-ts]').forEach(function (t) {
     var d = new Date(Number(t.getAttribute('data-ts')));
-    t.textContent = d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    t.textContent = window.PATVTime ? PATVTime.format(d, 'full')   // 1.99jx: the viewer's zone, labelled
+      : d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
   });
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-reveal]');

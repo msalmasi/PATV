@@ -3174,5 +3174,12 @@
   "market.price.rule_touch": "A reach/hit question is Yes if the price touched the target at any moment in the window, even if it ended on the other side.",
   "market.price.rule_close": "A closing-price question uses the price at the end of the window: {last}.",
   "market.price.partial": "The price data covers only part of the window so far.",
-  "market.price.unread": "Pepe couldn’t read this price question, so an admin settles it from the price chart."
+  "market.price.unread": "Pepe couldn’t read this price question, so an admin settles it from the price chart.",
+  "settings.timezone": "Time zone",
+  "settings.timezone.lede": "The time zone every time on PATV is shown in. Automatic follows your browser&#39;s time zone (UTC if it can&#39;t tell).",
+  "settings.timezone.label": "Show times in",
+  "settings.timezone.auto": "Automatic (browser time zone)",
+  "js.settings.timezone.now": "Now: {time} ({zone})",
+  "js.settings.timezone.failed": "Couldn't save your time zone - try again.",
+  "err.bad_timezone": "That isn't a time zone we know."
 }

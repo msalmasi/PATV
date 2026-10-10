@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Ulaşma sorusu, fiyat aralık içinde herhangi bir anda hedefe dokunduysa Evet’tir; sonunda diğer tarafta bitse bile.",
   "market.price.rule_close": "Kapanış fiyatı sorusu aralığın sonundaki fiyatı kullanır: {last}.",
   "market.price.partial": "Fiyat verisi şimdilik aralığın yalnızca bir kısmını kapsıyor.",
-  "market.price.unread": "Pepe bu fiyat sorusunu okuyamadı, bu yüzden bir admin fiyat grafiğine bakarak sonuçlandırır."
+  "market.price.unread": "Pepe bu fiyat sorusunu okuyamadı, bu yüzden bir admin fiyat grafiğine bakarak sonuçlandırır.",
+  "settings.timezone": "Saat dilimi",
+  "settings.timezone.lede": "PATV’deki tüm saatlerin gösterildiği saat dilimi. Otomatik, tarayıcının saat dilimini kullanır (bilinmiyorsa UTC).",
+  "settings.timezone.label": "Saatleri göster",
+  "settings.timezone.auto": "Otomatik (tarayıcı saat dilimi)",
+  "js.settings.timezone.now": "Şu an: {time} ({zone})",
+  "js.settings.timezone.failed": "Saat dilimin kaydedilemedi - tekrar dene.",
+  "err.bad_timezone": "Bu saat dilimini tanımıyoruz."
 }

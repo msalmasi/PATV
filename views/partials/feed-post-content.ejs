@@ -18,7 +18,7 @@
   <% if (q.quote && q.quote.lines && q.quote.lines.length) { const ql_ = detail_ ? q.quote.lines : q.quote.lines.slice(0, 8); %>
     <figure class="fq<%= detail_ ? ' is-detail' : '' %>" aria-label="<%- t('feed.pc.quote_aria') %>">
       <blockquote class="fq-lines">
-        <% ql_.forEach((l) => { %><p class="fq-l<%= l.mic ? ' mic' : '' %><%= l.name === 'someone' ? ' anon' : '' %><%= l.me ? ' me' : '' %>"><span class="fq-n">&lt;<%= l.name %>&gt;</span> <% if (l.mic) { %><span class="fq-mic" title="<%- t('feed.pc.said_on_mic') %>" aria-label="<%- t('feed.pc.on_mic') %>">🎙</span> <% } %><span class="fq-t"><%= l.text %></span><% if (detail_ && l.ts) { %> <time class="fq-ts" datetime="<%= new Date(l.ts).toISOString() %>"><%= new Date(l.ts).toISOString().slice(11, 16) %></time><% } %></p><% }) %>
+        <% ql_.forEach((l) => { %><p class="fq-l<%= l.mic ? ' mic' : '' %><%= l.name === 'someone' ? ' anon' : '' %><%= l.me ? ' me' : '' %>"><span class="fq-n">&lt;<%= l.name %>&gt;</span> <% if (l.mic) { %><span class="fq-mic" title="<%- t('feed.pc.said_on_mic') %>" aria-label="<%- t('feed.pc.on_mic') %>">🎙</span> <% } %><span class="fq-t"><%= l.text %></span><% if (detail_ && l.ts) { %> <%- (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(l.ts, 'time', 'fq-ts') %><% } %></p><% }) %>
         <% if (q.quote.lines.length > ql_.length) { %><p class="fq-more"><a href="<%= url_ %>">+ <%- t('feed.pc.more_lines', { count: q.quote.lines.length - ql_.length }) %></a></p><% } %>
       </blockquote>
       <figcaption class="fq-cap">💬 <%- t('feed.pc.people', { count: q.quote.speakers }) %> · <%- t('feed.pc.lines', { count: q.quote.lines.length }) %><%- q.quote.source === 'chat' ? ' · ' + t('feed.pc.clipped') : '' %></figcaption>

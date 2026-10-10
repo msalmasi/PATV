@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Eine Erreicht-Frage ist Ja, wenn der Kurs das Ziel zu irgendeinem Zeitpunkt im Zeitfenster berührt hat, auch wenn er am Ende auf der anderen Seite lag.",
   "market.price.rule_close": "Eine Schlusskurs-Frage verwendet den Kurs am Ende des Zeitfensters: {last}.",
   "market.price.partial": "Die Kursdaten decken bisher nur einen Teil des Zeitfensters ab.",
-  "market.price.unread": "Pepe konnte diese Kursfrage nicht lesen, daher entscheidet ein Admin anhand des Kurscharts."
+  "market.price.unread": "Pepe konnte diese Kursfrage nicht lesen, daher entscheidet ein Admin anhand des Kurscharts.",
+  "settings.timezone": "Zeitzone",
+  "settings.timezone.lede": "Die Zeitzone, in der alle Zeiten auf PATV angezeigt werden. Automatisch folgt der Zeitzone deines Browsers (UTC, wenn sie unbekannt ist).",
+  "settings.timezone.label": "Zeiten anzeigen in",
+  "settings.timezone.auto": "Automatisch (Browser-Zeitzone)",
+  "js.settings.timezone.now": "Jetzt: {time} ({zone})",
+  "js.settings.timezone.failed": "Deine Zeitzone konnte nicht gespeichert werden – versuch es noch mal.",
+  "err.bad_timezone": "Diese Zeitzone kennen wir nicht."
 }

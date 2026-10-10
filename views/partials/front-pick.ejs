@@ -7,7 +7,7 @@
 %>
 <% const F = (typeof fp !== 'undefined' && fp) || null; const A = F && F.auto; const C = (F && F.cfg) || { w: {} }; const B = C.boost || { on: true, k: 0.1, cap: 25, rel: 0.5, half_min: 60 };
    const iso = (ms) => new Date(ms).toISOString();
-   const hm = (ms) => iso(ms).slice(11, 16) + ' UTC';
+   const hm = (ms) => (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(ms, 'time');   // 1.99jx: the viewer's zone, labelled (tz.js)
    const n1 = (v) => (Math.round((Number(v) || 0) * 10) / 10).toLocaleString('en-US'); %>
 <style>
   .fpk { display: grid; gap: 6px; font-size: 13px; color: #b7c2b7; min-width: 0; width: 100%; }
@@ -72,7 +72,7 @@
   if (!box || !box.hasAttribute('data-fp')) return;
   box.querySelectorAll('time[data-ts]').forEach(function (t) {
     var d = new Date(Number(t.getAttribute('data-ts')));
-    if (!isNaN(d)) t.textContent = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    if (!isNaN(d)) t.textContent = window.PATVTime ? PATVTime.format(d, 'time') : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });   // 1.99jx: labelled
   });
   var btn = box.querySelector('[data-fp-re]'), msg = box.querySelector('[data-fp-msg]');
   btn.addEventListener('click', function () {

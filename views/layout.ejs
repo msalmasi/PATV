@@ -37,6 +37,9 @@
     <%# 1.99jo: page scripts translate with __t(key, englishDefault, vars), key = js.<area>.<name> - PATV_I18N holds the page language's
         "js.*" strings (nothing for English: the defaults are the English). Plain text: put it in textContent, or escape it. %>
     <% if (t.lang !== 'en') { %><script>window.PATV_I18N = <%- locals.i18nClient ? i18nClient(['js.'].concat(locals.i18nJs || [])) : '{"lang":"en","dir":"ltr","s":{}}' %>;</script><% } %>
+    <%# 1.99jx: times in the viewer's own zone with its label (tz.js + public/js/localtime.js); PATV_TZ_SAVED = Edit profile -> Time zone %>
+    <script>window.PATV_TZ_SAVED = <%- JSON.stringify(locals.tzSaved || null) %>;</script>
+    <script src="/public/js/localtime.js?v=1"></script>
     <script>window.__t = function (k, d, v) { var I = window.PATV_I18N, s = I && I.s ? I.s[k] : null; if (s == null || s === '') s = d;
         if (s && typeof s === 'object') { var n = v && v.count != null ? +v.count : NaN, c = 'other'; try { if (!isNaN(n)) c = new Intl.PluralRules(I ? I.lang : 'en').select(n); } catch (e) {} s = s[c] != null ? s[c] : s.other; }
         return String(s == null ? k : s).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? String(v[n]) : m; }); };</script>

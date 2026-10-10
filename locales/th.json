@@ -3130,5 +3130,12 @@
   "market.price.rule_touch": "คำถามแตะราคาจะเป็นใช่ หากราคาแตะเป้าหมายในช่วงเวลาใดก็ได้ แม้ตอนจบจะอยู่อีกฝั่ง",
   "market.price.rule_close": "คำถามราคาปิดใช้ราคาตอนสิ้นสุดช่วงเวลา: {last}",
   "market.price.partial": "ข้อมูลราคาตอนนี้ครอบคลุมเพียงบางส่วนของช่วงเวลา",
-  "market.price.unread": "Pepe อ่านคำถามราคานี้ไม่ออก แอดมินจึงจะตัดสินจากกราฟราคา"
+  "market.price.unread": "Pepe อ่านคำถามราคานี้ไม่ออก แอดมินจึงจะตัดสินจากกราฟราคา",
+  "settings.timezone": "เขตเวลา",
+  "settings.timezone.lede": "เขตเวลาที่ใช้แสดงเวลาทั้งหมดบน PATV อัตโนมัติจะใช้เขตเวลาของเบราว์เซอร์ (UTC หากระบุไม่ได้)",
+  "settings.timezone.label": "แสดงเวลาตาม",
+  "settings.timezone.auto": "อัตโนมัติ (เขตเวลาของเบราว์เซอร์)",
+  "js.settings.timezone.now": "ตอนนี้: {time} ({zone})",
+  "js.settings.timezone.failed": "บันทึกเขตเวลาไม่สำเร็จ - ลองอีกครั้ง",
+  "err.bad_timezone": "เราไม่รู้จักเขตเวลานั้น"
 }

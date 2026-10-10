@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Una pregunta de alcanzar es Sí si el precio tocó el objetivo en cualquier momento de la ventana, aunque terminara del otro lado.",
   "market.price.rule_close": "Una pregunta de precio de cierre usa el precio al final de la ventana: {last}.",
   "market.price.partial": "Por ahora los datos de precio cubren solo parte de la ventana.",
-  "market.price.unread": "Pepe no pudo leer esta pregunta de precio, así que un admin la liquida con el gráfico de precios."
+  "market.price.unread": "Pepe no pudo leer esta pregunta de precio, así que un admin la liquida con el gráfico de precios.",
+  "settings.timezone": "Zona horaria",
+  "settings.timezone.lede": "La zona horaria en la que se muestran todas las horas en PATV. Automática sigue la zona horaria de tu navegador (UTC si no se puede saber).",
+  "settings.timezone.label": "Mostrar horas en",
+  "settings.timezone.auto": "Automática (zona horaria del navegador)",
+  "js.settings.timezone.now": "Ahora: {time} ({zone})",
+  "js.settings.timezone.failed": "No se pudo guardar tu zona horaria; inténtalo de nuevo.",
+  "err.bad_timezone": "No conocemos esa zona horaria."
 }

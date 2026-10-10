@@ -47,8 +47,8 @@
         <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><% if (r.profile) { %><%# 1.99df: a profile post shows u/<username> where the pad would be %><a class="fp-room fp-user<%= r.removed ? ' off' : '' %>" href="/u/<%= encodeURIComponent(r.profile) %>" title="<%- t('feed.p.users_profile', { name: r.profile }) %>">u/<%= r.profile %><%- r.removed ? ' ' + t('feed.p.removed') : '' %></a><% } else { %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>" title="<%= r.title %>">p/<%= r.slug %><%- r.removed ? ' ' + t('feed.p.removed') : '' %></a><% } %><% }) %></span>
       <% } %>
       <span class="dot" aria-hidden="true">·</span>
-      <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a>
-      <% if (p.edited) { %><span class="fp-ed" title="<%- t('feed.p.edited_at', { date: new Date(p.edited).toUTCString() }) %>"><%- t('feed.edited') %></span><% } %>
+      <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(p.created, 'long') %>"><%= fx.ago(p.created) %></time></a>
+      <% if (p.edited) { %><span class="fp-ed" title="<%- t('feed.p.edited_at', { date: (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(p.edited, 'long') }) %>"><%- t('feed.edited') %></span><% } %>
     </div>
     <%# 1.99ex: no title -> the shared label (postlabel.js), muted, when the card has nothing else that names it (a
         picture / video / audio / capture only post); a body or link card already says what it is %>

@@ -98,7 +98,7 @@ test("banner: outcome, Pepe as AI judge, when, his reasoning with a link to the 
   assert.match(ban, /--oc: #e57373/, "No is red");
   assert.match(ban, /⚖ Resolved: NO/);
   assert.match(ban, /judged by 🤖 Pepe \(AI judge\)/);
-  assert.match(ban, /settled \d{4}-\d\d-\d\d \d\d:\d\d UTC/);
+  assert.match(ban, /settled <time datetime="[^"]+" data-tz="datetime" title="[^"]+ UTC">[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M UTC<\/time>/);   // 1.99jx: a <time> tag, labelled
   assert.match(ban, /never reaching \$87,000\.00[\s\S]*href="#judgement"/);
   assert.match(ban, /Each <b>No<\/b> share paid <b>1 PAT<\/b>; Yes shares are worth 0/);
   assert.match(ban, /<b>2,485,637<\/b>PAT paid out/);
@@ -162,7 +162,7 @@ test("trades: a settlement row on top, then one payout row per winner, then the 
   const tbl = between(h, "<h3>Trades</h3>", "</table>");
   const ev = tbl.indexOf('class="settle-ev won"');
   assert.ok(ev > 0, "settlement row");
-  assert.match(tbl, /<td colspan="7">⚖ Settled NO by 🤖 Pepe \(AI judge\) · \d{4}-\d\d-\d\d \d\d:\d\d UTC · 2,485,637 PAT paid to 2 holders \(1 PAT per No share\)<\/td>/);
+  assert.match(tbl, /<td colspan="7">⚖ Settled NO by 🤖 Pepe \(AI judge\) · <time datetime="[^"]+" data-tz="datetime" title="[^"]+ UTC">[A-Z][a-z]{2} \d+, \d+:\d\d [AP]M UTC<\/time> · 2,485,637 PAT paid to 2 holders \(1 PAT per No share\)<\/td>/);
   const pays = tbl.match(/<tr class="payout">[\s\S]*?<\/tr>/g) || [];
   assert.equal(pays.length, 2);
   assert.match(pays[0], /tsyko[\s\S]*payout[\s\S]*2,483,696[\s\S]*2,483,696[\s\S]*1\.000/);

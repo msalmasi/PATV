@@ -65,7 +65,9 @@
   const COLORS = ['#4caf50', '#e57373', '#64b5f6', '#ffd54f', '#ba68c8', '#4dd0e1', '#ff8a65', '#aed581'];
   const pc = (p) => (p * 100).toFixed(p >= 0.995 || p <= 0.005 ? 1 : 0) + '%';
   const fmt = (n) => Math.round(n).toLocaleString();
-  const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  // 1.99jx: times in the viewer's zone with its label (tz.js), as <time> tags - print them with the raw tag
+  const tzT = locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time;
+  const when = (ts) => ts ? tzT(ts, 'datetime') : '';
   // 1.99dt: E escapes; \u0001 in an escaped status line marks where the linked "(by <who>)" goes
   const E = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const byWho = () => (m && m.settled_by ? ' (by ' + ul(m.settled_by) + ')' : '');
@@ -76,7 +78,7 @@
   const sIdx = S && S.kind === 'won' ? m.options.findIndex((o) => o.name === S.result) : -1;
   const sColor = sIdx >= 0 ? (m.options.length === 2 && /^no$/i.test(S.result) ? '#e57373' : m.options.length === 2 && /^yes$/i.test(S.result) ? '#4caf50' : COLORS[sIdx % COLORS.length]) : '#9e9e9e';
   const sBy = () => S && S.byAi ? '🤖 Pepe (AI judge)' : S && S.by ? ul(S.by) : 'the judge';
-  const sWhen = S && S.at ? when(S.at) + ' UTC' : '';
+  const sWhen = S && S.at ? when(S.at) : '';
   const sPaid = S ? (S.kind === 'void' ? 'refunded ' : '') + fmt(S.paid || 0) + ' PAT ' + (S.kind === 'void' ? 'to ' : 'paid to ') + S.winners + ' holder' + (S.winners === 1 ? '' : 's') : '';
 %>
 <div class="mk">
@@ -91,7 +93,7 @@
       <div class="settled <%= S.kind %>" id="settlement" style="--oc: <%= sColor %>">
         <div class="s-top">
           <div class="s-out"><% if (S.kind === 'won') { %>⚖ Resolved: <%= S.result.toUpperCase() %><% } else { %>⚖ Voided <small>— holders refunded</small><% } %></div>
-          <div class="s-meta">judged by <%- sBy() %><%= sWhen ? ' · settled ' + sWhen : '' %></div>
+          <div class="s-meta">judged by <%- sBy() %><%- sWhen ? ' · settled ' + sWhen : '' %></div>
         </div>
         <p class="s-rule"><% if (S.kind === 'won') { %>Each <b><%= S.result %></b> share paid <b>1 PAT</b>; <%= m.options.filter((o) => !o.won).map((o) => o.name).join(' / ') %> shares are worth 0.<% } else { %><%= S.reason ? 'Reason: ' + S.reason + '. ' : '' %>Trading fees are kept; holders got back what they put in (net of the 2% fee)<%= S.ratio < 1 ? ', scaled to ' + (S.ratio * 100).toFixed(0) + '% because the pot after the Reserve\'s seed couldn\'t cover it all' : '' %>.<% } %></p>
         <% if (S.why) { %>
@@ -155,7 +157,7 @@
         </svg>
         <div class="legend">
           <% m.options.forEach((o, i) => { %><span><i style="background: <%= COLORS[i % COLORS.length] %>"></i><%= o.name %></span><% }) %>
-          <span style="margin-left:auto;color:#888">since <%= when(t0) %> UTC · dashed = 50%</span>
+          <span style="margin-left:auto;color:#888">since <%- when(t0) %> · dashed = 50%</span>
         </div>
       </div>
     <% } %>
@@ -253,7 +255,7 @@
         <% if (S && m.myResult) { const R = m.myResult; %>
           <tr class="settle-ord"><td>settled</td><td><%= S.kind === 'void' ? 'void' : S.result %></td>
               <td class="r"><%= fmt(R.payout) %> PAT</td>
-              <td>⚖ <%= R.state === 'won' ? 'paid ' + fmt(R.payout) + ' PAT' : R.state === 'lost' ? 'lost — nothing paid' : 'refunded ' + (S.approx ? '≈ ' : '') + fmt(R.payout) + ' PAT' %> · net <%= (R.pnl >= 0 ? '+' : '−') + fmt(Math.abs(R.pnl)) %> · <%= sWhen %></td></tr>
+              <td>⚖ <%= R.state === 'won' ? 'paid ' + fmt(R.payout) + ' PAT' : R.state === 'lost' ? 'lost — nothing paid' : 'refunded ' + (S.approx ? '≈ ' : '') + fmt(R.payout) + ' PAT' %> · net <%= (R.pnl >= 0 ? '+' : '−') + fmt(Math.abs(R.pnl)) %> · <%- sWhen %></td></tr>
         <% } %>
         <% orders.forEach((o) => { const k = o.kind || 'buy'; %>
           <tr><td><%= k %></td><td><%= k === 'resolve' ? o.outcome : o.option %></td>
@@ -266,20 +268,20 @@
 
     <h3>Trades</h3>
     <div class="tbl"><table>
-      <tr><th>Who</th><th>Side</th><th>Outcome</th><th class="r">Shares</th><th class="r">PAT</th><th class="r">Price</th><th class="r">When (UTC)</th></tr>
+      <tr><th>Who</th><th>Side</th><th>Outcome</th><th class="r">Shares</th><th class="r">PAT</th><th class="r">Price</th><th class="r">When</th></tr>
       <% if (S) { %>
-        <tr class="settle-ev <%= S.kind %>"><td colspan="7">⚖ <%= S.kind === 'void' ? 'Voided' : 'Settled ' + S.result.toUpperCase() %> by <%- sBy() %><%= sWhen ? ' · ' + sWhen : '' %> · <%= sPaid %><%= S.kind === 'won' ? ' (1 PAT per ' + S.result + ' share)' : '' %></td></tr>
+        <tr class="settle-ev <%= S.kind %>"><td colspan="7">⚖ <%= S.kind === 'void' ? 'Voided' : 'Settled ' + S.result.toUpperCase() %> by <%- sBy() %><%- sWhen ? ' · ' + sWhen : '' %> · <%= sPaid %><%= S.kind === 'won' ? ' (1 PAT per ' + S.result + ' share)' : '' %></td></tr>
         <% S.payouts.slice(0, 50).forEach((p) => { %>
           <tr class="payout"><td><%- ul(p.nick) %></td><td class="pay"><%= S.kind === 'void' ? 'refund' : 'payout' %></td><td><%= p.option || 'void' %></td>
               <td class="r"><%= p.shares == null ? '' : fmt(p.shares) %></td><td class="r pay"><%= S.approx ? '≈ ' : '' %><%= fmt(p.amount) %></td>
-              <td class="r"><%= S.kind === 'void' ? '' : '1.000' %></td><td class="r"><%= when(S.at) %></td></tr>
+              <td class="r"><%= S.kind === 'void' ? '' : '1.000' %></td><td class="r"><%- when(S.at) %></td></tr>
         <% }) %>
         <% if (S.payouts.length > 50) { %><tr class="payout"><td colspan="7" style="color:#888">… and <%= S.payouts.length - 50 %> more</td></tr><% } %>
       <% } %>
       <% m.trades.slice(0, 100).forEach((t) => { %>
         <tr><td><%- ul(t.nick, { web: t.web }) %></td><td class="<%= t.side === 'buy' ? 'up' : 'down' %>"><%= t.side %></td><td><%= t.option %></td>
             <td class="r"><%= fmt(t.shares) %></td><td class="r"><%= fmt(t.pat) %></td>
-            <td class="r"><%= t.shares ? fp(t.pat / t.shares) : '' %></td><td class="r"><%= when(t.ts) %></td></tr>
+            <td class="r"><%= t.shares ? fp(t.pat / t.shares) : '' %></td><td class="r"><%- when(t.ts) %></td></tr>
       <% }) %>
       <% if (!m.trades.length && !S) { %><tr><td colspan="7" style="color:#888">No trades yet.</td></tr><% } %>
     </table></div>
@@ -348,10 +350,10 @@
     <% } %>
     <h3>Bets</h3>
     <div class="tbl"><table>
-      <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When (UTC)</th></tr>
+      <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When</th></tr>
       <% (m.bets || []).slice().sort((a, b) => b.ts - a.ts).forEach((b) => { %>
         <tr><td><%- ul(b.nick, { web: b.web }) %></td><td><%= b.option %></td>
-            <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%= when(b.ts) %></td></tr>
+            <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%- when(b.ts) %></td></tr>
       <% }) %>
       <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888">No bets yet.</td></tr><% } %>
     </table></div>

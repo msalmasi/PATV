@@ -3265,5 +3265,12 @@
   "market.price.rule_touch": "Pytanie o osiągnięcie ceny to Tak, jeśli cena dotknęła celu w dowolnym momencie okna, nawet jeśli skończyła po drugiej stronie.",
   "market.price.rule_close": "Pytanie o cenę zamknięcia używa ceny z końca okna: {last}.",
   "market.price.partial": "Dane cenowe obejmują na razie tylko część okna.",
-  "market.price.unread": "Pepe nie zdołał odczytać tego pytania o cenę, więc rozlicza je admin na podstawie wykresu."
+  "market.price.unread": "Pepe nie zdołał odczytać tego pytania o cenę, więc rozlicza je admin na podstawie wykresu.",
+  "settings.timezone": "Strefa czasowa",
+  "settings.timezone.lede": "Strefa czasowa, w której PATV pokazuje wszystkie godziny. Automatyczna korzysta ze strefy przeglądarki (UTC, jeśli jest nieznana).",
+  "settings.timezone.label": "Pokazuj godziny w",
+  "settings.timezone.auto": "Automatyczna (strefa przeglądarki)",
+  "js.settings.timezone.now": "Teraz: {time} ({zone})",
+  "js.settings.timezone.failed": "Nie udało się zapisać strefy czasowej – spróbuj ponownie.",
+  "err.bad_timezone": "Nie znamy takiej strefy czasowej."
 }

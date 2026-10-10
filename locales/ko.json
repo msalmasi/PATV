@@ -3130,5 +3130,12 @@
   "market.price.rule_touch": "도달형 질문은 기간 중 어느 순간이라도 가격이 목표에 닿았다면, 마지막에 반대편에서 끝났더라도 예입니다.",
   "market.price.rule_close": "종가 질문은 기간이 끝날 때의 가격을 사용합니다: {last}.",
   "market.price.partial": "가격 데이터가 아직 기간의 일부만 포함합니다.",
-  "market.price.unread": "Pepe가 이 가격 질문을 읽지 못해 관리자가 가격 차트를 보고 정산합니다."
+  "market.price.unread": "Pepe가 이 가격 질문을 읽지 못해 관리자가 가격 차트를 보고 정산합니다.",
+  "settings.timezone": "시간대",
+  "settings.timezone.lede": "PATV의 모든 시간이 표시되는 시간대입니다. 자동은 브라우저의 시간대를 따릅니다(알 수 없으면 UTC).",
+  "settings.timezone.label": "시간 표시 기준",
+  "settings.timezone.auto": "자동(브라우저 시간대)",
+  "js.settings.timezone.now": "지금: {time} ({zone})",
+  "js.settings.timezone.failed": "시간대를 저장하지 못했습니다. 다시 시도하세요.",
+  "err.bad_timezone": "알 수 없는 시간대입니다."
 }

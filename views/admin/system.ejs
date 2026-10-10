@@ -16,7 +16,7 @@
     <div><b>Environment</b><span><%= S.env %></span></div>
     <div><b>Site version</b><span><%= S.sha ? S.sha : 'unknown' %></span></div>
     <div><b>Up for</b><span><%= dur(S.uptime) %></span></div>
-    <div><b>Started</b><span><%= S.started ? new Date(S.started).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '?' %></span></div>
+    <div><b>Started</b><span><%= S.started ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(S.started, 'long') : '?' %></span></div>
     <div><b>Node</b><span><%= S.node %></span></div>
     <div><b>Database</b><span><%= S.db ? 'answering' : 'NOT answering' %></span></div>
   </div>

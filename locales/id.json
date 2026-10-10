@@ -3130,5 +3130,12 @@
   "market.price.rule_touch": "Pertanyaan mencapai harga bernilai Ya jika harga menyentuh target kapan saja dalam jendela, meski berakhir di sisi lain.",
   "market.price.rule_close": "Pertanyaan harga penutupan memakai harga di akhir jendela: {last}.",
   "market.price.partial": "Data harga sejauh ini baru mencakup sebagian jendela.",
-  "market.price.unread": "Pepe tidak bisa membaca pertanyaan harga ini, jadi admin menyelesaikannya dari grafik harga."
+  "market.price.unread": "Pepe tidak bisa membaca pertanyaan harga ini, jadi admin menyelesaikannya dari grafik harga.",
+  "settings.timezone": "Zona waktu",
+  "settings.timezone.lede": "Zona waktu untuk semua waktu di PATV. Otomatis mengikuti zona waktu browser-mu (UTC jika tidak diketahui).",
+  "settings.timezone.label": "Tampilkan waktu dalam",
+  "settings.timezone.auto": "Otomatis (zona waktu browser)",
+  "js.settings.timezone.now": "Sekarang: {time} ({zone})",
+  "js.settings.timezone.failed": "Zona waktumu gagal disimpan - coba lagi.",
+  "err.bad_timezone": "Kami tidak mengenal zona waktu itu."
 }

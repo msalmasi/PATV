@@ -2,6 +2,7 @@
 // opened and when it closes / closed (and when Pepe ruled / it settled) as <time> tags the page rewrites in the
 // viewer's own time zone (UTC on hover); a "next 24 hours" question gets its window spelled out; Pepe's exchange
 // price check (source, the window's HIGH / LOW and when, the rule used) shows in the judgement section.
+// Times come from tz.js: the browser's zone (patv_tz cookie) here, UTC without one, always with the zone's label.
 "use strict";
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -14,6 +15,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "market-times-test-"));
 process.chdir(tmp);
 process.env.SECRET_KEY = "test-secret";
 const express = require("express");
+const cookieParser = require("cookie-parser");
+const tz = require(path.join(repo, "tz"));
 const { runQuery } = require(path.join(repo, "dbUtils"));
 const markets = require(path.join(repo, "markets"));
 
@@ -30,7 +33,7 @@ const M49 = {
         reason: "BTC hit $83,093.39 at 2026-10-10 17:30 UTC, at/above $83,000.00 (Coinbase data).",
         evidence: "PRICE DATA (Coinbase, 1-min candles ...)",
         price: { symbol: "BTC", target: 83000, direction: "up", mode: "touch", start: CREATED, end: CLOSES, source: "Coinbase",
-                 gran: 60, candles: 1440, covered: true, high: 83093.39, high_at: 1791653400, low: 82198, low_at: 1791575100,
+                 gran: 60, candles: 1440, covered: true, high: 83093.39, high_at: 1791653880, low: 82198, low_at: 1791575460,
                  last: 82567.1, cov_start: CREATED, cov_end: CLOSES, used: "up" } },
   positions: { foamy1111: pos("foamy1111", { Yes: 138126, No: 0 }, { Yes: 60000, No: 0 }) },
   trades: [], history: [],
@@ -59,6 +62,8 @@ test.before(async () => {
   app.set("view engine", "ejs");
   app.set("views", path.join(repo, "views"));
   app.use(express.json({ limit: "5mb" }));
+  app.use(cookieParser());
+  app.use(tz.middleware(() => null));
   markets.register(app, { isBotToken: (t) => t === "bot-token", addUser: (req, res, next) => { req.user = null; next(); } });
   server = app.listen(0);
   base = "http://127.0.0.1:" + server.address().port;
@@ -67,26 +72,31 @@ test.before(async () => {
   assert.equal(r.status, 200);
 });
 test.after(() => server.close());
-const page = async (p) => (await fetch(base + p)).text();
-const tag = (ts) => new RegExp(`<time datetime="${new Date(ts * 1000).toISOString()}" data-mkt-ts="${ts}" title="[^"]+ UTC">`);
+const page = async (p, zone) => (await fetch(base + p, { headers: zone ? { cookie: "patv_tz=" + encodeURIComponent(zone) } : {} })).text();
+const at = (ts) => `<time datetime="${new Date(ts * 1000).toISOString()}" data-tz="[a-z]+" title="${new Date(ts * 1000).toISOString().slice(0, 19).replace("T", " ")} UTC">`;
 
-test("M49: opened / closed / Pepe ruled as local-time <time> tags, and the 24-hour window spelled out", async () => {
-  const h = await page("/markets/49");
-  assert.match(h, /Opened <time [^>]*data-mkt-ts="1791568375"[^>]*>Fri Oct 9, 17:52 UTC<\/time>/);
-  assert.match(h, /Closed <time [^>]*data-mkt-ts="1791654775"[^>]*>Sat Oct 10, 17:52 UTC<\/time>/);
-  assert.match(h, tag(CREATED));
-  assert.match(h, /title="2026-10-09 17:52:55 UTC"/, "UTC on hover");
-  assert.match(h, /Pepe ruled <time [^>]*data-mkt-ts="1791655675"/);
-  assert.match(h, /class="mk-t-win">Window: <time [^>]*data-mkt-ts="1791568375"[^>]*>[^<]*<\/time> → <time [^>]*data-mkt-ts="1791654775"/);
+test("M49 in New York: opened / closed / Pepe ruled with the zone's label, and the 24-hour window spelled out", async () => {
+  const h = await page("/markets/49", "America/New_York");
+  assert.match(h, new RegExp("Opened " + at(CREATED) + "Fri, Oct 9, 1:52 PM EDT</time>"));
+  assert.match(h, new RegExp("Closed " + at(CLOSES) + "Sat, Oct 10, 1:52 PM EDT</time>"));
+  assert.match(h, new RegExp("Pepe ruled " + at(CLOSES + 900) + "Sat, Oct 10, 2:07 PM EDT</time>"));
+  assert.match(h, new RegExp('class="mk-t-win">Window: ' + at(CREATED) + "Fri, Oct 9, 1:52 PM EDT</time> → " + at(CLOSES) + "Sat, Oct 10, 1:52 PM EDT</time>"));
   assert.match(h, /Times are in your time zone/);
-  assert.match(h, /new Intl\.DateTimeFormat\(lang, \{ weekday: 'short'[^}]*timeZoneName: 'short' \}\)/, "the page localises the tags");
-  assert.equal((h.match(/time\[data-mkt-ts\]/g) || []).length, 1, "the formatter is on the page once");
+  assert.match(h, /<script src="\/public\/js\/localtime\.js\?v=\d+"><\/script>/, "the browser re-localises the tags");
+});
+
+test("without a zone the times are UTC - and say so", async () => {
+  const h = await page("/markets/49");
+  assert.match(h, new RegExp("Opened " + at(CREATED) + "Fri, Oct 9, 5:52 PM UTC</time>"));
+  assert.match(h, new RegExp("Closed " + at(CLOSES) + "Sat, Oct 10, 5:52 PM UTC</time>"));
+  const bad = await page("/markets/49", "Not/AZone");
+  assert.match(bad, /Fri, Oct 9, 5:52 PM UTC<\/time>/, "an unknown cookie zone falls back to UTC");
 });
 
 test("M49: the judgement shows the price check - source, HIGH and LOW with times, target, and the touch rule", async () => {
-  const h = await page("/markets/49");
-  assert.match(h, /Price check \(Coinbase, 1-minute candles\): BTC HIGH \$83,093\.39 at <time [^>]*data-mkt-ts="1791653400"/);
-  assert.match(h, /LOW \$82,198\.00 at <time [^>]*data-mkt-ts="1791575100"[^>]*>[^<]*<\/time>; target \$83,000\.00\./);
+  const h = await page("/markets/49", "Europe/London");
+  assert.match(h, new RegExp("Price check \\(Coinbase, 1-minute candles\\): BTC HIGH \\$83,093\\.39 at " + at(1791653880) + "Oct 10, 6:38 PM GMT\\+1</time>"));
+  assert.match(h, new RegExp("LOW \\$82,198\\.00 at " + at(1791575460) + "[^<]+</time>; target \\$83,000\\.00\\."));
   assert.match(h, /A reach\/hit question is Yes if the price touched the target at any moment in the window/);
   assert.doesNotMatch(h, /PRICE DATA \(Coinbase, 1-min candles \.\.\.\)/, "the structured check replaces the raw line");
 });
@@ -95,7 +105,7 @@ test("an open market: Closes <time> (in 3h 12m), no window line for a question w
   const h = await page("/markets/50");
   assert.match(h, /Trading open/);
   assert.doesNotMatch(h, /closes [A-Z][a-z]{2}, \d\d [A-Z][a-z]{2} \d{4}/, "no more toUTCString()");
-  assert.match(h, /Closes <time [^>]*>[^<]*<\/time> \(in 3h 1[12]m\)/);
+  assert.match(h, /Closes <time [^>]*>[^<]* UTC<\/time> \(in 3h 1[12]m\)/);
   assert.doesNotMatch(h, /class="mk-t-win"/);
 });
 
@@ -105,8 +115,7 @@ test("an unreadable price question says an admin settles it from the chart", asy
 });
 
 test("the /markets cards carry the compact times", async () => {
-  const h = await page("/markets");
-  assert.match(h, /class="mk-times compact">\s*<span class="mk-t-line">Opened <time [^>]*data-mkt-ts="1791568375"/);
+  const h = await page("/markets", "Asia/Tokyo");
+  assert.match(h, new RegExp('class="mk-times compact">\\s*<span class="mk-t-line">Opened ' + at(CREATED) + "Sat, Oct 10, 2:52 AM GMT\\+9</time>"));
   assert.match(h, /Closes <time [^>]*>[^<]*<\/time> \(in 3h 1[12]m\)/);
-  assert.equal((h.match(/time\[data-mkt-ts\]/g) || []).length, 1, "the formatter is on the page once");
 });

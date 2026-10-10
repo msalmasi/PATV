@@ -3355,5 +3355,12 @@
   "market.price.rule_touch": "سؤال الوصول يكون نعم إذا لمس السعر الهدف في أي لحظة خلال النافذة، حتى لو انتهى على الجانب الآخر.",
   "market.price.rule_close": "سؤال سعر الإغلاق يستخدم السعر عند نهاية النافذة: {last}.",
   "market.price.partial": "بيانات السعر تغطي جزءًا من النافذة فقط حتى الآن.",
-  "market.price.unread": "لم يتمكن Pepe من قراءة سؤال السعر هذا، لذا يسوّيه مشرف من مخطط السعر."
+  "market.price.unread": "لم يتمكن Pepe من قراءة سؤال السعر هذا، لذا يسوّيه مشرف من مخطط السعر.",
+  "settings.timezone": "المنطقة الزمنية",
+  "settings.timezone.lede": "المنطقة الزمنية التي تُعرض بها كل الأوقات على PATV. التلقائي يتبع منطقة متصفحك (UTC إن تعذّر معرفتها).",
+  "settings.timezone.label": "عرض الأوقات بتوقيت",
+  "settings.timezone.auto": "تلقائي (منطقة المتصفح)",
+  "js.settings.timezone.now": "الآن: {time} ({zone})",
+  "js.settings.timezone.failed": "تعذّر حفظ منطقتك الزمنية - حاول مرة أخرى.",
+  "err.bad_timezone": "لا نعرف هذه المنطقة الزمنية."
 }

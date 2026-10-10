@@ -27,7 +27,7 @@
       <% } %>
       <% if (c.flair && fx.flair) { %><%- fx.flair(c.flair) %><% } %><%# 1.99ir: their flair in the post's pad (padflair.js) %>
       <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="<%- t('feed.c.op_title') %>"><%- t('feed.c.op') %></span><% } %>
-      <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>
+      <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(c.created, 'long') %>"><%= fx.ago(c.created) %></time></a>
       <% if (c.edited) { %><span class="fp-ed"><%- t('feed.edited') %></span><% } %>
       <% if (c.hidden) { %><span class="tag warn" title="<%- t('feed.c.hidden_title') %>"><%- t('feed.c.hidden') %></span><% } %>
     </div>

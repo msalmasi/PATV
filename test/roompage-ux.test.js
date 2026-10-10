@@ -113,7 +113,7 @@ test("room page: the Stage card (player + Snap / Clip) then its own Go live card
   assert.doesNotMatch(pub, /\/p\/plant_based_chatting\/settings/, "1.99dc: no settings link for the public");
   assert.match(pub, /Alice Live/); assert.match(pub, /Bob Booked/); assert.match(pub, /Dave Queued/);
   assert.match(pub, /★ Featured/); assert.match(pub, /Ordinary slot/); assert.match(pub, /▶ YouTube/); assert.match(pub, /🎥 Stream/);
-  assert.match(pub, /<time data-ts="\d+" data-min="15" datetime="2026-10-06T14:00:00.000Z">2026-10-06 14:00 UTC<\/time>/);
+  assert.match(pub, /<time data-ts="\d+" data-min="15" datetime="2026-10-06T14:00:00.000Z">Tue, Oct 6, 2:00 PM UTC<\/time>/);   // 1.99jx: labelled
   assert.doesNotMatch(pub, /Carol Pending|SECRET-PENDING-TITLE|Waiting for the owner/);
   assert.match(pub, /room-schedule\.js/);
   assert.doesNotMatch(pub, /class="upnext"/, "the old up-next list gives way to the schedule");

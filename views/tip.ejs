@@ -390,7 +390,7 @@
     return new Date(t).toLocaleDateString();
   }
   document.querySelectorAll('.tp .when[data-ts]').forEach(function (el) {
-    var a = ago(el.getAttribute('data-ts')); if (a) { el.textContent = '· ' + a; el.title = new Date(el.getAttribute('data-ts')).toLocaleString(); }
+    var a = ago(el.getAttribute('data-ts')); if (a) { el.textContent = '· ' + a; el.title = window.PATVTime ? PATVTime.format(el.getAttribute('data-ts'), 'long') : new Date(el.getAttribute('data-ts')).toLocaleString(); }
   });
 
   var share = document.getElementById('tp-share');
@@ -438,7 +438,7 @@
     line.appendChild(nm);
     var w = document.createElement('span'); w.className = 'when';
     var iso = String(t.timestamp || '').replace(' ', 'T') + 'Z';
-    w.textContent = ago(iso) || String(t.timestamp || '').slice(0, 10); w.title = new Date(iso).toLocaleString();
+    w.textContent = ago(iso) || String(t.timestamp || '').slice(0, 10); w.title = window.PATVTime ? PATVTime.format(iso, 'long') : new Date(iso).toLocaleString();
     line.appendChild(w); li.appendChild(line);
     var pts = document.createElement('span'); pts.className = 'pts ' + (out ? 'out' : 'in');
     pts.textContent = (out ? '−' : '+') + fmt(t.points); li.appendChild(pts);

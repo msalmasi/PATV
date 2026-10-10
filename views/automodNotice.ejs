@@ -8,7 +8,8 @@
   const state = N.state === 'reversed' ? 'reversed' : N.action;
   const told = { flag: 'Nothing has changed yet: the pad owner gets a report and decides.', hide: 'It\'s hidden in this pad until the pad owner reviews it.',
                  remove: 'It\'s been taken out of this pad.', none: 'No action was taken - it\'s fine.' }[N.action] || '';
-  const when = new Date(N.at).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  // 1.99jx: in the viewer's zone with its label (tz.js)
+  const when = (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(N.at, 'long');
 %>
 <style>
   .an .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 12px 0 0; }

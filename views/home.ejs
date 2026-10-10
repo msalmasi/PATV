@@ -474,7 +474,7 @@
               <p class="sl-msg"><%- t('home.stage.nothing_on') %></p>
               <div class="sl-acts">
                 <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a>
-                <% if (nextUp_) { %><span class="sl-next" id="slNext"><%- t('home.stage.next_up') %> <b><%= nextUp_.display %></b><%= nextUp_.title ? ' · ' + nextUp_.title : '' %> · <time datetime="<%= new Date(nextUp_.start_at).toISOString() %>" data-local-time="<%= Number(nextUp_.start_at) %>"><%= new Date(nextUp_.start_at).toISOString().slice(11, 16) %> UTC</time></span>
+                <% if (nextUp_) { %><span class="sl-next" id="slNext"><%- t('home.stage.next_up') %> <b><%= nextUp_.display %></b><%= nextUp_.title ? ' · ' + nextUp_.title : '' %> · <%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(nextUp_.start_at, 'full') %></span>
                 <% } else { %><a class="btn" href="/p" id="slBrowse"><%- t('home.stage.browse_top') %></a><% } %>
               </div>
             </div>
@@ -670,13 +670,7 @@
       document.getElementById('stPillTxt').textContent = on ? _t('js.home.on_air', 'ON AIR') : _t('js.home.off_air', 'OFF AIR');
       if (how) document.getElementById('stSub').textContent = how;
     }
-    // the slate's "Next up" time in the viewer's own clock (the server writes UTC)
-    document.querySelectorAll('time[data-local-time]').forEach(function (t) {
-      var d = new Date(Number(t.getAttribute('data-local-time')));
-      if (isNaN(d.getTime())) return;
-      var today = new Date().toDateString() === d.toDateString();
-      try { t.textContent = (today ? '' : d.toLocaleDateString([], { weekday: 'short' }) + ' ') + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
-    });
+    // the slate's "Next up" time: a tz.js <time data-tz> tag, put in the viewer's zone by public/js/localtime.js (1.99jx)
 
     // ── the stage (public/js/stage-room.js): the FRONT ROOM's stage - its featured slot by default, else
     // Pepe's stream (his HLS + low-latency WHEP, or an admin-chosen YouTube / Twitch embed - 1.99fv: never an automatic

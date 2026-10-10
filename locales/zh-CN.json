@@ -3130,5 +3130,12 @@
   "market.price.rule_touch": "触及类问题：只要价格在窗口内任意时刻触及目标即为是，即使最后收在另一侧。",
   "market.price.rule_close": "收盘价类问题使用窗口结束时的价格：{last}。",
   "market.price.partial": "价格数据目前只覆盖了部分窗口。",
-  "market.price.unread": "Pepe 无法解读这个价格问题，所以由管理员根据价格图表结算。"
+  "market.price.unread": "Pepe 无法解读这个价格问题，所以由管理员根据价格图表结算。",
+  "settings.timezone": "时区",
+  "settings.timezone.lede": "PATV 上所有时间所使用的时区。自动会跟随浏览器的时区（无法判断时使用 UTC）。",
+  "settings.timezone.label": "时间显示为",
+  "settings.timezone.auto": "自动（浏览器时区）",
+  "js.settings.timezone.now": "现在：{time}（{zone}）",
+  "js.settings.timezone.failed": "无法保存你的时区，请重试。",
+  "err.bad_timezone": "我们不认识这个时区。"
 }

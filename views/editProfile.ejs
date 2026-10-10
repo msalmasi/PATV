@@ -39,6 +39,9 @@
   // the Language setting (i18n.js): every supported language + "Automatic"; renders without the middleware's locals too
   const langs_ = Array.isArray(locals.i18nLangs) && locals.i18nLangs.length ? locals.i18nLangs : [{ code: 'en', name: 'English', english: 'English' }];
   const langPref_ = locals.langPref || 'auto';
+  // 1.99jx: the Time zone setting (tz.js): Automatic (the browser's zone) or any IANA zone
+  const tzPref_ = locals.tzPref || 'auto';
+  const tzZones_ = typeof locals.tzZones === 'function' ? locals.tzZones() : ['UTC'];
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
@@ -286,7 +289,7 @@
   </section>
 
   <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
-    <a href="#account"><%- t('settings.account') %></a><a href="#language"><%- t('settings.language') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a>
+    <a href="#account"><%- t('settings.account') %></a><a href="#language"><%- t('settings.language') %></a><a href="#timezone"><%- t('settings.timezone') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a>
   </nav>
 
   <section class="card" id="account">
@@ -323,6 +326,23 @@
         <button class="btn primary" type="submit" id="langSave"><%- t('settings.save') %></button>
       </div>
       <span class="status" id="langStatus" role="status" aria-live="polite"></span>
+    </form>
+  </section>
+
+  <section class="card" id="timezone">
+    <h2><%- t('settings.timezone') %></h2>
+    <p class="lede"><%- t('settings.timezone.lede') %></p>
+    <form class="field" id="tzForm" action="/api/settings/timezone" method="post">
+      <label class="lbl" for="tzSelect"><%- t('settings.timezone.label') %></label>
+      <div class="row">
+        <select id="tzSelect" name="tz">
+          <option value="auto"<%= tzPref_ === 'auto' ? ' selected' : '' %>><%- t('settings.timezone.auto') %></option>
+          <% tzZones_.forEach((z) => { %><option value="<%= z %>"<%= tzPref_ === z ? ' selected' : '' %>><%= z.replace(/_/g, ' ') %></option><% }) %>
+        </select>
+        <button class="btn primary" type="submit" id="tzSave"><%- t('settings.save') %></button>
+      </div>
+      <span class="hint" id="tzNow"></span>
+      <span class="status" id="tzStatus" role="status" aria-live="polite"></span>
     </form>
   </section>
 
@@ -488,6 +508,37 @@
         .catch(function (err) {
           btn.disabled = sel.disabled = false;
           lsay((err && err.message) || _t('js.settings.language.failed', "Couldn't save your language - try again."), false);
+        });
+    });
+  })();
+
+  // the Time zone setting (1.99jx): POST {tz} to /api/settings/timezone, then reload so every time follows it
+  (function () {
+    var f = document.getElementById('tzForm'), sel = document.getElementById('tzSelect');
+    var btn = document.getElementById('tzSave'), st = document.getElementById('tzStatus'), now = document.getElementById('tzNow');
+    if (!f || !sel) return;
+    function show() {
+      var T = window.PATVTime, z = sel.value === 'auto' ? ((T && T.browser) || 'UTC') : sel.value, txt = '';
+      try { txt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: z, timeZoneName: 'short' }).format(new Date()); } catch (e) {}
+      if (now) now.textContent = txt ? _t('js.settings.timezone.now', 'Now: {time} ({zone})', { time: txt, zone: z.replace(/_/g, ' ') }) : '';
+    }
+    sel.addEventListener('change', show);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show); else show();
+    function say(msg, ok) { st.textContent = msg; st.className = 'status ' + (ok ? 'ok' : 'err'); }
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      btn.disabled = sel.disabled = true;
+      say(_t('js.settings.language.saving', 'Saving…'), true);
+      fetch('/api/settings/timezone', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ tz: sel.value }) })
+        .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
+        .then(function (d) {
+          if (d && d.success) { location.reload(); return; }
+          throw new Error((d && d.message) || '');
+        })
+        .catch(function (err) {
+          btn.disabled = sel.disabled = false;
+          say((err && err.message) || _t('js.settings.timezone.failed', "Couldn't save your time zone - try again."), false);
         });
     });
   })();

@@ -79,7 +79,8 @@
 <% } else {
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString();
   const pct = (f, d) => ((Number(f) || 0) * 100).toFixed(d == null ? 1 : d) + '%';
-  const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
+  // 1.99jx: in the viewer's zone with its label (tz.js); print with the raw tag
+  const when = (ts) => ts ? (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime') : '';
   const day = (ts) => ts ? new Date(ts * 1000).toISOString().slice(5, 10) : '';
   const left = (tt) => { const s = Math.max(0, Math.round(tt - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s > 0 ? Math.max(1, Math.floor(s/60)) + 'm' : t('wallet.now'); };
   const cd = (t) => '<span data-until="' + Number(t) + '">' + left(t) + '</span>';
@@ -242,7 +243,7 @@
           <tr><th><%- t('wallet.loan.loan') %></th><th><%- t('wallet.hist.with') %></th><th class="r"><%- t('wallet.loan.principal') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th><%- t('wallet.status') %></th><th><%- t('wallet.hist.ended') %></th></tr>
           <% loanHistory.forEach((l) => { %>
             <tr><td class="ref"><%= l.ref %></td><td><%- l.iBorrow ? t('wallet.hist.from', { who: l.reserve ? t('wallet.fed') : ul(l.lender) }) : t('wallet.hist.to', { who: ul(l.borrower) }) %></td>
-              <td class="r"><%= fmt(l.principal) %></td><td class="r"><%= fmt(l.paid) %></td><td><%- stName(l.status) %><%- l.late ? ' ' + t('wallet.hist.late') : '' %></td><td><%= when(l.ended || l.created) %></td></tr>
+              <td class="r"><%= fmt(l.principal) %></td><td class="r"><%= fmt(l.paid) %></td><td><%- stName(l.status) %><%- l.late ? ' ' + t('wallet.hist.late') : '' %></td><td><%- when(l.ended || l.created) %></td></tr>
           <% }) %>
         </table></div>
       </details>
@@ -385,7 +386,7 @@
     <div class="grid">
       <% admin.pending.forEach((r) => { %>
         <div class="card admin">
-          <span class="ref">LR<%= r.id %> · <%= r.status %> · <%= when(r.created) %> UTC</span>
+          <span class="ref">LR<%= r.id %> · <%= r.status %> · <%- when(r.created) %></span>
           <span class="name"><%- ul(r.nick) %> wants <%= fmt(r.amount) %> PAT for <%= dur(r.term) %></span>
           <% const rc = r.creditLive; if (rc) { %>
             <span class="info">📊 Credit <b><%= rc.score %></b> <span class="band <%= bandCls(rc.band) %>"><%= rc.band %></span>

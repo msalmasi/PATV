@@ -501,7 +501,7 @@
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
       <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">
-        <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%- UL(u.username, { text: u.display, user: true }) %></b><span class="muted"><%- t('pad.golive.min', { n: u.minutes }) %><%- u.featured ? ' · ' + t('pad.golive.featured') : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
+        <% RS.upcoming.forEach((u) => { %><li><%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(u.start_at, 'full') %><b><%- UL(u.username, { text: u.display, user: true }) %></b><span class="muted"><%- t('pad.golive.min', { n: u.minutes }) %><%- u.featured ? ' · ' + t('pad.golive.featured') : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
       </ul>
     <% } %>
   </section>
@@ -511,10 +511,6 @@
     'use strict';
     var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var box = document.getElementById('rmStage');
-    document.querySelectorAll('.upnext time[data-ts]').forEach(function (t) {
-      var d = new Date(Number(t.getAttribute('data-ts')));
-      t.textContent = d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    });
     var padSlug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     // 1.99cr: Snap / Clip the stream that's showing (stage-capture.js; cut on the server, saved to this pad's story)
     var cap = PATVStage.capture({ host: document.getElementById('rmCap'), room: function () { return padSlug; } });
@@ -1111,7 +1107,7 @@
       <% if (RV_.history && RV_.history.length) { %>
       <ul class="rv-hist" aria-label="<%- t('pad.vault.moves') %>">
         <% RV_.history.slice(0, 6).forEach((e) => { %>
-          <li><span><%= new Date(e.ts * 1000).toISOString().slice(5, 16).replace('T', ' ') %> · <%= rvKind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %></span>
+          <li><span><%- (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(e.ts, 'datetime') %> · <%= rvKind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %></span>
               <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= rvf_(Math.abs(e.amount)) %><%- e.overflow ? ' ' + t('pad.vault.overflow', { n: rvf_(e.overflow) }) : '' %></span></li>
         <% }) %>
       </ul>

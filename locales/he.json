@@ -3220,5 +3220,12 @@
   "market.price.rule_touch": "שאלת הגעה היא כן אם המחיר נגע ביעד בכל רגע בחלון, גם אם הסתיים בצד השני.",
   "market.price.rule_close": "שאלת מחיר סגירה משתמשת במחיר בסוף החלון: {last}.",
   "market.price.partial": "נתוני המחיר מכסים בינתיים רק חלק מהחלון.",
-  "market.price.unread": "Pepe לא הצליח לקרוא את שאלת המחיר הזו, לכן מנהל יסלק אותה לפי גרף המחיר."
+  "market.price.unread": "Pepe לא הצליח לקרוא את שאלת המחיר הזו, לכן מנהל יסלק אותה לפי גרף המחיר.",
+  "settings.timezone": "אזור זמן",
+  "settings.timezone.lede": "אזור הזמן שבו מוצגים כל הזמנים ב־PATV. אוטומטי עוקב אחרי אזור הזמן של הדפדפן (UTC אם לא ידוע).",
+  "settings.timezone.label": "הצג זמנים לפי",
+  "settings.timezone.auto": "אוטומטי (אזור הזמן של הדפדפן)",
+  "js.settings.timezone.now": "עכשיו: {time} ({zone})",
+  "js.settings.timezone.failed": "לא הצלחנו לשמור את אזור הזמן - נסה שוב.",
+  "err.bad_timezone": "אזור הזמן הזה לא מוכר לנו."
 }

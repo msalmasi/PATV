@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Une question d’atteinte est Oui si le prix a touché la cible à n’importe quel moment de la fenêtre, même s’il a fini de l’autre côté.",
   "market.price.rule_close": "Une question de prix de clôture utilise le prix à la fin de la fenêtre : {last}.",
   "market.price.partial": "Les données de prix ne couvrent pour l’instant qu’une partie de la fenêtre.",
-  "market.price.unread": "Pepe n’a pas pu lire cette question de prix, un admin la règle donc à partir du graphique."
+  "market.price.unread": "Pepe n’a pas pu lire cette question de prix, un admin la règle donc à partir du graphique.",
+  "settings.timezone": "Fuseau horaire",
+  "settings.timezone.lede": "Le fuseau horaire dans lequel toutes les heures de PATV s’affichent. Automatique suit le fuseau de ton navigateur (UTC s’il est inconnu).",
+  "settings.timezone.label": "Afficher les heures en",
+  "settings.timezone.auto": "Automatique (fuseau du navigateur)",
+  "js.settings.timezone.now": "Maintenant : {time} ({zone})",
+  "js.settings.timezone.failed": "Impossible d’enregistrer ton fuseau horaire – réessaie.",
+  "err.bad_timezone": "Nous ne connaissons pas ce fuseau horaire."
 }

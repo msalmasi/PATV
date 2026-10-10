@@ -82,20 +82,24 @@
     return a;
   }
   function convAvatar(c, extra) { return c.kind === 'group' ? groupAvatar(c.members, extra) : avatar((c.with || {}).username, (c.with || {}).display, extra, (c.with || {}).avatar); }
-  function dayKey(ms) { var d = new Date(ms); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  // 1.99jx: the viewer's zone (saved choice or the browser's - public/js/localtime.js); clock times carry its label
+  var TZ = (window.PATVTime && window.PATVTime.zone) || undefined;
+  function tzo(x) { if (TZ) x.timeZone = TZ; return x; }
+  function dayKey(ms) { try { return new Date(ms).toLocaleDateString('en-CA', tzo({})); } catch (e) { var d = new Date(ms); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); } }
   function dayLabel(ms) {
     var d = new Date(ms), t = new Date(), y = new Date(Date.now() - 86400e3);
     if (dayKey(ms) === dayKey(t.getTime())) return _t('js.msg.today', 'Today');
     if (dayKey(ms) === dayKey(y.getTime())) return _t('js.msg.yesterday', 'Yesterday');
-    return d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: d.getFullYear() === t.getFullYear() ? undefined : 'numeric' });
+    return d.toLocaleDateString([], tzo({ weekday: 'long', day: 'numeric', month: 'long', year: d.getFullYear() === t.getFullYear() ? undefined : 'numeric' }));
   }
-  function hm(ms) { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  function hm(ms) { return window.PATVTime ? PATVTime.format(ms, 'time') : new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' }); }
+  function full(ms) { return window.PATVTime ? PATVTime.format(ms, 'long') : new Date(ms).toLocaleString(); }
   function shortWhen(ms) {
     if (!ms) return '';
     if (dayKey(ms) === dayKey(Date.now())) return hm(ms);
     var s = (Date.now() - ms) / 1000;
-    if (s < 6 * 86400) return new Date(ms).toLocaleDateString([], { weekday: 'short' });
-    return new Date(ms).toLocaleDateString([], { day: 'numeric', month: 'short' });
+    if (s < 6 * 86400) return new Date(ms).toLocaleDateString([], tzo({ weekday: 'short' }));
+    return new Date(ms).toLocaleDateString([], tzo({ day: 'numeric', month: 'short' }));
   }
   function visible() { return document.visibilityState === 'visible'; }
   function isPhone() { return window.matchMedia('(max-width: 760px)').matches; }
@@ -293,7 +297,7 @@
       if (!g || !prev || prev.from !== m.from || m.at - prev.at > 7 * 60e3) {
         var mine = m.from === me.username;
         var body = el('div', { cls: 'dm-gb' }, [el('div', { cls: 'dm-gh' }, [m.blocked && !S.shown[m.id] ? el('b', { text: _t('js.msg.blocked', 'Blocked') }) : el('b', null, [nameNode(m.fromDisplay || m.from || '[gone]', m.fromCss)]),
-          el('time', { datetime: new Date(m.at).toISOString(), title: new Date(m.at).toLocaleString(), text: hm(m.at) })])]);
+          el('time', { datetime: new Date(m.at).toISOString(), title: full(m.at), text: hm(m.at) })])]);
         g = el('div', { cls: 'dm-g' + (mine ? ' mine' : '') }, [m.blocked && !S.shown[m.id] ? el('span', { cls: 'av av-blk', 'aria-hidden': 'true', text: '⊘' }) : avatar(m.from, m.fromDisplay, null, m.fromAvatar), body]);
         msgsEl.appendChild(g);
       }
@@ -414,7 +418,7 @@
       .then(function () { if (seq === S.ntLoading) $('dmNtScroll').removeAttribute('aria-busy'); });
   }
   function showNtMsg(s) { var m = $('dmNtMsg'); m.textContent = s || ''; m.hidden = !s; }
-  function longWhen(ms) { return new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); }
+  function longWhen(ms) { return full(ms); }
   function renderNotices() {
     var N = S.nt, kind = N.kind || null;
     if (N.msg) { showNtMsg(N.msg); N.msg = null; }

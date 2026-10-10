@@ -217,6 +217,12 @@ const i18n = require("./i18n");
 app.use(i18n.middleware(cookieUserId));
 i18n.register(app, { addUser, cookieUserId });
 i18n.ensure();                                       // the user_language table + the saved preferences, into memory
+// 1.99jx: the viewer's time zone (tz.js) - res.locals.tz / tzTime(ts, style) / tzFmt; saved choice (Edit profile ->
+// Time zone) > the browser's zone (patv_tz cookie, set by public/js/localtime.js) > UTC. /api/settings/timezone
+const tz = require("./tz");
+app.use(tz.middleware(cookieUserId));
+tz.register(app, { addUser });
+tz.ensure();                                         // the user_timezone table + the saved choices, into memory
 
 let clients = []; // Keep track of connected clients for SSE
 

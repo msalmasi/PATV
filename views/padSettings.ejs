@@ -18,7 +18,8 @@
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
-  const dt = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  // 1.99jx: in the viewer's zone with its label (tz.js)
+  const dt = (ms) => (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ms, 'datetime');
   const whoLabel = { everyone: 'Everyone signed in', linked: 'Linked Camfrog accounts', followers: 'Followers of the pad', approved: 'Approved posters only' };
   const href = '/p/' + encodeURIComponent(slug);
   const isAdmin = viewer && viewer.class === 'Admin';

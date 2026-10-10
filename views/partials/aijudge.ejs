@@ -7,7 +7,7 @@
   // 1.99jx: the exchange price check as evidence (source, the window's HIGH / LOW and when, the rule used)
   const Tj = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
   const px = (v) => v == null ? '?' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: Number(v) >= 1 ? 2 : 6, maximumFractionDigits: Number(v) >= 1 ? 2 : 6 });
-  const tj = (ts) => { const d = new Date(ts * 1000); return '<time datetime="' + d.toISOString() + '" data-mkt-ts="' + Math.round(ts) + '" title="' + d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC">' + d.toISOString().slice(5, 16).replace('T', ' ') + ' UTC</time>'; };
+  const tj = (ts) => (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime');
   const P = ai.price && ai.price.source ? ai.price : null;
   const evidenceHtml = () => {
     if (P) {
@@ -37,7 +37,7 @@
     <% } else if (ai.state === 'unsure' && live) { %>
       <p>Pepe couldn't tell yet — <%= ai.reason %></p>
       <% if (ai.next_try && ai.next_try > now) { const mins = Math.max(1, Math.round((ai.next_try - now) / 60)); %>
-        <p class="aij-sub">He'll look again at <%= new Date(ai.next_try * 1000).toISOString().slice(11, 16) %> UTC (in <%= mins >= 90 ? Math.round(mins / 60) + ' h' : mins + ' min' %>). If he still can't tell after a few tries, the admins settle it.</p>
+        <p class="aij-sub">He'll look again at <%- tj(ai.next_try) %> (in <%= mins >= 90 ? Math.round(mins / 60) + ' h' : mins + ' min' %>). If he still can't tell after a few tries, the admins settle it.</p>
       <% } else { %>
         <p class="aij-sub">He'll look again shortly.</p>
       <% } %>

@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Een bereik-vraag is Ja als de koers het doel op enig moment in het tijdvak raakte, ook als hij aan de andere kant eindigde.",
   "market.price.rule_close": "Een slotkoers-vraag gebruikt de koers aan het einde van het tijdvak: {last}.",
   "market.price.partial": "De koersdata dekken tot nu toe maar een deel van het tijdvak.",
-  "market.price.unread": "Pepe kon deze koersvraag niet lezen, dus een admin rekent af op basis van de koersgrafiek."
+  "market.price.unread": "Pepe kon deze koersvraag niet lezen, dus een admin rekent af op basis van de koersgrafiek.",
+  "settings.timezone": "Tijdzone",
+  "settings.timezone.lede": "De tijdzone waarin alle tijden op PATV worden getoond. Automatisch volgt de tijdzone van je browser (UTC als die onbekend is).",
+  "settings.timezone.label": "Tijden tonen in",
+  "settings.timezone.auto": "Automatisch (tijdzone van browser)",
+  "js.settings.timezone.now": "Nu: {time} ({zone})",
+  "js.settings.timezone.failed": "Je tijdzone kon niet worden opgeslagen - probeer het opnieuw.",
+  "err.bad_timezone": "Die tijdzone kennen we niet."
 }

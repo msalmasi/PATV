@@ -4,7 +4,8 @@
   prompter's AI switch, and where the help data came from. Admins only.
 %>
 <%
-  const when = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  // 1.99jx: in the viewer's zone with its label (tz.js)
+  const when = (t) => t ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(t, 'datetime') : '';
   const WHY = { 'signed-out': 'signed out (search only)', 'ai-off': 'AI answers off', 'no-match': 'nothing matched', 'pepe-offline': 'Pepe offline',
                 'limited': 'over the limit', busy: 'queue full', 'pepe-slow': 'Pepe too slow', 'pepe-error': 'Pepe gave no usable answer',
                 'pepe-none': 'Pepe: no command for it' };

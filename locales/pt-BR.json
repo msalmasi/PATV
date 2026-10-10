@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Uma pergunta de atingir é Sim se o preço tocou o alvo em qualquer momento da janela, mesmo que tenha terminado do outro lado.",
   "market.price.rule_close": "Uma pergunta de preço de fechamento usa o preço no fim da janela: {last}.",
   "market.price.partial": "Por enquanto os dados de preço cobrem só parte da janela.",
-  "market.price.unread": "Pepe não conseguiu ler esta pergunta de preço, então um admin a liquida pelo gráfico de preços."
+  "market.price.unread": "Pepe não conseguiu ler esta pergunta de preço, então um admin a liquida pelo gráfico de preços.",
+  "settings.timezone": "Fuso horário",
+  "settings.timezone.lede": "O fuso horário em que todos os horários do PATV são exibidos. Automático segue o fuso do seu navegador (UTC se não for possível saber).",
+  "settings.timezone.label": "Mostrar horários em",
+  "settings.timezone.auto": "Automático (fuso do navegador)",
+  "js.settings.timezone.now": "Agora: {time} ({zone})",
+  "js.settings.timezone.failed": "Não foi possível salvar seu fuso horário - tente de novo.",
+  "err.bad_timezone": "Não conhecemos esse fuso horário."
 }

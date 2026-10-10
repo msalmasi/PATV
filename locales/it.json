@@ -3175,5 +3175,12 @@
   "market.price.rule_touch": "Una domanda di raggiungimento è Sì se il prezzo ha toccato l’obiettivo in qualsiasi momento della finestra, anche se ha chiuso dall’altra parte.",
   "market.price.rule_close": "Una domanda sul prezzo di chiusura usa il prezzo alla fine della finestra: {last}.",
   "market.price.partial": "Per ora i dati di prezzo coprono solo parte della finestra.",
-  "market.price.unread": "Pepe non è riuscito a leggere questa domanda sul prezzo, quindi la liquida un admin dal grafico."
+  "market.price.unread": "Pepe non è riuscito a leggere questa domanda sul prezzo, quindi la liquida un admin dal grafico.",
+  "settings.timezone": "Fuso orario",
+  "settings.timezone.lede": "Il fuso orario in cui vengono mostrati tutti gli orari su PATV. Automatico segue il fuso del tuo browser (UTC se non è noto).",
+  "settings.timezone.label": "Mostra gli orari in",
+  "settings.timezone.auto": "Automatico (fuso del browser)",
+  "js.settings.timezone.now": "Ora: {time} ({zone})",
+  "js.settings.timezone.failed": "Impossibile salvare il fuso orario: riprova.",
+  "err.bad_timezone": "Non conosciamo questo fuso orario."
 }

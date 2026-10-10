@@ -10,24 +10,32 @@
   if (!box) return;
   var slug = box.getAttribute('data-slug');
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  // 1.99jx: the viewer's zone (saved choice or the browser's - public/js/localtime.js), the last time labelled
+  var Z = (window.PATVTime && window.PATVTime.zone) || undefined;
+  function o(x) { if (Z) x.timeZone = Z; return x; }
+  function ymd(d) { try { return d.toLocaleDateString('en-CA', o({})); } catch (e) { return d.toDateString(); } }
   function day(d) {
     var t = new Date(), y = new Date(Date.now() + 86400000);
-    if (d.toDateString() === t.toDateString()) return 'Today';
-    if (d.toDateString() === y.toDateString()) return 'Tomorrow';
-    return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    if (ymd(d) === ymd(t)) return 'Today';
+    if (ymd(d) === ymd(y)) return 'Tomorrow';
+    return d.toLocaleDateString(undefined, o({ weekday: 'short', day: 'numeric', month: 'short' }));
   }
-  function hm(d) { return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
+  function hm(d, label) {
+    var x = o({ hour: '2-digit', minute: '2-digit' });
+    if (label) x.timeZoneName = 'short';
+    try { return d.toLocaleTimeString(undefined, x); } catch (e) { return d.toISOString().slice(11, 16) + ' UTC'; }
+  }
   function localize(root) {
     root.querySelectorAll('time[data-ts]').forEach(function (t) {
       var d = new Date(Number(t.getAttribute('data-ts')));
       if (isNaN(d)) return;
-      if (t.getAttribute('data-fmt') === 't') { t.textContent = hm(d); return; }
+      if (t.getAttribute('data-fmt') === 't') { t.textContent = hm(d, true); return; }
       var m = Number(t.getAttribute('data-min')) || 0;
-      t.textContent = day(d) + ' ' + hm(d) + (m ? '–' + hm(new Date(d.getTime() + m * 60000)) : '');
+      t.textContent = day(d) + ' ' + hm(d, !m) + (m ? '–' + hm(new Date(d.getTime() + m * 60000), true) : '');
     });
   }
   try {
-    var tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    var tz = Z || Intl.DateTimeFormat().resolvedOptions().timeZone;
     if (tz) document.getElementById('rsTz').textContent = ' (' + tz.replace(/_/g, ' ') + ')';
   } catch (e) { /* no Intl */ }
   localize(box);

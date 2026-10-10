@@ -4,7 +4,8 @@
   admins' review of recent checks (thumbnails are served admin-only by /admin/imagesafety/thumb/<id>). Admins only.
 %>
 <%
-  const when = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  // 1.99jx: in the viewer's zone with its label (tz.js)
+  const when = (t) => t ? (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(t, 'datetime') : '';
   const pct = (x) => x == null ? '-' : Math.round(x * 100) + '%';
   const ACTION_LABEL = { allow: 'allow', flag: 'allow + flag', nsfw: 'mark NSFW', nsfw_pad: "mark NSFW (refuse if the pad says no)", refuse: 'refuse', refuse_flag: 'refuse + flag + alert admins' };
   const KEY_LABEL = { nudity_explicit: 'Explicit nudity', sexual: 'Sexual activity', suggestive: 'Suggestive', minor_risk: 'Possible minor (sexual / suggestive context)', gore: 'Gore', hate_symbols: 'Hate symbols', nsfw_level: "Model's overall call is NSFW / refuse" };
