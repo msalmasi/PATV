@@ -1,0 +1,21 @@
+{
+ "programs": [],
+ "stream_groups": [],
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "av1",
+   "profile": "Main",
+   "width": 3840,
+   "height": 2160,
+   "sample_aspect_ratio": "1:1",
+   "pix_fmt": "yuv420p",
+   "color_transfer": "bt709",
+   "color_primaries": "bt709",
+   "disposition": {
+    "attached_pic": 0
+   }
+  }
+ ],
+ "_source": "movie 3840x2160 av1"
+}

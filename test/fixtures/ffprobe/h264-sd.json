@@ -1,0 +1,20 @@
+{
+ "programs": [],
+ "stream_groups": [],
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "h264",
+   "profile": "High",
+   "width": 640,
+   "height": 480,
+   "sample_aspect_ratio": "1:1",
+   "pix_fmt": "yuv420p",
+   "field_order": "progressive",
+   "disposition": {
+    "attached_pic": 0
+   }
+  }
+ ],
+ "_source": "episode 640x480 h264"
+}

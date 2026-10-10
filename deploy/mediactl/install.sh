@@ -65,6 +65,7 @@ NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$NODE_MAJOR" -ge 18 ] || die "node is v$NODE_MAJOR - needs 18+"
 [ -x /usr/bin/node ] || die "/usr/bin/node missing (the unit runs it)"
 command -v ffmpeg >/dev/null || die "ffmpeg missing (apt install ffmpeg)"
+command -v ffprobe >/dev/null || warn "ffprobe missing - mediactl then guesses the source from Plex's metadata (the fallback ladder still works)"
 if [ "$ENCODER" = vaapi ]; then
   [ -e /dev/dri/renderD128 ] || die "/dev/dri/renderD128 missing - pass the iGPU into this container, or ENCODER=x264"
   ffmpeg -hide_banner -encoders 2>/dev/null | grep -q h264_vaapi || die "this ffmpeg has no h264_vaapi - ENCODER=x264 or a full ffmpeg build"

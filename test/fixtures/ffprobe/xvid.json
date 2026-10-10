@@ -1,0 +1,19 @@
+{
+ "programs": [],
+ "stream_groups": [],
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "mpeg4",
+   "profile": "Advanced Simple Profile",
+   "width": 640,
+   "height": 480,
+   "sample_aspect_ratio": "1:1",
+   "pix_fmt": "yuv420p",
+   "disposition": {
+    "attached_pic": 0
+   }
+  }
+ ],
+ "_source": "episode 640x480 mpeg4"
+}

@@ -20,6 +20,27 @@ site play a movie or an episode from the Plex library on a pad's stage.
 * One stream per stage; at most `MEDIACTL_MAX_STREAMS` at once (default 2, the iGPU's budget next to Plex).
 * The Plex token never leaves the container. The site only ever sees titles, posters, tracks and play status.
 
+## Sources (mediactl 1.1.0)
+
+Before each play mediactl runs `ffprobe` on the file and picks a filter graph, best first. A way that dies before
+the first frame (and not because of the RTMP ingest) falls through to the next one automatically:
+
+| mode | decode | filters | encode | used for |
+|------|--------|---------|--------|----------|
+| `hw` | GPU | deinterlace_vaapi + scale_vaapi | h264_vaapi | SDR H.264 / HEVC / VP9 / AV1 / MPEG-2 with nothing drawn on the picture |
+| `hwdl` | GPU | scale_vaapi, then on the CPU: HDR tone-map (zscale + hable) and/or burnt-in subtitles | h264_vaapi | HDR10 / HLG / Dolby Vision 8.1, subtitles |
+| `sw` | CPU | bwdif, scale, tone-map, subtitles | h264_vaapi | what the iGPU can't decode: H.264 Hi10P, XviD/DivX, VC-1, WMV, 4:2:2, rotated video |
+| `x264` | CPU | same | libx264 | last resort (or `MEDIACTL_ENCODER=x264`) |
+
+* **HDR:** `tonemap_vaapi` fails on this Arrow Lake iGPU with the iHD driver ("Failed to start picture processing",
+  then h264_vaapi error -22 and "Nothing was written"). That was the 1.99ji "Slow Horses won't play" bug. HDR is
+  tone-mapped on the CPU after the GPU shrank the frame, capped at `MEDIACTL_HDR_MAX_HEIGHT` (720: two at once keep up
+  on 4 cores; 1080 costs ~1.4 cores each).
+* Interlaced sources are deinterlaced, anamorphic DVDs keep their display aspect, a cover-art stream is never picked.
+* Known limits: Dolby Vision profile 5 (no HDR10 base layer) comes out with the wrong colours; burnt-in subtitles make
+  ffmpeg read the subtitle track from the whole file first (a minute or so on a 4K remux on the NAS).
+* `/streams` reports each stream's `mode`, `fallbacks` and `source` (codec, pix_fmt, hdr, dv, interlaced).
+
 ## Security
 
 * Every call except `GET /health` is HMAC-SHA256 signed with `MEDIACTL_SECRET` (timestamp ±120 s, single-use nonce).

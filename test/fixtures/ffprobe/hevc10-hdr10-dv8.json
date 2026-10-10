@@ -1,0 +1,27 @@
+{
+ "programs": [],
+ "stream_groups": [],
+ "streams": [
+  {
+   "index": 0,
+   "codec_name": "hevc",
+   "profile": "Main 10",
+   "width": 3840,
+   "height": 1920,
+   "sample_aspect_ratio": "1:1",
+   "pix_fmt": "yuv420p10le",
+   "color_transfer": "smpte2084",
+   "color_primaries": "bt2020",
+   "disposition": {
+    "attached_pic": 0
+   },
+   "side_data_list": [
+    {
+     "dv_profile": 8,
+     "dv_bl_signal_compatibility_id": 1
+    }
+   ]
+  }
+ ],
+ "_source": "episode 3840x1920 hevc"
+}

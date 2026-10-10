@@ -13,6 +13,9 @@ const { EventEmitter } = require("events");
 const { PassThrough } = require("stream");
 
 const M = require(path.resolve(__dirname, "..", "deploy", "mediactl", "mediactl.js"));
+// real ffprobe answers (mediactl's own -show_entries) for library files of each kind, captured in the Plex container
+const FIX = (n) => JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "ffprobe", n + ".json"), "utf8"));
+const PROBE = Object.fromEntries(["hevc10-hdr10-dv8", "h264-hi10", "mpeg2-dvd", "xvid", "hevc8-4k", "av1-4k", "h264-sd"].map((n) => [n, M.parseProbe(FIX(n))]));
 const SECRET = "s".repeat(40);
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mediactl-test-"));
 const media = path.join(tmp, "media");
@@ -53,7 +56,9 @@ const lastProc = () => procs[procs.length - 1];
 const cfg = M.loadConfig({ MEDIACTL_SECRET: SECRET, MEDIACTL_ALLOW: "127.0.0.1/32,::1", MEDIACTL_MEDIA_ROOTS: media + path.sep,
                            MEDIACTL_RTMP_ALLOW: "rtmp://stream.publicaccess.tv/", PLEX_TOKEN: "t", MEDIACTL_MAX_STREAMS: "2" });
 let T = Date.now();
-const streams = M.makeStreams(cfg, fakePlex, fakeSpawn, () => T);
+let probeAnswer = null;                 // what the fake ffprobe says about the next file (null = ffprobe failed)
+const fakeProbe = async () => probeAnswer;
+const streams = M.makeStreams(cfg, fakePlex, fakeSpawn, () => T, fakeProbe);
 const { server } = M.makeServer(cfg, { plex: fakePlex, streams });
 let base;
 test.before(() => new Promise((r) => server.listen(0, "127.0.0.1", () => { base = `http://127.0.0.1:${server.address().port}`; r(); })));
@@ -80,33 +85,174 @@ test("ipAllowed: v4 CIDRs, v6, v4-mapped", () => {
   assert.equal(M.ipAllowed("garbage", ["0.0.0.0/0"]), false);
 });
 
-test("ffmpeg args: VAAPI full-GPU path, scaled to 720p keeping the aspect, AAC, FLV to the RTMP url", () => {
+test("parseProbe: real ffprobe answers -> codec, 10-bit, HDR, Dolby Vision, interlacing, anamorphic SAR", () => {
+  assert.deepEqual(PROBE["hevc10-hdr10-dv8"], { index: 0, codec: "hevc", profile: "Main 10", pixFmt: "yuv420p10le", width: 3840, height: 1920, sar: 1,
+    interlaced: false, transfer: "smpte2084", hdr: true, dv: 8, dvCompat: 1, rotation: 0 });
+  assert.equal(PROBE["mpeg2-dvd"].interlaced, true);
+  assert.ok(Math.abs(PROBE["mpeg2-dvd"].sar - 8 / 9) < 1e-9);
+  assert.equal(PROBE["h264-hi10"].pixFmt, "yuv420p10le");
+  assert.equal(PROBE["hevc8-4k"].hdr, false);
+  // cover art in front of the film, a phone video shot sideways, HLG
+  const cover = M.parseProbe({ streams: [{ index: 0, codec_name: "mjpeg", width: 600, height: 600, disposition: { attached_pic: 1 } },
+                                         { index: 1, codec_name: "h264", pix_fmt: "yuv420p", width: 1920, height: 1080, disposition: { attached_pic: 0 } }] });
+  assert.equal(cover.index, 1);
+  const rot = M.parseProbe({ streams: [{ index: 0, codec_name: "h264", pix_fmt: "yuv420p", width: 1920, height: 1080, side_data_list: [{ rotation: -90 }] }] });
+  assert.equal(rot.rotation, 270);
+  assert.equal(M.parseProbe({ streams: [{ index: 0, codec_name: "hevc", pix_fmt: "yuv420p10le", color_transfer: "arib-std-b67" }] }).hdr, true);
+  assert.equal(M.parseProbe({ streams: [] }), null);
+  assert.equal(M.parseProbe(null), null);
+});
+
+test("pickModes: what the iGPU can decode goes on the GPU, the rest on the CPU, every ladder ends in libx264", () => {
+  const it = ITEMS["100"];
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["h264-sd"]), ["hw", "hwdl", "sw", "x264"]);
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["hevc8-4k"]), ["hw", "hwdl", "sw", "x264"]);
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["av1-4k"]), ["hw", "hwdl", "sw", "x264"]);
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["mpeg2-dvd"]), ["hw", "hwdl", "sw", "x264"]);
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["hevc10-hdr10-dv8"]), ["hwdl", "sw", "x264"], "HDR: tone-mapped on the CPU");
+  assert.deepEqual(M.pickModes(cfg, it, { sub: 2 }, PROBE["h264-sd"]), ["hwdl", "sw", "x264"], "burnt-in subtitles: drawn on the CPU");
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["h264-hi10"]), ["sw", "x264"], "H.264 Hi10P: no VA-API decoder");
+  assert.deepEqual(M.pickModes(cfg, it, {}, PROBE["xvid"]), ["sw", "x264"], "MPEG-4 ASP: no VA-API decoder");
+  assert.deepEqual(M.pickModes(cfg, it, {}, { ...PROBE["h264-sd"], rotation: 90 }), ["sw", "x264"], "rotated: ffmpeg's autorotate is CPU");
+  assert.deepEqual(M.pickModes(cfg, it, {}, null), ["hw", "hwdl", "sw", "x264"], "no probe: try the GPU, the ladder catches it");
+  assert.deepEqual(M.pickModes(cfg, { ...it, hdr: true }, {}, null), ["hwdl", "sw", "x264"], "no probe: Plex's HDR flag");
+  assert.deepEqual(M.pickModes({ ...cfg, encoder: "x264" }, it, {}, PROBE["h264-sd"]), ["x264"]);
+});
+
+test("ffmpeg args: SDR on the GPU end to end, aspect kept, AAC, FLV to the RTMP url", () => {
   const a = M.ffmpegArgs(cfg, ITEMS["100"], { offset: 0, quality: 720, url: "rtmp://x/stage/key" });
   const s = a.join(" ");
-  assert.match(s, /-hwaccel vaapi -hwaccel_device \/dev\/dri\/renderD128 -hwaccel_output_format vaapi/);
+  assert.match(s, /-init_hw_device vaapi=va:\/dev\/dri\/renderD128 -filter_hw_device va -hwaccel vaapi -hwaccel_device va -hwaccel_output_format vaapi/);
   assert.match(s, /-re -i /);
-  assert.match(s, /scale_vaapi=w=960:h=720:format=nv12/);            // 1440x1080 (4:3) -> 960x720
+  assert.match(s, /\[0:v:0\]scale_vaapi=w=960:h=720:format=nv12\[v\]/);            // 1440x1080 (4:3) -> 960x720
+  assert.ok(!s.includes("hwdownload") && !s.includes("tonemap"));
   assert.match(s, /-c:v h264_vaapi/);
-  assert.ok(s.includes("-map 0:a:0?"));                               // no track picked: the first audio track
+  assert.ok(s.includes("-map 0:a:0?"));                                             // no track picked: the first audio track
   assert.ok(a.includes("-f") && a[a.length - 1] === "rtmp://x/stage/key");
   assert.ok(!s.includes("-ss"));
-  const b = M.ffmpegArgs(cfg, { ...ITEMS["100"], hdr: true }, { offset: 600, quality: 1080, audio: 1, url: "rtmp://x/y/k" }).join(" ");
-  assert.match(b, /-ss 600\.000 -i /);
-  assert.match(b, /tonemap_vaapi=.*scale_vaapi=w=1440:h=1080/);
-  assert.match(b, /-map 0:1 /);
+  // a 4K HEVC 8-bit source: GPU, scaled to 1080p
+  assert.match(M.ffmpegArgs(cfg, ITEMS["100"], { quality: 1080, url: "u", probe: PROBE["hevc8-4k"] }).join(" "), /\[0:0\]scale_vaapi=w=1920:h=1080:format=nv12\[v\]/);
 });
-test("ffmpeg args: burnt-in text subtitles (CPU filter + hwupload), seek keeps subtitle timing, image subs overlay", () => {
+
+test("ffmpeg args: the 1.99ji bug - HDR10 / Dolby Vision is tone-mapped on the CPU (never tonemap_vaapi), capped at 720p", () => {
+  const s = M.ffmpegArgs(cfg, ITEMS["100"], { offset: 600, quality: 1080, audio: 1, url: "rtmp://x/y/k", probe: PROBE["hevc10-hdr10-dv8"] }).join(" ");
+  assert.ok(!s.includes("tonemap_vaapi"), "Arrow Lake's iHD refuses tonemap_vaapi (error -22 / nothing written)");
+  assert.match(s, /-ss 600\.000 -i /);
+  // 3840x1920 -> 1440x720, decoded + shrunk on the GPU as 10-bit, tone-mapped on the CPU, back up for the GPU encoder
+  assert.match(s, /\[0:0\]scale_vaapi=w=1440:h=720:format=p010,hwdownload,format=p010le,zscale=t=linear:npl=100:p=bt709,format=gbrpf32le,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=nv12,hwupload\[v\]/);
+  assert.match(s, /-map 0:1 /);
+  assert.match(s, /-c:v h264_vaapi/);
+  // MEDIACTL_HDR_MAX_HEIGHT=1080 lets it through at 1080p
+  assert.match(M.ffmpegArgs({ ...cfg, hdrMaxHeight: 1080 }, ITEMS["100"], { quality: 1080, url: "u", probe: PROBE["hevc10-hdr10-dv8"] }).join(" "), /scale_vaapi=w=2160:h=1080:format=p010/);
+  // no probe: Plex's HDR flag does the same
+  assert.match(M.ffmpegArgs(cfg, { ...ITEMS["100"], hdr: true }, { quality: 720, url: "u" }).join(" "), /format=p010,hwdownload,format=p010le,zscale=t=linear/);
+  // the CPU fallbacks tone-map too
+  assert.match(M.ffmpegArgs(cfg, ITEMS["100"], { quality: 720, url: "u", probe: PROBE["hevc10-hdr10-dv8"], mode: "sw" }).join(" "), /\[0:0\]scale=1440:720,zscale=t=linear.*format=nv12,hwupload\[v\]/);
+  const x = M.ffmpegArgs(cfg, ITEMS["100"], { quality: 720, url: "u", probe: PROBE["hevc10-hdr10-dv8"], mode: "x264" }).join(" ");
+  assert.match(x, /\[0:0\]scale=1440:720,zscale=t=linear.*format=yuv420p\[v\]/);
+  assert.ok(!x.includes("vaapi"));
+});
+
+test("ffmpeg args: interlaced anamorphic DVD, Hi10P anime, XviD, a 4:3 source", () => {
+  const d = M.ffmpegArgs(cfg, ITEMS["100"], { quality: 1080, url: "u", probe: PROBE["mpeg2-dvd"] }).join(" ");
+  assert.match(d, /\[0:0\]deinterlace_vaapi,scale_vaapi=w=640:h=480:format=nv12\[v\]/, "720x480 at SAR 8:9 shows as 640x480");
+  const dsw = M.ffmpegArgs(cfg, ITEMS["100"], { quality: 1080, url: "u", probe: PROBE["mpeg2-dvd"], mode: "sw" }).join(" ");
+  assert.match(dsw, /\[0:0\]bwdif,scale=640:480,format=nv12,hwupload\[v\]/);
+  const h = M.ffmpegArgs(cfg, ITEMS["100"], { quality: 1080, url: "u", probe: PROBE["h264-hi10"] }).join(" ");
+  assert.ok(!h.includes("-hwaccel "), "Hi10P is decoded on the CPU");
+  assert.match(h, /-init_hw_device vaapi=va:\/dev\/dri\/renderD128 -filter_hw_device va -re/);
+  assert.match(h, /\[0:0\]scale=1548:1080,format=nv12,hwupload\[v\]/);
+  const v = M.ffmpegArgs(cfg, ITEMS["100"], { quality: 720, url: "u", probe: PROBE["xvid"] }).join(" ");
+  assert.match(v, /\[0:0\]scale=640:480,format=nv12,hwupload\[v\]/, "never upscaled");
+  assert.deepEqual(M.outSize(M.QUALITY[1080], { width: 3840, height: 1600 }, null), { w: 2592, h: 1080 });
+  assert.deepEqual(M.outSize(M.QUALITY[1080], { width: 7680, height: 1080 }, null), { w: 4096, h: 576 }, "at most 4096 wide");
+  assert.deepEqual(M.outSize(M.QUALITY[720], {}, { width: 1080, height: 1920, sar: 1, rotation: 90 }), { w: 1280, h: 720 }, "rotated: the sides swap");
+  assert.deepEqual(M.outSize(M.QUALITY[480], { width: 853, height: 481 }, null), { w: 852, h: 480 }, "even sides");
+});
+
+test("ffmpeg args: burnt-in subtitles after the GPU shrank the picture; seek keeps subtitle timing; image subs scaled + overlaid", () => {
   const a = M.ffmpegArgs(cfg, ITEMS["100"], { offset: 120, quality: 480, sub: 2, url: "rtmp://x/y/k", srcLink: "/run/mediactl/stage.mkv" }).join(" ");
-  assert.ok(!a.includes("-hwaccel vaapi"));
-  assert.match(a, /-init_hw_device vaapi=va:\/dev\/dri\/renderD128 -filter_hw_device va/);
-  assert.match(a, /-ss 120\.000 -copyts -i \/run\/mediactl\/stage\.mkv/);
-  assert.match(a, /subtitles=filename=.*stage\.mkv:si=0,setpts=PTS-STARTPTS,scale=640:480,format=nv12,hwupload/);
+  assert.match(a, /-hwaccel vaapi -hwaccel_device va -hwaccel_output_format vaapi -re -ss 120\.000 -copyts -i \/run\/mediactl\/stage\.mkv/);
+  assert.match(a, /scale_vaapi=w=640:h=480:format=nv12,hwdownload,format=nv12,subtitles=filename=.*stage\.mkv:si=0,setpts=PTS-STARTPTS,format=nv12,hwupload\[v\]/);
   assert.match(a, /-af asetpts=PTS-STARTPTS/);
   const b = M.ffmpegArgs(cfg, ITEMS["100"], { offset: 0, quality: 720, sub: 3, url: "rtmp://x/y/k" }).join(" ");
-  assert.match(b, /\[0:v:0\]\[0:3\]overlay=eof_action=pass,scale=960:720/);
+  assert.match(b, /\[0:3\]scale=960:720\[sb\];\[0:v:0\]scale_vaapi=w=960:h=720:format=nv12,hwdownload,format=nv12\[pic\];\[pic\]\[sb\]overlay=eof_action=pass,format=nv12,hwupload\[v\]/);
+  // HDR + subtitles: tone-map first, then draw the (SDR) subtitles
+  const c = M.ffmpegArgs(cfg, ITEMS["100"], { quality: 720, sub: 2, url: "u", srcLink: "/l.mkv", probe: PROBE["hevc10-hdr10-dv8"] }).join(" ");
+  assert.match(c, /tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,subtitles=filename=/);
   const x = M.ffmpegArgs({ ...cfg, encoder: "x264" }, ITEMS["100"], { quality: 720, url: "rtmp://x/y/k" }).join(" ");
   assert.match(x, /-c:v libx264 -preset veryfast/);
   assert.ok(!x.includes("vaapi"));
+});
+
+test("fallback ladder: a mode that dies before the first frame falls through to the next; a network error doesn't", async () => {
+  const lp = [];
+  const spawn2 = (c, a) => { const p = fakeSpawn(c, a); lp.push(p); return p; };
+  probeAnswer = PROBE["hevc10-hdr10-dv8"];
+  const st = M.makeStreams(cfg, fakePlex, spawn2, () => T, fakeProbe);
+  await st.start("fb.Room", START);
+  assert.equal(st.get("fb.Room").mode, "hwdl");
+  assert.equal(st.get("fb.Room").source.hdr, true);
+  assert.match(lp[0].args.join(" "), /-hwaccel vaapi/);
+  lp[0].stderr.write("[vost#0:0/h264_vaapi @ 0x1] Task finished with error code: -22 (Invalid argument)\n");
+  await new Promise((r) => setImmediate(r));
+  lp[0].emit("exit", 234);
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  assert.equal(lp.length, 2, "relaunched straight away");
+  const v = st.get("fb.Room");
+  assert.equal(v.state, "playing");
+  assert.equal(v.mode, "sw");
+  assert.equal(v.fallbacks[0].mode, "hwdl");
+  assert.ok(!lp[1].args.includes("-hwaccel"));
+  // the sw one runs (frames out), then dies mid-film: an ordinary restart in the SAME mode, not a fallback
+  lp[1].stdout.write("out_time_us=60000000\n");
+  await new Promise((r) => setImmediate(r));
+  T += 60000;
+  lp[1].emit("exit", 1);
+  assert.equal(st.get("fb.Room").mode, "sw");
+  st.stopAll();
+  // an RTMP refusal before the first frame is not the filter graph's fault: error, no fallback
+  const st2 = M.makeStreams(cfg, fakePlex, spawn2, () => T, fakeProbe);
+  await st2.start("fb2.Room", START);
+  const n = lp.length;
+  lp[n - 1].stderr.write("[flv @ 0x1] rtmp://stream.publicaccess.tv/stage/psABCDEFGHIJKLMNOP: Connection refused\n");
+  await new Promise((r) => setImmediate(r));
+  lp[n - 1].emit("exit", 1);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(lp.length, n);
+  assert.equal(st2.get("fb2.Room").state, "error");
+  assert.equal(st2.get("fb2.Room").mode, "hwdl");
+  st2.stopAll();
+  // the whole ladder failing ends in an error with x264's last words
+  const st3 = M.makeStreams(cfg, fakePlex, spawn2, () => T, fakeProbe);
+  probeAnswer = PROBE["xvid"];
+  await st3.start("fb3.Room", START);
+  for (let i = 0; i < 2; i++) {
+    const p = lp[lp.length - 1];
+    p.stderr.write(`boom ${i}\n`);
+    await new Promise((r) => setImmediate(r));
+    p.emit("exit", 1);
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+  }
+  const e3 = st3.get("fb3.Room");
+  assert.equal(e3.state, "error");
+  assert.equal(e3.mode, "x264");
+  assert.match(e3.error, /boom 1/);
+  st3.stopAll();
+  probeAnswer = null;
+});
+
+test("probeFile runs ffprobe with mediactl's entries and survives it failing", async () => {
+  const seen = [];
+  const fx = (cmd, args, o, cb) => { seen.push([cmd, args]); cb(null, JSON.stringify(FIX("h264-sd"))); };
+  const p = await M.probeFile(cfg, "/mnt/x.mkv", fx);
+  assert.equal(p.codec, "h264");
+  assert.equal(seen[0][0], "ffprobe");
+  assert.equal(seen[0][1][seen[0][1].length - 1], "/mnt/x.mkv");
+  assert.equal(await M.probeFile(cfg, "/x", (c, a, o, cb) => cb(new Error("ENOENT"))), null);
+  assert.equal(await M.probeFile(cfg, "/x", (c, a, o, cb) => cb(null, "not json")), null);
 });
 test("escFilter escapes a path for a filtergraph option", () => {
   assert.equal(M.escFilter("/a/b's:c[1].mkv"), "/a/b\\\\\\'s\\\\:c\\[1\\].mkv");

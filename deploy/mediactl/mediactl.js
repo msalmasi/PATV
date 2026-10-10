@@ -36,7 +36,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.0.0";
+const VERSION = "1.1.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -50,6 +50,7 @@ function loadConfig(env = process.env) {
     plexUrl: String(env.PLEX_URL || "http://127.0.0.1:32400").replace(/\/+$/, ""),
     plexToken: String(env.PLEX_TOKEN || ""),
     ffmpeg: env.FFMPEG || "ffmpeg",
+    ffprobe: env.FFPROBE || "ffprobe",
     encoder: ["vaapi", "x264"].includes(env.MEDIACTL_ENCODER) ? env.MEDIACTL_ENCODER : "vaapi",
     vaapiDevice: env.MEDIACTL_VAAPI_DEVICE || "/dev/dri/renderD128",
     rtmpAllow: list(env.MEDIACTL_RTMP_ALLOW, "rtmp://stream.publicaccess.tv/"),
@@ -57,6 +58,8 @@ function loadConfig(env = process.env) {
     maxStreams: Math.max(1, parseInt(env.MEDIACTL_MAX_STREAMS, 10) || 2),
     workDir: env.MEDIACTL_WORKDIR || path.join(os.tmpdir(), "mediactl"),
     retries: Math.max(0, parseInt(env.MEDIACTL_RETRIES, 10) || 3),
+    // HDR -> SDR tone-mapping runs on the CPU: 1080p is ~1.4 cores, so two at once can't keep up on a 4-core box; 720p can
+    hdrMaxHeight: [480, 720, 1080].includes(parseInt(env.MEDIACTL_HDR_MAX_HEIGHT, 10)) ? parseInt(env.MEDIACTL_HDR_MAX_HEIGHT, 10) : 720,
   };
   return c;
 }
@@ -204,45 +207,140 @@ function makePlex(cfg, req = request) {
   };
 }
 
+// ── the source: ffprobe ──
+// What the filter graph has to know about the video, from the file itself (Plex's metadata misses some of it:
+// interlacing, Dolby Vision, rotation, a cover-art "video" stream in front of the real one).
+const PROBE_ENTRIES = "stream=index,codec_name,profile,pix_fmt,width,height,sample_aspect_ratio,field_order,color_transfer,color_primaries" +
+                      ":stream_disposition=attached_pic:stream_side_data=dv_profile,dv_bl_signal_compatibility_id,rotation";
+const HDR_TRC = /^(smpte2084|arib-std-b67)$/;
+/** Pure: ffprobe's JSON -> {index, codec, profile, pixFmt, width, height, sar, interlaced, transfer, hdr, dv, dvCompat, rotation} | null */
+function parseProbe(j) {
+  const vs = ((j && j.streams) || []).filter((s) => s.codec_type === "video" || s.codec_name);
+  const v = vs.find((s) => !(s.disposition && s.disposition.attached_pic) && !/^(mjpeg|png|bmp|gif)$/.test(String(s.codec_name || "")));
+  if (!v) return null;
+  const side = v.side_data_list || [];
+  const dvRec = side.find((d) => d.dv_profile != null);
+  const rot = side.find((d) => d.rotation != null);
+  const sarM = /^(\d+):(\d+)$/.exec(String(v.sample_aspect_ratio || ""));
+  const sar = sarM && Number(sarM[1]) > 0 && Number(sarM[2]) > 0 ? Number(sarM[1]) / Number(sarM[2]) : 1;
+  const transfer = String(v.color_transfer || "");
+  return {
+    index: Number(v.index), codec: String(v.codec_name || ""), profile: String(v.profile || ""), pixFmt: String(v.pix_fmt || ""),
+    width: Number(v.width) || null, height: Number(v.height) || null, sar: sar > 0.25 && sar < 4 ? sar : 1,
+    interlaced: /^(tt|bb|tb|bt)$/.test(String(v.field_order || "")), transfer, hdr: HDR_TRC.test(transfer),
+    dv: dvRec ? Number(dvRec.dv_profile) : null, dvCompat: dvRec ? Number(dvRec.dv_bl_signal_compatibility_id) : null,
+    rotation: rot ? ((Math.round(Number(rot.rotation) / 90) * 90) % 360 + 360) % 360 : 0,
+  };
+}
+function probeFile(cfg, file, execFile = childProcess.execFile) {
+  return new Promise((resolve) => {
+    execFile(cfg.ffprobe, ["-v", "error", "-select_streams", "v", "-show_entries", PROBE_ENTRIES, "-of", "json", file],
+             { timeout: 20000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+               if (err) return resolve(null);
+               try { resolve(parseProbe(JSON.parse(stdout))); } catch (e) { resolve(null); }
+             });
+  });
+}
+
 // ── ffmpeg ──
-// Pure: the argument list for one stream. info = plex.item(), o = {offset, quality, audio, sub, url, srcLink}.
+// What the Intel iGPU (iHD VA-API) decodes: codec -> the pixel formats it takes. Not here = decoded on the CPU
+// (H.264 Hi10P anime, MPEG-4 ASP / XviD / DivX, VC-1, WMV, 4:2:2 / 4:4:4).
+const HW_DECODE = {
+  h264: /^(yuv420p|yuvj420p)$/,
+  hevc: /^(yuv420p|yuvj420p|yuv420p10le)$/,
+  vp9: /^(yuv420p|yuv420p10le)$/,
+  av1: /^(yuv420p|yuv420p10le)$/,
+  mpeg2video: /^(yuv420p)$/,
+  vp8: /^(yuv420p)$/,
+};
+// HDR10 / HLG -> SDR BT.709 on the CPU (after the GPU decoded + shrank the frame, so it's ~1 core at 1080p).
+// Not tonemap_vaapi: Arrow Lake's iHD driver refuses it ("Failed to start picture processing") - the 1.99ji bug.
+const TONEMAP = "zscale=t=linear:npl=100:p=bt709,format=gbrpf32le,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv";
+// The ways to make a stream, best first:
+//   hw    decode + deinterlace + scale on the GPU, H.264 on the GPU          (SDR, nothing drawn on the picture)
+//   hwdl  decode + scale on the GPU, tone-map / subtitles on the CPU, H.264 on the GPU
+//   sw    everything on the CPU but the H.264 encode                         (what the GPU can't decode)
+//   x264  everything on the CPU                                              (the last resort, or MEDIACTL_ENCODER=x264)
+const MODES = ["hw", "hwdl", "sw", "x264"];
+const hwDecodable = (p) => !!p && !!HW_DECODE[p.codec] && HW_DECODE[p.codec].test(p.pixFmt) && !p.rotation;
+/** Pure: the modes to try for this source, in order (a mode that fails before the first frame falls through to the next). */
+function pickModes(cfg, info, o, probe) {
+  if (cfg.encoder === "x264") return ["x264"];
+  const sub = o.sub != null ? (info.subs || []).find((s) => s.index === Number(o.sub) && s.burnable) : null;
+  const hdr = probe ? probe.hdr : !!info.hdr;
+  const gpuDecode = probe ? hwDecodable(probe) : true;      // no probe: try the GPU, the ladder catches it
+  if (!gpuDecode) return ["sw", "x264"];
+  return sub || hdr ? ["hwdl", "sw", "x264"] : ["hw", "hwdl", "sw", "x264"];
+}
+/** Pure: the output size for a quality: the source's DISPLAY aspect (anamorphic DVDs), even sides, at most 4096 wide. */
+function outSize(q, info, probe) {
+  const rot = probe && (probe.rotation === 90 || probe.rotation === 270);
+  let sh = Number((probe && probe.height) || info.height) || q.h;
+  let sw = Number((probe && probe.width) || info.width) || Math.round(sh * 16 / 9);
+  sw *= (probe && probe.sar) || 1;
+  if (rot) [sw, sh] = [sh, sw];
+  let outH = Math.min(q.h, sh);
+  let outW = sw * outH / sh;
+  if (outW > 4096) { outH = outH * 4096 / outW; outW = 4096; }
+  const even = (n) => Math.max(2, Math.round(n / 2) * 2);
+  return { w: even(outW), h: even(Math.floor(outH)) };
+}
+// Pure: the argument list for one stream. info = plex.item(), o = {offset, quality, audio, sub, url, srcLink, probe, mode}.
 function ffmpegArgs(cfg, info, o) {
-  const q = QUALITY[o.quality] || QUALITY[720];
-  const sh = Number(info.height) || q.h, sw = Number(info.width) || Math.round(sh * 16 / 9);
-  const outH = Math.min(q.h, sh) - (Math.min(q.h, sh) % 2);
-  const outW = Math.max(2, Math.round((sw * outH / sh) / 2) * 2);
+  const probe = o.probe || null;
+  const hdr = probe ? probe.hdr : !!info.hdr;
+  let q = QUALITY[o.quality] || QUALITY[720];
+  if (hdr && q.h > (cfg.hdrMaxHeight || 720)) q = { ...q, h: cfg.hdrMaxHeight || 720 };
+  const { w: outW, h: outH } = outSize(q, info, probe);
   const offset = Math.max(0, Number(o.offset) || 0);
   const sub = o.sub != null ? (info.subs || []).find((s) => s.index === Number(o.sub) && s.burnable) : null;
   const audio = o.audio != null ? (info.audio || []).find((a) => a.index === Number(o.audio)) : null;
-  const vaapi = cfg.encoder === "vaapi";
-  const fullHw = vaapi && !sub;                 // decode + scale (+ tone-map) on the GPU when nothing has to be drawn on the CPU
+  const mode = MODES.includes(o.mode) ? o.mode : pickModes(cfg, info, o, probe)[0];
+  const deint = !!(probe && probe.interlaced);
+  const gpuDec = mode === "hw" || mode === "hwdl", gpuEnc = mode !== "x264";
   const src = o.srcLink || info.file;
   const a = ["-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats", "-progress", "pipe:1"];
-  if (fullHw) a.push("-hwaccel", "vaapi", "-hwaccel_device", cfg.vaapiDevice, "-hwaccel_output_format", "vaapi");
-  else if (vaapi) a.push("-init_hw_device", `vaapi=va:${cfg.vaapiDevice}`, "-filter_hw_device", "va");
+  if (gpuEnc) a.push("-init_hw_device", `vaapi=va:${cfg.vaapiDevice}`, "-filter_hw_device", "va");
+  if (gpuDec) a.push("-hwaccel", "vaapi", "-hwaccel_device", "va", "-hwaccel_output_format", "vaapi");
   // burnt-in subtitles need the original timestamps to line up after a seek: keep them, then rebase the output to 0
   const rebase = !!sub && offset > 0;
   a.push("-re");
   if (offset > 0) a.push("-ss", offset.toFixed(3));
   if (rebase) a.push("-copyts");
   a.push("-i", src);
-  let vchain;
-  if (fullHw) {
-    vchain = `[0:v:0]${info.hdr ? "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709," : ""}scale_vaapi=w=${outW}:h=${outH}:format=nv12[v]`;
+  const vin = probe && Number.isFinite(probe.index) ? `[0:${probe.index}]` : "[0:v:0]";   // never the cover art
+  const f = [];                                                // the main chain
+  let pre = "";                                                // extra graph chains before it (image subtitles)
+  if (gpuDec) {
+    if (deint) f.push("deinterlace_vaapi");
+    f.push(`scale_vaapi=w=${outW}:h=${outH}:format=${mode === "hwdl" && hdr ? "p010" : "nv12"}`);
+    if (mode === "hwdl") f.push("hwdownload", `format=${hdr ? "p010le" : "nv12"}`);
   } else {
-    const parts = [];
-    if (sub && sub.image) vchain = `[0:v:0][0:${sub.index}]overlay=eof_action=pass`;
-    else if (sub) vchain = `[0:v:0]subtitles=filename=${escFilter(src)}:si=${sub.rel}`;
-    else vchain = "[0:v:0]null";
-    if (rebase) parts.push("setpts=PTS-STARTPTS");
-    parts.push(`scale=${outW}:${outH}`, "format=nv12");
-    if (vaapi) parts.push("hwupload");
-    vchain += "," + parts.join(",") + "[v]";
+    if (deint) f.push("bwdif");
+    f.push(`scale=${outW}:${outH}`);
+  }
+  if (mode !== "hw") {
+    if (hdr) f.push(TONEMAP);
+    if (sub && sub.image) { pre = `[0:${sub.index}]scale=${outW}:${outH}[sb];`; }
+    else if (sub) f.push(`subtitles=filename=${escFilter(src)}:si=${sub.rel}`);
+    if (rebase) f.push("setpts=PTS-STARTPTS");
+    f.push(gpuEnc ? "format=nv12" : "format=yuv420p");
+    if (gpuEnc) f.push("hwupload");
+  }
+  let vchain;
+  if (sub && sub.image && mode !== "hw") {
+    // scale + (tone-map) the picture, lay the subtitle (scaled to the same size) over it, then the rest
+    const tailLen = (rebase ? 1 : 0) + (gpuEnc ? 2 : 1);      // [setpts,] format=..., [hwupload]
+    const cut = f.length - tailLen;
+    const before = f.slice(0, cut), after = f.slice(cut);
+    vchain = `${pre}${vin}${before.join(",")}[pic];[pic][sb]overlay=eof_action=pass,${after.join(",")}[v]`;
+  } else {
+    vchain = `${vin}${f.join(",")}[v]`;
   }
   a.push("-filter_complex", vchain, "-map", "[v]");
   a.push("-map", audio ? `0:${audio.index}` : "0:a:0?");
   if (rebase) a.push("-af", "asetpts=PTS-STARTPTS");
-  if (vaapi) a.push("-c:v", "h264_vaapi", "-profile:v", "high", "-bf", "0");
+  if (gpuEnc) a.push("-c:v", "h264_vaapi", "-profile:v", "high", "-bf", "0");
   else a.push("-c:v", "libx264", "-preset", "veryfast", "-tune", "film", "-profile:v", "high", "-pix_fmt", "yuv420p");
   a.push("-b:v", `${q.vb}k`, "-maxrate", `${q.vb}k`, "-bufsize", `${q.vb * 2}k`, "-g", "60", "-force_key_frames", "expr:gte(t,n_forced*2)",
          "-c:a", "aac", "-b:a", `${q.ab}k`, "-ac", "2", "-ar", "48000", "-f", "flv", o.url);
@@ -255,12 +353,16 @@ function escFilter(p) {
 }
 
 // ── the streams ──
-function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.now()) {
+// a failure that isn't the filter graph's fault (the RTMP ingest refused / dropped us): don't try another mode for it
+const NET_ERR = /rtmp:\/\/|Connection (refused|reset|timed out)|Broken pipe|Server returned|Network is unreachable|No route to host/i;
+function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.now(), probe = (file) => probeFile(cfg, file)) {
   const streams = new Map();   // stage -> state
   const view = (s) => ({
     stage: s.stage, state: s.state, ratingKey: s.ratingKey, title: s.title, quality: s.quality, audio: s.audio, sub: s.sub,
     offset: Math.round(s.offset), position: Math.round(position(s)), duration: s.duration, started: s.started, error: s.error || null,
-    restarts: s.restarts, encoder: cfg.encoder,
+    restarts: s.restarts, encoder: cfg.encoder, mode: s.modes ? s.modes[s.modeIdx] : null,
+    fallbacks: (s.fallbacks || []).map((x) => ({ mode: x.mode, error: x.error })),
+    source: s.probe ? { codec: s.probe.codec, pix_fmt: s.probe.pixFmt, hdr: s.probe.hdr, dv: s.probe.dv, interlaced: s.probe.interlaced } : null,
   });
   const position = (s) => (s.state === "playing" ? s.offset + s.played : s.offset);
   function linkFor(stage, file) {
@@ -276,8 +378,10 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
   }
   function launch(s) {
     const args = ffmpegArgs(cfg, s.info, { offset: s.offset, quality: s.quality, audio: s.audio, sub: s.sub, url: s.url,
-                                           srcLink: s.sub != null ? linkFor(s.stage, s.info.file) : null });
+                                           srcLink: s.sub != null ? linkFor(s.stage, s.info.file) : null,
+                                           probe: s.probe, mode: s.modes[s.modeIdx] });
     s.played = 0;
+    s.progressed = false;
     s.error = null;
     s.state = "playing";
     s.tail = [];
@@ -291,7 +395,7 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       while ((i = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
         const m = /^out_time_(?:us|ms)=(\d+)/.exec(line);
-        if (m && s.proc === p) s.played = Number(m[1]) / 1e6;
+        if (m && s.proc === p) { s.played = Number(m[1]) / 1e6; if (s.played > 0) s.progressed = true; }
       }
     });
     p.stderr && p.stderr.on("data", (d) => {
@@ -304,6 +408,16 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       s.offset += s.played;
       s.played = 0;
       if (code === 0 || (s.duration && s.offset >= s.duration - 5)) { s.state = "ended"; return; }
+      // died before the first frame and not because of the network: the next, more conservative way (GPU -> CPU)
+      const tailTxt = s.tail.join("\n");
+      if (!s.progressed && s.modeIdx < s.modes.length - 1 && !NET_ERR.test(tailTxt)) {
+        const failed = s.modes[s.modeIdx];
+        s.fallbacks.push({ mode: failed, error: (s.tail.slice(-2).join(" | ") || `exit ${code}`).slice(0, 300) });
+        s.modeIdx++;
+        console.error(`[mediactl] ${s.stage}: ${failed} failed (${s.fallbacks[s.fallbacks.length - 1].error}) - trying ${s.modes[s.modeIdx]}`);
+        setImmediate(() => { if (streams.get(s.stage) === s && s.state === "playing" && !s.proc) launch(s); });
+        return;
+      }
       // a network blip: start again where it was (a few times, not when it dies straight away)
       const ranFor = clock() - s.launchedAt;
       if (s.restarts < cfg.retries && ranFor > 5000) {
@@ -349,9 +463,14 @@ function makeStreams(cfg, plex, spawn = childProcess.spawn, clock = () => Date.n
       const audio = b.audio != null && b.audio !== "" ? Number(b.audio) : null;
       const sub = b.sub != null && b.sub !== "" ? Number(b.sub) : null;
       if (sub != null && !(info.subs || []).some((s) => s.index === sub && s.burnable)) throw fail(400, "That subtitle track can't be burnt in.");
+      const pr = await probe(real);
+      const modes = pickModes(cfg, info, { sub }, pr);
       const s = { stage, ratingKey, info: { ...info, file: real }, title: String(b.title || info.title || "").slice(0, 120), url: `${rtmp}/${key}`,
                   quality, audio, sub, offset: clampInt(b.offset, 0, Math.max(0, (info.duration || 0) - 1), 0), duration: info.duration || null,
-                  started: clock(), restarts: 0, played: 0, state: "starting", proc: null };
+                  started: clock(), restarts: 0, played: 0, state: "starting", proc: null, probe: pr, modes, modeIdx: 0, fallbacks: [] };
+      // (again: the probe took a moment)
+      if (streams.get(stage) && ["playing", "paused"].includes(streams.get(stage).state)) throw fail(409, "That stage is already playing something - stop it first.");
+      if ([...streams.values()].filter((x) => x.state === "playing" && x.stage !== stage).length >= cfg.maxStreams) throw fail(429, "Too many streams running right now.");
       streams.set(stage, s);
       launch(s);
       return view(s);
@@ -431,7 +550,7 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
       res.writeHead(200, { "Content-Type": /^image\//.test(img.type) ? img.type : "image/jpeg", "Content-Length": img.body.length, "Cache-Control": "private, max-age=3600" });
       return res.end(img.body);
     }
-    if (req.method === "GET" && p === "/streams") return send(res, 200, { ok: true, streams: streams.list() });
+    if (req.method === "GET" && p === "/streams") return send(res, 200, { ok: true, streams: streams.list(), max: cfg.maxStreams });
     if ((m = /^\/streams\/([A-Za-z0-9._-]{1,80})(?:\/(stop|pause|resume|seek))?$/.exec(p))) {
       const stage = m[1], op = m[2] || null;
       let b = {};
@@ -487,4 +606,5 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { loadConfig, sign, ipAllowed, ffmpegArgs, escFilter, makePlex, makeStreams, makeServer, VERSION, QUALITY };
+module.exports = { loadConfig, sign, ipAllowed, ffmpegArgs, escFilter, makePlex, makeStreams, makeServer, VERSION, QUALITY,
+                   parseProbe, probeFile, pickModes, outSize, hwDecodable, MODES };
