@@ -17,6 +17,9 @@
 //   POST /streams/:stage/seek         {offset} restart at that position (seek-by-restart)
 //   GET  /plex/shares                 1.2.0: who the server is shared with (plex.tv shared_servers: ids, usernames,
 //                                     emails for the site's server-side matching; never an access token)
+//                                     1.3.0: + `owner` {plex_id, username, title} - the account that OWNS the server (it is
+//                                     never in its own share list); null when plex.tv can't tell. Never its token.
+//   GET  /plex/owner                  1.3.0: just the owner {plex_id, username, title}
 //   POST /plex/shares/:id/remove      1.2.0: {plex_id} remove ONE library share - the share must belong to that Plex
 //                                     user. The site only asks after an admin confirmed (or its auto-revoke is on).
 //                                     MEDIACTL_PLEX_REVOKE=0 refuses every removal here.
@@ -41,7 +44,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.2.1";
+const VERSION = "1.3.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -203,6 +206,19 @@ function makePlex(cfg, req = request) {
     }
     return out;
   }
+  // 1.3.0: the server's OWNER = the plex.tv account behind this token (api/v2/user). Only id / username / title leave
+  // here - the answer also carries the token and the email, which are dropped. Cached for an hour.
+  let ownerCache = null;
+  async function owner() {
+    if (ownerCache && Date.now() - ownerCache.at < 3600 * 1000) return ownerCache.v;
+    const r = await tv("GET", "/api/v2/user");
+    const m = /<user\b([^>]*?)\/?>/.exec(String(r.text || ""));
+    const a = m ? xmlAttrs(m[1]) : {};
+    if (!/^\d{1,15}$/.test(a.id || "")) { const e = new Error("Couldn't read the Plex server owner's account"); e.status = 502; throw e; }
+    const v = { plex_id: a.id, username: a.username || "", title: a.title || "" };
+    ownerCache = { at: Date.now(), v };
+    return v;
+  }
   return {
     async search(q, limit = 20) {
       const mc = await get(`/hubs/search?query=${encodeURIComponent(q)}&limit=${clampInt(limit, 1, 50, 20)}&includeCollections=0&includeExternalMedia=0`);
@@ -257,6 +273,7 @@ function makePlex(cfg, req = request) {
     // ── 1.2.0: who this server is shared with (plex.tv, with the server owner's token). Never returns a token. ──
     machineId,
     shares,
+    owner,
     /** Remove ONE library share (not the friendship). The caller names the share AND its Plex user: both must match. */
     async removeShare(shareId, plexId) {
       if (!/^\d{1,15}$/.test(String(shareId)) || !/^\d{1,15}$/.test(String(plexId))) { const e = new Error("bad share"); e.status = 400; throw e; }
@@ -615,7 +632,14 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
     }
     if (req.method === "GET" && p === "/streams") return send(res, 200, { ok: true, streams: streams.list(), max: cfg.maxStreams });
     // 1.2.0: the server's Plex shares (PATV's Plex members) and removing one (the site asks only after an admin confirmed)
-    if (req.method === "GET" && p === "/plex/shares") return send(res, 200, { ok: true, shares: await plex.shares() });
+    if (req.method === "GET" && p === "/plex/shares") {
+      const shares = await plex.shares();
+      // 1.3.0: the owner too (best effort: the share list still answers when the owner can't be read)
+      let owner = null;
+      try { owner = await plex.owner(); } catch (e) { console.warn(`[mediactl] Plex owner: ${e.message}`); }
+      return send(res, 200, { ok: true, shares, owner });
+    }
+    if (req.method === "GET" && p === "/plex/owner") return send(res, 200, { ok: true, owner: await plex.owner() });
     if (req.method === "POST" && (m = /^\/plex\/shares\/(\d{1,15})\/remove$/.exec(p))) {
       let b = {};
       try { b = body.length ? JSON.parse(body.toString("utf8")) : {}; } catch (e) { return send(res, 400, { ok: false, error: "bad JSON" }); }

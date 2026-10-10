@@ -468,3 +468,68 @@ test("the subscriptions page renders in other languages (and in English without 
     assert.doesNotMatch(html, /(?<![.\w])subs\.[a-z_]+\b/, "no raw keys (the js.subs.* strings in PATV_I18N are fine)");
   }
 });
+
+test("1.99jt: the server OWNER (mediactl's owner, never in the share list) is an 'owner' member: kept, never revocable, free plays + flair", async () => {
+  const ejs = require("ejs");
+  const i18n = require(path.join(repo, "i18n"));
+  const pb = (await getQuery("SELECT userId, username FROM users WHERE username = 'pb'"))[0];
+  const me = { userId: pb.userId, username: pb.username };
+  const OWNER = { plex_id: "9000001", username: "plantbaked", title: "Plant Baked" };
+  // signed in with Plex first: linked, but not in the share list = "isn't on our server (yet)"
+  await PM.linkSelf(me, { plex_id: OWNER.plex_id, username: OWNER.username });
+  assert.equal(await PM.memberFor(pb.userId), null);
+  const plain = SHARES.map((s) => ({ ...s }));
+  try {
+    PM._set({ fetchShares: async () => ({ shares: plain.map((s) => ({ ...s })), owner: { ...OWNER } }) });
+    const res = await PM.sync({ actor: "test" });
+    assert.deepEqual(res.owner, { plex_id: OWNER.plex_id, username: "plantbaked", linked: true });
+    let r = await PM.row(OWNER.plex_id);
+    assert.equal(r.access, "owner");
+    assert.equal(r.access_pinned, 1);
+    assert.equal(r.on_server, 1);
+    assert.equal(r.user_id, pb.userId, "the self-link is kept");
+    assert.equal(r.link_source, "self");
+    assert.equal(r.share_id, null);
+    const m = await PM.memberFor(pb.userId);
+    assert.equal(m && m.access, "owner");
+    assert.ok(PM.memberSync(pb.userId), "the cached answer (flair, cosmetics)");
+    await conf.set({ library_enabled: true, library_plex: true, library_users: "" }, "test");
+    const acc = await L.access(me);
+    assert.equal(acc.free, true, "free plays");
+    assert.equal(acc.how, "plex");
+    // never revocable, never unpinned
+    await assert.rejects(PM.revoke(OWNER.plex_id, "boss"), (e) => e.status === 409);
+    await assert.rejects(PM.adminPin(OWNER.plex_id, "auto", "boss"), (e) => e.status === 409);
+    assert.equal(await PM.refreshUser(pb.userId), 0, "a purchase re-check leaves it alone");
+    // the owner couldn't be read this time (or an older mediactl): the owner's row stays as it is
+    PM._set({ fetchShares: async () => ({ shares: plain.map((s) => ({ ...s })), owner: null }) });
+    await PM.sync({ actor: "test" });
+    PM._set({ fetchShares: async () => plain.map((s) => ({ ...s })) });
+    await PM.sync({ actor: "test" });
+    r = await PM.row(OWNER.plex_id);
+    assert.equal(r.on_server, 1);
+    assert.equal(r.access, "owner");
+    assert.ok(await PM.memberFor(pb.userId));
+    // the pages say so (English + a translation)
+    const plex = await PM.mine(pb.userId);
+    assert.equal(plex.member.access, "owner");
+    const locals = { user: pb.username, title: "Subscriptions", data: await SUB.pageData(me), plex, invites: [], selflink: true, balance: 0, pin: null, libraryOpen: true, price: 50000 };
+    assert.match(await ejs.renderFile(path.join(repo, "views", "subscriptions.ejs"), locals), /You own our Plex server\./);
+    const de = i18n.tFor("de");
+    const html = await ejs.renderFile(path.join(repo, "views", "subscriptions.ejs"), { ...locals, i18nT: de, t: de, i18nClient: (p) => i18n.clientJson("de", p) });
+    assert.ok(html.includes(de("subs.plex_owner")));
+    assert.notEqual(de("subs.plex_owner"), "You own our Plex server.");
+    // the server changed hands: the old owner's row goes back to an ordinary row
+    PM._set({ fetchShares: async () => ({ shares: plain.map((s) => ({ ...s })), owner: { plex_id: "9000002", username: "newowner", title: "" } }) });
+    await PM.sync({ actor: "test" });
+    r = await PM.row(OWNER.plex_id);
+    assert.equal(r.on_server, 0);
+    assert.notEqual(r.access, "owner");
+    assert.equal(await PM.memberFor(pb.userId), null);
+    assert.equal((await PM.row("9000002")).access, "owner");
+  } finally {
+    PM._set({ fetchShares: async () => SHARES.map((s) => ({ ...s })) });
+    await runQuery("DELETE FROM plex_members WHERE plex_id IN ('9000001', '9000002')");
+    await PM.reload();
+  }
+});

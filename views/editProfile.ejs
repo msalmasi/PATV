@@ -431,8 +431,8 @@
       <div class="conn-row" id="plexDiv">
         <span class="conn-ico" style="background:#1f1f1f;color:#e5a00d">📼</span>
         <span class="conn-name">Plex<b><% if (pxRow_) { %><span style="color:#e5a00d"><%= pxRow_.username || pxRow_.plex_id %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b>
-          <% if (pxLive_) { %><small class="px-st"><span class="chip plex">📼 <%- t('settings.connections.plex_member') %></span>
-            <%- pxLive_.access === 'lifetime' ? t('subs.plex_lifetime') : (pxLive_.access === 'manual' || pxLive_.access === 'pre-existing') ? t('subs.plex_kept') : pxLive_.expires ? t('subs.plex_until', { date: pxDate_(pxLive_.expires) }) : '' %></small>
+          <% if (pxLive_) { %><small class="px-st"><span class="chip plex">📼 <%- pxLive_.access === 'owner' ? t('settings.connections.plex_owner') : t('settings.connections.plex_member') %></span>
+            <%- pxLive_.access === 'owner' ? t('subs.plex_owner') : pxLive_.access === 'lifetime' ? t('subs.plex_lifetime') : (pxLive_.access === 'manual' || pxLive_.access === 'pre-existing') ? t('subs.plex_kept') : pxLive_.expires ? t('subs.plex_until', { date: pxDate_(pxLive_.expires) }) : '' %></small>
           <% } else if (pxRow_ && pxRow_.pending) { %><small class="px-st"><%- t('subs.plex_pending', { plex: pxRow_.username || '?' }) %></small>
           <% } else if (pxRow_) { %><small class="px-st"><%- t('subs.plex_linked_off', { plex: pxRow_.username || '?' }) %></small><% } %>
         </span>

@@ -39,7 +39,7 @@
     <% const live = plex && plex.member; const rows = (plex && plex.rows) || []; %>
     <% if (live) { %>
       <p class="st ok"><span class="chip">📼 Plex</span> <%- t('subs.plex_member', { plex: live.username || '?' }) %>
-        <%- live.access === 'lifetime' ? t('subs.plex_lifetime') : (live.access === 'manual' || live.access === 'pre-existing') ? t('subs.plex_kept') : live.expires ? t('subs.plex_until', { date: d(live.expires) }) : '' %></p>
+        <%- live.access === 'owner' ? t('subs.plex_owner') : live.access === 'lifetime' ? t('subs.plex_lifetime') : (live.access === 'manual' || live.access === 'pre-existing') ? t('subs.plex_kept') : live.expires ? t('subs.plex_until', { date: d(live.expires) }) : '' %></p>
     <% } else if (rows.some((r) => r.pending)) { %>
       <p class="st warn"><%- t('subs.plex_pending', { plex: rows.find((r) => r.pending).username || '?' }) %></p>
     <% } else if (rows.length) { %>

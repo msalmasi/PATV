@@ -46,6 +46,9 @@ the first frame (and not because of the RTMP ingest) falls through to the next o
 * `GET /plex/shares` lists who the server is shared with (plex.tv `api/servers/<machineId>/shared_servers`, read with the
   server owner's token that's already here): share id, Plex user id, username, email (the site keeps only a keyed hash),
   invited / accepted times. Never an access token.
+* 1.3.0 (site 1.99jt): the same answer carries `owner` = the account that OWNS the server (plex.tv `api/v2/user` for the
+  token here, cached an hour): Plex user id, username, title only - never its token or email. The owner is never in its own
+  share list; the site keeps it as an `owner` member (never revoked). `GET /plex/owner` returns just that.
 * `POST /plex/shares/:id/remove {plex_id}` removes ONE library share (not the friendship) - only when that share belongs to
   that Plex user. The site asks only after an admin confirmed on /admin/media (or with its `plex_auto_revoke` setting on).
   `MEDIACTL_PLEX_REVOKE=0` in `/etc/mediactl/mediactl.env` refuses every removal here.

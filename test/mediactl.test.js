@@ -422,3 +422,25 @@ test("1.2.0: Plex shares from plex.tv (ids, names, no tokens) and removing one o
   assert.equal(seen.filter((x) => x.method === "DELETE").length, 1);
   assert.ok(seen.every((x) => x.token === "tok" && !x.url.includes("tok")), "the token is a header, never in the URL");
 });
+
+test("1.3.0: the server OWNER from plex.tv api/v2/user - id, username, title only (never its token or email), cached", async () => {
+  const seen = [];
+  const fake = async (url, o) => {
+    seen.push(url);
+    if (url === "https://plex.example/api/v2/user") {
+      const xml = '<?xml version="1.0"?><user id="9000001" uuid="u1" username="plantbaked" title="Plant &amp; Baked" email="owner@x.test" authToken="OWNERSECRET">' +
+                  '<subscription active="1"/><profile/></user>';
+      return { status: 200, headers: {}, body: Buffer.from(xml) };
+    }
+    return { status: 404, json: null, text: "" };
+  };
+  const P = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" }, fake);
+  const o = await P.owner();
+  assert.deepEqual(o, { plex_id: "9000001", username: "plantbaked", title: "Plant & Baked" });
+  assert.ok(!JSON.stringify(o).includes("OWNERSECRET") && !JSON.stringify(o).includes("owner@x.test"));
+  await P.owner();
+  assert.equal(seen.length, 1, "cached");
+  const bad = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" },
+    async () => ({ status: 200, headers: {}, body: Buffer.from("<html>nope</html>") }));
+  await assert.rejects(bad.owner(), (e) => e.status === 502);
+});

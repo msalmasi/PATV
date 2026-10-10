@@ -20,6 +20,9 @@
 //   pre-existing   on the server before their first PATV purchase, or no PATV purchase at all, or not linked - NEVER revoked
 //   manual         re-shared by hand after their PATV time ended, or an admin said "keep" - NEVER revoked
 //   An admin can pin manual / pre-existing on any row.
+//   owner          1.99jt: the Plex account that OWNS the server (mediactl 1.3.0 reports it next to the shares; it is never in
+//                  shared_servers). Kept like pre-existing (pinned, never revoked, an active member: free plays, flair,
+//                  Connections) - and an admin can't unpin it. Only the sync sets it.
 //
 // REVOKING (removing the library share when PATV-sold access ended): only rows that are linked, on the server, PATV-sold,
 // not pinned, and expired. With plex_auto_revoke OFF (the default) a sync only LISTS them ("would remove") and an admin
@@ -40,6 +43,8 @@ const SLACK = 2 * DAY;                  // invite times vs order times: this muc
 const PATV_TYPES = ["lifetime", "yearly", "monthly", "subscription"];
 const KEEP_TYPES = ["manual", "pre-existing"];
 const LINK_SOURCES = ["self", "admin", "wizarr", "overseerr", "email"];
+const OWNER = "owner";                  // 1.99jt: the server owner's row (never a share, never revoked)
+const isOwnerRow = (r) => !!r && r.access === OWNER && !!r.access_pinned;
 let clock = () => Date.now();
 
 class Refuse extends Error {
@@ -129,7 +134,7 @@ async function patvAccess(userId, t = clock()) {
 
 /** The access type + expiry a row should have now (pure: row + patvAccess). */
 function classify(row, pa, t = clock()) {
-  if (row.access_pinned && KEEP_TYPES.includes(row.access)) return { access: row.access, expires: null };
+  if (row.access_pinned && (KEEP_TYPES.includes(row.access) || row.access === OWNER)) return { access: row.access, expires: null };
   if (!row.user_id || !pa || pa.none) return { access: "pre-existing", expires: null };
   if (row.invited_at && pa.first && row.invited_at < pa.first - SLACK) return { access: "pre-existing", expires: null };
   if (pa.active) return { access: pa.type || "monthly", expires: pa.expires };
@@ -138,7 +143,7 @@ function classify(row, pa, t = clock()) {
   return { access: pa.type || "monthly", expires: pa.expires };
 }
 const isActiveRow = (r, t = clock()) => !!r && !!r.user_id && !!r.on_server && !r.pending &&
-  (KEEP_TYPES.includes(r.access) || r.expires == null || Number(r.expires) > t);
+  (KEEP_TYPES.includes(r.access) || r.access === OWNER || r.expires == null || Number(r.expires) > t);
 const isCandidate = (r, t = clock()) => !!r && !!r.user_id && !!r.on_server && !r.access_pinned && PATV_TYPES.includes(r.access) &&
   r.expires != null && Number(r.expires) <= t && r.revoke !== "revoked";
 
@@ -208,7 +213,8 @@ let fetchShares = async () => {
   const lib = require("./medialib");
   const r = await lib.call("GET", "/plex/shares", null, { timeout: 30000 });
   if (r.status !== 200 || !r.json || !r.json.ok) throw new Refuse(502, (r.json && r.json.error) || `media-control answered ${r.status}`);
-  return r.json.shares || [];
+  // 1.99jt: mediactl 1.3.0 also reports the server OWNER ({plex_id, username, title}; null when it couldn't tell)
+  return { shares: r.json.shares || [], owner: r.json.owner || null };
 };
 const env = (k) => String(process.env[k] || "").trim();
 async function getJson(base, p, hdr) {
@@ -251,7 +257,9 @@ function sync({ actor = "system", dry = false } = {}) {
   syncing = (async () => {
     await init();
     const t = clock();
-    const shares = await fetchShares();                      // throws when unreachable: nothing changes
+    const got = await fetchShares();                         // throws when unreachable: nothing changes
+    const shares = Array.isArray(got) ? got : (got && got.shares) || [];
+    const ownerIn = !Array.isArray(got) && got && got.owner && /^\d{1,15}$/.test(String(got.owner.plex_id || "")) ? got.owner : null;
     const res = { at: t, dry, plex_users: shares.length, pending: 0, new: 0, gone: 0, linked: 0, auto_linked: 0, unlinked: 0,
                   by_source: {}, by_access: {}, candidates: 0, revoked: 0, errors: [] };
     const rows = new Map((await getQuery("SELECT * FROM plex_members")).map((r) => [r.plex_id, r]));
@@ -270,8 +278,30 @@ function sync({ actor = "system", dry = false } = {}) {
       rows.set(pid, next);
       writes.push(next);
     }
+    // 1.99jt: the server owner - on the server, pinned "owner" (never revoked); keeps any link it already has
+    if (ownerIn) {
+      const pid = String(ownerIn.plex_id);
+      const cur = rows.get(pid);
+      if (!seen.has(pid)) {
+        seen.add(pid);
+        const next = { ...(cur || { plex_id: pid, first_seen: t, link_lock: 0 }), share_id: null, username: String(ownerIn.username || ""),
+                       title: String(ownerIn.title || ""), on_server: 1, pending: 0, access: OWNER, access_pinned: 1, expires: null, revoke: null,
+                       last_seen: t, last_synced: t };
+        if (!cur) res.new++;
+        rows.set(pid, next);
+        writes.push(next);
+      }
+      res.owner = { plex_id: pid, username: String(ownerIn.username || ""), linked: !!rows.get(pid).user_id };
+      // an older owner row (the server changed hands): back to an ordinary row
+      for (const [k, r] of rows) {
+        if (k === pid || r.access !== OWNER) continue;
+        const next = { ...r, access: null, access_pinned: 0 };
+        rows.set(k, next); writes.push(next);
+      }
+    }
     for (const [pid, r] of rows) {
       if (seen.has(pid) || !r.on_server) continue;
+      if (!ownerIn && isOwnerRow(r)) continue;                 // owner unknown this time: leave the owner's row alone
       const next = { ...r, on_server: 0, last_synced: t };
       if (r.revoke === "candidate") next.revoke = null;
       rows.set(pid, next); writes.push(next); res.gone++;
@@ -459,6 +489,7 @@ async function adminPin(plexId, access, actor) {
   await init();
   const r = await row(plexId);
   if (!r) throw new Refuse(404, "No such Plex member.");
+  if (isOwnerRow(r)) throw new Refuse(409, "That's the Plex server's owner - their access can't be changed here.");
   const a = access === "keep" ? "manual" : access;
   if (a === "auto") {
     await runQuery("UPDATE plex_members SET access_pinned = 0 WHERE plex_id = ?", [r.plex_id]);
@@ -639,7 +670,7 @@ function register(app, { addUser, noTimers } = {}) {
 
 module.exports = {
   init, register, sync, refreshUser, revoke, adminLink, adminPin, adminState, mine, memberFor, memberSync, memberByName, patvAccess, classify,
-  isActiveRow, isCandidate, emailHash, linkStart, linkCheck, linkSelf, unlinkSelf, reload, row, Refuse, PATV_TYPES, KEEP_TYPES, LINK_SOURCES,
+  isActiveRow, isCandidate, isOwnerRow, OWNER, emailHash, linkStart, linkCheck, linkSelf, unlinkSelf, reload, row, Refuse, PATV_TYPES, KEEP_TYPES, LINK_SOURCES,
   // 1.99jr: Sign in with Plex (plexsso.js) shares the PATV client id + the plex.tv caller (tests swap it with _set)
   plexApi: (...a) => plexTv(...a), clientId: () => CLIENT_ID(), site: () => SITE(),
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
