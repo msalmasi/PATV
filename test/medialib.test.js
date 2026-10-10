@@ -53,7 +53,7 @@ function fakeSpawn(cmd, args) {
   return p;
 }
 const mcfg = M.loadConfig({ MEDIACTL_SECRET: SECRET, MEDIACTL_MEDIA_ROOTS: media + path.sep, PLEX_TOKEN: "t" });
-const mstreams = M.makeStreams(mcfg, plex, fakeSpawn);
+const mstreams = M.makeStreams(mcfg, plex, fakeSpawn, undefined, async () => null);     // no ffprobe here
 const { server } = M.makeServer(mcfg, { plex, streams: mstreams });
 
 let n = 0;
@@ -211,6 +211,203 @@ test("the encoder failing to start ends the slot it opened", async () => {
 test("staging prefixes its mediactl stage names (one service serves both sites)", () => {
   assert.equal(L.stageName("PepeFrog.Room"), "PepeFrog.Room");
   assert.match(L.stageName("weird id/with spaces"), /^r-[0-9a-f]{16}$/);
+});
+
+// ── 1.99jn: Plex users play for PAT ──
+const INV_MONTH = "1c120384-c080-4186-b246-f1227e82ab01", INV_LIFE = "e101bcff-cc8c-4db9-b4ca-302ef5e16871";
+const DAY = 86400000;
+let plexU, other;
+async function order(userId, prizeId, ageDays, status = "completed") {
+  require(path.join(repo, "shop"));                                          // shop's tables (created on load)
+  for (let i = 0; i < 100 && !(await getQuery("SELECT 1 FROM sqlite_master WHERE name = 'shop_order_events'")).length; i++) await new Promise((r) => setTimeout(r, 20));
+  await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, official, title, price, status, created) VALUES (?, ?, 1, 'Plex Invite', 1000000, ?, ?)`,
+                 [prizeId, userId, status, Date.now() - ageDays * DAY]);
+}
+const bal = async (u) => (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [u.userId]))[0].b;
+async function pubLatest() {
+  const url = procs[procs.length - 1].args[procs[procs.length - 1].args.length - 1];
+  return pub(url.slice(S.RTMP_PUBLIC.length + 1));
+}
+
+test("who is a Plex user: an invite still in its days (lifetime = forever), an admin link, the override list; refunded / expired = no", async () => {
+  await conf.set({ library_enabled: true, library_plex: true, library_price: 100000, library_daily_cap: 2 }, "test");
+  plexU = await mkUser(); other = await mkUser();
+  await runQuery("UPDATE users SET points_balance = 1000000 WHERE userId IN (?, ?)", [plexU.userId, other.userId]);
+  let a = await L.access(other);
+  assert.equal(a.ok, false);
+  assert.equal(a.why, "noplex");
+  assert.equal(a.hint, "/shop/item/" + INV_MONTH, "the hint points at the store's Plex invite");
+  await order(other.userId, INV_MONTH, 40);                                        // a month's invite, 40 days ago: over
+  await order(other.userId, INV_MONTH, 5, "refunded");                             // refunded: doesn't count
+  assert.equal((await L.access(other)).ok, false);
+  await order(plexU.userId, INV_MONTH, 10);
+  a = await L.access(plexU);
+  assert.equal(a.ok, true);
+  assert.equal(a.free, false);
+  assert.equal(a.how, "invite");
+  assert.ok(Math.abs(a.until - (Date.now() + 20 * DAY)) < 60000);
+  const life = await mkUser();
+  await order(life.userId, INV_LIFE, 900);
+  assert.equal((await L.access(life)).how, "invite");
+  assert.equal((await L.access(life)).until, null);
+  const linked = await mkUser();
+  await runQuery("CREATE TABLE IF NOT EXISTS media_user_links (user_id TEXT PRIMARY KEY, overseerr_user INTEGER NOT NULL, set_by TEXT, at INTEGER)");
+  await runQuery("INSERT INTO media_user_links (user_id, overseerr_user) VALUES (?, 7)", [linked.userId]);
+  assert.equal((await L.access(linked)).how, "linked");
+  await conf.set({ library_users: "Nobody, " + other.username.toUpperCase() }, "test");
+  assert.equal((await L.access(other)).how, "override");
+  await conf.set({ library_users: "" }, "test");
+  // admins stay free; the switch off = Plex users are locked out, admins aren't
+  assert.equal((await L.access(admin)).free, true);
+  await conf.set({ library_plex: false }, "test");
+  assert.equal((await L.access(plexU)).why, "off");
+  assert.equal((await L.access(admin)).ok, true);
+  await conf.set({ library_plex: true }, "test");
+  await assert.rejects(L.search(other, "charade"), (e) => e.status === 403);
+  assert.equal((await L.search(plexU, "charade"))[0].key, "500");
+  const it = await L.item(plexU, "500");
+  assert.equal(it.file, undefined, "file paths are for admins");
+  assert.deepEqual(it.pricing, { price: 200000, hours: 2, per_hour: 100000, free: false });
+});
+
+test("price: library_price per STARTED hour of what's left from the start point, at least one hour", () => {
+  const S0 = { library_price: 100000 };
+  assert.deepEqual(L.priceFor(6780, 0, S0), { price: 200000, hours: 2, per_hour: 100000 });     // 1:53 -> 2 h
+  assert.equal(L.priceFor(6780, 3600, S0).price, 100000);                                       // 53 min left
+  assert.equal(L.priceFor(2700, 0, S0).price, 100000);                                          // a 45-min episode
+  assert.equal(L.priceFor(10900, 0, S0).price, 400000);                                         // 3:01:40 -> 4 h
+  assert.equal(L.priceFor(null, 0, S0).price, 100000);
+  assert.equal(L.priceFor(6780, 0, { library_price: 0 }).price, 0);
+});
+
+test("a paid play: confirm the price, PAT held on a completed order, ROUTED 50/50 Fort Knox / room vault once it's on the stage", async () => {
+  procs.length = 0;
+  await assert.rejects(L.play(plexU, { room: ROOM, key: "500" }), (e) => e.status === 400 && e.extra.price === 200000, "the price has to be confirmed");
+  await assert.rejects(L.play(plexU, { room: ROOM, key: "500", price: 100000 }), (e) => e.status === 409 && e.extra.price === 200000);
+  assert.equal(procs.length, 0);
+  assert.equal(await bal(plexU), 1000000, "nothing charged yet");
+  const r = await L.play(plexU, { room: ROOM, key: "500", price: 200000 });
+  assert.equal(r.price, 200000);
+  assert.equal(await bal(plexU), 800000);
+  const o = (await getQuery("SELECT * FROM shop_orders WHERE id = ?", [r.order_id]))[0];
+  assert.equal(o.status, "completed");
+  assert.equal(o.seller_paid, 0, "held: nobody credited yet");
+  assert.equal(o.source, "medialib");
+  let p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [r.play_id]))[0];
+  assert.equal(p.charge, "held");
+  assert.equal(p.price, 200000);
+  assert.equal(p.access, "invite");
+  await L.watch();
+  assert.equal((await getQuery("SELECT charge FROM media_plays WHERE id = ?", [r.play_id]))[0].charge, "held", "not live yet: still held");
+  // someone else can't touch it; its starter can
+  await assert.rejects(L.pause(other, ROOM), (e) => e.status === 403);
+  assert.equal((await pubLatest()).status, 302);                             // the encoder's publish: the slot goes live
+  await L.watch();
+  p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [r.play_id]))[0];
+  assert.equal(p.charge, "routed");
+  const led = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", ["library:" + r.play_id]))[0];
+  assert.equal(led.kind, "library_play");
+  assert.equal(led.amount, 200000);
+  assert.equal(led.fortknox, 100000);
+  assert.equal(led.room_vault, 100000);
+  assert.equal(led.room_id, ROOM);
+  const claim = (await getQuery("SELECT * FROM reserve_claims WHERE flow LIKE '%library_play' AND amount = -100000"));
+  assert.ok(claim.length >= 1, "the Fort Knox half is a reserve claim");
+  assert.equal((await getQuery("SELECT seller_paid FROM shop_orders WHERE id = ?", [r.order_id]))[0].seller_paid, 1);
+  await L.watch();
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM room_flow_ledger WHERE ref = ?", ["library:" + r.play_id]))[0].n, 1, "routed once");
+  // its starter controls it from the Go-live page
+  assert.equal((await L.pause(plexU, ROOM)).ok, true);
+  const mine = await L.mine(plexU);
+  assert.equal(mine.sessions.length, 1);
+  assert.equal(mine.sessions[0].charge, "routed");
+  assert.equal(mine.daily_left, 1);
+  assert.equal(mine.streams.max, 2);
+  const res = await L.resume(plexU, ROOM);
+  assert.equal(res.same_slot, true);
+  assert.equal(await bal(plexU), 800000, "resume / seek are free");
+  assert.equal((await L.stop(plexU, ROOM)).ok, true);
+  assert.equal(await bal(plexU), 800000, "it was on the stage: no refund");
+});
+
+test("refunds: the encoder refusing to start, and a play stopped before it ever reached the stage", async () => {
+  mcfg.maxStreams = 0;                                                      // mediactl refuses the start (429)
+  try { await assert.rejects(L.play(plexU, { room: ROOM, key: "500", price: 200000 }), (e) => e.status === 429 && /refunded/.test(e.message)); }
+  finally { mcfg.maxStreams = 2; }
+  assert.equal(await bal(plexU), 800000, "refunded at once");
+  const last = (await getQuery("SELECT * FROM shop_orders WHERE buyer_id = ? ORDER BY id DESC LIMIT 1", [plexU.userId]))[0];
+  assert.equal(last.status, "refunded");
+  const r = await L.play(plexU, { room: ROOM, key: "500", price: 200000 });
+  assert.equal(await bal(plexU), 600000);
+  await L.stop(plexU, ROOM);                                                 // never published
+  assert.equal(await bal(plexU), 800000, "never on the stage: refunded");
+  assert.equal((await getQuery("SELECT charge FROM media_plays WHERE id = ?", [r.play_id]))[0].charge, "refunded");
+  assert.equal((await getQuery("SELECT status FROM shop_orders WHERE id = ?", [r.order_id]))[0].status, "refunded");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM room_flow_ledger WHERE ref = ?", ["library:" + r.play_id]))[0].n, 0);
+});
+
+test("limits: every encoder busy = refused before paying; the daily cap; the pad's owner playing on their own pad = 100% Fort Knox", async () => {
+  // both of mediactl's streams busy (an admin's on another pad + a fake)
+  mcfg.maxStreams = 1;
+  const a = await L.play(admin, { room: "other.Room", key: "500" }).catch((e) => e);
+  try {
+    if (a instanceof Error) {
+      // other.Room isn't a pad here: occupy the encoder directly instead
+      await mstreams.start("busy.Room", { rtmp: S.RTMP_PUBLIC, key: "psBUSYBUSYBUSY12", ratingKey: "500" });
+    }
+    const before = await bal(plexU);
+    await assert.rejects(L.play(plexU, { room: ROOM, key: "500", price: 200000 }), (e) => e.status === 429 && /in use/.test(e.message));
+    assert.equal(await bal(plexU), before, "nothing charged");
+  } finally {
+    mcfg.maxStreams = 2;
+    mstreams.stop("busy.Room");
+    if (!(a instanceof Error)) await L.stop(admin, "other.Room").catch(() => {});
+  }
+  // the owner's own pad: all of it to Fort Knox
+  const rooms = require(path.join(repo, "rooms"));
+  const orig = rooms.stageSettings;
+  rooms.stageSettings = async (id) => ({ ...(await orig(id)), owner: { userId: plexU.userId, username: plexU.username } });
+  try {
+    const r = await L.play(plexU, { room: ROOM, key: "500", offset: 6780 - 600, price: 100000 });
+    await pubLatest();
+    await L.watch();
+    const led = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", ["library:" + r.play_id]))[0];
+    assert.equal(led.fortknox, 100000);
+    assert.equal(led.room_vault, 0);
+    assert.equal(led.owner_self, 1);
+    await L.stop(plexU, ROOM);
+  } finally { rooms.stageSettings = orig; }
+  // two paid plays in 24 h (refunded ones don't count): the cap
+  await assert.rejects(L.play(plexU, { room: ROOM, key: "500", price: 200000 }), (e) => e.status === 429 && /24 hours/.test(e.message));
+  assert.equal((await L.mine(plexU)).daily_left, 0);
+  // admins are never capped or charged
+  const ar = await L.play(admin, { room: ROOM, key: "500" });
+  assert.equal(ar.price, 0);
+  assert.equal((await getQuery("SELECT charge FROM media_plays WHERE id = ?", [ar.play_id]))[0].charge, "free");
+  await L.stop(admin, ROOM);
+});
+
+test("a held charge carries over when a resume needs a fresh slot, and is settled by how the new one goes", async () => {
+  await runQuery("DELETE FROM media_plays WHERE user_id = ?", [plexU.userId]);   // reset the daily cap
+  const r = await L.play(plexU, { room: ROOM, key: "500", price: 200000 });
+  const b0 = await bal(plexU);
+  await L.pause(plexU, ROOM);
+  await S.end(r.slot.id, "idle", "system");                                  // paused too long, before ever going live
+  const again = await L.resume(plexU, ROOM);
+  assert.equal(again.same_slot, false);
+  assert.equal(again.price, 0, "no second charge");
+  const p0 = (await getQuery("SELECT charge FROM media_plays WHERE id = ?", [r.play_id]))[0];
+  assert.equal(p0.charge, "moved");
+  const p1 = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [again.play_id]))[0];
+  assert.equal(p1.charge, "held");
+  assert.equal(p1.price, 200000);
+  assert.equal(p1.order_id, r.order_id);
+  assert.equal(p1.user_id, plexU.userId);
+  await pubLatest();
+  await L.watch();
+  assert.equal((await getQuery("SELECT charge FROM media_plays WHERE id = ?", [again.play_id]))[0].charge, "routed");
+  assert.equal(await bal(plexU), b0);
+  await L.stop(plexU, ROOM);
 });
 
 test("https with a pinned certificate: a matching pin works, a wrong pin refuses before anything is sent", { skip: !hasOpenssl() }, async () => {

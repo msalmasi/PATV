@@ -61,7 +61,7 @@ function register(app, { addUser, noTimers } = {}) {
       const pads = (await rooms.list()).map((r) => ({ id: r.id, title: r.title }));
       res.render("mediaAdmin", { user: req.user.username, S: conf.get(), K: conf.keys(), pads, house: rooms.HOUSE_ROOM,
         requests: await reqs.adminState(), invites: await inv.adminState(), libraryOk: conf.libraryAllowed(req.user),
-        plays: await require("./dbUtils").getQuery(`SELECT id, ts, username, room_id, title, quality, offset_start, ended_at, end_reason, error
+        plays: await require("./dbUtils").getQuery(`SELECT id, ts, username, room_id, title, quality, offset_start, ended_at, end_reason, error, price, charge, access
                                                     FROM media_plays ORDER BY id DESC LIMIT 100`) });
     } catch (e) {
       console.error("[media] admin page:", conf.errLine(e));

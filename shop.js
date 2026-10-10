@@ -480,12 +480,15 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
 // ── 1.99ji: official SERVICE charges (no stocked prize) - e.g. a 🎬 media request (mediarequests.js) ──
 // The same money path as an official store sale: the buyer pays, the PAT goes to the store owner, and a completed
 // official order (prize_id NULL) records it on their orders page. refundService() reverses exactly that, once.
-async function chargeService({ userId, username, title, price, source, note }) {
+// 1.99jn: hold = true (📼 Play from Plex, medialib.js): the buyer pays and gets the completed order, but NOBODY is credited
+// yet (seller_paid 0) - the caller routes the PAT itself once the service really happened (boosts.routeInTx: Fort Knox /
+// the pad's room vault) and marks the order paid, or refundService() gives it all back (no store-owner debit for a hold).
+async function chargeService({ userId, username, title, price, source, note, hold = false }) {
   await ready;
   price = Math.floor(Number(price));
   if (!(price > 0) || price > PRICE_MAX) throw new Refuse(400, "Bad price.");
   title = String(title || "Service").replace(/[\r\n\t]+/g, " ").slice(0, 120);
-  const owner = (await getQuery("SELECT userId FROM users WHERE username = ?", [STORE_OWNER_USERNAME]))[0] || null;
+  const owner = hold ? null : (await getQuery("SELECT userId FROM users WHERE username = ?", [STORE_OWNER_USERNAME]))[0] || null;
   return tx(async () => {
     const r = await require("./ledger").post(userId, -price, `purchase of ${title}`, { requireCover: true, source: "shop service" });
     if (!r.ok) {
@@ -499,9 +502,9 @@ async function chargeService({ userId, username, title, price, source, note }) {
     const t = Date.now();
     const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
         seller_paid, status, source, created, completed_at, closed_at, updated)
-      VALUES (NULL, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?)`,
-      [userId, title, price, price, source || "website", t, t, t, t]);
-    await event(o.id, "completed", username, note || "Official service — charged");
+      VALUES (NULL, ?, NULL, 1, ?, ?, 0, 0, ?, ?, 'completed', ?, ?, ?, ?, ?)`,
+      [userId, title, price, price, hold ? 0 : 1, source || "website", t, t, t, t]);
+    await event(o.id, "completed", username, note || (hold ? "Official service — charged (held until it starts)" : "Official service — charged"));
     return { order_id: o.id, price };
   });
 }
@@ -512,9 +515,13 @@ async function refundService(orderId, reason, actor) {
   return tx(async () => {
     const o = await getOrder(orderId);
     if (!o || !o.official || o.prize_id || o.status !== "completed") return false;
+    // 1.99jn: a HELD charge (chargeService hold) was never credited to anyone - refund it from the hold, no owner debit.
+    // A held charge that has since been ROUTED (seller_paid 1, source medialib) went to Fort Knox / a room vault: not here.
+    const held = !o.seller_paid;
+    if (!held && o.source === "medialib") return false;
     await transition(o, "completed", "refunded", { resolution: String(reason || "refunded").slice(0, 300), closed_at: Date.now() });
     await move(o.buyer_id, o.price, `shop refund: ${o.title} (order #${o.id})`);
-    if (owner) await require("./ledger").postOrThrow(owner.userId, -o.price, `store refund: ${o.title} (order #${o.id})`, { source: "shop service refund" });
+    if (owner && !held) await require("./ledger").postOrThrow(owner.userId, -o.price, `store refund: ${o.title} (order #${o.id})`, { source: "shop service refund" });
     await event(o.id, "refunded", actor || "system", String(reason || "refunded").slice(0, 300));
     return true;
   });

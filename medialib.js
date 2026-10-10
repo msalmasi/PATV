@@ -1,19 +1,34 @@
-// medialib.js — 1.99ji: 📼 Play from library. An admin plays a movie or an episode from the homelab Plex library on a
-// pad's stage.
+// medialib.js — 1.99ji: 📼 Play from library. A movie or an episode from the homelab Plex library on a pad's stage.
+// 1.99jn: PLEX USERS can do it too, for PAT, from the Go-live flow (/stage, "📼 Play from Plex").
 //
 // The homelab media-control service (deploy/mediactl, next to the files and the iGPU) does the Plex search and runs
 // one `ffmpeg -re` per stage that pushes H.264 + AAC to the ordinary RTMP ingest with a 📼 LIBRARY SLOT's one-time key
-// (mainstage.libraryOpen: free, as long as the title, one per pad). So the stage, HLS, WHEP, snaps and the Twitch relay
-// all see an ordinary slot, and ending the slot (Cut, time up, a paused slot left too long) ends the stream.
+// (mainstage.libraryOpen: no slot fee, as long as the title, one per pad). So the stage, HLS, WHEP, snaps and the Twitch
+// relay all see an ordinary slot, and ending the slot (Cut, time up, a paused slot left too long) ends the stream.
 //
 // Calls to the service are signed (HMAC-SHA256 with MEDIACTL_SECRET - the same scheme as mediactl.js sign()) and,
 // for https, the certificate is pinned by MEDIACTL_TLS_SHA256. The Plex token stays in the homelab.
 //
-// Admin-only for now (DMCA / rights): mediaconf library_allow = admins (class Admin) | staff. Flag library_enabled.
-// Every play is logged (media_plays: who, what, pad, when, how it ended).
+// WHO (access()):
+//   * site admins (library_allow = admins) or admins + staff (= staff): FREE, any pad, as before;
+//   * PLEX USERS, while library_plex is on: an active Plex invite bought in the store (a completed / not refunded
+//     shop order of a mediaconf invite_items item, within its days; 0 days = lifetime), an admin-linked Overseerr
+//     identity (media_user_links), or a username on the library_users override list. They pay library_price PAT per
+//     STARTED HOUR of what's left of the title (from the start point), and take the pad under the stage-slot rules
+//     (sees the pad, not banned there, no other open slot of their own, a free slot in the pad), at most
+//     library_daily_cap paid plays a rolling day, and only while mediactl has a free stream (MEDIACTL_MAX_STREAMS).
+// MONEY (paid plays): shop.chargeService({hold}) debits the buyer and records a completed official order (their
+// orders page), crediting nobody yet. Once the stream is ON the stage (the slot's went_live), the hold is ROUTED like
+// any pad spend - boosts.routeInTx kind "library_play" (flow library_play): 50% Fort Knox / 50% that pad's room vault,
+// 100% Fort Knox when the pad's owner plays on their own pad. If it never gets on the stage (the encoder or the slot
+// fails, it's stopped first) the whole price is refunded (shop.refundService). Seek / pause / resume are free; a
+// resume that needs a fresh slot carries the original charge.
+// CONTROLS: the slot owner (who started it) and the admins: pause / resume / seek / stop - on /stage (the Go-live page's
+// "Your slot" card) and /admin/media. The pad owner / staff can Cut it from the stage like any slot.
+// Every play is logged (media_plays: who, what, pad, price, how it ended). Only show what we have the rights to show.
 //
 //   media_sessions   room_id -> the slot + play that pad's stage is running from the library
-//   media_plays      the log
+//   media_plays      the log (+ price, order_id, charge: free | held | routed | refunded | moved | carried)
 "use strict";
 const crypto = require("crypto");
 const http = require("http");
@@ -27,9 +42,11 @@ const rooms = require("./rooms");
 const STAGING = !!process.env.STAGING;
 const WATCH_MS = 10 * 1000;
 const SLACK_MIN = 20;          // a library slot runs this much longer than what's left of the title
+const DAY_MS = 24 * 3600 * 1000;
+const OPEN_STATES = "('waiting','active')";
 
 class Refuse extends Error {
-  constructor(status, message) { super(message); this.status = status; this.refuse = true; }
+  constructor(status, message, extra) { super(message); this.status = status; this.refuse = true; if (extra) this.extra = extra; }
 }
 
 // ── the media-control client ──
@@ -90,7 +107,7 @@ async function call(method, pathQ, body = null, { raw = false, timeout = 15000 }
     req.end();
   });
 }
-// a JSON call that must succeed: its error message is shown to the admin as-is (mediactl's messages are written for that)
+// a JSON call that must succeed: its error message is shown to the user as-is (mediactl's messages are written for that)
 async function must(method, pathQ, body) {
   const r = await call(method, pathQ, body);
   if (r.status === 401) throw new Refuse(502, "The media-control service refused our signature - check MEDIACTL_SECRET on both sides (and the clocks).");
@@ -107,6 +124,10 @@ function stageName(roomId) {
 
 // ── storage ──
 let ready = null;
+async function addCol(table, def) {
+  try { await runQuery(`ALTER TABLE ${table} ADD COLUMN ${def}`); }
+  catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+}
 function init() {
   if (!ready) {
     ready = (async () => {
@@ -117,6 +138,11 @@ function init() {
         rating_key TEXT, title TEXT, kind TEXT, year INTEGER, duration INTEGER, quality INTEGER, offset_start INTEGER,
         audio INTEGER, sub INTEGER, ended_at INTEGER, end_reason TEXT, last_pos INTEGER, error TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS media_plays_ts ON media_plays (ts)");
+      // 1.99jn: what the play cost and where that PAT is
+      for (const def of ["price INTEGER NOT NULL DEFAULT 0", "order_id INTEGER", "charge TEXT", "settled_at INTEGER", "carried_from INTEGER", "access TEXT"]) {
+        await addCol("media_plays", def);
+      }
+      await runQuery("CREATE INDEX IF NOT EXISTS media_plays_user ON media_plays (user_id, ts)");
       await runQuery(`CREATE TABLE IF NOT EXISTS media_sessions (
         room_id TEXT PRIMARY KEY, slot_id TEXT NOT NULL, play_id INTEGER NOT NULL, rating_key TEXT, title TEXT, state TEXT NOT NULL,
         by_user TEXT, started INTEGER NOT NULL, updated INTEGER NOT NULL, position INTEGER, duration INTEGER)`);
@@ -130,21 +156,143 @@ const keys = new Map();   // room id -> the slot's raw RTMP key (memory only; re
 const fmtTitle = (it) => (it.type === "episode" && it.show
   ? `${it.show} S${String(it.season || 0).padStart(2, "0")}E${String(it.episode || 0).padStart(2, "0")} · ${it.title}`
   : `${it.title}${it.year ? ` (${it.year})` : ""}`).slice(0, 72);
+const fmtPat = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 
-function assertUser(user) {
-  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
-  if (!conf.libraryAllowed(user)) throw new Refuse(403, "Playing from the library is for site admins.");
-  if (!conf.on.library()) throw new Refuse(403, conf.keys().mediactl ? "Play from library is switched off (/admin/media)." : "The media-control service isn't configured yet.");
+// ── who may play (1.99jn) ──
+async function safeQuery(sql, args) { try { return await getQuery(sql, args); } catch (e) { return []; } }
+/** The store's Plex invite item to point people at: the shortest timed one (else the first). */
+function inviteItemLink() {
+  const items = Object.entries(conf.get().invite_items || {});
+  if (!items.length) return "/shop";
+  items.sort((a, b) => ((a[1].days || 1e9) - (b[1].days || 1e9)));
+  return "/shop/item/" + encodeURIComponent(items[0][0]);
 }
+/**
+ * Is this account a PLEX USER right now? -> {how: override|linked|invite, until (ms, null = no end)} | null.
+ * Most reliable first: the admin's override list, an admin-linked Overseerr identity, then a store invite still in its days.
+ */
+async function plexUser(user, t = Date.now()) {
+  if (!user || !user.userId) return null;
+  const S = conf.get();
+  const over = String(S.library_users || "").split(",").filter(Boolean);
+  if (user.username && over.includes(String(user.username).toLowerCase())) return { how: "override", until: null };
+  if ((await safeQuery("SELECT 1 AS x FROM media_user_links WHERE user_id = ?", [user.userId])).length) return { how: "linked", until: null };
+  const items = S.invite_items || {};
+  const ids = Object.keys(items);
+  if (!ids.length) return null;
+  const orders = await safeQuery(`SELECT prize_id, created FROM shop_orders WHERE buyer_id = ? AND prize_id IN (${ids.map(() => "?").join(",")})
+                                  AND status NOT IN ('cancelled','refunded')`, [user.userId, ...ids]);
+  let best = null;
+  for (const o of orders) {
+    const days = Number((items[o.prize_id] || {}).days) || 0;
+    if (days <= 0) return { how: "invite", until: null };                       // lifetime
+    const until = Number(o.created) + days * DAY_MS;
+    if (until > t && (!best || until > best.until)) best = { how: "invite", until };
+  }
+  return best;
+}
+/**
+ * May `user` play from the library, and on what terms?
+ * -> {ok, free, how, until, why: signin|off|noplex|null, message, hint}
+ */
+async function access(user) {
+  await conf.init();
+  const S = conf.get();
+  if (!user || !user.userId) return { ok: false, free: false, how: null, why: "signin", message: "Sign in first." };
+  if (conf.libraryAllowed(user)) {
+    if (!conf.on.library()) return { ok: false, free: true, how: "admin", why: "off", message: conf.keys().mediactl ? "Play from library is switched off (/admin/media)." : "The media-control service isn't configured yet." };
+    return { ok: true, free: true, how: user.class === "Admin" ? "admin" : "staff", until: null, why: null, message: null };
+  }
+  if (!S.library_plex || !conf.on.library()) return { ok: false, free: false, how: null, why: "off", message: "Playing from Plex isn't open right now." };
+  const p = await plexUser(user);
+  if (!p) {
+    return { ok: false, free: false, how: null, why: "noplex", hint: inviteItemLink(),
+             message: "📼 Play from Plex is for Plex users - get Plex access in the store (or ask an admin to link your Plex account)." };
+  }
+  return { ok: true, free: S.library_price <= 0, how: p.how, until: p.until, why: null, message: null };
+}
+/** What the Go-live page draws for the 📼 choice: shown to admins + Plex users, locked with a hint for other signed-in
+ *  people while Plex users may play; hidden when it's closed to them. */
+async function goLiveInfo(user) {
+  if (!user || !user.userId) return null;
+  const A = await access(user);
+  const S = conf.get();
+  return { show: A.ok || A.why === "noplex" || (A.why === "off" && A.free), ok: A.ok, free: A.free, how: A.how, why: A.why,
+           message: A.message, hint: A.hint || null, price_per_hour: A.free ? 0 : S.library_price, daily_cap: S.library_daily_cap,
+           quality: S.library_quality, pause_max_min: S.library_pause_max_min };
+}
+/** PAT for a play: library_price per STARTED hour of what's left of the title from `offset` (at least one hour). */
+function priceFor(durationSec, offsetSec, S = conf.get()) {
+  const per = Math.max(0, Math.floor(Number(S.library_price) || 0));
+  if (!per) return { price: 0, hours: 0, per_hour: 0 };
+  const left = Math.max(0, (Number(durationSec) || 0) - Math.max(0, Number(offsetSec) || 0));
+  const hours = Math.max(1, Math.ceil(left / 3600));
+  return { price: per * hours, hours, per_hour: per };
+}
+async function paidToday(userId, t = Date.now()) {
+  const r = await safeQuery("SELECT COUNT(*) AS n FROM media_plays WHERE user_id = ? AND ts > ? AND charge IN ('held','routed')", [userId, t - DAY_MS]);
+  return (r[0] && r[0].n) || 0;
+}
+async function mustAccess(user) {
+  const A = await access(user);
+  if (!A.ok) throw new Refuse(A.why === "signin" ? 401 : 403, A.message, A.hint ? { hint: A.hint } : null);
+  return A;
+}
+// the admins (library_allow) control every library stream; anyone else only the ones they started
+const isLibAdmin = (user) => conf.libraryAllowed(user);
+
 async function session(roomId) { return (await getQuery("SELECT * FROM media_sessions WHERE room_id = ?", [String(roomId)]))[0] || null; }
 async function closePlay(playId, reason, pos, error) {
   await runQuery("UPDATE media_plays SET ended_at = COALESCE(ended_at, ?), end_reason = COALESCE(end_reason, ?), last_pos = COALESCE(?, last_pos), error = COALESCE(?, error) WHERE id = ?",
                  [Date.now(), reason, pos == null ? null : Math.round(pos), error || null, playId]);
 }
+
+// ── the money (1.99jn) ──
+/**
+ * Settle a held charge: on the stage (wentLive) -> route it (Fort Knox / the pad's room vault); never got there -> refund.
+ * Idempotent: only a play whose charge is still 'held' moves, and each of its two ways claims it first.
+ */
+async function settle(playId, wentLive, why) {
+  const p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [playId]))[0];
+  if (!p || p.charge !== "held" || !(p.price > 0)) return null;
+  if (wentLive) {
+    const boosts = require("./boosts");
+    await boosts.init();
+    const RS = await rooms.stageSettings(p.room_id).catch(() => null);
+    const ownerSelf = !!(RS && RS.owner && RS.owner.userId === p.user_id);
+    const row = await boosts.tx(async () => {
+      const c = await runQuery("UPDATE media_plays SET charge = 'routed', settled_at = ? WHERE id = ? AND charge = 'held'", [Date.now(), p.id]);
+      if (!c.changes) return null;
+      if (p.order_id) await runQuery("UPDATE shop_orders SET seller_paid = 1, updated = ? WHERE id = ? AND seller_paid = 0", [Date.now(), p.order_id]);
+      return boosts.routeInTx({ ref: "library:" + p.id, kind: "library_play", room_id: p.room_id, payer_id: p.user_id, payer_name: p.username,
+        amount: p.price, owner_self: ownerSelf, via: "web", flow: "library_play", detail: `📼 ${p.title || ""}`.slice(0, 120) });
+    });
+    if (row) {
+      try { boosts.telemetry(row, p.username, "web"); } catch (e) { /* telemetry only */ }
+      try { await require("./shop").event(p.order_id, "completed", "system", `On the stage - routed: Fort Knox ${fmtPat(row.fortknox)}, room vault ${fmtPat(row.room_vault)}`); } catch (e) { /* log only */ }
+      console.log(`[medialib] play #${p.id}: ${p.price} PAT routed (Fort Knox ${row.fortknox}, room vault ${row.room_vault}${ownerSelf ? ", owner's own pad" : ""})`);
+    }
+    return row ? "routed" : null;
+  }
+  const c = await runQuery("UPDATE media_plays SET charge = 'refunding' WHERE id = ? AND charge = 'held'", [p.id]);
+  if (!c.changes) return null;
+  let ok = false;
+  try { ok = p.order_id ? await require("./shop").refundService(p.order_id, `📼 it never got on the stage (${why || "failed"})`, "system") : false; }
+  catch (e) { console.error(`[medialib] play #${p.id}: refund failed:`, conf.errLine(e)); }
+  await runQuery("UPDATE media_plays SET charge = ?, settled_at = ? WHERE id = ?", [ok ? "refunded" : "refund_failed", Date.now(), p.id]);
+  if (ok) {
+    require("./inbox").addSafe(p.user_id, { kind: "media", title: `📼 ${p.title} didn't start - refunded`,
+      body: `It never got on the stage, so the ${fmtPat(p.price)} PAT came straight back.`, link: "/stage", ref: "mlib-refund:" + p.id }).catch(() => {});
+  } else console.error(`[medialib] play #${p.id}: ${p.price} PAT NOT refunded (order ${p.order_id}) - check it by hand`);
+  return ok ? "refunded" : "refund_failed";
+}
+
 async function dropSession(s, reason, pos, error) {
   await runQuery("DELETE FROM media_sessions WHERE room_id = ? AND slot_id = ?", [s.room_id, s.slot_id]);
   keys.delete(s.room_id);
   await closePlay(s.play_id, reason, pos, error);
+  const slot = await stage.getSlot(s.slot_id).catch(() => null);
+  await settle(s.play_id, !!(slot && slot.went_live), reason).catch((e) => console.error("[medialib] settle:", conf.errLine(e)));
 }
 const roomOf = async (v) => {
   const id = String(v || "");
@@ -154,18 +302,25 @@ const roomOf = async (v) => {
 
 // ── actions ──
 async function search(user, q) {
-  assertUser(user);
+  await mustAccess(user);
   q = String(q || "").trim().slice(0, 100);
   if (q.length < 2) throw new Refuse(400, "Type at least 2 characters.");
   return (await must("GET", `/search?q=${encodeURIComponent(q)}&limit=24`)).results || [];
 }
-async function item(user, key) {
-  assertUser(user);
+async function fetchItem(key) {
   if (!/^\d{1,12}$/.test(String(key))) throw new Refuse(400, "Bad item.");
   return (await must("GET", `/item/${key}`)).item;
 }
+async function item(user, key) {
+  const A = await mustAccess(user);
+  const it = await fetchItem(key);
+  // the price at the start (the page re-prices for another start point with the same rule)
+  if (it && ["movie", "episode"].includes(it.type)) it.pricing = { ...priceFor(it.duration, 0), free: A.free };
+  if (it && !isLibAdmin(user)) delete it.file;                        // file paths are for the admins' eyes
+  return it;
+}
 async function poster(user, key) {
-  assertUser(user);
+  await mustAccess(user);
   if (!/^\d{1,12}$/.test(String(key))) throw new Refuse(400, "Bad item.");
   const r = await call("GET", `/poster/${key}`, null, { raw: true });
   if (r.status !== 200) throw new Refuse(404, "No poster.");
@@ -189,13 +344,40 @@ async function startOn(user, R, it, o) {
   return opened.slot;
 }
 
+// mediactl's streams right now (null = can't be reached) + its cap
+async function streamsNow() {
+  try {
+    const r = await call("GET", "/streams", null, { timeout: 6000 });
+    if (r.status !== 200 || !r.json) return null;
+    const list = r.json.streams || [];
+    list.max = Number(r.json.max) || null;
+    return list;
+  } catch (e) { return null; }
+}
+
+/**
+ * Play a title on a pad. b = {room, key, offset, quality, audio, sub, price (the price the user confirmed)}.
+ * Internal: b._carry = {play} - a resume on a fresh slot, carrying the original play's charge (no new charge).
+ */
 async function play(user, b = {}) {
   await init();
-  assertUser(user);
+  const carry = b._carry || null;
+  // a carried play (a resume on a fresh slot) was allowed when it started; anything else asks now
+  const A = carry ? { ok: true, free: true, how: carry.access || "carried" } : await mustAccess(user);
   const R = await roomOf(b.room);
   if (!R) throw new Refuse(404, "No such pad.");
   if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.");
-  const it = await item(user, b.key);
+  const paidRules = !A.free || (!isLibAdmin(user) && !carry);
+  if (!isLibAdmin(user) && !carry) {
+    // a Plex user takes the pad under the ordinary stage-slot rules
+    if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.");
+    if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.");
+    const mine = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]);
+    if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.");
+    const cap = conf.get().library_daily_cap;
+    if (!A.free && (await paidToday(user.userId)) >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.");
+  }
+  const it = await fetchItem(b.key);
   if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw new Refuse(400, "Pick a movie or an episode.");
   const S = conf.get();
   const o = {
@@ -204,27 +386,65 @@ async function play(user, b = {}) {
     audio: b.audio !== undefined && b.audio !== null && b.audio !== "" && (it.audio || []).some((a) => a.index === Number(b.audio)) ? Number(b.audio) : null,
     sub: b.sub !== undefined && b.sub !== null && b.sub !== "" && (it.subs || []).some((s) => s.index === Number(b.sub) && s.burnable) ? Number(b.sub) : null,
   };
-  const slot = await startOn(user, R, it, o);
+  // the price: what the user saw and confirmed must be what we charge
+  const q = carry || A.free ? { price: 0, hours: 0, per_hour: 0 } : priceFor(it.duration, o.offset, S);
+  if (q.price > 0) {
+    if (b.price == null || b.price === "") throw new Refuse(400, `This costs ${fmtPat(q.price)} PAT - confirm the price to play it.`, { price: q.price });
+    if (Math.floor(Number(b.price)) !== q.price) throw new Refuse(409, `The price is ${fmtPat(q.price)} PAT now - confirm it again.`, { price: q.price });
+  }
+  // a free encoder before anyone pays (MEDIACTL_MAX_STREAMS); mediactl still has the last word
+  if (paidRules || q.price > 0) {
+    const live = await streamsNow();
+    if (live === null) throw new Refuse(503, "The Plex player can't be reached right now - try again in a bit.");
+    const busy = live.filter((x) => x.state === "playing").length;
+    if (live.max && busy >= live.max) throw new Refuse(429, `Every library stream is in use (${busy} of ${live.max}) - try again when one ends.`);
+  }
+  let order = null;
+  if (q.price > 0) {
+    order = await require("./shop").chargeService({ userId: user.userId, username: user.username, price: q.price, source: "medialib", hold: true,
+      title: `📼 Play from Plex: ${fmtTitle(it)} on ${R.title || R.id}`,
+      note: `${q.hours} h × ${fmtPat(q.per_hour)} PAT - held until it's on the stage, refunded if it never gets there` });
+  }
+  let slot;
+  try {
+    slot = await startOn(user, R, it, o);
+  } catch (e) {
+    if (order) {
+      const back = await require("./shop").refundService(order.order_id, "📼 it didn't start: " + String(e.message || "error").slice(0, 120), "system").catch(() => false);
+      if (!back) console.error(`[medialib] order ${order.order_id}: start failed AND the refund didn't go through - check it by hand`);
+      if (e && e.refuse) e.message += back ? " Your PAT was refunded." : "";
+    }
+    throw e;
+  }
   const t = Date.now();
-  const p = await runQuery(`INSERT INTO media_plays (ts, user_id, username, room_id, slot_id, rating_key, title, kind, year, duration, quality, offset_start, audio, sub)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  const charge = carry ? (carry.charge === "held" ? "held" : "carried") : q.price > 0 ? "held" : "free";
+  const p = await runQuery(`INSERT INTO media_plays (ts, user_id, username, room_id, slot_id, rating_key, title, kind, year, duration, quality, offset_start, audio, sub,
+                              price, order_id, charge, carried_from, access)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                            [t, user.userId, user.username, R.id, slot.id, String(it.key), fmtTitle(it), it.type, it.year || null, it.duration || null,
-                            o.quality, o.offset, o.audio, o.sub]);
+                            o.quality, o.offset, o.audio, o.sub,
+                            carry ? (carry.charge === "held" ? carry.price : 0) : q.price, carry ? carry.order_id : order ? order.order_id : null,
+                            charge, carry ? carry.id : null, carry ? carry.access : A.how]);
   await runQuery(`INSERT INTO media_sessions (room_id, slot_id, play_id, rating_key, title, state, by_user, started, updated, position, duration)
                   VALUES (?, ?, ?, ?, ?, 'playing', ?, ?, ?, ?, ?)`,
                  [R.id, slot.id, p.id, String(it.key), fmtTitle(it), user.username, t, t, o.offset, it.duration || null]);
-  console.log(`[medialib] ${user.username} plays "${fmtTitle(it)}" (${it.key}) on ${R.id} at ${o.offset}s, ${o.quality}p - play #${p.id}`);
-  return { ok: true, play_id: p.id, slot: { id: slot.id, stream: slot.stream, hls: slot.hls }, title: fmtTitle(it) };
+  console.log(`[medialib] ${user.username} (${A.how}) plays "${fmtTitle(it)}" (${it.key}) on ${R.id} at ${o.offset}s, ${o.quality}p - play #${p.id}` +
+              (q.price ? `, ${q.price} PAT held (order ${order.order_id})` : carry ? ` (carries play #${carry.id})` : ", free"));
+  return { ok: true, play_id: p.id, slot: { id: slot.id, stream: slot.stream, hls: slot.hls }, title: fmtTitle(it), price: q.price,
+           order_id: order ? order.order_id : null };
 }
 
 async function needSession(user, room) {
   await init();
-  assertUser(user);
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   const R = await roomOf(room);
   if (!R) throw new Refuse(404, "No such pad.");
   const s = await session(R.id);
   if (!s) throw new Refuse(404, "Nothing from the library is playing on this pad.");
-  return { R, s };
+  const p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [s.play_id]))[0] || {};
+  if (!isLibAdmin(user) && p.user_id !== user.userId) throw new Refuse(403, "Only whoever started it (or an admin) can control it.");
+  if (!isLibAdmin(user) && !conf.on.library()) throw new Refuse(403, "Playing from Plex isn't open right now.");
+  return { R, s, p };
 }
 
 async function stop(user, room, reason = "stopped") {
@@ -247,7 +467,7 @@ async function pause(user, room) {
 
 // resume (paused) or seek (any state): back on the same slot when it's still open, else on a fresh slot
 async function restart(user, room, offset, how) {
-  const { R, s } = await needSession(user, room);
+  const { R, s, p } = await needSession(user, room);
   const slot = await stage.getSlot(s.slot_id);
   const open = slot && !slot.settled && ["waiting", "active"].includes(slot.status);
   const name = encodeURIComponent(stageName(R.id));
@@ -263,41 +483,74 @@ async function restart(user, room, offset, how) {
       await stage.end(s.slot_id, "library_restart", user.username).catch(() => {});
     }
   }
-  // a fresh slot (the old one ended - a long pause - or mediactl lost the stream)
-  const play = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [s.play_id]))[0] || {};
+  // a fresh slot (the old one ended - a long pause - or mediactl lost the stream). The new play carries the old one's
+  // charge: a still-held one moves over (so it's routed / refunded by how the new one goes), a paid one stays paid.
+  const carry = { id: p.id, charge: p.charge, price: p.price, order_id: p.order_id, access: p.access };
+  if (p.charge === "held") await runQuery("UPDATE media_plays SET charge = 'moved' WHERE id = ? AND charge = 'held'", [p.id]);
   await dropSession(s, open ? "restarted" : "slot ended", pos);
   try { await call("POST", `/streams/${name}/stop`, {}); } catch (e) { /* best effort */ }
-  return { ...(await play_(user, { room: R.id, key: s.rating_key, offset: pos, quality: play.quality, audio: play.audio, sub: play.sub })), same_slot: false };
+  // the new play stays the starter's (their controls, their log line), whoever pressed resume / seek
+  const owner = p.user_id && p.user_id !== user.userId ? { userId: p.user_id, username: p.username, class: null } : user;
+  try {
+    return { ...(await play_(owner, { room: R.id, key: s.rating_key, offset: pos, quality: p.quality, audio: p.audio, sub: p.sub, _carry: carry })), same_slot: false };
+  } catch (e) {
+    // couldn't start again: a charge that was still held goes back to its first play and is settled there
+    if (carry.charge === "held") {
+      await runQuery("UPDATE media_plays SET charge = 'held' WHERE id = ? AND charge = 'moved'", [p.id]);
+      await settle(p.id, !!(slot && slot.went_live), "restart failed").catch(() => {});
+    }
+    throw e;
+  }
 }
 const play_ = (u, b) => play(u, b);
 const resume = (user, room) => restart(user, room, null, "resume");
 const seek = (user, room, offset) => restart(user, room, offset, "seek");
 
 // ── state ──
-async function streamsNow() {
-  try { const r = await call("GET", "/streams", null, { timeout: 6000 }); return r.status === 200 && r.json ? r.json.streams || [] : null; }
-  catch (e) { return null; }
-}
 async function state(user) {
   await init();
-  if (!conf.libraryAllowed(user)) throw new Refuse(403, "Admins only.");
+  if (!isLibAdmin(user)) throw new Refuse(403, "Admins only.");
   const S = conf.get(), K = conf.keys();
   const sessions = await getQuery("SELECT * FROM media_sessions ORDER BY started");
   const live = K.mediactl ? await streamsNow() : null;
   const byName = new Map((live || []).map((x) => [x.stage, x]));
   return {
     enabled: conf.on.library(), flag: !!S.library_enabled, configured: K.mediactl, pinned: K.mediactl_tls_pinned, reachable: live !== null,
-    quality: S.library_quality, pause_max_min: S.library_pause_max_min,
+    quality: S.library_quality, pause_max_min: S.library_pause_max_min, max_streams: live ? live.max : null,
     sessions: sessions.map((s) => {
       const m = byName.get(stageName(s.room_id));
       return { room: s.room_id, slot_id: s.slot_id, play_id: s.play_id, title: s.title, by: s.by_user, started: s.started,
-               state: m ? m.state : s.state, position: m ? m.position : s.position, duration: (m && m.duration) || s.duration, error: m ? m.error : null };
+               state: m ? m.state : s.state, position: m ? m.position : s.position, duration: (m && m.duration) || s.duration, error: m ? m.error : null,
+               mode: m ? m.mode || null : null };
     }),
-    plays: await getQuery("SELECT id, ts, username, room_id, title, kind, quality, offset_start, ended_at, end_reason, last_pos, error FROM media_plays ORDER BY id DESC LIMIT 30"),
+    plays: await getQuery("SELECT id, ts, username, room_id, title, kind, quality, offset_start, ended_at, end_reason, last_pos, error, price, charge FROM media_plays ORDER BY id DESC LIMIT 30"),
   };
 }
+/** The Go-live page: may I play, on what terms, and what of mine is playing. */
+async function mine(user, roomId) {
+  await init();
+  const A = await access(user);
+  const S = conf.get();
+  const out = { ok: true, access: A, notice: "Only show what we have the rights to show. Every play is logged.",
+                price_per_hour: A.free ? 0 : Math.max(0, S.library_price), daily_cap: S.library_daily_cap, daily_left: null,
+                quality: S.library_quality, pause_max_min: S.library_pause_max_min, sessions: [], streams: null };
+  if (!user || !user.userId) return out;
+  if (A.ok && !A.free) out.daily_left = Math.max(0, S.library_daily_cap - (await paidToday(user.userId)));
+  const rows = await getQuery(`SELECT s.*, p.user_id, p.price, p.charge FROM media_sessions s JOIN media_plays p ON p.id = s.play_id
+                               WHERE p.user_id = ? ORDER BY s.started`, [user.userId]);
+  const live = A.ok || rows.length ? await streamsNow() : null;
+  if (live) out.streams = { used: live.filter((x) => x.state === "playing").length, max: live.max };
+  const byName = new Map((live || []).map((x) => [x.stage, x]));
+  out.sessions = rows.map((s) => {
+    const m = byName.get(stageName(s.room_id));
+    return { room: s.room_id, slot_id: s.slot_id, play_id: s.play_id, title: s.title, started: s.started, price: s.price, charge: s.charge,
+             state: m ? m.state : s.state, position: m ? m.position : s.position, duration: (m && m.duration) || s.duration, error: m ? m.error : null };
+  });
+  if (roomId) out.room = roomId;
+  return out;
+}
 
-// ── the watcher: keeps the slot and the stream together ──
+// ── the watcher: keeps the slot and the stream together, and settles held charges ──
 async function watch() {
   await init();
   const sessions = await getQuery("SELECT * FROM media_sessions");
@@ -309,6 +562,8 @@ async function watch() {
       const slot = await stage.getSlot(s.slot_id);
       const name = stageName(s.room_id);
       const m = live ? live.find((x) => x.stage === name) : undefined;
+      // on the stage: a held charge is routed now
+      if (slot && slot.went_live) await settle(s.play_id, true).catch((e) => console.error("[medialib] settle:", conf.errLine(e)));
       if (!slot || slot.settled || slot.status === "ended") {
         // the stage ended it (Cut, time up, paused too long): stop the encoder
         try { await call("POST", `/streams/${encodeURIComponent(name)}/stop`, {}); } catch (e) { /* unreachable: it'll fail to publish anyway */ }
@@ -346,12 +601,13 @@ function register(app, { addUser, noTimers } = {}) {
     timer.unref();
   }
   const fail = (res, e) => {
-    if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message });
+    if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(e.extra || {}) });
     console.error("[medialib]", conf.errLine(e));
     res.status(500).json({ ok: false, error: "Something went wrong." });
   };
+  // signed in + same-site POSTs; who may do what is decided per action (access(), needSession())
   const gate = (req, res, next) => {
-    if (!req.user || !conf.libraryAllowed(req.user)) return res.status(403).json({ ok: false, error: "Admins only." });
+    if (!req.user || !req.user.userId) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (req.method === "POST" && !guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };
@@ -359,6 +615,7 @@ function register(app, { addUser, noTimers } = {}) {
   const J = (fn) => [addUser, gate, async (req, res) => { try { res.set("Cache-Control", "no-store"); res.json(await fn(req)); } catch (e) { fail(res, e); } }];
 
   app.get("/api/medialib/state", ...J(async (req) => ({ ok: true, ...(await state(me(req))) })));
+  app.get("/api/medialib/mine", ...J(async (req) => mine(me(req), req.query.room ? String(req.query.room) : null)));
   app.get("/api/medialib/search", ...J(async (req) => ({ ok: true, results: await search(me(req), req.query.q) })));
   app.get("/api/medialib/item/:key", ...J(async (req) => ({ ok: true, item: await item(me(req), req.params.key) })));
   app.get("/api/medialib/poster/:key", addUser, gate, async (req, res) => {
@@ -369,11 +626,18 @@ function register(app, { addUser, noTimers } = {}) {
       res.send(r.body);
     } catch (e) { res.status(e.status === 403 ? 403 : 404).end(); }
   });
-  app.post("/api/medialib/play", ...J(async (req) => play(me(req), req.body || {})));
+  app.post("/api/medialib/play", ...J(async (req) => {
+    const b = { ...(req.body || {}) };
+    delete b._carry;                                                   // internal only
+    const R = await roomOf(b.room);
+    if (b.room && R && !(await stage.seesPad(req.user, R.id))) throw new Refuse(404, "No such pad.");
+    return play(me(req), b);
+  }));
   app.post("/api/medialib/stop", ...J(async (req) => stop(me(req), (req.body || {}).room)));
   app.post("/api/medialib/pause", ...J(async (req) => pause(me(req), (req.body || {}).room)));
   app.post("/api/medialib/resume", ...J(async (req) => resume(me(req), (req.body || {}).room)));
   app.post("/api/medialib/seek", ...J(async (req) => seek(me(req), (req.body || {}).room, (req.body || {}).offset)));
 }
 
-module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, watch, stageName, call, signHeaders, fmtTitle, Refuse, _keys: keys };
+module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday,
+                   stageName, call, signHeaders, fmtTitle, inviteItemLink, Refuse, _keys: keys };

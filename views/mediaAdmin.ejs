@@ -25,22 +25,27 @@
   <% } %>
   <section class="sb-card" id="plays" aria-labelledby="plT">
     <h2 id="plT">📼 Play log</h2>
-    <div class="tblwrap"><table><thead><tr><th>When</th><th>Who</th><th>Pad</th><th>Title</th><th>From</th><th>Ended</th></tr></thead><tbody>
+    <div class="tblwrap"><table><thead><tr><th>When</th><th>Who</th><th>Pad</th><th>Title</th><th>From</th><th>PAT</th><th>Ended</th></tr></thead><tbody>
       <% plays.forEach((p) => { %><tr><td><%= when(p.ts) %></td><td><%= p.username %></td><td><%= p.room_id %></td><td><%= p.title %> <small class="muted"><%= p.quality %>p</small></td>
-        <td><%= p.offset_start ? Math.floor(p.offset_start / 60) + ' min' : 'start' %></td><td><%= p.ended_at ? when(p.ended_at) + ' — ' + (p.end_reason || '') : 'playing' %><%= p.error ? ' — ' + p.error : '' %></td></tr><% }) %>
-      <% if (!plays.length) { %><tr><td colspan="6" class="muted">Nothing played yet.</td></tr><% } %>
+        <td><%= p.offset_start ? Math.floor(p.offset_start / 60) + ' min' : 'start' %></td><td><%= p.price ? Number(p.price).toLocaleString('en-US') + ' · ' + (p.charge || '') : (p.charge || 'free') %><%= p.access && p.access !== 'admin' ? ' (' + p.access + ')' : '' %></td><td><%= p.ended_at ? when(p.ended_at) + ' — ' + (p.end_reason || '') : 'playing' %><%= p.error ? ' — ' + p.error : '' %></td></tr><% }) %>
+      <% if (!plays.length) { %><tr><td colspan="7" class="muted">Nothing played yet.</td></tr><% } %>
     </tbody></table></div>
   </section>
 
   <section class="sb-card" id="settings" aria-labelledby="stT">
     <h2 id="stT">Settings</h2>
     <form id="mediaSettings" class="book" autocomplete="off">
-      <input type="hidden" name="_bools" value="library_enabled,requests_enabled,invites_enabled">
+      <input type="hidden" name="_bools" value="library_enabled,library_plex,requests_enabled,invites_enabled">
       <h3>📼 Play from library</h3>
       <label class="chk"><input type="checkbox" name="library_enabled" <%= S.library_enabled ? 'checked' : '' %>> On</label>
       <label>Who may use it <select name="library_allow"><option value="admins" <%= S.library_allow === 'admins' ? 'selected' : '' %>>Site admins</option><option value="staff" <%= S.library_allow === 'staff' ? 'selected' : '' %>>Admins + staff</option></select></label>
       <label>Default quality <select name="library_quality"><% [1080, 720, 480].forEach((q) => { %><option value="<%= q %>" <%= S.library_quality === q ? 'selected' : '' %>><%= q %>p</option><% }) %></select></label>
       <label>A paused library slot ends after (minutes) <input type="number" name="library_pause_max_min" min="5" max="240" value="<%= S.library_pause_max_min %>"></label>
+      <label class="chk"><input type="checkbox" name="library_plex" <%= S.library_plex ? 'checked' : '' %>> Plex users may play too, for PAT (the 📼 choice on <a href="/stage">/stage</a> → Go live)</label>
+      <label>Price, PAT per started hour of the title (0 = free) <input type="number" name="library_price" min="0" max="100000000" step="1000" value="<%= S.library_price %>"></label>
+      <label>Paid plays per Plex user per 24 h <input type="number" name="library_daily_cap" min="0" max="50" value="<%= S.library_daily_cap %>"></label>
+      <label>Always count as Plex users (usernames, comma-separated) <input type="text" name="library_users" value="<%= S.library_users %>" maxlength="4000"></label>
+      <p class="muted" style="grid-column: 1 / -1; margin: 0">A Plex user = an active Plex invite from the store (within its days; lifetime = always), an Overseerr link below, or the list above. Paid plays: the price is held when they press Play, routed once it's on the stage (50% Fort Knox / 50% the pad's room vault; 100% Fort Knox on their own pad), refunded if it never gets there. Admins (above) play free.</p>
 
       <h3>🎬 Requests (Overseerr)</h3>
       <label class="chk"><input type="checkbox" name="requests_enabled" <%= S.requests_enabled ? 'checked' : '' %>> On — <a href="/requests">/requests</a></label>

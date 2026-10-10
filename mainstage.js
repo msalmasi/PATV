@@ -1375,12 +1375,15 @@ function register(app, { addUser, isBotToken, noTimers }) {
     const all = PA.visibleRows(req.user || null, await rooms.list());
     const want = String(req.query.room || "");
     const pick = all.find((r) => r.slug === want || r.id === want) || all.find((r) => r.id === rooms.HOUSE_ROOM) || all[0] || null;
+    // 1.99jn: 📼 Play from Plex (medialib.js): shown to admins + Plex users, locked for the rest; never breaks the page
+    let plex = null;
+    if (me) { try { plex = await require("./medialib").goLiveInfo({ userId: me.userId, username: me.username, class: me.class }); } catch (e) { plex = null; } }
     res.locals.og = { title: "Go live on PATV", description: "Stream to a pad's stage on publicaccess.tv - from OBS, your browser, or a YouTube/Twitch link. Slots are free on most pads.",
                       image: res.locals.ogBase + "/og/page.png?t=Go%20live%20on%20PATV", url: res.locals.ogBase + "/stage" };
     res.render("stageBook", { user: me ? me.username : null, me, C: config(), rtmpServer: RTMP_PUBLIC, staff: isStaff(req.user),
                               rooms: all.map((r) => ({ id: r.id, slug: r.slug, title: r.title, slot_count: r.slot_count, slot_price: r.slot_price, approval: r.approval, house: r.house,
                                                         owner: r.owner ? r.owner.display || r.owner.username : null })),
-                              pick: pick ? pick.id : null, twitchUrl });
+                              pick: pick ? pick.id : null, twitchUrl, plex });
   };
   app.get("/stage", addUser, bookPage);
   app.get("/stage/book", addUser, bookPage);
@@ -1531,7 +1534,7 @@ module.exports = {
   register, start, init, book, end, tick, reconcile, rtmpCallback, relayChunk, stopRelay, publicSlots, adminState, ownerState,
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
-  isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
+  isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
   libraryOpen, libraryExtend, setLibraryIdle, idleMinFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,

@@ -142,3 +142,30 @@
 .sb .rs-badge.rs-error { border-color: var(--red); color: #ffb3b3; background: #2a1212; }
 .sb .rs-warn { color: var(--gold); font-size: 13px; }
 .sb #rsSaved { margin: 0 0 10px; overflow-wrap: anywhere; }
+/* 1.99jn: 📼 Play from Plex in the Go-live flow (stage-plex.js) */
+.sb .choice label.locked { opacity: .55; cursor: not-allowed; }
+.sb .pxlock { margin: 0; font-size: 13px; }
+.sb #bookForm.plex-mode .np { display: none !important; }
+.sb .px { display: grid; gap: 10px; margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.sb .px .pxnote { margin: 0; font-size: 13px; color: var(--gold); }
+.sb .px form.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.sb .px form.row input { flex: 1 1 220px; min-width: 0; }
+.sb .px-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+.sb .px-it { background: #0b0b0b; border: 1px solid #222; border-radius: 10px; padding: 6px; cursor: pointer; text-align: left; color: #ddd; font: inherit; display: grid; gap: 4px; min-width: 0; }
+.sb .px-it:hover, .sb .px-it:focus-visible { border-color: var(--green); }
+.sb .px-it img, .sb .px-ph { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; background: #1a1a1a; display: block; }
+.sb .px-it b { font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+.sb .px-it small { color: var(--muted); font-size: 11.5px; }
+.sb .px-pick { border: 1px solid #262626; border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; min-width: 0; }
+.sb .px-pick .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.sb .px-pick label { font-size: 13px; color: #bbb; display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sb .px-pick select, .sb .px-pick input[type=text] { max-width: 100%; }
+.sb .px-eps { max-height: 280px; overflow: auto; display: grid; gap: 4px; }
+.sb .px-eps button { text-align: left; overflow-wrap: anywhere; }
+.sb .px-price { font-size: 15px; }
+.sb .px-price b { color: var(--lime); }
+.sb .pxnow { background: rgba(76,175,80,.08); border: 1px solid #1f3a20; border-radius: 10px; padding: 10px 12px; margin: 8px 0; display: grid; gap: 8px; min-width: 0; }
+.sb .pxnow .px-bar { height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+.sb .pxnow .px-bar span { display: block; height: 100%; background: var(--green); }
+.sb .pxnow .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sb .pxnow input[type=text] { width: 90px; }

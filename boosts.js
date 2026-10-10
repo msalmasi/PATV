@@ -202,8 +202,9 @@ async function routeInTx({ ref, kind, room_id, payer_id, payer_name, amount, own
 // ledger kind -> its routing flow (the reserve_claims flow / econ_charges flow) and the claim's label
 // challenge_fee: a staked mic-challenge head-to-head's fee (challengepay.js). Kind "challenge" (a prize PAID OUT of the
 // escrow, room_vault negative) never goes through routeInTx, so it has no flow.
-const KIND_FLOW = Object.freeze({ boost: "boost", slot_fee: "stage_slot", pad_cosmetic: "pad_cosmetics", challenge_fee: "challenge_fee" });   // 1.99ew: pad cosmetics
-const KIND_LABEL = Object.freeze({ boost: "boost", slot_fee: "stage slot fee", pad_cosmetic: "pad cosmetic", challenge_fee: "mic challenge fee" });
+// 1.99jn: library_play = 📼 Play from Plex (medialib.js), routed once the stream is on the pad's stage
+const KIND_FLOW = Object.freeze({ boost: "boost", slot_fee: "stage_slot", pad_cosmetic: "pad_cosmetics", challenge_fee: "challenge_fee", library_play: "library_play" });   // 1.99ew: pad cosmetics
+const KIND_LABEL = Object.freeze({ boost: "boost", slot_fee: "stage slot fee", pad_cosmetic: "pad cosmetic", challenge_fee: "mic challenge fee", library_play: "📼 library play" });
 const ROOM_FLOWS = Object.freeze(Object.values(KIND_FLOW));
 function telemetry(row, login, via) {
   try {

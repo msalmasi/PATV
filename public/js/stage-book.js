@@ -80,7 +80,8 @@
   $('bookForm').addEventListener('submit', function (e) {
     e.preventDefault();
     var m = Number(mins.value), w = radio('when'), mode = radio('mode');
-    var body = { room: $('room').value, minutes: m, mode: mode, embed: $('embed').value, title: $('title').value };
+    if (mode === 'plex') return;                     // 1.99jn: 📼 Play from Plex has its own panel (stage-plex.js)
+    var body ={ room: $('room').value, minutes: m, mode: mode, embed: $('embed').value, title: $('title').value };
     if (mode === 'embed' && !$('embed').value.trim()) { $('bookMsg').textContent = 'Paste a YouTube or Twitch link.'; return; }
     var hold = m * price();
     var url = '/api/stage/book';
@@ -165,15 +166,20 @@
     $('slotRoom').textContent = roomTitle(s.room_id);
     var o = roomOpt(s.room_id);
     $('watchLink').href = o ? '/p/' + encodeURIComponent(o.value) : '/';
-    var embed = s.mode === 'embed';
-    show('streamPanes', !embed); show('embedNote', embed);
+    var embed = s.mode === 'embed', lib = !!s.library;     // 1.99jn: a 📼 library slot - its controls are #plexNow (stage-plex.js)
+    show('streamPanes', !embed && !lib); show('embedNote', embed);
     var st = $('slotState');
     st.className = 'state ' + (s.live ? 'live' : 'wait');
-    st.innerHTML = (s.live ? '<span class="dot" aria-hidden="true"></span> LIVE' + (s.featured ? ' · ★ FEATURED' : '') : (s.went_live ? 'Off air - reconnect to continue' : 'Waiting for your stream'));
+    st.innerHTML = (s.live ? '<span class="dot" aria-hidden="true"></span> LIVE' + (s.featured ? ' · ★ FEATURED' : '') + (lib ? ' · 📼' : '')
+      : (lib ? (s.went_live ? '📼 Paused / off air' : '📼 Starting…') : s.went_live ? 'Off air - reconnect to continue' : 'Waiting for your stream'));
     $('liveTime').textContent = mmss(s.live_seconds);
     $('charged').textContent = fmt(s.charged) + ' PAT';
     $('held').textContent = fmt(s.held) + ' PAT';
-    if (!s.went_live && !embed) {
+    if (lib) {
+      $('leftK').textContent = 'Slot open for';
+      $('leftV').textContent = mmss(s.max_minutes * 60 - s.live_seconds);
+      $('slotNote').textContent = s.live ? '📼 Playing from Plex on ' + roomTitle(s.room_id) + '\'s stage.' : (s.went_live ? 'Paused - resume below.' : 'The library stream is starting - it shows on the stage within a few seconds.');
+    } else if (!s.went_live && !embed) {
       $('leftK').textContent = 'Go live within';
       $('leftV').textContent = mmss((s.start_by - Date.now()) / 1000);
       $('slotNote').textContent = 'Start streaming before the timer runs out, or the slot is cancelled' + (s.held ? ' and everything is refunded.' : '.');
@@ -184,7 +190,7 @@
         (s.price_per_min && s.held > s.charged ? fmt(s.price_per_min) + ' PAT per started minute live.' : 'Viewers pick your tab to watch.') : 'Your stream dropped. Billing is paused until you are back.';
     }
     // 1.99cr: may viewers snap / clip this stream, is it NSFW (not while a change is on its way)
-    show('capOpts', !embed);
+    show('capOpts', !embed && !lib);
     if (!capBusy) { $('capAllow').checked = s.capture !== false; $('capNsfw').checked = !!s.nsfw; }
     var k = null;
     try { k = sessionStorage.getItem(KEY_STORE + s.id); } catch (e) {}
@@ -215,12 +221,14 @@
   }
   refresh();
   polling = setInterval(refresh, 3000);
+  window.PATVStageRefresh = refresh;                  // 1.99jn: stage-plex.js after a play / stop
 
   $('endBtn').addEventListener('click', function () {
-    if (!slot || !confirm('End your slot now?' + (slot.held > slot.charged ? ' Unused PAT is refunded right away.' : ''))) return;
+    if (!slot || !confirm(slot.library ? 'Stop the library stream and end your slot?' : 'End your slot now?' + (slot.held > slot.charged ? ' Unused PAT is refunded right away.' : ''))) return;
     $('endBtn').disabled = true;
     stopWeb('');
-    post('/api/stage/slots/' + encodeURIComponent(slot.id) + '/end').then(function (j) {
+    // a 📼 library slot: stop the encoder too (the stage would end it on its own within seconds)
+    (slot.library ? post('/api/medialib/stop', { room: slot.room_id }) : post('/api/stage/slots/' + encodeURIComponent(slot.id) + '/end')).then(function (j) {
       $('endBtn').disabled = false;
       if (!j.ok) alert(j.error || 'Could not end it.');
       refresh();

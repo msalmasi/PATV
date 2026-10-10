@@ -28,6 +28,12 @@ const DEFAULTS = {
   library_allow: "admins",        // admins (class Admin) | staff (Admin + Staff). Later: approved pads.
   library_quality: 720,           // the default pick: 1080 | 720 | 480
   library_pause_max_min: 30,      // a paused library slot ends after this long
+  // 1.99jn: 📼 Play from Plex in the Go-live flow for PLEX USERS (an active Plex invite from the store, an admin-linked
+  // Overseerr identity, or the override list below), for PAT. Admins / staff (library_allow) stay free. OFF until switched on.
+  library_plex: false,
+  library_price: 100000,          // PAT per STARTED HOUR of what's left of the title (from the start point); 0 = free
+  library_daily_cap: 3,           // paid plays per Plex user per rolling 24 h (refunded ones don't count)
+  library_users: "",              // override: PATV usernames (comma-separated) that count as Plex users whatever the data says
   // 🎬 requests (Overseerr)
   requests_enabled: false,
   request_price_movie: 0,         // PAT per movie request (0 = free); request credits are used first
@@ -93,6 +99,11 @@ const CLEAN = {
   library_allow: (v) => (["admins", "staff"].includes(v) ? v : "admins"),
   library_quality: (v) => ([1080, 720, 480].includes(Number(v)) ? Number(v) : 720),
   library_pause_max_min: (v) => num(v, 5, 240, 30),
+  library_plex: bool,
+  library_price: (v) => num(v, 0, 100000000, 100000),
+  library_daily_cap: (v) => num(v, 0, 50, 3),
+  library_users: (v) => String(v == null ? "" : v).split(/[\s,]+/).map((x) => x.trim().toLowerCase())
+    .filter((x) => /^[a-z0-9_.-]{1,40}$/.test(x)).slice(0, 200).join(","),
   request_price_movie: (v) => num(v, 0, 100000000, 0),
   request_price_tv: (v) => num(v, 0, 100000000, 0),
   requests_per_day: (v) => num(v, 0, 100, 3),

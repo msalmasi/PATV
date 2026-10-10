@@ -3,13 +3,15 @@
      queue), stream from OBS / the browser or put a YouTube / Twitch link on. 1.99ee: no paid featuring - pads are
      🚀 boosted on their pages instead (boosts.js). Live status +
      browser streaming run in /public/js/stage-book.js; data from mainstage.js. -->
-<link rel="stylesheet" href="/public/css/stage.css?v=6">
+<link rel="stylesheet" href="/public/css/stage.css?v=7">
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const defMin = Math.min(C.max_minutes, Math.max(C.min_minutes, 15));
   const sel = (rooms || []).find((r) => r.id === pick) || (rooms || [])[0] || null;
   // 1.99et: WebRTC (WHIP) go-live - only while the stage setting webrtc_enabled is on (webrtc.js)
   const rtc = typeof locals.webrtcCfg === 'function' ? locals.webrtcCfg() : null;
+  // 1.99jn: 📼 Play from Plex (medialib.js access()) - shown to Plex users + admins, locked (with a hint) for everyone else
+  const px = typeof plex !== 'undefined' && plex ? plex : null;
 %>
 <main class="sb" id="sb" data-price="<%= C.price_per_min %>" data-min="<%= C.min_minutes %>" data-max="<%= C.max_minutes %>"
       data-rtmp="<%= rtmpServer %>" data-signed="<%= me ? 1 : 0 %>" data-lead="<%= C.lead_min %>" data-days="<%= C.schedule_days %>">
@@ -54,6 +56,10 @@
         <div class="fact"><span class="k" id="leftK">Time left</span><span class="v" id="leftV">–</span></div>
       </div>
       <p class="muted" id="slotNote"></p>
+      <% if (px && px.show) { %>
+      <!-- 1.99jn: 📼 the slot owner's controls for a library slot (stage-plex.js) -->
+      <div class="pxnow hide" id="plexNow" aria-live="polite"></div>
+      <% } %>
       <div class="row">
         <button type="button" class="btn danger" id="endBtn">End my slot now</button>
         <a class="btn" id="watchLink" href="/" target="_blank" rel="noopener">Watch the stage ↗</a>
@@ -197,14 +203,20 @@
         </label>
         <p class="roominfo muted" id="roomInfo" aria-live="polite"></p>
 
-        <fieldset class="choice" id="kindSet"><legend>Slot</legend>
+        <fieldset class="choice np" id="kindSet"><legend>Slot</legend>
           <label><input type="radio" name="kind" value="slot" checked> <span><b>Ordinary slot</b><small id="slotPriceTxt">free</small></span></label>
         </fieldset>
 
         <fieldset class="choice" id="srcSet"><legend>What you're putting on</legend>
           <label><input type="radio" name="mode" value="stream" checked> <span><b>My stream</b><small>OBS key or this browser</small></span></label>
           <label><input type="radio" name="mode" value="embed"> <span><b>A video link</b><small>YouTube or Twitch</small></span></label>
+          <% if (px && px.show) { %>
+          <label class="<%= px.ok ? '' : 'locked' %>" title="<%= px.ok ? '' : px.message %>"><input type="radio" name="mode" value="plex"<%= px.ok ? '' : ' disabled' %>> <span><b>📼 Play from Plex</b><small><%= !px.ok ? '🔒 Plex users only' : px.free ? 'a movie or an episode · free for you' : fmt(px.price_per_hour) + ' PAT / started hour' %></small></span></label>
+          <% } %>
         </fieldset>
+        <% if (px && px.show && !px.ok) { %>
+        <p class="muted pxlock" id="plexLocked">🔒 <b>📼 Play from Plex</b> puts a movie or an episode from our Plex library on a pad's stage. <%= px.message %><% if (px.hint) { %> <a href="<%= px.hint %>">Get Plex access ›</a><% } %></p>
+        <% } %>
         <label class="fld hide" id="embedFld">YouTube / Twitch link
           <input type="text" id="embed" name="embed" inputmode="url" placeholder="https://youtu.be/… · https://twitch.tv/channel" maxlength="300">
         </label>
@@ -214,17 +226,17 @@
           <span class="muted" id="twNote">From your connected Twitch — edit or clear it to use another link.</span>
         </div>
         <% } %>
-        <label class="fld">Title <span class="muted">(optional, shows on the Pads list)</span>
+        <label class="fld np">Title <span class="muted">(optional, shows on the Pads list)</span>
           <input type="text" id="title" name="title" maxlength="80" placeholder="What's on?">
         </label>
 
-        <label class="fld" for="mins">Length (max)</label>
-        <div class="mins">
+        <label class="fld np" for="mins">Length (max)</label>
+        <div class="mins np">
           <input type="range" id="minsR" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= defMin %>" aria-label="Max minutes">
           <span class="num"><input type="number" id="mins" name="minutes" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= defMin %>" inputmode="numeric"> min</span>
         </div>
 
-        <fieldset class="choice" id="whenSet"><legend>When</legend>
+        <fieldset class="choice np" id="whenSet"><legend>When</legend>
           <label><input type="radio" name="when" value="now" checked> <span><b>Now</b><small id="nowTxt">if a slot is free</small></span></label>
           <label><input type="radio" name="when" value="later"> <span><b>Later</b><small>pick a time</small></span></label>
           <label><input type="radio" name="when" value="queue"> <span><b>Queue</b><small id="queueTxt">next free slot</small></span></label>
@@ -233,15 +245,33 @@
           <input type="datetime-local" id="at" name="at">
         </label>
 
-        <div class="hold">Hold: <b id="holdAmt">0</b> PAT <span class="muted">· you have <b id="bal"><%= fmt(me.points_balance) %></b> · you only pay for minutes live</span></div>
-        <button type="submit" class="btn primary big" id="bookBtn">🎥 Go live now</button>
+        <div class="hold np">Hold: <b id="holdAmt">0</b> PAT <span class="muted">· you have <b id="bal"><%= fmt(me.points_balance) %></b> · you only pay for minutes live</span></div>
+        <button type="submit" class="btn primary big np" id="bookBtn">🎥 Go live now</button>
         <p class="msg" id="bookMsg" role="status" aria-live="polite"></p>
       </form>
+      <% if (px && px.show && px.ok) { %>
+      <!-- 1.99jn: 📼 Play from Plex: search the library, pick a title, see the price, confirm (stage-plex.js -> /api/medialib/*) -->
+      <div class="px hide" id="plexPanel" data-free="<%= px.free ? 1 : 0 %>" data-per-hour="<%= px.price_per_hour %>" data-quality="<%= px.quality %>"
+           data-cap="<%= px.daily_cap %>" data-pause="<%= px.pause_max_min %>">
+        <p class="pxnote">⚖️ <b>Only show what we have the rights to show.</b> Every play is logged (who, what, which pad).</p>
+        <p class="muted" id="plexInfo" aria-live="polite"></p>
+        <form id="plexSearch" class="row" autocomplete="off" role="search">
+          <input type="search" name="q" minlength="2" maxlength="100" placeholder="Search Plex: a movie, a show…" aria-label="Search the Plex library">
+          <button type="submit" class="btn">Search</button>
+        </form>
+        <div id="plexResults" class="px-grid"></div>
+        <div id="plexPick" class="px-pick hide"></div>
+        <p class="msg" id="plexMsg" role="status" aria-live="polite"></p>
+        <p class="muted"><% if (px.free) { %>Free for site admins.<% } else { %>Price: <%= fmt(px.price_per_hour) %> PAT per started hour of what's left of the title from where you start it. It's taken when you press Play and comes straight back if the stream never gets on the stage. Half goes to the pad's room vault, half to Fort Knox (all to Fort Knox on your own pad).<% } %>
+          It plays in a 📼 library slot on the pad you picked (one per pad, the same rules as any slot). You get pause / seek / stop in "Your slot" above; it ends at the end of the title, when you stop it, or after <%= px.pause_max_min %> minutes paused.</p>
+      </div>
+      <% } %>
     </section>
   <% } %>
   <p class="muted center"><a href="/p">Pads ›</a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=7" defer></script>
+<script src="/public/js/stage-book.js?v=8" defer></script>
+<% if (me && px && px.show) { %><script src="/public/js/stage-plex.js?v=1" defer></script><% } %>
 <% if (me) { %><script src="/public/js/restream.js?v=1" defer></script><% } %>
 <% if (rtc) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=2">
 <script src="/public/js/webrtc-client.js?v=2" defer></script>
