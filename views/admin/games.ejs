@@ -16,12 +16,15 @@
   </section>
 
   <section class="adm-card" id="jackpot" aria-labelledby="jackpotT">
-    <h2 id="jackpotT">Jackpot top-up</h2>
-    <p class="adm-help">Adds an amount to the casino jackpot pot (a jackpot rake row in your name).</p>
+    <h2 id="jackpotT">House adjustment <span class="adm-pill admin">admins</span></h2>
+    <p class="adm-help">Moves PAT between the Federal Reserve and the House (the casino jackpot pot) - never a free mint. A positive amount is paid by the Reserve (refused if it can't cover it); a negative one returns what the House holds to the Reserve. Needs a reason; every adjustment is in the admin log.</p>
+    <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <form id="jackpotForm" class="adm-form" action="/api/g/wheel/jackpot" method="POST">
-      <label for="jackpotAmount">Amount (PAT)<input type="number" id="jackpotAmount" name="amount" required></label>
-      <div class="adm-actions"><button type="submit">Update jackpot</button><span id="jackpotStatus" class="adm-msg" role="status"></span></div>
+      <label for="jackpotAmount">Amount (PAT)<input type="number" id="jackpotAmount" name="amount" step="1" required></label>
+      <label for="jackpotReason">Reason<input type="text" id="jackpotReason" name="reason" minlength="8" maxlength="200" required placeholder="why the House needs this"></label>
+      <div class="adm-actions"><button type="submit">Adjust the House</button><span id="jackpotStatus" class="adm-msg" role="status"></span></div>
     </form>
+    <% } %>
   </section>
 </div>
 

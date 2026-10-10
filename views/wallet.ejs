@@ -119,6 +119,7 @@
     <p class="center info">👋 <%- t('wallet.welcome.paid', { n: fmt(welcomeStatus.amount) }) %></p>
   <% } %>
   <% if (!canAct) { %><p class="hint"><%- t('wallet.link_hint') %></p><% } %>
+  <%- include('partials/donate-card', { donate: locals.donate }) %>
 
   <!-- ───────── Stashes ───────── -->
   <h2><%- t('wallet.h.stashes') %></h2>

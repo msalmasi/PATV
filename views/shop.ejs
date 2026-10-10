@@ -27,6 +27,7 @@
   <% } %>
 
   <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+  <% if (!store && me) { %><%- include('partials/donate-card', { donate: locals.donate }) %><% } %>
 
   <div class="bar">
     <div class="links">

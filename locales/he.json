@@ -3196,5 +3196,16 @@
   "auth.plex.expired": "ההתחברות הזו ל־Plex פגה או שלא התחילה כאן. נסו שוב.",
   "auth.plex.failed": "ההתחברות עם Plex לא הצליחה. נסו שוב.",
   "auth.plex.unfinished": "ההתחברות עם Plex לא הושלמה. נסו שוב.",
-  "auth.plex.welcome": "ברוכים הבאים ל־PATV, {name}! חשבון ה־Plex שלכם מקושר."
+  "auth.plex.welcome": "ברוכים הבאים ל־PATV, {name}! חשבון ה־Plex שלכם מקושר.",
+  "donate.title": "תמכו ב-PATV",
+  "donate.blurb": "תרמו בכרטיס כדי ש-PATV ימשיך לפעול. כתודה, כל 1 $ מוסיף {rate} PAT לארנק שלכם.",
+  "donate.no_cashout": "תרומות הן סופיות. ה-PAT נשאר ב-PATV - אי אפשר לפדות אותו בכסף.",
+  "donate.thanks": "תודה! ה-PAT שלכם יגיע לארנק בעוד רגע.",
+  "donate.cancelled": "התרומה בוטלה - לא חויב דבר.",
+  "donate.amount_label": "סכום (USD)",
+  "donate.button": "תרמו בכרטיס",
+  "donate.notice_title": "💖 תודה שתמכתם ב-PATV",
+  "donate.notice_body": "התרומה שלכם בסך {usd} $ הוסיפה {pat} PAT לארנק שלכם.",
+  "js.donate.bad_amount": "הזינו מספר שלם של דולרים בין 1 ל-{max}.",
+  "js.donate.failed": "תשלום בכרטיס אינו זמין כרגע."
 }

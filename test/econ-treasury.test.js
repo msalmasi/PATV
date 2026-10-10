@@ -66,7 +66,7 @@ test("sync: the budget is live only while Pepe reports it; grant flows follow it
   assert.equal(F.vaultFor("room_owner"), "reserve", "not a grant: stays on the Reserve");
   F.sync({ reserve: 5000000, flows: FLOWS });         // an older Pepe / treasury off: no key
   assert.equal(F.treasuryLive(), false);
-  assert.equal(F.vaultFor("levelup"), "reserve", "flow says incentives but the budget isn't live: Reserve, as before");
+  assert.equal(F.vaultFor("levelup"), "incentives", "1.99jw: flow says incentives but the budget isn't live: STILL the budget (refused / queued), never the Reserve");
   F.sync({ reserve: 5000000, flows: FLOWS, incentives: { balance: "lots" } });
   assert.equal(F.treasuryLive(), false, "a malformed budget is ignored");
 });
@@ -179,10 +179,15 @@ test("queueSummary lists groups and the oldest waiting grants", async () => {
   assert.equal(s.items[0].type, "Level-up reward (Lv 9)");
 });
 
-test("treasury off: grants go back to the Reserve (skip when short), the queue waits", async () => {
-  F.sync({ reserve: 0, flows: FLOWS });
+test("1.99jw: budget missing while the flows say incentives: grants are QUEUED (never a Reserve claim), the queue waits", async () => {
+  F.sync({ reserve: 5000000, flows: FLOWS });
   const a = await mkUser();
-  assert.equal(await F.fundPayout(a, 1000, "levelup", "Level-up"), false, "Reserve 0: skipped as in v1, not queued");
+  const rc = (await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow = 'levelup'"))[0].n;
+  assert.equal(await F.fundPayout(a, 1000, "levelup", "Level-up"), "queued", "owed, paid once the budget is synced");
+  assert.equal(await bal(a), 0, "not credited yet");
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE flow = 'levelup'"))[0].n, rc, "no Reserve claim, though the Reserve could cover it");
+  assert.equal(await F.canFund("levelup", 1), false);
+  assert.equal(await F.fundable("levelup"), 0);
   const before = (await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE queued = 1"))[0].n;
   await F.drainQueue();
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM reserve_claims WHERE queued = 1"))[0].n, before, "nothing drains while off");

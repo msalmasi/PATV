@@ -3106,5 +3106,16 @@
   "auth.plex.expired": "그 Plex 로그인은 만료됐거나 여기서 시작되지 않았어요. 다시 시도해 주세요.",
   "auth.plex.failed": "Plex 로그인에 실패했어요. 다시 시도해 주세요.",
   "auth.plex.unfinished": "Plex 로그인이 끝나지 않았어요. 다시 시도해 주세요.",
-  "auth.plex.welcome": "PATV에 오신 걸 환영해요, {name}님! Plex 계정이 연결됐어요."
+  "auth.plex.welcome": "PATV에 오신 걸 환영해요, {name}님! Plex 계정이 연결됐어요.",
+  "donate.title": "PATV 후원하기",
+  "donate.blurb": "카드로 후원해 PATV가 계속 운영되도록 도와주세요. 감사의 뜻으로 1 $마다 지갑에 {rate} PAT가 추가됩니다.",
+  "donate.no_cashout": "후원은 취소할 수 없습니다. PAT는 PATV 안에서만 쓰이며 현금으로 바꿀 수 없습니다.",
+  "donate.thanks": "감사합니다! 곧 PAT가 지갑에 들어옵니다.",
+  "donate.cancelled": "후원이 취소되었습니다. 청구된 금액은 없습니다.",
+  "donate.amount_label": "금액(USD)",
+  "donate.button": "카드로 후원하기",
+  "donate.notice_title": "💖 PATV를 후원해 주셔서 감사합니다",
+  "donate.notice_body": "{usd} $ 후원으로 지갑에 {pat} PAT가 추가되었습니다.",
+  "js.donate.bad_amount": "1부터 {max}까지 달러를 정수로 입력하세요.",
+  "js.donate.failed": "지금은 카드 결제를 사용할 수 없습니다."
 }

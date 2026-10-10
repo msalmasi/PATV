@@ -1138,7 +1138,8 @@ require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp 
 require("./padlook").register(app, { addUser });       // 1.99es: a pad's look - avatar, banner, accent (/api/rooms/:slug/look, /media/pad/<file>)
 require("./padcosmetics").register(app, { addUser });   // 1.99ew: premium pad cosmetics - frames, glows, badges, animated avatar (/api/rooms/:slug/cosmetics; 100% Fort Knox / gift 50/50)
 require("./premium").register(app, { addUser });        // 1.99iv: Prime Time (pad tier) + Season Pass (personal tier) - /premium, PAT subscriptions, daily renewals, admin comps
-require("./stripebilling").register(app, { addUser });  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
+require("./stripebilling").register(app, { addUser });
+require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
@@ -1353,6 +1354,11 @@ app.post("/api/stats/supply", async (req, res) => {
     await supplyReady;
     await runQuery("INSERT INTO supply_snapshot (id, pools, updated_at) VALUES (1, ?, CURRENT_TIMESTAMP) " +
                    "ON CONFLICT(id) DO UPDATE SET pools = excluded.pools, updated_at = CURRENT_TIMESTAMP", [JSON.stringify(clean)]);
+    // 1.99jw: today's row of the daily supply history (+ Pepe's mint journal / Fed band) - never fails the snapshot
+    try {
+      const SH = require("./supplyhistory");
+      await SH.record(await patSupply(), SH.cleanMonetary(req.body.monetary));
+    } catch (e) { console.error("supply history:", e.message); }
     res.json({ ok: true });
   } catch (e) {
     console.error("supply snapshot:", e);
@@ -2239,26 +2245,8 @@ app.post(
 // Verify a pending Camfrog link — called by the bot when a user types !verify CODE
 app.post("/api/users/camfrog/verify", verifyCamfrogLink);
 
-// Zero out a user's balance (for account merging)
-app.post("/api/users/zero-balance", async (req, res) => {
-  const { userId, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
-    return res.status(403).send("Access denied");
-  }
-  try {
-    const before = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
-    await runQuery("UPDATE users SET points_balance = 0 WHERE userId = ?", [userId]);
-    const was = before.length ? Number(before[0].points_balance) || 0 : 0;
-    if (was) {   // logged, so the ledger still adds up to the balance
-      await runQuery("INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [uuidv4(), userId, "balance-zeroed", -was]);
-    }
-    res.json({ message: "Balance zeroed" });
-  } catch (error) {
-    console.error("Error zeroing balance:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-});
+// 1.99jw: POST /api/users/zero-balance is gone - Pepe's auto-account merge moves the whole balance atomically with
+// POST /api/users/merge-balance (botcredits.js), so nothing is zeroed after a separate credit any more.
 
 // GET /api/users/camfrog/:camfrogUsername (lookup by Camfrog login) lives in userlookup.js since
 // 1.99fz: bot token required, minimal field set, touch() only for the bot.
@@ -2636,32 +2624,19 @@ app.get("/api/u/:username/wheel/spins-left", authenticateToken, async (req, res)
 });
 
 // HTTP Post endpoint to update the jackpot
+// 1.99jw: ADMIN ONLY (Staff lost it), a written reason, and a Fed <-> House MOVE - never a free mint: + is paid by the
+// Federal Reserve (a house_adjust claim, refused when the Reserve can't cover it), - returns only what the House holds
+// to the Reserve. Audited (staffgrant.houseAdjust).
 app.post("/api/g/wheel/jackpot", addUser, requireUser, async (req, res) => {
-  const { amount } = req.body;
-  const userId = req.user.userId; // guaranteed by requireUser
-  const jackpotId = uuidv4(); // Function to generate a UUID v4
-  const spinId = "admin:" + uuidv4();   // 1.99gx: tagged - an admin's adjustment, itemised in Pepe's flow table (jackpotflows.js)
-  const userType = req.user ? req.user.class : null;
-  const username = req.user ? req.user.username : null;
-  if (userType === "Admin" || userType === "Staff") {
-    const sql = `INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)`;
-    try {
-      await runQuery(sql, [jackpotId, spinId, userId, amount]);
-      res.json({ message: "Jackpot updated successfully." });
-      // req.flash('success', "Jackpot updated successfully.");
-      // return res.redirect('/admin/panel');
-    } catch (error) {
-      console.error(error);
-      res.json({ message: "Failed to update the jackpot." });
-      // req.flash('error', "Failed to update the jackpot.");
-      // return res.redirect('/admin/panel');
-    }
-  } else {
-    req.flash(
-      "error",
-      "Access denied. You must be an admin or staff to access this page."
-    );
-    return res.redirect("/login");
+  try {
+    // the class as the DATABASE has it now (the JWT's can be stale)
+    const me = (await getQuery("SELECT userId, username, class FROM users WHERE userId = ?", [req.user.userId]))[0];
+    if (!me || me.class !== "Admin") return res.status(403).json({ message: "Admins only." });
+    const r = await require("./staffgrant").houseAdjust({ userId: me.userId, username: me.username }, (req.body || {}).amount, (req.body || {}).reason);
+    res.status(r.status).json(r.body);
+  } catch (error) {
+    console.error("[house_adjust]", error);
+    res.status(500).json({ message: "Failed to update the jackpot." });
   }
 });
 
@@ -2691,9 +2666,10 @@ app.post(
   async (req, res) => {
     const userType = req.user ? req.user.class : null;
 
-    if (userType === "Admin" || userType === "Staff") {
-      // 1.99jt: paid by the Federal Reserve (a staff_grant claim Pepe settles), refused when it can't cover it -
-      // never minted (staffgrant.js)
+    // 1.99jw: ADMIN ONLY (Staff lost access); paid by the INCENTIVE BUDGET (an incentives:staff_grant claim Pepe
+    // settles), refused when it can't cover it or the weekly staff-grant cap is reached - never minted, never the Reserve
+    // (staffgrant.js)
+    if (userType === "Admin") {
       try {
         const r = await require("./staffgrant").grant(req.params.username, req.body && req.body.amount, req.user.username);
         res.status(r.status).json(r.body);
@@ -2701,6 +2677,8 @@ app.post(
         console.error("[staffgrant]", error);
         res.status(500).json({ message: "Failed to transfer points." });
       }
+    } else if (userType === "Staff") {
+      return res.status(403).json({ message: "PAT grants are for Admins only." });
     } else {
       req.flash(
         "error",
@@ -3088,6 +3066,9 @@ app.post("/api/blackjack/result", async (req, res) => {
       // when the account exists (1.99ga - else the catch rolls the whole result back)
       await ledger.postOrThrow(userId, Number(payout), "blackjack payout", { transactionId, source: "blackjack" });
       if (Number(payout) > 0) {
+        // 1.99jw: House flash liquidity - a payout that takes the House below its hard floor books the gap as a
+        // flash:house:blackjack claim (the Fed lends it to the House) while Pepe allows it; otherwise as before
+        await funding.houseFlashCover("blackjack", Number(payout), userId, "blackjack payout", "bj:" + transactionId);
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
                        [uuidv4(), "bj:" + transactionId, userId, -Number(payout)]);   // 1.99gx: tagged (jackpotflows.js)
       }
@@ -3986,72 +3967,10 @@ app.post(
   }
 );
 
-// -- Restored bonus/xp/jackpot endpoints (accidentally removed during the wheel refactor) --
-app.post("/api/bonus/chatwinner", async (req, res) => {
-    const { userId, type, amount } = req.body;
-    const password = req.body.password;
-
-    if (password !== process.env.TWITCH_BOT_TOKEN) {
-        return res.status(403).send("Access denied");
-    }
-  
-    if (!userId || !amount || !type) {
-      return res.status(400).send("Missing required fields");
-    }
-    // 1.63: Discord/Twitch rewards are paid OUT of a vault ("platform_rewards"), never minted.
-    // (Pepe's own credits through here are already paid for on his side.)
-    // 1.99ga: an account that doesn't exist is refused BEFORE any vault is touched
-    if (!(await ledger.userExists(userId))) {
-      console.warn(`[bonus] ${type} ${amount} for missing account ${userId} - refused (${ledger.E_TARGET_NOT_FOUND})`);
-      return res.status(404).json({ success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND });
-    }
-    if (Number(amount) > 0 && /^(discord|twitch)-/i.test(String(type))) {
-      if (!(await funding.takeFunds("platform_rewards", amount, userId, type))) {
-        return res.status(409).json({ success: false, skipped: true, message: "the bank can't cover it" });
-      }
-    }
-  
-    const cp = await resolveCounterparty(req.body.counterparty);
-    const idem = await idemBegin(req, res, "bonus/chatwinner");
-    if (idem.replay) return;
-    try {
-      // Start a transaction
-      const transactionId = uuidv4();
-      const bonusId = uuidv4();
-      await runQuery("BEGIN TRANSACTION");
-  
-      // Credit, or debit only what the balance covers: a deduction can never take anyone below zero.
-      // 1.99ga: balance and ledger row move together, only for an account that exists.
-      const amt = Number(amount);
-      const posted = await ledger.post(userId, amt, "bonus win", { requireCover: true, counterparty: cp, transactionId, source: `bonus ${type}` });
-      if (!posted.ok) {
-        await runQuery("ROLLBACK");
-        const body = posted.code === ledger.E_INSUFFICIENT ? { success: false, error: "insufficient" }
-                                                           : { success: false, error: "no_user", code: ledger.E_TARGET_NOT_FOUND };
-        const status = posted.code === ledger.E_INSUFFICIENT ? 402 : 404;
-        idem.done(status, body);
-        return res.status(status).json(body);
-      }
-
-      // Insert into bonus_winners table
-      await runQuery(
-        "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-        [bonusId, type, userId, transactionId, amount]
-      );
-  
-      // Commit the transaction
-      await runQuery("COMMIT");
-  
-      idem.done(200, { message: "Bonus winner logged and points awarded successfully" });
-      res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
-    } catch (error) {
-      // Rollback in case of error
-      await runQuery("ROLLBACK");
-      idem.fail();
-      console.error("Failed to process bonus winner:", error);
-      res.status(500).send("Failed to process bonus winner");
-    }
-  });
+// 1.99jw: the bot credit / House endpoints live in botcredits.js: POST /api/bonus/chatwinner (a positive non-platform
+// credit must name its source + ref; every call logged in bot_credit_log, idempotent per ref), POST /api/g/heist/jackpot-adjust
+// (source + ref required, logged, idempotent), POST /api/users/merge-balance, POST /api/g/stale/reclaimed.
+require("./botcredits").register(app, { isBotToken, idemBegin, resolveCounterparty });
 
 // Grant XP to a user (bot-authenticated) — used for duel/heist wins. Runs the same
 // updateLevel path as the wheel, so level-ups and their bonuses behave identically.
@@ -4072,72 +3991,8 @@ app.post("/api/u/grant-xp", async (req, res) => {
   }
 });
 
-// Adjust the jackpot pool from the !heist game. Positive amount FEEDS the bank
-// (e.g. busted heist wagers), negative DRAINS it (heist winnings paid out from the pot).
-// Bot-authenticated (same token pattern as chatwinner). Returns the new pot total.
-app.post("/api/g/heist/jackpot-adjust", async (req, res) => {
-  const { amount, userId, password } = req.body;
-  if (password !== process.env.TWITCH_BOT_TOKEN) {
-    return res.status(403).send("Access denied");
-  }
-  if (amount === undefined || amount === null || isNaN(Number(amount))) {
-    return res.status(400).send("Missing or invalid amount");
-  }
-  try {
-    const jackpotId = uuidv4();
-    const spinId = "bot:" + uuidv4();     // 1.99gx: tagged - Pepe logs these himself (jackpotflows.js keeps them apart)
-    await runQuery(
-      "INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
-      [jackpotId, spinId, userId || null, Math.round(Number(amount))]
-    );
-    const rows = await getQuery("SELECT SUM(amount) AS pot FROM jackpot_rakes");
-    const pot = (rows && rows[0] && rows[0].pot) || 0;
-    res.status(200).json({ success: true, jackpotTotal: pot });
-  } catch (error) {
-    console.error("Heist jackpot-adjust error:", error);
-    res.status(500).send("Failed to adjust jackpot");
-  }
-});
-
-// HTTP POST endpoint to handle bonus winner
-app.post("/api/bonus/winner", authenticateToken, addUser, async (req, res) => {
-  const { userId, type, amount } = req.body;
-
-  const userType = req.user ? req.user.class : null;
-  if (userType !== "Admin" || userType !== "Staff") {
-      return res.status(403).send("Access denied");
-  }
-
-  if (!userId || !amount || !type) {
-    return res.status(400).send("Missing required fields");
-  }
-
-  try {
-    // Start a transaction
-    const transactionId = uuidv4();
-    const bonusId = uuidv4();
-    await runQuery("BEGIN TRANSACTION");
-
-    // Add points to the winner's points balance (1.99ga: logged only when it really moved)
-    await ledger.postOrThrow(userId, Number(amount), "bonus win", { transactionId, source: "bonus/winner" });
-
-    // Insert into bonus_winners table
-    await runQuery(
-      "INSERT INTO bonus_winners (bonusId, type, userId, transactionId, amount) VALUES (?, ?, ?, ?, ?)",
-      [bonusId, type, userId, transactionId, amount]
-    );
-
-    // Commit the transaction
-    await runQuery("COMMIT");
-
-    res.status(200).send({ message: "Bonus winner logged and points awarded successfully" });
-  } catch (error) {
-    // Rollback in case of error
-    await runQuery("ROLLBACK");
-    console.error("Failed to process bonus winner:", error);
-    res.status(500).send("Failed to process bonus winner");
-  }
-});
+// (1.99jw: POST /api/g/heist/jackpot-adjust moved to botcredits.js; the dead POST /api/bonus/winner - it always
+// answered 403 - is gone.)
 
 // Is a wheel page (the OBS "WheelSource") connected to receive spins? Pepe checks before a
 // !spin and his OBS watchdog refreshes the source when nothing is listening.

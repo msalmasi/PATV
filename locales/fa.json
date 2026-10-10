@@ -3151,5 +3151,16 @@
   "auth.plex.expired": "این ورود Plex منقضی شده یا از اینجا شروع نشده است. لطفا دوباره امتحان کن.",
   "auth.plex.failed": "ورود با Plex انجام نشد. لطفا دوباره امتحان کن.",
   "auth.plex.unfinished": "ورود با Plex تمام نشد. لطفا دوباره امتحان کن.",
-  "auth.plex.welcome": "به PATV خوش آمدی، {name}! حساب Plex تو متصل شد."
+  "auth.plex.welcome": "به PATV خوش آمدی، {name}! حساب Plex تو متصل شد.",
+  "donate.title": "از PATV حمایت کنید",
+  "donate.blurb": "با کارت کمک کنید تا PATV ادامه دهد. به نشانه قدردانی، هر 1 $ مقدار {rate} PAT به کیف پول شما اضافه می‌کند.",
+  "donate.no_cashout": "کمک‌ها قطعی هستند. PAT در PATV می‌ماند - قابل تبدیل به پول نیست.",
+  "donate.thanks": "سپاسگزاریم! PAT شما تا لحظاتی دیگر در کیف پولتان است.",
+  "donate.cancelled": "کمک لغو شد - هیچ مبلغی کسر نشد.",
+  "donate.amount_label": "مبلغ (USD)",
+  "donate.button": "کمک با کارت",
+  "donate.notice_title": "💖 از حمایت شما از PATV سپاسگزاریم",
+  "donate.notice_body": "کمک {usd} $ شما {pat} PAT به کیف پولتان اضافه کرد.",
+  "js.donate.bad_amount": "یک عدد صحیح دلار از 1 تا {max} وارد کنید.",
+  "js.donate.failed": "پرداخت با کارت اکنون در دسترس نیست."
 }

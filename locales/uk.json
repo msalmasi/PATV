@@ -3241,5 +3241,16 @@
   "auth.plex.expired": "Цей вхід Plex прострочено або його розпочато не тут. Спробуй ще раз.",
   "auth.plex.failed": "Вхід через Plex не вдався. Спробуй ще раз.",
   "auth.plex.unfinished": "Вхід через Plex не завершено. Спробуй ще раз.",
-  "auth.plex.welcome": "Вітаємо в PATV, {name}! Твій акаунт Plex прив’язано."
+  "auth.plex.welcome": "Вітаємо в PATV, {name}! Твій акаунт Plex прив’язано.",
+  "donate.title": "Підтримати PATV",
+  "donate.blurb": "Підтримайте PATV карткою, щоб сайт працював далі. На знак подяки кожен 1 $ додає {rate} PAT у ваш гаманець.",
+  "donate.no_cashout": "Пожертви остаточні. PAT залишаються на PATV - їх не можна вивести в гроші.",
+  "donate.thanks": "Дякуємо! Ваші PAT з’являться в гаманці за мить.",
+  "donate.cancelled": "Пожертву скасовано - нічого не списано.",
+  "donate.amount_label": "Сума (USD)",
+  "donate.button": "Пожертвувати карткою",
+  "donate.notice_title": "💖 Дякуємо за підтримку PATV",
+  "donate.notice_body": "Ваша пожертва {usd} $ додала {pat} PAT у ваш гаманець.",
+  "js.donate.bad_amount": "Введіть ціле число доларів від 1 до {max}.",
+  "js.donate.failed": "Оплата карткою зараз недоступна."
 }

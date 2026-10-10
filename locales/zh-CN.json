@@ -3106,5 +3106,16 @@
   "auth.plex.expired": "该 Plex 登录已过期，或并非从这里发起。请重试。",
   "auth.plex.failed": "Plex 登录失败。请重试。",
   "auth.plex.unfinished": "Plex 登录未完成。请重试。",
-  "auth.plex.welcome": "欢迎来到 PATV，{name}！你的 Plex 账号已关联。"
+  "auth.plex.welcome": "欢迎来到 PATV，{name}！你的 Plex 账号已关联。",
+  "donate.title": "支持 PATV",
+  "donate.blurb": "用银行卡捐助,让 PATV 持续运营。作为感谢,每 1 $ 会向你的钱包加入 {rate} PAT。",
+  "donate.no_cashout": "捐助一经完成不可撤销。PAT 只留在 PATV 内,不能兑换成现金。",
+  "donate.thanks": "谢谢!你的 PAT 稍后就会到账。",
+  "donate.cancelled": "捐助已取消,未扣任何款项。",
+  "donate.amount_label": "金额(USD)",
+  "donate.button": "用银行卡捐助",
+  "donate.notice_title": "💖 感谢你支持 PATV",
+  "donate.notice_body": "你捐助的 {usd} $ 已为你的钱包加入 {pat} PAT。",
+  "js.donate.bad_amount": "请输入 1 到 {max} 之间的整数美元金额。",
+  "js.donate.failed": "银行卡付款目前不可用。"
 }

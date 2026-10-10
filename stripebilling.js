@@ -22,6 +22,15 @@
 // Entitlements are the same rows PAT pays for (premium.js): a pad / account is on while paid_through OR
 // stripe_through is ahead. POST /api/premium/stripe/portal opens Stripe's billing portal (cancel / change card).
 //
+// 1.99jw "Support PATV" donations (Economy v3 - the ONLY way the site creates PAT): POST /api/premium/stripe/donate
+// {usd} (whole dollars, 1..1000) -> a Checkout Session in mode "payment" (price_data, product "Support PATV", metadata
+// {kind:"donation", userId}). Its checkout.session.completed (payment_status "paid") credits the donor in ONE transaction
+// with the stripe_events row: pat = floor(amount_total cents * rate / 100), bonus = floor(pat * bonus_pct / 100) (rate /
+// bonus_pct = Pepe's monetary.donation, defaults 500,000 / 20), a "donation" transactions row "don-<event id>", and a
+// "mint:donation" reserve_claims row (claimId "don-<event id>", meta {bonus, usd_cents, rate, bonus_pct, event}) - Pepe
+// journals the mint (policy "donation") and mints `bonus` into the incentive budget. Donated PAT is purchased PAT: there
+// is no cash-out, and there must stay none. A replayed event changes nothing (stripe_events + the fixed ids).
+//
 // TEST MODE (later): put sk_test_ / whsec_ from the Stripe dashboard's test mode in the env, create two test Prices,
 // set STRIPE_ENABLED=1 on STAGING only, point a test-mode webhook endpoint at
 // https://staging.publicaccess.tv/api/premium/stripe/webhook (or `stripe listen --forward-to localhost:3100/...`),
@@ -54,6 +63,7 @@ function init() {
       await require("./premium").init();
       await runQuery(`CREATE TABLE IF NOT EXISTS stripe_events (id TEXT PRIMARY KEY, type TEXT NOT NULL, created INTEGER NOT NULL,
         received INTEGER NOT NULL, outcome TEXT)`);
+      await require("./funding").init();          // 1.99jw: reserve_claims (+ meta) for the donation mint claims
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -134,6 +144,33 @@ async function checkout(user, { tier, pad } = {}) {
   });
   return { url: s.url, id: s.id };
 }
+const DONATE_MAX_USD = 1000;
+/** 1.99jw: a one-off "Support PATV" Checkout Session (mode payment). -> {url, id} */
+async function donate(user, { usd, back } = {}) {
+  const P = require("./premium");
+  await init();
+  if (!user || !user.userId) throw new P.Refuse(401, "Sign in first.");
+  const n = Number(usd);
+  if (!Number.isInteger(n) || n < 1 || n > DONATE_MAX_USD) throw new P.Refuse(400, `Pick a whole number of dollars from 1 to ${DONATE_MAX_USD}.`);
+  const page = back === "/shop" ? "/shop" : "/wallet";
+  const s = await api("/checkout/sessions", {
+    mode: "payment", client_reference_id: user.userId,
+    line_items: { 0: { quantity: 1, price_data: { currency: "usd", unit_amount: n * 100, product_data: { name: "Support PATV" } } } },
+    metadata: { kind: "donation", userId: user.userId },
+    success_url: site() + page + "?donate=success",
+    cancel_url: site() + page + "?donate=cancel",
+  });
+  return { url: s.url, id: s.id };
+}
+
+/** 1.99jw: what the Support PATV card (views/partials/donate-card.ejs) needs; enabled:false hides it. */
+function donateLocals(back, result) {
+  const st = publicState();
+  if (!st.enabled) return { stripe: st };
+  const terms = require("./funding").donationTerms();
+  return { stripe: st, back, result: result === "success" || result === "cancel" ? result : null, rate: terms.rate, bonus_pct: terms.bonus_pct, max: DONATE_MAX_USD };
+}
+
 /** Stripe's billing portal for the customer behind one of the viewer's card subscriptions. -> {url} */
 async function portal(user, { tier, pad } = {}) {
   const P = require("./premium");
@@ -174,12 +211,36 @@ async function handleEvent(ev) {
   const t = clock();
   const obj = (ev.data && ev.data.object) || {};
   let notice = null;
+  let donation = null;
   const out = await tx(async () => {
     const ins = await runQuery("INSERT OR IGNORE INTO stripe_events (id, type, created, received) VALUES (?, ?, ?, ?)",
                                [ev.id, ev.type, Number(ev.created) || 0, t]);
     if (!ins.changes) return { dup: true, outcome: "dup" };
     let outcome = "ignored";
-    if (ev.type === "checkout.session.completed" && obj.mode === "subscription") {
+    const dm = obj.metadata || {};
+    if (ev.type === "checkout.session.completed" && dm.kind === "donation") {
+      // 1.99jw: a "Support PATV" donation - the PAT credit + its mint claim, with this event's row, or nothing
+      if (obj.payment_status !== "paid") outcome = "donation-unpaid";
+      else {
+        const ledger = require("./ledger");
+        const target = await ledger.resolveUserId(dm.userId || obj.client_reference_id);
+        const cents = Math.floor(Number(obj.amount_total) || 0);
+        if (!target) { outcome = "donation-no-user"; console.error(`[stripe] donation ${ev.id}: account ${dm.userId} not found - not credited`); }
+        else if (cents <= 0) outcome = "donation-zero";
+        else {
+          const terms = require("./funding").donationTerms();
+          const pat = Math.floor((cents * terms.rate) / 100);
+          const bonus = Math.floor((pat * terms.bonus_pct) / 100);
+          const id = "don-" + ev.id;
+          await ledger.postOrThrow(target, pat, "donation", { transactionId: id, source: "stripe donation" });
+          await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, 'mint:donation', ?, 'donation', ?, ?)",
+                         [id, target, pat, JSON.stringify({ bonus, usd_cents: cents, rate: terms.rate, bonus_pct: terms.bonus_pct, event: ev.id })]);
+          donation = { userId: target, pat, cents, ref: "donation-" + ev.id };
+          console.log(`[stripe] donation ${ev.id}: $${(cents / 100).toFixed(2)} -> ${pat} PAT for ${target} (+${bonus} to the incentive budget)`);
+          outcome = "donation-credited";
+        }
+      }
+    } else if (ev.type === "checkout.session.completed" && obj.mode === "subscription") {
       const m = obj.metadata || {};
       if (P.TIERS[m.tier] && m.target) {
         const sub = await P.ensureSub(m.tier, String(m.target), t);
@@ -226,6 +287,16 @@ async function handleEvent(ev) {
     const m = (obj && obj.metadata) || invoiceMeta(obj || {});
     if (m && m.tier) await P.afterChange(m.tier, String(m.target || ""));
   }
+  if (donation && !out.dup) {
+    try {
+      const i18n = require("./i18n");
+      await i18n.ensure();
+      const t = i18n.tFor(i18n.getPref(donation.userId) || "en");
+      await require("./inbox").addSafe(donation.userId, { kind: "system", ref: donation.ref, link: "/wallet",
+        title: t("donate.notice_title"),
+        body: t("donate.notice_body", { usd: (donation.cents / 100).toFixed(2), pat: t.num ? t.num(donation.pat) : donation.pat.toLocaleString("en-US") }) });
+    } catch (e) { /* notice only */ }
+  }
   if (notice) {
     const T = P.TIERS[notice.tier];
     try {
@@ -262,10 +333,11 @@ function register(app, { addUser }) {
   };
   app.post("/api/premium/stripe/checkout", off, addUser, json((u, b) => checkout(u, { tier: b.tier, pad: b.pad })));
   app.post("/api/premium/stripe/portal", off, addUser, json((u, b) => portal(u, { tier: b.tier, pad: b.pad })));
+  app.post("/api/premium/stripe/donate", off, addUser, json((u, b) => donate(u, { usd: b.usd, back: b.back })));   // 1.99jw
 }
 
 module.exports = {
-  init, register, enabled, testMode, publicState, priceId, verify, sign, handleEvent, checkout, portal, form,
+  init, register, enabled, testMode, publicState, priceId, verify, sign, handleEvent, checkout, portal, donate, donateLocals, form, DONATE_MAX_USD,
   _setFetch: (fn) => { fetchImpl = fn || ((...a) => fetch(...a)); },
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

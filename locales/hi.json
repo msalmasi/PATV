@@ -3151,5 +3151,16 @@
   "auth.plex.expired": "यह Plex साइन-इन खत्म हो गया या यहाँ से शुरू नहीं हुआ था। कृपया फिर से कोशिश करें।",
   "auth.plex.failed": "Plex साइन-इन नहीं हो पाया। कृपया फिर से कोशिश करें।",
   "auth.plex.unfinished": "Plex साइन-इन पूरा नहीं हुआ। कृपया फिर से कोशिश करें।",
-  "auth.plex.welcome": "PATV में आपका स्वागत है, {name}! आपका Plex अकाउंट लिंक हो गया।"
+  "auth.plex.welcome": "PATV में आपका स्वागत है, {name}! आपका Plex अकाउंट लिंक हो गया।",
+  "donate.title": "PATV का समर्थन करें",
+  "donate.blurb": "PATV को चलाए रखने के लिए कार्ड से योगदान दें। धन्यवाद के रूप में हर 1 $ आपके वॉलेट में {rate} PAT जोड़ता है।",
+  "donate.no_cashout": "दान अंतिम हैं। PAT, PATV पर ही रहते हैं - इन्हें नकद में नहीं बदला जा सकता।",
+  "donate.thanks": "धन्यवाद! आपके PAT कुछ ही पलों में आपके वॉलेट में होंगे।",
+  "donate.cancelled": "दान रद्द - कुछ भी नहीं काटा गया।",
+  "donate.amount_label": "राशि (USD)",
+  "donate.button": "कार्ड से दान करें",
+  "donate.notice_title": "💖 PATV का समर्थन करने के लिए धन्यवाद",
+  "donate.notice_body": "आपके {usd} $ के दान ने आपके वॉलेट में {pat} PAT जोड़े।",
+  "js.donate.bad_amount": "1 से {max} तक डॉलर की पूर्ण संख्या दर्ज करें।",
+  "js.donate.failed": "कार्ड भुगतान अभी उपलब्ध नहीं है।"
 }

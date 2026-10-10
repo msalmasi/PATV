@@ -3106,5 +3106,16 @@
   "auth.plex.expired": "そのPlexサインインは期限切れか、ここから開始されたものではありません。もう一度お試しください。",
   "auth.plex.failed": "Plexでのログインに失敗しました。もう一度お試しください。",
   "auth.plex.unfinished": "Plexのサインインが完了しませんでした。もう一度お試しください。",
-  "auth.plex.welcome": "PATVへようこそ、{name}さん！Plexアカウントを連携しました。"
+  "auth.plex.welcome": "PATVへようこそ、{name}さん！Plexアカウントを連携しました。",
+  "donate.title": "PATVを支援する",
+  "donate.blurb": "カードで支援してPATVの運営を支えてください。お礼として、1 $ ごとに {rate} PAT がウォレットに追加されます。",
+  "donate.no_cashout": "寄付は確定です。PATはPATV内でのみ使え、換金はできません。",
+  "donate.thanks": "ありがとうございます!まもなくPATがウォレットに届きます。",
+  "donate.cancelled": "寄付はキャンセルされました。請求は発生していません。",
+  "donate.amount_label": "金額(USD)",
+  "donate.button": "カードで寄付する",
+  "donate.notice_title": "💖 PATVへのご支援ありがとうございます",
+  "donate.notice_body": "{usd} $ のご寄付で {pat} PAT がウォレットに追加されました。",
+  "js.donate.bad_amount": "1から{max}までの整数のドル額を入力してください。",
+  "js.donate.failed": "現在カード決済はご利用いただけません。"
 }

@@ -61,7 +61,7 @@ async function reserveStatus() {
   const today = await getQuery(`SELECT flow, COUNT(*) AS n, COALESCE(SUM(amount), 0) AS t FROM reserve_claims
                                 WHERE created >= date('now') GROUP BY flow ORDER BY t DESC`);
   const uns = (await getQuery(`SELECT COALESCE(SUM(amount), 0) AS t FROM reserve_claims
-                               WHERE settled = 0 AND COALESCE(queued, 0) = 0 AND flow NOT LIKE 'incentives:%'`))[0].t;
+                               WHERE settled = 0 AND COALESCE(queued, 0) = 0 AND flow NOT LIKE 'incentives:%' AND flow NOT LIKE 'mint:%'`))[0].t;   // 1.99jw: mints aren't the Reserve's
   const jp = await safe(async () => (await getQuery("SELECT COALESCE(SUM(amount), 0) AS t FROM jackpot_rakes"))[0].t, null);
   return { balance: funding.state.reserve, syncedAt: funding.state.syncedAt || 0, today, todayTotal: today.reduce((a, r) => a + (r.t || 0), 0),
            unsettled: uns, jackpot: jp };
@@ -200,7 +200,9 @@ function register(app, { addUser }) {
     const isAdmin = !!me && me.class === "Admin";
     const roy = await safe(() => require("./royalties").summary(), null);
     return { reserve: isAdmin ? await safe(reserveStatus) : null, loans: isAdmin ? await safe(loanStatus) : null, roy, shop: await safe(shopStatus),
-             inc: isAdmin ? await safe(incentiveStatus) : null };
+             inc: isAdmin ? await safe(incentiveStatus) : null,
+             // 1.99jw: Pepe's monetary policy (flash switches, Fed loan room, House floor, donation rate, grant cap)
+             monetary: isAdmin ? require("./funding").state.monetary : null };
   }));
   app.get("/admin/games", addUser, gate, page("games", "Admin · Games"));
   app.get("/admin/cosmetics", addUser, gate, page("cosmetics", "Admin · Cosmetics & Achievements"));

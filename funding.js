@@ -36,6 +36,18 @@
 // room_vaults = {on, cap}), boosts.routeInTx books the ROOM half of a boost / slot fee / pad cosmetic / challenge fee
 // as a "room:<flow>:<room id>" claim (negative: the site collected it) that Pepe credits to that pad's vault. Those
 // claims are neither the Reserve's nor the incentive budget's.
+//
+// 1.99jw (Economy v3, PAT monetary policy - "the Reserve only funds the protocol"):
+//   * every sync carries Pepe's `monetary` policy (state.monetary, null when absent): flash-liquidity switches, the
+//     Fed loan room, the House hard floor, the donation rate, the weekly staff-grant cap and the budget week.
+//   * a flow Pepe routes to "incentives" never falls back to the Reserve (vaultFor): with no budget synced it is
+//     refused / queued until one is.
+//   * the staff PAT grant is paid by the incentive budget (takeIncentivesRef, claim "incentives:staff_grant").
+//   * House flash liquidity (houseFlashCover): while the House is houseBacked and monetary.flash.house is on, a House
+//     payout that would take it below its hard floor is paid in full and the gap is a "flash:house:<flow>" claim
+//     (Pepe opens a Fed flash loan to the House for it), within the Fed loan room net of unsettled flash claims.
+//   * "mint:donation" claims (Stripe donations, stripebilling.js) are mints Pepe journals - not the Reserve's money,
+//     so unsettledReserve() leaves "mint:%" out; "flash:%" and "house_adjust" are the Reserve's.
 const { v4: uuidv4 } = require("uuid");
 const { runQuery, getQuery } = require("./dbUtils");
 
@@ -55,8 +67,13 @@ const state = {
   room_vaults: null,
   // the pad launchpad: Pepe's {on, live, room_vaults, cfg, budget, spendable, matched, paid} (launchpad.cleanState), else null
   launchpad: null,
+  // 1.99jw: Pepe's monetary policy (cleanMonetary), else null. Every sync sets it.
+  monetary: null,
 };
 const INC = "incentives:";
+const DONATION_RATE = 500000;          // 1.99jw: PAT per $1 while Pepe never synced a rate
+const DONATION_BONUS_PCT = 20;         // 1.99jw: % extra minted into the incentive budget
+const HOUSE_HARD_FLOOR = 5000000;
 
 let ready = runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
     claimId TEXT PRIMARY KEY,
@@ -72,6 +89,8 @@ let ready = runQuery(`CREATE TABLE IF NOT EXISTS reserve_claims (
     const cols = (await getQuery("SELECT name FROM pragma_table_info('reserve_claims')")).map((r) => r.name);
     if (!cols.includes("queued")) await runQuery("ALTER TABLE reserve_claims ADD COLUMN queued INTEGER DEFAULT 0");
     if (!cols.includes("paid_at")) await runQuery("ALTER TABLE reserve_claims ADD COLUMN paid_at INTEGER");
+    // 1.99jw: free-form JSON for Pepe (a donation mint's {bonus, usd_cents, rate, bonus_pct, event}, a flash claim's ref)
+    if (!cols.includes("meta")) await runQuery("ALTER TABLE reserve_claims ADD COLUMN meta TEXT");
     await runQuery("CREATE INDEX IF NOT EXISTS reserve_claims_queue ON reserve_claims (queued, created)");
   }).catch((e) => console.error("[funding] table:", e));
 
@@ -82,7 +101,10 @@ const groupOf = (flow) => (state.incentives && state.incentives.groups && state.
 
 function vaultFor(flow) {
   const v = state.flows[flow];
-  if (v === "incentives" && treasuryLive() && groupOf(flow)) return "incentives";
+  // 1.99jw: routed to the incentive budget = the incentive budget, even while its state is missing (a sync hiccup, an
+  // older Pepe): canFund / fundable / takeFunds then refuse and fundPayout queues it - never a Reserve claim, which Pepe
+  // would settle out of the Fed ("the Reserve only funds the protocol").
+  if (v === "incentives") return "incentives";
   return v === "jackpot" ? "jackpot" : "reserve";
 }
 
@@ -116,9 +138,11 @@ async function canFundIncentives(flow, amount, headOfQueue) {
 
 async function unsettledReserve() {
   await ready;
-  // E-2: the incentive budget's claims (and queued grants) aren't the Reserve's
+  // E-2: the incentive budget's claims (and queued grants) aren't the Reserve's; 1.99jw: nor are mints ("mint:%" nets to
+  // zero for the Fed - Pepe journals it and it never leaves the Reserve). Flash claims and house_adjust are the Reserve's.
   const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims
-                            WHERE settled = 0 AND COALESCE(queued,0) = 0 AND flow NOT LIKE 'incentives:%' AND flow NOT LIKE 'room:%'`);
+                            WHERE settled = 0 AND COALESCE(queued,0) = 0 AND flow NOT LIKE 'incentives:%' AND flow NOT LIKE 'room:%'
+                              AND flow NOT LIKE 'mint:%'`);
   return (r[0] && r[0].t) || 0;
 }
 
@@ -153,8 +177,17 @@ const houseBacked = () => vaultFor("wheel_shortfall") === "jackpot";
 // what the House can't cover is refused - nothing is drawn from the Reserve. Never minted either way.
 async function wheelDraw(payout, spinId, userId) {
   payout = Math.max(0, Math.floor(Number(payout) || 0));
-  const out = { paid: 0, fromHouse: 0, short: 0, refused: 0, backstop: houseBacked() ? "house" : "reserve" };
+  const out = { paid: 0, fromHouse: 0, short: 0, refused: 0, backstop: houseBacked() ? "house" : "reserve", flash: 0 };
   if (!payout) return out;
+  // 1.99jw: House flash liquidity - a prize that would take the House below its hard floor is paid in full; the Fed
+  // lends the House the gap (a flash:house:wheel claim). Off / no room: exactly as before.
+  const fl = await houseFlashCover("wheel", payout, userId, "wheel prize", spinId ? "spin:" + spinId : null);
+  if (fl.used) {
+    await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
+                   [uuidv4(), spinId || null, userId || null, -payout]);
+    Object.assign(out, { paid: payout, fromHouse: payout - fl.gap, flash: fl.gap });
+    return out;
+  }
   const fromPot = Math.min(payout, Math.max(0, await jackpotPot()));
   if (fromPot > 0) {
     await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
@@ -173,6 +206,50 @@ async function wheelDraw(payout, spinId, userId) {
   out.refused = ok ? 0 : out.short;
   out.paid = ok ? payout : fromPot;
   return out;
+}
+
+// 1.99jw: PAT the site booked as House flash liquidity that Pepe hasn't settled (turned into Fed loans) yet
+async function unsettledFlash() {
+  await ready;
+  const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims
+                            WHERE settled = 0 AND COALESCE(queued,0) = 0 AND flow LIKE 'flash:%'`);
+  return (r[0] && r[0].t) || 0;
+}
+
+// 1.99jw: would a House payout of `payout` need the Fed's flash liquidity, and can it have it? -> {need, gap, room, reason}
+//   need = the House can't pay it without dropping below monetary.house_hard_floor; gap = payout - max(0, House - floor)
+//   (never more than the payout); ok = it may be booked (houseBacked, flash.house on, gap within the Fed loan room net of
+//   unsettled flash claims). `house` = the House balance BEFORE this payout (defaults to the pot now).
+async function houseFlashPlan(payout, house) {
+  payout = Math.max(0, Math.floor(Number(payout) || 0));
+  const m = state.monetary;
+  if (!payout || !m || !m.flash || m.flash.house !== true || !houseBacked()) return { ok: false, need: false, gap: 0, reason: "off" };
+  const h = house === undefined ? await jackpotPot() : Math.floor(Number(house) || 0);
+  const above = Math.max(0, h - m.house_hard_floor);
+  if (payout <= above) return { ok: false, need: false, gap: 0, reason: "covered" };
+  const gap = Math.min(payout, payout - above);
+  const room = m.fedloan_room - (await unsettledFlash());
+  if (gap > room) return { ok: false, need: true, gap, room, house: h, reason: "room" };
+  return { ok: true, need: true, gap, room, house: h, reason: "flash" };
+}
+
+// 1.99jw: book the House flash liquidity for a payout the caller is about to make out of the House (the caller writes
+// the -payout jackpot_rakes row itself). -> {used, gap, reason}; used = a "flash:house:<flow>" claim of `gap` was booked
+// (Pepe opens a Fed flash loan of `gap` to the House). Logged either way when the House was short.
+async function houseFlashCover(flow, payout, userId, type, ref) {
+  await ready;
+  const p = await houseFlashPlan(payout);
+  if (!p.need) return { used: false, gap: 0, reason: p.reason };
+  if (!p.ok) {
+    console.log(`[funding] flash:house:${flow}: ${payout} would take the House (${p.house}) below its hard floor; gap ${p.gap} > Fed loan room ${p.room} - no flash`);
+    return { used: false, gap: p.gap, reason: p.reason };
+  }
+  const id = uuidv4();
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount, meta) VALUES (?, ?, ?, ?, ?, ?)",
+                 [id, "flash:house:" + flow, userId || null, type || flow, p.gap,
+                  JSON.stringify({ payout: Math.floor(Number(payout) || 0), house: p.house, floor: state.monetary.house_hard_floor, ref: ref || null })]);
+  console.log(`[funding] flash:house:${flow}: paid ${payout} in full; the House (${p.house}) is short of its hard floor by ${p.gap} - Fed flash liquidity claim ${id}`);
+  return { used: true, gap: p.gap, claimId: id, reason: "flash" };
 }
 
 // Top the wheel's pot back up to `floor` after a jackpot win. v1: from the Reserve (a "wheel_shortfall" claim).
@@ -246,6 +323,44 @@ async function takeReserveRef(flow, amount, userId, type) {
   await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
                  [id, flow, userId || null, type || flow, amount]);
   return { ok: true, available, claimId: id, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
+}
+
+// 1.99jw: the staff PAT grant's claim on the INCENTIVE BUDGET ("incentives:<flow>"), outside every weekly group budget.
+// amount > 0 = paid out of the budget: refused while the budget isn't known (reason "unknown"), when its balance net of
+// unsettled incentive claims can't cover it ("short"), or when monetary.grant_weekly_cap >= 0 and this budget week's
+// positive claims for the flow + amount would pass it ("cap"). amount < 0 = returned to the budget (always booked).
+// Never queued. Does NOT move the user's balance. -> {ok, available, reason, cap?, used?, claimId?, undo}
+async function takeIncentivesRef(flow, amount, userId, type) {
+  await ready;
+  amount = Math.trunc(Number(amount) || 0);
+  const none = async () => {};
+  const claimFlow = INC + flow;
+  const inc = state.incentives;
+  const available = inc ? Math.max(0, (Number(inc.balance) || 0) - (await unsettledIncentives())) : null;
+  if (amount === 0) return { ok: true, available, undo: none };
+  if (amount > 0) {
+    if (!inc) return { ok: false, available: null, reason: "unknown", undo: none };
+    if (available < amount) return { ok: false, available, reason: "short", undo: none };
+    const m = state.monetary;
+    const cap = m && Number.isFinite(m.grant_weekly_cap) ? m.grant_weekly_cap : -1;
+    if (cap >= 0) {
+      const since = m.week_start || 0;
+      const r = await getQuery(`SELECT COALESCE(SUM(amount),0) AS t FROM reserve_claims
+                                WHERE flow = ? AND amount > 0 AND created >= datetime(?, 'unixepoch')`, [claimFlow, since]);
+      const used = (r[0] && r[0].t) || 0;
+      if (used + amount > cap) return { ok: false, available, reason: "cap", cap, used, undo: none };
+    }
+  }
+  const id = uuidv4();
+  await runQuery("INSERT INTO reserve_claims (claimId, flow, userId, type, amount) VALUES (?, ?, ?, ?, ?)",
+                 [id, claimFlow, userId || null, type || flow, amount]);
+  return { ok: true, available, claimId: id, undo: () => runQuery("DELETE FROM reserve_claims WHERE claimId = ? AND settled = 0", [id]) };
+}
+
+// 1.99jw: the donation terms Pepe synced (or the defaults while he never has)
+function donationTerms() {
+  const d = state.monetary && state.monetary.donation;
+  return { rate: d ? d.rate : DONATION_RATE, bonus_pct: d ? d.bonus_pct : DONATION_BONUS_PCT };
 }
 
 // E-2: record a grant the incentive budget can't pay yet. The user is NOT credited now; drainQueue pays it.
@@ -386,6 +501,28 @@ function cleanIncentives(x) {
            release_per_day: typeof x.release_per_day === "number" ? Math.floor(x.release_per_day) : null };
 }
 
+// 1.99jw: Pepe's monetary policy from the sync. Anything that isn't an object -> null; missing / bad fields -> defaults.
+function cleanMonetary(x) {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const int = (v, dflt) => { const n = Number(v); return v !== null && v !== "" && typeof v !== "boolean" && Number.isFinite(n) ? Math.floor(n) : dflt; };
+  const f = x.flash && typeof x.flash === "object" ? x.flash : {};
+  const sw = (v) => (typeof v === "boolean" ? v : true);          // default: on
+  const d = x.donation && typeof x.donation === "object" ? x.donation : {};
+  const pct = Number(d.bonus_pct);
+  const b = x.band && typeof x.band === "object" ? x.band : null;
+  const cap = int(x.grant_weekly_cap, -1);
+  return {
+    flash: { house: sw(f.house), bank: sw(f.bank), mm: sw(f.mm) },
+    fedloan_room: Math.max(0, int(x.fedloan_room, 0)),
+    house_hard_floor: Math.max(0, int(x.house_hard_floor, HOUSE_HARD_FLOOR)),
+    donation: { rate: Math.max(0, int(d.rate, DONATION_RATE)),
+                bonus_pct: typeof d.bonus_pct === "number" && Number.isFinite(pct) ? Math.max(0, Math.min(1000, pct)) : DONATION_BONUS_PCT },
+    grant_weekly_cap: cap < 0 ? -1 : cap,
+    week_start: Math.max(0, int(x.week_start, 0)),
+    band: b ? { fed: int(b.fed, null), floor: int(b.floor, null), ceiling: int(b.ceiling, null) } : null,
+  };
+}
+
 function sync(body) {
   if (typeof body.reserve === "number" && isFinite(body.reserve)) state.reserve = Math.floor(body.reserve);
   if (body.flows && typeof body.flows === "object") {
@@ -396,6 +533,8 @@ function sync(body) {
   state.fortknox = typeof body.fortknox === "number" && isFinite(body.fortknox) ? Math.max(0, Math.floor(body.fortknox)) : null;
   // E-2: every sync sets it - a sync without it (an older Pepe, the treasury off) puts the grants back on the Reserve
   state.incentives = cleanIncentives(body.incentives);
+  // 1.99jw: every sync sets it - a sync without it (an older Pepe) turns flash liquidity off and the defaults back on
+  state.monetary = cleanMonetary(body.monetary);
   // the pad launchpad (launchpad.js / Pepe's pepe_launchpad.py): every sync sets it - null = off (no welcomes, no
   // launch progress, no boost credit)
   try { state.launchpad = require("./launchpad").cleanState(body.launchpad); } catch (e) { state.launchpad = null; }
@@ -412,7 +551,15 @@ const roomVaultsLive = () => state.room_vaults !== null;
 async function claims() {
   await ready;
   // E-2: only claims the website has actually paid (queued = 0); a queued grant reaches Pepe once it's paid
-  return getQuery("SELECT claimId, flow, type, amount, created FROM reserve_claims WHERE settled = 0 AND COALESCE(queued,0) = 0 ORDER BY created LIMIT 500");
+  // 1.99jw: + userId, username (Pepe names the member in his journal) and meta (JSON text, e.g. a donation's terms)
+  try {
+    return await getQuery(`SELECT c.claimId, c.flow, c.type, c.amount, c.created, c.userId, u.username, c.meta FROM reserve_claims c
+                           LEFT JOIN users u ON u.userId = c.userId
+                           WHERE c.settled = 0 AND COALESCE(c.queued,0) = 0 ORDER BY c.created, c.rowid LIMIT 500`);
+  } catch (e) {        // no users table (a bare test database)
+    return getQuery(`SELECT claimId, flow, type, amount, created, userId, NULL AS username, meta FROM reserve_claims
+                     WHERE settled = 0 AND COALESCE(queued,0) = 0 ORDER BY created, rowid LIMIT 500`);
+  }
 }
 
 async function settle(ids) {
@@ -427,4 +574,7 @@ async function settle(ids) {
 
 module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, sync, claims, settle, state, fortknoxLive, roomVaultsLive,
                    treasuryLive, treasuryOn, vaultFor, queueClaim, drainQueue, queueSummary, groupOf, fundable, unsettledIncentives,
-                   houseBacked, wheelDraw, wheelReseed, reserveAvailable, takeReserveRef };
+                   houseBacked, wheelDraw, wheelReseed, reserveAvailable, takeReserveRef,
+                   // 1.99jw
+                   init: () => ready, cleanMonetary, takeIncentivesRef, houseFlashPlan, houseFlashCover, unsettledFlash, unsettledReserve,
+                   donationTerms, jackpotPot };

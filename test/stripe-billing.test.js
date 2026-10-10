@@ -184,3 +184,99 @@ test("an invoice for an unknown subscription with metadata creates the mapping (
   const n = await getQuery("SELECT title FROM inbox WHERE user_id = ?", [owner.userId]);
   assert.ok(n.some((x) => /card payment failed/.test(x.title)));
 });
+
+// ── 1.99jw "Support PATV" donations: the only path that creates PAT on the site ──
+const F = require(path.join(repo, "funding"));
+const donationEv = (id, o = {}) => ({ id, type: "checkout.session.completed", created: 1, data: { object: Object.assign({ id: "cs_" + id, object: "checkout.session",
+  mode: "payment", payment_status: "paid", amount_total: 500, currency: "usd", client_reference_id: fan.userId, metadata: { kind: "donation", userId: fan.userId } }, o) } });
+const fanBal = async () => (await getQuery("SELECT points_balance AS b FROM users WHERE userId = ?", [fan.userId]))[0].b;
+const mintClaims = () => getQuery("SELECT claimId, flow, userId, type, amount, meta, settled FROM reserve_claims WHERE flow = 'mint:donation' ORDER BY created, rowid");
+
+test("donate: a payment-mode Checkout Session with price_data + kind=donation metadata; 404 while off; whole dollars 1..1000", async () => {
+  off();
+  assert.equal((await raw("POST", "/api/premium/stripe/donate", { user: "fan", body: JSON.stringify({ usd: 5 }), headers: { "Content-Type": "application/json" } })).status, 404);
+  on();
+  let seen = null;
+  SB._setFetch(async (url, opts) => { seen = { url, opts }; return { ok: true, json: async () => ({ id: "cs_don_1", url: "https://checkout.stripe.com/c/pay/cs_don_1" }) }; });
+  const r = await raw("POST", "/api/premium/stripe/donate", { user: "fan", body: JSON.stringify({ usd: 25, back: "/shop" }), headers: { "Content-Type": "application/json" } });
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.url, "https://checkout.stripe.com/c/pay/cs_don_1");
+  const f = new URLSearchParams(seen.opts.body);
+  assert.equal(f.get("mode"), "payment");
+  assert.equal(f.get("line_items[0][price_data][currency]"), "usd");
+  assert.equal(f.get("line_items[0][price_data][unit_amount]"), "2500");
+  assert.equal(f.get("line_items[0][price_data][product_data][name]"), "Support PATV");
+  assert.equal(f.get("metadata[kind]"), "donation");
+  assert.equal(f.get("metadata[userId]"), fan.userId);
+  assert.match(f.get("success_url"), /\/shop\?donate=success$/);
+  for (const usd of [0, 1.5, 1001, "x", -3]) {
+    const b = await raw("POST", "/api/premium/stripe/donate", { user: "fan", body: JSON.stringify({ usd }), headers: { "Content-Type": "application/json" } });
+    assert.equal(b.status, 400, String(usd));
+  }
+  assert.equal((await raw("POST", "/api/premium/stripe/donate", { body: JSON.stringify({ usd: 5 }), headers: { "Content-Type": "application/json" } })).status, 401);
+  // the same-site check, like the other card routes
+  assert.equal((await raw("POST", "/api/premium/stripe/donate", { user: "fan", body: JSON.stringify({ usd: 5 }), headers: { "Content-Type": "application/json", Origin: "https://evil.example" } })).status, 403);
+});
+
+test("webhook: a paid donation credits the donor + books the mint:donation claim with its meta, once (signed, replayed, duplicated)", async () => {
+  on();
+  F.sync({ reserve: 1 });                                       // Pepe never synced monetary: the defaults (500,000 / 20%)
+  const send = (ev) => { const s = signed(ev); return raw("POST", "/api/premium/stripe/webhook", { body: s.body, headers: { "Stripe-Signature": s.header, "Content-Type": "application/json" } }); };
+  const b0 = await fanBal();
+  const r = await send(donationEv("evt_don1"));
+  assert.equal(r.status, 200, r.text);
+  assert.equal(r.json.outcome, "donation-credited");
+  assert.equal(await fanBal(), b0 + 2500000, "$5 x 500,000");
+  const tx = await getQuery("SELECT type, points FROM transactions WHERE transactionId = 'don-evt_don1'");
+  assert.deepEqual(tx.map((x) => [x.type, x.points]), [["donation", 2500000]]);
+  const c = await mintClaims();
+  assert.equal(c.length, 1);
+  assert.deepEqual([c[0].claimId, c[0].userId, c[0].amount, c[0].settled], ["don-evt_don1", fan.userId, 2500000, 0]);
+  assert.deepEqual(JSON.parse(c[0].meta), { bonus: 500000, usd_cents: 500, rate: 500000, bonus_pct: 20, event: "evt_don1" });
+  assert.equal(await F.unsettledReserve(), 0, "a mint isn't a Reserve payout");
+  const n = await getQuery("SELECT title FROM inbox WHERE user_id = ? AND title LIKE '%supporting PATV%'", [fan.userId]);
+  assert.equal(n.length, 1, "a thank-you notice");
+  // Stripe retries the same event: nothing changes
+  const again = await send(donationEv("evt_don1"));
+  assert.equal(again.json.outcome, "dup");
+  assert.equal(await fanBal(), b0 + 2500000);
+  assert.equal((await mintClaims()).length, 1);
+  // the claim reaches Pepe (with the donor's name)
+  const pc = (await F.claims()).find((x) => x.claimId === "don-evt_don1");
+  assert.equal(pc.username, "fan");
+});
+
+test("webhook: unpaid / not-a-donation sessions are ignored; the rate and bonus come from Pepe's synced monetary state", async () => {
+  on();
+  const b0 = await fanBal();
+  assert.equal((await SB.handleEvent(donationEv("evt_don2", { payment_status: "unpaid" }))).outcome, "donation-unpaid");
+  assert.equal((await SB.handleEvent(donationEv("evt_don3", { metadata: { kind: "other", userId: fan.userId } }))).outcome, "ignored");
+  assert.equal((await SB.handleEvent(donationEv("evt_don4", { metadata: {} }))).outcome, "ignored");
+  assert.equal(await fanBal(), b0);
+  assert.equal((await mintClaims()).length, 1);
+  F.sync({ reserve: 1, monetary: { donation: { rate: 1000, bonus_pct: 50 } } });
+  const r = await SB.handleEvent(donationEv("evt_don5", { amount_total: 1234 }));
+  assert.equal(r.outcome, "donation-credited");
+  assert.equal(await fanBal(), b0 + 12340, "$12.34 x 1,000");
+  const c = (await mintClaims()).at(-1);
+  assert.equal(c.amount, 12340);
+  assert.deepEqual(JSON.parse(c.meta), { bonus: 6170, usd_cents: 1234, rate: 1000, bonus_pct: 50, event: "evt_don5" });
+  F.sync({ reserve: 1 });
+});
+
+test("pages: the Support PATV card shows on /shop and /wallet only while Stripe is on", async () => {
+  const ejs = require("ejs");
+  const card = path.join(repo, "views", "partials", "donate-card.ejs");
+  off();
+  assert.equal((await ejs.renderFile(card, { donate: SB.donateLocals("/wallet", null) })).trim(), "");
+  on();
+  const html = await ejs.renderFile(card, { donate: SB.donateLocals("/wallet", "success") });
+  assert.match(html, /id="donate"/);
+  assert.match(html, /500,000 PAT/);
+  assert.match(html, /\/api\/premium\/stripe\/donate/);
+  assert.match(html, /TEST MODE/);
+  for (const v of ["views/shop.ejs", "views/wallet.ejs"]) assert.match(fs.readFileSync(path.join(repo, v), "utf8"), /include\('partials\/donate-card'/, v);
+  assert.match(fs.readFileSync(path.join(repo, "shop.js"), "utf8"), /donateLocals\("\/shop"/);
+  assert.match(fs.readFileSync(path.join(repo, "wallet.js"), "utf8"), /donateLocals\("\/wallet"/);
+  off();
+});

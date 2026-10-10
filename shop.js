@@ -1023,7 +1023,9 @@ function register(app, deps) {
     return u ? { ...u, staff: isStaff(u) } : null;
   }
   const base = (req, me, extra) => Object.assign({ user: me ? me.username : (req.user ? req.user.username : null), me, H,
-    msg: msgOf(req), settings, categories: settings.categories }, extra);
+    msg: msgOf(req), settings, categories: settings.categories,
+    // 1.99jw: the Support PATV card (only while Stripe is on)
+    donate: (() => { try { return require("./stripebilling").donateLocals("/shop", req.query && req.query.donate); } catch (e) { return null; } })() }, extra);
   // Form posts: run, then go back with a message.
   const formPost = (dflt, fn) => [addUser, async (req, res) => {
     const back = safeBack((req.body || {}).back, dflt);

@@ -20,6 +20,18 @@
       <div><b>Paid out today (UTC)</b><span><%= fmt(R.todayTotal) %> PAT</span></div>
       <% if (R.jackpot !== null) { %><div><b>Casino jackpot</b><span><%= fmt(R.jackpot) %> PAT</span></div><% } %>
     </div>
+    <% const MP = typeof monetary !== 'undefined' ? monetary : null; %>
+    <h3>Monetary policy (from Pepe)</h3>
+    <% if (!MP) { %><p class="adm-help">Not synced yet: House flash liquidity is off and donations use the defaults (500,000 PAT per $1, +20% to the incentive budget).</p><% } else { %>
+    <div class="adm-kv" id="monetaryKv">
+      <div><b>Flash liquidity</b><span>House <%= MP.flash.house ? 'on' : 'off' %> · Bank <%= MP.flash.bank ? 'on' : 'off' %> · MM <%= MP.flash.mm ? 'on' : 'off' %></span></div>
+      <div><b>Fed loan room</b><span><%= fmt(MP.fedloan_room) %> PAT</span></div>
+      <div><b>House hard floor</b><span><%= fmt(MP.house_hard_floor) %> PAT</span></div>
+      <div><b>Donations</b><span><%= fmt(MP.donation.rate) %> PAT per $1 · +<%= MP.donation.bonus_pct %>% to incentives</span></div>
+      <div><b>Staff grant cap</b><span><%= MP.grant_weekly_cap < 0 ? 'unlimited' : fmt(MP.grant_weekly_cap) + ' PAT / week' %></span></div>
+      <% if (MP.band) { %><div><b>Fed band</b><span><%= MP.band.fed === null ? '?' : fmt(MP.band.fed) %> (floor <%= MP.band.floor === null ? '?' : fmt(MP.band.floor) %> · ceiling <%= MP.band.ceiling === null ? '?' : fmt(MP.band.ceiling) %>)</span></div><% } %>
+    </div>
+    <% } %>
     <div class="adm-tbl"><table aria-label="Reserve payouts today by flow">
       <thead><tr><th>Flow (today, UTC)</th><th class="num">Payouts</th><th class="num">PAT</th></tr></thead>
       <tbody>
@@ -27,6 +39,29 @@
         <% R.today.forEach((f) => { %><tr><td><code><%= f.flow %></code></td><td class="num"><%= fmt(f.n) %></td><td class="num"><%= fmt(f.t) %></td></tr><% }) %>
       </tbody>
     </table></div>
+  <% } %>
+</section>
+
+<section class="adm-card" id="supply-history" aria-labelledby="shT">
+  <h2 id="shT">📈 Supply history <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">One row per UTC day, written on every supply snapshot Pepe posts: total supply, the Federal Reserve against its band, and each day's mints (Pepe's mint journal, by source) against the PAT burned that day. Month-to-date mints by source are compared with Pepe's caps.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="shStatus" class="adm-help" aria-live="polite">Loading…</div>
+    <figure class="sh-fig"><figcaption>Total supply (PAT)</figcaption><div id="shTotal" class="sh-chart"></div></figure>
+    <figure class="sh-fig"><figcaption>Federal Reserve vs its band</figcaption><div id="shFed" class="sh-chart"></div></figure>
+    <figure class="sh-fig"><figcaption>Mints per day (by source) vs burns</figcaption><div id="shMints" class="sh-chart"></div><div id="shLegend" class="sh-legend"></div></figure>
+    <div class="adm-tbl"><table aria-label="Month-to-date mints by source">
+      <thead><tr><th>Source (month to date)</th><th class="num">Minted</th><th class="num">Cap</th></tr></thead>
+      <tbody id="shMtd"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+    </table></div>
+    <style>
+      .sh-fig { margin: 10px 0; min-width: 0; }
+      .sh-fig figcaption { font-size: 13px; opacity: .8; margin-bottom: 4px; }
+      .sh-chart svg { width: 100%; height: auto; display: block; }
+      .sh-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; margin-top: 4px; }
+      .sh-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+    </style>
+    <script src="/public/js/admin-supply.js?v=1" defer></script>
   <% } %>
 </section>
 
@@ -129,13 +164,15 @@
 
 <div class="adm-cols">
   <section class="adm-card" id="grants" aria-labelledby="grantsT">
-    <h2 id="grantsT">PAT grant</h2>
-    <p class="adm-help">Paid from the Federal Reserve: adds PAT to an account's balance as a "Staff transfer" in their history (the old "Points panel"). Refused if the Reserve can't cover it. A negative amount takes PAT back into the Reserve.</p>
+    <h2 id="grantsT">PAT grant <span class="adm-pill admin">admins</span></h2>
+    <p class="adm-help">Paid from the incentive budget: adds PAT to an account's balance as a "Staff transfer" in their history (the old "Points panel"). Refused if the incentive budget can't cover it, isn't synced yet, or this week's staff-grant cap (a Pepe setting) would be passed - never queued, never minted. A negative amount takes PAT back into the incentive budget. The Reserve only funds the protocol, so it never pays a grant.</p>
+    <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <form id="pointsTransferForm" class="adm-form" action="/api/admin/transfer/username" method="POST">
       <label for="pointsUsername">Username<input type="text" id="pointsUsername" name="username" required autocomplete="off"></label>
       <label for="pointsAmount">Amount (PAT)<input type="number" id="pointsAmount" name="amount" required></label>
       <div class="adm-actions"><button type="submit">Grant PAT</button><span id="transferStatus" class="adm-msg" role="status"></span></div>
     </form>
+    <% } %>
   </section>
 
   <section class="adm-card" id="codes" aria-labelledby="codesT">

@@ -155,6 +155,37 @@
    ]
   },
   {
+   "id": "language",
+   "title": "!language [code|auto]",
+   "category": "chat",
+   "role": "everyone",
+   "commands": [
+    "!language",
+    "!lang"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!language",
+    "!language <code>",
+    "!language auto"
+   ],
+   "summary": "Which language Pepe speaks in this room - he follows the room's chat on his own, or a mod fixes it.",
+   "details": "`!language` shows this room's setting and the language Pepe has detected (with how much of the recent chat it makes up). By default it's **auto**: Pepe watches the room's recent chat and mic and answers in whatever language clearly dominates - a few lines in another language never flip it, it switches only after a language holds most of the chat from at least two people for a couple of minutes. His AI replies and the most common command lines (balance, spin, tips, heists, raffle, `!help`, `!intro`) come out in that language; usernames and commands stay as they are.\n\n**Room mods fix it** with `!language <code>` (`es`, `pt`, `fr`, `de`, `it`, `nl`, `pl`, `tr`, `ru`, `uk`, `ar`, `fa`, `hi`, `id`, `vi`, `th`, `ja`, `ko`, `zh`, `zh-tw`, or the name, like `!language spanish`) and go back with `!language auto`. Mods = Pepe admins, the room's owner and its red list (the same people as `!snap on`).",
+   "examples": [
+    "!language",
+    "!language es",
+    "!language auto"
+   ],
+   "keywords": [
+    "language",
+    "spanish",
+    "translate",
+    "idioma",
+    "speak another language",
+    "auto detect language"
+   ]
+  },
+  {
    "id": "time",
    "title": "!time [place|user] · !time set [zone]",
    "category": "start",
@@ -2282,7 +2313,7 @@
     "!econ"
    ],
    "summary": "The economy layers at a glance: the Federal Reserve (and its loans to the Treasury vaults), Fort Knox and the incentive budget.",
-   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Loans are repaid first from that vault's weekly surplus. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their room vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
+   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Loans are repaid first from that vault's weekly surplus. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ get [key]` (the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; one key shows its value, default and label), `!econ set <key> <value>` (changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back; validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card; keys: fed_target, house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap, budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad), `!econ monetary` (economy v3: the Federal Reserve's band - it mints back up to its floor, 25M by default, at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity), `!econ mints` (this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints), `!econ mint <amount> <fed|incentives|house|bank|mm|fortknox|casino> <reason>` (an admin mint into the Fed or a named pool, never a wallet - a dry run first, then `!econ mint confirm <id>`; logged and inside the monthly admin cap), `!econ fedseed <total> [reason]` (mints the Federal Reserve up to <total>, once per total - a dry run first, then `!econ fedseed confirm <id>`), `!econ flash` (the Fed's flash liquidity: when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap at once, inside the Fed loan cap; an admin action that draws on it asks for a second confirm), `!econ set` also takes the v3 keys: fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|admin|loan|restore|total> (a number or unlimited), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, room_vault_cap, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their room vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
    "examples": [
     "!econ"
    ],
@@ -6466,5 +6497,5 @@
   }
  ],
  "undocumented": [],
- "hash": "65b5210998688368"
+ "hash": "53fcdca9fe6bcac9"
 }

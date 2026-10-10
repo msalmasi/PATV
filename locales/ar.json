@@ -3331,5 +3331,16 @@
   "auth.plex.expired": "انتهت صلاحية تسجيل الدخول هذا إلى Plex أو لم يبدأ من هنا. يرجى المحاولة مجددًا.",
   "auth.plex.failed": "لم ينجح تسجيل الدخول عبر Plex. يرجى المحاولة مجددًا.",
   "auth.plex.unfinished": "لم يكتمل تسجيل الدخول عبر Plex. يرجى المحاولة مجددًا.",
-  "auth.plex.welcome": "مرحبًا بك في PATV يا {name}! تم ربط حساب Plex الخاص بك."
+  "auth.plex.welcome": "مرحبًا بك في PATV يا {name}! تم ربط حساب Plex الخاص بك.",
+  "donate.title": "ادعم PATV",
+  "donate.blurb": "ساهم بالبطاقة لإبقاء PATV قائمًا. وكشكر لك، كل 1 $ يضيف {rate} PAT إلى محفظتك.",
+  "donate.no_cashout": "التبرعات نهائية. تبقى PAT على PATV - ولا يمكن صرفها نقدًا.",
+  "donate.thanks": "شكرًا لك! ستصل PAT إلى محفظتك بعد لحظات.",
+  "donate.cancelled": "تم إلغاء التبرع - لم يتم خصم أي مبلغ.",
+  "donate.amount_label": "المبلغ (USD)",
+  "donate.button": "تبرّع بالبطاقة",
+  "donate.notice_title": "💖 شكرًا لدعمك PATV",
+  "donate.notice_body": "أضاف تبرعك بمبلغ {usd} $ ما مقداره {pat} PAT إلى محفظتك.",
+  "js.donate.bad_amount": "أدخل عددًا صحيحًا من الدولارات من 1 إلى {max}.",
+  "js.donate.failed": "الدفع بالبطاقة غير متاح حاليًا."
 }

@@ -3106,5 +3106,16 @@
   "auth.plex.expired": "Sesi masuk Plex itu kedaluwarsa atau tidak dimulai di sini. Silakan coba lagi.",
   "auth.plex.failed": "Masuk dengan Plex gagal. Silakan coba lagi.",
   "auth.plex.unfinished": "Proses masuk Plex belum selesai. Silakan coba lagi.",
-  "auth.plex.welcome": "Selamat datang di PATV, {name}! Akun Plex-mu sudah tertaut."
+  "auth.plex.welcome": "Selamat datang di PATV, {name}! Akun Plex-mu sudah tertaut.",
+  "donate.title": "Dukung PATV",
+  "donate.blurb": "Bantu dengan kartu agar PATV tetap berjalan. Sebagai ucapan terima kasih, setiap 1 $ menambahkan {rate} PAT ke dompetmu.",
+  "donate.no_cashout": "Donasi bersifat final. PAT tetap di PATV - tidak bisa dicairkan.",
+  "donate.thanks": "Terima kasih! PAT-mu akan masuk ke dompet sebentar lagi.",
+  "donate.cancelled": "Donasi dibatalkan - tidak ada yang ditagih.",
+  "donate.amount_label": "Jumlah (USD)",
+  "donate.button": "Donasi dengan kartu",
+  "donate.notice_title": "💖 Terima kasih telah mendukung PATV",
+  "donate.notice_body": "Donasi {usd} $ milikmu menambahkan {pat} PAT ke dompetmu.",
+  "js.donate.bad_amount": "Masukkan jumlah dolar bulat dari 1 sampai {max}.",
+  "js.donate.failed": "Pembayaran kartu sedang tidak tersedia."
 }

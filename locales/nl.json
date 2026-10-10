@@ -3151,5 +3151,16 @@
   "auth.plex.expired": "Die Plex-login is verlopen of is niet hier gestart. Probeer het opnieuw.",
   "auth.plex.failed": "Inloggen met Plex is niet gelukt. Probeer het opnieuw.",
   "auth.plex.unfinished": "De Plex-login is niet afgerond. Probeer het opnieuw.",
-  "auth.plex.welcome": "Welkom bij PATV, {name}! Je Plex-account is gekoppeld."
+  "auth.plex.welcome": "Welkom bij PATV, {name}! Je Plex-account is gekoppeld.",
+  "donate.title": "Steun PATV",
+  "donate.blurb": "Doneer met je kaart om PATV draaiende te houden. Als bedankje levert elke $ 1 je {rate} PAT op in je wallet.",
+  "donate.no_cashout": "Donaties zijn definitief. PAT blijft op PATV - het kan niet worden uitbetaald.",
+  "donate.thanks": "Bedankt! Je PAT staat zo in je wallet.",
+  "donate.cancelled": "Donatie geannuleerd - er is niets afgeschreven.",
+  "donate.amount_label": "Bedrag (USD)",
+  "donate.button": "Doneer met kaart",
+  "donate.notice_title": "💖 Bedankt dat je PATV steunt",
+  "donate.notice_body": "Je donatie van $ {usd} heeft {pat} PAT aan je wallet toegevoegd.",
+  "js.donate.bad_amount": "Vul een heel aantal dollars in van 1 tot {max}.",
+  "js.donate.failed": "Kaartbetalingen zijn nu niet beschikbaar."
 }

@@ -3151,5 +3151,16 @@
   "auth.plex.expired": "Ese inicio de sesión de Plex caducó o no empezó aquí. Inténtalo de nuevo.",
   "auth.plex.failed": "El inicio de sesión con Plex no funcionó. Inténtalo de nuevo.",
   "auth.plex.unfinished": "El inicio de sesión con Plex no se completó. Inténtalo de nuevo.",
-  "auth.plex.welcome": "¡Te damos la bienvenida a PATV, {name}! Tu cuenta de Plex está vinculada."
+  "auth.plex.welcome": "¡Te damos la bienvenida a PATV, {name}! Tu cuenta de Plex está vinculada.",
+  "donate.title": "Apoya a PATV",
+  "donate.blurb": "Aporta con tarjeta para mantener PATV en marcha. Como agradecimiento, cada 1 $ añade {rate} PAT a tu billetera.",
+  "donate.no_cashout": "Las donaciones son definitivas. Los PAT se quedan en PATV: no se pueden canjear por dinero.",
+  "donate.thanks": "¡Gracias! Tus PAT llegarán a tu billetera en un momento.",
+  "donate.cancelled": "Donación cancelada: no se cobró nada.",
+  "donate.amount_label": "Importe (USD)",
+  "donate.button": "Donar con tarjeta",
+  "donate.notice_title": "💖 Gracias por apoyar a PATV",
+  "donate.notice_body": "Tu donación de {usd} $ añadió {pat} PAT a tu billetera.",
+  "js.donate.bad_amount": "Introduce un número entero de dólares del 1 al {max}.",
+  "js.donate.failed": "Los pagos con tarjeta no están disponibles ahora mismo."
 }

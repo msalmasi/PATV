@@ -3241,5 +3241,16 @@
   "auth.plex.expired": "To logowanie Plex wygasło lub nie zaczęło się tutaj. Spróbuj ponownie.",
   "auth.plex.failed": "Logowanie przez Plex nie powiodło się. Spróbuj ponownie.",
   "auth.plex.unfinished": "Logowanie przez Plex nie zostało dokończone. Spróbuj ponownie.",
-  "auth.plex.welcome": "Witaj w PATV, {name}! Twoje konto Plex jest połączone."
+  "auth.plex.welcome": "Witaj w PATV, {name}! Twoje konto Plex jest połączone.",
+  "donate.title": "Wesprzyj PATV",
+  "donate.blurb": "Wpłać kartą, aby PATV mogło dalej działać. W podziękowaniu każdy 1 $ dodaje {rate} PAT do twojego portfela.",
+  "donate.no_cashout": "Darowizny są ostateczne. PAT zostają na PATV - nie można ich wypłacić.",
+  "donate.thanks": "Dziękujemy! Twoje PAT za chwilę pojawią się w portfelu.",
+  "donate.cancelled": "Darowizna anulowana - nic nie zostało pobrane.",
+  "donate.amount_label": "Kwota (USD)",
+  "donate.button": "Wpłać kartą",
+  "donate.notice_title": "💖 Dziękujemy za wsparcie PATV",
+  "donate.notice_body": "Twoja darowizna {usd} $ dodała {pat} PAT do twojego portfela.",
+  "js.donate.bad_amount": "Wpisz całkowitą liczbę dolarów od 1 do {max}.",
+  "js.donate.failed": "Płatności kartą są teraz niedostępne."
 }

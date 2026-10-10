@@ -75,6 +75,7 @@ const RULES = {
   // ledger
   "transactions.userId": M(), "transactions.counterparty": M(),
   "bonus_winners.userId": M(), "reserve_claims.userId": M(), "jackpot_rakes.userId": M(), "wheel_spins.userId": M(),
+  "bot_credit_log.userId": M(),     // 1.99jw: botcredits.js - the log of every bot credit / House move
   "blackjack.userId": M(), "poker_cashier.userId": M(), "poker_now_games.userId": M(), "user_redemptions.userId": M({ key: ["code"] }),
   "pat_burns.actor": M(), "pat_burns.actor_kind": { deny: FLAG },
   "econ_charges.payer": M(), "econ_charges.payer_kind": { deny: FLAG },

@@ -123,6 +123,7 @@ const RULES = [
   [/^level-up-bonus$/i, "rewards", "⬆️", () => `Level-up bonus`],
   [/^reserve-grant$/i, "admin", "🏛️", () => `Paid from the Federal Reserve`],
   [/^staff transfer$/i, "admin", "🛠️", () => `Staff transfer`],
+  [/^donation$/i, "rewards", "💖", () => `Supported PATV by card - thank you!`],   // 1.99jw: Stripe donation (stripebilling.js)
   [/^(fine|modfine|automod-fine)(-refund)?$/i, "admin", "⚖️", (a, m) => m[2] ? `Fine refunded` : `Fined`],
   [/^Refund$/i, "admin", "↩️", () => `Refund`],
   [/^ledger-correction$/i, "admin", "📒", () => `Balance carried over from before the full history (merges, resets, older records)`],

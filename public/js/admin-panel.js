@@ -226,12 +226,12 @@
     grant.addEventListener('submit', function (e) {
       e.preventDefault();
       var username = $('pointsUsername').value;
-      // 1.99jt: paid by the Federal Reserve - a refusal (Reserve short, unknown user, bad amount) says why
+      // 1.99jw: paid by the incentive budget (Admins only) - a refusal (budget short / not synced, weekly cap, unknown user, bad amount) says why
       fetch(grant.getAttribute('action').replace('username', encodeURIComponent(username)), {
         headers: { 'content-type': 'application/json' }, body: JSON.stringify({ amount: $('pointsAmount').value }), method: 'POST',
       }).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (d) {
-          if (r.ok) say('transferStatus', true, 'PAT transferred from the Federal Reserve.');
+          if (r.ok) say('transferStatus', true, 'PAT transferred from the incentive budget.');
           else say('transferStatus', false, (d && d.message) || 'Transfer failed. Check the username.');
         });
       }).catch(function () { say('transferStatus', false, 'Could not reach the server.'); });
@@ -281,7 +281,13 @@
   if (jp) {
     jp.addEventListener('submit', function (e) {
       e.preventDefault();
-      legacy(postJson('/api/g/wheel/jackpot', { amount: $('jackpotAmount').value }), 'Jackpot updated successfully.', 'Failed to update the jackpot.', 'jackpotStatus');
+      // 1.99jw: Admins only, with a written reason; + comes from the Federal Reserve, - goes back to it (a refusal says why)
+      postJson('/api/g/wheel/jackpot', { amount: $('jackpotAmount').value, reason: $('jackpotReason').value }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (d) {
+          if (r.ok) say('jackpotStatus', true, 'House updated: ' + n(d.jackpotTotal) + ' PAT now.');
+          else say('jackpotStatus', false, (d && d.message) || 'Failed to update the jackpot.');
+        });
+      }).catch(function () { say('jackpotStatus', false, 'Could not reach the server.'); });
     });
   }
 

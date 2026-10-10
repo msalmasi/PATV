@@ -74,7 +74,14 @@ async function burned() {
   return { total: Number(r.total) || 0, d7: Number(r.d7) || 0, d30: Number(r.d30) || 0, count: Number(r.n) || 0, last: r.last || null };
 }
 
-const SOURCE_LABEL = { burn: "🔥 Burn reserve (surplus after the incentive buffer and the Reserve were full)" };
+/** 1.99jw: PAT burned in [fromMs, toMs) (the supply history's per-day burns). */
+async function burnedBetween(fromMs, toMs) {
+  await ensure();
+  const r = (await getQuery("SELECT COALESCE(SUM(amount), 0) AS t FROM pat_burns WHERE at >= ? AND at < ?", [Number(fromMs) || 0, Number(toMs) || 0]))[0];
+  return Number(r && r.t) || 0;
+}
+
+const SOURCE_LABEL ={ burn: "🔥 Burn reserve (surplus after the incentive buffer and the Reserve were full)" };
 const maskHandles = (s) => String(s || "").replace(/@[A-Za-z0-9_.-]+/g, "@…");
 
 /** The public log: no user data (no actor, @handles masked). */
@@ -178,4 +185,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, record, burned, publicLog, sync, adminView, request, actionResult, ensure, state, _setClock };
+module.exports = { register, record, burned, burnedBetween, publicLog, sync, adminView, request, actionResult, ensure, state, _setClock };

@@ -231,6 +231,8 @@ function register(app, { isBotToken, addUser }) {
         myCredit: camfrog ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog, u) : null,
         welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
         acts: await actions.recentFor(req.user.userId, "wallet"),
+        // 1.99jw: the Support PATV card (only while Stripe is on)
+        donate: (() => { try { return require("./stripebilling").donateLocals("/wallet", req.query.donate); } catch (e) { return null; } })(),
       });
     } catch (e) {
       console.error("[wallet] page:", e);

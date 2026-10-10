@@ -1,0 +1,51 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%#
+  1.99jw "Support PATV" (stripebilling.js donate): a card donation that adds PAT to the donor's wallet. Shown on /shop and
+  /wallet ONLY while Stripe is on (donate.stripe.enabled). Locals: donate = {stripe, result ('success'|'cancel'|null),
+  rate (PAT per $1), bonus_pct, back ('/shop'|'/wallet'), max}.
+-%>
+<% const D = locals.donate || null; %>
+<% if (D && D.stripe && D.stripe.enabled) { %>
+<style>
+  .donate-card { background: #111; border: 1px solid #6a3d6a; border-radius: 10px; padding: 14px 16px; margin: 12px 0; display: grid; gap: 8px; min-width: 0; }
+  .donate-card h2 { margin: 0; font-size: 18px; color: #fff; }
+  .donate-card p { margin: 0; color: #bbb; font-size: 14px; }
+  .donate-card .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .donate-card input { width: 7em; max-width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #333; background: #000; color: #fff; }
+  .donate-card .msg { font-size: 14px; }
+  .donate-card .msg.ok { color: #81c784; } .donate-card .msg.err { color: #ef9a9a; }
+</style>
+<section class="donate-card" id="donate" aria-labelledby="donateT" data-back="<%= D.back || '/wallet' %>">
+  <h2 id="donateT">💖 <%- t('donate.title') %></h2>
+  <p><%- t('donate.blurb', { rate: Number(D.rate || 0).toLocaleString('en-US') }) %></p>
+  <p><%- t('donate.no_cashout') %></p>
+  <% if (D.result === 'success') { %><p class="msg ok" role="status"><%- t('donate.thanks') %></p><% } else if (D.result === 'cancel') { %><p class="msg" role="status"><%- t('donate.cancelled') %></p><% } %>
+  <div class="row">
+    <label for="donateUsd"><%- t('donate.amount_label') %></label>
+    <input type="number" id="donateUsd" min="1" max="<%= D.max || 1000 %>" step="1" value="5" inputmode="numeric">
+    <button type="button" class="btn" id="donateGo">💳 <%- t('donate.button') %><%- D.stripe.test ? ' ' + t('premium.test_mode') : '' %></button>
+  </div>
+  <p class="msg" id="donateMsg" role="status" aria-live="polite"></p>
+</section>
+<script>
+(function () {
+  var _t = window.__t || function (k, d) { return d; };
+  var box = document.getElementById('donate'), go = document.getElementById('donateGo'), msg = document.getElementById('donateMsg');
+  if (!box || !go) return;
+  go.addEventListener('click', function () {
+    var v = String(document.getElementById('donateUsd').value || '').trim();
+    var n = Number(v), max = Number(document.getElementById('donateUsd').max) || 1000;
+    if (!/^\d+$/.test(v) || n < 1 || n > max) { msg.textContent = _t('js.donate.bad_amount', 'Enter a whole number of dollars from 1 to {max}.', { max: max }); msg.className = 'msg err'; return; }
+    go.disabled = true;
+    fetch('/api/premium/stripe/donate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usd: n, back: box.getAttribute('data-back') }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        go.disabled = false;
+        if (j && j.ok && j.url) { location.href = j.url; return; }
+        msg.textContent = (j && j.error) || _t('js.donate.failed', 'Card payments aren’t available right now.'); msg.className = 'msg err';
+      })
+      .catch(function () { go.disabled = false; msg.textContent = _t('js.donate.failed', 'Card payments aren’t available right now.'); msg.className = 'msg err'; });
+  });
+})();
+</script>
+<% } %>

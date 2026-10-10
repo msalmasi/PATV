@@ -3151,5 +3151,16 @@
   "auth.plex.expired": "Bu Plex girişinin süresi doldu ya da burada başlatılmadı. Lütfen tekrar dene.",
   "auth.plex.failed": "Plex girişi işe yaramadı. Lütfen tekrar dene.",
   "auth.plex.unfinished": "Plex girişi tamamlanmadı. Lütfen tekrar dene.",
-  "auth.plex.welcome": "PATV'ye hoş geldin, {name}! Plex hesabın bağlandı."
+  "auth.plex.welcome": "PATV'ye hoş geldin, {name}! Plex hesabın bağlandı.",
+  "donate.title": "PATV’yi destekle",
+  "donate.blurb": "PATV’nin yayında kalması için kartla destek ol. Teşekkür olarak her 1 $ cüzdanına {rate} PAT ekler.",
+  "donate.no_cashout": "Bağışlar kesindir. PAT, PATV’de kalır - nakde çevrilemez.",
+  "donate.thanks": "Teşekkürler! PAT’lerin birazdan cüzdanında olacak.",
+  "donate.cancelled": "Bağış iptal edildi - hiçbir ücret alınmadı.",
+  "donate.amount_label": "Tutar (USD)",
+  "donate.button": "Kartla bağış yap",
+  "donate.notice_title": "💖 PATV’yi desteklediğin için teşekkürler",
+  "donate.notice_body": "{usd} $ bağışın cüzdanına {pat} PAT ekledi.",
+  "js.donate.bad_amount": "1 ile {max} arasında tam sayı bir dolar tutarı gir.",
+  "js.donate.failed": "Kartla ödeme şu anda kullanılamıyor."
 }

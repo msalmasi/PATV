@@ -3106,5 +3106,16 @@
   "auth.plex.expired": "Phiên đăng nhập Plex đó đã hết hạn hoặc không bắt đầu từ đây. Vui lòng thử lại.",
   "auth.plex.failed": "Đăng nhập bằng Plex không thành công. Vui lòng thử lại.",
   "auth.plex.unfinished": "Quá trình đăng nhập Plex chưa hoàn tất. Vui lòng thử lại.",
-  "auth.plex.welcome": "Chào mừng đến PATV, {name}! Tài khoản Plex của bạn đã được liên kết."
+  "auth.plex.welcome": "Chào mừng đến PATV, {name}! Tài khoản Plex của bạn đã được liên kết.",
+  "donate.title": "Ủng hộ PATV",
+  "donate.blurb": "Đóng góp bằng thẻ để PATV tiếp tục hoạt động. Để cảm ơn, mỗi 1 $ thêm {rate} PAT vào ví của bạn.",
+  "donate.no_cashout": "Khoản quyên góp là cuối cùng. PAT ở lại trên PATV - không thể quy đổi ra tiền.",
+  "donate.thanks": "Cảm ơn bạn! PAT sẽ vào ví của bạn trong giây lát.",
+  "donate.cancelled": "Đã hủy quyên góp - không có khoản nào bị trừ.",
+  "donate.amount_label": "Số tiền (USD)",
+  "donate.button": "Quyên góp bằng thẻ",
+  "donate.notice_title": "💖 Cảm ơn bạn đã ủng hộ PATV",
+  "donate.notice_body": "Khoản quyên góp {usd} $ của bạn đã thêm {pat} PAT vào ví.",
+  "js.donate.bad_amount": "Nhập số đô la nguyên từ 1 đến {max}.",
+  "js.donate.failed": "Thanh toán bằng thẻ hiện không khả dụng."
 }
