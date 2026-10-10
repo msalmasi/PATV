@@ -5,7 +5,7 @@
 <main class="sb" id="sa">
   <div class="sb-head">
     <h1>📺 Stage admin</h1>
-    <p class="lede">Pad stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a></p>
+    <p class="lede">Pad stages: user slots, featuring, scheduling. RTMP application: <code><%= state.rtmp_app %></code>. <a href="/stage/book">Booking page ›</a><% if (typeof isAdmin !== 'undefined' && isAdmin) { %> · <a href="/admin/media#library">📼 Play from library ›</a><% } %></p>
   </div>
 
   <section class="sb-card" id="open" aria-labelledby="openT">

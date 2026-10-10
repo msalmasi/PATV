@@ -39,6 +39,7 @@ const KINDS = {
   tip:         { icon: "💸", label: "Tips", link: "/history" },
   achievement: { icon: "🏅", label: "Achievements", link: "/achievements" },
   stage:       { icon: "📺", label: "Stage & streaming", link: "/stage" },
+  media:       { icon: "🎬", label: "Movie & show requests, Plex invites", link: "/requests" },   // 1.99ji: mediarequests.js / mediainvites.js
   room:        { icon: "🏠", label: "Your pads", link: "/p" },
   feed:        { icon: "📝", label: "Feed posts & comments", link: "/feed" },
   follow:      { icon: "⭐", label: "New posts from people & pads you follow", link: "/feed/following" },

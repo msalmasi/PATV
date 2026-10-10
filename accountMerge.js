@@ -163,6 +163,12 @@ const RULES = {
   // stage / rooms / pads
   "stage_slots.userId": M({ name: "username" }), "stage_slots.ended_by": M(), "stage_slots.feature_by": M(), "stage_slots.approved_by": M(),
   "stage_queue.userId": M({ name: "username" }), "stage_captures.user_id": M({ name: "username" }),
+  // 1.99ji: Plex / media (medialib.js, mediarequests.js, mediainvites.js)
+  "media_plays.user_id": M({ name: "username" }), "media_sessions.by_user": { deny: NAME },
+  "media_requests.user_id": M({ name: "username" }), "media_requests.mapped_by": { deny: FLAG },
+  "media_credits.user_id": M({ key: ["kind"], merge: { n: "SUM" } }),
+  "media_user_links.user_id": M({ key: [] }), "media_user_links.set_by": { deny: NAME },
+  "media_invites.user_id": M({ name: "username" }), "media_invites.done_by": { deny: NAME },
   "stage_events.actor": M(), "room_events.actor": M(),
   "stage_bans.userId": M({ key: [], name: "username" }), "stage_bans.by": M(),
   "stage_room_bans.userId": M({ key: ["room_id"], name: "username" }), "stage_room_bans.by": M(),

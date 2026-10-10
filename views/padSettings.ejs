@@ -164,6 +164,7 @@
         <tbody id="openRows"></tbody></table></div>
       <p class="msg" id="nowMsg" role="status" aria-live="polite"></p>
     </div>
+    <% if (typeof admin !== 'undefined' && admin) { %><%- include('partials/media-library', { room: room.id }) %><% } %>
     <div class="sb-card ps-card">
       <h3>Bookings</h3>
       <h4>Waiting for your OK</h4><ul class="mylist" id="reqList"></ul>

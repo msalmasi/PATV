@@ -1,0 +1,41 @@
+# deploy/mediactl/mediactl.service - PATV media-control ("📼 Play from library"), site 1.99ji.
+# Runs in the Plex container (next to the files and the iGPU). Installed by deploy/mediactl/install.sh.
+# Config: /etc/mediactl/mediactl.env (root:mediactl 0640). Emergency stop of every library stream:
+#     systemctl stop mediactl
+[Unit]
+Description=PATV media-control (Plex library -> stage RTMP)
+After=network-online.target plexmediaserver.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mediactl
+Group=mediactl
+SupplementaryGroups=render video
+EnvironmentFile=/etc/mediactl/mediactl.env
+Environment=MEDIACTL_WORKDIR=/run/mediactl
+RuntimeDirectory=mediactl
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/node /usr/local/lib/mediactl/mediactl.js
+Restart=always
+RestartSec=5
+KillMode=control-group
+KillSignal=SIGTERM
+TimeoutStopSec=15
+SyslogIdentifier=mediactl
+# hardening: reads media (read-only mounts), talks to Plex on loopback, pushes RTMP out, uses /dev/dri
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# (no DevicePolicy: device cgroup filters don't work inside an unprivileged LXC; /dev/dri is all it has anyway)
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

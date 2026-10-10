@@ -1,0 +1,101 @@
+<%- include('partials/admin-open', { title: 'Plex & media', user: user, section: 'media', admIsAdmin: true }) %>
+<!-- views/mediaAdmin.ejs — 1.99ji: Plex / media integrations (mediaweb.js): 📼 library playback, 🎬 Overseerr requests, 🎟️ Wizarr invites. -->
+<link rel="stylesheet" href="/public/css/stage.css?v=6">
+<% const yes = (b) => b ? '✅' : '—'; const fmt = (n) => Number(n || 0).toLocaleString('en-US'); const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : ''; %>
+<main class="sb" id="mediaAdm">
+  <div class="sb-head">
+    <h1>🎬 Plex &amp; media</h1>
+    <p class="lede">Everything here is OFF until its keys are in the server's <code>.env</code> and you switch it on. Keys never show on a page.</p>
+  </div>
+
+  <section class="sb-card" id="checks" aria-labelledby="ckT">
+    <h2 id="ckT">Connections</h2>
+    <div class="tblwrap"><table><thead><tr><th>Service</th><th>Keys in .env</th><th>Switched on</th><th>Reachable</th></tr></thead>
+      <tbody>
+        <tr><td>📼 Media-control (homelab)</td><td><%= yes(K.mediactl) %> <small class="muted">MEDIACTL_URL, MEDIACTL_SECRET<%= K.mediactl_tls_pinned ? ', TLS pinned' : '' %></small></td><td><%= yes(S.library_enabled) %></td><td data-ck="mediactl">…</td></tr>
+        <tr><td>🎬 Overseerr / Seerr</td><td><%= yes(K.overseerr) %> <small class="muted">OVERSEERR_URL, OVERSEERR_API_KEY<%= K.overseerr_webhook ? ', webhook secret' : '' %></small></td><td><%= yes(S.requests_enabled) %></td><td data-ck="overseerr">…</td></tr>
+        <tr><td>🎟️ Wizarr</td><td><%= yes(K.wizarr) %> <small class="muted">WIZARR_URL, WIZARR_API_KEY</small></td><td><%= yes(S.invites_enabled) %></td><td data-ck="wizarr">…</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <% if (libraryOk) { %>
+  <section id="library">
+    <%- include('partials/media-library', { pads: pads, house: house }) %>
+  </section>
+  <% } %>
+  <section class="sb-card" id="plays" aria-labelledby="plT">
+    <h2 id="plT">📼 Play log</h2>
+    <div class="tblwrap"><table><thead><tr><th>When</th><th>Who</th><th>Pad</th><th>Title</th><th>From</th><th>Ended</th></tr></thead><tbody>
+      <% plays.forEach((p) => { %><tr><td><%= when(p.ts) %></td><td><%= p.username %></td><td><%= p.room_id %></td><td><%= p.title %> <small class="muted"><%= p.quality %>p</small></td>
+        <td><%= p.offset_start ? Math.floor(p.offset_start / 60) + ' min' : 'start' %></td><td><%= p.ended_at ? when(p.ended_at) + ' — ' + (p.end_reason || '') : 'playing' %><%= p.error ? ' — ' + p.error : '' %></td></tr><% }) %>
+      <% if (!plays.length) { %><tr><td colspan="6" class="muted">Nothing played yet.</td></tr><% } %>
+    </tbody></table></div>
+  </section>
+
+  <section class="sb-card" id="settings" aria-labelledby="stT">
+    <h2 id="stT">Settings</h2>
+    <form id="mediaSettings" class="book" autocomplete="off">
+      <input type="hidden" name="_bools" value="library_enabled,requests_enabled,invites_enabled">
+      <h3>📼 Play from library</h3>
+      <label class="chk"><input type="checkbox" name="library_enabled" <%= S.library_enabled ? 'checked' : '' %>> On</label>
+      <label>Who may use it <select name="library_allow"><option value="admins" <%= S.library_allow === 'admins' ? 'selected' : '' %>>Site admins</option><option value="staff" <%= S.library_allow === 'staff' ? 'selected' : '' %>>Admins + staff</option></select></label>
+      <label>Default quality <select name="library_quality"><% [1080, 720, 480].forEach((q) => { %><option value="<%= q %>" <%= S.library_quality === q ? 'selected' : '' %>><%= q %>p</option><% }) %></select></label>
+      <label>A paused library slot ends after (minutes) <input type="number" name="library_pause_max_min" min="5" max="240" value="<%= S.library_pause_max_min %>"></label>
+
+      <h3>🎬 Requests (Overseerr)</h3>
+      <label class="chk"><input type="checkbox" name="requests_enabled" <%= S.requests_enabled ? 'checked' : '' %>> On — <a href="/requests">/requests</a></label>
+      <label>Movie request price (PAT, 0 = free) <input type="number" name="request_price_movie" min="0" value="<%= S.request_price_movie %>"></label>
+      <label>Show request price (PAT, 0 = free) <input type="number" name="request_price_tv" min="0" value="<%= S.request_price_tv %>"></label>
+      <label>Requests per account per day (0 = no limit) <input type="number" name="requests_per_day" min="0" max="100" value="<%= S.requests_per_day %>"></label>
+      <label>Minimum level <input type="number" name="request_min_level" min="0" value="<%= S.request_min_level %>"></label>
+      <label>Overseerr service user id for accounts with no match (blank = the API key's owner) <input type="text" name="overseerr_service_user" value="<%= S.overseerr_service_user %>" inputmode="numeric"></label>
+      <label>Re-check open requests every (minutes) <input type="number" name="request_poll_min" min="2" max="240" value="<%= S.request_poll_min %>"></label>
+      <label>Store items that add request credits <small class="muted">{"prizeId": {"kind": "movie"|"tv", "n": 10}}</small>
+        <textarea name="credit_items" rows="4" spellcheck="false"><%= JSON.stringify(S.credit_items, null, 1) %></textarea></label>
+
+      <h3>🎟️ Plex invites (Wizarr)</h3>
+      <label class="chk"><input type="checkbox" name="invites_enabled" <%= S.invites_enabled ? 'checked' : '' %>> On — store purchases of the items below get a Wizarr invite automatically</label>
+      <label>Wizarr server ids (comma-separated, blank = default) <input type="text" name="wizarr_server_ids" value="<%= S.wizarr_server_ids %>"></label>
+      <label>Wizarr library ids (comma-separated, blank = all) <input type="text" name="wizarr_library_ids" value="<%= S.wizarr_library_ids %>"></label>
+      <div class="row"><button type="button" class="btn" id="wzCat">List Wizarr servers + libraries</button><span class="muted" id="wzCatOut"></span></div>
+      <label>The invite link works for (days) <select name="wizarr_link_days"><% [1, 7, 30].forEach((d) => { %><option value="<%= d %>" <%= S.wizarr_link_days === d ? 'selected' : '' %>><%= d %></option><% }) %></select></label>
+      <label>Store items that are Plex invites <small class="muted">{"prizeId": {"days": 30}} — days of access, 0 = lifetime</small>
+        <textarea name="invite_items" rows="5" spellcheck="false"><%= JSON.stringify(S.invite_items, null, 1) %></textarea></label>
+      <div class="row"><button type="submit" class="btn primary">Save settings</button><span class="msg" id="setMsg" role="status"></span></div>
+    </form>
+  </section>
+
+  <section class="sb-card" id="requests" aria-labelledby="rqT">
+    <h2 id="rqT">Requests</h2>
+    <div class="row"><button type="button" class="btn" id="rqPoll">Re-check open requests now</button><span class="msg" id="rqMsg" role="status"></span></div>
+    <div class="tblwrap"><table><thead><tr><th>#</th><th>Who</th><th>Title</th><th>Status</th><th>Paid</th><th>As</th><th>When</th></tr></thead><tbody>
+      <% requests.recent.forEach((r) => { %><tr><td><%= r.id %></td><td><%= r.username %></td><td><%= r.media_type === 'tv' ? '📺' : '🎬' %> <%= r.title %><%= r.year ? ' (' + r.year + ')' : '' %></td>
+        <td><%= r.status %><%= r.error ? ' — ' + r.error : '' %></td><td><%= r.paid_with %><%= r.price ? ' ' + fmt(r.price) : '' %><% if (r.order_id) { %> <a href="/shop/orders/<%= r.order_id %>">#<%= r.order_id %></a><% } %></td>
+        <td><%= r.mapped_by || '' %></td><td><%= when(r.created) %></td></tr><% }) %>
+      <% if (!requests.recent.length) { %><tr><td colspan="7" class="muted">None yet.</td></tr><% } %>
+    </tbody></table></div>
+    <h3>Link a PATV account to an Overseerr user</h3>
+    <p class="muted">Without a link, a PATV account whose VERIFIED email matches an Overseerr user requests as that user; everyone else as the service user above.</p>
+    <form id="linkForm" class="row" autocomplete="off">
+      <input type="text" name="username" placeholder="PATV username" required maxlength="40">
+      <input type="text" name="overseerr_user" placeholder="Overseerr user id (blank = unlink)" inputmode="numeric" maxlength="9">
+      <button type="submit" class="btn">Save link</button><span class="msg" id="linkMsg" role="status"></span>
+    </form>
+    <ul class="muted"><% requests.links.forEach((l) => { %><li><%= l.username || l.user_id %> → Overseerr user <%= l.overseerr_user %> <small>(<%= l.set_by || '' %>)</small></li><% }) %></ul>
+  </section>
+
+  <section class="sb-card" id="invites" aria-labelledby="ivT">
+    <h2 id="ivT">Plex invites — manual queue</h2>
+    <p class="muted">Orders whose Wizarr invite couldn't be made (Wizarr down). They're retried every 10 minutes (6 times); retry now, or paste a link / note you sent by hand (it goes to the buyer's order page + a DM).</p>
+    <div class="tblwrap"><table><thead><tr><th>Order</th><th>Buyer</th><th>Item</th><th>Tries</th><th>Last error</th><th></th></tr></thead><tbody>
+      <% invites.queue.forEach((q) => { %><tr data-inv="<%= q.id %>"><td><a href="/shop/orders/<%= q.order_id %>">#<%= q.order_id %></a></td><td><%= q.username %></td><td><%= q.title %></td><td><%= q.attempts %></td><td><%= q.error || '' %></td>
+        <td><button type="button" class="btn" data-inv-act="retry">Retry</button> <button type="button" class="btn" data-inv-act="sent">Sent by hand…</button></td></tr><% }) %>
+      <% if (!invites.queue.length) { %><tr><td colspan="6" class="muted">Empty.</td></tr><% } %>
+    </tbody></table></div>
+    <p class="msg" id="invMsg" role="status"></p>
+    <h3>Recent invites</h3>
+    <ul class="muted"><% invites.recent.forEach((r) => { %><li>#<%= r.order_id %> <%= r.username %> — <%= r.title %> — <%= r.status %><%= r.done_by && r.done_by !== 'system' ? ' by ' + r.done_by : '' %> <small><%= when(r.updated) %></small></li><% }) %></ul>
+  </section>
+</main>
+<script src="/public/js/media-admin.js?v=1" defer></script>
+<%- include('partials/admin-close') %>

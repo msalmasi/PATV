@@ -171,6 +171,7 @@ function init() {
       await addColumn("stage_slots", "approved_by", "TEXT");
       await addColumn("stage_slots", "notified", "INTEGER NOT NULL DEFAULT 0");
       await addColumn("stage_slots", "via", "TEXT");                  // 1.99et: how it's live now - rtmp | browser | whip
+      await addColumn("stage_slots", "source", "TEXT");               // 1.99ji: 'library' = 📼 played from the Plex library (medialib.js)
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
                       start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
@@ -543,6 +544,54 @@ async function book(user, opts = {}) {
   return { slot: view(slot), key, rtmp: key ? { server: RTMP_PUBLIC, key } : null };
 }
 
+// ── 1.99ji: 📼 library slots (medialib.js) ──
+// An admin plays a movie / episode from the Plex library on a pad's stage: the homelab media-control service
+// pushes it with this slot's one-time key to the ordinary RTMP ingest, so HLS, WHEP, snaps and the Twitch relay
+// see a normal slot. Free (nothing held), as long as the title (+ slack), outside the per-user booking limits;
+// still one per pad at a time and inside the pad's slot count and the site-wide max_concurrent.
+let libraryIdleMin = 30;
+const idleMinFor = (s, C = CONFIG) => (s && s.source === "library" ? Math.max(C.idle_grace_min, libraryIdleMin) : C.idle_grace_min);
+function setLibraryIdle(min) { const n = Math.floor(Number(min)); if (Number.isFinite(n) && n >= 1 && n <= 24 * 60) libraryIdleMin = n; return libraryIdleMin; }
+async function libraryOpen(user, opts = {}) {
+  await init();
+  if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
+  const C = CONFIG;
+  const roomId = String(opts.room || rooms.HOUSE_ROOM);
+  const R = await rooms.get(roomId);
+  if (!R && roomId !== rooms.HOUSE_ROOM) throw new Refuse(404, "No such pad.");
+  const RS = R || (await rooms.stageSettings(roomId));
+  const minutes = Math.floor(Number(opts.minutes));
+  if (!Number.isFinite(minutes) || minutes < 1 || minutes > 24 * 60) throw new Refuse(400, "Bad length.");
+  const title = cleanTitle(opts.title);
+  const key = newKey();
+  const id = uuidv4();
+  const t = now();
+  await tx(async () => {
+    const open = await getQuery(`SELECT * FROM stage_slots WHERE room_id = ? AND status IN ${OPEN}`, [roomId]);
+    if (open.some((s) => s.source === "library")) throw new Refuse(409, "This pad's stage is already playing something from the library - stop it first.");
+    const all = await getQuery(`SELECT COUNT(*) AS n FROM stage_slots WHERE status IN ${OPEN}`);
+    if (all[0].n >= C.max_concurrent) throw new Refuse(409, `The site already has ${all[0].n} streams open (the most at once) - end one first.`);
+    if (open.length >= RS.slot_count) throw new Refuse(409, RS.slot_count > 1 ? `All ${RS.slot_count} slots in this pad are taken.` : "This pad's stage slot is taken - end it first.");
+    const u = (await getQuery("SELECT username, displayname FROM users WHERE userId = ?", [user.userId]))[0];
+    if (!u) throw new Refuse(404, "Couldn't find your account.");
+    const stream = STREAM_PREFIX + crypto.randomBytes(8).toString("hex");
+    await runQuery(`INSERT INTO stage_slots (id, userId, username, displayname, status, created, max_minutes, price_per_min, held,
+                    key_hash, stream, revenue_vault, room_id, kind, featured, feature_by, mode, embed, start_at, title, source)
+                    VALUES (?, ?, ?, ?, 'waiting', ?, ?, 0, 0, ?, ?, 'room_flow', ?, 'slot', 0, NULL, 'stream', NULL, ?, ?, 'library')`,
+                   [id, user.userId, u.username, u.displayname || u.username, t, minutes, sha(key), stream, roomId, t, title]);
+  });
+  pubCache.clear();
+  await event(id, "library", user.username, `📼 ${title || "library"} (${minutes} min max)`, roomId);
+  return { slot: view(await getSlot(id)), key, rtmp: { server: RTMP_PUBLIC, key } };
+}
+/** A library slot needs more time (seeking back, a long pause): raise its max_minutes. */
+async function libraryExtend(slotId, minutes) {
+  await init();
+  const m = Math.min(24 * 60, Math.floor(Number(minutes)) || 0);
+  const r = await runQuery("UPDATE stage_slots SET max_minutes = MAX(max_minutes, ?) WHERE id = ? AND source = 'library' AND settled = 0", [m, String(slotId || "")]);
+  return !!(r && r.changes);
+}
+
 // ── settle: the ONLY place money comes back out of a slot ──
 async function end(slotId, reason, actor) {
   await init();
@@ -697,7 +746,8 @@ async function tick() {
       let why = null;
       if (liveMs >= s.max_minutes * 60000) why = "time_up";
       else if (s.status === "waiting" && t - startOf(s) > C.start_window_min * 60000) why = "never_live";
-      else if (s.status === "active" && !isEmbed(s) && !live && t - (s.last_live || s.went_live || startOf(s)) > C.idle_grace_min * 60000) why = "idle";
+      // 1.99ji: a 📼 library slot may sit paused (pause = its ffmpeg stopped) for longer than a streamer may drop out
+      else if (s.status === "active" && !isEmbed(s) && !live && t - (s.last_live || s.went_live || startOf(s)) > idleMinFor(s, C) * 60000) why = "idle";
       else if (t > deadline(s, C)) why = "deadline";
       if (why) await end(s.id, why, "system");
     } catch (e) {
@@ -1058,6 +1108,7 @@ function view(s, t = now()) {
     mode: s.mode || "stream", embed: e, embed_label: e ? embeds.label(e) : null, title: s.title || null,
     // 1.99cr (stagecap.js): may viewers snap / clip this slot (its streamer's choice, default yes), is it NSFW
     capture: !s.capture_off && !isEmbed(s) && s.via !== "whip", nsfw: !!s.nsfw,
+    library: s.source === "library",                                     // 1.99ji: 📼 played from the Plex library
   };
 }
 // 1.99et: a WHIP slot's HLS comes from MediaMTX (webrtc.js), everything else from nginx-rtmp's /hls
@@ -1481,6 +1532,7 @@ module.exports = {
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
+  libraryOpen, libraryExtend, setLibraryIdle, idleMinFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },

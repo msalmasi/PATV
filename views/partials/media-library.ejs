@@ -1,0 +1,39 @@
+<%# views/partials/media-library.ejs — 1.99ji: 📼 Play from library (medialib.js). Site admins only (the caller checks).
+    Params: room (a pad id: the player is fixed to it) OR pads + house (a pad picker). Drawn by /public/js/medialib.js. %>
+<% const _fixed = typeof room !== 'undefined' && room ? String(room) : ''; %>
+<div class="sb-card ml" id="mediaLibrary" data-room="<%= _fixed %>">
+  <h3>📼 Play from library</h3>
+  <p class="muted" id="mlStatus" role="status">Loading…</p>
+  <% if (!_fixed && typeof pads !== 'undefined') { %>
+    <label class="ml-pad">Pad <select id="mlRoom">
+      <% pads.forEach((p) => { %><option value="<%= p.id %>"<%= p.id === house ? ' selected' : '' %>><%= p.title %></option><% }) %>
+    </select></label>
+  <% } %>
+  <div id="mlNow" aria-live="polite"></div>
+  <form id="mlSearch" class="row" autocomplete="off" role="search">
+    <input type="text" name="q" minlength="2" maxlength="100" placeholder="Search the Plex library: a movie, a show…" aria-label="Search the Plex library" style="flex:1 1 240px">
+    <button type="submit" class="btn">Search</button>
+  </form>
+  <div id="mlResults" class="ml-grid"></div>
+  <div id="mlPick" class="ml-pick hide"></div>
+  <p class="msg" id="mlMsg" role="status"></p>
+  <p class="muted">Plays the file on this pad's stage as a free 📼 library slot (one per pad): HLS, ⚡ low latency and the Twitch relay work as for any slot, and Cut on the stage stops it. Pause stops the encoder and keeps your place (the slot ends if it stays paused too long); seeking restarts it at the new time. Every play is logged. Only show what we have the rights to show.</p>
+</div>
+<style>
+  .ml .ml-pad { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: #bbb; margin-bottom: 6px; }
+  .ml .ml-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; margin: 8px 0; }
+  .ml .ml-it { background: #0b0b0b; border: 1px solid #222; border-radius: 10px; padding: 6px; cursor: pointer; text-align: left; color: #ddd; font: inherit; display: grid; gap: 4px; }
+  .ml .ml-it:hover, .ml .ml-it:focus-visible { border-color: var(--green); }
+  .ml .ml-it img, .ml .ml-ph { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; background: #1a1a1a; display: block; }
+  .ml .ml-it b { font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+  .ml .ml-it small { color: var(--muted); font-size: 11.5px; }
+  .ml .ml-pick { border-top: 1px solid #222; padding-top: 10px; display: grid; gap: 8px; }
+  .ml .ml-pick label { font-size: 13px; color: #bbb; display: inline-flex; gap: 6px; align-items: center; }
+  .ml .ml-eps { max-height: 260px; overflow: auto; display: grid; gap: 4px; }
+  .ml .ml-eps button { text-align: left; }
+  .ml .ml-now { background: rgba(76,175,80,.08); border: 1px solid #1f3a20; border-radius: 10px; padding: 10px 12px; margin: 6px 0; display: grid; gap: 6px; }
+  .ml .ml-bar { height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+  .ml .ml-bar span { display: block; height: 100%; background: var(--green); }
+  .ml .ml-now input[type=text] { width: 90px; }
+</style>
+<script src="/public/js/medialib.js?v=1" defer></script>

@@ -1137,6 +1137,7 @@ require("./bounties").register(app, { isBotToken, addUser });
 // 1.99al: paid Main Stage slots (book, RTMP key / browser relay, per-minute billing, admin cut)
 require("./mainstage").register(app, { isBotToken, addUser });
 require("./restream").register(app, { addUser });   // 1.99fk: "Also stream to Twitch" relay (deploy/restream)
+require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - 📼 play from library on a stage (deploy/mediactl), 🎬 Overseerr requests (/requests), 🎟️ Wizarr invites; /admin/media
 // 1.99cr: viewers snap / clip the stages (server-side from the HLS on disk) -> the pad's story
 require("./stagecap").register(app, { isBotToken, addUser });
 // 1.91: link previews — every page knows its absolute URL; og.js draws the preview images

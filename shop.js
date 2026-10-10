@@ -283,6 +283,15 @@ async function notify(userId, { subject, text, pm, link }) {
 
 // ── purchase ──
 let D = { achievements: null, discordBridge: null, userRoles: null };
+// 1.99ji: after an official sale commits, these run (never awaited by the buyer, never throw into the sale): the media
+// integrations fulfil their items there (mediainvites.js: a Wizarr invite; mediarequests.js: request credits).
+const saleHooks = [];
+function onOfficialSale(fn) { if (typeof fn === "function" && !saleHooks.includes(fn)) saleHooks.push(fn); }
+function runSaleHooks(sale) {
+  for (const fn of saleHooks) {
+    Promise.resolve().then(() => fn(sale)).catch((e) => console.error("[shop] sale hook:", e && e.message));
+  }
+}
 
 // Returns {success, status, message, prize, cost, balance, remaining_stock, owner, order_id}. Never throws.
 async function purchasePrize({ userId, username, prizeId, source, buyerInput, expectedCost }) {
@@ -434,6 +443,7 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
 
     // E-0 telemetry (econ.js), best effort after the commit: the spin boost is a House inflow.
     if (boost) houseTelemetry(orderId, prize.cost, users[0].camfrogUsername || username, source);
+    runSaleHooks({ orderId, prizeId: prize.prizeId, title: prize.prize, price: prize.cost, userId, username, source });
 
     // Notifications are not part of the purchase: an outage must never turn a completed, charged
     // purchase into a reported failure.
@@ -464,6 +474,49 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
       message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
                `Balance: ${remaining.toLocaleString()} PAT.`,
     };
+  });
+}
+
+// ── 1.99ji: official SERVICE charges (no stocked prize) - e.g. a 🎬 media request (mediarequests.js) ──
+// The same money path as an official store sale: the buyer pays, the PAT goes to the store owner, and a completed
+// official order (prize_id NULL) records it on their orders page. refundService() reverses exactly that, once.
+async function chargeService({ userId, username, title, price, source, note }) {
+  await ready;
+  price = Math.floor(Number(price));
+  if (!(price > 0) || price > PRICE_MAX) throw new Refuse(400, "Bad price.");
+  title = String(title || "Service").replace(/[\r\n\t]+/g, " ").slice(0, 120);
+  const owner = (await getQuery("SELECT userId FROM users WHERE username = ?", [STORE_OWNER_USERNAME]))[0] || null;
+  return tx(async () => {
+    const r = await require("./ledger").post(userId, -price, `purchase of ${title}`, { requireCover: true, source: "shop service" });
+    if (!r.ok) {
+      if (r.code === "E_INSUFFICIENT") {
+        const b = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]))[0];
+        throw new Refuse(402, `That costs ${price.toLocaleString()} PAT and you have ${((b && b.points_balance) || 0).toLocaleString()}.`);
+      }
+      throw new Refuse(404, "We couldn't find your account.");
+    }
+    if (owner) await move(owner.userId, price, `store sale: ${title} to ${username} (${source || "website"})`);
+    const t = Date.now();
+    const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
+        seller_paid, status, source, created, completed_at, closed_at, updated)
+      VALUES (NULL, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?)`,
+      [userId, title, price, price, source || "website", t, t, t, t]);
+    await event(o.id, "completed", username, note || "Official service — charged");
+    return { order_id: o.id, price };
+  });
+}
+/** Refund a chargeService() order (whole price back to the buyer, out of the store owner). -> true once, then false. */
+async function refundService(orderId, reason, actor) {
+  await ready;
+  const owner = (await getQuery("SELECT userId FROM users WHERE username = ?", [STORE_OWNER_USERNAME]))[0] || null;
+  return tx(async () => {
+    const o = await getOrder(orderId);
+    if (!o || !o.official || o.prize_id || o.status !== "completed") return false;
+    await transition(o, "completed", "refunded", { resolution: String(reason || "refunded").slice(0, 300), closed_at: Date.now() });
+    await move(o.buyer_id, o.price, `shop refund: ${o.title} (order #${o.id})`);
+    if (owner) await require("./ledger").postOrThrow(owner.userId, -o.price, `store refund: ${o.title} (order #${o.id})`, { source: "shop service refund" });
+    await event(o.id, "refunded", actor || "system", String(reason || "refunded").slice(0, 300));
+    return true;
   });
 }
 
@@ -1248,6 +1301,6 @@ function register(app, deps) {
   });
 }
 
-module.exports = { register, purchasePrize, orderAction, createListing, editListing, listingStatus, sweep, settings, saveSettings,
+module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
                    ready, ROLE_PRIZES, STORE_OWNER_USERNAME, notify,
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise };
