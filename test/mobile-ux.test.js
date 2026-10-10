@@ -108,7 +108,7 @@ test("styles.css: every text field is >= 16px at phone widths / touch, over page
 // ── 2. the pad's user list ──
 test("room.ejs: roster rows are avatar | name (ellipsis) | fixed controls; mic names ellipse instead of widening the page", () => {
   const html = rd("views", "room.ejs");
-  assert.match(html, /\.rm \.people li \{ display: grid; grid-template-columns: 28px minmax\(0, 1fr\) max-content;[^}]*min-width: 0; max-width: 100%/);
+  assert.match(html, /\.rm \.people li \{ display: grid; grid-template-columns: 28px minmax\(0, 1fr\) auto;[^}]*min-width: 0; max-width: 100%/);
   assert.match(html, /\.rm \.people \.nm \{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; \}/);
   assert.match(html, /\.rm \.people \.ic \{[^}]*justify-self: end;[^}]*flex: none;[^}]*white-space: nowrap;/);
   assert.match(html, /\.rm \.people \.ic > \* \{ display: inline-grid; place-items: center; width: 26px; height: 26px;/, "the buttons are fixed squares");

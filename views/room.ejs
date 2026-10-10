@@ -108,7 +108,7 @@
   .rm .people { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 46vh; overflow-y: auto; }
   .rm .people { overflow-x: hidden; }
   /* 1.99ex: avatar | name (shrinks, ellipsis) | controls (fixed width, never squeezed or pushed out of the card) */
-  .rm .people li { display: grid; grid-template-columns: 28px minmax(0, 1fr) max-content; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; font-size: 14px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .rm .people li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 8px; font-size: 14px; min-width: 0; max-width: 100%; box-sizing: border-box; }
   .rm .people li:hover { background: #161616; }
   .rm .people .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rm .people .nm small { color: #777; margin-left: 4px; }
@@ -348,7 +348,7 @@
   .rm .side .card > h2 > .ht { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
   .rm .side .card > h2 > small { white-space: nowrap; margin-left: auto; flex: none; }
   /* 1.99ec: roster row - avatar, name and the 📷 / ⋯ / 🎙️ buttons centred on one line; the buttons are fixed squares */
-  .rm .people .ic { align-items: center; align-self: center; justify-self: end; flex: none; flex-wrap: nowrap; white-space: nowrap; }
+  .rm .people .ic { width: max-content; align-items: center; align-self: center; justify-self: end; flex: none; flex-wrap: nowrap; white-space: nowrap; }
   .rm .people .ic > * { display: inline-grid; place-items: center; width: 26px; height: 26px; line-height: 1; padding: 0; box-sizing: border-box; }
   .rm .people .ic button.cam, .rm .people .ic .pm-mg { width: 26px; height: 26px; padding: 0; margin: 0; border-radius: 6px; font-size: 13px; line-height: 1; }
   @media (max-width: 520px) {

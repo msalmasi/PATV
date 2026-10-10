@@ -1,3 +1,10 @@
+// 1.99jk: the VPS runs Node 16, which has no global fetch; mediarequests / mediainvites / mediaweb / stripebilling use it
+// (their tests ran on Node 20, so they passed). node-fetch 2 has the same API for what they use.
+if (typeof globalThis.fetch !== "function") {
+  const nf = require("node-fetch");
+  globalThis.fetch = nf; globalThis.Headers = globalThis.Headers || nf.Headers;
+  globalThis.Request = globalThis.Request || nf.Request; globalThis.Response = globalThis.Response || nf.Response;
+}
 // 1.99fb: the SQLite connections wait up to 5 s for a lock (busy_timeout) on libuv pool threads; give the pool room so
 // a waiting statement can't starve the one holding the lock (default 4). Must be set before anything uses the pool.
 if (!process.env.UV_THREADPOOL_SIZE) process.env.UV_THREADPOOL_SIZE = "16";
