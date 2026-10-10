@@ -128,4 +128,17 @@
     <p class="muted" style="margin:0">A new fee % applies to orders placed after the change; open orders keep the fee they were bought at.</p>
     <div><button type="submit">Save settings</button></div>
   </form>
+  <% if (typeof subsCfg !== 'undefined' && subsCfg) { %>
+  <h2 id="subscriptions">🔁 Subscriptions</h2>
+  <form class="box" method="POST" action="/shop/admin/subscriptions" style="display:grid;gap:10px">
+    <div class="formgrid">
+      <label class="check wide"><input type="checkbox" name="enabled" value="1" <%= subsCfg.enabled ? 'checked' : '' %>> Subscriptions on (off: no new ones; running ones keep renewing)</label>
+      <label>Grace when a renewal can't be paid (days) <input type="number" name="grace_days" min="0" max="14" value="<%= subsCfg.grace_days %>" required></label>
+      <label class="wide">Official items sold as a subscription <small class="muted">{"prizeId": {"days": 30}} — the price is the item's price, charged every N days</small>
+        <textarea name="items" style="min-height:90px" spellcheck="false"><%= JSON.stringify(subsCfg.items, null, 1) %></textarea></label>
+    </div>
+    <p class="muted" style="margin:0">Renewals pay the store exactly like a purchase of that item. Members manage theirs at <a href="/settings/subscriptions">/settings/subscriptions</a> (it also lists their Prime Time / Season Pass auto-renewals).</p>
+    <div><button type="submit">Save subscription settings</button></div>
+  </form>
+  <% } %>
 </div>

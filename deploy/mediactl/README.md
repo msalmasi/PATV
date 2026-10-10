@@ -41,6 +41,15 @@ the first frame (and not because of the RTMP ingest) falls through to the next o
   ffmpeg read the subtitle track from the whole file first (a minute or so on a 4K remux on the NAS).
 * `/streams` reports each stream's `mode`, `fallbacks` and `source` (codec, pix_fmt, hdr, dv, interlaced).
 
+## Plex members (mediactl 1.2.0, site 1.99jp)
+
+* `GET /plex/shares` lists who the server is shared with (plex.tv `api/servers/<machineId>/shared_servers`, read with the
+  server owner's token that's already here): share id, Plex user id, username, email (the site keeps only a keyed hash),
+  invited / accepted times. Never an access token.
+* `POST /plex/shares/:id/remove {plex_id}` removes ONE library share (not the friendship) - only when that share belongs to
+  that Plex user. The site asks only after an admin confirmed on /admin/media (or with its `plex_auto_revoke` setting on).
+  `MEDIACTL_PLEX_REVOKE=0` in `/etc/mediactl/mediactl.env` refuses every removal here.
+
 ## Security
 
 * Every call except `GET /health` is HMAC-SHA256 signed with `MEDIACTL_SECRET` (timestamp ±120 s, single-use nonce).

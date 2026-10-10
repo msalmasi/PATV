@@ -15,6 +15,11 @@
 //   POST /streams/:stage/pause        stop ffmpeg, remember the position (pause-by-stop)
 //   POST /streams/:stage/resume       start again at the remembered position
 //   POST /streams/:stage/seek         {offset} restart at that position (seek-by-restart)
+//   GET  /plex/shares                 1.2.0: who the server is shared with (plex.tv shared_servers: ids, usernames,
+//                                     emails for the site's server-side matching; never an access token)
+//   POST /plex/shares/:id/remove      1.2.0: {plex_id} remove ONE library share - the share must belong to that Plex
+//                                     user. The site only asks after an admin confirmed (or its auto-revoke is on).
+//                                     MEDIACTL_PLEX_REVOKE=0 refuses every removal here.
 //
 // ONE stream per stage (a stage = a PATV pad id). ffmpeg reads the file in real time (-re) and pushes H.264 + AAC
 // as FLV to the stage's RTMP ingest with that slot's one-time key, so the site's stage, HLS, WHEP and the Twitch
@@ -36,7 +41,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -49,6 +54,8 @@ function loadConfig(env = process.env) {
     tlsKey: env.MEDIACTL_TLS_KEY || "",
     plexUrl: String(env.PLEX_URL || "http://127.0.0.1:32400").replace(/\/+$/, ""),
     plexToken: String(env.PLEX_TOKEN || ""),
+    plexTv: String(env.PLEX_TV_URL || "https://plex.tv").replace(/\/+$/, ""),        // 1.2.0: sharing (tests point it elsewhere)
+    plexRevoke: env.MEDIACTL_PLEX_REVOKE !== "0",                                   // 1.2.0: 0 = never remove a share from here
     ffmpeg: env.FFMPEG || "ffmpeg",
     ffprobe: env.FFPROBE || "ffprobe",
     encoder: ["vaapi", "x264"].includes(env.MEDIACTL_ENCODER) ? env.MEDIACTL_ENCODER : "vaapi",
@@ -111,6 +118,17 @@ const QUALITY = { 1080: { h: 1080, vb: 5000, ab: 160 }, 720: { h: 720, vb: 3000,
 const TEXT_SUBS = new Set(["srt", "subrip", "ass", "ssa", "mov_text", "webvtt", "vtt", "text", "tx3g"]);
 const IMAGE_SUBS = new Set(["pgs", "hdmv_pgs_subtitle", "dvd_subtitle", "vobsub", "dvb_subtitle", "dvdsub"]);
 
+// plex.tv answers XML: one tag's attributes, entities decoded
+const XML_ENT = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+function xmlAttrs(s) {
+  const o = {};
+  for (const m of String(s).matchAll(/([A-Za-z_][\w.-]*)="([^"]*)"/g)) {
+    o[m[1]] = m[2].replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/gi, (x, e) => (e[0] === "#"
+      ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : XML_ENT[e.toLowerCase()]));
+  }
+  return o;
+}
+
 // ── Plex ──
 function request(urlStr, { method = "GET", headers = {}, body = null, timeout = 15000, insecure = false, raw = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -153,6 +171,37 @@ function makePlex(cfg, req = request) {
     duration: m.duration ? Math.round(m.duration / 1000) : null, poster: !!(m.thumb || m.grandparentThumb || m.parentThumb),
     leafs: m.leafCount || null,
   });
+  // 1.2.0: the server's machine identifier (local, cached) and plex.tv calls with the owner's token in a header
+  let mid = null;
+  async function machineId() {
+    if (mid) return mid;
+    if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
+    const r = await req(cfg.plexUrl + "/identity", { headers: headers(), insecure });
+    const id = (r.json && r.json.MediaContainer && r.json.MediaContainer.machineIdentifier) || (/machineIdentifier="([^"]+)"/.exec(r.text || "") || [])[1];
+    if (!id || !/^[A-Za-z0-9]{8,64}$/.test(id)) { const e = new Error("Couldn't read the Plex server's identity"); e.status = 502; throw e; }
+    mid = id;
+    return mid;
+  }
+  async function tv(method, p) {
+    if (!cfg.plexToken) { const e = new Error("PLEX_TOKEN is not set"); e.status = 503; throw e; }
+    const r = await req((cfg.plexTv || "https://plex.tv") + p, { method, headers: { ...headers(), Accept: "application/xml" } });
+    if (r.status === 401) { const e = new Error("plex.tv refused the token"); e.status = 502; throw e; }
+    if (r.status >= 400 && method === "GET") { const e = new Error(`plex.tv answered ${r.status}`); e.status = 502; throw e; }
+    return r;
+  }
+  /** -> [{share_id, plex_id, username, title, email, invited_at, accepted_at, pending, all_libraries}] (no tokens) */
+  async function shares() {
+    const r = await tv("GET", `/api/servers/${await machineId()}/shared_servers`);
+    const out = [];
+    for (const m of String(r.text || "").matchAll(/<SharedServer\b([^>]*?)\/?>/g)) {
+      const a = xmlAttrs(m[1]);
+      if (!/^\d{1,15}$/.test(a.id || "") || !/^\d{1,15}$/.test(a.userID || "")) continue;
+      out.push({ share_id: a.id, plex_id: a.userID, username: a.username || "", title: a.name || "", email: a.email || "",
+                 invited_at: Number(a.invitedAt) || null, accepted_at: Number(a.acceptedAt) || null, pending: !Number(a.acceptedAt),
+                 all_libraries: a.allLibraries === "1" });
+    }
+    return out;
+  }
   return {
     async search(q, limit = 20) {
       const mc = await get(`/hubs/search?query=${encodeURIComponent(q)}&limit=${clampInt(limit, 1, 50, 20)}&includeCollections=0&includeExternalMedia=0`);
@@ -203,6 +252,19 @@ function makePlex(cfg, req = request) {
       if (!thumb) { const e = new Error("No poster"); e.status = 404; throw e; }
       const r = await get(`/photo/:/transcode?width=240&height=360&minSize=1&upscale=1&format=jpeg&url=${encodeURIComponent(thumb)}`, true);
       return { type: String(r.headers["content-type"] || "image/jpeg"), body: r.body };
+    },
+    // ── 1.2.0: who this server is shared with (plex.tv, with the server owner's token). Never returns a token. ──
+    machineId,
+    shares,
+    /** Remove ONE library share (not the friendship). The caller names the share AND its Plex user: both must match. */
+    async removeShare(shareId, plexId) {
+      if (!/^\d{1,15}$/.test(String(shareId)) || !/^\d{1,15}$/.test(String(plexId))) { const e = new Error("bad share"); e.status = 400; throw e; }
+      const s = (await shares()).find((x) => x.share_id === String(shareId));
+      if (!s) { const e = new Error("That share isn't on the server any more."); e.status = 404; throw e; }
+      if (s.plex_id !== String(plexId)) { const e = new Error("That share belongs to a different Plex user."); e.status = 409; throw e; }
+      const r = await tv("DELETE", `/api/servers/${await machineId()}/shared_servers/${s.share_id}`);
+      if (r.status >= 400) { const e = new Error(`plex.tv answered ${r.status}`); e.status = 502; throw e; }
+      return { removed: true, share_id: s.share_id, plex_id: s.plex_id, username: s.username };
     },
   };
 }
@@ -551,6 +613,16 @@ function makeServer(cfg, { plex, streams, clock = () => Date.now() } = {}) {
       return res.end(img.body);
     }
     if (req.method === "GET" && p === "/streams") return send(res, 200, { ok: true, streams: streams.list(), max: cfg.maxStreams });
+    // 1.2.0: the server's Plex shares (PATV's Plex members) and removing one (the site asks only after an admin confirmed)
+    if (req.method === "GET" && p === "/plex/shares") return send(res, 200, { ok: true, shares: await plex.shares() });
+    if (req.method === "POST" && (m = /^\/plex\/shares\/(\d{1,15})\/remove$/.exec(p))) {
+      let b = {};
+      try { b = body.length ? JSON.parse(body.toString("utf8")) : {}; } catch (e) { return send(res, 400, { ok: false, error: "bad JSON" }); }
+      if (cfg.plexRevoke === false) return send(res, 403, { ok: false, error: "Removing shares is switched off here (MEDIACTL_PLEX_REVOKE=0)." });
+      const r = await plex.removeShare(m[1], b.plex_id);
+      console.log(`[mediactl] removed Plex share ${r.share_id} (${r.username || r.plex_id}) - asked by the site${b.by ? " for " + String(b.by).slice(0, 40) : ""}`);
+      return send(res, 200, { ok: true, ...r });
+    }
     if ((m = /^\/streams\/([A-Za-z0-9._-]{1,80})(?:\/(stop|pause|resume|seek))?$/.exec(p))) {
       const stage = m[1], op = m[2] || null;
       let b = {};
@@ -606,5 +678,5 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { loadConfig, sign, ipAllowed, ffmpegArgs, escFilter, makePlex, makeStreams, makeServer, VERSION, QUALITY,
+module.exports = { loadConfig, sign, xmlAttrs, ipAllowed, ffmpegArgs, escFilter, makePlex, makeStreams, makeServer, VERSION, QUALITY,
                    parseProbe, probeFile, pickModes, outSize, hwDecodable, MODES };

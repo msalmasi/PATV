@@ -392,3 +392,29 @@ test("makePlex parses Plex's JSON: hub search, a movie's part + streams, a show'
   await assert.rejects(P.item("999"), (e) => e.status === 404);
   assert.ok(seen.every((x) => x.token === "tok" && !x.url.includes("tok")), "the token never goes in the URL");
 });
+
+test("1.2.0: Plex shares from plex.tv (ids, names, no tokens) and removing one only when the share belongs to that Plex user", async () => {
+  const seen = [];
+  const xml = '<MediaContainer><SharedServer id="40000001" username="sharer1" email="g@x.test" userID="50000001" accessToken="SECRETTOK" name="Gang &amp; Co" acceptedAt="1700000192" invitedAt="1700000190" allLibraries="1"></SharedServer>' +
+              '<SharedServer id="42" username="pend" email="" userID="77" accessToken="T2" acceptedAt="0" invitedAt="1700000000" allLibraries="0"/></MediaContainer>';
+  const fake = async (url, o) => {
+    seen.push({ url, method: o.method || "GET", token: o.headers["X-Plex-Token"] });
+    if (url.endsWith("/identity")) return { status: 200, json: { MediaContainer: { machineIdentifier: "abcdef0123456789" } } };
+    if (/\/api\/servers\/abcdef0123456789\/shared_servers$/.test(url) && (o.method || "GET") === "GET") return { status: 200, json: null, text: xml };
+    if (/shared_servers\/40000001$/.test(url) && o.method === "DELETE") return { status: 200, json: null, text: "" };
+    return { status: 404, json: null, text: "" };
+  };
+  const P = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok", plexTv: "https://plex.example" }, fake);
+  const s = await P.shares();
+  assert.equal(s.length, 2);
+  assert.deepEqual([s[0].share_id, s[0].plex_id, s[0].username, s[0].title, s[0].pending], ["40000001", "50000001", "sharer1", "Gang & Co", false]);
+  assert.equal(s[1].pending, true);
+  assert.ok(!JSON.stringify(s).includes("SECRETTOK"), "access tokens are never returned");
+  await assert.rejects(P.removeShare("40000001", "999"), (e) => e.status === 409, "the share must belong to that Plex user");
+  await assert.rejects(P.removeShare("5", "50000001"), (e) => e.status === 404);
+  assert.equal(seen.filter((x) => x.method === "DELETE").length, 0);
+  const r = await P.removeShare("40000001", "50000001");
+  assert.equal(r.removed, true);
+  assert.equal(seen.filter((x) => x.method === "DELETE").length, 1);
+  assert.ok(seen.every((x) => x.token === "tok" && !x.url.includes("tok")), "the token is a header, never in the URL");
+});

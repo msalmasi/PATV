@@ -32,20 +32,34 @@
     </tbody></table></div>
   </section>
 
+  <section class="sb-card" id="plexMembers" aria-labelledby="pmT">
+    <h2 id="pmT">📼 Plex members</h2>
+    <p class="muted">Who's on our Plex server (read from Plex through media-control), which PATV account each one is, and the access PATV sold them. Auto-links: a PATV order's Wizarr invite, an Overseerr link, a VERIFIED email match; a same name is only a suggestion. Pre-existing / manual shares are never removed.</p>
+    <div class="row"><button type="button" class="btn primary" id="pmSync">Sync now</button><button type="button" class="btn" id="pmDry">Preview (dry run)</button><span class="msg" id="pmMsg" role="status"></span></div>
+    <div id="pmOut"><p class="muted">Loading…</p></div>
+  </section>
+
   <section class="sb-card" id="settings" aria-labelledby="stT">
     <h2 id="stT">Settings</h2>
     <form id="mediaSettings" class="book" autocomplete="off">
-      <input type="hidden" name="_bools" value="library_enabled,library_plex,requests_enabled,invites_enabled">
+      <input type="hidden" name="_bools" value="library_enabled,library_plex,requests_enabled,invites_enabled,plex_auto_revoke,plex_selflink,plex_flair,wizarr_timed">
       <h3>📼 Play from library</h3>
       <label class="chk"><input type="checkbox" name="library_enabled" <%= S.library_enabled ? 'checked' : '' %>> On</label>
       <label>Who may use it <select name="library_allow"><option value="admins" <%= S.library_allow === 'admins' ? 'selected' : '' %>>Site admins</option><option value="staff" <%= S.library_allow === 'staff' ? 'selected' : '' %>>Admins + staff</option></select></label>
       <label>Default quality <select name="library_quality"><% [1080, 720, 480].forEach((q) => { %><option value="<%= q %>" <%= S.library_quality === q ? 'selected' : '' %>><%= q %>p</option><% }) %></select></label>
       <label>A paused library slot ends after (minutes) <input type="number" name="library_pause_max_min" min="5" max="240" value="<%= S.library_pause_max_min %>"></label>
-      <label class="chk"><input type="checkbox" name="library_plex" <%= S.library_plex ? 'checked' : '' %>> Plex users may play too, for PAT (the 📼 choice on <a href="/stage">/stage</a> → Go live)</label>
-      <label>Price, PAT per started hour of the title (0 = free) <input type="number" name="library_price" min="0" max="100000000" step="1000" value="<%= S.library_price %>"></label>
-      <label>Paid plays per Plex user per 24 h <input type="number" name="library_daily_cap" min="0" max="50" value="<%= S.library_daily_cap %>"></label>
-      <label>Always count as Plex users (usernames, comma-separated) <input type="text" name="library_users" value="<%= S.library_users %>" maxlength="4000"></label>
-      <p class="muted" style="grid-column: 1 / -1; margin: 0">A Plex user = an active Plex invite from the store (within its days; lifetime = always), an Overseerr link below, or the list above. Paid plays: the price is held when they press Play, routed once it's on the stage (50% Fort Knox / 50% the pad's room vault; 100% Fort Knox on their own pad), refunded if it never gets there. Admins (above) play free.</p>
+      <label class="chk"><input type="checkbox" name="library_plex" <%= S.library_plex ? 'checked' : '' %>> Members may play too (the 📼 choice on <a href="/stage">/stage</a> → Go live): Plex members free, everyone else for PAT</label>
+      <label>Price for non-members, PAT per started hour of the title (0 = free) <input type="number" name="library_price" min="0" max="100000000" step="1000" value="<%= S.library_price %>"></label>
+      <label>Paid plays per member per 24 h <input type="number" name="library_daily_cap" min="0" max="50" value="<%= S.library_daily_cap %>"></label>
+      <label>Free plays per Plex member per 24 h <input type="number" name="library_free_daily_cap" min="0" max="50" value="<%= S.library_free_daily_cap %>"></label>
+      <label>Always count as Plex members (usernames, comma-separated) <input type="text" name="library_users" value="<%= S.library_users %>" maxlength="4000"></label>
+      <p class="muted" style="grid-column: 1 / -1; margin: 0">A Plex member = a PATV account linked to a Plex account that's on our server with active access (📼 Plex members below), or the list above. Paid plays: the price is held when they press Play, routed once it's on the stage (flow library_play: 50% Fort Knox / 50% the pad's room vault; 100% Fort Knox on their own pad), refunded if it never gets there. Admins (above) play free.</p>
+
+      <h3>📼 Plex members</h3>
+      <label>Re-read the server's shares every (minutes) <input type="number" name="plex_sync_min" min="10" max="1440" value="<%= S.plex_sync_min %>"></label>
+      <label class="chk"><input type="checkbox" name="plex_auto_revoke" <%= S.plex_auto_revoke ? 'checked' : '' %>> Remove ended PATV-sold access automatically (off = the sync only lists it; you click Remove)</label>
+      <label class="chk"><input type="checkbox" name="plex_selflink" <%= S.plex_selflink ? 'checked' : '' %>> Members may link their Plex account themselves (Plex sign-in on /settings/subscriptions)</label>
+      <label class="chk"><input type="checkbox" name="plex_flair" <%= S.plex_flair ? 'checked' : '' %>> Show the automatic 📼 Plex chip / flair for active members</label>
 
       <h3>🎬 Requests (Overseerr)</h3>
       <label class="chk"><input type="checkbox" name="requests_enabled" <%= S.requests_enabled ? 'checked' : '' %>> On — <a href="/requests">/requests</a></label>
@@ -63,6 +77,7 @@
       <label>Wizarr server ids (comma-separated, blank = default) <input type="text" name="wizarr_server_ids" value="<%= S.wizarr_server_ids %>"></label>
       <label>Wizarr library ids (comma-separated, blank = all) <input type="text" name="wizarr_library_ids" value="<%= S.wizarr_library_ids %>"></label>
       <div class="row"><button type="button" class="btn" id="wzCat">List Wizarr servers + libraries</button><span class="muted" id="wzCatOut"></span></div>
+      <label class="chk"><input type="checkbox" name="wizarr_timed" <%= S.wizarr_timed ? 'checked' : '' %>> Let Wizarr expire timed invites itself (off: PATV tracks the time and removals go through the review below)</label>
       <label>The invite link works for (days) <select name="wizarr_link_days"><% [1, 7, 30].forEach((d) => { %><option value="<%= d %>" <%= S.wizarr_link_days === d ? 'selected' : '' %>><%= d %></option><% }) %></select></label>
       <label>Store items that are Plex invites <small class="muted">{"prizeId": {"days": 30}} — days of access, 0 = lifetime</small>
         <textarea name="invite_items" rows="5" spellcheck="false"><%= JSON.stringify(S.invite_items, null, 1) %></textarea></label>
@@ -102,5 +117,5 @@
     <ul class="muted"><% invites.recent.forEach((r) => { %><li>#<%= r.order_id %> <%= r.username %> — <%= r.title %> — <%= r.status %><%= r.done_by && r.done_by !== 'system' ? ' by ' + r.done_by : '' %> <small><%= when(r.updated) %></small></li><% }) %></ul>
   </section>
 </main>
-<script src="/public/js/media-admin.js?v=1" defer></script>
+<script src="/public/js/media-admin.js?v=2" defer></script>
 <%- include('partials/admin-close') %>

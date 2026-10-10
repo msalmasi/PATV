@@ -229,45 +229,52 @@ async function pubLatest() {
   return pub(url.slice(S.RTMP_PUBLIC.length + 1));
 }
 
-test("who is a Plex user: an invite still in its days (lifetime = forever), an admin link, the override list; refunded / expired = no", async () => {
+// 1.99jp: plexU is an ordinary member who PAYS (not on our Plex server); Plex members play free (the next test)
+test("1.99jp terms: everyone signed in may play - non-members pay per started hour, members on the server free, override list, admins free", async () => {
   await conf.set({ library_enabled: true, library_plex: true, library_price: 100000, library_daily_cap: 2 }, "test");
   plexU = await mkUser(); other = await mkUser();
   await runQuery("UPDATE users SET points_balance = 1000000 WHERE userId IN (?, ?)", [plexU.userId, other.userId]);
   let a = await L.access(other);
-  assert.equal(a.ok, false);
-  assert.equal(a.why, "noplex");
-  assert.equal(a.hint, "/shop/item/" + INV_MONTH, "the hint points at the store's Plex invite");
-  await order(other.userId, INV_MONTH, 40);                                        // a month's invite, 40 days ago: over
-  await order(other.userId, INV_MONTH, 5, "refunded");                             // refunded: doesn't count
-  assert.equal((await L.access(other)).ok, false);
+  assert.deepEqual([a.ok, a.free, a.how], [true, false, "paid"], "not locked any more: they pay");
+  assert.equal(a.hint, "/shop/item/" + INV_MONTH, "the hint points at the store's Plex access");
+  // a store purchase alone isn't membership any more - being on the server is (plexmembers.js)
   await order(plexU.userId, INV_MONTH, 10);
-  a = await L.access(plexU);
-  assert.equal(a.ok, true);
-  assert.equal(a.free, false);
-  assert.equal(a.how, "invite");
-  assert.ok(Math.abs(a.until - (Date.now() + 20 * DAY)) < 60000);
-  const life = await mkUser();
-  await order(life.userId, INV_LIFE, 900);
-  assert.equal((await L.access(life)).how, "invite");
-  assert.equal((await L.access(life)).until, null);
-  const linked = await mkUser();
-  await runQuery("CREATE TABLE IF NOT EXISTS media_user_links (user_id TEXT PRIMARY KEY, overseerr_user INTEGER NOT NULL, set_by TEXT, at INTEGER)");
-  await runQuery("INSERT INTO media_user_links (user_id, overseerr_user) VALUES (?, 7)", [linked.userId]);
-  assert.equal((await L.access(linked)).how, "linked");
+  assert.equal((await L.access(plexU)).how, "paid");
+  const PM = require(path.join(repo, "plexmembers"));
+  await PM.init();
+  const mem = await mkUser();
+  await runQuery("INSERT INTO plex_members (plex_id, username, on_server, pending, user_id, access) VALUES ('900', 'memp', 1, 0, ?, 'pre-existing')", [mem.userId]);
+  a = await L.access(mem);
+  assert.deepEqual([a.ok, a.free, a.how], [true, true, "plex"]);
+  const pend = await mkUser();
+  await runQuery("INSERT INTO plex_members (plex_id, username, on_server, pending, user_id, access) VALUES ('901', 'pendp', 1, 1, ?, 'pre-existing')", [pend.userId]);
+  assert.equal((await L.access(pend)).how, "paid", "an invite not accepted yet isn't membership");
   await conf.set({ library_users: "Nobody, " + other.username.toUpperCase() }, "test");
   assert.equal((await L.access(other)).how, "override");
+  assert.equal((await L.access(other)).free, true);
   await conf.set({ library_users: "" }, "test");
-  // admins stay free; the switch off = Plex users are locked out, admins aren't
+  // admins stay free; the switch off = everyone but the admins is out
   assert.equal((await L.access(admin)).free, true);
   await conf.set({ library_plex: false }, "test");
   assert.equal((await L.access(plexU)).why, "off");
+  assert.equal((await L.access(mem)).why, "off");
   assert.equal((await L.access(admin)).ok, true);
   await conf.set({ library_plex: true }, "test");
-  await assert.rejects(L.search(other, "charade"), (e) => e.status === 403);
   assert.equal((await L.search(plexU, "charade"))[0].key, "500");
   const it = await L.item(plexU, "500");
   assert.equal(it.file, undefined, "file paths are for admins");
   assert.deepEqual(it.pricing, { price: 200000, hours: 2, per_hour: 100000, free: false });
+  assert.deepEqual((await L.item(mem, "500")).pricing, { price: 0, hours: 0, per_hour: 0, free: true });
+  // a member's free play: no price, logged as 'plex', counted against the free cap
+  await conf.set({ library_free_daily_cap: 1 }, "test");
+  const r = await L.play(mem, { room: ROOM, key: "500" });
+  assert.equal(r.price, 0);
+  const p = (await getQuery("SELECT charge, access FROM media_plays WHERE id = ?", [r.play_id]))[0];
+  assert.deepEqual([p.charge, p.access], ["free", "plex"]);
+  assert.equal((await L.mine(mem)).daily_left, 0);
+  await L.stop(mem, ROOM);
+  await assert.rejects(L.play(mem, { room: ROOM, key: "500" }), (e) => e.status === 429 && /24 hours/.test(e.message));
+  await conf.set({ library_free_daily_cap: 5 }, "test");
 });
 
 test("price: library_price per STARTED hour of what's left from the start point, at least one hour", () => {
@@ -296,7 +303,7 @@ test("a paid play: confirm the price, PAT held on a completed order, ROUTED 50/5
   let p = (await getQuery("SELECT * FROM media_plays WHERE id = ?", [r.play_id]))[0];
   assert.equal(p.charge, "held");
   assert.equal(p.price, 200000);
-  assert.equal(p.access, "invite");
+  assert.equal(p.access, "paid");
   await L.watch();
   assert.equal((await getQuery("SELECT charge FROM media_plays WHERE id = ?", [r.play_id]))[0].charge, "held", "not live yet: still held");
   // someone else can't touch it; its starter can

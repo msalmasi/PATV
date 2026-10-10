@@ -508,6 +508,39 @@ async function chargeService({ userId, username, title, price, source, note, hol
     return { order_id: o.id, price };
   });
 }
+// ── 1.99jp: a SUBSCRIPTION renewal (subscriptions.js) - the same money path as buying the official item again: the
+// buyer pays the item's price, the store owner is credited (where that item's sales always went), a completed official
+// order with the item's prize_id goes on their orders page. No stock is used. `inTx(order)` runs inside the same
+// transaction (the subscription's own ledger row + new date), so the charge and the renewal commit together or not at all;
+// it may return "dup" to abort with nothing charged (-> null).
+async function chargeRenewal({ userId, username, prizeId, title, price, note, inTx }) {
+  await ready;
+  price = Math.floor(Number(price));
+  if (!(price > 0) || price > PRICE_MAX) throw new Refuse(400, "Bad price.");
+  title = String(title || "Subscription").replace(/[\r\n\t]+/g, " ").slice(0, 120);
+  const owner = (await getQuery("SELECT userId FROM users WHERE username = ?", [STORE_OWNER_USERNAME]))[0] || null;
+  if (!owner) console.error(`STORE OWNER '${STORE_OWNER_USERNAME}' not found - renewal proceeds go nowhere`);
+  const out = await tx(async () => {
+    const r = await require("./ledger").post(userId, -price, `purchase of ${title}`, { requireCover: true, source: "shop subscription" });
+    if (!r.ok) {
+      if (r.code === "E_INSUFFICIENT") throw new Refuse(402, `That costs ${price.toLocaleString()} PAT.`);
+      throw new Refuse(404, "We couldn't find the account.");
+    }
+    if (owner) await move(owner.userId, price, `store sale: ${title} to ${username} (subscription)`);
+    const t = Date.now();
+    const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
+        seller_paid, status, source, created, completed_at, closed_at, updated)
+      VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', 'subscription', ?, ?, ?, ?)`,
+      [prizeId || null, userId, title, price, price, t, t, t, t]);
+    await event(o.id, "completed", "system", note || "Subscription renewal — charged");
+    const order = { order_id: o.id, price, created: t };
+    if (inTx) { const x = await inTx(order); if (x === "dup") throw Object.assign(new Error("dup"), { dup: true }); }
+    return order;
+  }).catch((e) => { if (e && e.dup) return null; throw e; });
+  if (out) runSaleHooks({ orderId: out.order_id, prizeId, title, price, userId, username, source: "subscription", renewal: true });
+  return out;
+}
+
 /** Refund a chargeService() order (whole price back to the buyer, out of the store owner). -> true once, then false. */
 async function refundService(orderId, reason, actor) {
   await ready;
@@ -1085,7 +1118,12 @@ function register(app, deps) {
         AND ${p.seller_id ? "seller_id = ?" : "seller_id IS NULL"} ORDER BY COALESCE(sold,0) DESC LIMIT 6`,
         p.seller_id ? [p.prizeId, p.seller_id] : [p.prizeId]);
       if (!p.seller_id) await personalise(more, me && me.userId);
-      res.render("shopItem", base(req, me, { p, sales, more }));
+      // 1.99jp: an official item that's also sold as a subscription (subscriptions.js)
+      let sub = null;
+      if (!p.seller_id) {
+        try { const SUB = require("./subscriptions"); await SUB.init(); const c = SUB.config(); if (c.enabled && c.items[p.prizeId]) sub = { days: c.items[p.prizeId].days }; } catch (e) { sub = null; }
+      }
+      res.render("shopItem", base(req, me, { p, sales, more, sub }));
     } catch (e) {
       console.error("[shop] item:", e);
       res.status(500).send("Couldn't load that item.");
@@ -1231,7 +1269,9 @@ function register(app, deps) {
         ORDER BY (p.seller_id IS NULL) DESC, COALESCE(p.updated, p.created, 0) DESC LIMIT 100`, lq ? [likeArg(lq), likeArg(lq)] : []);
       const stats = (await getQuery(`SELECT COUNT(*) AS n, COALESCE(SUM(fee),0) AS fees, COALESCE(SUM(CASE WHEN status IN ('paid','disputed') AND seller_paid = 0 THEN price ELSE 0 END),0) AS held
         FROM shop_orders WHERE official = 0`))[0];
-      res.render("shopAdmin", base(req, me, { review, disputes, orders, ost, page, opages: Math.max(1, Math.ceil(ototal / 50)), listings, lq, stats }));
+      let subsCfg = null;          // 1.99jp: subscriptions.js config (its own form below the settings)
+      try { const SUB = require("./subscriptions"); await SUB.init(); subsCfg = SUB.config(); } catch (e) { subsCfg = null; }
+      res.render("shopAdmin", base(req, me, { review, disputes, orders, ost, page, opages: Math.max(1, Math.ceil(ototal / 50)), listings, lq, stats, subsCfg }));
     } catch (e) {
       console.error("[shop] admin:", e);
       res.status(500).send("Couldn't load the shop admin.");
@@ -1308,6 +1348,6 @@ function register(app, deps) {
   });
 }
 
-module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
+module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
                    ready, ROLE_PRIZES, STORE_OWNER_USERNAME, notify,
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise };

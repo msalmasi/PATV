@@ -89,7 +89,8 @@ test("on: one one-time invite per purchase, the link only on the buyer's order +
   const r = await buy(u, MONTH);
   await settle();
   assert.equal(W.posts.length, 1);
-  assert.deepEqual(W.posts[0], { expires_in_days: 7, duration: "30", unlimited: false, allow_downloads: false, allow_live_tv: false,
+  // 1.99jp: Wizarr never expires it by itself (PATV tracks the 30 days: plexmembers.js) unless wizarr_timed is on
+  assert.deepEqual(W.posts[0], { expires_in_days: 7, duration: "unlimited", unlimited: true, allow_downloads: false, allow_live_tv: false,
                                  allow_mobile_uploads: false, server_ids: [1], library_ids: [3, 4] });
   const o = await shop.getOrder(r.order_id);
   assert.equal(o.status, "completed");
@@ -109,6 +110,28 @@ test("on: one one-time invite per purchase, the link only on the buyer's order +
   // the hook firing twice for one order makes one invite
   await I.onSale({ orderId: r2.order_id, prizeId: LIFE, title: "x", price: 1, userId: u.userId, username: u.username });
   assert.equal(W.posts.length, 2);
+});
+
+test("1.99jp: wizarr_timed on = a timed invite; a subscription renewal and an existing Plex member get no new invite", async () => {
+  await conf.set({ wizarr_timed: true }, "test");
+  const u = await mkUser();
+  await buy(u, MONTH);
+  await settle();
+  assert.equal(W.posts[W.posts.length - 1].duration, "30");
+  assert.equal(W.posts[W.posts.length - 1].unlimited, false);
+  await conf.set({ wizarr_timed: false }, "test");
+  const before = W.posts.length;
+  assert.equal(await I.onSale({ orderId: 99901, prizeId: MONTH, title: "x", price: 1, userId: u.userId, username: u.username, renewal: true }), false);
+  // already on the server (an active, linked member): the purchase extends, no invite
+  const PM = require(path.join(repo, "plexmembers"));
+  await PM.init();
+  await runQuery("INSERT INTO plex_members (plex_id, username, on_server, pending, user_id, access) VALUES ('77', 'onplex', 1, 0, ?, 'pre-existing')", [u.userId]);
+  await PM.reload();
+  const r = await buy(u, MONTH);
+  await settle();
+  assert.equal(W.posts.length, before, "no new invite");
+  assert.equal((await getQuery("SELECT status FROM media_invites WHERE order_id = ?", [r.order_id]))[0].status, "extended");
+  assert.match((await shop.getOrder(r.order_id)).seller_note, /already on our Plex server \(as onplex\)/);
 });
 
 test("Wizarr down: the order goes to the manual queue, the buyer is told it's coming; the retry sends it", async () => {

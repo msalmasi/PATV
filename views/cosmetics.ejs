@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'Cosmetics', user: user }) %>
 <%- include('partials/cosmetics-css') %>
 <%
@@ -104,6 +105,8 @@
       <% } else { %><div class="cxp-muted"><a href="/login">Sign in</a> to buy.</div><% } %>
     <% } else if (it.perk === 'season_pass') { %>
       <div class="cxp-muted">🎟️ Comes with the <a href="/premium">Season Pass</a></div>
+    <% } else if (it.perk === 'plex') { %>
+      <div class="cxp-muted"><%- t('cos.plex_perk', { link: '<a href="/settings/subscriptions">' + t('cos.plex_perk_link') + '</a>' }) %></div>
     <% } else if (it.seasonState === 'upcoming') { %>
       <div class="cxp-price"><%= fmt(it.price) %> PAT</div><div class="cxp-muted">On sale in <span class="cx-cd" data-to="<%= it.seasonStart %>"><%= left(it.seasonStart) %></span></div>
     <% } else if (it.seasonState === 'over') { %>

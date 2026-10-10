@@ -171,14 +171,15 @@
     var st = $('slotState');
     st.className = 'state ' + (s.live ? 'live' : 'wait');
     st.innerHTML = (s.live ? '<span class="dot" aria-hidden="true"></span> ' + esc(_t('js.stage.live', 'LIVE')) + (s.featured ? ' · ' + esc(_t('js.stage.featured_caps', '★ FEATURED')) : '') + (lib ? ' · 📼' : '')
-      : esc(lib ? (s.went_live ? '📼 Paused / off air' : '📼 Starting…') : s.went_live ? _t('js.stage.off_air_reconnect', 'Off air - reconnect to continue') : _t('js.stage.waiting_stream', 'Waiting for your stream')));
+      : esc(lib ? (s.went_live ? _t('js.stage.lib_paused', '📼 Paused / off air') : _t('js.stage.lib_starting', '📼 Starting…')) : s.went_live ? _t('js.stage.off_air_reconnect', 'Off air - reconnect to continue') : _t('js.stage.waiting_stream', 'Waiting for your stream')));
     $('liveTime').textContent = mmss(s.live_seconds);
     $('charged').textContent = fmt(s.charged) + ' PAT';
     $('held').textContent = fmt(s.held) + ' PAT';
     if (lib) {
-      $('leftK').textContent = 'Slot open for';
+      $('leftK').textContent = _t('js.stage.lib_open_for', 'Slot open for');
       $('leftV').textContent = mmss(s.max_minutes * 60 - s.live_seconds);
-      $('slotNote').textContent = s.live ? '📼 Playing from Plex on ' + roomTitle(s.room_id) + '\'s stage.' : (s.went_live ? 'Paused - resume below.' : 'The library stream is starting - it shows on the stage within a few seconds.');
+      $('slotNote').textContent = s.live ? _t('js.stage.lib_playing', '📼 Playing from Plex on {pad}’s stage.', { pad: roomTitle(s.room_id) })
+        : (s.went_live ? _t('js.stage.lib_paused_note', 'Paused - resume below.') : _t('js.stage.lib_starting_note', 'The library stream is starting - it shows on the stage within a few seconds.'));
     } else if (!s.went_live && !embed) {
       $('leftK').textContent = _t('js.stage.go_live_within', 'Go live within');
       $('leftV').textContent = mmss((s.start_by - Date.now()) / 1000);
@@ -224,7 +225,7 @@
   window.PATVStageRefresh = refresh;                  // 1.99jn: stage-plex.js after a play / stop
 
   $('endBtn').addEventListener('click', function () {
-    if (!slot || !confirm(slot.library ? 'Stop the library stream and end your slot?' : _t('js.stage.q_end', 'End your slot now?') + (slot.held > slot.charged ? ' ' + _t('js.stage.q_end_refund', 'Unused PAT is refunded right away.') : ''))) return;
+    if (!slot || !confirm(slot.library ? _t('js.stage.lib_q_stop', 'Stop the library stream and end your slot?') : _t('js.stage.q_end', 'End your slot now?') + (slot.held > slot.charged ? ' ' + _t('js.stage.q_end_refund', 'Unused PAT is refunded right away.') : ''))) return;
     $('endBtn').disabled = true;
     stopWeb('');
     // a 📼 library slot: stop the encoder too (the stage would end it on its own within seconds)

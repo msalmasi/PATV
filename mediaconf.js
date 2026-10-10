@@ -28,12 +28,20 @@ const DEFAULTS = {
   library_allow: "admins",        // admins (class Admin) | staff (Admin + Staff). Later: approved pads.
   library_quality: 720,           // the default pick: 1080 | 720 | 480
   library_pause_max_min: 30,      // a paused library slot ends after this long
-  // 1.99jn: 📼 Play from Plex in the Go-live flow for PLEX USERS (an active Plex invite from the store, an admin-linked
-  // Overseerr identity, or the override list below), for PAT. Admins / staff (library_allow) stay free. OFF until switched on.
+  // 1.99jn: 📼 Play from Plex in the Go-live flow. 1.99jp: open to EVERY signed-in member while on - PLEX MEMBERS (on our
+  // Plex server: plexmembers.js, or the override list) play FREE, everyone else pays library_price per started hour.
+  // Admins / staff (library_allow) stay free and uncapped.
   library_plex: false,
-  library_price: 100000,          // PAT per STARTED HOUR of what's left of the title (from the start point); 0 = free
-  library_daily_cap: 3,           // paid plays per Plex user per rolling 24 h (refunded ones don't count)
+  library_price: 50000,           // PAT per STARTED HOUR of what's left of the title (from the start point), non-members; 0 = free
+  library_daily_cap: 3,           // paid plays per member per rolling 24 h (refunded ones don't count)
+  library_free_daily_cap: 5,      // 1.99jp: free plays per Plex member per rolling 24 h
   library_users: "",              // override: PATV usernames (comma-separated) that count as Plex users whatever the data says
+  // 1.99jp: 📼 Plex members (plexmembers.js) - the server's shares, read through mediactl
+  plex_sync_min: 60,              // how often the shares are re-read (minutes); "Sync now" on /admin/media any time
+  plex_auto_revoke: false,        // OFF = a sync only LISTS the PATV-sold access that ended; an admin clicks Remove
+  plex_selflink: true,            // members may link their Plex account themselves (Plex sign-in, /settings/subscriptions)
+  plex_flair: true,               // the automatic 📼 Plex chip / flair for active members
+  wizarr_timed: false,            // false = Wizarr invites never expire by themselves (PATV ends PATV-sold access: plexmembers.js)
   // 🎬 requests (Overseerr)
   requests_enabled: false,
   request_price_movie: 0,         // PAT per movie request (0 = free); request credits are used first
@@ -100,8 +108,11 @@ const CLEAN = {
   library_quality: (v) => ([1080, 720, 480].includes(Number(v)) ? Number(v) : 720),
   library_pause_max_min: (v) => num(v, 5, 240, 30),
   library_plex: bool,
-  library_price: (v) => num(v, 0, 100000000, 100000),
+  library_price: (v) => num(v, 0, 100000000, 50000),
   library_daily_cap: (v) => num(v, 0, 50, 3),
+  library_free_daily_cap: (v) => num(v, 0, 50, 5),
+  plex_sync_min: (v) => num(v, 10, 1440, 60),
+  plex_auto_revoke: bool, plex_selflink: bool, plex_flair: bool, wizarr_timed: bool,
   library_users: (v) => String(v == null ? "" : v).split(/[\s,]+/).map((x) => x.trim().toLowerCase())
     .filter((x) => /^[a-z0-9_.-]{1,40}$/.test(x)).slice(0, 200).join(","),
   request_price_movie: (v) => num(v, 0, 100000000, 0),

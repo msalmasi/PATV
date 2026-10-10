@@ -171,6 +171,10 @@ const RULES = {
   "media_credits.user_id": M({ key: ["kind"], merge: { n: "SUM" } }),
   "media_user_links.user_id": M({ key: [] }), "media_user_links.set_by": { deny: NAME },
   "media_invites.user_id": M({ name: "username" }), "media_invites.done_by": { deny: NAME },
+  // 1.99jp: 📼 Plex members (plexmembers.js) + 🔁 store subscriptions (subscriptions.js)
+  "plex_members.user_id": M(), "plex_members.linked_by": { deny: NAME }, "plex_members.revoke_by": { deny: NAME },
+  "plex_member_log.user_id": M(), "plex_member_log.actor": { deny: NAME },
+  "shop_subs.user_id": M(),
   "stage_events.actor": M(), "room_events.actor": M(),
   "stage_bans.userId": M({ key: [], name: "username" }), "stage_bans.by": M(),
   "stage_room_bans.userId": M({ key: ["room_id"], name: "username" }), "stage_room_bans.by": M(),

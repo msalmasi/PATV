@@ -80,4 +80,89 @@
     call.then(function () { msg("invMsg", "Done - reload to refresh the queue.", true); }).catch(function (e) { msg("invMsg", e.message); })
       .then(function () { b.disabled = false; });
   });
+  // ── 1.99jp: 📼 Plex members (plexmembers.js) ──
+  var pm = document.getElementById("pmOut");
+  var esc = function (t) { return String(t == null ? "" : t).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var day = function (ms) { return ms ? new Date(Number(ms)).toISOString().slice(0, 10) : ""; };
+  function accessTxt(r) {
+    var a = r.access || "?";
+    if (r.access_pinned) a += " 📌";
+    if (r.expires) a += (Number(r.expires) > Date.now() ? " · until " : " · ended ") + day(r.expires);
+    return a;
+  }
+  function table(head, rows) {
+    return '<div class="tblwrap"><table><thead><tr>' + head.map(function (h) { return "<th>" + h + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      (rows.length ? rows.join("") : '<tr><td colspan="' + head.length + '" class="muted">None.</td></tr>') + "</tbody></table></div>";
+  }
+  function summary(r) {
+    if (!r) return '<p class="muted">Not synced since the site started - press Sync now.</p>';
+    if (r.error) return '<p class="muted">Last sync failed: ' + esc(r.error) + "</p>";
+    var src = Object.keys(r.by_source || {}).map(function (k) { return k + " " + r.by_source[k]; }).join(", ");
+    var acc = Object.keys(r.by_access || {}).map(function (k) { return k + " " + r.by_access[k]; }).join(", ");
+    return "<p><b>" + (r.dry ? "Preview (nothing saved)" : "Last sync") + " " + esc(new Date(r.at).toISOString().slice(0, 16).replace("T", " ")) + ":</b> " +
+      r.plex_users + " Plex users (" + r.pending + " invites not accepted yet) · " + r.linked + " linked (" + esc(src || "-") + "; " + r.auto_linked + " newly) · " +
+      r.unlinked + " unlinked · access: " + esc(acc || "-") + " · would remove: " + r.candidates + (r.revoked ? " · removed: " + r.revoked : "") +
+      (r.errors && r.errors.length ? '<br><span class="muted">' + esc(r.errors.join(" · ")) + "</span>" : "") + "</p>";
+  }
+  function draw(j, preview) {
+    var h = summary(preview || j.last);
+    h += '<p class="muted">Removing ended access: <b>' + (j.on.auto_revoke ? "AUTOMATIC" : "you confirm each one") + "</b>" + (j.on.sync ? "" : " · media-control isn't configured, so nothing syncs") + "</p>";
+    h += "<h3>Would remove (PATV-sold access ended)</h3>" + table(["Plex user", "PATV", "Access", "", ""], j.candidates.map(function (r) {
+      return '<tr data-pm="' + esc(r.plex_id) + '"><td>' + esc(r.username || r.plex_id) + "</td><td>" + esc(r.patv || "") + "</td><td>" + esc(accessTxt(r)) +
+        (r.revoke === "failed" ? ' <span class="muted">(last try failed: ' + esc(r.revoke_error || "") + ")</span>" : "") + "</td>" +
+        '<td><button type="button" class="btn danger" data-pm-act="revoke">Remove access</button></td><td><button type="button" class="btn" data-pm-act="keep">Keep (manual)</button></td></tr>';
+    }));
+    h += "<h3>Linked (" + j.linked.length + ")</h3>" + table(["Plex user", "PATV", "How", "Access", ""], j.linked.map(function (r) {
+      return '<tr data-pm="' + esc(r.plex_id) + '"><td>' + esc(r.username || r.plex_id) + (r.pending ? ' <span class="muted">(invite pending)</span>' : "") + "</td><td>" + esc(r.patv || r.user_id) +
+        "</td><td>" + esc(r.link_source || "") + (r.link_lock ? " 🔒" : "") + "</td><td>" + esc(accessTxt(r)) + "</td><td>" +
+        '<button type="button" class="btn" data-pm-act="unlink">Unlink</button> ' +
+        (r.access_pinned ? '<button type="button" class="btn" data-pm-act="auto">Unpin</button>' : '<button type="button" class="btn" data-pm-act="pre">Pin pre-existing</button>') + "</td></tr>";
+    }));
+    h += "<h3>Unlinked (" + j.unlinked.length + ")</h3>" + table(["Plex user", "Suggested", "Link to PATV user", ""], j.unlinked.map(function (r) {
+      return '<tr data-pm="' + esc(r.plex_id) + '"><td>' + esc(r.username || r.plex_id) + (r.title && r.title !== r.username ? ' <span class="muted">' + esc(r.title) + "</span>" : "") +
+        (r.pending ? ' <span class="muted">(invite pending)</span>' : "") + "</td><td>" + esc(r.suggest || "") + '</td><td><input type="text" data-pm-user maxlength="40" placeholder="PATV username" value="' + esc(r.suggest || "") + '"></td>' +
+        '<td><button type="button" class="btn" data-pm-act="link">Link</button></td></tr>';
+    }));
+    h += "<h3>PATV buyers with no linked Plex account (" + j.buyers.length + ")</h3>" + table(["PATV", "Orders", "Last", "Their access"], j.buyers.map(function (b) {
+      return "<tr><td>" + esc(b.username || b.user_id) + "</td><td>" + b.orders + "</td><td>" + day(b.last) + "</td><td>" + esc((b.access || "-") + (b.expires ? (b.active ? " until " : " ended ") + day(b.expires) : "")) + "</td></tr>";
+    }));
+    if (j.off_server.length) h += "<details><summary>No longer on the server (" + j.off_server.length + ")</summary>" + table(["Plex user", "PATV", "Why"], j.off_server.map(function (r) {
+      return "<tr><td>" + esc(r.username || r.plex_id) + "</td><td>" + esc(r.patv || "") + "</td><td>" + esc(r.revoke === "revoked" ? "removed by " + (r.revoke_by || "?") + " " + day(r.revoke_at) : "share gone") + "</td></tr>";
+    })) + "</details>";
+    h += '<details><summary>Log</summary><ul class="muted">' + j.log.map(function (l) { return "<li>" + esc(new Date(l.ts).toISOString().slice(0, 16).replace("T", " ") + " " + l.what + " (" + (l.actor || "") + ") " + (l.detail || "")) + "</li>"; }).join("") + "</ul></details>";
+    pm.innerHTML = h;
+  }
+  function loadPm(preview) {
+    if (!pm) return;
+    api("GET", "/api/media/admin/plex").then(function (j) { draw(j, preview); }).catch(function (e) { pm.innerHTML = '<p class="muted">' + esc(e.message) + "</p>"; });
+  }
+  loadPm();
+  ["pmSync", "pmDry"].forEach(function (id) {
+    var b = document.getElementById(id);
+    if (b) b.addEventListener("click", function () {
+      var dry = id === "pmDry";
+      b.disabled = true;
+      msg("pmMsg", dry ? "Previewing…" : "Syncing…", true);
+      api("POST", "/api/media/admin/plex/sync", { dry: dry }).then(function (j) { msg("pmMsg", dry ? "Preview below - nothing was saved." : "Synced.", true); loadPm(dry ? j.result : null); })
+        .catch(function (e) { msg("pmMsg", e.message); }).then(function () { b.disabled = false; });
+    });
+  });
+  if (pm) pm.addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-pm-act]");
+    if (!b) return;
+    var tr = b.closest("[data-pm]"), id = tr.getAttribute("data-pm"), act = b.getAttribute("data-pm-act"), name = tr.cells[0].textContent;
+    var call;
+    if (act === "revoke") { if (!confirm("Remove " + name + "'s access to the Plex server? (Their PATV-sold access ended. This removes the library share on Plex.)")) return; call = api("POST", "/api/media/admin/plex/revoke", { plex_id: id }); }
+    else if (act === "keep") call = api("POST", "/api/media/admin/plex/pin", { plex_id: id, access: "manual" });
+    else if (act === "pre") call = api("POST", "/api/media/admin/plex/pin", { plex_id: id, access: "pre-existing" });
+    else if (act === "auto") call = api("POST", "/api/media/admin/plex/pin", { plex_id: id, access: "auto" });
+    else if (act === "unlink") { if (!confirm("Unlink " + name + "? A sync won't link it again by itself.")) return; call = api("POST", "/api/media/admin/plex/link", { plex_id: id, username: "" }); }
+    else if (act === "link") {
+      var u = tr.querySelector("[data-pm-user]").value.trim();
+      if (!u) { msg("pmMsg", "Type the PATV username."); return; }
+      call = api("POST", "/api/media/admin/plex/link", { plex_id: id, username: u });
+    }
+    b.disabled = true;
+    call.then(function () { msg("pmMsg", "Done.", true); loadPm(); }).catch(function (e) { msg("pmMsg", e.message); b.disabled = false; });
+  });
 })();

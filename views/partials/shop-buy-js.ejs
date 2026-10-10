@@ -21,10 +21,14 @@
       const inputEl = document.getElementById('buyerInput');
       const buyerInput = inputEl ? inputEl.value.trim() : '';
       if (inputEl && inputEl.required && !buyerInput) { show(_t('js.shop.seller_needs', 'The seller needs this to deliver it: {what}', { what: inputEl.dataset.prompt || _t('js.shop.fill_box', 'fill in the box') }), false); inputEl.focus(); return; }
-      if (!confirm(_t('js.shop.confirm_buy', 'Buy {name} for {cost} PAT?', { name: '"' + name + '"', cost: cost.toLocaleString() }))) return;
+      // 1.99jp: a subscription (subscriptions.js) - the first period now, then every N days until cancelled
+      const subscribe = button.dataset.subscribe === '1';
+      const q = subscribe ? _t('js.subs.q_sub', 'Subscribe to {title} for {price} PAT every {days} days? The first period is charged now; cancel any time.', { title: '"' + name + '"', price: cost.toLocaleString(), days: button.dataset.days })
+                          : _t('js.shop.confirm_buy', 'Buy {name} for {cost} PAT?', { name: '"' + name + '"', cost: cost.toLocaleString() });
+      if (!confirm(q)) return;
       button.disabled = true;
-      fetch('/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                       body: JSON.stringify({ product, price: cost, buyer_input: buyerInput }) })
+      fetch(subscribe ? '/api/subscriptions/start' : '/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify(subscribe ? { product, price: cost } : { product, price: cost, buyer_input: buyerInput }) })
         // The server explains WHY a purchase failed (not logged in, not enough PAT, out of stock).
         .then((r) => r.json().catch(() => ({})).then((data) => ({ ok: r.ok, data })))
         .then(({ ok, data }) => {
@@ -33,7 +37,7 @@
           show((data && data.message ? data.message.replace(/ Track it: \S+$/, '') : '') || (succeeded ? _t('js.shop.purchased_msg', 'Purchase complete.') : _t('js.shop.buy_failed', 'Could not buy that item.')),
                succeeded, succeeded && data.order_id ? '/shop/orders/' + data.order_id : null);
           if (succeeded) {
-            button.textContent = listing ? _t('js.shop.ordered', 'Ordered') : _t('js.shop.purchased', 'Purchased');      // no accidental double-buy
+            button.textContent = subscribe ? _t('js.subs.subscribed', 'Subscribed') : listing ? _t('js.shop.ordered', 'Ordered') : _t('js.shop.purchased', 'Purchased');      // no accidental double-buy
             const bal = document.getElementById('shopBalance');
             if (bal && typeof data.balance === 'number') bal.textContent = data.balance.toLocaleString();
             document.querySelectorAll('[data-stock="' + product + '"]').forEach((el) => {

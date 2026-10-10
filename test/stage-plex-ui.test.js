@@ -32,13 +32,15 @@ test("no Plex info (signed out / closed): no 📼 choice, no panel, no script", 
 test("a Plex user: the third choice with the price, the search panel + rights notice, the slot owner's controls", async () => {
   const html = await render(PLEX);
   assert.match(html, /<label class=""[^>]*><input type="radio" name="mode" value="plex"> <span><b>📼 Play from Plex<\/b><small>100,000 PAT \/ started hour<\/small>/);
-  assert.match(html, /id="plexPanel" data-free="0" data-per-hour="100000" data-quality="720"/);
+  assert.match(html, /id="plexPanel" data-free="0" data-member="0" data-per-hour="100000" data-quality="720"/);
   assert.match(html, /Only show what we have the rights to show/);
   assert.match(html, /id="plexSearch"/);
   assert.match(html, /comes straight back if the stream never gets on the stage/);
-  assert.match(html, /Half goes to the pad's room vault, half to Fort Knox/);
+  assert.match(html, /Half goes to the pad’s room vault, half to Fort Knox/);
+  assert.match(html, /up to 3 paid plays a day/);
+  assert.match(html, /Plex members play free: <a href="\/settings\/subscriptions">/, "1.99jp: how to play free");
   assert.match(html, /id="plexNow"/, "pause / seek / stop live in Your slot");
-  assert.match(html, /stage-plex\.js\?v=1/);
+  assert.match(html, /stage-plex\.js\?v=2/);
   assert.match(html, /stage\.css\?v=7/);
   // the ordinary booking fields step aside in 📼 mode
   for (const id of ["kindSet", "whenSet", "bookBtn"]) assert.match(html, new RegExp('class="[^"]*\\bnp\\b[^"]*" id="' + id + '"|id="' + id + '"[^>]*class="[^"]*\\bnp\\b'), id + " is .np");
@@ -55,13 +57,29 @@ test("an admin: free", async () => {
   assert.match(html, /Free for site admins\./);
 });
 
-test("not a Plex user: the choice is there but locked, with how to get access", async () => {
-  const html = await render({ ...PLEX, ok: false, why: "noplex", hint: "/shop/item/1c120384-c080-4186-b246-f1227e82ab01",
-                              message: "📼 Play from Plex is for Plex users - get Plex access in the store (or ask an admin to link your Plex account)." });
+test("1.99jp: a Plex member plays free with their own daily cap", async () => {
+  const html = await render({ ...PLEX, free: true, member: true, how: "plex", price_per_hour: 0, daily_cap: 5 });
+  assert.match(html, /📼 Play from Plex<\/b><small>a movie or an episode · free for Plex members<\/small>/);
+  assert.match(html, /data-free="1" data-member="1"/);
+  assert.match(html, /Free for you as a Plex member, up to 5 plays a day\./);
+  assert.doesNotMatch(html, /Plex members play free:/);
+});
+
+test("an admin while it's switched off: the choice is shown disabled with the reason", async () => {
+  const html = await render({ ...PLEX, ok: false, free: true, how: "admin", why: "off", message: "Play from library is switched off (/admin/media)." });
   assert.match(html, /<label class="locked"[^>]*><input type="radio" name="mode" value="plex" disabled>/);
-  assert.match(html, /🔒 Plex users only/);
-  assert.match(html, /id="plexLocked"[^>]*>🔒 <b>📼 Play from Plex<\/b>.*<a href="\/shop\/item\/1c120384-c080-4186-b246-f1227e82ab01">Get Plex access ›<\/a>/s);
-  assert.doesNotMatch(html, /id="plexPanel"/, "no search for them");
+  assert.match(html, /🔒 switched off right now/);
+  assert.match(html, /id="plexLocked"[^>]*>🔒 <b>📼 Play from Plex<\/b> puts a movie.*switched off \(\/admin\/media\)/s);
+  assert.doesNotMatch(html, /id="plexPanel"/, "no search");
+});
+
+test("1.99jp: the Plex texts are translated (German render has no English Plex strings)", async () => {
+  const i18n = require(path.join(repo, "i18n"));
+  const t = i18n.tFor("de");
+  const html = await ejs.renderFile(path.join(repo, "views", "stageBook.ejs"), { ...base, plex: PLEX, i18nT: t, t });
+  assert.ok(html.includes(t("stage.px.choice")));
+  assert.ok(html.includes(t("stage.px.search")));
+  assert.doesNotMatch(html, /Search Plex: a movie|Only show what we have the rights|started hour of what/);
 });
 
 test("the scripts: stage-plex.js parses, confirms the price, re-asks when the server's price differs; stage-book.js hands library slots over", () => {

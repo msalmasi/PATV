@@ -11,12 +11,13 @@
 //
 // WHO (access()):
 //   * site admins (library_allow = admins) or admins + staff (= staff): FREE, any pad, as before;
-//   * PLEX USERS, while library_plex is on: an active Plex invite bought in the store (a completed / not refunded
-//     shop order of a mediaconf invite_items item, within its days; 0 days = lifetime), an admin-linked Overseerr
-//     identity (media_user_links), or a username on the library_users override list. They pay library_price PAT per
-//     STARTED HOUR of what's left of the title (from the start point), and take the pad under the stage-slot rules
-//     (sees the pad, not banned there, no other open slot of their own, a free slot in the pad), at most
-//     library_daily_cap paid plays a rolling day, and only while mediactl has a free stream (MEDIACTL_MAX_STREAMS).
+//   * 1.99jp: EVERY signed-in member while library_plex is on:
+//       - PLEX MEMBERS play FREE: a Plex account linked to them that's on our Plex server and active (plexmembers.js),
+//         or a username on the library_users override list; at most library_free_daily_cap plays a rolling day;
+//       - everyone else pays library_price PAT per STARTED HOUR of what's left of the title (from the start point), at
+//         most library_daily_cap paid plays a rolling day.
+//     Both take the pad under the stage-slot rules (sees the pad, not banned there, no other open slot of their own, a
+//     free slot in the pad), and only while mediactl has a free stream (MEDIACTL_MAX_STREAMS).
 // MONEY (paid plays): shop.chargeService({hold}) debits the buyer and records a completed official order (their
 // orders page), crediting nobody yet. Once the stream is ON the stage (the slot's went_live), the hold is ROUTED like
 // any pad spend - boosts.routeInTx kind "library_play" (flow library_play): 50% Fort Knox / 50% that pad's room vault,
@@ -168,32 +169,22 @@ function inviteItemLink() {
   return "/shop/item/" + encodeURIComponent(items[0][0]);
 }
 /**
- * Is this account a PLEX USER right now? -> {how: override|linked|invite, until (ms, null = no end)} | null.
- * Most reliable first: the admin's override list, an admin-linked Overseerr identity, then a store invite still in its days.
+ * Is this account a PLEX USER right now (1.99jp: on our Plex server)? -> {how: override|plex, until (ms, null = no end)} | null.
+ * The admin's override list, else a Plex account linked to it that's on the server and still active (plexmembers.js).
  */
 async function plexUser(user, t = Date.now()) {
   if (!user || !user.userId) return null;
   const S = conf.get();
   const over = String(S.library_users || "").split(",").filter(Boolean);
   if (user.username && over.includes(String(user.username).toLowerCase())) return { how: "override", until: null };
-  if ((await safeQuery("SELECT 1 AS x FROM media_user_links WHERE user_id = ?", [user.userId])).length) return { how: "linked", until: null };
-  const items = S.invite_items || {};
-  const ids = Object.keys(items);
-  if (!ids.length) return null;
-  const orders = await safeQuery(`SELECT prize_id, created FROM shop_orders WHERE buyer_id = ? AND prize_id IN (${ids.map(() => "?").join(",")})
-                                  AND status NOT IN ('cancelled','refunded')`, [user.userId, ...ids]);
-  let best = null;
-  for (const o of orders) {
-    const days = Number((items[o.prize_id] || {}).days) || 0;
-    if (days <= 0) return { how: "invite", until: null };                       // lifetime
-    const until = Number(o.created) + days * DAY_MS;
-    if (until > t && (!best || until > best.until)) best = { how: "invite", until };
-  }
-  return best;
+  let m = null;
+  try { m = await require("./plexmembers").memberFor(user.userId, t); } catch (e) { m = null; }
+  return m ? { how: "plex", until: m.expires == null ? null : m.expires, plex: m.username, access: m.access } : null;
 }
 /**
- * May `user` play from the library, and on what terms?
- * -> {ok, free, how, until, why: signin|off|noplex|null, message, hint}
+ * May `user` play from the library, and on what terms? 1.99jp: every signed-in member may while library_plex is on -
+ * Plex members free (their own daily cap), everyone else for library_price per started hour.
+ * -> {ok, free, how: admin|staff|override|plex|paid, until, why: signin|off|null, message, hint}
  */
 async function access(user) {
   await conf.init();
@@ -205,20 +196,20 @@ async function access(user) {
   }
   if (!S.library_plex || !conf.on.library()) return { ok: false, free: false, how: null, why: "off", message: "Playing from Plex isn't open right now." };
   const p = await plexUser(user);
-  if (!p) {
-    return { ok: false, free: false, how: null, why: "noplex", hint: inviteItemLink(),
-             message: "📼 Play from Plex is for Plex users - get Plex access in the store (or ask an admin to link your Plex account)." };
-  }
-  return { ok: true, free: S.library_price <= 0, how: p.how, until: p.until, why: null, message: null };
+  if (p) return { ok: true, free: true, how: p.how, until: p.until, plex: p.plex || null, why: null, message: null };
+  return { ok: true, free: S.library_price <= 0, how: "paid", until: null, why: null, message: null, hint: inviteItemLink() };
 }
-/** What the Go-live page draws for the 📼 choice: shown to admins + Plex users, locked with a hint for other signed-in
- *  people while Plex users may play; hidden when it's closed to them. */
+const isMemberHow = (how) => how === "plex" || how === "override";
+/** What the Go-live page draws for the 📼 choice: every signed-in member while it's open (the price is per user: free for
+ *  Plex members / admins, library_price per started hour for the rest); admins also see it, disabled, while it's off. */
 async function goLiveInfo(user) {
   if (!user || !user.userId) return null;
   const A = await access(user);
   const S = conf.get();
-  return { show: A.ok || A.why === "noplex" || (A.why === "off" && A.free), ok: A.ok, free: A.free, how: A.how, why: A.why,
-           message: A.message, hint: A.hint || null, price_per_hour: A.free ? 0 : S.library_price, daily_cap: S.library_daily_cap,
+  const member = isMemberHow(A.how);
+  return { show: A.ok || (A.why === "off" && A.free), ok: A.ok, free: A.free, how: A.how, why: A.why, member, admin: A.how === "admin" || A.how === "staff",
+           message: A.message, hint: A.hint || null, price_per_hour: A.free ? 0 : S.library_price,
+           daily_cap: member ? S.library_free_daily_cap : A.free ? null : S.library_daily_cap,
            quality: S.library_quality, pause_max_min: S.library_pause_max_min };
 }
 /** PAT for a play: library_price per STARTED hour of what's left of the title from `offset` (at least one hour). */
@@ -231,6 +222,12 @@ function priceFor(durationSec, offsetSec, S = conf.get()) {
 }
 async function paidToday(userId, t = Date.now()) {
   const r = await safeQuery("SELECT COUNT(*) AS n FROM media_plays WHERE user_id = ? AND ts > ? AND charge IN ('held','routed')", [userId, t - DAY_MS]);
+  return (r[0] && r[0].n) || 0;
+}
+// 1.99jp: a Plex member's free plays in the last 24 h (a resume on a fresh slot carries its play: not counted again)
+async function freeToday(userId, t = Date.now()) {
+  const r = await safeQuery("SELECT COUNT(*) AS n FROM media_plays WHERE user_id = ? AND ts > ? AND charge = 'free' AND access IN ('plex','override') AND carried_from IS NULL",
+                            [userId, t - DAY_MS]);
   return (r[0] && r[0].n) || 0;
 }
 async function mustAccess(user) {
@@ -315,7 +312,7 @@ async function item(user, key) {
   const A = await mustAccess(user);
   const it = await fetchItem(key);
   // the price at the start (the page re-prices for another start point with the same rule)
-  if (it && ["movie", "episode"].includes(it.type)) it.pricing = { ...priceFor(it.duration, 0), free: A.free };
+  if (it && ["movie", "episode"].includes(it.type)) it.pricing = { ...(A.free ? { price: 0, hours: 0, per_hour: 0 } : priceFor(it.duration, 0)), free: A.free };
   if (it && !isLibAdmin(user)) delete it.file;                        // file paths are for the admins' eyes
   return it;
 }
@@ -374,8 +371,11 @@ async function play(user, b = {}) {
     if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.");
     const mine = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]);
     if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.");
-    const cap = conf.get().library_daily_cap;
-    if (!A.free && (await paidToday(user.userId)) >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.");
+    const S0 = conf.get();
+    const member = isMemberHow(A.how);
+    const cap = member ? S0.library_free_daily_cap : S0.library_daily_cap;
+    const used = member ? await freeToday(user.userId) : !A.free ? await paidToday(user.userId) : 0;
+    if ((member || !A.free) && used >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.");
   }
   const it = await fetchItem(b.key);
   if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw new Refuse(400, "Pick a movie or an episode.");
@@ -531,11 +531,13 @@ async function mine(user, roomId) {
   await init();
   const A = await access(user);
   const S = conf.get();
-  const out = { ok: true, access: A, notice: "Only show what we have the rights to show. Every play is logged.",
-                price_per_hour: A.free ? 0 : Math.max(0, S.library_price), daily_cap: S.library_daily_cap, daily_left: null,
+  const member = isMemberHow(A.how);
+  const out = { ok: true, access: A, notice: "Only show what we have the rights to show. Every play is logged.", member,
+                price_per_hour: A.free ? 0 : Math.max(0, S.library_price), daily_cap: member ? S.library_free_daily_cap : S.library_daily_cap, daily_left: null,
                 quality: S.library_quality, pause_max_min: S.library_pause_max_min, sessions: [], streams: null };
   if (!user || !user.userId) return out;
-  if (A.ok && !A.free) out.daily_left = Math.max(0, S.library_daily_cap - (await paidToday(user.userId)));
+  if (A.ok && member) out.daily_left = Math.max(0, S.library_free_daily_cap - (await freeToday(user.userId)));
+  else if (A.ok && !A.free) out.daily_left = Math.max(0, S.library_daily_cap - (await paidToday(user.userId)));
   const rows = await getQuery(`SELECT s.*, p.user_id, p.price, p.charge FROM media_sessions s JOIN media_plays p ON p.id = s.play_id
                                WHERE p.user_id = ? ORDER BY s.started`, [user.userId]);
   const live = A.ok || rows.length ? await streamsNow() : null;
@@ -639,5 +641,5 @@ function register(app, { addUser, noTimers } = {}) {
   app.post("/api/medialib/seek", ...J(async (req) => seek(me(req), (req.body || {}).room, (req.body || {}).offset)));
 }
 
-module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday,
+module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
                    stageName, call, signHeaders, fmtTitle, inviteItemLink, Refuse, _keys: keys };

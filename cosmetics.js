@@ -107,11 +107,16 @@ function onSale(item, now = Date.now()) {
   return src.includes("shop");
 }
 
-// 1.99iv: Season Pass perk items (premium.js)
-const isPerk = (it) => !!it && it.perk === "season_pass";
+// 1.99iv: Season Pass perk items (premium.js). 1.99jp: + 📼 Plex member perk items ("perk": "plex", plexmembers.js) - the
+// same rules: granted while the membership is active, never sold / listed / traded, rendered only while it's active.
+const PERKS = { season_pass: { label: "🎟️ Season Pass", link: "/premium" }, plex: { label: "📼 Plex membership", link: "/settings/subscriptions" } };
+const isPerk = (it) => !!it && !!PERKS[it.perk];
 const passOn = (userId) => { try { return require("./premium").hasPass(userId); } catch (e) { return false; } };
-const perkLive = (it, userId) => !isPerk(it) || passOn(userId);
-const PERK_IDS = ITEMS.filter(isPerk).map((i) => i.id);
+const plexOn = (userId) => { try { return !!require("./plexmembers").memberSync(userId); } catch (e) { return false; } };
+const perkOn = (it, userId) => (it && it.perk === "plex" ? plexOn(userId) : passOn(userId));
+const perkLive = (it, userId) => !isPerk(it) || perkOn(it, userId);
+const PERK_IDS = ITEMS.filter((i) => i.perk === "season_pass").map((i) => i.id);
+const PLEX_PERK_IDS = ITEMS.filter((i) => i.perk === "plex").map((i) => i.id);
 
 // ── rendering (inline CSS from the catalog's style data) ──
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -257,7 +262,7 @@ async function inventory(userId) {
   const items = rows.filter((r) => BY_ID[r.item_id]).map((r) => ({
     inv_id: r.id, item_id: r.item_id, kind: BY_ID[r.item_id].kind, name: BY_ID[r.item_id].name,
     rarity: BY_ID[r.item_id].rarity, source: r.source, acquired: r.acquired, locked: !!r.locked,
-    perk: isPerk(BY_ID[r.item_id]) ? "season_pass" : null, perk_off: isPerk(BY_ID[r.item_id]) && !passOn(userId),
+    perk: isPerk(BY_ID[r.item_id]) ? BY_ID[r.item_id].perk : null, perk_off: isPerk(BY_ID[r.item_id]) && !perkOn(BY_ID[r.item_id], userId),
     equipped: equippedInv.has(r.id), listing_id: r.listing_id || null, listing_price: r.listing_price || null,
   }));
   return { items, equipped };
@@ -461,7 +466,10 @@ async function equip(userId, invId, on) {
   const kind = BY_ID[c.item_id].kind;
   if (on) {
     if (c.locked) return { ok: false, error: "That copy is listed on the market — cancel the listing first." };
-    if (!perkLive(BY_ID[c.item_id], userId)) return { ok: false, error: "That one comes with a 🎟️ Season Pass - it's off until the pass is back (publicaccess.tv/premium)." };
+    if (!perkLive(BY_ID[c.item_id], userId)) {
+      const P = PERKS[BY_ID[c.item_id].perk];
+      return { ok: false, error: `That one comes with a ${P.label} - it's off until that's back (publicaccess.tv${P.link}).` };
+    }
     await runQuery(`INSERT INTO user_cosmetic_equips (user_id, kind, inv_id) VALUES (?, ?, ?)
                     ON CONFLICT(user_id, kind) DO UPDATE SET inv_id = excluded.inv_id`, [userId, kind, c.id]);
   } else {
@@ -480,7 +488,7 @@ async function transfer({ invId, fromId, toId, idem, listingId }) {
   if (fromId === toId) return { ok: false, error: "can't transfer to the same user" };
   {
     const c0 = (await getQuery("SELECT item_id FROM user_cosmetics WHERE id = ?", [invId]))[0];
-    if (c0 && isPerk(BY_ID[c0.item_id])) return { ok: false, error: "Season Pass items can't be traded or gifted" };
+    if (c0 && isPerk(BY_ID[c0.item_id])) return { ok: false, error: `${PERKS[BY_ID[c0.item_id].perk].label} items can't be traded or gifted` };
   }
   idem = String(idem).slice(0, 200);
   const claim = await runQuery("INSERT OR IGNORE INTO cosmetic_transfers (idem, inv_id, from_id, to_id, listing_id, created) VALUES (?, ?, ?, ?, ?, ?)",
@@ -565,7 +573,9 @@ async function profileData(username) {
   const eq = await equippedFor(u.userId);
   const gtf = {};
   for (const k of GTF_KINDS) if (eq[k]) gtf[GTF_OPT[k]] = eq[k].r.layer;
-  return { equipped: eq, showcase: await showcaseFor(u.userId), seed: await seedFor(u.camfrogUsername), gtf, seasonPass: passOn(u.userId) };   // 1.99iv: + the 🎟️ chip
+  let plex = null;
+  try { plex = require("./mediaconf").get().plex_flair ? !!require("./plexmembers").memberSync(u.userId) : false; } catch (e) { plex = false; }
+  return { equipped: eq, showcase: await showcaseFor(u.userId), seed: await seedFor(u.camfrogUsername), gtf, seasonPass: passOn(u.userId), plex };   // 1.99iv: + the 🎟️ chip
 }
 
 // ── helpers for routes ──
@@ -802,7 +812,7 @@ function register(app, { isBotToken, addUser }) {
     if (price > LIST_MAX) return back("That price is too high.");
     const c = (await getQuery("SELECT id, item_id, locked FROM user_cosmetics WHERE id = ? AND user_id = ?", [invId, me]))[0];
     if (!c || !BY_ID[c.item_id]) return back("You don't own that item.");
-    if (isPerk(BY_ID[c.item_id])) return back("Season Pass items can't be sold.");
+    if (isPerk(BY_ID[c.item_id])) return back(`${PERKS[BY_ID[c.item_id].perk].label} items can't be sold.`);
     if (c.locked) return back("That copy is already listed.");
     const open = await getQuery("SELECT COUNT(*) AS n FROM cosmetic_listings WHERE seller_id = ? AND status = 'active'", [me]);
     if (open[0].n >= MAX_LISTINGS) return back(`You can have ${MAX_LISTINGS} listings at a time.`);
@@ -926,8 +936,16 @@ async function grantSeasonPerks(userId) {
   return n;
 }
 
+/** 1.99jp: put the 📼 Plex member perk items in this account's inventory (idempotent; plexmembers.js calls it). */
+async function grantPlexPerks(userId) {
+  let n = 0;
+  for (const id of PLEX_PERK_IDS) { const r = await grant(userId, id, "plex", `plex-perk:${userId}:${id}`); if (r.ok && !r.already) n++; }
+  if (n) invalidateNames();
+  return n;
+}
+
 module.exports = {
-  grantSeasonPerks, isPerk, invalidateNames: () => invalidateNames(), PERK_IDS,
+  grantSeasonPerks, grantPlexPerks, isPerk, invalidateNames: () => invalidateNames(), PERK_IDS, PLEX_PERK_IDS, PERKS,
   register, locals, grantUnlocks, syncUnlocks, backfillLevelUnlocks, nameStyles, nameStyle, nameHtml, render, onSale, seasonState,
   resolveUser, grant, grantCapped, rollDrop, pickDrop, dropConfig, setDropConfig, transfer, equip, inventory, equippedFor, profileData, pageData,
   catalog: () => ITEMS, byId: (id) => BY_ID[id] || null, ready, MARKET_FEE_PCT, LIST_MIN,

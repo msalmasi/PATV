@@ -7,7 +7,12 @@
 // If Wizarr can't be reached the order goes to the MANUAL QUEUE (/admin/media#invites): it's retried every 10 minutes
 // (6 times), an admin can retry it or send a link / note by hand. With invites off nothing changes (manual, as before).
 //
-//   media_invites   one row per order: pending | created | manual | sent (by hand)
+// 1.99jp: the invite's own expiry: by default Wizarr invites NEVER expire by themselves (setting wizarr_timed off) - PATV
+// tracks how long the access lasts (plexmembers.js: stacked orders, subscriptions) and only removes a share after an admin
+// confirms (or with plex_auto_revoke on). A buyer who is ALREADY an active Plex member gets no second invite: the order
+// just adds time ("extended"). A subscription renewal (sale.renewal) never makes an invite.
+//
+//   media_invites   one row per order: pending | created | manual | sent (by hand) | extended
 "use strict";
 const { runQuery, getQuery } = require("./dbUtils");
 const conf = require("./mediaconf");
@@ -56,10 +61,11 @@ const idList = (s) => String(s || "").split(",").map((x) => x.trim()).filter(Boo
 /** Create one one-time invitation. -> {code, url} (throws Refuse on any failure). */
 async function createInvite(days) {
   const S = conf.get();
+  const timed = days > 0 && !!S.wizarr_timed;
   const body = {
     expires_in_days: S.wizarr_link_days,
-    duration: days > 0 ? String(days) : "unlimited",
-    unlimited: !(days > 0),
+    duration: timed ? String(days) : "unlimited",
+    unlimited: !timed,
     allow_downloads: false, allow_live_tv: false, allow_mobile_uploads: false,
   };
   const servers = idList(S.wizarr_server_ids), libs = idList(S.wizarr_library_ids);
@@ -116,8 +122,25 @@ async function attempt(row, by) {
 async function onSale(sale) {
   const item = (conf.get().invite_items || {})[sale.prizeId];
   if (!item || !conf.on.invites()) return false;            // off = fulfilled by hand, as before
+  if (sale.renewal) return false;                           // 1.99jp: a subscription renewal only adds time
   await init();
   const t = clock();
+  // 1.99jp: already on the server (an active, linked Plex member): no second invite - the purchase extends the access
+  let member = null;
+  try { member = await require("./plexmembers").memberFor(sale.userId); } catch (e) { member = null; }
+  if (member) {
+    const ins0 = await runQuery(`INSERT OR IGNORE INTO media_invites (order_id, user_id, username, prize_id, title, days, status, created, updated, done_by)
+                                 VALUES (?, ?, ?, ?, ?, ?, 'extended', ?, ?, 'system')`, [sale.orderId, sale.userId, sale.username, sale.prizeId, sale.title, item.days, t, t]);
+    if (!ins0 || !ins0.changes) return false;
+    const shop = require("./shop");
+    await runQuery("UPDATE shop_orders SET seller_note = ?, updated = ? WHERE id = ?",
+                   [`You're already on our Plex server (as ${member.username || "your Plex account"}), so no new invite is needed - this adds ${accessText(item.days)} to your access. See /settings/subscriptions.`, t, sale.orderId]);
+    await shop.event(sale.orderId, "completed", "system", "Already a Plex member - access extended (no new invite)");
+    try { await require("./plexmembers").refreshUser(sale.userId); } catch (e) { /* the next sync does it */ }
+    await require("./inbox").addSafe(sale.userId, { kind: "media", title: "📼 Your Plex access was extended", body: `${accessText(item.days)} added.`,
+      link: "/settings/subscriptions", ref: `minv-ext:${sale.orderId}` });
+    return true;
+  }
   const ins = await runQuery(`INSERT OR IGNORE INTO media_invites (order_id, user_id, username, prize_id, title, days, status, created, updated)
                               VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`, [sale.orderId, sale.userId, sale.username, sale.prizeId, sale.title, item.days, t, t]);
   if (!ins || !ins.changes) return false;

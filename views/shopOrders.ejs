@@ -3,7 +3,7 @@
 <%- include('partials/shop-css') %>
 <div class="sh">
   <h1><%- t('shop.my_orders') %></h1>
-  <p class="sub"><%- t('shop.orders.sub') %> <a href="/shop"><%- t('shop.back') %></a> · <a href="/shop/seller"><%- t('shop.orders.seller_dashboard') %></a></p>
+  <p class="sub"><%- t('shop.orders.sub') %> <a href="/shop"><%- t('shop.back') %></a> · <a href="/shop/seller"><%- t('shop.orders.seller_dashboard') %></a> · <a href="/settings/subscriptions"><%- t('shop.orders.subs_link') %></a></p>
   <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
   <div class="stats">
     <div class="stat"><span><%- t('shop.orders.total_spent') %></span><b class="price"><%= H.fmt(spent.t) %></b><em><%- t('shop.orders.n_orders', { count: spent.n, n: H.fmt(spent.n) }) %></em></div>

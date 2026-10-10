@@ -17,6 +17,10 @@
 // Reads are cached per pad (CACHE_MS; every write drops that pad's entry), so the feed / chat pay one query per pad
 // and minute, not per row.
 //
+// 1.99jp: the automatic 📼 PLEX flair - people on our Plex server (plexmembers.js, an active membership) show a "📼 Plex"
+// chip in every pad where they have no flair of the pad's own (the pad's flair always wins). It comes and goes with the
+// membership (no row is written); media setting plex_flair switches it off.
+//
 // Management: the pad settings hub's "🏷️ Flair" tab (views/padSettings.ejs, public/js/pad-flair.js). Members pick
 // theirs from the pad page's Feed tab ("Your flair here").
 "use strict";
@@ -80,6 +84,18 @@ function shape(r) {
 // ── cache: room id -> {at, flairs: [...], byUser: Map(userId -> flair), byName: Map(lowercased username -> flair)} ──
 const cache = new Map();
 function drop(roomId) { cache.delete(String(roomId)); }
+function dropAll() { cache.clear(); }
+
+// 1.99jp: the automatic 📼 Plex flair (never stored, never assignable)
+let PLEX_FLAIR = null;
+function plexFlair() {
+  if (!PLEX_FLAIR) { const c = cleanColor("#e5a00d") || cleanColor(DEFAULT_COLOR); PLEX_FLAIR = { id: 0, name: "Plex", color: c.hex, ink: c.ink, emoji: "📼", self: false, auto: "plex" }; }
+  return PLEX_FLAIR;
+}
+function plexOn() { try { return !!require("./mediaconf").get().plex_flair; } catch (e) { return false; } }
+const PM = () => require("./plexmembers");
+function plexById(userId) { try { return plexOn() && PM().memberSync(userId) ? plexFlair() : null; } catch (e) { return null; } }
+function plexByName(name) { try { return plexOn() && PM().memberByName(name) ? plexFlair() : null; } catch (e) { return null; } }
 async function load(roomId) {
   const id = String(roomId || "");
   const hit = cache.get(id);
@@ -110,21 +126,22 @@ async function forUsers(roomId, userIds) {
   const out = new Map();
   if (!flairable(roomId)) return out;
   const L = await load(roomId);
-  if (!L.byUser.size) return out;
-  for (const id of userIds || []) { const f = L.byUser.get(String(id)); if (f) out.set(String(id), f); }
+  for (const id of userIds || []) { const f = L.byUser.get(String(id)) || plexById(id); if (f) out.set(String(id), f); }
   return out;
 }
 /** The pad's flairs by lowercased PATV username (the live chat resolves people by their linked account's username). */
 async function byUsername(roomId) {
   if (!flairable(roomId)) return new Map();
-  return (await load(roomId)).byName;
+  const m = (await load(roomId)).byName;
+  // the pad's own flair, else the automatic 📼 Plex one (a Map-like: only get / has are used)
+  return { get: (name) => m.get(name) || plexByName(name) || undefined, has: (name) => m.has(name) || !!plexByName(name), size: m.size };
 }
 async function of(roomId, userId) { return (await forUsers(roomId, [userId])).get(String(userId)) || null; }
 
 /** The chip (escaped; colour values are strict hex from cleanColor). */
 function html(f, { cls = "" } = {}) {
   if (!f || !f.name) return "";
-  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="Pad flair: ${esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
+  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
 }
 /** What the live chat JSON carries (rendered with textContent on the page). */
 const plain = (f) => (f ? { name: f.name, color: f.color, ink: f.ink, emoji: f.emoji || "" } : null);
@@ -319,5 +336,5 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, list, forUsers, byUsername, of, html, plain, save, remove, assign, pick, mine, manageView, cleanName, cleanEmoji, cleanColor,
+module.exports = { init, register, list, forUsers, byUsername, of, html, plain, dropAll, plexFlair, save, remove, assign, pick, mine, manageView, cleanName, cleanEmoji, cleanColor,
                    Refuse, MAX_FLAIRS, NAME_MAX, _drop: drop, _clear: () => cache.clear(), _setClock: (fn) => { NOW = fn || (() => Date.now()); } };
