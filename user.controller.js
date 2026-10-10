@@ -79,13 +79,13 @@ async function registerUser(req, res) {
   if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-up refused");
   const ip = guard.clientIp(req);
   const wait = registerLimit.blocked(ip);
-  if (wait) return back(`Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
+  if (wait) return back(req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.`);
 
   let problem;
-  if ((problem = guard.checkUsername(username))) return back(problem, "username");
-  if ((problem = guard.checkEmail(email))) return back(problem, "email");
-  if ((problem = guard.checkPassword(password, username))) return back(problem, "password");
-  if (typeof confirm === "string" && confirm !== password) return back("Those passwords don't match.", "confirm_password");
+  if ((problem = guard.checkUsername(username, req))) return back(problem, "username");
+  if ((problem = guard.checkEmail(email, req))) return back(problem, "email");
+  if ((problem = guard.checkPassword(password, username, req))) return back(problem, "password");
+  if (typeof confirm === "string" && confirm !== password) return back(req.t ? req.t('auth.err.mismatch') : "Those passwords don't match.", "confirm_password");
 
   const userId = uuidv4();
   try {
@@ -93,8 +93,8 @@ async function registerUser(req, res) {
       "SELECT LOWER(username) = LOWER(?) AS u, LOWER(email) = LOWER(?) AS e FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?) LIMIT 5",
       [username, email, username, email]
     );
-    if (taken.some((r) => r.u)) return back("That username is taken. Try another one.", "username");
-    if (taken.some((r) => r.e)) return back("That email already has an account. Sign in, or reset your password if you've forgotten it.", "email");
+    if (taken.some((r) => r.u)) return back(req.t ? req.t('auth.err.username_taken') : "That username is taken. Try another one.", "username");
+    if (taken.some((r) => r.e)) return back(req.t ? req.t('auth.err.email_taken') : "That email already has an account. Sign in, or reset your password if you've forgotten it.", "email");
 
     const hashedPassword = await bcrypt.hash(password, 12);
     try {
@@ -105,7 +105,7 @@ async function registerUser(req, res) {
       );
     } catch (e) {
       // two sign-ups for the same name at once: the UNIQUE index catches the second
-      if (/UNIQUE/i.test(String(e && e.message))) return back("That username or email was just taken. Try another one.", "username");
+      if (/UNIQUE/i.test(String(e && e.message))) return back(req.t ? req.t('auth.err.just_taken') : "That username or email was just taken. Try another one.", "username");
       throw e;
     }
     registerLimit.hit(ip);
@@ -133,11 +133,11 @@ async function registerUser(req, res) {
 
     // Signed straight in (same 90-day login as a normal sign-in).
     issueLogin(res, { userId, username, class: "pleb" });
-    req.flash("success", `Welcome to PATV, ${username}! Check your email to verify your address.`);
+    req.flash("success", req.t ? req.t('auth.welcome', { name: username }) : `Welcome to PATV, ${username}! Check your email to verify your address.`);
     return res.redirect(next || `/u/${encodeURIComponent(username)}/wheel`);
   } catch (error) {
     console.error(`[auth] registration error: ${error && error.message}`);
-    return back("Something went wrong creating your account. Please try again.");
+    return back(req.t ? req.t('auth.err.register_failed') : "Something went wrong creating your account. Please try again.");
   }
 }
 
@@ -224,13 +224,13 @@ async function loginUser(req, res) {
   const back = (msg, field) => backTo(req, res, "/login", next, msg, { username: ident, field });
 
   if (!guard.sameSite(req)) return res.status(403).send("Cross-site sign-in refused");
-  if (!ident) return back("Enter your username or email.", "username");
-  if (!password) return back("Enter your password.", "password");
+  if (!ident) return back(req.t ? req.t('auth.login.username_required') : "Enter your username or email.", "username");
+  if (!password) return back(req.t ? req.t('auth.login.password_required') : "Enter your password.", "password");
 
   const ip = guard.clientIp(req);
   const who = ident.toLowerCase();
   const wait = Math.max(loginPairLimit.blocked(ip + "|" + who), loginNameLimit.blocked(who), loginIpLimit.blocked(ip));
-  if (wait) return back(`Too many sign-in attempts. Try again in ${guard.waitText(wait)}, or reset your password.`);
+  if (wait) return back(req.t ? req.t('auth.err.too_many_logins', { wait: guard.waitText(wait, req) }) : `Too many sign-in attempts. Try again in ${guard.waitText(wait)}, or reset your password.`);
 
   try {
     const byEmail = ident.includes("@");
@@ -246,7 +246,7 @@ async function loginUser(req, res) {
       loginPairLimit.hit(ip + "|" + who);
       loginNameLimit.hit(who);
       loginIpLimit.hit(ip);
-      return back("That username and password don't match. Check caps lock, or reset your password.", "password");
+      return back(req.t ? req.t('auth.err.bad_login') : "That username and password don't match. Check caps lock, or reset your password.", "password");
     }
     loginPairLimit.reset(ip + "|" + who);
     await require("./staleaccounts").touch(user.userId, "sign-in");   // 1.99bm: an archived account comes back
@@ -254,7 +254,7 @@ async function loginUser(req, res) {
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
     console.error("[auth] login error:", err && err.message);
-    return back("Something went wrong signing you in. Please try again.");
+    return back(req.t ? req.t('auth.err.login_failed') : "Something went wrong signing you in. Please try again.");
   }
 }
 

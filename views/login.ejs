@@ -1,5 +1,6 @@
 <%# views/login.ejs - sign in (GET/POST /login: index.js + loginUser in user.controller.js) -%>
-<%- include('layout', { title: 'Sign in · Public Access TV', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('auth.login.page_title'), user: user }) %>
 <%
   const F = (typeof form !== 'undefined' && form) ? form : {};
   const errs = (errors || []).filter(Boolean), oks = (success || []).filter(Boolean);
@@ -10,8 +11,8 @@
 <main class="au">
   <section class="au-card" aria-labelledby="au-title">
     <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
-    <h1 id="au-title">Sign in</h1>
-    <p class="sub">Welcome back. Your wallet, wheel spins and tables are waiting.</p>
+    <h1 id="au-title"><%- t('auth.login.heading') %></h1>
+    <p class="sub"><%- t('auth.login.sub') %></p>
 
     <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
     <% if (errs.length) { %><div class="au-alert err" role="alert" id="au-form-err"><%= errs.join(' ') %></div><% } %>
@@ -19,29 +20,29 @@
     <form action="/login" method="POST" data-au-form>
       <input type="hidden" name="next" value="<%= next %>">
       <div class="au-field">
-        <label for="username">Username or email</label>
+        <label for="username"><%- t('auth.login.username_label') %></label>
         <input type="text" id="username" name="username" value="<%= F.username || '' %>" required
                autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="254"
-               data-rule="required" data-required-msg="Enter your username or email."
+               data-rule="required" data-required-msg="<%- t('auth.login.username_required') %>"
                aria-describedby="username-err<%= errs.length ? ' au-form-err' : '' %>"<% if (bad('username')) { %> aria-invalid="true"<% } %><% if (!F.username) { %> data-autofocus<% } %>>
         <div class="au-err" id="username-err" aria-live="polite"></div>
       </div>
       <div class="au-field">
-        <div class="lblrow"><label for="password">Password</label><a href="/forgot-password">Forgot password?</a></div>
+        <div class="lblrow"><label for="password"><%- t('auth.password') %></label><a href="/forgot-password"><%- t('auth.login.forgot') %></a></div>
         <div class="au-pw">
           <input type="password" id="password" name="password" required autocomplete="current-password"
-                 data-rule="required" data-required-msg="Enter your password." data-caps="password-caps"
+                 data-rule="required" data-required-msg="<%- t('auth.login.password_required') %>" data-caps="password-caps"
                  aria-describedby="password-err password-caps"<% if (bad('password')) { %> aria-invalid="true"<% } %><% if (F.username) { %> data-autofocus<% } %>>
-          <button type="button" class="eye" aria-controls="password" aria-pressed="false" aria-label="Show password">Show</button>
+          <button type="button" class="eye" aria-controls="password" aria-pressed="false" aria-label="<%- t('auth.show_password') %>"><%- t('auth.show') %></button>
         </div>
-        <div class="au-caps" id="password-caps" hidden>Caps Lock is on.</div>
+        <div class="au-caps" id="password-caps" hidden><%- t('auth.caps_lock') %></div>
         <div class="au-err" id="password-err" aria-live="polite"></div>
       </div>
-      <button type="submit" class="au-btn" data-busy="Signing in…"><span class="spin" aria-hidden="true"></span><span class="lbl">Sign in</span></button>
+      <button type="submit" class="au-btn" data-busy="<%- t('auth.login.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.login.submit') %></span></button>
     </form>
 
     <%- include('partials/auth-oauth', { next: next, verb: 'Sign in' }) %>
   </section>
-  <p class="au-foot">New to PATV? <a href="/register<%= nextQ %>">Create an account</a></p>
+  <p class="au-foot"><%- t('auth.login.new_here') %> <a href="/register<%= nextQ %>"><%- t('auth.create_account') %></a></p>
 </main>
 <%- include('partials/auth-js') %>

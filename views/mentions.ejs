@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%# /settings/mentions — 📣 room mention alerts (1.99ii, mentions.js). Locals: user, title, boot {prefs, words, names, linked, rooms, wordsMax}.
     Everything user-entered goes back in with textContent / .value; the JSON boot is < -escaped. %>
 <%- include('layout', { title: title, user: user }) %>
@@ -24,48 +25,48 @@
 </style>
 <main class="lg mn">
   <header class="hero">
-    <div class="eyebrow">📣 SETTINGS · MENTIONS</div>
-    <h1>Room mention alerts</h1>
-    <p class="lead">Get a 🔔 notice when someone says your name, or a word you pick, in a Camfrog room Pepe bridges to the site. Open the notice to jump to that line in the pad's live chat.</p>
-    <p class="note">Only rooms Pepe <b>bridges</b> to PATV can alert (other rooms have no live feed here). Never for lines from people who are <code>!incognito</code> or hidden from the bridge, or in pads you can't see. At most one alert per room a minute and <%= boot.hourMax %> an hour.</p>
+    <div class="eyebrow">📣 <%- t('settings.mentions.eyebrow') %></div>
+    <h1><%- t('settings.mentions.h1') %></h1>
+    <p class="lead"><%- t('settings.mentions.lead') %></p>
+    <p class="note"><%- t('settings.mentions.note', { n: boot.hourMax }) %></p>
   </header>
 
   <form id="mnForm" autocomplete="off">
     <section class="card" aria-labelledby="mnOnH">
-      <h2 id="mnOnH">Alerts</h2>
-      <label class="ck"><input type="checkbox" id="mnOn"> <span>Alert me about room mentions</span></label>
-      <label class="ck"><input type="checkbox" id="mnNames"> <span>Match my own names</span></label>
-      <div class="names" id="mnNameList" aria-label="Your names"></div>
-      <p class="mut" id="mnNoLink" hidden>Link your Camfrog name (type <code>!verify</code> in a room with Pepe) so your own lines never alert you and your Camfrog login counts as one of your names.</p>
+      <h2 id="mnOnH"><%- t('settings.mentions.alerts') %></h2>
+      <label class="ck"><input type="checkbox" id="mnOn"> <span><%- t('settings.mentions.on') %></span></label>
+      <label class="ck"><input type="checkbox" id="mnNames"> <span><%- t('settings.mentions.names') %></span></label>
+      <div class="names" id="mnNameList" aria-label="<%- t('settings.mentions.names_aria') %>"></div>
+      <p class="mut" id="mnNoLink" hidden><%- t('settings.mentions.nolink') %></p>
     </section>
 
     <section class="card" aria-labelledby="mnWH">
-      <h2 id="mnWH">Words and phrases</h2>
-      <p class="mut">Whole words, any case: <i>bob</i> matches "hey Bob!" but not "bobby". Up to <span id="mnMax"></span>, each for every room or one room.</p>
+      <h2 id="mnWH"><%- t('settings.mentions.words_h') %></h2>
+      <p class="mut"><%- t('settings.mentions.words_note', { q: '"', max: '<span id="mnMax"></span>' }) %></p>
       <div class="words" id="mnWords"></div>
-      <button type="button" id="mnAdd">+ Add a word or phrase</button>
+      <button type="button" id="mnAdd">+ <%- t('settings.mentions.add') %></button>
     </section>
 
     <section class="card" aria-labelledby="mnQH">
-      <h2 id="mnQH">Quiet hours and mute</h2>
-      <label class="ck"><input type="checkbox" id="mnQuiet"> <span>Quiet hours (no alerts, none saved for later)</span></label>
+      <h2 id="mnQH"><%- t('settings.mentions.quiet_h') %></h2>
+      <label class="ck"><input type="checkbox" id="mnQuiet"> <span><%- t('settings.mentions.quiet') %></span></label>
       <div class="q" id="mnQ">
-        <label for="mnFrom">From</label><input type="time" id="mnFrom" value="23:00">
-        <label for="mnTo">to</label><input type="time" id="mnTo" value="08:00">
+        <label for="mnFrom"><%- t('settings.mentions.from') %></label><input type="time" id="mnFrom" value="23:00">
+        <label for="mnTo"><%- t('settings.mentions.to') %></label><input type="time" id="mnTo" value="08:00">
       </div>
-      <p class="mut" style="margin:6px 0 0 26px">Your time zone: <b id="mnTz"></b></p>
-      <div class="row" role="group" aria-label="Mute">
+      <p class="mut" style="margin:6px 0 0 26px"><%- t('settings.mentions.tz') %> <b id="mnTz"></b></p>
+      <div class="row" role="group" aria-label="<%- t('settings.mentions.mute') %>">
         <span id="mnMuteTxt" class="mut"></span>
-        <button type="button" data-mute="60">Mute 1 hour</button>
-        <button type="button" data-mute="480">8 hours</button>
-        <button type="button" data-mute="1440">24 hours</button>
-        <button type="button" data-mute="10080">1 week</button>
-        <button type="button" data-mute="0" id="mnUnmute" hidden>Unmute</button>
+        <button type="button" data-mute="60"><%- t('settings.mentions.mute_1h') %></button>
+        <button type="button" data-mute="480"><%- t('settings.mentions.h8') %></button>
+        <button type="button" data-mute="1440"><%- t('settings.mentions.h24') %></button>
+        <button type="button" data-mute="10080"><%- t('settings.mentions.w1') %></button>
+        <button type="button" data-mute="0" id="mnUnmute" hidden><%- t('settings.mentions.unmute') %></button>
       </div>
     </section>
 
     <div class="row">
-      <button type="submit" class="pri">Save</button>
+      <button type="submit" class="pri"><%- t('msg.save') %></button>
       <span class="msg" id="mnMsg" role="status" aria-live="polite"></span>
     </div>
   </form>
@@ -74,6 +75,7 @@
 <script>
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var B = JSON.parse(document.getElementById('mnBoot').textContent);
   var $ = function (id) { return document.getElementById(id); };
   var tz = (B.prefs.quiet && B.prefs.quiet.tz) || B.prefs.tz || '';
@@ -87,17 +89,17 @@
   function api(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }); })
-      .then(function (d) { if (!d.ok) throw new Error(d.error || 'Something went wrong.'); return d; });
+      .then(function (d) { if (!d.ok) throw new Error(d.error || _t('js.settings.mentions.error', 'Something went wrong.')); return d; });
   }
   function wordRow(w) {
     var row = el('div', 'w');
-    var inp = el('input'); inp.type = 'text'; inp.maxLength = 60; inp.placeholder = 'a word or phrase'; inp.value = w.phrase || ''; inp.setAttribute('aria-label', 'Word or phrase');
-    var sel = el('select'); sel.setAttribute('aria-label', 'Which rooms');
-    sel.appendChild(new Option('Every room', ''));
+    var inp = el('input'); inp.type = 'text'; inp.maxLength = 60; inp.placeholder = _t('js.settings.mentions.word_ph', 'a word or phrase'); inp.value = w.phrase || ''; inp.setAttribute('aria-label', _t('js.settings.mentions.word_aria', 'Word or phrase'));
+    var sel = el('select'); sel.setAttribute('aria-label', _t('js.settings.mentions.rooms_aria', 'Which rooms'));
+    sel.appendChild(new Option(_t('js.settings.mentions.every_room', 'Every room'), ''));
     (B.rooms || []).forEach(function (r) { sel.appendChild(new Option(r.name, r.id)); });
-    if (w.room && !(B.rooms || []).some(function (r) { return r.id === w.room; })) sel.appendChild(new Option('(a room no longer bridged)', w.room));
+    if (w.room && !(B.rooms || []).some(function (r) { return r.id === w.room; })) sel.appendChild(new Option(_t('js.settings.mentions.gone_room', '(a room no longer bridged)'), w.room));
     sel.value = w.room || '';
-    var x = el('button', 'x', '✕'); x.type = 'button'; x.setAttribute('aria-label', 'Remove'); x.addEventListener('click', function () { row.remove(); });
+    var x = el('button', 'x', '✕'); x.type = 'button'; x.setAttribute('aria-label', _t('js.settings.mentions.remove', 'Remove')); x.addEventListener('click', function () { row.remove(); });
     row.appendChild(inp); row.appendChild(sel); row.appendChild(x);
     return row;
   }
@@ -114,14 +116,14 @@
     if (q) { $('mnFrom').value = hm(q.from); $('mnTo').value = hm(q.to); }
     $('mnQ').style.opacity = q ? '1' : '.55';
     var mu = d.prefs.mutedUntil;
-    $('mnMuteTxt').textContent = mu ? '🔕 Muted until ' + new Date(mu).toLocaleString() : 'Not muted.';
+    $('mnMuteTxt').textContent = mu ? '🔕 ' + _t('js.settings.mentions.muted_until', 'Muted until {when}', { when: new Date(mu).toLocaleString() }) : _t('js.settings.mentions.not_muted', 'Not muted.');
     $('mnMuteTxt').className = mu ? 'muted-on' : 'mut';
     $('mnUnmute').hidden = !mu;
   }
   paint(B);
   $('mnQuiet').addEventListener('change', function () { $('mnQ').style.opacity = this.checked ? '1' : '.55'; });
   $('mnAdd').addEventListener('click', function () {
-    if ($('mnWords').children.length >= B.wordsMax) { say('Up to ' + B.wordsMax + ' words or phrases.', 'bad'); return; }
+    if ($('mnWords').children.length >= B.wordsMax) { say(_t('js.settings.mentions.max_words', 'Up to {n} words or phrases.', { n: B.wordsMax }), 'bad'); return; }
     var r = wordRow({}); $('mnWords').appendChild(r); r.querySelector('input').focus();
   });
   $('mnForm').addEventListener('submit', function (e) {
@@ -130,15 +132,15 @@
       .filter(function (w) { return w.phrase.trim(); });
     var quiet = { from: null, to: null, tz: tz };
     if ($('mnQuiet').checked) { quiet.from = mins($('mnFrom').value); quiet.to = mins($('mnTo').value); }
-    say('Saving…');
+    say(_t('js.settings.mentions.saving', 'Saving…'));
     api('/api/mentions', { enabled: $('mnOn').checked, names: $('mnNames').checked, words: words, quiet: quiet })
-      .then(function (d) { paint(d); say('Saved.', 'ok'); })
+      .then(function (d) { paint(d); say(_t('js.settings.mentions.saved', 'Saved.'), 'ok'); })
       .catch(function (x) { say(x.message, 'bad'); });
   });
   Array.prototype.forEach.call(document.querySelectorAll('[data-mute]'), function (b) {
     b.addEventListener('click', function () {
       api('/api/mentions/mute', { minutes: Number(b.getAttribute('data-mute')) })
-        .then(function (d) { paint(d); say(Number(b.getAttribute('data-mute')) ? 'Muted.' : 'Unmuted.', 'ok'); })
+        .then(function (d) { paint(d); say(Number(b.getAttribute('data-mute')) ? _t('js.settings.mentions.muted', 'Muted.') : _t('js.settings.mentions.unmuted', 'Unmuted.'), 'ok'); })
         .catch(function (x) { say(x.message, 'bad'); });
     });
   });

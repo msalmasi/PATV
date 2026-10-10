@@ -3,6 +3,7 @@
 // Signed-out buttons are plain links to the sign-in page. Same-site JSON with X-Requested-With: fetch.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   if (window.__patvFollow) return;
   window.__patvFollow = true;
   function api(url, body) {
@@ -13,7 +14,7 @@
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
     b.classList.toggle('on', on);
     var lbl = b.querySelector('.fw-l') || b;
-    lbl.textContent = on ? (b.getAttribute('data-on-label') || 'Following') : (b.getAttribute('data-off-label') || '+ Follow');
+    lbl.textContent = on ? (b.getAttribute('data-on-label') || _t('js.feed.follow.following', 'Following')) : (b.getAttribute('data-off-label') || _t('js.feed.follow.follow', '+ Follow'));
   }
   document.addEventListener('click', function (ev) {
     var b = ev.target.closest('button[data-follow-kind]');

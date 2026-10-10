@@ -1,26 +1,27 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   The Following tab's own panel (1.99bz): the inbox-notice switch and the viewer's OWN lists (who they
   follow, who follows them) - only ever rendered for the signed-in user themselves. Locals: follow
   ({rooms, people, followers, prefs} from follows.lists + prefs), here
 %><% const F_ = follow || { rooms: [], people: [], followers: [], prefs: { notify: false } }; %>
-<section class="fl" aria-label="Who you follow">
-  <label class="fl-notify"><input type="checkbox" data-follow-notify<%= F_.prefs.notify ? ' checked' : '' %>> 🔔 Tell me in my inbox when someone I follow posts (or someone posts in a pad I follow)</label>
+<section class="fl" aria-label="<%- t('feed.fl.aria') %>">
+  <label class="fl-notify"><input type="checkbox" data-follow-notify<%= F_.prefs.notify ? ' checked' : '' %>> 🔔 <%- t('feed.fl.notify') %></label>
   <details class="fl-lists">
-    <summary>Following <b><%= F_.rooms.length + F_.people.length %></b> · Followers <b><%= F_.followers.length %></b> <span class="mut">(only you see these lists)</span></summary>
+    <summary><%- t('feed.following') %> <b><%= F_.rooms.length + F_.people.length %></b> · <%- t('feed.fl.followers') %> <b><%= F_.followers.length %></b> <span class="mut"><%- t('feed.fl.only_you') %></span></summary>
     <div class="fl-cols">
       <div>
-        <h3>📡 Pads</h3>
-        <% if (!F_.rooms.length) { %><p class="mut">None yet — “+ Follow” is on every pad's page.</p><% } %>
+        <h3><%- t('feed.fl.pads') %></h3>
+        <% if (!F_.rooms.length) { %><p class="mut"><%- t('feed.fl.no_pads') %></p><% } %>
         <ul><% F_.rooms.forEach((r) => { %><li><a href="<%= r.href %>"><%= r.label %></a> <%- include('follow-btn', { kind: 'room', id: r.id, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
       </div>
       <div>
-        <h3>👤 People</h3>
-        <% if (!F_.people.length) { %><p class="mut">None yet — “+ Follow” is on profiles and next to post authors.</p><% } %>
+        <h3><%- t('feed.fl.people') %></h3>
+        <% if (!F_.people.length) { %><p class="mut"><%- t('feed.fl.no_people') %></p><% } %>
         <ul><% F_.people.forEach((u) => { %><li><a href="<%= u.href %>"><%= u.label %></a> <%- include('follow-btn', { kind: 'user', id: u.username, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
       </div>
       <div>
-        <h3>💚 Your followers</h3>
-        <% if (!F_.followers.length) { %><p class="mut">Nobody yet.</p><% } %>
+        <h3><%- t('feed.fl.your_followers') %></h3>
+        <% if (!F_.followers.length) { %><p class="mut"><%- t('feed.fl.nobody') %></p><% } %>
         <ul><% F_.followers.forEach((u) => { %><li><a href="<%= u.href %>"><%= u.label %></a></li><% }) %></ul>
       </div>
     </div>

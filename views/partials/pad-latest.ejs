@@ -1,16 +1,17 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# The Live tab's "Latest posts" card (1.99dx; 1.99ec: a short one-line title): the pad's 2-3 newest posts and a way over to the Feed tab
     (data-pad-tab="feed": public/js/pad-tabs.js switches tabs; without JS it's a ?tab=feed link).
     Locals: latest (bridge.js padLatest), slug, fx (optional: fx.ago) %>
 <% const L_ = (typeof latest !== 'undefined' && latest ? latest : []).slice(0, 3);
    const ago_ = typeof fx !== 'undefined' && fx && fx.ago ? fx.ago : (ms) => new Date(ms).toISOString().slice(0, 10); %>
 <section class="card plf" aria-labelledby="plfH">
-  <h2 id="plfH"><span class="ht">📝 Latest posts</span><small><a href="?tab=feed" data-pad-tab="feed">Open feed ›</a></small></h2>
+  <h2 id="plfH"><span class="ht"><%- t('pad.latest.title') %></span><small><a href="?tab=feed" data-pad-tab="feed"><%- t('pad.latest.open_feed') %></a></small></h2>
   <% if (!L_.length) { %>
-    <p class="muted" style="margin:0">Nothing posted in p/<%= slug %> yet — <a href="?tab=feed" data-pad-tab="feed">start the feed ›</a></p>
+    <p class="muted" style="margin:0"><%- t('pad.latest.empty', { slug: slug }) %> <a href="?tab=feed" data-pad-tab="feed"><%- t('pad.latest.start_feed') %></a></p>
   <% } else { %>
     <ul class="plf-l">
       <% L_.forEach((p) => { %><li>
-        <a class="plf-t<%= p.titleFallback && !p.nsfw ? ' plf-fb' : '' %>" href="<%= p.url || ('/feed/p/' + encodeURIComponent(p.id)) %>"><%= p.nsfw ? '🔞 ' + (p.title && !p.titleFallback ? p.title : 'NSFW post') : (p.title || p.text || 'A post') %></a>
+        <a class="plf-t<%= p.titleFallback && !p.nsfw ? ' plf-fb' : '' %>" href="<%= p.url || ('/feed/p/' + encodeURIComponent(p.id)) %>"><%- p.nsfw ? '🔞 ' + (p.title && !p.titleFallback ? t.esc(p.title) : t('pad.latest.nsfw_post')) : (p.title || p.text ? t.esc(p.title || p.text) : t('pad.latest.a_post')) %></a>
         <small><%= p.author %> · <time datetime="<%= new Date(p.created).toISOString() %>"><%= ago_(p.created) %></time></small>
       </li><% }) %>
     </ul>

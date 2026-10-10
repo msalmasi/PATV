@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# A pad's stage schedule (1.99bx; 1.99dx: no longer a card of its own; 1.99ee: the lower half of the pad's Go live
     card in views/room.ejs, under its slot status and action row): on now, the booked / scheduled slots
     ahead, the queue. Pass { slug, schedule (mainstage.roomSchedule) }. Times are rendered in UTC here and
@@ -9,7 +10,7 @@
   const S = schedule || { live: [], upcoming: [], queue: [] };
   const iso = (ms) => new Date(Number(ms)).toISOString();
   const utc = (ms) => iso(ms).slice(0, 10) + ' ' + iso(ms).slice(11, 16) + ' UTC';
-  const src = (r) => r.mode === 'embed' ? '▶ ' + (r.embed_label || 'Video link') : '🎥 Stream';
+  const src = (r) => r.mode === 'embed' ? '▶ ' + (r.embed_label ? t.esc(r.embed_label) : t('pad.sched.video_link')) : t('pad.sched.stream');
 %>
 <style>
   .rs { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #1f2a20; }
@@ -35,42 +36,42 @@
   .rs .note { color: #7d7d7d; font-size: 11.5px; margin: 0; }
   @media (max-width: 860px) { .rs .scols { grid-template-columns: minmax(0, 1fr); } }
 </style>
-<div class="rs" id="rmSched" data-slug="<%= slug %>" role="group" aria-label="Stage schedule">
+<div class="rs" id="rmSched" data-slug="<%= slug %>" role="group" aria-label="<%- t('pad.sched.aria') %>">
   <div class="scols">
     <div>
-      <h3 id="rsLiveH">On now</h3>
+      <h3 id="rsLiveH"><%- t('pad.sched.on_now') %></h3>
       <ul id="rsLive" aria-labelledby="rsLiveH">
-        <% if (!S.live.length) { %><li class="empty">Nothing on this stage right now.</li><% } %>
+        <% if (!S.live.length) { %><li class="empty"><%- t('pad.sched.nothing_now') %></li><% } %>
         <% S.live.forEach((r) => { %><li class="srow<%= r.live ? ' live' : '' %><%= r.mine ? ' mine' : '' %>">
-          <span class="when"><%= r.live ? '● LIVE' : 'Starting' %> · until <time data-ts="<%= r.ends_by %>" data-fmt="t" datetime="<%= iso(r.ends_by) %>"><%= iso(r.ends_by).slice(11, 16) %> UTC</time></span>
+          <span class="when"><%- r.live ? t('pad.sched.live') : t('pad.sched.starting') %> · <%- t('pad.sched.until') %> <time data-ts="<%= r.ends_by %>" data-fmt="t" datetime="<%= iso(r.ends_by) %>"><%= iso(r.ends_by).slice(11, 16) %> UTC</time></span>
           <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
-          <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%= r.featured ? '★ Featured' : 'Ordinary slot' %></span><span class="tg"><%= src(r) %></span><% if (r.mine) { %><span class="tg you">You</span><% } %></span>
+          <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%- r.featured ? t('pad.sched.featured') : t('pad.sched.ordinary') %></span><span class="tg"><%- src(r) %></span><% if (r.mine) { %><span class="tg you"><%- t('pad.sched.you') %></span><% } %></span>
         </li><% }) %>
       </ul>
     </div>
     <div>
-      <h3 id="rsUpH">Coming up</h3>
+      <h3 id="rsUpH"><%- t('pad.sched.coming_up') %></h3>
       <ul id="rsUp" aria-labelledby="rsUpH">
-        <% if (!S.upcoming.length) { %><li class="empty">Nothing booked yet — <a href="/stage?room=<%= encodeURIComponent(slug) %>#whenSet">book the first slot</a>.</li><% } %>
+        <% if (!S.upcoming.length) { %><li class="empty"><%- t('pad.sched.none_booked', { link: '<a href="/stage?room=' + encodeURIComponent(slug) + '#whenSet">' + t('pad.sched.book_first') + '</a>' }) %></li><% } %>
         <% S.upcoming.forEach((r) => { %><li class="srow<%= r.status === 'requested' ? ' pend' : '' %><%= r.mine ? ' mine' : '' %>">
-          <span class="when"><time data-ts="<%= r.start_at %>" data-min="<%= r.minutes %>" datetime="<%= iso(r.start_at) %>"><%= utc(r.start_at) %></time> · <%= r.minutes %> min</span>
+          <span class="when"><time data-ts="<%= r.start_at %>" data-min="<%= r.minutes %>" datetime="<%= iso(r.start_at) %>"><%= utc(r.start_at) %></time> · <%- t('pad.sched.min', { n: r.minutes }) %></span>
           <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
-          <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%= r.featured ? '★ Featured' : 'Ordinary slot' %></span><span class="tg"><%= src(r) %></span><% if (r.status === 'requested') { %><span class="tg pend">⏳ Waiting for the owner's OK</span><% } %><% if (r.mine) { %><span class="tg you">You</span><% } %></span>
+          <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%- r.featured ? t('pad.sched.featured') : t('pad.sched.ordinary') %></span><span class="tg"><%- src(r) %></span><% if (r.status === 'requested') { %><span class="tg pend"><%- t('pad.sched.waiting_ok') %></span><% } %><% if (r.mine) { %><span class="tg you"><%- t('pad.sched.you') %></span><% } %></span>
         </li><% }) %>
       </ul>
     </div>
     <div>
-      <h3 id="rsQH">Queue</h3>
+      <h3 id="rsQH"><%- t('pad.sched.queue') %></h3>
       <ul id="rsQ" aria-labelledby="rsQH">
-        <% if (!S.queue.length) { %><li class="empty">Nobody waiting — a free slot goes to the next in line.</li><% } %>
+        <% if (!S.queue.length) { %><li class="empty"><%- t('pad.sched.nobody_waiting') %></li><% } %>
         <% S.queue.forEach((r) => { %><li class="srow<%= r.mine ? ' mine' : '' %>">
-          <span class="when">#<%= r.position %> · <%= r.minutes %> min</span>
+          <span class="when">#<%= r.position %> · <%- t('pad.sched.min', { n: r.minutes }) %></span>
           <span class="who"><b><% if (r.href) { %><a class="ulink" href="<%= r.href %>" title="<%= r.username %>"><%= r.display %></a><% } else { %><%= r.display %><% } %></b><% if (r.title) { %><span class="ttl"><%= r.title %></span><% } %></span>
-          <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%= r.featured ? '★ Featured' : 'Ordinary slot' %></span><span class="tg"><%= r.mode === 'embed' ? '▶ Video link' : '🎥 Stream' %></span><% if (r.mine) { %><span class="tg you">You</span><% } %></span>
+          <span class="tags"><span class="tg<%= r.featured ? ' feat' : '' %>"><%- r.featured ? t('pad.sched.featured') : t('pad.sched.ordinary') %></span><span class="tg"><%- r.mode === 'embed' ? '▶ ' + t('pad.sched.video_link') : t('pad.sched.stream') %></span><% if (r.mine) { %><span class="tg you"><%- t('pad.sched.you') %></span><% } %></span>
         </li><% }) %>
       </ul>
     </div>
   </div>
-  <p class="note" id="rsNote">Times in your local time<span id="rsTz"></span>.</p>
+  <p class="note" id="rsNote"><%- t('pad.sched.local_time', { tz: '<span id="rsTz"></span>' }) %></p>
 </div>
 <script src="/public/js/room-schedule.js?v=5" defer></script>

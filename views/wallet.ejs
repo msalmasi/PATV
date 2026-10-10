@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Wallet', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('wallet.title'), user: user}) %>
 <style>
   .wl { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
   .wl a { color: #81c784; }
@@ -69,10 +70,10 @@
 </style>
 <div class="wl">
 <% if (!signedIn) { %>
-  <h1>Wallet</h1>
+  <h1><%- t('wallet.title') %></h1>
   <div class="login">
-    <p class="info">Your stashes, staking, loans and market positions live here.</p>
-    <p><a href="/login">Sign in</a> to see your wallet.</p>
+    <p class="info"><%- t('wallet.signed_out') %></p>
+    <p><%- t('wallet.sign_in_to_see', { link: '<a href="/login">' + t('wallet.sign_in') + '</a>' }) %></p>
     <%- include('partials/actions', { acts: [], msg }) %>
   </div>
 <% } else {
@@ -80,82 +81,85 @@
   const pct = (f, d) => ((Number(f) || 0) * 100).toFixed(d == null ? 1 : d) + '%';
   const when = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ') : '';
   const day = (ts) => ts ? new Date(ts * 1000).toISOString().slice(5, 10) : '';
-  const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s > 0 ? Math.max(1, Math.floor(s/60)) + 'm' : 'now'; };
+  const left = (tt) => { const s = Math.max(0, Math.round(tt - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s > 0 ? Math.max(1, Math.floor(s/60)) + 'm' : t('wallet.now'); };
   const cd = (t) => '<span data-until="' + Number(t) + '">' + left(t) + '</span>';
   const dur = (s) => { s = Number(s) || 0; return s >= 86400 ? +(s / 86400).toFixed(1) + 'd' : s >= 3600 ? Math.round(s / 3600) + 'h' : Math.round(s / 60) + 'm'; };
-  const rate = (l) => l.rate_basis === 'week' ? l.rate + '%/week' : l.rate + '% flat';
+  const rate = (l) => l.rate_basis === 'week' ? t('wallet.rate_week', { r: l.rate }) : t('wallet.rate_flat', { r: l.rate });   // HTML-safe
   const canAct = !!camfrog;
   const hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/wallet"><input type="hidden" name="tag" value="wallet">';
-  const LS = { offered: 'offer', accepting: 'accepting…', funding: 'funding…', active: 'active', repaid: 'repaid', forgiven: 'forgiven', declined: 'declined', cancelled: 'cancelled', expired: 'expired', failed: 'failed' };
+  const LS = { offered: t('wallet.ls.offered'), accepting: t('wallet.ls.accepting'), funding: t('wallet.ls.funding'), active: t('wallet.ls.active'), repaid: t('wallet.ls.repaid'), forgiven: t('wallet.ls.forgiven'), declined: t('wallet.ls.declined'), cancelled: t('wallet.ls.cancelled'), expired: t('wallet.ls.expired'), failed: t('wallet.ls.failed') };   // HTML-safe
+  const stName = (s) => t.has('wallet.status.' + s) ? t('wallet.status.' + s) : t.esc(s);
+  const bandName = (b) => { const k = 'wallet.band.' + bandCls(b).replace(/-/g, '_'); return t.has(k) ? t(k) : t.esc(b); };
+  const days_ = (d) => t('wallet.n_days', { count: d });
   const terms = [1, 3, 7, 14, 30, 60, 90].filter((d) => !reserve || !reserve.max_days || d <= reserve.max_days);
-  const VN = { bank: '🏦 Bank', house: '🎰 House', mm: '📈 Market maker', auto: '🤖 Auto' };
+  const VN = { bank: '🏦 ' + t('wallet.vault.bank'), house: '🎰 ' + t('wallet.vault.house'), mm: '📈 ' + t('wallet.vault.mm'), auto: '🤖 ' + t('wallet.vault.auto') };   // HTML-safe
   const VK = ['bank', 'house', 'mm', 'auto'];
-  const vaultSelect = '<select name="a3" aria-label="Vault">' + VK.map((k) => '<option value="' + k + '"' + (k === 'auto' ? ' selected' : '') + '>' + VN[k] + '</option>').join('') + '</select>';
+  const vaultSelect = '<select name="a3" aria-label="' + t('wallet.vault') + '">' + VK.map((k) => '<option value="' + k + '"' + (k === 'auto' ? ' selected' : '') + '>' + VN[k] + '</option>').join('') + '</select>';
   const holdLine = (h) => VK.filter((k) => h && h[k]).map((k) => VN[k] + ' ' + fmt(h[k].value)).join(' · ');
   const bandCls = (b) => String(b || '').toLowerCase().replace(/[^a-z]+/g, '-');
   const pts = (p) => (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p);
   const meterPos = (s, c) => Math.max(0, Math.min(100, ((s - (c.min || 300)) / ((c.max || 850) - (c.min || 300))) * 100)).toFixed(1);
 %>
-  <h1>Wallet</h1>
+  <h1><%- t('wallet.title') %></h1>
   <p class="bal"><b><%= fmt(bal) %></b> PAT</p>
-  <p class="center info"><%= camfrog ? 'Camfrog: ' + camfrog + ' · ' : '' %><a href="/history">PAT history ›</a></p>
+  <p class="center info"><%= camfrog ? 'Camfrog: ' + camfrog + ' · ' : '' %><a href="/history"><%- t('wallet.history_link') %></a></p>
 
   <%- include('partials/actions', { acts, msg }) %>
   <% if (welcomeStatus && welcomeStatus.state === 'pending') { const ws = welcomeStatus; %>
     <div class="card welcome" style="margin:12px 0">
-      <span class="name">👋 Welcome bonus: PAT <%= fmt(ws.amount) %> — on its way</span>
+      <span class="name">👋 <%- t('wallet.welcome.pending', { n: fmt(ws.amount) }) %></span>
       <% if (ws.need && ws.need.length) { %>
-        <span class="info">It's paid once you've really played here (once per person, from the Federal Reserve). Still to do: <%= ws.need.join(' · ') %>.</span>
+        <span class="info"><%- t('wallet.welcome.need', { need: ws.need.join(' · ') }) %></span>
       <% } else { %>
-        <span class="info">You've done it — it's paid within a few minutes<%= ws.enabled ? '' : ' (paused by the admins right now)' %>.</span>
+        <span class="info"><%- ws.enabled ? t('wallet.welcome.done') : t('wallet.welcome.done_paused') %></span>
       <% } %>
-      <% if (ws.connectOwed) { %><span class="info">Your Discord/Twitch connect bonus is paid with it.</span><% } %>
+      <% if (ws.connectOwed) { %><span class="info"><%- t('wallet.welcome.connect') %></span><% } %>
     </div>
   <% } else if (welcomeStatus && welcomeStatus.state === 'paid') { %>
-    <p class="center info">👋 Welcome bonus paid: PAT <%= fmt(welcomeStatus.amount) %>.</p>
+    <p class="center info">👋 <%- t('wallet.welcome.paid', { n: fmt(welcomeStatus.amount) }) %></p>
   <% } %>
-  <% if (!canAct) { %><p class="hint">Link your Camfrog name (<code>!verify</code>) to use stashes, staking and loans from here — Pepe runs them as you.</p><% } %>
+  <% if (!canAct) { %><p class="hint"><%- t('wallet.link_hint') %></p><% } %>
 
   <!-- ───────── Stashes ───────── -->
-  <h2>MY STASHES</h2>
+  <h2><%- t('wallet.h.stashes') %></h2>
   <% if (canAct) { %>
-    <% if (!myStashes.length) { %><p class="info">You don't own or share a stash yet. A stash is a shared PAT account you can stake into the vaults for yield.</p><% } %>
+    <% if (!myStashes.length) { %><p class="info"><%- t('wallet.stash.none') %></p><% } %>
     <div class="grid">
     <% myStashes.forEach((s) => { %>
       <div class="card<%= s.owner_me ? ' own' : '' %>">
-        <span class="ref"><%- ul(s.owner) %>/<%= s.name %><%= s.owner_me ? ' · yours' : ' · member' %></span>
+        <span class="ref"><%- ul(s.owner) %>/<%= s.name %><%- ' · ' + (s.owner_me ? t('wallet.stash.yours') : t('wallet.stash.member')) %></span>
         <div class="stats">
-          <div class="stat"><span>Balance</span><b class="gold"><%= fmt(s.balance) %></b></div>
-          <div class="stat"><span>In vaults</span><b class="green"><%= fmt(s.vaulted) %></b></div>
+          <div class="stat"><span><%- t('wallet.balance') %></span><b class="gold"><%= fmt(s.balance) %></b></div>
+          <div class="stat"><span><%- t('wallet.in_vaults') %></span><b class="green"><%= fmt(s.vaulted) %></b></div>
         </div>
-        <span class="info"><%= holdLine(s.hold) || 'Nothing staked in the vaults.' %></span>
-        <span class="info">Members: <%= [s.owner].concat(s.members || []).join(', ') %></span>
+        <span class="info"><%- holdLine(s.hold) || t('wallet.stash.nothing_staked') %></span>
+        <span class="info"><%- t('wallet.stash.members', { list: [s.owner].concat(s.members || []).join(', ') }) %></span>
         <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-          <select name="a0"><option value="deposit">Deposit</option><option value="withdraw">Withdraw</option></select>
+          <select name="a0"><option value="deposit"><%- t('wallet.stash.deposit') %></option><option value="withdraw"><%- t('wallet.stash.withdraw') %></option></select>
           <input type="hidden" name="a1" value="<%= s.ref %>">
-          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
-          <button type="submit">Go</button>
+          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.stash.amount_or_all') %>" required>
+          <button type="submit"><%- t('wallet.stash.go') %></button>
         </form>
         <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-          <select name="a0"><option value="stake">Stake</option><option value="unstake">Unstake</option></select>
+          <select name="a0"><option value="stake"><%- t('wallet.stash.stake') %></option><option value="unstake"><%- t('wallet.stash.unstake') %></option></select>
           <input type="hidden" name="a1" value="<%= s.ref %>">
-          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
+          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.stash.amount_or_all') %>" required>
           <%- vaultSelect %>
-          <button type="submit">Queue</button>
+          <button type="submit"><%- t('wallet.stash.queue') %></button>
         </form>
-        <span class="info">Stakes and unstakes run at the next daily cut-off at that day's price; a withdrawal waits if the vault has no free cash.</span>
+        <span class="info"><%- t('wallet.stash.stake_info') %></span>
         <% if (s.owner_me) { %>
-          <details><summary>Members &amp; close</summary>
+          <details><summary><%- t('wallet.stash.members_close') %></summary>
             <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-              <select name="a0"><option value="grant">Grant</option><option value="revoke">Revoke</option></select>
+              <select name="a0"><option value="grant"><%- t('wallet.stash.grant') %></option><option value="revoke"><%- t('wallet.stash.revoke') %></option></select>
               <input type="hidden" name="a1" value="<%= s.name %>">
               <input type="text" name="a2" data-at maxlength="60" placeholder="@member" required>
-              <button class="alt" type="submit">Apply</button>
+              <button class="alt" type="submit"><%- t('wallet.stash.apply') %></button>
             </form>
             <form class="inline" method="post" action="/act" style="margin-top:8px"><%- hidden('stash') %>
               <input type="hidden" name="a0" value="close"><input type="hidden" name="a1" value="<%= s.name %>">
-              <label><input type="checkbox" required> Close <%= s.name %> (balance returns to you)</label>
-              <button class="danger" type="submit">Close</button>
+              <label><input type="checkbox" required> <%- t('wallet.stash.close_confirm', { name: s.name }) %></label>
+              <button class="danger" type="submit"><%- t('wallet.stash.close') %></button>
             </form>
           </details>
         <% } %>
@@ -164,80 +168,80 @@
     </div>
     <div class="forms">
       <form method="post" action="/act"><%- hidden('stash') %>
-        <b>➕ Create a stash</b>
+        <b>➕ <%- t('wallet.stash.create_h') %></b>
         <input type="hidden" name="a0" value="create">
-        <input type="text" name="a1" pattern="[a-z0-9_\-]{1,20}" maxlength="20" placeholder="name (a-z 0-9 _ -, up to 20)" required>
-        <button type="submit">Create</button>
+        <input type="text" name="a1" pattern="[a-z0-9_\-]{1,20}" maxlength="20" placeholder="<%- t('wallet.stash.name_ph') %>" required>
+        <button type="submit"><%- t('wallet.stash.create') %></button>
       </form>
     </div>
   <% } %>
 
   <!-- ───────── Staking ───────── -->
-  <h2>STAKING</h2>
-  <% if (!vaults) { %><p class="info">No staking numbers from Pepe yet. <a href="/staking">Staking dashboard ›</a></p><% } else {
+  <h2><%- t('wallet.h.staking') %></h2>
+  <% if (!vaults) { %><p class="info"><%- t('wallet.staking.none') %> <a href="/staking"><%- t('wallet.staking.dashboard') %></a></p><% } else {
        const ap = (f) => f == null ? '—' : pct(f); %>
     <div class="tbl"><table>
-      <tr><th>Vault</th><th class="r">Share price</th><th class="r">APR 7d</th><th class="r">APR 30d</th></tr>
+      <tr><th><%- t('wallet.vault') %></th><th class="r"><%- t('wallet.staking.share_price') %></th><th class="r"><%- t('wallet.staking.apr7') %></th><th class="r"><%- t('wallet.staking.apr30') %></th></tr>
       <% VK.forEach((k) => { const a = (vaults.apr || {})[k] || {}; %>
-        <tr><td><%= VN[k] %></td><td class="r"><%= (Number((vaults.prices || {})[k]) || 0).toFixed(4) %></td>
+        <tr><td><%- VN[k] %></td><td class="r"><%= (Number((vaults.prices || {})[k]) || 0).toFixed(4) %></td>
           <td class="r <%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= ap(a[7]) %></td><td class="r <%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= ap(a[30]) %></td></tr>
       <% }) %>
     </table></div>
-    <p class="info"><%- vaults.next_epoch ? 'Next cut-off in ' + cd(vaults.next_epoch) + ' · ' : '' %><a href="/staking">Full staking dashboard ›</a></p>
+    <p class="info"><%- vaults.next_epoch ? t('wallet.staking.next_cutoff', { when: cd(vaults.next_epoch) }) + ' · ' : '' %><a href="/staking"><%- t('wallet.staking.full_dashboard') %></a></p>
   <% } %>
 
   <!-- ───────── Loans ───────── -->
-  <h2>MY LOANS</h2>
+  <h2><%- t('wallet.h.loans') %></h2>
   <% if (canAct) {
        const loanTable = (list, side) => { %>
     <div class="tbl"><table>
-      <tr><th>Loan</th><th><%= side === 'b' ? 'Lender' : 'Borrower' %></th><th class="r">Principal</th><th>Rate</th><th class="r">Owed</th><th class="r">Paid</th><th class="r">Left</th><th>Due</th><th></th></tr>
+      <tr><th><%- t('wallet.loan.loan') %></th><th><%- side === 'b' ? t('wallet.loan.lender') : t('wallet.loan.borrower') %></th><th class="r"><%- t('wallet.loan.principal') %></th><th><%- t('wallet.loan.rate') %></th><th class="r"><%- t('wallet.loan.owed') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th class="r"><%- t('wallet.loan.left') %></th><th><%- t('wallet.loan.due') %></th><th></th></tr>
       <% list.forEach((l) => { %>
         <tr>
-          <td class="ref"><%= l.ref %> <span class="pill <%= l.status === 'active' ? 'on' : '' %>"><%= LS[l.status] || l.status %></span><%- l.late ? ' <span class="pill late">LATE</span>' : '' %></td>
-          <td><%- side === 'b' ? (l.reserve ? '🏦 Federal Reserve' : ul(l.lender)) : ul(l.borrower) %></td>
-          <td class="r"><%= fmt(l.principal) %></td><td><%= rate(l) %> · <%= dur(l.term) %></td>
-          <td class="r"><%= fmt(l.owed) %><%= l.penalty ? ' (incl. ' + fmt(l.penalty) + ' late penalty)' : '' %></td><td class="r"><%= fmt(l.paid) %></td><td class="r"><b><%= fmt(l.left) %></b></td>
-          <td><%- l.status === 'offered' && l.offer_until ? 'offer ends ' + cd(l.offer_until) : l.due ? (l.due > now ? cd(l.due) : '<span class="down">overdue</span>') : '' %></td>
+          <td class="ref"><%= l.ref %> <span class="pill <%= l.status === 'active' ? 'on' : '' %>"><%- LS[l.status] || t.esc(l.status) %></span><%- l.late ? ' <span class="pill late">' + t('wallet.loan.late_pill') + '</span>' : '' %></td>
+          <td><%- side === 'b' ? (l.reserve ? '🏦 ' + t('wallet.fed') : ul(l.lender)) : ul(l.borrower) %></td>
+          <td class="r"><%= fmt(l.principal) %></td><td><%- rate(l) %> · <%= dur(l.term) %></td>
+          <td class="r"><%= fmt(l.owed) %><%- l.penalty ? ' ' + t('wallet.loan.incl_penalty', { n: fmt(l.penalty) }) : '' %></td><td class="r"><%= fmt(l.paid) %></td><td class="r"><b><%= fmt(l.left) %></b></td>
+          <td><%- l.status === 'offered' && l.offer_until ? t('wallet.loan.offer_ends', { when: cd(l.offer_until) }) : l.due ? (l.due > now ? cd(l.due) : '<span class="down">' + t('wallet.loan.overdue') + '</span>') : '' %></td>
           <td>
             <% if (side === 'b' && l.status === 'offered' && !l.reserve) { %>
-              <form class="inline" method="post" action="/act"><%- hidden('loan') %><input type="hidden" name="a0" value="accept"><input type="hidden" name="a1" value="<%= l.ref %>"><button type="submit">Accept</button></form>
-              <form class="inline" method="post" action="/act" style="margin-top:4px"><%- hidden('loan') %><input type="hidden" name="a0" value="decline"><input type="hidden" name="a1" value="<%= l.ref %>"><button class="alt" type="submit">Decline</button></form>
+              <form class="inline" method="post" action="/act"><%- hidden('loan') %><input type="hidden" name="a0" value="accept"><input type="hidden" name="a1" value="<%= l.ref %>"><button type="submit"><%- t('wallet.loan.accept') %></button></form>
+              <form class="inline" method="post" action="/act" style="margin-top:4px"><%- hidden('loan') %><input type="hidden" name="a0" value="decline"><input type="hidden" name="a1" value="<%= l.ref %>"><button class="alt" type="submit"><%- t('wallet.loan.decline') %></button></form>
             <% } else if (side === 'b' && l.status === 'active') { %>
               <form class="inline" method="post" action="/act" style="flex-wrap:nowrap"><%- hidden('loan') %><input type="hidden" name="a0" value="repay"><input type="hidden" name="a1" value="<%= l.ref %>">
-                <input type="number" name="a2" min="1" step="1" placeholder="all" style="width:90px"><button type="submit">Repay</button></form>
+                <input type="number" name="a2" min="1" step="1" placeholder="<%- t('wallet.loan.all') %>" style="width:90px"><button type="submit"><%- t('wallet.loan.repay') %></button></form>
             <% } else if (side === 'l' && l.status === 'active' && !l.reserve) { %>
               <form class="inline" method="post" action="/act" style="flex-wrap:nowrap"><%- hidden('loan') %><input type="hidden" name="a0" value="forgive"><input type="hidden" name="a1" value="<%= l.ref %>">
-                <label><input type="checkbox" required> sure</label><button class="danger" type="submit">Forgive</button></form>
+                <label><input type="checkbox" required> <%- t('wallet.loan.sure') %></label><button class="danger" type="submit"><%- t('wallet.loan.forgive') %></button></form>
             <% } %>
           </td>
         </tr>
       <% }) %>
     </table></div>
   <% }; %>
-    <h3>Borrowed</h3>
-    <% if (borrowed.length) loanTable(borrowed, 'b'); else { %><p class="info">You don't owe anyone.</p><% } %>
-    <h3>Lent</h3>
-    <% if (lent.length) loanTable(lent, 'l'); else { %><p class="info">No open loans you've made.</p><% } %>
+    <h3><%- t('wallet.loan.borrowed') %></h3>
+    <% if (borrowed.length) loanTable(borrowed, 'b'); else { %><p class="info"><%- t('wallet.loan.owe_none') %></p><% } %>
+    <h3><%- t('wallet.loan.lent') %></h3>
+    <% if (lent.length) loanTable(lent, 'l'); else { %><p class="info"><%- t('wallet.loan.lent_none') %></p><% } %>
     <div class="forms">
       <form method="post" action="/act" id="lend"><%- hidden('loan') %>
-        <b>🤝 Lend to someone</b>
-        <input type="text" name="a0" data-at maxlength="60" placeholder="@user" required aria-label="Borrower">
-        <span class="info" id="lend-credit" aria-live="polite">Type a name to see their credit score.</span>
-        <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="Amount, e.g. 10k" required aria-label="Amount">
-        <input type="text" name="a2" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="Interest %, e.g. 10%" required aria-label="Interest">
-        <label>Term <select name="a3"><% [1, 3, 7, 14, 30].forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%= d %> day<%= d === 1 ? '' : 's' %></option><% }) %></select></label>
-        <button type="submit">Offer loan</button>
-        <span class="info">The amount is held from your balance until they accept (10 min) — same as <code>!loan @bob 10k 10% 7d</code>.</span>
+        <b>🤝 <%- t('wallet.lend.h') %></b>
+        <input type="text" name="a0" data-at maxlength="60" placeholder="@user" required aria-label="<%- t('wallet.loan.borrower') %>">
+        <span class="info" id="lend-credit" aria-live="polite"><%- t('wallet.lend.credit_hint') %></span>
+        <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.lend.amount_ph') %>" required aria-label="<%- t('wallet.amount') %>">
+        <input type="text" name="a2" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="<%- t('wallet.lend.interest_ph') %>" required aria-label="<%- t('wallet.lend.interest') %>">
+        <label><%- t('wallet.term') %> <select name="a3"><% [1, 3, 7, 14, 30].forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%- days_(d) %></option><% }) %></select></label>
+        <button type="submit"><%- t('wallet.lend.offer') %></button>
+        <span class="info"><%- t('wallet.lend.info') %></span>
       </form>
     </div>
     <% if (loanHistory.length) { %>
-      <details style="margin-top:12px"><summary>Loan history (<%= loanHistory.length %>)</summary>
+      <details style="margin-top:12px"><summary><%- t('wallet.hist.summary', { n: loanHistory.length }) %></summary>
         <div class="tbl"><table>
-          <tr><th>Loan</th><th>With</th><th class="r">Principal</th><th class="r">Paid</th><th>Status</th><th>Ended (UTC)</th></tr>
+          <tr><th><%- t('wallet.loan.loan') %></th><th><%- t('wallet.hist.with') %></th><th class="r"><%- t('wallet.loan.principal') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th><%- t('wallet.status') %></th><th><%- t('wallet.hist.ended') %></th></tr>
           <% loanHistory.forEach((l) => { %>
-            <tr><td class="ref"><%= l.ref %></td><td><%- l.iBorrow ? 'from ' + (l.reserve ? 'Federal Reserve' : ul(l.lender)) : 'to ' + ul(l.borrower) %></td>
-              <td class="r"><%= fmt(l.principal) %></td><td class="r"><%= fmt(l.paid) %></td><td><%= l.status %><%= l.late ? ' (late)' : '' %></td><td><%= when(l.ended || l.created) %></td></tr>
+            <tr><td class="ref"><%= l.ref %></td><td><%- l.iBorrow ? t('wallet.hist.from', { who: l.reserve ? t('wallet.fed') : ul(l.lender) }) : t('wallet.hist.to', { who: ul(l.borrower) }) %></td>
+              <td class="r"><%= fmt(l.principal) %></td><td class="r"><%= fmt(l.paid) %></td><td><%- stName(l.status) %><%- l.late ? ' ' + t('wallet.hist.late') : '' %></td><td><%= when(l.ended || l.created) %></td></tr>
           <% }) %>
         </table></div>
       </details>
@@ -245,132 +249,132 @@
   <% } %>
 
   <!-- ───────── Federal Reserve ───────── -->
-  <h2>FEDERAL RESERVE</h2>
-  <% if (!reserve) { %><p class="info">No Reserve numbers from Pepe yet.</p><% } else { %>
+  <h2><%- t('wallet.h.reserve') %></h2>
+  <% if (!reserve) { %><p class="info"><%- t('wallet.reserve.none') %></p><% } else { %>
     <div class="stats">
-      <div class="stat"><span>Rate</span><b><%= pct(reserve.rate_week) %>/week</b></div>
-      <div class="stat"><span>Max term</span><b><%= reserve.max_days %> days</b></div>
-      <div class="stat"><span>Lending</span><b class="<%= reserve.enabled ? 'green' : 'red' %>"><%= reserve.enabled ? 'open' : 'closed' %></b></div>
+      <div class="stat"><span><%- t('wallet.loan.rate') %></span><b><%- t('wallet.reserve.per_week', { rate: pct(reserve.rate_week) }) %></b></div>
+      <div class="stat"><span><%- t('wallet.reserve.max_term') %></span><b><%- t('wallet.reserve.max_days', { n: reserve.max_days }) %></b></div>
+      <div class="stat"><span><%- t('wallet.reserve.lending') %></span><b class="<%= reserve.enabled ? 'green' : 'red' %>"><%- reserve.enabled ? t('wallet.reserve.open') : t('wallet.reserve.closed') %></b></div>
     </div>
     <% const ml = myLimit || { state: 'nodata' }; const bd = ml.breakdown; %>
     <div class="card limit<%= ml.state === 'ok' ? ' own' : '' %>" style="margin-top:12px">
       <% if (ml.state === 'nolink') { %>
-        <span class="name">🏦 Your borrow limit</span>
-        <span class="info"><a href="/u/<%= encodeURIComponent(user) %>">Link your Camfrog name</a> (<code>!verify</code>) to borrow from the Federal Reserve.</span>
+        <span class="name">🏦 <%- t('wallet.limit.h') %></span>
+        <span class="info"><%- t('wallet.limit.nolink', { link: '<a href="/u/' + t.esc(encodeURIComponent(user)) + '">' + t('wallet.limit.link_name') + '</a>' }) %></span>
       <% } else if (ml.state === 'nodata') { %>
-        <span class="name">🏦 Your borrow limit</span>
-        <span class="info">Pepe hasn't sent your limit yet — <code>!loan reserve</code> in a Camfrog room shows it.</span>
+        <span class="name">🏦 <%- t('wallet.limit.h') %></span>
+        <span class="info"><%- t('wallet.limit.nodata') %></span>
       <% } else if (ml.state === 'ok') { %>
-        <span class="name">🏦 Federal Reserve — you can borrow up to <b class="lim">PAT <%= fmt(ml.limit) %></b> instantly</span>
-        <span class="info"><%= pct(reserve.rate_week) %> a week (pro rata), for up to <%= reserve.max_days %> days. One Reserve loan open at a time.</span>
+        <span class="name">🏦 <%- t('wallet.limit.ok', { amount: '<b class="lim">PAT ' + t.esc(fmt(ml.limit)) + '</b>' }) %></span>
+        <span class="info"><%- t('wallet.limit.terms_one', { rate: pct(reserve.rate_week), days: reserve.max_days }) %></span>
       <% } else { %>
-        <span class="name">🏦 No instant Reserve loan right now</span>
+        <span class="name">🏦 <%- t('wallet.limit.no_instant') %></span>
         <span class="info down"><%= ml.reason.charAt(0).toUpperCase() + ml.reason.slice(1) %>.</span>
-        <span class="info"><%= pct(reserve.rate_week) %> a week (pro rata), for up to <%= reserve.max_days %> days.</span>
+        <span class="info"><%- t('wallet.limit.terms', { rate: pct(reserve.rate_week), days: reserve.max_days }) %></span>
       <% } %>
       <% if (bd) { %>
         <div class="tbl"><table class="bd">
-          <tr><td>Base</td><td class="r"><%= fmt(bd.base) %></td></tr>
-          <tr><td>Level <%= bd.level %> bonus (<%= fmt(reserve.per_level) %> a level)</td><td class="r">+ <%= fmt(bd.levelBonus) %></td></tr>
-          <tr><td>Reserve loans repaid: <%= bd.repaid %> (+25% each, up to 2×)</td><td class="r">× <%= +bd.mult.toFixed(2) %></td></tr>
-          <tr><td>Went late: <%= bd.lates %> (halves it each time)</td><td class="r <%= bd.lates ? 'down' : '' %>">× <%= +bd.penalty.toFixed(4) %></td></tr>
-          <tr><td>Cap: <%= bd.capped === 'room' ? 'what the Reserve has left to lend' : 'biggest instant loan' %></td><td class="r"><%= fmt(bd.capped === 'room' ? bd.room : bd.maxAuto) %></td></tr>
-          <tr class="tot"><td>Your instant limit<%= bd.capped ? ' (capped)' : '' %></td><td class="r"><%= fmt(ml.limit) %></td></tr>
+          <tr><td><%- t('wallet.bd.base') %></td><td class="r"><%= fmt(bd.base) %></td></tr>
+          <tr><td><%- t('wallet.bd.level', { level: bd.level, per: fmt(reserve.per_level) }) %></td><td class="r">+ <%= fmt(bd.levelBonus) %></td></tr>
+          <tr><td><%- t('wallet.bd.repaid', { n: bd.repaid }) %></td><td class="r">× <%= +bd.mult.toFixed(2) %></td></tr>
+          <tr><td><%- t('wallet.bd.lates', { n: bd.lates }) %></td><td class="r <%= bd.lates ? 'down' : '' %>">× <%= +bd.penalty.toFixed(4) %></td></tr>
+          <tr><td><%- bd.capped === 'room' ? t('wallet.bd.cap_room') : t('wallet.bd.cap_auto') %></td><td class="r"><%= fmt(bd.capped === 'room' ? bd.room : bd.maxAuto) %></td></tr>
+          <tr class="tot"><td><%- bd.capped ? t('wallet.bd.limit_capped') : t('wallet.bd.limit') %></td><td class="r"><%= fmt(ml.limit) %></td></tr>
         </table></div>
       <% } %>
     </div>
     <% if (myCredit) { const c = myCredit; %>
       <div class="card" id="credit" style="margin-top:12px">
-        <span class="name">📊 Your credit score</span>
+        <span class="name">📊 <%- t('wallet.credit.h') %></span>
         <div class="credit">
           <span class="num"><%= c.score %></span>
-          <span><span class="band <%= bandCls(c.band) %>"><%= c.band %></span> <span class="info">out of <%= c.min %>–<%= c.max %></span></span>
-          <div class="meter" role="img" aria-label="Credit score <%= c.score %> of <%= c.max %>"><i style="left:<%= meterPos(c.score, c) %>%"></i></div>
+          <span><span class="band <%= bandCls(c.band) %>"><%- bandName(c.band) %></span> <span class="info"><%- t('wallet.credit.out_of', { min: c.min, max: c.max }) %></span></span>
+          <div class="meter" role="img" aria-label="<%- t('wallet.credit.aria', { score: c.score, max: c.max }) %>"><i style="left:<%= meterPos(c.score, c) %>%"></i></div>
         </div>
         <ul class="factors">
           <% c.factors.forEach((f) => { %>
             <li><span><%= f.label.charAt(0).toUpperCase() + f.label.slice(1) %></span><b class="<%= f.points > 0 ? 'up' : f.points < 0 ? 'down' : '' %>"><%= pts(f.points) %></b></li>
           <% }) %>
         </ul>
-        <span class="info">From your loan history (personal and Federal Reserve loans), what you owe now against your level, your account's age and your level. Lenders and the admins see it when you borrow; it doesn't change your instant limit. Bands: 800+ Excellent · 740 Very good · 670 Good · 580 Fair · below Poor.</span>
+        <span class="info"><%- t('wallet.credit.info') %></span>
       </div>
     <% } %>
     <% if (canAct && reserve.enabled) { %>
       <div class="forms">
         <% if (ml.state === 'ok' || ml.state === 'nodata') { %>
         <form method="post" action="/act"><%- hidden('loan') %>
-          <b>🏦 Borrow from the Reserve</b>
+          <b>🏦 <%- t('wallet.borrow.h') %></b>
           <input type="hidden" name="a0" value="reserve">
           <% if (ml.state === 'ok') { %>
-            <input type="number" name="a1" min="<%= Math.min(reserve.min || 1, ml.limit) %>" max="<%= ml.limit %>" step="1" value="<%= ml.limit %>" placeholder="Amount (PAT)" aria-label="Amount (PAT)" required>
+            <input type="number" name="a1" min="<%= Math.min(reserve.min || 1, ml.limit) %>" max="<%= ml.limit %>" step="1" value="<%= ml.limit %>" placeholder="<%- t('wallet.amount_pat') %>" aria-label="<%- t('wallet.amount_pat') %>" required>
           <% } else { %>
-            <input type="number" name="a1" min="1" step="1" placeholder="Amount (PAT)" required>
+            <input type="number" name="a1" min="1" step="1" placeholder="<%- t('wallet.amount_pat') %>" required>
           <% } %>
-          <label>Term <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%= d %> day<%= d === 1 ? '' : 's' %></option><% }) %></select></label>
-          <button type="submit">Borrow</button>
-          <span class="info"><%= ml.state === 'ok' ? 'Up to PAT ' + fmt(ml.limit) + ', paid out at once.' : 'Instant up to your limit (grows with level and repayments).' %> Interest <%= pct(reserve.rate_week) %> per week. Need more? <a href="#reserve-request">Request a bigger loan ›</a></span>
+          <label><%- t('wallet.term') %> <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%- days_(d) %></option><% }) %></select></label>
+          <button type="submit"><%- t('wallet.borrow.button') %></button>
+          <span class="info"><%- ml.state === 'ok' ? t('wallet.borrow.up_to', { n: fmt(ml.limit) }) : t('wallet.borrow.instant') %> <%- t('wallet.borrow.interest', { rate: pct(reserve.rate_week) }) %> <a href="#reserve-request"><%- t('wallet.borrow.request_link') %></a></span>
         </form>
         <% } %>
         <form method="post" action="/act" id="reserve-request"><%- hidden('loan') %>
-          <b>📝 Ask the admins for a bigger loan</b>
+          <b>📝 <%- t('wallet.request.h') %></b>
           <input type="hidden" name="a0" value="request">
-          <input type="number" name="a1" min="1" step="1" placeholder="Amount (PAT)" required>
-          <label>Term <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%= d %> day<%= d === 1 ? '' : 's' %></option><% }) %></select></label>
-          <input type="text" name="a3" maxlength="200" placeholder="What's it for?" required>
-          <button type="submit">Send request</button>
+          <input type="number" name="a1" min="1" step="1" placeholder="<%- t('wallet.amount_pat') %>" required>
+          <label><%- t('wallet.term') %> <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%- days_(d) %></option><% }) %></select></label>
+          <input type="text" name="a3" maxlength="200" placeholder="<%- t('wallet.request.why_ph') %>" required>
+          <button type="submit"><%- t('wallet.request.send') %></button>
         </form>
       </div>
     <% } %>
     <% if (canAct) { %>
       <div class="forms">
         <form method="post" action="/act" id="donate"><%- hidden('donate') %>
-          <b>🎁 Give to the casino</b>
-          <label>Into <select name="a0"><option value="casino">💰 Casino vault (what casino heists rob)</option><option value="lotto">🎟️ Lotto pot (the jackpot)</option><option value="house">🎰 House (the bankroll)</option></select></label>
-          <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="Amount, e.g. 25k" required aria-label="Amount">
-          <button type="submit">Donate</button>
-          <span class="info">A gift, not a stake — it's gone from your wallet and Pepe thanks you in the Camfrog room. Same as <code>!donate lotto 25k</code>.</span>
+          <b>🎁 <%- t('wallet.donate.h') %></b>
+          <label><%- t('wallet.donate.into') %> <select name="a0"><option value="casino">💰 <%- t('wallet.donate.casino') %></option><option value="lotto">🎟️ <%- t('wallet.donate.lotto') %></option><option value="house">🎰 <%- t('wallet.donate.house') %></option></select></label>
+          <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.donate.amount_ph') %>" required aria-label="<%- t('wallet.amount') %>">
+          <button type="submit"><%- t('wallet.donate.button') %></button>
+          <span class="info"><%- t('wallet.donate.info') %></span>
         </form>
       </div>
     <% } %>
     <% if (myRequests.length) { %>
-      <h3>My requests</h3>
+      <h3><%- t('wallet.myreq.h') %></h3>
       <div class="tbl"><table>
-        <tr><th>Request</th><th class="r">Amount</th><th>Term</th><th>Why</th><th>Status</th></tr>
+        <tr><th><%- t('wallet.myreq.request') %></th><th class="r"><%- t('wallet.amount') %></th><th><%- t('wallet.term') %></th><th><%- t('wallet.myreq.why') %></th><th><%- t('wallet.status') %></th></tr>
         <% myRequests.forEach((r) => { %>
           <tr><td class="ref">LR<%= r.id %></td><td class="r"><%= fmt(r.amount) %></td><td><%= dur(r.term) %></td><td><%= r.why %></td>
-            <td><%= r.status === 'approved' ? '✅ approved' + (r.loan ? ' → L' + r.loan : '') : r.status === 'denied' ? '❌ denied' + (r.deny_why ? ': ' + r.deny_why : '') : '⏳ ' + r.status %></td></tr>
+            <td><%- r.status === 'approved' ? '✅ ' + t('wallet.myreq.approved') + t.esc(r.loan ? ' → L' + r.loan : '') : r.status === 'denied' ? '❌ ' + t('wallet.myreq.denied') + t.esc(r.deny_why ? ': ' + r.deny_why : '') : '⏳ ' + stName(r.status) %></td></tr>
         <% }) %>
       </table></div>
     <% } %>
   <% } %>
 
   <!-- ───────── Market positions ───────── -->
-  <h2>MY MARKET POSITIONS</h2>
-  <% if (!positions.length) { %><p class="info">No open share positions. <a href="/markets">Browse markets ›</a></p><% } else { %>
+  <h2><%- t('wallet.h.positions') %></h2>
+  <% if (!positions.length) { %><p class="info"><%- t('wallet.pos.none') %> <a href="/markets"><%- t('wallet.pos.browse') %></a></p><% } else { %>
     <div class="tbl"><table>
-      <tr><th>Market</th><th>Option</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Price</th><th class="r">Value</th><th class="r">P/L</th></tr>
+      <tr><th><%- t('wallet.pos.market') %></th><th><%- t('wallet.pos.option') %></th><th class="r"><%- t('wallet.pos.shares') %></th><th class="r"><%- t('wallet.pos.entry') %></th><th class="r"><%- t('wallet.pos.price') %></th><th class="r"><%- t('wallet.pos.value') %></th><th class="r"><%- t('wallet.pos.pl') %></th></tr>
       <% positions.forEach((p) => { p.mine.forEach((x, i) => { %>
-        <tr><td><% if (i === 0) { %><a href="/markets/<%= p.id %>"><%= p.ref %></a> <%= p.question %><%= p.status !== 'open' ? ' (' + p.status + ')' : '' %><% } %></td>
+        <tr><td><% if (i === 0) { %><a href="/markets/<%= p.id %>"><%= p.ref %></a> <%= p.question %><%- p.status !== 'open' ? ' (' + stName(p.status) + ')' : '' %><% } %></td>
           <td><%= x.option %></td><td class="r"><%= x.shares.toFixed(1) %></td><td class="r"><%= (x.entry * 100).toFixed(1) %>¢</td><td class="r"><%= (x.price * 100).toFixed(1) %>¢</td>
           <td class="r"><%= fmt(x.value) %></td><td class="r <%= x.pnl >= 0 ? 'up' : 'down' %>"><%= (x.pnl >= 0 ? '+' : '') + fmt(x.pnl) %></td></tr>
       <% }) }) %>
     </table></div>
-    <p class="info">Entry = what you paid per share (cost ÷ shares). Price = today's market price; a winning share pays 1 PAT.</p>
+    <p class="info"><%- t('wallet.pos.info') %></p>
   <% } %>
   <% const settledP = typeof settledPositions !== 'undefined' ? settledPositions : []; %>
   <% if (settledP.length) { %>
-    <h3 style="margin-top:16px">Settled in the last 30 days</h3>
+    <h3 style="margin-top:16px"><%- t('wallet.settled.h') %></h3>
     <div class="tbl"><table class="settled-pos">
-      <tr><th>Market</th><th>Option</th><th class="r">Shares</th><th class="r">Cost</th><th class="r">Paid</th><th class="r">P/L</th><th>Result</th></tr>
+      <tr><th><%- t('wallet.pos.market') %></th><th><%- t('wallet.pos.option') %></th><th class="r"><%- t('wallet.pos.shares') %></th><th class="r"><%- t('wallet.settled.cost') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th class="r"><%- t('wallet.pos.pl') %></th><th><%- t('wallet.settled.result') %></th></tr>
       <% settledP.forEach((p) => { p.mine.forEach((x, i) => { %>
         <tr><td><% if (i === 0) { %><a href="/markets/<%= p.id %>"><%= p.ref %></a> <%= p.question %><% } %></td>
           <td><%= x.option %></td><td class="r"><%= x.shares.toFixed(1) %></td><td class="r"><%= fmt(x.cost) %></td>
           <td class="r"><%= x.state === 'lost' ? '0' : fmt(x.payout) + ' PAT' %></td>
           <td class="r <%= x.pnl >= 0 ? 'up' : 'down' %>"><%= (x.pnl >= 0 ? '+' : '') + fmt(x.pnl) %></td>
-          <td><%= x.state === 'won' ? '🏆 Won' : x.state === 'lost' ? 'Lost' : 'Refunded (void)' %></td></tr>
+          <td><%- x.state === 'won' ? '🏆 ' + t('wallet.settled.won') : x.state === 'lost' ? t('wallet.settled.lost') : t('wallet.settled.refunded') %></td></tr>
       <% }) }) %>
     </table></div>
-    <p class="info">These are paid out and closed: they don't count toward your open positions.</p>
+    <p class="info"><%- t('wallet.settled.info') %></p>
   <% } %>
 
   <!-- ───────── Admin ───────── -->
@@ -447,7 +451,8 @@
 
   <script>
     (function () {
-      const fmt = (s) => s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s >= 60 ? Math.floor(s/60) + 'm ' + (s%60) + 's' : s > 0 ? s + 's' : 'now';
+      var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+      const fmt = (s) => s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s >= 60 ? Math.floor(s/60) + 'm ' + (s%60) + 's' : s > 0 ? s + 's' : _t('js.wallet.now', 'now');
       const tick = () => document.querySelectorAll('[data-until]').forEach((el) => { el.textContent = fmt(Math.max(0, Math.round(Number(el.dataset.until) - Date.now() / 1000))); });
       tick(); setInterval(tick, 1000);
       const who = document.querySelector('#lend input[name=a0]'), out = document.getElementById('lend-credit');
@@ -457,12 +462,12 @@
           const v = who.value.trim().replace(/^@+/, '');
           if (!v || v === last) return;
           last = v;
-          out.textContent = 'Looking up ' + v + '…';
+          out.textContent = _t('js.wallet.looking_up', 'Looking up {name}…', { name: v });
           fetch('/wallet/credit?u=' + encodeURIComponent(v), { credentials: 'same-origin' }).then((r) => r.json()).then((d) => {
             if (who.value.trim().replace(/^@+/, '') !== v) return;
-            out.textContent = d.error ? d.error : ('📊 ' + d.name + "'s credit: " + d.score + ' ' + d.band
+            out.textContent = d.error ? d.error : ('📊 ' + _t('js.wallet.credit_of', "{name}'s credit: {score} {band}", { name: d.name, score: d.score, band: d.band })
               + (d.top && d.top.length ? ' — ' + d.top.map((f) => f.label + ' (' + (f.points > 0 ? '+' : '') + f.points + ')').join(', ') : ''));
-          }).catch(() => { out.textContent = "Couldn't look that up."; });
+          }).catch(() => { out.textContent = _t('js.wallet.lookup_failed', "Couldn't look that up."); });
         };
         who.addEventListener('input', () => { clearTimeout(t); t = setTimeout(look, 450); });
         who.addEventListener('change', look);

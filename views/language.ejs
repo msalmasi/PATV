@@ -1,0 +1,30 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('lang.title') + ' · Public Access TV', user: user, ogPath: '/language' }) %>
+<%# 1.99jo: the language picker (i18n.js). Each choice is a plain link, so it works without JS. %>
+<style>
+  .lp { max-width: 760px; margin: 0 auto; padding: 22px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; box-sizing: border-box; }
+  .lp h1 { margin: 6px 0 8px; font-size: 26px; }
+  .lp p { color: #bbb; line-height: 1.55; margin: 0 0 16px; }
+  .lp ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+  .lp a { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 9px; border: 1px solid #2b2b2b;
+          background: #161618; color: #ddd; text-decoration: none; min-height: 44px; box-sizing: border-box; }
+  .lp a:hover, .lp a:focus-visible { border-color: #4caf50; color: #fff; }
+  .lp a.on { border-color: #3CC47C; background: #1f2b22; color: #fff; }
+  .lp .en { color: #888; font-size: 12px; }
+  .lp .auto { margin-bottom: 12px; display: inline-flex; }
+  .lp .note { font-size: 13px; color: #8a8a8a; margin-top: 16px; }
+</style>
+<div class="lp">
+  <h1><span aria-hidden="true">🌐</span> <%- t('lang.heading') %></h1>
+  <p><%- t('lang.intro') %></p>
+  <a class="auto" href="/lang/auto?next=<%= encodeURIComponent(next || '/') %>"><%- t('lang.auto') %></a>
+  <ul>
+    <% for (const L of (locals.i18nLangs || [{ code: 'en', name: 'English', english: 'English' }])) { %>
+      <li><a href="/lang/<%= L.code %>?next=<%= encodeURIComponent(next || '/') %>" lang="<%= L.code %>"<%- L.dir === 'rtl' ? ' dir="rtl"' : '' %><%- L.code === t.lang ? ' class="on" aria-current="true"' : '' %>>
+        <span><%= L.name %></span><span class="en" lang="en"><%= L.english %><%= L.code === t.lang ? ' · ' : '' %><%- L.code === t.lang ? t('lang.current') : '' %></span></a></li>
+    <% } %>
+  </ul>
+  <p class="note"><%- user ? t('lang.saved_note') : t('lang.cookie_note') %></p>
+</div>
+</body>
+</html>

@@ -5,6 +5,7 @@
 // -> restart the recorder from chunk 0 (a fresh WebM header).
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var root = document.getElementById('sb');
   if (!root || root.getAttribute('data-signed') !== '1') return;
   var PRICE = Number(root.getAttribute('data-price')) || 0;
@@ -19,7 +20,7 @@
 
   function post(url, body) {
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}), credentials: 'same-origin' })
-      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Server error (' + r.status + ')' }; }); });
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: _t('js.stage.e_server', 'Server error ({status})', { status: r.status }) }; }); });
   }
   function show(id, on) { $(id).classList.toggle('hide', !on); }
   function radio(name) { var r = document.querySelector('input[name=' + name + ']:checked'); return r ? r.value : null; }
@@ -50,7 +51,7 @@
   }
   function formCalc() {
     var o = $('room').selectedOptions[0], sp = o ? Number(o.getAttribute('data-price')) || 0 : 0;
-    $('slotPriceTxt').textContent = sp ? fmt(sp) + ' PAT / live min in this pad' : 'free in this pad';
+    $('slotPriceTxt').textContent = sp ? _t('js.stage.price_pad', '{n} PAT / live min in this pad', { n: fmt(sp) }) : _t('js.stage.free_pad', 'free in this pad');
     $('holdAmt').textContent = fmt((Number(mins.value) || 0) * price());
     var w = radio('when'), embed = radio('mode') === 'embed';
     show('embedFld', embed); show('atFld', w === 'later');
@@ -60,7 +61,7 @@
       // it's theirs - clearing it doesn't bring it back (the chip does)
       if (embed && !twOffered) { twOffered = true; if (!$('embed').value.trim()) { $('embed').value = $('twChip').getAttribute('data-url'); twNoteOn(true); } }
     }
-    $('bookBtn').textContent = w === 'later' ? '📅 Book this time' : w === 'queue' ? '⏳ Join the queue' : (embed ? '▶ Put it on now' : '🎥 Go live now');
+    $('bookBtn').textContent = w === 'later' ? _t('js.stage.btn_later', '📅 Book this time') : w === 'queue' ? _t('js.stage.btn_queue', '⏳ Join the queue') : (embed ? _t('js.stage.btn_embed', '▶ Put it on now') : _t('js.stage.btn_now', '🎥 Go live now'));
   }
   mins.addEventListener('input', function () { minsR.value = mins.value; formCalc(); });
   minsR.addEventListener('input', function () { mins.value = minsR.value; formCalc(); });
@@ -82,79 +83,78 @@
     var m = Number(mins.value), w = radio('when'), mode = radio('mode');
     if (mode === 'plex') return;                     // 1.99jn: 📼 Play from Plex has its own panel (stage-plex.js)
     var body ={ room: $('room').value, minutes: m, mode: mode, embed: $('embed').value, title: $('title').value };
-    if (mode === 'embed' && !$('embed').value.trim()) { $('bookMsg').textContent = 'Paste a YouTube or Twitch link.'; return; }
+    if (mode === 'embed' && !$('embed').value.trim()) { $('bookMsg').textContent = _t('js.stage.paste_link', 'Paste a YouTube or Twitch link.'); return; }
     var hold = m * price();
     var url = '/api/stage/book';
     if (w === 'later') {
       var at = new Date($('at').value).getTime();
-      if (!at || at < Date.now() + 60000) { $('bookMsg').textContent = 'Pick a start time in the future.'; return; }
+      if (!at || at < Date.now() + 60000) { $('bookMsg').textContent = _t('js.stage.future', 'Pick a start time in the future.'); return; }
       body.start_at = at;
     } else if (w === 'queue') url = '/api/stage/queue';
-    var q = w === 'queue' ? 'Join the queue for a ' + m + '-minute slot? When a slot frees up it\'s booked for you' + (hold ? ' and ' + fmt(hold) + ' PAT is held then' : '') + '.'
-      : (hold ? 'Hold ' + fmt(hold) + ' PAT for a ' + m + '-minute slot? You pay only for the minutes you\'re live; the rest comes back.'
-              : 'Book a free ' + m + '-minute slot' + (w === 'later' ? ' at ' + when(body.start_at) : ' now') + '?');
+    var q = w === 'queue' ? (hold ? _t('js.stage.q_queue_hold', 'Join the queue for a {m}-minute slot? When a slot frees up it\'s booked for you and {n} PAT is held then.', { m: m, n: fmt(hold) }) : _t('js.stage.q_queue', 'Join the queue for a {m}-minute slot? When a slot frees up it\'s booked for you.', { m: m }))
+      : (hold ? _t('js.stage.q_hold', 'Hold {n} PAT for a {m}-minute slot? You pay only for the minutes you\'re live; the rest comes back.', { n: fmt(hold), m: m })
+              : (w === 'later' ? _t('js.stage.q_free_at', 'Book a free {m}-minute slot at {when}?', { m: m, when: when(body.start_at) }) : _t('js.stage.q_free_now', 'Book a free {m}-minute slot now?', { m: m })));
     if (!confirm(q)) return;
-    $('bookBtn').disabled = true; $('bookMsg').textContent = 'Booking…';
+    $('bookBtn').disabled = true; $('bookMsg').textContent = _t('js.stage.booking', 'Booking…');
     post(url, body).then(function (j) {
       $('bookBtn').disabled = false;
       if (!j.ok) {
-        $('bookMsg').textContent = j.error || 'Could not book.';
+        $('bookMsg').textContent = j.error || _t('js.stage.e_book', 'Could not book.');
         if (/queue/i.test(j.error || '') && w === 'now') { setRadio('when', 'queue'); formCalc(); }
         return;
       }
-      if (w === 'queue') $('bookMsg').textContent = 'You\'re #' + j.position + ' in the queue - we\'ll tell you (inbox + Pepe) when you\'re up.';
-      else if (j.slot && (j.slot.status === 'requested')) $('bookMsg').textContent = 'Requested - the pad\'s owner approves it. Your hold comes back if they don\'t.';
-      else if (j.slot && j.slot.status === 'scheduled') $('bookMsg').textContent = 'Booked for ' + when(j.slot.start_at) + '. Your key works from a few minutes before.';
+      if (w === 'queue') $('bookMsg').textContent = _t('js.stage.queued', 'You\'re #{n} in the queue - we\'ll tell you (inbox + Pepe) when you\'re up.', { n: j.position });
+      else if (j.slot && (j.slot.status === 'requested')) $('bookMsg').textContent = _t('js.stage.requested', 'Requested - the pad\'s owner approves it. Your hold comes back if they don\'t.');
+      else if (j.slot && j.slot.status === 'scheduled') $('bookMsg').textContent = _t('js.stage.booked', 'Booked for {when}. Your key works from a few minutes before.', { when: when(j.slot.start_at) });
       else $('bookMsg').textContent = '';
       if (j.key && j.slot) { try { sessionStorage.setItem(KEY_STORE + j.slot.id, j.key); } catch (x) {} }
       refresh();
-    }).catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = 'Could not reach the server.'; });
+    }).catch(function () { $('bookBtn').disabled = false; $('bookMsg').textContent = _t('js.stage.e_net', 'Could not reach the server.'); });
   });
 
   // ── status ──
-  var REASONS = { owner_ended: 'you ended it', time_up: 'your time ran out', never_live: "it never went live, so you got everything back",
-    idle: 'the stream was off air too long', cut: 'it was cut back to Pepe', banned: 'an admin or the pad owner cut it', deadline: 'it reached its deadline',
-    restart: 'it timed out while the site restarted', cancelled: 'you cancelled it', denied: 'the pad owner declined it', not_approved: "it wasn't approved in time",
-    no_room: 'no slot was free at its start' };
+  var REASONS = { owner_ended: _t('js.stage.r_owner_ended', 'you ended it'), time_up: _t('js.stage.r_time_up', 'your time ran out'), never_live: _t('js.stage.r_never_live', 'it never went live, so you got everything back'),
+    idle: _t('js.stage.r_idle', 'the stream was off air too long'), cut: _t('js.stage.r_cut', 'it was cut back to Pepe'), banned: _t('js.stage.r_banned', 'an admin or the pad owner cut it'), deadline: _t('js.stage.r_deadline', 'it reached its deadline'),
+    restart: _t('js.stage.r_restart', 'it timed out while the site restarted'), cancelled: _t('js.stage.r_cancelled', 'you cancelled it'), denied: _t('js.stage.r_denied', 'the pad owner declined it'), not_approved: _t('js.stage.r_not_approved', 'it wasn\'t approved in time'),
+    no_room: _t('js.stage.r_no_room', 'no slot was free at its start') };
   function render(d) {
     if (d.balance != null) $('bal').textContent = fmt(d.balance);
     roomState = d.room;
     if (d.room) {
       var R = d.room, bits = [];
-      bits.push('🎬 ' + R.open + '/' + R.room.slot_count + ' slot' + (R.room.slot_count === 1 ? '' : 's') + ' in use');
-      if (R.featured) bits.push('★ featured: ' + R.featured.display);
-      if (R.queue.length) bits.push(R.queue.length + ' in the queue');
-      if (R.room.approval) bits.push('bookings for later need the owner\'s OK');
-      if (R.upcoming.length) bits.push('next booking ' + when(R.upcoming[0].start_at));
+      bits.push(R.room.slot_count === 1 ? _t('js.stage.slots_one', '🎬 {open}/{total} slot in use', { open: R.open, total: R.room.slot_count }) : _t('js.stage.slots_many', '🎬 {open}/{total} slots in use', { open: R.open, total: R.room.slot_count }));
+      if (R.featured) bits.push(_t('js.stage.featured_by', '★ featured: {name}', { name: R.featured.display }));
+      if (R.queue.length) bits.push(_t('js.stage.in_queue', '{n} in the queue', { n: R.queue.length }));
+      if (R.room.approval) bits.push(_t('js.stage.approval', 'bookings for later need the owner\'s OK'));
+      if (R.upcoming.length) bits.push(_t('js.stage.next_booking', 'next booking {when}', { when: when(R.upcoming[0].start_at) }));
       $('roomInfo').textContent = bits.join(' · ');
-      $('nowTxt').textContent = R.free > 0 ? 'a slot is free' : 'all slots busy';
+      $('nowTxt').textContent = R.free > 0 ? _t('js.stage.slot_free', 'a slot is free') : _t('js.stage.all_busy', 'all slots busy');
       if (R.free < 1 && !whenTouched && radio('when') === 'now') { setRadio('when', 'queue'); formCalc(); }
-      $('queueTxt').textContent = R.queue.length ? R.queue.length + ' waiting' : 'next free slot';
+      $('queueTxt').textContent = R.queue.length ? _t('js.stage.n_waiting', '{n} waiting', { n: R.queue.length }) : _t('js.stage.next_free', 'next free slot');
     }
-    if (d.banned) $('roomInfo').textContent = 'You can\'t book this pad\'s stage.';
+    if (d.banned) $('roomInfo').textContent = _t('js.stage.banned', 'You can\'t book this pad\'s stage.');
     var list = d.slots || [];
     var s = list.find ? list.find(function (x) { return x.status === 'waiting' || x.status === 'active'; }) : null;
     show('slotCard', !!s);
     var last = d.slot && d.slot.status === 'ended' ? d.slot : null;
     show('doneCard', !s && !!last && last.ended && Date.now() - last.ended < 30 * 60000);
     if (!s && last) {
-      $('doneTxt').innerHTML = 'Ended - ' + esc(REASONS[last.end_reason] || last.end_reason || 'ended') + '. Live <b>' + mmss(last.live_seconds) + '</b>, charged <b>' +
-        fmt(last.charged) + '</b> PAT, refunded <b>' + fmt(last.refunded) + '</b> PAT.';
+      $('doneTxt').innerHTML = esc(_t('js.stage.ended', 'Ended - {why}.', { why: REASONS[last.end_reason] || last.end_reason || _t('js.stage.ended_word', 'ended') })) + ' ' + esc(_t('js.stage.ended_stats', 'Live {live}, charged {charged} PAT, refunded {refunded} PAT.')).replace(/\{(\w+)\}/g, function (m, n) { return { live: '<b>' + mmss(last.live_seconds) + '</b>', charged: '<b>' + fmt(last.charged) + '</b>', refunded: '<b>' + fmt(last.refunded) + '</b>' }[n] || m; });
       if (slot && slot.id === last.id) { stopWeb(''); try { sessionStorage.removeItem(KEY_STORE + last.id); } catch (e) {} }
     }
     // upcoming + queue
     var up = list.filter(function (x) { return x.status === 'scheduled' || x.status === 'requested'; });
     var h = '';
     up.forEach(function (x) {
-      h += '<li><span><b>' + esc(roomTitle(x.room_id)) + '</b> · ' + when(x.start_at) + ' · ' + x.max_minutes + ' min' + (x.featured ? ' · ★ featured' : '') +
-           (x.embed_label ? ' · ' + esc(x.embed_label) : '') + (x.status === 'requested' ? ' · <i>waiting for the owner</i>' : '') +
-           (x.held ? ' · ' + fmt(x.held) + ' PAT held' : '') + '</span>' +
-           (x.mode !== 'embed' ? '<button type="button" class="btn" data-key="' + esc(x.id) + '">Key</button>' : '') +
-           '<button type="button" class="btn danger" data-cancel="' + esc(x.id) + '">Cancel</button></li>';
+      h += '<li><span><b>' + esc(roomTitle(x.room_id)) + '</b> · ' + when(x.start_at) + ' · ' + esc(_t('js.stage.n_min', '{n} min', { n: x.max_minutes })) + (x.featured ? ' · ' + esc(_t('js.stage.featured', '★ featured')) : '') +
+           (x.embed_label ? ' · ' + esc(x.embed_label) : '') + (x.status === 'requested' ? ' · <i>' + esc(_t('js.stage.waiting_owner', 'waiting for the owner')) + '</i>' : '') +
+           (x.held ? ' · ' + esc(_t('js.stage.n_held', '{n} PAT held', { n: fmt(x.held) })) : '') + '</span>' +
+           (x.mode !== 'embed' ? '<button type="button" class="btn" data-key="' + esc(x.id) + '">' + esc(_t('js.stage.key', 'Key')) + '</button>' : '') +
+           '<button type="button" class="btn danger" data-cancel="' + esc(x.id) + '">' + esc(_t('js.stage.cancel', 'Cancel')) + '</button></li>';
     });
     (d.queue || []).forEach(function (q) {
-      h += '<li><span><b>' + esc(roomTitle(q.room_id)) + '</b> · queue #' + q.position + ' · ' + q.minutes + ' min' + '</span>' +
-           '<button type="button" class="btn danger" data-leave="' + esc(q.id) + '">Leave</button></li>';
+      h += '<li><span><b>' + esc(roomTitle(q.room_id)) + '</b> · ' + esc(_t('js.stage.queue_pos', 'queue #{n}', { n: q.position })) + ' · ' + esc(_t('js.stage.n_min', '{n} min', { n: q.minutes })) + '</span>' +
+           '<button type="button" class="btn danger" data-leave="' + esc(q.id) + '">' + esc(_t('js.stage.leave', 'Leave')) + '</button></li>';
     });
     $('upList').innerHTML = h;
     show('upCard', !!h);
@@ -170,8 +170,8 @@
     show('streamPanes', !embed && !lib); show('embedNote', embed);
     var st = $('slotState');
     st.className = 'state ' + (s.live ? 'live' : 'wait');
-    st.innerHTML = (s.live ? '<span class="dot" aria-hidden="true"></span> LIVE' + (s.featured ? ' · ★ FEATURED' : '') + (lib ? ' · 📼' : '')
-      : (lib ? (s.went_live ? '📼 Paused / off air' : '📼 Starting…') : s.went_live ? 'Off air - reconnect to continue' : 'Waiting for your stream'));
+    st.innerHTML = (s.live ? '<span class="dot" aria-hidden="true"></span> ' + esc(_t('js.stage.live', 'LIVE')) + (s.featured ? ' · ' + esc(_t('js.stage.featured_caps', '★ FEATURED')) : '') + (lib ? ' · 📼' : '')
+      : esc(lib ? (s.went_live ? '📼 Paused / off air' : '📼 Starting…') : s.went_live ? _t('js.stage.off_air_reconnect', 'Off air - reconnect to continue') : _t('js.stage.waiting_stream', 'Waiting for your stream')));
     $('liveTime').textContent = mmss(s.live_seconds);
     $('charged').textContent = fmt(s.charged) + ' PAT';
     $('held').textContent = fmt(s.held) + ' PAT';
@@ -180,14 +180,14 @@
       $('leftV').textContent = mmss(s.max_minutes * 60 - s.live_seconds);
       $('slotNote').textContent = s.live ? '📼 Playing from Plex on ' + roomTitle(s.room_id) + '\'s stage.' : (s.went_live ? 'Paused - resume below.' : 'The library stream is starting - it shows on the stage within a few seconds.');
     } else if (!s.went_live && !embed) {
-      $('leftK').textContent = 'Go live within';
+      $('leftK').textContent = _t('js.stage.go_live_within', 'Go live within');
       $('leftV').textContent = mmss((s.start_by - Date.now()) / 1000);
-      $('slotNote').textContent = 'Start streaming before the timer runs out, or the slot is cancelled' + (s.held ? ' and everything is refunded.' : '.');
+      $('slotNote').textContent = s.held ? _t('js.stage.start_before_refund', 'Start streaming before the timer runs out, or the slot is cancelled and everything is refunded.') : _t('js.stage.start_before', 'Start streaming before the timer runs out, or the slot is cancelled.');
     } else {
-      $('leftK').textContent = 'Time left';
+      $('leftK').textContent = _t('js.stage.time_left', 'Time left');
       $('leftV').textContent = mmss(s.max_minutes * 60 - s.live_seconds);
-      $('slotNote').textContent = s.live ? (s.featured ? 'You\'re the featured stream in ' + roomTitle(s.room_id) + '. ' : 'You\'re on the stage in ' + roomTitle(s.room_id) + '. ') +
-        (s.price_per_min && s.held > s.charged ? fmt(s.price_per_min) + ' PAT per started minute live.' : 'Viewers pick your tab to watch.') : 'Your stream dropped. Billing is paused until you are back.';
+      $('slotNote').textContent = s.live ? (s.featured ? _t('js.stage.you_featured', 'You\'re the featured stream in {pad}.', { pad: roomTitle(s.room_id) }) : _t('js.stage.you_on_stage', 'You\'re on the stage in {pad}.', { pad: roomTitle(s.room_id) })) + ' ' +
+        (s.price_per_min && s.held > s.charged ? _t('js.stage.per_minute', '{n} PAT per started minute live.', { n: fmt(s.price_per_min) }) : _t('js.stage.viewers_pick', 'Viewers pick your tab to watch.')) : _t('js.stage.dropped', 'Your stream dropped. Billing is paused until you are back.');
     }
     // 1.99cr: may viewers snap / clip this stream, is it NSFW (not while a change is on its way)
     show('capOpts', !embed && !lib);
@@ -195,8 +195,8 @@
     var k = null;
     try { k = sessionStorage.getItem(KEY_STORE + s.id); } catch (e) {}
     $('rtmpKey').value = k || '';
-    $('keyNote').textContent = k ? 'Your key works only for this slot and stops working when it ends. Don\'t share it.'
-      : 'This tab doesn\'t have your key - press "New key" for a fresh one (the old one stops working), or go live from the browser.';
+    $('keyNote').textContent = k ? _t('js.stage.key_note', 'Your key works only for this slot and stops working when it ends. Don\'t share it.')
+      : _t('js.stage.no_key', 'This tab doesn\'t have your key - press {q}New key{q} for a fresh one (the old one stops working), or go live from the browser.', { q: '"' });
   }
   var capBusy = false;
   function capSave() {
@@ -208,9 +208,9 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         capBusy = false;
-        $('slotMsg').textContent = j.ok ? (j.capture ? 'Viewers can snap and clip your stream' : 'Snaps and clips of your stream are off') + (j.nsfw ? ' · marked NSFW.' : '.') : (j.error || 'Could not change that.');
+        $('slotMsg').textContent = j.ok ? (j.capture ? _t('js.stage.cap_on', 'Viewers can snap and clip your stream') : _t('js.stage.cap_off', 'Snaps and clips of your stream are off')) + (j.nsfw ? ' · ' + _t('js.stage.marked_nsfw', 'marked NSFW.') : '.') : (j.error || _t('js.stage.e_change', 'Could not change that.'));
         refresh();
-      }).catch(function () { capBusy = false; $('slotMsg').textContent = 'Could not reach the site.'; });
+      }).catch(function () { capBusy = false; $('slotMsg').textContent = _t('js.stage.e_site', 'Could not reach the site.'); });
   }
   $('capAllow').addEventListener('change', capSave);
   $('capNsfw').addEventListener('change', capSave);
@@ -224,39 +224,39 @@
   window.PATVStageRefresh = refresh;                  // 1.99jn: stage-plex.js after a play / stop
 
   $('endBtn').addEventListener('click', function () {
-    if (!slot || !confirm(slot.library ? 'Stop the library stream and end your slot?' : 'End your slot now?' + (slot.held > slot.charged ? ' Unused PAT is refunded right away.' : ''))) return;
+    if (!slot || !confirm(slot.library ? 'Stop the library stream and end your slot?' : _t('js.stage.q_end', 'End your slot now?') + (slot.held > slot.charged ? ' ' + _t('js.stage.q_end_refund', 'Unused PAT is refunded right away.') : ''))) return;
     $('endBtn').disabled = true;
     stopWeb('');
     // a 📼 library slot: stop the encoder too (the stage would end it on its own within seconds)
     (slot.library ? post('/api/medialib/stop', { room: slot.room_id }) : post('/api/stage/slots/' + encodeURIComponent(slot.id) + '/end')).then(function (j) {
       $('endBtn').disabled = false;
-      if (!j.ok) alert(j.error || 'Could not end it.');
+      if (!j.ok) alert(j.error || _t('js.stage.e_end', 'Could not end it.'));
       refresh();
     }).catch(function () { $('endBtn').disabled = false; });
   });
   function newKey(id, then) {
     post('/api/stage/slots/' + encodeURIComponent(id) + '/key').then(function (j) {
-      if (!j.ok) { alert(j.error || 'Could not make a key.'); return; }
+      if (!j.ok) { alert(j.error || _t('js.stage.e_key', 'Could not make a key.')); return; }
       try { sessionStorage.setItem(KEY_STORE + id, j.key); } catch (e) {}
       if (then) then(j.key);
       refresh();
     });
   }
   $('newKey').addEventListener('click', function () {
-    if (slot && confirm('Make a new stream key? The old one stops working.')) newKey(slot.id);
+    if (slot && confirm(_t('js.stage.q_new_key', 'Make a new stream key? The old one stops working.'))) newKey(slot.id);
   });
   $('upList').addEventListener('click', function (e) {
     var b = e.target.closest('button'); if (!b) return;
     if (b.hasAttribute('data-cancel')) {
-      if (!confirm('Cancel this booking? Anything held is refunded.')) return;
-      post('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-cancel')) + '/end').then(function (j) { if (!j.ok) alert(j.error || 'Could not cancel.'); refresh(); });
+      if (!confirm(_t('js.stage.q_cancel', 'Cancel this booking? Anything held is refunded.'))) return;
+      post('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-cancel')) + '/end').then(function (j) { if (!j.ok) alert(j.error || _t('js.stage.e_cancel', 'Could not cancel.')); refresh(); });
     } else if (b.hasAttribute('data-leave')) {
       post('/api/stage/queue/' + encodeURIComponent(b.getAttribute('data-leave')) + '/leave').then(function () { refresh(); });
     } else if (b.hasAttribute('data-key')) {
       var id = b.getAttribute('data-key'), k = null;
       try { k = sessionStorage.getItem(KEY_STORE + id); } catch (x) {}
-      if (k) { prompt('Your stream key for that booking (works from a few minutes before the start):', k); return; }
-      if (confirm('This tab doesn\'t have that booking\'s key. Make a new one?')) newKey(id, function (key) { prompt('Your new stream key (works from a few minutes before the start):', key); });
+      if (k) { prompt(_t('js.stage.p_key', 'Your stream key for that booking (works from a few minutes before the start):'), k); return; }
+      if (confirm(_t('js.stage.q_no_key', 'This tab doesn\'t have that booking\'s key. Make a new one?'))) newKey(id, function (key) { prompt(_t('js.stage.p_new_key', 'Your new stream key (works from a few minutes before the start):'), key); });
     }
   });
 
@@ -266,13 +266,13 @@
       var el = $(b.getAttribute('data-copy'));
       if (!el.value) return;
       (navigator.clipboard ? navigator.clipboard.writeText(el.value) : Promise.reject()).then(function () {
-        var t = b.textContent; b.textContent = 'Copied'; setTimeout(function () { b.textContent = t; }, 1200);
+        var t = b.textContent; b.textContent = _t('js.stage.copied', 'Copied'); setTimeout(function () { b.textContent = t; }, 1200);
       }).catch(function () { el.type = 'text'; el.select(); });
     });
   });
   $('showKey').addEventListener('click', function () {
     var k = $('rtmpKey'); k.type = k.type === 'password' ? 'text' : 'password';
-    $('showKey').textContent = k.type === 'password' ? 'Show' : 'Hide';
+    $('showKey').textContent = k.type === 'password' ? _t('js.stage.show', 'Show') : _t('js.stage.hide', 'Hide');
   });
 
   // tabs
@@ -323,13 +323,15 @@
   function scrVideo() { return scr ? scr.getVideoTracks()[0] || null : null; }
   function settings(t) { try { return (t && t.getSettings && t.getSettings()) || {}; } catch (e) { return {}; } }
   function stopStream(s) { if (s) s.getTracks().forEach(function (t) { t.onended = null; try { t.stop(); } catch (e) { /* gone */ } }); }
+  var DEV = { camera: _t('js.stage.dev_camera', 'camera'), microphone: _t('js.stage.dev_mic', 'microphone'), screen: _t('js.stage.dev_screen', 'screen'), 'camera and mic': _t('js.stage.dev_cam_mic', 'camera and mic'), 'screen share': _t('js.stage.dev_screen_share', 'screen share') };
   function errText(e, what) {
     var n = e && e.name;
-    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') return 'Permission denied - allow the ' + what + ' for this site in your browser (the lock / camera icon by the address), then try again.';
-    if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'No ' + what + ' found.';
-    if (n === 'OverconstrainedError') return 'That ' + what + ' isn\'t available - pick another one.';
-    if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') return 'Your ' + what + ' is busy - close other apps or tabs using it, then try again.';
-    return (e && e.message) || ('Could not open the ' + what + '.');
+    what = DEV[what] || what;
+    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError') return _t('js.stage.e_perm', 'Permission denied - allow the {what} for this site in your browser (the lock / camera icon by the address), then try again.', { what: what });
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return _t('js.stage.e_notfound', 'No {what} found.', { what: what });
+    if (n === 'OverconstrainedError') return _t('js.stage.e_overcon', 'That {what} isn\'t available - pick another one.', { what: what });
+    if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') return _t('js.stage.e_busy', 'Your {what} is busy - close other apps or tabs using it, then try again.', { what: what });
+    return (e && e.message) || _t('js.stage.e_open', 'Could not open the {what}.', { what: what });
   }
   // constraints: an explicit pick is exact; the remembered one is only "ideal" (a stale id never fails)
   function vCons(o) {
@@ -361,15 +363,15 @@
       if (!e || /NotAllowed|Security|PermissionDenied/.test(e.name || '')) throw e;
       return gum({ audio: aCons() }).then(function (s) {
         cam = null; mic = s;
-        return errText(e, 'camera') + ' You can still go live with your mic and a black picture, or pick another camera.';
+        return errText(e, 'camera') + ' ' + _t('js.stage.mic_only_hint', 'You can still go live with your mic and a black picture, or pick another camera.');
       }, function () { throw e; });
     });
   }
   function openScreen() {
-    if (!md().getDisplayMedia) return Promise.reject(new Error('Screen sharing isn\'t supported in this browser.'));
+    if (!md().getDisplayMedia) return Promise.reject(new Error(_t('js.stage.no_screen', 'Screen sharing isn\'t supported in this browser.')));
     return md().getDisplayMedia({ video: { frameRate: { ideal: 30 } }, audio: true }).then(function (s) {
       scr = s;
-      return gum({ audio: aCons() }).then(function (m) { mic = m; return ''; }, function (e) { mic = null; return errText(e, 'microphone') + ' Streaming the screen without your mic.'; });
+      return gum({ audio: aCons() }).then(function (m) { mic = m; return ''; }, function (e) { mic = null; return errText(e, 'microphone') + ' ' + _t('js.stage.screen_no_mic', 'Streaming the screen without your mic.'); });
     });
   }
   function hookCam() {
@@ -384,7 +386,7 @@
   }
   function hookScr() {
     var t = scrVideo(); if (!t) return;
-    t.onended = function () { if (live) stopWeb('Your screen share stopped.'); else releaseMedia(); };
+    t.onended = function () { if (live) stopWeb(_t('js.stage.screen_stopped', 'Your screen share stopped.')); else releaseMedia(); };
   }
 
   // ── the program feed ──
@@ -476,7 +478,7 @@
     $('micBtn').disabled = !micTrack(); $('camBtn').disabled = !(camTrack() || scrVideo());
     if (!live) return;
     var next = recTracks();
-    if (!next.some(function (t) { return t.kind === 'video'; })) { stopWeb('Your ' + (srcKind() === 'camera' ? 'camera' : 'screen share') + ' stopped.'); return; }
+    if (!next.some(function (t) { return t.kind === 'video'; })) { stopWeb(_t('js.stage.src_stopped', 'Your {what} stopped.', { what: DEV[srcKind() === 'camera' ? 'camera' : 'screen share'] })); return; }
     var cur = media ? media.getTracks() : [];
     var same = next.length === cur.length && next.every(function (t) { return cur.indexOf(t) >= 0; });
     if (!same) { media = new MediaStream(next); restartRecorder(); }
@@ -485,13 +487,13 @@
     var s = srcKind() === 'camera' ? cam : scr, pv = $('pv');
     if (pv.srcObject !== s) pv.srcObject = s || null;
     show('pvEmpty', !s);
-    $('pvEmpty').textContent = previewing && !s ? (mic ? 'No camera - mic only' : 'No source') : 'Pick a source to preview';
+    $('pvEmpty').textContent = previewing && !s ? (mic ? _t('js.stage.no_cam_mic_only', 'No camera - mic only') : _t('js.stage.no_source', 'No source')) : _t('js.stage.pick_source', 'Pick a source to preview');
   }
   function releaseMedia() {
     teardownProgram();
     stopStream(cam); stopStream(mic); stopStream(scr);
     cam = mic = scr = null; media = null; previewing = false;
-    $('pv').srcObject = null; show('pvEmpty', true); $('pvEmpty').textContent = 'Pick a source to preview';
+    $('pv').srcObject = null; show('pvEmpty', true); $('pvEmpty').textContent = _t('js.stage.pick_source', 'Pick a source to preview');
     $('micBtn').disabled = true; $('camBtn').disabled = true;
     pickers();
   }
@@ -499,14 +501,14 @@
     if (live) return Promise.resolve(media);
     releaseMedia();
     if (!md() || !md().getUserMedia) {
-      var e0 = new Error('This browser can\'t capture video here (needs HTTPS and a modern browser).'); webMsg(e0.message); return Promise.reject(e0);
+      var e0 = new Error(_t('js.stage.no_capture', 'This browser can\'t capture video here (needs HTTPS and a modern browser).')); webMsg(e0.message); return Promise.reject(e0);
     }
     var screen = srcKind() === 'screen';
-    webMsg('Asking for your ' + (screen ? 'screen' : 'camera and mic') + '…');
+    webMsg(_t('js.stage.asking', 'Asking for your {what}…', { what: DEV[screen ? 'screen' : 'camera and mic'] }));
     return (screen ? openScreen() : openCamera()).then(function (note) {
       previewing = true; camOn = true; micOn = true;
       hookCam(); hookMic(); hookScr();
-      setToggle('micBtn', true, '🎤 Mic'); setToggle('camBtn', true, '🎥 Video');
+      setToggle('micBtn', true, 'mic'); setToggle('camBtn', true, 'video');
       rewire();
       remember('camera'); remember('microphone');
       webMsg(note || '');
@@ -532,11 +534,11 @@
       listDevices().then(function () {
         var id = settings(isCam ? camTrack() : micTrack()).deviceId, d = null;
         (isCam ? devs.video : devs.audio).forEach(function (x) { if (x.deviceId === id) d = x; });
-        webMsg('Your ' + kind + ' disconnected - switched to ' + ((d && d.label) || 'another one') + '.');
+        webMsg(_t('js.stage.switched_to', 'Your {what} disconnected - switched to {name}.', { what: DEV[kind] || kind, name: (d && d.label) || _t('js.stage.another_one', 'another one') }));
       });
     }, function () {
       listDevices();
-      webMsg('Your ' + kind + ' disconnected' + (live ? (isCam ? ' - viewers see a black picture until you pick another camera.' : ' - the stream is silent until you pick another mic.') : '.'));
+      webMsg(live ? (isCam ? _t('js.stage.cam_lost_live', 'Your camera disconnected - viewers see a black picture until you pick another camera.') : _t('js.stage.mic_lost_live', 'Your microphone disconnected - the stream is silent until you pick another mic.')) : _t('js.stage.dev_lost', 'Your {what} disconnected.', { what: DEV[kind] || kind }));
     });
   }
   // iOS: opening one kind can end the other kind's track - reopen it quietly
@@ -556,7 +558,7 @@
     var set = function (s) { if (isCam) cam = s; else mic = s; };
     var old = isCam ? cam : mic, oldId = settings(get()).deviceId;
     switching = true;
-    webMsg('Switching ' + kind + '…');
+    webMsg(_t('js.stage.switching', 'Switching {what}…', { what: DEV[kind] || kind }));
     return gum(cons(o)).catch(function (e) {
       if (!old || !(e && /NotReadable|TrackStart|Abort/.test(e.name || ''))) throw e;
       stopStream(old); old = null; set(null);
@@ -599,11 +601,11 @@
     sel.textContent = '';
     var named = list.some(function (d) { return d.label; });
     if (!named) {
-      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = 'Default ' + noun; sel.appendChild(o0);
+      var o0 = document.createElement('option'); o0.value = ''; o0.textContent = noun === 'camera' ? _t('js.stage.default_cam', 'Default camera') : _t('js.stage.default_mic', 'Default microphone'); sel.appendChild(o0);
       sel.disabled = true; return;
     }
     list.forEach(function (d, i) {
-      var o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || (noun.charAt(0).toUpperCase() + noun.slice(1) + ' ' + (i + 1));
+      var o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || (noun === 'camera' ? _t('js.stage.cam_n', 'Camera {n}', { n: i + 1 }) : _t('js.stage.mic_n', 'Microphone {n}', { n: i + 1 }));
       sel.appendChild(o);
     });
     sel.disabled = false;
@@ -615,8 +617,8 @@
     var named = devs.video.concat(devs.audio).some(function (d) { return d.label; });
     show('flipBtn', camMode && previewing && !!camTrack() && (devs.video.length > 1 || /^(user|environment)$/.test(settings(camTrack()).facingMode || '')));
     $('flipBtn').disabled = switching;
-    $('devNote').textContent = !md() ? '' : named ? (live ? 'You can switch while live - the stream keeps going.' : '')
-      : 'Press Preview once and allow the camera and mic - then you can choose which ones to use.';
+    $('devNote').textContent = !md() ? '' : named ? (live ? _t('js.stage.switch_live', 'You can switch while live - the stream keeps going.') : '')
+      : _t('js.stage.press_preview', 'Press Preview once and allow the camera and mic - then you can choose which ones to use.');
   }
   function listDevices() {
     if (!md() || !md().enumerateDevices) { show('devs', false); return Promise.resolve(); }
@@ -642,23 +644,24 @@
   if (md() && md().addEventListener) md().addEventListener('devicechange', function () { listDevices(); });
   listDevices();
 
-  function setToggle(id, on, label) { var b = $(id); b.setAttribute('aria-pressed', String(on)); b.textContent = label + (on ? ' on' : ' off'); }
+  var TOG = { mic: [_t('js.stage.mic_on', '🎤 Mic on'), _t('js.stage.mic_off', '🎤 Mic off')], video: [_t('js.stage.video_on', '🎥 Video on'), _t('js.stage.video_off', '🎥 Video off')] };
+  function setToggle(id, on, which) { var b = $(id); b.setAttribute('aria-pressed', String(on)); b.textContent = TOG[which][on ? 0 : 1]; }
   $('pvBtn').addEventListener('click', function () { preview().catch(function () {}); });
   document.querySelectorAll('input[name=src]').forEach(function (r) {
     r.addEventListener('change', function () { pickers(); if (!live && previewing) preview().catch(function () {}); });
   });
   $('micBtn').addEventListener('click', function () {
     var t = micTrack(); if (!t) return;
-    micOn = !micOn; t.enabled = micOn; setToggle('micBtn', micOn, '🎤 Mic');
+    micOn = !micOn; t.enabled = micOn; setToggle('micBtn', micOn, 'mic');
   });
   $('camBtn').addEventListener('click', function () {
     var t = srcKind() === 'camera' ? camTrack() : scrVideo(); if (!t) return;
-    camOn = !camOn; t.enabled = camOn; setToggle('camBtn', camOn, '🎥 Video');
+    camOn = !camOn; t.enabled = camOn; setToggle('camBtn', camOn, 'video');
   });
 
   function startRecorder() {
     var mt = mime();
-    if (mt === null) throw new Error('This browser can\'t record video for streaming - try Chrome, Edge or Firefox, or use OBS.');
+    if (mt === null) throw new Error(_t('js.stage.no_record', 'This browser can\'t record video for streaming - try Chrome, Edge or Firefox, or use OBS.'));
     var opts = { videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 };
     if (mt) opts.mimeType = mt;
     seq = 0; queue = [];
@@ -690,7 +693,7 @@
         pump(); return;
       }
       if (res.status === 409) { restartRecorder(); return; }              // relay restarted / out of order
-      stopWeb((res.j && res.j.error) || ('Streaming stopped (' + res.status + ').'));
+      stopWeb((res.j && res.j.error) || _t('js.stage.stream_stopped', 'Streaming stopped ({status}).', { status: res.status }));
       refresh();
     }).catch(function () {
       sending = false;
@@ -718,7 +721,7 @@
       var tracks = recTracks();
       if (!tracks.some(function (t) { return t.kind === 'video'; })) {
         teardownProgram();
-        webMsg('No camera to stream - plug one in, pick another camera, or choose Screen.');
+        webMsg(_t('js.stage.no_cam', 'No camera to stream - plug one in, pick another camera, or choose Screen.'));
         return;
       }
       media = new MediaStream(tracks);
@@ -727,7 +730,7 @@
       show('goBtn', false); show('stopBtn', true); show('onAir', true); show('pvBtn', false);
       document.querySelectorAll('input[name=src]').forEach(function (r) { r.disabled = true; });
       pickers();
-      webMsg('Connecting to the stage… you should be live in a few seconds.');
+      webMsg(_t('js.stage.connecting', 'Connecting to the stage… you should be live in a few seconds.'));
       setTimeout(function () { if (live) webMsg(''); }, 8000);
     }).catch(function () { if (ac) { try { ac.close(); } catch (e) { /* fine */ } } });
   });
@@ -742,6 +745,6 @@
     if (was) releaseMedia();
     if (msg != null) webMsg(msg);
   }
-  $('stopBtn').addEventListener('click', function () { stopWeb('Stopped. Your slot is still open - go live again or end it.'); });
+  $('stopBtn').addEventListener('click', function () { stopWeb(_t('js.stage.stopped', 'Stopped. Your slot is still open - go live again or end it.')); });
   window.addEventListener('beforeunload', function (e) { if (live) { e.preventDefault(); e.returnValue = ''; } });
 })();

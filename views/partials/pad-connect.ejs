@@ -1,75 +1,76 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# 1.99ja: the settings hub's platform connections (padconnect.js; public/js/pad-connect.js). Locals: slug, room, connect
     (padconnect.state: platform, camfrog, twitch, twitchLinked, twitchLogin, ownerIsViewer, staff, admin, code_ttl_h, pepeIn). %>
 <% const CN_ = connect, CF_ = CN_.camfrog, TW_ = CN_.twitch, PL_ = CN_.platform;
    const dt_ = (ms) => new Date(Number(ms) || 0).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
    const next_ = encodeURIComponent('/p/' + slug + '/settings?tab=address#connections'); %>
 <div class="sb-card ps-card pcn" id="connections" data-base="/api/rooms/<%= encodeURIComponent(slug) %>">
-  <h3>Platform</h3>
-  <p class="muted">This pad is a <%- typeof padBadge === 'function' ? padBadge(PL_) : PL_ %>. Connect it to where your people already hang out: a Camfrog room (its live chat, room vault and Pepe's room features) or a Twitch channel (your stream on the pad). One platform at a time; disconnecting keeps the feed, followers and settings.</p>
+  <h3><%- t('pad.conn.h') %></h3>
+  <p class="muted"><%- t('pad.conn.intro', { badge: typeof padBadge === 'function' ? padBadge(PL_) : PL_ }) %></p>
 
   <div class="pcn-p" id="pcnCamfrog">
-    <h4>🐸 Camfrog room</h4>
+    <h4><%- t('pad.conn.cf_h') %></h4>
     <% if (CN_.house) { %>
-      <p class="note">House pads are run by the site.</p>
+      <p class="note"><%- t('pad.conn.house') %></p>
     <% } else if (PL_ === 'camfrog') { %>
-      <p>Connected to <b><%= (CF_ && CF_.external_name) || room.id %></b> <small class="muted">(room id <code><%= room.id %></code><%= CF_ && CF_.verified_at ? ', since ' + dt_(CF_.verified_at).slice(0, 10) : '' %>)</small>.</p>
+      <p><%- t('pad.conn.cf_connected', { name: (CF_ && CF_.external_name) || room.id }) %> <small class="muted">(<%- t('pad.conn.room_id', { id: '<code>' + t.esc(room.id) + '</code>' }) %><%- CF_ && CF_.verified_at ? ', ' + t('pad.conn.since', { date: dt_(CF_.verified_at).slice(0, 10) }) : '' %>)</small>.</p>
       <% if (CF_) { %>
         <label class="ps-switch"><input type="checkbox" id="pcnJoin"<%= CF_.join_opt_in ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
-          <span>I'd like Pepe in my room <small class="muted">(a site admin approves it; <%= CF_.join_status === 'approved' ? 'approved ✓' : CF_.join_status === 'requested' ? 'waiting for an admin' : CF_.join_status === 'denied' ? 'declined' : 'not asked' %><%= CN_.pepeIn ? ' · Pepe is in the room now' : '' %>)</small></span></label>
+          <span><%- t('pad.conn.want_pepe') %> <small class="muted">(<%- t('pad.conn.admin_approves') %> <%- CF_.join_status === 'approved' ? t('pad.conn.approved') : CF_.join_status === 'requested' ? t('pad.conn.waiting_admin') : CF_.join_status === 'denied' ? t('pad.conn.declined') : t('pad.conn.not_asked') %><%- CN_.pepeIn ? ' · ' + t('pad.conn.pepe_in') : '' %>)</small></span></label>
       <% } %>
-      <details class="pcn-danger"><summary>Disconnect from Camfrog</summary>
-        <p class="muted">The pad goes back to being a site pad with its feed, followers, stories, settings and address. What belongs to the Camfrog room stays with the room: its live chat history, room stats, room vault and royalties earned there. If Pepe is in the room it gets a new, unowned pad. Pepe doesn't leave the room by himself.</p>
-        <button type="button" class="btn danger" data-pcn="disconnect" data-platform="camfrog">Disconnect this pad from Camfrog</button>
+      <details class="pcn-danger"><summary><%- t('pad.conn.cf_disc') %></summary>
+        <p class="muted"><%- t('pad.conn.cf_disc_what') %></p>
+        <button type="button" class="btn danger" data-pcn="disconnect" data-platform="camfrog"><%- t('pad.conn.cf_disc_btn') %></button>
       </details>
     <% } else if (PL_ !== 'site') { %>
-      <p class="muted">Disconnect this pad from <%= PL_ %> first.</p>
+      <p class="muted"><%- t('pad.conn.disc_first', { platform: PL_ }) %></p>
     <% } else if (CF_ && (CF_.status === 'pending' || CF_.status === 'review')) { %>
-      <p>Connecting to <b><%= CF_.external_name %></b>. Your code:</p>
-      <p class="pcn-code"><code id="pcnCode"><%= CF_.code %></code> <button type="button" class="btn-s ghost" data-pcn="copy">Copy</button> <small class="muted">valid until <%= dt_(CF_.code_expires) %></small></p>
+      <p><%- t('pad.conn.connecting', { name: CF_.external_name }) %></p>
+      <p class="pcn-code"><code id="pcnCode"><%= CF_.code %></code> <button type="button" class="btn-s ghost" data-pcn="copy"><%- t('pad.conn.copy') %></button> <small class="muted"><%- t('pad.conn.valid_until', { date: dt_(CF_.code_expires) }) %></small></p>
       <ol class="pcn-steps">
-        <li><b>Fastest:</b> put <code><%= CF_.code %></code> in the room's <b>topic</b> (only the room's owner or operators can). Pepe finishes within a couple of minutes, then you can change the topic back.</li>
-        <li><b>Or</b> type <code>!verifypad <%= CF_.code %></code> in the room. A site admin then confirms it<%= CF_.status === 'review' ? ' - done, it is waiting for an admin now' : '' %>.</li>
+        <li><%- t('pad.conn.step_topic', { code: '<code>' + t.esc(CF_.code) + '</code>' }) %></li>
+        <li><%- t('pad.conn.step_cmd', { cmd: '<code>!verifypad ' + t.esc(CF_.code) + '</code>' }) %><%- CF_.status === 'review' ? t('pad.conn.review_done') : '' %>.</li>
       </ol>
-      <p class="muted">Pepe has to be in the room to see either. If he isn't there, a site admin can send him to check (they can see your request).</p>
-      <div class="row"><button type="button" class="btn" data-pcn="check">Check now</button><button type="button" class="btn-s ghost" data-pcn="disconnect" data-platform="camfrog" data-soft="1">Cancel</button><span class="msg" id="pcnCfMsg" role="status" aria-live="polite"></span></div>
+      <p class="muted"><%- t('pad.conn.pepe_needed') %></p>
+      <div class="row"><button type="button" class="btn" data-pcn="check"><%- t('pad.conn.check') %></button><button type="button" class="btn-s ghost" data-pcn="disconnect" data-platform="camfrog" data-soft="1"><%- t('pad.conn.cancel') %></button><span class="msg" id="pcnCfMsg" role="status" aria-live="polite"></span></div>
     <% } else { %>
       <form id="pcnCfForm" class="ps-form" autocomplete="off">
-        <label class="fld">Your Camfrog room's name <small class="muted">as it shows on the room's tab</small><input type="text" name="room" maxlength="64" required placeholder="e.g. Night Owls Lounge"></label>
-        <label class="chk"><input type="checkbox" name="join"> I'd like Pepe in my room <small class="muted">(a site admin approves it - Pepe never joins on his own)</small></label>
-        <div class="row"><button type="submit" class="btn primary">Get a verification code</button><span class="msg" id="pcnCfMsg" role="status" aria-live="polite"></span></div>
+        <label class="fld"><%- t('pad.conn.room_name') %> <small class="muted"><%- t('pad.conn.room_name_hint') %></small><input type="text" name="room" maxlength="64" required placeholder="<%- t('pad.conn.room_ph') %>"></label>
+        <label class="chk"><input type="checkbox" name="join"> <%- t('pad.conn.want_pepe') %> <small class="muted"><%- t('pad.conn.never_own') %></small></label>
+        <div class="row"><button type="submit" class="btn primary"><%- t('pad.conn.get_code') %></button><span class="msg" id="pcnCfMsg" role="status" aria-live="polite"></span></div>
       </form>
-      <% if (CF_ === null) { %><p class="muted ps-mini">You'll prove you run the room by putting a code in its topic. The code lasts <%= CN_.code_ttl_h %> hours.</p><% } %>
+      <% if (CF_ === null) { %><p class="muted ps-mini"><%- t('pad.conn.prove', { h: CN_.code_ttl_h }) %></p><% } %>
     <% } %>
   </div>
 
   <div class="pcn-p" id="pcnTwitch">
-    <h4>🟣 Twitch channel</h4>
+    <h4><%- t('pad.conn.tw_h') %></h4>
     <% if (PL_ === 'twitch' && TW_) { %>
-      <p>Connected to <a href="https://twitch.tv/<%= TW_.external_id %>" rel="noopener" target="_blank">twitch.tv/<%= TW_.external_id %></a>: the pad's Live tab plays the stream.</p>
-      <p class="muted ps-mini">Streaming to the pad's stage and want it on Twitch too? Use "Also stream to Twitch" when you <a href="/stage">go live</a>. A Twitch chat bridge comes later.</p>
-      <details class="pcn-danger"><summary>Disconnect from Twitch</summary>
-        <p class="muted">The pad goes back to being a site pad; nothing else changes.</p>
-        <button type="button" class="btn danger" data-pcn="disconnect" data-platform="twitch">Disconnect this pad from Twitch</button>
+      <p><%- t('pad.conn.tw_connected', { link: '<a href="https://twitch.tv/' + t.esc(TW_.external_id) + '" rel="noopener" target="_blank">twitch.tv/' + t.esc(TW_.external_id) + '</a>' }) %></p>
+      <p class="muted ps-mini"><%- t('pad.conn.tw_also', { link: '<a href="/stage">' + t('pad.conn.go_live') + '</a>' }) %></p>
+      <details class="pcn-danger"><summary><%- t('pad.conn.tw_disc') %></summary>
+        <p class="muted"><%- t('pad.conn.tw_disc_what') %></p>
+        <button type="button" class="btn danger" data-pcn="disconnect" data-platform="twitch"><%- t('pad.conn.tw_disc_btn') %></button>
       </details>
     <% } else if (CN_.house) { %>
-      <p class="note">House pads are run by the site.</p>
+      <p class="note"><%- t('pad.conn.house') %></p>
     <% } else if (PL_ !== 'site') { %>
-      <p class="muted">Disconnect this pad from <%= PL_ %> first.</p>
+      <p class="muted"><%- t('pad.conn.disc_first', { platform: PL_ }) %></p>
     <% } else if (!CN_.ownerIsViewer) { %>
-      <p class="muted">Only the pad's owner can connect their own Twitch channel.</p>
+      <p class="muted"><%- t('pad.conn.owner_only') %></p>
     <% } else if (CN_.twitchLogin) { %>
-      <p>Your PATV account is linked to <b>twitch.tv/<%= CN_.twitchLogin %></b>.</p>
-      <div class="row"><button type="button" class="btn primary" data-pcn="twitch">Make this a Twitch pad for twitch.tv/<%= CN_.twitchLogin %></button><span class="msg" id="pcnTwMsg" role="status" aria-live="polite"></span></div>
+      <p><%- t('pad.conn.linked_to', { login: CN_.twitchLogin }) %></p>
+      <div class="row"><button type="button" class="btn primary" data-pcn="twitch"><%- t('pad.conn.make_tw', { login: CN_.twitchLogin }) %></button><span class="msg" id="pcnTwMsg" role="status" aria-live="polite"></span></div>
     <% } else if (CN_.twitchLinked) { %>
-      <p class="muted">Your Twitch is linked, but PATV doesn't know your Twitch login yet. <a href="/auth/twitch?next=<%= next_ %>">Sign in with Twitch</a> once more, then come back.</p>
+      <p class="muted"><%- t('pad.conn.tw_relogin', { link: '<a href="/auth/twitch?next=' + t.esc(next_) + '">' + t('pad.conn.tw_signin') + '</a>' }) %></p>
     <% } else { %>
-      <p class="muted">Link your Twitch account first - that's how PATV knows the stream is yours. <a class="btn" href="/auth/twitch?next=<%= next_ %>">Link Twitch</a></p>
+      <p class="muted"><%- t('pad.conn.tw_link_first') %> <a class="btn" href="/auth/twitch?next=<%= next_ %>"><%- t('pad.conn.tw_link') %></a></p>
     <% } %>
   </div>
 
   <div class="pcn-p" id="pcnDiscord">
-    <h4>💬 Discord server</h4>
-    <p class="muted">Coming later.</p>
+    <h4><%- t('pad.conn.dc_h') %></h4>
+    <p class="muted"><%- t('pad.conn.later') %></p>
   </div>
 </div>
 <style>

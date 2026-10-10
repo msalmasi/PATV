@@ -426,6 +426,7 @@ test("the profile feed partial renders for the owner (composer, Your profile pic
   assert.match(own, /Also show in All/);
   assert.match(own, /Profile feed settings/);
   assert.match(own, /Pepe can reply on my profile/);
+  assert.match(own, /data-pp-roomgen[^]*Don't post my room generations/);
   assert.match(own, /fp-room fp-user/, "the card's u/ label");
   const vis = await render(U.bob);
   assert.doesNotMatch(vis, /id="fcForm"/);

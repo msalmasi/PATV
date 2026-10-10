@@ -120,9 +120,12 @@ function limiter({ max, windowMs }) {
   };
 }
 
-function waitText(sec) {
+// i18n: the optional trailing `req` translates the message (req.t is set by i18n.js); without it, English.
+const tr = (req, key, en, vars) => (req && typeof req.t === "function" ? req.t(key, vars) : en);
+
+function waitText(sec, req) {
   const m = Math.ceil(sec / 60);
-  return m <= 1 ? "a minute" : `${m} minutes`;
+  return m <= 1 ? tr(req, "auth.err.wait_minute", "a minute") : tr(req, "auth.err.wait_minutes", `${m} minutes`, { n: m });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -131,29 +134,29 @@ function waitText(sec) {
 const USERNAME_RE = /^[A-Za-z0-9_.-]{3,24}$/;
 
 /** null when fine, else a message. */
-function checkUsername(u) {
+function checkUsername(u, req) {
   const s = String(u == null ? "" : u).trim();
-  if (!s) return "Choose a username.";
-  if (!USERNAME_RE.test(s)) return "Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.";
-  if (/^[._-]|[._-]$/.test(s)) return "Usernames can't start or end with a dot, dash or underscore.";
+  if (!s) return tr(req, "auth.err.choose_username", "Choose a username.");
+  if (!USERNAME_RE.test(s)) return tr(req, "auth.err.username_chars", "Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.");
+  if (/^[._-]|[._-]$/.test(s)) return tr(req, "auth.err.username_ends", "Usernames can't start or end with a dot, dash or underscore.");
   // "CF..." names are Pepe's automatic Camfrog accounts (see completeCamfrogLink): a real account
   // named like that could be mistaken for one and merged away.
-  if (/^cf/i.test(s)) return "Usernames starting with “CF” are reserved for Camfrog accounts.";
+  if (/^cf/i.test(s)) return tr(req, "auth.err.username_cf", "Usernames starting with “CF” are reserved for Camfrog accounts.");
   return null;
 }
 
-function checkPassword(p, username) {
+function checkPassword(p, username, req) {
   const s = String(p == null ? "" : p);
-  if (s.length < 8) return "Use at least 8 characters for your password.";
-  if (Buffer.byteLength(s, "utf8") > 72) return "That password is too long (72 bytes max).";
-  if (username && s.toLowerCase() === String(username).trim().toLowerCase()) return "Your password can't be your username.";
+  if (s.length < 8) return tr(req, "auth.err.short_password", "Use at least 8 characters for your password.");
+  if (Buffer.byteLength(s, "utf8") > 72) return tr(req, "auth.err.long_password", "That password is too long (72 bytes max).");
+  if (username && s.toLowerCase() === String(username).trim().toLowerCase()) return tr(req, "auth.err.password_is_username", "Your password can't be your username.");
   return null;
 }
 
-function checkEmail(e) {
+function checkEmail(e, req) {
   const s = String(e == null ? "" : e).trim();
-  if (!s) return "Enter your email address.";
-  if (s.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return "That doesn't look like an email address.";
+  if (!s) return tr(req, "auth.err.enter_email", "Enter your email address.");
+  if (s.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return tr(req, "auth.err.bad_email", "That doesn't look like an email address.");
   return null;
 }
 

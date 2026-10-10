@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   The post composer (1.99bv). Locals: composer (feedweb.composerFor or null when signed out), next (return path),
   expanded (optional, 1.99ec: true on the /submit page - the full form, no "Create post" bar)
@@ -6,109 +7,109 @@
   form in place, focused, with that kind picked (public/js/feed-composer.js); a saved draft opens it by itself.
 %><% const cp = composer; const exp_ = typeof expanded !== 'undefined' && !!expanded; %>
 <% if (!cp) { %>
-  <a class="fc-bar fc-bar-out" href="/login?next=<%= encodeURIComponent(next) %>"><span class="fc-bar-in"><span aria-hidden="true">✏️</span><span class="fc-bar-ph">Sign in to post — text, links, pictures, audio or video</span></span></a>
+  <a class="fc-bar fc-bar-out" href="/login?next=<%= encodeURIComponent(next) %>"><span class="fc-bar-in"><span aria-hidden="true">✏️</span><span class="fc-bar-ph"><%- t('feed.fc.sign_in') %></span></span></a>
 <% } else if (cp.refusal) { %>
   <div class="fc fc-out">✍️ <%= cp.refusal %></div>
 <% } else { %>
   <% const home_ = cp.rooms.find((r) => r.id === cp.room) || null;
-     const where_ = home_ ? (home_.profile ? 'your profile' : (home_.label || 'p/' + home_.slug)) : ''; %>
+     const where_ = home_ ? (home_.profile ? t('feed.fc.your_profile') : t.esc(home_.label || 'p/' + home_.slug)) : '';      // HTML %>
   <% if (!exp_) { %>
   <div class="fc-bar" id="fcBar">
-    <button type="button" class="fc-bar-in" data-fc-open="text" aria-controls="fcForm" aria-expanded="false"><span aria-hidden="true">✏️</span><span class="fc-bar-ph"><%= where_ ? 'Post something to ' + where_ + '…' : 'Create a post…' %></span></button>
+    <button type="button" class="fc-bar-in" data-fc-open="text" aria-controls="fcForm" aria-expanded="false"><span aria-hidden="true">✏️</span><span class="fc-bar-ph"><%- where_ ? t('feed.fc.post_to', { where: where_ }) : t('feed.fc.create') %></span></button>
     <span class="fc-bar-qs">
-      <% if (!cp.mediaRefusal) { %><button type="button" class="fc-bar-q" data-fc-open="image" aria-controls="fcForm" title="Post a picture" aria-label="Create a post with a picture">🖼<span class="lb"> Picture</span></button><% } %>
-      <button type="button" class="fc-bar-q" data-fc-open="link" aria-controls="fcForm" title="Post a link" aria-label="Create a post with a link">🔗<span class="lb"> Link</span></button>
-      <% if (!cp.mediaRefusal && cp.aigen) { %><button type="button" class="fc-bar-q" data-fc-open="gen" aria-controls="fcForm" title="Generate a picture or video with Pepe" aria-label="Create a post with a generated picture or video">✨<span class="lb"> Generate</span></button><% } %>
+      <% if (!cp.mediaRefusal) { %><button type="button" class="fc-bar-q" data-fc-open="image" aria-controls="fcForm" title="<%- t('feed.fc.q_pic_title') %>" aria-label="<%- t('feed.fc.q_pic_aria') %>">🖼<span class="lb"> <%- t('feed.fc.picture') %></span></button><% } %>
+      <button type="button" class="fc-bar-q" data-fc-open="link" aria-controls="fcForm" title="<%- t('feed.fc.q_link_title') %>" aria-label="<%- t('feed.fc.q_link_aria') %>">🔗<span class="lb"> <%- t('feed.fc.link') %></span></button>
+      <% if (!cp.mediaRefusal && cp.aigen) { %><button type="button" class="fc-bar-q" data-fc-open="gen" aria-controls="fcForm" title="<%- t('feed.fc.q_gen_title') %>" aria-label="<%- t('feed.fc.q_gen_aria') %>">✨<span class="lb"> <%- t('feed.fc.generate') %></span></button><% } %>
     </span>
   </div>
   <% } %>
   <form class="fc<%= exp_ ? ' fc-full' : '' %>" id="fcForm" novalidate<%= exp_ ? '' : ' hidden' %> data-expanded="<%= exp_ ? '1' : '' %>" data-user="<%= cp.user %>" data-chunk="<%= cp.chunk %>" data-caps="<%= JSON.stringify(cp.caps) %>" data-prices="<%= JSON.stringify(cp.prices) %>" data-max-images="<%= cp.maxImages %>" data-home="<%= cp.room || '' %>">
-    <% if (!exp_) { %><div class="fc-head"><b>✏️ Create post</b><button type="button" class="fc-min" id="fcMin" aria-controls="fcForm" title="Fold the form away - your draft is kept">Hide ▴</button></div><% } %>
+    <% if (!exp_) { %><div class="fc-head"><b><%- t('feed.fc.head') %></b><button type="button" class="fc-min" id="fcMin" aria-controls="fcForm" title="<%- t('feed.fc.hide_title') %>"><%- t('feed.fc.hide') %></button></div><% } %>
     <div class="fc-row">
-      <input name="title" maxlength="140" placeholder="Title (optional)" aria-label="Title" autocomplete="off">
+      <input name="title" maxlength="140" placeholder="<%- t('feed.title_opt') %>" aria-label="<%- t('feed.title_aria') %>" autocomplete="off">
     </div>
-    <textarea name="body" maxlength="5000" rows="3" placeholder="<%= cp.room && /^u\//.test(cp.room) ? 'Post something to your profile…' : cp.room ? 'Post something to this pad…' : 'What\'s going on?' %>" aria-label="Text"></textarea>
-    <div class="fc-stk" style="margin:2px 0 6px"><button type="button" class="fc-bar-q" data-sticker-picker="#fcForm textarea[name=body]" aria-expanded="false" title="Add a sticker" aria-label="Add a sticker">🧸<span class="lb"> Sticker</span></button></div>
+    <textarea name="body" maxlength="5000" rows="3" placeholder="<%- cp.room && /^u\//.test(cp.room) ? t('feed.fc.ph_profile') : cp.room ? t('feed.fc.ph_pad') : t('feed.fc.ph_any') %>" aria-label="<%- t('feed.text_aria') %>"></textarea>
+    <div class="fc-stk" style="margin:2px 0 6px"><button type="button" class="fc-bar-q" data-sticker-picker="#fcForm textarea[name=body]" aria-expanded="false" title="<%- t('feed.fc.sticker_add') %>" aria-label="<%- t('feed.fc.sticker_add') %>">🧸<span class="lb"> <%- t('feed.fc.sticker') %></span></button></div>
     <div class="fc-link hide" id="fcLinkRow">
-      <input name="link" type="url" inputmode="url" placeholder="https://… (YouTube and Twitch links play right here)" aria-label="Link" autocomplete="off">
+      <input name="link" type="url" inputmode="url" placeholder="<%- t('feed.fc.link_ph') %>" aria-label="<%- t('feed.fc.link') %>" autocomplete="off">
       <div class="fc-pv" id="fcPv" aria-live="polite"></div>
     </div>
     <%# 1.99iq: content tags (feedtags.js) - free text, normalised on the server; chips suggest the picked pad's popular tags %>
     <% const tg_ = cp.tags || { max: 5, len: 24, suggest: {} }; %>
     <div class="fc-tags">
-      <input name="tags" maxlength="200" placeholder="Tags (optional): plants, diy — up to <%= tg_.max %>" aria-label="Tags, comma-separated" autocomplete="off" spellcheck="false">
-      <div class="fc-tagsug" data-tag-suggest="<%= JSON.stringify(tg_.suggest || {}) %>" data-max="<%= tg_.max %>" aria-label="Suggested tags" hidden></div>
+      <input name="tags" maxlength="200" placeholder="<%- t('feed.fc.tags_ph', { n: tg_.max }) %>" aria-label="<%- t('feed.fc.tags_aria') %>" autocomplete="off" spellcheck="false">
+      <div class="fc-tagsug" data-tag-suggest="<%= JSON.stringify(tg_.suggest || {}) %>" data-max="<%= tg_.max %>" aria-label="<%- t('feed.fc.tags_sug') %>" hidden></div>
     </div>
     <ul class="fc-files" id="fcFiles" aria-live="polite"></ul>
     <%# 1.99di: "✨ Generate" - Pepe's !imagine / !video as you (aigen.js): the same price, filters and refunds as chat %>
     <% if (!cp.mediaRefusal && cp.aigen) { %>
       <div class="fc-gen hide" id="fcGen" data-aigen="<%= JSON.stringify(cp.aigen) %>">
         <div class="fc-gen-head">
-          <div class="fc-gen-kind" role="radiogroup" aria-label="What to generate">
-            <label><input type="radio" name="genKind" value="image" checked> 🖼 Image</label>
-            <label><input type="radio" name="genKind" value="video"> 🎬 Video</label>
+          <div class="fc-gen-kind" role="radiogroup" aria-label="<%- t('feed.fc.gen_what') %>">
+            <label><input type="radio" name="genKind" value="image" checked> 🖼 <%- t('feed.fc.gen_image') %></label>
+            <label><input type="radio" name="genKind" value="video"> 🎬 <%- t('feed.fc.gen_video') %></label>
           </div>
           <span class="fc-gen-by mut">Pepe's <code>!imagine</code> / <code>!video</code></span>
         </div>
-        <textarea name="genPrompt" rows="2" maxlength="<%= cp.aigen.promptMax %>" aria-label="Prompt" autocomplete="off"></textarea>
+        <textarea name="genPrompt" rows="2" maxlength="<%= cp.aigen.promptMax %>" aria-label="<%- t('feed.fc.prompt') %>" autocomplete="off"></textarea>
         <%# 1.99dn: an optional reference picture (image-to-image / image-to-video): an upload (the normal upload
             pipeline) or a picture already in this draft; priced like chat's -cam %>
         <div class="fc-gen-ref" id="fcGenRef">
           <div class="fc-gen-ref-h">
-            <span class="fc-gen-ref-l">Reference picture <small class="mut">(optional)</small></span>
+            <span class="fc-gen-ref-l"><%- t('feed.fc.ref') %> <small class="mut"><%- t('feed.fc.optional') %></small></span>
             <span class="fc-gen-ref-pick" id="fcGenRefPick">
-              <label class="fc-gj-btn">📷 Upload<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" id="fcGenRefFile" hidden></label>
-              <button type="button" class="fc-gj-btn" id="fcGenRefDraft" aria-expanded="false" aria-controls="fcGenRefList">🖼 From this draft</button>
+              <label class="fc-gj-btn">📷 <%- t('feed.fc.upload') %><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" id="fcGenRefFile" hidden></label>
+              <button type="button" class="fc-gj-btn" id="fcGenRefDraft" aria-expanded="false" aria-controls="fcGenRefList">🖼 <%- t('feed.fc.from_draft') %></button>
               <%# 1.99dr: a fresh snapshot of someone on cam in the picked pad's Camfrog room (aigen.js camList / claimCamRef) %>
-              <button type="button" class="fc-gj-btn hide" id="fcGenRefCam" aria-expanded="false" aria-controls="fcGenRefCams">📷 From a cam in this room</button>
+              <button type="button" class="fc-gj-btn hide" id="fcGenRefCam" aria-expanded="false" aria-controls="fcGenRefCams">📷 <%- t('feed.fc.from_cam') %></button>
             </span>
           </div>
-          <div class="fc-gen-ref-list hide" id="fcGenRefList" aria-label="Pictures in this draft"></div>
-          <div class="fc-gen-ref-cams hide" id="fcGenRefCams" aria-label="People on cam in this pad's Camfrog room" aria-live="polite"></div>
+          <div class="fc-gen-ref-list hide" id="fcGenRefList" aria-label="<%- t('feed.fc.draft_pics') %>"></div>
+          <div class="fc-gen-ref-cams hide" id="fcGenRefCams" aria-label="<%- t('feed.fc.cam_people') %>" aria-live="polite"></div>
           <ul class="fc-files fc-gen-ref-cur" id="fcGenRefCur" aria-live="polite"></ul>
-          <p class="fc-gen-ref-note">⚖️ Only use photos you have the right to use. A real person's photo (or cam) can never be made nude or sexual, and minors are always refused. A cam snapshot is only used for this generation - it isn't saved anywhere. A reference adds <b id="fcGenRefPrice"></b> (like <code>-cam</code> in chat).</p>
+          <p class="fc-gen-ref-note"><%- t('feed.fc.ref_note', { price: '<b id="fcGenRefPrice"></b>' }) %></p>
         </div>
         <div class="fc-gen-go">
           <span class="fc-gen-price" id="fcGenPrice"></span>
-          <button type="button" class="btn-s" id="fcGenGo">✨ Generate</button>
+          <button type="button" class="btn-s" id="fcGenGo">✨ <%- t('feed.fc.generate') %></button>
         </div>
         <%# 1.99en: the content policy (guidelines.js AI_POLICY, via feedweb cp.aigen.policy) %>
-        <p class="fc-gen-terms fc-gen-policy">🔞 <b><%= (cp.aigen.policy && cp.aigen.policy.short) || 'No explicit nudity — suggestive is fine. Nothing sexual with minors or real people.' %></b> Photorealistic is fine; suggestive results are marked NSFW automatically. <a href="/guidelines#ai">The AI rules</a></p>
-        <p class="fc-gen-terms">Charged when it's made · refunded if it fails or is refused · a result you discard is <b>not</b> refunded. A prompt (and optionally a reference picture), with the same rules as chat. Posts with it get a ✨ AI-generated badge.</p>
+        <p class="fc-gen-terms fc-gen-policy">🔞 <b><% if (cp.aigen.policy && cp.aigen.policy.short) { %><%= cp.aigen.policy.short %><% } else { %><%- t('feed.fc.policy_short') %><% } %></b> <%- t('feed.fc.policy_more') %> <a href="/guidelines#ai"><%- t('feed.fc.ai_rules') %></a></p>
+        <p class="fc-gen-terms"><%- t('feed.fc.gen_terms') %></p>
         <span class="fc-err" id="fcGenErr" role="alert"></span>
         <div class="fc-gen-jobs" id="fcGenJobs" aria-live="polite"></div>
       </div>
     <% } %>
     <div class="fc-tools">
-      <button type="button" class="fc-tool" data-tool="link" aria-label="Add a link">🔗 Link</button>
+      <button type="button" class="fc-tool" data-tool="link" aria-label="<%- t('feed.fc.add_link') %>">🔗 <%- t('feed.fc.link') %></button>
       <% if (!cp.mediaRefusal) { %>
-        <label class="fc-tool">🖼 Picture<input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple data-kind="image" hidden></label>
-        <label class="fc-tool">🔊 Audio<input type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac" data-kind="audio" hidden></label>
-        <label class="fc-tool">🎬 Video<input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" data-kind="video" hidden></label>
-        <% if (cp.aigen) { %><button type="button" class="fc-tool fc-tool-gen" data-tool="gen" aria-controls="fcGen" title="Make a picture or a video with Pepe's !imagine / !video">✨ Generate</button><% } %>
+        <label class="fc-tool">🖼 <%- t('feed.fc.picture') %><input type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple data-kind="image" hidden></label>
+        <label class="fc-tool">🔊 <%- t('feed.fc.audio') %><input type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.wav,.flac" data-kind="audio" hidden></label>
+        <label class="fc-tool">🎬 <%- t('feed.fc.gen_video') %><input type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.mkv" data-kind="video" hidden></label>
+        <% if (cp.aigen) { %><button type="button" class="fc-tool fc-tool-gen" data-tool="gen" aria-controls="fcGen" title="<%- t('feed.fc.gen_title') %>">✨ <%- t('feed.fc.generate') %></button><% } %>
       <% } %>
-      <label class="fc-tool ck" title="Blurred until someone clicks it"><input type="checkbox" name="nsfw"> 🔞 NSFW</label>
+      <label class="fc-tool ck" title="<%- t('feed.fc.nsfw_title') %>"><input type="checkbox" name="nsfw"> 🔞 <%- t('feed.nsfw') %></label>
     </div>
     <% if (cp.mediaRefusal) { %><p class="fc-note">📎 <%= cp.mediaRefusal %></p><% } %>
     <%# 1.99ci: every post lives in exactly ONE pad (Reddit-style; Crosspost shares it into others). The picker
         lists the pads this account may post in (the owners' who-can-post settings, bans) and searches them. %>
     <fieldset class="fc-where">
-      <legend>Pad</legend>
+      <legend><%- t('feed.bar.pad') %></legend>
       <% const sel_ = cp.rooms.find((r) => r.id === cp.room) || null; %>
       <details class="fc-comm"<%= sel_ ? '' : ' data-empty' %>>
-        <summary aria-label="Choose a pad"><span class="fc-comm-cur" data-comm-cur><% if (sel_) { %><%- fx.padChip(sel_, 'sm', sel_.profile ? '👤' : null) %><b><%= sel_.title %></b><small><%= sel_.label || 'p/' + sel_.slug %></small><% } else { %><span class="cbadge sm all" aria-hidden="true">?</span><b>Choose a pad</b><% } %></span><%- fx.icon('chevron', 'chev') %></summary>
-        <div class="fc-comm-menu" role="radiogroup" aria-label="Pads you can post in">
-          <label class="cb-search"><%- fx.icon('search') %><input type="search" placeholder="Search pads" aria-label="Search pads" data-comm-search autocomplete="off"></label>
+        <summary aria-label="<%- t('feed.bar.choose') %>"><span class="fc-comm-cur" data-comm-cur><% if (sel_) { %><%- fx.padChip(sel_, 'sm', sel_.profile ? '👤' : null) %><b><%= sel_.title %></b><small><%= sel_.label || 'p/' + sel_.slug %></small><% } else { %><span class="cbadge sm all" aria-hidden="true">?</span><b><%- t('feed.bar.choose') %></b><% } %></span><%- fx.icon('chevron', 'chev') %></summary>
+        <div class="fc-comm-menu" role="radiogroup" aria-label="<%- t('feed.fc.pads_aria') %>">
+          <label class="cb-search"><%- fx.icon('search') %><input type="search" placeholder="<%- t('feed.bar.search') %>" aria-label="<%- t('feed.bar.search') %>" data-comm-search autocomplete="off"></label>
           <% cp.rooms.forEach((r, i_) => { const lab_ = r.label || 'p/' + r.slug; %>
             <%# 1.99df: "Your profile (u/<username>)" heads the list - only you post there %>
             <label class="fc-comm-it<%= r.profile ? ' is-profile' : '' %>" data-name="<%= (r.title + ' ' + r.slug + ' ' + lab_).toLowerCase() %>"><input type="radio" name="community" value="<%= r.id %>" data-slug="<%= r.slug %>" data-label="<%= lab_ %>" data-title="<%= r.title %>" data-badge="<%= r.profile ? '👤' : fx.cBadge(r) %>" data-hue="<%= fx.hue(r.slug) %>"<% const lk_ = !r.profile && typeof padLook === 'function' ? padLook(r.id) : null; if (lk_ && lk_.avatar) { %> data-av="<%= lk_.avatar %>"<% } %><% if (lk_ && lk_.accent) { %> data-acc="<%= lk_.accent %>"<% } %><%= cp.room === r.id ? ' checked' : '' %>>
-              <%- r.profile ? fx.padChip({ slug: r.slug }, 'sm', '👤') : fx.padChip(r, 'sm') %><span class="t"><b><%= r.title %><%= r.profile ? ' (' + lab_ + ')' : '' %></b><small><% if (r.profile) { %>Only you post here · your followers see it<% } else { %><%- fx.padBadge(r, { compact: true }) %> <%= lab_ %> · <%= fx.num(r.followers) %> follower<%= r.followers === 1 ? '' : 's' %><% } %></small></span></label>
+              <%- r.profile ? fx.padChip({ slug: r.slug }, 'sm', '👤') : fx.padChip(r, 'sm') %><span class="t"><b><%= r.title %><%= r.profile ? ' (' + lab_ + ')' : '' %></b><small><% if (r.profile) { %><%- t('feed.fc.only_you') %><% } else { %><%- fx.padBadge(r, { compact: true }) %> <%= lab_ %> · <%- t('feed.n_followers', { count: r.followers, n: fx.num(r.followers) }) %><% } %></small></span></label>
             <% if (r.profile && cp.rooms.length > 1) { %><div class="fc-comm-sep" role="separator"></div><% } %>
           <% }) %>
-          <p class="cb-none hide" data-comm-none>No pad matches.</p>
+          <p class="cb-none hide" data-comm-none><%- t('feed.bar.no_match') %></p>
         </div>
       </details>
-      <% if (cp.roomRefusal) { %><p class="fc-note">✋ <%= cp.roomRefusal %> You can still pick another pad.</p><% } %>
+      <% if (cp.roomRefusal) { %><p class="fc-note">✋ <%= cp.roomRefusal %> <%- t('feed.fc.pick_another') %></p><% } %>
       <%# 1.99cu: the announce checkbox is always there for the picked pad: enabled + ticked when Pepe can announce
           it (pad announcements on - the default for Camfrog pads - and Pepe in the room), otherwise greyed out
           with the reason (owners/admins get a link to switch it on in Moderate) %>
@@ -117,10 +118,10 @@
           <% cp.rooms.forEach((r) => { if (r.profile) return; const a_ = r.ann || { ok: !!r.announce, why: 'Announcements are off for this pad' }; %>
             <span class="fc-ann-w<%= cp.room === r.id ? '' : ' hide' %>" data-ann-for="<%= r.id %>">
               <% if (a_.ok) { %>
-                <label class="fc-ann" title="Pepe posts a short line in the Camfrog room about new posts (at most one every few minutes)"><input type="checkbox" name="announce" value="<%= r.id %>" checked> 🐸📣 Pepe announces it in the Camfrog room</label>
+                <label class="fc-ann" title="<%- t('feed.fc.ann_title') %>"><input type="checkbox" name="announce" value="<%= r.id %>" checked> 🐸📣 <%- t('feed.fc.ann') %></label>
               <% } else { %>
-                <label class="fc-ann off" aria-disabled="true" title="<%= a_.why %>"><input type="checkbox" name="announce" value="<%= r.id %>" disabled> 🐸📣 Pepe announces it in the Camfrog room</label>
-                <small class="fc-ann-why" data-ann-code="<%= a_.code || 'off' %>"><%= a_.why %><% if (a_.manage) { %> · <a href="/p/<%= encodeURIComponent(r.slug) %>/settings#announce">turn on in Pad settings</a><% } %></small>
+                <label class="fc-ann off" aria-disabled="true" title="<%= a_.why %>"><input type="checkbox" name="announce" value="<%= r.id %>" disabled> 🐸📣 <%- t('feed.fc.ann') %></label>
+                <small class="fc-ann-why" data-ann-code="<%= a_.code || 'off' %>"><%= a_.why %><% if (a_.manage) { %> · <a href="/p/<%= encodeURIComponent(r.slug) %>/settings#announce"><%- t('feed.fc.ann_turn_on') %></a><% } %></small>
               <% } %>
             </span>
           <% }) %>
@@ -129,26 +130,26 @@
         <div class="fc-rules-w">
           <% cp.rooms.forEach((r) => { if (r.profile) { %>
             <%# 1.99df: a profile follows Padiquette; "Also show in All" is per post (default on) %>
-            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 Posting on <b>your profile</b> (<%= r.label %>): it follows <a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>. Your followers see it in Following.</p>
-            <label class="fc-inall ck<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>" title="Off: it stays on your profile and in your followers' Following tab, but not in All"><input type="checkbox" name="inAll" checked> 🌐 Also show in All</label>
+            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 <%- t('feed.fc.rules_profile', { label: r.label, link: '<a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>' }) %></p>
+            <label class="fc-inall ck<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>" title="<%- t('feed.fc.inall_title') %>"><input type="checkbox" name="inAll" checked> 🌐 <%- t('feed.inall') %></label>
           <% return; } %>
             <%# 1.99ec: the rules live in the pad page's About tab; on the pad's own page the link switches tabs in place %>
-            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 Posting in <b>p/<%= r.slug %></b>: <a href="/p/<%= encodeURIComponent(r.slug) %>?tab=about#rules" target="_blank" rel="noopener"<% if (cp.room === r.id) { %> data-pad-tab="about" data-open="rules"<% } %>><% if (r.rules) { %>read its <%= r.rules %> rule<%= r.rules === 1 ? '' : 's' %></a><% } else { %>read the rules</a> (it follows <a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>)<% } %></p>
+            <p class="fc-rules<%= cp.room === r.id ? '' : ' hide' %>" data-rules-for="<%= r.id %>">📜 <%- t('feed.fc.posting_in', { pad: r.slug }) %> <a href="/p/<%= encodeURIComponent(r.slug) %>?tab=about#rules" target="_blank" rel="noopener"<% if (cp.room === r.id) { %> data-pad-tab="about" data-open="rules"<% } %>><% if (r.rules) { %><%- t('feed.fc.read_n_rules', { count: r.rules }) %></a><% } else { %><%- t('feed.fc.read_rules') %></a> <%- t('feed.fc.follows_padiquette', { link: '<a href="/guidelines" target="_blank" rel="noopener">Padiquette</a>' }) %><% } %></p>
           <% }) %>
         </div>
       <% } %>
     </fieldset>
     <% if (cp.terms && cp.terms.needed) { %>
-      <label class="fc-terms ck"><input type="checkbox" name="acceptTerms" required> I've read and agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> (I'm 18+). You'll only be asked once.</label>
+      <label class="fc-terms ck"><input type="checkbox" name="acceptTerms" required> <%- t('feed.fc.terms_accept', { tos: '<a href="/terms" target="_blank" rel="noopener">' + t('feed.fc.tos') + '</a>' }) %></label>
     <% } else if (cp.terms && cp.terms.enforced) { %><%# 1.99cf: nothing while the Terms aren't enforced (admin switch, default off) %>
-      <p class="fc-terms">By posting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a>.</p>
+      <p class="fc-terms"><%- t('feed.fc.terms_agree', { tos: '<a href="/terms" target="_blank" rel="noopener">' + t('feed.fc.tos') + '</a>' }) %></p>
     <% } %>
     <div class="fc-send">
-      <span class="fc-cost mut" id="fcCost"><%= cp.paid ? '' : 'Posting is free.' %></span>
+      <span class="fc-cost mut" id="fcCost"><%- cp.paid ? '' : t('feed.fc.free') %></span>
       <span class="fc-err" id="fcErr" role="alert"></span>
-      <button type="submit" class="btn-s" id="fcGo">Post</button>
+      <button type="submit" class="btn-s" id="fcGo"><%- t('feed.fc.post') %></button>
     </div>
-    <p class="fc-note">Pictures up to <%= cp.caps.image %> MB, audio up to <%= cp.caps.audio %> MB (<%= Math.round(cp.caps.audioSecs / 60) %> min), video up to <%= cp.caps.video %> MB (<%= Math.round(cp.caps.videoSecs / 60) %> min). Files are re-encoded and their metadata (camera, GPS location) is removed. iPhone HEIC photos are fine. Your draft is kept on this device until you post it.</p>
+    <p class="fc-note"><%- t('feed.fc.caps', { img: cp.caps.image, audio: cp.caps.audio, amin: Math.round(cp.caps.audioSecs / 60), video: cp.caps.video, vmin: Math.round(cp.caps.videoSecs / 60) }) %></p>
   </form>
   <script src="/public/js/stickers.js?v=1" defer></script>
 <% } %>

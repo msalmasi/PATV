@@ -25,6 +25,7 @@
 // The pure helpers (pickTab, defaultTab, requestedTab, newCount) are exported for node tests.
 (function (root) {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var ALIAS = { live: 'live', stage: 'live', chat: 'live', feed: 'feed', posts: 'feed', rules: 'about', about: 'about', info: 'about', schedule: 'live' };
   var FEED_Q = /(?:^|[?&])(?:sort|fsort|t|ft|p|fp|tag)=/;      // 1.99iq: + ?tag= (a tag filter is the Feed's)
   var FIRST_LOOK_MS = 3 * 24 * 3600 * 1000;   // a first visit counts the last 3 days' posts as new
@@ -107,7 +108,7 @@
   }
 
   /** The pill's text: "3 new", "10+ new" when every post we know of is new and there are more. */
-  function badgeText(n, total, more) { return n ? (n >= total && more ? n + '+' : n) + ' new' : ''; }
+  function badgeText(n, total, more) { return n ? _t('js.pad.tabs.n_new', '{n} new', { n: n >= total && more ? n + '+' : n }) : ''; }
 
   function store(key, val) {
     try {

@@ -280,10 +280,14 @@ test("posting from /submit opens the new post (the composer's existing rule: off
 
 // ───────────────────────── Live tab polish, story viewer ─────────────────────────
 test("Live side cards: one-line titles; Manage card header is title · chip · toggle in one row; roster buttons are fixed squares", async () => {
-  const lat = fs.readFileSync(path.join(repo, "views", "partials", "pad-latest.ejs"), "utf8");
+  // i18n: headings come from the catalog - checked on the rendered partial / page
+  const lat = await ejs.renderFile(path.join(repo, "views", "partials", "pad-latest.ejs"), { latest: [], slug: "pad" });
   assert.match(lat, /<span class="ht">📝 Latest posts<\/span><small><a href="\?tab=feed" data-pad-tab="feed">Open feed ›<\/a><\/small>/);
+  const page = await ejs.renderFile(path.join(repo, "views", "room.ejs"), {
+    user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "", platform: "camfrog" },
+    initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, latest: [] });
+  assert.match(page, /<h2 id="pplH"><span class="ht">In the Camfrog room<\/span>/);
   const room = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  assert.match(room, /<h2 id="pplH"><span class="ht">In the Camfrog room<\/span>/);
   assert.match(room, /\.rm \.side \.card > h2 > \.ht \{ white-space: nowrap;/);
   assert.match(room, /\.rm \.people \.ic > \* \{ display: inline-grid; place-items: center; width: 26px; height: 26px;/);
   const mod = fs.readFileSync(path.join(repo, "public", "js", "room-mod.js"), "utf8");
@@ -297,6 +301,7 @@ test("story viewer: the footer button says what it opens", () => {
   const js = fs.readFileSync(path.join(repo, "public", "js", "stories.js"), "utf8");
   assert.doesNotMatch(js, /'Capture page'/);
   assert.match(js, /var noun = it\.source === 'user' \? 'story' : it\.kind === 'clip' \? 'clip' : it\.kind === 'photo' \? 'snap' : '';/);
-  assert.match(js, /noun \? 'Open ' \+ noun \+ ' ›' : 'Open ›'/);
+  // i18n: one translatable label per noun (English defaults unchanged)
+  assert.match(js, /noun === 'story' \? _t\('js\.feed\.sv\.open_story', 'Open story ›'\) : noun === 'clip' \? _t\('js\.feed\.sv\.open_clip', 'Open clip ›'\) : noun === 'snap' \? _t\('js\.feed\.sv\.open_snap', 'Open snap ›'\) : _t\('js\.feed\.sv\.open', 'Open ›'\)/);
   assert.match(js, /'s page to share or download'/);
 });

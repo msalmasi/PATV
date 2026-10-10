@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   One feed post card (1.99bv, redesigned 1.99bx). Locals: p (feedstore.decorate row), fx (feedweb.fx), embeds
   (stageembed), host, viewer (or null), modRooms (Set of room ids the viewer manages), detail (bool), ctxRoom (room id or null)
@@ -24,17 +25,17 @@
 %>
 <article class="fp<%= p.nsfw ? ' is-nsfw' : '' %><%= p.hidden || p.roomHidden ? ' is-hidden' : '' %><%= p.pinned ? ' is-pinned' : '' %><%= detail_ ? ' is-detail' : '' %>" id="p-<%= p.id %>" data-id="<%= p.id %>">
   <div class="vote fp-vote" data-v="<%= v_ %>" data-kind="post"<%- p.mine ? ' data-own="1"' : '' %>>
-    <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= v_ === 1 ? 'true' : 'false' %>" aria-label="Upvote"><%- fx.icon('up') %></button>
-    <span class="vs" title="<%= p.ups %> up · <%= p.downs %> down"><%= fx.num(p.score) %></span>
-    <button type="button" class="vb vb-down" data-act="vote" data-dir="-1" aria-pressed="<%= v_ === -1 ? 'true' : 'false' %>" aria-label="<%= p.mine ? 'You can\'t downvote your own post' : 'Downvote' %>"<%= p.mine ? ' disabled' : '' %>><%- fx.icon('down') %></button>
+    <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= v_ === 1 ? 'true' : 'false' %>" aria-label="<%- t('feed.p.upvote') %>"><%- fx.icon('up') %></button>
+    <span class="vs" title="<%- t('feed.updown', { up: p.ups, down: p.downs }) %>"><%= fx.num(p.score) %></span>
+    <button type="button" class="vb vb-down" data-act="vote" data-dir="-1" aria-pressed="<%= v_ === -1 ? 'true' : 'false' %>" aria-label="<%- p.mine ? t('feed.p.no_downvote') : t('feed.p.downvote') %>"<%= p.mine ? ' disabled' : '' %>><%- fx.icon('down') %></button>
   </div>
   <div class="fp-main">
     <div class="fp-meta">
-      <% if (p.pinned) { %><span class="fp-pin" title="Pinned by the pad owner"><%- fx.icon('pin') %>Pinned</span><span class="dot" aria-hidden="true">·</span><% } %>
+      <% if (p.pinned) { %><span class="fp-pin" title="<%- t('feed.p.pinned_title') %>"><%- fx.icon('pin') %><%- t('feed.p.pinned') %></span><span class="dot" aria-hidden="true">·</span><% } %>
       <% if (p.author.bot) { %>
         <%# 1.99cg: Pepe's own posts - his avatar and the bot badge instead of a name (pepefeed.js) %>
         <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="22" height="22" aria-hidden="true">
-        <a class="fp-author bot-badge" href="/u/<%= encodeURIComponent(p.author.username) %>" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
+        <a class="fp-author bot-badge" href="/u/<%= encodeURIComponent(p.author.username) %>" title="<%- t('feed.pepe_bot') %>">🤖 Pepe</a>
       <% } else { %>
       <%- fx.uav(p.author, { size: 22 }) %>
       <%- fx.uname(p.author, { href: '/u/' + encodeURIComponent(p.author.username), cls: 'fp-author' }) %>
@@ -43,11 +44,11 @@
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length) { %>
         <span class="dot" aria-hidden="true">·</span>
-        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><% if (r.profile) { %><%# 1.99df: a profile post shows u/<username> where the pad would be %><a class="fp-room fp-user<%= r.removed ? ' off' : '' %>" href="/u/<%= encodeURIComponent(r.profile) %>" title="<%= r.profile %>'s profile">u/<%= r.profile %><%= r.removed ? ' (removed)' : '' %></a><% } else { %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>" title="<%= r.title %>">p/<%= r.slug %><%= r.removed ? ' (removed)' : '' %></a><% } %><% }) %></span>
+        <span class="fp-where"><% roomsShown.forEach((r, i) => { %><%= i ? ', ' : '' %><% if (r.profile) { %><%# 1.99df: a profile post shows u/<username> where the pad would be %><a class="fp-room fp-user<%= r.removed ? ' off' : '' %>" href="/u/<%= encodeURIComponent(r.profile) %>" title="<%- t('feed.p.users_profile', { name: r.profile }) %>">u/<%= r.profile %><%- r.removed ? ' ' + t('feed.p.removed') : '' %></a><% } else { %><a class="fp-room<%= r.removed ? ' off' : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>" title="<%= r.title %>">p/<%= r.slug %><%- r.removed ? ' ' + t('feed.p.removed') : '' %></a><% } %><% }) %></span>
       <% } %>
       <span class="dot" aria-hidden="true">·</span>
       <a class="fp-time" href="<%= url_ %>"><time datetime="<%= new Date(p.created).toISOString() %>" title="<%= new Date(p.created).toUTCString() %>"><%= fx.ago(p.created) %></time></a>
-      <% if (p.edited) { %><span class="fp-ed" title="edited <%= new Date(p.edited).toUTCString() %>">(edited)</span><% } %>
+      <% if (p.edited) { %><span class="fp-ed" title="<%- t('feed.p.edited_at', { date: new Date(p.edited).toUTCString() }) %>"><%- t('feed.edited') %></span><% } %>
     </div>
     <%# 1.99ex: no title -> the shared label (postlabel.js), muted, when the card has nothing else that names it (a
         picture / video / audio / capture only post); a body or link card already says what it is %>
@@ -55,98 +56,98 @@
     <% if (p.title || fbT_ || p.nsfw || p.hidden || p.deleted || p.pending || p.roomHidden || p.locked || (p.mine && p.onProfile && !p.inAll)) { %>
       <div class="fp-titlerow">
         <% if (p.title) { %><h3 class="fp-title"><% if (detail_) { %><%= p.title %><% } else { %><a href="<%= url_ %>"><%= p.title %></a><% } %></h3><% } else if (fbT_) { %><h3 class="fp-title fp-fb"><% if (detail_) { %><%= fbT_ %><% } else { %><a href="<%= url_ %>"><%= fbT_ %></a><% } %></h3><% } %>
-        <% if (p.nsfw) { %><span class="tag nsfw">NSFW</span><% } %>
-        <% if (p.hidden) { %><span class="tag warn" title="Hidden after reports - an admin will review it">Hidden · in review</span><% } %>
-        <% if (p.deleted) { %><span class="tag warn">Deleted<%= p.deleteReason ? ': ' + p.deleteReason : '' %></span><% } %>
-        <% if (p.pending) { %><span class="tag pend" title="The pad owner reviews posts before they show here">Awaiting approval</span><% } %>
-        <% if (p.roomHidden) { %><span class="tag warn" title="Hidden in this pad by its owner">Hidden in this pad</span><% } %>
-        <% if (p.locked) { %><span class="tag lock" title="Comments are locked"><%- fx.icon('lock') %> Locked</span><% } %>
-        <% if (p.mine && p.onProfile && !p.inAll) { %><span class="tag pend" title="Only on your profile and in your followers' Following - not in All">Not in All</span><% } %>
+        <% if (p.nsfw) { %><span class="tag nsfw"><%- t('feed.nsfw') %></span><% } %>
+        <% if (p.hidden) { %><span class="tag warn" title="<%- t('feed.p.hidden_title') %>"><%- t('feed.p.hidden') %></span><% } %>
+        <% if (p.deleted) { %><span class="tag warn"><%- p.deleteReason ? t('feed.p.deleted_why', { why: p.deleteReason }) : t('feed.p.deleted') %></span><% } %>
+        <% if (p.pending) { %><span class="tag pend" title="<%- t('feed.p.pending_title') %>"><%- t('feed.p.pending') %></span><% } %>
+        <% if (p.roomHidden) { %><span class="tag warn" title="<%- t('feed.p.room_hidden_title') %>"><%- t('feed.p.room_hidden') %></span><% } %>
+        <% if (p.locked) { %><span class="tag lock" title="<%- t('feed.p.locked_title') %>"><%- fx.icon('lock') %> <%- t('feed.p.locked') %></span><% } %>
+        <% if (p.mine && p.onProfile && !p.inAll) { %><span class="tag pend" title="<%- t('feed.p.not_in_all_title') %>"><%- t('feed.p.not_in_all') %></span><% } %>
       </div>
     <% } %>
     <%# 1.99eq: made from a story capture (storykeep.js): where it was captured, who's in it (their profile when linked), and
         the subject's own one-click "Remove me" %>
     <% if (p.capture) { const c_ = p.capture; %>
-      <p class="fp-cap"><span aria-hidden="true">📸</span><span>Captured from <% if (c_.room.href) { %><a href="<%= c_.room.href %>"><%= c_.room.title %></a><% } else { %><%= c_.room.title %><% } %><% if (c_.subject) { %> · with <a href="/u/<%= encodeURIComponent(c_.subject.username) %>">u/<%= c_.subject.username %></a><% } else if (c_.subjectName) { %> · with <%= c_.subjectName %><% } %></span>
-        <% if (c_.canRemoveMe && !p.deleted) { %><button type="button" class="fp-rmme" data-act="remove-me" title="You're in this capture: take the post down (the poster is told)">Remove me</button><% } %></p>
+      <p class="fp-cap"><span aria-hidden="true">📸</span><span><%- t('feed.p.captured_from') %> <% if (c_.room.href) { %><a href="<%= c_.room.href %>"><%= c_.room.title %></a><% } else { %><%= c_.room.title %><% } %><% if (c_.subject) { %> · <%- t('feed.p.with') %> <a href="/u/<%= encodeURIComponent(c_.subject.username) %>">u/<%= c_.subject.username %></a><% } else if (c_.subjectName) { %> · <%- t('feed.p.with') %> <%= c_.subjectName %><% } %></span>
+        <% if (c_.canRemoveMe && !p.deleted) { %><button type="button" class="fp-rmme" data-act="remove-me" title="<%- t('feed.p.rm_capture_title') %>"><%- t('feed.p.remove_me') %></button><% } %></p>
     <% } %>
     <%# 1.99fp: someone quoted / heard in it: one click anonymises them in the quote (quotes.js) or takes the clip down (micclip.js) %>
     <% if (p.quote && (p.quote.canRemoveMe || p.quote.removedMe) && !p.deleted) { %>
-      <p class="fp-cap fq-you"><span aria-hidden="true">💬</span><span><%= p.quote.canRemoveMe ? 'You\'re quoted in this.' : 'You removed yourself from this quote.' %></span>
-        <% if (p.quote.canRemoveMe) { %><button type="button" class="fp-rmme" data-act="quote-rm" title="Show your lines as “someone” (the quote stays)">Remove me</button><% } %></p>
+      <p class="fp-cap fq-you"><span aria-hidden="true">💬</span><span><%- p.quote.canRemoveMe ? t('feed.p.quoted') : t('feed.p.quote_removed') %></span>
+        <% if (p.quote.canRemoveMe) { %><button type="button" class="fp-rmme" data-act="quote-rm" title="<%- t('feed.p.rm_quote_title') %>"><%- t('feed.p.remove_me') %></button><% } %></p>
     <% } %>
     <% if (p.voice && p.voice.canRemoveMe && !p.deleted && !(p.capture && p.capture.canRemoveMe)) { %>
-      <p class="fp-cap"><span aria-hidden="true">🎙</span><span>You're heard in this clip.</span>
-        <button type="button" class="fp-rmme" data-act="voice-rm" title="Take the post down (the person who clipped it is told)">Remove me</button></p>
+      <p class="fp-cap"><span aria-hidden="true">🎙</span><span><%- t('feed.p.heard') %></span>
+        <button type="button" class="fp-rmme" data-act="voice-rm" title="<%- t('feed.p.rm_voice_title') %>"><%- t('feed.p.remove_me') %></button></p>
     <% } %>
     <% if (xp_) { %>
-      <p class="fp-xfrom"><%- fx.icon('xpost') %><span>Crossposted from <% if (xp_.from && xp_.from.profile) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/u/<%= encodeURIComponent(xp_.from.profile) %>">u/<%= xp_.from.profile %></a><% } else if (xp_.from) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %>a pad<% } %><% if (xp_.author) { %> by <a href="/u/<%= encodeURIComponent(xp_.author.username) %>">u/<%= xp_.author.username %></a><% } %></span></p>
+      <p class="fp-xfrom"><%- fx.icon('xpost') %><span><%- t('feed.p.xfrom') %> <% if (xp_.from && xp_.from.profile) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/u/<%= encodeURIComponent(xp_.from.profile) %>">u/<%= xp_.from.profile %></a><% } else if (xp_.from) { %><%- fx.padBadge(xp_.from, { compact: true }) %> <a href="/p/<%= encodeURIComponent(xp_.from.slug) %>">p/<%= xp_.from.slug %></a><% } else { %><%- t('feed.p.a_pad') %><% } %><% if (xp_.author) { %> <%- t('feed.p.by') %> <a href="/u/<%= encodeURIComponent(xp_.author.username) %>">u/<%= xp_.author.username %></a><% } %></span></p>
     <% } %>
     <div class="fp-content<%= p.nsfw ? ' blur' : '' %>">
       <% if (xp_) { %>
         <% if (xp_.post && !(xp_.removed && !staff_)) { const o_ = xp_.post; %>
           <div class="fp-xbox<%= xp_.removed ? ' is-gone' : '' %>">
-            <% if (xp_.removed) { %><span class="tag warn">Original removed · staff view</span><% } %>
-            <a class="fp-xtitle" href="<%= o_.url %>"><%= o_.title || (o_.link && o_.link.title) || 'View the original post' %></a>
+            <% if (xp_.removed) { %><span class="tag warn"><%- t('feed.p.orig_removed_staff') %></span><% } %>
+            <a class="fp-xtitle" href="<%= o_.url %>"><% const xt_ = o_.title || (o_.link && o_.link.title); %><%- xt_ ? t.esc(xt_) : t('feed.p.view_orig') %></a>
             <%- include('feed-post-content', { q: Object.assign({}, o_, { nsfw: p.nsfw }), fx, embeds, host, detail_, signed, url_: o_.url }) %>
-            <a class="fp-xorig" href="<%= o_.url %>"><%- fx.icon('comment') %><span><%= fx.num(o_.score) %> points · <%= fx.num(o_.comments) %> comment<%= o_.comments === 1 ? '' : 's' %> on the original</span></a>
+            <a class="fp-xorig" href="<%= o_.url %>"><%- fx.icon('comment') %><span><%- t('feed.p.orig_counts', { count: o_.comments, points: fx.num(o_.score), n: fx.num(o_.comments) }) %></span></a>
           </div>
         <% } else { %>
-          <div class="fp-xbox is-gone"><p class="fp-xgone"><%- fx.icon('remove') %>The original post was removed.</p></div>
+          <div class="fp-xbox is-gone"><p class="fp-xgone"><%- fx.icon('remove') %><%- t('feed.p.orig_gone') %></p></div>
         <% } %>
       <% } else { %>
         <%- include('feed-post-content', { q: p, fx, embeds, host, detail_, signed, url_ }) %>
       <% } %>
-      <% if (p.nsfw && signed) { %><button type="button" class="fp-reveal" data-act="reveal">NSFW — click to show</button><% } %>
+      <% if (p.nsfw && signed) { %><button type="button" class="fp-reveal" data-act="reveal"><%- t('feed.p.reveal') %></button><% } %>
     </div>
     <% if (p.xcount) { %>
-      <p class="fp-xto"><%- fx.icon('xpost') %><span>Crossposted to <%= p.xcount %> pad<%= p.xcount === 1 ? '' : 's' %>:</span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="<%= x.url %>"><%= x.label || 'p/' + x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
+      <p class="fp-xto"><%- fx.icon('xpost') %><span><%- t('feed.p.xto', { count: p.xcount }) %></span><% p.crossposts.slice(0, detail_ ? 20 : 3).forEach((x, i) => { %><%= i ? ',' : '' %> <a href="<%= x.url %>"><%= x.label || 'p/' + x.slug %></a><% }) %><%= !detail_ && p.crossposts.length > 3 ? ' …' : '' %></p>
     <% } %>
     <%# 1.99iq: content tags (feedtags.js) - each one filters the feed (in this pad when the card is in a pad's feed); a mod of a
         pad it's in (or staff) gets a ✕ to take a tag off %>
     <% if (p.tags && p.tags.length && !p.deleted) { const tpad_ = ctx_ ? (p.roomsAll.find((r) => r.id === ctx_) || null) : null; const tmod_ = staff_ || myRooms.length > 0; %>
-      <p class="fp-tags" aria-label="Tags"><% p.tags.forEach((t) => { %><span class="ftag-w"><a class="ftag" href="<%= fx.tagHref(t, tpad_ && !tpad_.profile ? tpad_.slug : null) %>">#<%= t %></a><% if (tmod_) { %><button type="button" class="ftag-x" data-tagrm="<%= t %>" data-room="<%= ctx_ && mods_.has(ctx_) ? ctx_ : '' %>" title="Remove the tag #<%= t %> from this post (mods)" aria-label="Remove tag <%= t %>">✕</button><% } %></span><% }) %></p>
+      <p class="fp-tags" aria-label="<%- t('feed.tags.aria') %>"><% p.tags.forEach((tg) => { %><span class="ftag-w"><a class="ftag" href="<%= fx.tagHref(tg, tpad_ && !tpad_.profile ? tpad_.slug : null) %>">#<%= tg %></a><% if (tmod_) { %><button type="button" class="ftag-x" data-tagrm="<%= tg %>" data-room="<%= ctx_ && mods_.has(ctx_) ? ctx_ : '' %>" title="<%- t('feed.p.tag_rm_title', { tag: tg }) %>" aria-label="<%- t('feed.p.tag_rm_aria', { tag: tg }) %>">✕</button><% } %></span><% }) %></p>
     <% } %>
     <div class="bar fp-bar">
-      <a class="act" href="<%= url_ %>#comments"><%- fx.icon('comment') %><span><%= fx.num(p.comments) %><span class="lg"> comment<%= p.comments === 1 ? '' : 's' %></span></span></a>
-      <button type="button" class="act" data-act="share" data-url="<%= url_ %>"><%- fx.icon('share') %><span class="lbl">Share</span></button>
-      <% if (detail_ && canXpost) { %><button type="button" class="act" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %><span class="lbl">Crosspost</span></button><% } %>
+      <a class="act" href="<%= url_ %>#comments"><%- fx.icon('comment') %><span><%= fx.num(p.comments) %><span class="lg"> <%- t('feed.p.comments_word', { count: p.comments }) %></span></span></a>
+      <button type="button" class="act" data-act="share" data-url="<%= url_ %>"><%- fx.icon('share') %><span class="lbl"><%- t('feed.p.share') %></span></button>
+      <% if (detail_ && canXpost) { %><button type="button" class="act" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %><span class="lbl"><%- t('feed.p.crosspost') %></span></button><% } %>
       <% if (signed) { %>
         <details class="more">
-          <summary class="act" aria-label="More actions" title="More"><%- fx.icon('more') %></summary>
+          <summary class="act" aria-label="<%- t('feed.more_aria') %>" title="<%- t('feed.more') %>"><%- fx.icon('more') %></summary>
           <div class="menu" role="menu">
             <% if (p.mine && !p.deleted) { %>
-              <button type="button" role="menuitem" data-act="edit"><%- fx.icon('edit') %>Edit</button>
-              <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %>Delete</button>
+              <button type="button" role="menuitem" data-act="edit"><%- fx.icon('edit') %><%- t('feed.edit') %></button>
+              <button type="button" role="menuitem" class="danger" data-act="delete"><%- fx.icon('trash') %><%- t('feed.delete') %></button>
             <% } %>
-            <% if (canXpost) { %><button type="button" role="menuitem" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %>Crosspost</button><% } %>
-            <% if (!p.deleted && !p.hidden) { %><a role="menuitem" href="/messages?share=<%= encodeURIComponent(p.id) %>"><%- fx.icon('share') %>Share → Send in a message</a><% } %>
-            <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><a role="menuitem" href="/messages?to=<%= encodeURIComponent(p.author.username) %>"><%- fx.icon('comment') %>Message <%= p.author.display %></a><% } %>
-            <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %>Report post</button><% } %>
+            <% if (canXpost) { %><button type="button" role="menuitem" data-act="crosspost" data-title="<%= p.title %>"><%- fx.icon('xpost') %><%- t('feed.p.crosspost') %></button><% } %>
+            <% if (!p.deleted && !p.hidden) { %><a role="menuitem" href="/messages?share=<%= encodeURIComponent(p.id) %>"><%- fx.icon('share') %><%- t('feed.p.share_msg') %></a><% } %>
+            <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><a role="menuitem" href="/messages?to=<%= encodeURIComponent(p.author.username) %>"><%- fx.icon('comment') %><%- t('feed.p.message', { name: p.author.display }) %></a><% } %>
+            <% if (!p.mine) { %><button type="button" role="menuitem" data-act="report"><%- fx.icon('flag') %><%- t('feed.p.report') %></button><% } %>
             <% if (detail_ && typeof pepeMuted !== 'undefined' && !p.author.bot && !p.deleted && (p.mine || staff_ || myRooms.length)) { %>
-              <button type="button" role="menuitem" data-act="pepe-mute" data-on="<%= pepeMuted ? '0' : '1' %>" title="Pepe won't answer or comment in this thread"><%- fx.icon(pepeMuted ? 'show' : 'hide') %><%= pepeMuted ? 'Let Pepe back in this thread' : 'Mute Pepe in this thread' %></button>
+              <button type="button" role="menuitem" data-act="pepe-mute" data-on="<%= pepeMuted ? '0' : '1' %>" title="<%- t('feed.p.pepe_mute_title') %>"><%- fx.icon(pepeMuted ? 'show' : 'hide') %><%- pepeMuted ? t('feed.p.pepe_unmute') : t('feed.p.pepe_mute') %></button>
             <% } %>
             <% ownRooms.forEach((r) => { const q_ = ' data-room="' + r.id + '" data-slug="' + r.slug + '"'; %>
               <% if (r.profile) { %>
                 <%# 1.99df: your profile - lock comments, and the profile feed's settings (blocks, Pepe); nothing to pin / hide / remove (delete the post instead) %>
-                <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%= viewer && viewer.username === r.profile ? 'Your profile' : 'u/' + r.profile %></span></div>
-                <% if (lockable && !staff_) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= p.locked ? 'unlock' : 'lock' %>"<%- q_ %>><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%= p.locked ? 'Unlock comments' : 'Lock comments' %></button><% } %>
-                <% if (p.mine && !p.deleted) { %><button type="button" role="menuitem" data-act="in-all" data-on="<%= p.inAll ? '0' : '1' %>"><%- fx.icon(p.inAll ? 'hide' : 'show') %><%= p.inAll ? 'Keep out of All' : 'Also show in All' %></button><% } %>
-                <a role="menuitem" href="/u/<%= encodeURIComponent(r.profile) %>/posts#profile-settings"><%- fx.icon('flag') %>Profile feed settings</a>
+                <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%- viewer && viewer.username === r.profile ? t('feed.p.your_profile') : t.esc('u/' + r.profile) %></span></div>
+                <% if (lockable && !staff_) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= p.locked ? 'unlock' : 'lock' %>"<%- q_ %>><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%- p.locked ? t('feed.p.unlock') : t('feed.p.lock') %></button><% } %>
+                <% if (p.mine && !p.deleted) { %><button type="button" role="menuitem" data-act="in-all" data-on="<%= p.inAll ? '0' : '1' %>"><%- fx.icon(p.inAll ? 'hide' : 'show') %><%- p.inAll ? t('feed.p.keep_out') : t('feed.inall') %></button><% } %>
+                <a role="menuitem" href="/u/<%= encodeURIComponent(r.profile) %>/posts#profile-settings"><%- fx.icon('flag') %><%- t('feed.p.profile_settings') %></a>
               <% return; } %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span><%= r.title %></span></div>
               <% if (r.pending) { %>
-                <button type="button" role="menuitem" data-act="rmod" data-op="approve"<%- q_ %>><%- fx.icon('check') %>Approve</button>
-                <button type="button" role="menuitem" class="danger" data-act="rmod" data-op="reject"<%- q_ %>><%- fx.icon('x') %>Reject</button>
+                <button type="button" role="menuitem" data-act="rmod" data-op="approve"<%- q_ %>><%- fx.icon('check') %><%- t('feed.p.approve') %></button>
+                <button type="button" role="menuitem" class="danger" data-act="rmod" data-op="reject"<%- q_ %>><%- fx.icon('x') %><%- t('feed.p.reject') %></button>
               <% } %>
-              <% if (!r.removed && !r.pending) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= r.pinned ? 'unpin' : 'pin' %>"<%- q_ %>><%- fx.icon('pin') %><%= r.pinned ? 'Unpin' : 'Pin to the pad' %></button><% } %>
-              <% if (lockable && !staff_) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= p.locked ? 'unlock' : 'lock' %>"<%- q_ %>><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%= p.locked ? 'Unlock comments' : 'Lock comments' %></button><% } %>
-              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.nsfw ? 'unnsfw' : 'nsfw' %>"<%- q_ %>><%- fx.icon('nsfw') %><%= r.nsfw ? 'Unmark NSFW here' : 'Mark NSFW in this pad' %></button>
-              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.hidden ? 'unhide' : 'hide' %>"<%- q_ %>><%- fx.icon(r.hidden ? 'show' : 'hide') %><%= r.hidden ? 'Unhide in this pad' : 'Hide in this pad (review)' %></button>
-              <% if (r.removed) { %><button type="button" role="menuitem" data-act="restore-room" data-room="<%= r.id %>"><%- fx.icon('restore') %>Put back in the pad</button>
-              <% } else { %><button type="button" role="menuitem" class="danger" data-act="remove-room" data-room="<%= r.id %>"><%- fx.icon('remove') %>Remove from the pad</button><% } %>
-              <% if (!p.mine) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= p.author.username %>"<%- q_ %>><%- fx.icon('shield') %>Ban <%= p.author.display %> from this pad</button><% } %>
-              <a role="menuitem" href="/p/<%= encodeURIComponent(r.slug) %>/settings#moderation"><%- fx.icon('flag') %>Pad settings &amp; moderation</a>
+              <% if (!r.removed && !r.pending) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= r.pinned ? 'unpin' : 'pin' %>"<%- q_ %>><%- fx.icon('pin') %><%- r.pinned ? t('feed.p.unpin') : t('feed.p.pin') %></button><% } %>
+              <% if (lockable && !staff_) { %><button type="button" role="menuitem" data-act="rmod" data-op="<%= p.locked ? 'unlock' : 'lock' %>"<%- q_ %>><%- fx.icon(p.locked ? 'unlock' : 'lock') %><%- p.locked ? t('feed.p.unlock') : t('feed.p.lock') %></button><% } %>
+              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.nsfw ? 'unnsfw' : 'nsfw' %>"<%- q_ %>><%- fx.icon('nsfw') %><%- r.nsfw ? t('feed.p.unnsfw_here') : t('feed.p.nsfw_here') %></button>
+              <button type="button" role="menuitem" data-act="rmod" data-op="<%= r.hidden ? 'unhide' : 'hide' %>"<%- q_ %>><%- fx.icon(r.hidden ? 'show' : 'hide') %><%- r.hidden ? t('feed.p.unhide_here') : t('feed.p.hide_here') %></button>
+              <% if (r.removed) { %><button type="button" role="menuitem" data-act="restore-room" data-room="<%= r.id %>"><%- fx.icon('restore') %><%- t('feed.p.restore') %></button>
+              <% } else { %><button type="button" role="menuitem" class="danger" data-act="remove-room" data-room="<%= r.id %>"><%- fx.icon('remove') %><%- t('feed.p.remove_pad') %></button><% } %>
+              <% if (!p.mine) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= p.author.username %>"<%- q_ %>><%- fx.icon('shield') %><%- t('feed.p.ban', { name: p.author.display }) %></button><% } %>
+              <a role="menuitem" href="/p/<%= encodeURIComponent(r.slug) %>/settings#moderation"><%- fx.icon('flag') %><%- t('feed.p.pad_settings') %></a>
             <% }) %>
             <% if (staff_) { %>
               <div class="sep" role="separator"></div><div class="mh"><%- fx.icon('shield') %><span>Admin</span></div>
@@ -159,16 +160,16 @@
           </div>
         </details>
       <% } %>
-      <% if (p.cost) { %><span class="cost" title="Paid to post"><%= Number(p.cost).toLocaleString('en-US') %> PAT</span><% } %>
+      <% if (p.cost) { %><span class="cost" title="<%- t('feed.p.paid') %>"><%= Number(p.cost).toLocaleString('en-US') %> PAT</span><% } %>
     </div>
     <% if (p.mine) { %>
       <form class="fp-editf hide" data-act="edit-save">
-        <input name="title" maxlength="140" value="<%= p.title %>" placeholder="Title (optional)" aria-label="Title">
-        <textarea name="body" maxlength="5000" rows="4" aria-label="Text"><%= p.body %></textarea>
-        <input name="tags" maxlength="200" value="<%= (p.tags || []).join(', ') %>" placeholder="Tags, comma-separated (up to <%= fx.MAX_TAGS || 5 %>)" aria-label="Tags" autocomplete="off">
-        <div class="row"><label class="ck"><input type="checkbox" name="nsfw"<%= p.nsfwAuthor ? ' checked' : '' %>> NSFW</label>
-          <% if (p.onProfile) { %><label class="ck" title="Off: only on your profile and in your followers' Following"><input type="checkbox" name="inAll"<%= p.inAll ? ' checked' : '' %>> Also show in All</label><% } %>
-          <span class="grow"></span><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="edit-cancel">Cancel</button><button type="submit" class="btn-s">Save</button></div>
+        <input name="title" maxlength="140" value="<%= p.title %>" placeholder="<%- t('feed.title_opt') %>" aria-label="<%- t('feed.title_aria') %>">
+        <textarea name="body" maxlength="5000" rows="4" aria-label="<%- t('feed.text_aria') %>"><%= p.body %></textarea>
+        <input name="tags" maxlength="200" value="<%= (p.tags || []).join(', ') %>" placeholder="<%- t('feed.p.tags_ph', { n: fx.MAX_TAGS || 5 }) %>" aria-label="<%- t('feed.tags.aria') %>" autocomplete="off">
+        <div class="row"><label class="ck"><input type="checkbox" name="nsfw"<%= p.nsfwAuthor ? ' checked' : '' %>> <%- t('feed.nsfw') %></label>
+          <% if (p.onProfile) { %><label class="ck" title="<%- t('feed.p.inall_title') %>"><input type="checkbox" name="inAll"<%= p.inAll ? ' checked' : '' %>> <%- t('feed.inall') %></label><% } %>
+          <span class="grow"></span><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="edit-cancel"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.save') %></button></div>
       </form>
     <% } %>
   </div>

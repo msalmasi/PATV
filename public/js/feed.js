@@ -3,6 +3,7 @@
 // click-to-play embeds. Every write is a same-site JSON fetch with X-Requested-With: fetch.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   if (window.__patvFeed) return;          // the room page and /feed may include this twice
   window.__patvFeed = true;
   var me = document.currentScript;
@@ -34,14 +35,14 @@
     try { return el ? JSON.parse(el.textContent) : null; } catch (e) { return null; }
   }
   function askReason() {
-    var R = reasons() || { spam: 'Spam', abuse: 'Harassment or hate', nsfw: 'Unmarked NSFW', illegal: 'Illegal content', personal: 'Personal info / doxxing', other: 'Something else' };
+    var R = reasons() || { spam: _t('js.feed.reason.spam', 'Spam'), abuse: _t('js.feed.reason.abuse', 'Harassment or hate'), nsfw: _t('js.feed.reason.nsfw', 'Unmarked NSFW'), illegal: _t('js.feed.reason.illegal', 'Illegal content'), personal: _t('js.feed.reason.personal', 'Personal info / doxxing'), other: _t('js.feed.reason.other', 'Something else') };
     var keys = Object.keys(R);
-    var txt = 'Why are you reporting this?\n' + keys.map(function (k, i) { return (i + 1) + '. ' + R[k]; }).join('\n') + '\n\nType a number:';
+    var txt = _t('js.feed.report.why', 'Why are you reporting this?') + '\n' + keys.map(function (k, i) { return (i + 1) + '. ' + R[k]; }).join('\n') + '\n\n' + _t('js.feed.report.type_number', 'Type a number:');
     var n = window.prompt(txt, '1');
     if (n === null) return null;
     var k = keys[(parseInt(n, 10) || 0) - 1];
-    if (!k) { alert('Pick one of the numbers.'); return null; }
-    var note = window.prompt('Anything to add? (optional)', '') || '';
+    if (!k) { alert(_t('js.feed.report.pick', 'Pick one of the numbers.')); return null; }
+    var note = window.prompt(_t('js.feed.report.add', 'Anything to add? (optional)'), '') || '';
     return { reason: k, note: note.slice(0, 300) };
   }
 
@@ -57,7 +58,7 @@
     var id = postOf(b);
     if (act === 'reveal') {
       var c = b.closest('.fp-content'); c.classList.remove('blur');
-      if (!showNsfw && window.confirm('Show NSFW posts without the blur from now on (on this device)?')) { try { localStorage.setItem('patvFeedNsfw', '1'); } catch (e) { /* private mode */ } }
+      if (!showNsfw && window.confirm(_t('js.feed.nsfw_always', 'Show NSFW posts without the blur from now on (on this device)?'))) { try { localStorage.setItem('patvFeedNsfw', '1'); } catch (e) { /* private mode */ } }
       return;
     }
     if (act === 'embed') {
@@ -67,7 +68,7 @@
       f.src = src; f.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media'; f.allowFullscreen = true;
       f.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
       f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
-      f.title = 'Video player';
+      f.title = _t('js.feed.video_player', 'Video player');
       box.innerHTML = ''; box.appendChild(f);
       return;
     }
@@ -75,9 +76,9 @@
       var url = location.origin + b.getAttribute('data-url');
       var lbl = b.querySelector('.lbl') || b;
       if (navigator.share && /Mobi|Android/i.test(navigator.userAgent)) { navigator.share({ url: url }).catch(function () {}); return; }
-      var done = function () { lbl.textContent = 'Link copied'; b.classList.add('done'); setTimeout(function () { lbl.textContent = 'Share'; b.classList.remove('done'); }, 2000); };
-      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy the link:', url); });
-      else window.prompt('Copy the link:', url);
+      var done = function () { lbl.textContent = _t('js.feed.link_copied', 'Link copied'); b.classList.add('done'); setTimeout(function () { lbl.textContent = _t('js.feed.share', 'Share'); b.classList.remove('done'); }, 2000); };
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done, function () { window.prompt(_t('js.feed.copy_link', 'Copy the link:'), url); });
+      else window.prompt(_t('js.feed.copy_link', 'Copy the link:'), url);
       return;
     }
     if (act === 'vote') {
@@ -100,7 +101,7 @@
       api(vurl, { dir: dir }).then(function (d) {
         setState(d.vote);
         vs.textContent = fmtNum(d.score);
-        vs.title = d.ups + ' up · ' + d.downs + ' down' + (d.counted === false ? ' · your downvote counts once your account is level 2 or has a linked Camfrog name' : '');
+        vs.title = _t('js.feed.updown', '{up} up · {down} down', { up: d.ups, down: d.downs }) + (d.counted === false ? ' · ' + _t('js.feed.downvote_later', 'your downvote counts once your account is level 2 or has a linked Camfrog name') : '');
       }).catch(function (e) { setState(cur); alert(e.message); }).then(function () { box.classList.remove('busy'); });
       return;
     }
@@ -111,7 +112,7 @@
       if (window.patvSafety) { window.patvSafety.report(tgt); return; }
       var r = askReason(); if (!r) return;
       if (tgt.comment) r.comment = tgt.comment;
-      api('/api/feed/posts/' + tgt.post + '/report', r).then(function (d) { alert(d.already ? 'You already reported this.' : 'Thanks - an admin will take a look.'); }).catch(function (e) { alert(e.message); });
+      api('/api/feed/posts/' + tgt.post + '/report', r).then(function (d) { alert(d.already ? _t('js.feed.report.already', 'You already reported this.') : _t('js.feed.report.thanks', 'Thanks - an admin will take a look.')); }).catch(function (e) { alert(e.message); });
       return;
     }
     if (act === 'details' || act === 'cdetails') {
@@ -131,26 +132,26 @@
     if (act === 'delete' || act === 'admin-delete') {
       var why = '';
       if (act === 'admin-delete') { why = window.prompt('Delete this post for everyone. Reason (the author is told):', ''); if (why === null) return; }
-      else if (!window.confirm('Delete your post? This can\'t be undone.')) return;
+      else if (!window.confirm(_t('js.feed.delete_post', 'Delete your post? This can\'t be undone.'))) return;
       api('/api/feed/posts/' + id + '/delete', { reason: why }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
     // 1.99eq: the person in a story capture takes its post down (storykeep.js; the poster is told)
     if (act === 'remove-me') {
-      if (!window.confirm('Remove this post of you? It comes down for everyone and the person who posted it is told.')) return;
+      if (!window.confirm(_t('js.feed.remove_me', 'Remove this post of you? It comes down for everyone and the person who posted it is told.'))) return;
       b.disabled = true;
       api('/api/stories/posts/' + id + '/remove-me', {}).then(function () { location.reload(); }).catch(function (e) { b.disabled = false; alert(e.message); });
       return;
     }
     // 1.99fp: someone quoted anonymises themselves in a quote (quotes.js); someone heard takes a mic clip down (micclip.js)
     if (act === 'quote-rm' || act === 'voice-rm') {
-      if (!window.confirm(act === 'quote-rm' ? 'Show your lines in this quote as “someone”? Your name comes off it for good.' : 'Take this clip of you down? It comes down for everyone and the person who posted it is told.')) return;
+      if (!window.confirm(act === 'quote-rm' ? _t('js.feed.quote_rm', 'Show your lines in this quote as “someone”? Your name comes off it for good.') : _t('js.feed.voice_rm', 'Take this clip of you down? It comes down for everyone and the person who posted it is told.'))) return;
       b.disabled = true;
       api('/api/feed/posts/' + id + '/' + (act === 'quote-rm' ? 'quote-remove-me' : 'voice-remove-me'), {}).then(function () { location.reload(); }).catch(function (e) { b.disabled = false; alert(e.message); });
       return;
     }
     if (act === 'remove-room' || act === 'restore-room') {
-      if (act === 'remove-room' && !window.confirm('Take this post out of your pad? (It stays anywhere else it was posted.)')) return;
+      if (act === 'remove-room' && !window.confirm(_t('js.feed.remove_room', 'Take this post out of your pad? (It stays anywhere else it was posted.)'))) return;
       api('/api/feed/posts/' + id + '/' + act, { room: b.getAttribute('data-room') }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
@@ -168,19 +169,21 @@
     // room owners: their room only (the server checks the owner per room)
     if (act === 'rmod') {
       var op = b.getAttribute('data-op'), body = { op: op, post: id };
-      if (op === 'reject') { var rs = window.prompt('Reject this post for your pad? Reason (optional, the author is told):', ''); if (rs === null) return; body.reason = rs; }
+      if (op === 'reject') { var rs = window.prompt(_t('js.feed.reject', 'Reject this post for your pad? Reason (optional, the author is told):'), ''); if (rs === null) return; body.reason = rs; }
       api('/api/rooms/' + encodeURIComponent(b.getAttribute('data-slug')) + '/feed/mod', body).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
     if (act === 'room-ban') {
       // 1.99df: data-what = "commenting on your profile" (a profile owner's block)
-      var what = b.getAttribute('data-what') || 'posting and commenting in this pad';
-      var d = window.prompt('Ban ' + b.getAttribute('data-user') + ' from ' + what + '.\nHow long? 1 = a day, 7 = a week, 0 = permanently', '1');
+      var profBlock = !!b.getAttribute('data-what');
+      var d = window.prompt((profBlock ? _t('js.feed.ban.ask_profile', 'Ban {user} from commenting on your profile.', { user: b.getAttribute('data-user') }) : _t('js.feed.ban.ask_pad', 'Ban {user} from posting and commenting in this pad.', { user: b.getAttribute('data-user') })) + '\n' + _t('js.feed.ban.how_long', 'How long? 1 = a day, 7 = a week, 0 = permanently'), '1');
       if (d === null) return;
-      var days = parseInt(d, 10); if (!(days >= 0)) { alert('Type a number of days (0 = permanently).'); return; }
-      var reason = window.prompt('Reason (optional):', '') || '';
+      var days = parseInt(d, 10); if (!(days >= 0)) { alert(_t('js.feed.ban.days', 'Type a number of days (0 = permanently).')); return; }
+      var reason = window.prompt(_t('js.feed.ban.reason', 'Reason (optional):'), '') || '';
       api('/api/feed/ban', { user: b.getAttribute('data-user'), room: b.getAttribute('data-slug'), days: days, reason: reason })
-        .then(function () { alert((b.getAttribute('data-what') ? 'Blocked from ' + what : 'Banned from this pad') + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' permanently') + '.'); }).catch(function (e) { alert(e.message); });
+        .then(function () { alert(days ? (profBlock ? (days === 1 ? _t('js.feed.ban.done_profile_1', 'Blocked from commenting on your profile for 1 day.') : _t('js.feed.ban.done_profile_days', 'Blocked from commenting on your profile for {n} days.', { n: days }))
+                         : (days === 1 ? _t('js.feed.ban.done_pad_1', 'Banned from this pad for 1 day.') : _t('js.feed.ban.done_pad_days', 'Banned from this pad for {n} days.', { n: days })))
+          : (profBlock ? _t('js.feed.ban.done_profile', 'Blocked from commenting on your profile permanently.') : _t('js.feed.ban.done_pad', 'Banned from this pad permanently.'))); }).catch(function (e) { alert(e.message); });
       return;
     }
     // 1.99di: the author shows / hides the prompt of an AI-generated file (aigen.js checks it's theirs)
@@ -204,8 +207,8 @@
       var cm = b.closest('.cm');
       var own = !!cm.querySelector(':scope > .cm-editf');
       var cwhy = '';
-      if (own) { if (!window.confirm('Delete your comment?')) return; }
-      else { cwhy = window.prompt('Remove this comment. Reason (optional, the author is told):', ''); if (cwhy === null) return; }
+      if (own) { if (!window.confirm(_t('js.feed.delete_comment', 'Delete your comment?'))) return; }
+      else { cwhy = window.prompt(_t('js.feed.remove_comment', 'Remove this comment. Reason (optional, the author is told):'), ''); if (cwhy === null) return; }
       api('/api/feed/comments/' + cm.getAttribute('data-id') + '/delete', { reason: cwhy }).then(function () { location.reload(); }).catch(function (e) { alert(e.message); });
       return;
     }
@@ -262,7 +265,7 @@
       api(curl, body).catch(function (e) {
         if (e.code !== 'terms' || !window.patvSafety) throw e;
         return window.patvSafety.termsAsk().then(function (yes) {
-          if (!yes) throw new Error('You need to accept the Terms of Service to comment.');
+          if (!yes) throw new Error(_t('js.feed.terms_needed', 'You need to accept the Terms of Service to comment.'));
           body.acceptTerms = true;
           return api(curl, body);
         });

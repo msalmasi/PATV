@@ -3,31 +3,32 @@
   // Shared behaviour for every form[data-au-form]: show/hide password, caps-lock hint, inline
   // checks before sending (the server checks the same things), and one submit only.
   (function () {
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var RULES = {
-      checked: function (v, el) { return el.checked ? '' : 'Tick the box to confirm.'; },
-      required: function (v, el) { return v.trim() ? '' : (el.getAttribute('data-required-msg') || 'This field is required.'); },
+      checked: function (v, el) { return el.checked ? '' : _t('js.auth.tick_box', 'Tick the box to confirm.'); },
+      required: function (v, el) { return v.trim() ? '' : (el.getAttribute('data-required-msg') || _t('js.auth.required', 'This field is required.')); },
       newuser: function (v) {
         v = v.trim();
-        if (!v) return 'Choose a username.';
-        if (!/^[A-Za-z0-9_.-]{3,24}$/.test(v)) return 'Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.';
-        if (/^[._-]|[._-]$/.test(v)) return "Usernames can't start or end with a dot, dash or underscore.";
-        if (/^cf/i.test(v)) return 'Usernames starting with “CF” are reserved for Camfrog accounts.';
+        if (!v) return _t('js.auth.choose_username', 'Choose a username.');
+        if (!/^[A-Za-z0-9_.-]{3,24}$/.test(v)) return _t('js.auth.username_chars', 'Usernames are 3-24 characters: letters, numbers, dot, dash or underscore.');
+        if (/^[._-]|[._-]$/.test(v)) return _t('js.auth.username_ends', "Usernames can't start or end with a dot, dash or underscore.");
+        if (/^cf/i.test(v)) return _t('js.auth.username_cf', 'Usernames starting with “CF” are reserved for Camfrog accounts.');
         return '';
       },
       email: function (v) {
         v = v.trim();
-        if (!v) return 'Enter your email address.';
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? '' : "That doesn't look like an email address.";
+        if (!v) return _t('js.auth.enter_email', 'Enter your email address.');
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? '' : _t('js.auth.bad_email', "That doesn't look like an email address.");
       },
       newpass: function (v, el) {
-        if (v.length < 8) return 'Use at least 8 characters for your password.';
+        if (v.length < 8) return _t('js.auth.short_password', 'Use at least 8 characters for your password.');
         var u = el.form && el.form.querySelector('[name="username"]');
-        if (u && u.value.trim() && v.toLowerCase() === u.value.trim().toLowerCase()) return "Your password can't be your username.";
+        if (u && u.value.trim() && v.toLowerCase() === u.value.trim().toLowerCase()) return _t('js.auth.password_is_username', "Your password can't be your username.");
         return '';
       },
       match: function (v, el) {
         var other = document.getElementById(el.getAttribute('data-match'));
-        return other && v === other.value ? '' : "Those passwords don't match.";
+        return other && v === other.value ? '' : _t('js.auth.mismatch', "Those passwords don't match.");
       }
     };
     function errBox(el) { return document.getElementById(el.id + '-err'); }
@@ -73,7 +74,7 @@
         if (btn) {
           btn.disabled = true;
           btn.setAttribute('aria-busy', 'true');
-          if (label) label.textContent = btn.getAttribute('data-busy') || 'Working…';
+          if (label) label.textContent = btn.getAttribute('data-busy') || _t('js.auth.working', 'Working…');
         }
       });
       // back/forward cache: a page restored after submitting must be usable again
@@ -94,8 +95,8 @@
         var show = input.type === 'password';
         input.type = show ? 'text' : 'password';
         b.setAttribute('aria-pressed', show ? 'true' : 'false');
-        b.textContent = show ? 'Hide' : 'Show';
-        b.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+        b.textContent = show ? _t('js.auth.hide', 'Hide') : _t('js.auth.show', 'Show');
+        b.setAttribute('aria-label', show ? _t('js.auth.hide_password', 'Hide password') : _t('js.auth.show_password', 'Show password'));
       });
     });
 
@@ -117,7 +118,7 @@
       function upd() {
         var n = input.value.length;
         hint.classList.toggle('ok', n >= 8);
-        hint.textContent = n === 0 ? base : (n >= 8 ? 'Length looks good.' : (8 - n) + ' more character' + (8 - n === 1 ? '' : 's') + ' to go.');
+        hint.textContent = n === 0 ? base : (n >= 8 ? _t('js.auth.length_ok', 'Length looks good.') : (8 - n === 1 ? _t('js.auth.more_chars_one', '{n} more character to go.', { n: 8 - n }) : _t('js.auth.more_chars', '{n} more characters to go.', { n: 8 - n })));
       }
       input.addEventListener('input', upd);
     });

@@ -1,4 +1,5 @@
-<%- include('layout', { title: `${displayname || usernameProfile} on Public Access`, user: username, og: typeof og !== 'undefined' ? og : null }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('profile.page_title', { name: displayname || usernameProfile }), user: username, og: typeof og !== 'undefined' ? og : null }) %>
 <%
   // 1.99du: header (photo + GTF portrait, name, stat strip, primary actions + "More") and tabs under it -
   // Posts (default) · Overview · Analytics, in the owner's layout order (profilelayout.tabsFor).
@@ -11,7 +12,7 @@
   const PL = typeof profileLayoutMod !== 'undefined' && profileLayoutMod ? profileLayoutMod : null;
   const L = typeof layout !== 'undefined' && layout ? layout : { order: ['posts', 'stats', 'level', 'avatar', 'gtf', 'badges', 'analytics'],
     hidden: () => false, show: () => true, seesHidden: false, anyHidden: false };
-  const hidTag = (id) => L.hidden(id) ? '<span class="pf-hid">\u{1F441} Hidden from visitors</span>' : '';
+  const hidTag = (id) => L.hidden(id) ? '<span class="pf-hid">\u{1F441} ' + t('profile.hidden_from_visitors') + '</span>' : '';
   const role = (classh || '').toLowerCase();
   const enc = encodeURIComponent(usernameProfile);
   // Profile URLs in one place (1.99dv): the profile is /u/<name>, a tab /u/<name>/<tab> (posts, overview, analytics)
@@ -39,7 +40,7 @@
   const avItems = av ? av.items : [];
   const top = avItems.slice().sort((a, b) => RANK.indexOf(b.rarity) - RANK.indexOf(a.rarity))[0] || null;
   const configured = avItems.length > 0;
-  const gtfLabel = sheet && sheet.cls ? 'GTF: ' + sheet.cls : 'GTF avatar';
+  const gtfLabel = sheet && sheet.cls ? 'GTF: ' + t.esc(sheet.cls) : t('profile.gtf.avatar');   // HTML-safe: printed raw
   const acts = isMe && typeof avatarActs !== 'undefined' && avatarActs ? avatarActs : [];
   const tipNew = isMe && typeof tipJarNew !== 'undefined' ? tipJarNew : 0;
 
@@ -233,67 +234,67 @@
     <div class="pf-face">
       <span class="cx-av">
         <% if (cxDeco && cxDeco.conic) { %><span class="cx-conic<%= cxDeco.spin ? ' cx-spin' : '' %>" style="<%= cxDeco.conic %>" aria-hidden="true"></span><% } %>
-        <img class="avatar" src="<%= avatar %>" alt="<%= usernameProfile %>'s avatar" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
+        <img class="avatar" src="<%= avatar %>" alt="<%- t('profile.avatar_alt', { name: usernameProfile }) %>" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
         <% if (cxDeco && cxDeco.emoji) { %><span class="cx-emoji" aria-hidden="true"><%= cxDeco.emoji %></span><% } %>
       </span>
       <% if (showAv) { %>
         <button type="button" class="pf-gtfmini<%= av.svg ? '' : ' empty' %>" popovertarget="gtfPop" data-gtf-open
-                style="--rc:<%= top ? top.color : '#3a3a3a' %>" title="<%= gtfLabel %> — wardrobe" aria-label="Open <%= displayname || usernameProfile %>'s GTF avatar"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></button>
+                style="--rc:<%= top ? top.color : '#3a3a3a' %>" title="<%- t('profile.gtf.wardrobe_title', { label: gtfLabel }) %>" aria-label="<%- t('profile.gtf.open_aria', { name: displayname || usernameProfile }) %>"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></button>
       <% } %>
     </div>
     <div class="who">
       <h1><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= displayname || usernameProfile %></span><% } else { %><%= displayname || usernameProfile %><% } %></h1>
-      <div class="handle">@<%= usernameProfile %><% if (cf) { %> · 🐸 <%= cf %> on Camfrog<% } %></div>
+      <div class="handle">@<%= usernameProfile %><% if (cf) { %> · 🐸 <%- t('profile.on_camfrog', { name: cf }) %><% } %></div>
       <div class="chips">
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
-        <% if (pc && pc.seasonPass) { %><a class="chip" href="/premium" title="Has a Season Pass" style="background:linear-gradient(90deg,#9b5de5,#ff6ad5);color:#fff;text-decoration:none">🎟️ Season Pass</a><% } %>
-        <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%= gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
+        <% if (pc && pc.seasonPass) { %><a class="chip" href="/premium" title="<%- t('profile.has_season_pass') %>" style="background:linear-gradient(90deg,#9b5de5,#ff6ad5);color:#fff;text-decoration:none">🎟️ Season Pass</a><% } %>
+        <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%- gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
       </div>
       <% if (cxShow.length) { %>
-        <div class="showcase" aria-label="Pinned badges">
+        <div class="showcase" aria-label="<%- t('profile.pinned_badges') %>">
           <% cxShow.forEach((b) => { %><span class="pin" title="<%= b.description %>"><img src="<%= b.icon %>" alt=""><%= b.name %></span><% }) %>
         </div>
       <% } %>
     </div>
-    <div class="pf-strip" aria-label="Stats">
+    <div class="pf-strip" aria-label="<%- t('profile.stats_aria') %>">
       <% if (L.show('stats') && L.show('stats_balance')) { const h_ = L.hidden('stats') || L.hidden('stats_balance'); %>
-        <div class="ps<%= h_ ? ' is-hidden' : '' %>"<%- h_ ? ' title="Hidden from visitors"' : '' %>><span class="k">PAT</span><b class="gold"><%= fmt(points_balance) %></b></div>
+        <div class="ps<%= h_ ? ' is-hidden' : '' %>"<%- h_ ? ' title="' + t('profile.hidden_from_visitors') + '"' : '' %>><span class="k">PAT</span><b class="gold"><%= fmt(points_balance) %></b></div>
       <% } %>
-      <div class="ps lv<%= L.show('level') && L.hidden('level') ? ' is-hidden' : '' %>" title="XP comes from chatting, the mic and games. Every level-up pays 25,000 PAT; every 5th level is a milestone with a bigger bonus and a cosmetic.">
-        <span class="k">Level</span>
+      <div class="ps lv<%= L.show('level') && L.hidden('level') ? ' is-hidden' : '' %>" title="<%- t('profile.level_title') %>">
+        <span class="k"><%- t('profile.level') %></span>
         <span class="lv-row"><b><%= level %></b><% if (L.show('level')) { %><small><%= fmt(xp) %> / <%= fmt(need) %> XP</small><% } %></span>
-        <% if (L.show('level')) { %><div class="xb" role="progressbar" aria-label="XP to level <%= level + 1 %>" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div><% } %>
+        <% if (L.show('level')) { %><div class="xb" role="progressbar" aria-label="<%- t('profile.xp_to_level', { n: level + 1 }) %>" aria-valuenow="<%= Math.round(pct) %>" aria-valuemin="0" aria-valuemax="100"><span style="width: <%= pct.toFixed(1) %>%"></span></div><% } %>
       </div>
       <% if (L.show('stats')) { %>
-        <a class="ps<%= L.hidden('stats') ? ' is-hidden' : '' %>" href="/achievements?user=<%= enc %>"><span class="k">Badges</span><b><%= badges.length %></b></a>
+        <a class="ps<%= L.hidden('stats') ? ' is-hidden' : '' %>" href="/achievements?user=<%= enc %>"><span class="k"><%- t('profile.badges') %></span><b><%= badges.length %></b></a>
       <% } %>
       <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'stat' }) %><% } %>
     </div>
     <div class="actions">
       <% if (isMe) { %>
-        <a class="btn primary" href="/u/<%= encodeURIComponent(username) %>/edit">✏️ Edit profile</a>
-        <a class="btn" href="/wallet">👛 Wallet</a>
+        <a class="btn primary" href="/u/<%= encodeURIComponent(username) %>/edit">✏️ <%- t('profile.edit_profile') %></a>
+        <a class="btn" href="/wallet">👛 <%- t('profile.wallet') %></a>
       <% } else if (!previewing) { %>
         <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'actions' }) %><% } %>
-        <a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="Send <%= displayname || usernameProfile %> some PAT">💸 Tip</a>
+        <a class="btn<%= soc ? '' : ' primary' %>" href="/u/<%= enc %>/tip" title="<%- t('profile.tip_title', { name: displayname || usernameProfile }) %>">💸 <%- t('profile.tip') %></a>
       <% } %>
       <details class="pf-more" data-pf-more>
-        <summary class="btn" aria-haspopup="menu">⋯ More<% if (tipNew > 0) { %> <span class="tj-new" title="New tips in your jar"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
+        <summary class="btn" aria-haspopup="menu">⋯ <%- t('profile.more') %><% if (tipNew > 0) { %> <span class="tj-new" title="<%- t('profile.new_tips_title') %>"><%= tipNew > 99 ? '99+' : tipNew %></span><% } %></summary>
         <div class="pf-menu" role="menu">
           <% if (isMe) { %>
-            <a role="menuitem" href="/u/<%= enc %>/tip">💰 Your tip jar<% if (tipNew > 0) { %> <span class="tj-new"><%= tipNew > 99 ? '99+' : tipNew %> new</span><% } %></a>
-            <a role="menuitem" href="/history">📜 PAT history</a>
-            <% if (soc) { %><a role="menuitem" href="/feed/following">⭐ Your follow lists</a><% } %>
-            <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
-            <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
-            <a role="menuitem" href="/premium">🎟️ Season Pass &amp; stickers</a>
-            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar &amp; wardrobe</button><% } %>
+            <a role="menuitem" href="/u/<%= enc %>/tip">💰 <%- t('profile.menu.tip_jar') %><% if (tipNew > 0) { %> <span class="tj-new"><%- t('profile.menu.n_new', { n: tipNew > 99 ? '99+' : tipNew }) %></span><% } %></a>
+            <a role="menuitem" href="/history">📜 <%- t('profile.menu.pat_history') %></a>
+            <% if (soc) { %><a role="menuitem" href="/feed/following">⭐ <%- t('profile.menu.follow_lists') %></a><% } %>
+            <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 <%- t('profile.menu.achievements') %></a>
+            <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.menu.cosmetics') %></a>
+            <a role="menuitem" href="/premium">🎟️ <%- t('profile.menu.season_pass') %></a>
+            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 <%- t('profile.menu.gtf_wardrobe') %></button><% } %>
             <hr>
-            <form action="/logout" method="POST"><button type="submit" role="menuitem">↪ Log out</button></form>
+            <form action="/logout" method="POST"><button type="submit" role="menuitem">↪ <%- t('profile.menu.logout') %></button></form>
           <% } else { %>
-            <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 Achievements</a>
-            <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %><a role="menuitem" href="/history?user=<%= enc %>">📜 PAT history</a><% } %>
-            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 GTF avatar</button><% } %>
+            <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 <%- t('profile.menu.achievements') %></a>
+            <% if (typeof canSeeHistory !== 'undefined' && canSeeHistory) { %><a role="menuitem" href="/history?user=<%= enc %>">📜 <%- t('profile.menu.pat_history') %></a><% } %>
+            <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 <%- t('profile.gtf.avatar') %></button><% } %>
             <% if (soc) { %><%- include('partials/profile-follow', { social: soc, usernameProfile, previewing, part: 'menu' }) %><% } %>
           <% } %>
         </div>
@@ -306,19 +307,20 @@
       captures of them show here %>
   <% const pst_ = typeof profileStory !== 'undefined' && profileStory ? profileStory : null; %>
   <% if (pst_ && (pst_.rooms.length || pst_.owner)) { %>
-    <section class="card pf-story" aria-label="Story">
-      <%- include('partials/story-strip', { story: { rooms: pst_.rooms, caps: [], room: null, signed: pst_.signed, compose: pst_.owner, pad: 'profile' }, heading: '📸 Story', next: base }) %>
+    <section class="card pf-story" aria-label="<%- t('profile.story.aria') %>">
+      <%- include('partials/story-strip', { story: { rooms: pst_.rooms, caps: [], room: null, signed: pst_.signed, compose: pst_.owner, pad: 'profile' }, heading: '📸 ' + t('profile.story.heading'), next: base }) %>
       <% if (pst_.owner && pst_.prefs) { %>
-        <label class="pf-story-set"><input type="checkbox" data-story-pref="capturesOfMe"<%= pst_.prefs.capturesOfMe ? ' checked' : '' %>> Show captures of me in my story (snaps and clips of my cam or my stream from the last 24 h)</label>
+        <label class="pf-story-set"><input type="checkbox" data-story-pref="capturesOfMe"<%= pst_.prefs.capturesOfMe ? ' checked' : '' %>> <%- t('profile.story.captures_pref') %></label>
         <script>
           (function () {
+            var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
             var c = document.querySelector('[data-story-pref="capturesOfMe"]');
             if (!c) return;
             c.addEventListener('change', function () {
               c.disabled = true;
               fetch('/api/stories/prefs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
                 body: JSON.stringify({ capturesOfMe: c.checked }) }).then(function (r) { return r.json(); })
-                .then(function (d) { c.disabled = false; if (!d.ok) { c.checked = !c.checked; alert(d.error || 'Not saved.'); } else location.reload(); })
+                .then(function (d) { c.disabled = false; if (!d.ok) { c.checked = !c.checked; alert(d.error || _t('js.profile.not_saved', 'Not saved.')); } else location.reload(); })
                 .catch(function () { c.disabled = false; c.checked = !c.checked; });
             });
           })();
@@ -328,11 +330,11 @@
   <% } %>
 
   <% if (previewing) { %>
-    <div class="pf-bar preview" role="status"><span>👁 Previewing your profile as a visitor sees it — hidden sections and “only me &amp; admins” panels are left out.</span>
-      <span class="btns"><a class="btn" href="<%= tabHref(active === 'posts' ? '' : active) %>">Back to my view</a><a class="btn" href="<%= base %>/edit#layout">Edit layout</a></span></div>
+    <div class="pf-bar preview" role="status"><span>👁 <%- t('profile.bar.previewing') %></span>
+      <span class="btns"><a class="btn" href="<%= tabHref(active === 'posts' ? '' : active) %>"><%- t('profile.bar.back') %></a><a class="btn" href="<%= base %>/edit#layout"><%- t('profile.bar.edit_layout') %></a></span></div>
   <% } else if (L.seesHidden && L.anyHidden) { %>
-    <div class="pf-bar"><span>👁 Greyed-out sections are hidden from visitors<%= isMe ? '' : ' (you see them as an admin)' %>.</span>
-      <% if (isMe) { %><span class="btns"><a class="btn" href="<%= base %>?preview=visitor">Preview as visitor</a><a class="btn" href="<%= base %>/edit#layout">Edit layout</a></span><% } %></div>
+    <div class="pf-bar"><span>👁 <%- isMe ? t('profile.bar.greyed') : t('profile.bar.greyed_admin') %></span>
+      <% if (isMe) { %><span class="btns"><a class="btn" href="<%= base %>?preview=visitor"><%- t('profile.bar.preview') %></a><a class="btn" href="<%= base %>/edit#layout"><%- t('profile.bar.edit_layout') %></a></span><% } %></div>
   <% } %>
 
   <%
@@ -341,9 +343,9 @@
   <% if (typeof analytics !== 'undefined' && analytics && !analytics.empty) { %>
     <%- include('partials/user-analytics', { a: analytics, L }) %>
   <% } else if (typeof analytics !== 'undefined' && analytics && analytics.empty) { %>
-    <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">Pepe hasn't recorded any Camfrog activity for <%= cf %> yet — it shows up here after some chat or mic time.</p></section>
+    <section class="card" id="analytics"><h2><%- t('profile.analytics') %></h2><p class="muted" style="margin:0"><%- t('profile.analytics.empty', { name: cf }) %></p></section>
   <% } else if (isMe && !cf) { %>
-    <section class="card" id="analytics"><h2>Analytics</h2><p class="muted" style="margin:0">No Camfrog name is linked to this account, so there's no chat or mic activity to show. Accounts Pepe makes in Camfrog are linked automatically.</p></section>
+    <section class="card" id="analytics"><h2><%- t('profile.analytics') %></h2><p class="muted" style="margin:0"><%- t('profile.analytics.unlinked') %></p></section>
   <% } %>
   <% };
     SEC.gtf = function () { %>
@@ -351,22 +353,22 @@
     <h2>Grand Theft Frogger</h2>
     <div class="gtf">
       <% if (showAv) { %>
-        <button type="button" class="gtf-port" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#2a2a2a' %>" aria-label="Open the GTF avatar"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></button>
+        <button type="button" class="gtf-port" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#2a2a2a' %>" aria-label="<%- t('profile.gtf.open_the') %>"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></button>
       <% } else { %><span></span><% } %>
       <div>
         <% if (sheet) { %>
-          <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= sheet.url %>">Heist sheet</a><%= sheet.cls ? ' · ' + sheet.cls : '' %><% if (showAv) { %> · <span class="muted"><%= configured ? avItems.length + ' wardrobe item' + (avItems.length === 1 ? '' : 's') : 'no wardrobe items yet' %></span><% } %></div>
+          <div style="font-size:16px;margin-bottom:8px">🥷 <a href="<%= sheet.url %>"><%- t('profile.gtf.heist_sheet') %></a><%= sheet.cls ? ' · ' + sheet.cls : '' %><% if (showAv) { %> · <span class="muted"><%- configured ? t('profile.gtf.n_items', { count: avItems.length }) : t('profile.gtf.no_items') %></span><% } %></div>
         <% } else { %>
-          <div class="muted" style="margin-bottom:8px">No heist sheet yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one.</div>
+          <div class="muted" style="margin-bottom:8px"><%- t('profile.gtf.no_sheet') %></div>
         <% } %>
         <% if (typeof gtf !== 'undefined' && gtf) { %>
           <div class="links">
-            <a href="/gtf">What is GTF?</a><a href="<%= gtf.heistHelp %>">Heists</a><a href="<%= gtf.turfGuide %>">Turf Wars</a>
-            <a href="<%= gtf.turfMap %>">Turf map</a><a href="<%= gtf.gangs %>">Gangs</a><a href="/bounties">Bounties</a>
+            <a href="/gtf"><%- t('profile.gtf.what') %></a><a href="<%= gtf.heistHelp %>"><%- t('profile.gtf.heists') %></a><a href="<%= gtf.turfGuide %>"><%- t('profile.gtf.turf_wars') %></a>
+            <a href="<%= gtf.turfMap %>"><%- t('profile.gtf.turf_map') %></a><a href="<%= gtf.gangs %>"><%- t('profile.gtf.gangs') %></a><a href="/bounties"><%- t('profile.gtf.bounties') %></a>
           </div>
         <% } %>
       </div>
-      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>">Open sheet →</a><% } %>
+      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>"><%- t('profile.gtf.open_sheet') %></a><% } %>
     </div>
   </section>
   <% };
@@ -375,9 +377,9 @@
   <% };
     SEC.badges = function () { %>
   <section class="card" id="badges">
-    <h2>Badges</h2>
+    <h2><%- t('profile.badges') %></h2>
     <% if (!badges.length) { %>
-      <p class="muted" style="margin:0">No badges yet. <a href="/achievements">How to earn them</a></p>
+      <p class="muted" style="margin:0"><%- t('profile.badges.none') %> <a href="/achievements"><%- t('profile.badges.how') %></a></p>
     <% } else { %>
       <div class="badges">
         <% badges.forEach((badge) => { %>
@@ -389,17 +391,17 @@
   <% };
   %>
   <% if (tabs.length) { %>
-    <nav class="pf-tabs" role="tablist" aria-label="Profile">
-      <% tabs.forEach((t) => { %>
-        <a class="pf-tab<%= t.hidden ? ' is-hidden' : '' %>" role="tab" id="tb-<%= t.id %>" href="<%= tabHref(t.id) %>" data-tab="<%= t.id %>" aria-controls="tab-<%= t.id %>"
-           aria-selected="<%= t.id === active ? 'true' : 'false' %>" tabindex="<%= t.id === active ? '0' : '-1' %>"<%- t.hidden ? ' title="Hidden from visitors"' : '' %>><span aria-hidden="true"><%= t.icon %></span><%= t.label %><% if (t.hidden) { %> <span class="eye" aria-label="hidden from visitors">👁</span><% } %></a>
+    <nav class="pf-tabs" role="tablist" aria-label="<%- t('profile.tabs_aria') %>">
+      <% tabs.forEach((tb) => { %>
+        <a class="pf-tab<%= tb.hidden ? ' is-hidden' : '' %>" role="tab" id="tb-<%= tb.id %>" href="<%= tabHref(tb.id) %>" data-tab="<%= tb.id %>" aria-controls="tab-<%= tb.id %>"
+           aria-selected="<%= tb.id === active ? 'true' : 'false' %>" tabindex="<%= tb.id === active ? '0' : '-1' %>"<%- tb.hidden ? ' title="' + t('profile.hidden_from_visitors') + '"' : '' %>><span aria-hidden="true"><%= tb.icon %></span><%- t.has('profile.tab.' + tb.id) ? t('profile.tab.' + tb.id) : t.esc(tb.label) %><% if (tb.hidden) { %> <span class="eye" aria-label="<%- t('profile.hidden_from_visitors_lc') %>">👁</span><% } %></a>
       <% }) %>
       <%# 1.99eq: the owner's private Saved captures (storykeep.js) - a page of its own, never shown to visitors %>
-      <% if (isMe) { %><a class="pf-tab" href="<%= base %>/saved" title="Story snaps and clips you saved - only you see these"><span aria-hidden="true">🔖</span>Saved</a><% } %>
+      <% if (isMe) { %><a class="pf-tab" href="<%= base %>/saved" title="<%- t('profile.tab.saved_title') %>"><span aria-hidden="true">🔖</span><%- t('profile.tab.saved') %></a><% } %>
     </nav>
-    <% tabs.forEach((t) => { %>
-      <div class="pf-panel" role="tabpanel" id="tab-<%= t.id %>" aria-labelledby="tb-<%= t.id %>" data-panel="<%= t.id %>"<%= t.id === active ? '' : ' hidden' %>>
-        <% t.sections.forEach((id) => { %>
+    <% tabs.forEach((tb) => { %>
+      <div class="pf-panel" role="tabpanel" id="tab-<%= tb.id %>" aria-labelledby="tb-<%= tb.id %>" data-panel="<%= tb.id %>"<%= tb.id === active ? '' : ' hidden' %>>
+        <% tb.sections.forEach((id) => { %>
           <div class="pf-slot<%= L.hidden(id) ? ' is-hidden' : '' %>" data-sec="<%= id %>"><%- hidTag(id) %>
           <% SEC[id](); %>
           </div>
@@ -407,38 +409,38 @@
       </div>
     <% }) %>
   <% } else { %>
-    <p class="pf-empty">Nothing else to see here yet.</p>
+    <p class="pf-empty"><%- t('profile.nothing_else') %></p>
   <% } %>
 </div>
 
 <% if (showAv) { %>
-<div id="gtfPop" class="gtf-pop" popover aria-label="Grand Theft Frogger avatar" data-gtf-pop data-gtf-state="<%= configured ? 'configured' : 'unconfigured' %>">
-  <div class="gp-head"><h2>🎮 Grand Theft Frogger</h2><button type="button" class="gp-x" popovertarget="gtfPop" popovertargetaction="hide" aria-label="Close">×</button></div>
+<div id="gtfPop" class="gtf-pop" popover aria-label="<%- t('profile.gtf.pop_aria') %>" data-gtf-pop data-gtf-state="<%= configured ? 'configured' : 'unconfigured' %>">
+  <div class="gp-head"><h2>🎮 Grand Theft Frogger</h2><button type="button" class="gp-x" popovertarget="gtfPop" popovertargetaction="hide" aria-label="<%- t('profile.close') %>">×</button></div>
   <div class="gp-body">
     <div class="gp-frame<%= av.svg ? '' : ' empty' %>" style="--rc:<%= top ? top.color : '#2a2a2a' %>"><% if (av.svg) { %><%- av.svg %><% } else { %><span aria-hidden="true">🐸</span><% } %></div>
     <div class="gp-info">
       <div class="gp-who"><%= displayname || usernameProfile %></div>
-      <% if (sheet && sheet.cls) { %><span class="gp-role" title="Heist role">🥷 <%= sheet.cls %></span><% } %>
+      <% if (sheet && sheet.cls) { %><span class="gp-role" title="<%- t('profile.gtf.heist_role') %>">🥷 <%= sheet.cls %></span><% } %>
       <% if (!av.svg) { %>
-        <p class="gp-none">No GTF avatar yet — <code>!sheet</code> in a Camfrog room with Pepe rolls one<%= isMe ? '' : ' for them' %>.</p>
+        <p class="gp-none"><%- isMe ? t('profile.gtf.no_avatar_me') : t('profile.gtf.no_avatar_them') %></p>
       <% } else if (configured) { %>
-        <ul class="gp-items" aria-label="Wardrobe">
+        <ul class="gp-items" aria-label="<%- t('profile.gtf.wardrobe') %>">
           <% avItems.forEach((it) => { %>
             <li style="--rc:<%= it.color %>" title="<%= it.desc %>"><span class="gp-slot"><%= it.slot %></span><span class="gp-name"><%= it.emoji %> <%= it.name %></span><span class="gp-rar"><%= it.rarity %></span></li>
           <% }) %>
         </ul>
       <% } else { %>
-        <p class="gp-none"><%= isMe ? 'You\'re not wearing anything from the GTF wardrobe yet — backgrounds, hats, masks and frames are in Cosmetics.' : 'Not wearing anything from the GTF wardrobe yet.' %></p>
+        <p class="gp-none"><%- isMe ? t('profile.gtf.not_wearing_me') : t('profile.gtf.not_wearing') %></p>
       <% } %>
     </div>
     <div class="gp-acts">
-      <% if (isMe) { %><a class="btn<%= configured ? '' : ' primary' %>" href="/cosmetics?tab=mine#tabs">🎨 Change look</a><% } else { %><a class="btn" href="/cosmetics">🎨 GTF wardrobe</a><% } %>
-      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>">🥷 Heist sheet</a><% } %>
+      <% if (isMe) { %><a class="btn<%= configured ? '' : ' primary' %>" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.gtf.change_look') %></a><% } else { %><a class="btn" href="/cosmetics">🎨 <%- t('profile.gtf.gtf_wardrobe') %></a><% } %>
+      <% if (sheet) { %><a class="btn" href="<%= sheet.url %>">🥷 <%- t('profile.gtf.heist_sheet') %></a><% } %>
     </div>
     <% if (isMe && av.svg && cf) { %>
       <details class="gp-regen">
-        <summary class="btn">🎲 New avatar…</summary>
-        <p>Pepe rolls you a brand-new pixel avatar for <b>20,000 PAT</b> (the same as <code>!avatar regen</code> in chat). Your equipped cosmetics stay on; your current face is gone for good.</p>
+        <summary class="btn">🎲 <%- t('profile.gtf.new_avatar') %></summary>
+        <p><%- t('profile.gtf.regen_info') %></p>
         <form method="post" action="/act">
           <input type="hidden" name="kind" value="cmd">
           <input type="hidden" name="cmd" value="avatar">
@@ -446,7 +448,7 @@
           <input type="hidden" name="tag" value="avatar">
           <input type="hidden" name="label" value="New GTF avatar">
           <input type="hidden" name="back" value="<%= base %>?gtf=1">
-          <button class="btn" type="submit">Yes, roll a new one</button>
+          <button class="btn" type="submit"><%- t('profile.gtf.regen_yes') %></button>
         </form>
       </details>
     <% } %>

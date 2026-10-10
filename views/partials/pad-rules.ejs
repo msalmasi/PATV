@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   A pad's Rules card (1.99dc padrules.js; 1.99dx: its own partial - the Feed's side column and the About tab).
   Locals: rules (padrules.effective: {source, name, url, intro, rules[]}), slug, canEdit (owner / admin: the
@@ -5,18 +6,18 @@
 %><% const RU = typeof rules !== 'undefined' ? rules : null; if (RU) {
   const id_ = typeof id !== 'undefined' && id ? id : null, open_ = typeof open !== 'undefined' && !!open, edit_ = typeof canEdit !== 'undefined' && !!canEdit; %>
     <details class="rf-rules"<% if (id_) { %> id="<%= id_ %>"<% } %><%= open_ ? ' open' : '' %>>
-      <summary><span class="rf-rules-t">📜 Rules</span><span class="rf-rules-s"><%= RU.source === 'pad' ? RU.rules.length + ' rule' + (RU.rules.length === 1 ? '' : 's') + ' for p/' + slug : 'This pad follows ' + RU.name %></span><%- typeof fx !== 'undefined' && fx && fx.icon ? fx.icon('chevron', 'chev') : '▾' %></summary>
+      <summary><span class="rf-rules-t"><%- t('pad.rules.title') %></span><span class="rf-rules-s"><%- RU.source === 'pad' ? t('pad.rules.count', { count: RU.rules.length, slug: slug }) : t('pad.rules.follows', { name: RU.name }) %></span><%- typeof fx !== 'undefined' && fx && fx.icon ? fx.icon('chevron', 'chev') : '▾' %></summary>
       <div class="rf-rules-b">
         <% if (RU.intro) { %><p class="rf-rules-intro"><%= RU.intro %></p><% } %>
         <% if (RU.source === 'pad') { %>
           <ol class="rf-rules-l"><% RU.rules.forEach((r) => { %><li><b><%= r.title %></b><% if (r.desc) { %><span><%= r.desc %></span><% } %></li><% }) %></ol>
-          <p class="rf-rules-f">Plus the site's hard limits from <a href="<%= RU.url %>">Padiquette</a> — no doxxing, threats, illegal content and the like — which hold in every pad.</p>
+          <p class="rf-rules-f"><%- t('pad.rules.plus_hard', { link: '<a href="' + t.esc(RU.url) + '">Padiquette</a>' }) %></p>
         <% } else { %>
-          <p class="rf-rules-f">No pad rules of its own, so the site-wide guidelines apply: be decent, swear if you like, tag NSFW, report rather than retaliate. The hard limits:</p>
+          <p class="rf-rules-f"><%- t('pad.rules.site_wide') %></p>
           <ul class="rf-rules-l hard"><% RU.rules.filter((r) => r.severity !== 'minor').forEach((r) => { %><li><b><%= r.title %></b></li><% }) %></ul>
-          <p class="rf-rules-f"><a href="<%= RU.url %>">Read Padiquette ›</a></p>
+          <p class="rf-rules-f"><a href="<%= RU.url %>"><%- t('pad.rules.read') %></a></p>
         <% } %>
-        <% if (edit_) { %><p class="rf-rules-f"><a href="/p/<%= encodeURIComponent(slug) %>/settings#rules">✏️ Edit this pad's rules</a></p><% } %>
+        <% if (edit_) { %><p class="rf-rules-f"><a href="/p/<%= encodeURIComponent(slug) %>/settings#rules"><%- t('pad.rules.edit') %></a></p><% } %>
       </div>
     </details>
     <% if (id_) { %><script>(function () { if (location.hash === '#<%= id_ %>') { var d = document.getElementById('<%= id_ %>'); if (d) d.open = true; } })();</script><% } %>

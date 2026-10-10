@@ -4,6 +4,7 @@
 //     itself is plain text ("plants, diy") - the server normalises it
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   if (window.__patvTags) return;
   window.__patvTags = true;
 
@@ -28,7 +29,7 @@
     var id = art && art.getAttribute('data-id');
     var tag = b.getAttribute('data-tagrm');
     if (!id || !tag) return;
-    if (!window.confirm('Remove the tag #' + tag + ' from this post? The author can\'t put it back.')) return;
+    if (!window.confirm(_t('js.feed.tags.remove', 'Remove the tag #{tag} from this post? The author can\'t put it back.', { tag: tag }))) return;
     b.disabled = true;
     api('/api/feed/posts/' + encodeURIComponent(id) + '/tags/remove', { tag: tag, room: b.getAttribute('data-room') || undefined }).then(function () {
       var w = b.closest('.ftag-w');
@@ -58,7 +59,7 @@
     list.forEach(function (t) {
       var c = document.createElement('button');
       c.type = 'button'; c.className = 'ftag sug'; c.textContent = '#' + t;
-      c.setAttribute('aria-label', 'Add the tag ' + t);
+      c.setAttribute('aria-label', _t('js.feed.tags.add', 'Add the tag {tag}', { tag: t }));
       c.addEventListener('click', function () {
         var h = current();
         if (h.length >= max || h.indexOf(t) >= 0) return;

@@ -16,6 +16,7 @@
 // Everything user-visible goes in via textContent.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var reduce = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, String(v)); } catch (e) { return null; } return null; }
@@ -92,15 +93,15 @@
     var showOff = !!(opts && opts.showOff);
     var home = slug, cur = slug, curName = null;     // the pad this player belongs to / the one it plays now
     var box = el('div', 'rb-audio hide');
-    box.setAttribute('role', 'group'); box.setAttribute('aria-label', 'Room audio');
-    var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', 'Listen live');
-    var state = el('span', 'rb-state', 'Room audio');
+    box.setAttribute('role', 'group'); box.setAttribute('aria-label', _t('js.pad.audio.room_audio', 'Room audio'));
+    var play = el('button', 'rb-btn rb-play', '▶'); play.type = 'button'; play.setAttribute('aria-label', _t('js.pad.audio.listen', 'Listen live'));
+    var state = el('span', 'rb-state', _t('js.pad.audio.room_audio', 'Room audio'));
     var modeEl = el('span', 'rb-mode hide');        // 1.99il: "⚡ live" (WebRTC) / "standard" (the MP3 relay)
     var meter = el('span', 'rb-meter'); meter.setAttribute('aria-hidden', 'true');
     var bars = [el('i'), el('i'), el('i'), el('i'), el('i')]; bars.forEach(function (b) { meter.appendChild(b); });
-    var mute = el('button', 'rb-btn rb-mute', '🔊'); mute.type = 'button'; mute.setAttribute('aria-label', 'Mute');
-    var vol = el('input', 'rb-vol'); vol.type = 'range'; vol.min = '0'; vol.max = '100'; vol.step = '5'; vol.setAttribute('aria-label', 'Volume');
-    var jump = el('button', 'rb-btn rb-jump hide', 'Jump to live'); jump.type = 'button';
+    var mute = el('button', 'rb-btn rb-mute', '🔊'); mute.type = 'button'; mute.setAttribute('aria-label', _t('js.pad.audio.mute', 'Mute'));
+    var vol = el('input', 'rb-vol'); vol.type = 'range'; vol.min = '0'; vol.max = '100'; vol.step = '5'; vol.setAttribute('aria-label', _t('js.pad.audio.volume', 'Volume'));
+    var jump = el('button', 'rb-btn rb-jump hide', _t('js.pad.audio.jump', 'Jump to live')); jump.type = 'button';
     var au = el('audio'); au.preload = 'none'; au.setAttribute('playsinline', '');
     // 1.99il: the WebRTC stream plays in its own element (never routed through Web Audio - the meter only taps it)
     var rau = el('audio'); rau.setAttribute('playsinline', ''); rau.autoplay = true;
@@ -123,17 +124,17 @@
       mode = m;
       modeEl.classList.toggle('hide', !m);
       modeEl.classList.toggle('rtc', m === 'rtc');
-      modeEl.textContent = m === 'rtc' ? '⚡ live' : m === 'mp3' ? 'standard' : '';
-      modeEl.title = m === 'rtc' ? 'Low latency (WebRTC): about half a second behind the room'
-        : m === 'mp3' ? 'Standard relay: about 1.5 s behind the room' : '';
+      modeEl.textContent = m === 'rtc' ? _t('js.pad.audio.mode_rtc', '⚡ live') : m === 'mp3' ? _t('js.pad.audio.mode_mp3', 'standard') : '';
+      modeEl.title = m === 'rtc' ? _t('js.pad.audio.mode_rtc_title', 'Low latency (WebRTC): about half a second behind the room')
+        : m === 'mp3' ? _t('js.pad.audio.mode_mp3_title', 'Standard relay: about 1.5 s behind the room') : '';
     }
     applyVolume();
     function paint() {
       play.textContent = playing ? '❚❚' : '▶';
-      play.setAttribute('aria-label', playing ? 'Pause room audio' : 'Listen live');
+      play.setAttribute('aria-label', playing ? _t('js.pad.audio.pause', 'Pause room audio') : _t('js.pad.audio.listen', 'Listen live'));
       play.setAttribute('aria-pressed', playing ? 'true' : 'false');
       mute.textContent = userMuted || (!IOS && userVol === 0) ? '🔇' : '🔊';
-      mute.setAttribute('aria-label', userMuted ? 'Unmute' : 'Mute');
+      mute.setAttribute('aria-label', userMuted ? _t('js.pad.audio.unmute', 'Unmute') : _t('js.pad.audio.mute', 'Mute'));
       mute.setAttribute('aria-pressed', userMuted ? 'true' : 'false');
       box.classList.toggle('on', playing);
     }
@@ -197,7 +198,7 @@
       }
       ms.addEventListener('sourceopen', function () {
         if (mse !== m) return;
-        try { m.sb = ms.addSourceBuffer('audio/mpeg'); } catch (e) { stop('this browser can\'t play the room audio'); return; }
+        try { m.sb = ms.addSourceBuffer('audio/mpeg'); } catch (e) { stop(_t('js.pad.audio.cant_play', 'this browser can\'t play the room audio')); return; }
         m.sb.addEventListener('updateend', pump);
         fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: m.ctl.signal }).then(function (r) {
           if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
@@ -205,13 +206,13 @@
           function next() {
             return rd.read().then(function (x) {
               if (mse !== m) { try { rd.cancel(); } catch (e) { /* gone */ } return; }
-              if (x.done) { if (playing) stop('audio stopped — ▶ to retry'); return; }
+              if (x.done) { if (playing) stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); return; }
               m.q.push(x.value); pump();
               return next();
             });
           }
           return next();
-        }).catch(function () { if (mse === m && playing) stop('audio stopped — ▶ to retry'); });
+        }).catch(function () { if (mse === m && playing) stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
       });
     }
     function rtcWanted() {
@@ -240,7 +241,7 @@
         .then(function (j) {
           if (gen !== startGen || !playing) throw 'stale';
           if (!j || !j.ok || !j.whep) throw (j && j.fallback) || 'error';
-          setState(j.ready ? 'connecting ⚡…' : 'starting ⚡…', 'wait');
+          setState(j.ready ? _t('js.pad.audio.connecting_rtc', 'connecting ⚡…') : _t('js.pad.audio.starting_rtc', 'starting ⚡…'), 'wait');
           return window.PATVRtc.listen(j.whep, rau, { timeout: RTC_TIMEOUT_MS });
         })
         .then(function (sess) {
@@ -248,11 +249,11 @@
           rtcSess = sess;
           setMode('rtc'); applyVolume(); wireRtcMeter(rau.srcObject);
           if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
-          startedAt = Date.now(); setState('LIVE', 'live'); meterLoop();
+          startedAt = Date.now(); setState(_t('js.pad.audio.live', 'LIVE'), 'live'); meterLoop();
           sess.onfail = function () {                 // lost after it started: carry on with the MP3 relay
             if (rtcSess !== sess) return;
             rtcSess = null; noteRtcFail('lost');
-            if (playing && gen === startGen) { setState('reconnecting…', 'wait'); startMp3(); }
+            if (playing && gen === startGen) { setState(_t('js.pad.audio.reconnecting', 'reconnecting…'), 'wait'); startMp3(); }
           };
         });
     }
@@ -264,7 +265,7 @@
       playing = true; paint(); store('patvRoomAudio', 1);
       if (rtcWanted()) {
         try { var pp = rau.play(); if (pp && pp.catch) pp.catch(function () {}); } catch (e) { /* unlock in the gesture (iOS) */ }
-        setState('connecting ⚡…', 'wait');
+        setState(_t('js.pad.audio.connecting_rtc', 'connecting ⚡…'), 'wait');
         startRtc(gen).catch(function (e) {
           var why = rtcWhy(e);
           if (gen !== startGen || !playing || why === 'stale') return;
@@ -288,20 +289,20 @@
       if (shared.ctx && shared.ctx.state === 'suspended') shared.ctx.resume();
       applyVolume();
       playing = true; paint(); store('patvRoomAudio', 1);
-      setState('connecting…', 'wait');
+      setState(_t('js.pad.audio.connecting', 'connecting…'), 'wait');
       var t0 = Date.now(), lastGot = 0, grewAt = Date.now();
       waitTimer = setInterval(function () {
         if (!playing) { clearInterval(waitTimer); return; }
         var got = ahead();
-        if (got > 0.2) setState('buffering ' + Math.min(100, Math.round(got / CUSHION * 100)) + '%', 'wait');
+        if (got > 0.2) setState(_t('js.pad.audio.buffering', 'buffering {pct}%', { pct: Math.min(100, Math.round(got / CUSHION * 100)) }), 'wait');
         // a paused element stops fetching after a couple of seconds - so "it stopped growing" counts as full too
         if (got > lastGot + 0.05) { lastGot = got; grewAt = Date.now(); }
         var full = got >= CUSHION || (got > 0.3 && Date.now() - grewAt > 1500);
         if (!full && Date.now() - t0 < 20000) return;
         clearInterval(waitTimer);
-        if (got <= 0) { stop('no audio from the room right now — ▶ to retry'); return; }
+        if (got <= 0) { stop(_t('js.pad.audio.no_audio', 'no audio from the room right now — ▶ to retry')); return; }
         au.play().then(function () { startedAt = Date.now() - au.currentTime * 1000; meterLoop(); })
-          .catch(function () { playing = false; paint(); setState('tap ▶ to listen', ''); });
+          .catch(function () { playing = false; paint(); setState(_t('js.pad.audio.tap_listen', 'tap ▶ to listen'), ''); });
       }, 250);
     }
     function stop(msg) {
@@ -309,7 +310,7 @@
       startGen++; rtcClose(); setMode(null);
       mseStop();
       au.pause(); au.removeAttribute('src'); au.load();
-      jump.classList.add('hide'); paint(); setState(msg || (curName ? curName + ' · audio' : 'Room audio'), '');
+      jump.classList.add('hide'); paint(); setState(msg || (curName ? _t('js.pad.audio.named_audio', '{name} · audio', { name: curName }) : _t('js.pad.audio.room_audio', 'Room audio')), '');
       notify();
     }
     var listeners = [];
@@ -322,10 +323,10 @@
       store('patvRoomVol', vol.value); applyVolume(); paint();
     });
     jump.addEventListener('click', function () { stop(); start(); });       // a fresh connection starts at live
-    au.addEventListener('waiting', function () { if (playing) setState('LIVE · buffering…', 'wait'); });
-    au.addEventListener('playing', function () { setState('LIVE', 'live'); });
-    au.addEventListener('error', function () { if (playing && mode === 'mp3') stop('audio stopped — ▶ to retry'); });
-    rau.addEventListener('playing', function () { if (playing && mode === 'rtc') setState('LIVE', 'live'); });
+    au.addEventListener('waiting', function () { if (playing) setState(_t('js.pad.audio.live_buffering', 'LIVE · buffering…'), 'wait'); });
+    au.addEventListener('playing', function () { setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
+    au.addEventListener('error', function () { if (playing && mode === 'mp3') stop(_t('js.pad.audio.stopped', 'audio stopped — ▶ to retry')); });
+    rau.addEventListener('playing', function () { if (playing && mode === 'rtc') setState(_t('js.pad.audio.live', 'LIVE'), 'live'); });
     function setRate(r) { try { if (au.playbackRate !== r) au.playbackRate = r; } catch (e) { /* fixed rate */ } }
     var lastEdge = 0;
     function edge() {
@@ -345,8 +346,8 @@
       var behind = (now - startedAt) / 1000 - au.currentTime;          // time lost to stalls (catch-up shrinks it)
       var lagging = behind >= 6 || a > EDGE_JUMP / 2;
       jump.classList.toggle('hide', behind < 6);
-      if (lagging && state.textContent === 'LIVE') setState('LIVE · catching up…', 'wait');
-      else if (!lagging && state.textContent === 'LIVE · catching up…') setState('LIVE', 'live');
+      if (lagging && state.textContent === _t('js.pad.audio.live', 'LIVE')) setState(_t('js.pad.audio.catching_up', 'LIVE · catching up…'), 'wait');
+      else if (!lagging && state.textContent === _t('js.pad.audio.catching_up', 'LIVE · catching up…')) setState(_t('js.pad.audio.live', 'LIVE'), 'live');
     }
     setInterval(edge, 500);
     box.rbEdge = edge;                          // tests drive it directly
@@ -359,10 +360,10 @@
       afterRec: function () {
         applyVolume(); paint();
         if (playing && mode === 'rtc' && rau.paused) {     // 1.99il: the WebRTC player, the same way
-          var rp = rau.play(); if (rp && rp.catch) rp.catch(function () { setState('tap ▶ to resume', ''); });
+          var rp = rau.play(); if (rp && rp.catch) rp.catch(function () { setState(_t('js.pad.audio.tap_resume', 'tap ▶ to resume'), ''); });
         } else if (playing && mode === 'mp3' && startedAt && au.paused) {          // (still cushioning: start() plays it)
-          au.play().then(function () { setState('LIVE', 'live'); })
-            .catch(function () { setState('tap ▶ to resume', ''); playing = false; paint(); });
+          au.play().then(function () { setState(_t('js.pad.audio.live', 'LIVE'), 'live'); })
+            .catch(function () { setState(_t('js.pad.audio.tap_resume', 'tap ▶ to resume'), ''); playing = false; paint(); });
         }
       },
     };
@@ -376,9 +377,9 @@
     };
     var painted = false, offWhy = null;
     function offReason(d) {
-      if (d && d.room && d.room.live === false) return 'room offline';
+      if (d && d.room && d.room.live === false) return _t('js.pad.audio.room_offline', 'room offline');
       // 1.99ia: switched on but not streaming (e.g. loopback mode streams only the audio room) - say why
-      return d && d.room && d.room.audioWhy ? 'audio unavailable: ' + String(d.room.audioWhy).slice(0, 120) : 'audio relay off';
+      return d && d.room && d.room.audioWhy ? _t('js.pad.audio.unavailable', 'audio unavailable: {why}', { why: String(d.room.audioWhy).slice(0, 120) }) : _t('js.pad.audio.relay_off', 'audio relay off');
     }
     function enable(on) {
       box.classList.toggle('off', !on);
@@ -394,7 +395,7 @@
         cur = s; curName = s === home ? null : (name || s);
         box.classList.remove('hide'); enable(true); play.title = '';
         start();
-        if (curName) setState('connecting to ' + curName + '…', 'wait');
+        if (curName) setState(_t('js.pad.audio.connecting_to', 'connecting to {name}…', { name: curName }), 'wait');
         notify();
         return true;
       },
@@ -411,10 +412,10 @@
         painted = true; available = on; offWhy = why;
         box.classList.toggle('hide', !on && !showOff);
         enable(on);
-        play.title = on ? '' : (why === 'room offline' ? 'The Camfrog room isn\'t live right now' : 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)');
+        play.title = on ? '' : (d && d.room && d.room.live === false ? _t('js.pad.audio.title_offline', 'The Camfrog room isn\'t live right now') : _t('js.pad.audio.title_relay_off', 'The room\'s audio relay is off (an admin turns it on with !bridge audio on)'));
         if (!on) { if (was) stop(); setState('🔇 ' + why, ''); }
-        else if (store('patvRoomAudio') === '1') setState('▶ to resume listening', '');
-        else setState('Room audio', '');
+        else if (store('patvRoomAudio') === '1') setState(_t('js.pad.audio.resume_listening', '▶ to resume listening'), '');
+        else setState(_t('js.pad.audio.room_audio', 'Room audio'), '');
       },
     };
   }
@@ -426,18 +427,18 @@
   // here, for you only; public answers land in the room feed.
   function relay(host, slug) {
     var form = el('form', 'rb-say hide'); form.setAttribute('autocomplete', 'off');
-    var lab = el('label', 'rb-sr', 'Message or !command to the Camfrog room'); lab.htmlFor = 'rbSay' + slug;
+    var lab = el('label', 'rb-sr', _t('js.pad.relay.label', 'Message or !command to the Camfrog room')); lab.htmlFor = 'rbSay' + slug;
     var wrap = el('div', 'rb-say-in');
     var inp = el('input'); inp.id = 'rbSay' + slug; inp.type = 'text'; inp.maxLength = 300; inp.required = true;
-    inp.placeholder = 'Say something — Pepe relays it as “🌐 you (web)”';
+    inp.placeholder = _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
     inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-autocomplete', 'list'); inp.setAttribute('aria-expanded', 'false');
-    var list = el('ul', 'rb-ac hide'); list.id = 'rbAc' + slug; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', 'Commands');
+    var list = el('ul', 'rb-ac hide'); list.id = 'rbAc' + slug; list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', _t('js.pad.relay.commands', 'Commands'));
     inp.setAttribute('aria-controls', list.id);
     wrap.appendChild(inp); wrap.appendChild(list);
-    var btn = el('button', 'rb-btn rb-send', 'Send'); btn.type = 'submit';
-    var hint = el('div', 'rb-hint hide', 'Type !commands to see what you can run here as your Camfrog name.');
+    var btn = el('button', 'rb-btn rb-send', _t('js.pad.relay.send', 'Send')); btn.type = 'submit';
+    var hint = el('div', 'rb-hint hide', _t('js.pad.relay.hint', 'Type !commands to see what you can run here as your Camfrog name.'));
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
-    var feed = el('ul', 'rb-cmdfeed'); feed.setAttribute('aria-live', 'polite'); feed.setAttribute('aria-label', 'Your commands');
+    var feed = el('ul', 'rb-cmdfeed'); feed.setAttribute('aria-live', 'polite'); feed.setAttribute('aria-label', _t('js.pad.relay.your_commands', 'Your commands'));
     form.appendChild(lab); form.appendChild(wrap); form.appendChild(btn);
     host.appendChild(form); host.appendChild(hint); host.appendChild(mine); host.appendChild(feed);
     var last = '', lastJs = [], cmds = null, local = [], acIdx = -1, acItems = [];
@@ -463,7 +464,7 @@
       names.forEach(function (c, i) {
         var li = el('li', 'rb-ac-it'); li.id = list.id + '-' + i; li.setAttribute('role', 'option');
         li.appendChild(el('span', 'rb-ac-c', c));
-        var p = c === '!commands' ? 'list them all' : fmtPrice(cmds[c]);
+        var p = c === '!commands' ? _t('js.pad.relay.list_all', 'list them all') : fmtPrice(cmds[c]);
         if (p) li.appendChild(el('span', 'rb-ac-p', p));
         li.addEventListener('mousedown', function (e) { e.preventDefault(); pick(c); });
         list.appendChild(li); acItems.push(li);
@@ -483,7 +484,7 @@
     function renderFeed(js) {
       feed.textContent = '';
       var rows = local.concat(js.filter(function (x) { return x.kind === 'cmd'; }).map(function (j) {
-        var st = j.state !== 'done' ? 'waiting for Pepe…' : (j.ok ? (j.replies && j.replies.length ? '' : (j.msg || 'done')) : 'not run — ' + (j.msg || 'refused'));
+        var st = j.state !== 'done' ? _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') : (j.ok ? (j.replies && j.replies.length ? '' : (j.msg || _t('js.pad.relay.done', 'done'))) : _t('js.pad.relay.not_run', 'not run — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') }));
         return { at: j.at, text: j.text, st: st, ok: j.state === 'done' ? j.ok : null, replies: j.replies || [] };
       })).sort(function (a, b) { return a.at - b.at; }).slice(-4);
       rows.forEach(function (r) {
@@ -508,11 +509,11 @@
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (d.ok && d.local) { inp.value = ''; local.push({ at: Date.now(), text: text, st: '', ok: true, replies: [d.reply || ''] }); local = local.slice(-2); renderFeed(lastJs); return; }
-          if (d.ok) { inp.value = ''; if (!isCmd) mine.textContent = '💬 your message: waiting for Pepe…'; return; }
-          if (isCmd) { local.push({ at: Date.now(), text: text, st: 'not sent — ' + (d.error || 'refused'), ok: false, replies: [] }); local = local.slice(-2); renderFeed(lastJs); }
-          else mine.textContent = '💬 ' + (d.error || 'not sent');
+          if (d.ok) { inp.value = ''; if (!isCmd) mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') }); return; }
+          if (isCmd) { local.push({ at: Date.now(), text: text, st: _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: d.error || _t('js.pad.relay.refused', 'refused') }), ok: false, replies: [] }); local = local.slice(-2); renderFeed(lastJs); }
+          else mine.textContent = '💬 ' + (d.error || _t('js.pad.relay.not_sent', 'not sent'));
         })
-        .catch(function () { mine.textContent = '💬 couldn\'t reach the site'; })
+        .catch(function () { mine.textContent = '💬 ' + _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); })
         .then(function () { setTimeout(function () { btn.disabled = false; }, isCmd ? 1500 : 3000); });
     });
     return {
@@ -520,13 +521,13 @@
         form.classList.toggle('hide', !(d && d.room && d.room.relay));
         cmds = d && d.room && d.room.cmds ? d.room.cmds : null;
         hint.classList.toggle('hide', !(cmds && d.room.relay));
-        inp.placeholder = cmds ? 'Say something, or type ! for commands — relayed as “🌐 you (web)”' : 'Say something — Pepe relays it as “🌐 you (web)”';
+        inp.placeholder = cmds ? _t('js.pad.relay.placeholder_cmds', 'Say something, or type ! for commands — relayed as “🌐 you (web)”') : _t('js.pad.relay.placeholder', 'Say something — Pepe relays it as “🌐 you (web)”');
         var js = (d && d.mine) || [], k = JSON.stringify(js);
         lastJs = js;
         if (k === last) return;
         last = k;
         var j = js.filter(function (x) { return x.kind === 'say'; }).pop();
-        if (j) mine.textContent = '💬 your message: ' + (j.state === 'done' ? (j.ok ? (j.msg || 'sent') : 'not sent — ' + (j.msg || 'refused')) : 'waiting for Pepe…');
+        if (j) mine.textContent = _t('js.pad.relay.your_msg', '💬 your message: {status}', { status: j.state === 'done' ? (j.ok ? (j.msg || _t('js.pad.relay.sent', 'sent')) : _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: j.msg || _t('js.pad.relay.refused', 'refused') })) : _t('js.pad.relay.waiting_pepe', 'waiting for Pepe…') });
         renderFeed(js);
       },
     };
@@ -540,25 +541,25 @@
   function clipStatus(j) {
     if (!j) return '';
     var s = j.state, m = String(j.msg || '');
-    if (s === 'pending' || s === 'claimed') return 'sent — waiting for Pepe…';
-    if (s === 'queued') return 'queued for the mic…';
-    if (s === 'waiting') return 'waiting for the mic…';
-    if (s === 'playing') return 'playing on the mic now';
-    if (j.ok) return m === 'played' ? 'played' : (m || 'sent');
-    if (/couldn.t get the mic|stayed busy|dropped/i.test(m)) return 'couldn’t get the mic, try again';
-    return 'not sent — ' + (m || 'refused');
+    if (s === 'pending' || s === 'claimed') return _t('js.pad.ptt.s_pending', 'sent — waiting for Pepe…');
+    if (s === 'queued') return _t('js.pad.ptt.s_queued', 'queued for the mic…');
+    if (s === 'waiting') return _t('js.pad.ptt.s_waiting', 'waiting for the mic…');
+    if (s === 'playing') return _t('js.pad.ptt.s_playing', 'playing on the mic now');
+    if (j.ok) return m === 'played' ? _t('js.pad.ptt.s_played', 'played') : (m || _t('js.pad.relay.sent', 'sent'));
+    if (/couldn.t get the mic|stayed busy|dropped/i.test(m)) return _t('js.pad.ptt.s_no_mic', 'couldn’t get the mic, try again');
+    return _t('js.pad.relay.not_sent_why', 'not sent — {why}', { why: m || _t('js.pad.relay.refused', 'refused') });
   }
 
   function ptt(host, slug) {
     var box = el('div', 'rb-ptt hide');
-    var btn = el('button', 'rb-btn rb-talk', '🎙 Hold to talk'); btn.type = 'button'; btn.setAttribute('aria-pressed', 'false');
-    var txt = el('span', 'rb-ptt-txt', 'up to 20 s · Pepe plays it on the mic when it\'s free');
+    var btn = el('button', 'rb-btn rb-talk', _t('js.pad.ptt.hold', '🎙 Hold to talk')); btn.type = 'button'; btn.setAttribute('aria-pressed', 'false');
+    var txt = el('span', 'rb-ptt-txt', _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free'));
     txt.setAttribute('aria-live', 'polite');
     var mine = el('div', 'rb-mine'); mine.setAttribute('aria-live', 'polite');
     // 1.99bx: which mic (shown once the browser has named them - after the first clip - and only
     // when there's more than one). The pick is an "ideal" deviceId: a stale / unplugged one quietly
     // falls back to the default, so the iOS gesture timing below is untouched.
-    var micSel = el('select', 'rb-micsel hide'); micSel.setAttribute('aria-label', 'Microphone for push-to-talk');
+    var micSel = el('select', 'rb-micsel hide'); micSel.setAttribute('aria-label', _t('js.pad.ptt.mic_label', 'Microphone for push-to-talk'));
     box.appendChild(btn); box.appendChild(micSel); box.appendChild(txt);
     function listMics() {
       var md = navigator.mediaDevices;
@@ -584,7 +585,7 @@
     var can = !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     var rec = null, stream = null, recAt = 0, recTimer = null, held = false, last = '';
     var opening = false, pressAt = 0, upAt = 0, tapMode = false;
-    function idle() { btn.setAttribute('aria-pressed', 'false'); btn.textContent = '🎙 Hold to talk'; }
+    function idle() { btn.setAttribute('aria-pressed', 'false'); btn.textContent = _t('js.pad.ptt.hold', '🎙 Hold to talk'); }
     // Every mic track stopped and the stream dropped (iOS keeps the page in play-and-record while any
     // track is alive), then the room player gets its playback session + the user's volume back.
     function release() {
@@ -600,20 +601,20 @@
       if (stream) release();
     }
     function send(chunks, mimeType, secs) {
-      if (secs < 0.7) { txt.textContent = 'too short — hold the button while you talk'; return; }
+      if (secs < 0.7) { txt.textContent = _t('js.pad.ptt.too_short', 'too short — hold the button while you talk'); return; }
       var blob = new Blob(chunks, { type: (mimeType || 'audio/webm').split(';')[0] });
-      txt.textContent = 'sending ' + secs.toFixed(0) + 's…';
+      txt.textContent = _t('js.pad.ptt.sending', 'sending {n}s…', { n: secs.toFixed(0) });
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/clip', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': blob.type, 'x-clip-secs': secs.toFixed(1) }, body: blob })
         .then(function (r) { return r.json(); })
-        .then(function (d) { txt.textContent = d.ok ? 'sent — Pepe plays it when the mic is free' : (d.error || 'not sent'); })
-        .catch(function () { txt.textContent = 'couldn\'t reach the site'; });
+        .then(function (d) { txt.textContent = d.ok ? _t('js.pad.ptt.sent', 'sent — Pepe plays it when the mic is free') : (d.error || _t('js.pad.relay.not_sent', 'not sent')); })
+        .catch(function () { txt.textContent = _t('js.pad.relay.unreachable', 'couldn\'t reach the site'); });
     }
     function start() {
       if (rec && rec.state === 'recording') return stop();
       if (opening) return;                       // a second press while the browser is still opening the mic
       opening = true; pressAt = Date.now();
       recSession.before();
-      txt.textContent = 'opening the microphone…';
+      txt.textContent = _t('js.pad.ptt.opening', 'opening the microphone…');
       navigator.mediaDevices.getUserMedia({ audio: micCons() }).then(function (s) {
         opening = false;
         stream = s;
@@ -623,13 +624,13 @@
         // 1.99bk this recorded on for 20 s with the room ducked; the next press "fixed" it.)
         if ((upAt && upAt - pressAt > 400) || document.hidden || box.classList.contains('hide')) {
           release();
-          txt.textContent = upAt ? 'keep holding until it says Recording, then talk' : 'up to 20 s · Pepe plays it on the mic when it\'s free';
+          txt.textContent = upAt ? _t('js.pad.ptt.keep_holding', 'keep holding until it says Recording, then talk') : _t('js.pad.ptt.upto', 'up to 20 s · Pepe plays it on the mic when it\'s free');
           return;
         }
         var type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm', 'audio/mp4'].filter(function (t) { return MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t); })[0] || '';
         var r, chunks = [], t0 = Date.now();
         try { r = new MediaRecorder(s, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined); }
-        catch (e) { release(); txt.textContent = 'this browser can\'t record a clip'; return; }
+        catch (e) { release(); txt.textContent = _t('js.pad.ptt.cant_record', 'this browser can\'t record a clip'); return; }
         rec = r; recAt = t0;
         r.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
         r.onstop = function () {
@@ -640,17 +641,17 @@
         r.start(250);
         tapMode = !!upAt;                        // a quick tap started it: tap again to send
         btn.setAttribute('aria-pressed', 'true');
-        btn.textContent = tapMode ? '⏺ Recording — tap to send' : '⏺ Recording — release to send';
-        txt.textContent = 'recording…';
+        btn.textContent = tapMode ? _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send') : _t('js.pad.ptt.rec_release', '⏺ Recording — release to send');
+        txt.textContent = _t('js.pad.ptt.recording', 'recording…');
         recTimer = setTimeout(stop, 20000);
-      }).catch(function () { opening = false; release(); txt.textContent = 'the browser didn\'t allow the microphone'; });
+      }).catch(function () { opening = false; release(); txt.textContent = _t('js.pad.ptt.denied', 'the browser didn\'t allow the microphone'); });
     }
     function up() {
       if (!held) return;
       held = false; upAt = Date.now();
       if (!rec || rec.state !== 'recording' || tapMode) return;
       if (Date.now() - recAt > 400) stop();
-      else { tapMode = true; btn.textContent = '⏺ Recording — tap to send'; }
+      else { tapMode = true; btn.textContent = _t('js.pad.ptt.rec_tap', '⏺ Recording — tap to send'); }
     }
     btn.addEventListener('pointerdown', function (e) { e.preventDefault(); held = true; upAt = 0; start(); });
     btn.addEventListener('pointerup', up);
@@ -668,7 +669,7 @@
         if (k === last) return;
         last = k;
         var j = js.filter(function (x) { return x.kind === 'clip'; }).pop();
-        mine.textContent = j ? '🎙 your clip: ' + clipStatus(j) : '';
+        mine.textContent = j ? _t('js.pad.ptt.your_clip', '🎙 your clip: {status}', { status: clipStatus(j) }) : '';
       },
     };
   }

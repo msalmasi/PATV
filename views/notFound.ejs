@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Not found', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('err.notfound.title'), user: user}) %>
 <style>
   .nf { max-width: 560px; margin: 48px auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; text-align: center; }
   .nf .frog { font-size: 64px; line-height: 1; }
@@ -11,12 +12,12 @@
 </style>
 <div class="nf">
   <div class="frog">🐸</div>
-  <h1><%= heading || 'Nothing here' %></h1>
-  <p><%- message || 'That page doesn&#39;t exist (or it moved).' %></p>
+  <h1><% if (heading) { %><%= heading %><% } else { %><%- t('err.notfound.heading') %><% } %></h1>
+  <p><%- message || t('err.notfound.message') %></p>
   <div class="go">
-    <a href="/">Home</a>
-    <a href="/markets">Markets</a>
-    <% if (user) { %><a href="/u/<%= encodeURIComponent(user) %>">Your profile</a><% } %>
+    <a href="/"><%- t('err.notfound.home') %></a>
+    <a href="/markets"><%- t('nav.markets') %></a>
+    <% if (user) { %><a href="/u/<%= encodeURIComponent(user) %>"><%- t('nav.your_profile') %></a><% } %>
   </div>
 </div>
 </body>

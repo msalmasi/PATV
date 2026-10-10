@@ -25,6 +25,7 @@
 // manage = the room owner / staff: feature / unfeature / cut buttons on the selected slot.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var PEPE_HLS = 'https://publicaccess.tv/hls/broadcast.m3u8';
   var YT_ID = /^[A-Za-z0-9_-]{11}$/, YT_CH = /^UC[A-Za-z0-9_-]{22}$/, TW_LOGIN = /^[A-Za-z0-9_]{3,25}$/, TW_VOD = /^[0-9]{5,12}$/;
   function embedUrl(e) {
@@ -70,7 +71,7 @@
       embedFor = url;
       o.embedHost.innerHTML = '';
       var f = document.createElement('iframe');
-      f.src = url; f.title = 'Stage video'; f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      f.src = url; f.title = _t('js.stage.room.video_title', 'Stage video'); f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
       f.setAttribute('allowfullscreen', ''); f.referrerPolicy = 'strict-origin-when-cross-origin';
       f.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
       o.embedHost.appendChild(f);
@@ -82,7 +83,7 @@
       var s = cur();
       if (s && s.embed) {
         player.stop(); setEmbed(s.embed);
-        o.onAir && o.onAir(true, (s.title ? s.title + ' · ' : '') + 'from ' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch'));
+        o.onAir && o.onAir(true, (s.title ? s.title + ' · ' : '') + _t('js.stage.room.from', 'from {platform}', { platform: s.embed.p === 'youtube' ? 'YouTube' : 'Twitch' }));
       } else if (s) {
         setEmbed(null);
         player.setSrc(s.hls, s.whep || null); if (loaded) player.start();
@@ -90,7 +91,7 @@
       } else if (pepeOn && pepeHere && pepeEmbed()) {
         // on air because HIS stream is; an admin chose to show it through YouTube / Twitch
         player.stop(); setEmbed(pepeEmbed());
-        o.onAir && o.onAir(true, 'via ' + (pepeSrc.label || (pepeSrc.embed.p === 'youtube' ? 'YouTube' : 'Twitch')));
+        o.onAir && o.onAir(true, _t('js.stage.room.via', 'via {name}', { name: pepeSrc.label || (pepeSrc.embed.p === 'youtube' ? 'YouTube' : 'Twitch') }));
       } else if (pepeOn && pepeHere) {
         setEmbed(null);
         player.setSrc(PEPE_HLS, pepeWhep); if (loaded) player.start();
@@ -98,7 +99,7 @@
       } else {
         setEmbed(null); player.stop();
         var any = slots.length > 0;
-        o.onAir && o.onAir(any, any ? (pepeHere ? "Pepe's stream is off air - pick a stream above" : 'pick a stream above') : 'nothing streaming right now');
+        o.onAir && o.onAir(any, any ? (pepeHere ? _t('js.stage.room.pepe_off_pick', 'Pepe\'s stream is off air - pick a stream above') : _t('js.stage.room.pick', 'pick a stream above')) : _t('js.stage.room.nothing', 'nothing streaming right now'));
       }
       renderTabs();
       if (o.onShow) o.onShow(selection());
@@ -108,7 +109,7 @@
     function selection() {
       var s = cur();
       if (s) return { stream: s.id, label: s.display, embed: !!s.embed, capture: !s.embed && s.capture !== false, nsfw: !!s.nsfw };
-      if (pepeHere && pepeOn) return { stream: 'pepe', label: "Pepe's stream", embed: false, capture: true, nsfw: false };
+      if (pepeHere && pepeOn) return { stream: 'pepe', label: _t('js.stage.room.pepe_stream', 'Pepe\'s stream'), embed: false, capture: true, nsfw: false };
       return null;
     }
     // 1.99fv: next to Pepe's tab while he's on air and showing - subtle: "Pepe's own stream" when an admin embed
@@ -117,12 +118,12 @@
       if (!pepeHere || !pepeOn || cur()) return '';
       var h = '';
       if (pepeSrc && pepeSrc.mode === 'embed') {
-        h += ownPepe ? '<button type="button" class="stx" data-pepe-src="embed">Back to ' + esc(pepeSrc.label || 'the embed') + '</button>'
-                     : '<button type="button" class="stx" data-pepe-src="own" title="Pepe\'s own stream: lower delay, ⚡, snaps / clips">Pepe\'s own stream</button>';
+        h += ownPepe ? '<button type="button" class="stx" data-pepe-src="embed">' + esc(_t('js.stage.room.back_to', 'Back to {name}', { name: pepeSrc.label || _t('js.stage.room.the_embed', 'the embed') })) + '</button>'
+                     : '<button type="button" class="stx" data-pepe-src="own" title="' + esc(_t('js.stage.room.own_title', 'Pepe\'s own stream: lower delay, ⚡, snaps / clips')) + '">' + esc(_t('js.stage.room.own', 'Pepe\'s own stream')) + '</button>';
       }
       var tw = pepeSrc && pepeSrc.twitch, pe = pepeEmbed();
       if (tw && tw.live && TW_LOGIN.test(tw.login || '') && !(pe && pe.p === 'twitch')) {
-        h += '<a class="stx" href="https://www.twitch.tv/' + esc(tw.login) + '" target="_blank" rel="noopener noreferrer" title="Also live on Twitch - open it there (Twitch chat)">🟣 Watch on Twitch ↗</a>';
+        h += '<a class="stx" href="https://www.twitch.tv/' + esc(tw.login) + '" target="_blank" rel="noopener noreferrer" title="' + esc(_t('js.stage.room.tw_title', 'Also live on Twitch - open it there (Twitch chat)')) + '">' + esc(_t('js.stage.room.tw_watch', '🟣 Watch on Twitch ↗')) + '</a>';
       }
       return h;
     }
@@ -134,20 +135,20 @@
       slots.forEach(function (s) {
         h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
              (s.title ? ' title="' + esc(s.title) + '"' : '') + '>' +
-             '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="featured">★</span>' : '') +
+             '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="' + esc(_t('js.stage.room.featured', 'featured')) + '">★</span>' : '') +
              '<span class="n' + (s.nameCss ? ' cx-name' : '') + '" style="' + esc(s.nameCss || '') + '">' + esc(s.display) + '</span>' +
              (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') + '</button>';
       });
       var pOn = pepeOn;                                     // 1.99fv: his own stream only - Twitch never counts
       if (pepeHere) h += '<button type="button" class="stab' + (pOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
-           '<span class="dot" aria-hidden="true"></span>🐸 Pepe\'s stream' + (pOn ? '' : ' (off air)') + '</button>';
+           '<span class="dot" aria-hidden="true"></span>' + esc(pOn ? _t('js.stage.room.pepe_tab', '🐸 Pepe\'s stream') : _t('js.stage.room.pepe_tab_off', '🐸 Pepe\'s stream (off air)')) + '</button>';
       h += pepeExtras();
       var s = cur();
       if (o.manage && s) {
-        h += '<span class="adm">' + (s.featured ? '<button type="button" data-act="unfeature" data-id="' + esc(s.id) + '">☆ Unfeature</button>'
-                                                : '<button type="button" data-act="feature" data-id="' + esc(s.id) + '">★ Feature</button>') +
-             '<button type="button" data-act="cut" data-id="' + esc(s.id) + '">✂ Cut</button>' +
-             '<button type="button" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">Cut + ban</button></span>';
+        h += '<span class="adm">' + (s.featured ? '<button type="button" data-act="unfeature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.unfeature', '☆ Unfeature')) + '</button>'
+                                                : '<button type="button" data-act="feature" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.feature', '★ Feature')) + '</button>') +
+             '<button type="button" data-act="cut" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut', '✂ Cut')) + '</button>' +
+             '<button type="button" data-act="cut" data-ban="1" data-id="' + esc(s.id) + '">' + esc(_t('js.stage.room.cut_ban', 'Cut + ban')) + '</button></span>';
       }
       box.innerHTML = h;
     }
@@ -160,14 +161,14 @@
         var act = b.getAttribute('data-act');
         if (!act) return;
         var ban = b.hasAttribute('data-ban');
-        var q = act === 'cut' ? (ban ? 'Cut this slot AND ban them from this pad\'s stage?' : 'Cut this slot? Unused PAT is refunded.')
-              : act === 'unfeature' ? 'Stop featuring this slot? It stays on as an ordinary one.' : 'Feature this slot? It becomes the pad\'s main stream.';
+        var q = act === 'cut' ? (ban ? _t('js.stage.room.q_cut_ban', 'Cut this slot AND ban them from this pad\'s stage?') : _t('js.stage.room.q_cut', 'Cut this slot? Unused PAT is refunded.'))
+              : act === 'unfeature' ? _t('js.stage.room.q_unfeature', 'Stop featuring this slot? It stays on as an ordinary one.') : _t('js.stage.room.q_feature', 'Feature this slot? It becomes the pad\'s main stream.');
         if (!confirm(q)) return;
         b.disabled = true;
         fetch('/api/stage/slots/' + encodeURIComponent(b.getAttribute('data-id')) + '/' + act, { method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ban: ban }) })
-          .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || 'Could not do that.'); poll(); })
-          .catch(function () { alert('Could not reach the server.'); b.disabled = false; });
+          .then(function (r) { return r.json(); }).then(function (j) { if (!j.ok) alert(j.error || _t('js.stage.room.e_do', 'Could not do that.')); poll(); })
+          .catch(function () { alert(_t('js.stage.room.e_net', 'Could not reach the server.')); b.disabled = false; });
       });
     }
     function poll() {

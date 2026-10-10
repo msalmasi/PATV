@@ -139,26 +139,37 @@ test("labels: the homepage's room card says 💬 ROOM ACTIVE / ROOM OFFLINE (nev
   assert.match(html, /<span class="pill off" id="lrLive"[^>]*>.*<span id="lrLiveTxt">ROOM OFFLINE<\/span>/);
   const src = fs.readFileSync(path.join(repo, "views", "home.ejs"), "utf8");
   assert.match(src, /'lrLive'\)\.className = 'pill ' \+ \(r\.live \? 'chat' : 'off'\)/);
-  assert.match(src, /lrLiveTxt'\)\.textContent = r\.live \? '💬 ROOM ACTIVE' : 'ROOM OFFLINE'/);
+  assert.match(src, /lrLiveTxt'\)\.textContent = r\.live \? _t\('js\.home\.room\.active', '💬 ROOM ACTIVE'\) : _t\('js\.home\.room\.offline', 'ROOM OFFLINE'\)/);
   assert.doesNotMatch(src, /lrLiveTxt'\)\.textContent = r\.live \? 'LIVE'/);
   assert.match(html, /\.hm \.pill\.chat \.dot \{ display: none; \}/);
 });
 
 test("labels: the pad page header pill and the /p guide use the same room wording; the stage pills keep ON AIR / ON STAGE", async () => {
-  const src = fs.readFileSync(path.join(repo, "views", "room.ejs"), "utf8");
-  assert.match(src, /id="rmLive" title="Is the Camfrog room active\? \(ON AIR on the stage = a video stream\)"/);
-  assert.match(src, /<span id="rmLiveTxt"><%= room\.live \? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %><\/span>/);
-  assert.match(src, /rmLiveTxt'\)\.textContent = r\.live \? '💬 ROOM ACTIVE' : 'ROOM OFFLINE'/);
-  assert.match(src, /live\.classList\.toggle\('chat', !!r\.live\)/);
-  assert.match(src, /id="rmStPillTxt"><%= live \? 'ON AIR' : 'OFF AIR' %>/, "the pad's stage pill is unchanged");
-  const guide = fs.readFileSync(path.join(repo, "views", "rooms.ejs"), "utf8");
-  assert.match(guide, /r\.live \? '💬 ROOM ACTIVE' : \(r\.bridged \? 'QUIET' : 'OFF THE WEB'\)/);
-  assert.match(guide, /📺 <%= liveNow\.length %> ON STAGE/);
-  assert.doesNotMatch(guide, /r\.live \? 'LIVE'/);
-  // a real render of the pad page header
+  // i18n: the wording comes from the catalog (locales/en.json), so the checks run on rendered pages; the live
+  // loop's client strings keep their English defaults in the page script
   const html = await ejs.renderFile(path.join(repo, "views", "room.ejs"), {
     user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 2, live: true, topic: "", platform: "camfrog",
       description: "Plants and chat", owner: "pb", ownerUser: "pb", camfrogName: "Plant Based Chatting" },
     initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: {}, latest: [] });
-  assert.match(html, /<span class="live chat" id="rmLive"[^>]*><span class="dot" aria-hidden="true"><\/span><span id="rmLiveTxt">💬 ROOM ACTIVE<\/span>/);
+  assert.match(html, /id="rmLive" title="Is the Camfrog room active\? \(ON AIR on the stage = a video stream\)"/);
+  assert.match(html, /rmLiveTxt'\)\.textContent = r\.live \? _t\('js\.pad\.room_active', '💬 ROOM ACTIVE'\) : _t\('js\.pad\.room_offline', 'ROOM OFFLINE'\)/);
+  assert.match(html, /live\.classList\.toggle\('chat', !!r\.live\)/);
+  assert.match(html, /<span id="rmStPillTxt">OFF AIR<\/span>/, "the pad's stage pill is unchanged");
+  assert.match(html, /rmStPillTxt'\)\.textContent = on \? _t\('js\.pad\.stage\.on_air', 'ON AIR'\) : _t\('js\.pad\.stage\.off_air', 'OFF AIR'\)/);
+  const off = (await ejs.renderFile(path.join(repo, "views", "room.ejs"), {
+    user: "u", signedIn: true, linked: true, room: { name: "Houseplants", slug: "plant_based_chatting", count: 0, live: false, topic: "", platform: "camfrog" },
+    initial: { room: {}, members: [], mic: [], feed: [], cursor: 0 }, onStage: false, stage: { active: true }, pepeHere: true, latest: [] }));
+  assert.match(off, /<span id="rmLiveTxt">ROOM OFFLINE<\/span>/);
+  assert.match(off, /<span id="rmStPillTxt">ON AIR<\/span>/);
+  const row = (id, extra) => ({ id, slug: id, title: id, live: false, bridged: true, count: 0, micCount: 0, slot_count: 1, now: [], next: [], ...extra });
+  const guide = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), {
+    user: null, signedIn: false, staff: false, owned: [], pepe: { active: false }, ul: (n) => String(n), rows: [
+      row("active", { live: true, count: 3, now: [{ username: "ann", display: "Ann", live: true, mode: "rtmp" }] }), row("quiet"), row("offweb", { bridged: false })] });
+  const pill = (txt) => new RegExp('<span class="pill [a-z]+" title="[^"]*"><span class="dot" aria-hidden="true"></span>' + txt + "</span>");
+  assert.match(guide, pill("💬 ROOM ACTIVE"));
+  assert.match(guide, pill("QUIET"));
+  assert.match(guide, pill("OFF THE WEB"));
+  assert.match(guide, /📺 1 ON STAGE<\/span>/);
+  assert.doesNotMatch(guide, pill("LIVE"));
+  // a real render of the pad page header
 });

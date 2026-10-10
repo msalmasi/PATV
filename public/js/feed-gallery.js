@@ -13,6 +13,7 @@
 // Every localStorage access is wrapped: it's a convenience only.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   if (window.__patvGallery) return;
   window.__patvGallery = true;
 
@@ -48,9 +49,9 @@
   function tile(x) {
     var li = el('li', 'fg-t' + (x.nsfw ? ' nsfw' : '')); li.setAttribute('data-id', x.id);
     var a = el('a', 'fg-a'); a.href = x.hop; a.setAttribute('data-fg-post', x.id);
-    var ic = x.clip ? ['📹', 'captured clip'] : x.video ? ['▶', 'video'] : x.multi ? ['❐', x.multi + ' pictures'] : null;
-    a.setAttribute('aria-label', (x.title || 'Post') + (ic ? ' (' + ic[1] + ')' : '') + (x.ai ? ' (AI-generated)' : '') + (x.nsfw ? ' (NSFW)' : '') +
-      ' - ' + (Number(x.score) || 0) + ' votes, ' + (Number(x.comments) || 0) + ' comments');
+    var ic = x.clip ? ['📹', _t('js.feed.gallery.clip', 'captured clip')] : x.video ? ['▶', _t('js.feed.gallery.video', 'video')] : x.multi ? ['❐', _t('js.feed.gallery.pictures', '{n} pictures', { n: x.multi })] : null;
+    a.setAttribute('aria-label', (x.title || _t('js.feed.gallery.post', 'Post')) + (ic ? ' (' + ic[1] + ')' : '') + (x.ai ? ' ' + _t('js.feed.gallery.ai', '(AI-generated)') : '') + (x.nsfw ? ' (NSFW)' : '') +
+      ' - ' + _t('js.feed.gallery.counts', '{score} votes, {comments} comments', { score: Number(x.score) || 0, comments: Number(x.comments) || 0 }));
     if (x.quote) {          // 1.99fp: a chat quote tile (its first line)
       var q = el('span', 'fg-q'); q.setAttribute('aria-hidden', 'true');
       q.appendChild(el('b', null, '<' + x.quote.name + '>')); q.appendChild(document.createTextNode(' ' + (x.quote.mic ? '🎙 ' : '') + x.quote.text));
@@ -72,7 +73,7 @@
     var p = fg.querySelector('.fg-text'), s = fg.querySelector('[data-fg-textn]');
     if (!p || !s) return;
     if (!t || !t.n) { p.hidden = true; return; }
-    s.textContent = t.n + (t.more ? '+' : '') + ' text post' + (t.n === 1 && !t.more ? '' : 's');
+    s.textContent = t.n === 1 && !t.more ? _t('js.feed.gallery.text_post_1', '1 text post') : _t('js.feed.gallery.text_posts', '{n} text posts', { n: t.n + (t.more ? '+' : '') });
     p.hidden = false;
   }
 
@@ -83,7 +84,7 @@
     if (!first && !cur) return;
     fg._busy = true;
     var st = fg.querySelector('.fg-status');
-    if (st) st.textContent = 'Loading…';
+    if (st) st.textContent = _t('js.feed.gallery.loading', 'Loading…');
     var url = '/api/feed/gallery' + qs({ scope: fg.getAttribute('data-fg-scope'), sort: fg.getAttribute('data-fg-sort'), t: fg.getAttribute('data-fg-t'), cursor: cur });
     fetch(url, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
       return r.json().catch(function () { return { ok: false }; }).then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || ('HTTP ' + r.status)); return d; });
@@ -103,7 +104,7 @@
       fg._busy = false;
       if (!st) return;
       st.textContent = '';
-      var b = el('button', null, 'Couldn\'t load (' + (e.message || 'error') + ') - try again'); b.type = 'button';
+      var b = el('button', null, _t('js.feed.gallery.load_failed', 'Couldn\'t load ({why}) - try again', { why: e.message || 'error' })); b.type = 'button';
       b.addEventListener('click', function () { load(fg, !fg.getAttribute('data-fg-loaded')); });
       st.appendChild(b);
     });
@@ -119,7 +120,7 @@
       }, { rootMargin: '600px 0px' });
       fg._io.observe(s);
     } else if (st && !st.querySelector('button')) {
-      var b = el('button', null, 'Load more'); b.type = 'button';
+      var b = el('button', null, _t('js.feed.gallery.load_more', 'Load more')); b.type = 'button';
       b.addEventListener('click', function () { b.remove(); load(fg, false); });
       st.appendChild(b);
     }

@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   A post's content (1.99ci: split out of feed-post.ejs so a crosspost can embed its original). Locals: q (a
   feedstore.decorate row), fx, embeds, host, detail_ (bool), signed (bool), url_ (the post's address, for the
@@ -11,28 +12,28 @@
   if (link_ && link_.embed) { try { player_ = embeds.playerUrl(link_.embed, host); } catch (e) { player_ = null; } }
 %>
 <% if (hide_) { %>
-  <div class="fp-nsfw-gate">This post is marked NSFW. <a href="/login?next=<%= encodeURIComponent(url_) %>">Sign in</a> to see it.</div>
+  <div class="fp-nsfw-gate"><%- t('feed.pc.nsfw_gate', { link: '<a href="/login?next=' + t.esc(encodeURIComponent(url_)) + '">' + t('feed.sign_in') + '</a>' }) %></div>
 <% } else { %>
   <%# 1.99fp: a chat quote (quotes.js) shows as the quote card instead of its plain-text body %>
   <% if (q.quote && q.quote.lines && q.quote.lines.length) { const ql_ = detail_ ? q.quote.lines : q.quote.lines.slice(0, 8); %>
-    <figure class="fq<%= detail_ ? ' is-detail' : '' %>" aria-label="Quote from the Camfrog room">
+    <figure class="fq<%= detail_ ? ' is-detail' : '' %>" aria-label="<%- t('feed.pc.quote_aria') %>">
       <blockquote class="fq-lines">
-        <% ql_.forEach((l) => { %><p class="fq-l<%= l.mic ? ' mic' : '' %><%= l.name === 'someone' ? ' anon' : '' %><%= l.me ? ' me' : '' %>"><span class="fq-n">&lt;<%= l.name %>&gt;</span> <% if (l.mic) { %><span class="fq-mic" title="Said on the mic (auto-transcribed)" aria-label="on the mic">🎙</span> <% } %><span class="fq-t"><%= l.text %></span><% if (detail_ && l.ts) { %> <time class="fq-ts" datetime="<%= new Date(l.ts).toISOString() %>"><%= new Date(l.ts).toISOString().slice(11, 16) %></time><% } %></p><% }) %>
-        <% if (q.quote.lines.length > ql_.length) { %><p class="fq-more"><a href="<%= url_ %>">+ <%= q.quote.lines.length - ql_.length %> more line<%= q.quote.lines.length - ql_.length === 1 ? '' : 's' %></a></p><% } %>
+        <% ql_.forEach((l) => { %><p class="fq-l<%= l.mic ? ' mic' : '' %><%= l.name === 'someone' ? ' anon' : '' %><%= l.me ? ' me' : '' %>"><span class="fq-n">&lt;<%= l.name %>&gt;</span> <% if (l.mic) { %><span class="fq-mic" title="<%- t('feed.pc.said_on_mic') %>" aria-label="<%- t('feed.pc.on_mic') %>">🎙</span> <% } %><span class="fq-t"><%= l.text %></span><% if (detail_ && l.ts) { %> <time class="fq-ts" datetime="<%= new Date(l.ts).toISOString() %>"><%= new Date(l.ts).toISOString().slice(11, 16) %></time><% } %></p><% }) %>
+        <% if (q.quote.lines.length > ql_.length) { %><p class="fq-more"><a href="<%= url_ %>">+ <%- t('feed.pc.more_lines', { count: q.quote.lines.length - ql_.length }) %></a></p><% } %>
       </blockquote>
-      <figcaption class="fq-cap">💬 <%= q.quote.speakers %> <%= q.quote.speakers === 1 ? 'person' : 'people' %> · <%= q.quote.lines.length %> line<%= q.quote.lines.length === 1 ? '' : 's' %><%= q.quote.source === 'chat' ? ' · clipped with !quote' : '' %></figcaption>
+      <figcaption class="fq-cap">💬 <%- t('feed.pc.people', { count: q.quote.speakers }) %> · <%- t('feed.pc.lines', { count: q.quote.lines.length }) %><%- q.quote.source === 'chat' ? ' · ' + t('feed.pc.clipped') : '' %></figcaption>
     </figure>
   <% } else if (q.body) { %><div class="fp-body<%= detail_ ? '' : ' clamp' %>"><%- fx.body(q.body) %></div><% } %>
   <% if (q.images.length) { %>
     <div class="fp-imgs n<%= Math.min(q.images.length, 4) %>">
-      <% q.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"<%- im.ai ? ' class="ai"' : '' %><%- detail_ ? '' : ' data-hop' %>><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="<%= im.ai ? 'AI-generated picture' : 'Picture' %> in <%= q.author.display %>'s post" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>><% if (im.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></a><% }) %>
+      <% q.images.forEach((im) => { %><a href="<%= fx.fileUrl(im.file) %>" target="_blank" rel="noopener"<%- im.ai ? ' class="ai"' : '' %><%- detail_ ? '' : ' data-hop' %>><img src="<%= fx.fileUrl(detail_ ? im.file : (im.thumb || im.file)) %>" alt="<%- t(im.ai ? 'feed.pc.alt_ai' : 'feed.pc.alt', { name: q.author.display }) %>" loading="lazy"<%= im.w && im.h ? ' width=' + im.w + ' height=' + im.h : '' %>><% if (im.ai) { %><span class="fp-ai-badge">✨ <%- t('feed.pc.ai') %></span><% } %></a><% }) %>
     </div>
   <% } %>
   <% q.video.forEach((v) => { %>
     <% if (!detail_) { %>
-    <a class="fp-video fp-vhop<%= v.ai ? ' ai' : '' %>" href="<%= url_ %>" data-hop aria-label="Play the video<%= q.title ? ': ' + q.title : '' %>"><% if (v.poster) { %><img src="<%= fx.fileUrl(v.poster) %>" alt="" loading="lazy"><% } else { %><video src="<%= fx.fileUrl(v.file) %>#t=0.5" preload="metadata" muted playsinline tabindex="-1" aria-hidden="true"></video><% } %><span class="fp-vplay" aria-hidden="true">▶</span><% if (v.secs) { %><span class="fp-vdur" aria-hidden="true"><%= fx.fmtSecs(v.secs) %></span><% } %><% if (v.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></a>
+    <a class="fp-video fp-vhop<%= v.ai ? ' ai' : '' %>" href="<%= url_ %>" data-hop aria-label="<%- q.title ? t('feed.pc.play_video_t', { title: q.title }) : t('feed.pc.play_video') %>"><% if (v.poster) { %><img src="<%= fx.fileUrl(v.poster) %>" alt="" loading="lazy"><% } else { %><video src="<%= fx.fileUrl(v.file) %>#t=0.5" preload="metadata" muted playsinline tabindex="-1" aria-hidden="true"></video><% } %><span class="fp-vplay" aria-hidden="true">▶</span><% if (v.secs) { %><span class="fp-vdur" aria-hidden="true"><%= fx.fmtSecs(v.secs) %></span><% } %><% if (v.ai) { %><span class="fp-ai-badge">✨ <%- t('feed.pc.ai') %></span><% } %></a>
     <% return; } %>
-    <div class="fp-video<%= v.ai ? ' ai' : '' %>"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video><% if (v.ai) { %><span class="fp-ai-badge">✨ AI-generated</span><% } %></div>
+    <div class="fp-video<%= v.ai ? ' ai' : '' %>"><video src="<%= fx.fileUrl(v.file) %>" controls playsinline preload="none"<% if (v.poster) { %> poster="<%= fx.fileUrl(v.poster) %>"<% } %>></video><% if (v.ai) { %><span class="fp-ai-badge">✨ <%- t('feed.pc.ai') %></span><% } %></div>
   <% }) %>
   <% q.audio.forEach((a) => { %>
     <%# 1.99fp: an audio capture's waveform card (media.js) rides along as its poster %>
@@ -42,14 +43,14 @@
       author hid it (they can switch it here) %>
   <% if (q.ai && q.ai.length) { %>
     <div class="fp-ai">
-      <% q.ai.forEach((a_, i_) => { const lbl_ = q.ai.length > 1 ? (a_.kind === 'video' ? 'video' : 'picture ' + (i_ + 1)) : ''; %>
+      <% q.ai.forEach((a_, i_) => { const lbl_ = q.ai.length > 1 ? (a_.kind === 'video' ? t('feed.pc.ai_video') : t('feed.pc.ai_picture', { n: i_ + 1 })) : '';      // HTML %>
         <div class="fp-ai-row">
           <% if (a_.ai.prompt && !(a_.ai.hidden && !q.mine)) { %>
-            <details class="fp-ai-p"><summary>✨ AI-generated<%= lbl_ ? ' ' + lbl_ : '' %> · prompt<%= a_.ai.hidden ? ' (hidden from others)' : '' %></summary><p><%= a_.ai.prompt %></p></details>
+            <details class="fp-ai-p"><summary>✨ <%- t('feed.pc.ai') %><%- lbl_ ? ' ' + lbl_ : '' %> · <%- t('feed.pc.prompt') %><%- a_.ai.hidden ? ' ' + t('feed.pc.prompt_hidden') : '' %></summary><p><%= a_.ai.prompt %></p></details>
           <% } else { %>
-            <span class="fp-ai-p mut">✨ AI-generated<%= lbl_ ? ' ' + lbl_ : '' %> · prompt not shown</span>
+            <span class="fp-ai-p mut">✨ <%- t('feed.pc.ai') %><%- lbl_ ? ' ' + lbl_ : '' %> · <%- t('feed.pc.prompt_not_shown') %></span>
           <% } %>
-          <% if (q.mine) { %><button type="button" class="fp-ai-tg" data-act="ai-prompt" data-att="<%= a_.id %>" data-show="<%= a_.ai.hidden ? '1' : '0' %>"><%= a_.ai.hidden ? 'Show the prompt' : 'Hide the prompt' %></button><% } %>
+          <% if (q.mine) { %><button type="button" class="fp-ai-tg" data-act="ai-prompt" data-att="<%= a_.id %>" data-show="<%= a_.ai.hidden ? '1' : '0' %>"><%- a_.ai.hidden ? t('feed.pc.show_prompt') : t('feed.pc.hide_prompt') %></button><% } %>
         </div>
       <% }) %>
     </div>
@@ -57,9 +58,9 @@
   <% if (link_) { %>
     <% if (player_) { %>
       <div class="fp-embed" data-src="<%= player_ %>">
-        <button type="button" class="fp-play" data-act="embed" aria-label="Play <%= embeds.label(link_.embed) %>">
+        <button type="button" class="fp-play" data-act="embed" aria-label="<%- t('feed.pc.play', { what: embeds.label(link_.embed) }) %>">
           <% if (link_.thumbFile) { %><img src="<%= fx.fileUrl(link_.thumbFile) %>" alt="" loading="lazy"><% } %>
-          <span class="tri">▶</span><span class="lbl"><%= embeds.label(link_.embed) %> · click to play</span>
+          <span class="tri">▶</span><span class="lbl"><%= embeds.label(link_.embed) %> · <%- t('feed.pc.click_play') %></span>
         </button>
       </div>
     <% } %>

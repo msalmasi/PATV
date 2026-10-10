@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   The pad page's Feed section (1.99bv; sort bar + owner tools 1.99ca; 1.99ck: the pad page /p/<slug> is the
   pad's feed view - Follow sits in the pad header). Locals: feed (feedweb.roomFeed), fx, embeds, host, room
@@ -12,9 +13,9 @@
 %>
 <link rel="stylesheet" href="/public/css/feed.css?v=17">
 <section class="card rf" id="feed" aria-labelledby="rfH">
-  <h2 id="rfH"><span>📝 p/<%= room.slug %> feed</span><small><a href="/feed">All pads ›</a></small></h2>
+  <h2 id="rfH"><span><%- t('pad.feed.title', { slug: room.slug }) %></span><small><a href="/feed"><%- t('pad.feed.all_pads') %></a></small></h2>
   <%# 1.99bz: Pepe's fresh captures from this pad's Camfrog room - tap one for the story viewer %>
-  <% if (!noStory_) { %><%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer, compose: !!F.viewer }, heading: '📸 Fresh captures', next: here_ + '#feed' }) %><% } %>
+  <% if (!noStory_) { %><%- include('story-strip', { story: { caps: F.caps, rooms: F.storyRooms || [], room: F.room, signed: !!F.viewer, compose: !!F.viewer }, heading: t('pad.story.fresh'), next: here_ + '#feed' }) %><% } %>
   <%# 1.99dc: the pad's rules (padrules.js) - its own, or Padiquette; owners edit them in the settings hub. Moderation
       and the announce switch moved there too (the header's "⚙ Pad settings"). %>
   <% if (!noRules_) { %><%- include('pad-rules', { fx, rules: F.rules, slug: room.slug, canEdit: !!(F.mod.owner || F.mod.admin), id: 'rules' }) %><% } %>
@@ -23,11 +24,11 @@
   <% const MF_ = F.flair || null; %>
   <% if (MF_ && (MF_.flair || MF_.choices.length)) { %>
     <div class="pfl" data-pfl="<%= room.slug %>">
-      <span>🎖️ Your flair here:</span>
-      <span data-pfl-cur><% if (MF_.flair) { %><%- fx.flair(MF_.flair) %><% } else { %><span class="mut">none</span><% } %></span>
-      <% if (MF_.locked) { %><small class="mut">given by a mod</small>
+      <span><%- t('pad.flair.here') %></span>
+      <span data-pfl-cur><% if (MF_.flair) { %><%- fx.flair(MF_.flair) %><% } else { %><span class="mut"><%- t('pad.flair.none') %></span><% } %></span>
+      <% if (MF_.locked) { %><small class="mut"><%- t('pad.flair.by_mod') %></small>
       <% } else if (MF_.choices.length) { %>
-        <select data-pfl-pick aria-label="Pick your flair in this pad"><option value="">No flair</option><% MF_.choices.forEach((c) => { %><option value="<%= c.id %>"<%= MF_.flair && MF_.flair.id === c.id ? ' selected' : '' %>><%= c.emoji ? c.emoji + ' ' : '' %><%= c.name %></option><% }) %></select>
+        <select data-pfl-pick aria-label="<%- t('pad.flair.pick') %>"><option value=""><%- t('pad.flair.no_flair') %></option><% MF_.choices.forEach((c) => { %><option value="<%= c.id %>"<%= MF_.flair && MF_.flair.id === c.id ? ' selected' : '' %>><%= c.emoji ? c.emoji + ' ' : '' %><%= c.name %></option><% }) %></select>
         <span class="pfl-msg" role="status" aria-live="polite"></span>
       <% } %>
     </div>
@@ -35,17 +36,17 @@
   <% } %>
   <%# 1.99iq: content tags - this pad's ?tag= filter and its popular tags (feedtags.js) %>
   <%- include('feed-tagbar', { fx, tag: F.tag || null, popular: F.popularTags || [], href: (t) => fq({ tag: t, fp: '' }), swap: false }) %>
-  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: 'Sort this pad\'s feed', hop: F.tag ? null : 'p/' + room.slug, gallery: F.gallery || null }) %>
+  <%- include('feed-sort', { fx, sort: F.sort, top: F.top, href: (s, t) => fq({ fsort: s, ft: t || '', fp: '' }), label: t('pad.feed.sort_label'), hop: F.tag ? null : 'p/' + room.slug, gallery: F.gallery || null }) %>
   <% if (!F.posts.length) { %>
-    <p class="empty"><%= F.page > 1 ? 'No more posts.' : F.tag ? 'No posts tagged #' + F.tag + ' in this pad yet.' : 'Nobody has posted in this pad yet. Be the first!' %></p>
+    <p class="empty"><%- F.page > 1 ? t('pad.feed.no_more') : F.tag ? t('pad.feed.no_tagged', { tag: F.tag }) : t('pad.feed.empty') %></p>
   <% } else { %>
     <div class="fd-list">
       <% F.posts.forEach((p) => { %><%- include('feed-post', { p, fx, embeds, host, viewer: F.viewer, modRooms: mods, detail: false, ctxRoom: F.room }) %><% }) %>
     </div>
   <% } %>
   <nav class="fd-pager">
-    <% if (F.page > 1) { %><a href="<%= fq({ fp: F.page - 1 }) %>">‹ Newer</a><% } %>
-    <% if (F.more) { %><a href="<%= fq({ fp: F.page + 1 }) %>">Older ›</a><% } %>
+    <% if (F.page > 1) { %><a href="<%= fq({ fp: F.page - 1 }) %>"><%- t('pad.feed.newer') %></a><% } %>
+    <% if (F.more) { %><a href="<%= fq({ fp: F.page + 1 }) %>"><%- t('pad.feed.older') %></a><% } %>
   </nav>
 </section>
 <%- include('feed-js', { viewer: F.viewer }) %>

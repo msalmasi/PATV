@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   Profile follow bits (1.99bz). 1.99ef: split by header zone so counts never sit among tags -
     part 'stat'    - the Followers / following cell in the stat strip (public counts; the owner's links to their lists)
@@ -8,14 +9,14 @@
 %><% const S_ = social; const back_ = '/u/' + encodeURIComponent(usernameProfile); const part_ = typeof part !== 'undefined' && part ? part : 'actions';
    const visitor_ = !S_.self && !previewing; %>
 <% if (part_ === 'stat') { const tag_ = S_.self && !previewing ? 'a' : 'div'; %>
-  <<%= tag_ %> class="ps fw"<%- tag_ === 'a' ? ' href="/feed/following" title="Your follow lists"' : '' %>><span class="k">Followers</span>
-    <span class="fw-row"><b data-follower-count-kind="user" data-follower-count-id="<%= usernameProfile %>"><%= S_.counts.followers.toLocaleString('en-US') %></b><small><%= S_.counts.following.toLocaleString('en-US') %> following</small></span></<%= tag_ %>>
+  <<%= tag_ %> class="ps fw"<%- tag_ === 'a' ? ' href="/feed/following" title="' + t('profile.menu.follow_lists') + '"' : '' %>><span class="k"><%- t('profile.followers') %></span>
+    <span class="fw-row"><b data-follower-count-kind="user" data-follower-count-id="<%= usernameProfile %>"><%= t.num(S_.counts.followers) %></b><small><%- t('profile.n_following', { n: t.num(S_.counts.following) }) %></small></span></<%= tag_ %>>
 <% } else if (part_ === 'menu') { %>
-  <% if (visitor_ && S_.signed) { %><hr><button type="button" role="menuitem" class="pf-report" data-safety="report-user" data-user="<%= usernameProfile %>" title="Report this account to the site admins">⚑ Report user</button>
+  <% if (visitor_ && S_.signed) { %><hr><button type="button" role="menuitem" class="pf-report" data-safety="report-user" data-user="<%= usernameProfile %>" title="<%- t('profile.report_title') %>">⚑ <%- t('profile.report_user') %></button>
   <script src="/public/js/feed-safety.js?v=4" defer></script><% } %>
 <% } else { %>
   <% if (visitor_) { %><%- include('follow-btn', { kind: 'user', id: usernameProfile, following: S_.following, signed: S_.signed, next: back_ }) %><% } %>
-  <% if (visitor_ && S_.signed) { %><a class="btn pf-msg" href="/messages?to=<%= encodeURIComponent(usernameProfile) %>" title="Send a direct message">💬 Message</a><% } %>
+  <% if (visitor_ && S_.signed) { %><a class="btn pf-msg" href="/messages?to=<%= encodeURIComponent(usernameProfile) %>" title="<%- t('profile.message_title') %>">💬 <%- t('profile.message') %></a><% } %>
   <link rel="stylesheet" href="/public/css/stories.css?v=6">
   <script src="/public/js/follow.js?v=1" defer></script>
 <% } %>

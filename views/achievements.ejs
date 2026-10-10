@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Achievements', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('ach.title'), user: user}) %>
     <link rel="stylesheet" href="/public/css/leaderboard.css">
 <style>
   .ach-wrap { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; }
@@ -19,21 +20,19 @@
   .ach.rare .nm { color: #b388ff; }
 </style>
 <div class="ach-wrap">
-  <h1>Achievements</h1>
-  <p class="ach-lede">Earned around PATV and in the Camfrog rooms — sign up, link your accounts, chat, grab the mic, use Pepe's commands, rob vaults, win games.
-    Every one comes with XP and a PAT bonus from the Federal Reserve, and Pepe announces it in the Camfrog room.
-    Link your Camfrog account on your profile to collect them here.</p>
+  <h1><%- t('ach.heading') %></h1>
+  <p class="ach-lede"><%- t('ach.lede') %></p>
   <% if (owned) { %>
-    <div class="ach-stats"><%= (typeof viewing !== 'undefined' && viewing && !own) ? viewing + ' has' : 'You have' %> <%= owned.size %> / <%= achievements.length %></div>
+    <div class="ach-stats"><%- (typeof viewing !== 'undefined' && viewing && !own) ? t('ach.they_have', { name: viewing, n: owned.size, total: achievements.length }) : t('ach.you_have', { n: owned.size, total: achievements.length }) %></div>
   <% } %>
   <% const siteIds = achievements.filter(a => a.site).map(a => a.id);
-     const groups = [["PATV", siteIds], ["Getting started", ["cf_linked","cf_cmd_1","cf_level_"]], ["Chat & streaks", ["cf_chat_","cf_streak_"]], ["On the mic", ["cf_mic_","cf_top_mic"]], ["Pepe's commands", ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ["The room & each other", ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ["Heists", ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ["The wheel", ["cf_spin","cf_wheel"]], ["Casino", ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ["Games & fights", ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ["Bounties", ["cf_bounty"]], ["Everything else", ["cf_"]]];
+     const groups = [[t.esc("PATV"), siteIds], [t('ach.group.start'), ["cf_linked","cf_cmd_1","cf_level_"]], [t('ach.group.chat'), ["cf_chat_","cf_streak_"]], [t('ach.group.mic'), ["cf_mic_","cf_top_mic"]], [t('ach.group.commands'), ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], [t('ach.group.room'), ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], [t('ach.group.heists'), ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], [t('ach.group.wheel'), ["cf_spin","cf_wheel"]], [t('ach.group.casino'), ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], [t('ach.group.games'), ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], [t('ach.group.bounties'), ["cf_bounty"]], [t('ach.group.else'), ["cf_"]]];
      const used = new Set(); %>
   <% groups.forEach(([title, prefixes]) => {
        const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
        items.forEach(a => used.add(a.id));
        if (!items.length) return; %>
-    <div class="ach-group"><%= title %></div>
+    <div class="ach-group"><%- title %></div>
     <div class="ach-grid">
       <% items.forEach(a => { const got = owned && owned.has(a.id); %>
         <div class="ach <%= a.tier %> <%= owned ? (got ? 'got' : 'locked') : '' %>">
@@ -42,7 +41,7 @@
             <div class="nm"><%= a.name %></div>
             <div class="ds"><%= a.desc %></div>
             <div class="rw"><%= [a.xp ? '+' + a.xp.toLocaleString() + ' XP' : '', a.pat ? '+' + a.pat.toLocaleString() + ' PAT' : ''].filter(Boolean).join(' · ') %></div>
-            <div class="hd"><%= (holders[a.id] || 0).toLocaleString() %> <%= (holders[a.id] || 0) === 1 ? 'player has' : 'players have' %> it</div>
+            <div class="hd"><%- t('ach.holders', { count: holders[a.id] || 0, n: (holders[a.id] || 0).toLocaleString() }) %></div>
           </div>
         </div>
       <% }) %>

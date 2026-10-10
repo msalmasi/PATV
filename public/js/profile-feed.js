@@ -6,6 +6,7 @@
   'use strict';
   if (window.__patvProfileFeed) return;
   window.__patvProfileFeed = true;
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   function api(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
       .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }).then(function (d) { if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status)); return d; }); });
@@ -46,7 +47,7 @@
     ev.preventDefault();
     var err = f.querySelector('.fc-err');
     var who = f.elements.user.value.trim().replace(/^@|^u\//, '');
-    if (!who) { err.textContent = 'Type a username.'; return; }
+    if (!who) { err.textContent = _t('js.profile.type_username', 'Type a username.'); return; }
     err.textContent = '';
     slug().then(function (s) { return api('/api/feed/ban', { user: who, room: s, days: parseInt(f.elements.days.value, 10) || 0, reason: 'blocked from commenting on a profile' }); })
       .then(function () { location.hash = 'profile-settings'; location.reload(); })

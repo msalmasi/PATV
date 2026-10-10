@@ -1,16 +1,17 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   1.99iq: a feed's content tags (feedtags.js): the active ?tag= filter ("Tagged #x · ✕ Show all") and the popular tags as
   chips. Locals: fx, tag (the active one or null), popular ([{tag, n}]), href(tag) -> this feed's address with ?tag= (''
   clears it), swap (bool: /feed's in-place links)
 %><% const sw_ = typeof swap !== 'undefined' && swap ? ' data-swap' : ''; const pop_ = (typeof popular !== 'undefined' && popular) || []; %>
 <% if (tag || pop_.length) { %>
-<nav class="ftg" aria-label="Tags">
+<nav class="ftg" aria-label="<%- t('feed.tags.aria') %>">
   <% if (tag) { %>
-    <span class="ftg-on">Tagged <b class="ftag on">#<%= tag %></b></span>
-    <a<%- sw_ %> class="ftg-clear" href="<%= href('') %>">✕ Show all posts</a>
+    <span class="ftg-on"><%- t('feed.tags.tagged') %> <b class="ftag on">#<%= tag %></b></span>
+    <a<%- sw_ %> class="ftg-clear" href="<%= href('') %>"><%- t('feed.tags.show_all') %></a>
   <% } else { %>
-    <span class="ftg-k">Popular tags</span>
-    <span class="ftg-list"><% pop_.forEach((t) => { %><a<%- sw_ %> class="ftag" href="<%= href(t.tag) %>" title="<%= t.n %> post<%= t.n === 1 ? '' : 's' %>">#<%= t.tag %></a><% }) %></span>
+    <span class="ftg-k"><%- t('feed.tags.popular') %></span>
+    <span class="ftg-list"><% pop_.forEach((tg) => { %><a<%- sw_ %> class="ftag" href="<%= href(tg.tag) %>" title="<%- t('feed.n_posts', { count: tg.n, n: tg.n }) %>">#<%= tg.tag %></a><% }) %></span>
   <% } %>
 </nav>
 <% } %>

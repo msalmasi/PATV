@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%# views/messages.ejs — the one inbox (messages.js, 1.99cp; notices merged in 1.99cu). The shell only: public/js/messages.js
     renders the conversation list, the chat and the 🔔 Notices pane (inbox.js) from `boot` (JSON, below) and the JSON APIs,
     with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
@@ -6,90 +7,90 @@
 <link rel="stylesheet" href="/public/css/messages.css?v=6">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
-  <aside class="dm-side" aria-label="Conversations">
+  <aside class="dm-side" aria-label="<%- t('msg.conversations') %>">
     <div class="dm-sh">
-      <h1>Messages</h1>
-      <button type="button" class="dm-ib" id="dmNewBtn" title="New conversation or group" aria-label="New conversation or group"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/></svg></button>
-      <% if (boot.pepe) { %><a class="dm-ib dm-pepe-btn" id="dmPepeBtn" href="/messages?to=<%= encodeURIComponent(boot.pepe.username) %>" title="Message Pepe - he answers in character" aria-label="Message Pepe">🐸</a><% } %>
-      <button type="button" class="dm-ib" id="dmGearBtn" title="Settings" aria-label="Message and notice settings"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
+      <h1><%- t('msg.title') %></h1>
+      <button type="button" class="dm-ib" id="dmNewBtn" title="<%- t('msg.new_conv_or_group') %>" aria-label="<%- t('msg.new_conv_or_group') %>"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17Z"/><path d="m14 8 3 3"/></svg></button>
+      <% if (boot.pepe) { %><a class="dm-ib dm-pepe-btn" id="dmPepeBtn" href="/messages?to=<%= encodeURIComponent(boot.pepe.username) %>" title="<%- t('msg.pepe_title') %>" aria-label="<%- t('msg.pepe_aria') %>">🐸</a><% } %>
+      <button type="button" class="dm-ib" id="dmGearBtn" title="<%- t('msg.settings') %>" aria-label="<%- t('msg.settings_aria') %>"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg></button>
     </div>
     <div class="dm-share" id="dmShare" role="status" hidden>
-      <span><b>Send a post:</b> pick a conversation (or press ✎). The link goes in the message box.</span>
-      <button type="button" id="dmShareX" aria-label="Cancel sharing">✕</button>
+      <span><%- t('msg.share') %></span>
+      <button type="button" id="dmShareX" aria-label="<%- t('msg.share_cancel') %>">✕</button>
     </div>
     <div class="dm-find-msg" id="dmFindMsg" role="status"></div>
     <div class="dm-pinned">
       <a class="dm-it dm-pin<%= _ntOn ? ' on' : '' %><%= _ntN ? ' unread' : '' %>" id="dmNotices" href="/messages/notices"<%- _ntOn ? ' aria-current="true"' : '' %>>
         <span class="av av-bell" aria-hidden="true">🔔</span>
-        <span class="nm">Notices</span>
+        <span class="nm"><%- t('msg.notices') %></span>
         <span class="tm" id="dmPinTm"></span>
-        <span class="sn" id="dmPinSn"><%= _nt.latest ? _nt.latest.title : 'From Pepe and the site' %></span>
-        <span class="bd" id="dmPinBd"<%- _ntN ? '' : ' hidden' %> aria-label="<%= _ntN %> unread"><%= _ntN > 99 ? '99+' : _ntN %></span>
+        <span class="sn" id="dmPinSn"><%- _nt.latest ? t.esc(_nt.latest.title) : t('msg.notices.sub') %></span>
+        <span class="bd" id="dmPinBd"<%- _ntN ? '' : ' hidden' %> aria-label="<%- t('msg.n_unread', { n: _ntN }) %>"><%= _ntN > 99 ? '99+' : _ntN %></span>
       </a>
     </div>
     <div class="dm-lscroll">
-      <ul class="dm-list" id="dmList" aria-label="Direct messages"></ul>
-      <p class="dm-empty" id="dmListEmpty" hidden>No conversations yet. Press <b>✎</b> to message someone, or use <b>Message</b> on a profile.</p>
+      <ul class="dm-list" id="dmList" aria-label="<%- t('msg.dms_aria') %>"></ul>
+      <p class="dm-empty" id="dmListEmpty" hidden><%- t('msg.list_empty') %></p>
     </div>
-    <p class="dm-e2e"><span aria-hidden="true">🔓</span> Messages aren't end-to-end encrypted. Site admins can read a message only if it's reported to them. <a href="/privacy#messages">Privacy</a></p>
+    <p class="dm-e2e"><span aria-hidden="true">🔓</span> <%- t('msg.e2e') %> <a href="/privacy#messages"><%- t('msg.privacy') %></a></p>
   </aside>
 
-  <section class="dm-chat" id="dmChat" aria-label="Chat">
+  <section class="dm-chat" id="dmChat" aria-label="<%- t('msg.chat_aria') %>">
     <div class="dm-none" id="dmNone"<%- _ntOn ? ' hidden' : '' %>>
       <div class="big" aria-hidden="true">💬</div>
-      <p>Pick a conversation, or press <b>✎</b> to start one.</p>
+      <p><%- t('msg.none') %></p>
     </div>
     <header class="dm-ch" id="dmHead" hidden>
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
     <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
-      <button type="button" class="dm-back" id="dmBack" aria-label="Back to conversations"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
+      <button type="button" class="dm-back" id="dmBack" aria-label="<%- t('msg.back') %>"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
       <span class="av av-l" id="dmHeadAv" aria-hidden="true"></span>
       <div class="dm-who"><a class="dm-name" id="dmHeadName" href="#"></a><span class="dm-handle" id="dmHeadHandle"></span></div>
-      <span class="dm-muted" id="dmHeadMuted" title="Muted: no Camfrog alerts" hidden>🔕</span>
+      <span class="dm-muted" id="dmHeadMuted" title="<%- t('msg.muted_title') %>" hidden>🔕</span>
       <details class="dm-menu" id="dmMenu">
-        <summary aria-label="Conversation options"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor"/></svg></summary>
+        <summary aria-label="<%- t('msg.menu_aria') %>"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor"/></svg></summary>
         <div class="dm-pop" role="menu">
-          <a role="menuitem" id="dmMProfile" href="#" data-for="dm">View profile</a>
-          <button type="button" role="menuitem" data-dm="members" data-for="group">Members &amp; add people</button>
-          <button type="button" role="menuitem" data-dm="rename" data-for="group">Rename group</button>
-          <button type="button" role="menuitem" data-dm="mute" id="dmMMute">Mute</button>
-          <button type="button" role="menuitem" data-dm="clear">Clear history (for you)</button>
-          <button type="button" role="menuitem" data-dm="hide">Delete conversation (for you)</button>
-          <button type="button" role="menuitem" class="danger" data-dm="leave" data-for="group">Leave group</button>
-          <button type="button" role="menuitem" class="danger" data-dm="block" id="dmMBlock" data-for="dm">Block</button>
+          <a role="menuitem" id="dmMProfile" href="#" data-for="dm"><%- t('msg.menu.profile') %></a>
+          <button type="button" role="menuitem" data-dm="members" data-for="group"><%- t('msg.menu.members') %></button>
+          <button type="button" role="menuitem" data-dm="rename" data-for="group"><%- t('msg.menu.rename') %></button>
+          <button type="button" role="menuitem" data-dm="mute" id="dmMMute"><%- t('msg.menu.mute') %></button>
+          <button type="button" role="menuitem" data-dm="clear"><%- t('msg.menu.clear') %></button>
+          <button type="button" role="menuitem" data-dm="hide"><%- t('msg.menu.hide') %></button>
+          <button type="button" role="menuitem" class="danger" data-dm="leave" data-for="group"><%- t('msg.menu.leave') %></button>
+          <button type="button" role="menuitem" class="danger" data-dm="block" id="dmMBlock" data-for="dm"><%- t('msg.menu.block') %></button>
         </div>
       </details>
     </header>
     <div class="dm-scroll" id="dmScroll" hidden>
-      <div class="dm-older" id="dmOlder" hidden>Loading older messages…</div>
+      <div class="dm-older" id="dmOlder" hidden><%- t('msg.loading_older') %></div>
       <div class="dm-start" id="dmStart" hidden></div>
       <div class="dm-msgs" id="dmMsgs" role="log" aria-live="polite" aria-relevant="additions"></div>
     </div>
     <form class="dm-compose" id="dmCompose" hidden autocomplete="off">
       <div class="dm-pepe" id="dmPepeNote" role="note" hidden></div>
       <div class="dm-refuse" id="dmRefuse" role="status" hidden></div>
-      <ul class="dm-tray" id="dmTray" aria-label="Pictures to send" hidden></ul>
+      <ul class="dm-tray" id="dmTray" aria-label="<%- t('msg.tray_aria') %>" hidden></ul>
       <div class="dm-cbox">
-        <button type="button" class="dm-att" id="dmAttach" title="Add pictures (up to <%= boot.maxPics %>)" aria-label="Add pictures"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="m21 16-5.2-5.2a1.5 1.5 0 0 0-2.1 0L5 19.5"/></svg></button>
+        <button type="button" class="dm-att" id="dmAttach" title="<%- t('msg.add_pics_title', { n: boot.maxPics }) %>" aria-label="<%- t('msg.add_pics') %>"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="m21 16-5.2-5.2a1.5 1.5 0 0 0-2.1 0L5 19.5"/></svg></button>
         <input type="file" id="dmFile" accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif" multiple hidden>
-        <button type="button" class="dm-att" data-sticker-picker="#dmText" aria-expanded="false" title="Stickers" aria-label="Stickers">🧸</button>
-        <label for="dmText" class="vh">Message</label>
-        <textarea id="dmText" rows="1" maxlength="<%= boot.maxLen %>" placeholder="Message"></textarea>
-        <button type="submit" id="dmSend" aria-label="Send"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 20 4l-4 16-4-7Z"/><path d="m12 13 8-9"/></svg></button>
+        <button type="button" class="dm-att" data-sticker-picker="#dmText" aria-expanded="false" title="<%- t('msg.stickers') %>" aria-label="<%- t('msg.stickers') %>">🧸</button>
+        <label for="dmText" class="vh"><%- t('msg.message') %></label>
+        <textarea id="dmText" rows="1" maxlength="<%= boot.maxLen %>" placeholder="<%- t('msg.message') %>"></textarea>
+        <button type="submit" id="dmSend" aria-label="<%- t('msg.send') %>"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12 20 4l-4 16-4-7Z"/><path d="m12 13 8-9"/></svg></button>
       </div>
-      <div class="dm-hint"><span><b>Enter</b> sends · <b>Shift+Enter</b> new line</span><span id="dmErr" class="dm-err" role="alert"></span></div>
+      <div class="dm-hint"><span><%- t('msg.hint') %></span><span id="dmErr" class="dm-err" role="alert"></span></div>
     </form>
 
     <%# the 🔔 Notices pane (inbox.js): filled by public/js/messages.js from boot.notices and /api/inbox/notices %>
     <section class="dm-nt" id="dmNt" aria-labelledby="dmNtT"<%- _ntOn ? '' : ' hidden' %>>
       <header class="dm-ch">
-        <button type="button" class="dm-back" id="dmNtBack" aria-label="Back to conversations"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
+        <button type="button" class="dm-back" id="dmNtBack" aria-label="<%- t('msg.back') %>"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 8 12l7 7"/></svg></button>
         <span class="av av-l av-bell" aria-hidden="true">🔔</span>
-        <div class="dm-who"><h2 class="dm-name" id="dmNtT">Notices</h2><span class="dm-handle" id="dmNtSub">From Pepe and the site</span></div>
-        <button type="button" class="dm-btn" id="dmNtAll"<%- _ntN ? '' : ' disabled' %>>✓ Mark all read</button>
+        <div class="dm-who"><h2 class="dm-name" id="dmNtT"><%- t('msg.notices') %></h2><span class="dm-handle" id="dmNtSub"><%- t('msg.notices.sub') %></span></div>
+        <button type="button" class="dm-btn" id="dmNtAll"<%- _ntN ? '' : ' disabled' %>>✓ <%- t('msg.notices.mark_all') %></button>
       </header>
-      <nav class="dm-chips" id="dmNtChips" aria-label="Filter notices by category"></nav>
+      <nav class="dm-chips" id="dmNtChips" aria-label="<%- t('msg.notices.filter_aria') %>"></nav>
       <div class="dm-nt-msg" id="dmNtMsg" role="status" hidden></div>
       <div class="dm-nt-scroll" id="dmNtScroll">
         <ul class="dm-nt-list" id="dmNtList"></ul>
@@ -101,87 +102,87 @@
 
   <dialog class="dm-dlg" id="dmSettings" aria-labelledby="dmSetT">
     <form method="dialog" id="dmSetForm">
-      <h2 id="dmSetT">Settings</h2>
+      <h2 id="dmSetT"><%- t('msg.settings') %></h2>
       <fieldset>
-        <legend>Who can message me</legend>
-        <label class="rd"><input type="radio" name="who" value="everyone"> Everyone <span class="mut">(new accounts only if you follow them)</span></label>
-        <label class="rd"><input type="radio" name="who" value="following"> Only people I follow</label>
-        <label class="rd"><input type="radio" name="who" value="nobody"> Nobody <span class="mut">(people you write to can still reply)</span></label>
+        <legend><%- t('msg.set.who') %></legend>
+        <label class="rd"><input type="radio" name="who" value="everyone"> <%- t('msg.set.everyone') %> <span class="mut"><%- t('msg.set.everyone_note') %></span></label>
+        <label class="rd"><input type="radio" name="who" value="following"> <%- t('msg.set.following') %></label>
+        <label class="rd"><input type="radio" name="who" value="nobody"> <%- t('msg.set.nobody') %> <span class="mut"><%- t('msg.set.nobody_note') %></span></label>
       </fieldset>
       <fieldset>
-        <legend>Camfrog alerts for messages</legend>
-        <label class="ck"><input type="checkbox" name="alerts"> Pepe PMs me in Camfrog when I get a message I haven't read on the site</label>
-        <label class="ck sub"><input type="checkbox" name="nopreview"> Alert without preview (who it's from, not what it says)</label>
-        <p class="mut" id="dmSetCf">At most one alert per conversation every 10 minutes, and only in a room where you are.</p>
+        <legend><%- t('msg.set.alerts_h') %></legend>
+        <label class="ck"><input type="checkbox" name="alerts"> <%- t('msg.set.alerts') %></label>
+        <label class="ck sub"><input type="checkbox" name="nopreview"> <%- t('msg.set.nopreview') %></label>
+        <p class="mut" id="dmSetCf"><%- t('msg.set.alerts_note') %></p>
       </fieldset>
       <fieldset>
-        <legend>Camfrog PMs for notices</legend>
-        <p class="mut" style="margin:2px 0 6px">Every notice always lands in 🔔 Notices. Untick a category and Pepe stops PMing you about it in Camfrog (he only PMs you in a room you're in).</p>
+        <legend><%- t('msg.set.pms_h') %></legend>
+        <p class="mut" style="margin:2px 0 6px"><%- t('msg.set.pms_note') %></p>
         <div class="dm-ntprefs" id="dmNtPrefs"></div>
-        <p class="mut" style="margin:6px 0 0">Shop emails and PMs also follow your <a href="/shop/seller#notify">shop settings</a>.</p>
+        <p class="mut" style="margin:6px 0 0"><%- t('msg.set.shop', { link: '<a href="/shop/seller#notify">' + t('msg.set.shop_link') + '</a>' }) %></p>
       </fieldset>
       <fieldset>
-        <legend>Room mentions</legend>
-        <p class="mut" style="margin:2px 0 0">📣 Get a 🔔 notice when someone says your name (or words you pick) in a Camfrog room Pepe bridges: <a href="/settings/mentions">Mention alerts</a>.</p>
+        <legend><%- t('msg.set.mentions_h') %></legend>
+        <p class="mut" style="margin:2px 0 0">📣 <%- t('msg.set.mentions', { link: '<a href="/settings/mentions">' + t('msg.set.mentions_link') + '</a>' }) %></p>
       </fieldset>
       <fieldset>
-        <legend>Blocked</legend>
+        <legend><%- t('msg.set.blocked_h') %></legend>
         <ul class="dm-blocks" id="dmBlocks"></ul>
-        <p class="mut">Blocking stops messages both ways. They aren't told.</p>
+        <p class="mut"><%- t('msg.set.blocked_note') %></p>
       </fieldset>
-      <div class="dm-dlg-acts"><span class="dm-err" id="dmSetMsg" role="status"></span><button type="button" value="cancel" id="dmSetClose">Close</button><button type="submit" value="save" class="pri">Save</button></div>
+      <div class="dm-dlg-acts"><span class="dm-err" id="dmSetMsg" role="status"></span><button type="button" value="cancel" id="dmSetClose"><%- t('msg.close') %></button><button type="submit" value="save" class="pri"><%- t('msg.save') %></button></div>
     </form>
   </dialog>
 
   <dialog class="dm-dlg" id="dmReport" aria-labelledby="dmRepT">
     <form method="dialog" id="dmRepForm">
-      <h2 id="dmRepT">Report this message</h2>
-      <p class="mut">It goes to the site admins only (never pad owners). The sender isn't told who reported it. An admin can then read this one message.</p>
+      <h2 id="dmRepT"><%- t('msg.report.h') %></h2>
+      <p class="mut"><%- t('msg.report.note') %></p>
       <div class="dm-reasons" id="dmReasons"></div>
-      <label class="nt">Anything to add? <span class="mut">(optional)</span><textarea name="note" maxlength="300" rows="2"></textarea></label>
-      <div class="dm-dlg-acts"><span class="dm-err" id="dmRepMsg" role="status"></span><button type="button" id="dmRepClose">Cancel</button><button type="submit" class="pri">Report</button></div>
+      <label class="nt"><%- t('msg.report.add') %> <span class="mut"><%- t('msg.optional') %></span><textarea name="note" maxlength="300" rows="2"></textarea></label>
+      <div class="dm-dlg-acts"><span class="dm-err" id="dmRepMsg" role="status"></span><button type="button" id="dmRepClose"><%- t('msg.cancel') %></button><button type="submit" class="pri"><%- t('msg.report.button') %></button></div>
     </form>
   </dialog>
 
   <%# 1.99cz: ✎ - one person = a direct message, 2-9 people = a group %>
   <dialog class="dm-dlg" id="dmNewDlg" aria-labelledby="dmNewT">
     <form method="dialog" id="dmNewForm" autocomplete="off">
-      <h2 id="dmNewT">New conversation</h2>
-      <p class="mut">Add one person for a direct message, or <%= boot.groupMin - 1 %>-<%= boot.groupMax - 1 %> people for a group.</p>
+      <h2 id="dmNewT"><%- t('msg.new.h') %></h2>
+      <p class="mut"><%- t('msg.new.note', { min: boot.groupMin - 1, max: boot.groupMax - 1 }) %></p>
       <div class="dm-pick">
-        <label for="dmNewIn" class="vh">Add someone by username</label>
-        <input id="dmNewIn" placeholder="Username, then Enter" maxlength="64" spellcheck="false" autocapitalize="off">
-        <button type="button" id="dmNewAdd">Add</button>
+        <label for="dmNewIn" class="vh"><%- t('msg.new.add_label') %></label>
+        <input id="dmNewIn" placeholder="<%- t('msg.new.placeholder') %>" maxlength="64" spellcheck="false" autocapitalize="off">
+        <button type="button" id="dmNewAdd"><%- t('msg.add') %></button>
       </div>
-      <ul class="dm-people" id="dmNewPeople" aria-label="People added" aria-live="polite"></ul>
-      <label class="nt" id="dmNewTitleL" hidden>Group name <span class="mut">(optional)</span><input id="dmNewTitle" maxlength="<%= boot.titleMax %>" placeholder="Named after the members if you leave it empty"></label>
-      <div class="dm-dlg-acts"><span class="dm-err" id="dmNewMsg" role="status"></span><button type="button" id="dmNewClose">Cancel</button><button type="submit" class="pri" id="dmNewGo" disabled>Message</button></div>
+      <ul class="dm-people" id="dmNewPeople" aria-label="<%- t('msg.new.people_aria') %>" aria-live="polite"></ul>
+      <label class="nt" id="dmNewTitleL" hidden><%- t('msg.new.group_name') %> <span class="mut"><%- t('msg.optional') %></span><input id="dmNewTitle" maxlength="<%= boot.titleMax %>" placeholder="<%- t('msg.new.group_name_ph') %>"></label>
+      <div class="dm-dlg-acts"><span class="dm-err" id="dmNewMsg" role="status"></span><button type="button" id="dmNewClose"><%- t('msg.cancel') %></button><button type="submit" class="pri" id="dmNewGo" disabled><%- t('msg.message') %></button></div>
     </form>
   </dialog>
 
   <dialog class="dm-dlg" id="dmMembersDlg" aria-labelledby="dmMemT">
     <form method="dialog" id="dmMemForm" autocomplete="off">
-      <h2 id="dmMemT">Members</h2>
+      <h2 id="dmMemT"><%- t('msg.members.h') %></h2>
       <ul class="dm-people dm-members" id="dmMemList"></ul>
       <fieldset id="dmMemAddF">
-        <legend>Add people</legend>
+        <legend><%- t('msg.members.add_h') %></legend>
         <div class="dm-pick">
-          <label for="dmMemIn" class="vh">Username to add</label>
-          <input id="dmMemIn" placeholder="Username, then Enter" maxlength="64" spellcheck="false" autocapitalize="off">
-          <button type="button" id="dmMemAdd">Add</button>
+          <label for="dmMemIn" class="vh"><%- t('msg.members.add_label') %></label>
+          <input id="dmMemIn" placeholder="<%- t('msg.new.placeholder') %>" maxlength="64" spellcheck="false" autocapitalize="off">
+          <button type="button" id="dmMemAdd"><%- t('msg.add') %></button>
         </div>
         <ul class="dm-people" id="dmMemResults" aria-live="polite"></ul>
         <p class="mut" id="dmMemHint"></p>
       </fieldset>
-      <div class="dm-dlg-acts"><span class="dm-err" id="dmMemMsg" role="status"></span><button type="button" id="dmMemClose">Close</button></div>
+      <div class="dm-dlg-acts"><span class="dm-err" id="dmMemMsg" role="status"></span><button type="button" id="dmMemClose"><%- t('msg.close') %></button></div>
     </form>
   </dialog>
 
-  <dialog class="dm-lb" id="dmLightbox" aria-label="Picture">
+  <dialog class="dm-lb" id="dmLightbox" aria-label="<%- t('msg.lb.picture') %>">
     <img id="dmLbImg" alt="">
-    <button type="button" class="dm-lb-x" id="dmLbClose" aria-label="Close">✕</button>
-    <button type="button" class="dm-lb-nav prev" id="dmLbPrev" aria-label="Previous picture">‹</button>
-    <button type="button" class="dm-lb-nav next" id="dmLbNext" aria-label="Next picture">›</button>
+    <button type="button" class="dm-lb-x" id="dmLbClose" aria-label="<%- t('msg.close') %>">✕</button>
+    <button type="button" class="dm-lb-nav prev" id="dmLbPrev" aria-label="<%- t('msg.lb.prev') %>">‹</button>
+    <button type="button" class="dm-lb-nav next" id="dmLbNext" aria-label="<%- t('msg.lb.next') %>">›</button>
     <span class="dm-lb-n" id="dmLbN"></span>
   </dialog>
 </main>

@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   The profile feed (1.99df; was the 1.99bz Posts panel - layout section "posts", Public / Hidden like the other
   sections: hidden = the server loads nothing for visitors). Reddit's u/ page: full post cards (votes, comments,
@@ -25,44 +26,44 @@
 <section class="card rf pp" id="posts" aria-labelledby="ppH">
   <%# 1.99du: the owner's composer heads the Posts tab ("Your profile" picked); visitors get the feed %>
   <% if (S_.composer) { %>
-    <div class="pp-compose" aria-label="Post to your profile">
+    <div class="pp-compose" aria-label="<%- t('profile.posts.compose_aria') %>">
       <%- include('feed-composer', { composer: S_.composer, next: base_, fx: fx_ }) %>
     </div>
   <% } %>
-  <h2 id="ppH"><span>📝 Posts · <span class="pp-u">u/<%= usernameProfile %></span></span><a class="pp-all" href="/feed?by=<%= encodeURIComponent(usernameProfile) %>">on the feed ›</a></h2>
-  <nav class="pp-views" aria-label="Which posts">
-    <a class="pp-view<%= S_.view === 'all' ? ' on' : '' %>" href="<%= pq({ pview: 'all', pp: '' }) %>"<%- S_.view === 'all' ? ' aria-current="page"' : '' %>>All posts</a>
-    <a class="pp-view<%= S_.view === 'profile' ? ' on' : '' %>" href="<%= pq({ pview: 'profile', pp: '' }) %>"<%- S_.view === 'profile' ? ' aria-current="page"' : '' %>>👤 Profile only</a>
+  <h2 id="ppH"><span>📝 <%- t('profile.tab.posts') %> · <span class="pp-u">u/<%= usernameProfile %></span></span><a class="pp-all" href="/feed?by=<%= encodeURIComponent(usernameProfile) %>"><%- t('profile.posts.on_feed') %></a></h2>
+  <nav class="pp-views" aria-label="<%- t('profile.posts.which') %>">
+    <a class="pp-view<%= S_.view === 'all' ? ' on' : '' %>" href="<%= pq({ pview: 'all', pp: '' }) %>"<%- S_.view === 'all' ? ' aria-current="page"' : '' %>><%- t('profile.posts.all') %></a>
+    <a class="pp-view<%= S_.view === 'profile' ? ' on' : '' %>" href="<%= pq({ pview: 'profile', pp: '' }) %>"<%- S_.view === 'profile' ? ' aria-current="page"' : '' %>>👤 <%- t('profile.posts.profile_only') %></a>
   </nav>
-  <% if (fx_) { %><%- include('feed-sort', { fx: fx_, sort: S_.sort, top: S_.top, href: (s, t) => pq({ psort: s, pt: t || '', pp: '' }), label: 'Sort ' + name_ + '\'s posts', hop: 'u/' + usernameProfile, gallery: S_.gallery || null }) %><% } %>
+  <% if (fx_) { %><%- include('feed-sort', { fx: fx_, sort: S_.sort, top: S_.top, href: (s, t) => pq({ psort: s, pt: t || '', pp: '' }), label: t('profile.posts.sort_label', { name: name_ }), hop: 'u/' + usernameProfile, gallery: S_.gallery || null }) %><% } %>
   <% if (!S_.posts.length) { %>
-    <p class="empty"><%= S_.page > 1 ? 'No more posts.' : isMe ? (S_.view === 'profile' ? 'Nothing on your profile yet - write something above with "Your profile" picked.' : 'You haven\'t posted yet.') : (S_.view === 'profile' ? name_ + ' hasn\'t posted to their profile yet.' : 'No posts yet.') %></p>
+    <p class="empty"><%- S_.page > 1 ? t('profile.posts.no_more') : isMe ? (S_.view === 'profile' ? t('profile.posts.empty_own_profile') : t('profile.posts.empty_own')) : (S_.view === 'profile' ? t('profile.posts.empty_their_profile', { name: name_ }) : t('profile.posts.empty')) %></p>
   <% } else { %>
     <div class="fd-list">
       <% S_.posts.forEach((p) => { %><%- include('feed-post', { p, fx: fx_, embeds: S_.embeds, host: S_.host, viewer: S_.viewer, modRooms: S_.modRooms, detail: false, ctxRoom: S_.view === 'profile' ? S_.padId : null }) %><% }) %>
     </div>
   <% } %>
   <nav class="fd-pager">
-    <% if (S_.page > 1) { %><a href="<%= pq({ pp: S_.page - 1 }) %>">‹ Newer</a><% } %>
-    <% if (S_.more) { %><a href="<%= pq({ pp: S_.page + 1 }) %>">Older ›</a><% } %>
+    <% if (S_.page > 1) { %><a href="<%= pq({ pp: S_.page - 1 }) %>"><%- t('profile.posts.newer') %></a><% } %>
+    <% if (S_.more) { %><a href="<%= pq({ pp: S_.page + 1 }) %>"><%- t('profile.posts.older') %></a><% } %>
   </nav>
   <% if (S_.settings) { const ST = S_.settings; %>
     <details class="pp-set" id="profile-settings">
-      <summary>⚙ Profile feed settings</summary>
+      <summary>⚙ <%- t('profile.posts.settings') %></summary>
       <div class="pp-set-b" data-pp-settings data-slug="<%= ST.slug || '' %>">
-        <label class="ck"><input type="checkbox" data-pp-pepe<%= ST.pepe ? ' checked' : '' %>> <span>🐸 Pepe can reply on my profile (when someone mentions him on one of your profile posts)</span></label>
-        <label class="ck"><input type="checkbox" data-pp-roomgen<%= ST.roomgenOff ? ' checked' : '' %>> <span>✨ Don't post my room generations (pictures / videos you make with <code>!imagine</code> / <code>!video</code> in a Camfrog room are otherwise posted to that room's pad feed; <code>-nofeed</code> skips one)</span></label>
-        <p class="mut">Your profile follows <a href="/guidelines">Padiquette</a>. You can delete comments on your profile posts, lock their comments and block people from commenting here (from a post's or comment's ⋯ menu, or below). Reports go to the site admins.</p>
-        <h3>Blocked from commenting on your profile</h3>
-        <% if (!ST.bans.length) { %><p class="mut">Nobody.</p><% } else { %>
+        <label class="ck"><input type="checkbox" data-pp-pepe<%= ST.pepe ? ' checked' : '' %>> <span>🐸 <%- t('profile.posts.pepe_reply') %></span></label>
+        <label class="ck"><input type="checkbox" data-pp-roomgen<%= ST.roomgenOff ? ' checked' : '' %>> <span>✨ <%- t('profile.posts.roomgen') %></span></label>
+        <p class="mut"><%- t('profile.posts.rules', { link: '<a href="/guidelines">Padiquette</a>' }) %></p>
+        <h3><%- t('profile.posts.bans_h') %></h3>
+        <% if (!ST.bans.length) { %><p class="mut"><%- t('profile.posts.nobody') %></p><% } else { %>
           <ul class="pp-bans">
-            <% ST.bans.forEach((b) => { %><li><a href="/u/<%= encodeURIComponent(b.username || '') %>"><%= b.username %></a><span class="mut"><%= b.until ? ' until ' + new Date(b.until).toISOString().slice(0, 10) : ' · for good' %></span><button type="button" class="btn-g" data-pp-unban="<%= b.userId %>">Unblock</button></li><% }) %>
+            <% ST.bans.forEach((b) => { %><li><a href="/u/<%= encodeURIComponent(b.username || '') %>"><%= b.username %></a><span class="mut"><%- b.until ? ' ' + t('profile.posts.until', { date: new Date(b.until).toISOString().slice(0, 10) }) : ' · ' + t('profile.posts.for_good_lc') %></span><button type="button" class="btn-g" data-pp-unban="<%= b.userId %>"><%- t('profile.posts.unblock') %></button></li><% }) %>
           </ul>
         <% } %>
         <form class="pp-ban" data-pp-ban novalidate>
-          <input name="user" placeholder="Username" aria-label="Username to block" autocomplete="off" maxlength="40">
-          <select name="days" aria-label="For how long"><option value="1">1 day</option><option value="7">1 week</option><option value="30">30 days</option><option value="0" selected>For good</option></select>
-          <button type="submit" class="btn-s">Block</button>
+          <input name="user" placeholder="<%- t('profile.posts.username') %>" aria-label="<%- t('profile.posts.username_aria') %>" autocomplete="off" maxlength="40">
+          <select name="days" aria-label="<%- t('profile.posts.how_long') %>"><option value="1"><%- t('profile.posts.d1') %></option><option value="7"><%- t('profile.posts.w1') %></option><option value="30"><%- t('profile.posts.d30') %></option><option value="0" selected><%- t('profile.posts.for_good') %></option></select>
+          <button type="submit" class="btn-s"><%- t('profile.posts.block') %></button>
           <span class="fc-err" role="alert"></span>
         </form>
       </div>

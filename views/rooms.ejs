@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Pads', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('rooms.page_title'), user: user }) %>
 <% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
    const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
    /* 1.99ed: inside a pad card (one <a>) names are plain text - no nested links */
@@ -141,28 +142,28 @@
 </style>
 <main class="cg">
   <div>
-    <h1>📡 Pads</h1>
-    <p class="lead">Every PATV pad (p/<i>name</i>) has a feed, a stage anyone can stream to, and Pepe's stream — and most are backed by a Camfrog room whose chat is live on the web.<% if (!signedIn) { %> <a href="/login">Sign in</a> to watch the Camfrog rooms' chat.<% } %></p>
+    <h1><%- t('rooms.h1') %></h1>
+    <p class="lead"><%- t('rooms.lead') %><% if (!signedIn) { %> <%- t('rooms.lead_signin', { link: '<a href="/login">' + t('rooms.signin') + '</a>' }) %><% } %></p>
   </div>
 
-  <section class="cta" aria-label="Go live">
+  <section class="cta" aria-label="<%- t('rooms.go_live_aria') %>">
     <div>
-      <b class="big">🎥 Your show, on PATV</b>
+      <b class="big"><%- t('rooms.cta_h') %></b>
       <%# 1.99es: one line, like the homepage's card (the three steps are gone) %>
-      <span class="muted" style="font-size:14px;color:#d9c9c3"><b>Anyone can go live.</b> Stream to a pad's stage from OBS or your browser, or put a YouTube / Twitch link on it.</span>
+      <span class="muted" style="font-size:14px;color:#d9c9c3"><%- t('rooms.cta_text') %></span>
     </div>
-    <div class="btns"><a class="golive-btn" href="/stage">🎥 Go live</a><a class="btn" href="<%= signedIn ? '/pads/new' : '/login?next=%2Fpads%2Fnew' %>" style="text-align:center">🧱 Create a pad</a></div>
+    <div class="btns"><a class="golive-btn" href="/stage"><%- t('rooms.go_live') %></a><a class="btn" href="<%= signedIn ? '/pads/new' : '/login?next=%2Fpads%2Fnew' %>" style="text-align:center"><%- t('rooms.create') %></a></div>
   </section>
 
   <div class="pepe" role="status">
-    <span class="pill <%= pepeOn ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%= pepeOn ? 'ON AIR' : 'OFF AIR' %></span>
-    <span><b>🐸 Pepe's stream</b> plays on the stage of every pad whose Camfrog room he's in<%= rows.some((r) => r.pepe_here) ? ' (🐸 on its card)' : '' %>.</span>
-    <a href="/" style="margin-left:auto">Front page ›</a>
+    <span class="pill <%= pepeOn ? 'on' : 'off' %>"><span class="dot" aria-hidden="true"></span><%- pepeOn ? t('rooms.on_air') : t('rooms.off_air') %></span>
+    <span><%- rows.some((r) => r.pepe_here) ? t('rooms.pepe_bar_card') : t('rooms.pepe_bar') %></span>
+    <a href="/" style="margin-left:auto"><%- t('rooms.front_page') %></a>
   </div>
 
   <% if (owned && owned.length) { %>
     <section class="card" aria-labelledby="ownH">
-      <h2 id="ownH">Your pads <small>you own these</small></h2>
+      <h2 id="ownH"><%- t('rooms.yours') %> <small><%- t('rooms.yours_sub') %></small></h2>
       <div class="owned"><% owned.forEach((r) => { %><a class="btn" href="/p/<%= encodeURIComponent(r.slug) %>/settings">⚙ <%= r.title %></a><% }) %></div>
     </section>
   <% } %>
@@ -170,38 +171,38 @@
   <%# 1.99ee: Trending - the front page's automatic pick and the runners-up from its last check (roomsweb.guideRows r.trend) %>
   <% const trend_ = rows.filter((r) => r.trend).sort((a, b) => a.trend.rank - b.trend.rank); %>
   <section class="card trend" id="trending" aria-labelledby="trH">
-    <h2 id="trH">🔥 Trending <small>the front page shows the liveliest pad · chat, mic and people decide, 🚀 boosts can tip a close race</small></h2>
+    <h2 id="trH"><%- t('rooms.trending') %> <small><%- t('rooms.trending_sub') %></small></h2>
     <% if (!trend_.length) { %>
-      <div class="empty">No live Camfrog pads right now.</div>
+      <div class="empty"><%- t('rooms.no_live') %></div>
     <% } else { %>
       <ol class="tr-list">
         <% trend_.forEach((r) => { %><li class="<%= r.trend.front ? 'front' : '' %>">
           <%# 1.99es: the 🚀 badge sits by the name, not among the stat tags %>
           <span class="tn"><a class="t" href="/p/<%= encodeURIComponent(r.slug) %>"><%= r.title %></a><%- BM(r.boost_pat, 'tg boost') %></span>
-          <span class="tags"><% if (r.trend.front) { %><span class="tg on">📺 On the front page</span><% } else { %><span class="tg">Trending #<%= r.trend.rank - (trend_[0].trend.front ? 1 : 0) %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
-          <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="Boost <%= r.title %>">🚀 Boost</a>
+          <span class="tags"><% if (r.trend.front) { %><span class="tg on"><%- t('rooms.on_front') %></span><% } else { %><span class="tg"><%- t('rooms.trending_n', { n: r.trend.rank - (trend_[0].trend.front ? 1 : 0) }) %></span><% } %><span class="tg">👥 <%= r.count %></span></span>
+          <a class="bst" href="/p/<%= encodeURIComponent(r.slug) %>#boost" aria-label="<%- t('rooms.boost_aria', { title: r.title }) %>"><%- t('rooms.boost') %></a>
         </li><% }) %>
       </ol>
     <% } %>
   </section>
 
   <section class="card" aria-labelledby="chH">
-    <h2 id="chH">Pads <small><%= rows.filter((r) => r.live).length %> live · <%= rows.length %> pad<%= rows.length === 1 ? '' : 's' %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
+    <h2 id="chH"><%- t('rooms.pads_h') %> <small><%- t('rooms.n_live', { n: rows.filter((r) => r.live).length }) %> · <%- t('rooms.n_pads', { count: rows.length }) %><% if (staff) { %> · <a href="/pads/admin">Pads admin ›</a><% } %></small></h2>
     <%# 1.99x: filter by platform - All / Camfrog / Site (Twitch / Discord appear once a pad has them) %>
     <% const plat_ = typeof platform !== 'undefined' ? platform : '', counts_ = typeof counts !== 'undefined' ? counts : {}, PL_ = typeof PAD_PLATFORMS !== 'undefined' ? PAD_PLATFORMS : { camfrog: { icon: '🐸', label: 'Camfrog Pad' }, site: { icon: '🌐', label: 'Site Pad' } };
        const padBadge_ = typeof padBadge === 'function' ? padBadge : (p) => '<span class="pad-plat pp-' + p + '">' + (PL_[p] ? PL_[p].icon + ' ' + PL_[p].label : p) + '</span>'; %>
-    <nav class="pad-filter" aria-label="Filter pads by platform">
-      <a href="/p"<%- plat_ ? '' : ' class="on" aria-current="page"' %>>All <small><%= typeof allCount !== 'undefined' ? allCount : rows.length %></small></a>
+    <nav class="pad-filter" aria-label="<%- t('rooms.filter_aria') %>">
+      <a href="/p"<%- plat_ ? '' : ' class="on" aria-current="page"' %>><%- t('rooms.all') %> <small><%= typeof allCount !== 'undefined' ? allCount : rows.length %></small></a>
       <% Object.keys(PL_).filter((k) => k === 'camfrog' || k === 'site' || counts_[k] || plat_ === k).forEach((k) => { %>
         <a href="/p?platform=<%= k %>"<%- plat_ === k ? ' class="on" aria-current="page"' : '' %>><%= PL_[k].icon %> <%= PL_[k].label.replace(/ Pad$/, '') %> <small><%= counts_[k] || 0 %></small></a>
       <% }) %>
     </nav>
     <% if (!rows.length) { %>
-      <div class="empty"><%= plat_ ? 'No pads on that platform yet.' : 'No pads yet.' %></div>
+      <div class="empty"><%- plat_ ? t('rooms.none_platform') : t('rooms.none') %></div>
     <% } else { %>
     <div class="grid">
       <% rows.forEach((r) => { const liveNow = r.now.filter((s) => s.live); const desc = r.description || r.topic || '';
-           const pepeTip = "Pepe is in this room — his stream plays here"; %>
+           const pepeTip = t('rooms.pepe_tip'); %>
         <% const fx_ = PFX_(r.id); %>
         <a class="ch<%= r.live ? ' live' : '' %><%= liveNow.length ? ' onair' : '' %><%= fx_ && fx_.cls ? ' ' + fx_.cls : '' %>" href="/p/<%= encodeURIComponent(r.slug) %>"><%- fx_ ? fx_.layer : '' %>
           <div class="ch-head">
@@ -209,32 +210,32 @@
             <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.title %></span><%- fx_ ? fx_.badges : '' %><%- BM(r.boost_pat, 'pill ch-mark') %></span>
             <span class="ch-badges">
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
-              <% if (r.access === 'approved') { %><span class="pill" title="Only members the owner approved can see this pad">🔒 Approved</span><% } else if (r.access === 'public') { %><span class="pill" title="Anyone can see this pad, signed in or not">🌐 Public</span><% } %>
-              <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="The pad's Camfrog room (ON STAGE = a video stream)"><span class="dot" aria-hidden="true"></span><%= r.live ? '💬 ROOM ACTIVE' : (r.bridged ? 'QUIET' : 'OFF THE WEB') %></span><% } %>
-              <% if (liveNow.length) { %><span class="pill on" title="Someone is streaming on this pad's stage">📺 <%= liveNow.length %> ON STAGE</span><% } %>
+              <% if (r.access === 'approved') { %><span class="pill" title="<%- t('rooms.approved_tip') %>"><%- t('rooms.approved') %></span><% } else if (r.access === 'public') { %><span class="pill" title="<%- t('rooms.public_tip') %>"><%- t('rooms.public') %></span><% } %>
+              <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="<%- t('rooms.room_pill_tip') %>"><span class="dot" aria-hidden="true"></span><%- r.live ? t('rooms.room_active') : (r.bridged ? t('rooms.quiet') : t('rooms.off_web')) %></span><% } %>
+              <% if (liveNow.length) { %><span class="pill on" title="<%- t('rooms.on_stage_tip') %>"><%- t('rooms.on_stage', { n: liveNow.length }) %></span><% } %>
             </span>
           </div>
           <div class="ch-meta">
             <span class="padref">p/<%= r.slug %></span>
-            <% if (r.bridged && r.live && r.count > 0) { %><span title="<%= r.count %> in the Camfrog room" aria-label="<%= r.count %> in the Camfrog room">👥 <%= r.count %></span><% } %>
-            <% if (r.bridged && r.live && r.micCount > 0) { %><span title="<%= r.micCount %> on mic" aria-label="<%= r.micCount %> on mic">🎙 <%= r.micCount %></span><% } %>
-            <% if (r.house) { %><span class="own" title="House pad — run by Pepe">🏠 House pad</span><% } else if (r.owner) { %><span class="own" title="Pad owner">👑 <%= r.owner %></span><% } %>
-            <span title="Stage slots in use / total">🎬 <%= r.now.length %>/<%= r.slot_count %> slots</span>
-            <% if (r.pepe_here) { %><span class="pepe-here" role="img" title="<%= pepeTip %>" aria-label="<%= pepeTip %>">🐸</span><% } %>
+            <% if (r.bridged && r.live && r.count > 0) { %><span title="<%- t('rooms.n_in_room', { n: r.count }) %>" aria-label="<%- t('rooms.n_in_room', { n: r.count }) %>">👥 <%= r.count %></span><% } %>
+            <% if (r.bridged && r.live && r.micCount > 0) { %><span title="<%- t('rooms.n_on_mic', { n: r.micCount }) %>" aria-label="<%- t('rooms.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span><% } %>
+            <% if (r.house) { %><span class="own" title="<%- t('rooms.house_tip') %>"><%- t('rooms.house') %></span><% } else if (r.owner) { %><span class="own" title="<%- t('rooms.owner_tip') %>">👑 <%= r.owner %></span><% } %>
+            <span title="<%- t('rooms.slots_tip') %>"><%- t('rooms.slots', { now: r.now.length, total: r.slot_count }) %></span>
+            <% if (r.pepe_here) { %><span class="pepe-here" role="img" title="<%- pepeTip %>" aria-label="<%- pepeTip %>">🐸</span><% } %>
           </div>
           <div class="ch-desc"><%= desc.slice(0, 200) %></div>
           <div class="ch-foot">
-            <div class="slotrow"><span class="k now">Now</span>
+            <div class="slotrow"><span class="k now"><%- t('rooms.now') %></span>
               <ul>
-                <% if (!r.now.length) { %><li class="muted"><%= r.pepe_here ? "🐸 Pepe's stream" + (pepeOn ? '' : ' (off air)') + ' — slot open' : 'Slot open' %></li><% } %>
-                <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="featured">★</span> ' : '' %><b><%- TXT(s.username, s.display) %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%= s.mode === 'embed' ? (s.embed_label || 'video') : (s.live ? '● live' : 'starting…') %></span></li><% }) %>
+                <% if (!r.now.length) { %><li class="muted"><%- r.pepe_here ? (pepeOn ? t('rooms.pepe_slot_open') : t('rooms.pepe_off_slot_open')) : t('rooms.slot_open') %></li><% } %>
+                <% r.now.forEach((s) => { %><li><%- s.featured ? '<span class="star" title="' + t('rooms.featured') + '">★</span> ' : '' %><b><%- TXT(s.username, s.display) %></b><%= s.title ? ' — ' + s.title : '' %> <span class="src"><%- s.mode === 'embed' ? (s.embed_label ? t.esc(s.embed_label) : t('rooms.video')) : (s.live ? t('rooms.live') : t('rooms.starting')) %></span></li><% }) %>
               </ul>
             </div>
-            <div class="slotrow"><span class="k">Next</span>
+            <div class="slotrow"><span class="k"><%- t('rooms.next') %></span>
               <ul>
-                <% if (!r.next.length) { %><li class="muted">Nothing booked</li><% } %>
+                <% if (!r.next.length) { %><li class="muted"><%- t('rooms.nothing_booked') %></li><% } %>
                 <% r.next.slice(0, 2).forEach((n) => { %><li><time data-ts="<%= n.start_at %>"><%= new Date(n.start_at).toISOString().slice(11, 16) %></time><b><%- TXT(n.username, n.display) %></b><%= n.featured ? ' ★' : '' %><%= n.title ? ' — ' + n.title : '' %></li><% }) %>
-                <% if (r.next.length > 2) { %><li class="muted">+<%= r.next.length - 2 %> more booked</li><% } %>
+                <% if (r.next.length > 2) { %><li class="muted"><%- t('rooms.more_booked', { n: r.next.length - 2 }) %></li><% } %>
               </ul>
             </div>
           </div>
@@ -245,14 +246,14 @@
   </section>
 
   <section class="card" aria-labelledby="scH">
-    <h2 id="scH">Schedule <small>booked slots, all pads · your local time</small></h2>
+    <h2 id="scH"><%- t('rooms.schedule') %> <small><%- t('rooms.schedule_sub') %></small></h2>
     <% if (!sched.length) { %>
-      <div class="empty">Nothing booked yet. <a href="/stage">Book the first slot ›</a></div>
+      <div class="empty"><%- t('rooms.none_booked') %> <a href="/stage"><%- t('rooms.book_first') %></a></div>
     <% } else { %>
       <ul class="sched">
         <% sched.slice(0, 30).forEach((n) => { %>
           <li><time data-ts="<%= n.start_at %>" data-long="1"><%= new Date(n.start_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</time>
-            <span class="w"><b><%- UL(n.username, { text: n.display, user: true }) %></b><%= n.featured ? ' ★' : '' %> in <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%= n.minutes %> min<%= n.title ? ' · ' + n.title : '' %></span></li>
+            <span class="w"><b><%- UL(n.username, { text: n.display, user: true }) %></b><%= n.featured ? ' ★' : '' %> <%- t('rooms.in') %> <a class="rl" href="/p/<%= encodeURIComponent(n.room.slug) %>"><%= n.room.title %></a> · <%- t('rooms.min', { n: n.minutes }) %><%= n.title ? ' · ' + n.title : '' %></span></li>
         <% }) %>
       </ul>
     <% } %>

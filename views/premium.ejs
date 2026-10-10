@@ -1,33 +1,34 @@
-<%- include('layout', { title: 'Prime Time & Season Pass', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('premium.page_title'), user: user }) %>
 <%
   // 1.99iv: /premium - the two paid tiers (premium.js) + 🧸 sticker packs (stickers.js). S = premium.state(), stickers = stickers.pageData()
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const day = (ms) => ms ? new Date(ms).toISOString().slice(0, 10) : '';
   const V = S.viewer || {}, PASS = V.pass, PAD = S.pad, ST = S.stripe || { enabled: false };
   const STK = stickers || { packs: [], signed: false, allowance: null };
-  const statusTxt = (s) => !s ? '' : s.status === 'comped' ? '🎁 Comped (free, no end date)' : s.status === 'active' ? '✅ Active until ' + day(s.paid_through)
-    : s.status === 'grace' ? '⏳ Renewal due - perks stay on until ' + day(s.ends) : s.status === 'lapsed' ? '⚪ Ended ' + day(s.paid_through) : '⚪ Not active';
+  const statusTxt = (s) => !s ? '' : s.status === 'comped' ? t('premium.status.comped') : s.status === 'active' ? t('premium.status.active', { date: day(s.paid_through) })
+    : s.status === 'grace' ? t('premium.status.grace', { date: day(s.ends) }) : s.status === 'lapsed' ? t('premium.status.lapsed', { date: day(s.paid_through) }) : t('premium.status.inactive');
   const PT_PERKS = [
-    ['📺', 'The “Prime Time” badge', 'Next to the pad\'s name on its page, the Pads list and Top Pads.', 'live'],
-    ['🖼️', 'Prime Time theme pack', 'An animated on-air banner frame, a gold-to-red name glow and two extra badges (On Air, Premiere) - equip them in the pad\'s ✨ Cosmetics.', 'live'],
-    ['🎬', 'Pad intro animation', 'A short “PRIME TIME” sweep when someone opens the pad.', 'live'],
-    ['🏷️', '+' + S.perks.prime_extra_badges + ' badge slots', 'Show up to ' + (3 + S.perks.prime_extra_badges) + ' pad badges at once.', 'live'],
-    ['🎤', '+' + S.perks.prime_extra_slots + ' stage slots', 'More people on the pad\'s stage at once than the usual cap.', 'live'],
-    ['⚡', 'Low-latency room audio & stage', 'The pad is flagged Prime Time for the low-latency pipeline as it rolls out.', 'soon'],
-    ['⏱️', 'Longer stage slots', 'Book longer sets on a Prime Time pad.', 'soon'],
-    ['🏦', 'Bigger room-vault cap', 'More room in the pad\'s vault (economy v2 room vaults).', 'soon'],
-    ['🧸', 'A custom sticker pack slot', 'The pad\'s own sticker pack for its members.', 'soon'],
-    ['📈', 'Analytics extras', 'Deeper pad analytics: retention, peak hours, top contributors.', 'soon'],
+    ['📺', t('premium.pt.badge'), t('premium.pt.badge_d'), 'live'],
+    ['🖼️', t('premium.pt.theme'), t('premium.pt.theme_d'), 'live'],
+    ['🎬', t('premium.pt.intro'), t('premium.pt.intro_d'), 'live'],
+    ['🏷️', t('premium.pt.badge_slots', { n: S.perks.prime_extra_badges }), t('premium.pt.badge_slots_d', { n: 3 + S.perks.prime_extra_badges }), 'live'],
+    ['🎤', t('premium.pt.stage_slots', { n: S.perks.prime_extra_slots }), t('premium.pt.stage_slots_d'), 'live'],
+    ['⚡', t('premium.pt.lowlat'), t('premium.pt.lowlat_d'), 'soon'],
+    ['⏱️', t('premium.pt.longer'), t('premium.pt.longer_d'), 'soon'],
+    ['🏦', t('premium.pt.vault'), t('premium.pt.vault_d'), 'soon'],
+    ['🧸', t('premium.pt.sticker'), t('premium.pt.sticker_d'), 'soon'],
+    ['📈', t('premium.pt.analytics'), t('premium.pt.analytics_d'), 'soon'],
   ];
   const SP_PERKS = [
-    ['🌈', '“Season Pass” name style', 'Your name in a slow gold-pink-violet shimmer everywhere names are shown.', 'live'],
-    ['💫', 'Animated avatar ring', 'A spinning ticket-gold ring round your avatar.', 'live'],
-    ['🏞️', 'Season Pass profile banner', 'A midnight-to-violet banner for your profile.', 'live'],
-    ['🧸', S.perks.sp_sticker_packs + ' free sticker pack' + (S.perks.sp_sticker_packs === 1 ? '' : 's') + ' a month', 'Claim it below - it\'s yours to keep.', 'live'],
-    ['📤', S.perks.sp_upload_mult + '× upload limits', 'Bigger pictures, audio and video on the feed, a bigger daily allowance and more space.', 'live'],
-    ['🎟️', 'The Season Pass chip', 'On your profile.', 'live'],
-    ['🎨', 'Custom tag / flair colour', 'Pick your own flair colour.', 'soon'],
-    ['🐸', 'Priority in Pepe\'s queue', 'Your requests jump ahead in Pepe\'s queues.', 'soon'],
+    ['🌈', t('premium.sp.name'), t('premium.sp.name_d'), 'live'],
+    ['💫', t('premium.sp.ring'), t('premium.sp.ring_d'), 'live'],
+    ['🏞️', t('premium.sp.banner'), t('premium.sp.banner_d'), 'live'],
+    ['🧸', t('premium.sp.stickers', { count: S.perks.sp_sticker_packs }), t('premium.sp.stickers_d'), 'live'],
+    ['📤', t('premium.sp.uploads', { n: S.perks.sp_upload_mult }), t('premium.sp.uploads_d'), 'live'],
+    ['🎟️', t('premium.sp.chip'), t('premium.sp.chip_d'), 'live'],
+    ['🎨', t('premium.sp.flair'), t('premium.sp.flair_d'), 'soon'],
+    ['🐸', t('premium.sp.priority'), t('premium.sp.priority_d'), 'soon'],
   ];
   const routeRow = (r) => r.shares.map((x) => x.pct + '% ' + x.label).join(' · ') + (r.rest ? ' · ' + r.rest + '% 🏛️ Federal Reserve' : '');
 %>
@@ -82,81 +83,81 @@
 </style>
 <main class="pm" id="pm" data-pad="<%= PAD ? PAD.slug : '' %>">
   <section class="hero">
-    <div class="eyebrow">PATV PREMIUM</div>
-    <h1><em>Prime Time</em> for pads, a <em>Season Pass</em> for you</h1>
-    <p class="lead">Two ways to back PATV with PAT. <b>📺 Prime Time</b> lights up a whole pad - anyone can chip in, so a pad's regulars can keep it on air together. <b>🎟️ Season Pass</b> is yours: a name style, an avatar ring, a banner, free stickers and bigger uploads. Both run for <%= S.period_days %> days at a time and can renew themselves.</p>
-    <% if (!S.sales) { %><p class="lead" style="color:#f2d48a;margin-top:10px">Sales are paused right now - existing subscriptions keep running.</p><% } %>
+    <div class="eyebrow"><%- t('premium.eyebrow') %></div>
+    <h1><%- t('premium.h1') %></h1>
+    <p class="lead"><%- t('premium.lead', { days: S.period_days }) %></p>
+    <% if (!S.sales) { %><p class="lead" style="color:#f2d48a;margin-top:10px"><%- t('premium.paused') %></p><% } %>
   </section>
 
   <div class="tiers">
     <section class="card tier pt" aria-labelledby="ptH">
-      <h3 id="ptH">📺 Prime Time <span class="tag">pad tier</span></h3>
-      <div class="price"><%= fmt(S.prices.prime_time) %> PAT <small>per <%= S.period_days %> days · or chip in from <%= fmt(S.day_price.prime_time) %> PAT (one day)</small></div>
+      <h3 id="ptH">📺 Prime Time <span class="tag"><%- t('premium.pt.tag') %></span></h3>
+      <div class="price"><%= fmt(S.prices.prime_time) %> PAT <small><%- t('premium.pt.per_period', { days: S.period_days, price: fmt(S.day_price.prime_time) }) %></small></div>
       <ul class="perks">
-        <% PT_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span aria-hidden="true"><%= p[0] %></span><span><b><%= p[1] %></b><% if (p[3] === 'soon') { %><span class="soon-tag">coming soon</span><% } %><span class="d"><%= p[2] %></span></span></li><% }) %>
+        <% PT_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
       </ul>
       <% if (PAD) { %>
         <div class="stat" id="ptState">
           <div><b>p/<%= PAD.slug %></b><% if (PAD.title && PAD.title !== PAD.slug) { %> · <%= PAD.title %><% } %></div>
-          <div><%= statusTxt(PAD) %><% if (PAD.renewing && PAD.status !== 'comped') { %> · 🔁 renews<% } %></div>
-          <% if (PAD.contributors && PAD.contributors.length) { %><div class="mut" style="margin-top:6px">Backed by:</div><ul class="contrib"><% PAD.contributors.forEach((c) => { %><li><%= c.name %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
+          <div><%- statusTxt(PAD) %><% if (PAD.renewing && PAD.status !== 'comped') { %> · <%- t('premium.renews') %><% } %></div>
+          <% if (PAD.contributors && PAD.contributors.length) { %><div class="mut" style="margin-top:6px"><%- t('premium.backed_by') %></div><ul class="contrib"><% PAD.contributors.forEach((c) => { %><li><%= c.name %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
         </div>
         <% if (PAD.status !== 'comped') { %>
           <% if (V.signed) { %>
             <div class="row">
-              <button type="button" class="btn gold" data-buy="prime_time" data-months="1"><%= PAD.mine ? 'Get' : 'Gift' %> 1 period · <%= fmt(S.prices.prime_time) %></button>
-              <button type="button" class="btn ghost" data-buy="prime_time" data-months="3">3 periods · <%= fmt(S.prices.prime_time * 3) %></button>
+              <button type="button" class="btn gold" data-buy="prime_time" data-months="1"><%- t(PAD.mine ? 'premium.get_1' : 'premium.gift_1', { price: fmt(S.prices.prime_time) }) %></button>
+              <button type="button" class="btn ghost" data-buy="prime_time" data-months="3"><%- t('premium.periods_3', { price: fmt(S.prices.prime_time * 3) }) %></button>
             </div>
-            <div class="row"><label class="mut" for="ptAmt">Chip in</label><input type="number" id="ptAmt" min="<%= S.day_price.prime_time %>" step="1000" value="<%= S.day_price.prime_time * 7 %>" style="width:150px"> <span class="mut">PAT</span>
-              <button type="button" class="btn" data-chip="1">🤝 Chip in</button></div>
-            <div class="row"><label class="mut"><input type="checkbox" id="ptRenew"<%= PAD.renewer_me ? ' checked' : '' %>> 🔁 Renew it every <%= S.period_days %> days from my balance</label></div>
-            <% if (ST.enabled && ST.tiers && ST.tiers.prime_time && PAD.mine) { %><div class="row card-pay"><button type="button" class="btn" data-card="prime_time">💳 Pay by card instead<%= ST.test ? ' (TEST MODE)' : '' %></button><% if (PAD.stripe) { %><button type="button" class="btn ghost" data-portal="prime_time">Manage card subscription</button><% } %></div><% } %>
-          <% } else { %><p><a href="/login?next=<%= encodeURIComponent('/premium?pad=' + PAD.slug) %>">Sign in</a> to back this pad.</p><% } %>
+            <div class="row"><label class="mut" for="ptAmt"><%- t('premium.chip_in') %></label><input type="number" id="ptAmt" min="<%= S.day_price.prime_time %>" step="1000" value="<%= S.day_price.prime_time * 7 %>" style="width:150px"> <span class="mut">PAT</span>
+              <button type="button" class="btn" data-chip="1">🤝 <%- t('premium.chip_in') %></button></div>
+            <div class="row"><label class="mut"><input type="checkbox" id="ptRenew"<%= PAD.renewer_me ? ' checked' : '' %>> <%- t('premium.renew_label', { days: S.period_days }) %></label></div>
+            <% if (ST.enabled && ST.tiers && ST.tiers.prime_time && PAD.mine) { %><div class="row card-pay"><button type="button" class="btn" data-card="prime_time">💳 <%- t('premium.pay_card') %><%- ST.test ? ' ' + t('premium.test_mode') : '' %></button><% if (PAD.stripe) { %><button type="button" class="btn ghost" data-portal="prime_time"><%- t('premium.manage_card') %></button><% } %></div><% } %>
+          <% } else { %><p><%- t('premium.pt.signin', { link: '<a href="/login?next=' + t.esc(encodeURIComponent('/premium?pad=' + PAD.slug)) + '">' + t('premium.sign_in') + '</a>' }) %></p><% } %>
         <% } %>
-        <p class="mut"><a href="/p/<%= encodeURIComponent(PAD.slug) %>">← back to p/<%= PAD.slug %></a> · <a href="/premium">pick another pad</a></p>
+        <p class="mut"><a href="/p/<%= encodeURIComponent(PAD.slug) %>"><%- t('premium.pt.back', { pad: PAD.slug }) %></a> · <a href="/premium"><%- t('premium.pt.another') %></a></p>
       <% } else { %>
-        <form class="row" action="/premium" method="GET"><label class="mut" for="ptPad">Which pad?</label><input type="text" id="ptPad" name="pad" placeholder="p/your-pad" autocomplete="off" style="flex:1"><button class="btn gold">Go</button></form>
-        <p class="mut">Or open a pad and use <b>⋯ → 📺 Prime Time</b>.</p>
+        <form class="row" action="/premium" method="GET"><label class="mut" for="ptPad"><%- t('premium.pt.which') %></label><input type="text" id="ptPad" name="pad" placeholder="<%- t('premium.pt.which_ph') %>" autocomplete="off" style="flex:1"><button class="btn gold"><%- t('premium.pt.go') %></button></form>
+        <p class="mut"><%- t('premium.pt.or_open') %></p>
       <% } %>
     </section>
 
     <section class="card tier sp" aria-labelledby="spH">
-      <h3 id="spH">🎟️ Season Pass <span class="tag">personal</span></h3>
-      <div class="price"><%= fmt(S.prices.season_pass) %> PAT <small>per <%= S.period_days %> days</small></div>
+      <h3 id="spH">🎟️ Season Pass <span class="tag"><%- t('premium.sp.tag') %></span></h3>
+      <div class="price"><%= fmt(S.prices.season_pass) %> PAT <small><%- t('premium.sp.per_period', { days: S.period_days }) %></small></div>
       <ul class="perks">
-        <% SP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span aria-hidden="true"><%= p[0] %></span><span><b><%= p[1] %></b><% if (p[3] === 'soon') { %><span class="soon-tag">coming soon</span><% } %><span class="d"><%= p[2] %></span></span></li><% }) %>
+        <% SP_PERKS.forEach((p) => { %><li class="<%= p[3] %>"><span aria-hidden="true"><%= p[0] %></span><span><b><%- p[1] %></b><% if (p[3] === 'soon') { %><span class="soon-tag"><%- t('premium.coming_soon') %></span><% } %><span class="d"><%- p[2] %></span></span></li><% }) %>
       </ul>
       <% if (V.signed) { %>
-        <div class="stat">Yours: <%= statusTxt(PASS) %><% if (PASS && PASS.renewing && PASS.status !== 'comped') { %> · 🔁 renews<% } %><% if (PASS && PASS.active) { %> · <a href="/cosmetics?tab=mine#tabs">equip your Season Pass looks</a><% } %></div>
+        <div class="stat"><%- t('premium.sp.yours') %> <%- statusTxt(PASS) %><% if (PASS && PASS.renewing && PASS.status !== 'comped') { %> · <%- t('premium.renews') %><% } %><% if (PASS && PASS.active) { %> · <a href="/cosmetics?tab=mine#tabs"><%- t('premium.sp.equip') %></a><% } %></div>
         <% if (!PASS || PASS.status !== 'comped') { %>
           <div class="row">
-            <button type="button" class="btn violet" data-buy="season_pass" data-months="1">Get 1 period · <%= fmt(S.prices.season_pass) %></button>
-            <button type="button" class="btn ghost" data-buy="season_pass" data-months="3">3 periods · <%= fmt(S.prices.season_pass * 3) %></button>
+            <button type="button" class="btn violet" data-buy="season_pass" data-months="1"><%- t('premium.get_1', { price: fmt(S.prices.season_pass) }) %></button>
+            <button type="button" class="btn ghost" data-buy="season_pass" data-months="3"><%- t('premium.periods_3', { price: fmt(S.prices.season_pass * 3) }) %></button>
           </div>
-          <div class="row"><label class="mut"><input type="checkbox" id="spRenew"<%= PASS && PASS.renewer_me ? ' checked' : '' %>> 🔁 Renew it every <%= S.period_days %> days from my balance</label></div>
-          <% if (ST.enabled && ST.tiers && ST.tiers.season_pass) { %><div class="row card-pay"><button type="button" class="btn" data-card="season_pass">💳 Pay by card instead<%= ST.test ? ' (TEST MODE)' : '' %></button><% if (PASS && PASS.stripe) { %><button type="button" class="btn ghost" data-portal="season_pass">Manage card subscription</button><% } %></div><% } %>
+          <div class="row"><label class="mut"><input type="checkbox" id="spRenew"<%= PASS && PASS.renewer_me ? ' checked' : '' %>> <%- t('premium.renew_label', { days: S.period_days }) %></label></div>
+          <% if (ST.enabled && ST.tiers && ST.tiers.season_pass) { %><div class="row card-pay"><button type="button" class="btn" data-card="season_pass">💳 <%- t('premium.pay_card') %><%- ST.test ? ' ' + t('premium.test_mode') : '' %></button><% if (PASS && PASS.stripe) { %><button type="button" class="btn ghost" data-portal="season_pass"><%- t('premium.manage_card') %></button><% } %></div><% } %>
         <% } %>
-        <div class="row"><label class="mut" for="spGift">🎁 Gift one period to</label><input type="text" id="spGift" placeholder="username" autocomplete="off" style="width:160px"><button type="button" class="btn" data-gift="season_pass">Gift · <%= fmt(S.prices.season_pass) %></button></div>
-      <% } else { %><p><a href="/login?next=/premium">Sign in</a> to get a Season Pass.</p><% } %>
+        <div class="row"><label class="mut" for="spGift"><%- t('premium.sp.gift_to') %></label><input type="text" id="spGift" placeholder="<%- t('premium.sp.gift_ph') %>" autocomplete="off" style="width:160px"><button type="button" class="btn" data-gift="season_pass"><%- t('premium.sp.gift_btn', { price: fmt(S.prices.season_pass) }) %></button></div>
+      <% } else { %><p><%- t('premium.sp.signin', { link: '<a href="/login?next=/premium">' + t('premium.sign_in') + '</a>' }) %></p><% } %>
     </section>
   </div>
   <% if (V.signed) { %><p class="msg" id="pmMsg" role="status" aria-live="polite"></p><% } %>
 
   <section class="card" id="stickers" aria-labelledby="stkH">
-    <h2 id="stkH">🧸 Sticker packs</h2>
-    <p class="mut" style="margin:0">Pixel stickers for your messages and posts - the 🧸 button in the composer. A pack is yours for good. <%= fmt(S.prices.sticker_pack) %> PAT a pack<% if (STK.allowance && STK.allowance.per) { %> · your 🎟️ Season Pass has <b><%= STK.allowance.left %></b> free pack<%= STK.allowance.left === 1 ? '' : 's' %> left this month<% } else { %> · a 🎟️ Season Pass includes <%= S.perks.sp_sticker_packs %> free a month<% } %>.</p>
+    <h2 id="stkH"><%- t('premium.stk.heading') %></h2>
+    <p class="mut" style="margin:0"><%- t('premium.stk.intro', { price: fmt(S.prices.sticker_pack) }) %><% if (STK.allowance && STK.allowance.per) { %> · <%- t('premium.stk.left', { count: STK.allowance.left }) %><% } else { %> · <%- t('premium.stk.sp_includes', { n: S.perks.sp_sticker_packs }) %><% } %>.</p>
     <div class="packs">
       <% STK.packs.forEach((p) => { %>
         <div class="card pack">
-          <h3 style="margin:0;font-size:17px"><%= p.emoji %> <%= p.name %><% if (p.owned) { %> <span class="tag">✅ yours</span><% } %></h3>
+          <h3 style="margin:0;font-size:17px"><%= p.emoji %> <%= p.name %><% if (p.owned) { %> <span class="tag"><%- t('premium.stk.yours') %></span><% } %></h3>
           <p class="mut" style="margin:0"><%= p.desc %></p>
           <div class="sheet"><% p.stickers.forEach((s) => { %><img src="<%= s.url %>" alt="<%= s.name %>" title="<%= s.name %>" loading="lazy"><% }) %></div>
           <% if (STK.signed) { %><div class="row">
             <% if (!p.owned) { %>
-              <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="btn violet" data-stk="<%= p.id %>" data-free="1">🎟️ Claim free</button><% } %>
-              <button type="button" class="btn" data-stk="<%= p.id %>">Buy · <%= fmt(p.price) %></button>
+              <% if (STK.allowance && STK.allowance.left) { %><button type="button" class="btn violet" data-stk="<%= p.id %>" data-free="1"><%- t('premium.stk.claim') %></button><% } %>
+              <button type="button" class="btn" data-stk="<%= p.id %>"><%- t('premium.stk.buy', { price: fmt(p.price) }) %></button>
             <% } %>
-            <button type="button" class="btn ghost" data-stk-gift="<%= p.id %>">🎁 Gift</button>
+            <button type="button" class="btn ghost" data-stk-gift="<%= p.id %>"><%- t('premium.stk.gift') %></button>
           </div><% } %>
         </div>
       <% }) %>
@@ -164,37 +165,38 @@
   </section>
 
   <section class="card" aria-labelledby="rtH">
-    <h2 id="rtH">Where your PAT goes</h2>
+    <h2 id="rtH"><%- t('premium.routes.heading') %></h2>
     <table>
-      <tr><th>What</th><th>Routing</th></tr>
+      <tr><th><%- t('premium.routes.what') %></th><th><%- t('premium.routes.routing') %></th></tr>
       <% Object.keys(S.routes).forEach((k) => { const r = S.routes[k]; %><tr><td><%= r.label %></td><td><%= routeRow(r) %></td></tr><% }) %>
     </table>
-    <p class="mut">Nothing is burned. The pad's room-vault share goes to Fort Knox when the pad's owner pays for their own pad (you never feed your own vault) or when the pad can't have a vault. Room vaults and Fort Knox are part of <a href="/economy">PATV's economy</a>.</p>
+    <p class="mut"><%- t('premium.routes.note', { link: '<a href="/economy">' + t('premium.routes.economy') + '</a>' }) %></p>
   </section>
 
   <section class="card" aria-labelledby="rlH">
-    <h2 id="rlH">How it works</h2>
+    <h2 id="rlH"><%- t('premium.rules.heading') %></h2>
     <ul class="rules">
-      <li>Every payment adds time: a period is <%= S.period_days %> days, a chip-in adds its share of a period. You can pay up to about a year ahead.</li>
-      <li><b>Renewing:</b> tick 🔁 and the daily run takes one period from your balance when it's due. For a pad, one person is the renewer (the owner can always take it over).</li>
-      <li><b>Grace:</b> if the renewal can't be paid, the perks stay on for <%= S.grace_days %> day<%= S.grace_days === 1 ? '' : 's' %> while anyone tops it up. Then it <b>lapses</b>: the perks switch off and the renewer is cleared. Nothing is lost - the looks come back when it's renewed.</li>
-      <li>Gifts and chip-ins tell the pad's owner (or the person you gifted) in their notices. All payments are final - no refunds.</li>
-      <li>Site admins' own accounts and pads have both tiers comped.</li>
+      <li><%- t('premium.rules.time', { days: S.period_days }) %></li>
+      <li><%- t('premium.rules.renewing') %></li>
+      <li><%- t('premium.rules.grace', { count: S.grace_days }) %></li>
+      <li><%- t('premium.rules.gifts') %></li>
+      <li><%- t('premium.rules.admins') %></li>
     </ul>
   </section>
 </main>
 <% if (V.signed) { %>
 <script>
 (function () {
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var root = document.getElementById('pm'), msg = document.getElementById('pmMsg'), pad = root.getAttribute('data-pad');
   function ref() { var a = new Uint8Array(12); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
   function say(t, ok) { msg.textContent = t; msg.className = 'msg ' + (ok ? 'ok' : 'err'); msg.scrollIntoView({ block: 'nearest' }); }
   function post(url, body) {
     return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Something went wrong.' }; }); });
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: _t('js.premium.went_wrong', 'Something went wrong.') }; }); });
   }
   function fmt(n) { return Math.round(Number(n) || 0).toLocaleString('en-US'); }
-  function done(j, okText) { if (j.ok) { say(okText, true); setTimeout(function () { location.reload(); }, 1100); } else say((j.error || 'That didn’t work.') + (j.hint ? ' ' + j.hint : ''), false); }
+  function done(j, okText) { if (j.ok) { say(okText, true); setTimeout(function () { location.reload(); }, 1100); } else say((j.error || _t('js.premium.didnt_work', 'That didn’t work.')) + (j.hint ? ' ' + j.hint : ''), false); }
   root.addEventListener('click', function (e) {
     var b = e.target.closest('button');
     if (!b || !root.contains(b)) return;
@@ -202,36 +204,36 @@
     if (b.hasAttribute('data-buy')) {
       var months = Number(b.getAttribute('data-months')) || 1;
       var renewEl = document.getElementById(tier === 'prime_time' ? 'ptRenew' : 'spRenew');
-      if (!confirm('Pay ' + b.textContent.split('·').pop().trim() + ' PAT for ' + months + ' period' + (months > 1 ? 's' : '') + '? Payments are final.')) return;
+      if (!confirm(_t('js.premium.confirm_pay', months > 1 ? 'Pay {price} PAT for {count} periods? Payments are final.' : 'Pay {price} PAT for {count} period? Payments are final.', { price: b.textContent.split('·').pop().trim(), count: months }))) return;
       b.disabled = true;
       post('/api/premium/buy', { tier: tier, pad: pad || undefined, months: months, ref: ref(), renew: !!(renewEl && renewEl.checked) })
-        .then(function (j) { b.disabled = false; done(j, 'Done - paid through ' + (j.paid_through ? new Date(j.paid_through).toISOString().slice(0, 10) : '') + '.'); });
+        .then(function (j) { b.disabled = false; done(j, _t('js.premium.paid_through', 'Done - paid through {date}.', { date: j.paid_through ? new Date(j.paid_through).toISOString().slice(0, 10) : '' })); });
     } else if (b.hasAttribute('data-chip')) {
       var amt = Math.floor(Number(document.getElementById('ptAmt').value));
-      if (!confirm('Chip in ' + fmt(amt) + ' PAT to p/' + pad + '’s Prime Time? Payments are final.')) return;
+      if (!confirm(_t('js.premium.confirm_chip', 'Chip in {amount} PAT to p/{pad}’s Prime Time? Payments are final.', { amount: fmt(amt), pad: pad }))) return;
       b.disabled = true;
-      post('/api/premium/buy', { tier: 'prime_time', pad: pad, amount: amt, ref: ref() }).then(function (j) { b.disabled = false; done(j, 'Thanks - p/' + pad + ' is on air a little longer.'); });
+      post('/api/premium/buy', { tier: 'prime_time', pad: pad, amount: amt, ref: ref() }).then(function (j) { b.disabled = false; done(j, _t('js.premium.chip_thanks', 'Thanks - p/{pad} is on air a little longer.', { pad: pad })); });
     } else if (b.hasAttribute('data-gift')) {
       var to = document.getElementById('spGift').value.trim();
-      if (!to) return say('Type a username first.', false);
-      if (!confirm('Gift a Season Pass period to ' + to + '? Payments are final.')) return;
+      if (!to) return say(_t('js.premium.type_username', 'Type a username first.'), false);
+      if (!confirm(_t('js.premium.confirm_gift', 'Gift a Season Pass period to {user}? Payments are final.', { user: to }))) return;
       b.disabled = true;
-      post('/api/premium/buy', { tier: 'season_pass', user: to, months: 1, ref: ref() }).then(function (j) { b.disabled = false; done(j, 'Gifted to ' + to + ' 🎁'); });
+      post('/api/premium/buy', { tier: 'season_pass', user: to, months: 1, ref: ref() }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: to })); });
     } else if (b.hasAttribute('data-stk')) {
       var free = b.hasAttribute('data-free');
-      if (!free && !confirm('Buy this sticker pack for ' + b.textContent.split('·').pop().trim() + ' PAT?')) return;
+      if (!free && !confirm(_t('js.premium.confirm_stk', 'Buy this sticker pack for {price} PAT?', { price: b.textContent.split('·').pop().trim() }))) return;
       b.disabled = true;
-      post('/api/stickers/buy', { pack: b.getAttribute('data-stk'), ref: ref(), allowance: free }).then(function (j) { b.disabled = false; done(j, 'It’s yours - find it under 🧸 in the composer.'); });
+      post('/api/stickers/buy', { pack: b.getAttribute('data-stk'), ref: ref(), allowance: free }).then(function (j) { b.disabled = false; done(j, _t('js.premium.stk_yours', 'It’s yours - find it under 🧸 in the composer.')); });
     } else if (b.hasAttribute('data-stk-gift')) {
-      var who = prompt('Gift this sticker pack to (username):');
+      var who = prompt(_t('js.premium.stk_gift_prompt', 'Gift this sticker pack to (username):'));
       if (!who) return;
       b.disabled = true;
-      post('/api/stickers/buy', { pack: b.getAttribute('data-stk-gift'), ref: ref(), to: who.trim() }).then(function (j) { b.disabled = false; done(j, 'Gifted to ' + who.trim() + ' 🎁'); });
+      post('/api/stickers/buy', { pack: b.getAttribute('data-stk-gift'), ref: ref(), to: who.trim() }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: who.trim() })); });
     } else if (b.hasAttribute('data-card') || b.hasAttribute('data-portal')) {
       var card = b.hasAttribute('data-card');
       b.disabled = true;
       post(card ? '/api/premium/stripe/checkout' : '/api/premium/stripe/portal', { tier: b.getAttribute(card ? 'data-card' : 'data-portal'), pad: pad || undefined })
-        .then(function (j) { b.disabled = false; if (j.ok && j.url) location.href = j.url; else say(j.error || 'Card payments aren’t available.', false); });
+        .then(function (j) { b.disabled = false; if (j.ok && j.url) location.href = j.url; else say(j.error || _t('js.premium.no_card', 'Card payments aren’t available.'), false); });
     }
   });
   root.addEventListener('change', function (e) {
@@ -239,8 +241,8 @@
     if (t.id !== 'ptRenew' && t.id !== 'spRenew') return;
     var tier = t.id === 'ptRenew' ? 'prime_time' : 'season_pass';
     post('/api/premium/renew', { tier: tier, pad: pad || undefined, on: t.checked }).then(function (j) {
-      if (j.ok) say(t.checked ? '🔁 It renews from your balance now.' : 'Renewal switched off.', true);
-      else { t.checked = !t.checked; say(j.error || 'That didn’t work.', false); }
+      if (j.ok) say(t.checked ? _t('js.premium.renew_on', '🔁 It renews from your balance now.') : _t('js.premium.renew_off', 'Renewal switched off.'), true);
+      else { t.checked = !t.checked; say(j.error || _t('js.premium.didnt_work', 'That didn’t work.'), false); }
     });
   });
 })();

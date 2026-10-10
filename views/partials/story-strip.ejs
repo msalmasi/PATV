@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   The story strip (1.99bz; public/js/stories.js opens the viewer). Locals: story =
     { rooms: stories.forViewer() rows (circles, one per room), caps: one room's captures (thumbnails),
@@ -10,6 +11,7 @@
 %><%
   const S = story || { rooms: [], caps: [], signed: false };
   const ttl_ = typeof heading !== 'undefined' && heading ? heading : null;
+  const ttlH_ = typeof headingHtml !== 'undefined' && headingHtml ? headingHtml : null;     // i18n: a heading that's already HTML (t() output)
   const next_ = typeof next !== 'undefined' && next ? next : '/';
   const mono = (t) => String(t || '?').replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || '📡';
   const kindIc = { photo: '📸', clip: '📹', audio: '🔊' };
@@ -24,21 +26,21 @@
 %>
 <% if (showRooms || showCaps || compose_) { %>
 <link rel="stylesheet" href="/public/css/stories.css?v=6">
-<section class="ss" aria-label="Stories: snaps and clips from the pads' Camfrog rooms and stages, last 24 hours" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>"<% if (scope_) { %> data-scope="<%= scope_ %>"<% } %>>
-  <% if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small>last 24 h</small></h2><% } %>
+<section class="ss" aria-label="<%- t('feed.story.strip_aria') %>" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>"<% if (scope_) { %> data-scope="<%= scope_ %>"<% } %>>
+  <% if (ttlH_) { %><h2 class="ss-h"><%- ttlH_ %> <small><%- t('feed.story.last24') %></small></h2><% } else if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small><%- t('feed.story.last24') %></small></h2><% } %>
   <%# 1.99es: no native scrollbar - a fade at the edge that has more, and ‹ › buttons on hover-capable pointers (stories.js) %>
   <div class="ss-scroll">
-  <button type="button" class="ss-arr prev" tabindex="-1" aria-label="Scroll back" hidden>‹</button>
+  <button type="button" class="ss-arr prev" tabindex="-1" aria-label="<%- t('feed.story.scroll_back') %>" hidden>‹</button>
   <div class="ss-row" role="list">
     <% if (compose_) { %>
-      <button type="button" role="listitem" class="ss-c ss-add" data-story-compose data-pad="<%= composePad_ %>" aria-label="Add your story: a picture or a short video for 24 hours">
+      <button type="button" role="listitem" class="ss-c ss-add" data-story-compose data-pad="<%= composePad_ %>" aria-label="<%- t('feed.story.add_aria') %>">
         <span class="ss-ring"><span class="ss-av"><span class="ss-plus" aria-hidden="true">＋</span></span></span>
-        <span class="ss-n">Your story</span>
+        <span class="ss-n"><%- t('feed.story.yours') %></span>
       </button>
     <% } %>
     <% (S.rooms || []).forEach((r) => { %>
       <button type="button" role="listitem" class="ss-c<%= r.unseen ? ' unseen' : ' seen' %>" data-story-room="<%= r.id %>" data-latest="<%= r.latest %>"<%= !S.signed && r.open ? ' data-story-open=1' : '' %>
-              aria-label="<%= r.title %>: <%= r.person ? 'story, ' : '' %><%= r.count %> <%= r.person ? 'item' : 'capture' %><%= r.count === 1 ? '' : 's' %><%= r.unseen ? ', new' : '' %>">
+              aria-label="<%= r.title %>: <%- r.person ? t('feed.story.person_aria', { count: r.count }) : t('feed.story.room_aria', { count: r.count }) %><%- r.unseen ? t('feed.story.new_suffix') : '' %>">
         <span class="ss-ring"><span class="ss-av<%= r.person ? ' ss-person' : '' %>"><% if (r.person && r.avatar) { %><img src="<%= r.avatar %>" alt="" loading="lazy" onerror="this.remove()"><% } else { %><% if ((S.signed || r.open) && r.cover) { %><img src="<%= r.cover %>" alt="" loading="lazy" onerror="this.remove()"><% } %><% const pav_ = r.person ? null : padAvSrc_(r.id); if (pav_) { %><img class="ss-pav" src="<%= pav_ %>" alt="" loading="lazy"><% } else { %><span class="ss-mono" aria-hidden="true"><%= mono(r.title) %></span><% } %><% } %></span></span>
         <span class="ss-n"><%= r.title %></span>
         <span class="ss-k" aria-hidden="true"><%= r.count %></span>
@@ -46,17 +48,17 @@
     <% }) %>
     <% (S.caps || []).forEach((c) => { %>
       <a role="listitem" class="ss-t k-<%= c.kind %><%= c.kind !== 'photo' && c.poster && !c.nsfw ? ' has-p' : '' %>" href="<%= c.page %>" data-story-room="<%= S.room %>" data-story-item="<%= c.id %>"
-         aria-label="<%= c.source === 'user' ? (c.by || 'Someone') + "'s story" : (c.source === 'stage' ? 'Stage ' + (c.kind === 'clip' ? 'clip' : 'snap') : (c.kind === 'photo' ? 'Snap' : c.kind === 'clip' ? 'Clip' : 'Audio')) + ' of ' + (c.subject || 'someone') %><%= c.nsfw ? ' (NSFW)' : '' %>">
+         aria-label="<% const what_ = c.source === 'stage' ? t(c.kind === 'clip' ? 'feed.story.k_stage_clip' : 'feed.story.k_stage_snap') : t(c.kind === 'photo' ? 'feed.story.k_snap' : c.kind === 'clip' ? 'feed.story.k_clip' : 'feed.story.k_audio'); %><%- c.source === 'user' ? (c.by ? t('feed.story.users', { name: c.by }) : t('feed.story.someones')) : c.subject ? t('feed.story.of', { what: what_, who: c.subject }) : t('feed.story.of_someone', { what: what_ }) %><%- c.nsfw ? ' ' + t('feed.story.nsfw_suffix') : '' %>">
         <% if (c.kind === 'photo' && !c.nsfw) { %><img src="<%= c.src %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
         <%# 1.99dq: clips show their poster frame, audio its waveform card; the camcorder icon stays as the fallback %>
         <% if (c.kind !== 'photo' && c.poster && !c.nsfw) { %><img class="pst" src="<%= c.poster %>" alt="" loading="lazy" onerror="this.parentNode.classList.add('gone'); this.remove()"><% } %>
         <span class="ic" aria-hidden="true"><%= c.nsfw ? '🔞' : c.source === 'stage' ? '📺' : c.source === 'user' ? '✨' : kindIc[c.kind] %></span>
         <% if (c.kind !== 'photo') { %><span class="dur" aria-hidden="true"><%= c.kind === 'clip' ? '▶' : '🔊' %><% if (c.secs > 0) { %> <%= mmss(c.secs) %><% } %></span><% } %>
-        <span class="who"><%= c.source === 'user' ? (c.by || 'someone') : (c.subject || 'someone') %></span>
+        <span class="who"><% const who_ = c.source === 'user' ? c.by : c.subject; %><%- who_ ? t.esc(who_) : t('feed.story.someone') %></span>
       </a>
     <% }) %>
   </div>
-  <button type="button" class="ss-arr next" tabindex="-1" aria-label="Scroll for more" hidden>›</button>
+  <button type="button" class="ss-arr next" tabindex="-1" aria-label="<%- t('feed.story.scroll_more') %>" hidden>›</button>
   </div>
 </section>
 <%# 1.99fu: signed out, a Public pad's story (r.open, padaccess.js) is inlined too, so its circle opens %>

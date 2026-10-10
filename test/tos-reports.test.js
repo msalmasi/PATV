@@ -309,7 +309,8 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   const row = (await getQuery("SELECT terms_accepted_version AS v, terms_accepted_at AS at FROM users WHERE username = 'newperson'"))[0];
   assert.equal(row.v, terms.VERSION);
   assert.ok(row.at > 0);
-  const reg = fs.readFileSync(path.join(repo, "views", "register.ejs"), "utf8");
+  // 1.99jo: the sign-up text comes from locales/en.json now - check the rendered (English) form with the Terms line on
+  const reg = await require("ejs").renderFile(path.join(repo, "views", "register.ejs"), { user: null, errors: [], success: [], next: "", termsEnforced: true });
   assert.match(reg, /agree to the <a href="\/terms"/);
   const t = await get("/terms", null);
   assert.equal(t.status, 200);
@@ -338,7 +339,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(s12, /<!--email_off--><address class="dmca-agent"/, "Cloudflare email obfuscation must not hide the agent's email");
   assert.doesNotMatch(s12, /Designated Copyright Agent, Houseplants LLC/);   // the old block (copyright@ as the agent) is gone
   assert.match(s12, /General copyright questions that aren't notices can also go to/);
-  assert.match(fs.readFileSync(path.join(repo, "views", "layout.ejs"), "utf8"), /href="\/terms#reporting">Report abuse &amp; copyright/);
+  assert.match(t.text, /href="\/terms#reporting">Report abuse &amp; copyright/);   // 1.99jo: rendered (labels in locales/en.json)
   assert.doesNotMatch(t.text, /\[\[[A-Z]/);
   assert.match(t.text, /no cash value/);
   assert.match(t.text, /18 years old/);

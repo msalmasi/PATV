@@ -379,10 +379,12 @@ test("the site's global JSON parser (100 kb) skips the help sync - the data is ~
   assert.ok(Buffer.byteLength(JSON.stringify(BUNDLED)) > 100 * 1024, "(why: bigger than the default limit)");
 });
 
-test("navbar + footer + guides point at /help, not Netlify", () => {
+test("navbar + footer + guides point at /help, not Netlify", async () => {
   const layout = fs.readFileSync(path.join(repo, "views", "layout.ejs"), "utf8");
-  assert.match(layout, /\['\/help', '<img src="\/public\/img\/pepe.png" height="16" alt="">', 'PepeFrog commands'\]/);
-  assert.match(layout, /<a href="\/help">Pepe's commands<\/a>/);
+  // 1.99jo: the labels come from locales/en.json now - check the rendered (English) layout
+  const html = await require("ejs").renderFile(path.join(repo, "views", "layout.ejs"), { title: "T", ogPath: "/" });
+  assert.match(html, /<a href="\/help" class="nav-link" title="PepeFrog commands"><span class="ic"><img src="\/public\/img\/pepe.png" height="16" alt=""><\/span>/);
+  assert.match(html, /<a href="\/help">Pepe's commands<\/a>/);
   assert.doesNotMatch(layout, /pepe\.publicaccess\.tv"/);
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "views", "economy.ejs"), "utf8"), /pepe\.publicaccess\.tv\/help/);
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "views", "about.ejs"), "utf8"), /href="https:\/\/pepe\.publicaccess\.tv"/);

@@ -1,4 +1,5 @@
-<%- include('layout', { title: pad ? 'Create a post in p/' + pad.slug : 'Create a post', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: pad ? t('feed.submit.title_in', { pad: pad.slug }) : t('feed.submit.title'), user: user }) %>
 <%# 1.99ec: the create-post page - /submit (any pad) and /p/<pad>/submit (that pad preselected). feedweb.js submitPage:
     signed in only (else /login?next=). The full composer, already open; posting opens the new post. %>
 <link rel="stylesheet" href="/public/css/feed.css?v=17">
@@ -13,9 +14,9 @@
   .sb .fc { margin: 0; }
 </style>
 <main class="sb">
-  <div class="crumb"><% if (pad) { %><a href="/p">Pads</a> › <a href="<%= pad.href %>">p/<%= pad.slug %></a> › Create post<% } else { %><a href="/feed">Feed</a> › Create post<% } %></div>
-  <h1>✏️ Create a post</h1>
-  <p class="sb-sub"><% if (pad) { %>Posting in <a href="<%= pad.href %>"><b>p/<%= pad.slug %></b></a> — or pick another pad below.<% } else { %>Pick the pad it goes in below. Text, links, pictures, audio, video — or ✨ generate one with Pepe.<% } %></p>
+  <div class="crumb"><% if (pad) { %><a href="/p"><%- t('feed.submit.pads') %></a> › <a href="<%= pad.href %>">p/<%= pad.slug %></a> › <%- t('feed.submit.crumb') %><% } else { %><a href="/feed"><%- t('feed.post.feed') %></a> › <%- t('feed.submit.crumb') %><% } %></div>
+  <h1><%- t('feed.submit.h1') %></h1>
+  <p class="sb-sub"><% if (pad) { %><%- t('feed.submit.posting_in', { pad: '<a href="' + t.esc(pad.href) + '"><b>p/' + t.esc(pad.slug) + '</b></a>' }) %><% } else { %><%- t('feed.submit.pick') %><% } %></p>
   <%- include('partials/feed-composer', { composer, next: here, fx, expanded: true }) %>
 </main>
 <%- include('partials/feed-js', { viewer }) %>

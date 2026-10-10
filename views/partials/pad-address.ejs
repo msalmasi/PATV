@@ -1,28 +1,29 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%# 1.99iy: the pad settings hub's "Address" section (padaddress.js; public/js/pad-address.js). Locals: slug, room, address
     ({aliases, next_at, rename_days, staff, min, max}). Its own section so other hub changes don't collide with it. %>
 <% const AD_ = typeof address !== 'undefined' && address ? address : null; %>
 <% if (AD_) { %>
 <section class="ps-sec" id="address" role="tabpanel" aria-labelledby="tab-address">
-  <h2 class="ps-h">🔗 Address &amp; platform</h2>
-  <p class="ps-what">Where your pad lives on the site, and what it's connected to.</p>
+  <h2 class="ps-h"><%- t('pad.addr.title') %></h2>
+  <p class="ps-what"><%- t('pad.addr.what') %></p>
   <div class="sb-card ps-card" id="pad-address" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/address" data-slug="<%= slug %>"
        data-min="<%= AD_.min %>" data-max="<%= AD_.max %>">
-    <h3>Pad address</h3>
-    <p class="muted">Your pad is at <b>publicaccess.tv/p/<%= slug %></b>. Pick a new one and every old link keeps working: they redirect to the new address, tabs and anchors included. Posts, followers, stories, the stage and the room vault stay with the pad.</p>
+    <h3><%- t('pad.addr.h') %></h3>
+    <p class="muted"><%- t('pad.addr.intro', { slug: slug }) %></p>
     <% if (AD_.next_at && AD_.next_at > Date.now()) { %>
-      <p class="note">You changed it recently. Next change possible on <b><%= new Date(AD_.next_at).toISOString().slice(0, 10) %></b> (once every <%= AD_.rename_days %> days; a site admin can change it sooner).</p>
+      <p class="note"><%- t('pad.addr.recent', { date: new Date(AD_.next_at).toISOString().slice(0, 10), days: AD_.rename_days }) %></p>
     <% } else { %>
       <form class="ps-form" id="padAddrForm" autocomplete="off">
-        <label class="fld">New address
+        <label class="fld"><%- t('pad.addr.new') %>
           <span class="pa-in"><span class="pa-pre" aria-hidden="true">publicaccess.tv/p/</span><input type="text" name="slug" id="padAddrIn" minlength="<%= AD_.min %>" maxlength="<%= AD_.max %>" value="<%= slug %>" spellcheck="false" autocapitalize="off" aria-describedby="padAddrHint"></span>
         </label>
-        <p class="muted ps-mini" id="padAddrHint"><%= AD_.min %>-<%= AD_.max %> characters: letters, digits and single hyphens.<% if (!AD_.staff) { %> You can change it once every <%= AD_.rename_days %> days.<% } else { %> Site staff: no waiting period.<% } %></p>
-        <div class="row"><button type="submit" class="btn primary" id="padAddrSave" disabled>Change address</button><span class="msg" id="padAddrMsg" role="status" aria-live="polite"></span></div>
+        <p class="muted ps-mini" id="padAddrHint"><%- t('pad.addr.rule', { min: AD_.min, max: AD_.max }) %><% if (!AD_.staff) { %> <%- t('pad.addr.once_every', { days: AD_.rename_days }) %><% } else { %> <%- t('pad.addr.staff') %><% } %></p>
+        <div class="row"><button type="submit" class="btn primary" id="padAddrSave" disabled><%- t('pad.addr.change') %></button><span class="msg" id="padAddrMsg" role="status" aria-live="polite"></span></div>
       </form>
     <% } %>
     <% if (AD_.aliases && AD_.aliases.length) { %>
-      <h4>Old addresses (they redirect here)</h4>
-      <ul class="mylist"><% AD_.aliases.forEach((a) => { %><li><code>p/<%= a.slug %></code> <small class="muted">retired <%= new Date(Number(a.created) || 0).toISOString().slice(0, 10) %><%= a.by ? ' · changed by ' + a.by : '' %></small></li><% }) %></ul>
+      <h4><%- t('pad.addr.old') %></h4>
+      <ul class="mylist"><% AD_.aliases.forEach((a) => { %><li><code>p/<%= a.slug %></code> <small class="muted"><%- t('pad.addr.retired', { date: new Date(Number(a.created) || 0).toISOString().slice(0, 10) }) %><%- a.by ? ' · ' + t('pad.addr.changed_by', { name: a.by }) : '' %></small></li><% }) %></ul>
     <% } %>
   </div>
   <%# 1.99ja: platform connections (padconnect.js, partials/pad-connect.ejs) %>

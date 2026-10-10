@@ -1,5 +1,6 @@
 <%# views/tip.ejs — send PAT to another user (route: GET/POST /u/:username/tip in index.js) %>
-<%- include('layout', { title: `Tip ${displayname || usernameProfile}`, user: username }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('tip.page_title', { name: displayname || usernameProfile }), user: username }) %>
 <%
   const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
   const name = displayname || usernameProfile;
@@ -19,7 +20,7 @@
   // owner's tip-jar dashboard (isSelf); see tipJarData() in index.js
   const J = typeof jar !== 'undefined' && jar ? jar : null;
   const escH = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const nameOf = (u) => !u.username ? 'Someone' : (typeof cosmeticNameHtml === 'function'
+  const nameOf = (u) => !u.username ? t('tip.someone') : (typeof cosmeticNameHtml === 'function'
     ? cosmeticNameHtml(u.username, u.displayname || u.username) : escH(u.displayname || u.username));
   const profOf = (u) => '/u/' + encodeURIComponent(u.username);
   const isFresh = (t) => !!(J && J.seenAt && t.timestamp > J.seenAt);
@@ -196,7 +197,7 @@
 </style>
 
 <main class="tp">
-  <div class="crumb"><a href="<%= profileHref %>">&larr; Back to <%= name %>'s profile</a></div>
+  <div class="crumb"><a href="<%= profileHref %>"><%- t('tip.back_profile', { name: name }) %></a></div>
 
   <section class="card hero cx-host" aria-labelledby="tp-name">
     <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
@@ -204,17 +205,17 @@
       <% if (av && av.svg) { %><%- av.svg %><% } else { %><img src="<%= avatar || '/public/img/avatar.png' %>" alt="" onerror="this.src='/public/img/avatar.png'"><% } %>
     </div>
     <div class="who">
-      <div class="kicker"><%= isSelf ? '💰 Your tip jar' : '💸 Tip jar' %></div>
+      <div class="kicker"><%- isSelf ? t('tip.your_jar') : t('tip.jar') %></div>
       <h1 id="tp-name"><% if (cxName && cxName.css) { %><span class="cx-name" style="<%= cxName.css %>"><%= name %></span><% } else { %><%= name %><% } %></h1>
       <div class="handle"><a href="<%= profileHref %>" style="color:inherit">@<%= usernameProfile %></a><% if (camfrog) { %> · 🐸 <%= camfrog %><% } %></div>
       <div class="chips">
-        <span class="chip">Level <%= level %></span>
+        <span class="chip"><%- t('tip.level', { n: level }) %></span>
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
-        <% if (badgeCount) { %><span class="chip">🏅 <%= badgeCount %> badge<%= badgeCount === 1 ? '' : 's' %></span><% } %>
+        <% if (badgeCount) { %><span class="chip"><%- t('tip.badges', { count: badgeCount }) %></span><% } %>
       </div>
     </div>
     <% if (showcase.length) { %>
-      <div class="showcase" aria-label="Pinned badges">
+      <div class="showcase" aria-label="<%- t('tip.pinned') %>">
         <% showcase.forEach((b) => { %><span class="pin" title="<%= b.description %>"><img src="<%= b.icon %>" alt=""><span><%= b.name %></span></span><% }) %>
       </div>
     <% } %>
@@ -223,37 +224,37 @@
 
   <% if (!signedIn) { %>
     <section class="card">
-      <h2>Send a tip</h2>
-      <p class="muted" style="margin-top:0">Sign in to send <%= name %> some PAT.</p>
-      <div class="row"><a class="btn primary" href="/login">Sign in to tip</a><a class="btn" href="<%= profileHref %>">View profile</a></div>
+      <h2><%- t('tip.send_h') %></h2>
+      <p class="muted" style="margin-top:0"><%- t('tip.signin_send', { name: name }) %></p>
+      <div class="row"><a class="btn primary" href="/login"><%- t('tip.signin_tip') %></a><a class="btn" href="<%= profileHref %>"><%- t('tip.view_profile') %></a></div>
     </section>
   <% } else if (isSelf) { const T = (J && J.totals) || {}; %>
     <section class="card" aria-labelledby="tj-title">
-      <h2 id="tj-title">Your tip jar<% if (J && J.newCount) { %><span class="newpill"><%= J.newCount %> new</span><% } %></h2>
+      <h2 id="tj-title"><%- t('tip.your_jar_h') %><% if (J && J.newCount) { %><span class="newpill"><%- t('tip.n_new', { n: J.newCount }) %></span><% } %></h2>
       <div class="stats">
-        <div class="tot hl"><div class="k">Received all-time</div><div class="v"><%= fmt(T.recv) %> PAT</div>
-          <div class="sub"><%= fmt(T.recvCount) %> tip<%= T.recvCount == 1 ? '' : 's' %> from <%= fmt(T.tippers) %> <%= T.tippers == 1 ? 'person' : 'people' %></div></div>
-        <div class="tot"><div class="k">Last 7 days</div><div class="v" style="color:#81c784"><%= fmt(T.week) %></div></div>
-        <div class="tot"><div class="k">Last 30 days</div><div class="v" style="color:#81c784"><%= fmt(T.month) %></div></div>
-        <div class="tot"><div class="k">Tippers</div><div class="v"><%= fmt(T.tippers) %></div></div>
-        <div class="tot"><div class="k">You've sent</div><div class="v" style="color:#ef9a9a"><%= fmt(T.sent) %></div></div>
+        <div class="tot hl"><div class="k"><%- t('tip.recv_all') %></div><div class="v"><%= fmt(T.recv) %> PAT</div>
+          <div class="sub"><%- t('tip.n_tips', { count: Number(T.recvCount) || 0, n: fmt(T.recvCount) }) %> <%- t('tip.from_people', { count: Number(T.tippers) || 0, n: fmt(T.tippers) }) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.last7') %></div><div class="v" style="color:#81c784"><%= fmt(T.week) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.last30') %></div><div class="v" style="color:#81c784"><%= fmt(T.month) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.tippers') %></div><div class="v"><%= fmt(T.tippers) %></div></div>
+        <div class="tot"><div class="k"><%- t('tip.you_sent') %></div><div class="v" style="color:#ef9a9a"><%= fmt(T.sent) %></div></div>
       </div>
       <div class="row" style="margin-top:14px">
-        <button class="btn primary" type="button" id="tp-share" data-url="<%= tipHref %>">🔗 Copy tip link</button>
-        <a class="btn" href="/history">📜 PAT history</a>
+        <button class="btn primary" type="button" id="tp-share" data-url="<%= tipHref %>"><%- t('tip.copy_link') %></button>
+        <a class="btn" href="/history"><%- t('tip.history') %></a>
       </div>
       <p class="hint" id="tp-share-msg" role="status" aria-live="polite"></p>
     </section>
 
     <% if (J && J.top && J.top.length) { %>
     <section class="card" aria-labelledby="tj-top-title">
-      <h2 id="tj-top-title">Top tippers</h2>
+      <h2 id="tj-top-title"><%- t('tip.top') %></h2>
       <ol class="top">
         <% J.top.forEach((u, i) => { %>
           <li>
             <span class="rk"><%= i + 1 %></span>
             <span class="mini" aria-hidden="true"><% if (J.avatars && J.avatars[u.username]) { %><%- J.avatars[u.username] %><% } else { %><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><% } %></span>
-            <span class="nm"><a href="<%= profOf(u) %>"><%- nameOf(u) %></a><br><span class="meta"><%= fmt(u.n) %> tip<%= u.n == 1 ? '' : 's' %> · last <span class="when" data-ts="<%= iso(u.last) %>"><%= String(u.last || '').slice(0, 10) %></span></span></span>
+            <span class="nm"><a href="<%= profOf(u) %>"><%- nameOf(u) %></a><br><span class="meta"><%- t('tip.n_tips', { count: Number(u.n) || 0, n: fmt(u.n) }) %> · <%- t('tip.last') %> <span class="when" data-ts="<%= iso(u.last) %>"><%= String(u.last || '').slice(0, 10) %></span></span></span>
             <span class="amt"><%= fmt(u.total) %></span>
           </li>
         <% }) %>
@@ -262,33 +263,33 @@
     <% } %>
 
     <section class="card" aria-labelledby="tj-list-title">
-      <h2 id="tj-list-title" class="sr-only">Tips</h2>
-      <div class="tabs" role="tablist" aria-label="Tips">
-        <button class="tab" type="button" role="tab" id="tj-tab-received" aria-controls="tj-panel-received" aria-selected="true">Received <span class="n">(<%= fmt(T.recvCount) %>)</span></button>
-        <button class="tab" type="button" role="tab" id="tj-tab-sent" aria-controls="tj-panel-sent" aria-selected="false" tabindex="-1">Sent <span class="n">(<%= fmt(T.sentCount) %>)</span></button>
+      <h2 id="tj-list-title" class="sr-only"><%- t('tip.tips') %></h2>
+      <div class="tabs" role="tablist" aria-label="<%- t('tip.tips') %>">
+        <button class="tab" type="button" role="tab" id="tj-tab-received" aria-controls="tj-panel-received" aria-selected="true"><%- t('tip.received') %> <span class="n">(<%= fmt(T.recvCount) %>)</span></button>
+        <button class="tab" type="button" role="tab" id="tj-tab-sent" aria-controls="tj-panel-sent" aria-selected="false" tabindex="-1"><%- t('tip.sent') %> <span class="n">(<%= fmt(T.sentCount) %>)</span></button>
       </div>
       <% [['received', J ? J.received : null], ['sent', J ? J.sent : null]].forEach(([kind, pg]) => { const items = (pg && pg.items) || []; const out = kind === 'sent'; %>
         <div role="tabpanel" id="tj-panel-<%= kind %>" aria-labelledby="tj-tab-<%= kind %>"<%= out ? ' hidden' : '' %>>
           <% if (items.length) { %>
             <ul class="jar" data-kind="<%= kind %>">
-              <% items.forEach((t) => { %>
-                <li<%- !out && isFresh(t) ? ' class="fresh"' : '' %>>
-                  <span class="mini sm" aria-hidden="true"><img src="<%= t.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"></span>
-                  <span class="line"><span class="nm"><% if (out) { %><span class="muted" style="font-weight:normal">to </span><% } %><% if (t.username) { %><a href="<%= profOf(t) %>"><%- nameOf(t) %></a><% } else { %>Someone<% } %></span><span class="when" data-ts="<%= iso(t.timestamp) %>"><%= String(t.timestamp || '').slice(0, 10) %></span></span>
-                  <span class="pts <%= out ? 'out' : 'in' %>"><%= out ? '−' : '+' %><%= fmt(Math.abs(t.points)) %></span>
-                  <% if (t.note) { %><span class="tnote">&ldquo;<%= t.note %>&rdquo;</span><% } %>
+              <% items.forEach((tp) => { %>
+                <li<%- !out && isFresh(tp) ? ' class="fresh"' : '' %>>
+                  <span class="mini sm" aria-hidden="true"><img src="<%= tp.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"></span>
+                  <span class="line"><span class="nm"><% if (out) { %><span class="muted" style="font-weight:normal"><%- t('tip.to') %> </span><% } %><% if (tp.username) { %><a href="<%= profOf(tp) %>"><%- nameOf(tp) %></a><% } else { %><%- t('tip.someone') %><% } %></span><span class="when" data-ts="<%= iso(tp.timestamp) %>"><%= String(tp.timestamp || '').slice(0, 10) %></span></span>
+                  <span class="pts <%= out ? 'out' : 'in' %>"><%= out ? '−' : '+' %><%= fmt(Math.abs(tp.points)) %></span>
+                  <% if (tp.note) { %><span class="tnote">&ldquo;<%= tp.note %>&rdquo;</span><% } %>
                 </li>
               <% }) %>
             </ul>
-            <% if (pg.more) { %><button class="btn more" type="button" data-more="<%= kind %>" data-offset="<%= items.length %>">Load more</button><% } %>
+            <% if (pg.more) { %><button class="btn more" type="button" data-more="<%= kind %>" data-offset="<%= items.length %>"><%- t('tip.load_more') %></button><% } %>
             <p class="hint err" data-more-err="<%= kind %>" role="alert" hidden></p>
           <% } else if (!out) { %>
             <div class="empty">
               <div class="big" aria-hidden="true">🫙</div>
-              <p class="muted">No tips yet. Share your tip link in the Camfrog room or on Discord — every tip lands here with who sent it and their message.</p>
+              <p class="muted"><%- t('tip.no_tips') %></p>
             </div>
           <% } else { %>
-            <div class="empty"><p class="muted">You haven't tipped anyone yet. Open someone's profile and hit <b>💸 Tip</b>.</p></div>
+            <div class="empty"><p class="muted"><%- t('tip.none_sent') %></p></div>
           <% } %>
         </div>
       <% }) %>
@@ -297,46 +298,46 @@
     <section class="card" id="tp-card" aria-labelledby="tp-step-title">
       <!-- step 1: amount + note -->
       <form id="tp-form" novalidate>
-        <h2 id="tp-step-title">Send a tip</h2>
-        <div class="bal"><span class="k">Your balance</span><span class="v"><span id="tp-bal"><%= fmt(balance) %></span> PAT</span></div>
+        <h2 id="tp-step-title"><%- t('tip.send_h') %></h2>
+        <div class="bal"><span class="k"><%- t('tip.your_balance') %></span><span class="v"><span id="tp-bal"><%= fmt(balance) %></span> PAT</span></div>
 
-        <label class="lbl" for="tp-amt">Amount</label>
+        <label class="lbl" for="tp-amt"><%- t('tip.amount') %></label>
         <div class="amt-wrap">
           <input id="tp-amt" name="amount" type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
-                 placeholder="e.g. 25k" aria-describedby="tp-hint" required>
+                 placeholder="<%- t('tip.amount_ph') %>" aria-describedby="tp-hint" required>
           <span class="unit" aria-hidden="true">PAT</span>
         </div>
-        <div class="amt-chips" role="group" aria-label="Quick amounts">
+        <div class="amt-chips" role="group" aria-label="<%- t('tip.quick') %>">
           <% CHIPS.forEach(([v, l]) => { %>
             <button type="button" class="amt-chip" data-v="<%= v %>" aria-pressed="false"<%= v > balance ? ' disabled' : '' %> aria-label="<%= fmt(v) %> PAT"><%= l %></button>
           <% }) %>
         </div>
-        <div class="hint" id="tp-hint" aria-live="polite">Type a number — <b>k</b> = thousand, <b>m</b> = million (2.5k = 2,500).</div>
+        <div class="hint" id="tp-hint" aria-live="polite"><%- t('tip.hint') %></div>
 
         <div class="note-wrap">
-          <label class="lbl" for="tp-note">Message <span style="text-transform:none;letter-spacing:0;color:#777">(optional)</span></label>
-          <input id="tp-note" name="note" type="text" maxlength="<%= noteMax %>" autocomplete="off" placeholder="Say thanks, GG, for the DJ set…" aria-describedby="tp-note-meta">
-          <div class="note-meta" id="tp-note-meta"><span><%= name %> sees this on their history.</span><span><span id="tp-note-n">0</span>/<%= noteMax %></span></div>
+          <label class="lbl" for="tp-note"><%- t('tip.message') %> <span style="text-transform:none;letter-spacing:0;color:#777"><%- t('tip.optional') %></span></label>
+          <input id="tp-note" name="note" type="text" maxlength="<%= noteMax %>" autocomplete="off" placeholder="<%- t('tip.note_ph') %>" aria-describedby="tp-note-meta">
+          <div class="note-meta" id="tp-note-meta"><span><%- t('tip.sees', { name: name }) %></span><span><span id="tp-note-n">0</span>/<%= noteMax %></span></div>
         </div>
 
-        <div class="row send-row"><button class="btn primary" type="submit" id="tp-review">Review tip</button></div>
+        <div class="row send-row"><button class="btn primary" type="submit" id="tp-review"><%- t('tip.review') %></button></div>
       </form>
 
       <!-- step 2: confirm -->
       <div id="tp-confirm" hidden>
-        <h2 tabindex="-1" id="tp-confirm-title">Confirm your tip</h2>
+        <h2 tabindex="-1" id="tp-confirm-title"><%- t('tip.confirm_h') %></h2>
         <div class="sum">
-          <div><span class="k">To</span><span class="v"><b><%= name %></b> <span class="muted">@<%= usernameProfile %></span></span></div>
-          <div><span class="k">Amount</span><span class="v big" id="tp-c-amt"></span></div>
-          <div id="tp-c-note-row"><span class="k">Message</span><span class="v note" id="tp-c-note"></span></div>
-          <div><span class="k">Your balance</span><span class="v"><span id="tp-c-before"></span> → <b id="tp-c-after"></b></span></div>
+          <div><span class="k"><%- t('tip.to_k') %></span><span class="v"><b><%= name %></b> <span class="muted">@<%= usernameProfile %></span></span></div>
+          <div><span class="k"><%- t('tip.amount') %></span><span class="v big" id="tp-c-amt"></span></div>
+          <div id="tp-c-note-row"><span class="k"><%- t('tip.message') %></span><span class="v note" id="tp-c-note"></span></div>
+          <div><span class="k"><%- t('tip.your_balance') %></span><span class="v"><span id="tp-c-before"></span> → <b id="tp-c-after"></b></span></div>
         </div>
         <div class="warn" id="tp-c-warn" hidden></div>
-        <p class="muted" style="margin-top:0">Tips are instant and can't be undone. No fee — <%= name %> gets the full amount.</p>
+        <p class="muted" style="margin-top:0"><%- t('tip.fine', { name: name }) %></p>
         <div class="hint err" id="tp-c-err" role="alert"></div>
         <div class="row">
-          <button class="btn primary" type="button" id="tp-send">Send tip</button>
-          <button class="btn" type="button" id="tp-back">Back</button>
+          <button class="btn primary" type="button" id="tp-send"><%- t('tip.send_tip') %></button>
+          <button class="btn" type="button" id="tp-back"><%- t('tip.back') %></button>
         </div>
       </div>
 
@@ -344,47 +345,48 @@
       <div id="tp-done" class="done" hidden>
         <div class="burst" aria-hidden="true" id="tp-burst"></div>
         <div class="big-check" aria-hidden="true">✓</div>
-        <h3 tabindex="-1" id="tp-done-title">Sent <span class="amt" id="tp-d-amt"></span> PAT to <%= name %></h3>
-        <p class="muted">Your balance is now <b id="tp-d-bal" style="color:#ffd700"></b> PAT.</p>
+        <h3 tabindex="-1" id="tp-done-title"><%- t('tip.done_h', { amt: '<span class="amt" id="tp-d-amt"></span>', name: name }) %></h3>
+        <p class="muted"><%- t('tip.bal_now', { bal: '<b id="tp-d-bal" style="color:#ffd700"></b>' }) %></p>
         <div class="row">
-          <button class="btn primary" type="button" id="tp-again">Tip again</button>
-          <a class="btn" href="<%= profileHref %>">Back to profile</a>
+          <button class="btn primary" type="button" id="tp-again"><%- t('tip.again') %></button>
+          <a class="btn" href="<%= profileHref %>"><%- t('tip.back_to_profile') %></a>
         </div>
       </div>
     </section>
 
     <section class="card" aria-labelledby="tp-hist-title">
-      <h2 id="tp-hist-title">You &amp; <%= name %></h2>
+      <h2 id="tp-hist-title"><%- t('tip.you_and', { name: name }) %></h2>
       <div class="totals">
-        <div class="tot"><div class="k">You've tipped</div><div class="v" style="color:#ef9a9a"><span id="tp-sent-tot"><%= fmt(sentTotal) %></span> PAT</div></div>
-        <div class="tot"><div class="k">They've tipped you</div><div class="v" style="color:#81c784"><%= fmt(recvTotal) %> PAT</div></div>
+        <div class="tot"><div class="k"><%- t('tip.you_tipped_k') %></div><div class="v" style="color:#ef9a9a"><span id="tp-sent-tot"><%= fmt(sentTotal) %></span> PAT</div></div>
+        <div class="tot"><div class="k"><%- t('tip.they_tipped_k') %></div><div class="v" style="color:#81c784"><%= fmt(recvTotal) %> PAT</div></div>
       </div>
       <ul class="tips" id="tp-list"<%= recent.length ? '' : ' hidden' %>>
-        <% recent.forEach((t) => { const out = t.type === 'tip sent'; %>
+        <% recent.forEach((tp) => { const out = tp.type === 'tip sent'; %>
           <li>
             <span class="ic" aria-hidden="true"><%= out ? '💸' : '💰' %></span>
-            <span class="what"><%= out ? 'You tipped' : 'They tipped you' %> <span class="when" data-ts="<%= iso(t.timestamp) %>"><%= String(t.timestamp || '').slice(0, 10) %></span></span>
-            <span class="pts <%= out ? 'out' : 'in' %>"><%= out ? '−' : '+' %><%= fmt(Math.abs(t.points)) %></span>
-            <% if (t.note) { %><span class="tnote">&ldquo;<%= t.note %>&rdquo;</span><% } %>
+            <span class="what"><%- out ? t('tip.you_tipped') : t('tip.they_tipped') %> <span class="when" data-ts="<%= iso(tp.timestamp) %>"><%= String(tp.timestamp || '').slice(0, 10) %></span></span>
+            <span class="pts <%= out ? 'out' : 'in' %>"><%= out ? '−' : '+' %><%= fmt(Math.abs(tp.points)) %></span>
+            <% if (tp.note) { %><span class="tnote">&ldquo;<%= tp.note %>&rdquo;</span><% } %>
           </li>
         <% }) %>
       </ul>
-      <p class="muted" id="tp-empty" style="margin:0"<%= recent.length ? ' hidden' : '' %>>No tips between you two yet — be the first.</p>
+      <p class="muted" id="tp-empty" style="margin:0"<%= recent.length ? ' hidden' : '' %>><%- t('tip.none_between') %></p>
     </section>
   <% } %>
 </main>
 
 <script>
 (function () {
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var fmt = function (n) { return Math.floor(Number(n) || 0).toLocaleString('en-US'); };
   // relative times for the history list
   function ago(iso) {
     var t = Date.parse(iso); if (isNaN(t)) return null;
     var s = Math.max(0, (Date.now() - t) / 1000);
-    if (s < 60) return 'just now';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    if (s < 86400 * 30) return Math.floor(s / 86400) + 'd ago';
+    if (s < 60) return _t('js.tip.just_now', 'just now');
+    if (s < 3600) return _t('js.tip.m_ago', '{n}m ago', { n: Math.floor(s / 60) });
+    if (s < 86400) return _t('js.tip.h_ago', '{n}h ago', { n: Math.floor(s / 3600) });
+    if (s < 86400 * 30) return _t('js.tip.d_ago', '{n}d ago', { n: Math.floor(s / 86400) });
     return new Date(t).toLocaleDateString();
   }
   document.querySelectorAll('.tp .when[data-ts]').forEach(function (el) {
@@ -395,7 +397,7 @@
   if (share) share.addEventListener('click', function () {
     var url = location.origin + share.getAttribute('data-url');
     var msg = document.getElementById('tp-share-msg');
-    var ok = function () { msg.textContent = 'Copied: ' + url; };
+    var ok = function () { msg.textContent = _t('js.tip.copied', 'Copied: {url}', { url: url }); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(ok, function () { msg.textContent = url; });
     else msg.textContent = url;
   });
@@ -425,14 +427,14 @@
     mini.appendChild(img); li.appendChild(mini);
     var line = document.createElement('span'); line.className = 'line';
     var nm = document.createElement('span'); nm.className = 'nm';
-    if (out) { var to = document.createElement('span'); to.className = 'muted'; to.style.fontWeight = 'normal'; to.textContent = 'to '; nm.appendChild(to); }
+    if (out) { var to = document.createElement('span'); to.className = 'muted'; to.style.fontWeight = 'normal'; to.textContent = _t('js.tip.to', 'to') + ' '; nm.appendChild(to); }
     if (t.username) {
       var a = document.createElement('a'); a.href = '/u/' + encodeURIComponent(t.username);
       var label = t.displayname || t.username;
       if (t.nameCss) { var c = document.createElement('span'); c.className = 'cx-name'; c.setAttribute('style', t.nameCss); c.textContent = label; a.appendChild(c); }
       else a.textContent = label;
       nm.appendChild(a);
-    } else nm.appendChild(document.createTextNode('Someone'));
+    } else nm.appendChild(document.createTextNode(_t('js.tip.someone', 'Someone')));
     line.appendChild(nm);
     var w = document.createElement('span'); w.className = 'when';
     var iso = String(t.timestamp || '').replace(' ', 'T') + 'Z';
@@ -449,16 +451,16 @@
     var err = document.querySelector('.tp [data-more-err="' + kind + '"]');
     btn.addEventListener('click', function () {
       if (btn.disabled) return;
-      btn.disabled = true; btn.textContent = 'Loading…'; err.hidden = true;
+      btn.disabled = true; btn.textContent = _t('js.tip.loading', 'Loading…'); err.hidden = true;
       var off = Number(btn.getAttribute('data-offset')) || 0;
       fetch('/api/tipjar?kind=' + encodeURIComponent(kind) + '&offset=' + off, { credentials: 'same-origin', headers: { accept: 'application/json' } })
         .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
         .then(function (d) {
           (d.items || []).forEach(function (t) { list.appendChild(jarRow(t, kind === 'sent')); });
           btn.setAttribute('data-offset', off + (d.items || []).length);
-          btn.disabled = false; btn.textContent = 'Load more'; btn.hidden = !d.more;
+          btn.disabled = false; btn.textContent = _t('js.tip.load_more', 'Load more'); btn.hidden = !d.more;
         })
-        .catch(function () { btn.disabled = false; btn.textContent = 'Load more'; err.textContent = 'Couldn’t load more tips — try again.'; err.hidden = false; });
+        .catch(function () { btn.disabled = false; btn.textContent = _t('js.tip.load_more', 'Load more'); err.textContent = _t('js.tip.load_err', 'Couldn’t load more tips — try again.'); err.hidden = false; });
     });
   });
 
@@ -485,9 +487,9 @@
     var n = parseAmt(raw);
     var bad = null;
     if (!raw) bad = '';
-    else if (isNaN(n)) bad = 'Use a number like 2500, 25k or 1.5m.';
-    else if (n < 1) bad = 'Tip at least 1 PAT.';
-    else if (n > balance) bad = "That's more than your balance (" + fmt(balance) + ' PAT).';
+    else if (isNaN(n)) bad = _t('js.tip.bad_num', 'Use a number like 2500, 25k or 1.5m.');
+    else if (n < 1) bad = _t('js.tip.min', 'Tip at least 1 PAT.');
+    else if (n > balance) bad = _t('js.tip.over', 'That\'s more than your balance ({n} PAT).', { n: fmt(balance) });
     chips.forEach(function (c) {
       c.setAttribute('aria-pressed', String(Number(c.getAttribute('data-v')) === n));
       c.disabled = Number(c.getAttribute('data-v')) > balance;
@@ -495,7 +497,7 @@
     if (bad === '') { hint.className = 'hint'; hint.innerHTML = HINT0; amtEl.removeAttribute('aria-invalid'); return null; }
     if (bad) { hint.className = 'hint err'; hint.textContent = bad; amtEl.setAttribute('aria-invalid', 'true'); return null; }
     hint.className = 'hint'; amtEl.removeAttribute('aria-invalid');
-    hint.textContent = '= ' + fmt(n) + ' PAT · leaves you ' + fmt(balance - n) + ' PAT';
+    hint.textContent = _t('js.tip.calc', '= {n} PAT · leaves you {left} PAT', { n: fmt(n), left: fmt(balance - n) });
     return n;
   }
   amtEl.addEventListener('input', check);
@@ -516,7 +518,7 @@
     e.preventDefault();
     var n = check();
     if (n === null) {
-      if (!amtEl.value.trim()) { hint.className = 'hint err'; hint.textContent = 'Enter an amount to tip.'; amtEl.setAttribute('aria-invalid', 'true'); }
+      if (!amtEl.value.trim()) { hint.className = 'hint err'; hint.textContent = _t('js.tip.enter', 'Enter an amount to tip.'); amtEl.setAttribute('aria-invalid', 'true'); }
       amtEl.focus(); return;
     }
     var note = noteEl.value.replace(/\s+/g, ' ').trim();
@@ -529,9 +531,9 @@
     var warn = document.getElementById('tp-c-warn');
     var big = n >= balance * 0.5 && n >= 10000;
     warn.hidden = !big;
-    if (big) warn.textContent = n === balance ? 'Heads up: this is your whole balance.' : 'Heads up: that’s ' + Math.round(n / balance * 100) + '% of your balance.';
+    if (big) warn.textContent = n === balance ? _t('js.tip.whole', 'Heads up: this is your whole balance.') : _t('js.tip.pct', 'Heads up: that’s {pct}% of your balance.', { pct: Math.round(n / balance * 100) });
     errEl.textContent = '';
-    sendBtn.disabled = false; sendBtn.textContent = 'Send ' + fmt(n) + ' PAT';
+    sendBtn.disabled = false; sendBtn.textContent = _t('js.tip.send_n', 'Send {n} PAT', { n: fmt(n) });
     show('confirm');
     document.getElementById('tp-confirm-title').focus();
   });
@@ -542,7 +544,7 @@
 
   sendBtn.addEventListener('click', function () {
     if (!pending || sendBtn.disabled) return;
-    sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; errEl.textContent = '';
+    sendBtn.disabled = true; sendBtn.textContent = _t('js.tip.sending', 'Sending…'); errEl.textContent = '';
     var p = pending;
     fetch('/u/' + encodeURIComponent(TARGET) + '/tip', {
       method: 'POST', credentials: 'same-origin',
@@ -554,18 +556,18 @@
         .then(function (d) { return { status: r.status, ok: r.ok, d: d || {} }; });
     }).then(function (res) {
       if (res.ok) return success(p, res.d);
-      sendBtn.disabled = false; sendBtn.textContent = 'Try again';
-      if (res.status === 409) { errEl.textContent = 'That tip is still going through — check your history before trying again.'; return; }
-      if (res.status === 401) { errEl.innerHTML = 'You’ve been signed out. <a href="/login">Sign in</a> and try again.'; return; }
+      sendBtn.disabled = false; sendBtn.textContent = _t('js.tip.try_again', 'Try again');
+      if (res.status === 409) { errEl.textContent = _t('js.tip.e409', 'That tip is still going through — check your history before trying again.'); return; }
+      if (res.status === 401) { errEl.textContent = _t('js.tip.e401', 'You’ve been signed out.') + ' '; var lk = document.createElement('a'); lk.href = '/login'; lk.textContent = _t('js.tip.signin', 'Sign in'); errEl.appendChild(lk); errEl.appendChild(document.createTextNode(' ' + _t('js.tip.e401_tail', 'and try again.'))); return; }
       var m = String(res.d.message || res.d.error || '');
-      if (/insufficient/i.test(m)) m = 'You don’t have enough PAT for that any more.';
-      else if (!m || m.length > 160) m = 'The tip didn’t go through — nothing was sent.';
+      if (/insufficient/i.test(m)) m = _t('js.tip.insufficient', 'You don’t have enough PAT for that any more.');
+      else if (!m || m.length > 160) m = _t('js.tip.failed', 'The tip didn’t go through — nothing was sent.');
       errEl.textContent = m;
       if (res.status !== 500) pending.key = newKey();   // a refused attempt is final; a fresh try gets a fresh key
     }).catch(function () {
       // Network error: we don't know if it landed. Keep the SAME key so a retry can't send twice.
-      sendBtn.disabled = false; sendBtn.textContent = 'Retry';
-      errEl.textContent = 'Couldn’t reach the server. Retrying is safe — it won’t send twice.';
+      sendBtn.disabled = false; sendBtn.textContent = _t('js.tip.retry', 'Retry');
+      errEl.textContent = _t('js.tip.network', 'Couldn’t reach the server. Retrying is safe — it won’t send twice.');
     });
   });
 
@@ -579,7 +581,8 @@
     // prepend to the list
     var list = document.getElementById('tp-list');
     var li = document.createElement('li'); li.className = 'fresh';
-    li.innerHTML = '<span class="ic" aria-hidden="true">💸</span><span class="what">You tipped <span class="when">· just now</span></span><span class="pts out"></span>';
+    li.innerHTML = '<span class="ic" aria-hidden="true">💸</span><span class="what"> <span class="when"></span></span><span class="pts out"></span>';
+    var wh = li.querySelector('.what'); wh.insertBefore(document.createTextNode(_t('js.tip.you_tipped', 'You tipped')), wh.firstChild); li.querySelector('.when').textContent = '· ' + _t('js.tip.just_now', 'just now');
     li.querySelector('.pts').textContent = '−' + fmt(p.amount);
     if (p.note) { var n = document.createElement('span'); n.className = 'tnote'; n.textContent = '“' + p.note + '”'; li.appendChild(n); }
     list.insertBefore(li, list.firstChild); list.hidden = false;

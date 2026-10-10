@@ -22,6 +22,8 @@
 // clip stories now show 🔖 Save too (can.save from the server).
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  function escH(s) { return String(s).replace(/[&<>"]/g, function (c) { return c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&quot;'; }); }
   if (window.__patvStories) return;
   window.__patvStories = true;
 
@@ -102,10 +104,10 @@
   // ── the sign-in prompt (signed-out visitors) ──
   function signInPrompt(next) {
     var box = document.createElement('div');
-    box.className = 'sv-ask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Sign in to see stories');
-    box.innerHTML = '<div class="sv-ask-card"><div class="sv-ask-ic" aria-hidden="true">📸</div><h2>Stories are for PATV members</h2>' +
-      '<p>These are snaps and clips from the pads\' Camfrog rooms and stages, so you need to be signed in to watch them.</p>' +
-      '<div class="sv-ask-btns"><a class="sv-btn primary" href="#">Sign in</a><a class="sv-btn" href="/register">Join PATV</a><button type="button" class="sv-btn ghost">Not now</button></div></div>';
+    box.className = 'sv-ask'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', _t('js.feed.sv.ask_aria', 'Sign in to see stories'));
+    box.innerHTML = '<div class="sv-ask-card"><div class="sv-ask-ic" aria-hidden="true">📸</div><h2>' + escH(_t('js.feed.sv.ask_h', 'Stories are for PATV members')) + '</h2>' +
+      '<p>' + escH(_t('js.feed.sv.ask_p', 'These are snaps and clips from the pads\' Camfrog rooms and stages, so you need to be signed in to watch them.')) + '</p>' +
+      '<div class="sv-ask-btns"><a class="sv-btn primary" href="#">' + escH(_t('js.feed.sv.sign_in', 'Sign in')) + '</a><a class="sv-btn" href="/register">' + escH(_t('js.feed.sv.join', 'Join PATV')) + '</a><button type="button" class="sv-btn ghost">' + escH(_t('js.feed.sv.not_now', 'Not now')) + '</button></div></div>';
     box.querySelector('a.primary').setAttribute('href', '/login?next=' + encodeURIComponent(next || (location.pathname + location.search)));
     var close = function () { box.remove(); document.removeEventListener('keydown', onKey); };
     var onKey = function (e) { if (e.key === 'Escape') close(); };
@@ -119,10 +121,10 @@
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function ago(ms) {
     var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-    if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; return Math.floor(s / 3600) + 'h ago';
+    if (s < 60) return _t('js.feed.sv.just_now', 'just now'); if (s < 3600) return _t('js.feed.sv.m_ago', '{n}m ago', { n: Math.floor(s / 60) }); return _t('js.feed.sv.h_ago', '{n}h ago', { n: Math.floor(s / 3600) });
   }
   function build() {
-    var root = el('div', 'sv'); root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', 'Story viewer'); root.tabIndex = -1;
+    var root = el('div', 'sv'); root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true'); root.setAttribute('aria-label', _t('js.feed.sv.viewer', 'Story viewer')); root.tabIndex = -1;
     var frame = el('div', 'sv-frame');
     var bars = el('div', 'sv-bars');
     var head = el('div', 'sv-head');
@@ -131,18 +133,18 @@
     var who = el('span', 'sv-who'), when = el('span', 'sv-when');
     meta.appendChild(who); meta.appendChild(when);
     var info = el('div', 'sv-info'); info.appendChild(room); info.appendChild(meta);
-    var mute = el('button', 'sv-ico sv-mute'); mute.type = 'button'; mute.setAttribute('aria-label', 'Mute'); mute.textContent = '🔊';
-    var pause = el('button', 'sv-ico sv-pause'); pause.type = 'button'; pause.setAttribute('aria-label', 'Pause'); pause.textContent = '❚❚';
-    var x = el('button', 'sv-ico sv-x'); x.type = 'button'; x.setAttribute('aria-label', 'Close'); x.textContent = '✕';
+    var mute = el('button', 'sv-ico sv-mute'); mute.type = 'button'; mute.setAttribute('aria-label', _t('js.feed.sv.mute', 'Mute')); mute.textContent = '🔊';
+    var pause = el('button', 'sv-ico sv-pause'); pause.type = 'button'; pause.setAttribute('aria-label', _t('js.feed.sv.pause', 'Pause')); pause.textContent = '❚❚';
+    var x = el('button', 'sv-ico sv-x'); x.type = 'button'; x.setAttribute('aria-label', _t('js.feed.sv.close', 'Close')); x.textContent = '✕';
     head.appendChild(info); head.appendChild(mute); head.appendChild(pause); head.appendChild(x);
     var stage = el('div', 'sv-stage');
     var foot = el('div', 'sv-foot');
     var live = el('div', 'sv-live'); live.setAttribute('aria-live', 'polite'); live.className = 'sv-sr';
-    var hint = el('div', 'sv-hint', 'Tap → next · tap ← back · hold to pause · swipe ↓ to close');
+    var hint = el('div', 'sv-hint', _t('js.feed.sv.hint', 'Tap → next · tap ← back · hold to pause · swipe ↓ to close'));
     var acts = el('div', 'sv-acts');          // 1.99eq: 📌 Post to pad / 🔖 Save
     frame.appendChild(bars); frame.appendChild(head); frame.appendChild(stage); frame.appendChild(foot); frame.appendChild(hint); frame.appendChild(acts);
-    var prevRoom = el('button', 'sv-side sv-prev'); prevRoom.type = 'button'; prevRoom.setAttribute('aria-label', 'Previous pad'); prevRoom.textContent = '‹';
-    var nextRoom = el('button', 'sv-side sv-next'); nextRoom.type = 'button'; nextRoom.setAttribute('aria-label', 'Next pad'); nextRoom.textContent = '›';
+    var prevRoom = el('button', 'sv-side sv-prev'); prevRoom.type = 'button'; prevRoom.setAttribute('aria-label', _t('js.feed.sv.prev_pad', 'Previous pad')); prevRoom.textContent = '‹';
+    var nextRoom = el('button', 'sv-side sv-next'); nextRoom.type = 'button'; nextRoom.setAttribute('aria-label', _t('js.feed.sv.next_pad', 'Next pad')); nextRoom.textContent = '›';
     root.appendChild(prevRoom); root.appendChild(frame); root.appendChild(nextRoom); root.appendChild(live);
     return { root: root, frame: frame, bars: bars, room: room, who: who, when: when, mute: mute, pause: pause, x: x, stage: stage, foot: foot,
              live: live, hint: hint, prevRoom: prevRoom, nextRoom: nextRoom, acts: acts };
@@ -211,26 +213,30 @@
     });
     V.room.textContent = R.title; V.room.href = R.href;
     // 1.99cr: stage captures (a stream on the pad's stage, not a Camfrog cam) say so
-    var what = it.source === 'stage' ? (it.kind === 'clip' ? '📺 Stage clip' : '📺 Stage snap')
-             : it.source === 'user' ? '✨ Story'
-             : it.kind === 'photo' ? '📸 Snap' : it.kind === 'clip' ? '📹 Clip' : '🔊 Audio';
-    V.who.textContent = (it.source === 'user' ? '✨ ' + (it.by || 'someone') + '’s story'
-      : what + ' of ' + (it.subject || 'someone') + (it.by ? (it.source === 'stage' ? ' by ' : ' · by ') + it.by : ''))
-      + (it.where && it.where.title ? ' · in ' + it.where.title : '') + (it.nsfw ? ' · NSFW' : '');
+    var what = it.source === 'stage' ? (it.kind === 'clip' ? _t('js.feed.sv.k_stage_clip', '📺 Stage clip') : _t('js.feed.sv.k_stage_snap', '📺 Stage snap'))
+             : it.source === 'user' ? _t('js.feed.sv.k_story', '✨ Story')
+             : it.kind === 'photo' ? _t('js.feed.sv.k_snap', '📸 Snap') : it.kind === 'clip' ? _t('js.feed.sv.k_clip', '📹 Clip') : _t('js.feed.sv.k_audio', '🔊 Audio');
+    var whoName = it.subject || _t('js.feed.sv.someone', 'someone');
+    var ofWho = _t('js.feed.sv.of', '{what} of {who}', { what: what, who: whoName });
+    var storyOf = it.by ? _t('js.feed.sv.users_story', '{name}’s story', { name: it.by }) : _t('js.feed.sv.someones_story', 'someone’s story');
+    V.who.textContent = (it.source === 'user' ? '✨ ' + storyOf
+      : ofWho + (it.by ? (it.source === 'stage' ? ' ' + _t('js.feed.sv.by', 'by {name}', { name: it.by }) : ' · ' + _t('js.feed.sv.by', 'by {name}', { name: it.by })) : ''))
+      + (it.where && it.where.title ? ' · ' + _t('js.feed.sv.in', 'in {pad}', { pad: it.where.title }) : '') + (it.nsfw ? ' · NSFW' : '');
     V.when.textContent = ago(it.created);
     V.when.title = new Date(it.created).toLocaleString();
     V.prevRoom.disabled = ri === 0; V.nextRoom.disabled = ri === rooms.length - 1;
-    V.pause.textContent = '❚❚'; V.pause.setAttribute('aria-label', 'Pause');
+    V.pause.textContent = '❚❚'; V.pause.setAttribute('aria-label', _t('js.feed.sv.pause', 'Pause'));
     V.mute.classList.toggle('hide', it.kind === 'photo');
-    V.mute.textContent = V.muted ? '🔇' : '🔊'; V.mute.setAttribute('aria-label', V.muted ? 'Unmute' : 'Mute');
+    V.mute.textContent = V.muted ? '🔇' : '🔊'; V.mute.setAttribute('aria-label', V.muted ? _t('js.feed.sv.unmute', 'Unmute') : _t('js.feed.sv.mute', 'Mute'));
     V.foot.innerHTML = '';
-    var openRoom = el('a', 'sv-open-room', 'Open ' + R.title + ' ›'); openRoom.href = R.href; V.foot.appendChild(openRoom);
+    var openRoom = el('a', 'sv-open-room', _t('js.feed.sv.open_pad', 'Open {pad} ›', { pad: R.title })); openRoom.href = R.href; V.foot.appendChild(openRoom);
     // 1.99ec: says what it opens ("Capture page" confused people)
     var noun = it.source === 'user' ? 'story' : it.kind === 'clip' ? 'clip' : it.kind === 'photo' ? 'snap' : '';
-    var page = el('a', 'sv-open-item', noun ? 'Open ' + noun + ' ›' : 'Open ›'); page.href = it.page;
-    page.setAttribute('aria-label', 'Open this ' + (noun || 'capture') + '\'s page to share or download');
+    var page = el('a', 'sv-open-item', noun === 'story' ? _t('js.feed.sv.open_story', 'Open story ›') : noun === 'clip' ? _t('js.feed.sv.open_clip', 'Open clip ›') : noun === 'snap' ? _t('js.feed.sv.open_snap', 'Open snap ›') : _t('js.feed.sv.open', 'Open ›')); page.href = it.page;
+    page.setAttribute('aria-label', noun === 'story' ? _t('js.feed.sv.page_story', 'Open this story\'s page to share or download') : noun === 'clip' ? _t('js.feed.sv.page_clip', 'Open this clip\'s page to share or download')
+      : noun === 'snap' ? _t('js.feed.sv.page_snap', 'Open this snap\'s page to share or download') : _t('js.feed.sv.page_capture', 'Open this capture\'s page to share or download'));
     V.foot.appendChild(page);
-    V.live.textContent = R.title + ': ' + (it.source === 'user' ? (it.by || 'someone') + '’s story' : what + ' of ' + (it.subject || 'someone')) + ', ' + (ii + 1) + ' of ' + R.items.length;
+    V.live.textContent = R.title + ': ' + (it.source === 'user' ? storyOf : ofWho) + ', ' + _t('js.feed.sv.n_of', '{i} of {n}', { i: ii + 1, n: R.items.length });
     closePanel(true);
     paintActs(R, it);
     // media
@@ -242,8 +248,8 @@
     var spin = el('div', 'sv-spin'); spin.setAttribute('aria-hidden', 'true'); V.stage.appendChild(spin);
     if (V.gated) {
       var gate = el('div', 'sv-nsfw');
-      gate.appendChild(el('span', null, it.source === 'user' ? '🔞 Marked NSFW' : '🔞 Marked NSFW by the streamer'));
-      var show18 = el('button', 'sv-btn primary', 'Show it (18+)'); show18.type = 'button';
+      gate.appendChild(el('span', null, it.source === 'user' ? _t('js.feed.sv.nsfw', '🔞 Marked NSFW') : _t('js.feed.sv.nsfw_streamer', '🔞 Marked NSFW by the streamer')));
+      var show18 = el('button', 'sv-btn primary', _t('js.feed.sv.show18', 'Show it (18+)')); show18.type = 'button';
       show18.addEventListener('click', function () {
         V.nsfwOk = true; V.gated = false; V.stage.classList.remove('nsfw'); gate.remove();
         if (!V.media) { V.waiting = !!V.stage.querySelector('.sv-spin'); V.last = performance.now(); } else play();
@@ -255,12 +261,12 @@
       if (V.ri !== ri || V.ii !== ii) return;
       V.stage.classList.add('gone');
       V.stage.innerHTML = '';
-      V.stage.appendChild(el('div', 'sv-gone', 'This capture is gone.'));
+      V.stage.appendChild(el('div', 'sv-gone', _t('js.feed.sv.gone', 'This capture is gone.')));
       V.waiting = false; V.dur = 1500; V.elapsed = 0;
     };
     if (it.kind === 'photo') {
       var img = new Image();
-      img.alt = it.source === 'user' ? (it.by || 'Someone') + '’s story' : what.replace(/^\S+ /, '') + ' of ' + (it.subject || 'someone') + ' in ' + R.title;
+      img.alt = it.source === 'user' ? (it.by ? storyOf : _t('js.feed.sv.someones_story_cap', 'Someone’s story')) : _t('js.feed.sv.alt', '{what} of {who} in {pad}', { what: what.replace(/^\S+ /, ''), who: whoName, pad: R.title });
       img.className = 'sv-img'; img.decoding = 'async';
       img.onload = function () { if (V.ri !== ri || V.ii !== ii) return; spin.remove(); V.waiting = !!V.gated; V.last = performance.now(); };
       img.onerror = failed;
@@ -274,7 +280,7 @@
       if (it.kind === 'audio') {
         var card = el('div', 'sv-audio-card');
         card.appendChild(el('div', 'sv-audio-ic', '🔊'));
-        card.appendChild(el('div', 'sv-audio-t', 'Camfrog room audio from ' + R.title));
+        card.appendChild(el('div', 'sv-audio-t', _t('js.feed.sv.audio_from', 'Camfrog room audio from {pad}', { pad: R.title })));
         var wave = el('div', 'sv-wave'); for (var w = 0; w < 24; w++) { var s = el('i'); s.style.animationDelay = (w * 53 % 700) + 'ms'; wave.appendChild(s); } card.appendChild(wave);
         V.stage.appendChild(card);
       }
@@ -302,7 +308,7 @@
     var p = m.play();
     if (p && p.catch) p.catch(function () {
       // autoplay with sound refused: play muted and say so
-      if (!m.muted) { m.muted = true; V.muted = true; V.mute.textContent = '🔇'; V.mute.setAttribute('aria-label', 'Unmute'); m.play().catch(function () {}); }
+      if (!m.muted) { m.muted = true; V.muted = true; V.mute.textContent = '🔇'; V.mute.setAttribute('aria-label', _t('js.feed.sv.unmute', 'Unmute')); m.play().catch(function () {}); }
     });
   }
 
@@ -332,44 +338,44 @@
     V.acts.innerHTML = '';
     var can = it.can || {};
     if (it.posted) {
-      var pl = el('a', 'sv-act on', '📌 Posted ›'); pl.href = it.posted; pl.setAttribute('aria-label', 'Posted to ' + R.title + ': open the post'); V.acts.appendChild(pl);
+      var pl = el('a', 'sv-act on', _t('js.feed.sv.posted', '📌 Posted ›')); pl.href = it.posted; pl.setAttribute('aria-label', _t('js.feed.sv.posted_aria', 'Posted to {pad}: open the post', { pad: R.title })); V.acts.appendChild(pl);
     } else if (can.post) {
-      var pb = el('button', 'sv-act', '📌 Post to pad'); pb.type = 'button'; pb.setAttribute('aria-label', 'Post this to ' + R.title + ' for good');
+      var pb = el('button', 'sv-act', _t('js.feed.sv.post_to_pad', '📌 Post to pad')); pb.type = 'button'; pb.setAttribute('aria-label', _t('js.feed.sv.post_to_pad_aria', 'Post this to {pad} for good', { pad: R.title }));
       pb.addEventListener('click', function () { openPanel(R, it); });
       V.acts.appendChild(pb);
     }
     if (can.save || it.saved) {
-      var sb = el('button', 'sv-act' + (it.saved ? ' on' : ''), it.saved ? '🔖 Saved' : '🔖 Save'); sb.type = 'button';
-      sb.setAttribute('aria-pressed', it.saved ? 'true' : 'false'); sb.setAttribute('aria-label', it.saved ? 'Saved - tap to unsave' : 'Save to your private Saved');
+      var sb = el('button', 'sv-act' + (it.saved ? ' on' : ''), it.saved ? _t('js.feed.sv.saved', '🔖 Saved') : _t('js.feed.sv.save', '🔖 Save')); sb.type = 'button';
+      sb.setAttribute('aria-pressed', it.saved ? 'true' : 'false'); sb.setAttribute('aria-label', it.saved ? _t('js.feed.sv.saved_aria', 'Saved - tap to unsave') : _t('js.feed.sv.save_aria', 'Save to your private Saved'));
       sb.addEventListener('click', function () {
         sb.disabled = true;
         var was = !!it.saved;
         api('/api/stories/' + encodeURIComponent(it.id) + (was ? '/unsave' : '/save'), {}).then(function () {
           it.saved = !was;
           if (V && V.ri !== undefined && data[V.ri] && data[V.ri].items[V.ii] === it) paintActs(R, it);
-          toast(it.saved ? 'Saved — find it on your profile under 🔖 Saved' : 'Removed from Saved');
+          toast(it.saved ? _t('js.feed.sv.saved_toast', 'Saved — find it on your profile under 🔖 Saved') : _t('js.feed.sv.unsaved_toast', 'Removed from Saved'));
         }).catch(function (e) { sb.disabled = false; toast(e.message); });
       });
       V.acts.appendChild(sb);
     }
     // 1.99ez: 🗑 a member's own story (the uploader, the pad's owner / mods, staff) / 🙈 hide a capture of me from my story
     if (can.del) {
-      var db = el('button', 'sv-act', '🗑 ' + (it.mine ? 'Delete' : 'Remove')); db.type = 'button';
-      db.setAttribute('aria-label', it.mine ? 'Delete your story' : 'Remove this story from the pad');
+      var db = el('button', 'sv-act', '🗑 ' + (it.mine ? _t('js.feed.sv.delete', 'Delete') : _t('js.feed.sv.remove', 'Remove'))); db.type = 'button';
+      db.setAttribute('aria-label', it.mine ? _t('js.feed.sv.delete_aria', 'Delete your story') : _t('js.feed.sv.remove_aria', 'Remove this story from the pad'));
       db.addEventListener('click', function () {
-        if (!window.confirm(it.mine ? 'Delete this story?' : 'Remove this story?')) return;
+        if (!window.confirm(it.mine ? _t('js.feed.sv.delete_q', 'Delete this story?') : _t('js.feed.sv.remove_q', 'Remove this story?'))) return;
         db.disabled = true;
-        api('/api/stories/' + encodeURIComponent(it.id) + '/delete', {}).then(function () { dropItem(R, it, it.mine ? 'Story deleted' : 'Story removed'); })
+        api('/api/stories/' + encodeURIComponent(it.id) + '/delete', {}).then(function () { dropItem(R, it, it.mine ? _t('js.feed.sv.deleted', 'Story deleted') : _t('js.feed.sv.removed', 'Story removed')); })
           .catch(function (e) { db.disabled = false; toast(e.message); });
       });
       V.acts.appendChild(db);
     }
     if (it.hideable) {
-      var hb = el('button', 'sv-act', '🙈 Hide from my story'); hb.type = 'button';
-      hb.setAttribute('aria-label', 'Hide this capture from your story (it stays in its pad)');
+      var hb = el('button', 'sv-act', _t('js.feed.sv.hide', '🙈 Hide from my story')); hb.type = 'button';
+      hb.setAttribute('aria-label', _t('js.feed.sv.hide_aria', 'Hide this capture from your story (it stays in its pad)'));
       hb.addEventListener('click', function () {
         hb.disabled = true;
-        api('/api/stories/' + encodeURIComponent(it.id) + '/hide', {}).then(function () { dropItem(R, it, 'Hidden from your story'); })
+        api('/api/stories/' + encodeURIComponent(it.id) + '/hide', {}).then(function () { dropItem(R, it, _t('js.feed.sv.hidden', 'Hidden from your story')); })
           .catch(function (e) { hb.disabled = false; toast(e.message); });
       });
       V.acts.appendChild(hb);
@@ -409,16 +415,16 @@
     closePanel(true);
     V.panelPaused = !V.paused;
     if (!V.paused) setPaused(true);
-    var p = el('form', 'sv-panel'); p.setAttribute('aria-label', 'Post to ' + R.title);
-    p.appendChild(el('h3', null, '📌 Post to ' + R.title));
-    p.appendChild(el('p', null, 'It becomes a permanent post in this pad' + (it.by ? ', credited to ' + it.by : '') + '. ' +
-      (it.subject ? it.subject + ' can remove it from the post any time.' : 'The person in it can remove it any time.')));
-    var cap = el('input', 'sv-cap'); cap.type = 'text'; cap.maxLength = 140; cap.placeholder = 'Add a caption (optional)'; cap.setAttribute('aria-label', 'Caption (optional)');
+    var p = el('form', 'sv-panel'); p.setAttribute('aria-label', _t('js.feed.sv.panel_aria', 'Post to {pad}', { pad: R.title }));
+    p.appendChild(el('h3', null, _t('js.feed.sv.panel_h', '📌 Post to {pad}', { pad: R.title })));
+    p.appendChild(el('p', null, (it.by ? _t('js.feed.sv.permanent_by', 'It becomes a permanent post in this pad, credited to {name}.', { name: it.by }) : _t('js.feed.sv.permanent', 'It becomes a permanent post in this pad.')) + ' ' +
+      (it.subject ? _t('js.feed.sv.subject_can', '{name} can remove it from the post any time.', { name: it.subject }) : _t('js.feed.sv.person_can', 'The person in it can remove it any time.'))));
+    var cap = el('input', 'sv-cap'); cap.type = 'text'; cap.maxLength = 140; cap.placeholder = _t('js.feed.sv.caption_ph', 'Add a caption (optional)'); cap.setAttribute('aria-label', _t('js.feed.sv.caption_aria', 'Caption (optional)'));
     p.appendChild(cap);
     var err = el('p', 'sv-err'); err.setAttribute('role', 'alert'); p.appendChild(err);
     var row = el('div', 'sv-ask-btns');
-    var go = el('button', 'sv-btn primary', 'Post'); go.type = 'submit';
-    var no = el('button', 'sv-btn ghost', 'Cancel'); no.type = 'button';
+    var go = el('button', 'sv-btn primary', _t('js.feed.sv.post', 'Post')); go.type = 'submit';
+    var no = el('button', 'sv-btn ghost', _t('js.feed.sv.cancel', 'Cancel')); no.type = 'button';
     no.addEventListener('click', function () { closePanel(false); });
     row.appendChild(go); row.appendChild(no); p.appendChild(row);
     p.addEventListener('submit', function (e) {
@@ -428,9 +434,9 @@
         it.posted = d.post.url;
         paintActs(R, it);
         p.innerHTML = '';
-        p.appendChild(el('h3', null, d.again ? '📌 Already posted' : '📌 Posted to ' + R.title));
-        var a = el('a', 'sv-btn primary', 'View the post ›'); a.href = d.post.url; p.appendChild(a);
-        var c2 = el('button', 'sv-btn ghost', 'Keep watching'); c2.type = 'button'; c2.addEventListener('click', function () { closePanel(false); }); p.appendChild(c2);
+        p.appendChild(el('h3', null, d.again ? _t('js.feed.sv.already', '📌 Already posted') : _t('js.feed.sv.posted_to', '📌 Posted to {pad}', { pad: R.title })));
+        var a = el('a', 'sv-btn primary', _t('js.feed.sv.view_post', 'View the post ›')); a.href = d.post.url; p.appendChild(a);
+        var c2 = el('button', 'sv-btn ghost', _t('js.feed.sv.keep_watching', 'Keep watching')); c2.type = 'button'; c2.addEventListener('click', function () { closePanel(false); }); p.appendChild(c2);
         a.focus();
       }).catch(function (e2) { go.disabled = false; err.textContent = e2.message; });
     });
@@ -441,7 +447,7 @@
 
   function setPaused(p) {
     V.paused = p;
-    V.pause.textContent = p ? '▶' : '❚❚'; V.pause.setAttribute('aria-label', p ? 'Play' : 'Pause');
+    V.pause.textContent = p ? '▶' : '❚❚'; V.pause.setAttribute('aria-label', p ? _t('js.feed.sv.play', 'Play') : _t('js.feed.sv.pause', 'Pause'));
     V.root.classList.toggle('is-paused', p);
     if (V.media) { if (p) V.media.pause(); else play(); }
   }
@@ -471,7 +477,7 @@
       V.muted = !V.muted;
       try { localStorage.setItem('patvStoryMuted', V.muted ? '1' : '0'); } catch (e) { /* none */ }
       if (V.media) V.media.muted = V.muted;
-      V.mute.textContent = V.muted ? '🔇' : '🔊'; V.mute.setAttribute('aria-label', V.muted ? 'Unmute' : 'Mute');
+      V.mute.textContent = V.muted ? '🔇' : '🔊'; V.mute.setAttribute('aria-label', V.muted ? _t('js.feed.sv.unmute', 'Unmute') : _t('js.feed.sv.mute', 'Mute'));
     });
     V.prevRoom.addEventListener('click', prevRoomStart);
     V.nextRoom.addEventListener('click', nextRoomStart);

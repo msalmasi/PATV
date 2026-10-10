@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   The feed sort bar (1.99bx): Hot / New / Top / Controversial / Rising, and a time filter that only shows
   for Top and Controversial. Reused by /feed, the room feeds (and Following / profiles).
@@ -9,6 +10,7 @@
 %><%
   const t_ = fx.WINDOWS.includes(top) ? top : 'week';
   const timed_ = fx.TIMED.has(sort);
+  const L_ = (k, d) => (t.has(k) ? t(k) : t.esc(d));     // i18n: a sort / window label (HTML), English from fx when the catalog lacks it
   const sw_ = typeof swap !== 'undefined' && swap ? ' data-swap' : '';
   const G_ = typeof gallery !== 'undefined' && gallery && gallery.scope && typeof hop !== 'undefined' && hop ? gallery : null;
   // the toggle's no-JS links: this feed, this sort, + ?view=
@@ -18,14 +20,14 @@
     return b + (b.indexOf('?') < 0 ? '?' : b.endsWith('?') || b.endsWith('&') ? '' : '&') + 'view=' + v + hash;
   };
 %>
-<nav class="fs" aria-label="<%= typeof label !== 'undefined' && label ? label : 'Sort posts' %>"<% if (G_) { %> data-view="<%= G_.view %>"<% } %>>
+<nav class="fs" aria-label="<% if (typeof label !== 'undefined' && label) { %><%= label %><% } else { %><%- t('feed.sort.aria') %><% } %>"<% if (G_) { %> data-view="<%= G_.view %>"<% } %>>
   <div class="fs-sorts">
-    <% fx.SORTS.forEach((s) => { %><a<%- sw_ %> class="fs-pill<%= sort === s ? ' on' : '' %>" href="<%= href(s, fx.TIMED.has(s) ? t_ : '') %>"<%= sort === s ? ' aria-current=true' : '' %>><%- fx.icon(s) %><span><%= fx.SORT_LABELS[s] %></span></a><% }) %>
+    <% fx.SORTS.forEach((s) => { %><a<%- sw_ %> class="fs-pill<%= sort === s ? ' on' : '' %>" href="<%= href(s, fx.TIMED.has(s) ? t_ : '') %>"<%= sort === s ? ' aria-current=true' : '' %>><%- fx.icon(s) %><span><%- L_('feed.sort.' + s, fx.SORT_LABELS[s]) %></span></a><% }) %>
   </div>
   <% if (G_) { const gal_ = G_.view === 'gallery'; %>
-    <div class="fv" role="group" aria-label="View" data-fv-scope="<%= G_.scope %>" data-fv-src="<%= G_.src %>">
-      <a class="fv-b<%= gal_ ? '' : ' on' %>" href="<%= vHref_('list') %>" data-fv="list" aria-pressed="<%= gal_ ? 'false' : 'true' %>" title="List view"><span aria-hidden="true">☰</span><span class="fv-l"> List</span></a>
-      <a class="fv-b<%= gal_ ? ' on' : '' %>" href="<%= vHref_('gallery') %>" data-fv="gallery" aria-pressed="<%= gal_ ? 'true' : 'false' %>" title="Gallery view"><span aria-hidden="true">▦</span><span class="fv-l"> Gallery</span></a>
+    <div class="fv" role="group" aria-label="<%- t('feed.view.aria') %>" data-fv-scope="<%= G_.scope %>" data-fv-src="<%= G_.src %>">
+      <a class="fv-b<%= gal_ ? '' : ' on' %>" href="<%= vHref_('list') %>" data-fv="list" aria-pressed="<%= gal_ ? 'false' : 'true' %>" title="<%- t('feed.view.list_title') %>"><span aria-hidden="true">☰</span><span class="fv-l"> <%- t('feed.view.list') %></span></a>
+      <a class="fv-b<%= gal_ ? ' on' : '' %>" href="<%= vHref_('gallery') %>" data-fv="gallery" aria-pressed="<%= gal_ ? 'true' : 'false' %>" title="<%- t('feed.view.gallery_title') %>"><span aria-hidden="true">▦</span><span class="fv-l"> <%- t('feed.view.gallery') %></span></a>
     </div>
   <% } %>
   <% if (typeof hop !== 'undefined' && hop && fx.HOP) { %>
@@ -34,11 +36,11 @@
   <% } %>
   <% if (timed_) { %>
     <details class="fs-time">
-      <summary aria-label="Time range: <%= fx.WINDOW_LABELS[t_] %>"><%- fx.icon('clock') %><span><%= fx.WINDOW_LABELS[t_] %></span><%- fx.icon('chevron', 'chev') %></summary>
+      <summary aria-label="<%- t('feed.sort.range_aria', { w: L_('feed.window.' + t_, fx.WINDOW_LABELS[t_]) }) %>"><%- fx.icon('clock') %><span><%- L_('feed.window.' + t_, fx.WINDOW_LABELS[t_]) %></span><%- fx.icon('chevron', 'chev') %></summary>
       <div class="fs-menu" role="menu">
-        <% fx.WINDOWS.forEach((w) => { %><a<%- sw_ %> role="menuitem" class="<%= w === t_ ? 'on' : '' %>" href="<%= href(sort, w) %>"><%= fx.WINDOW_LABELS[w] %></a><% }) %>
+        <% fx.WINDOWS.forEach((w) => { %><a<%- sw_ %> role="menuitem" class="<%= w === t_ ? 'on' : '' %>" href="<%= href(sort, w) %>"><%- L_('feed.window.' + w, fx.WINDOW_LABELS[w]) %></a><% }) %>
       </div>
     </details>
   <% } %>
 </nav>
-<% if (G_) { %><%- include('feed-gallery', { G: G_, hop, sort, t: timed_ ? t_ : '' }) %><% } %>
+<% if (G_) { %><%- include('feed-gallery', { G: G_, hop, sort, tw: timed_ ? t_ : '' }) %><% } %>

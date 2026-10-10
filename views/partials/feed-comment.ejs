@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   One comment (1.99bx) with its replies (one level). Locals: c (feedstore.comments row), p (the post), fx, viewer,
   staff (bool), modRooms (Set), reply (bool: this is a reply)
@@ -11,7 +12,7 @@
 <li class="cm<%= c.deleted ? ' is-del' : '' %><%= c.replies && c.replies.length ? ' has-kids' : '' %>" id="c-<%= c.id %>" data-id="<%= c.id %>">
   <% if (c.deleted) { %>
     <span class="av av-del" aria-hidden="true"></span>
-    <div class="cm-head"><span class="mut">[deleted]</span></div>
+    <div class="cm-head"><span class="mut"><%- t('feed.c.deleted') %></span></div>
   <% } else { %>
     <% if (c.author.bot) { %>
       <img class="av av-pepe" src="/public/img/pepe.png" alt="" width="26" height="26" aria-hidden="true">
@@ -20,15 +21,15 @@
     <% } %>
     <div class="cm-head">
       <% if (c.author.bot) { %>
-        <a href="/u/<%= encodeURIComponent(c.author.username) %>" class="fp-author bot-badge" title="Pepe, PATV's bot - written by AI">🤖 Pepe</a>
+        <a href="/u/<%= encodeURIComponent(c.author.username) %>" class="fp-author bot-badge" title="<%- t('feed.pepe_bot') %>">🤖 Pepe</a>
       <% } else { %>
       <%- fx.uname(c.author, { href: '/u/' + encodeURIComponent(c.author.username), cls: 'fp-author' }) %>
       <% } %>
       <% if (c.flair && fx.flair) { %><%- fx.flair(c.flair) %><% } %><%# 1.99ir: their flair in the post's pad (padflair.js) %>
-      <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="Wrote the post">OP</span><% } %>
+      <% if (p.author && c.author.username === p.author.username) { %><span class="op" title="<%- t('feed.c.op_title') %>"><%- t('feed.c.op') %></span><% } %>
       <span class="dot" aria-hidden="true">·</span><a class="fp-time" href="#c-<%= c.id %>"><time datetime="<%= new Date(c.created).toISOString() %>" title="<%= new Date(c.created).toUTCString() %>"><%= fx.ago(c.created) %></time></a>
-      <% if (c.edited) { %><span class="fp-ed">(edited)</span><% } %>
-      <% if (c.hidden) { %><span class="tag warn" title="Hidden by an urgent report - only admins see it">Hidden · urgent review</span><% } %>
+      <% if (c.edited) { %><span class="fp-ed"><%- t('feed.edited') %></span><% } %>
+      <% if (c.hidden) { %><span class="tag warn" title="<%- t('feed.c.hidden_title') %>"><%- t('feed.c.hidden') %></span><% } %>
     </div>
   <% } %>
   <span class="rail" aria-hidden="true"></span>
@@ -36,21 +37,21 @@
     <div class="cm-body"><%- fx.body(c.body) %></div>
     <div class="bar cm-bar">
       <div class="vote h" data-v="<%= cv %>" data-kind="comment"<%- c.mine ? ' data-own="1"' : '' %>>
-        <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= cv === 1 ? 'true' : 'false' %>" aria-label="Upvote comment"><%- fx.icon('up') %></button>
-        <span class="vs" title="<%= c.ups %> up · <%= c.downs %> down"><%= fx.num(c.score) %></span>
-        <button type="button" class="vb vb-down" data-act="vote" data-dir="-1" aria-pressed="<%= cv === -1 ? 'true' : 'false' %>" aria-label="<%= c.mine ? 'You can\'t downvote your own comment' : 'Downvote comment' %>"<%= c.mine ? ' disabled' : '' %>><%- fx.icon('down') %></button>
+        <button type="button" class="vb vb-up" data-act="vote" data-dir="1" aria-pressed="<%= cv === 1 ? 'true' : 'false' %>" aria-label="<%- t('feed.c.upvote') %>"><%- fx.icon('up') %></button>
+        <span class="vs" title="<%- t('feed.updown', { up: c.ups, down: c.downs }) %>"><%= fx.num(c.score) %></span>
+        <button type="button" class="vb vb-down" data-act="vote" data-dir="-1" aria-pressed="<%= cv === -1 ? 'true' : 'false' %>" aria-label="<%- c.mine ? t('feed.c.no_downvote') : t('feed.c.downvote') %>"<%= c.mine ? ' disabled' : '' %>><%- fx.icon('down') %></button>
       </div>
-      <% if (signed && !isReply) { %><button type="button" class="act" data-act="reply"><%- fx.icon('reply') %><span>Reply</span></button><% } %>
+      <% if (signed && !isReply) { %><button type="button" class="act" data-act="reply"><%- fx.icon('reply') %><span><%- t('feed.c.reply') %></span></button><% } %>
       <% if (hasMenu) { %>
         <details class="more">
-          <summary class="act" aria-label="More actions" title="More"><%- fx.icon('more') %></summary>
+          <summary class="act" aria-label="<%- t('feed.more_aria') %>" title="<%- t('feed.more') %>"><%- fx.icon('more') %></summary>
           <div class="menu" role="menu">
-            <% if (c.mine) { %><button type="button" role="menuitem" data-act="cedit"><%- fx.icon('edit') %>Edit</button><% } %>
-            <% if (canDel) { %><button type="button" role="menuitem" class="danger" data-act="cdelete"><%- fx.icon('trash') %>Delete</button><% } %>
-            <% if (!c.mine) { %><button type="button" role="menuitem" data-act="creport"><%- fx.icon('flag') %>Report comment</button><% } %>
+            <% if (c.mine) { %><button type="button" role="menuitem" data-act="cedit"><%- fx.icon('edit') %><%- t('feed.edit') %></button><% } %>
+            <% if (canDel) { %><button type="button" role="menuitem" class="danger" data-act="cdelete"><%- fx.icon('trash') %><%- t('feed.delete') %></button><% } %>
+            <% if (!c.mine) { %><button type="button" role="menuitem" data-act="creport"><%- fx.icon('flag') %><%- t('feed.c.report') %></button><% } %>
             <%# 1.99df: on a profile post: the profile's owner can block the commenter from commenting on their profile %>
             <% const prof_ = !c.mine && c.author && !c.author.bot && modRooms ? (p.roomsAll || []).find((r) => r.profile && modRooms.has(r.id)) : null;
-               if (prof_) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= c.author.username %>" data-slug="<%= prof_.slug %>" data-what="commenting on your profile"><%- fx.icon('shield') %>Block from commenting on your profile</button><% } %>
+               if (prof_) { %><button type="button" role="menuitem" class="danger" data-act="room-ban" data-user="<%= c.author.username %>" data-slug="<%= prof_.slug %>" data-what="commenting on your profile"><%- fx.icon('shield') %><%- t('feed.c.block') %></button><% } %>
             <% if (viewer && viewer.class === 'Admin') { %><button type="button" role="menuitem" data-act="cdetails"><%- fx.icon('shield') %>Details (admin)</button><% } %>
           </div>
         </details>
@@ -58,15 +59,15 @@
     </div>
     <% if (c.mine) { %>
       <form class="cm-editf composer hide" data-act="cedit-save">
-        <textarea name="body" maxlength="2000" rows="3" aria-label="Edit comment"><%= c.body %></textarea>
-        <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="cedit">Cancel</button><button type="submit" class="btn-s">Save</button></div>
+        <textarea name="body" maxlength="2000" rows="3" aria-label="<%- t('feed.c.edit_aria') %>"><%= c.body %></textarea>
+        <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="cedit"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.save') %></button></div>
       </form>
     <% } %>
   <% } %>
   <% if (!isReply && signed && !c.deleted) { %>
     <form class="cm-replyf composer hide" data-act="comment" data-post="<%= p.id %>" data-parent="<%= c.id %>">
-      <textarea name="body" maxlength="2000" rows="2" placeholder="Reply to <%= c.author.display %>…" aria-label="Your reply"></textarea>
-      <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="reply">Cancel</button><button type="submit" class="btn-s">Reply</button></div>
+      <textarea name="body" maxlength="2000" rows="2" placeholder="<%- t('feed.c.reply_to', { name: c.author.display }) %>" aria-label="<%- t('feed.c.your_reply') %>"></textarea>
+      <div class="cbar"><span class="fc-err" role="alert"></span><button type="button" class="btn-g" data-act="reply"><%- t('feed.cancel') %></button><button type="submit" class="btn-s"><%- t('feed.c.reply') %></button></div>
     </form>
   <% } %>
   <% if (c.replies && c.replies.length) { %>

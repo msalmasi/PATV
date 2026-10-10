@@ -136,7 +136,7 @@ function requireUser(req, res, next) {
   if (!req.user || !req.user.userId) {
     return res
       .status(401)
-      .json({ success: false, message: "Your session has expired — please log in again." });
+      .json({ success: false, message: req.t ? req.t("err.session_expired") : "Your session has expired — please log in again." });
   }
   next();
 }
@@ -210,6 +210,12 @@ app.use(welcome.middleware(cookieUserId));
 welcome.start();
 // 1.99bs: an account warned it'll be archived - a signed-in page view keeps it, with a one-time banner
 app.use(stale.noticeMiddleware(cookieUserId));
+// 1.99jo: the site's language (i18n.js) - res.locals.t / lang / dir for every page; saved preference > cookie >
+// Accept-Language > English. /language, /lang/:code, /api/settings/language, /i18n/:code.json
+const i18n = require("./i18n");
+app.use(i18n.middleware(cookieUserId));
+i18n.register(app, { addUser, cookieUserId });
+i18n.ensure();                                       // the user_language table + the saved preferences, into memory
 
 let clients = []; // Keep track of connected clients for SSE
 

@@ -1,10 +1,13 @@
 <!-- views/home.ejs — the functional homepage (home.js). Explainers live on /about. -->
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'Public Access Television', user: username }) %>
 <%
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
   const short = (n) => { n = Number(n) || 0; const a = Math.abs(n);
     return a >= 1e9 ? (n / 1e9).toFixed(a >= 1e10 ? 0 : 1) + 'B' : a >= 1e6 ? (n / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M' : a >= 1e4 ? Math.round(n / 1e3) + 'K' : fmt(n); };
-  const ago = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + 'm ago' : s < 172800 ? Math.round(s / 3600) + 'h ago' : Math.round(s / 86400) + 'd ago'; };
+  const agoP_ = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 90 ? null : s < 5400 ? ['m', Math.round(s / 60)] : s < 172800 ? ['h', Math.round(s / 3600)] : ['d', Math.round(s / 86400)]; };
+  const ago = (ms) => { const p = agoP_(ms); return p ? t('home.ago.' + p[0], { n: p[1] }) : t('home.ago.just_now'); };      // escaped HTML (t)
+  const dur_ = (ms) => { const p = agoP_(ms); return p ? t('home.dur.' + p[0], { n: p[1] }) : t('home.ago.just_now'); };
   const pic = (a) => (typeof a === 'string' && /^(https?:\/\/|\/)/.test(a) ? a : '/public/img/avatar.png');
   const S0 = S || {};
   const st = stage || { active: false };
@@ -29,19 +32,20 @@
   const wheelHref = me ? '/u/' + encodeURIComponent(me.username) + '/wheel' : '/login';
   // things to do: compact, action-first; `hot` = something live there now, `fresh` = you haven't tried it
   const todo = [
-    { href: '/p', ic: '📡', t: 'Pads', s: room ? room.count + ' in ' + room.name : null, hot: !!(room && room.live) },
-    { href: '/stage', ic: '🎥', t: 'Go live', s: 'stream to a pad', hot: paid.length > 0 },
-    { href: '/markets', ic: '🔮', t: 'Markets', s: S0.markets ? S0.markets + ' open' : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
-    { href: '/lotto', ic: '🎟️', t: 'Lotto', s: S0.lotto ? short(S0.lotto.jackpot) + ' jackpot' : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
-    { href: wheelHref, ic: '🎡', t: 'Wheel', s: S0.casinoPot ? short(S0.casinoPot) + ' pot' : null },
-    { href: '/tables', ic: '🃏', t: 'Casino tables', s: (S0.tables || []).length ? S0.tables.map((t) => t.game).join(' + ') + ' open' : null, hot: (S0.tables || []).length > 0 },
+    // i18n: t / s are HTML (t() output), printed raw below
+    { href: '/p', ic: '📡', t: t('home.pads'), s: room ? t('home.todo.pads_in', { n: room.count, room: room.name }) : null, hot: !!(room && room.live) },
+    { href: '/stage', ic: '🎥', t: t('home.todo.golive'), s: t('home.todo.golive_sub'), hot: paid.length > 0 },
+    { href: '/markets', ic: '🔮', t: t('home.todo.markets'), s: S0.markets ? t('home.todo.markets_open', { n: S0.markets }) : null, hot: S0.markets > 0, fresh: me && me.camfrogUsername && !M.bets },
+    { href: '/lotto', ic: '🎟️', t: t('home.todo.lotto'), s: S0.lotto ? t('home.todo.jackpot', { n: short(S0.lotto.jackpot) }) : null, hot: !!(S0.lotto && S0.lotto.open), fresh: me && me.camfrogUsername && !M.tickets },
+    { href: wheelHref, ic: '🎡', t: t('home.todo.wheel'), s: S0.casinoPot ? t('home.todo.pot', { n: short(S0.casinoPot) }) : null },
+    { href: '/tables', ic: '🃏', t: t('home.todo.tables'), s: (S0.tables || []).length ? t('home.todo.tables_open', { games: S0.tables.map((x) => x.game).join(' + ') }) : null, hot: (S0.tables || []).length > 0 },
     { href: '/gtf', ic: '🔫', t: 'Grand Theft Frogger', s: null },
-    { href: '/bounties', ic: '🎯', t: 'Bounties', s: S0.bounties ? S0.bounties + ' open' : null, hot: S0.bounties > 0 },
-    { href: '/wagers', ic: '🤝', t: 'Wagers', s: S0.wagers ? S0.wagers + ' live' : null },
-    { href: '/staking', ic: '🏦', t: 'Staking', s: S0.vaults ? short(S0.vaults.house) + ' House' : null },
-    { href: '/cosmetics', ic: '🎨', t: 'Cosmetics', s: null },
-    { href: '/feed', ic: '📝', t: 'Feed & stories', s: null },
-    { href: '/rankings', ic: '🏆', t: 'Rankings', s: null },
+    { href: '/bounties', ic: '🎯', t: t('home.todo.bounties'), s: S0.bounties ? t('home.todo.bounties_open', { n: S0.bounties }) : null, hot: S0.bounties > 0 },
+    { href: '/wagers', ic: '🤝', t: t('home.todo.wagers'), s: S0.wagers ? t('home.todo.wagers_live', { n: S0.wagers }) : null },
+    { href: '/staking', ic: '🏦', t: t('home.todo.staking'), s: S0.vaults ? t('home.todo.house', { n: short(S0.vaults.house) }) : null },
+    { href: '/cosmetics', ic: '🎨', t: t('home.todo.cosmetics'), s: null },
+    { href: '/feed', ic: '📝', t: t('home.todo.feed'), s: null },
+    { href: '/rankings', ic: '🏆', t: t('home.todo.rankings'), s: null },
   ];
 %>
 <link href="https://vjs.zencdn.net/8.3.0/video-js.css" rel="stylesheet" />
@@ -408,25 +412,25 @@
 </style>
 
 <main class="hm">
-  <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, heading: '📸 Stories from the pads', next: '/' }) %></div><% } %>
+  <% if (typeof story !== 'undefined' && story && (story.rooms.length || story.compose)) { %><div class="card hm-stories"><%- include('partials/story-strip', { story, headingHtml: t('home.stories.heading'), next: '/' }) %></div><% } %>
 
   <!-- ───── your show (1.99ds: its own card above the stage; the stage header no longer repeats these links) ───── -->
   <section class="card golive golive-wide" id="stageShow" aria-labelledby="gsH">
     <div class="gl-txt">
-      <h3 id="gsH">🎥 Your show on PATV</h3>
-      <p><b>Anyone can go live.</b> Stream to a pad's stage from OBS or your browser, or put a YouTube / Twitch link on it.</p>
+      <h3 id="gsH"><%- t('home.show.title') %></h3>
+      <p><%- t('home.show.blurb') %></p>
     </div>
-    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a><a class="btn" href="/p">Pads</a></div>
+    <div class="row"><a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a><a class="btn" href="/p"><%- t('home.pads') %></a></div>
   </section>
 
   <!-- ───── main stage ───── -->
   <section class="stage <%= live ? 'live' : 'off' %>" id="stage" aria-labelledby="stTtl">
     <div class="bar">
-      <span class="ttl" id="stTtl">📺 MAIN STAGE</span>
-      <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span>
+      <span class="ttl" id="stTtl"><%- t('home.stage.title') %></span>
+      <span class="pill <%= live ? 'on' : 'off' %>" id="stPill"><span class="dot" aria-hidden="true"></span><span id="stPillTxt"><%- live ? t('home.stage.on_air') : t('home.stage.off_air') %></span></span>
       <% if (frontInfo) { %><span class="sub" id="stRoom">📡 <a class="room-on" href="/p/<%= encodeURIComponent(frontInfo.slug) %>"><%= frontInfo.title %></a></span><%- BM(frontInfo.boost, 'bm') %><% } %>
       <%# the subtitle only shows while off air (the ON AIR pill says it otherwise); setPill() still writes it %>
-      <span class="sub" id="stSub"><%= live ? (st.since ? 'on air for ' + ago(st.since).replace(' ago', '') : 'live now') : (st.ended ? 'last on air ' + ago(st.ended) : 'nothing streaming right now') %></span>
+      <span class="sub" id="stSub"><%- live ? (st.since ? t('home.stage.on_air_for', { d: dur_(st.since) }) : t('home.stage.live_now')) : (st.ended ? t('home.stage.last_on_air', { ago: ago(st.ended) }) : t('home.stage.nothing')) %></span>
     </div>
     <% if (stageAdmin) { %>
     <%# 1.99ds: every admin-only control in one collapsible strip (collapsed by default, remembered per browser) %>
@@ -454,39 +458,39 @@
       })();
     </script>
     <% } %>
-    <div class="stabs" id="stTabs" role="tablist" aria-label="Stage streams"></div>
+    <div class="stabs" id="stTabs" role="tablist" aria-label="<%- t('home.stage.tabs_aria') %>"></div>
     <div class="stage-body">
       <%# 1.99ds: the player and its Snap / Clip row share one column, so the row sits under the video at its width %>
       <div class="stage-main">
         <div class="player" id="player">
           <div id="videoWrapper"></div>
-          <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
-          <button type="button" class="unmute hide" id="stUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
+          <div class="reconnect hide" id="stReconnect" role="status"><span class="dot" aria-hidden="true"></span> <%- t('home.stage.reconnecting') %></div>
+          <button type="button" class="unmute hide" id="stUnmute" aria-label="<%- t('home.stage.unmute') %>"><img src="/public/img/mute-icon.png" alt=""></button>
           <div class="embed hide" id="stEmbed"></div>
           <%# 1.99eo: the off-air slate - the player's own 16:9 box, so the layout never collapses; .stage.live hides it %>
-          <div class="slate" id="stSlate" role="status" aria-label="The stage is off air">
+          <div class="slate" id="stSlate" role="status" aria-label="<%- t('home.stage.off_air_aria') %>">
             <div class="sl-in">
-              <div class="sl-pad"><span class="pill off"><span class="dot" aria-hidden="true"></span>OFF AIR</span><b id="slPad"><%= frontInfo ? frontInfo.title : 'Main Stage' %></b></div>
-              <p class="sl-msg">Nothing on stage right now</p>
+              <div class="sl-pad"><span class="pill off"><span class="dot" aria-hidden="true"></span><%- t('home.stage.off_air') %></span><b id="slPad"><%- frontInfo ? t.esc(frontInfo.title) : t('home.stage.main_stage') %></b></div>
+              <p class="sl-msg"><%- t('home.stage.nothing_on') %></p>
               <div class="sl-acts">
-                <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>">🎥 Go live</a>
-                <% if (nextUp_) { %><span class="sl-next" id="slNext">Next up: <b><%= nextUp_.display %></b><%= nextUp_.title ? ' · ' + nextUp_.title : '' %> · <time datetime="<%= new Date(nextUp_.start_at).toISOString() %>" data-local-time="<%= Number(nextUp_.start_at) %>"><%= new Date(nextUp_.start_at).toISOString().slice(11, 16) %> UTC</time></span>
-                <% } else { %><a class="btn" href="/p" id="slBrowse">Browse Top Pads</a><% } %>
+                <a class="golive-btn" href="/stage<%= frontInfo ? '?room=' + encodeURIComponent(frontInfo.slug) : '' %>"><%- t('home.golive') %></a>
+                <% if (nextUp_) { %><span class="sl-next" id="slNext"><%- t('home.stage.next_up') %> <b><%= nextUp_.display %></b><%= nextUp_.title ? ' · ' + nextUp_.title : '' %> · <time datetime="<%= new Date(nextUp_.start_at).toISOString() %>" data-local-time="<%= Number(nextUp_.start_at) %>"><%= new Date(nextUp_.start_at).toISOString().slice(11, 16) %> UTC</time></span>
+                <% } else { %><a class="btn" href="/p" id="slBrowse"><%- t('home.stage.browse_top') %></a><% } %>
               </div>
             </div>
           </div>
         </div>
-        <div class="stcap hide" id="stCap" aria-label="Snap or clip this stream"></div>
+        <div class="stcap hide" id="stCap" aria-label="<%- t('home.stage.cap_aria') %>"></div>
       </div>
       <%# 1.99eo: the stage widgets sit in the side column on and off air (they used to move to an off-air strip) %>
       <div class="stage-side" id="stageSide">
       <div class="aw aw-hm" id="wheelBox">
         <% if (me) { %>
         <div class="aw-coinop" id="coinop">
-          <div class="aw-credit" aria-hidden="true"><span>CREDIT</span><span class="n" id="creditCount">00</span></div>
+          <div class="aw-credit" aria-hidden="true"><span><%- t('home.wheel.credit') %></span><span class="n" id="creditCount">00</span></div>
           <div class="aw-hm-row">
             <div class="aw-door">
-              <div class="aw-plate"><span class="p">5000</span><span class="u">PAT</span><span class="ins">STAGE WHEEL</span></div>
+              <div class="aw-plate"><span class="p">5000</span><span class="u">PAT</span><span class="ins"><%- t('home.wheel.stage_wheel') %></span></div>
               <div class="aw-slot-area">
                 <div class="aw-dropclip" id="dropClip"><div class="aw-coin aw-flycoin" id="clipCoin" aria-hidden="true">PAT</div></div>
                 <div class="aw-slot" id="coinSlot" aria-hidden="true"></div>
@@ -494,39 +498,39 @@
             </div>
             <button type="button" class="aw-coinbtn" id="spinButton" aria-describedby="spinStatus">
               <span class="aw-coin" aria-hidden="true">PAT</span>
-              <span class="cap">INSERT COIN</span>
+              <span class="cap"><%- t('home.wheel.insert_coin') %></span>
             </button>
           </div>
           <div class="aw-now" id="stSpin" aria-live="polite"></div>
-          <div class="aw-status" id="spinStatus" role="status" aria-live="polite">Spin the wheel on stream · you have <span id="balTxt"><%= fmt(me.points_balance) %></span> PAT</div>
-          <div class="aw-tools"><button type="button" class="aw-tool" id="muteBtn" aria-pressed="false">SOUND ON</button><a class="aw-tool" href="<%= wheelHref %>">MY WHEEL</a></div>
+          <div class="aw-status" id="spinStatus" role="status" aria-live="polite"><%- t('home.wheel.status', { bal: '<span id="balTxt">' + fmt(me.points_balance) + '</span>' }) %></div>
+          <div class="aw-tools"><button type="button" class="aw-tool" id="muteBtn" aria-pressed="false">SOUND ON</button><a class="aw-tool" href="<%= wheelHref %>"><%- t('home.wheel.my_wheel') %></a></div>
           <div class="aw-coin aw-flycoin" id="flyCoin" aria-hidden="true">PAT</div>
         </div>
         <% } else { %>
         <div class="aw-coinop">
-          <div class="aw-credit" aria-hidden="true"><span>CREDIT</span><span class="n">00</span></div>
-          <a class="aw-coinbtn" href="/login"><span class="aw-coin" aria-hidden="true">PAT</span><span class="cap">SIGN IN TO PLAY</span></a>
+          <div class="aw-credit" aria-hidden="true"><span><%- t('home.wheel.credit') %></span><span class="n">00</span></div>
+          <a class="aw-coinbtn" href="/login"><span class="aw-coin" aria-hidden="true">PAT</span><span class="cap"><%- t('home.wheel.sign_in_play') %></span></a>
           <div class="aw-now" id="stSpin" aria-live="polite"></div>
-          <div class="aw-status">Spin the stage wheel live on stream.</div>
+          <div class="aw-status"><%- t('home.wheel.status_out') %></div>
         </div>
         <% } %>
       </div>
       <% if (feat) { %>
         <a class="box" href="/casino/t/<%= encodeURIComponent(feat.id) %>">
-          <h3>🃏 Featured table</h3>
-          <b><%= feat.game %></b><span class="muted"> · <%= feat.seats.length %> seated<%= feat.room ? ' · ' + feat.room : '' %></span>
-          <div class="muted" style="margin-top:4px">Watch or take a seat ›</div>
+          <h3><%- t('home.feat.title') %></h3>
+          <b><%= feat.game %></b><span class="muted"> · <%- t('home.feat.seated', { n: feat.seats.length }) %><%= feat.room ? ' · ' + feat.room : '' %></span>
+          <div class="muted" style="margin-top:4px"><%- t('home.feat.watch') %></div>
         </a>
       <% } %>
       <%# 1.99ek: "Top Pads" (was "On now"): the top 5 LIVE pads, ranked by the front pick's score (activity + 🚀 boost points); hidden when none is live %>
       <% if (tops_.length) { %>
         <section class="box tp" aria-labelledby="tpH">
-          <h2 id="tpH"><span>Top Pads</span><a href="/p">All pads ›</a></h2>
+          <h2 id="tpH"><span><%- t('home.tp.title') %></span><a href="/p"><%- t('home.tp.all') %></a></h2>
           <ol class="rooms-mini">
             <% tops_.forEach((r) => { %>
               <%# 1.99es: the 🚀 badge sits by the NAME (not among the counts), so the 👥 / 🎙 columns line up boosted or not; the pad's avatar (padlook.js) first %>
               <% const fx_ = PFX_(r.id); %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%= r.count %> in the room">👥 <%= r.count %></span><span title="<%= r.micCount %> on the mic">🎙 <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? 'audio relay off' : !r.listen ? (me ? 'members of this pad only' : 'sign in to listen') : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%= lsWhy_ ? 'Listen to ' + r.name + ' (' + lsWhy_ + ')' : 'Listen to ' + r.name + ' live' %>" title="<%= lsWhy_ ? '🔇 ' + lsWhy_ : 'Listen live' %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button></li>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%- t('home.tp.in_room', { n: r.count }) %>">👥 <%= r.count %></span><span title="<%- t('home.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? t('home.tp.relay_off') : !r.listen ? (me ? t('home.tp.members_only') : t('home.tp.sign_in_listen')) : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%- lsWhy_ ? t('home.tp.listen_why', { name: r.name, why: lsWhy_ }) : t('home.tp.listen_to_live', { name: r.name }) %>" title="<%- lsWhy_ ? '🔇 ' + lsWhy_ : t('home.tp.listen_live') %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button></li>
             <% }) %>
           </ol>
           <div id="tpAudioBox"></div>
@@ -538,34 +542,34 @@
 
   <!-- ───── you ───── -->
   <% if (me) { %>
-  <section class="card me" aria-label="You">
+  <section class="card me" aria-label="<%- t('home.me.aria') %>">
     <div class="pic">
-      <a href="/u/<%= encodeURIComponent(me.username) %>" aria-label="Your profile"><img class="ava" src="<%= pic(me.avatar) %>" alt=""></a>
-      <% if (M.gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>" aria-label="Your GTF avatar"><%- M.gtf %></a><% } %>
+      <a href="/u/<%= encodeURIComponent(me.username) %>" aria-label="<%- t('home.me.profile_aria') %>"><img class="ava" src="<%= pic(me.avatar) %>" alt=""></a>
+      <% if (M.gtf) { %><a class="gtf" href="/u/<%= encodeURIComponent(me.username) %>" aria-label="<%- t('home.me.gtf_aria') %>"><%- M.gtf %></a><% } %>
     </div>
     <div class="who">
       <div class="top"><span class="nm <%= nameCss ? 'cx-name' : '' %>" style="<%= nameCss %>"><%= me.displayname || me.username %></span>
-        <span>💰 <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ Lv <b><%= me.level %></b> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span></div>
-      <div class="lvl" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="XP to the next level"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
+        <span>💰 <b id="balTop"><%= fmt(me.points_balance) %></b> PAT</span><span>⭐ <%- t('home.me.lv') %> <b><%= me.level %></b> · <%= fmt(me.xp) %>/<%= fmt(need) %> XP</span></div>
+      <div class="lvl" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= Math.round(pct) %>" aria-label="<%- t('home.me.xp_aria') %>"><span style="width: <%= pct.toFixed(1) %>%"></span></div>
       <div class="chips">
-        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>">🔗 Link Camfrog: type !verify in a Camfrog room</a><% } %>
-        <a class="chip <%= M.tickets ? '' : 'warm' %>" href="/lotto">🎟️ <%= M.tickets ? M.tickets + ' lotto ticket' + (M.tickets === 1 ? '' : 's') : 'no lotto tickets yet' %></a>
-        <% if (M.seat) { %><a class="chip mic" href="/casino/t/<%= encodeURIComponent(M.seat.id) %>">🃏 seated at <%= M.seat.game %></a><% } %>
-        <% if (M.bets) { %><a class="chip" href="/markets">🔮 <%= M.bets %> open bet<%= M.bets === 1 ? '' : 's' %></a><% } %>
-        <a class="chip" href="/achievements">🏅 <%= M.badges %> badges</a>
-        <% if (M.pending) { %><span class="chip warm">⏳ <%= M.pending %> waiting for Pepe</span><% } %>
+        <% if (!me.camfrogUsername) { %><a class="chip warm" href="/u/<%= encodeURIComponent(me.username) %>">🔗 <%- t('home.me.link_camfrog') %></a><% } %>
+        <a class="chip <%= M.tickets ? '' : 'warm' %>" href="/lotto">🎟️ <%- M.tickets ? t('home.me.tickets', { count: M.tickets }) : t('home.me.no_tickets') %></a>
+        <% if (M.seat) { %><a class="chip mic" href="/casino/t/<%= encodeURIComponent(M.seat.id) %>">🃏 <%- t('home.me.seated_at', { game: M.seat.game }) %></a><% } %>
+        <% if (M.bets) { %><a class="chip" href="/markets">🔮 <%- t('home.me.open_bets', { count: M.bets }) %></a><% } %>
+        <a class="chip" href="/achievements">🏅 <%- t('home.me.badges', { n: M.badges }) %></a>
+        <% if (M.pending) { %><span class="chip warm">⏳ <%- t('home.me.pending', { n: M.pending }) %></span><% } %>
       </div>
     </div>
     <div class="acts">
-      <a class="btn primary" href="<%= wheelHref %>">🎡 Arcade wheel</a>
-      <a class="btn" href="/lotto">🎟️ Tickets</a>
-      <a class="btn" href="/wallet">👛 Wallet</a>
+      <a class="btn primary" href="<%= wheelHref %>"><%- t('home.me.arcade') %></a>
+      <a class="btn" href="/lotto"><%- t('home.me.tickets_btn') %></a>
+      <a class="btn" href="/wallet"><%- t('home.me.wallet') %></a>
     </div>
   </section>
   <% } else { %>
   <section class="card pitch">
-    <p><b>Public Access TV</b> is a community hangout: a live stream, Camfrog rooms where Pepe the frog runs the games, and PAT — the points everyone plays with. <a href="/about">What's this? ›</a></p>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/register">Join PATV</a><a class="btn" href="/login">Sign in</a></div>
+    <p><%- t('home.pitch.text') %> <a href="/about"><%- t('home.pitch.what') %></a></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/register"><%- t('home.pitch.join') %></a><a class="btn" href="/login"><%- t('home.sign_in') %></a></div>
   </section>
   <% } %>
 
@@ -573,28 +577,28 @@
   <div class="main">
     <% if (room) { %>
     <section class="card lr-card" aria-labelledby="lrH">
-      <h2 id="lrH"><span>📡 <%= roomOnStage ? 'On stage: ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'chat' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span></span>
-        <a href="/p/<%= encodeURIComponent(room.slug) %>">Open the pad ›</a></h2>
+      <h2 id="lrH"><span>📡 <%- roomOnStage ? t('home.room.on_stage') + ' ' : '' %><%= room.name %> <span class="pill <%= room.live ? 'chat' : 'off' %>" id="lrLive" style="font-family:Ubuntu,sans-serif" title="<%- t('home.room.pill_title') %>"><span class="dot" aria-hidden="true"></span><span id="lrLiveTxt"><%- room.live ? t('home.room.active') : t('home.room.offline') %></span></span></span>
+        <a href="/p/<%= encodeURIComponent(room.slug) %>"><%- t('home.room.open') %></a></h2>
       <%# 1.99fu: signed in, or a Public pad (padaccess.js) - roomLive is only set when this viewer may watch it %>
       <% if (me || roomLive) { %>
         <div class="lr">
           <div class="lr-log">
-            <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="Room chat and mic transcripts" tabindex="0"><p class="muted">Loading the room…</p></div>
+            <div class="lr-feed" id="lrFeed" role="log" aria-live="polite" aria-label="<%- t('home.room.feed_aria') %>" tabindex="0"><p class="muted"><%- t('home.room.loading') %></p></div>
             <% if (me && me.camfrogUsername) { %><div id="lrRelay" style="margin-top:8px;display:grid;gap:4px"></div><div id="lrPtt" style="margin-top:6px;display:grid;gap:4px"></div><% } %>
-            <div class="ro">Live from Camfrog — read-only (v1). 🎙 lines are what people said on the mic (auto-transcribed). PMs are never shown; <code>!incognito</code> / <code>!bridge hide</code> users show as "someone".</div>
+            <div class="ro"><%- t('home.room.note', { q: '"' }) %></div>
           </div>
           <div class="lr-side">
-            <div class="box"><h3>Topic</h3><div id="lrTopic" style="font-size:13px;overflow-wrap:anywhere"><%= room.topic || '—' %></div></div>
-            <div class="box"><h3>On the mic</h3><div class="chips" id="lrMic"></div></div>
+            <div class="box"><h3><%- t('home.room.topic') %></h3><div id="lrTopic" style="font-size:13px;overflow-wrap:anywhere"><%= room.topic || '—' %></div></div>
+            <div class="box"><h3><%- t('home.room.on_mic') %></h3><div class="chips" id="lrMic"></div></div>
             <div id="lrAudioBox"></div>
-            <div class="box"><h3>In the room · <span id="lrCount"><%= room.count %></span></h3><div class="chips" id="lrPeople"></div></div>
+            <div class="box"><h3><%- t('home.room.in_room') %> · <span id="lrCount"><%= room.count %></span></h3><div class="chips" id="lrPeople"></div></div>
           </div>
         </div>
       <% } else { %>
         <div class="tease">
-          <b style="font-size:16px">Sign in to watch the room live</b>
-          <p class="muted" style="margin:0"><%= room.count %> in the Camfrog room<%= room.micCount ? ' · ' + room.micCount + ' on the mic' : '' %>. The chat, what's said on the mic, and who's here stream to PATV members as it happens.</p>
-          <a class="btn primary" href="/login">Sign in</a>
+          <b style="font-size:16px"><%- t('home.room.tease_title') %></b>
+          <p class="muted" style="margin:0"><%- t('home.room.n_in_camfrog', { n: room.count }) %><%- room.micCount ? ' · ' + t('home.n_on_mic', { n: room.micCount }) : '' %>. <%- t('home.room.tease_blurb') %></p>
+          <a class="btn primary" href="/login"><%- t('home.sign_in') %></a>
         </div>
       <% } %>
     </section>
@@ -603,24 +607,24 @@
       <%# 1.99ci: the mini feed - the top 5 hot posts across every community (signed-out visitors: no NSFW) %>
       <% if (typeof hot !== 'undefined' && hot) { %><%- include('partials/home-hot', { hot, fx }) %><% } %>
       <section class="card now" aria-labelledby="nowH">
-        <h2 id="nowH">Live now</h2>
-        <% if (feat) { %><a class="it" href="/casino/t/<%= encodeURIComponent(feat.id) %>"><span>🃏</span><span class="q"><%= feat.game %> table<%= feat.phase ? ' · ' + feat.phase : '' %></span><span class="v"><%= feat.seats.length %> seated</span></a><% } %>
-        <% if (S0.lotto) { %><a class="it" href="/lotto"><span>🎟️</span><span class="q">Lotto — draw <%- S0.lotto.next_at ? 'in <span data-until="' + Number(S0.lotto.next_at) + '">…</span>' : 'Sunday' %></span><span class="v"><%= short(S0.lotto.jackpot) %></span></a><% } %>
+        <h2 id="nowH"><%- t('home.now.title') %></h2>
+        <% if (feat) { %><a class="it" href="/casino/t/<%= encodeURIComponent(feat.id) %>"><span>🃏</span><span class="q"><%- t('home.now.table', { game: feat.game }) %><%= feat.phase ? ' · ' + feat.phase : '' %></span><span class="v"><%- t('home.feat.seated', { n: feat.seats.length }) %></span></a><% } %>
+        <% if (S0.lotto) { %><a class="it" href="/lotto"><span>🎟️</span><span class="q"><%- S0.lotto.next_at ? t('home.now.lotto_in', { when: '<span data-until="' + Number(S0.lotto.next_at) + '">…</span>' }) : t('home.now.lotto_sunday') %></span><span class="v"><%= short(S0.lotto.jackpot) %></span></a><% } %>
         <% (S0.closing || []).forEach((m) => { %><a class="it" href="/markets/<%= encodeURIComponent(m.id) %>"><span>🔮</span><span class="q"><%= m.q %></span><span class="v" data-until="<%= Number(m.closes) %>">…</span></a><% }) %>
         <% (S0.topBounties || []).forEach((b) => { %><a class="it" href="/bounties/<%= encodeURIComponent(b.id) %>"><span>🎯</span><span class="q"><%= b.task %></span><span class="v"><%= short(b.pot) %></span></a><% }) %>
-        <% if (!feat && !S0.lotto && !(S0.closing || []).length && !(S0.topBounties || []).length) { %><p class="muted" style="margin:0">Quiet right now.</p><% } %>
+        <% if (!feat && !S0.lotto && !(S0.closing || []).length && !(S0.topBounties || []).length) { %><p class="muted" style="margin:0"><%- t('home.now.quiet') %></p><% } %>
       </section>
     </aside>
   </div>
 
   <!-- ───── things to do ───── -->
   <section class="card" aria-labelledby="tdH">
-    <h2 id="tdH"><span>Things to do</span><a href="/about">About PATV ›</a></h2>
+    <h2 id="tdH"><span><%- t('home.todo.title') %></span><a href="/about"><%- t('home.todo.about') %></a></h2>
     <div class="todo">
-      <% todo.forEach((t) => { %>
-        <a class="<%= t.hot ? 'hot' : '' %>" href="<%= t.href %>">
-          <% if (t.fresh) { %><span class="tag">try it</span><% } %>
-          <span class="i" aria-hidden="true"><%= t.ic %></span><b><%= t.t %></b><small><%= t.s || (t.hot ? 'live now' : 'open ›') %></small>
+      <% todo.forEach((td) => { %>
+        <a class="<%= td.hot ? 'hot' : '' %>" href="<%= td.href %>">
+          <% if (td.fresh) { %><span class="tag"><%- t('home.todo.try_it') %></span><% } %>
+          <span class="i" aria-hidden="true"><%= td.ic %></span><b><%- td.t %></b><small><%- td.s || (td.hot ? t('home.todo.live_now') : t('home.todo.open')) %></small>
         </a>
       <% }) %>
     </div>
@@ -628,7 +632,7 @@
 
   <!-- ───── top frogs ───── -->
   <section class="card" aria-labelledby="tfH">
-    <h2 id="tfH"><span>Top frogs</span><span class="h2r"><small><%= fmt(S0.members) %> members</small><a href="/rankings">All rankings ›</a></span></h2>
+    <h2 id="tfH"><span><%- t('home.tf.title') %></span><span class="h2r"><small><%- t('home.tf.members', { n: fmt(S0.members) }) %></small><a href="/rankings"><%- t('home.tf.all') %></a></span></h2>
     <ol class="tf">
       <% (top || []).forEach((u, i) => { const cs = cosmeticName(u.username); %>
         <li class="r<%= i + 1 %>">
@@ -637,7 +641,7 @@
             <span class="av"><% if (u.gtf) { %><%- u.gtf %><% } else { %><img src="<%= pic(u.avatar) %>" alt="" loading="lazy"><% } %></span>
             <span class="nm <%= cs ? 'cx-name' : '' %>" style="<%= cs %>"><%= u.displayname || u.username %></span>
             <span class="pt"><%= short(u.points_balance) %> PAT</span>
-            <span class="lv">Level <%= u.level %></span>
+            <span class="lv"><%- t('home.tf.level', { n: u.level }) %></span>
           </a>
         </li>
       <% }) %>
@@ -651,8 +655,9 @@
 <script>
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     // countdowns (lotto draw, markets closing)
-    function left(t) { var s = Math.max(0, Math.round(t - Date.now() / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : s > 0 ? Math.max(1, Math.ceil(s / 60)) + 'm' : 'now'; }
+    function left(t) { var s = Math.max(0, Math.round(t - Date.now() / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : s > 0 ? Math.max(1, Math.ceil(s / 60)) + 'm' : _t('js.home.now', 'now'); }
     function tick() { document.querySelectorAll('[data-until]').forEach(function (e) { e.textContent = left(Number(e.getAttribute('data-until'))); }); }
     tick(); setInterval(tick, 30000);
 
@@ -662,7 +667,7 @@
     function setPill(on, how) {
       stageEl.classList.toggle('live', on); stageEl.classList.toggle('off', !on);
       document.getElementById('stPill').className = 'pill ' + (on ? 'on' : 'off');
-      document.getElementById('stPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
+      document.getElementById('stPillTxt').textContent = on ? _t('js.home.on_air', 'ON AIR') : _t('js.home.off_air', 'OFF AIR');
       if (how) document.getElementById('stSub').textContent = how;
     }
     // the slate's "Next up" time in the viewer's own clock (the server writes UTC)
@@ -687,7 +692,7 @@
       onShow: function (sel) { stCap.update(frontSlug ? sel : null); },
       onPoll: function (g) { if (g && g.front && g.front.slug && g.front.slug !== frontSlug) { frontSlug = g.front.slug; stCap.reload(); } },
       api: '/api/stage', slots: initSlots, pepeOn: <%= st.active ? 'true' : 'false' %>, pepeHere: <%= pepeHere_ ? 'true' : 'false' %>, pepeWhep: <%- JSON.stringify(st.whep || null).replace(/</g, '\\u003c') %>, pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\u003c') %>, manage: <%= staff ? 'true' : 'false' %>,
-      onAir: function (on, sub) { setPill(on, sub || (on ? 'live now' : 'nothing streaming right now')); }
+      onAir: function (on, sub) { setPill(on, sub || (on ? _t('js.home.live_now', 'live now') : _t('js.home.nothing', 'nothing streaming right now'))); }
     });
 
     // admin: which room the homepage features (a site setting - Pepe's !activeroom is untouched)
@@ -710,13 +715,13 @@
       var box = document.getElementById('stSpin');
       if (!box || !sp || !(sp.display || sp.name)) return;
       box.textContent = '';
-      box.appendChild(document.createTextNode(sp.state === 'spinning' || sp.type === 'spinning' ? 'NOW SPINNING \u25B8 ' : 'LAST SPIN \u25B8 '));
+      box.appendChild(document.createTextNode(sp.state === 'spinning' || sp.type === 'spinning' ? _t('js.home.spin.now', 'NOW SPINNING') + ' \u25B8 ' : _t('js.home.spin.last', 'LAST SPIN') + ' \u25B8 '));
       var who = document.createElement('span'); who.className = 'who'; who.textContent = sp.display || sp.name;
       if (sp.nameCss) who.style.cssText = sp.nameCss;
       box.appendChild(who);
       if (sp.result != null && sp.state !== 'spinning' && sp.type !== 'spinning') {
         var a = document.createElement('span'); a.className = 'amt';
-        a.textContent = (Number(sp.result) > 0 ? '+' + Number(sp.result).toLocaleString('en-US') + ' PAT' : 'no prize');
+        a.textContent = (Number(sp.result) > 0 ? '+' + Number(sp.result).toLocaleString('en-US') + ' PAT' : _t('js.home.spin.no_prize', 'no prize'));
         box.appendChild(a);
       }
     }
@@ -734,6 +739,7 @@
   // wheel in OBS - same /api/g/wheel/spin, 5,000 PAT and cooldown as the old homepage arcade.
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var user = <%- JSON.stringify(me.username).replace(/</g, '\\u003c') %>;
     var onStage = null;
     window.wheelBalance = <%= Number(me.points_balance) || 0 %>;
@@ -760,27 +766,27 @@
     function fire(name, detail) { document.dispatchEvent(new CustomEvent(name, { detail: detail || {} })); }
     window.userSpin = function () {
       return checkStage().then(function () {
-        if (onStage === false) return { ok: false, message: 'The wheel isn\'t on the stage right now - try again when it\'s up.' };
+        if (onStage === false) return { ok: false, message: _t('js.home.wheel.off_stage', 'The wheel isn\'t on the stage right now - try again when it\'s up.') };
         return fetch('/api/g/wheel/spin', { method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: user }) })
           .then(function (r) {
-            if (r.redirected || r.status === 401) return { ok: false, login: true, message: 'Sign in again.' };
-            return r.ok ? r.json().then(function (d) { return d.spinId ? { ok: true, spinId: d.spinId } : { ok: false, message: 'The wheel is busy.' }; })
-                        : r.text().then(function (t) { if (/^\s*</.test(t || '')) t = ''; return { ok: false, message: (t || 'The wheel is busy - try again in a moment.').slice(0, 160) }; });
+            if (r.redirected || r.status === 401) return { ok: false, login: true, message: _t('js.home.wheel.sign_in_again', 'Sign in again.') };
+            return r.ok ? r.json().then(function (d) { return d.spinId ? { ok: true, spinId: d.spinId } : { ok: false, message: _t('js.home.wheel.busy', 'The wheel is busy.') }; })
+                        : r.text().then(function (t) { if (/^\s*</.test(t || '')) t = ''; return { ok: false, message: (t || _t('js.home.wheel.busy_retry', 'The wheel is busy - try again in a moment.')).slice(0, 160) }; });
           })
           .then(function (res) {
             if (!res.ok) return res;
             bal();
             // the coin has dropped: the wheel is spinning on stream now
-            Promise.resolve(window.wheelCoinGate).then(function () { fire('wheel:spinstart'); window.setSpinStatus('Spinning on stream…', 'ok'); });
+            Promise.resolve(window.wheelCoinGate).then(function () { fire('wheel:spinstart'); window.setSpinStatus(_t('js.home.wheel.spinning', 'Spinning on stream…'), 'ok'); });
             var es = new EventSource('/events?type=results&identifier=' + encodeURIComponent(res.spinId));
-            var guard = setTimeout(function () { es.close(); fire('wheel:result', {}); window.setSpinStatus('No result yet - check the stream.', ''); }, 90000);
+            var guard = setTimeout(function () { es.close(); fire('wheel:result', {}); window.setSpinStatus(_t('js.home.wheel.no_result', 'No result yet - check the stream.'), ''); }, 90000);
             es.onmessage = function (ev) {
               var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
               clearTimeout(guard); es.close();
               var won = Number(d.result) || 0;
               fire('wheel:result', { result: won });
               window.setSpinStatus(won > 0 ? '+' + won.toLocaleString('en-US') + ' PAT' + (d.xp ? ' · +' + Math.round(d.xp) + ' XP' : '') +
-                (d.levelUp && d.levelUp.leveledUp ? ' · LEVEL ' + d.levelUp.newLevel + '!' : '') : 'No prize this time.', won > 0 ? 'win' : '');
+                (d.levelUp && d.levelUp.leveledUp ? ' · ' + _t('js.home.wheel.level_up', 'LEVEL {n}!', { n: d.levelUp.newLevel }) : '') : _t('js.home.wheel.no_prize', 'No prize this time.'), won > 0 ? 'win' : '');
               bal();
             };
             es.onerror = function () { clearTimeout(guard); es.close(); fire('wheel:result', {}); };
@@ -803,10 +809,11 @@
   // The live room widget: chat + mic transcripts, polled every 3s while the tab is visible (bridge.js).
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     var feed = document.getElementById('lrFeed'), cursor = 0, started = false, timer = null, fails = 0, lastP = '', lastM = '';
     function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-    function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
+    function label(u) { return !u || u.anon ? _t('js.home.room.someone', 'someone') : (u.display || u.login); }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function nameEl(u) {
       // 1.99ea: the name is the PATV display name (server-resolved by login) linking to the profile,
@@ -822,13 +829,14 @@
     function line(it) {
       if (it.k === 'msg' || it.k === 'tx') {
         var d = el('div', 'ln' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
-        if (it.k === 'tx') d.title = 'Said on the mic (auto-transcribed)';
+        if (it.k === 'tx') d.title = _t('js.home.room.said_on_mic', 'Said on the mic (auto-transcribed)');
         d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
         return d;
       }
-      var t = it.k === 'join' ? '→ ' + label(it.u) + ' joined' : it.k === 'leave' ? '← ' + label(it.u) + ' left'
-        : it.k === 'mic' ? '🎙️ ' + label(it.u) + ' grabbed the mic' : it.k === 'unmic' ? '🎙️ ' + label(it.u) + ' dropped the mic'
-        : it.k === 'topic' ? '📌 topic: ' + it.text : null;
+      var who = { name: label(it.u) };
+      var t = it.k === 'join' ? '→ ' + _t('js.home.room.joined', '{name} joined', who) : it.k === 'leave' ? '← ' + _t('js.home.room.left', '{name} left', who)
+        : it.k === 'mic' ? '🎙️ ' + _t('js.home.room.grabbed_mic', '{name} grabbed the mic', who) : it.k === 'unmic' ? '🎙️ ' + _t('js.home.room.dropped_mic', '{name} dropped the mic', who)
+        : it.k === 'topic' ? '📌 ' + _t('js.home.room.topic', 'topic: {text}', { text: it.text }) : null;
       return t ? el('div', 'ln sys', t + ' · ' + hhmm(it.ts)) : null;
     }
     function chip(u, cls) { return chipTitle(el('span', 'chip' + (cls ? ' ' + cls : ''), label(u)), u); }
@@ -841,7 +849,7 @@
       if (started && d.cursor < cursor) { started = false; cursor = 0; }
       if (!started) feed.textContent = '';
       (d.feed || []).slice(-80).forEach(function (it) { var n = line(it); if (n) feed.appendChild(n); });
-      if (!started && !feed.childNodes.length) feed.appendChild(el('p', 'muted', 'Quiet right now — lines show up here the moment someone talks.'));
+      if (!started && !feed.childNodes.length) feed.appendChild(el('p', 'muted', _t('js.home.room.quiet', 'Quiet right now — lines show up here the moment someone talks.')));
       if (started && (d.feed || []).length && feed.firstChild && feed.firstChild.tagName === 'P') feed.removeChild(feed.firstChild);
       while (feed.childNodes.length > 120) feed.removeChild(feed.firstChild);
       if (near) feed.scrollTop = feed.scrollHeight;
@@ -851,19 +859,19 @@
       document.getElementById('lrTopic').textContent = r.topic || '—';
       document.getElementById('lrCount').textContent = r.count;
       document.getElementById('lrLive').className = 'pill ' + (r.live ? 'chat' : 'off');
-      document.getElementById('lrLiveTxt').textContent = r.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE';
+      document.getElementById('lrLiveTxt').textContent = r.live ? _t('js.home.room.active', '💬 ROOM ACTIVE') : _t('js.home.room.offline', 'ROOM OFFLINE');
       roomAudio.update(d);
       if (roomRelay) roomRelay.update(d);
       if (roomPtt) roomPtt.update(d);
       var mk = JSON.stringify(d.mic);
-      if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', 'Mic is free')); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
+      if (mk !== lastM) { lastM = mk; var m = document.getElementById('lrMic'); m.textContent = ''; if (!d.mic.length) m.appendChild(el('span', 'muted', _t('js.home.room.mic_free', 'Mic is free'))); d.mic.forEach(function (u) { m.appendChild(chip(u, 'mic')); }); }
       var pk = JSON.stringify(d.members);
       if (pk !== lastP) {
         lastP = pk; var p = document.getElementById('lrPeople'); p.textContent = '';
         var ms = d.members.filter(function (u) { return !u.self; }).sort(function (a, b) { return (b.on_mic ? 1 : 0) - (a.on_mic ? 1 : 0) || (a.anon ? 1 : 0) - (b.anon ? 1 : 0) || label(a).localeCompare(label(b)); });
         ms.slice(0, 30).forEach(function (u) { p.appendChild(chip(u, u.on_mic ? 'mic' : '')); });
-        if (ms.length > 30) p.appendChild(el('span', 'muted', '+' + (ms.length - 30) + ' more'));
-        if (!ms.length) p.appendChild(el('span', 'muted', 'Just Pepe'));
+        if (ms.length > 30) p.appendChild(el('span', 'muted', _t('js.home.room.more', '+{n} more', { n: ms.length - 30 })));
+        if (!ms.length) p.appendChild(el('span', 'muted', _t('js.home.room.just_pepe', 'Just Pepe')));
       }
     }
     function poll() {
@@ -888,6 +896,7 @@
   // there is one (so it shows the volume / live state), else a player under Top Pads; one room at a time.
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var btns = [].slice.call(document.querySelectorAll('.tp-ls[data-listen]'));
     if (!btns.length || !window.PATVRoom) return;
     var player = null;
@@ -902,7 +911,7 @@
         var on = !!now && b.getAttribute('data-listen') === now;
         b.setAttribute('aria-pressed', on ? 'true' : 'false');
         b.textContent = on ? '❚❚' : '🎧';
-        if (!b.disabled) b.title = on ? 'Stop listening' : 'Listen live';
+        if (!b.disabled) b.title = on ? _t('js.home.tp.stop', 'Stop listening') : _t('js.home.tp.listen_live', 'Listen live');
       });
     }
     btns.forEach(function (b) {

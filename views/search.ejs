@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: title, user: user }) %>
 <%#
   /search (1.99is, search.js): one box, tabs All / People / Posts / Pads. Everything here already passed the site's
@@ -8,48 +9,48 @@
 <link rel="stylesheet" href="/public/css/tags.css?v=1">
 <link rel="stylesheet" href="/public/css/search.css?v=2">
 <%
-  const tabs_ = [['all', 'All'], ['people', 'People'], ['posts', 'Posts'], ['pads', 'Pads']];
+  const tabs_ = [['all', t('search.tab.all')], ['people', t('search.tab.people')], ['posts', t('search.tab.posts')], ['pads', t('search.tab.pads')]];   // labels HTML-safe
   const C_ = R ? R.counts : { people: 0, posts: 0, pads: 0 };
   const num_ = (n, cap) => (cap && n >= cap ? n + '+' : String(n));
   const cnt_ = (k) => k === 'all' ? '' : num_(C_[k], k === 'posts' ? 400 : k === 'people' ? 100 : 0);
-  const sorts_ = [['relevance', 'Best match'], ['new', 'New'], ['top', 'Top']];
+  const sorts_ = [['relevance', t('search.sort.relevance')], ['new', t('search.sort.new')], ['top', t('search.sort.top')]];
 %>
 <main class="fd srch">
-  <h1 class="sr-h">Search</h1>
+  <h1 class="sr-h"><%- t('search.title') %></h1>
   <form class="sr-form" action="/search" method="get" role="search">
     <label class="sr-box"><%- fx.icon('search') %>
-      <input type="search" name="q" value="<%= q %>" maxlength="100" placeholder="People, posts, pads — or #tag" aria-label="Search PATV" autocomplete="off" spellcheck="false"<%= q ? '' : ' autofocus' %>></label>
+      <input type="search" name="q" value="<%= q %>" maxlength="100" placeholder="<%- t('search.placeholder') %>" aria-label="<%- t('search.aria') %>" autocomplete="off" spellcheck="false"<%= q ? '' : ' autofocus' %>></label>
     <% if (kind !== 'all') { %><input type="hidden" name="type" value="<%= kind %>"><% } %>
-    <button type="submit" class="btn-s">Search</button>
+    <button type="submit" class="btn-s"><%- t('search.button') %></button>
   </form>
 
   <% if (wait) { %>
-    <p class="sr-empty" role="alert">You're searching very fast — try again in <%= wait %> second<%= wait === 1 ? '' : 's' %>.</p>
+    <p class="sr-empty" role="alert"><%- t('search.wait', { count: wait }) %></p>
   <% } else if (!q) { %>
-    <p class="sr-hint">Find people by their name, username or Camfrog name; posts by what they say; pads by their name. Start with <b>#</b> to list a tag's posts.</p>
+    <p class="sr-hint"><%- t('search.hint') %></p>
     <% if (popular && popular.length) { %>
-      <nav class="ftg sr-pop" aria-label="Popular tags"><span class="ftg-k">Popular tags</span><span class="ftg-list"><% popular.forEach((t) => { %><a class="ftag" href="<%= url({ q: '#' + t.tag, kind: 'posts' }) %>">#<%= t.tag %></a><% }) %></span></nav>
+      <nav class="ftg sr-pop" aria-label="<%- t('search.popular') %>"><span class="ftg-k"><%- t('search.popular') %></span><span class="ftg-list"><% popular.forEach((t) => { %><a class="ftag" href="<%= url({ q: '#' + t.tag, kind: 'posts' }) %>">#<%= t.tag %></a><% }) %></span></nav>
     <% } %>
   <% } else { %>
-    <nav class="sr-tabs" aria-label="What to show">
-      <% tabs_.forEach((t) => { if (R.tag && (t[0] === 'people' || t[0] === 'pads')) return; %>
-        <a class="sr-tab<%= kind === t[0] ? ' on' : '' %>" href="<%= url({ q, kind: t[0] }) %>"<%- kind === t[0] ? ' aria-current="page"' : '' %>><%= t[1] %><% if (t[0] !== 'all') { %> <span class="sr-n"><%= cnt_(t[0]) %></span><% } %></a>
+    <nav class="sr-tabs" aria-label="<%- t('search.tabs_aria') %>">
+      <% tabs_.forEach((tb) => { if (R.tag && (tb[0] === 'people' || tb[0] === 'pads')) return; %>
+        <a class="sr-tab<%= kind === tb[0] ? ' on' : '' %>" href="<%= url({ q, kind: tb[0] }) %>"<%- kind === tb[0] ? ' aria-current="page"' : '' %>><%- tb[1] %><% if (tb[0] !== 'all') { %> <span class="sr-n"><%= cnt_(tb[0]) %></span><% } %></a>
       <% }) %>
     </nav>
-    <% if (R.tag) { %><p class="sr-sub">Posts tagged <a class="ftag on" href="<%= fx.tagHref(R.tag) %>">#<%= R.tag %></a> · <a href="<%= fx.tagHref(R.tag) %>">open in the feed ›</a></p><% } %>
+    <% if (R.tag) { %><p class="sr-sub"><%- t('search.tagged') %> <a class="ftag on" href="<%= fx.tagHref(R.tag) %>">#<%= R.tag %></a> · <a href="<%= fx.tagHref(R.tag) %>"><%- t('search.open_feed') %></a></p><% } %>
     <% const none_ = !R.people.length && !R.pads.length && !R.posts.length; %>
-    <% if (none_) { %><p class="sr-empty">Nothing found for “<%= q %>”<%= kind !== 'all' ? ' in ' + kind : '' %>.<% if (kind !== 'all') { %> <a href="<%= url({ q }) %>">Search everything</a><% } %></p><% } %>
+    <% if (none_) { %><p class="sr-empty"><%- kind !== 'all' ? t('search.none_in', { q, kind: t.has('search.kind.' + kind) ? t('search.kind.' + kind) : t.esc(kind) }) : t('search.none', { q }) %><% if (kind !== 'all') { %> <a href="<%= url({ q }) %>"><%- t('search.everything') %></a><% } %></p><% } %>
 
     <%# ── people ── %>
     <% if (R.people.length && (kind === 'all' || kind === 'people')) { %>
       <section class="sr-sec" aria-labelledby="srPeople">
-        <h2 id="srPeople">People<% if (kind === 'all' && C_.people > R.people.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'people' }) %>">See all <%= cnt_('people') %> ›</a><% } %></h2>
+        <h2 id="srPeople"><%- t('search.tab.people') %><% if (kind === 'all' && C_.people > R.people.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'people' }) %>"><%- t('search.see_all', { n: cnt_('people') }) %></a><% } %></h2>
         <ul class="sr-people">
           <% R.people.forEach((u) => { %>
             <li><a class="sr-person" href="<%= u.href %>">
               <% if (u.bot) { %><img class="av av-pepe sr-av" src="/public/img/pepe.png" alt="" width="40" height="40"><% } else { %><%- fx.uav(u, { size: 40, cls: 'sr-av' }) %><% } %>
               <span class="sr-pt">
-                <b class="sr-name"><% if (u.nameCss && !u.bot) { %><span class="cx-name" style="<%= u.nameCss %>"><%- highlight(u.display, terms) %></span><% } else { %><%- highlight(u.display, terms) %><% } %><% if (u.bot) { %> <span class="bot-badge">🤖 bot</span><% } %></b>
+                <b class="sr-name"><% if (u.nameCss && !u.bot) { %><span class="cx-name" style="<%= u.nameCss %>"><%- highlight(u.display, terms) %></span><% } else { %><%- highlight(u.display, terms) %><% } %><% if (u.bot) { %> <span class="bot-badge">🤖 <%- t('search.bot') %></span><% } %></b>
                 <small>@<%- highlight(u.username, terms) %><% if (u.camfrog) { %> · 🐸 <%- highlight(u.camfrog, terms) %><% } %></small>
               </span>
             </a></li>
@@ -61,14 +62,14 @@
     <%# ── pads ── %>
     <% if (R.pads.length && (kind === 'all' || kind === 'pads')) { %>
       <section class="sr-sec" aria-labelledby="srPads">
-        <h2 id="srPads">Pads<% if (kind === 'all' && C_.pads > R.pads.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'pads' }) %>">See all <%= C_.pads %> ›</a><% } %></h2>
+        <h2 id="srPads"><%- t('search.tab.pads') %><% if (kind === 'all' && C_.pads > R.pads.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'pads' }) %>"><%- t('search.see_all', { n: C_.pads }) %></a><% } %></h2>
         <ul class="sr-pads">
           <% R.pads.forEach((c) => { %>
             <li><a class="sr-pad" href="<%= c.href %>">
               <%- fx.padChip(c, 'lg') %>
               <span class="sr-pt">
                 <b><%- highlight(c.title, terms) %> <%- fx.padBadge(c, { compact: true }) %></b>
-                <small>p/<%- highlight(c.slug, terms) %> · <%= fx.num(c.followers) %> follower<%= c.followers === 1 ? '' : 's' %> · <%= fx.num(c.posts) %> post<%= c.posts === 1 ? '' : 's' %></small>
+                <small>p/<%- highlight(c.slug, terms) %> · <%- t('search.n_followers', { count: c.followers, n: fx.num(c.followers) }) %> · <%- t('search.n_posts', { count: c.posts, n: fx.num(c.posts) }) %></small>
                 <% if (c.description) { %><span class="sr-desc"><%- highlight(c.description.length > 160 ? c.description.slice(0, 157) + '…' : c.description, terms) %></span><% } %>
               </span>
             </a></li>
@@ -80,9 +81,9 @@
     <%# ── posts ── %>
     <% if (R.posts.length && (kind === 'all' || kind === 'posts')) { %>
       <section class="sr-sec" aria-labelledby="srPosts">
-        <h2 id="srPosts">Posts<% if (kind === 'all' && C_.posts > R.posts.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'posts' }) %>">See all <%= cnt_('posts') %> ›</a><% } %></h2>
+        <h2 id="srPosts"><%- t('search.tab.posts') %><% if (kind === 'all' && C_.posts > R.posts.length) { %> <a class="sr-more" href="<%= url({ q, kind: 'posts' }) %>"><%- t('search.see_all', { n: cnt_('posts') }) %></a><% } %></h2>
         <% if (kind === 'posts') { %>
-          <nav class="sr-sorts" aria-label="Sort posts"><% sorts_.forEach((s) => { if (R.tag && s[0] === 'relevance') return; %><a class="fs-pill<%= sort === s[0] || (R.tag && sort === 'relevance' && s[0] === 'new') ? ' on' : '' %>" href="<%= url({ q, kind: 'posts', sort: s[0] }) %>"><%= s[1] %></a><% }) %></nav>
+          <nav class="sr-sorts" aria-label="<%- t('search.sort_aria') %>"><% sorts_.forEach((s) => { if (R.tag && s[0] === 'relevance') return; %><a class="fs-pill<%= sort === s[0] || (R.tag && sort === 'relevance' && s[0] === 'new') ? ' on' : '' %>" href="<%= url({ q, kind: 'posts', sort: s[0] }) %>"><%- s[1] %></a><% }) %></nav>
         <% } %>
         <ul class="sr-posts">
           <% R.posts.forEach((p) => {
@@ -98,14 +99,14 @@
               <div class="sr-pt">
                 <a class="sr-title<%= lab_.fallback ? ' fb' : '' %>" href="<%= p.url %>"><%- titleHtml_ %></a><% if (p.nsfw) { %> <span class="tag nsfw">NSFW</span><% } %>
                 <% if (bodyHtml_) { %><p class="sr-snip"><%- bodyHtml_ %></p><% } %>
-                <% if (p.nsfw) { %><button type="button" class="sr-reveal" data-sr-reveal>NSFW — tap to show</button><% } %>
+                <% if (p.nsfw) { %><button type="button" class="sr-reveal" data-sr-reveal><%- t('search.nsfw_reveal') %></button><% } %>
                 <% if (p.tags && p.tags.length) { %><p class="fp-tags"><% p.tags.slice(0, 5).forEach((t) => { %><a class="ftag" href="<%= fx.tagHref(t) %>">#<%= t %></a><% }) %></p><% } %>
                 <span class="sr-meta">
                   <% if (pad_) { %><a href="<%= pad_.profile ? '/u/' + encodeURIComponent(pad_.profile) : '/p/' + encodeURIComponent(pad_.slug) %>"><%= pad_.label %></a><span class="dot" aria-hidden="true">·</span><% } %>
                   <% if (p.author && p.author.bot) { %><span>🤖 Pepe</span><% } else if (p.author) { %><%- fx.uav(p.author, { size: 18 }) %><%- fx.uname(p.author, { href: '/u/' + encodeURIComponent(p.author.username), cls: 'sr-author' }) %><% } %>
                   <span class="dot" aria-hidden="true">·</span><time datetime="<%= new Date(p.created).toISOString() %>"><%= fx.ago(p.created) %></time>
-                  <span class="dot" aria-hidden="true">·</span><span><%= fx.num(p.score) %> point<%= p.score === 1 ? '' : 's' %></span>
-                  <span class="dot" aria-hidden="true">·</span><a href="<%= p.url %>#comments"><%= fx.num(p.comments) %> comment<%= p.comments === 1 ? '' : 's' %></a>
+                  <span class="dot" aria-hidden="true">·</span><span><%- t('search.n_points', { count: p.score, n: fx.num(p.score) }) %></span>
+                  <span class="dot" aria-hidden="true">·</span><a href="<%= p.url %>#comments"><%- t('search.n_comments', { count: p.comments, n: fx.num(p.comments) }) %></a>
                 </span>
               </div>
             </li>
@@ -113,8 +114,8 @@
         </ul>
         <% if (kind === 'posts' && (R.page > 1 || R.more)) { %>
           <nav class="fd-pager">
-            <% if (R.page > 1) { %><a href="<%= url({ q, kind: 'posts', sort, page: R.page - 1 }) %>">‹ Previous</a><% } %>
-            <% if (R.more) { %><a href="<%= url({ q, kind: 'posts', sort, page: R.page + 1 }) %>">More ›</a><% } %>
+            <% if (R.page > 1) { %><a href="<%= url({ q, kind: 'posts', sort, page: R.page - 1 }) %>"><%- t('search.prev') %></a><% } %>
+            <% if (R.more) { %><a href="<%= url({ q, kind: 'posts', sort, page: R.page + 1 }) %>"><%- t('search.more') %></a><% } %>
           </nav>
         <% } %>
       </section>

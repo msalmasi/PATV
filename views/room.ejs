@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: 'p/' + room.slug + ' — ' + room.name, user: user }) %>
 <% /* 1.99dt: ul() links names (userlinks.js, app.locals); rendered without the app it's the plain name */
    const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
@@ -25,7 +26,7 @@
    const liveOpen_ = typeof liveOpen !== 'undefined' ? !!liveOpen : (typeof signedIn !== 'undefined' && !!signedIn);
    const access_ = typeof access !== 'undefined' && access ? access : { level: 'members' };
    const tabOn_ = (t) => PT_.initial === t;
-   const liveLabel_ = PT_.camfrog ? 'Live' : 'Stage'; %>
+   const liveLabel_ = PT_.camfrog ? t('pad.tab.live') : t('pad.tab.stage'); %>
 <%# 1.99x: the platform badge (pads.js padBadge via fx or app.locals; a plain fallback when rendered bare) %>
 <% const padBadge_ = typeof fx !== 'undefined' && fx && fx.padBadge ? fx.padBadge : typeof padBadge === 'function' ? padBadge
      : (p) => '<span class="pad-plat pp-' + p + '">' + (p === 'site' ? '🌐 Site Pad' : '🐸 Camfrog Pad') + '</span>'; %>
@@ -379,7 +380,7 @@
    const primeOn_ = typeof isPrimeTime === 'function' ? !!isPrimeTime(room.id) : false; %>
 <link rel="stylesheet" href="/public/css/padfx.css?v=2">
 <main class="rm<%= LK_ && LK_.accent ? ' pad-acc' : '' %>"<% if (LK_ && LK_.vars) { %> style="<%= LK_.vars %>"<% } %>>
-  <div class="crumb"><a href="/p">Pads</a> › p/<%= room.slug %></div>
+  <div class="crumb"><a href="/p"><%- t('pad.crumb') %></a> › p/<%= room.slug %></div>
   <% if (primeOn_) { %><div class="pt-intro" aria-hidden="true">📺 PRIME TIME</div><% } %>
   <% if (room.banner && !(LK_ && LK_.banner)) { %><img class="banner-img" src="<%= room.banner %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %>
   <%# 1.99ef: the header is three zones - identity (left: name + LIVE, p/slug + quiet type tags, one description line),
@@ -391,61 +392,61 @@
      const fcount_ = feed_ && feed_.follow ? feed_.follow.followers : 0;
      const queue_ = feed_ && feed_.queue ? feed_.queue : 0, pending_ = schedule_ && schedule_.pending ? schedule_.pending : 0;
      const analytics_ = typeof roomAnalytics !== 'undefined' && roomAnalytics ? roomAnalytics : null;
-     const psTitle_ = 'Pad settings: page, stage, feed, Pepe, rules, moderation' + (queue_ ? ' · ' + queue_ + ' waiting in Moderation' : '') + (pending_ ? ' · ' + pending_ + ' to approve' : ''); %>
+     const psTitle_ = t('pad.hdr.settings_tip') + (queue_ ? ' · ' + t('pad.hdr.n_waiting_mod', { n: queue_ }) : '') + (pending_ ? ' · ' + t('pad.hdr.n_to_approve', { n: pending_ }) : ''); %>
   <section class="hero<%= LK_ && LK_.banner ? ' has-bn' : '' %><%= PFX_ && PFX_.cls ? ' ' + PFX_.cls : '' %>" aria-labelledby="rmTitle"><%- PFX_ ? PFX_.layer : '' %>
     <% if (LK_ && LK_.banner) { %><div class="hero-bn" aria-hidden="true"><img src="<%= LK_.banner %>" alt="" decoding="async"></div><% } %>
     <div class="hd">
       <div class="hd-id">
         <h1 id="rmTitle"><%- avHtml_ %><% if (PFX_ && PFX_.glow) { %><span class="rm-nm <%= PFX_.glow %>"><%= room.name %></span><% } else { %><%= room.name %><% } %><%- PFX_ ? PFX_.badges : '' %>
-          <% if (!siteOnly_) { %><span class="live <%= room.live ? 'chat' : 'off' %>" id="rmLive" title="Is the Camfrog room active? (ON AIR on the stage = a video stream)"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%= room.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE' %></span></span><% } %>
+          <% if (!siteOnly_) { %><span class="live <%= room.live ? 'chat' : 'off' %>" id="rmLive" title="<%- t('pad.hdr.room_tip') %>"><span class="dot" aria-hidden="true"></span><span id="rmLiveTxt"><%- room.live ? t('pad.room_active') : t('pad.room_offline') %></span></span><% } %>
         </h1>
         <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
           <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
-          <% if (access_.level === 'approved') { %><span class="htag" title="Only members the owner approved can see this pad">🔒 Approved members</span><% } else if (access_.level === 'public') { %><span class="htag" title="Anyone can see this pad, signed in or not">🌐 Public</span><% } %>
-          <% if (room.house) { %><span class="htag own" title="Run by Pepe">🐸 House pad</span><% } else if (room.owner) { %><a class="htag own" href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 Pad owner: <%= room.owner %></a><% } %>
+          <% if (access_.level === 'approved') { %><span class="htag" title="<%- t('pad.hdr.approved_tip') %>"><%- t('pad.hdr.approved') %></span><% } else if (access_.level === 'public') { %><span class="htag" title="<%- t('pad.hdr.public_tip') %>"><%- t('pad.hdr.public') %></span><% } %>
+          <% if (room.house) { %><span class="htag own" title="<%- t('pad.hdr.run_by_pepe') %>"><%- t('pad.hdr.house') %></span><% } else if (room.owner) { %><a class="htag own" href="/u/<%= encodeURIComponent(room.ownerUser) %>"><%- t('pad.hdr.owner', { name: room.owner }) %></a><% } %>
         </span></div>
         <div class="topic" id="rmTopic" data-desc="<%= desc_ %>"><%= topic_ && !sameTxt_(topic_, desc_) ? topic_ : '' %></div>
         <% if (desc_) { %><div class="desc"><%= desc_ %></div><% } %>
       </div>
       <div class="hd-acts">
-        <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: 'Follow this pad' }) %>
-          <span class="hd-fc" title="Follow this pad to get its posts on your Following feed"><b data-follower-count-kind="room" data-follower-count-id="<%= feed_.room %>"><%= fcount_.toLocaleString('en-US') %></b> follower<%= fcount_ === 1 ? '' : 's' %></span></div><% } %>
-        <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%= psTitle_ %>" aria-label="<%= psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
+        <% if (feed_ && feed_.follow) { %><div class="hd-follow"><%- include('partials/follow-btn', { kind: 'room', id: feed_.room, following: feed_.follow.following, signed: !!feed_.viewer, next: '/p/' + encodeURIComponent(room.slug), fwTitle: t('pad.hdr.follow') }) %>
+          <span class="hd-fc" title="<%- t('pad.hdr.follow_tip') %>"><%- t('pad.hdr.followers', { count: fcount_, n: '<b data-follower-count-kind="room" data-follower-count-id="' + t.esc(feed_.room) + '">' + t.esc(fcount_.toLocaleString('en-US')) + '</b>' }) %></span></div><% } %>
+        <% if (manage_) { %><a class="ibtn ps-link" href="/p/<%= encodeURIComponent(room.slug) %>/settings<%= queue_ ? '#moderation' : '' %>" title="<%- psTitle_ %>" aria-label="<%- psTitle_ %>">⚙<% if (queue_ || pending_) { %><span class="ps-q" aria-hidden="true"><%= queue_ + pending_ %></span><% } %></a><% } %>
         <details class="hd-more" id="rmMore">
-          <summary class="ibtn" aria-label="More: rules, analytics, share" title="More">⋯</summary>
+          <summary class="ibtn" aria-label="<%- t('pad.menu.aria') %>" title="<%- t('pad.menu.more') %>">⋯</summary>
           <div class="hd-menu" role="menu">
-            <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules">📜 Rules</a><% } %>
-            <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>">📈 Pad analytics</a><% } %>
-            <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>">🔗 Copy link</button>
-            <a role="menuitem" href="/premium?pad=<%= encodeURIComponent(room.slug) %>"><%= primeOn_ ? '📺 Prime Time is on' : '📺 Prime Time' %></a>
-            <% if (!isOwner_) { %><% if (giftSigned_) { %><button type="button" role="menuitem" data-pad-gift="<%= room.slug %>">🎁 Gift a cosmetic</button><% } else { %><a role="menuitem" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>">🎁 Gift a cosmetic</a><% } %><% } %>
+            <% if (feed_ && feed_.rules) { %><a role="menuitem" href="?tab=about#rules" data-pad-tab="about" data-open="rules"><%- t('pad.menu.rules') %></a><% } %>
+            <% if (analytics_) { %><a role="menuitem" href="<%= analytics_ %>"><%- t('pad.menu.analytics') %></a><% } %>
+            <button type="button" role="menuitem" data-copy-link="/p/<%= encodeURIComponent(room.slug) %>"><%- t('pad.menu.copy') %></button>
+            <a role="menuitem" href="/premium?pad=<%= encodeURIComponent(room.slug) %>"><%- primeOn_ ? t('pad.menu.prime_on') : '📺 Prime Time' %></a>
+            <% if (!isOwner_) { %><% if (giftSigned_) { %><button type="button" role="menuitem" data-pad-gift="<%= room.slug %>"><%- t('pad.menu.gift') %></button><% } else { %><a role="menuitem" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>"><%- t('pad.menu.gift') %></a><% } %><% } %>
           </div>
         </details>
       </div>
     </div>
   </section>
-  <section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="Launchpad" hidden></section>
+  <section class="card pad-launch" id="padLaunch" data-slug="<%= room.slug %>" aria-label="<%- t('pad.launchpad') %>" hidden></section>
   <% if (feed_ && (((feed_.caps || []).length) || ((feed_.storyRooms || []).length))) { %>
-    <section class="card rm-story" aria-label="Fresh captures from this pad"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: '📸 Fresh captures', next: '/p/' + encodeURIComponent(room.slug) }) %></section>
+    <section class="card rm-story" aria-label="<%- t('pad.story.aria') %>"><%- include('partials/story-strip', { story: { caps: feed_.caps, rooms: feed_.storyRooms || [], room: feed_.room, signed: !!feed_.viewer, compose: !!feed_.viewer }, heading: t('pad.story.fresh'), next: '/p/' + encodeURIComponent(room.slug) }) %></section>
   <% } %>
-  <nav class="ptabs" id="padTabs" role="tablist" aria-label="Pad sections">
-    <% PT_.tabs.forEach((t) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= t %>" data-tab="<%= t %>" aria-controls="padPanel-<%= t %>" aria-selected="<%= tabOn_(t) ? 'true' : 'false' %>" tabindex="<%= tabOn_(t) ? 0 : -1 %>">
-      <% if (t === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%= liveLabel_ %><% } else if (t === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span>Feed <span class="pnew" id="padFeedNew" hidden></span><% } else { %>About<% } %></button><% }) %>
+  <nav class="ptabs" id="padTabs" role="tablist" aria-label="<%- t('pad.tab.aria') %>">
+    <% PT_.tabs.forEach((tb_) => { %><button type="button" class="ptab" role="tab" id="padTab-<%= tb_ %>" data-tab="<%= tb_ %>" aria-controls="padPanel-<%= tb_ %>" aria-selected="<%= tabOn_(tb_) ? 'true' : 'false' %>" tabindex="<%= tabOn_(tb_) ? 0 : -1 %>">
+      <% if (tb_ === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%- liveLabel_ %><% } else if (tb_ === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span><%- t('pad.tab.feed') %> <span class="pnew" id="padFeedNew" hidden></span><% } else { %><%- t('pad.tab.about') %><% } %></button><% }) %>
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
   <%# 1.99ja: a Twitch pad plays its channel (padconnect.js twitchOf; the player URL is built by stageembed.js from the checked login) %>
   <% const TWP_ = typeof twitch !== 'undefined' && twitch && twitch.login && twitch.player ? twitch.player : null; %>
   <% if (TWP_) { %>
     <section class="card twp" aria-labelledby="twpH">
-      <h2 id="twpH"><span>🟣 twitch.tv/<%= twitch.login %></span> <a class="muted" href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank" style="font-family:Ubuntu,sans-serif;font-size:12.5px">Open on Twitch ›</a></h2>
+      <h2 id="twpH"><span>🟣 twitch.tv/<%= twitch.login %></span> <a class="muted" href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank" style="font-family:Ubuntu,sans-serif;font-size:12.5px"><%- t('pad.twitch.open') %></a></h2>
       <div style="position:relative;padding-top:56.25%;border-radius:10px;overflow:hidden;background:#000"><iframe src="<%= TWP_ %>" title="twitch.tv/<%= twitch.login %>" allowfullscreen loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe></div>
     </section>
   <% } %>
   <%# 1.99ef: the room's live status (was header chips): who's in the Camfrog room, Pepe is here %>
   <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
-    <% if (bridged_) { %><span><b id="rmCount"><%= room.count %></b> in <b><%= cfName_ %></b></span><% } else { %><span>📡 Camfrog room <b><%= cfName_ %></b></span><% } %>
-    <% if (pepeHere_ === true) { %><span class="ls-sep" aria-hidden="true">·</span><span title="Pepe is in the Camfrog room, so his stream is part of this pad's stage">🐸 Pepe is here</span><% } %></p><% } %>
-  <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <b>Live from the Camfrog room — read-only (v1).</b> What the Camfrog room shows to anyone sitting in it: public chat, who's here, who's on the mic. 🎙 lines are what people said on the mic (auto-transcribed). Private messages are never shown, and anyone who turned on <code>!incognito</code> or typed <code>!bridge hide</code> in the room appears as "someone".</div><% } %>
+    <% if (bridged_) { %><span><%- t('pad.live.n_in', { n: '<b id="rmCount">' + t.esc(room.count) + '</b>', room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } else { %><span><%- t('pad.live.cf_room', { room: '<b>' + t.esc(cfName_) + '</b>' }) %></span><% } %>
+    <% if (pepeHere_ === true) { %><span class="ls-sep" aria-hidden="true">·</span><span title="<%- t('pad.live.pepe_here_tip') %>"><%- t('pad.live.pepe_here') %></span><% } %></p><% } %>
+  <% if (bridged_ && !siteOnly_) { %><div class="banner" role="note">📡 <%- t('pad.live.banner') %></div><% } %>
 
 <% { const st = stage || {}; const RS = roomStage_ || { slots: [], upcoming: [], queue: {} }; const pepeOn_ = !!st.active && pepeHere_ !== false; const live = pepeOn_ || RS.slots.length > 0;
      const fmtT = (ms) => new Date(ms).toISOString(); %>
@@ -460,38 +461,38 @@
   <link rel="stylesheet" href="/public/css/stagecap.css?v=1">
   <script src="/public/js/stage-capture.js?v=2"></script>
   <section class="card stage <%= live ? 'is-on' : 'is-off' %>" id="rmStage" aria-labelledby="rmStageH">
-    <h2 id="rmStageH"><span>📺 <%= room.name %> stage</span>
-      <span class="live<%= live ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%= live ? 'ON AIR' : 'OFF AIR' %></span></span></h2>
-    <div class="stabs" id="rmTabs" role="tablist" aria-label="Stage streams"></div>
+    <h2 id="rmStageH"><span><%- t('pad.stage.title', { name: room.name }) %></span>
+      <span class="live<%= live ? '' : ' off' %>" id="rmStPill" style="font-family:Ubuntu,sans-serif"><span class="dot" aria-hidden="true"></span><span id="rmStPillTxt"><%- live ? t('pad.stage.on_air') : t('pad.stage.off_air') %></span></span></h2>
+    <div class="stabs" id="rmTabs" role="tablist" aria-label="<%- t('pad.stage.streams') %>"></div>
     <div class="player">
       <div class="wrap" id="rmVideo"></div>
-      <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> Stream is starting / reconnecting…</div>
-      <button type="button" class="unmute hide" id="rmStUnmute" aria-label="Unmute the stream"><img src="/public/img/mute-icon.png" alt=""></button>
+      <div class="reconnect hide" id="rmStReconnect" role="status"><span class="dot" aria-hidden="true"></span> <%- t('pad.stage.reconnecting') %></div>
+      <button type="button" class="unmute hide" id="rmStUnmute" aria-label="<%- t('pad.stage.unmute') %>"><img src="/public/img/mute-icon.png" alt=""></button>
       <div class="embed hide" id="rmEmbed"></div>
     </div>
-    <div class="stcap hide" id="rmCap" aria-label="Snap or clip this stream"></div>
-    <div class="off-air"><span id="rmOffTxt">Nothing on this stage right now — be the first: go live here.</span></div>
+    <div class="stcap hide" id="rmCap" aria-label="<%- t('pad.stage.cap') %>"></div>
+    <div class="off-air"><span id="rmOffTxt"><%- t('pad.stage.nothing') %></span></div>
   </section>
   <%# 1.99ee: go live / slots / schedule are their own card under the stage card (the stage card is the player + Snap / Clip).
       🚀 Boost replaces "★ Get featured": featuring is earned (the front page's automatic ranking); a boost adds to this
       pad's score there (boosts.js). Only Camfrog pads can be on the front page, so only they show the button. %>
   <% const BO_ = RS.boost || null, canBoost_ = !siteOnly_ && (room.platform || 'camfrog') === 'camfrog', signedIn_ = typeof signedIn !== 'undefined' ? !!signedIn : (typeof user !== 'undefined' && !!user); %>
   <section class="card golive-card" id="rmGoLive" aria-labelledby="rmGoLiveH">
-    <h2 id="rmGoLiveH" class="gl-h">🎬 Go live</h2>
+    <h2 id="rmGoLiveH" class="gl-h"><%- t('pad.golive.h') %></h2>
     <div class="stage-bar">
-      <span class="slots"><span id="rmSlotsTxt">🎬 <%= RS.open || 0 %>/<%= (RS.room && RS.room.slot_count) || 1 %> slot<%= ((RS.room && RS.room.slot_count) || 1) === 1 ? '' : 's' %> in use<%= RS.queue && RS.queue.length ? ' · ' + RS.queue.length + ' waiting' : '' %><%= RS.room && RS.room.slot_price ? ' · ' + Number(RS.room.slot_price).toLocaleString('en-US') + ' PAT/min' : ' · free slots' %></span><% if (canBoost_) { %><span class="boosted" id="rmBoostTxt"<%= BO_ && BO_.last_hour > 0 ? '' : ' hidden' %>> · 🚀 boosted · <b><%= BO_ ? Number(BO_.last_hour).toLocaleString('en-US') : 0 %></b> PAT in the last hour</span><% } %></span>
+      <span class="slots"><span id="rmSlotsTxt"><%- t('pad.golive.slots', { open: RS.open || 0, count: (RS.room && RS.room.slot_count) || 1 }) %><%- RS.queue && RS.queue.length ? ' · ' + t('pad.golive.n_waiting', { n: RS.queue.length }) : '' %><%- RS.room && RS.room.slot_price ? ' · ' + t('pad.golive.price', { n: Number(RS.room.slot_price).toLocaleString('en-US') }) : ' · ' + t('pad.golive.free') %></span><% if (canBoost_) { %><span class="boosted" id="rmBoostTxt"<%= BO_ && BO_.last_hour > 0 ? '' : ' hidden' %>> · <%- t('pad.golive.boosted', { n: '<b>' + (BO_ ? Number(BO_.last_hour).toLocaleString('en-US') : 0) + '</b>' }) %></span><% } %></span>
       <div class="stage-acts">
-        <a class="sact primary" href="/stage?room=<%= encodeURIComponent(room.slug) %>">🎥 Go live here</a>
-        <a class="sact" href="/stage?room=<%= encodeURIComponent(room.slug) %>#whenSet">📅 Book a slot</a>
-        <% if (canBoost_) { %><% if (signedIn_) { %><button type="button" class="sact boost" id="rmBoostBtn" aria-expanded="false" aria-controls="rmBoostBox">🚀 Boost this pad</button><% } else { %><a class="sact boost" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '#boost') %>">🚀 Boost this pad</a><% } %><% } %>
+        <a class="sact primary" href="/stage?room=<%= encodeURIComponent(room.slug) %>"><%- t('pad.golive.here') %></a>
+        <a class="sact" href="/stage?room=<%= encodeURIComponent(room.slug) %>#whenSet"><%- t('pad.golive.book') %></a>
+        <% if (canBoost_) { %><% if (signedIn_) { %><button type="button" class="sact boost" id="rmBoostBtn" aria-expanded="false" aria-controls="rmBoostBox"><%- t('pad.golive.boost') %></button><% } else { %><a class="sact boost" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '#boost') %>"><%- t('pad.golive.boost') %></a><% } %><% } %>
       </div>
       <% if (canBoost_ && signedIn_) { %>
       <form class="boostbox" id="rmBoostBox" data-slug="<%= room.slug %>" hidden autocomplete="off">
-        <p class="bx-what">Push <b><%= room.name %></b> up the front-page ranking. Boosts fade by half every hour and only count while people here are chatting or on the mic — they can tip a close race, not carry a quiet pad. Half goes to this pad's room vault, half to Fort Knox.<% if (!siteOnly_) { %> In the Camfrog room: <code>!boost 5000</code>.<% } %></p>
+        <p class="bx-what"><%- t('pad.boost.what', { name: room.name }) %><% if (!siteOnly_) { %> <%- t('pad.boost.in_room', { cmd: '<code>!boost 5000</code>' }) %><% } %></p>
         <div class="bx-row">
-          <span class="bx-presets" role="group" aria-label="Amount"><button type="button" data-amt="1000">1,000</button><button type="button" data-amt="5000">5,000</button><button type="button" data-amt="25000">25,000</button></span>
-          <label class="bx-amt"><span class="sr">PAT to boost with</span><input type="number" name="amount" min="<%= BO_ ? BO_.min : 100 %>" max="<%= BO_ ? BO_.max : 1000000 %>" step="1" value="5000" inputmode="numeric"> <small>PAT</small></label>
-          <button type="submit" class="sact primary">🚀 Boost</button>
+          <span class="bx-presets" role="group" aria-label="<%- t('pad.boost.amount') %>"><button type="button" data-amt="1000">1,000</button><button type="button" data-amt="5000">5,000</button><button type="button" data-amt="25000">25,000</button></span>
+          <label class="bx-amt"><span class="sr"><%- t('pad.boost.sr') %></span><input type="number" name="amount" min="<%= BO_ ? BO_.min : 100 %>" max="<%= BO_ ? BO_.max : 1000000 %>" step="1" value="5000" inputmode="numeric"> <small>PAT</small></label>
+          <button type="submit" class="sact primary"><%- t('pad.boost.btn') %></button>
         </div>
         <p class="bx-msg" id="rmBoostMsg" role="status" aria-live="polite"></p>
       </form>
@@ -499,8 +500,8 @@
     </div>
     <% if (schedule_) { %><%- include('partials/room-schedule', { slug: room.slug, schedule: schedule_ }) %><% } %>
     <% if (!schedule_ && (RS.upcoming || []).length) { %>
-      <ul class="upnext" aria-label="Coming up on this stage">
-        <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%- UL(u.username, { text: u.display, user: true }) %></b><span class="muted"><%= u.minutes %> min<%= u.featured ? ' · ★ featured' : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
+      <ul class="upnext" aria-label="<%- t('pad.golive.coming_up') %>">
+        <% RS.upcoming.forEach((u) => { %><li><time data-ts="<%= u.start_at %>" datetime="<%= fmtT(u.start_at) %>"><%= fmtT(u.start_at).slice(11, 16) %> UTC</time><b><%- UL(u.username, { text: u.display, user: true }) %></b><span class="muted"><%- t('pad.golive.min', { n: u.minutes }) %><%- u.featured ? ' · ' + t('pad.golive.featured') : '' %><%= u.title ? ' · ' + u.title : '' %></span></li><% }) %>
       </ul>
     <% } %>
   </section>
@@ -508,6 +509,7 @@
   <script>
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var box = document.getElementById('rmStage');
     document.querySelectorAll('.upnext time[data-ts]').forEach(function (t) {
       var d = new Date(Number(t.getAttribute('data-ts')));
@@ -524,14 +526,14 @@
       onAir: function (on) {
         box.classList.toggle('is-on', on); box.classList.toggle('is-off', !on);
         document.getElementById('rmStPill').className = 'live' + (on ? '' : ' off');
-        document.getElementById('rmStPillTxt').textContent = on ? 'ON AIR' : 'OFF AIR';
+        document.getElementById('rmStPillTxt').textContent = on ? _t('js.pad.stage.on_air', 'ON AIR') : _t('js.pad.stage.off_air', 'OFF AIR');
       }
     });
   })();
   </script>
 <% } %>
 <% if (!bridged_ && !siteOnly_) { %>
-  <section class="card"><p class="muted" style="margin:0">📡 Pepe isn't bridging this pad's Camfrog room to the website right now, so there's no live chat here — the stage and the feed still work. Join the Camfrog room to hang out.</p></section>
+  <section class="card"><p class="muted" style="margin:0"><%- t('pad.live.not_bridged') %></p></section>
 <% } %>
 
 <% if (!bridged_ || siteOnly_) { %>
@@ -539,25 +541,25 @@
 <% } else if (!liveOpen_) { %>
   <section class="card tease">
     <div class="big" aria-hidden="true">🐸</div>
-    <h2 style="justify-content:center">Sign in to watch the Camfrog room live</h2>
-    <p class="muted">The Camfrog room's live chat, who's in it and who's on the mic are for signed-in PATV members.</p>
-    <a class="btn" href="/login">Sign in</a>
-    <p class="muted">No account? <a href="/register">Make one</a> — then link your Camfrog name with <code>!verify</code>.</p>
+    <h2 style="justify-content:center"><%- t('pad.tease.h') %></h2>
+    <p class="muted"><%- t('pad.tease.text') %></p>
+    <a class="btn" href="/login"><%- t('pad.signin') %></a>
+    <p class="muted"><%- t('pad.tease.register', { link: '<a href="/register">' + t('pad.tease.make_one') + '</a>', cmd: '<code>!verify</code>' }) %></p>
   </section>
   <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
 <% } else { %>
   <%- include('partials/room-dj', { slug: room.slug, linked: linked }) %>
   <div class="grid">
     <section class="card" aria-labelledby="chatH">
-      <h2 id="chatH">Chat <small id="rmStatus" class="status" aria-live="polite"></small></h2>
-      <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Camfrog room chat"></div>
-      <button class="jump" id="rmJump" type="button">New messages ↓</button>
+      <h2 id="chatH"><%- t('pad.chat.h') %> <small id="rmStatus" class="status" aria-live="polite"></small></h2>
+      <div class="feed" id="rmFeed" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="<%- t('pad.chat.aria') %>"></div>
+      <button class="jump" id="rmJump" type="button"><%- t('pad.chat.new') %></button>
       <div id="rmClip"></div><%# 1.99fp: ✂️ Clip chat + 🔊 mic clips (public/js/chat-clip.js) %>
       <div class="compose hide" id="rmCompose">
         <% if (!signedIn) { %>
-          <p class="muted" style="margin:0">💬 This Camfrog room takes messages from the website. <a href="/login?next=<%= encodeURIComponent('/p/' + room.slug) %>">Sign in</a> and link your Camfrog name to join in.</p>
+          <p class="muted" style="margin:0"><%- t('pad.chat.takes') %> <%- t('pad.chat.signin_link', { link: '<a href="/login?next=' + encodeURIComponent('/p/' + room.slug) + '">' + t('pad.signin') + '</a>' }) %></p>
         <% } else if (!linked) { %>
-          <p class="muted" style="margin:0">💬 This Camfrog room takes messages from the website. <b>Link your Camfrog name</b> first: type <code>!verify</code> in a room with Pepe.</p>
+          <p class="muted" style="margin:0"><%- t('pad.chat.takes') %> <%- t('pad.chat.link_first', { cmd: '<code>!verify</code>' }) %></p>
         <% } else { %>
           <div id="rmRelay"></div>
           <div id="rmPtt"></div>
@@ -569,12 +571,12 @@
       <section class="card pm" id="rmMod" hidden></section>
       <% if (feed_ || latest_.length) { %><%- include('partials/pad-latest', { latest: latest_, slug: room.slug, fx: typeof fx !== 'undefined' ? fx : null }) %><% } %>
       <section class="card" aria-labelledby="micH">
-        <h2 id="micH"><span class="ht">On the mic</span></h2>
+        <h2 id="micH"><span class="ht"><%- t('pad.mic.h') %></span></h2>
         <div class="mic" id="rmMic"></div>
         <div id="rmAudioBox" style="margin-top:10px"></div>
       </section>
       <section class="card" aria-labelledby="pplH">
-        <h2 id="pplH"><span class="ht">In the Camfrog room</span> <small id="rmPplN"></small></h2>
+        <h2 id="pplH"><span class="ht"><%- t('pad.people.h') %></span> <small id="rmPplN"></small></h2>
         <ul class="people" id="rmPeople"></ul>
         <p class="muted" id="rmListNote" style="margin:8px 0 0"></p>
       </section>
@@ -592,6 +594,7 @@
   <script>
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var slug = <%- JSON.stringify(room.slug).replace(/</g, '\\u003c') %>;
     var data = JSON.parse(document.getElementById('rmInit').textContent);
     var feedEl = document.getElementById('rmFeed'), jump = document.getElementById('rmJump');
@@ -602,7 +605,7 @@
     // the ⋯ button next to someone (the people list and, 1.99fu, the mic list): mods get their actions too
     function moreBtn(u, canCam, onMic) {
       var mg = el('button', 'pm-mg', '⋯'); mg.type = 'button';
-      mg.title = 'Actions for ' + label(u); mg.setAttribute('aria-label', 'Actions for ' + label(u));
+      mg.title = _t('js.pad.people.actions', 'Actions for {name}', { name: label(u) }); mg.setAttribute('aria-label', mg.title);
       mg.setAttribute('aria-haspopup', 'menu'); mg.setAttribute('data-login', u.login);
       mg.addEventListener('click', function () { roomMod.menu(u, mg, { cam: canCam ? function () { snapOpen(u); } : null, mic: !!onMic }); });
       return mg;
@@ -620,7 +623,7 @@
       return d;
     }
     function name(u) {
-      if (!u || u.anon) return el('span', 'who', 'someone');
+      if (!u || u.anon) return el('span', 'who', _t('js.pad.someone', 'someone'));
       var n;
       if (u.patv) { n = el('a', 'who'); n.href = '/u/' + encodeURIComponent(u.patv.username); n.textContent = u.display || u.login; }
       else n = el('span', 'who', u.display || u.login);
@@ -633,7 +636,7 @@
       var f = u && !u.anon && u.patv && u.patv.flair;
       if (!f || !f.name) return null;
       var s = el('span', 'ufl', f.name);
-      s.title = 'Pad flair: ' + f.name;
+      s.title = _t('js.pad.flair', 'Pad flair: {name}', { name: f.name });
       if (f.emoji) s.insertBefore(el('span', 'ufl-e', f.emoji), s.firstChild);
       if (/^#[0-9a-f]{6}$/.test(f.color || '')) s.style.setProperty('--fl', f.color);
       if (/^#[0-9a-f]{6}$/.test(f.ink || '')) s.style.setProperty('--fli', f.ink);
@@ -641,12 +644,12 @@
     }
     function hhmm(ts) { var d = new Date(ts); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
     function dur(ms) { var s = Math.round(ms / 1000); return s < 60 ? s + 's' : s < 3600 ? Math.round(s / 60) + 'm' : (s / 3600).toFixed(1) + 'h'; }
-    function label(u) { return !u || u.anon ? 'someone' : (u.display || u.login); }
+    function label(u) { return !u || u.anon ? _t('js.pad.someone', 'someone') : (u.display || u.login); }
 
     function item(it) {
       if (it.k === 'msg' || it.k === 'tx') {
         var row = el('div', 'line' + (it.k === 'tx' ? ' tx' : '') + (it.u && it.u.self ? ' pepe' : ''));
-        if (it.k === 'tx') row.title = 'Said on the mic (auto-transcribed)';
+        if (it.k === 'tx') row.title = _t('js.pad.chat.tx', 'Said on the mic (auto-transcribed)');
         // 1.99fp: what ✂️ Clip chat / 🔊 Clip read (public/js/chat-clip.js) - the server re-reads its own copy by id
         if (it.c) row.setAttribute('data-c', it.c);
         row.setAttribute('data-k', it.k); row.setAttribute('data-name', label(it.u)); row.setAttribute('data-text', it.text);
@@ -661,11 +664,11 @@
         row.appendChild(b);
         return row;
       }
-      var txt = it.k === 'join' ? '→ ' + label(it.u) + ' joined'
-        : it.k === 'leave' ? '← ' + label(it.u) + ' left'
-        : it.k === 'mic' ? '🎙️ ' + label(it.u) + ' grabbed the mic'
-        : it.k === 'unmic' ? '🎙️ ' + label(it.u) + ' dropped the mic' + (it.ms ? ' after ' + dur(it.ms) : '')
-        : it.k === 'topic' ? '📌 topic: ' + it.text : null;
+      var txt = it.k === 'join' ? _t('js.pad.chat.joined', '→ {name} joined', { name: label(it.u) })
+        : it.k === 'leave' ? _t('js.pad.chat.left', '← {name} left', { name: label(it.u) })
+        : it.k === 'mic' ? _t('js.pad.chat.mic', '🎙️ {name} grabbed the mic', { name: label(it.u) })
+        : it.k === 'unmic' ? (it.ms ? _t('js.pad.chat.unmic_after', '🎙️ {name} dropped the mic after {dur}', { name: label(it.u), dur: dur(it.ms) }) : _t('js.pad.chat.unmic', '🎙️ {name} dropped the mic', { name: label(it.u) }))
+        : it.k === 'topic' ? _t('js.pad.chat.topic', '📌 topic: {text}', { text: it.text }) : null;
       if (!txt) return null;
       return el('div', 'sys' + (it.k === 'topic' ? ' topic' : ''), txt + ' · ' + hhmm(it.ts));
     }
@@ -687,7 +690,7 @@
       return true;
     }
     function addFeed(items, first) {
-      if (!items || !items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', 'Nothing said yet — it shows up here the moment someone talks.')); return; }
+      if (!items || !items.length) { if (first && !feedEl.childNodes.length) feedEl.appendChild(el('p', 'muted', _t('js.pad.chat.empty', 'Nothing said yet — it shows up here the moment someone talks.'))); return; }
       var stick = first || nearBottom();
       if (feedEl.firstChild && feedEl.firstChild.tagName === 'P') feedEl.removeChild(feedEl.firstChild);
       var frag = document.createDocumentFragment();
@@ -696,7 +699,7 @@
       while (feedEl.childNodes.length > 300) feedEl.removeChild(feedEl.firstChild);
       if (first && wantLine) {
         if (showLine()) return;
-        feedEl.appendChild(el('div', 'sys', 'The line you were mentioned in has scrolled out of the live chat.'));
+        feedEl.appendChild(el('div', 'sys', _t('js.pad.chat.mention_gone', 'The line you were mentioned in has scrolled out of the live chat.')));
         wantLine = null;
       }
       if (stick) { feedEl.style.scrollBehavior = 'auto'; feedEl.scrollTop = feedEl.scrollHeight; feedEl.style.scrollBehavior = ''; jump.style.display = 'none'; }
@@ -718,16 +721,16 @@
       var dotEl = document.getElementById('rmStDot'); if (dotEl) dotEl.textContent = r.live ? '🟢' : '⚪';
       var live = document.getElementById('rmLive');
       live.classList.toggle('off', !r.live); live.classList.toggle('chat', !!r.live);
-      document.getElementById('rmLiveTxt').textContent = r.live ? '💬 ROOM ACTIVE' : 'ROOM OFFLINE';
+      document.getElementById('rmLiveTxt').textContent = r.live ? _t('js.pad.room_active', '💬 ROOM ACTIVE') : _t('js.pad.room_offline', 'ROOM OFFLINE');
       var mk = JSON.stringify(d.mic) + (r.cams ? '1' : '0') + (roomMod ? roomMod.key() : '');
       if (mk !== lastMic) {
         lastMic = mk;
         var mic = document.getElementById('rmMic'); mic.textContent = '';
-        if (!d.mic.length) mic.appendChild(el('p', 'muted', 'Nobody on the mic right now.'));
+        if (!d.mic.length) mic.appendChild(el('p', 'muted', _t('js.pad.mic.nobody', 'Nobody on the mic right now.')));
         d.mic.forEach(function (u) {
           var h = el('div', 'holder'); h.appendChild(avatar(u));
           var n = el('span', 'nm'); n.appendChild(name(u)); h.appendChild(n);
-          var eq = el('span', 'eq'); eq.setAttribute('aria-label', 'talking');
+          var eq = el('span', 'eq'); eq.setAttribute('aria-label', _t('js.pad.mic.talking', 'talking'));
           if (!reduce) { eq.appendChild(el('i')); eq.appendChild(el('i')); eq.appendChild(el('i')); } else eq.textContent = '🎙️';
           h.appendChild(eq);
           // 1.99fu: the same ⋯ menu as the people list (View profile / Open cam / 💸 Tip; mods: their actions)
@@ -746,17 +749,17 @@
         ms.forEach(function (u) {
           var li = el('li'); li.appendChild(avatar(u));
           var n = el('span', 'nm'); n.appendChild(name(u));
-          if (u.src === 'seen') n.appendChild(el('small', null, 'recently'));
+          if (u.src === 'seen') n.appendChild(el('small', null, _t('js.pad.people.recently', 'recently')));
           li.appendChild(n);
           var ic = el('span', 'ic');
           var cam;
           if (r.cams && u.on_cam && !u.self && !u.anon && u.login) {
             cam = el('button', 'cam', '📷'); cam.type = 'button';
-            cam.title = 'Ask Pepe for a snapshot of ' + label(u) + '\'s cam';
-            cam.setAttribute('aria-label', 'Snapshot of ' + label(u) + '\'s cam');
+            cam.title = _t('js.pad.people.ask_snap', 'Ask Pepe for a snapshot of {name}\'s cam', { name: label(u) });
+            cam.setAttribute('aria-label', _t('js.pad.people.snap_aria', 'Snapshot of {name}\'s cam', { name: label(u) }));
             (function (who) { cam.addEventListener('click', function () { snapOpen(who); }); })(u);
           } else {
-            cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? 'On cam' : (u.on_cam === false ? 'Off cam' : 'Cam unknown');
+            cam = el('span', u.on_cam ? '' : 'off', '📷'); cam.title = u.on_cam ? _t('js.pad.people.on_cam', 'On cam') : (u.on_cam === false ? _t('js.pad.people.off_cam', 'Off cam') : _t('js.pad.people.cam_unknown', 'Cam unknown'));
           }
           ic.appendChild(cam);
           // 1.99dx: moderators (Pepe sent caps for this viewer) get a ⋯ menu next to the cam icon: the actions
@@ -764,7 +767,7 @@
           // itself stays the link to the person's profile. 1.99fu: every signed-in viewer gets the ⋯ too - the light
           // menu (View profile / Open cam / 💸 Tip); mods keep their moderation actions in it.
           if (wantsMore(u)) ic.appendChild(moreBtn(u, !!(r.cams && u.on_cam), false));
-          var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? 'On the mic' : 'Not on the mic'; ic.appendChild(m);
+          var m = el('span', u.on_mic ? '' : 'off', '🎙️'); m.title = u.on_mic ? _t('js.pad.people.on_mic', 'On the mic') : _t('js.pad.people.not_on_mic', 'Not on the mic'); ic.appendChild(m);
           li.appendChild(ic); ul.appendChild(li);
         });
         document.getElementById('rmPplN').textContent = d.members.length ? '(' + d.members.length + ')' : '';
@@ -777,19 +780,18 @@
     // How far the roster can be trusted. Pepe re-reads each room's participant list every minute or
     // so; when he can't (the list is stale), he only keeps people seen arriving / talking / on the
     // mic within seenTtl and drops the rest - so say which of the two the list on screen is.
-    function mins(ms) { var m = Math.max(0, Math.round(ms / 60000)); return m < 120 ? m + ' min' : Math.round(m / 60) + ' h'; }
+    function mins(ms) { var m = Math.max(0, Math.round(ms / 60000)); return m < 120 ? _t('js.pad.people.n_min', '{n} min', { n: m }) : _t('js.pad.people.n_h', '{n} h', { n: Math.round(m / 60) }); }
     function listNote(r) {
       var ttl = mins(r.seenTtl || 15 * 60000), staleAfter = r.listStaleAfter || 10 * 60000;
       var age = r.listAt ? Date.now() - r.listAt : null;
       var fresh = age != null && age < staleAfter && r.listFresh !== false;
       if (fresh) {
-        return 'From the room\'s participant list, checked ' + (age < 60000 ? 'just now' : mins(age) + ' ago')
-          + ' (' + hhmm(r.listAt) + '). "recently" = arrived or active since that check.';
+        return _t('js.pad.people.list_fresh', 'From the room\'s participant list, checked {ago} ({time}). {q}recently{q} = arrived or active since that check.', { ago: age < 60000 ? _t('js.pad.people.just_now', 'just now') : _t('js.pad.people.ago', '{t} ago', { t: mins(age) }), time: hhmm(r.listAt), q: '"' });
       }
       if (age != null) {
-        return 'List not checked for ' + mins(age) + ' — showing people active in the last ' + ttl + '.';
+        return _t('js.pad.people.list_stale', 'List not checked for {age} — showing people active in the last {ttl}.', { age: mins(age), ttl: ttl });
       }
-      return 'Pepe can\'t read this room\'s participant list right now — showing people seen arriving or active in the last ' + ttl + '.';
+      return _t('js.pad.people.list_none', 'Pepe can\'t read this room\'s participant list right now — showing people seen arriving or active in the last {ttl}.', { ttl: ttl });
     }
 
     var roomAudio = PATVRoom.audio(document.getElementById('rmAudioBox'), slug, { showOff: true });   // greyed while the relay is off
@@ -800,25 +802,25 @@
     function snapClose() { clearTimeout(snapTimer); clearTimeout(saveTimer); clearTimeout(clipTimer); if (snapEl) snapEl.remove(); snapEl = null; snapWho = null; }
     function snapBox(text) {
       if (!snapEl) {
-        snapEl = el('div', 'snap'); snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', 'Cam snapshot');
+        snapEl = el('div', 'snap'); snapEl.setAttribute('role', 'dialog'); snapEl.setAttribute('aria-label', _t('js.pad.snap.aria', 'Cam snapshot'));
         document.querySelector('.rm').appendChild(snapEl);
       }
       snapEl.textContent = '';
       var top = el('div', 'row'); top.appendChild(el('b', null, '📷 ' + label(snapWho)));
-      var x = el('button', null, 'Close'); x.type = 'button'; x.addEventListener('click', snapClose); top.appendChild(x);
+      var x = el('button', null, _t('js.pad.snap.close', 'Close')); x.type = 'button'; x.addEventListener('click', snapClose); top.appendChild(x);
       snapEl.appendChild(top);
       if (text) snapEl.appendChild(el('div', 'muted', text));
       return snapEl;
     }
     function snapShow(s) {
-      var box = snapBox(s.state === 'ok' ? null : (s.status || 'No picture.'));
+      var box = snapBox(s.state === 'ok' ? null : (s.status || _t('js.pad.snap.no_picture', 'No picture.')));
       if (s.state === 'ok' && s.img) {
-        var im = el('img'); im.alt = label(snapWho) + '\'s cam'; im.src = s.img; box.appendChild(im);
+        var im = el('img'); im.alt = _t('js.pad.snap.alt', '{name}\'s cam', { name: label(snapWho) }); im.src = s.img; box.appendChild(im);
       }
       var row = el('div', 'row');
       var t = new Date(s.ts || Date.now());
-      row.appendChild(el('span', null, 'taken ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2)));
-      var rf = el('button', null, 'Refresh'); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
+      row.appendChild(el('span', null, _t('js.pad.snap.taken', 'taken {time}', { time: ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2) })));
+      var rf = el('button', null, _t('js.pad.snap.refresh', 'Refresh')); rf.type = 'button'; rf.addEventListener('click', function () { snapOpen(snapWho, true); }); row.appendChild(rf);
       box.appendChild(row);
       // Save snap (1.99ap): only when the !snap rules let this viewer snap them (the server decides;
       // `save` is null otherwise, and then there's no Download either).
@@ -833,10 +835,10 @@
     function snapClipRow(box, s) {
       var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res'), vid = el('div');
       res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
-      var b = el('button', 'clip', '🎬 Clip'); b.type = 'button';
-      var sel = el('select', 'clip-secs'); sel.setAttribute('aria-label', 'Clip length');
-      (s.clip.secs || [10, 20, 30]).forEach(function (n) { var o = el('option', null, n + ' s'); o.value = n; if (n === s.clip.def) o.selected = true; sel.appendChild(o); });
-      b.title = s.clip.off || s.clip.hint || ('Pepe records ' + label(who) + '\'s cam - you see it first and only pay if you save it');
+      var b = el('button', 'clip', _t('js.pad.clip.btn', '🎬 Clip')); b.type = 'button';
+      var sel = el('select', 'clip-secs'); sel.setAttribute('aria-label', _t('js.pad.clip.length', 'Clip length'));
+      (s.clip.secs || [10, 20, 30]).forEach(function (n) { var o = el('option', null, _t('js.pad.clip.secs', '{n} s', { n: n })); o.value = n; if (n === s.clip.def) o.selected = true; sel.appendChild(o); });
+      b.title = s.clip.off || s.clip.hint || _t('js.pad.clip.title', 'Pepe records {name}\'s cam - you see it first and only pay if you save it', { name: label(who) });
       if (s.clip.off) { b.disabled = true; sel.disabled = true; }
       acts.appendChild(b); acts.appendChild(sel);
       box.appendChild(acts); box.appendChild(vid); box.appendChild(res);
@@ -844,7 +846,7 @@
       else if (s.clip.hint) { res.className = 'res hint'; res.textContent = s.clip.hint; }   // 1.99fb: an admin while !clip is off
       function say(text, cls, href) {
         res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text;
-        if (href) { var a = el('a', null, 'Open it ›'); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }
+        if (href) { var a = el('a', null, _t('js.pad.clip.open', 'Open it ›')); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }
       }
       function alive() { return snapWho === who && res.isConnected; }
       var base = '/api/rooms/' + encodeURIComponent(slug) + '/camclip/';
@@ -856,11 +858,11 @@
         clearTimeout(clipTimer);
         fetch(base + encodeURIComponent(id) + '/save', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (a) {
           if (!alive()) return;
-          if (a.status === 'done') return say('Saved to the pad\'s story.', 'ok', a.url || null);
-          if (a.status === 'failed') return say(a.message ? a.message.charAt(0).toUpperCase() + a.message.slice(1) + '.' : 'Pepe couldn\'t save it.', 'bad');
-          if (n > 60) return say('Pepe hasn\'t answered yet - check the pad\'s story in a minute.');
+          if (a.status === 'done') return say(_t('js.pad.clip.saved', 'Saved to the pad\'s story.'), 'ok', a.url || null);
+          if (a.status === 'failed') return say(a.message ? a.message.charAt(0).toUpperCase() + a.message.slice(1) + '.' : _t('js.pad.snap.couldnt_save', 'Pepe couldn\'t save it.'), 'bad');
+          if (n > 60) return say(_t('js.pad.clip.no_answer', 'Pepe hasn\'t answered yet - check the pad\'s story in a minute.'));
           clipTimer = setTimeout(function () { watchSave(id, n + 1); }, 1500);
-        }).catch(function () { if (alive()) say('Couldn\'t reach the site.', 'bad'); });
+        }).catch(function () { if (alive()) say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
       }
       function ready(c) {
         vid.textContent = '';
@@ -869,64 +871,64 @@
         v.src = c.video; vid.appendChild(v);
         var row = el('div', 'acts');
         if (c.save) {
-          var sv = el('button', 'save', '💾 Save clip' + (c.save.cost ? ' · ' + Number(c.save.cost).toLocaleString() + ' PAT' : ''));
-          sv.type = 'button'; sv.title = 'Put this clip in the pad\'s story as a !clip by you' + (c.save.cost ? ' (' + Number(c.save.cost).toLocaleString() + ' PAT, like !clip)' : '');
+          var sv = el('button', 'save', _t('js.pad.clip.save', '💾 Save clip') + (c.save.cost ? ' · ' + Number(c.save.cost).toLocaleString() + ' PAT' : ''));
+          sv.type = 'button'; sv.title = c.save.cost ? _t('js.pad.clip.save_title_cost', 'Put this clip in the pad\'s story as a !clip by you ({n} PAT, like !clip)', { n: Number(c.save.cost).toLocaleString() }) : _t('js.pad.clip.save_title', 'Put this clip in the pad\'s story as a !clip by you');
           sv.addEventListener('click', function () {
-            sv.disabled = true; say('Sending to Pepe…');
+            sv.disabled = true; say(_t('js.pad.snap.sending', 'Sending to Pepe…'));
             post(base + encodeURIComponent(c.id) + '/save', {}).then(function (d) {
               if (!alive()) return;
-              if (!d.ok) { sv.disabled = false; return say(d.error || 'Not right now.', 'bad'); }
-              say('Pepe is saving it…'); watchSave(c.id, 0);
-            }).catch(function () { sv.disabled = false; say('Couldn\'t reach the site.', 'bad'); });
+              if (!d.ok) { sv.disabled = false; return say(d.error || _t('js.pad.snap.not_now', 'Not right now.'), 'bad'); }
+              say(_t('js.pad.snap.saving', 'Pepe is saving it…')); watchSave(c.id, 0);
+            }).catch(function () { sv.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
           });
           row.appendChild(sv);
           if (c.save.id) { sv.disabled = true; watchSave(c.id, 0); }
         }
-        var dc = el('button', null, 'Discard'); dc.type = 'button';
-        dc.addEventListener('click', function () { post(base + encodeURIComponent(c.id) + '/discard', {}).then(function () { if (alive()) { vid.textContent = ''; row.remove(); say('Discarded.'); b.disabled = false; sel.disabled = false; } }); });
+        var dc = el('button', null, _t('js.pad.clip.discard', 'Discard')); dc.type = 'button';
+        dc.addEventListener('click', function () { post(base + encodeURIComponent(c.id) + '/discard', {}).then(function () { if (alive()) { vid.textContent = ''; row.remove(); say(_t('js.pad.clip.discarded', 'Discarded.')); b.disabled = false; sel.disabled = false; } }); });
         row.appendChild(dc);
         vid.appendChild(row);
-        if (!c.save) say(c.saveRule === 'no' ? 'They\'ve opted out - this clip can\'t be saved.' : 'Only you see this preview. You can\'t save clips of them here.');
-        else if (!c.save.id) say('Only you see this preview (for 10 minutes). Save it to put it in the pad\'s story.');
+        if (!c.save) say(c.saveRule === 'no' ? _t('js.pad.clip.opted_out', 'They\'ve opted out - this clip can\'t be saved.') : _t('js.pad.clip.no_save', 'Only you see this preview. You can\'t save clips of them here.'));
+        else if (!c.save.id) say(_t('js.pad.clip.preview', 'Only you see this preview (for 10 minutes). Save it to put it in the pad\'s story.'));
       }
       function poll(id, n) {
         clearTimeout(clipTimer);
         fetch(base + encodeURIComponent(id), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (c) {
           if (!alive()) return;
-          if (!c.ok) { b.disabled = false; sel.disabled = false; return say(c.error || 'That clip is gone.', 'bad'); }
+          if (!c.ok) { b.disabled = false; sel.disabled = false; return say(c.error || _t('js.pad.clip.gone', 'That clip is gone.'), 'bad'); }
           if (c.state === 'ready') return ready(c);
-          if (c.state === 'failed' || c.state === 'expired') { b.disabled = false; sel.disabled = false; return say(c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : 'Pepe couldn\'t clip that cam.', 'bad'); }
-          say(c.state === 'recording' ? '🔴 Pepe is recording ' + c.secs + ' s…' : c.state === 'encoding' ? 'Encoding the clip…' : 'Asking Pepe to record…');
-          if (n > 200) return say('Pepe hasn\'t finished yet - try again later.', 'bad');
+          if (c.state === 'failed' || c.state === 'expired') { b.disabled = false; sel.disabled = false; return say(c.status ? c.status.charAt(0).toUpperCase() + c.status.slice(1) : _t('js.pad.clip.failed', 'Pepe couldn\'t clip that cam.'), 'bad'); }
+          say(c.state === 'recording' ? _t('js.pad.clip.recording', '🔴 Pepe is recording {n} s…', { n: c.secs }) : c.state === 'encoding' ? _t('js.pad.clip.encoding', 'Encoding the clip…') : _t('js.pad.clip.asking', 'Asking Pepe to record…'));
+          if (n > 200) return say(_t('js.pad.clip.not_finished', 'Pepe hasn\'t finished yet - try again later.'), 'bad');
           clipTimer = setTimeout(function () { poll(id, n + 1); }, 1500);
         }).catch(function () { if (alive()) clipTimer = setTimeout(function () { poll(id, n + 1); }, 3000); });
       }
       b.addEventListener('click', function () {
-        b.disabled = true; sel.disabled = true; vid.textContent = ''; say('Asking Pepe to record…');
+        b.disabled = true; sel.disabled = true; vid.textContent = ''; say(_t('js.pad.clip.asking', 'Asking Pepe to record…'));
         post('/api/rooms/' + encodeURIComponent(slug) + '/camclip', { login: who.login, secs: Number(sel.value) }).then(function (d) {
           if (!alive()) return;
-          if (!d.ok) { if (d.id) return poll(d.id, 0); b.disabled = false; sel.disabled = false; return say(d.error || 'Not right now.', 'bad'); }
+          if (!d.ok) { if (d.id) return poll(d.id, 0); b.disabled = false; sel.disabled = false; return say(d.error || _t('js.pad.snap.not_now', 'Not right now.'), 'bad'); }
           poll(d.id, 0);
-        }).catch(function () { b.disabled = false; sel.disabled = false; say('Couldn\'t reach the site.', 'bad'); });
+        }).catch(function () { b.disabled = false; sel.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
       });
       if (typeof s.clip.busy === 'string') { b.disabled = true; sel.disabled = true; poll(s.clip.busy, 0); }
-      else if (s.clip.busy) { b.disabled = true; sel.disabled = true; say('Pepe is already clipping their cam - try again in a bit.'); }
+      else if (s.clip.busy) { b.disabled = true; sel.disabled = true; say(_t('js.pad.clip.busy', 'Pepe is already clipping their cam - try again in a bit.')); }
     }
     function snapGenRow(box, s) {
       var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res');
       res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
-      var g = el('button', 'gen', '✨ Use in Generate'); g.type = 'button';
-      g.title = 'Make an AI picture or video from this frame (Pepe\'s !imagine / !video, priced like -cam in chat)';
+      var g = el('button', 'gen', _t('js.pad.gen.btn', '✨ Use in Generate')); g.type = 'button';
+      g.title = _t('js.pad.gen.title', 'Make an AI picture or video from this frame (Pepe\'s !imagine / !video, priced like -cam in chat)');
       acts.appendChild(g); box.appendChild(acts); box.appendChild(res);
       g.addEventListener('click', function () {
-        g.disabled = true; res.className = 'res'; res.textContent = 'Getting it ready…';
+        g.disabled = true; res.className = 'res'; res.textContent = _t('js.pad.gen.getting', 'Getting it ready…');
         fetch('/api/feed/aigen/camref', { method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ pad: slug, sid: s.gen.sid }) })
           .then(function (r) { return r.json(); })
           .then(function (d) {
             if (snapWho !== who || !res.isConnected) return;
             g.disabled = false;
-            if (!d.ok) { res.className = 'res bad'; res.textContent = d.error || 'Not right now.'; return; }
+            if (!d.ok) { res.className = 'res bad'; res.textContent = d.error || _t('js.pad.snap.not_now', 'Not right now.'); return; }
             var c = { id: d.id, display: d.display, room: d.room, img: s.img, until: d.until };
             if (document.getElementById('fcGen')) {
               // 1.99ih: the composer lives in the pad's Feed tab - switch there first (the snapshot popover is on
@@ -940,17 +942,17 @@
               try { sessionStorage.setItem('patvGenCam', JSON.stringify(c)); } catch (e) { /* too big / blocked */ }
               location.href = '/feed';
             }
-          }).catch(function () { g.disabled = false; res.className = 'res bad'; res.textContent = 'Couldn\'t reach the site.'; });
+          }).catch(function () { g.disabled = false; res.className = 'res bad'; res.textContent = _t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'); });
       });
     }
     var saveTimer = null;
     function snapSaveRow(box, s) {
       var who = snapWho, acts = el('div', 'acts'), res = el('div', 'res');
       res.setAttribute('role', 'status'); res.setAttribute('aria-live', 'polite');
-      var sv = el('button', 'save', '💾 Save snap' + (s.save.cost ? ' · ' + Number(s.save.cost).toLocaleString() + ' PAT' : ''));
+      var sv = el('button', 'save', _t('js.pad.snap.save', '💾 Save snap') + (s.save.cost ? ' · ' + Number(s.save.cost).toLocaleString() + ' PAT' : ''));
       sv.type = 'button';
-      sv.title = 'Post this frame to the feed as a !snap by you' + (s.save.cost ? ' (' + Number(s.save.cost).toLocaleString() + ' PAT, like !snap)' : '');
-      var dl = el('a', 'dl', '⬇ Download');
+      sv.title = s.save.cost ? _t('js.pad.snap.save_title_cost', 'Post this frame to the feed as a !snap by you ({n} PAT, like !snap)', { n: Number(s.save.cost).toLocaleString() }) : _t('js.pad.snap.save_title', 'Post this frame to the feed as a !snap by you');
+      var dl = el('a', 'dl', _t('js.pad.snap.download', '⬇ Download'));
       var t = new Date(s.ts || Date.now());
       dl.href = s.img;
       dl.download = 'snap-' + String(who.login || 'cam').replace(/[^A-Za-z0-9._-]+/g, '_') + '-' + t.getFullYear() + ('0' + (t.getMonth() + 1)).slice(-2) + ('0' + t.getDate()).slice(-2)
@@ -959,7 +961,7 @@
       box.appendChild(acts); box.appendChild(res);
       function say(text, cls, href) {
         res.className = 'res' + (cls ? ' ' + cls : ''); res.textContent = text;
-        if (href) { var a = el('a', null, 'Open it on the feed ›'); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }
+        if (href) { var a = el('a', null, _t('js.pad.snap.open_feed', 'Open it on the feed ›')); a.href = href; res.appendChild(document.createTextNode(' ')); res.appendChild(a); }
       }
       function watch(id, n) {
         clearTimeout(saveTimer);
@@ -967,24 +969,24 @@
           .then(function (r) { return r.json(); })
           .then(function (a) {
             if (snapWho !== who || !res.isConnected) return;
-            if (a.status === 'done') { sv.textContent = '💾 Saved'; return say('Saved as your snap.', 'ok', a.url || null); }
-            if (a.status === 'failed') { sv.disabled = false; return say(a.message ? a.message.charAt(0).toUpperCase() + a.message.slice(1) + '.' : 'Pepe couldn\'t save it.', 'bad'); }
-            if (n > 40) { return say('Pepe hasn\'t answered yet — check the feed in a minute.', null); }
+            if (a.status === 'done') { sv.textContent = _t('js.pad.snap.saved_btn', '💾 Saved'); return say(_t('js.pad.snap.saved', 'Saved as your snap.'), 'ok', a.url || null); }
+            if (a.status === 'failed') { sv.disabled = false; return say(a.message ? a.message.charAt(0).toUpperCase() + a.message.slice(1) + '.' : _t('js.pad.snap.couldnt_save', 'Pepe couldn\'t save it.'), 'bad'); }
+            if (n > 40) { return say(_t('js.pad.snap.no_answer', 'Pepe hasn\'t answered yet — check the feed in a minute.'), null); }
             saveTimer = setTimeout(function () { watch(id, n + 1); }, 1500);
-          }).catch(function () { if (res.isConnected) say('Couldn\'t reach the site.', 'bad'); sv.disabled = false; });
+          }).catch(function () { if (res.isConnected) say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); sv.disabled = false; });
       }
       sv.addEventListener('click', function () {
-        sv.disabled = true; say('Sending to Pepe…');
+        sv.disabled = true; say(_t('js.pad.snap.sending', 'Sending to Pepe…'));
         fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/save', { method: 'POST', credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ sid: s.save.sid }) })
           .then(function (r) { return r.json(); })
           .then(function (d) {
             if (snapWho !== who || !res.isConnected) return;
-            if (!d.ok) { sv.disabled = false; return say(d.error || 'Not right now.', 'bad'); }
-            say('Pepe is saving it…'); watch(d.id, 0);
-          }).catch(function () { sv.disabled = false; say('Couldn\'t reach the site.', 'bad'); });
+            if (!d.ok) { sv.disabled = false; return say(d.error || _t('js.pad.snap.not_now', 'Not right now.'), 'bad'); }
+            say(_t('js.pad.snap.saving', 'Pepe is saving it…')); watch(d.id, 0);
+          }).catch(function () { sv.disabled = false; say(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.'), 'bad'); });
       });
-      if (s.save.id) { sv.disabled = true; say('Checking your save…'); watch(s.save.id, 0); }
+      if (s.save.id) { sv.disabled = true; say(_t('js.pad.snap.checking', 'Checking your save…')); watch(s.save.id, 0); }
     }
     function snapPoll(who, n) {
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap/' + encodeURIComponent(who.login), { credentials: 'same-origin', cache: 'no-store' })
@@ -992,21 +994,21 @@
         .then(function (s) {
           if (snapWho !== who) return;
           if (s.state === 'ok' || s.state === 'refused') return snapShow(s);
-          if (n > 30) return snapBox('Pepe didn\'t get a picture in time — try again in a bit.');
+          if (n > 30) return snapBox(_t('js.pad.snap.timeout', 'Pepe didn\'t get a picture in time — try again in a bit.'));
           snapTimer = setTimeout(function () { snapPoll(who, n + 1); }, 1500);
-        }).catch(function () { snapBox('Couldn\'t reach the site.'); });
+        }).catch(function () { snapBox(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });
     }
     function snapOpen(who, refresh) {
       clearTimeout(snapTimer); clearTimeout(saveTimer);
       snapWho = who;
-      snapBox('Asking Pepe to open ' + label(who) + '\'s cam…');
+      snapBox(_t('js.pad.snap.asking', 'Asking Pepe to open {name}\'s cam…', { name: label(who) }));
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: who.login }) })
         .then(function (r) { return r.json().then(function (d) { return { st: r.status, d: d }; }); })
         .then(function (x) {
           if (snapWho !== who) return;
-          if (!x.d.ok) return snapBox(x.d.error || 'Not right now.');
+          if (!x.d.ok) return snapBox(x.d.error || _t('js.pad.snap.not_now', 'Not right now.'));
           snapPoll(who, 0);
-        }).catch(function () { snapBox('Couldn\'t reach the site.'); });
+        }).catch(function () { snapBox(_t('js.pad.snap.unreachable', 'Couldn\'t reach the site.')); });
     }
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') snapClose(); });
 
@@ -1043,7 +1045,7 @@
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/live?after=' + cursor, { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { if (r.status === 401) { location.href = '/login'; throw new Error('signed out'); } if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) { fails = 0; setStatus(''); apply(d, false); })
-        .catch(function () { fails++; setStatus(fails > 2 ? 'reconnecting…' : '', fails > 2); })
+        .catch(function () { fails++; setStatus(fails > 2 ? _t('js.pad.chat.reconnecting', 'reconnecting…') : '', fails > 2); })
         .then(function () { schedule(); });
     }
     function setStatus(t, err) { var s = document.getElementById('rmStatus'); if (!s) return; s.textContent = t; s.classList.toggle('err', !!err); }
@@ -1062,25 +1064,25 @@
 <% } %>
   <section class="ppanel about" id="padPanel-about" role="tabpanel" aria-labelledby="padTab-about"<%= tabOn_('about') ? '' : ' hidden' %>>
     <section class="card" aria-labelledby="abH">
-      <h2 id="abH"><span>ℹ️ About p/<%= room.slug %></span></h2>
-      <% if (room.description) { %><div class="desc"><%= room.description %></div><% } else { %><p class="muted" style="margin:0">No description yet.</p><% } %>
+      <h2 id="abH"><span><%- t('pad.about.h', { slug: room.slug }) %></span></h2>
+      <% if (room.description) { %><div class="desc"><%= room.description %></div><% } else { %><p class="muted" style="margin:0"><%- t('pad.about.no_desc') %></p><% } %>
       <dl>
-        <dt>Pad</dt><dd><%= room.name %> · <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %></dd>
-        <dt>Run by</dt><dd><% if (room.house) { %>🐸 Pepe (a house pad)<% } else if (room.owner) { %><a href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 <%= room.owner %></a><% } else { %><span class="muted">Nobody yet</span><% } %></dd>
-        <% if (feed_ && feed_.follow) { %><dt>Followers</dt><dd><%= feed_.follow.followers.toLocaleString('en-US') %></dd><% } %>
-        <% if (!siteOnly_) { %><dt>Camfrog room</dt><dd><%= room.camfrogName || room.name %></dd><% } %>
+        <dt><%- t('pad.about.pad') %></dt><dd><%= room.name %> · <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %></dd>
+        <dt><%- t('pad.about.run_by') %></dt><dd><% if (room.house) { %><%- t('pad.about.house') %><% } else if (room.owner) { %><a href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 <%= room.owner %></a><% } else { %><span class="muted"><%- t('pad.about.nobody') %></span><% } %></dd>
+        <% if (feed_ && feed_.follow) { %><dt><%- t('pad.about.followers') %></dt><dd><%= feed_.follow.followers.toLocaleString('en-US') %></dd><% } %>
+        <% if (!siteOnly_) { %><dt><%- t('pad.about.cf_room') %></dt><dd><%= room.camfrogName || room.name %></dd><% } %>
         <% if (typeof twitch !== 'undefined' && twitch && twitch.login) { %><dt>Twitch</dt><dd><a href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank">twitch.tv/<%= twitch.login %></a></dd><% } %>
-        <% if (manage_) { %><dt>Settings</dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings">⚙ Pad settings ›</a></dd><% } %>
+        <% if (manage_) { %><dt><%- t('pad.about.settings') %></dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings"><%- t('pad.about.settings_link') %></a></dd><% } %>
       </dl>
     </section>
     <%# 1.99ew: 🎁 gift a premium cosmetic to this pad (padcosmetics.js, public/js/pad-cosmetics.js); the owner buys from ⚙ settings %>
     <section class="card ab-gift" id="gift" aria-labelledby="giftH">
-      <h2 id="giftH"><span>🎁 Pad cosmetics</span></h2>
+      <h2 id="giftH"><span><%- t('pad.gift.h') %></span></h2>
       <% if (isOwner_) { %>
-        <p class="muted" style="margin:0">Frames, name glows, badges and an animated avatar for your pad: <a href="/p/<%= encodeURIComponent(room.slug) %>/settings#cosmetics">✨ Cosmetics in your pad's settings ›</a></p>
+        <p class="muted" style="margin:0"><%- t('pad.gift.owner', { link: '<a href="/p/' + encodeURIComponent(room.slug) + '/settings#cosmetics">' + t('pad.gift.owner_link') + '</a>' }) %></p>
       <% } else { %>
-        <p class="muted" style="margin:0 0 10px">Treat <b><%= room.name %></b> to a banner frame, a name glow or a badge. Half of what you pay goes to this pad's room vault, half to Fort Knox. The owner can equip it or decline it — gifts are never refunded.</p>
-        <% if (giftSigned_) { %><button type="button" class="ab-btn" data-pad-gift="<%= room.slug %>">🎁 Gift a cosmetic</button><% } else { %><a class="ab-btn" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>">🎁 Sign in to gift a cosmetic</a><% } %>
+        <p class="muted" style="margin:0 0 10px"><%- t('pad.gift.treat', { name: room.name }) %></p>
+        <% if (giftSigned_) { %><button type="button" class="ab-btn" data-pad-gift="<%= room.slug %>"><%- t('pad.menu.gift') %></button><% } else { %><a class="ab-btn" href="/login?next=<%= encodeURIComponent('/p/' + room.slug + '?tab=about#gift') %>"><%- t('pad.gift.signin') %></a><% } %>
       <% } %>
     </section>
     <%# economy v2 E-3: 🏦 the room vault (roomvaults.js; Pepe's pepe_roomvault.py). Accumulate only: balance, the last
@@ -1088,38 +1090,38 @@
         rate - stored for the payout recipe that comes later. Camfrog pads only. %>
     <% const RV_ = typeof roomVault !== 'undefined' && roomVault ? roomVault : null;
        const rvf_ = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
-       const rvKind_ = { flow: 'room spending', site: 'website (boost / slot / gift)', deposit: 'deposit', migration: 'escrow moved in', refund: 'refund', challenge: 'mic challenge prize', launch: '🚀 launch grant', match: '🚀 launch owner match' }; %>
+       const rvKind_ = { flow: t('pad.vault.k_flow'), site: t('pad.vault.k_site'), deposit: t('pad.vault.k_deposit'), migration: t('pad.vault.k_migration'), refund: t('pad.vault.k_refund'), challenge: t('pad.vault.k_challenge'), launch: t('pad.vault.k_launch'), match: t('pad.vault.k_match') }; %>
     <% if (RV_ && (RV_.live || RV_.balance > 0)) { %>
     <section class="card rv-card" id="vault" aria-labelledby="rvH">
-      <h2 id="rvH"><span>🏦 Room vault</span><small><%= RV_.live ? 'filling up' : 'paused' %></small></h2>
-      <p class="rv-what">Half of what's spent in <b><%= room.name %></b> (paid commands, songs, voices, heist gear, boosts, stage slots, gifts) lands here; the other half goes to Fort Knox. The owner or the controlling gang spending in their own room sends it all to Fort Knox. The vault holds at most <%= rvf_(RV_.cap) %> PAT. Payouts to the owner, streamers and regulars come in a later update.<% if (!siteOnly_) { %> In the room: <code>!roomvault</code> · <code>!roomvault deposit 5000</code>.<% } %></p>
+      <h2 id="rvH"><span><%- t('pad.vault.h') %></span><small><%- RV_.live ? t('pad.vault.filling') : t('pad.vault.paused') %></small></h2>
+      <p class="rv-what"><%- t('pad.vault.what', { name: room.name, cap: rvf_(RV_.cap) }) %><% if (!siteOnly_) { %> <%- t('pad.vault.in_room', { cmds: '<code>!roomvault</code> · <code>!roomvault deposit 5000</code>' }) %><% } %></p>
       <div class="an-tiles">
-        <div class="an-t"><div class="k">Balance</div><div class="v"><%= rvf_(RV_.balance) %></div><div class="s">PAT</div></div>
-        <div class="an-t"><div class="k">Inflow</div><div class="v"><%= rvf_(RV_.inflow7) %></div><div class="s">last 7 days, from the room</div></div>
-        <div class="an-t"><div class="k">Deposits</div><div class="v"><%= rvf_(RV_.deposits7) %></div><div class="s">last 7 days (not counted as inflow)</div></div>
-        <div class="an-t"><div class="k">Payout rate</div><div class="v"><%= RV_.rate %>%</div><div class="s">a day, once payouts start<%= RV_.rate_default ? ' (default)' : '' %></div></div>
+        <div class="an-t"><div class="k"><%- t('pad.vault.balance') %></div><div class="v"><%= rvf_(RV_.balance) %></div><div class="s">PAT</div></div>
+        <div class="an-t"><div class="k"><%- t('pad.vault.inflow') %></div><div class="v"><%= rvf_(RV_.inflow7) %></div><div class="s"><%- t('pad.vault.inflow_sub') %></div></div>
+        <div class="an-t"><div class="k"><%- t('pad.vault.deposits') %></div><div class="v"><%= rvf_(RV_.deposits7) %></div><div class="s"><%- t('pad.vault.deposits_sub') %></div></div>
+        <div class="an-t"><div class="k"><%- t('pad.vault.rate') %></div><div class="v"><%= RV_.rate %>%</div><div class="s"><%- t('pad.vault.rate_sub') %><%- RV_.rate_default ? ' ' + t('pad.vault.default') : '' %></div></div>
       </div>
       <% if (RV_.days && RV_.days.length) { const mx_ = Math.max(1, ...RV_.days.map((d) => Math.max(0, d.in) + Math.max(0, d.dep))); %>
-      <div class="rv-days" role="img" aria-label="Inflow and deposits over the last 7 days">
+      <div class="rv-days" role="img" aria-label="<%- t('pad.vault.days_aria') %>">
         <% RV_.days.forEach((d) => { const h_ = Math.round(100 * (Math.max(0, d.in) + Math.max(0, d.dep)) / mx_); %>
-          <div class="b<%= d.dep > d.in ? ' dep' : '' %>" style="height:<%= h_ %>%" title="<%= d.day %>: inflow <%= rvf_(d.in) %>, deposits <%= rvf_(d.dep) %>"></div>
+          <div class="b<%= d.dep > d.in ? ' dep' : '' %>" style="height:<%= h_ %>%" title="<%- t('pad.vault.day_tip', { day: d.day, in: rvf_(d.in), dep: rvf_(d.dep) }) %>"></div>
         <% }) %>
       </div>
       <% } %>
       <% if (RV_.history && RV_.history.length) { %>
-      <ul class="rv-hist" aria-label="Latest moves">
+      <ul class="rv-hist" aria-label="<%- t('pad.vault.moves') %>">
         <% RV_.history.slice(0, 6).forEach((e) => { %>
           <li><span><%= new Date(e.ts * 1000).toISOString().slice(5, 16).replace('T', ' ') %> · <%= rvKind_[e.kind] || e.kind %><%= (e.kind === 'flow' || e.kind === 'site') && e.flow ? ' (' + e.flow + ')' : '' %></span>
-              <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= rvf_(Math.abs(e.amount)) %><%= e.overflow ? ' (+' + rvf_(e.overflow) + ' to Fort Knox)' : '' %></span></li>
+              <span class="amt"><%= e.kind === 'challenge' ? '−' : (e.amount < 0 ? '−' : '+') %><%= rvf_(Math.abs(e.amount)) %><%- e.overflow ? ' ' + t('pad.vault.overflow', { n: rvf_(e.overflow) }) : '' %></span></li>
         <% }) %>
       </ul>
       <% } %>
       <% if (RV_.can_set_rate) { %>
       <form class="rv-rate" id="rvRate" data-slug="<%= room.slug %>" autocomplete="off">
-        <label for="rvRateIn">Daily payout rate</label>
+        <label for="rvRateIn"><%- t('pad.vault.daily_rate') %></label>
         <input id="rvRateIn" type="number" name="rate" min="<%= RV_.rate_bounds.min %>" max="<%= RV_.rate_bounds.max %>" step="0.5" value="<%= RV_.rate %>"<%= RV_.rate_locked_until ? ' disabled' : '' %>> %
-        <button type="submit" class="ab-btn"<%= RV_.rate_locked_until ? ' disabled' : '' %>>Save</button>
-        <p class="rv-msg" id="rvRateMsg" role="status" aria-live="polite"><%= RV_.rate_locked_until ? 'You can change it again on ' + new Date(RV_.rate_locked_until).toISOString().slice(0, 10) + ' (once a week).' : 'Between ' + RV_.rate_bounds.min + '% and ' + RV_.rate_bounds.max + '% of the balance a day, once a week. Saved now, used when payouts start.' %></p>
+        <button type="submit" class="ab-btn"<%= RV_.rate_locked_until ? ' disabled' : '' %>><%- t('pad.vault.save') %></button>
+        <p class="rv-msg" id="rvRateMsg" role="status" aria-live="polite"><%- RV_.rate_locked_until ? t('pad.vault.locked', { date: new Date(RV_.rate_locked_until).toISOString().slice(0, 10) }) : t('pad.vault.bounds', { min: RV_.rate_bounds.min, max: RV_.rate_bounds.max }) %></p>
       </form>
       <% } %>
     </section>
@@ -1131,29 +1133,29 @@
        const anS_ = anCard_ && anSigned_ ? anCard_.stats : null; %>
     <% if (analytics_) { %>
     <section class="card an-card" aria-labelledby="anH">
-      <h2 id="anH"><span>📈 Analytics</span><small>last 30 days</small></h2>
+      <h2 id="anH"><span><%- t('pad.an.h') %></span><small><%- t('pad.an.last30') %></small></h2>
       <% if (anS_) { %>
       <div class="an-tiles">
-        <div class="an-t"><div class="k">Messages</div><div class="v"><%= anS_.msgs30 %></div><div class="s"><% if (anS_.msgsTrend != null) { %><span class="<%= anS_.msgsTrend >= 0 ? 'up' : 'down' %>"><%= anS_.msgsTrend >= 0 ? '▲' : '▼' %> <%= Math.abs(anS_.msgsTrend) %>%</span> on the month before<% } else { %>public chat<% } %></div></div>
-        <div class="an-t"><div class="k">Visitors</div><div class="v"><%= anS_.uniq30 %></div><div class="s">different people</div></div>
-        <div class="an-t"><div class="k">Mic time</div><div class="v"><%= anS_.mic30 %></div><div class="s">on the mic</div></div>
-        <div class="an-t"><div class="k">Typical size</div><div class="v"><%= anS_.typical %></div><div class="s"><%= anS_.typicalNote %><% if (anS_.peakSize) { %> · peak <%= anS_.peakSize %><% } %></div></div>
-        <div class="an-t an-wide"><div class="k">Busiest</div><div class="v sm"><%= anS_.peak %></div><div class="s">by messages</div></div>
+        <div class="an-t"><div class="k"><%- t('pad.an.messages') %></div><div class="v"><%= anS_.msgs30 %></div><div class="s"><% if (anS_.msgsTrend != null) { %><span class="<%= anS_.msgsTrend >= 0 ? 'up' : 'down' %>"><%= anS_.msgsTrend >= 0 ? '▲' : '▼' %> <%= Math.abs(anS_.msgsTrend) %>%</span> <%- t('pad.an.month_before') %><% } else { %><%- t('pad.an.public_chat') %><% } %></div></div>
+        <div class="an-t"><div class="k"><%- t('pad.an.visitors') %></div><div class="v"><%= anS_.uniq30 %></div><div class="s"><%- t('pad.an.different') %></div></div>
+        <div class="an-t"><div class="k"><%- t('pad.an.mic_time') %></div><div class="v"><%= anS_.mic30 %></div><div class="s"><%- t('pad.an.on_mic') %></div></div>
+        <div class="an-t"><div class="k"><%- t('pad.an.typical') %></div><div class="v"><%= anS_.typical %></div><div class="s"><%= anS_.typicalNote %><% if (anS_.peakSize) { %> · <%- t('pad.an.peak', { n: anS_.peakSize }) %><% } %></div></div>
+        <div class="an-t an-wide"><div class="k"><%- t('pad.an.busiest') %></div><div class="v sm"><%= anS_.peak %></div><div class="s"><%- t('pad.an.by_messages') %></div></div>
       </div>
       <% } else if (!anSigned_) { %>
-      <p class="an-gate">🔒 Pad analytics are for signed-in members, like the live Camfrog room chat. <a href="/login?next=<%= encodeURIComponent('/p/' + room.slug) %>">Sign in</a></p>
+      <p class="an-gate"><%- t('pad.an.gate') %> <a href="/login?next=<%= encodeURIComponent('/p/' + room.slug) %>"><%- t('pad.signin') %></a></p>
       <% } %>
-      <div class="an-foot"><a class="ab-btn" href="<%= analytics_ %>">See full analytics ›</a></div>
+      <div class="an-foot"><a class="ab-btn" href="<%= analytics_ %>"><%- t('pad.an.full') %></a></div>
     </section>
     <% } %>
     <% if (feed_ && feed_.rules) { %><%- include('partials/pad-rules', { fx, rules: feed_.rules, slug: room.slug, canEdit: !!(feed_.mod.owner || feed_.mod.admin), open: true, id: 'rules' }) %><% } %>
     <% if (!siteOnly_) { %>
     <section class="card join" aria-labelledby="joinH">
-      <h2 id="joinH">Join the Camfrog room</h2>
+      <h2 id="joinH"><%- t('pad.join.h') %></h2>
       <ol>
-        <li>Open Camfrog (<a href="https://www.camfrog.com/" rel="noopener">get it here</a>) and sign in.</li>
-        <li>Open the <b>Room List</b> and search for <b><%= room.camfrogName || room.name %></b>.</li>
-        <li>Say hi — Pepe answers <code>!help</code>.</li>
+        <li><%- t('pad.join.step1', { link: '<a href="https://www.camfrog.com/" rel="noopener">' + t('pad.join.get_it') + '</a>' }) %></li>
+        <li><%- t('pad.join.step2', { name: room.camfrogName || room.name }) %></li>
+        <li><%- t('pad.join.step3', { cmd: '<code>!help</code>' }) %></li>
       </ol>
     </section>
     <% } %>
@@ -1166,6 +1168,7 @@
   // 1.99ef: the header's ⋯ menu - closes on an outside click / Esc / after a pick; "Copy link" copies the pad's address
   (function () {
     'use strict';
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var m = document.getElementById('rmMore');
     if (!m) return;
     document.addEventListener('click', function (e) { if (m.open && !m.contains(e.target)) m.open = false; });
@@ -1175,9 +1178,9 @@
       if (!it) return;
       var path = it.getAttribute('data-copy-link');
       if (path) {
-        var url = location.origin + path, done = function () { it.textContent = '✅ Link copied'; setTimeout(function () { it.textContent = '🔗 Copy link'; m.open = false; }, 1200); };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt('Copy this link', url); });
-        else window.prompt('Copy this link', url);
+        var url = location.origin + path, done = function () { it.textContent = _t('js.pad.menu.copied', '✅ Link copied'); setTimeout(function () { it.textContent = _t('js.pad.menu.copy', '🔗 Copy link'); m.open = false; }, 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, function () { window.prompt(_t('js.pad.menu.copy_prompt', 'Copy this link'), url); });
+        else window.prompt(_t('js.pad.menu.copy_prompt', 'Copy this link'), url);
         return;
       }
       m.open = false;

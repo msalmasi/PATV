@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Go live', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('stage.page_title'), user: user }) %>
 <!-- views/stageBook.ejs — the "Go live" hub (1.99bi): book a slot on a room's stage (now, later, or the
      queue), stream from OBS / the browser or put a YouTube / Twitch link on. 1.99ee: no paid featuring - pads are
      🚀 boosted on their pages instead (boosts.js). Live status +
@@ -16,44 +17,44 @@
 <main class="sb" id="sb" data-price="<%= C.price_per_min %>" data-min="<%= C.min_minutes %>" data-max="<%= C.max_minutes %>"
       data-rtmp="<%= rtmpServer %>" data-signed="<%= me ? 1 : 0 %>" data-lead="<%= C.lead_min %>" data-days="<%= C.schedule_days %>">
   <div class="sb-head">
-    <h1>🎥 Go live on PATV</h1>
-    <p class="lede">Every pad has a stage. Stream to it from OBS or your browser, or put a YouTube / Twitch video on it. Viewers flip between the pad's streams and Pepe's. The pad owner can feature one stream as the pad's main one, and the front page shows the liveliest pad — earned, never bought.</p>
+    <h1><%- t('stage.h1') %></h1>
+    <p class="lede"><%- t('stage.lede') %></p>
   </div>
 
   <section class="sb-card how" aria-labelledby="howT">
-    <h2 id="howT">How it works</h2>
+    <h2 id="howT"><%- t('stage.how') %></h2>
     <div class="facts">
-      <div class="fact"><span class="k">Ordinary slot</span><span class="v" id="factSlot"><%= sel && sel.slot_price ? fmt(sel.slot_price) : 'Free' %> <small><%= sel && sel.slot_price ? 'PAT / live min' : 'in most pads' %></small></span></div>
-      <div class="fact"><span class="k">Front page</span><span class="v">Earned <small>the liveliest pad · 🚀 boosts help</small></span></div>
-      <div class="fact"><span class="k">Slot length</span><span class="v"><%= C.min_minutes %>–<%= C.max_minutes %> <small>minutes</small></span></div>
+      <div class="fact"><span class="k"><%- t('stage.ordinary') %></span><span class="v" id="factSlot"><%- sel && sel.slot_price ? fmt(sel.slot_price) : t('stage.free') %> <small><%- sel && sel.slot_price ? t('stage.pat_live_min') : t('stage.in_most') %></small></span></div>
+      <div class="fact"><span class="k"><%- t('stage.front') %></span><span class="v"><%- t('stage.earned') %> <small><%- t('stage.earned_sub') %></small></span></div>
+      <div class="fact"><span class="k"><%- t('stage.slot_len') %></span><span class="v"><%= C.min_minutes %>–<%= C.max_minutes %> <small><%- t('stage.minutes') %></small></span></div>
     </div>
     <ol class="steps">
-      <li><b>Pick a pad</b> and a slot: go on <b>now</b>, <b>book a time</b> (up to <%= C.schedule_days %> days ahead), or <b>join the queue</b> when every slot is taken.</li>
-      <li><b>Stream</b> with the key (OBS, Streamlabs…), straight from this page with your camera or screen, or paste a <b>YouTube / Twitch link</b>.</li>
-      <li><b>Featured</b> = the pad's main stream, picked by the pad owner (free). The <b>front page</b> shows the liveliest pad: chat, mic and people decide. Anyone can <b>🚀 boost</b> a pad from its page — it can tip a close race, it can't carry a quiet pad.</li>
-      <li><b>Slots are free</b> unless the pad's owner sets a price. A slot price is per live minute: PAT is held up front, you pay only for the minutes you're live and the rest comes straight back. Half of what you pay goes to the pad's room vault, half to Fort Knox.</li>
+      <li><%- t('stage.step1', { days: C.schedule_days }) %></li>
+      <li><%- t('stage.step2') %></li>
+      <li><%- t('stage.step3') %></li>
+      <li><%- t('stage.step4') %></li>
     </ol>
-    <p class="muted">Pad owners set how many slots their pad has, can feature, cut or ban, and may require approval for bookings. Admins can cut any slot (unused PAT is refunded). Keep it within the site rules.</p>
+    <p class="muted"><%- t('stage.owners_note') %></p>
   </section>
 
   <% if (!C.enabled || C.max_concurrent < 1) { %>
-    <section class="sb-card"><p class="note">Stage booking is closed right now.</p></section>
+    <section class="sb-card"><p class="note"><%- t('stage.closed') %></p></section>
   <% } %>
 
   <% if (!me) { %>
-    <section class="sb-card"><p class="note"><a href="/login?next=%2Fstage">Sign in</a> to go live.</p></section>
+    <section class="sb-card"><p class="note"><%- t('stage.signin', { link: '<a href="/login?next=%2Fstage">' + t('stage.signin_link') + '</a>' }) %></p></section>
   <% } else { %>
     <!-- your open slot -->
     <section class="sb-card hide" id="slotCard" aria-labelledby="slotT">
       <div class="slot-top">
-        <h2 id="slotT">Your slot · <span id="slotRoom"></span></h2>
+        <h2 id="slotT"><%- t('stage.your_slot') %> · <span id="slotRoom"></span></h2>
         <span class="state" id="slotState">–</span>
       </div>
       <div class="facts">
-        <div class="fact"><span class="k">Live</span><span class="v" id="liveTime">0:00</span></div>
-        <div class="fact"><span class="k">Charged so far</span><span class="v" id="charged">0</span></div>
-        <div class="fact"><span class="k">Held</span><span class="v" id="held">0</span></div>
-        <div class="fact"><span class="k" id="leftK">Time left</span><span class="v" id="leftV">–</span></div>
+        <div class="fact"><span class="k"><%- t('stage.live') %></span><span class="v" id="liveTime">0:00</span></div>
+        <div class="fact"><span class="k"><%- t('stage.charged') %></span><span class="v" id="charged">0</span></div>
+        <div class="fact"><span class="k"><%- t('stage.held') %></span><span class="v" id="held">0</span></div>
+        <div class="fact"><span class="k" id="leftK"><%- t('stage.time_left') %></span><span class="v" id="leftV">–</span></div>
       </div>
       <p class="muted" id="slotNote"></p>
       <% if (px && px.show) { %>
@@ -61,132 +62,132 @@
       <div class="pxnow hide" id="plexNow" aria-live="polite"></div>
       <% } %>
       <div class="row">
-        <button type="button" class="btn danger" id="endBtn">End my slot now</button>
-        <a class="btn" id="watchLink" href="/" target="_blank" rel="noopener">Watch the stage ↗</a>
+        <button type="button" class="btn danger" id="endBtn"><%- t('stage.end_now') %></button>
+        <a class="btn" id="watchLink" href="/" target="_blank" rel="noopener"><%- t('stage.watch') %></a>
       </div>
       <!-- 1.99cr: viewers' 📸 Snap / 🎬 Clip of this stream (stagecap.js) -->
       <fieldset class="capopts" id="capOpts">
-        <legend>Snaps &amp; clips</legend>
-        <label><input type="checkbox" id="capAllow" checked> Viewers may snap and clip my stream (saved to the pad's story)</label>
-        <label><input type="checkbox" id="capNsfw"> My stream is NSFW (18+) - snaps and clips of it are marked NSFW</label>
+        <legend><%- t('stage.cap_legend') %></legend>
+        <label><input type="checkbox" id="capAllow" checked> <%- t('stage.cap_allow') %></label>
+        <label><input type="checkbox" id="capNsfw"> <%- t('stage.cap_nsfw') %></label>
       </fieldset>
       <p class="msg" id="slotMsg" role="status" aria-live="polite"></p>
 
       <div id="streamPanes">
-        <div class="tabs" role="tablist" aria-label="How to stream">
-          <button type="button" role="tab" id="tabObs" aria-selected="true" aria-controls="paneObs">Stream from OBS</button>
-          <button type="button" role="tab" id="tabWeb" aria-selected="false" aria-controls="paneWeb">Go live from browser</button>
-          <% if (rtc) { %><button type="button" role="tab" id="tabRtc" aria-selected="false" aria-controls="paneRtc">⚡ Browser · ultra-low latency</button><% } %>
+        <div class="tabs" role="tablist" aria-label="<%- t('stage.how_stream') %>">
+          <button type="button" role="tab" id="tabObs" aria-selected="true" aria-controls="paneObs"><%- t('stage.tab_obs') %></button>
+          <button type="button" role="tab" id="tabWeb" aria-selected="false" aria-controls="paneWeb"><%- t('stage.tab_web') %></button>
+          <% if (rtc) { %><button type="button" role="tab" id="tabRtc" aria-selected="false" aria-controls="paneRtc"><%- t('stage.tab_rtc') %></button><% } %>
         </div>
 
         <div class="pane" id="paneObs" role="tabpanel" aria-labelledby="tabObs">
-          <p>In OBS: <b>Settings → Stream → Service: Custom</b>, then paste these. Start streaming and you're on the stage within a few seconds.</p>
-          <label class="kv">Server
-            <span class="copyrow"><input type="text" readonly id="rtmpUrl" value="<%= rtmpServer %>"><button type="button" class="btn" data-copy="rtmpUrl">Copy</button></span></label>
-          <label class="kv">Stream key
-            <span class="copyrow"><input type="password" readonly id="rtmpKey" value="" autocomplete="off"><button type="button" class="btn" id="showKey">Show</button><button type="button" class="btn" data-copy="rtmpKey">Copy</button></span></label>
-          <p class="muted" id="keyNote">Your key works only for this slot and stops working when it ends. Don't share it.</p>
-          <button type="button" class="btn" id="newKey">New key</button>
-          <p class="muted">Recommended: 1280×720 or 1920×1080, 30 fps, x264 2500–4500 kbps, keyframe interval 2 s, AAC 128 kbps.</p>
+          <p><%- t('stage.obs_how') %></p>
+          <label class="kv"><%- t('stage.server') %>
+            <span class="copyrow"><input type="text" readonly id="rtmpUrl" value="<%= rtmpServer %>"><button type="button" class="btn" data-copy="rtmpUrl"><%- t('stage.copy') %></button></span></label>
+          <label class="kv"><%- t('stage.stream_key') %>
+            <span class="copyrow"><input type="password" readonly id="rtmpKey" value="" autocomplete="off"><button type="button" class="btn" id="showKey"><%- t('stage.show') %></button><button type="button" class="btn" data-copy="rtmpKey"><%- t('stage.copy') %></button></span></label>
+          <p class="muted" id="keyNote"><%- t('stage.key_note') %></p>
+          <button type="button" class="btn" id="newKey"><%- t('stage.new_key') %></button>
+          <p class="muted"><%- t('stage.recommended') %></p>
           <% if (rtc) { %>
           <div class="whip" id="whipBox">
-            <h3>⚡ OBS 30+ over WHIP (ultra-low latency)</h3>
-            <p>In OBS: <b>Settings → Stream → Service: WHIP</b>, then paste these. Viewers who pick ⚡ Low latency see you about a second behind.</p>
-            <label class="kv">Server
-              <span class="copyrow"><input type="text" readonly id="whipUrl" value=""><button type="button" class="btn" data-copy="whipUrl">Copy</button></span></label>
-            <label class="kv">Bearer Token
-              <span class="copyrow"><input type="text" readonly value="Your stream key (above) - the same key" aria-readonly="true"><button type="button" class="btn" data-copy="rtmpKey">Copy key</button></span></label>
-            <p class="muted">Use RTMP <i>or</i> WHIP, not both at once. WHIP settings: x264 (or a hardware H.264 encoder), Opus audio (OBS picks it), keyframe interval 1–2 s, B-frames off.</p>
+            <h3><%- t('stage.whip_h') %></h3>
+            <p><%- t('stage.whip_how') %></p>
+            <label class="kv"><%- t('stage.server') %>
+              <span class="copyrow"><input type="text" readonly id="whipUrl" value=""><button type="button" class="btn" data-copy="whipUrl"><%- t('stage.copy') %></button></span></label>
+            <label class="kv"><%- t('stage.bearer') %>
+              <span class="copyrow"><input type="text" readonly value="<%- t('stage.bearer_val') %>" aria-readonly="true"><button type="button" class="btn" data-copy="rtmpKey"><%- t('stage.copy_key') %></button></span></label>
+            <p class="muted"><%- t('stage.whip_note') %></p>
           </div>
           <% } %>
         </div>
 
         <div class="pane hide" id="paneWeb" role="tabpanel" aria-labelledby="tabWeb">
           <div class="web">
-            <div class="preview"><video id="pv" muted playsinline autoplay></video><span class="pv-empty" id="pvEmpty">Pick a source to preview</span>
-              <span class="onair hide" id="onAir"><span class="dot" aria-hidden="true"></span> LIVE</span></div>
+            <div class="preview"><video id="pv" muted playsinline autoplay></video><span class="pv-empty" id="pvEmpty"><%- t('stage.pick_source') %></span>
+              <span class="onair hide" id="onAir"><span class="dot" aria-hidden="true"></span> <%- t('stage.live_caps') %></span></div>
             <div class="ctl">
-              <fieldset class="src"><legend>Source</legend>
-                <label><input type="radio" name="src" value="camera" checked> Camera + mic</label>
-                <label><input type="radio" name="src" value="screen"> Screen (+ mic)</label>
+              <fieldset class="src"><legend><%- t('stage.source') %></legend>
+                <label><input type="radio" name="src" value="camera" checked> <%- t('stage.cam_mic') %></label>
+                <label><input type="radio" name="src" value="screen"> <%- t('stage.screen_mic') %></label>
               </fieldset>
-              <div class="devs" id="devs" role="group" aria-label="Camera and microphone">
-                <label class="fld" id="camFld">📷 Camera <select id="camSel" disabled><option value="">Default camera</option></select></label>
-                <label class="fld" id="micFld">🎤 Microphone <select id="micSel" disabled><option value="">Default microphone</option></select></label>
-                <button type="button" class="btn hide" id="flipBtn">🔄 Switch camera</button>
+              <div class="devs" id="devs" role="group" aria-label="<%- t('stage.devs_aria') %>">
+                <label class="fld" id="camFld"><%- t('stage.camera') %> <select id="camSel" disabled><option value=""><%- t('stage.default_cam') %></option></select></label>
+                <label class="fld" id="micFld"><%- t('stage.microphone') %> <select id="micSel" disabled><option value=""><%- t('stage.default_mic') %></option></select></label>
+                <button type="button" class="btn hide" id="flipBtn"><%- t('stage.flip') %></button>
                 <p class="muted" id="devNote"></p>
               </div>
               <div class="row">
-                <button type="button" class="btn" id="pvBtn">Preview</button>
-                <button type="button" class="btn primary" id="goBtn">Go live</button>
-                <button type="button" class="btn danger hide" id="stopBtn">Stop</button>
+                <button type="button" class="btn" id="pvBtn"><%- t('stage.preview') %></button>
+                <button type="button" class="btn primary" id="goBtn"><%- t('stage.go_live') %></button>
+                <button type="button" class="btn danger hide" id="stopBtn"><%- t('stage.stop') %></button>
               </div>
               <div class="row">
-                <button type="button" class="btn" id="micBtn" aria-pressed="true" disabled>🎤 Mic on</button>
-                <button type="button" class="btn" id="camBtn" aria-pressed="true" disabled>🎥 Video on</button>
+                <button type="button" class="btn" id="micBtn" aria-pressed="true" disabled><%- t('stage.mic_on') %></button>
+                <button type="button" class="btn" id="camBtn" aria-pressed="true" disabled><%- t('stage.video_on') %></button>
               </div>
-              <div class="rate"><span>Upload</span> <b id="kbps">0</b> kbps <span class="meter"><span id="kbpsBar"></span></span></div>
+              <div class="rate"><span><%- t('stage.upload') %></span> <b id="kbps">0</b> kbps <span class="meter"><span id="kbpsBar"></span></span></div>
               <p class="msg" id="webMsg" role="status" aria-live="polite"></p>
-              <p class="muted">Keep this tab open while you're live. Stopping the browser stream doesn't end your slot - use <b>End my slot</b> for that (or it ends by itself after <%= C.idle_grace_min %> minutes off air).</p>
+              <p class="muted"><%- t('stage.keep_open', { n: C.idle_grace_min }) %></p>
             </div>
           </div>
         </div>
         <% if (rtc) { %>
         <div class="pane hide" id="paneRtc" role="tabpanel" aria-labelledby="tabRtc" data-base="<%= rtc.base %>">
-          <p><b>Go live from your browser (camera / screen) — ultra-low latency.</b> Sent over WebRTC: viewers who pick ⚡ Low latency see you about a second behind, everyone else gets the normal stream.</p>
+          <p><%- t('stage.rtc_intro') %></p>
           <div class="web">
-            <div class="preview"><video id="rtcPv" muted playsinline autoplay></video><span class="pv-empty" id="rtcPvEmpty">Pick a source to preview</span>
-              <span class="onair hide" id="rtcOnAir"><span class="dot" aria-hidden="true"></span> LIVE ⚡</span></div>
+            <div class="preview"><video id="rtcPv" muted playsinline autoplay></video><span class="pv-empty" id="rtcPvEmpty"><%- t('stage.pick_source') %></span>
+              <span class="onair hide" id="rtcOnAir"><span class="dot" aria-hidden="true"></span> <%- t('stage.live_caps') %> ⚡</span></div>
             <div class="ctl">
-              <fieldset class="src"><legend>Source</legend>
-                <label><input type="radio" name="rtcSrc" value="camera" checked> Camera + mic</label>
-                <label><input type="radio" name="rtcSrc" value="screen"> Screen (+ mic)</label>
+              <fieldset class="src"><legend><%- t('stage.source') %></legend>
+                <label><input type="radio" name="rtcSrc" value="camera" checked> <%- t('stage.cam_mic') %></label>
+                <label><input type="radio" name="rtcSrc" value="screen"> <%- t('stage.screen_mic') %></label>
               </fieldset>
-              <div class="devs" role="group" aria-label="Camera and microphone">
-                <label class="fld">📷 Camera <select id="rtcCam"><option value="">Default camera</option></select></label>
-                <label class="fld">🎤 Microphone <select id="rtcMic"><option value="">Default microphone</option></select></label>
-                <label class="fld">Bitrate cap <select id="rtcKbps">
-                  <option value="1000">1 Mbps · weak upload</option><option value="2500" selected>2.5 Mbps</option>
-                  <option value="4000">4 Mbps</option><option value="6000">6 Mbps · fast upload</option></select></label>
+              <div class="devs" role="group" aria-label="<%- t('stage.devs_aria') %>">
+                <label class="fld"><%- t('stage.camera') %> <select id="rtcCam"><option value=""><%- t('stage.default_cam') %></option></select></label>
+                <label class="fld"><%- t('stage.microphone') %> <select id="rtcMic"><option value=""><%- t('stage.default_mic') %></option></select></label>
+                <label class="fld"><%- t('stage.bitrate') %> <select id="rtcKbps">
+                  <option value="1000"><%- t('stage.weak') %></option><option value="2500" selected>2.5 Mbps</option>
+                  <option value="4000">4 Mbps</option><option value="6000"><%- t('stage.fast') %></option></select></label>
               </div>
               <div class="row">
-                <button type="button" class="btn" id="rtcPvBtn">Preview</button>
-                <button type="button" class="btn primary" id="rtcGo">⚡ Go live</button>
-                <button type="button" class="btn danger hide" id="rtcStop">Stop</button>
+                <button type="button" class="btn" id="rtcPvBtn"><%- t('stage.preview') %></button>
+                <button type="button" class="btn primary" id="rtcGo">⚡ <%- t('stage.go_live') %></button>
+                <button type="button" class="btn danger hide" id="rtcStop"><%- t('stage.stop') %></button>
               </div>
               <p class="msg" id="rtcMsg" role="status" aria-live="polite"></p>
-              <p class="muted">Keep this tab open while you're live. Stop doesn't end your slot - use <b>End my slot</b> for that.</p>
+              <p class="muted"><%- t('stage.keep_open_rtc') %></p>
             </div>
           </div>
         </div>
         <% } %>
       </div>
-      <p class="muted hide" id="embedNote">Your video is on the stage. It stays on until your time is up or you end the slot.</p>
+      <p class="muted hide" id="embedNote"><%- t('stage.embed_note') %></p>
     </section>
 
     <section class="sb-card hide" id="doneCard" aria-labelledby="doneT">
-      <h2 id="doneT">Your last slot</h2>
+      <h2 id="doneT"><%- t('stage.last_slot') %></h2>
       <p id="doneTxt"></p>
     </section>
 
     <!-- upcoming bookings + queue -->
     <section class="sb-card hide" id="upCard" aria-labelledby="upT">
-      <h2 id="upT">Coming up for you</h2>
+      <h2 id="upT"><%- t('stage.coming_up') %></h2>
       <ul class="mylist" id="upList"></ul>
     </section>
 
     <!-- 1.99fk: 🟣 Also stream to Twitch (restream.js) -->
     <section class="sb-card" id="rsCard" data-mode="me" aria-labelledby="rsT">
-      <h2 id="rsT">🟣 Also stream to Twitch</h2>
-      <p class="muted">PATV re-sends your stage stream to your own Twitch channel while you're live - no second upload from your computer. Works for OBS (RTMP) and browser streams; it's copied as-is, so Twitch's limits apply (H.264 + AAC, keyframes every 2 s, up to about 6000 kbps). Your key is stored encrypted and never shown again.</p>
+      <h2 id="rsT"><%- t('stage.rs_h') %></h2>
+      <p class="muted"><%- t('stage.rs_what') %></p>
       <div id="rsBody">
         <p id="rsSaved"></p>
         <form id="rsForm" class="settings" autocomplete="off">
-          <label>Twitch stream key<input type="password" name="key" autocomplete="new-password" spellcheck="false" maxlength="200" placeholder="live_…"></label>
-          <label>Ingest server <span class="muted">(optional)</span><input type="text" name="server" spellcheck="false" maxlength="200" placeholder="auto (rtmp://live.twitch.tv/app)"></label>
-          <label class="chk"><input type="checkbox" name="auto"> Turn it on for my new slots</label>
-          <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary">Save</button>
-            <button type="button" class="btn danger hide" data-rs-del>Delete key</button><span class="msg" id="rsMsg" role="status"></span></div>
+          <label><%- t('stage.rs_key') %><input type="password" name="key" autocomplete="new-password" spellcheck="false" maxlength="200" placeholder="live_…"></label>
+          <label><%- t('stage.rs_server') %> <span class="muted"><%- t('stage.optional') %></span><input type="text" name="server" spellcheck="false" maxlength="200" placeholder="auto (rtmp://live.twitch.tv/app)"></label>
+          <label class="chk"><input type="checkbox" name="auto"> <%- t('stage.rs_auto') %></label>
+          <div class="row" style="grid-column: 1 / -1"><button type="submit" class="btn primary"><%- t('stage.save') %></button>
+            <button type="button" class="btn danger hide" data-rs-del><%- t('stage.rs_del') %></button><span class="msg" id="rsMsg" role="status"></span></div>
         </form>
         <div id="rsSlots"></div>
       </div>
@@ -194,22 +195,22 @@
 
     <!-- booking form -->
     <section class="sb-card" id="bookCard" aria-labelledby="bookT">
-      <h2 id="bookT">Book a slot</h2>
+      <h2 id="bookT"><%- t('stage.book_h') %></h2>
       <form id="bookForm" class="book2" autocomplete="off">
-        <label class="fld">Pad
+        <label class="fld"><%- t('stage.pad') %>
           <select id="room" name="room">
-            <% (rooms || []).forEach((r) => { %><option value="<%= r.slug %>" data-id="<%= r.id %>" data-title="<%= r.title %>" data-price="<%= r.slot_price %>" data-slots="<%= r.slot_count %>" data-approval="<%= r.approval ? 1 : 0 %>"<%= sel && sel.id === r.id ? ' selected' : '' %>><%= r.title %><%= r.house ? " (house pad)" : r.owner ? ' — ' + r.owner : '' %></option><% }) %>
+            <% (rooms || []).forEach((r) => { %><option value="<%= r.slug %>" data-id="<%= r.id %>" data-title="<%= r.title %>" data-price="<%= r.slot_price %>" data-slots="<%= r.slot_count %>" data-approval="<%= r.approval ? 1 : 0 %>"<%= sel && sel.id === r.id ? ' selected' : '' %>><%= r.title %><%- r.house ? ' ' + t('stage.house_pad') : r.owner ? ' — ' + t.esc(r.owner) : '' %></option><% }) %>
           </select>
         </label>
         <p class="roominfo muted" id="roomInfo" aria-live="polite"></p>
 
-        <fieldset class="choice np" id="kindSet"><legend>Slot</legend>
-          <label><input type="radio" name="kind" value="slot" checked> <span><b>Ordinary slot</b><small id="slotPriceTxt">free</small></span></label>
+        <fieldset class="choice np" id="kindSet"><legend><%- t('stage.slot') %></legend>
+          <label><input type="radio" name="kind" value="slot" checked> <span><b><%- t('stage.ordinary') %></b><small id="slotPriceTxt"><%- t('stage.free_lc') %></small></span></label>
         </fieldset>
 
-        <fieldset class="choice" id="srcSet"><legend>What you're putting on</legend>
-          <label><input type="radio" name="mode" value="stream" checked> <span><b>My stream</b><small>OBS key or this browser</small></span></label>
-          <label><input type="radio" name="mode" value="embed"> <span><b>A video link</b><small>YouTube or Twitch</small></span></label>
+        <fieldset class="choice" id="srcSet"><legend><%- t('stage.what_on') %></legend>
+          <label><input type="radio" name="mode" value="stream" checked> <span><b><%- t('stage.my_stream') %></b><small><%- t('stage.my_stream_sub') %></small></span></label>
+          <label><input type="radio" name="mode" value="embed"> <span><b><%- t('stage.video_link') %></b><small><%- t('stage.video_link_sub') %></small></span></label>
           <% if (px && px.show) { %>
           <label class="<%= px.ok ? '' : 'locked' %>" title="<%= px.ok ? '' : px.message %>"><input type="radio" name="mode" value="plex"<%= px.ok ? '' : ' disabled' %>> <span><b>📼 Play from Plex</b><small><%= !px.ok ? '🔒 Plex users only' : px.free ? 'a movie or an episode · free for you' : fmt(px.price_per_hour) + ' PAT / started hour' %></small></span></label>
           <% } %>
@@ -217,36 +218,36 @@
         <% if (px && px.show && !px.ok) { %>
         <p class="muted pxlock" id="plexLocked">🔒 <b>📼 Play from Plex</b> puts a movie or an episode from our Plex library on a pad's stage. <%= px.message %><% if (px.hint) { %> <a href="<%= px.hint %>">Get Plex access ›</a><% } %></p>
         <% } %>
-        <label class="fld hide" id="embedFld">YouTube / Twitch link
+        <label class="fld hide" id="embedFld"><%- t('stage.link_label') %>
           <input type="text" id="embed" name="embed" inputmode="url" placeholder="https://youtu.be/… · https://twitch.tv/channel" maxlength="300">
         </label>
         <% if (typeof twitchUrl !== 'undefined' && twitchUrl) { %>
         <div class="twsug hide" id="twSug">
-          <button type="button" class="chip" id="twChip" data-url="<%= twitchUrl %>">📺 Use my Twitch channel <small><%= twitchUrl.replace(/^https:\/\//, '') %></small></button>
-          <span class="muted" id="twNote">From your connected Twitch — edit or clear it to use another link.</span>
+          <button type="button" class="chip" id="twChip" data-url="<%= twitchUrl %>"><%- t('stage.use_twitch') %> <small><%= twitchUrl.replace(/^https:\/\//, '') %></small></button>
+          <span class="muted" id="twNote"><%- t('stage.tw_note') %></span>
         </div>
         <% } %>
-        <label class="fld np">Title <span class="muted">(optional, shows on the Pads list)</span>
-          <input type="text" id="title" name="title" maxlength="80" placeholder="What's on?">
+        <label class="fld np"><%- t('stage.title') %> <span class="muted"><%- t('stage.title_hint') %></span>
+          <input type="text" id="title" name="title" maxlength="80" placeholder="<%- t('stage.title_ph') %>">
         </label>
 
-        <label class="fld np" for="mins">Length (max)</label>
+        <label class="fld np" for="mins"><%- t('stage.length') %></label>
         <div class="mins np">
-          <input type="range" id="minsR" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= defMin %>" aria-label="Max minutes">
-          <span class="num"><input type="number" id="mins" name="minutes" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= defMin %>" inputmode="numeric"> min</span>
+          <input type="range" id="minsR" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= defMin %>" aria-label="<%- t('stage.max_minutes') %>">
+          <span class="num"><input type="number" id="mins" name="minutes" min="<%= C.min_minutes %>" max="<%= C.max_minutes %>" value="<%= defMin %>" inputmode="numeric"> <%- t('stage.min') %></span>
         </div>
 
-        <fieldset class="choice np" id="whenSet"><legend>When</legend>
-          <label><input type="radio" name="when" value="now" checked> <span><b>Now</b><small id="nowTxt">if a slot is free</small></span></label>
-          <label><input type="radio" name="when" value="later"> <span><b>Later</b><small>pick a time</small></span></label>
-          <label><input type="radio" name="when" value="queue"> <span><b>Queue</b><small id="queueTxt">next free slot</small></span></label>
+        <fieldset class="choice np" id="whenSet"><legend><%- t('stage.when') %></legend>
+          <label><input type="radio" name="when" value="now" checked> <span><b><%- t('stage.now') %></b><small id="nowTxt"><%- t('stage.now_sub') %></small></span></label>
+          <label><input type="radio" name="when" value="later"> <span><b><%- t('stage.later') %></b><small><%- t('stage.later_sub') %></small></span></label>
+          <label><input type="radio" name="when" value="queue"> <span><b><%- t('stage.queue') %></b><small id="queueTxt"><%- t('stage.next_free') %></small></span></label>
         </fieldset>
-        <label class="fld hide" id="atFld">Start time (your local time)
+        <label class="fld hide" id="atFld"><%- t('stage.start_time') %>
           <input type="datetime-local" id="at" name="at">
         </label>
 
-        <div class="hold np">Hold: <b id="holdAmt">0</b> PAT <span class="muted">· you have <b id="bal"><%= fmt(me.points_balance) %></b> · you only pay for minutes live</span></div>
-        <button type="submit" class="btn primary big np" id="bookBtn">🎥 Go live now</button>
+        <div class="hold np"><%- t('stage.hold', { amt: '<b id="holdAmt">0</b>' }) %> <span class="muted">· <%- t('stage.you_have', { bal: '<b id="bal">' + t.esc(fmt(me.points_balance)) + '</b>' }) %> · <%- t('stage.pay_live') %></span></div>
+        <button type="submit" class="btn primary big np" id="bookBtn"><%- t('stage.go_live_now') %></button>
         <p class="msg" id="bookMsg" role="status" aria-live="polite"></p>
       </form>
       <% if (px && px.show && px.ok) { %>
@@ -268,9 +269,9 @@
       <% } %>
     </section>
   <% } %>
-  <p class="muted center"><a href="/p">Pads ›</a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
+  <p class="muted center"><a href="/p"><%- t('stage.pads_link') %></a><% if (staff) { %> · <a href="/stage/admin">Stage admin ›</a> · <a href="/pads/admin">Pads admin ›</a><% } %></p>
 </main>
-<script src="/public/js/stage-book.js?v=8" defer></script>
+<script src="/public/js/stage-book.js?v=9" defer></script>
 <% if (me && px && px.show) { %><script src="/public/js/stage-plex.js?v=1" defer></script><% } %>
 <% if (me) { %><script src="/public/js/restream.js?v=1" defer></script><% } %>
 <% if (rtc) { %><link rel="stylesheet" href="/public/css/webrtc.css?v=2">

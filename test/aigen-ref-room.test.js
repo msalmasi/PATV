@@ -289,6 +289,6 @@ test("Pad settings -> Feed shows the switch (Camfrog pads); the profile settings
   assert.match(html, /feed-roommod\.js\?v=4/);
   const pp = fs.readFileSync(path.join(repo, "views", "partials", "profile-posts.ejs"), "utf8");
   assert.match(pp, /data-pp-roomgen/);
-  assert.match(pp, /Don't post my room generations/);
+  assert.match(pp, /t\('profile\.posts\.roomgen'\)/);   // i18n: the label's text is checked rendered in profile-posts.test.js
   assert.match(pp, /profile-feed\.js\?v=2/);
 });

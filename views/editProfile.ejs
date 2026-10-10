@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Edit profile · Public Access', user: username }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('settings.page_title'), user: username }) %>
 <%
   // Normalize flash message — could be string, array, or empty
   function flashStr(v) {
@@ -28,9 +29,16 @@
   const isHidden = (id) => lay.hidden.includes(id);
   // privacy panels: public (default) / private (only me & admins) / hidden
   const stateOf = (id) => (isHidden(id) ? 'hidden' : (lay.priv || []).includes(id) ? 'private' : 'public');
-  const VIS = [['public', '🌐', 'Public', 'Everyone can see it'], ['private', '🔒', 'Only me & admins', 'You and site admins only'],
-               ['hidden', '🚫', 'Hidden', 'Nobody else; greyed out for you']];
+  // labels / tips are HTML-safe catalog text (printed raw)
+  const VIS = [['public', '🌐', t('settings.vis.public'), t('settings.vis.public_tip')], ['private', '🔒', t('settings.vis.private'), t('settings.vis.private_tip')],
+               ['hidden', '🚫', t('settings.vis.hidden'), t('settings.vis.hidden_tip')]];
   const camfrogName = typeof camfrogUsername !== 'undefined' && camfrogUsername ? camfrogUsername : '';
+  // section / panel names and descriptions come from profilelayout.js; the catalog has them by id (HTML-safe, printed raw)
+  const lbl_ = (o) => t.has('settings.layout.label.' + o.id) ? t('settings.layout.label.' + o.id) : t.esc(o.label);
+  const desc_ = (o) => t.has('settings.layout.desc.' + o.id) ? t('settings.layout.desc.' + o.id) : t.esc(o.desc || '');
+  // the Language setting (i18n.js): every supported language + "Automatic"; renders without the middleware's locals too
+  const langs_ = Array.isArray(locals.i18nLangs) && locals.i18nLangs.length ? locals.i18nLangs : [{ code: 'en', name: 'English', english: 'English' }];
+  const langPref_ = locals.langPref || 'auto';
 %>
 <%- include('partials/cosmetics-css') %>
 <style>
@@ -94,6 +102,9 @@
     width: 100%; margin: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #0b0b0b; color: #e6e6e6;
     font-size: 15px; font-family: inherit; box-sizing: border-box; }
   .pe input[type="text"]:focus, .pe input[type="email"]:focus, .pe input[type="password"]:focus { border-color: #4caf50; outline: none; }
+  .pe select { flex: 1; min-width: 0; width: 100%; margin: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid #2b2b2b; background: #0b0b0b; color: #e6e6e6;
+    font-size: 15px; font-family: inherit; box-sizing: border-box; }
+  .pe select:focus { border-color: #4caf50; outline: none; }
   .pe .hint { font-size: 12px; color: #777; }
   .pe .status { font-size: 13px; min-height: 18px; }
   .pe .status.ok { color: #81c784; }
@@ -219,20 +230,20 @@
 
 <div class="pe">
   <div class="top">
-    <h1>Edit profile</h1>
-    <a class="btn" href="/u/<%= username %>">View profile →</a>
+    <h1><%- t('profile.edit_profile') %></h1>
+    <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a>
   </div>
 
   <% if (verifyInfo) { %>
     <div class="verify-box">
-      <div class="verify-header">⚠ Verify Your Camfrog Username</div>
+      <div class="verify-header">⚠ <%- t('settings.verify.header') %></div>
       <div class="verify-msg"><%= verifyMsgText %></div>
-      <div class="verify-instructions">Type this in the Camfrog room:</div>
+      <div class="verify-instructions"><%- t('settings.verify.instructions') %></div>
       <div class="verify-code-wrap">
         <span class="verify-cmd">!verify <span class="verify-code"><%= verifyInfo.code %></span></span>
-        <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy',2000);">Copy</button>
+        <button type="button" class="verify-copy" onclick="navigator.clipboard.writeText('!verify <%= verifyInfo.code %>'); this.textContent=this.dataset.copied; setTimeout(()=>this.textContent=this.dataset.copy,2000);" data-copied="<%- t('settings.verify.copied') %>" data-copy="<%- t('settings.verify.copy') %>"><%- t('settings.verify.copy') %></button>
       </div>
-      <div class="verify-expires">⏱ Code expires in 15 minutes</div>
+      <div class="verify-expires">⏱ <%- t('settings.verify.expires') %></div>
     </div>
   <% } else { %>
     <% if (errStr) { %><div class="msg err" role="alert"><%= errStr %></div><% } %>
@@ -240,64 +251,80 @@
   <% } %>
 
   <!-- live preview of the profile hero -->
-  <section class="card hero cx-host" aria-label="Profile preview">
+  <section class="card hero cx-host" aria-label="<%- t('settings.preview_aria') %>">
     <% if (cxBanner) { %><div class="cx-banner" style="<%= cxBanner.css %>" aria-hidden="true"></div><% } %>
     <% if (cxFx) { %><div class="cx-fx cx-fx-<%= cxFx.effect %>" aria-hidden="true"></div><% } %>
     <span class="cx-av">
       <% if (cxDeco && cxDeco.conic) { %><span class="cx-conic<%= cxDeco.spin ? ' cx-spin' : '' %>" style="<%= cxDeco.conic %>" aria-hidden="true"></span><% } %>
-      <img class="avatar" id="pvAvatar" src="<%= avatar %>" alt="Your avatar" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
+      <img class="avatar" id="pvAvatar" src="<%= avatar %>" alt="<%- t('settings.your_avatar') %>" onerror="this.src='/public/img/avatar.png'"<% if (cxDeco && cxDeco.ring) { %> style="<%= cxDeco.ring %>"<% } %>>
       <% if (cxDeco && cxDeco.emoji) { %><span class="cx-emoji" aria-hidden="true"><%= cxDeco.emoji %></span><% } %>
     </span>
     <div class="who">
       <div class="nm"><% if (cxName && cxName.css) { %><span class="cx-name" id="pvName" style="<%= cxName.css %>"><%= displayname || username %></span><% } else { %><span id="pvName"><%= displayname || username %></span><% } %></div>
-      <div class="handle">@<span id="pvHandle"><%= username %></span><% if (camfrogName) { %> · 🐸 <%= camfrogName %> on Camfrog<% } %></div>
+      <div class="handle">@<span id="pvHandle"><%= username %></span><% if (camfrogName) { %> · 🐸 <%- t('profile.on_camfrog', { name: camfrogName }) %><% } %></div>
       <div class="chips">
-        <span class="chip pv">Preview</span>
-        <% if (typeof level !== 'undefined' && level != null) { %><span class="chip">Level <%= level %></span><% } %>
+        <span class="chip pv"><%- t('settings.preview') %></span>
+        <% if (typeof level !== 'undefined' && level != null) { %><span class="chip"><%- t('settings.level_n', { n: level }) %></span><% } %>
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
       </div>
     </div>
     <div class="hero-foot">
-      <span class="muted">Name colour, banner, border and avatar ring come from your equipped cosmetics.</span>
-      <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 Cosmetics</a>
+      <span class="muted"><%- t('settings.cosmetics_note') %></span>
+      <a class="btn" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.menu.cosmetics') %></a>
     </div>
     <% if (cxBorder) { %><div class="cx-frame <%= cxBorder.cls %>" style="<%= cxBorder.css %>" aria-hidden="true"></div><% } %>
   </section>
 
-  <nav class="jump" aria-label="Sections">
-    <a href="#account">Account</a><a href="#avatar">Avatar</a><a href="#layout">Profile layout</a><a href="#connections">Connections</a><a href="#password">Password</a>
+  <nav class="jump" aria-label="<%- t('settings.sections_aria') %>">
+    <a href="#account"><%- t('settings.account') %></a><a href="#language"><%- t('settings.language') %></a><a href="#avatar"><%- t('settings.avatar') %></a><a href="#layout"><%- t('settings.layout') %></a><a href="#connections"><%- t('settings.connections') %></a><a href="#password"><%- t('settings.password') %></a>
   </nav>
 
   <section class="card" id="account">
-    <h2>Account</h2>
-    <p class="lede">Your display name is what everyone sees; your username is in your profile link.</p>
+    <h2><%- t('settings.account') %></h2>
+    <p class="lede"><%- t('settings.account.lede') %></p>
     <div class="grid2">
       <form class="field" id="displaynameForm" action="/api/u/<%= username %>/update/displayname" method="post">
-        <label class="lbl" for="displayname">Display name</label>
-        <div class="row"><input type="text" id="displayname" name="displayname" value="<%= displayname %>" maxlength="32" required><button class="btn primary" type="submit">Save</button></div>
+        <label class="lbl" for="displayname"><%- t('settings.account.displayname') %></label>
+        <div class="row"><input type="text" id="displayname" name="displayname" value="<%= displayname %>" maxlength="32" required><button class="btn primary" type="submit"><%- t('settings.save') %></button></div>
       </form>
       <form class="field" id="usernameForm" action="/api/u/<%= username %>/update/username" method="post">
-        <label class="lbl" for="username">Username</label>
-        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" required><button class="btn" type="submit">Change</button></div>
-        <span class="hint">Changes your profile address.</span>
+        <label class="lbl" for="username"><%- t('settings.account.username') %></label>
+        <div class="row"><input type="text" id="username" name="username" value="<%= username %>" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
+        <span class="hint"><%- t('settings.account.username_hint') %></span>
       </form>
       <form class="field" id="emailForm" action="/api/u/<%= username %>/update/email" method="post">
-        <label class="lbl" for="email">Email</label>
-        <div class="row"><input type="email" id="email" name="email" value="<%= email %>" required><button class="btn" type="submit">Change</button></div>
-        <span class="hint">We'll send a link to verify the new address.</span>
+        <label class="lbl" for="email"><%- t('settings.account.email') %></label>
+        <div class="row"><input type="email" id="email" name="email" value="<%= email %>" required><button class="btn" type="submit"><%- t('settings.change') %></button></div>
+        <span class="hint"><%- t('settings.account.email_hint') %></span>
       </form>
     </div>
   </section>
 
+  <section class="card" id="language">
+    <h2><%- t('settings.language') %></h2>
+    <p class="lede"><%- t('settings.language.lede') %></p>
+    <form class="field" id="languageForm" action="/api/settings/language" method="post">
+      <label class="lbl" for="langSelect"><%- t('settings.language.label') %></label>
+      <div class="row">
+        <select id="langSelect" name="lang">
+          <option value="auto"<%= langPref_ === 'auto' ? ' selected' : '' %>><%- t('settings.language.auto') %></option>
+          <% langs_.forEach((l) => { %><option value="<%= l.code %>" lang="<%= l.code %>"<%= langPref_ === l.code ? ' selected' : '' %>><%= l.name %><%= l.english && l.english !== l.name ? ' (' + l.english + ')' : '' %></option><% }) %>
+        </select>
+        <button class="btn primary" type="submit" id="langSave"><%- t('settings.save') %></button>
+      </div>
+      <span class="status" id="langStatus" role="status" aria-live="polite"></span>
+    </form>
+  </section>
+
   <section class="card" id="avatar">
-    <h2>Avatar</h2>
-    <p class="lede">Square images look best — it's cropped to 200×200.</p>
+    <h2><%- t('settings.avatar') %></h2>
+    <p class="lede"><%- t('settings.avatar.lede') %></p>
     <form id="uploadForm" class="avup" enctype="multipart/form-data">
       <img id="avPreview" src="<%= avatar %>" alt="" onerror="this.src='/public/img/avatar.png'">
       <div style="display:grid;gap:8px;min-width:0">
         <div class="row" style="flex-wrap:wrap">
-          <span class="file"><span class="btn">📁 Choose image</span><input type="file" id="avatarFile" name="avatar" accept="image/*" required aria-label="Choose an avatar image"></span>
-          <button class="btn primary" type="submit" id="avSave" disabled>Upload</button>
+          <span class="file"><span class="btn">📁 <%- t('settings.avatar.choose') %></span><input type="file" id="avatarFile" name="avatar" accept="image/*" required aria-label="<%- t('settings.avatar.choose_aria') %>"></span>
+          <button class="btn primary" type="submit" id="avSave" disabled><%- t('settings.avatar.upload') %></button>
         </div>
         <div class="status" id="uploadStatus" role="status" aria-live="polite"></div>
       </div>
@@ -305,39 +332,39 @@
   </section>
 
   <section class="card" id="layout">
-    <h2>Profile layout</h2>
-    <p class="lede">Your profile is a header plus tabs — Posts (opens first), Overview and Analytics. The order below sets the order of the tabs and of the cards in Overview; drag sections, or use the arrows. Header items (stat strip, XP bar, GTF avatar) always sit in the header.</p>
-    <p class="lede"> Everything is public until you change it: switch a section off to hide it from visitors — you'll still see it on your own profile, greyed out.</p>
+    <h2><%- t('settings.layout') %></h2>
+    <p class="lede"><%- t('settings.layout.lede') %></p>
+    <p class="lede"> <%- t('settings.layout.lede2') %></p>
     <form id="layoutForm" action="/api/u/<%= username %>/update/layout" method="post">
-      <div class="lay-fixed">🔒 <span><b style="color:#ccc">Profile header</b> — always first: avatar, name, level, pinned badges</span></div>
+      <div class="lay-fixed">🔒 <span><b style="color:#ccc"><%- t('settings.layout.header') %></b> <%- t('settings.layout.header_desc') %></span></div>
       <ol class="lay" id="layList" aria-describedby="layHelp">
         <% lay.order.forEach((id, i) => { const s = byId[id]; if (!s) return; const off = isHidden(id); %>
-        <li class="lay-item<%= off ? ' off' : '' %>" data-id="<%= id %>" data-label="<%= s.label %>">
+        <li class="lay-item<%= off ? ' off' : '' %>" data-id="<%= id %>" data-label="<%- lbl_(s) %>">
           <input type="hidden" name="order" value="<%= id %>">
-          <button type="button" class="lay-grip" aria-label="Reorder <%= s.label %> (arrow keys move it)" title="Drag to reorder">⠿</button>
+          <button type="button" class="lay-grip" aria-label="<%- t('settings.layout.reorder_aria', { label: lbl_(s) }) %>" title="<%- t('settings.layout.drag') %>">⠿</button>
           <span class="lay-ico" aria-hidden="true"><%= s.icon %></span>
           <div class="lay-txt">
-            <b><%= s.label %></b><small><%= s.desc %></small>
+            <b><%- lbl_(s) %></b><small><%- desc_(s) %></small>
             <% if (subs[id] && subs[id].length) { %>
-              <div class="lay-subs" role="group" aria-label="<%= s.label %> panels">
+              <div class="lay-subs" role="group" aria-label="<%- t('settings.layout.panels_aria', { label: lbl_(s) }) %>">
                 <% subs[id].forEach((p) => { %>
-                  <label><input type="checkbox" name="show" value="<%= p.id %>"<%= isHidden(p.id) ? '' : ' checked' %>><%= p.label %></label>
+                  <label><input type="checkbox" name="show" value="<%= p.id %>"<%= isHidden(p.id) ? '' : ' checked' %>><%- lbl_(p) %></label>
                 <% }) %>
               </div>
             <% } %>
           </div>
-          <label class="sw"><input type="checkbox" name="show" value="<%= id %>"<%= off ? '' : ' checked' %> aria-label="Show <%= s.label %> to visitors"><span class="tr" aria-hidden="true"></span><span class="st"><%= off ? 'Hidden' : 'Visible' %></span></label>
-          <span class="mv"><button type="button" class="up" aria-label="Move <%= s.label %> up">▲</button><button type="button" class="dn" aria-label="Move <%= s.label %> down">▼</button></span>
+          <label class="sw"><input type="checkbox" name="show" value="<%= id %>"<%= off ? '' : ' checked' %> aria-label="<%- t('settings.layout.show_aria', { label: lbl_(s) }) %>"><span class="tr" aria-hidden="true"></span><span class="st"><%- off ? t('settings.layout.hidden') : t('settings.layout.visible') %></span></label>
+          <span class="mv"><button type="button" class="up" aria-label="<%- t('settings.layout.up_aria', { label: lbl_(s) }) %>">▲</button><button type="button" class="dn" aria-label="<%- t('settings.layout.down_aria', { label: lbl_(s) }) %>">▼</button></span>
           <% if (id === 'analytics' && privs.length) { %>
-          <div class="lay-priv" role="group" aria-label="Privacy panels">
-            <div class="lay-priv-h">Privacy panels <span>· who can see them</span></div>
+          <div class="lay-priv" role="group" aria-label="<%- t('settings.layout.priv') %>">
+            <div class="lay-priv-h"><%- t('settings.layout.priv') %> <span>· <%- t('settings.layout.priv_who') %></span></div>
             <% privs.forEach((p) => { const st = stateOf(p.id); %>
             <fieldset class="pv is-<%= st %>" data-pv="<%= p.id %>">
-              <legend class="sr"><%= p.label %>: who can see it</legend>
-              <div class="pv-txt" aria-hidden="true"><b><%= p.icon %> <%= p.label %></b><small><%= p.desc %></small></div>
+              <legend class="sr"><%- t('settings.layout.priv_legend', { label: lbl_(p) }) %></legend>
+              <div class="pv-txt" aria-hidden="true"><b><%= p.icon %> <%- lbl_(p) %></b><small><%- desc_(p) %></small></div>
               <div class="seg">
                 <% VIS.forEach(([v, ico, lbl, tip]) => { %>
-                <label class="s-<%= v %>" title="<%= tip %>"><input type="radio" name="vis_<%= p.id %>" value="<%= v %>"<%= st === v ? ' checked' : '' %>><span aria-hidden="true"><%= ico %></span><%= lbl %></label>
+                <label class="s-<%= v %>" title="<%- tip %>"><input type="radio" name="vis_<%= p.id %>" value="<%= v %>"<%= st === v ? ' checked' : '' %>><span aria-hidden="true"><%= ico %></span><%- lbl %></label>
                 <% }) %>
               </div>
             </fieldset>
@@ -347,68 +374,93 @@
         </li>
         <% }) %>
       </ol>
-      <p class="sr" id="layHelp">Each section has a reorder handle (use the up and down arrow keys on it), move up and move down buttons, and a switch that shows or hides it for visitors.</p>
+      <p class="sr" id="layHelp"><%- t('settings.layout.help') %></p>
       <div class="sr" id="layLive" aria-live="polite"></div>
       <div class="lay-actions">
-        <button class="btn primary" type="submit">Save layout</button>
-        <a class="btn" href="/u/<%= username %>?preview=visitor">👁 Preview as visitor</a>
-        <button class="btn ghost" type="submit" name="reset" value="1" id="layReset">Reset to default</button>
-        <span class="dirty" id="layDirty">Unsaved changes</span>
+        <button class="btn primary" type="submit"><%- t('settings.layout.save') %></button>
+        <a class="btn" href="/u/<%= username %>?preview=visitor">👁 <%- t('profile.bar.preview') %></a>
+        <button class="btn ghost" type="submit" name="reset" value="1" id="layReset"><%- t('settings.layout.reset') %></button>
+        <span class="dirty" id="layDirty"><%- t('settings.layout.unsaved') %></span>
       </div>
-      <p class="lay-note">🌐 Public: anyone who opens your profile. 🔒 Only me &amp; admins: you see it tagged “Only you &amp; admins can see this”, visitors don't get it at all. 🚫 Hidden: nobody else sees it; it shows greyed out on your own view. Top words are never recorded while you're <code>!incognito</code>. Use <b>Preview as visitor</b> to check.</p>
+      <p class="lay-note"><%- t('settings.layout.note') %></p>
     </form>
   </section>
 
   <section class="card" id="connections">
-    <h2>Connections</h2>
-    <p class="lede">Link your accounts so PAT, XP and badges follow you everywhere.</p>
+    <h2><%- t('settings.connections') %></h2>
+    <p class="lede"><%- t('settings.connections.lede') %></p>
     <div class="conn">
       <div class="conn-row">
         <span class="conn-ico" style="background:#9146ff">
           <svg viewBox="0 0 2400 2800" aria-hidden="true"><polygon fill="#fff" points="2200,1300 1800,1700 1400,1700 1050,2050 1050,1700 600,1700 600,200 2200,200"/><path fill="#9146ff" d="M500,0L0,500v1800h600v500l500-500h400l900-900V0H500z M2200,1300l-400,400h-400l-350,350v-350H600V200h1600V1300z"/><rect fill="#9146ff" x="1700" y="550" width="200" height="600"/><rect fill="#9146ff" x="1150" y="550" width="200" height="600"/></svg>
         </span>
-        <span class="conn-name">Twitch<b><% if (twitchDisplayname) { %><span style="color:#bf94ff"><%= twitchDisplayname %></span><% } else { %><span class="none">Not connected</span><% } %></b></span>
-        <button type="button" id="twitchLoginButton" class="btn twitch" onclick="loginWithTwitch()"><%= twitchDisplayname ? 'Reconnect' : 'Continue with Twitch' %></button>
+        <span class="conn-name">Twitch<b><% if (twitchDisplayname) { %><span style="color:#bf94ff"><%= twitchDisplayname %></span><% } else { %><span class="none"><%- t('settings.connections.not_connected') %></span><% } %></b></span>
+        <button type="button" id="twitchLoginButton" class="btn twitch" onclick="loginWithTwitch()"><%- twitchDisplayname ? t('settings.connections.reconnect') : t('settings.connections.twitch') %></button>
       </div>
       <div class="conn-row">
         <span class="conn-ico" style="background:#5865f2">
           <svg viewBox="0 -28.5 256 256" aria-hidden="true"><path fill="#fff" d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"/></svg>
         </span>
-        <span class="conn-name">Discord<b><% if (discordUsername) { %><span style="color:#aab3ff"><%= discordUsername %></span><% } else { %><span class="none">Not connected</span><% } %></b></span>
-        <button type="button" id="discordLoginButton" class="btn discord" onclick="loginWithDiscord()"><%= discordUsername ? 'Reconnect' : 'Continue with Discord' %></button>
+        <span class="conn-name">Discord<b><% if (discordUsername) { %><span style="color:#aab3ff"><%= discordUsername %></span><% } else { %><span class="none"><%- t('settings.connections.not_connected') %></span><% } %></b></span>
+        <button type="button" id="discordLoginButton" class="btn discord" onclick="loginWithDiscord()"><%- discordUsername ? t('settings.connections.reconnect') : t('settings.connections.discord') %></button>
       </div>
       <div class="conn-row" id="camfrogDiv">
         <span class="conn-ico" style="background:#123d22">🐸</span>
-        <span class="conn-name">Camfrog<b><% if (camfrogName) { %><span style="color:#00cc66"><%= camfrogName %></span><% } else { %><span class="none">Not linked</span><% } %></b></span>
+        <span class="conn-name">Camfrog<b><% if (camfrogName) { %><span style="color:#00cc66"><%= camfrogName %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
         <span></span>
         <form class="field conn-cf" id="camfrogForm" action="/api/u/<%= username %>/update/camfrog" method="post">
-          <label class="lbl" for="camfrogUsername">Camfrog username</label>
-          <div class="row"><input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= camfrogName %>" placeholder="Enter your Camfrog username"><button class="btn primary" type="submit">Link Camfrog</button></div>
-          <span class="hint">You'll get a <code>!verify</code> code to type in a Camfrog room with Pepe.</span>
+          <label class="lbl" for="camfrogUsername"><%- t('settings.connections.cf_label') %></label>
+          <div class="row"><input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= camfrogName %>" placeholder="<%- t('settings.connections.cf_placeholder') %>"><button class="btn primary" type="submit"><%- t('settings.connections.cf_link') %></button></div>
+          <span class="hint"><%- t('settings.connections.cf_hint') %></span>
         </form>
       </div>
     </div>
   </section>
 
   <section class="card" id="password">
-    <h2>Password</h2>
-    <p class="lede">At least 8 characters. You'll sign in again afterwards.</p>
+    <h2><%- t('settings.password') %></h2>
+    <p class="lede"><%- t('settings.password.lede') %></p>
     <form class="grid2" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
-      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password">New password</label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
-      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password">Confirm password</label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
-      <div><button class="btn primary" type="submit">Update password</button> <span class="status err" id="pwStatus" role="status" aria-live="polite"></span></div>
+      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
+      <div><button class="btn primary" type="submit"><%- t('settings.password.update') %></button> <span class="status err" id="pwStatus" role="status" aria-live="polite"></span></div>
     </form>
   </section>
 </div>
 
 <script>
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   function validateForm() {
     var p = document.getElementById("password").value, c = document.getElementById("confirm_password").value;
-    if (p !== c) { document.getElementById("pwStatus").textContent = "Passwords do not match."; return false; }
+    if (p !== c) { document.getElementById("pwStatus").textContent = _t('js.settings.pw_mismatch', "Passwords do not match."); return false; }
     return true;
   }
   function loginWithTwitch() { window.location.href = '/auth/twitch'; }
   function loginWithDiscord() { window.location.href = '/auth/discord'; }
+
+  // the Language setting: POST {lang} to /api/settings/language, then reload so the page renders in it
+  (function () {
+    var lf = document.getElementById('languageForm'), sel = document.getElementById('langSelect');
+    var btn = document.getElementById('langSave'), st = document.getElementById('langStatus');
+    if (!lf || !sel) return;
+    function lsay(msg, ok) { st.textContent = msg; st.className = 'status ' + (ok ? 'ok' : 'err'); }
+    lf.addEventListener('submit', function (e) {
+      e.preventDefault();
+      btn.disabled = sel.disabled = true;
+      lsay(_t('js.settings.language.saving', 'Saving…'), true);
+      fetch('/api/settings/language', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ lang: sel.value }) })
+        .then(function (r) { return r.json().catch(function () { return { success: false }; }); })
+        .then(function (d) {
+          if (d && d.success) { location.reload(); return; }
+          throw new Error((d && d.message) || '');
+        })
+        .catch(function (err) {
+          btn.disabled = sel.disabled = false;
+          lsay((err && err.message) || _t('js.settings.language.failed', "Couldn't save your language - try again."), false);
+        });
+    });
+  })();
 
   (function () {
     // live preview: display name
@@ -426,17 +478,17 @@
       var f = file.files && file.files[0];
       if (obj) { URL.revokeObjectURL(obj); obj = null; }
       if (!f) { img.src = oldSrc; save.disabled = true; return; }
-      if (!/^image\//.test(f.type)) { say('That is not an image.', false); save.disabled = true; return; }
+      if (!/^image\//.test(f.type)) { say(_t('js.settings.avatar.not_image', 'That is not an image.'), false); save.disabled = true; return; }
       obj = URL.createObjectURL(f);
       img.src = obj; if (pv) pv.src = obj;
-      save.disabled = false; say('Looks good? Hit Upload.', true);
+      save.disabled = false; say(_t('js.settings.avatar.looks_good', 'Looks good? Hit Upload.'), true);
     });
     if (form) form.addEventListener('submit', function (e) {
       e.preventDefault();
       var f = file.files && file.files[0];
       if (!f) return;
       var fd = new FormData(); fd.append('avatar', f);
-      save.disabled = true; say('Uploading…', true);
+      save.disabled = true; say(_t('js.settings.avatar.uploading', 'Uploading…'), true);
       fetch('/api/u/' + encodeURIComponent(fallback) + '/update/avatar', { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(function (r) {
           // 1.99fc: a picture the image safety check refused (422) says why
@@ -444,10 +496,10 @@
           if (!r.ok) throw new Error(); return r.json();
         })
         .then(function (d) {
-          if (d && /success/i.test(d.message || '')) { say('Avatar updated.', true); oldSrc = img.src; }
+          if (d && /success/i.test(d.message || '')) { say(_t('js.settings.avatar.updated', 'Avatar updated.'), true); oldSrc = img.src; }
           else throw new Error();
         })
-        .catch(function (e) { say((e && e.msg) || "Upload failed — try a smaller image.", false); save.disabled = false; });
+        .catch(function (e) { say((e && e.msg) || _t('js.settings.avatar.failed', "Upload failed — try a smaller image."), false); save.disabled = false; });
     });
 
     // ── profile layout: drag (pointer) + keyboard + up/down buttons ──
@@ -467,7 +519,7 @@
         li.querySelector('.dn').disabled = i === all.length - 1;
       });
       dirty.classList.toggle('on', snapshot() !== initial);
-      if (announceLi) live.textContent = announceLi.getAttribute('data-label') + ' moved to position ' + (all.indexOf(announceLi) + 1) + ' of ' + all.length;
+      if (announceLi) live.textContent = _t('js.settings.layout.moved', '{label} moved to position {n} of {total}', { label: announceLi.getAttribute('data-label'), n: all.indexOf(announceLi) + 1, total: all.length });
     }
     function move(li, dir) {
       if (dir < 0 && li.previousElementSibling) list.insertBefore(li, li.previousElementSibling);
@@ -504,7 +556,7 @@
       var li = c.closest('.lay-item');
       if (c.closest('.sw')) {
         li.classList.toggle('off', !c.checked);
-        li.querySelector('.sw .st').textContent = c.checked ? 'Visible' : 'Hidden';
+        li.querySelector('.sw .st').textContent = c.checked ? _t('js.settings.layout.visible', 'Visible') : _t('js.settings.layout.hidden', 'Hidden');
       }
       refresh();
     });
@@ -546,7 +598,7 @@
 
     var reset = document.getElementById('layReset');
     if (reset) reset.addEventListener('click', function (e) {
-      if (!confirm('Reset your profile layout to the default order with everything visible?')) e.preventDefault();
+      if (!confirm(_t('js.settings.layout.reset_confirm', 'Reset your profile layout to the default order with everything visible?'))) e.preventDefault();
     });
     document.getElementById('layoutForm').addEventListener('submit', function () { initial = snapshot(); });
     window.addEventListener('beforeunload', function (e) {

@@ -320,7 +320,8 @@ test("Your show: the homepage card is one line + Go live / Pads (no bullets); /p
   assert.match(card, /Anyone can go live\./);
   assert.doesNotMatch(card, /<ul|<li|Ordinary slots|liveliest/);
   assert.match(card, /🎥 Go live<\/a><a class="btn" href="\/p">Pads<\/a>/);
-  const src = rd(path.join(repo, "views", "rooms.ejs"));
+  const src = await ejs.renderFile(path.join(repo, "views", "rooms.ejs"), {   // rendered: the text comes from the i18n catalog
+    user: null, signedIn: false, staff: false, owned: [], pepe: { active: false }, boostMark: BM.boostMark, ul: (n) => String(n == null ? "" : n), rows: [] });
   const cta = src.slice(src.indexOf('<section class="cta"'), src.indexOf("</section>", src.indexOf('<section class="cta"')));
   assert.match(cta, /Anyone can go live\./);
   assert.doesNotMatch(cta, /<ol>|<li>|liveliest|boost/);

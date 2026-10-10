@@ -92,6 +92,8 @@ const RULES = {
   // achievements / badges / cosmetics / roles
   "user_badges.userId": M({ key: ["badgeId"], merge: { awardedAt: "MIN" } }),
   "user_badge_showcase.user_id": M({ key: [] }),
+  // 1.99jo i18n.js: the saved site language (one per account; both have one: the target's stays)
+  "user_language.userId": M({ key: [] }),
   "achievement_feed.userId": M(),
   "user_roles.userId": M({ key: ["role"], merge: { granted_at: "MIN" } }), "user_roles.granted_at": { deny: "a date" },
   "user_cosmetics.user_id": M(), "user_cosmetic_equips.user_id": M({ key: ["kind"] }),

@@ -1,4 +1,5 @@
-<%- include('layout', { title: fx.postLabel(p).slice(0, 80) + ' — PATV feed', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: fx.postLabel(p).slice(0, 80) + ' — ' + t('feed.post.title_suffix'), user: user}) %>
 <link rel="stylesheet" href="/public/css/feed.css?v=17">
 <%
   const signed = !!viewer;
@@ -6,33 +7,33 @@
   const backRoom = p.rooms.length ? p.rooms[0] : null;
 %>
 <main class="fd fd-detail">
-  <nav class="crumb" aria-label="Back">
+  <nav class="crumb" aria-label="<%- t('feed.post.back') %>">
     <% if (backRoom) { %><a href="/p/<%= encodeURIComponent(backRoom.slug) %>"><%- fx.icon('back') %>p/<%= backRoom.slug %></a>
-    <% } else { %><a href="/feed"><%- fx.icon('back') %>Feed</a><% } %>
+    <% } else { %><a href="/feed"><%- fx.icon('back') %><%- t('feed.post.feed') %></a><% } %>
   </nav>
   <%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: true, ctxRoom: null, pepeMuted: typeof pepeMuted !== 'undefined' ? pepeMuted : false }) %>
 
   <section class="fd-comments" id="comments" aria-labelledby="cH">
     <div class="cm-top">
-      <h2 id="cH">Comments <span class="n"><%= fx.num(p.comments) %></span></h2>
+      <h2 id="cH"><%- t('feed.post.comments') %> <span class="n"><%= fx.num(p.comments) %></span></h2>
       <% if (comments.length > 1) { %>
-        <nav class="cm-sort" aria-label="Sort comments">
-          <span class="mut">Sort by</span>
-          <% fx.CSORTS.forEach((s) => { %><a class="<%= cs === s ? 'on' : '' %>" href="?<%= s === 'best' ? '' : 'csort=' + s %>#comments"<%= cs === s ? ' aria-current=true' : '' %>><%= fx.CSORT_LABELS[s] %></a><% }) %>
+        <nav class="cm-sort" aria-label="<%- t('feed.post.sort_aria') %>">
+          <span class="mut"><%- t('feed.post.sort_by') %></span>
+          <% fx.CSORTS.forEach((s) => { %><a class="<%= cs === s ? 'on' : '' %>" href="?<%= s === 'best' ? '' : 'csort=' + s %>#comments"<%= cs === s ? ' aria-current=true' : '' %>><%- t.has('feed.csort.' + s) ? t('feed.csort.' + s) : t.esc(fx.CSORT_LABELS[s]) %></a><% }) %>
         </nav>
       <% } %>
     </div>
     <% if (p.locked) { %>
-      <p class="cm-locked"><%- fx.icon('lock') %>Comments are locked<%= p.lockedBy ? ' by ' + p.lockedBy : '' %>.</p>
+      <p class="cm-locked"><%- fx.icon('lock') %><%- p.lockedBy ? t('feed.post.locked_by', { name: p.lockedBy }) : t('feed.post.locked') %></p>
     <% } else if (signed) { %>
       <form class="cm-new composer" data-act="comment" data-post="<%= p.id %>">
-        <textarea name="body" maxlength="2000" rows="2" placeholder="Add a comment…" aria-label="Your comment" required></textarea>
-        <div class="cbar"><span class="hint mut">Commenting as <b><%= viewer.display %></b><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · by commenting you agree to the <a href="/terms" target="_blank" rel="noopener">Terms</a><%= typeof termsNeeded !== 'undefined' && termsNeeded ? ' (you’ll be asked once)' : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s">Comment</button></div>
+        <textarea name="body" maxlength="2000" rows="2" placeholder="<%- t('feed.post.add_comment') %>" aria-label="<%- t('feed.post.your_comment') %>" required></textarea>
+        <div class="cbar"><span class="hint mut"><%- t('feed.post.commenting_as', { name: viewer.display }) %><% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %> · <%- t('feed.post.agree', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('feed.post.terms') + '</a>' }) %><%- typeof termsNeeded !== 'undefined' && termsNeeded ? ' ' + t('feed.post.asked_once') : '' %><% } %></span><span class="fc-err" role="alert"></span><button type="submit" class="btn-s"><%- t('feed.post.comment_btn') %></button></div>
       </form>
     <% } else { %>
-      <div class="cm-signin"><span>Join the conversation</span><a class="btn-s" href="/login?next=<%= encodeURIComponent(p.url + '#comments') %>">Sign in to comment</a></div>
+      <div class="cm-signin"><span><%- t('feed.post.join') %></span><a class="btn-s" href="/login?next=<%= encodeURIComponent(p.url + '#comments') %>"><%- t('feed.post.sign_in_comment') %></a></div>
     <% } %>
-    <% if (!comments.length) { %><p class="cm-empty mut">No comments yet<%= p.locked ? '' : ' — start the conversation' %>.</p><% } %>
+    <% if (!comments.length) { %><p class="cm-empty mut"><%- p.locked ? t('feed.post.no_comments') : t('feed.post.no_comments_start') %></p><% } %>
     <ol class="cm-list">
       <% comments.forEach((c) => { %><%- include('partials/feed-comment', { c, p, fx, viewer, staff, modRooms, reply: false }) %><% }) %>
     </ol>

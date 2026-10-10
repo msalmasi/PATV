@@ -1,11 +1,12 @@
-<%- include('layout', { title: "Pepe's commands", user: user, ogPath: '/help' }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('help.page_title'), user: user, ogPath: '/help' }) %>
 <%#
   views/help.ejs - Pepe's command help (1.99fq, help.js). The data is Pepe's (camfrog-bot help/catalog.json, published
   by Pepe with live prices). Cards: id="cmd-<id>" (deep links; /help#cmd-<any command or alias> is resolved by
   help-page.js). The "ask" box ranks locally first (helpsearch.js), then asks Pepe (signed in) via POST /api/help/ask.
 %>
 <%
-  const ROLE_LABEL = { mod: 'Mods', owner: 'Pad owners', admin: 'Admins' };
+  const ROLE_LABEL = { mod: t('help.role.mod'), owner: t('help.role.owner'), admin: t('help.role.admin') };
   const copyText = (s) => { const m = /^[^\[<@{]*/.exec(String(s)); const t = (m ? m[0] : String(s)).trim(); return t + (t.length < String(s).trim().length ? ' ' : ''); };
   const asOf = M.at ? new Date(M.at).toISOString().slice(0, 10) : null;
 %>
@@ -106,40 +107,38 @@
   }
 </style>
 <div class="hlp" id="top">
-  <h1>🐸 Pepe's commands</h1>
-  <p class="sub">Everything PepeFrog does in the Camfrog rooms. Type these in a room's chat (most work in a pad page's chat on
-    the website too). New here? Start with <a href="#cmd-verify">linking your account</a> and <a href="#cmd-balance">!balance</a>,
-    and see <a href="/economy">how PAT works</a>.</p>
+  <h1>🐸 <%- t('help.heading') %></h1>
+  <p class="sub"><%- t('help.intro', { verify: '<a href="#cmd-verify">' + t('help.intro_verify') + '</a>', balance: '<a href="#cmd-balance">!balance</a>', economy: '<a href="/economy">' + t('help.intro_economy') + '</a>' }) %></p>
 
   <section class="ask" aria-labelledby="askT">
-    <h2 id="askT">🤔 Ask how to do something</h2>
-    <p class="hint">Say what you want to do and get the command for it.<% if (!signedIn) { %> <a href="/login?next=/help">Sign in</a> and Pepe answers in his own words too.<% } %></p>
+    <h2 id="askT">🤔 <%- t('help.ask.heading') %></h2>
+    <p class="hint"><%- t('help.ask.hint') %><% if (!signedIn) { %> <%- t('help.ask.signin', { link: '<a href="/login?next=/help">' + t('help.ask.signin_link') + '</a>' }) %><% } %></p>
     <form id="askForm" role="search" autocomplete="off">
-      <label class="sr" for="askQ">What do you want to do?</label>
-      <input id="askQ" name="q" type="text" maxlength="200" placeholder="e.g. how do I bet on a market" value="<%= q %>">
-      <button type="submit">Ask</button>
+      <label class="sr" for="askQ"><%- t('help.ask.label') %></label>
+      <input id="askQ" name="q" type="text" maxlength="200" placeholder="<%- t('help.ask.placeholder') %>" value="<%= q %>">
+      <button type="submit"><%- t('help.ask.button') %></button>
     </form>
-    <p class="eg">Try: <button type="button" data-ask="how do I bet on a market">bet on a market</button> ·
-      <button type="button" data-ask="send PAT to a friend">send PAT to a friend</button> ·
-      <button type="button" data-ask="save a picture of someone's cam">save someone's cam</button> ·
-      <button type="button" data-ask="play a song">play a song</button></p>
+    <p class="eg"><%- t('help.ask.try') %> <button type="button" data-ask="<%- t('help.ask.eg1_q') %>"><%- t('help.ask.eg1') %></button> ·
+      <button type="button" data-ask="<%- t('help.ask.eg2_q') %>"><%- t('help.ask.eg2') %></button> ·
+      <button type="button" data-ask="<%- t('help.ask.eg3_q') %>"><%- t('help.ask.eg3') %></button> ·
+      <button type="button" data-ask="<%- t('help.ask.eg4_q') %>"><%- t('help.ask.eg4') %></button></p>
     <div class="ans" id="askOut" aria-live="polite" hidden>
       <div class="pepe" id="askPepe" hidden></div>
       <ul class="hits" id="askHits"></ul>
     </div>
   </section>
 
-  <nav class="bar" aria-label="Filter and contents">
+  <nav class="bar" aria-label="<%- t('help.bar.aria') %>">
     <div class="row">
-      <label class="sr" for="flt">Filter commands</label>
-      <input id="flt" type="search" placeholder="Filter <%= M.count %> commands…" autocomplete="off">
-      <label class="sr" for="role">Who can use it</label>
+      <label class="sr" for="flt"><%- t('help.bar.filter_label') %></label>
+      <input id="flt" type="search" placeholder="<%- t('help.bar.filter_ph', { n: M.count }) %>" autocomplete="off">
+      <label class="sr" for="role"><%- t('help.bar.role_label') %></label>
       <select id="role">
-        <option value="">All roles</option>
-        <option value="everyone">Only what anyone can use</option>
-        <option value="mod">Mods</option>
-        <option value="owner">Pad owners</option>
-        <option value="admin">Admins</option>
+        <option value=""><%- t('help.bar.all_roles') %></option>
+        <option value="everyone"><%- t('help.bar.everyone') %></option>
+        <option value="mod"><%- t('help.role.mod') %></option>
+        <option value="owner"><%- t('help.role.owner') %></option>
+        <option value="admin"><%- t('help.role.admin') %></option>
       </select>
       <span class="n" id="fltN" aria-live="polite"></span>
     </div>
@@ -150,45 +149,44 @@
 
   <% M.cats.forEach((c) => { %>
   <section class="cat" id="cat-<%= c.id %>" aria-labelledby="h-<%= c.id %>">
-    <div class="kicker"><%= c.entries.length %> COMMAND<%= c.entries.length === 1 ? '' : 'S' %></div>
+    <div class="kicker"><%- t('help.cat.count', { count: c.entries.length }) %></div>
     <h2 class="ch" id="h-<%= c.id %>"><%= c.icon %> <%= c.label %></h2>
     <% if (c.blurb) { %><p class="lead"><%= c.blurb %></p><% } %>
     <div class="grid">
       <% c.entries.forEach((e) => { const more = e.details && e.details.trim() !== e.summary.trim(); %>
       <article class="card" id="cmd-<%= e.id %>" data-role="<%= e.role %>" data-cmds="<%= [].concat(e.commands, e.aliases || []).join(' ') %>">
         <% e.syntax.forEach((s) => { %>
-        <div class="syn"><code><%= s %></code><button type="button" class="cp" data-copy="<%= copyText(s) %>" aria-label="Copy <%= copyText(s).trim() %>">Copy</button></div>
+        <div class="syn"><code><%= s %></code><button type="button" class="cp" data-copy="<%= copyText(s) %>" aria-label="<%- t('help.card.copy_aria', { cmd: copyText(s).trim() }) %>"><%- t('help.card.copy') %></button></div>
         <% }) %>
         <div class="bdg">
-          <% if (e.role !== 'everyone') { %><span class="b <%= e.role %>"><%= ROLE_LABEL[e.role] || e.role %></span><% } %>
+          <% if (e.role !== 'everyone') { %><span class="b <%= e.role %>"><%- ROLE_LABEL[e.role] || t.esc(e.role) %></span><% } %>
           <% if (e.cost) { %><span class="b cost"><%= fmt(e.cost) %> PAT</span><% } %>
-          <% if (e.gates && e.gates.length) { %><span class="b gate" title="A room can switch this off: <%= e.gates.map((g) => M.gates[g] || g).join(', ') %>">room can switch off</span><% } %>
-          <% if (e.webchat) { %><span class="b web" title="Also works typed into a pad page's chat on publicaccess.tv">works on the website</span><% } %>
+          <% if (e.gates && e.gates.length) { %><span class="b gate" title="<%- t('help.card.gate_title', { gates: e.gates.map((g) => M.gates[g] || g).join(', ') }) %>"><%- t('help.card.gate') %></span><% } %>
+          <% if (e.webchat) { %><span class="b web" title="<%- t('help.card.web_title') %>"><%- t('help.card.web') %></span><% } %>
         </div>
         <p class="s"><%- md(e.summary) %></p>
-        <% if (e.aliases && e.aliases.length) { %><div class="al">Also: <%= e.aliases.join(' · ') %></div><% } %>
+        <% if (e.aliases && e.aliases.length) { %><div class="al"><%- t('help.card.also', { list: e.aliases.join(' · ') }) %></div><% } %>
         <% if (e.examples && e.examples.length) { %>
-        <div class="ex"><span>e.g.</span><% e.examples.forEach((x) => { %><button type="button" class="cpx" data-copy="<%= x %>" title="Copy"><code><%= x %></code></button><% }) %></div>
+        <div class="ex"><span><%- t('help.card.eg') %></span><% e.examples.forEach((x) => { %><button type="button" class="cpx" data-copy="<%= x %>" title="<%- t('help.card.copy') %>"><code><%= x %></code></button><% }) %></div>
         <% } %>
         <% if (e.web) { %><div class="webeq">🌐 <a href="<%= e.web.url %>"<%- /^https:/.test(e.web.url) ? ' rel="noopener"' : '' %>><%= e.web.label %> ›</a></div><% } %>
         <div class="ft">
-          <% if (more) { %><details><summary>More</summary><div class="d"><%- md(e.details) %></div></details><% } else { %><span></span><% } %>
-          <a class="lnk" href="#cmd-<%= e.id %>" aria-label="Link to <%= e.syntax[0] %>">#</a>
+          <% if (more) { %><details><summary><%- t('help.card.more') %></summary><div class="d"><%- md(e.details) %></div></details><% } else { %><span></span><% } %>
+          <a class="lnk" href="#cmd-<%= e.id %>" aria-label="<%- t('help.card.link_aria', { cmd: e.syntax[0] }) %>">#</a>
         </div>
       </article>
       <% }) %>
     </div>
-    <div class="top"><a href="#top">↑ top</a></div>
+    <div class="top"><a href="#top"><%- t('help.top') %></a></div>
   </section>
   <% }) %>
-  <p class="none" id="noneMsg" hidden>No command matches that. Try fewer words, or ask above.</p>
+  <p class="none" id="noneMsg" hidden><%- t('help.none') %></p>
 
   <p class="foot">
-    <% if (M.version) { %>Pepe <%= M.version %><% if (asOf) { %> · updated <%= asOf %><% } %> · <% } %>
-    Prices shown are the defaults; a room's owner or the admins can change some. Commands marked
-    <span class="b gate">room can switch off</span> may be off in a particular room.<br>
-    <a href="https://pepe.publicaccess.tv/patchnotes" rel="noopener">Patch notes</a> · <a href="/economy">How PAT works</a> ·
-    <a href="/gtf">Grand Theft Frogger</a> · <a href="https://pepe.publicaccess.tv/turfwars" rel="noopener">Turf Wars guide</a>
+    <% if (M.version) { %>Pepe <%= M.version %><% if (asOf) { %> · <%- t('help.foot.updated', { date: asOf }) %><% } %> · <% } %>
+    <%- t('help.foot.prices', { gate: '<span class="b gate">' + t('help.card.gate') + '</span>' }) %><br>
+    <a href="https://pepe.publicaccess.tv/patchnotes" rel="noopener"><%- t('help.foot.patchnotes') %></a> · <a href="/economy"><%- t('help.foot.economy') %></a> ·
+    <a href="/gtf">Grand Theft Frogger</a> · <a href="https://pepe.publicaccess.tv/turfwars" rel="noopener"><%- t('help.foot.turfwars') %></a>
   </p>
 </div>
 <script type="application/json" id="helpIdx"><%- JSON.stringify(M.index).replace(/</g, '\\u003c') %></script>

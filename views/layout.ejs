@@ -1,6 +1,7 @@
 <!-- views/layout.ejs -->
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="<%= t.lang %>"<%- t.dir === 'rtl' ? ' dir="rtl"' : '' %>>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,58 +34,67 @@
     <link rel="stylesheet" href="/public/css/styles.css?v=5">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css?family=Ubuntu" rel="stylesheet">
+    <%# 1.99jo: page scripts translate with __t(key, englishDefault, vars), key = js.<area>.<name> - PATV_I18N holds the page language's
+        "js.*" strings (nothing for English: the defaults are the English). Plain text: put it in textContent, or escape it. %>
+    <% if (t.lang !== 'en') { %><script>window.PATV_I18N = <%- locals.i18nClient ? i18nClient(['js.'].concat(locals.i18nJs || [])) : '{"lang":"en","dir":"ltr","s":{}}' %>;</script><% } %>
+    <script>window.__t = function (k, d, v) { var I = window.PATV_I18N, s = I && I.s ? I.s[k] : null; if (s == null || s === '') s = d;
+        if (s && typeof s === 'object') { var n = v && v.count != null ? +v.count : NaN, c = 'other'; try { if (!isNaN(n)) c = new Intl.PluralRules(I ? I.lang : 'en').select(n); } catch (e) {} s = s[c] != null ? s[c] : s.other; }
+        return String(s == null ? k : s).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? String(v[n]) : m; }); };</script>
 </head>
 <body>
     <header>
         <nav class="navbar">
             <%
               const wheelHref = (typeof user == 'undefined' || !user) ? '/login' : '/u/' + user + '/wheel';
+              // 1.99jo: labels come from locales/<lang>.json (HTML-safe text, so no escaping here)
               const main = [
-                ['/', '📺', 'Watch'],
-                ['/p', '📡', 'Pads'],
-                [wheelHref, '<img src="/public/img/star.gif" height="16" alt="">', 'Wheel'],
-                ['/feed', '📝', 'Feed'],
-                ['/markets', '🔮', 'Markets'],
-                ['/wagers', '🤝', 'Wagers'],
-                ['/gtf', '🔫', 'Grand Theft Frogger'],
-                ['/rankings', '🏆', 'Rankings'],
+                ['/', '📺', t('nav.watch')],
+                ['/p', '📡', t('nav.pads')],
+                [wheelHref, '<img src="/public/img/star.gif" height="16" alt="">', t('nav.wheel')],
+                ['/feed', '📝', t('nav.feed')],
+                ['/markets', '🔮', t('nav.markets')],
+                ['/wagers', '🤝', t('nav.wagers')],
+                ['/gtf', '🔫', t('nav.gtf')],
+                ['/rankings', '🏆', t('nav.rankings')],
               ];
               const more = [
-                ['/wallet', '👛', 'Wallet & stashes'],
-                ['/staking', '🏦', 'Staking & vaults'],
-                ['/cosmetics', '🎨', 'Cosmetics'],
-                ['/premium', '📺', 'Prime Time & Season Pass'],
-                ['/lotto', '🎟️', 'Lotto'],
-                ['/polls', '🗳️', 'Polls'],
-                ['/bounties', '🎯', 'Bounties'],
-                ['/economy', '📘', 'How PAT works'],
-                ['/about', '🐸', 'About PATV'],
-                ['/poker', '🃏', "Texas Hold'em"],
-                ['/blackjack', '🂡', 'Blackjack'],
-                ['/shop', '🏪', 'Prize shop'],
-                ['/achievements', '🏅', 'Achievements'],
-                ['/history', '📜', 'PAT history'],
-                ['/info', '📄', 'Info', 'infoLink'],
+                ['/wallet', '👛', t('nav.wallet')],
+                ['/staking', '🏦', t('nav.staking')],
+                ['/cosmetics', '🎨', t('nav.cosmetics')],
+                ['/premium', '📺', t('nav.premium')],
+                ['/lotto', '🎟️', t('nav.lotto')],
+                ['/polls', '🗳️', t('nav.polls')],
+                ['/bounties', '🎯', t('nav.bounties')],
+                ['/economy', '📘', t('nav.economy')],
+                ['/about', '🐸', t('nav.about')],
+                ['/poker', '🃏', t('nav.poker')],
+                ['/blackjack', '🂡', t('nav.blackjack')],
+                ['/shop', '🏪', t('nav.shop')],
+                ['/achievements', '🏅', t('nav.achievements')],
+                ['/history', '📜', t('nav.history')],
+                ['/info', '📄', t('nav.info'), 'infoLink'],
                 ['/admin', '🛠️', 'Admin', 'adminLink'],
               ];
+              const _here = typeof ogPath !== 'undefined' && ogPath && ogPath !== '/language' ? ogPath : '';
               const ext = [
-                ['/help', '<img src="/public/img/pepe.png" height="16" alt="">', 'PepeFrog commands'],
+                ['/help', '<img src="/public/img/pepe.png" height="16" alt="">', t('nav.help')],
                 ['https://discord.gg/publicaccess', '<img src="/public/img/discord.png" height="16" alt="">', 'Discord'],
                 ['https://twitch.tv/publicaccess_ttv', '<img src="/public/img/twitch.png" height="16" alt="">', 'Twitch'],
+                ['/language' + (_here ? '?next=' + encodeURIComponent(_here) : ''), '🌐', t('nav.language')],
               ];
               const item = (l, labelled) => '<a href="' + l[0] + '" class="nav-link' + (l[3] ? ' ' + l[3] : '') + '"'
                 + (l[3] === 'adminLink' ? ' hidden' : '') + (l[0].startsWith('http') ? ' rel="noopener"' : '')
-                + ' title="' + l[2].replace(/&/g, '&amp;') + '"><span class="ic">' + l[1] + '</span>'
-                + (labelled ? '<span class="nav-lbl">' + l[2].replace(/&/g, '&amp;') + '</span>' : '') + '</a>';
+                + ' title="' + l[2] + '"><span class="ic">' + l[1] + '</span>'
+                + (labelled ? '<span class="nav-lbl">' + l[2] + '</span>' : '') + '</a>';
             %>
             <div class="navbar-left">
                 <a href="/" id="logo"><span class="logo-full">publicaccess.tv</span><span class="logo-short">PATV</span></a>
                 <div class="nav-main"><%- main.map((l) => item(l, false)).join('') %></div>
                 <details class="nav-more">
-                    <summary>More <span aria-hidden="true">▾</span></summary>
+                    <summary><span class="nav-more-lbl"><%- t('nav.more') %></span> <span aria-hidden="true">▾</span></summary>
                     <div class="nav-pop">
                         <%# 1.99is: search (search.js) - in both menus, so every width has it %>
-                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="Search people, posts, pads" aria-label="Search people, posts and pads" autocomplete="off"><button type="submit" aria-label="Search">🔍</button></form>
+                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search_ph') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"><button type="submit" aria-label="<%- t('nav.search') %>">🔍</button></form>
                         <div class="nav-sep"></div>
                         <%- more.map((l) => item(l, true)).join('') %>
                         <div class="nav-sep"></div>
@@ -94,26 +104,26 @@
             </div>
             <div class="navbar-right">
                 <%# 1.99is: search - a box on wide screens, a 🔍 button on medium ones; narrower, it's in the ☰ / More menus %>
-                <form class="nav-search" action="/search" method="get" role="search"><span class="nav-s-ic" aria-hidden="true">🔍</span><input type="search" name="q" maxlength="100" placeholder="Search" aria-label="Search people, posts and pads" autocomplete="off"></form>
-                <a href="/search" class="nav-sbtn" title="Search people, posts and pads" aria-label="Search"><span aria-hidden="true">🔍</span></a>
+                <form class="nav-search" action="/search" method="get" role="search"><span class="nav-s-ic" aria-hidden="true">🔍</span><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"></form>
+                <a href="/search" class="nav-sbtn" title="<%- t('nav.search_aria') %>" aria-label="<%- t('nav.search') %>"><span aria-hidden="true">🔍</span></a>
                 <%# 1.99ec: "✏️ Post" - the create-post page; on a pad's pages (/p/<pad>/...) it preselects that pad %>
                 <% const _pm = typeof ogPath !== 'undefined' && ogPath ? /^\/p\/([A-Za-z0-9._~%-]+)/.exec(ogPath) : null; %>
-                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="Create a post<%= _pm ? ' in p/' + _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() : '' %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="nav-lbl">Post</span></a>
-                <a href="/stage" class="nav-golive" title="Go live: stream to a pad's stage"><span class="cta-ic" aria-hidden="true">🎥</span><span class="nav-lbl">Go live</span></a>
+                <a href="<%= _pm ? '/p/' + _pm[1] + '/submit' : '/submit' %>" class="nav-post" title="<%- _pm ? t('nav.create_post_in', { pad: _pm[1].replace(/%[0-9A-Fa-f]{2}/g, '').toLowerCase() }) : t('nav.create_post') %>"><span class="cta-ic" aria-hidden="true">✏️</span><span class="nav-lbl"><%- t('nav.post') %></span></a>
+                <a href="/stage" class="nav-golive" title="<%- t('nav.golive_title') %>"><span class="cta-ic" aria-hidden="true">🎥</span><span class="nav-lbl"><%- t('nav.golive') %></span></a>
                 <% if (typeof user == 'undefined' || !user) { %>
-                    <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin">Sign In</a>
+                    <a href="/login<%= (typeof ogPath !== 'undefined' && ogPath && ogPath !== '/' && !/^\/(login|register|forgot-password|reset-password)/.test(ogPath)) ? '?next=' + encodeURIComponent(ogPath) : '' %>" class="nav-signin"><%- t('nav.signin') %></a>
                 <% } else { const _ib = (typeof inboxUnread !== 'undefined' && inboxUnread > 0) ? inboxUnread : 0; const _dm = (typeof dmUnread !== 'undefined' && dmUnread > 0) ? dmUnread : 0; %>
-                    <a href="/messages" id="navDm" class="nav-bell<%= _dm ? ' has' : '' %>" title="Messages<%= _dm ? ' (' + _dm + ' unread)' : '' %>" aria-label="Messages<%= _dm ? ', ' + _dm + ' unread' : '' %>"><span aria-hidden="true">💬</span><% if (_dm) { %><span class="nav-badge"><%= _dm > 99 ? '99+' : _dm %></span><% } %></a>
+                    <a href="/messages" id="navDm" class="nav-bell<%= _dm ? ' has' : '' %>" title="<%- _dm ? t('nav.messages_unread', { n: _dm }) : t('nav.messages') %>" aria-label="<%- _dm ? t('nav.messages_unread_aria', { n: _dm }) : t('nav.messages') %>"><span aria-hidden="true">💬</span><% if (_dm) { %><span class="nav-badge"><%= _dm > 99 ? '99+' : _dm %></span><% } %></a>
                     <%# 1.99cu: both open the one inbox at /messages - 💬 the conversations, 🔔 its pinned Notices item %>
-                    <a href="/messages/notices" id="navBell" class="nav-bell<%= _ib ? ' has' : '' %>" title="Notices<%= _ib ? ' (' + _ib + ' unread)' : '' %>" aria-label="Notices<%= _ib ? ', ' + _ib + ' unread' : '' %>"><span aria-hidden="true">🔔</span><% if (_ib) { %><span class="nav-badge"><%= _ib > 99 ? '99+' : _ib %></span><% } %></a>
+                    <a href="/messages/notices" id="navBell" class="nav-bell<%= _ib ? ' has' : '' %>" title="<%- _ib ? t('nav.notices_unread', { n: _ib }) : t('nav.notices') %>" aria-label="<%- _ib ? t('nav.notices_unread_aria', { n: _ib }) : t('nav.notices') %>"><span aria-hidden="true">🔔</span><% if (_ib) { %><span class="nav-badge"><%= _ib > 99 ? '99+' : _ib %></span><% } %></a>
                     <div class="avatar">
-                        <a href="/u/<%= user %>" title="Your profile"><img id="userAvatar" src="/public/img/coin.png" alt="Your profile"></a>
+                        <a href="/u/<%= user %>" title="<%- t('nav.your_profile') %>"><img id="userAvatar" src="/public/img/coin.png" alt="<%- t('nav.your_profile') %>"></a>
                     </div>
                 <% } %>
                 <details class="nav-burger">
-                    <summary aria-label="Menu">☰</summary>
+                    <summary aria-label="<%- t('nav.menu') %>">☰</summary>
                     <div class="nav-pop">
-                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="Search people, posts, pads" aria-label="Search people, posts and pads" autocomplete="off"><button type="submit" aria-label="Search">🔍</button></form>
+                        <form class="nav-psearch" action="/search" method="get" role="search"><input type="search" name="q" maxlength="100" placeholder="<%- t('nav.search_ph') %>" aria-label="<%- t('nav.search_aria') %>" autocomplete="off"><button type="submit" aria-label="<%- t('nav.search') %>">🔍</button></form>
                         <div class="nav-sep"></div>
                         <%- main.map((l) => item(l, true)).join('') %>
                         <div class="nav-sep"></div>
@@ -163,6 +173,9 @@
             .navbar a.nav-post { border-color: #3c7a46; background: #12301a; color: #c8efcf !important; }
             .navbar a.nav-post:hover, .navbar a.nav-post:focus-visible { border-color: #4caf50; color: #fff !important; }
             /* 1.99ej: icon-only up to 500px (was 420 - signed in, 421-485px still overflowed with the labels); 1.99ek: equal squares */
+            /* 1.99jo: translated labels can be longer than English - they ellipsize instead of widening the bar */
+            .nav-post .nav-lbl, .nav-golive .nav-lbl, .nav-signin, .nav-more-lbl { display: inline-block; max-width: 7.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+            .nav-pop .nav-lbl { overflow-wrap: anywhere; }
             @media (max-width: 500px) { .nav-golive .nav-lbl, .nav-post .nav-lbl { display: none; } .navbar a.nav-post, .navbar a.nav-golive { width: 34px; min-width: 0; padding: 0; } }
             .nav-signin { color: #fff; padding: 6px 10px; border: 1px solid #3a3a42; border-radius: 6px; white-space: nowrap; }
             .navbar .avatar img { margin-left: 0; }
@@ -221,25 +234,34 @@
             .site-foot nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; margin-bottom: 4px; }
             .site-foot a { color: #9a9a9a; text-decoration: none; }
             .site-foot a:hover, .site-foot a:focus-visible { color: #fff; text-decoration: underline; }
+            .site-lang { margin-top: 8px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 12px; }
+            .site-lang select { background: #18181c; color: #ddd; border: 1px solid #3a3a42; border-radius: 6px; padding: 4px 6px; font: 13px Ubuntu, sans-serif; max-width: 220px; }
+            .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
         </style>
         <template id="siteFootTpl">
             <footer class="site-foot" role="contentinfo">
-                <nav aria-label="Site policies">
-                    <a href="/terms">Terms of Service</a>
-                    <a href="/privacy">Privacy Policy</a>
-                    <a href="/guidelines">Padiquette</a>
-                    <a href="/terms#reporting">Report abuse &amp; copyright</a>
-                    <a href="/about">About PATV</a>
-                    <a href="/economy">How PAT works</a>
+                <nav aria-label="<%- t('foot.policies_aria') %>">
+                    <a href="/terms"><%- t('foot.terms') %></a>
+                    <a href="/privacy"><%- t('foot.privacy') %></a>
+                    <a href="/guidelines"><%- t('foot.guidelines') %></a>
+                    <a href="/terms#reporting"><%- t('foot.report') %></a>
+                    <a href="/about"><%- t('nav.about') %></a>
+                    <a href="/economy"><%- t('nav.economy') %></a>
                 </nav>
                 <%# 1.99dw: the homepage's old link row lives here now, on every page %>
-                <nav aria-label="More from PATV">
-                    <a href="/help">Pepe's commands</a>
+                <nav aria-label="<%- t('foot.more_aria') %>">
+                    <a href="/help"><%- t('foot.help') %></a>
                     <a href="https://discord.gg/publicaccess" rel="noopener">Discord</a>
-                    <a href="/achievements">Achievements</a>
-                    <a href="/shop">Prize shop</a>
+                    <a href="/achievements"><%- t('nav.achievements') %></a>
+                    <a href="/shop"><%- t('nav.shop') %></a>
                 </nav>
-                <div>publicaccess.tv · PAT is a points system with no cash value · 18+</div>
+                <div><%- t('foot.tagline') %></div>
+                <%# 1.99jo: the language switcher (i18n.js); the select needs JS, the link always works %>
+                <div class="site-lang"><label><span aria-hidden="true">🌐</span> <span class="sr-only"><%- t('foot.language') %></span>
+                    <select aria-label="<%- t('foot.language') %>" onchange="location.href='/lang/' + this.value + '?next=' + encodeURIComponent(location.pathname + location.search)">
+                        <% for (const L of (locals.i18nLangs || [{ code: 'en', name: 'English' }])) { %><option value="<%= L.code %>"<%= L.code === t.lang ? ' selected' : '' %>><%= L.name %></option><% } %>
+                    </select></label>
+                    <a href="/language<%= _here ? '?next=' + encodeURIComponent(_here) : '' %>"><%- t('foot.all_languages') %></a></div>
             </footer>
         </template>
         <script>
@@ -264,12 +286,12 @@
         </script>
         <% if (typeof staleNotice !== 'undefined' && staleNotice) { %>
         <div class="stale-banner" role="status">
-            <strong>Welcome back - your account is staying.</strong>
-            It hadn't been used in a while, so it was due to be archived on <%= staleNotice.apply_on %>
-            <% if (staleNotice.balance > 0) { %>with its <%= Number(staleNotice.balance).toLocaleString('en-US') %> PAT going back to the Federal Reserve<% } %>.
-            You're active again, so nothing happens - there's nothing you need to do.
-            <a href="/messages/notices">Notices</a>
-            <button type="button" aria-label="Dismiss" onclick="this.parentNode.remove()">×</button>
+            <strong><%- t('stale.title') %></strong>
+            <%- t('stale.due', { date: staleNotice.apply_on }) %>
+            <% if (staleNotice.balance > 0) { %><%- t('stale.balance', { amount: t.num(Number(staleNotice.balance)) }) %><% } %>.
+            <%- t('stale.active') %>
+            <a href="/messages/notices"><%- t('nav.notices') %></a>
+            <button type="button" aria-label="<%- t('common.dismiss') %>" onclick="this.parentNode.remove()">×</button>
         </div>
         <style>
             .stale-banner { margin: 10px 20px 0; padding: 10px 40px 10px 14px; border-radius: 8px; background: #1f2b22; border: 1px solid #3CC47C;

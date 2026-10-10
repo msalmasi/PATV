@@ -1,3 +1,4 @@
+var _tUA = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
 document.getElementById('uploadForm').addEventListener('submit', function(event) {
     event.preventDefault();
     const formData = new FormData();
@@ -17,7 +18,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(event)
         console.log(message);
         if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
         document.getElementById('uploadStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-        document.getElementById('uploadStatus').textContent = 'Avatar edited successfully.'; // Display error message
+        document.getElementById('uploadStatus').textContent = _tUA('js.profile.avatar_edited', 'Avatar edited successfully.'); // Display error message
         document.getElementById('uploadStatus').style.visibility = 'visible'; // Make the status message visible
         setTimeout(() => {
             document.getElementById('uploadStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
@@ -26,7 +27,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(event)
     })
     .catch(error => {
         console.error('Error making the POST request:', error);
-        document.getElementById('uploadStatus').textContent = 'Class change failed. Check the username.'; // Display error message
+        document.getElementById('uploadStatus').textContent = _tUA('js.profile.avatar_upload_failed', 'Avatar upload failed.'); // Display error message
         document.getElementById('uploadStatus').style.visibility = 'visible'; // Make the status message visible
         setTimeout(() => {
             document.getElementById('uploadStatus').style.visibility = 'hidden'; // Remove the animation element after it completes

@@ -27,6 +27,7 @@
 // composer is ever lost.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   if (window.__patvComposer) return;
   window.__patvComposer = true;
 
@@ -165,10 +166,10 @@
     var n = { image: 0, audio: 0, video: 0 };
     files.forEach(function (f) { if (f.state !== 'failed') n[f.kind]++; });
     var c = (prices.post || 0) + (form.elements.link.value.trim() ? prices.link || 0 : 0) + n.image * (prices.image || 0) + n.audio * (prices.audio || 0) + n.video * (prices.video || 0);
-    el.textContent = c ? 'This post costs ' + c.toLocaleString('en-US') + ' PAT.' : 'This post is free.';
+    el.textContent = c ? _t('js.feed.fc.costs', 'This post costs {n} PAT.', { n: c.toLocaleString('en-US') }) : _t('js.feed.fc.free', 'This post is free.');
   }
   function busy() { return files.some(function (f) { return f.state === 'uploading' || f.state === 'processing'; }); }
-  function refreshGo() { go.disabled = busy(); go.textContent = busy() ? 'Uploading…' : 'Post'; cost(); saveSoon(); }
+  function refreshGo() { go.disabled = busy(); go.textContent = busy() ? _t('js.feed.fc.uploading', 'Uploading…') : _t('js.feed.fc.post', 'Post'); cost(); saveSoon(); }
 
   // ── draft (localStorage, a convenience: any failure just means no draft) ──
   function picked() { var x = form.querySelector('input[name=community]:checked'); return x ? x.value : ''; }
@@ -207,7 +208,7 @@
     cost();
     if (!u || u === pvFor) return;
     pvFor = u;
-    pv.textContent = 'Checking the link…';
+    pv.textContent = _t('js.feed.fc.checking_link', 'Checking the link…');
     api('/api/feed/preview', { url: u }).then(function (d) {
       if (form.elements.link.value.trim() !== u) return;
       var p = d.preview;
@@ -217,7 +218,7 @@
       var t = document.createElement('span'); t.className = 't';
       var bb = document.createElement('b'); bb.textContent = p.title || p.domain; t.appendChild(bb);
       if (p.description) { var dd = document.createElement('span'); dd.className = 'd'; dd.textContent = p.description; t.appendChild(dd); }
-      var dm = document.createElement('span'); dm.className = 'dom'; dm.textContent = '🔗 ' + p.domain + (p.embed ? ' · ' + p.embed + ' (plays in the post)' : ''); t.appendChild(dm);
+      var dm = document.createElement('span'); dm.className = 'dom'; dm.textContent = '🔗 ' + p.domain + (p.embed ? ' · ' + _t('js.feed.fc.plays_in_post', '{what} (plays in the post)', { what: p.embed }) : ''); t.appendChild(dm);
       a.appendChild(t); pv.appendChild(a);
     }).catch(function (e) { if (form.elements.link.value.trim() === u) pv.textContent = '⚠️ ' + e.message; });
   }
@@ -229,10 +230,10 @@
     var th = document.createElement('span'); th.className = 'th'; th.textContent = f.kind === 'image' ? '🖼' : f.kind === 'audio' ? '🔊' : '🎬';
     var mid = document.createElement('div');
     var nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = f.name;
-    var st = document.createElement('div'); st.className = 'st'; st.textContent = 'Starting…';
+    var st = document.createElement('div'); st.className = 'st'; st.textContent = _t('js.feed.fc.starting', 'Starting…');
     var bar = document.createElement('div'); bar.className = 'bar'; var bi = document.createElement('i'); bar.appendChild(bi);
     mid.appendChild(nm); mid.appendChild(st); mid.appendChild(bar);
-    var x = document.createElement('button'); x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', 'Remove ' + f.name);
+    var x = document.createElement('button'); x.type = 'button'; x.textContent = '✕'; x.setAttribute('aria-label', _t('js.feed.fc.remove_file', 'Remove {name}', { name: f.name }));
     x.addEventListener('click', function () {
       f.cancel = true;
       if (f.id) api('/api/feed/uploads/' + f.id + '/discard', {}).catch(function () {});
@@ -247,7 +248,7 @@
   function ready(f, att) {
     f.state = 'ready'; f.restoring = false;
     f.el.bi.style.width = '100%';
-    say(f, (f.kind === 'image' ? 'Ready' : 'Ready · ' + (att.secs ? Math.round(att.secs) + 's' : '')) + ' ✔' + (f.ai ? ' · ✨ AI-generated' : ''));
+    say(f, (f.kind === 'image' ? _t('js.feed.fc.ready', 'Ready') : _t('js.feed.fc.ready', 'Ready') + ' · ' + (att.secs ? Math.round(att.secs) + 's' : '')) + ' ✔' + (f.ai ? ' · ✨ ' + _t('js.feed.fc.ai', 'AI-generated') : ''));
     if (att.url && (f.kind === 'image' || f.kind === 'video')) {
       f.url = att.url;
       f.el.th.style.backgroundImage = 'url("' + att.url.replace(/["\\]/g, '') + '")'; f.el.th.textContent = '';
@@ -270,21 +271,21 @@
           .then(function (j) {
             off = j.received;
             f.el.bi.style.width = Math.round(off / file.size * 100) + '%';
-            say(f, 'Uploading ' + Math.round(off / file.size * 100) + '%');
+            say(f, _t('js.feed.fc.uploading_pct', 'Uploading {n}%', { n: Math.round(off / file.size * 100) }));
             return next();
           });
       }
       return next();
     }).then(function () {
-      f.state = 'processing'; say(f, f.kind === 'image' ? 'Processing…' : 'Converting (this can take a minute)…'); refreshGo();
+      f.state = 'processing'; say(f, f.kind === 'image' ? _t('js.feed.fc.processing', 'Processing…') : _t('js.feed.fc.converting', 'Converting (this can take a minute)…')); refreshGo();
       return new Promise(function (resolve, reject) {
         var tries = 0;
         (function poll() {
           if (f.cancel) return reject(new Error('cancelled'));
           fetch('/api/feed/uploads/' + f.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
             if (j.state === 'ready') return resolve(j.attachment);
-            if (j.state === 'failed' || j.state === 'deleted' || !j.ok) return reject(new Error(j.error || 'That file couldn\'t be processed.'));
-            if (++tries > 400) return reject(new Error('Processing took too long.'));
+            if (j.state === 'failed' || j.state === 'deleted' || !j.ok) return reject(new Error(j.error || _t('js.feed.fc.not_processed', 'That file couldn\'t be processed.')));
+            if (++tries > 400) return reject(new Error(_t('js.feed.fc.too_long', 'Processing took too long.')));
             setTimeout(poll, tries < 10 ? 800 : 2000);
           }).catch(function () { setTimeout(poll, 3000); });
         })();
@@ -301,10 +302,10 @@
       var kind = inp.getAttribute('data-kind');
       Array.prototype.slice.call(inp.files || []).forEach(function (file) {
         var have = files.filter(function (x) { return x.kind === kind && x.state !== 'failed'; }).length;
-        if (kind === 'image' && have >= maxImages) return setErr('At most ' + maxImages + ' pictures per post.');
-        if (kind !== 'image' && have >= 1) return setErr('One ' + kind + ' file per post.');
+        if (kind === 'image' && have >= maxImages) return setErr(_t('js.feed.fc.max_pics', 'At most {n} pictures per post.', { n: maxImages }));
+        if (kind !== 'image' && have >= 1) return setErr(kind === 'audio' ? _t('js.feed.fc.one_audio', 'One audio file per post.') : _t('js.feed.fc.one_video_file', 'One video file per post.'));
         var capMb = caps[kind] || 10;
-        if (file.size > capMb * 1024 * 1024) return setErr(file.name + ' is over ' + capMb + ' MB.');
+        if (file.size > capMb * 1024 * 1024) return setErr(_t('js.feed.fc.too_big', '{name} is over {n} MB.', { name: file.name, n: capMb }));
         var f = { kind: kind, name: file.name, state: 'new' };
         files.push(f); row(f); upload(f, file);
       });
@@ -323,7 +324,7 @@
     var gErr = document.getElementById('fcGenErr');
     var promptEl = form.elements.genPrompt;
     var cards = {};
-    var PH = { image: 'Describe the picture… e.g. a frog DJ in a neon nightclub, synthwave style', video: 'Describe the clip… e.g. a frog surfing a huge wave at sunset, slow motion' };
+    var PH = { image: _t('js.feed.fc.ph_image', 'Describe the picture… e.g. a frog DJ in a neon nightclub, synthwave style'), video: _t('js.feed.fc.ph_video', 'Describe the clip… e.g. a frog surfing a huge wave at sunset, slow motion') };
     function kind() { var x = form.querySelector('input[name=genKind]:checked'); return x ? x.value : 'image'; }
     // 1.99dn: the reference picture (null | {id, url, name, state, upload: true for one uploaded just for this})
     // 1.99dr: or a cam snapshot {cam: true, id: claim id, url: data URL, name, room: pad id, state: 'ready'}
@@ -334,14 +335,14 @@
     function refPrice() { var p = (cfg.refPrices || {})[picked()]; if (p == null) p = cfg.refGlobal; return Number(p) || 0; }
     function baseOf(k) { var p = (cfg.prices || {})[picked()] || cfg.global || {}; return Number(p[k]) || 0; }
     function priceOf(k) { return baseOf(k) + (ref ? refPrice() : 0); }
-    function fmtP(n) { return n ? Number(n).toLocaleString('en-US') + ' PAT' : 'free'; }
-    function what(k) { return k === 'video' ? 'video' : 'picture'; }
+    function fmtP(n) { return n ? Number(n).toLocaleString('en-US') + ' PAT' : _t('js.feed.fc.p_free', 'free'); }
+    function what(k) { return k === 'video' ? _t('js.feed.fc.w_video', 'video') : _t('js.feed.fc.w_picture', 'picture'); }
     function setGErr(t) { gErr.textContent = t || ''; }
     function showPrice() {
       var k = kind();
-      priceEl.textContent = (k === 'video' ? '🎬 A video' : '🖼 A picture') + ' costs ' + fmtP(priceOf(k)) + (ref ? ' (with the reference picture)' : '') + (picked() ? '' : ' (the price of the pad you pick)') + ' · ' + ((cfg.eta || {})[k] || '');
-      promptEl.placeholder = ref ? (k === 'video' ? 'Describe how to animate the picture… e.g. they wave and smile, slow zoom' : 'Describe what to make from the picture… e.g. as a pirate captain, oil painting') : PH[k];
-      if (refPriceEl) refPriceEl.textContent = fmtP(refPrice()) === 'free' ? 'nothing' : fmtP(refPrice());
+      priceEl.textContent = (k === 'video' ? _t('js.feed.fc.video_costs', '🎬 A video costs {p}', { p: fmtP(priceOf(k)) }) : _t('js.feed.fc.picture_costs', '🖼 A picture costs {p}', { p: fmtP(priceOf(k)) })) + (ref ? ' ' + _t('js.feed.fc.with_ref', '(with the reference picture)') : '') + (picked() ? '' : ' ' + _t('js.feed.fc.pad_price', '(the price of the pad you pick)')) + ' · ' + ((cfg.eta || {})[k] || '');
+      promptEl.placeholder = ref ? (k === 'video' ? _t('js.feed.fc.ph_animate', 'Describe how to animate the picture… e.g. they wave and smile, slow zoom') : _t('js.feed.fc.ph_from_pic', 'Describe what to make from the picture… e.g. as a pirate captain, oil painting')) : PH[k];
+      if (refPriceEl) refPriceEl.textContent = refPrice() ? fmtP(refPrice()) : _t('js.feed.fc.nothing', 'nothing');
     }
     function idem() { return 'g' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36); }
     function el(tag, cls, text) { var x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
@@ -358,13 +359,13 @@
     function start(k, prompt, again) {
       setGErr('');
       prompt = String(prompt || '').trim();
-      if (prompt.length < 3) { setGErr('Describe what to make.'); promptEl.focus(); return; }
-      if (ref && ref.state === 'failed') { setGErr('The reference picture failed - remove it or pick another.'); return; }
-      if (ref && ref.state !== 'ready') { setGErr('Wait for the reference picture to finish uploading.'); return; }
+      if (prompt.length < 3) { setGErr(_t('js.feed.fc.describe', 'Describe what to make.')); promptEl.focus(); return; }
+      if (ref && ref.state === 'failed') { setGErr(_t('js.feed.fc.ref_failed', 'The reference picture failed - remove it or pick another.')); return; }
+      if (ref && ref.state !== 'ready') { setGErr(_t('js.feed.fc.ref_wait', 'Wait for the reference picture to finish uploading.')); return; }
       var price = priceOf(k);
-      if (again && !window.confirm('Make a new ' + what(k) + ' from the same prompt? It costs ' + fmtP(price) + ' again - the one you have now is not refunded.')) return;
+      if (again && !window.confirm(k === 'video' ? _t('js.feed.fc.again_video', 'Make a new video from the same prompt? It costs {p} again - the one you have now is not refunded.', { p: fmtP(price) }) : _t('js.feed.fc.again_picture', 'Make a new picture from the same prompt? It costs {p} again - the one you have now is not refunded.', { p: fmtP(price) }))) return;
       goBtn.disabled = true;
-      if (ref && ref.cam && ref.room !== picked()) { setGErr('That cam snapshot is from another pad\'s room - pick a cam here.'); return; }
+      if (ref && ref.cam && ref.room !== picked()) { setGErr(_t('js.feed.fc.cam_other_room', 'That cam snapshot is from another pad\'s room - pick a cam here.')); return; }
       api('/api/feed/aigen', { kind: k, prompt: prompt, pad: picked() || null, price: price, ref: ref && !ref.cam ? ref.id : null,
                                camref: ref && ref.cam ? ref.id : null, back: location.pathname + location.search, idem: idem() })
         .then(function (d) { if (!again) promptEl.value = ''; card(d.job); poll(d.job.id); })
@@ -383,9 +384,9 @@
       refCur.innerHTML = '';
       var li = el('li'), th = el('span', 'th'), mid = el('div'), x = el('button', null, '✕');
       if (r.url) { th.style.backgroundImage = 'url("' + String(r.url).replace(/["\\]/g, '') + '")'; } else th.textContent = '🖼';
-      mid.appendChild(el('div', 'nm', r.name || 'Picture'));
-      mid.appendChild(el('div', 'st', r.cam ? '📷 Cam snapshot ✔ · used only for this generation' : 'Reference picture ✔'));
-      x.type = 'button'; x.setAttribute('aria-label', 'Don\'t use this picture as the reference');
+      mid.appendChild(el('div', 'nm', r.name || _t('js.feed.fc.picture', 'Picture')));
+      mid.appendChild(el('div', 'st', r.cam ? _t('js.feed.fc.cam_ok', '📷 Cam snapshot ✔ · used only for this generation') : _t('js.feed.fc.ref_ok', 'Reference picture ✔')));
+      x.type = 'button'; x.setAttribute('aria-label', _t('js.feed.fc.ref_unuse', 'Don\'t use this picture as the reference'));
       x.addEventListener('click', function () { clearRef(); });
       li.appendChild(th); li.appendChild(mid); li.appendChild(x); refCur.appendChild(li);
     }
@@ -398,9 +399,9 @@
       setGErr('');
       var pics = files.filter(function (f) { return f.kind === 'image' && f.state === 'ready' && f.id; });
       refList.innerHTML = '';
-      if (!pics.length) { refList.appendChild(el('p', 'mut', 'No pictures in this draft yet - add one with 🖼 Picture, or upload one here.')); }
+      if (!pics.length) { refList.appendChild(el('p', 'mut', _t('js.feed.fc.no_draft_pics', 'No pictures in this draft yet - add one with 🖼 Picture, or upload one here.'))); }
       pics.forEach(function (f) {
-        var b = el('button', 'fc-gen-ref-it'); b.type = 'button'; b.title = f.name; b.setAttribute('aria-label', 'Use ' + f.name + ' as the reference');
+        var b = el('button', 'fc-gen-ref-it'); b.type = 'button'; b.title = f.name; b.setAttribute('aria-label', _t('js.feed.fc.use_as_ref', 'Use {name} as the reference', { name: f.name }));
         if (f.url) b.style.backgroundImage = 'url("' + String(f.url).replace(/["\\]/g, '') + '")'; else b.textContent = '🖼';
         b.addEventListener('click', function () { pickDraft(f); });
         refList.appendChild(b);
@@ -434,11 +435,11 @@
       camBtn.classList.toggle('hide', !camPad());
       if (!camPad()) { camsEl.classList.add('hide'); camBtn.setAttribute('aria-expanded', 'false'); }
       // a cam snapshot belongs to its pad's room: switching pads drops it
-      if (ref && ref.cam && ref.room !== picked()) { clearRef(); setGErr('The cam snapshot was from another pad - pick a cam in this one.'); }
+      if (ref && ref.cam && ref.room !== picked()) { clearRef(); setGErr(_t('js.feed.fc.cam_switched', 'The cam snapshot was from another pad - pick a cam in this one.')); }
     }
     function useCam(c) {
       clearRef();
-      ref = { cam: true, id: c.id, url: c.img, name: (c.display || 'Someone') + '\'s cam', room: c.room, state: 'ready' };
+      ref = { cam: true, id: c.id, url: c.img, name: c.display ? _t('js.feed.fc.cam_of', '{name}\'s cam', { name: c.display }) : _t('js.feed.fc.cam_someone', 'Someone\'s cam'), room: c.room, state: 'ready' };
       refRow(ref); showPrice();
       if (camsEl) { camsEl.classList.add('hide'); camsEl.innerHTML = ''; }
       if (camBtn) camBtn.setAttribute('aria-expanded', 'false');
@@ -447,12 +448,12 @@
     function camSnap(slug, who, seq) {
       // Pepe takes a fresh snapshot through the bridge (the room's cam switch, rate limits and rules apply)
       clearTimeout(camTimer);
-      camSay('Asking Pepe for a snapshot of ' + who.display + '\'s cam…');
+      camSay(_t('js.feed.fc.asking', 'Asking Pepe for a snapshot of {name}\'s cam…', { name: who.display }));
       fetch('/api/rooms/' + encodeURIComponent(slug) + '/snap', { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login: who.login }) })
         .then(function (r) { return r.json(); })
-        .then(function (d) { if (seq !== camSeq) return; if (!d.ok) return camSay(d.error || 'Not right now.'); camPoll(slug, who, seq, 0); })
-        .catch(function () { if (seq === camSeq) camSay('Couldn\'t reach the site.'); });
+        .then(function (d) { if (seq !== camSeq) return; if (!d.ok) return camSay(d.error || _t('js.feed.fc.not_now', 'Not right now.')); camPoll(slug, who, seq, 0); })
+        .catch(function () { if (seq === camSeq) camSay(_t('js.feed.fc.unreachable', 'Couldn\'t reach the site.')); });
     }
     function camPoll(slug, who, seq, n) {
       camTimer = setTimeout(function () {
@@ -460,14 +461,14 @@
           .then(function (r) { return r.json(); })
           .then(function (snap) {
             if (seq !== camSeq) return;
-            if (snap.state === 'refused') return camSay((snap.status || 'Pepe couldn\'t get a picture') + '.');
-            if (snap.state !== 'ok') { if (n > 30) return camSay('Pepe didn\'t get a picture in time - try again in a bit.'); return camPoll(slug, who, seq, n + 1); }
-            if (!snap.gen || !snap.img) return camSay('That snapshot can\'t be used.');
+            if (snap.state === 'refused') return camSay((snap.status || _t('js.feed.fc.no_picture', 'Pepe couldn\'t get a picture')) + '.');
+            if (snap.state !== 'ok') { if (n > 30) return camSay(_t('js.feed.fc.snap_timeout', 'Pepe didn\'t get a picture in time - try again in a bit.')); return camPoll(slug, who, seq, n + 1); }
+            if (!snap.gen || !snap.img) return camSay(_t('js.feed.fc.snap_unusable', 'That snapshot can\'t be used.'));
             return api('/api/feed/aigen/camref', { pad: picked(), sid: snap.gen.sid }).then(function (c) {
               if (seq !== camSeq) return;
               useCam({ id: c.id, display: c.display, room: c.room, img: snap.img });
             });
-          }).catch(function (e) { if (seq === camSeq) camSay(e && e.message ? e.message : 'Couldn\'t reach the site.'); });
+          }).catch(function (e) { if (seq === camSeq) camSay(e && e.message ? e.message : _t('js.feed.fc.unreachable', 'Couldn\'t reach the site.')); });
       }, n ? 1500 : 800);
     }
     if (camBtn) camBtn.addEventListener('click', function () {
@@ -476,21 +477,21 @@
       camBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (!open) { camSeq++; clearTimeout(camTimer); return; }
       var seq = ++camSeq;
-      camSay('Checking who\'s on cam…');
+      camSay(_t('js.feed.fc.checking_cams', 'Checking who\'s on cam…'));
       fetch('/api/feed/aigen/cams?pad=' + encodeURIComponent(picked() || ''), { credentials: 'same-origin', cache: 'no-store' })
         .then(function (r) { return r.json(); })
         .then(function (d) {
           if (seq !== camSeq) return;
-          if (!d || !d.ok) return camSay((d && d.error) || 'Not right now.');
-          if (!d.cams || !d.cams.length) return camSay(d.why || 'Nobody is on cam there right now.');
+          if (!d || !d.ok) return camSay((d && d.error) || _t('js.feed.fc.not_now', 'Not right now.'));
+          if (!d.cams || !d.cams.length) return camSay(d.why || _t('js.feed.fc.nobody_cam', 'Nobody is on cam there right now.'));
           camsEl.innerHTML = '';
           d.cams.forEach(function (who) {
             var b = el('button', 'fc-gj-btn fc-gen-cam-it', '📷 ' + who.display); b.type = 'button';
-            b.title = 'Ask Pepe for a fresh snapshot of ' + who.display + '\'s cam';
+            b.title = _t('js.feed.fc.ask_snap', 'Ask Pepe for a fresh snapshot of {name}\'s cam', { name: who.display });
             b.addEventListener('click', function () { camSnap(d.slug, who, ++camSeq); });
             camsEl.appendChild(b);
           });
-        }).catch(function () { if (seq === camSeq) camSay('Couldn\'t reach the site.'); });
+        }).catch(function () { if (seq === camSeq) camSay(_t('js.feed.fc.unreachable', 'Couldn\'t reach the site.')); });
     });
     form.addEventListener('change', function (ev) { if (ev.target.name === 'community') syncCamBtn(); });
     // "✨ Use in Generate" from the pad page's snapshot popover (same page), or handed over from another page
@@ -499,7 +500,7 @@
       if (!isOpen()) setOpen(true);       // 1.99ec: the form may be folded into its bar
       var radio = form.querySelector('input[name=community][value="' + String(c.room || '').replace(/["\\]/g, '') + '"]');
       if (radio && !radio.checked) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
-      if (picked() !== c.room) { gen.classList.remove('hide'); setGErr('You can\'t post in that pad, so its cam can\'t be used here.'); return; }
+      if (picked() !== c.room) { gen.classList.remove('hide'); setGErr(_t('js.feed.fc.cam_cant_post', 'You can\'t post in that pad, so its cam can\'t be used here.')); return; }
       gen.classList.remove('hide');
       useCam(c);
       setGErr('');
@@ -515,10 +516,10 @@
     syncCamBtn();
 
     function statusLine(j) {
-      if (j.status === 'queued') return 'Waiting for Pepe…';
-      if (j.status === 'running') return 'Generating… ' + (j.eta || '') + ' · ' + (j.elapsed || 0) + ' s - you can leave this page: it is kept, and you get a notice when it is done.';
-      if (j.status === 'done') return 'Ready · ' + (j.cost ? fmtP(j.cost) + ' charged' : 'free') + (j.nsfw ? ' · 🔞 Pepe marked it NSFW - a post with it is NSFW' : '');
-      return '⚠️ ' + (j.message || 'It failed') + (j.refunded ? ' · refunded' : (j.cost ? '' : ' · nothing charged'));
+      if (j.status === 'queued') return _t('js.feed.fc.gen_waiting', 'Waiting for Pepe…');
+      if (j.status === 'running') return _t('js.feed.fc.gen_running', 'Generating… {eta} · {s} s - you can leave this page: it is kept, and you get a notice when it is done.', { eta: j.eta || '', s: j.elapsed || 0 });
+      if (j.status === 'done') return _t('js.feed.fc.ready', 'Ready') + ' · ' + (j.cost ? _t('js.feed.fc.charged', '{p} charged', { p: fmtP(j.cost) }) : _t('js.feed.fc.p_free', 'free')) + (j.nsfw ? ' · ' + _t('js.feed.fc.gen_nsfw', '🔞 Pepe marked it NSFW - a post with it is NSFW') : '');
+      return '⚠️ ' + (j.message || _t('js.feed.fc.gen_failed', 'It failed')) + (j.refunded ? ' · ' + _t('js.feed.fc.refunded', 'refunded') : (j.cost ? '' : ' · ' + _t('js.feed.fc.nothing_charged', 'nothing charged')));
     }
     function card(j) {
       if (j.attachment && attached(j.attachment.id)) return;
@@ -534,7 +535,7 @@
           var v = document.createElement('video'); v.src = j.attachment.file; if (j.attachment.poster) v.poster = j.attachment.poster;
           v.controls = true; v.playsInline = true; v.preload = 'metadata'; m.appendChild(v);
         } else {
-          var im = document.createElement('img'); im.src = j.attachment.url; im.alt = 'Generated picture: ' + j.prompt; m.appendChild(im);
+          var im = document.createElement('img'); im.src = j.attachment.url; im.alt = _t('js.feed.fc.gen_alt', 'Generated picture: {prompt}', { prompt: j.prompt }); m.appendChild(im);
         }
         m.appendChild(el('span', 'fp-ai-badge', '✨ AI'));
       } else if (j.status === 'queued' || j.status === 'running') {
@@ -547,10 +548,10 @@
       b.appendChild(el('div', 'fc-gj-st' + (j.status === 'failed' || j.status === 'timeout' ? ' bad' : ''), statusLine(j)));
       var acts = el('div', 'fc-gj-acts');
       if (j.status === 'done' && j.attachment) {
-        acts.appendChild(btn('📎 Attach to post', 'fc-gj-btn pri', function () { attach(j); }));
-        acts.appendChild(btn('↻ Regenerate · ' + fmtP(priceOf(j.kind)), null, function () { start(j.kind, j.prompt, true); }));
-        acts.appendChild(btn('Discard', 'fc-gj-btn ghost', function () {
-          if (!window.confirm('Discard this ' + what(j.kind) + '? ' + (j.cost && !j.refunded ? 'The ' + fmtP(j.cost) + ' is not refunded - it was made.' : ''))) return;
+        acts.appendChild(btn(_t('js.feed.fc.attach', '📎 Attach to post'), 'fc-gj-btn pri', function () { attach(j); }));
+        acts.appendChild(btn(_t('js.feed.fc.regen', '↻ Regenerate · {p}', { p: fmtP(priceOf(j.kind)) }), null, function () { start(j.kind, j.prompt, true); }));
+        acts.appendChild(btn(_t('js.feed.fc.discard', 'Discard'), 'fc-gj-btn ghost', function () {
+          if (!window.confirm((j.kind === 'video' ? _t('js.feed.fc.discard_video', 'Discard this video?') : _t('js.feed.fc.discard_picture', 'Discard this picture?')) + ' ' + (j.cost && !j.refunded ? _t('js.feed.fc.not_refunded', 'The {p} is not refunded - it was made.', { p: fmtP(j.cost) }) : ''))) return;
           api('/api/feed/aigen/' + j.id + '/discard', {}).then(function () { drop(j.id); }).catch(function (e) { setGErr(e.message); });
         }));
         var lab = el('label', 'fc-gj-show ck'); var ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = !j.attachment.hidePrompt;
@@ -558,14 +559,14 @@
           api('/api/feed/attachments/' + j.attachment.id + '/ai-prompt', { show: ck.checked }).then(function () { j.attachment.hidePrompt = !ck.checked; })
             .catch(function (e) { ck.checked = !ck.checked; setGErr(e.message); });
         });
-        lab.appendChild(ck); lab.appendChild(document.createTextNode(' Show the prompt on the post')); acts.appendChild(lab);
+        lab.appendChild(ck); lab.appendChild(document.createTextNode(' ' + _t('js.feed.fc.show_prompt', 'Show the prompt on the post'))); acts.appendChild(lab);
       } else if (j.status === 'queued') {
-        acts.appendChild(btn('Cancel', 'fc-gj-btn ghost', function () {
+        acts.appendChild(btn(_t('js.feed.fc.cancel', 'Cancel'), 'fc-gj-btn ghost', function () {
           api('/api/feed/aigen/' + j.id + '/discard', {}).then(function () { drop(j.id); }).catch(function (e) { setGErr(e.message); });
         }));
       } else if (j.status === 'failed' || j.status === 'timeout') {
-        acts.appendChild(btn('Try again', null, function () { drop(j.id); start(j.kind, j.prompt, false); }));
-        acts.appendChild(btn('Dismiss', 'fc-gj-btn ghost', function () { drop(j.id); }));
+        acts.appendChild(btn(_t('js.feed.fc.try_again', 'Try again'), null, function () { drop(j.id); start(j.kind, j.prompt, false); }));
+        acts.appendChild(btn(_t('js.feed.fc.dismiss', 'Dismiss'), 'fc-gj-btn ghost', function () { drop(j.id); }));
       }
       b.appendChild(acts);
       box.appendChild(m); box.appendChild(b);
@@ -588,8 +589,8 @@
     function attach(j) {
       setErr('');
       var k = j.kind, have = files.filter(function (x) { return x.kind === k && x.state !== 'failed'; }).length;
-      if (k === 'image' && have >= maxImages) return setGErr('At most ' + maxImages + ' pictures per post.');
-      if (k === 'video' && have >= 1) return setGErr('One video per post.');
+      if (k === 'image' && have >= maxImages) return setGErr(_t('js.feed.fc.max_pics', 'At most {n} pictures per post.', { n: maxImages }));
+      if (k === 'video' && have >= 1) return setGErr(_t('js.feed.fc.one_video', 'One video per post.'));
       var f = { kind: k, name: '✨ ' + j.prompt.slice(0, 80), id: j.attachment.id, state: 'processing', ai: true };
       files.push(f); row(f); ready(f, { url: j.attachment.url, secs: j.attachment.secs });
       drop(j.id);
@@ -630,7 +631,7 @@
       cur.appendChild(b); cur.appendChild(t); cur.appendChild(sm);
       comm.removeAttribute('data-empty');
     } else {
-      b.textContent = '?'; t.textContent = 'Choose a pad';
+      b.textContent = '?'; t.textContent = _t('js.feed.fc.choose_pad', 'Choose a pad');
       cur.appendChild(b); cur.appendChild(t);
       comm.setAttribute('data-empty', '');
     }
@@ -679,7 +680,7 @@
     var pending = (Array.isArray(d.files) ? d.files : []).slice(0, 6).filter(function (x) { return x && /^[a-f0-9]{24}$/.test(String(x.id)); });
     pending.forEach(function (x) {
       var f = { kind: x.kind === 'audio' || x.kind === 'video' ? x.kind : 'image', name: String(x.name || 'file').slice(0, 100), id: x.id, state: 'processing', restoring: true, url: x.url || null, ai: !!x.ai };
-      files.push(f); row(f); say(f, 'Checking…');
+      files.push(f); row(f); say(f, _t('js.feed.fc.checking', 'Checking…'));
       fetch('/api/feed/uploads/' + f.id, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
         if (j.ok && j.state === 'ready' && j.attachment) ready(f, j.attachment);
         else { files = files.filter(function (y) { return y !== f; }); f.el.li.remove(); refreshGo(); }
@@ -687,9 +688,9 @@
     });
     restoring = false;
     if (d.link) preview();
-    errEl.textContent = 'Draft restored'; errEl.classList.add('ok');
+    errEl.textContent = _t('js.feed.fc.draft_restored', 'Draft restored'); errEl.classList.add('ok');
     setOpen(true);                         // 1.99ec: a draft opens the folded form (no focus, no scroll)
-    var clr = document.createElement('button'); clr.type = 'button'; clr.className = 'fc-clear'; clr.textContent = 'Discard draft';
+    var clr = document.createElement('button'); clr.type = 'button'; clr.className = 'fc-clear'; clr.textContent = _t('js.feed.fc.discard_draft', 'Discard draft');
     clr.addEventListener('click', function () {
       files.forEach(function (f) { f.cancel = true; if (f.id) api('/api/feed/uploads/' + f.id + '/discard', {}).catch(function () {}); if (f.el) f.el.li.remove(); });
       files = [];
@@ -703,9 +704,9 @@
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
     setErr('');
-    if (busy()) return setErr('Wait for the uploads to finish.');
+    if (busy()) return setErr(_t('js.feed.fc.wait_uploads', 'Wait for the uploads to finish.'));
     var roomsSel = roomsChecked();
-    if (!roomsSel.length) { setErr('Choose a pad to post in.'); if (comm) comm.open = true; return; }
+    if (!roomsSel.length) { setErr(_t('js.feed.fc.choose_pad_to_post', 'Choose a pad to post in.')); if (comm) comm.open = true; return; }
     var announce = Array.prototype.slice.call(form.querySelectorAll('input[name=announce]:checked:not(:disabled)'))
       .map(function (x) { return x.value; }).filter(function (v) { return roomsSel.indexOf(v) >= 0; });
     var body = {
@@ -718,20 +719,20 @@
     };
     // 1.99cc: the Terms tick box (shown until this account accepted the current version)
     var tk = form.elements.acceptTerms;
-    if (tk && !tk.checked) { setErr('Tick the box to accept the Terms of Service first.'); tk.focus(); return; }
+    if (tk && !tk.checked) { setErr(_t('js.feed.fc.tick_terms', 'Tick the box to accept the Terms of Service first.')); tk.focus(); return; }
     if (tk && tk.checked) body.acceptTerms = true;
-    go.disabled = true; go.textContent = 'Posting…';
+    go.disabled = true; go.textContent = _t('js.feed.fc.posting', 'Posting…');
     api('/api/feed/posts', body).catch(function (e) {
       // not accepted yet (a page from before the change): ask once, then post again
       if (e.code !== 'terms' || !window.patvSafety) throw e;
       return window.patvSafety.termsAsk().then(function (yes) {
-        if (!yes) throw new Error('You need to accept the Terms of Service to post.');
+        if (!yes) throw new Error(_t('js.feed.fc.terms_needed', 'You need to accept the Terms of Service to post.'));
         body.acceptTerms = true;
         return api('/api/feed/posts', body);
       });
     }).then(function (d) {
       clearTimeout(saveTimer); clearDraft(); restoring = true;     // posted: the draft is done
-      errEl.textContent = 'Posted ✔'; errEl.classList.add('ok');
+      errEl.textContent = _t('js.feed.fc.posted', 'Posted ✔'); errEl.classList.add('ok');
       // stay on a pad page (the new post shows on top of New); elsewhere open the post
       var u = new URL(location.href);
       // 1.99df: on a profile (the profile feed) - back to its posts (1.99dv: the Posts tab, /u/<username>/posts)
@@ -743,7 +744,7 @@
         var target = u.toString();
         if (target.split('#')[0] === location.href.split('#')[0]) { location.hash = 'feed'; location.reload(); } else location.href = target; }
       else location.href = d.url;
-    }).catch(function (e) { setErr(e.message); go.disabled = false; go.textContent = 'Post'; });
+    }).catch(function (e) { setErr(e.message); go.disabled = false; go.textContent = _t('js.feed.fc.post', 'Post'); });
   });
   refreshGo();
 })();

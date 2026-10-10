@@ -1,6 +1,7 @@
 <%# Buy buttons (.buy-btn with data-product/data-name/data-cost; optional #buyerInput). Posts to /shop as JSON. %>
 <script>
 (function () {
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   // Purchases cost real PAT, so: confirm first, then make the outcome unmistakable —
   // colour-coded, and failures stay up longer than confirmations so they're actually read.
   let timer = null;
@@ -8,7 +9,7 @@
     const el = document.getElementById('shopStatus');
     if (!el) { alert(message); return; }
     el.textContent = message;
-    if (link) { el.appendChild(document.createTextNode(' ')); const a = document.createElement('a'); a.href = link; a.textContent = 'View order ›'; el.appendChild(a); }
+    if (link) { el.appendChild(document.createTextNode(' ')); const a = document.createElement('a'); a.href = link; a.textContent = _t('js.shop.view_order', 'View order ›'); el.appendChild(a); }
     el.style.color = ok ? '#81C784' : '#e57373';
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     clearTimeout(timer);
@@ -19,8 +20,8 @@
       const product = button.dataset.product, name = button.dataset.name, cost = Number(button.dataset.cost);
       const inputEl = document.getElementById('buyerInput');
       const buyerInput = inputEl ? inputEl.value.trim() : '';
-      if (inputEl && inputEl.required && !buyerInput) { show('The seller needs this to deliver it: ' + (inputEl.dataset.prompt || 'fill in the box'), false); inputEl.focus(); return; }
-      if (!confirm('Buy "' + name + '" for ' + cost.toLocaleString() + ' PAT?')) return;
+      if (inputEl && inputEl.required && !buyerInput) { show(_t('js.shop.seller_needs', 'The seller needs this to deliver it: {what}', { what: inputEl.dataset.prompt || _t('js.shop.fill_box', 'fill in the box') }), false); inputEl.focus(); return; }
+      if (!confirm(_t('js.shop.confirm_buy', 'Buy {name} for {cost} PAT?', { name: '"' + name + '"', cost: cost.toLocaleString() }))) return;
       button.disabled = true;
       fetch('/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                        body: JSON.stringify({ product, price: cost, buyer_input: buyerInput }) })
@@ -29,15 +30,15 @@
         .then(({ ok, data }) => {
           const succeeded = ok && data && data.success;
           const listing = succeeded && data.seller;
-          show((data && data.message ? data.message.replace(/ Track it: \S+$/, '') : '') || (succeeded ? 'Purchase complete.' : 'Could not buy that item.'),
+          show((data && data.message ? data.message.replace(/ Track it: \S+$/, '') : '') || (succeeded ? _t('js.shop.purchased_msg', 'Purchase complete.') : _t('js.shop.buy_failed', 'Could not buy that item.')),
                succeeded, succeeded && data.order_id ? '/shop/orders/' + data.order_id : null);
           if (succeeded) {
-            button.textContent = listing ? 'Ordered' : 'Purchased';      // no accidental double-buy
+            button.textContent = listing ? _t('js.shop.ordered', 'Ordered') : _t('js.shop.purchased', 'Purchased');      // no accidental double-buy
             const bal = document.getElementById('shopBalance');
             if (bal && typeof data.balance === 'number') bal.textContent = data.balance.toLocaleString();
             document.querySelectorAll('[data-stock="' + product + '"]').forEach((el) => {
               if (typeof data.remaining_stock !== 'number') return;
-              el.textContent = data.remaining_stock > 0 ? data.remaining_stock.toLocaleString() + ' left' : 'Out of stock';
+              el.textContent = data.remaining_stock > 0 ? _t('js.shop.n_left', '{n} left', { n: data.remaining_stock.toLocaleString() }) : _t('js.shop.out_of_stock', 'Out of stock');
               if (data.remaining_stock <= 0) el.className = 'oos';
             });
             if (inputEl) inputEl.value = '';
@@ -46,7 +47,7 @@
             if (data && data.status === 401) location.href = '/login';
           }
         })
-        .catch(() => { button.disabled = false; show('Could not reach the server — try again.', false); });
+        .catch(() => { button.disabled = false; show(_t('js.shop.no_server', 'Could not reach the server — try again.'), false); });
     });
   });
 })();

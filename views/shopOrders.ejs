@@ -1,40 +1,41 @@
-<%- include('layout', { title: 'My orders', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('shop.my_orders'), user: user }) %>
 <%- include('partials/shop-css') %>
 <div class="sh">
-  <h1>My orders</h1>
-  <p class="sub">Everything you've bought in the shop. <a href="/shop">Back to the shop</a> · <a href="/shop/seller">Seller dashboard</a></p>
+  <h1><%- t('shop.my_orders') %></h1>
+  <p class="sub"><%- t('shop.orders.sub') %> <a href="/shop"><%- t('shop.back') %></a> · <a href="/shop/seller"><%- t('shop.orders.seller_dashboard') %></a></p>
   <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
   <div class="stats">
-    <div class="stat"><span>Total spent</span><b class="price"><%= H.fmt(spent.t) %></b><em><%= H.fmt(spent.n) %> order<%= spent.n === 1 ? '' : 's' %> (refunds excluded)</em></div>
-    <div class="stat"><span>Open orders</span><b><%= H.fmt(open.n) %></b><em><%= H.fmt(open.t) %> PAT in progress</em></div>
-    <div class="stat"><span>Balance</span><b class="price"><%= H.fmt(me.points_balance) %></b><em>PAT</em></div>
+    <div class="stat"><span><%- t('shop.orders.total_spent') %></span><b class="price"><%= H.fmt(spent.t) %></b><em><%- t('shop.orders.n_orders', { count: spent.n, n: H.fmt(spent.n) }) %></em></div>
+    <div class="stat"><span><%- t('shop.orders.open') %></span><b><%= H.fmt(open.n) %></b><em><%- t('shop.orders.in_progress', { n: H.fmt(open.t) }) %></em></div>
+    <div class="stat"><span><%- t('shop.orders.balance') %></span><b class="price"><%= H.fmt(me.points_balance) %></b><em>PAT</em></div>
   </div>
 
-  <h2>Orders</h2>
-  <% if (!orders.length) { %><p class="muted">No orders yet. <a href="/shop">Have a look around</a>.</p><% } %>
+  <h2><%- t('shop.orders.heading') %></h2>
+  <% if (!orders.length) { %><p class="muted"><%- t('shop.orders.none', { link: '<a href="/shop">' + t('shop.orders.look_around') + '</a>' }) %></p><% } %>
   <div class="list">
     <% orders.forEach((o) => { const st = H.status(o.status); const ev = events[o.id] || []; %>
       <div class="item">
         <div class="top"><b><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></b><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
-        <div class="muted"><span class="price"><%= H.fmt(o.price) %> PAT</span> · <%= o.official ? 'PATV Store' : 'from ' + (o.seller_name || '?') %> · <%= H.day(o.created) %></div>
+        <div class="muted"><span class="price"><%= H.fmt(o.price) %> PAT</span> · <%- o.official ? t('shop.item.patv_store') : t('shop.orders.from', { name: o.seller_name || '?' }) %> · <%= H.day(o.created) %></div>
         <% if (o.seller_note && (o.status === 'fulfilled' || o.status === 'completed' || o.status === 'disputed')) { %>
-          <div><span class="muted">Seller's note / code:</span><div class="pre code"><%= o.seller_note %></div></div>
+          <div><span class="muted"><%- t('shop.orders.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
         <% } %>
         <% if (ev.length > 1 || !o.official) { %>
           <ul class="tl">
             <% ev.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><%= H.status(e.status).label %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
           </ul>
         <% } %>
-        <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0">Completes automatically <%= H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) %> unless you open a dispute.</p><% } %>
+        <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.orders.autocomplete_you', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>
         <%- include('partials/shop-order-actions', { o, role: 'buyer', back: '/shop/orders', H, settings }) %>
       </div>
     <% }) %>
   </div>
   <% if (pages > 1) { %>
     <nav class="pager">
-      <% if (page > 1) { %><a href="/shop/orders?page=<%= page - 1 %>">‹ Newer</a><% } %>
+      <% if (page > 1) { %><a href="/shop/orders?page=<%= page - 1 %>"><%- t('shop.orders.newer') %></a><% } %>
       <span class="cur"><%= page %> / <%= pages %></span>
-      <% if (page < pages) { %><a href="/shop/orders?page=<%= page + 1 %>">Older ›</a><% } %>
+      <% if (page < pages) { %><a href="/shop/orders?page=<%= page + 1 %>"><%- t('shop.orders.older') %></a><% } %>
     </nav>
   <% } %>
 </div>

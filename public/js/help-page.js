@@ -2,6 +2,7 @@
 // "ask how to do something" box (local ranking at once, then Pepe's answer for signed-in users via /api/help/ask).
 (function () {
   "use strict";
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var HS = window.HelpSearch;
   var idx = [];
   try { idx = JSON.parse(document.getElementById("helpIdx").textContent) || []; } catch (e) { idx = []; }
@@ -26,7 +27,7 @@
       if (!btn) return;
       var was = btn.getAttribute("data-label") || btn.textContent;
       btn.setAttribute("data-label", was);
-      if (btn.classList.contains("cp")) btn.textContent = ok ? "Copied" : "Press Ctrl+C";
+      if (btn.classList.contains("cp")) btn.textContent = ok ? _t("js.help.copied", "Copied") : _t("js.help.press_ctrl_c", "Press Ctrl+C");
       btn.classList.add("ok");
       setTimeout(function () { if (btn.classList.contains("cp")) btn.textContent = was; btn.classList.remove("ok"); }, 1400);
     }
@@ -64,7 +65,7 @@
       var a = document.querySelector('.toc a[data-cat="' + s.id.replace("cat-", "") + '"]');
       if (a) a.classList.toggle("dim", !any);
     });
-    n.textContent = (q || r) ? shown + " of " + cards.length : "";
+    n.textContent = (q || r) ? _t("js.help.n_of", "{n} of {total}", { n: shown, total: cards.length }) : "";
     none.hidden = shown > 0;
   }
   var ft = null;
@@ -93,11 +94,11 @@
   function hitHtml(e) {
     return '<li><a href="#cmd-' + esc(e.id) + '"><code>' + esc((e.syntax || [e.title])[0]) + "</code>" +
       (e.cost ? ' <span class="b cost">' + fmt(e.cost) + " PAT</span>" : "") +
-      (e.role && e.role !== "everyone" ? ' <span class="b ' + esc(e.role) + '">' + esc({ mod: "Mods", owner: "Pad owners", admin: "Admins" }[e.role] || e.role) + "</span>" : "") +
+      (e.role && e.role !== "everyone" ? ' <span class="b ' + esc(e.role) + '">' + esc({ mod: _t("js.help.role_mod", "Mods"), owner: _t("js.help.role_owner", "Pad owners"), admin: _t("js.help.role_admin", "Admins") }[e.role] || e.role) + "</span>" : "") +
       "<small>" + esc(e.summary) + "</small></a></li>";
   }
   function showHits(list) {
-    hitsEl.innerHTML = list.length ? list.map(hitHtml).join("") : '<li class="pepe note">No command matches that. Try other words, or filter the list below.</li>';
+    hitsEl.innerHTML = list.length ? list.map(hitHtml).join("") : '<li class="pepe note">' + esc(_t("js.help.no_match", "No command matches that. Try other words, or filter the list below.")) + '</li>';
   }
   function say(cls, html) { pepe.className = "pepe" + (cls ? " " + cls : ""); pepe.innerHTML = html; pepe.hidden = !html; }
   // Pepe's text: escaped, then each !command he names links to its card
@@ -108,16 +109,16 @@
     });
   }
   var NOTES = {
-    signin: '<a href="/login?next=/help">Sign in</a> and Pepe answers your question in his own words too.',
-    "pepe-offline": "Pepe isn't around to answer right now, so here's what the search found.",
-    "pepe-slow": "Pepe is taking too long to answer, so here's what the search found.",
-    "pepe-error": "Pepe couldn't answer that one, so here's what the search found.",
+    signin: esc(_t("js.help.note_signin", "{link} and Pepe answers your question in his own words too.")).replace("{link}", '<a href="/login?next=/help">' + esc(_t("js.help.sign_in", "Sign in")) + "</a>"),
+    "pepe-offline": esc(_t("js.help.note_pepe_offline", "Pepe isn't around to answer right now, so here's what the search found.")),
+    "pepe-slow": esc(_t("js.help.note_pepe_slow", "Pepe is taking too long to answer, so here's what the search found.")),
+    "pepe-error": esc(_t("js.help.note_pepe_error", "Pepe couldn't answer that one, so here's what the search found.")),
     "ai-off": "",
     nothing: "",
-    busy: "Pepe is busy with other questions right now. Here's what the search found.",
-    "limit-burst": "You've asked Pepe a lot just now. Here's what the search found (Pepe answers again in a few minutes).",
-    "limit-day": "That's all of Pepe's answers for today. The search still works.",
-    "limit-ip": "Lots of questions from your network right now. Here's what the search found.",
+    busy: esc(_t("js.help.note_busy", "Pepe is busy with other questions right now. Here's what the search found.")),
+    "limit-burst": esc(_t("js.help.note_limit_burst", "You've asked Pepe a lot just now. Here's what the search found (Pepe answers again in a few minutes).")),
+    "limit-day": esc(_t("js.help.note_limit_day", "That's all of Pepe's answers for today. The search still works.")),
+    "limit-ip": esc(_t("js.help.note_limit_ip", "Lots of questions from your network right now. Here's what the search found.")),
   };
   function ask(q) {
     q = String(q || "").trim();
@@ -126,15 +127,15 @@
     out.hidden = false;
     var local = HS.rank(idx, q, { limit: 5 }).map(function (r) { return r.entry; });
     showHits(local);
-    if (window.HELP_SIGNED_IN) say("wait", "🐸 Pepe is thinking…"); else say("note", NOTES.signin);
+    if (window.HELP_SIGNED_IN) say("wait", esc(_t("js.help.thinking", "🐸 Pepe is thinking…"))); else say("note", NOTES.signin);
     try { history.replaceState(null, "", "?q=" + encodeURIComponent(q) + location.hash); } catch (e) { /* ignore */ }
     fetch("/api/help/ask", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" }, body: JSON.stringify({ q: q }) })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (my !== seq) return;
-        if (!d || !d.ok) { say("note", esc((d && d.error) || "Something went wrong.")); return; }
+        if (!d || !d.ok) { say("note", esc((d && d.error) || _t("js.help.went_wrong", "Something went wrong."))); return; }
         if (d.answer) {
-          say("", '<span class="who">🐸 Pepe:</span>' + linkCmds(d.answer.text || "I don't know a command for that."));
+          say("", '<span class="who">' + esc(_t("js.help.pepe_says", "🐸 Pepe:")) + '</span>' + linkCmds(d.answer.text || _t("js.help.no_command", "I don't know a command for that.")));
           var first = (d.answer.ids || []).map(function (id) { return byId[id]; }).filter(Boolean);
           var rest = local.filter(function (e) { return (d.answer.ids || []).indexOf(e.id) < 0; });
           showHits(first.concat(rest).slice(0, 5));

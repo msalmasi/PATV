@@ -5,6 +5,7 @@
 // amount changed. Opens by itself when the page is reached with #boost. Server text goes in via textContent.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var box = document.getElementById('rmBoostBox');
   var btn = document.getElementById('rmBoostBtn');
   if (!box || !btn) return;
@@ -40,21 +41,21 @@
     e.preventDefault();
     if (busy) return;
     var amt = Math.floor(Number(input.value));
-    if (!(amt > 0)) { say('Pick an amount.', true); return; }
+    if (!(amt > 0)) { say(_t('js.pad.boost.pick', 'Pick an amount.'), true); return; }
     ref = ref || newRef();
-    busy = true; submit.disabled = true; say('Boosting…');
+    busy = true; submit.disabled = true; say(_t('js.pad.boost.boosting', 'Boosting…'));
     fetch('/api/rooms/' + encodeURIComponent(slug) + '/boost', {
       method: 'POST', credentials: 'same-origin', cache: 'no-store',
       headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amt, ref: ref })
-    }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Unexpected answer from the site.' }; }); })
+    }).then(function (r) { return r.json().catch(function () { return { ok: false, error: _t('js.pad.boost.unexpected', 'Unexpected answer from the site.') }; }); })
       .then(function (d) {
-        if (!d || !d.ok) { say((d && d.error) || 'Not done.', true); if (d && d.error && !/reach/i.test(d.error)) ref = newRef(); return; }
-        say((d.dup ? 'Already done: ' : '🚀 Boosted with ') + Number(d.amount).toLocaleString('en-US') + ' PAT' +
-            (d.boost ? ' · ' + Number(d.boost.last_hour).toLocaleString('en-US') + ' PAT in the last hour' : '') + '. Thanks!');
+        if (!d || !d.ok) { say((d && d.error) || _t('js.pad.boost.not_done', 'Not done.'), true); if (d && d.error && !/reach/i.test(d.error)) ref = newRef(); return; }
+        say((d.dup ? _t('js.pad.boost.dup', 'Already done: {n} PAT', { n: Number(d.amount).toLocaleString('en-US') }) : _t('js.pad.boost.done', '🚀 Boosted with {n} PAT', { n: Number(d.amount).toLocaleString('en-US') })) +
+            (d.boost ? ' · ' + _t('js.pad.boost.last_hour', '{n} PAT in the last hour', { n: Number(d.boost.last_hour).toLocaleString('en-US') }) : '') + _t('js.pad.boost.thanks', '. Thanks!'));
         if (d.boost) line(d.boost.last_hour);
         ref = newRef();
       })
-      .catch(function () { say('Couldn\'t reach the site - try again (you won\'t be charged twice).', true); })
+      .catch(function () { say(_t('js.pad.boost.network', 'Couldn\'t reach the site - try again (you won\'t be charged twice).'), true); })
       .then(function () { busy = false; submit.disabled = false; });
   });
   if (location.hash === '#boost') open(true);

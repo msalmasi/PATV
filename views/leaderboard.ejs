@@ -1,4 +1,5 @@
-<%- include('layout', { title: 'Rankings', user: user }) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('rank.title'), user: user }) %>
 <%
   const fmt = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
   const avs = typeof gtfAvatars !== 'undefined' && gtfAvatars ? gtfAvatars : {};
@@ -13,13 +14,13 @@
   // metric per board: [big value, unit]
   const metric = {
     pat:    (u) => [fmt(u.points_balance), 'PAT'],
-    level:  (u) => ['Lv ' + fmt(u.level), fmt(u.xp) + ' XP'],
-    badges: (u) => [fmt(u.badges), Number(u.badges) === 1 ? 'badge' : 'badges'],
+    level:  (u) => [t('rank.lv', { n: fmt(u.level) }), t('rank.xp', { n: fmt(u.xp) })],
+    badges: (u) => [fmt(u.badges), t('rank.badge_unit', { count: Number(u.badges) })],
   };
   const boards = [
-    { id: 'pat', label: 'PAT', list: users, empty: 'Nobody has any PAT yet.' },
-    { id: 'level', label: 'Level', list: lvlList, empty: 'Nobody has levelled up yet.' },
-    { id: 'badges', label: 'Badges', list: badgeList, empty: 'No badges earned yet.' },
+    { id: 'pat', label: 'PAT', list: users, empty: t('rank.empty_pat') },
+    { id: 'level', label: t('rank.tab_level'), list: lvlList, empty: t('rank.empty_level') },
+    { id: 'badges', label: t('rank.tab_badges'), list: badgeList, empty: t('rank.empty_badges') },
   ];
   const pot = typeof currentPot !== 'undefined' ? currentPot : 0;
   const hasSupply = typeof supply !== 'undefined' && supply;
@@ -157,41 +158,41 @@
 <main class="lb">
   <section class="card lb-head">
     <div>
-      <h1>Rankings</h1>
-      <p>The richest, highest-levelled and most-decorated frogs on Public Access.</p>
+      <h1><%- t('rank.heading') %></h1>
+      <p><%- t('rank.sub') %></p>
     </div>
     <div class="lb-tiles">
       <% if (hasSupply) { %>
-        <button type="button" class="lb-tile" data-go="supply" title="See where it all is"><span class="k">Total PAT supply</span><span class="v"><%= fmt(supply.total) %></span></button>
+        <button type="button" class="lb-tile" data-go="supply" title="<%- t('rank.tile.supply_title') %>"><span class="k"><%- t('rank.tile.supply') %></span><span class="v"><%= fmt(supply.total) %></span></button>
       <% } %>
       <% if (hasSupply && supply.burned) { %>
-        <a class="lb-tile" href="/economy#burned" title="PAT destroyed for good - the burn log"><span class="k">🔥 Burned</span><span class="v"><%= fmt(supply.burned.total) %></span></a>
+        <a class="lb-tile" href="/economy#burned" title="<%- t('rank.tile.burned_title') %>"><span class="k"><%- t('rank.tile.burned') %></span><span class="v"><%= fmt(supply.burned.total) %></span></a>
       <% } %>
-      <button type="button" class="lb-tile" data-go="jackpots" title="Recent jackpot winners"><span class="k">Jackpot pot</span><span class="v"><%= fmt(pot) %></span></button>
+      <button type="button" class="lb-tile" data-go="jackpots" title="<%- t('rank.tile.jackpot_title') %>"><span class="k"><%- t('rank.tile.jackpot') %></span><span class="v"><%= fmt(pot) %></span></button>
     </div>
   </section>
 
-  <div class="lb-tabs" role="tablist" aria-label="Leaderboards">
+  <div class="lb-tabs" role="tablist" aria-label="<%- t('rank.tabs_aria') %>">
     <% boards.forEach((b, i) => { %>
-      <button type="button" class="lb-tab" role="tab" id="t-<%= b.id %>" aria-controls="p-<%= b.id %>" aria-selected="<%= i === 0 ? 'true' : 'false' %>" data-tab="<%= b.id %>"><%= b.label %></button>
+      <button type="button" class="lb-tab" role="tab" id="t-<%= b.id %>" aria-controls="p-<%= b.id %>" aria-selected="<%= i === 0 ? 'true' : 'false' %>" data-tab="<%= b.id %>"><%- b.label %></button>
     <% }) %>
-    <button type="button" class="lb-tab" role="tab" id="t-jackpots" aria-controls="p-jackpots" aria-selected="false" data-tab="jackpots">Jackpots</button>
-    <button type="button" class="lb-tab" role="tab" id="t-supply" aria-controls="p-supply" aria-selected="false" data-tab="supply">PAT supply</button>
+    <button type="button" class="lb-tab" role="tab" id="t-jackpots" aria-controls="p-jackpots" aria-selected="false" data-tab="jackpots"><%- t('rank.tab_jackpots') %></button>
+    <button type="button" class="lb-tab" role="tab" id="t-supply" aria-controls="p-supply" aria-selected="false" data-tab="supply"><%- t('rank.tab_supply') %></button>
   </div>
 
   <% boards.forEach((b, bi) => { const list = b.list || []; const m = metric[b.id]; %>
   <section class="lb-panel" role="tabpanel" id="p-<%= b.id %>" aria-labelledby="t-<%= b.id %>"<%= bi === 0 ? '' : ' hidden' %>>
     <% if (!list.length) { %>
-      <div class="card"><p class="empty"><%= b.empty %></p></div>
+      <div class="card"><p class="empty"><%- b.empty %></p></div>
     <% } else { %>
       <div class="lb-pod">
         <% list.slice(0, 3).forEach((u, i) => { const v = m(u); %>
           <a class="p p<%= i + 1 %>" href="<%= prof(u) %>">
-            <span class="medal" aria-label="Rank <%= i + 1 %>"><%= i + 1 %></span>
+            <span class="medal" aria-label="<%- t('rank.rank_n', { n: i + 1 }) %>"><%= i + 1 %></span>
             <span class="av"><% if (avs[u.username]) { %><%- avs[u.username] %><% } else { %><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><% } %></span>
-            <span class="nm"><%- nameOf(u) %><% if (isMe(u)) { %><span class="me-tag">YOU</span><% } %></span>
-            <span class="val"><%= v[0] %></span>
-            <span class="sub"><%= v[1] %><% if (b.id !== 'level') { %> &middot; Lv <%= fmt(u.level) %><% } %></span>
+            <span class="nm"><%- nameOf(u) %><% if (isMe(u)) { %><span class="me-tag"><%- t('rank.you') %></span><% } %></span>
+            <span class="val"><%- v[0] %></span>
+            <span class="sub"><%- v[1] %><% if (b.id !== 'level') { %> &middot; <%- t('rank.lv', { n: fmt(u.level) }) %><% } %></span>
           </a>
         <% }) %>
       </div>
@@ -199,12 +200,12 @@
       <% if (list.length > 3) { %>
       <div class="card">
         <ol class="lb-list">
-          <li class="lb-row hd<%= b.id === 'level' ? ' lvl-board' : '' %>" aria-hidden="true"><span class="rk">#</span><span>Player</span><span class="lv">Level</span><span class="amt"><%= b.id === 'badges' ? 'Badges' : 'PAT' %></span></li>
+          <li class="lb-row hd<%= b.id === 'level' ? ' lvl-board' : '' %>" aria-hidden="true"><span class="rk">#</span><span><%- t('rank.col_player') %></span><span class="lv"><%- t('rank.tab_level') %></span><span class="amt"><%- b.id === 'badges' ? t('rank.tab_badges') : 'PAT' %></span></li>
           <% list.slice(3).forEach((u, j) => { const i = j + 3; %>
             <li class="lb-row<%= b.id === 'level' ? ' lvl-board' : '' %><%= isMe(u) ? ' me' : '' %>">
               <span class="rk"><%= i + 1 %></span>
-              <span class="who"><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><a href="<%= prof(u) %>"><%- nameOf(u) %></a><% if (isMe(u)) { %><span class="me-tag">YOU</span><% } %></span>
-              <span class="lv"><span>Lv <%= fmt(u.level) %> <small><%= fmt(u.xp) %> XP</small></span><span class="bar"><span style="width: <%= pctOf(u).toFixed(1) %>%"></span></span></span>
+              <span class="who"><img src="<%= u.avatar || '/public/img/avatar.png' %>" alt="" loading="lazy" onerror="this.onerror=null;this.src='/public/img/avatar.png'"><a href="<%= prof(u) %>"><%- nameOf(u) %></a><% if (isMe(u)) { %><span class="me-tag"><%- t('rank.you') %></span><% } %></span>
+              <span class="lv"><span><%- t('rank.lv', { n: fmt(u.level) }) %> <small><%- t('rank.xp', { n: fmt(u.xp) }) %></small></span><span class="bar"><span style="width: <%= pctOf(u).toFixed(1) %>%"></span></span></span>
               <% if (b.id === 'badges') { %>
                 <span class="amt"><%= fmt(u.badges) %></span>
               <% } else { %>
@@ -221,10 +222,10 @@
 
   <section class="lb-panel" role="tabpanel" id="p-jackpots" aria-labelledby="t-jackpots" hidden>
     <div class="card">
-      <h2>Recent jackpots</h2>
-      <p class="muted" style="margin:-4px 0 12px">Current pot: <b style="color:#ffd700"><%= fmt(pot) %> PAT</b> &middot; land the thin gold slice on the <a href="<%= user ? '/u/' + encodeURIComponent(user) + '/wheel' : '/login' %>">wheel</a> to roll for it.</p>
+      <h2><%- t('rank.jp.heading') %></h2>
+      <p class="muted" style="margin:-4px 0 12px"><%- t('rank.jp.pot', { pot: '<b style="color:#ffd700">' + fmt(pot) + ' PAT</b>' }) %> &middot; <%- t('rank.jp.land', { wheel: '<a href="' + t.esc(user ? '/u/' + encodeURIComponent(user) + '/wheel' : '/login') + '">' + t('rank.jp.wheel') + '</a>' }) %></p>
       <% if (!jackpots || jackpots.length === 0) { %>
-        <p class="empty">No jackpots have been won yet. Be the first!</p>
+        <p class="empty"><%- t('rank.jp.none') %></p>
       <% } else { %>
         <div>
           <% jackpots.forEach((j, index) => { %>
@@ -242,10 +243,10 @@
 
   <section class="lb-panel" role="tabpanel" id="p-supply" aria-labelledby="t-supply" hidden>
     <div class="card">
-      <h2>Where all the PAT is</h2>
+      <h2><%- t('rank.sup.heading') %></h2>
       <% if (hasSupply) { %>
-        <p class="muted" style="margin:-4px 0 14px">Total supply: <b style="color:#ffd700"><%= fmt(supply.total) %> PAT</b>
-          <% if (supply.burned) { %> · 🔥 burned for good: <b><%= fmt(supply.burned.total) %></b> (7 days <%= fmt(supply.burned.d7) %>, 30 days <%= fmt(supply.burned.d30) %>) · <a href="/economy#burned">burn log</a><% } %></p>
+        <p class="muted" style="margin:-4px 0 14px"><%- t('rank.sup.total', { total: '<b style="color:#ffd700">' + fmt(supply.total) + ' PAT</b>' }) %>
+          <% if (supply.burned) { %> · <%- t('rank.sup.burned', { total: '<b>' + fmt(supply.burned.total) + '</b>', d7: fmt(supply.burned.d7), d30: fmt(supply.burned.d30) }) %> · <a href="/economy#burned"><%- t('rank.sup.burn_log') %></a><% } %></p>
         <div class="lb-sup">
           <% const _groups = (supply.layers && supply.layers.length) ? supply.layers.map((g) => ({ ...g, rows: supply.rows.filter((r) => r.layer === g.key) }))
                                                                     : [{ key: "all", label: "", rows: supply.rows }]; %>
@@ -262,12 +263,11 @@
             </div>
           <% }) %>
         </div>
-        <p class="muted" style="margin:14px 0 0">The games never mint or burn PAT &mdash; it moves between wallets and these pools. The only PAT ever destroyed is the
-          weekly surplus left once the incentive buffer and the Reserve are full (the 🔥 burn reserve).
-          <% if (supply.updated) { %>Pepe's pools as of <%= supply.updated %> UTC.<% } else { %>Pepe hasn't reported his pools yet.<% } %>
-          <a href="/economy">How PAT works</a></p>
+        <p class="muted" style="margin:14px 0 0"><%- t('rank.sup.note') %>
+          <% if (supply.updated) { %><%- t('rank.sup.as_of', { when: supply.updated }) %><% } else { %><%- t('rank.sup.not_reported') %><% } %>
+          <a href="/economy"><%- t('rank.sup.how') %></a></p>
       <% } else { %>
-        <p class="empty">Supply data isn't available right now.</p>
+        <p class="empty"><%- t('rank.sup.unavailable') %></p>
       <% } %>
     </div>
   </section>
@@ -275,6 +275,7 @@
 
 <script>
   (function () {
+    var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     var ids = ['pat', 'level', 'badges', 'jackpots', 'supply'];
     var tabs = Array.prototype.slice.call(document.querySelectorAll('.lb-tab'));
     function show(name, focus) {
@@ -308,10 +309,10 @@
       var d = new Date(String(ts).replace(' ', 'T') + 'Z');
       if (isNaN(d)) return ts;
       var s = Math.floor((Date.now() - d.getTime()) / 1000);
-      if (s < 60) return s + 's ago';
-      if (s < 3600) return Math.floor(s / 60) + 'm ago';
-      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-      if (s < 2592000) return Math.floor(s / 86400) + 'd ago';
+      if (s < 60) return _t('js.rank.s_ago', '{n}s ago', { n: s });
+      if (s < 3600) return _t('js.rank.m_ago', '{n}m ago', { n: Math.floor(s / 60) });
+      if (s < 86400) return _t('js.rank.h_ago', '{n}h ago', { n: Math.floor(s / 3600) });
+      if (s < 2592000) return _t('js.rank.d_ago', '{n}d ago', { n: Math.floor(s / 86400) });
       return d.toLocaleDateString();
     }
     document.querySelectorAll('.jackpot-time').forEach(function (el) { el.textContent = relTime(el.dataset.ts); });

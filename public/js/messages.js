@@ -8,6 +8,7 @@
 // the text and adding safe links (messages.js render()). Notices, system lines and post cards are text only.
 (function () {
   'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
   var bootEl = document.getElementById('dmBoot');
   if (!bootEl) return;
   var B = JSON.parse(bootEl.textContent || '{}');
@@ -84,8 +85,8 @@
   function dayKey(ms) { var d = new Date(ms); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
   function dayLabel(ms) {
     var d = new Date(ms), t = new Date(), y = new Date(Date.now() - 86400e3);
-    if (dayKey(ms) === dayKey(t.getTime())) return 'Today';
-    if (dayKey(ms) === dayKey(y.getTime())) return 'Yesterday';
+    if (dayKey(ms) === dayKey(t.getTime())) return _t('js.msg.today', 'Today');
+    if (dayKey(ms) === dayKey(y.getTime())) return _t('js.msg.yesterday', 'Yesterday');
     return d.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long', year: d.getFullYear() === t.getFullYear() ? undefined : 'numeric' });
   }
   function hm(ms) { return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
@@ -111,13 +112,13 @@
       var b = a.querySelector('.nav-badge');
       if (n > 0) { if (!b) { b = el('span', { cls: 'nav-badge' }); a.appendChild(b); } b.textContent = n > 99 ? '99+' : String(n); a.classList.add('has'); }
       else { if (b) b.remove(); a.classList.remove('has'); }
-      a.setAttribute('aria-label', 'Messages' + (n ? ', ' + n + ' unread' : ''));
+      a.setAttribute('aria-label', n ? _t('js.msg.messages_unread', 'Messages, {n} unread', { n: n }) : _t('js.msg.messages', 'Messages'));
     }
     setTitle();
   }
   function setTitle() {
     var n = S.view === 'notices' ? (S.nt.unread || 0) : unreadSum();
-    var t = S.view === 'notices' ? 'Notices' : 'Messages';
+    var t = S.view === 'notices' ? _t('js.msg.notices', 'Notices') : _t('js.msg.messages', 'Messages');
     document.title = n ? t + ' (' + n + ')' : t;
   }
   // the layout's 🔔 and the pinned Notices item
@@ -128,7 +129,7 @@
       var b = a.querySelector('.nav-badge');
       if (n > 0) { if (!b) { b = el('span', { cls: 'nav-badge' }); a.appendChild(b); } b.textContent = n > 99 ? '99+' : String(n); a.classList.add('has'); }
       else { if (b) b.remove(); a.classList.remove('has'); }
-      a.setAttribute('aria-label', 'Notices' + (n ? ', ' + n + ' unread' : ''));
+      a.setAttribute('aria-label', n ? _t('js.msg.notices_unread', 'Notices, {n} unread', { n: n }) : _t('js.msg.notices', 'Notices'));
     }
     renderPin();
     setTitle();
@@ -138,10 +139,10 @@
     a.classList.toggle('on', S.view === 'notices');
     a.classList.toggle('unread', n > 0);
     if (S.view === 'notices') a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
-    $('dmPinSn').textContent = L ? L.title : 'From Pepe and the site';
+    $('dmPinSn').textContent = L ? L.title : _t('js.msg.notices_sub', 'From Pepe and the site');
     $('dmPinTm').textContent = L ? shortWhen(L.created) : '';
     var bd = $('dmPinBd');
-    bd.hidden = !n; bd.textContent = n > 99 ? '99+' : String(n); bd.setAttribute('aria-label', n + ' unread');
+    bd.hidden = !n; bd.textContent = n > 99 ? '99+' : String(n); bd.setAttribute('aria-label', _t('js.msg.n_unread', '{n} unread', { n: n }));
     var all = $('dmNtAll'); if (all) all.disabled = !n;
   }
 
@@ -153,16 +154,16 @@
       var w = c.with || {};
       var sn = el('span', { cls: 'sn' });
       if (c.last) {
-        if (c.last.deleted) sn.appendChild(el('i', { text: 'message deleted' }));
+        if (c.last.deleted) sn.appendChild(el('i', { text: _t('js.msg.deleted', 'message deleted') }));
         else if (c.last.system) sn.appendChild(el('i', { text: c.last.text }));
-        else if (c.last.blocked) sn.appendChild(el('i', { text: 'message from someone you blocked' }));
-        else sn.textContent = (c.last.mine ? 'You: ' : c.last.from ? c.last.from + ': ' : '') + c.last.text;
+        else if (c.last.blocked) sn.appendChild(el('i', { text: _t('js.msg.from_blocked', 'message from someone you blocked') }));
+        else sn.textContent = (c.last.mine ? _t('js.msg.you_prefix', 'You: ') : c.last.from ? c.last.from + ': ' : '') + c.last.text;
       }
-      var nm = el('span', { cls: 'nm' }, [c.kind === 'group' ? (c.title || w.display || 'Group') : nameNode(w.display || '[gone]', w.nameCss)]);
-      if (c.muted) nm.appendChild(el('span', { cls: 'mu', title: 'Muted', text: ' 🔕' }));
+      var nm = el('span', { cls: 'nm' }, [c.kind === 'group' ? (c.title || w.display || _t('js.msg.group', 'Group')) : nameNode(w.display || '[gone]', w.nameCss)]);
+      if (c.muted) nm.appendChild(el('span', { cls: 'mu', title: _t('js.msg.muted', 'Muted'), text: ' 🔕' }));
       var a = el('a', { cls: 'dm-it' + (c.id === S.open ? ' on' : '') + (c.unread ? ' unread' : '') + (c.blocked ? ' blocked' : '') + (c.muted ? ' muted' : ''), href: '/messages/c/' + c.id, 'data-c': c.id },
         [convAvatar(c), nm, el('span', { cls: 'tm', text: shortWhen(c.at) }), sn,
-         c.unread ? el('span', { cls: 'bd', text: c.unread > 99 ? '99+' : String(c.unread), 'aria-label': c.unread + ' unread' }) : null]);
+         c.unread ? el('span', { cls: 'bd', text: c.unread > 99 ? '99+' : String(c.unread), 'aria-label': _t('js.msg.n_unread', '{n} unread', { n: c.unread }) }) : null]);
       if (c.id === S.open) a.setAttribute('aria-current', 'true');
       listEl.appendChild(el('li', null, [a]));
     });
@@ -201,14 +202,14 @@
     $('dmHeadName').appendChild(grp ? document.createTextNode(h.title) : nameNode(w.display || '[gone]', w.nameCss));
     $('dmHeadName').href = href;
     $('dmMProfile').href = href;
-    $('dmHeadHandle').textContent = grp ? (h.members || []).length + ' members' + (h.owner ? ' · you own it' : '') : (w.username ? '@' + w.username : '');
+    $('dmHeadHandle').textContent = grp ? _t('js.msg.n_members', '{n} members', { n: (h.members || []).length }) + (h.owner ? ' · ' + _t('js.msg.you_own_it', 'you own it') : '') : (w.username ? '@' + w.username : '');
     $('dmHeadMuted').hidden = !(h && h.muted);
     var blk = $('dmMBlock');
-    blk.textContent = h && h.youBlocked ? 'Unblock' : 'Block';
+    blk.textContent = h && h.youBlocked ? _t('js.msg.unblock', 'Unblock') : _t('js.msg.block', 'Block');
     blk.setAttribute('data-on', h && h.youBlocked ? '0' : '1');
     root.querySelectorAll('.dm-pop [data-for]').forEach(function (b) { b.hidden = b.getAttribute('data-for') === 'group' ? !grp : grp; });
     blk.hidden = grp || !w.username;
-    var mute = $('dmMMute'); mute.hidden = !S.open; mute.textContent = h && h.muted ? 'Unmute (Camfrog alerts back on)' : 'Mute (no Camfrog alerts)';
+    var mute = $('dmMMute'); mute.hidden = !S.open; mute.textContent = h && h.muted ? _t('js.msg.unmute_long', 'Unmute (Camfrog alerts back on)') : _t('js.msg.mute_long', 'Mute (no Camfrog alerts)');
     root.querySelectorAll('[data-dm="clear"], [data-dm="hide"]').forEach(function (b) { b.hidden = !S.open; });
     var can = h ? h.canSend : (S.draft && S.draft.canSend);
     var why = h ? h.refusal : (S.draft && S.draft.refusal);
@@ -216,12 +217,12 @@
     $('dmPepeNote').hidden = !(pn && pn.note);
     $('dmPepeNote').textContent = pn && pn.note ? pn.note : '';
     $('dmRefuse').hidden = !!can;
-    $('dmRefuse').textContent = can ? '' : (why || "You can't send messages here.");
+    $('dmRefuse').textContent = can ? '' : (why || _t('js.msg.cant_send', "You can't send messages here."));
     form.classList.toggle('off', !can);
-    text.placeholder = grp ? 'Message ' + h.title : 'Message @' + (w.username || '');
+    text.placeholder = grp ? _t('js.msg.message_to', 'Message {name}', { name: h.title }) : _t('js.msg.message_to', 'Message {name}', { name: '@' + (w.username || '') });
     var att = $('dmAttach');
     att.disabled = !me.pictures;
-    att.title = me.pictures ? 'Add pictures (up to ' + (B.maxPics || 4) + ')' : (me.picturesWhy || "You can't send pictures yet.");
+    att.title = me.pictures ? _t('js.msg.add_pics', 'Add pictures (up to {n})', { n: B.maxPics || 4 }) : (me.picturesWhy || _t('js.msg.cant_send_pics', "You can't send pictures yet."));
   }
   function nearBottom() { return scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 120; }
   function toBottom() { scrollEl.scrollTop = scrollEl.scrollHeight; }
@@ -232,10 +233,10 @@
     if (!P.length) return null;
     var g = el('div', { cls: 'dm-pics n' + Math.min(P.length, 4) });
     P.forEach(function (p, i) {
-      var img = el('img', { src: p.thumb, alt: 'Picture ' + (i + 1) + ' of ' + P.length, loading: 'lazy', decoding: 'async' });
+      var img = el('img', { src: p.thumb, alt: _t('js.msg.picture_n_of', 'Picture {n} of {total}', { n: i + 1, total: P.length }), loading: 'lazy', decoding: 'async' });
       if (p.w && p.h) { img.width = p.w; img.height = p.h; }
-      var b = el('button', { type: 'button', cls: 'dm-pic' + (p.nsfw ? ' nsfw' : ''), 'data-pic': String(i), 'aria-label': p.nsfw ? 'NSFW picture - click to show' : 'Open picture ' + (i + 1) }, [img]);
-      if (p.nsfw) b.appendChild(el('span', { cls: 'gate', text: 'NSFW · click to show' }));
+      var b = el('button', { type: 'button', cls: 'dm-pic' + (p.nsfw ? ' nsfw' : ''), 'data-pic': String(i), 'aria-label': p.nsfw ? _t('js.msg.nsfw_pic', 'NSFW picture - click to show') : _t('js.msg.open_picture_n', 'Open picture {n}', { n: i + 1 }) }, [img]);
+      if (p.nsfw) b.appendChild(el('span', { cls: 'gate', text: _t('js.msg.nsfw_gate', 'NSFW · click to show') }));
       g.appendChild(b);
     });
     return g;
@@ -246,11 +247,11 @@
     if (!E.length) return null;
     var box = el('div', { cls: 'dm-embeds' });
     E.forEach(function (e) {
-      if (e.unavailable) { box.appendChild(el('div', { cls: 'dm-card gone', text: 'Post unavailable - it was removed or hidden.' })); return; }
+      if (e.unavailable) { box.appendChild(el('div', { cls: 'dm-card gone', text: _t('js.msg.post_gone', 'Post unavailable - it was removed or hidden.') })); return; }
       var meta = el('div', { cls: 'cm' }, [e.pad ? el('span', { cls: 'pad', text: e.pad.label || ('p/' + e.pad.slug) }) : null,
         e.author ? el('span', null, [nameNode('u/' + e.author.username, e.author.nameCss)]) : null,
-        el('span', { text: (e.score || 0) + ' point' + (e.score === 1 ? '' : 's') + ' · ' + (e.comments || 0) + ' comment' + (e.comments === 1 ? '' : 's') })]);
-      var tx = el('div', { cls: 'ct' }, [meta, el('div', { cls: 'tt' }, [e.nsfw ? el('span', { cls: 'tag', text: 'NSFW' }) : null, e.title || 'Post'])]);
+        el('span', { text: _t('js.msg.n_points', e.score === 1 ? '{count} point' : '{count} points', { count: e.score || 0 }) + ' · ' + _t('js.msg.n_comments', e.comments === 1 ? '{count} comment' : '{count} comments', { count: e.comments || 0 }) })]);
+      var tx = el('div', { cls: 'ct' }, [meta, el('div', { cls: 'tt' }, [e.nsfw ? el('span', { cls: 'tag', text: 'NSFW' }) : null, e.title || _t('js.msg.post', 'Post')])]);
       var th = e.thumb ? el('span', { cls: 'th' + (e.nsfw ? ' nsfw' : '') }, [el('img', { src: e.thumb, alt: '', loading: 'lazy' })]) : el('span', { cls: 'th none', 'aria-hidden': 'true', text: '📰' });
       box.appendChild(el('a', { cls: 'dm-card', href: e.href, 'data-nsfw': e.nsfw ? '1' : '' }, [th, tx]));
     });
@@ -260,14 +261,14 @@
     var mine = m.from === me.username;
     var t = el('div', { cls: 'dm-t' });
     var collapsed = m.blocked && !S.shown[m.id] && !m.deleted;
-    if (m.deleted) t.textContent = m.byAdmin ? 'message removed by an admin' : 'message deleted';
-    else if (collapsed) t.append(el('i', { text: 'Message from someone you blocked. ' }), el('button', { type: 'button', cls: 'lnk', 'data-mact': 'show', text: 'Show' }));
+    if (m.deleted) t.textContent = m.byAdmin ? _t('js.msg.removed_by_admin', 'message removed by an admin') : _t('js.msg.deleted', 'message deleted');
+    else if (collapsed) t.append(el('i', { text: _t('js.msg.blocked_collapsed', 'Message from someone you blocked.') + ' ' }), el('button', { type: 'button', cls: 'lnk', 'data-mact': 'show', text: _t('js.msg.show', 'Show') }));
     else if (m.html) t.innerHTML = m.html;             // server-escaped (see the top of this file)
     var acts = null;
     if (!m.deleted && m.id > 0) {
       acts = el('div', { cls: 'dm-acts' });
-      if (mine) acts.appendChild(el('button', { type: 'button', cls: 'danger', 'data-mact': 'delete', title: 'Delete for everyone', 'aria-label': 'Delete message', text: '🗑' }));
-      else acts.appendChild(el('button', { type: 'button', 'data-mact': 'report', title: 'Report to the site admins', 'aria-label': 'Report message', text: '⚑' }));
+      if (mine) acts.appendChild(el('button', { type: 'button', cls: 'danger', 'data-mact': 'delete', title: _t('js.msg.delete_all', 'Delete for everyone'), 'aria-label': _t('js.msg.delete_aria', 'Delete message'), text: '🗑' }));
+      else acts.appendChild(el('button', { type: 'button', 'data-mact': 'report', title: _t('js.msg.report_title', 'Report to the site admins'), 'aria-label': _t('js.msg.report_aria', 'Report message'), text: '⚑' }));
     }
     var kids = [el('time', { cls: 'mt', datetime: new Date(m.at).toISOString(), text: hm(m.at) })];
     if (m.html || m.deleted || collapsed) kids.push(t);
@@ -291,7 +292,7 @@
       }
       if (!g || !prev || prev.from !== m.from || m.at - prev.at > 7 * 60e3) {
         var mine = m.from === me.username;
-        var body = el('div', { cls: 'dm-gb' }, [el('div', { cls: 'dm-gh' }, [m.blocked && !S.shown[m.id] ? el('b', { text: 'Blocked' }) : el('b', null, [nameNode(m.fromDisplay || m.from || '[gone]', m.fromCss)]),
+        var body = el('div', { cls: 'dm-gb' }, [el('div', { cls: 'dm-gh' }, [m.blocked && !S.shown[m.id] ? el('b', { text: _t('js.msg.blocked', 'Blocked') }) : el('b', null, [nameNode(m.fromDisplay || m.from || '[gone]', m.fromCss)]),
           el('time', { datetime: new Date(m.at).toISOString(), title: new Date(m.at).toLocaleString(), text: hm(m.at) })])]);
         g = el('div', { cls: 'dm-g' + (mine ? ' mine' : '') }, [m.blocked && !S.shown[m.id] ? el('span', { cls: 'av av-blk', 'aria-hidden': 'true', text: '⊘' }) : avatar(m.from, m.fromDisplay, null, m.fromAvatar), body]);
         msgsEl.appendChild(g);
@@ -304,8 +305,8 @@
     start.hidden = S.more;
     start.textContent = '';
     if (!S.more) {
-      if (isGroup()) start.append(el('b', { text: S.head.title }), 'The start of this group (for you).');
-      else start.append(el('b', { text: w.display || '' }), 'This is the start of your conversation with @' + (w.username || '?') + '.');
+      if (isGroup()) start.append(el('b', { text: S.head.title }), _t('js.msg.group_start', 'The start of this group (for you).'));
+      else start.append(el('b', { text: w.display || '' }), _t('js.msg.dm_start', 'This is the start of your conversation with @{name}.', { name: w.username || '?' }));
     }
   }
   function upsertMsg(m) {
@@ -368,7 +369,7 @@
       if (push) history.pushState({ to: d.user.username }, '', '/messages?to=' + encodeURIComponent(d.user.username));
       if (d.canSend) { useShare(); text.focus(); }
     }).catch(function (e) {
-      $('dmFindMsg').textContent = e.status === 404 ? 'No one called "' + username + '".' : e.message;
+      $('dmFindMsg').textContent = e.status === 404 ? _t('js.msg.no_one_called', 'No one called “{name}”.', { name: username }) : e.message;
       if (isPhone()) setView('list');
     });
   }
@@ -409,7 +410,7 @@
       if (push) history.pushState({ nt: 1 }, '', ntUrl(d.kind, d.page));
       renderNotices(); setBell(d.unread || 0);
       if (!quiet) $('dmNtScroll').scrollTop = 0;
-    }).catch(function (e) { showNtMsg(e.message || "Couldn't load your notices."); })
+    }).catch(function (e) { showNtMsg(e.message || _t('js.msg.notices_failed', "Couldn't load your notices.")); })
       .then(function () { if (seq === S.ntLoading) $('dmNtScroll').removeAttribute('aria-busy'); });
   }
   function showNtMsg(s) { var m = $('dmNtMsg'); m.textContent = s || ''; m.hidden = !s; }
@@ -428,20 +429,20 @@
         if ((k || null) === kind) a.setAttribute('aria-current', 'true');
         return a;
       };
-      chips.appendChild(mk(null, 'All'));
+      chips.appendChild(mk(null, _t('js.msg.all', 'All')));
       (N.kinds || []).forEach(function (k) { if (unreadOf[k.key] !== undefined) chips.appendChild(mk(k.key, k.icon + ' ' + k.label)); });
     }
-    $('dmNtSub').textContent = (N.unread ? N.unread + ' unread · ' : '') + 'From Pepe and the site';
+    $('dmNtSub').textContent = (N.unread ? _t('js.msg.n_unread', '{n} unread', { n: N.unread }) + ' · ' : '') + _t('js.msg.notices_sub', 'From Pepe and the site');
     // the list
     var ul = $('dmNtList'); ul.textContent = '';
     (N.items || []).forEach(function (n) {
       var k = kindOf(n.kind);
       var tt = el('div', { cls: 'tt' });
-      if (n.unread) tt.appendChild(el('span', { cls: 'vh', text: 'Unread: ' }));
+      if (n.unread) tt.appendChild(el('span', { cls: 'vh', text: _t('js.msg.unread_prefix', 'Unread:') + ' ' }));
       tt.appendChild(document.createTextNode(n.title));
       var acts = el('div', { cls: 'acts' }, [
-        n.link ? el('a', { cls: 'open', href: '/inbox/open/' + encodeURIComponent(n.id), text: 'Open →' }) : null,
-        n.unread ? el('button', { type: 'button', cls: 'mark', 'data-read': String(n.id), text: 'Mark read' }) : null]);
+        n.link ? el('a', { cls: 'open', href: '/inbox/open/' + encodeURIComponent(n.id), text: _t('js.msg.open', 'Open →') }) : null,
+        n.unread ? el('button', { type: 'button', cls: 'mark', 'data-read': String(n.id), text: _t('js.msg.mark_read', 'Mark read') }) : null]);
       ul.appendChild(el('li', { cls: 'dm-n' + (n.unread ? ' unread' : ''), 'data-id': String(n.id) }, [
         el('div', { cls: 'ic', 'aria-hidden': 'true', text: k.icon }),
         el('div', { cls: 'tx' }, [tt, n.body ? el('div', { cls: 'bdy', text: n.body }) : null,
@@ -454,12 +455,12 @@
     em.hidden = (N.items || []).length > 0;
     if (em.hidden === false) {
       em.appendChild(el('div', { cls: 'big', 'aria-hidden': 'true', text: '📭' }));
-      em.appendChild(el('p', null, [el('b', { text: kind ? 'Nothing here in ' + kindOf(kind).label + '.' : 'No notices yet.' })]));
-      var p = el('p', { text: 'When Pepe executes a stake, a loan gets paid, you\'re picked to judge a wager, an order ships or someone tips you, it shows up here.' });
+      em.appendChild(el('p', null, [el('b', { text: kind ? _t('js.msg.nothing_in', 'Nothing here in {kind}.', { kind: kindOf(kind).label }) : _t('js.msg.no_notices', 'No notices yet.') })]));
+      var p = el('p', { text: _t('js.msg.notices_explain', 'When Pepe executes a stake, a loan gets paid, you\'re picked to judge a wager, an order ships or someone tips you, it shows up here.') });
       if (!me.camfrog) {
         p.appendChild(document.createTextNode(' '));
-        p.appendChild(el('a', { href: '/u/' + encodeURIComponent(me.username) + '/edit', text: 'Link your Camfrog name' }));
-        p.appendChild(document.createTextNode(' to get Pepe\'s notices too.'));
+        p.appendChild(el('a', { href: '/u/' + encodeURIComponent(me.username) + '/edit', text: _t('js.msg.link_camfrog', 'Link your Camfrog name') }));
+        p.appendChild(document.createTextNode(' ' + _t('js.msg.link_camfrog_tail', 'to get Pepe\'s notices too.')));
       }
       em.appendChild(p);
     }
@@ -467,10 +468,10 @@
     var pg = $('dmNtPager'); pg.textContent = '';
     pg.hidden = !(N.pages > 1);
     if (N.pages > 1) {
-      var prev = el('button', { type: 'button', cls: 'dm-btn', 'data-page': String(N.page - 1), text: '← Newer' });
-      var next = el('button', { type: 'button', cls: 'dm-btn', 'data-page': String(N.page + 1), text: 'Older →' });
+      var prev = el('button', { type: 'button', cls: 'dm-btn', 'data-page': String(N.page - 1), text: _t('js.msg.newer', '← Newer') });
+      var next = el('button', { type: 'button', cls: 'dm-btn', 'data-page': String(N.page + 1), text: _t('js.msg.older', 'Older →') });
       prev.disabled = N.page <= 1; next.disabled = N.page >= N.pages;
-      pg.append(prev, el('span', { text: 'Page ' + N.page + ' of ' + N.pages + ' · ' + N.total + ' notices' }), next);
+      pg.append(prev, el('span', { text: _t('js.msg.page_of', 'Page {page} of {pages} · {total} notices', { page: N.page, pages: N.pages, total: N.total }) }), next);
     }
     renderPin();
   }
@@ -544,11 +545,11 @@
     S.tray.forEach(function (p) {
       var th = el('span', { cls: 'th' + (p.nsfw ? ' nsfw' : '') });
       if (p.preview) th.appendChild(el('img', { src: p.preview, alt: '' }));
-      var st = p.state === 'ready' ? '' : p.state === 'failed' ? (p.error || 'Failed') : p.state === 'processing' ? 'Processing…' : (p.pct || 0) + '%';
+      var st = p.state === 'ready' ? '' : p.state === 'failed' ? (p.error || _t('js.msg.failed', 'Failed')) : p.state === 'processing' ? _t('js.msg.processing', 'Processing…') : (p.pct || 0) + '%';
       ul.appendChild(el('li', { cls: 'dm-tp ' + p.state, 'data-key': String(p.key) }, [th,
         st ? el('span', { cls: 'st', text: st }) : null,
-        el('label', { cls: 'nsfw-t', title: 'Blurred until clicked' }, [el('input', { type: 'checkbox', 'data-tnsfw': String(p.key) }), ' NSFW']),
-        el('button', { type: 'button', cls: 'x', 'data-tx': String(p.key), 'aria-label': 'Remove picture', text: '✕' })]));
+        el('label', { cls: 'nsfw-t', title: _t('js.msg.blurred', 'Blurred until clicked') }, [el('input', { type: 'checkbox', 'data-tnsfw': String(p.key) }), ' NSFW']),
+        el('button', { type: 'button', cls: 'x', 'data-tx': String(p.key), 'aria-label': _t('js.msg.remove_pic', 'Remove picture'), text: '✕' })]));
       if (p.nsfw) ul.lastChild.querySelector('input').checked = true;
     });
     updateSend();
@@ -578,7 +579,7 @@
         return api('/api/messages/uploads/' + p.id);
       }).then(function (d) {
         if (d.state === 'ready') { p.state = 'ready'; renderTray(); return; }
-        if (d.state === 'failed') throw new Error(d.error || "That picture couldn't be processed.");
+        if (d.state === 'failed') throw new Error(d.error || _t('js.msg.pic_failed', "That picture couldn't be processed."));
         return poll();
       });
     }
@@ -586,7 +587,7 @@
   function addFiles(files) {
     var max = B.maxPics || 4;
     Array.prototype.slice.call(files || []).forEach(function (f) {
-      if (S.tray.length >= max) { showErr('Up to ' + max + ' pictures per message.'); return; }
+      if (S.tray.length >= max) { showErr(_t('js.msg.max_pics', 'Up to {n} pictures per message.', { n: max })); return; }
       var p = { key: ++trayKey, file: f, state: 'uploading', pct: 0, nsfw: false, preview: null };
       try { if (/^image\/(jpeg|png|gif|webp|avif)$/.test(f.type)) p.preview = URL.createObjectURL(f); } catch (e) { /* none */ }
       S.tray.push(p);
@@ -601,7 +602,7 @@
     });
     S.tray = []; renderTray();
   }
-  $('dmAttach').addEventListener('click', function () { if (me.pictures) $('dmFile').click(); else showErr(me.picturesWhy || "You can't send pictures yet."); });
+  $('dmAttach').addEventListener('click', function () { if (me.pictures) $('dmFile').click(); else showErr(me.picturesWhy || _t('js.msg.cant_send_pics', "You can't send pictures yet.")); });
   $('dmFile').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
   $('dmTray').addEventListener('click', function (e) {
     var x = e.target.closest('[data-tx]');
@@ -645,16 +646,17 @@
     var body = text.value.replace(/\s+$/, '');
     var pics = S.tray.filter(function (p) { return p.state === 'ready'; });
     if ((!body.trim() && !pics.length) || S.sending) return;
-    if (S.tray.some(function (p) { return p.state !== 'ready' && p.state !== 'failed'; })) { showErr('Wait for the pictures to finish uploading.'); return; }
-    if (body.length > (B.maxLen || 2000)) { showErr('Messages can be up to ' + B.maxLen + ' characters.'); return; }
+    if (S.tray.some(function (p) { return p.state !== 'ready' && p.state !== 'failed'; })) { showErr(_t('js.msg.wait_upload', 'Wait for the pictures to finish uploading.')); return; }
+    if (body.length > (B.maxLen || 2000)) { showErr(_t('js.msg.max_len', 'Messages can be up to {n} characters.', { n: B.maxLen })); return; }
     var payload = S.open ? { conversation: S.open, body: body } : S.draft ? { to: S.draft.username, body: body } : null;
     if (!payload) return;
     if (pics.length) { payload.pictures = pics.map(function (p) { return p.id; }); payload.nsfw = pics.filter(function (p) { return p.nsfw; }).map(function (p) { return p.id; }); }
     S.sending = true; updateSend();
     // shown at once, greyed until the server has it
     var temp = { id: tmpId--, from: me.username, fromDisplay: me.display, fromAvatar: me.avatar || null, fromCss: me.nameCss || '', at: Date.now(), html: '', text: body, images: [] };
-    temp.html = body.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }).replace(/\n/g, '<br>');
-    if (pics.length && !body) temp.html = '<i>sending ' + pics.length + ' picture' + (pics.length === 1 ? '' : 's') + '…</i>';
+    var escH = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    temp.html = escH(body).replace(/\n/g, '<br>');
+    if (pics.length && !body) temp.html = '<i>' + escH(_t('js.msg.sending_pics', pics.length === 1 ? 'sending {count} picture…' : 'sending {count} pictures…', { count: pics.length })) + '</i>';
     S.msgs.push(temp); renderMsgs(); toBottom();
     var keepTray = S.tray.slice();
     text.value = ''; autoGrow();
@@ -680,7 +682,7 @@
   function lastText(m) {
     if (m.kind === 'system') return m.system || '';
     var t = (m.text || '').replace(/\s+/g, ' ').slice(0, 90);
-    if (!t && (m.images || []).length) t = m.images.length === 1 ? '📷 Photo' : '📷 ' + m.images.length + ' photos';
+    if (!t && (m.images || []).length) t = m.images.length === 1 ? '📷 ' + _t('js.msg.photo', 'Photo') : '📷 ' + _t('js.msg.n_photos', '{n} photos', { n: m.images.length });
     return t;
   }
   function bumpConv(id, head, m, mine) {
@@ -752,7 +754,7 @@
   function lbShow() {
     var p = LB.list[LB.i];
     if (!p) return;
-    $('dmLbImg').src = p.full; $('dmLbImg').alt = 'Picture ' + (LB.i + 1) + ' of ' + LB.list.length;
+    $('dmLbImg').src = p.full; $('dmLbImg').alt = _t('js.msg.picture_n_of', 'Picture {n} of {total}', { n: LB.i + 1, total: LB.list.length });
     $('dmLbN').textContent = LB.list.length > 1 ? (LB.i + 1) + ' / ' + LB.list.length : '';
     $('dmLbPrev').hidden = $('dmLbNext').hidden = LB.list.length < 2;
   }
@@ -778,7 +780,7 @@
     var pic = e.target.closest('[data-pic]');
     var row = e.target.closest('.dm-m');
     if (pic && row) {
-      if (pic.classList.contains('nsfw')) { pic.classList.remove('nsfw'); var gt = pic.querySelector('.gate'); if (gt) gt.remove(); pic.setAttribute('aria-label', 'Open picture'); return; }
+      if (pic.classList.contains('nsfw')) { pic.classList.remove('nsfw'); var gt = pic.querySelector('.gate'); if (gt) gt.remove(); pic.setAttribute('aria-label', _t('js.msg.open_picture', 'Open picture')); return; }
       var mm = S.msgs.filter(function (x) { return String(x.id) === row.getAttribute('data-id'); })[0];
       if (mm) openLightbox(mm.images || [], parseInt(pic.getAttribute('data-pic'), 10) || 0);
       return;
@@ -791,7 +793,7 @@
     var act = b.getAttribute('data-mact');
     if (act === 'show') { S.shown[id] = true; renderMsgs(); return; }
     if (act === 'delete') {
-      if (!window.confirm('Delete this message for everyone? It will show as "message deleted" (pictures included).')) return;
+      if (!window.confirm(_t('js.msg.confirm_delete', 'Delete this message for everyone? It will show as “message deleted” (pictures included).'))) return;
       api('/api/messages/m/' + id + '/delete', {}).then(function () { onEvent({ t: 'del', c: S.open, id: id }); }).catch(function (x) { showErr(x.message); });
     } else if (act === 'report') openReport(id);
   });
@@ -803,15 +805,15 @@
     var w = S.head ? S.head.with : (S.draft || {});
     var name = isGroup() ? S.head.title : '@' + w.username;
     if (act === 'clear' && S.open) {
-      if (!window.confirm('Clear this conversation\'s history for you? ' + (isGroup() ? 'Everyone else keeps theirs.' : '@' + w.username + ' keeps their copy.'))) return;
+      if (!window.confirm(isGroup() ? _t('js.msg.confirm_clear_group', 'Clear this conversation\'s history for you? Everyone else keeps theirs.') : _t('js.msg.confirm_clear_dm', 'Clear this conversation\'s history for you? @{name} keeps their copy.', { name: w.username }))) return;
       api('/api/messages/c/' + S.open + '/clear', {}).then(function () { S.msgs = []; S.more = false; renderMsgs(); loadList(); }).catch(function (x) { showErr(x.message); });
     } else if (act === 'hide' && S.open) {
-      if (!window.confirm('Delete this conversation for you? It disappears from your list and its history is cleared for you. A new message in ' + name + ' brings it back.')) return;
+      if (!window.confirm(_t('js.msg.confirm_hide', 'Delete this conversation for you? It disappears from your list and its history is cleared for you. A new message in {name} brings it back.', { name: name }))) return;
       var id = S.open;
       api('/api/messages/c/' + id + '/clear', { hide: true }).then(function () { S.convs = S.convs.filter(function (c) { return c.id !== id; }); closeChat(true); }).catch(function (x) { showErr(x.message); });
     } else if (act === 'block' && w.username) {
       var on = b.getAttribute('data-on') === '1';
-      if (on && !window.confirm('Block @' + w.username + '? Neither of you can message the other, and their messages in groups are collapsed for you. They aren\'t told.')) return;
+      if (on && !window.confirm(_t('js.msg.confirm_block', 'Block @{name}? Neither of you can message the other, and their messages in groups are collapsed for you. They aren\'t told.', { name: w.username }))) return;
       api('/api/messages/block', { username: w.username, on: on }).then(function () {
         return S.open ? openConv(S.open, false) : openNew(w.username, false);
       }).then(function () { return refreshPrefs(); }).then(loadList).catch(function (x) { showErr(x.message); });
@@ -820,11 +822,11 @@
       api('/api/messages/c/' + S.open + '/mute', { on: muted }).then(function () { if (S.head) S.head.muted = muted; var c = convById(S.open); if (c) c.muted = muted; renderHead(); renderList(); }).catch(function (x) { showErr(x.message); });
     } else if (act === 'members') openMembers();
     else if (act === 'rename' && isGroup()) {
-      var t = window.prompt('Rename the group (everyone sees the new name):', S.head.title);
+      var t = window.prompt(_t('js.msg.prompt_rename', 'Rename the group (everyone sees the new name):'), S.head.title);
       if (t === null || !t.trim()) return;
       api('/api/messages/c/' + S.open + '/rename', { title: t.trim().slice(0, B.titleMax || 60) }).then(reloadHead).then(loadList).catch(function (x) { showErr(x.message); });
     } else if (act === 'leave' && isGroup()) {
-      if (!window.confirm('Leave ' + S.head.title + '? You stop getting its messages; someone in it can add you again.' + (S.head.owner ? ' You own it - the longest-standing member becomes the owner.' : ''))) return;
+      if (!window.confirm(_t('js.msg.confirm_leave', 'Leave {name}? You stop getting its messages; someone in it can add you again.', { name: S.head.title }) + (S.head.owner ? ' ' + _t('js.msg.confirm_leave_owner', 'You own it - the longest-standing member becomes the owner.') : ''))) return;
       var lid = S.open;
       api('/api/messages/c/' + lid + '/leave', {}).then(function () { S.convs = S.convs.filter(function (c) { return c.id !== lid; }); closeChat(true); }).catch(function (x) { showErr(x.message); });
     }
@@ -838,28 +840,28 @@
     var ul = $('dmNewPeople'); ul.textContent = '';
     N.people.forEach(function (p) {
       ul.appendChild(el('li', { cls: p.ok ? 'ok' : p.ok === false ? 'no' : 'wait' }, [avatar(p.username, p.display, 'av-s'),
-        el('span', { cls: 'pn' }, [el('b', { text: p.display || p.username }), el('small', { text: p.ok === false ? p.why : p.ok ? '@' + p.username : 'checking…' })]),
-        el('button', { type: 'button', 'data-unpick': p.username, 'aria-label': 'Remove ' + p.username, text: '✕' })]));
+        el('span', { cls: 'pn' }, [el('b', { text: p.display || p.username }), el('small', { text: p.ok === false ? p.why : p.ok ? '@' + p.username : _t('js.msg.checking', 'checking…') })]),
+        el('button', { type: 'button', 'data-unpick': p.username, 'aria-label': _t('js.msg.remove_name', 'Remove {name}', { name: p.username }), text: '✕' })]));
     });
     var good = N.people.filter(function (p) { return p.ok; }).length, bad = N.people.some(function (p) { return p.ok !== true; });
     var grp = N.people.length >= 2;
     $('dmNewTitleL').hidden = !grp;
-    $('dmNewT').textContent = grp ? 'New group' : 'New conversation';
+    $('dmNewT').textContent = grp ? _t('js.msg.new_group', 'New group') : _t('js.msg.new_conv', 'New conversation');
     var go = $('dmNewGo');
-    go.textContent = grp ? 'Create group (' + (good + 1) + ')' : 'Message';
+    go.textContent = grp ? _t('js.msg.create_group', 'Create group ({n})', { n: good + 1 }) : _t('js.msg.message', 'Message');
     go.disabled = !good || bad || N.people.length > (B.groupMax || 10) - 1;
-    $('dmNewMsg').textContent = N.people.length > (B.groupMax || 10) - 1 ? 'A group can have up to ' + (B.groupMax || 10) + ' people, you included.' : bad && N.people.some(function (p) { return p.ok === false; }) ? 'Remove the people who can\'t be added.' : '';
+    $('dmNewMsg').textContent = N.people.length > (B.groupMax || 10) - 1 ? _t('js.msg.group_max', 'A group can have up to {n} people, you included.', { n: B.groupMax || 10 }) : bad && N.people.some(function (p) { return p.ok === false; }) ? _t('js.msg.remove_bad', 'Remove the people who can\'t be added.') : '';
   }
   function pick(name) {
     name = String(name || '').trim().replace(/^@/, '');
     if (!name) return;
-    if (name.toLowerCase() === String(me.username).toLowerCase()) { $('dmNewMsg').textContent = "You're in it already."; return; }
+    if (name.toLowerCase() === String(me.username).toLowerCase()) { $('dmNewMsg').textContent = _t('js.msg.in_it_already', "You're in it already."); return; }
     if (N.people.some(function (p) { return p.username.toLowerCase() === name.toLowerCase(); })) return;
     var p = { username: name, display: name, ok: null };
     N.people.push(p); renderPeople();
     api('/api/messages/check?to=' + encodeURIComponent(name)).then(function (d) {
       p.username = d.user.username; p.display = d.user.display; p.ok = !!d.canSend; p.why = d.refusal; p.conversation = d.conversation;
-    }).catch(function (e) { p.ok = false; p.why = e.status === 404 ? 'No one by that name.' : e.message; }).then(renderPeople);
+    }).catch(function (e) { p.ok = false; p.why = e.status === 404 ? _t('js.msg.no_such_user', 'No one by that name.') : e.message; }).then(renderPeople);
   }
   function openNewDlg() {
     N.people = []; $('dmNewIn').value = ''; $('dmNewTitle').value = ''; $('dmNewMsg').textContent = ''; $('dmFindMsg').textContent = '';
@@ -895,22 +897,22 @@
   var memDlg = $('dmMembersDlg');
   function renderMembers() {
     var h = S.head || {};
-    $('dmMemT').textContent = (h.title || 'Group') + ' · ' + (h.members || []).length + ' members';
+    $('dmMemT').textContent = (h.title || _t('js.msg.group', 'Group')) + ' · ' + _t('js.msg.n_members', '{n} members', { n: (h.members || []).length });
     var ul = $('dmMemList'); ul.textContent = '';
     (h.members || []).forEach(function (m) {
       var acts = el('span', { cls: 'pa' });
       if (!m.you && m.username) {
-        acts.appendChild(el('a', { href: '/u/' + encodeURIComponent(m.username), text: 'Profile' }));
-        acts.appendChild(el('button', { type: 'button', 'data-mblock': m.username, 'data-on': m.blocked ? '0' : '1', text: m.blocked ? 'Unblock' : 'Block' }));
-        if (h.owner) acts.appendChild(el('button', { type: 'button', cls: 'danger', 'data-mremove': m.username, text: 'Remove' }));
+        acts.appendChild(el('a', { href: '/u/' + encodeURIComponent(m.username), text: _t('js.msg.profile', 'Profile') }));
+        acts.appendChild(el('button', { type: 'button', 'data-mblock': m.username, 'data-on': m.blocked ? '0' : '1', text: m.blocked ? _t('js.msg.unblock', 'Unblock') : _t('js.msg.block', 'Block') }));
+        if (h.owner) acts.appendChild(el('button', { type: 'button', cls: 'danger', 'data-mremove': m.username, text: _t('js.msg.remove', 'Remove') }));
       }
       ul.appendChild(el('li', { cls: 'ok' }, [avatar(m.username, m.display, 'av-s', m.avatar),
-        el('span', { cls: 'pn' }, [el('b', { text: (m.display || m.username || '[gone]') + (m.you ? ' (you)' : '') }),
-          el('small', { text: (m.username ? '@' + m.username : '') + (m.role === 'owner' ? ' · owner' : '') + (m.blocked ? ' · blocked by you' : '') })]), acts]));
+        el('span', { cls: 'pn' }, [el('b', { text: (m.display || m.username || '[gone]') + (m.you ? ' ' + _t('js.msg.you_paren', '(you)') : '') }),
+          el('small', { text: (m.username ? '@' + m.username : '') + (m.role === 'owner' ? ' · ' + _t('js.msg.owner', 'owner') : '') + (m.blocked ? ' · ' + _t('js.msg.blocked_by_you', 'blocked by you') : '') })]), acts]));
     });
     var full = (h.members || []).length >= (h.max || B.groupMax || 10);
     $('dmMemIn').disabled = $('dmMemAdd').disabled = full;
-    $('dmMemHint').textContent = full ? 'The group is full (' + (h.max || 10) + ' people).' : 'Anyone in the group can add people. They see messages from when they were added. Only the owner can remove people.';
+    $('dmMemHint').textContent = full ? _t('js.msg.group_full', 'The group is full ({n} people).', { n: h.max || 10 }) : _t('js.msg.members_hint', 'Anyone in the group can add people. They see messages from when they were added. Only the owner can remove people.');
   }
   function openMembers() { if (!isGroup()) return; $('dmMemResults').textContent = ''; $('dmMemMsg').textContent = ''; renderMembers(); openDlg(memDlg); }
   $('dmMemClose').addEventListener('click', function () { closeDlg(memDlg); });
@@ -921,7 +923,7 @@
     $('dmMemAdd').disabled = true;
     api('/api/messages/c/' + S.open + '/members', { usernames: names }).then(function (d) {
       var ul = $('dmMemResults'); ul.textContent = '';
-      (d.added || []).forEach(function (a) { ul.appendChild(el('li', { cls: 'ok' }, [el('span', { cls: 'pn' }, [el('b', { text: a.display }), el('small', { text: 'added' })])])); });
+      (d.added || []).forEach(function (a) { ul.appendChild(el('li', { cls: 'ok' }, [el('span', { cls: 'pn' }, [el('b', { text: a.display }), el('small', { text: _t('js.msg.added', 'added') })])])); });
       (d.refused || []).forEach(function (r) { ul.appendChild(el('li', { cls: 'no' }, [el('span', { cls: 'pn' }, [el('b', { text: r.display || r.username }), el('small', { text: r.error })])])); });
       $('dmMemIn').value = '';
       return reloadHead().then(renderMembers);
@@ -933,11 +935,11 @@
     var rm = e.target.closest('[data-mremove]'), bl = e.target.closest('[data-mblock]');
     if (rm) {
       var u = rm.getAttribute('data-mremove');
-      if (!window.confirm('Remove @' + u + ' from ' + S.head.title + '?')) return;
+      if (!window.confirm(_t('js.msg.confirm_remove', 'Remove @{name} from {group}?', { name: u, group: S.head.title }))) return;
       api('/api/messages/c/' + S.open + '/remove', { username: u }).then(reloadHead).then(renderMembers).catch(function (x) { $('dmMemMsg').textContent = x.message; });
     } else if (bl) {
       var who = bl.getAttribute('data-mblock'), on = bl.getAttribute('data-on') === '1';
-      if (on && !window.confirm('Block @' + who + '? Their messages here are collapsed for you, they can\'t message you or add you to groups, and they aren\'t told.')) return;
+      if (on && !window.confirm(_t('js.msg.confirm_block_member', 'Block @{name}? Their messages here are collapsed for you, they can\'t message you or add you to groups, and they aren\'t told.', { name: who }))) return;
       api('/api/messages/block', { username: who, on: on }).then(refreshPrefs).then(function () { return openConv(S.open, false); }).then(renderMembers).catch(function (x) { $('dmMemMsg').textContent = x.message; });
     }
   });
@@ -960,7 +962,7 @@
     e.preventDefault();
     var f = e.target, r = f.querySelector('input[name=reason]:checked');
     api('/api/messages/m/' + repId + '/report', { reason: r ? r.value : 'other', note: f.note.value }).then(function (d) {
-      $('dmRepMsg').textContent = d.already ? 'You already reported this one.' : 'Reported - thank you. An admin will look at it.';
+      $('dmRepMsg').textContent = d.already ? _t('js.msg.already_reported', 'You already reported this one.') : _t('js.msg.reported', 'Reported - thank you. An admin will look at it.');
       $('dmRepMsg').style.color = '#a5d6a7';
       setTimeout(function () { repDlg.close(); }, 1400);
     }).catch(function (x) { $('dmRepMsg').style.color = ''; $('dmRepMsg').textContent = x.message; });
@@ -975,8 +977,8 @@
     setForm.nopreview.checked = P.preview === false;
     var linked = !!me.camfrog;
     setForm.alerts.disabled = !linked; setForm.nopreview.disabled = !linked || !setForm.alerts.checked;
-    $('dmSetCf').textContent = linked ? 'At most one alert per conversation every 10 minutes, and only in a Camfrog room where you are. Never sent while you\'re reading it here. Mute a conversation (⋯) to stop its alerts.'
-                                      : 'Link your Camfrog name first (type !verify in a Camfrog room with Pepe) to get alerts there.';
+    $('dmSetCf').textContent = linked ? _t('js.msg.alerts_linked', 'At most one alert per conversation every 10 minutes, and only in a Camfrog room where you are. Never sent while you\'re reading it here. Mute a conversation (⋯) to stop its alerts.')
+                                      : _t('js.msg.alerts_unlinked', 'Link your Camfrog name first (type !verify in a Camfrog room with Pepe) to get alerts there.');
     // notices: one Camfrog-PM switch per category (direct messages are the "Camfrog alerts" switch above)
     var np = $('dmNtPrefs'); np.textContent = '';
     var PM = S.nt.pm || {};
@@ -987,9 +989,9 @@
       np.appendChild(el('label', null, [cb, ' ' + k.icon + ' ' + k.label]));
     });
     var ul = $('dmBlocks'); ul.textContent = '';
-    if (!S.blocks.length) ul.appendChild(el('li', { cls: 'mut', text: 'Nobody.' }));
+    if (!S.blocks.length) ul.appendChild(el('li', { cls: 'mut', text: _t('js.msg.nobody', 'Nobody.') }));
     S.blocks.forEach(function (b) {
-      ul.appendChild(el('li', null, [el('span', { text: (b.display || b.username) + ' (@' + b.username + ')' }), el('button', { type: 'button', 'data-unblock': b.username, text: 'Unblock' })]));
+      ul.appendChild(el('li', null, [el('span', { text: (b.display || b.username) + ' (@' + b.username + ')' }), el('button', { type: 'button', 'data-unblock': b.username, text: _t('js.msg.unblock', 'Unblock') })]));
     });
   }
   function refreshPrefs() { return api('/api/messages/prefs').then(function (d) { S.prefs = d.prefs; S.blocks = d.blocks || []; if (setDlg.open) fillSettings(); }).catch(function () {}); }
@@ -1013,7 +1015,7 @@
       S.prefs = d.prefs;
       return api('/api/inbox/prefs', { pm: pm });
     }).then(function (d) {
-      S.nt.pm = d.prefs; $('dmSetMsg').style.color = '#a5d6a7'; $('dmSetMsg').textContent = 'Saved ✔';
+      S.nt.pm = d.prefs; $('dmSetMsg').style.color = '#a5d6a7'; $('dmSetMsg').textContent = _t('js.msg.saved', 'Saved ✔');
       setTimeout(function () { setDlg.close(); }, 700);
     }).catch(function (x) { $('dmSetMsg').style.color = ''; $('dmSetMsg').textContent = x.message; });
   });

@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
 <%#
   Profile → Analytics (userstats.js builds `a`). `L` (profilelayout.js view) decides what shows:
     * plain panels (an_*): Public or Hidden — hidden ones render greyed for the owner/admins only
@@ -10,10 +11,10 @@
   const LL = typeof L !== 'undefined' && L ? L : null;
   const sub = (id) => !LL || LL.show(id);
   const hc = (id) => (LL && LL.hidden(id) ? ' ua-hid' : '');
-  const ht = (id) => (LL && LL.hidden(id) ? '<span class="ua-hidtag">\u{1F441} Hidden from visitors</span>' : '');
+  const ht = (id) => (LL && LL.hidden(id) ? '<span class="ua-hidtag">\u{1F441} ' + t('profile.hidden_from_visitors') + '</span>' : '');
   // "only me & admins" panels: a lock tag (only ever rendered for the owner/admins — visitors don't get the panel)
   const isPriv = (id) => !!(LL && LL.priv && LL.priv(id) && !LL.hidden(id));
-  const pt = (id) => (isPriv(id) ? '<span class="lock">\u{1F512} Only ' + (LL.owner ? 'you' : 'the owner') + ' &amp; admins can see this</span>' : '');
+  const pt = (id) => (isPriv(id) ? '<span class="lock">\u{1F512} ' + (LL.owner ? t('profile.an.only_you') : t('profile.an.only_owner')) + '</span>' : '');
 %>
 <style>
   .ua { display: grid; gap: 18px; }
@@ -109,18 +110,18 @@
 </style>
 <section class="card ua" id="analytics">
   <div class="ua-head">
-    <h2>Analytics</h2>
-    <span class="muted">Camfrog activity<% if (a.updated) { %> · updated <%= a.updated %><% } %></span>
+    <h2><%- t('profile.analytics') %></h2>
+    <span class="muted"><%- t('profile.an.activity') %><% if (a.updated) { %> · <%- t('profile.an.updated', { when: a.updated }) %><% } %></span>
   </div>
 
   <% if (sub('an_tiles')) { %>
   <div class="tiles<%= hc('an_tiles') %>"><%- ht('an_tiles') %>
-    <div class="tile"><div class="k">Messages</div><div class="v"><%= a.tiles.messages %></div><div class="s"><%= a.tiles.messages30 %> in the last 30 days</div></div>
-    <div class="tile"><div class="k">Mic time</div><div class="v"><%= a.tiles.micDur %></div><div class="s">longest <%= a.tiles.longest %></div></div>
-    <div class="tile"><div class="k">Mic sessions</div><div class="v"><%= a.tiles.sessions %></div><div class="s">avg <%= a.tiles.avgSession %> each</div></div>
-    <div class="tile"><div class="k">First seen</div><div class="v sm"><%= a.tiles.first %></div><div class="s">by Pepe</div></div>
-    <div class="tile"><div class="k">Last seen</div><div class="v sm"><%= a.tiles.last %></div><div class="s"><%= a.tiles.peakChat ? 'busiest at ' + a.tiles.peakChat : '&nbsp;' %></div></div>
-    <div class="tile"><div class="k">Favourite room</div><div class="v sm"><%= a.tiles.favRoom %></div><div class="s">by messages + mic</div></div>
+    <div class="tile"><div class="k"><%- t('profile.an.messages') %></div><div class="v"><%= a.tiles.messages %></div><div class="s"><%- t('profile.an.in_30_days', { n: a.tiles.messages30 }) %></div></div>
+    <div class="tile"><div class="k"><%- t('profile.an.mic_time') %></div><div class="v"><%= a.tiles.micDur %></div><div class="s"><%- t('profile.an.longest', { d: a.tiles.longest }) %></div></div>
+    <div class="tile"><div class="k"><%- t('profile.an.mic_sessions') %></div><div class="v"><%= a.tiles.sessions %></div><div class="s"><%- t('profile.an.avg_each', { d: a.tiles.avgSession }) %></div></div>
+    <div class="tile"><div class="k"><%- t('profile.an.first_seen') %></div><div class="v sm"><%= a.tiles.first %></div><div class="s"><%- t('profile.an.by_pepe') %></div></div>
+    <div class="tile"><div class="k"><%- t('profile.an.last_seen') %></div><div class="v sm"><%= a.tiles.last %></div><div class="s"><%- a.tiles.peakChat ? t('profile.an.busiest_at', { h: a.tiles.peakChat }) : t.esc('&nbsp;') %></div></div>
+    <div class="tile"><div class="k"><%- t('profile.an.fav_room') %></div><div class="v sm"><%= a.tiles.favRoom %></div><div class="s"><%- t('profile.an.by_msgs_mic') %></div></div>
   </div>
   <% } %>
 
@@ -128,14 +129,14 @@
   <div class="two">
     <% if (sub('an_chat')) { %>
     <div class="blk<%= hc('an_chat') %>"><%- ht('an_chat') %>
-      <div class="blk-top"><b><span class="dot" style="background:#4caf50"></span>Messages per day</b><span class="muted">last 90 days</span></div>
-      <% if (a.hasChat) { %><%- a.chatChart %><% } else { %><div class="empty">No chat recorded yet.</div><% } %>
+      <div class="blk-top"><b><span class="dot" style="background:#4caf50"></span><%- t('profile.an.msgs_per_day') %></b><span class="muted"><%- t('profile.an.last_90') %></span></div>
+      <% if (a.hasChat) { %><%- a.chatChart %><% } else { %><div class="empty"><%- t('profile.an.no_chat') %></div><% } %>
     </div>
     <% } %>
     <% if (sub('an_mic')) { %>
     <div class="blk<%= hc('an_mic') %>"><%- ht('an_mic') %>
-      <div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span>Mic time per day</b><span class="muted">last 90 days</span></div>
-      <% if (a.hasMic) { %><%- a.micChart %><% } else { %><div class="empty">Never on the mic yet.</div><% } %>
+      <div class="blk-top"><b><span class="dot" style="background:#ffb74d"></span><%- t('profile.an.mic_per_day') %></b><span class="muted"><%- t('profile.an.last_90') %></span></div>
+      <% if (a.hasMic) { %><%- a.micChart %><% } else { %><div class="empty"><%- t('profile.an.no_mic') %></div><% } %>
     </div>
     <% } %>
   </div>
@@ -143,7 +144,7 @@
 
   <% if ((a.hasChat || a.hasMic) && sub('an_hours')) { %>
   <div class="blk<%= hc('an_hours') %>"><%- ht('an_hours') %>
-    <div class="blk-top"><b>Time of day</b><span class="muted">all time · Pepe's clock<%= a.tz ? ' (' + a.tz + ')' : '' %><%= a.tiles.peakMic ? ' · mic peaks at ' + a.tiles.peakMic : '' %></span></div>
+    <div class="blk-top"><b><%- t('profile.an.time_of_day') %></b><span class="muted"><%- t('profile.an.all_time_clock') %><%= a.tz ? ' (' + a.tz + ')' : '' %><%- a.tiles.peakMic ? ' · ' + t('profile.an.mic_peaks', { h: a.tiles.peakMic }) : '' %></span></div>
     <div><%- a.hoursHtml %>
       <div class="ua-hax"><span></span><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span></div>
     </div>
@@ -153,7 +154,7 @@
   <% if ((a.chatRooms.length || a.micRooms.length) && sub('an_rooms')) { %>
   <div class="two<%= hc('an_rooms') %>"><%- ht('an_rooms') %>
     <div>
-      <div class="sub">Rooms · chat</div>
+      <div class="sub"><%- t('profile.an.rooms_chat') %></div>
       <div class="rlist">
         <% if (!a.chatRooms.length) { %><div class="empty">—</div><% } %>
         <% a.chatRooms.forEach((r) => { %>
@@ -162,7 +163,7 @@
       </div>
     </div>
     <div>
-      <div class="sub">Rooms · mic</div>
+      <div class="sub"><%- t('profile.an.rooms_mic') %></div>
       <div class="rlist">
         <% if (!a.micRooms.length) { %><div class="empty">—</div><% } %>
         <% a.micRooms.forEach((r) => { %>
@@ -175,21 +176,21 @@
 
   <% if (a.cmds && sub('an_cmds')) { const k = a.cmds; %>
   <div class="blk<%= hc('an_cmds') %>"><%- ht('an_cmds') %>
-    <div class="sub">Commands<% if (k.hasMod && LL && LL.hidden('an_modcmds')) { %> <span class="lock">👁 moderation & admin commands: hidden from visitors</span><% } else if (k.hasMod && isPriv('an_modcmds')) { %> <span class="lock">🔒 moderation & admin commands: only <%= LL.owner ? 'you' : 'the owner' %> &amp; admins</span><% } %></div>
+    <div class="sub"><%- t('profile.an.commands') %><% if (k.hasMod && LL && LL.hidden('an_modcmds')) { %> <span class="lock">👁 <%- t('profile.an.modcmds_hidden') %></span><% } else if (k.hasMod && isPriv('an_modcmds')) { %> <span class="lock">🔒 <%- LL.owner ? t('profile.an.modcmds_you') : t('profile.an.modcmds_owner') %></span><% } %></div>
     <div class="two">
       <div>
         <div class="cmdhead">
           <span class="big"><%= k.total %></span>
-          <span class="muted"><b><%= k.last30 %></b> in 30 days · <b><%= k.paidPct %>%</b> PAT-priced<% if (k.web !== '0') { %> · <b><%= k.web %></b> from the website<% } %></span>
+          <span class="muted"><%- t('profile.an.cmd_last30', { n: k.last30 }) %> · <%- t('profile.an.cmd_paid', { pct: k.paidPct }) %><% if (k.web !== '0') { %> · <%- t('profile.an.cmd_web', { n: k.web }) %><% } %></span>
         </div>
         <%- k.spark %>
-        <div class="catbar" role="img" aria-label="Commands by category"><% k.cats.forEach((c) => { %><span style="width:<%= c.pct.toFixed(2) %>%;background:<%= c.color %>" data-tip="<%= c.label %> · <%= c.n %>"></span><% }) %></div>
+        <div class="catbar" role="img" aria-label="<%- t('profile.an.cmds_by_cat') %>"><% k.cats.forEach((c) => { %><span style="width:<%= c.pct.toFixed(2) %>%;background:<%= c.color %>" data-tip="<%= c.label %> · <%= c.n %>"></span><% }) %></div>
         <div class="catleg"><% k.cats.forEach((c) => { %><span><span class="dot" style="background:<%= c.color %>"></span><%= c.label %><b><%= c.n %></b></span><% }) %></div>
       </div>
       <div>
         <div class="toplist">
-          <% k.top.forEach((t) => { %>
-            <div class="toprow" data-tip="<%= t.cmd %> · <%= t.n %> uses · last <%= t.last %> · <%= t.cat %>"><code><%= t.cmd %></code><div class="tb"><span style="width:<%= t.pct.toFixed(1) %>%;background:<%= t.color %>"></span></div><span class="tn"><%= t.n %> · <%= t.last %></span></div>
+          <% k.top.forEach((tp) => { %>
+            <div class="toprow" data-tip="<%= tp.cmd %> · <%- t('profile.an.tip_uses', { n: tp.n, last: tp.last }) %> · <%= tp.cat %>"><code><%= tp.cmd %></code><div class="tb"><span style="width:<%= tp.pct.toFixed(1) %>%;background:<%= tp.color %>"></span></div><span class="tn"><%= tp.n %> · <%= tp.last %></span></div>
           <% }) %>
         </div>
       </div>
@@ -199,7 +200,7 @@
 
   <% if (a.words.length && sub('an_words')) { %>
   <div class="blk<%= hc('an_words') %>"><%- ht('an_words') %>
-    <div class="sub">Most-used words <%- pt('an_words') %></div>
+    <div class="sub"><%- t('profile.an.words') %> <%- pt('an_words') %></div>
     <div class="words"><% a.words.forEach(([w, n]) => { %><span><%= w %><b><%= n %></b></span><% }) %></div>
   </div>
   <% } %>
@@ -207,19 +208,19 @@
   <% const modOn = a.mod.on && sub('an_modon') ? a.mod.on : null; %>
   <% if (sub('an_mod') || modOn) { %>
   <div>
-    <div class="sub">Moderation</div>
+    <div class="sub"><%- t('profile.an.moderation') %></div>
     <div class="modgrid">
       <% if (sub('an_mod')) { %>
       <div class="modbox<%= hc('an_mod') %>"><%- ht('an_mod') %>
-        <div class="muted">Mod actions taken</div>
-        <div class="big"><%= a.mod.byTotal.toLocaleString('en-US') %></div>
+        <div class="muted"><%- t('settings.layout.label.an_mod') %></div>
+        <div class="big"><%= t.num(a.mod.byTotal) %></div>
         <% if (a.mod.byCounts.length) { %>
           <div class="pills"><% a.mod.byCounts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
-        <% } else { %><div class="empty">None that Pepe has seen.</div><% } %>
+        <% } else { %><div class="empty"><%- t('profile.an.mod_none') %></div><% } %>
         <% if (a.mod.byRecent.length && sub('an_modlist')) { %>
           <div class="ua-modlist<%= hc('an_modlist') %>"><%- ht('an_modlist') %>
           <% if (isPriv('an_modlist')) { %><div class="ua-privnote"><%- pt('an_modlist') %></div><% } %>
-          <table><thead><tr><th>When</th><th>Action</th><th>On</th><th class="room">Room</th></tr></thead><tbody>
+          <table><thead><tr><th><%- t('profile.an.when') %></th><th><%- t('profile.an.action') %></th><th><%- t('profile.an.on') %></th><th class="room"><%- t('profile.an.room') %></th></tr></thead><tbody>
             <% a.mod.byRecent.forEach((e) => { %>
               <tr><td class="t" title="<%= e.when %>"><%= e.ago %></td><td><%= e.label %><%= e.note ? ' · ' + e.note : '' %></td><td class="w"><%= e.who || '—' %></td><td class="room"><%= e.room %></td></tr>
             <% }) %>
@@ -230,16 +231,16 @@
       <% } %>
       <% if (modOn) { %>
       <div class="modbox<%= isPriv('an_modon') ? ' private' : '' %><%= hc('an_modon') %>"><%- ht('an_modon') %>
-        <div class="muted ua-ttl">Moderated against <%- pt('an_modon') %></div>
-        <div class="big"><%= modOn.total.toLocaleString('en-US') %></div>
+        <div class="muted ua-ttl"><%- t('settings.layout.label.an_modon') %> <%- pt('an_modon') %></div>
+        <div class="big"><%= t.num(modOn.total) %></div>
         <% if (modOn.counts.length) { %>
           <div class="pills"><% modOn.counts.forEach((c) => { %><span class="pill"><%= c.label %><b><%= c.n %></b></span><% }) %></div>
-          <table><thead><tr><th>When</th><th>What</th><th>By</th><th class="room">Room</th></tr></thead><tbody>
+          <table><thead><tr><th><%- t('profile.an.when') %></th><th><%- t('profile.an.what') %></th><th><%- t('profile.an.by') %></th><th class="room"><%- t('profile.an.room') %></th></tr></thead><tbody>
             <% modOn.recent.forEach((e) => { %>
               <tr><td class="t" title="<%= e.when %>"><%= e.ago %></td><td><%= e.label %><%= e.note ? ' · ' + e.note : '' %></td><td class="w"><%= e.who || '—' %></td><td class="room"><%= e.room %></td></tr>
             <% }) %>
           </tbody></table>
-        <% } else { %><div class="empty">Clean record — nothing on file.</div><% } %>
+        <% } else { %><div class="empty"><%- t('profile.an.clean') %></div><% } %>
       </div>
       <% } %>
     </div>
