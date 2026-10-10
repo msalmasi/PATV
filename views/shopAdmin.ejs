@@ -137,7 +137,7 @@
       <label class="wide">Official items sold as a subscription <small class="muted">{"prizeId": {"days": 30}} — the price is the item's price, charged every N days</small>
         <textarea name="items" style="min-height:90px" spellcheck="false"><%= JSON.stringify(subsCfg.items, null, 1) %></textarea></label>
     </div>
-    <p class="muted" style="margin:0">Renewals pay the store exactly like a purchase of that item. Members manage theirs at <a href="/settings/subscriptions">/settings/subscriptions</a> (it also lists their Prime Time / Season Pass auto-renewals).</p>
+    <p class="muted" style="margin:0">Renewals pay the store exactly like a purchase of that item. Members manage theirs at <a href="/subscriptions">/subscriptions</a> (it also lists their Prime Time / Season Pass auto-renewals).</p>
     <div><button type="submit">Save subscription settings</button></div>
   </form>
   <% } %>

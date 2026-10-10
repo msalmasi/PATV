@@ -1,5 +1,5 @@
 // subscriptions.js — 1.99jp: SUBSCRIPTIONS for official store items (generic), plus one place to see and cancel every
-// auto-renewing thing an account pays for (/settings/subscriptions): these shop subscriptions AND the 📺 Prime Time /
+// auto-renewing thing an account pays for (/subscriptions - 1.99jr; was /settings/subscriptions, which redirects): these shop subscriptions AND the 📺 Prime Time /
 // 🎟️ Season Pass renewals (premium.js, which already renews by itself - shown and switched from here, prices and routing
 // unchanged).
 //
@@ -100,7 +100,7 @@ async function liveFor(userId, prizeId) {
   return (await getQuery(`SELECT * FROM shop_subs WHERE user_id = ? AND prize_id = ? AND status IN ${LIVE} ORDER BY id DESC LIMIT 1`, [userId, prizeId]))[0] || null;
 }
 async function notify(userId, ref, title, body) {
-  try { await require("./inbox").addSafe(userId, { kind: "shop", ref, title, body, link: "/settings/subscriptions" }); } catch (e) { /* never blocks */ }
+  try { await require("./inbox").addSafe(userId, { kind: "shop", ref, title, body, link: "/subscriptions" }); } catch (e) { /* never blocks */ }
 }
 // Plex access depends on these: re-check the member's rows after every change
 const touchPlex = (userId, prizeId) => {
@@ -262,7 +262,7 @@ async function plexSub(userId, t = clock()) {
   return best;
 }
 
-/** Everything for /settings/subscriptions. */
+/** Everything for /subscriptions. */
 async function pageData(user) {
   await init();
   const t = clock();
@@ -317,8 +317,13 @@ function register(app, { addUser, noTimers } = {}) {
     if (!guard.sameSite(req)) return res.status(403).json({ ok: false, error: "cross-site request refused" });
     next();
   };
-  app.get("/settings/subscriptions", addUser, async (req, res) => {
-    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent("/settings/subscriptions"));
+  // 1.99jr: the page moved to a top-level /subscriptions (there's no /settings hub); old links / inbox notices still work
+  app.get("/settings/subscriptions", (req, res) => {
+    const q = req.originalUrl.indexOf("?");
+    res.redirect(301, "/subscriptions" + (q >= 0 ? req.originalUrl.slice(q) : ""));
+  });
+  app.get("/subscriptions", addUser, async (req, res) => {
+    if (!req.user || !req.user.userId) return res.redirect("/login?next=" + encodeURIComponent("/subscriptions"));
     try {
       const data = await pageData(req.user);
       let plex = null;

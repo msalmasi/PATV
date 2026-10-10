@@ -102,7 +102,7 @@
 %>
   <h1><%- t('wallet.title') %></h1>
   <p class="bal"><b><%= fmt(bal) %></b> PAT</p>
-  <p class="center info"><%= camfrog ? 'Camfrog: ' + camfrog + ' · ' : '' %><a href="/history"><%- t('wallet.history_link') %></a></p>
+  <p class="center info"><%= camfrog ? 'Camfrog: ' + camfrog + ' · ' : '' %><a href="/history"><%- t('wallet.history_link') %></a> · <a href="/subscriptions">🔁 <%- t('subs.title') %></a></p>
 
   <%- include('partials/actions', { acts, msg }) %>
   <% if (welcomeStatus && welcomeStatus.state === 'pending') { const ws = welcomeStatus; %>

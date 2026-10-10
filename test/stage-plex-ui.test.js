@@ -38,7 +38,7 @@ test("a Plex user: the third choice with the price, the search panel + rights no
   assert.match(html, /comes straight back if the stream never gets on the stage/);
   assert.match(html, /Half goes to the pad’s room vault, half to Fort Knox/);
   assert.match(html, /up to 3 paid plays a day/);
-  assert.match(html, /Plex members play free: <a href="\/settings\/subscriptions">/, "1.99jp: how to play free");
+  assert.match(html, /Plex members play free: <a href="\/subscriptions">/, "1.99jp: how to play free (1.99jr: /subscriptions)");
   assert.match(html, /id="plexNow"/, "pause / seek / stop live in Your slot");
   assert.match(html, /stage-plex\.js\?v=2/);
   assert.match(html, /stage\.css\?v=7/);

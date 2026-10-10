@@ -33,6 +33,7 @@
       <% if (store) { %><a href="/shop"><%- t('shop.all_items') %></a><% } %>
       <% if (me) { %>
         <a href="/shop/orders"><%- t('shop.my_orders') %></a>
+        <a href="/subscriptions">🔁 <%- t('subs.title') %></a>
         <a href="/shop/seller"><%- t('shop.sell') %></a>
         <% if (me.staff) { %><a href="/shop/admin"><%- t('shop.admin') %></a><% } %>
       <% } else { %><a href="/login"><%- t('shop.signin_buy_sell') %></a><% } %>

@@ -52,6 +52,7 @@
   .pe .muted { color: #888; font-size: 13px; }
   .pe code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
   .pe .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pe .top-acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .pe .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid #2b2b2b;
              background: #181818; color: #ddd !important; font-size: 14px; cursor: pointer; font-family: inherit; line-height: 1.2; text-decoration: none; }
   .pe .btn:hover { border-color: #4caf50; }
@@ -70,7 +71,8 @@
   .pe .btn:disabled { opacity: .45; cursor: default; }
   .pe .btn.primary:disabled:hover { background: #4caf50; }
   .pe .jump { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pe .jump a { font-size: 13px; padding: 5px 11px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
+  .pe .jump a { display: inline-flex; align-items: center; box-sizing: border-box; height: 30px; font-size: 13px; line-height: 1; padding: 0 12px;
+                border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; white-space: nowrap; }
   .pe .jump a:hover { border-color: #4caf50; }
 
   /* messages */
@@ -85,11 +87,16 @@
                 box-shadow: 0 0 0 6px rgba(76, 175, 80, .12); }
   .pe .who .nm { margin: 0; font-size: 26px; line-height: 1.15; font-weight: bold; overflow-wrap: anywhere; }
   .pe .handle { color: #9a9; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
-  .pe .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-  .pe .chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid #2c3a2d; background: #0f1a10; color: #b9d8bb; }
+  /* 1.99jr: one pill style - same height / padding / line-height, centred in a flex row (the Preview pill used to pick up
+     the privacy panel's .pv grid + padding and stretch the row, which pushed the other pills' text to the top) */
+  .pe .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+  .pe .chip { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 24px; margin: 0;
+              padding: 0 10px; font-size: 12px; line-height: 1; white-space: nowrap; border-radius: 999px; border: 1px solid #2c3a2d;
+              background: #0f1a10; color: #b9d8bb; }
   .pe .chip.admin { border-color: #6b4fa0; background: #1a1326; color: #cbb6f2; }
   .pe .chip.staff { border-color: #2f6d8f; background: #10202a; color: #a9d7f0; }
-  .pe .chip.pv { border-color: #5a4a1c; background: #1d1a10; color: #e8cf7a; }
+  .pe .chip.chip-preview { border-color: #5a4a1c; background: #1d1a10; color: #e8cf7a; }
+  .pe .chip.plex { border-color: #8a5a12; background: #241806; color: #f3c04f; text-decoration: none; }
   .pe .hero-foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 
   /* forms */
@@ -127,6 +134,9 @@
   .pe .conn-name b { display: block; font-size: 15px; overflow-wrap: anywhere; }
   .pe .conn-name .none { color: #777; font-weight: normal; }
   .pe .conn-cf { grid-column: 1 / -1; }
+  .pe .conn-name .px-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: #aaa; }
+  .pe .btn.plex { background: #e5a00d; border-color: #e5a00d; color: #1a1200 !important; font-weight: bold; }
+  .pe .btn.plex:hover { background: #f0b429; }
 
   /* layout editor */
   .pe .lay-fixed { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px dashed #2b2b2b; color: #888; font-size: 13px; margin-bottom: 8px; }
@@ -231,7 +241,7 @@
 <div class="pe">
   <div class="top">
     <h1><%- t('profile.edit_profile') %></h1>
-    <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a>
+    <span class="top-acts"><a class="btn" href="/subscriptions">🔁 <%- t('subs.title') %></a> <a class="btn" href="/u/<%= username %>"><%- t('settings.view_profile') %></a></span>
   </div>
 
   <% if (verifyInfo) { %>
@@ -263,7 +273,7 @@
       <div class="nm"><% if (cxName && cxName.css) { %><span class="cx-name" id="pvName" style="<%= cxName.css %>"><%= displayname || username %></span><% } else { %><span id="pvName"><%= displayname || username %></span><% } %></div>
       <div class="handle">@<span id="pvHandle"><%= username %></span><% if (camfrogName) { %> · 🐸 <%- t('profile.on_camfrog', { name: camfrogName }) %><% } %></div>
       <div class="chips">
-        <span class="chip pv"><%- t('settings.preview') %></span>
+        <span class="chip chip-preview"><%- t('settings.preview') %></span>
         <% if (typeof level !== 'undefined' && level != null) { %><span class="chip"><%- t('settings.level_n', { n: level }) %></span><% } %>
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
       </div>
@@ -413,6 +423,26 @@
           <div class="row"><input type="text" id="camfrogUsername" name="camfrogUsername" value="<%= camfrogName %>" placeholder="<%- t('settings.connections.cf_placeholder') %>"><button class="btn primary" type="submit"><%- t('settings.connections.cf_link') %></button></div>
           <span class="hint"><%- t('settings.connections.cf_hint') %></span>
         </form>
+      </div>
+      <%# 1.99jr: 📼 Plex (plexmembers.js self-link: Plex's own sign-in, a PIN; the same link as on /subscriptions) %>
+      <% const px_ = locals.plex || { rows: [], member: null }; const pxRows_ = px_.rows || []; const pxLive_ = px_.member;
+         const pxRow_ = pxRows_.find((r) => r.active) || pxRows_.find((r) => r.pending) || pxRows_[0] || null;
+         const pxDate_ = (ms) => new Date(Number(ms)).toISOString().slice(0, 10); %>
+      <div class="conn-row" id="plexDiv">
+        <span class="conn-ico" style="background:#1f1f1f;color:#e5a00d">📼</span>
+        <span class="conn-name">Plex<b><% if (pxRow_) { %><span style="color:#e5a00d"><%= pxRow_.username || pxRow_.plex_id %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b>
+          <% if (pxLive_) { %><small class="px-st"><span class="chip plex">📼 <%- t('settings.connections.plex_member') %></span>
+            <%- pxLive_.access === 'lifetime' ? t('subs.plex_lifetime') : (pxLive_.access === 'manual' || pxLive_.access === 'pre-existing') ? t('subs.plex_kept') : pxLive_.expires ? t('subs.plex_until', { date: pxDate_(pxLive_.expires) }) : '' %></small>
+          <% } else if (pxRow_ && pxRow_.pending) { %><small class="px-st"><%- t('subs.plex_pending', { plex: pxRow_.username || '?' }) %></small>
+          <% } else if (pxRow_) { %><small class="px-st"><%- t('subs.plex_linked_off', { plex: pxRow_.username || '?' }) %></small><% } %>
+        </span>
+        <% if (pxRow_ && pxRow_.link_source !== 'admin') { %>
+          <button type="button" class="btn" data-plex-unlink="<%= pxRow_.plex_id %>"><%- t('subs.plex_unlink') %></button>
+        <% } else if (!pxRow_ && locals.plexLink) { %>
+          <button type="button" class="btn plex" id="plexLinkBtn" data-back="profile"<%= locals.plexPin ? ' data-pin="' + locals.plexPin + '"' : '' %>><%- t('settings.connections.plex_link') %></button>
+        <% } else { %><span></span><% } %>
+        <div class="conn-cf"><span class="status" id="plexStatus" role="status" aria-live="polite"></span>
+          <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %></span></div>
       </div>
     </div>
   </section>
@@ -607,5 +637,6 @@
     refresh();
   })();
 </script>
+<script src="/public/js/plex-link.js?v=1" defer></script>
 </body>
 </html>

@@ -134,11 +134,11 @@ async function onSale(sale) {
     if (!ins0 || !ins0.changes) return false;
     const shop = require("./shop");
     await runQuery("UPDATE shop_orders SET seller_note = ?, updated = ? WHERE id = ?",
-                   [`You're already on our Plex server (as ${member.username || "your Plex account"}), so no new invite is needed - this adds ${accessText(item.days)} to your access. See /settings/subscriptions.`, t, sale.orderId]);
+                   [`You're already on our Plex server (as ${member.username || "your Plex account"}), so no new invite is needed - this adds ${accessText(item.days)} to your access. See /subscriptions.`, t, sale.orderId]);
     await shop.event(sale.orderId, "completed", "system", "Already a Plex member - access extended (no new invite)");
     try { await require("./plexmembers").refreshUser(sale.userId); } catch (e) { /* the next sync does it */ }
     await require("./inbox").addSafe(sale.userId, { kind: "media", title: "📼 Your Plex access was extended", body: `${accessText(item.days)} added.`,
-      link: "/settings/subscriptions", ref: `minv-ext:${sale.orderId}` });
+      link: "/subscriptions", ref: `minv-ext:${sale.orderId}` });
     return true;
   }
   const ins = await runQuery(`INSERT OR IGNORE INTO media_invites (order_id, user_id, username, prize_id, title, days, status, created, updated)

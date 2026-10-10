@@ -264,7 +264,7 @@
         <div id="plexPick" class="px-pick hide"></div>
         <p class="msg" id="plexMsg" role="status" aria-live="polite"></p>
         <p class="muted"><% if (px.member) { %><%- t('stage.px.note_member', { n: px.daily_cap }) %><% } else if (px.free) { %><%- t('stage.px.note_admin') %><% } else { %><%- t('stage.px.note_price', { price: fmt(px.price_per_hour), n: px.daily_cap }) %>
-          <%- t('stage.px.note_join', { link: '<a href="/settings/subscriptions">' + t('stage.px.note_join_link') + '</a>' }) %><% } %>
+          <%- t('stage.px.note_join', { link: '<a href="/subscriptions">' + t('stage.px.note_join_link') + '</a>' }) %><% } %>
           <%- t('stage.px.note_slot', { min: px.pause_max_min }) %></p>
       </div>
       <% } %>

@@ -215,6 +215,57 @@ async function sendVerificationEmail(email, username, token) {
 }
 
 
+// 1.99jr: the one way a sign-in finishes - password (loginUser) and Sign in with Plex (plexsso.js). Any sign-in gate
+// (a ban, 2FA) belongs HERE so every path gets it; today a sign-in brings an archived account back (1.99bm) and issues
+// the 90-day sliding login (middleware/loginCookie.js). Site restrictions (casino ban, feed bans, red list) are not
+// sign-in blocks - they're enforced where they apply, whichever way the member signed in.
+async function finishLogin(req, res, user, via) {
+  await require("./staleaccounts").touch(user.userId, via || "sign-in");
+  issueLogin(res, { userId: user.userId, username: user.username, class: user.class });
+  return user;
+}
+
+// 1.99jr: an account made from a single-sign-on identity (Sign in with Plex, plexsso.js) - the SAME rules as the sign-up
+// form: the per-IP new-account limit, the username rules + unique in any letter case, Terms, the vesting welcome bonus
+// (welcome.enroll, with the provider identity so one Plex account can't farm it), the fresh_meat badge. The email is
+// the provider's: verified only when the provider says so (an unverified one gets the usual verification email), and
+// left out when another account already uses it. The password is random (they sign in with the provider, or reset it).
+// -> {user} or {error, field}
+async function createSsoAccount(req, res, { username, email, emailVerified, provider, identity }) {
+  const ip = guard.clientIp(req);
+  const wait = registerLimit.blocked(ip);
+  if (wait) return { error: req.t ? req.t('auth.err.too_many_accounts', { wait: guard.waitText(wait, req) }) : `Too many new accounts from your network. Try again in ${guard.waitText(wait)}.` };
+  username = String(username == null ? "" : username).trim();
+  const problem = guard.checkUsername(username, req);
+  if (problem) return { error: problem, field: "username" };
+  if ((await getQuery("SELECT 1 FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1", [username])).length)
+    return { error: req.t ? req.t('auth.err.username_taken') : "That username is taken. Try another one.", field: "username" };
+  let mail = String(email == null ? "" : email).trim();
+  if (!(mail.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail))) mail = "";
+  if (mail && (await getQuery("SELECT 1 FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1", [mail])).length) mail = "";   // never someone else's
+  const userId = uuidv4();
+  const hashed = await bcrypt.hash(crypto.randomBytes(24).toString("hex"), 12);
+  try {
+    await runQuery("INSERT INTO users (userId, username, displayname, password, email, isEmailVerified, points_balance, xp, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   [userId, username, username, hashed, mail || null, mail && emailVerified ? 1 : 0, 0, 0, "/public/img/avatar.png"]);
+  } catch (e) {
+    if (/UNIQUE/i.test(String(e && e.message))) return { error: req.t ? req.t('auth.err.just_taken') : "That username or email was just taken. Try another one.", field: "username" };
+    throw e;
+  }
+  registerLimit.hit(ip);
+  console.log(`[auth] new account ${username} (${userId}) via ${provider}`);
+  const termsMod = require("./terms");
+  if (termsMod.enforced()) await termsMod.accept(userId).catch((e) => console.error("[auth] terms accept:", e.message));
+  await displaynames.markNewAccount(userId).catch(() => {});
+  await require("./welcome").enroll(userId, provider, req, res, identity);
+  if (mail && !emailVerified) {
+    try { const token = generateValidationToken(); await updateUserWithToken(userId, token); sendVerificationEmail(mail, username, token); }
+    catch (e) { console.error("[auth] verification setup failed:", e.message); }
+  }
+  try { await awardBadge(userId, "fresh_meat"); } catch (e) { console.error("[auth] fresh_meat badge:", e.message); }
+  return { user: { userId, username, class: "pleb" } };
+}
+
 // Function to handle user login. Username (any case) or email; never logs the password.
 async function loginUser(req, res) {
   const body = req.body || {};
@@ -249,8 +300,10 @@ async function loginUser(req, res) {
       return back(req.t ? req.t('auth.err.bad_login') : "That username and password don't match. Check caps lock, or reset your password.", "password");
     }
     loginPairLimit.reset(ip + "|" + who);
-    await require("./staleaccounts").touch(user.userId, "sign-in");   // 1.99bm: an archived account comes back
-    issueLogin(res, user);   // 90-day sliding login (middleware/loginCookie.js)
+    await finishLogin(req, res, user, "sign-in");
+    // 1.99jr: "I already have an account" after a Plex sign-in that wasn't linked yet - link it now (plexsso.js; only
+    // when this form asked for it, and only the Plex account THIS browser just signed in to)
+    if (body.link_plex === "1") await require("./plexsso").linkPendingTo(req, user).catch((e) => console.error("[auth] plex link after sign-in:", e.message));
     return res.redirect(next || `/u/${encodeURIComponent(user.username)}/wheel`);
   } catch (err) {
     console.error("[auth] login error:", err && err.message);
@@ -973,6 +1026,8 @@ async function awardBonus(userId, type, amount) {
 module.exports = {
   registerUser,
   loginUser,
+  finishLogin,          // 1.99jr
+  createSsoAccount,     // 1.99jr
   updateUsername,
   updateEmail,
   updatePassword,

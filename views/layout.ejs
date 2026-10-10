@@ -59,6 +59,7 @@
               ];
               const more = [
                 ['/wallet', '👛', t('nav.wallet')],
+                ...((typeof user !== 'undefined' && user) ? [['/subscriptions', '🔁', t('subs.title')]] : []),   // 1.99jr: signed in only
                 ['/staking', '🏦', t('nav.staking')],
                 ['/cosmetics', '🎨', t('nav.cosmetics')],
                 ['/premium', '📺', t('nav.premium')],

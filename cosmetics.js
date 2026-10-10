@@ -109,7 +109,7 @@ function onSale(item, now = Date.now()) {
 
 // 1.99iv: Season Pass perk items (premium.js). 1.99jp: + 📼 Plex member perk items ("perk": "plex", plexmembers.js) - the
 // same rules: granted while the membership is active, never sold / listed / traded, rendered only while it's active.
-const PERKS = { season_pass: { label: "🎟️ Season Pass", link: "/premium" }, plex: { label: "📼 Plex membership", link: "/settings/subscriptions" } };
+const PERKS = { season_pass: { label: "🎟️ Season Pass", link: "/premium" }, plex: { label: "📼 Plex membership", link: "/subscriptions" } };
 const isPerk = (it) => !!it && !!PERKS[it.perk];
 const passOn = (userId) => { try { return require("./premium").hasPass(userId); } catch (e) { return false; } };
 const plexOn = (userId) => { try { return !!require("./plexmembers").memberSync(userId); } catch (e) { return false; } };

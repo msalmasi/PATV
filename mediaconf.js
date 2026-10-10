@@ -39,7 +39,8 @@ const DEFAULTS = {
   // 1.99jp: 📼 Plex members (plexmembers.js) - the server's shares, read through mediactl
   plex_sync_min: 60,              // how often the shares are re-read (minutes); "Sync now" on /admin/media any time
   plex_auto_revoke: false,        // OFF = a sync only LISTS the PATV-sold access that ended; an admin clicks Remove
-  plex_selflink: true,            // members may link their Plex account themselves (Plex sign-in, /settings/subscriptions)
+  plex_selflink: true,            // members may link their Plex account themselves (Plex sign-in, /subscriptions)
+  plex_sso: true,                 // 1.99jr: "Sign in with Plex" on /login + /register (plexsso.js)
   plex_flair: true,               // the automatic 📼 Plex chip / flair for active members
   wizarr_timed: false,            // false = Wizarr invites never expire by themselves (PATV ends PATV-sold access: plexmembers.js)
   // 🎬 requests (Overseerr)
@@ -112,7 +113,7 @@ const CLEAN = {
   library_daily_cap: (v) => num(v, 0, 50, 3),
   library_free_daily_cap: (v) => num(v, 0, 50, 5),
   plex_sync_min: (v) => num(v, 10, 1440, 60),
-  plex_auto_revoke: bool, plex_selflink: bool, plex_flair: bool, wizarr_timed: bool,
+  plex_auto_revoke: bool, plex_selflink: bool, plex_sso: bool, plex_flair: bool, wizarr_timed: bool,
   library_users: (v) => String(v == null ? "" : v).split(/[\s,]+/).map((x) => x.trim().toLowerCase())
     .filter((x) => /^[a-z0-9_.-]{1,40}$/.test(x)).slice(0, 200).join(","),
   request_price_movie: (v) => num(v, 0, 100000000, 0),

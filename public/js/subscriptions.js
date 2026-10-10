@@ -1,4 +1,4 @@
-// /settings/subscriptions — 1.99jp (subscriptions.js, plexmembers.js): cancel / resume / pay now, Prime Time & Season Pass
+// /subscriptions — 1.99jp (subscriptions.js, plexmembers.js): cancel / resume / pay now, Prime Time & Season Pass
 // auto-renew, subscribe, and linking a Plex account with Plex's own sign-in (a PIN: we open Plex's page, poll until it's
 // done, then reload). Every string goes through __t (js.subs.*).
 (function () {
@@ -50,7 +50,7 @@
   function poll(pin, btn, until) {
     if (polling) clearTimeout(polling);
     post('/api/plex/link/check', { pin: pin }).then(function (d) {
-      if (d.done) { say(_t('js.subs.plex_done', 'Linked! Reloading…'), 'ok'); setTimeout(function () { location.href = '/settings/subscriptions#plex'; }, 900); return; }
+      if (d.done) { say(_t('js.subs.plex_done', 'Linked! Reloading…'), 'ok'); setTimeout(function () { location.href = '/subscriptions#plex'; }, 900); return; }
       if (Date.now() > until) { say(_t('js.subs.plex_expired', 'The Plex sign-in expired - try again.'), 'bad'); if (btn) btn.disabled = false; return; }
       polling = setTimeout(function () { poll(pin, btn, until); }, 2500);
     }).catch(function (e) { say(e.message, 'bad'); if (btn) btn.disabled = false; });

@@ -1,0 +1,54 @@
+<%# views/plexSso.ejs - 1.99jr: after Sign in with Plex, a Plex account no PATV account is linked to (plexsso.js):
+    create a PATV account with it, or sign in to an existing one (which links it). Never matched by email / name. -%>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('auth.plex.page_title'), user: user }) %>
+<%
+  const F = (typeof form !== 'undefined' && form) ? form : {};
+  const errs = (errors || []).filter(Boolean), oks = (success || []).filter(Boolean);
+  const P = locals.plex || { username: '' };
+  const nextQ = next ? '?next=' + encodeURIComponent(next) : '';
+%>
+<%- include('partials/auth-css') %>
+<main class="au">
+  <section class="au-card" aria-labelledby="au-title">
+    <div class="au-brand"><img src="/public/img/pepe.png" alt=""><span class="k">publicaccess.tv</span></div>
+    <h1 id="au-title">📼 <%- t('auth.plex.heading') %></h1>
+    <p class="sub"><%- t('auth.plex.sub', { plex: P.username || 'Plex' }) %></p>
+
+    <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
+    <% if (errs.length) { %><div class="au-alert err" role="alert"><%= errs.join(' ') %></div><% } %>
+
+    <h2 class="au-h2"><%- t('auth.plex.create_h') %></h2>
+    <form action="/auth/plex/create" method="POST" data-au-form>
+      <div class="au-field">
+        <label for="username"><%- t('auth.username') %></label>
+        <input type="text" id="username" name="username" value="<%= F.username || suggest || '' %>" required
+               autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="24"
+               data-rule="newuser" aria-describedby="username-hint username-err"<% if (F.field === 'username') { %> aria-invalid="true"<% } %> data-autofocus>
+        <div class="au-hint" id="username-hint"><%- t('auth.register.username_hint') %></div>
+        <div class="au-err" id="username-err" aria-live="polite"></div>
+      </div>
+      <p class="au-hint" style="margin:8px 0 0"><%- P.email ? (P.verified ? t('auth.plex.email_verified') : t('auth.plex.email_unverified')) : t('auth.plex.email_none') %></p>
+      <% if (typeof termsEnforced !== 'undefined' && termsEnforced) { %>
+      <p class="au-terms"><%- t('auth.register.terms', { terms: '<a href="/terms" target="_blank" rel="noopener">' + t('auth.register.terms_link') + '</a>', privacy: '<a href="/privacy" target="_blank" rel="noopener">' + t('auth.register.privacy_link') + '</a>' }) %></p>
+      <% } %>
+      <div style="height:14px"></div>
+      <button type="submit" class="au-btn" data-busy="<%- t('auth.register.busy') %>"><span class="spin" aria-hidden="true"></span><span class="lbl"><%- t('auth.plex.create_btn') %></span></button>
+    </form>
+
+    <div class="au-or" role="separator"><%- t('auth.oauth.or') %></div>
+    <h2 class="au-h2"><%- t('auth.plex.have_h') %></h2>
+    <p class="sub"><%- t('auth.plex.have_sub') %></p>
+    <a class="au-btn ghost" href="/login<%= nextQ %>"><%- t('auth.plex.have_btn') %></a>
+    <form action="/auth/plex/cancel" method="POST" style="margin-top:10px;text-align:center">
+      <button type="submit" class="au-linkbtn"><%- t('auth.plex.cancel') %></button>
+    </form>
+    <p class="au-oauth-note"><%- t('auth.plex.note') %></p>
+  </section>
+</main>
+<style>
+  .au-h2 { font-size: 16px; margin: 18px 0 8px; color: #e6e6e6; }
+  .au-linkbtn { background: none; border: 0; color: #888; font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+  .au-linkbtn:hover { color: #ccc; }
+</style>
+<%- include('partials/auth-js') %>

@@ -17,8 +17,12 @@
     <% if (oks.length) { %><div class="au-alert ok" role="status"><%= oks.join(' ') %></div><% } %>
     <% if (errs.length) { %><div class="au-alert err" role="alert" id="au-form-err"><%= errs.join(' ') %></div><% } %>
 
+    <% if (locals.plexPending) { %><%# 1.99jr: "I already have an account" after Sign in with Plex (plexsso.js) %>
+    <div class="au-alert ok" role="status">📼 <%- t('auth.plex.link_on_signin', { plex: plexPending.username || 'Plex' }) %></div>
+    <% } %>
     <form action="/login" method="POST" data-au-form>
       <input type="hidden" name="next" value="<%= next %>">
+      <% if (locals.plexPending) { %><input type="hidden" name="link_plex" value="1"><% } %>
       <div class="au-field">
         <label for="username"><%- t('auth.login.username_label') %></label>
         <input type="text" id="username" name="username" value="<%= F.username || '' %>" required

@@ -248,7 +248,7 @@
       <div class="chips">
         <% if (role && role !== 'pleb') { %><span class="chip <%= role %>"><%= classh %></span><% } %>
         <% if (pc && pc.seasonPass) { %><a class="chip" href="/premium" title="<%- t('profile.has_season_pass') %>" style="background:linear-gradient(90deg,#9b5de5,#ff6ad5);color:#fff;text-decoration:none">🎟️ Season Pass</a><% } %>
-        <% if (pc && pc.plex) { %><a class="chip" href="/settings/subscriptions" title="<%- t('profile.plex_member') %>" style="background:linear-gradient(90deg,#cc7b19,#e5a00d);color:#1a1200;text-decoration:none"><%- t('profile.plex_chip') %></a><% } %>
+        <% if (pc && pc.plex) { %><a class="chip" href="/subscriptions" title="<%- t('profile.plex_member') %>" style="background:linear-gradient(90deg,#cc7b19,#e5a00d);color:#1a1200;text-decoration:none"><%- t('profile.plex_chip') %></a><% } %>
         <% if (showAv) { %><button type="button" class="chip gtfc" popovertarget="gtfPop" data-gtf-open style="--rc:<%= top ? top.color : '#3a3a1c' %>">🎮 <%- gtfLabel %></button><% } else if (sheet && sheet.cls) { %><span class="chip">🥷 <%= sheet.cls %></span><% } %>
       </div>
       <% if (cxShow.length) { %>
@@ -289,6 +289,7 @@
             <a role="menuitem" href="/achievements?user=<%= enc %>">🏅 <%- t('profile.menu.achievements') %></a>
             <a role="menuitem" href="/cosmetics?tab=mine#tabs">🎨 <%- t('profile.menu.cosmetics') %></a>
             <a role="menuitem" href="/premium">🎟️ <%- t('profile.menu.season_pass') %></a>
+            <a role="menuitem" href="/subscriptions">🔁 <%- t('subs.title') %></a>
             <% if (showAv) { %><button type="button" role="menuitem" popovertarget="gtfPop" data-gtf-open>🎮 <%- t('profile.menu.gtf_wardrobe') %></button><% } %>
             <hr>
             <form action="/logout" method="POST"><button type="submit" role="menuitem">↪ <%- t('profile.menu.logout') %></button></form>

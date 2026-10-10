@@ -46,6 +46,7 @@ const { issueLogin, refreshLogin, clearLogin } = require("./middleware/loginCook
 const guard = require("./middleware/authGuard");
 const { moveUserRows } = require("./accountMerge");
 const providerMerge = require("./providermerge");      // 1.99fy: Twitch / Discord account merges (security)
+const plexSso = require("./plexsso");                // 1.99jr: Sign in with Plex
 const oauthLink = require("./oauthlink");              // 1.99gb: link rewards, provider email capture, Twitch headers
 const displaynames = require("./displaynames");
 const stale = require("./staleaccounts");          // 1.99bm: archived (stale) accounts
@@ -337,6 +338,7 @@ function authView(req, extra) {
     success: [...new Set(req.flash("success"))],
     form,
     next: guard.safeNext(req.query.next) || guard.refererNext(req) || "",
+    plexSso: plexSso.enabled(),          // 1.99jr: the "Plex" button (auth-oauth partial)
   }, extra || {});
 }
 
@@ -347,8 +349,12 @@ app.get("/register", addUser, (req, res) => {
 
 app.get("/login", addUser, (req, res) => {
   if (req.user && req.user.username) return res.redirect(guard.safeNext(req.query.next) || `/u/${encodeURIComponent(req.user.username)}`);
-  res.render("login", authView(req));
+  // 1.99jr: back from Sign in with Plex with an unlinked Plex account ("I already have an account") - signing in links it
+  const pp = plexSso.pendingFor(req);
+  res.render("login", authView(req, pp ? { plexPending: { username: pp.username }, next: guard.safeNext(req.query.next) || pp.next || "" } : null));
 });
+// 1.99jr: 📼 Sign in with Plex (plexsso.js) - /auth/plex, /auth/plex/callback, /auth/plex/new, /auth/plex/create
+plexSso.register(app, { addUser, authView });
 
 // ── OAuth (Twitch / Discord) sign-in ──
 // `state` ties the callback to the browser that started it: without it, someone could send you a
@@ -1152,7 +1158,7 @@ require("./mainstage").register(app, { isBotToken, addUser });
 require("./restream").register(app, { addUser });   // 1.99fk: "Also stream to Twitch" relay (deploy/restream)
 require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - 📼 play from library on a stage (deploy/mediactl), 🎬 Overseerr requests (/requests), 🎟️ Wizarr invites; /admin/media
 require("./plexmembers").register(app, { addUser });   // 1.99jp: 📼 which PATV users are on our Plex server (hourly sync via mediactl), links, PATV-sold access + removal review
-require("./subscriptions").register(app, { addUser }); // 1.99jp: 🔁 store subscriptions (Plex monthly) + /settings/subscriptions (also Prime Time / Season Pass auto-renew)
+require("./subscriptions").register(app, { addUser }); // 1.99jp: 🔁 store subscriptions (Plex monthly) + /subscriptions (also Prime Time / Season Pass auto-renew)
 // 1.99cr: viewers snap / clip the stages (server-side from the HLS on disk) -> the pad's story
 require("./stagecap").register(app, { isBotToken, addUser });
 // 1.91: link previews — every page knows its absolute URL; og.js draws the preview images
@@ -2103,6 +2109,9 @@ app.get(
           let pc = null, layout = profileLayout.sanitize(profileLayout.DEFAULT);
           try { pc = await cosmetics.profileData(user.username); } catch (e) { console.error("edit profile cosmetics:", e.message); }
           try { layout = await profileLayout.get(user.userId); } catch (e) { console.error("edit profile layout:", e.message); }
+          // 1.99jr: Connections → 📼 Plex (plexmembers.js self-link)
+          let plex = null, plexLink = false;
+          try { plex = await require("./plexmembers").mine(user.userId); plexLink = !!require("./mediaconf").get().plex_selflink; } catch (e) { console.error("edit profile plex:", e.message); }
           res.render("editProfile", {
             // Render profile.ejs with user data
             username: user.username,
@@ -2122,6 +2131,8 @@ app.get(
             privPanels: profileLayout.PRIV,
             errors: errorMessages,
             success: successMessages,
+            plex, plexLink,
+            plexPin: /^\d{1,15}$/.test(String(req.query.plex || "")) ? String(req.query.plex) : null,
           });
         } else {
           res.status(404).send("User not found.");

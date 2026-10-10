@@ -48,7 +48,7 @@
         <div><button class="buy-btn" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.item.buy_for', { price: H.fmt(p.cost) }) %></button></div>
         <% if (typeof sub !== 'undefined' && sub) { %>
         <div><button class="buy-btn alt" data-subscribe="1" data-days="<%= sub.days %>" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.item.subscribe_btn', { price: H.fmt(p.cost), days: sub.days }) %></button></div>
-        <p class="muted" style="margin:0"><%- t('shop.item.subscribe_note', { days: sub.days, link: '<a href="/settings/subscriptions">' + t('shop.item.subscribe_link') + '</a>' }) %></p>
+        <p class="muted" style="margin:0"><%- t('shop.item.subscribe_note', { days: sub.days, link: '<a href="/subscriptions">' + t('shop.item.subscribe_link') + '</a>' }) %></p>
         <% } %>
         <% if (!official) { %><p class="muted" style="margin:0"><%- t('shop.item.cancel_note', { days: settings.auto_complete_days }) %></p><% } %>
       <% } %>

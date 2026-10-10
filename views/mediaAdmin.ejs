@@ -42,7 +42,7 @@
   <section class="sb-card" id="settings" aria-labelledby="stT">
     <h2 id="stT">Settings</h2>
     <form id="mediaSettings" class="book" autocomplete="off">
-      <input type="hidden" name="_bools" value="library_enabled,library_plex,requests_enabled,invites_enabled,plex_auto_revoke,plex_selflink,plex_flair,wizarr_timed">
+      <input type="hidden" name="_bools" value="library_enabled,library_plex,requests_enabled,invites_enabled,plex_auto_revoke,plex_selflink,plex_sso,plex_flair,wizarr_timed">
       <h3>📼 Play from library</h3>
       <label class="chk"><input type="checkbox" name="library_enabled" <%= S.library_enabled ? 'checked' : '' %>> On</label>
       <label>Who may use it <select name="library_allow"><option value="admins" <%= S.library_allow === 'admins' ? 'selected' : '' %>>Site admins</option><option value="staff" <%= S.library_allow === 'staff' ? 'selected' : '' %>>Admins + staff</option></select></label>
@@ -58,7 +58,8 @@
       <h3>📼 Plex members</h3>
       <label>Re-read the server's shares every (minutes) <input type="number" name="plex_sync_min" min="10" max="1440" value="<%= S.plex_sync_min %>"></label>
       <label class="chk"><input type="checkbox" name="plex_auto_revoke" <%= S.plex_auto_revoke ? 'checked' : '' %>> Remove ended PATV-sold access automatically (off = the sync only lists it; you click Remove)</label>
-      <label class="chk"><input type="checkbox" name="plex_selflink" <%= S.plex_selflink ? 'checked' : '' %>> Members may link their Plex account themselves (Plex sign-in on /settings/subscriptions)</label>
+      <label class="chk"><input type="checkbox" name="plex_selflink" <%= S.plex_selflink ? 'checked' : '' %>> Members may link their Plex account themselves (Plex sign-in on /subscriptions and Edit profile → Connections)</label>
+      <label class="chk"><input type="checkbox" name="plex_sso" <%= S.plex_sso !== false ? 'checked' : '' %>> "Sign in with Plex" on the sign-in / sign-up pages (only Plex accounts explicitly linked to a PATV account sign in; never matched by email)</label>
       <label class="chk"><input type="checkbox" name="plex_flair" <%= S.plex_flair ? 'checked' : '' %>> Show the automatic 📼 Plex chip / flair for active members</label>
 
       <h3>🎬 Requests (Overseerr)</h3>

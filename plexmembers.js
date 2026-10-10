@@ -5,7 +5,7 @@
 // (or had) a share: plex_members. A sync (hourly + "Sync now" on /admin/media) refreshes it.
 //
 // LINKING a Plex account to a PATV account (first match wins; an admin's decision is never changed by a sync):
-//   self      the PATV user proved it with Plex's own sign-in (PIN flow, /settings/subscriptions) - the strongest
+//   self      the PATV user proved it with Plex's own sign-in (PIN flow, /subscriptions + Edit profile → Connections; 1.99jr: Sign in with Plex, plexsso.js) - the strongest
 //   admin     an admin linked it (/admin/media → Plex members); an admin UNLINK is sticky too (link_lock)
 //   wizarr    a PATV store order's Wizarr invite (media_invites.code) was redeemed by a Wizarr user whose email / username
 //             is this Plex account
@@ -422,7 +422,7 @@ async function revoke(plexId, actor, { auto = false } = {}) {
   await log(r.plex_id, r.user_id, "removed", actor, `${auto ? "auto" : "admin"}: ${r.username || r.plex_id} (${c.access}, ended ${c.expires ? new Date(c.expires).toISOString().slice(0, 10) : "?"})`);
   if (r.user_id) {
     require("./inbox").addSafe(r.user_id, { kind: "media", title: "📼 Your Plex access ended",
-      body: "The Plex access you bought on PATV ran out, so the library share was removed. Get it again any time in the store.", link: "/settings/subscriptions",
+      body: "The Plex access you bought on PATV ran out, so the library share was removed. Get it again any time in the store.", link: "/subscriptions",
       ref: `plex-removed:${r.plex_id}:${r.expires || 0}` }).catch(() => {});
   }
   await reload();
@@ -508,7 +508,7 @@ async function adminState() {
   };
 }
 
-/** The member's own view (/settings/subscriptions). */
+/** The member's own view (/subscriptions, Edit profile → Connections). */
 async function mine(userId) {
   await init();
   const rows = await getQuery("SELECT plex_id, username, on_server, pending, access, expires, link_source, link_lock FROM plex_members WHERE user_id = ?", [String(userId || "")]);
@@ -527,7 +527,7 @@ let plexTv = async (method, p, hdr) => {
   let j = null; try { j = await r.json(); } catch (e) { /* not JSON */ }
   return { status: r.status, json: j };
 };
-async function linkStart(user) {
+async function linkStart(user, { back } = {}) {
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
   if (!conf.get().plex_selflink) throw new Refuse(403, "Linking a Plex account isn't open right now.");
   for (const [k, v] of pins) if (clock() - v.at > PIN_TTL) pins.delete(k);
@@ -538,7 +538,8 @@ async function linkStart(user) {
   if (!/^\d{1,15}$/.test(id) || !/^[A-Za-z0-9]{4,64}$/.test(code)) throw new Refuse(502, "Plex's sign-in answered oddly - try again.");
   pins.set(id, { userId: user.userId, at: clock() });
   const url = "https://app.plex.tv/auth#?" + new URLSearchParams({ clientID: CLIENT_ID(), code, "context[device][product]": "PATV",
-    forwardUrl: SITE() + "/settings/subscriptions?plex=" + id }).toString();
+    // 1.99jr: back to where they started - Edit profile → Connections, or /subscriptions
+    forwardUrl: SITE() + (back === "profile" && user.username ? "/u/" + encodeURIComponent(user.username) + "/edit?plex=" + id : "/subscriptions?plex=" + id) }).toString();
   return { ok: true, pin: id, url };
 }
 /** Poll a PIN: once the user signed in to Plex, read WHO (id, username, email) with that one-time token, then drop it. */
@@ -623,7 +624,7 @@ function register(app, { addUser, noTimers } = {}) {
   const J = (gate, fn) => [addUser, gate, async (req, res) => { try { res.json(await fn(req)); } catch (e) { fail(res, e); } }];
   // the member
   app.get("/api/plex/me", ...J(me, async (req) => ({ ok: true, ...(await mine(req.user.userId)) })));
-  app.post("/api/plex/link/start", ...J(me, async (req) => linkStart(req.user)));
+  app.post("/api/plex/link/start", ...J(me, async (req) => linkStart(req.user, { back: String((req.body || {}).back || "") })));
   app.post("/api/plex/link/check", ...J(me, async (req) => linkCheck(req.user, (req.body || {}).pin)));
   app.post("/api/plex/link/unlink", ...J(me, async (req) => unlinkSelf(req.user, (req.body || {}).plex_id)));
   // the admins (/admin/media → Plex members)
@@ -637,6 +638,8 @@ function register(app, { addUser, noTimers } = {}) {
 module.exports = {
   init, register, sync, refreshUser, revoke, adminLink, adminPin, adminState, mine, memberFor, memberSync, memberByName, patvAccess, classify,
   isActiveRow, isCandidate, emailHash, linkStart, linkCheck, linkSelf, unlinkSelf, reload, row, Refuse, PATV_TYPES, KEEP_TYPES, LINK_SOURCES,
+  // 1.99jr: Sign in with Plex (plexsso.js) shares the PATV client id + the plex.tv caller (tests swap it with _set)
+  plexApi: (...a) => plexTv(...a), clientId: () => CLIENT_ID(), site: () => SITE(),
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _set: (o) => {
     if (o.fetchShares) fetchShares = o.fetchShares;
