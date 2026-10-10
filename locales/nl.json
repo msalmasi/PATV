@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 Bedankt dat je PATV steunt",
   "donate.notice_body": "Je donatie van $ {usd} heeft {pat} PAT aan je wallet toegevoegd.",
   "js.donate.bad_amount": "Vul een heel aantal dollars in van 1 tot {max}.",
-  "js.donate.failed": "Kaartbetalingen zijn nu niet beschikbaar."
+  "js.donate.failed": "Kaartbetalingen zijn nu niet beschikbaar.",
+  "market.time.opened": "Geopend {!when}",
+  "market.time.closes": "Sluit {!when}",
+  "market.time.closed": "Gesloten {!when}",
+  "market.time.in": "over {left}",
+  "market.time.judged": "Pepe besliste {!when}",
+  "market.time.settled": "Afgerekend {!when}",
+  "market.time.window": "Tijdvak: {!from} → {!to}",
+  "market.time.tz_note": "Tijden in jouw tijdzone (beweeg erover voor UTC).",
+  "market.price.line": "Koerscontrole ({source}, candles van {gran} minuten): {symbol} HOOG {high} om {!high_at}, LAAG {low} om {!low_at}; doel {target}.",
+  "market.price.rule_touch": "Een bereik-vraag is Ja als de koers het doel op enig moment in het tijdvak raakte, ook als hij aan de andere kant eindigde.",
+  "market.price.rule_close": "Een slotkoers-vraag gebruikt de koers aan het einde van het tijdvak: {last}.",
+  "market.price.partial": "De koersdata dekken tot nu toe maar een deel van het tijdvak.",
+  "market.price.unread": "Pepe kon deze koersvraag niet lezen, dus een admin rekent af op basis van de koersgrafiek."
 }

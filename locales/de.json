@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 Danke, dass du PATV unterstützt",
   "donate.notice_body": "Deine Spende von {usd} $ hat {pat} PAT in deine Wallet gebracht.",
   "js.donate.bad_amount": "Gib eine ganze Dollarzahl von 1 bis {max} ein.",
-  "js.donate.failed": "Kartenzahlungen sind gerade nicht verfügbar."
+  "js.donate.failed": "Kartenzahlungen sind gerade nicht verfügbar.",
+  "market.time.opened": "Eröffnet {!when}",
+  "market.time.closes": "Schließt {!when}",
+  "market.time.closed": "Geschlossen {!when}",
+  "market.time.in": "in {left}",
+  "market.time.judged": "Pepe entschied {!when}",
+  "market.time.settled": "Abgerechnet {!when}",
+  "market.time.window": "Zeitfenster: {!from} → {!to}",
+  "market.time.tz_note": "Zeiten in deiner Zeitzone (für UTC darüberfahren).",
+  "market.price.line": "Kursprüfung ({source}, {gran}-Minuten-Kerzen): {symbol} HOCH {high} um {!high_at}, TIEF {low} um {!low_at}; Ziel {target}.",
+  "market.price.rule_touch": "Eine Erreicht-Frage ist Ja, wenn der Kurs das Ziel zu irgendeinem Zeitpunkt im Zeitfenster berührt hat, auch wenn er am Ende auf der anderen Seite lag.",
+  "market.price.rule_close": "Eine Schlusskurs-Frage verwendet den Kurs am Ende des Zeitfensters: {last}.",
+  "market.price.partial": "Die Kursdaten decken bisher nur einen Teil des Zeitfensters ab.",
+  "market.price.unread": "Pepe konnte diese Kursfrage nicht lesen, daher entscheidet ein Admin anhand des Kurscharts."
 }

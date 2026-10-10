@@ -3117,5 +3117,18 @@
   "donate.notice_title": "💖 Terima kasih telah mendukung PATV",
   "donate.notice_body": "Donasi {usd} $ milikmu menambahkan {pat} PAT ke dompetmu.",
   "js.donate.bad_amount": "Masukkan jumlah dolar bulat dari 1 sampai {max}.",
-  "js.donate.failed": "Pembayaran kartu sedang tidak tersedia."
+  "js.donate.failed": "Pembayaran kartu sedang tidak tersedia.",
+  "market.time.opened": "Dibuka {!when}",
+  "market.time.closes": "Tutup {!when}",
+  "market.time.closed": "Ditutup {!when}",
+  "market.time.in": "dalam {left}",
+  "market.time.judged": "Pepe memutuskan {!when}",
+  "market.time.settled": "Diselesaikan {!when}",
+  "market.time.window": "Jendela: {!from} → {!to}",
+  "market.time.tz_note": "Waktu sesuai zona waktumu (arahkan kursor untuk UTC).",
+  "market.price.line": "Cek harga ({source}, candle {gran} menit): {symbol} TERTINGGI {high} pada {!high_at}, TERENDAH {low} pada {!low_at}; target {target}.",
+  "market.price.rule_touch": "Pertanyaan mencapai harga bernilai Ya jika harga menyentuh target kapan saja dalam jendela, meski berakhir di sisi lain.",
+  "market.price.rule_close": "Pertanyaan harga penutupan memakai harga di akhir jendela: {last}.",
+  "market.price.partial": "Data harga sejauh ini baru mencakup sebagian jendela.",
+  "market.price.unread": "Pepe tidak bisa membaca pertanyaan harga ini, jadi admin menyelesaikannya dari grafik harga."
 }

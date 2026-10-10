@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 PATV का समर्थन करने के लिए धन्यवाद",
   "donate.notice_body": "आपके {usd} $ के दान ने आपके वॉलेट में {pat} PAT जोड़े।",
   "js.donate.bad_amount": "1 से {max} तक डॉलर की पूर्ण संख्या दर्ज करें।",
-  "js.donate.failed": "कार्ड भुगतान अभी उपलब्ध नहीं है।"
+  "js.donate.failed": "कार्ड भुगतान अभी उपलब्ध नहीं है।",
+  "market.time.opened": "खुला {!when}",
+  "market.time.closes": "बंद होगा {!when}",
+  "market.time.closed": "बंद हुआ {!when}",
+  "market.time.in": "{left} में",
+  "market.time.judged": "Pepe ने फ़ैसला दिया {!when}",
+  "market.time.settled": "निपटाया गया {!when}",
+  "market.time.window": "अवधि: {!from} → {!to}",
+  "market.time.tz_note": "समय आपके टाइम ज़ोन में हैं (UTC के लिए होवर करें)।",
+  "market.price.line": "कीमत जाँच ({source}, {gran}-मिनट कैंडल): {symbol} उच्चतम {high} ({!high_at}), न्यूनतम {low} ({!low_at}); लक्ष्य {target}।",
+  "market.price.rule_touch": "पहुँचने वाला सवाल हाँ है अगर कीमत ने अवधि में किसी भी पल लक्ष्य को छुआ, भले ही अंत में दूसरी तरफ़ रही हो।",
+  "market.price.rule_close": "क्लोज़िंग कीमत वाला सवाल अवधि के अंत की कीमत इस्तेमाल करता है: {last}।",
+  "market.price.partial": "कीमत का डेटा अभी तक अवधि के सिर्फ़ एक हिस्से को कवर करता है।",
+  "market.price.unread": "Pepe यह कीमत वाला सवाल पढ़ नहीं सका, इसलिए एक एडमिन कीमत चार्ट देखकर इसे निपटाएगा।"
 }

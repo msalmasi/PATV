@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 Merci de soutenir PATV",
   "donate.notice_body": "Votre don de {usd} $ a ajouté {pat} PAT à votre portefeuille.",
   "js.donate.bad_amount": "Saisissez un nombre entier de dollars entre 1 et {max}.",
-  "js.donate.failed": "Les paiements par carte ne sont pas disponibles pour le moment."
+  "js.donate.failed": "Les paiements par carte ne sont pas disponibles pour le moment.",
+  "market.time.opened": "Ouvert {!when}",
+  "market.time.closes": "Ferme {!when}",
+  "market.time.closed": "Fermé {!when}",
+  "market.time.in": "dans {left}",
+  "market.time.judged": "Pepe a tranché {!when}",
+  "market.time.settled": "Réglé {!when}",
+  "market.time.window": "Fenêtre : {!from} → {!to}",
+  "market.time.tz_note": "Heures dans ton fuseau horaire (survole pour l’UTC).",
+  "market.price.line": "Vérification du prix ({source}, bougies de {gran} minutes) : {symbol} PLUS HAUT {high} à {!high_at}, PLUS BAS {low} à {!low_at} ; cible {target}.",
+  "market.price.rule_touch": "Une question d’atteinte est Oui si le prix a touché la cible à n’importe quel moment de la fenêtre, même s’il a fini de l’autre côté.",
+  "market.price.rule_close": "Une question de prix de clôture utilise le prix à la fin de la fenêtre : {last}.",
+  "market.price.partial": "Les données de prix ne couvrent pour l’instant qu’une partie de la fenêtre.",
+  "market.price.unread": "Pepe n’a pas pu lire cette question de prix, un admin la règle donc à partir du graphique."
 }

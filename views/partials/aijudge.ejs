@@ -3,7 +3,24 @@
   const ai = m.ai || {};
   const ref = 'M' + m.id;
   const live = m.status === 'open' || m.status === 'closed';
-  const left = Math.max(0, Math.round((ai.until || 0) - now)); %>
+  const left = Math.max(0, Math.round((ai.until || 0) - now));
+  // 1.99jx: the exchange price check as evidence (source, the window's HIGH / LOW and when, the rule used)
+  const Tj = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+  const px = (v) => v == null ? '?' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: Number(v) >= 1 ? 2 : 6, maximumFractionDigits: Number(v) >= 1 ? 2 : 6 });
+  const tj = (ts) => { const d = new Date(ts * 1000); return '<time datetime="' + d.toISOString() + '" data-mkt-ts="' + Math.round(ts) + '" title="' + d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC">' + d.toISOString().slice(5, 16).replace('T', ' ') + ' UTC</time>'; };
+  const P = ai.price && ai.price.source ? ai.price : null;
+  const evidenceHtml = () => {
+    if (P) {
+      let h = '📈 ' + Tj('market.price.line', { source: P.source, gran: Math.max(1, Math.round((P.gran || 60) / 60)), symbol: P.symbol,
+                                                high: px(P.high), high_at: tj(P.high_at), low: px(P.low), low_at: tj(P.low_at), target: px(P.target) });
+      h += '<br>' + (P.mode === 'close' ? Tj('market.price.rule_close', { last: px(P.last) }) : Tj('market.price.rule_touch'));
+      if (!P.covered) h += '<br>' + Tj('market.price.partial');
+      return h;
+    }
+    if (ai.price_unread) return '📈 ' + Tj('market.price.unread');
+    return ai.evidence ? '📈 ' + E_(ai.evidence) : '';
+  };
+  const E_ = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
   <div class="aij">
     <div class="aij-head">🤖 Judged by Pepe <span class="aij-tag">AI · experimental</span></div>
     <% if (ai.state === 'proposed' && live) { %>
@@ -27,14 +44,14 @@
     <% } else if (ai.state === 'final' && !live && ai.result) { %>
       <%# 1.99dy: his ruling stays on the page after it paid out (the settlement banner links here) %>
       <p id="judgement">Pepe ruled <b><%= ai.result %></b><%= ai.confidence ? ' (' + Math.round(ai.confidence * 100) + '% sure)' : '' %> — <%= ai.reason %></p>
-      <% if (ai.evidence) { %><p class="aij-sub">📈 <%= ai.evidence %></p><% } %>
+      <% if (evidenceHtml()) { %><p class="aij-sub aij-ev"><%- evidenceHtml() %></p><% } %>
       <% if ((ai.disputes || []).length) { %><p class="aij-sub"><%= ai.disputes.length %> dispute<%= ai.disputes.length === 1 ? ' was' : 's were' %> raised:</p>
         <% ai.disputes.forEach((d) => { %><p class="aij-sub">⚖️ <%- ul(d.nick) %>: <%= d.why || '(no reason)' %></p><% }) %><% } %>
     <% } else if (live) { %>
       <p>When <%= kind === 'market' ? 'trading' : 'betting' %> closes, Pepe checks the evidence (exchange price data for price questions, the web, his Camfrog records), proposes the result with his reasoning, and it pays out after a dispute window.</p>
     <% } %>
-    <% if (ai.evidence && live && (ai.state === 'unsure' || ai.state === 'proposed')) { %>
-      <p class="aij-sub">📈 <%= ai.evidence %></p>
+    <% if (evidenceHtml() && live && (ai.state === 'unsure' || ai.state === 'proposed' || ai.state === 'disputed')) { %>
+      <p class="aij-sub aij-ev"><%- evidenceHtml() %></p>
     <% } %>
     <% if (live && (inIt || judgeMe)) { %>
       <div class="aij-forms">
@@ -63,6 +80,7 @@
     .aij-head { font-weight: bold; }
     .aij-tag { font-size: 11px; color: #9fb3ff; border: 1px solid #3a4a7a; border-radius: 10px; padding: 1px 8px; margin-left: 6px; font-weight: normal; }
     .aij-sub { color: #999; font-size: 13px; }
+    .aij-ev time { color: #ccc; white-space: nowrap; }
     .aij-forms form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .aij-forms input[type=text] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 10px; }
     .aij-forms button { background: #3a4a7a; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; }

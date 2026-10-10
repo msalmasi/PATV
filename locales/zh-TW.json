@@ -3117,5 +3117,18 @@
   "donate.notice_title": "💖 感謝你支持 PATV",
   "donate.notice_body": "你贊助的 {usd} $ 已為你的錢包加入 {pat} PAT。",
   "js.donate.bad_amount": "請輸入 1 到 {max} 之間的整數美元金額。",
-  "js.donate.failed": "信用卡付款目前無法使用。"
+  "js.donate.failed": "信用卡付款目前無法使用。",
+  "market.time.opened": "開盤 {!when}",
+  "market.time.closes": "截止 {!when}",
+  "market.time.closed": "已截止 {!when}",
+  "market.time.in": "還有 {left}",
+  "market.time.judged": "Pepe 裁定於 {!when}",
+  "market.time.settled": "結算於 {!when}",
+  "market.time.window": "時間窗口：{!from} → {!to}",
+  "market.time.tz_note": "時間以你的時區顯示（滑過查看 UTC）。",
+  "market.price.line": "價格核查（{source}，{gran} 分鐘 K 線）：{symbol} 最高 {high}（{!high_at}），最低 {low}（{!low_at}）；目標 {target}。",
+  "market.price.rule_touch": "觸及類問題：只要價格在窗口內任一時刻觸及目標即為是，即使最後收在另一側。",
+  "market.price.rule_close": "收盤價類問題使用窗口結束時的價格：{last}。",
+  "market.price.partial": "價格資料目前只涵蓋部分窗口。",
+  "market.price.unread": "Pepe 無法解讀這個價格問題，所以由管理員依價格圖表結算。"
 }

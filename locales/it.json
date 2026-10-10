@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 Grazie per sostenere PATV",
   "donate.notice_body": "La tua donazione di {usd} $ ha aggiunto {pat} PAT al tuo portafoglio.",
   "js.donate.bad_amount": "Inserisci un numero intero di dollari da 1 a {max}.",
-  "js.donate.failed": "I pagamenti con carta non sono disponibili al momento."
+  "js.donate.failed": "I pagamenti con carta non sono disponibili al momento.",
+  "market.time.opened": "Aperto {!when}",
+  "market.time.closes": "Chiude {!when}",
+  "market.time.closed": "Chiuso {!when}",
+  "market.time.in": "tra {left}",
+  "market.time.judged": "Pepe ha deciso {!when}",
+  "market.time.settled": "Liquidato {!when}",
+  "market.time.window": "Finestra: {!from} → {!to}",
+  "market.time.tz_note": "Orari nel tuo fuso orario (passa il mouse per l’UTC).",
+  "market.price.line": "Verifica del prezzo ({source}, candele da {gran} minuti): {symbol} MASSIMO {high} alle {!high_at}, MINIMO {low} alle {!low_at}; obiettivo {target}.",
+  "market.price.rule_touch": "Una domanda di raggiungimento è Sì se il prezzo ha toccato l’obiettivo in qualsiasi momento della finestra, anche se ha chiuso dall’altra parte.",
+  "market.price.rule_close": "Una domanda sul prezzo di chiusura usa il prezzo alla fine della finestra: {last}.",
+  "market.price.partial": "Per ora i dati di prezzo coprono solo parte della finestra.",
+  "market.price.unread": "Pepe non è riuscito a leggere questa domanda sul prezzo, quindi la liquida un admin dal grafico."
 }

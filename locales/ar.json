@@ -3342,5 +3342,18 @@
   "donate.notice_title": "💖 شكرًا لدعمك PATV",
   "donate.notice_body": "أضاف تبرعك بمبلغ {usd} $ ما مقداره {pat} PAT إلى محفظتك.",
   "js.donate.bad_amount": "أدخل عددًا صحيحًا من الدولارات من 1 إلى {max}.",
-  "js.donate.failed": "الدفع بالبطاقة غير متاح حاليًا."
+  "js.donate.failed": "الدفع بالبطاقة غير متاح حاليًا.",
+  "market.time.opened": "فُتح {!when}",
+  "market.time.closes": "يُغلق {!when}",
+  "market.time.closed": "أُغلق {!when}",
+  "market.time.in": "خلال {left}",
+  "market.time.judged": "حكم Pepe {!when}",
+  "market.time.settled": "تمت التسوية {!when}",
+  "market.time.window": "النافذة: {!from} → {!to}",
+  "market.time.tz_note": "الأوقات بتوقيتك المحلي (مرّر المؤشر لعرض UTC).",
+  "market.price.line": "فحص السعر ({source}، شموع {gran} دقيقة): {symbol} الأعلى {high} عند {!high_at}، الأدنى {low} عند {!low_at}؛ الهدف {target}.",
+  "market.price.rule_touch": "سؤال الوصول يكون نعم إذا لمس السعر الهدف في أي لحظة خلال النافذة، حتى لو انتهى على الجانب الآخر.",
+  "market.price.rule_close": "سؤال سعر الإغلاق يستخدم السعر عند نهاية النافذة: {last}.",
+  "market.price.partial": "بيانات السعر تغطي جزءًا من النافذة فقط حتى الآن.",
+  "market.price.unread": "لم يتمكن Pepe من قراءة سؤال السعر هذا، لذا يسوّيه مشرف من مخطط السعر."
 }

@@ -8,6 +8,15 @@ const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
 
 // Pepe as judge (1.90): keep just the display fields of his ruling
+function cleanPrice(p) {
+  if (!p || typeof p !== "object") return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  return { source: p.source ? String(p.source).slice(0, 40) : null, symbol: String(p.symbol || "").slice(0, 12),
+           target: n(p.target), direction: String(p.direction || "").slice(0, 8), mode: String(p.mode || "").slice(0, 8),
+           used: String(p.used || "").slice(0, 8), gran: n(p.gran), candles: n(p.candles), covered: !!p.covered,
+           high: n(p.high), high_at: n(p.high_at), low: n(p.low), low_at: n(p.low_at), last: n(p.last),
+           start: n(p.start), end: n(p.end), cov_start: n(p.cov_start), cov_end: n(p.cov_end) };
+}
 function cleanAi(ai) {
   if (!ai || typeof ai !== "object") return null;
   return { state: String(ai.state || ""), result: ai.result == null ? null : String(ai.result).slice(0, 60),
@@ -16,6 +25,8 @@ function cleanAi(ai) {
            // 1.99dh: when Pepe looks again, whether he handed it to the admins, the price data he used
            next_try: Number(ai.next_try) || 0, escalated: Number(ai.escalated) || 0, tries: Number(ai.tries) || 0,
            evidence: String(ai.evidence || "").slice(0, 320),
+           // 1.99jx: when Pepe ruled, and his exchange price check (M49) as numbers for the judgement section
+           at: Number(ai.at) || 0, price: cleanPrice(ai.price), price_unread: !!ai.price_unread,
            disputes: (ai.disputes || []).slice(0, 30).map((d) => ({ nick: String(d.nick || "").slice(0, 60), why: String(d.why || "").slice(0, 160) })) };
 }
 

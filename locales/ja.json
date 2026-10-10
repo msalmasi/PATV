@@ -3117,5 +3117,18 @@
   "donate.notice_title": "💖 PATVへのご支援ありがとうございます",
   "donate.notice_body": "{usd} $ のご寄付で {pat} PAT がウォレットに追加されました。",
   "js.donate.bad_amount": "1から{max}までの整数のドル額を入力してください。",
-  "js.donate.failed": "現在カード決済はご利用いただけません。"
+  "js.donate.failed": "現在カード決済はご利用いただけません。",
+  "market.time.opened": "開始 {!when}",
+  "market.time.closes": "締切 {!when}",
+  "market.time.closed": "締切済み {!when}",
+  "market.time.in": "あと {left}",
+  "market.time.judged": "Pepe の判定 {!when}",
+  "market.time.settled": "精算 {!when}",
+  "market.time.window": "期間: {!from} → {!to}",
+  "market.time.tz_note": "時刻はあなたのタイムゾーンで表示（ホバーで UTC）。",
+  "market.price.line": "価格チェック（{source}、{gran}分足）: {symbol} 高値 {high}（{!high_at}）、安値 {low}（{!low_at}）、目標 {target}。",
+  "market.price.rule_touch": "到達系の質問は、期間中のどこかで価格が目標に触れれば、最後に反対側で終わっても「はい」です。",
+  "market.price.rule_close": "終値の質問は期間終了時の価格を使います: {last}。",
+  "market.price.partial": "価格データはまだ期間の一部しかカバーしていません。",
+  "market.price.unread": "Pepe はこの価格の質問を読み取れなかったため、管理者が価格チャートから精算します。"
 }

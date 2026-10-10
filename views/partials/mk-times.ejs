@@ -1,0 +1,36 @@
+<%#
+  1.99jx: a market's times as absolute timestamps in the viewer's own time zone (UTC on hover), and the question's
+  window spelled out when it says "next 24 hours" / "today". Pass { m, now, compact }. M49 ("climb back to $83,000
+  in the next 24 hours") showed only "closes <UTC string>", so traders couldn't tell what "24 hours" meant.
+  The server writes UTC; partials/mk-times-script (once per page) rewrites every time[data-mkt-ts] in local time.
+%>
+<% const T_ = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json')));
+   const mt_ = locals.m || {};
+   const now_ = Number(locals.now) || Date.now() / 1000;
+   const created_ = Number(mt_.created) || 0, closes_ = Number(mt_.closes) || 0;
+   const S_ = mt_.settle || null;
+   const settledAt_ = Number((S_ && S_.at) || mt_.ended || 0);
+   const ai_ = mt_.ai || null;
+   const D_ = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], M_ = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+   const p2_ = (n) => String(n).padStart(2, '0');
+   const tm_ = (ts) => { const d = new Date(ts * 1000);
+     const fb = D_[d.getUTCDay()] + ' ' + M_[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + p2_(d.getUTCHours()) + ':' + p2_(d.getUTCMinutes()) + ' UTC';
+     const full = d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC';
+     return '<time datetime="' + d.toISOString() + '" data-mkt-ts="' + Math.round(ts) + '" title="' + full + '">' + fb + '</time>'; };
+   const left_ = (t) => { const s = Math.max(0, Math.round(t - now_)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : Math.max(1, Math.floor(s / 60)) + 'm'; };
+   const open_ = mt_.status === 'open' && closes_ > now_;
+   const relQ_ = /\b(?:(?:in|within|over)\s+(?:the\s+)?(?:next\s+)?\d+\s*(?:h|hrs?|hours?|d|days?|mins?|minutes?|weeks?|wks?)\b|next\s+\d+\s*(?:h|hrs?|hours?|d|days?|mins?|minutes?|weeks?)\b|24\s*h|today|tonight|tomorrow|this\s+(?:week|weekend|month)|by\s+(?:the\s+)?(?:deadline|close))/i.test(String(mt_.question || ''));
+   const parts_ = [];
+   if (created_) parts_.push(T_('market.time.opened', { when: tm_(created_) }));
+   if (closes_) parts_.push(T_(open_ ? 'market.time.closes' : 'market.time.closed', { when: tm_(closes_) }) + (open_ ? ' (' + T_('market.time.in', { left: left_(closes_) }) + ')' : ''));
+   if (ai_ && Number(ai_.at) && (ai_.state === 'proposed' || ai_.state === 'disputed' || ai_.state === 'final')) parts_.push(T_('market.time.judged', { when: tm_(Number(ai_.at)) }));
+   if (settledAt_ && (S_ || /^(settled|void|resolved)$/.test(String(mt_.status)))) parts_.push(T_('market.time.settled', { when: tm_(settledAt_) })); %>
+<% if (parts_.length) { %>
+<div class="mk-times<%= locals.compact ? ' compact' : '' %>">
+  <span class="mk-t-line"><%- parts_.join(' · ') %></span>
+  <% if (relQ_ && created_ && closes_ && !locals.compact) { %>
+    <span class="mk-t-win"><%- T_('market.time.window', { from: tm_(created_), to: tm_(closes_) }) %></span>
+  <% } %>
+  <% if (!locals.compact) { %><span class="mk-t-note"><%= T_('market.time.tz_note') %></span><% } %>
+</div>
+<% } %>

@@ -3117,5 +3117,18 @@
   "donate.notice_title": "💖 ขอบคุณที่สนับสนุน PATV",
   "donate.notice_body": "การบริจาค {usd} $ ของคุณเพิ่ม {pat} PAT ในกระเป๋าเงินของคุณ",
   "js.donate.bad_amount": "กรอกจำนวนดอลลาร์เป็นจำนวนเต็มตั้งแต่ 1 ถึง {max}",
-  "js.donate.failed": "การชำระด้วยบัตรไม่พร้อมใช้งานในขณะนี้"
+  "js.donate.failed": "การชำระด้วยบัตรไม่พร้อมใช้งานในขณะนี้",
+  "market.time.opened": "เปิด {!when}",
+  "market.time.closes": "ปิด {!when}",
+  "market.time.closed": "ปิดแล้ว {!when}",
+  "market.time.in": "อีก {left}",
+  "market.time.judged": "Pepe ตัดสิน {!when}",
+  "market.time.settled": "ชำระแล้ว {!when}",
+  "market.time.window": "ช่วงเวลา: {!from} → {!to}",
+  "market.time.tz_note": "เวลาแสดงตามเขตเวลาของคุณ (วางเมาส์เพื่อดู UTC)",
+  "market.price.line": "ตรวจราคา ({source}, แท่งเทียน {gran} นาที): {symbol} สูงสุด {high} เวลา {!high_at}, ต่ำสุด {low} เวลา {!low_at}; เป้าหมาย {target}",
+  "market.price.rule_touch": "คำถามแตะราคาจะเป็นใช่ หากราคาแตะเป้าหมายในช่วงเวลาใดก็ได้ แม้ตอนจบจะอยู่อีกฝั่ง",
+  "market.price.rule_close": "คำถามราคาปิดใช้ราคาตอนสิ้นสุดช่วงเวลา: {last}",
+  "market.price.partial": "ข้อมูลราคาตอนนี้ครอบคลุมเพียงบางส่วนของช่วงเวลา",
+  "market.price.unread": "Pepe อ่านคำถามราคานี้ไม่ออก แอดมินจึงจะตัดสินจากกราฟราคา"
 }

@@ -3117,5 +3117,18 @@
   "donate.notice_title": "💖 Cảm ơn bạn đã ủng hộ PATV",
   "donate.notice_body": "Khoản quyên góp {usd} $ của bạn đã thêm {pat} PAT vào ví.",
   "js.donate.bad_amount": "Nhập số đô la nguyên từ 1 đến {max}.",
-  "js.donate.failed": "Thanh toán bằng thẻ hiện không khả dụng."
+  "js.donate.failed": "Thanh toán bằng thẻ hiện không khả dụng.",
+  "market.time.opened": "Mở {!when}",
+  "market.time.closes": "Đóng lúc {!when}",
+  "market.time.closed": "Đã đóng {!when}",
+  "market.time.in": "còn {left}",
+  "market.time.judged": "Pepe phán quyết {!when}",
+  "market.time.settled": "Đã tất toán {!when}",
+  "market.time.window": "Khung thời gian: {!from} → {!to}",
+  "market.time.tz_note": "Thời gian theo múi giờ của bạn (di chuột để xem UTC).",
+  "market.price.line": "Kiểm tra giá ({source}, nến {gran} phút): {symbol} CAO NHẤT {high} lúc {!high_at}, THẤP NHẤT {low} lúc {!low_at}; mục tiêu {target}.",
+  "market.price.rule_touch": "Câu hỏi chạm giá là Có nếu giá chạm mục tiêu vào bất kỳ lúc nào trong khung, kể cả khi kết thúc ở phía bên kia.",
+  "market.price.rule_close": "Câu hỏi giá đóng cửa dùng giá ở cuối khung thời gian: {last}.",
+  "market.price.partial": "Dữ liệu giá hiện mới bao phủ một phần khung thời gian.",
+  "market.price.unread": "Pepe không đọc được câu hỏi về giá này, nên admin sẽ tất toán dựa trên biểu đồ giá."
 }

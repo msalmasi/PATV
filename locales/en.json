@@ -3161,5 +3161,18 @@
   "donate.notice_title": "💖 Thank you for supporting PATV",
   "donate.notice_body": "Your ${usd} donation added {pat} PAT to your wallet.",
   "js.donate.bad_amount": "Enter a whole number of dollars from 1 to {max}.",
-  "js.donate.failed": "Card payments aren’t available right now."
+  "js.donate.failed": "Card payments aren’t available right now.",
+  "market.time.opened": "Opened {!when}",
+  "market.time.closes": "Closes {!when}",
+  "market.time.closed": "Closed {!when}",
+  "market.time.in": "in {left}",
+  "market.time.judged": "Pepe ruled {!when}",
+  "market.time.settled": "Settled {!when}",
+  "market.time.window": "Window: {!from} → {!to}",
+  "market.time.tz_note": "Times are in your time zone (hover for UTC).",
+  "market.price.line": "Price check ({source}, {gran}-minute candles): {symbol} HIGH {high} at {!high_at}, LOW {low} at {!low_at}; target {target}.",
+  "market.price.rule_touch": "A reach/hit question is Yes if the price touched the target at any moment in the window, even if it ended on the other side.",
+  "market.price.rule_close": "A closing-price question uses the price at the end of the window: {last}.",
+  "market.price.partial": "The price data covers only part of the window so far.",
+  "market.price.unread": "Pepe couldn’t read this price question, so an admin settles it from the price chart."
 }

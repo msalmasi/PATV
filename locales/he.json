@@ -3207,5 +3207,18 @@
   "donate.notice_title": "💖 תודה שתמכתם ב-PATV",
   "donate.notice_body": "התרומה שלכם בסך {usd} $ הוסיפה {pat} PAT לארנק שלכם.",
   "js.donate.bad_amount": "הזינו מספר שלם של דולרים בין 1 ל-{max}.",
-  "js.donate.failed": "תשלום בכרטיס אינו זמין כרגע."
+  "js.donate.failed": "תשלום בכרטיס אינו זמין כרגע.",
+  "market.time.opened": "נפתח {!when}",
+  "market.time.closes": "נסגר ב־{!when}",
+  "market.time.closed": "נסגר {!when}",
+  "market.time.in": "בעוד {left}",
+  "market.time.judged": "Pepe פסק {!when}",
+  "market.time.settled": "סולק {!when}",
+  "market.time.window": "חלון: {!from} → {!to}",
+  "market.time.tz_note": "הזמנים באזור הזמן שלך (רחף כדי לראות UTC).",
+  "market.price.line": "בדיקת מחיר ({source}, נרות של {gran} דקות): {symbol} שיא {high} ב־{!high_at}, שפל {low} ב־{!low_at}; יעד {target}.",
+  "market.price.rule_touch": "שאלת הגעה היא כן אם המחיר נגע ביעד בכל רגע בחלון, גם אם הסתיים בצד השני.",
+  "market.price.rule_close": "שאלת מחיר סגירה משתמשת במחיר בסוף החלון: {last}.",
+  "market.price.partial": "נתוני המחיר מכסים בינתיים רק חלק מהחלון.",
+  "market.price.unread": "Pepe לא הצליח לקרוא את שאלת המחיר הזו, לכן מנהל יסלק אותה לפי גרף המחיר."
 }

@@ -3252,5 +3252,18 @@
   "donate.notice_title": "💖 Дякуємо за підтримку PATV",
   "donate.notice_body": "Ваша пожертва {usd} $ додала {pat} PAT у ваш гаманець.",
   "js.donate.bad_amount": "Введіть ціле число доларів від 1 до {max}.",
-  "js.donate.failed": "Оплата карткою зараз недоступна."
+  "js.donate.failed": "Оплата карткою зараз недоступна.",
+  "market.time.opened": "Відкрито {!when}",
+  "market.time.closes": "Закривається {!when}",
+  "market.time.closed": "Закрито {!when}",
+  "market.time.in": "через {left}",
+  "market.time.judged": "Pepe ухвалив рішення {!when}",
+  "market.time.settled": "Розраховано {!when}",
+  "market.time.window": "Вікно: {!from} → {!to}",
+  "market.time.tz_note": "Час у вашому часовому поясі (наведіть, щоб побачити UTC).",
+  "market.price.line": "Перевірка ціни ({source}, {gran}-хвилинні свічки): {symbol} МАКС. {high} о {!high_at}, МІН. {low} о {!low_at}; ціль {target}.",
+  "market.price.rule_touch": "Питання про досягнення ціни — Так, якщо ціна торкнулася цілі в будь-який момент вікна, навіть якщо наприкінці була з іншого боку.",
+  "market.price.rule_close": "Питання про ціну закриття використовує ціну наприкінці вікна: {last}.",
+  "market.price.partial": "Поки що дані про ціну охоплюють лише частину вікна.",
+  "market.price.unread": "Pepe не зміг прочитати це цінове питання, тож його розрахує адмін за графіком ціни."
 }

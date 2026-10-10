@@ -3117,5 +3117,18 @@
   "donate.notice_title": "💖 PATV를 후원해 주셔서 감사합니다",
   "donate.notice_body": "{usd} $ 후원으로 지갑에 {pat} PAT가 추가되었습니다.",
   "js.donate.bad_amount": "1부터 {max}까지 달러를 정수로 입력하세요.",
-  "js.donate.failed": "지금은 카드 결제를 사용할 수 없습니다."
+  "js.donate.failed": "지금은 카드 결제를 사용할 수 없습니다.",
+  "market.time.opened": "개설 {!when}",
+  "market.time.closes": "마감 {!when}",
+  "market.time.closed": "마감됨 {!when}",
+  "market.time.in": "{left} 남음",
+  "market.time.judged": "Pepe 판정 {!when}",
+  "market.time.settled": "정산 {!when}",
+  "market.time.window": "기간: {!from} → {!to}",
+  "market.time.tz_note": "시간은 내 시간대 기준입니다(UTC는 마우스를 올려 확인).",
+  "market.price.line": "가격 확인 ({source}, {gran}분 봉): {symbol} 고가 {high} ({!high_at}), 저가 {low} ({!low_at}); 목표 {target}.",
+  "market.price.rule_touch": "도달형 질문은 기간 중 어느 순간이라도 가격이 목표에 닿았다면, 마지막에 반대편에서 끝났더라도 예입니다.",
+  "market.price.rule_close": "종가 질문은 기간이 끝날 때의 가격을 사용합니다: {last}.",
+  "market.price.partial": "가격 데이터가 아직 기간의 일부만 포함합니다.",
+  "market.price.unread": "Pepe가 이 가격 질문을 읽지 못해 관리자가 가격 차트를 보고 정산합니다."
 }

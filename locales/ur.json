@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 PATV کی مدد کرنے کا شکریہ",
   "donate.notice_body": "آپ کے {usd} $ کے عطیے نے آپ کے والیٹ میں {pat} PAT شامل کیے۔",
   "js.donate.bad_amount": "1 سے {max} تک ڈالرز کا پورا عدد درج کریں۔",
-  "js.donate.failed": "کارڈ سے ادائیگی ابھی دستیاب نہیں۔"
+  "js.donate.failed": "کارڈ سے ادائیگی ابھی دستیاب نہیں۔",
+  "market.time.opened": "کھلا {!when}",
+  "market.time.closes": "بند ہوگا {!when}",
+  "market.time.closed": "بند ہوا {!when}",
+  "market.time.in": "{left} میں",
+  "market.time.judged": "Pepe نے فیصلہ کیا {!when}",
+  "market.time.settled": "طے ہوا {!when}",
+  "market.time.window": "وقفہ: {!from} → {!to}",
+  "market.time.tz_note": "اوقات آپ کے ٹائم زون میں ہیں (UTC کے لیے کرسر رکھیں)۔",
+  "market.price.line": "قیمت کی جانچ ({source}، {gran} منٹ کی کینڈلز): {symbol} بلند ترین {high} بوقت {!high_at}، کم ترین {low} بوقت {!low_at}؛ ہدف {target}۔",
+  "market.price.rule_touch": "پہنچنے والا سوال ہاں ہے اگر قیمت وقفے میں کسی بھی لمحے ہدف کو چھو گئی، چاہے آخر میں دوسری طرف ختم ہوئی ہو۔",
+  "market.price.rule_close": "بند ہونے کی قیمت والا سوال وقفے کے آخر کی قیمت استعمال کرتا ہے: {last}۔",
+  "market.price.partial": "قیمت کا ڈیٹا ابھی وقفے کے صرف ایک حصے کا احاطہ کرتا ہے۔",
+  "market.price.unread": "Pepe یہ قیمت والا سوال نہیں پڑھ سکا، اس لیے ایک ایڈمن قیمت کے چارٹ سے اسے طے کرے گا۔"
 }

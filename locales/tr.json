@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 PATV’yi desteklediğin için teşekkürler",
   "donate.notice_body": "{usd} $ bağışın cüzdanına {pat} PAT ekledi.",
   "js.donate.bad_amount": "1 ile {max} arasında tam sayı bir dolar tutarı gir.",
-  "js.donate.failed": "Kartla ödeme şu anda kullanılamıyor."
+  "js.donate.failed": "Kartla ödeme şu anda kullanılamıyor.",
+  "market.time.opened": "Açıldı {!when}",
+  "market.time.closes": "Kapanış {!when}",
+  "market.time.closed": "Kapandı {!when}",
+  "market.time.in": "{left} içinde",
+  "market.time.judged": "Pepe karar verdi {!when}",
+  "market.time.settled": "Sonuçlandı {!when}",
+  "market.time.window": "Zaman aralığı: {!from} → {!to}",
+  "market.time.tz_note": "Saatler senin saat diliminde (UTC için üzerine gel).",
+  "market.price.line": "Fiyat kontrolü ({source}, {gran} dakikalık mumlar): {symbol} EN YÜKSEK {high} ({!high_at}), EN DÜŞÜK {low} ({!low_at}); hedef {target}.",
+  "market.price.rule_touch": "Ulaşma sorusu, fiyat aralık içinde herhangi bir anda hedefe dokunduysa Evet’tir; sonunda diğer tarafta bitse bile.",
+  "market.price.rule_close": "Kapanış fiyatı sorusu aralığın sonundaki fiyatı kullanır: {last}.",
+  "market.price.partial": "Fiyat verisi şimdilik aralığın yalnızca bir kısmını kapsıyor.",
+  "market.price.unread": "Pepe bu fiyat sorusunu okuyamadı, bu yüzden bir admin fiyat grafiğine bakarak sonuçlandırır."
 }

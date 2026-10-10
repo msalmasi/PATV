@@ -1,0 +1,25 @@
+<%# 1.99jx: styles + the local-time formatter for partials/mk-times (include once per page) %>
+<style>
+  .mk-times { display: grid; gap: 2px; font-size: 13px; color: #aaa; margin: 6px 0; overflow-wrap: anywhere; }
+  .mk-times time { color: #ddd; white-space: nowrap; }
+  .mk-times .mk-t-win { color: #ffe082; }
+  .mk-times .mk-t-win time { color: #ffe082; }
+  .mk-times .mk-t-note { color: #777; font-size: 12px; }
+  .mk-times.compact { margin: 2px 0 0; font-size: 12px; }
+  .mk-times.compact time { color: #bbb; }
+</style>
+<script>
+  (function () {
+    function fmt() {
+      var lang = document.documentElement.lang || undefined, f;
+      try { f = new Intl.DateTimeFormat(lang, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }); }
+      catch (e) { try { f = new Intl.DateTimeFormat(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }); } catch (e2) { return; } }
+      document.querySelectorAll('time[data-mkt-ts]').forEach(function (el) {
+        var d = new Date(Number(el.getAttribute('data-mkt-ts')) * 1000);
+        if (isNaN(d.getTime())) return;
+        try { el.textContent = f.format(d); } catch (e) {}
+      });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fmt); else fmt();
+  })();
+</script>

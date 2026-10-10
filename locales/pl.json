@@ -3252,5 +3252,18 @@
   "donate.notice_title": "💖 Dziękujemy za wsparcie PATV",
   "donate.notice_body": "Twoja darowizna {usd} $ dodała {pat} PAT do twojego portfela.",
   "js.donate.bad_amount": "Wpisz całkowitą liczbę dolarów od 1 do {max}.",
-  "js.donate.failed": "Płatności kartą są teraz niedostępne."
+  "js.donate.failed": "Płatności kartą są teraz niedostępne.",
+  "market.time.opened": "Otwarto {!when}",
+  "market.time.closes": "Zamyka się {!when}",
+  "market.time.closed": "Zamknięto {!when}",
+  "market.time.in": "za {left}",
+  "market.time.judged": "Pepe orzekł {!when}",
+  "market.time.settled": "Rozliczono {!when}",
+  "market.time.window": "Okno: {!from} → {!to}",
+  "market.time.tz_note": "Godziny w Twojej strefie czasowej (najedź, aby zobaczyć UTC).",
+  "market.price.line": "Sprawdzenie ceny ({source}, świece {gran}-minutowe): {symbol} MAKS. {high} o {!high_at}, MIN. {low} o {!low_at}; cel {target}.",
+  "market.price.rule_touch": "Pytanie o osiągnięcie ceny to Tak, jeśli cena dotknęła celu w dowolnym momencie okna, nawet jeśli skończyła po drugiej stronie.",
+  "market.price.rule_close": "Pytanie o cenę zamknięcia używa ceny z końca okna: {last}.",
+  "market.price.partial": "Dane cenowe obejmują na razie tylko część okna.",
+  "market.price.unread": "Pepe nie zdołał odczytać tego pytania o cenę, więc rozlicza je admin na podstawie wykresu."
 }

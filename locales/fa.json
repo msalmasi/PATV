@@ -3162,5 +3162,18 @@
   "donate.notice_title": "💖 از حمایت شما از PATV سپاسگزاریم",
   "donate.notice_body": "کمک {usd} $ شما {pat} PAT به کیف پولتان اضافه کرد.",
   "js.donate.bad_amount": "یک عدد صحیح دلار از 1 تا {max} وارد کنید.",
-  "js.donate.failed": "پرداخت با کارت اکنون در دسترس نیست."
+  "js.donate.failed": "پرداخت با کارت اکنون در دسترس نیست.",
+  "market.time.opened": "باز شد {!when}",
+  "market.time.closes": "بسته می‌شود {!when}",
+  "market.time.closed": "بسته شد {!when}",
+  "market.time.in": "تا {left} دیگر",
+  "market.time.judged": "Pepe رأی داد {!when}",
+  "market.time.settled": "تسویه شد {!when}",
+  "market.time.window": "بازه: {!from} → {!to}",
+  "market.time.tz_note": "زمان‌ها به وقت محلی شماست (برای UTC نشانگر را نگه دارید).",
+  "market.price.line": "بررسی قیمت ({source}، کندل‌های {gran} دقیقه‌ای): {symbol} بیشینه {high} در {!high_at}، کمینه {low} در {!low_at}؛ هدف {target}.",
+  "market.price.rule_touch": "سؤال رسیدن، بله است اگر قیمت در هر لحظه‌ای از بازه به هدف رسیده باشد، حتی اگر در پایان آن طرف بسته شده باشد.",
+  "market.price.rule_close": "سؤال قیمت بسته‌شدن از قیمت پایان بازه استفاده می‌کند: {last}.",
+  "market.price.partial": "داده‌های قیمت فعلاً فقط بخشی از بازه را پوشش می‌دهند.",
+  "market.price.unread": "Pepe نتوانست این سؤال قیمت را بخواند، پس یک ادمین آن را از روی نمودار قیمت تسویه می‌کند."
 }

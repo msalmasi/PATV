@@ -3252,5 +3252,18 @@
   "donate.notice_title": "💖 Спасибо за поддержку PATV",
   "donate.notice_body": "Ваше пожертвование {usd} $ добавило {pat} PAT в ваш кошелёк.",
   "js.donate.bad_amount": "Введите целое число долларов от 1 до {max}.",
-  "js.donate.failed": "Оплата картой сейчас недоступна."
+  "js.donate.failed": "Оплата картой сейчас недоступна.",
+  "market.time.opened": "Открыт {!when}",
+  "market.time.closes": "Закрывается {!when}",
+  "market.time.closed": "Закрыт {!when}",
+  "market.time.in": "через {left}",
+  "market.time.judged": "Pepe вынес решение {!when}",
+  "market.time.settled": "Рассчитан {!when}",
+  "market.time.window": "Окно: {!from} → {!to}",
+  "market.time.tz_note": "Время в вашем часовом поясе (наведите, чтобы увидеть UTC).",
+  "market.price.line": "Проверка цены ({source}, {gran}-минутные свечи): {symbol} МАКС. {high} в {!high_at}, МИН. {low} в {!low_at}; цель {target}.",
+  "market.price.rule_touch": "Вопрос о достижении цены — Да, если цена коснулась цели в любой момент окна, даже если в конце оказалась по другую сторону.",
+  "market.price.rule_close": "Вопрос о цене закрытия использует цену в конце окна: {last}.",
+  "market.price.partial": "Пока данные о цене покрывают только часть окна.",
+  "market.price.unread": "Pepe не смог разобрать этот ценовой вопрос, поэтому его рассчитает админ по графику цены."
 }

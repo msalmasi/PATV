@@ -86,6 +86,7 @@
     <p class="info">It may have been settled more than 60 days ago.</p>
   <% } else if (m.shares) { %>
     <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
+    <%- include('partials/mk-times', { m, now }) %>
     <% if (S) { %>
       <div class="settled <%= S.kind %>" id="settlement" style="--oc: <%= sColor %>">
         <div class="s-top">
@@ -116,7 +117,7 @@
     <div class="info">
       <% if (!S) { %><%- E(m.settle && m.settle.kind === 'won' ? 'Resolved: ' + m.settle.result + '\u0001' + ' — each ' + m.settle.result + ' share paid 1 PAT' + (m.settle.total ? ' (' + fmt(m.settle.total) + ' PAT paid out)' : '')
          : m.settle && m.settle.kind === 'void' ? 'Voided' + (m.settle.reason ? ' (' + m.settle.reason + ')' : '') + ' — holders were refunded' + (m.settle.total != null ? ' ' + fmt(m.settle.total) + ' PAT' : '')
-         : m.status === 'open' ? 'Trading open — closes ' + new Date(m.closes * 1000).toUTCString()
+         : m.status === 'open' ? 'Trading open'
          : m.status === 'settled' || m.status === 'resolved' ? 'Resolved: ' + m.result + '\u0001'
          : m.status === 'void' ? 'Voided — holders were refunded'
          : m.status === 'settling' ? 'Paying out…' : 'Trading closed — waiting for the judge').split('\u0001').join(byWho()) %><br><% } %>
@@ -284,8 +285,9 @@
     </table></div>
   <% } else { %>
     <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
+    <%- include('partials/mk-times', { m, now }) %>
     <div class="info">
-      <%- E(m.status === 'open' ? 'Open — closes ' + new Date(m.closes * 1000).toUTCString()
+      <%- E(m.status === 'open' ? 'Open'
          : m.status === 'settled' ? 'Settled: ' + m.result + '\u0001'
          : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge').split('\u0001').join(byWho()) %><br>
       Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%- ul(m.judge) %> · created by <%- ul(m.creator) %> in <%- padLink(m.room, 'a room') %>
@@ -355,5 +357,6 @@
     </table></div>
   <% } %>
 </div>
+<%- include('partials/mk-times-script') %>
 </body>
 </html>
