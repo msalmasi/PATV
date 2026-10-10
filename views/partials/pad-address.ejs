@@ -25,6 +25,8 @@
       <ul class="mylist"><% AD_.aliases.forEach((a) => { %><li><code>p/<%= a.slug %></code> <small class="muted">retired <%= new Date(Number(a.created) || 0).toISOString().slice(0, 10) %><%= a.by ? ' · changed by ' + a.by : '' %></small></li><% }) %></ul>
     <% } %>
   </div>
+  <%# 1.99ja: platform connections (padconnect.js, partials/pad-connect.ejs) %>
+  <% if (typeof connect !== 'undefined' && connect) { %><%- include('pad-connect', { slug, room, connect }) %><% } %>
 </section>
 <style>
   .pa-in{display:flex;align-items:stretch;gap:0;max-width:520px}

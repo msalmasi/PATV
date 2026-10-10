@@ -433,6 +433,14 @@
       <% if (t === 'live') { %><span class="pdot" aria-hidden="true"<%= PT_.active ? '' : ' hidden' %>></span><%= liveLabel_ %><% } else if (t === 'feed') { %><span class="pnewdot" id="padFeedDot" aria-hidden="true" hidden></span>Feed <span class="pnew" id="padFeedNew" hidden></span><% } else { %>About<% } %></button><% }) %>
   </nav>
   <section class="ppanel" id="padPanel-live" role="tabpanel" aria-labelledby="padTab-live"<%= tabOn_('live') ? '' : ' hidden' %>>
+  <%# 1.99ja: a Twitch pad plays its channel (padconnect.js twitchOf; the player URL is built by stageembed.js from the checked login) %>
+  <% const TWP_ = typeof twitch !== 'undefined' && twitch && twitch.login && twitch.player ? twitch.player : null; %>
+  <% if (TWP_) { %>
+    <section class="card twp" aria-labelledby="twpH">
+      <h2 id="twpH"><span>🟣 twitch.tv/<%= twitch.login %></span> <a class="muted" href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank" style="font-family:Ubuntu,sans-serif;font-size:12.5px">Open on Twitch ›</a></h2>
+      <div style="position:relative;padding-top:56.25%;border-radius:10px;overflow:hidden;background:#000"><iframe src="<%= TWP_ %>" title="twitch.tv/<%= twitch.login %>" allowfullscreen loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;border:0"></iframe></div>
+    </section>
+  <% } %>
   <%# 1.99ef: the room's live status (was header chips): who's in the Camfrog room, Pepe is here %>
   <% if (!siteOnly_) { const cfName_ = room.camfrogName || room.name; %><p class="lstat" id="rmLiveStat"><span id="rmStDot" aria-hidden="true"><%= room.live ? '🟢' : '⚪' %></span>
     <% if (bridged_) { %><span><b id="rmCount"><%= room.count %></b> in <b><%= cfName_ %></b></span><% } else { %><span>📡 Camfrog room <b><%= cfName_ %></b></span><% } %>
@@ -1061,6 +1069,7 @@
         <dt>Run by</dt><dd><% if (room.house) { %>🐸 Pepe (a house pad)<% } else if (room.owner) { %><a href="/u/<%= encodeURIComponent(room.ownerUser) %>">👑 <%= room.owner %></a><% } else { %><span class="muted">Nobody yet</span><% } %></dd>
         <% if (feed_ && feed_.follow) { %><dt>Followers</dt><dd><%= feed_.follow.followers.toLocaleString('en-US') %></dd><% } %>
         <% if (!siteOnly_) { %><dt>Camfrog room</dt><dd><%= room.camfrogName || room.name %></dd><% } %>
+        <% if (typeof twitch !== 'undefined' && twitch && twitch.login) { %><dt>Twitch</dt><dd><a href="https://twitch.tv/<%= twitch.login %>" rel="noopener" target="_blank">twitch.tv/<%= twitch.login %></a></dd><% } %>
         <% if (manage_) { %><dt>Settings</dt><dd><a href="/p/<%= encodeURIComponent(room.slug) %>/settings">⚙ Pad settings ›</a></dd><% } %>
       </dl>
     </section>

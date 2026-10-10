@@ -118,7 +118,10 @@ function register(app, { addUser, isBotToken }) {
       // 1.99bv: Pepe's relay refusals (restricted logins) in, the room feed mentions out
       let feed = {};
       try { feed = await require("./feedweb").botSync(req.body || {}); } catch (e) { console.error("[rooms] feed sync:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}) });
+      // 1.99ja: the pending pad codes, for Pepe's room-topic check (padconnect.js)
+      let padVerify = [];
+      try { padVerify = await require("./padconnect").pendingForPepe(); } catch (e) { console.error("[rooms] pad verify:", e.message); }
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

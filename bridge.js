@@ -91,11 +91,18 @@ function roomFor(ref) {
   if (ref.name && ref.name !== R.name) R.name = ref.name;
   // slug from the display name; another room already holding it gets the id-based one.
   // 1.99iy: a pad whose address was CHOSEN (renamed / picked at creation - rooms.js slug_set) uses that one
-  let reg = null;
-  try { reg = require("./rooms").getCached(R.id); } catch (e) { reg = null; }
-  let slug = reg && reg.slug_set && reg.slug ? reg.slug : slugify(R.name);
-  if (!(reg && reg.slug_set)) for (const o of rooms.values()) if (o !== R && o.slug === slug) slug = slugify(R.id);
-  R.slug = slug;
+  let reg = null, REG = null;
+  try { REG = require("./rooms"); reg = REG.getCached(R.id); } catch (e) { reg = null; }
+  if (reg && reg.slug_set && reg.slug) { R.slug = reg.slug; return R; }
+  // 1.99ja: never a slug another PAD owns (a pad that was this room's pad and went back to being a site pad keeps its
+  // address; the room shows its own) - the display-name slug, else the room's registry slug, else id-based ones
+  const taken = (s) => {
+    for (const o of rooms.values()) if (o !== R && o.slug === s) return true;
+    try { const P = REG && REG.bySlugCached(s); if (P && P.id !== R.id) return true; } catch (e) { /* no registry */ }
+    return false;
+  };
+  const tries = [slugify(R.name), reg && reg.slug, slugify(R.id), slugify(R.id) + "-room"].filter(Boolean);
+  R.slug = tries.find((s) => !taken(s)) || slugify(R.id);
   return R;
 }
 
@@ -631,6 +638,13 @@ async function liveFor(slug) {
   return R ? liveView(R, 0) : null;
 }
 
+/** 1.99ja: recompute a live room's slug now (after its pad changed: connected / disconnected / renamed). */
+function reslug(id) {
+  const R = rooms.get(id);
+  if (R) roomFor({ id: R.id, name: R.name });
+  return R ? R.slug : null;
+}
+
 function bySlug(slug) {
   const s = String(slug || "").toLowerCase();
   for (const R of rooms.values()) if (R.slug === s || slugify(R.id) === s) return R;
@@ -867,12 +881,21 @@ function register(app, { isBotToken, addUser }) {
       schedule: await require("./mainstage").roomSchedule(R.id, req.user, manage).catch((e) => { console.error("[stage] room schedule:", e.message); return null; }),
       analytics: reg.hasRoute(app, "/p/:slug/analytics"),
       // economy v2 E-3: the room vault card (About tab), Camfrog pads only (roomvaults.js)
+      twitch: platform === "twitch" ? await twitchPlayer(R.id, req.hostname) : null,      // 1.99ja: a Twitch pad's login + its player
       roomVault: siteOnly ? null : await require("./roomvaults").card(R.id, req.user, { canManage: manage, staff: reg.isStaff(req.user) })
         .catch((e) => { console.error("[roomvaults] card:", e.message); return null; }),
       feed,
       fx: require("./feedweb").fx, embeds: require("./stageembed"), host: req.hostname || "publicaccess.tv",
     });
   });
+}
+
+/** 1.99ja: a Twitch pad's {login, player} (padconnect.js; the player URL from stageembed's checked parts), or null. */
+async function twitchPlayer(roomId, host) {
+  try {
+    const t = await require("./padconnect").twitchOf(roomId);
+    return t ? { ...t, player: require("./stageembed").playerUrl({ p: "twitch", t: "channel", id: t.login }, host || "publicaccess.tv") } : null;
+  } catch (e) { return null; }
 }
 
 // ── 1.99dx: the pad page's tabs ──
@@ -906,5 +929,5 @@ function padTabsFor(o) {
            posts: (o.latest || []).map((p) => ({ id: p.id, created: p.created })) };
 }
 
-module.exports = { _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
+module.exports = { reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
   liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

@@ -83,6 +83,8 @@ async function hubData(R, viewer, app) {
     popularTags: R.profile ? [] : await require("./feedtags").popular(R.id, { viewer, limit: 20 }).catch(() => []),
     // 1.99iy: the pad's address (padaddress.js) - its old slugs, when the owner may change it next
     address: R.profile ? null : await addressData(R, viewer),
+    // 1.99ja: platform connections (padconnect.js) - Camfrog / Twitch / Discord (later)
+    connect: R.profile ? null : await require("./padconnect").state(R, viewer).catch((e) => { console.error("[padsettings] connect:", e.message); return null; }),
   };
 }
 

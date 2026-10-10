@@ -28,7 +28,7 @@
   ].filter((t) => t[0] !== 'camfrog' || camfrog);
   // 1.99ir: Flair & tags (padflair.js / feedtags.js) - its section is the last one on the page (not on profile pads)
   if (typeof flair !== 'undefined' && flair) tabs.push(['flair', '🎖️', 'Flair & tags']);
-  if (typeof address !== 'undefined' && address) tabs.push(['address', '🔗', 'Address']);   // 1.99iy: partials/pad-address.ejs
+  if (typeof address !== 'undefined' && address) tabs.push(['address', '🔗', typeof connect !== 'undefined' && connect ? 'Address & platform' : 'Address']);   // 1.99iy: partials/pad-address.ejs
   const amLabel = { none: 'Do nothing', flag: 'Flag it for me', hide: 'Hide it until I review', remove: 'Remove it (clear-cut only)' };
   const sevInfo = {
     minor: ['Minor', 'Spam, a missing NSFW tag, or a small break of one of your pad rules.'],
@@ -71,7 +71,7 @@
         <label class="fld">Banner link <small>optional: an https:// image link, used when no banner is uploaded below</small><input type="text" name="banner" maxlength="300" value="<%= room.banner %>" placeholder="https://…"></label>
         <div class="row"><button type="submit" class="btn primary">Save page</button><span class="msg" id="pageMsg" role="status"></span></div>
       </form>
-      <div class="ps-kv"><span>Platform badge</span><span><%- padBadge(platform) %> <small class="muted"><%= camfrog ? 'Set by the Camfrog room behind this pad.' : 'A pad made on the site - no Camfrog room behind it.' %> The badge follows the platform; ask a site admin to change it.</small></span></div>
+      <div class="ps-kv"><span>Platform badge</span><span><%- padBadge(platform) %> <small class="muted"><%= camfrog ? 'Set by the Camfrog room behind this pad.' : platform === 'twitch' ? 'Backed by a Twitch channel.' : 'A pad made on the site - no Camfrog room behind it.' %> The badge follows the platform: <a href="#connections">connect or disconnect it</a>.</small></span></div>
       <div class="ps-kv"><span>Address</span><span><a href="<%= href %>">publicaccess.tv/p/<%= slug %></a><% if (typeof address !== 'undefined' && address) { %> · <a href="#address">Change</a><% } %></span></div>
     </div>
     <%# 1.99fu: who can see this pad (padaccess.js, public/js/pad-access.js). Server-rendered first, then pad-access.js takes over. %>

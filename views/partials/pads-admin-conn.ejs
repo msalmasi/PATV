@@ -1,0 +1,60 @@
+<%# 1.99ja: /pads/admin "Pad connections" (padconnect.js): Camfrog requests waiting for a check, and owners asking for Pepe to
+    join. Loaded by the script below from GET /api/pads/connections; actions POST /api/pads/connections/:id/:op. %>
+<section class="sb-card" id="padconn" aria-labelledby="padConnT">
+  <h2 id="padConnT">🔗 Pad connections</h2>
+  <p class="muted">Owners prove they run a Camfrog room with a code in its topic (finishes by itself) or <code>!verifypad CODE</code> typed in the room (lands here: anyone in the room could type it, so check who did). <b>Approve</b> connects the pad to the room Pepe saw; <b>Ask Pepe to visit</b> sends him to a room he isn't in so he can see the code (he leaves again later); <b>Pepe joins</b> puts the room on his auto-join list - only when its owner asked. Visits and joins are site Admins only.</p>
+  <div class="tblwrap"><table><thead><tr><th>Pad</th><th>Camfrog room</th><th>State</th><th>Evidence</th><th></th></tr></thead><tbody id="pcnRows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody></table></div>
+  <p class="msg" id="pcnAdmMsg" role="status" aria-live="polite"></p>
+</section>
+<script>
+(function () {
+  'use strict';
+  var tb = document.getElementById('pcnRows');
+  if (!tb) return;
+  function el(tag, text, cls) { var e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; }
+  function when(ms) { return ms ? new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : ''; }
+  function load() {
+    fetch('/api/pads/connections', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+      tb.textContent = '';
+      if (!j.ok) { var r0 = el('tr'); var c0 = el('td', j.error || 'Not available.', 'muted'); c0.colSpan = 5; r0.appendChild(c0); tb.appendChild(r0); return; }
+      if (!j.items.length) { var r1 = el('tr'); var c1 = el('td', 'Nothing waiting.', 'muted'); c1.colSpan = 5; r1.appendChild(c1); tb.appendChild(r1); return; }
+      j.items.forEach(function (it) {
+        var tr = el('tr');
+        var pad = el('td');
+        if (it.pad) { var a = el('a', it.pad.title); a.href = '/p/' + encodeURIComponent(it.pad.slug); pad.appendChild(a); pad.appendChild(el('div', 'p/' + it.pad.slug + (it.pad.owner ? ' · ' + it.pad.owner : ''), 'muted')); }
+        else pad.textContent = it.room_id;
+        tr.appendChild(pad);
+        var rm = el('td', it.external_name || it.external_id || '');
+        rm.appendChild(el('div', it.bridged ? 'Pepe sees it (id ' + it.room_id_seen + ')' : (it.external_id ? 'id ' + it.external_id : 'Pepe hasn’t seen it'), 'muted'));
+        tr.appendChild(rm);
+        var stTxt = it.status === 'verified' ? 'connected - asks for Pepe to join' : it.status === 'review' ? 'code typed in the room - check it' : 'waiting for the code';
+        var st = el('td', stTxt);
+        st.appendChild(el('div', (it.code ? it.code + ' · ' : '') + (it.status === 'verified' ? when(it.verified_at) : 'until ' + when(it.code_expires)) + (it.expired ? ' (expired)' : ''), 'muted'));
+        tr.appendChild(st);
+        var ev = it.evidence && it.evidence.command;
+        tr.appendChild(el('td', ev ? 'typed by ' + (ev.by || '?') + (ev.owner_login ? ' (the owner’s linked login)' : '') + (ev.pepe_admin ? ' · a Pepe admin' : '') + ' in ' + (ev.room_name || ev.room || '') + ' · ' + when(ev.at) : ''));
+        var act = el('td');
+        var ops = it.status === 'verified' ? [['join', 'Pepe joins'], ['nojoin', 'Decline']] : [['approve', 'Approve'], ['visit', 'Ask Pepe to visit'], ['deny', 'Deny']];
+        ops.forEach(function (o) {
+          var b = el('button', o[1], 'btn');
+          b.type = 'button';
+          b.addEventListener('click', function () {
+            if (o[0] === 'approve' && !confirm('Connect ' + (it.pad ? 'p/' + it.pad.slug : it.room_id) + ' to the Camfrog room ' + (it.room_id_seen || it.external_id || it.external_name) + '?')) return;
+            var note = o[0] === 'deny' ? (prompt('Why? (the owner sees this)') || '') : '';
+            b.disabled = true;
+            fetch('/api/pads/connections/' + it.id + '/' + o[0], { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: note }) })
+              .then(function (r) { return r.json(); }).then(function (d) {
+                document.getElementById('pcnAdmMsg').textContent = d.ok ? 'Done.' : (d.error || 'Not done.');
+                load();
+              }).catch(function () { b.disabled = false; });
+          });
+          act.appendChild(b);
+        });
+        tr.appendChild(act);
+        tb.appendChild(tr);
+      });
+    }).catch(function () { tb.textContent = ''; });
+  }
+  load();
+})();
+</script>

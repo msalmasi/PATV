@@ -75,6 +75,7 @@
 
   <%# 1.99iy: pad addresses (+ 1.99iz creation, 1.99ja connections) - padcfg.js %>
   <% if (typeof padsCfg !== 'undefined' && padsCfg) { %><%- include('partials/pads-admin-cfg', { padsCfg, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %><% } %>
+  <%- include('partials/pads-admin-conn') %>
 
   <section class="sb-card" id="royalties" aria-labelledby="royT">
     <h2 id="royT">Pad owner royalties</h2>

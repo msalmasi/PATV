@@ -384,6 +384,35 @@
    }
   },
   {
+   "id": "verifypad",
+   "title": "!verifypad [code]",
+   "category": "start",
+   "role": "everyone",
+   "commands": [
+    "!verifypad"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!verifypad [PATV-code]"
+   ],
+   "summary": "Prove this Camfrog room belongs to a PATV pad's owner, to connect the pad to the room.",
+   "details": "Connect your PATV pad to your Camfrog room: in the pad's settings (Address & platform) type the room's name and get a code like `PATV-AB23CD`. The fastest proof is putting that code in the room's **topic** (only the room's owner and operators can) - Pepe spots it within a couple of minutes, no admin needed. Or type `!verifypad PATV-AB23CD` in the room: a site admin then confirms it. Pepe has to be in the room for either. Once connected, the pad gets the room's live chat on the website, its room vault and the owner's `!stage` commands. Pepe only joins your room if you ask for it in the pad's settings and a site admin approves.",
+   "examples": [
+    "!verifypad PATV-AB23CD"
+   ],
+   "keywords": [
+    "connect pad",
+    "pad room",
+    "camfrog pad",
+    "verify room",
+    "pad code"
+   ],
+   "web": {
+    "label": "Connect your pad in its settings (Address & platform)",
+    "url": "/p"
+   }
+  },
+  {
    "id": "profile",
    "title": "!profile [@user]",
    "category": "start",
@@ -2253,7 +2282,7 @@
     "!econ"
    ],
    "summary": "The economy layers at a glance: the Federal Reserve (and its loans to the Treasury vaults), Fort Knox and the incentive budget.",
-   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Loans are repaid first from that vault's weekly surplus. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`. `!econ` also shows the Fed loans outstanding.",
+   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Loans are repaid first from that vault's weekly surplus. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their room vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
    "examples": [
     "!econ"
    ],
@@ -6437,5 +6466,5 @@
   }
  ],
  "undocumented": [],
- "hash": "06e39fd66e2fcb13"
+ "hash": "65b5210998688368"
 }

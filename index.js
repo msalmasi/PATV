@@ -1112,6 +1112,7 @@ require("./padrules").register(app, { addUser });   // 1.99dc: a pad's own rules
 require("./padsettings").register(app, { addUser });   // 1.99dc: the pad settings hub /p/:slug/settings (was /manage + /mod)
 require("./padaddress").register(app, { addUser });   // 1.99iy: change a pad's address (/api/rooms/:slug/address; old slugs 301 - pads.js)
 require("./padcreate").register(app, { addUser });    // 1.99iz: members create pads (/pads/new, /api/pads/create) + the empty-pad reclaim sweep (off by default)
+require("./padconnect").register(app, { addUser, isBotToken });   // 1.99ja: connect a pad to Camfrog (verified) / Twitch; Pepe's /api/pads/verify
 require("./imagesafety").register(app, { isBotToken, addUser });   // 1.99fc: image safety checks via Pepe's vision (OFF by default; /admin/imagesafety)
 require("./imagesafety").install();   // 1.99fc: padlook / stories / feed posts / DM pictures go through it (a pass-through while it's off)
 require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp });   // 1.99fq: /help (Pepe's commands, published by Pepe) + its "ask how to do something" prompter
