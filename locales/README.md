@@ -12,7 +12,8 @@ from a catalog shows in English.
    - in a view, `<%- t('area.name', { name }) %>` (the view starts with the shared prelude, see `i18n-core.js`)
    - in server code, `req.t('area.name')`
    - in page scripts, `__t('js.area.name', 'English default', vars)`. The default must equal `en.json`.
-3. Commit and push to `staging`. Don't translate by hand.
+3. Commit and push to `staging`. Don't translate by hand. Don't write the literal text `[skip ci]` anywhere in your
+   commit message: GitHub then runs no workflow for the push, so the sync doesn't run either.
 
 ## What happens automatically
 
