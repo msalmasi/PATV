@@ -2031,6 +2031,7 @@
   "ach.group.casino": "کیسینو",
   "ach.group.games": "گیمز اور لڑائیاں",
   "ach.group.bounties": "انعامات",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "باقی سب",
   "ach.holders": {
     "one": "{n} کھلاڑی کے پاس ہے",
@@ -3019,6 +3020,8 @@
   "subs.plex_unlink": "ان لنک",
   "subs.plex_link": "🔗 میرا Plex اکاؤنٹ لنک کریں",
   "subs.plex_link_note": "یہ دکھانے کے لیے کہ کون سا Plex اکاؤنٹ آپ کا ہے، Plex سے سائن ان کریں۔ ہم صرف اس کا یوزر نیم اور آئی ڈی پڑھتے ہیں۔",
+  "subs.plex_ach": "🏆 Plex {!link}: اپنا Plex اکاؤنٹ جوڑنے پر 📼 Tuned In (+ VHS Reels اوتار رنگ)، ہمارے سرور پر جگہ ملنے پر 🍿 Front Row (+ Now Playing بینر)، وہاں 3 مہینے بعد 📼 Be Kind, Rewind۔ رسائی ختم ہو جائے تب بھی یہ آپ کے رہتے ہیں۔",
+  "subs.plex_ach_link": "کامیابیاں",
   "subs.plex_get_h": "Plex رسائی حاصل کریں",
   "subs.view": "دیکھیں ›",
   "subs.subscribe": "🔁 سبسکرائب: ہر {days} دن {price} PAT",

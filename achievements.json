@@ -114,6 +114,9 @@
     {"id": "cf_tips_recv_10m", "name": "Influencer", "emoji": "🌟", "desc": "Received 10,000,000 PAT in tips.", "metric": "tips_recv_pat", "threshold": 10000000, "xp": 25000, "pat": 300000, "tier": "legendary", "side": "web"},
     {"id": "cf_level_10", "name": "Double Digits", "emoji": "🔟", "desc": "Reached level 10.", "metric": "level", "threshold": 10, "xp": 0, "pat": 50000, "tier": "common", "side": "web"},
     {"id": "cf_level_25", "name": "Veteran", "emoji": "🎖️", "desc": "Reached level 25.", "metric": "level", "threshold": 25, "xp": 0, "pat": 150000, "tier": "rare", "side": "web"},
-    {"id": "cf_level_50", "name": "Elder Frog", "emoji": "🧙", "desc": "Reached level 50.", "metric": "level", "threshold": 50, "xp": 0, "pat": 500000, "tier": "legendary", "side": "web"}
+    {"id": "cf_level_50", "name": "Elder Frog", "emoji": "🧙", "desc": "Reached level 50.", "metric": "level", "threshold": 50, "xp": 0, "pat": 500000, "tier": "legendary", "side": "web"},
+    {"id": "cf_plex_linked", "name": "Tuned In", "emoji": "📼", "desc": "Linked your Plex account to PATV.", "metric": "plex_linked", "threshold": 1, "xp": 2000, "pat": 25000, "tier": "common", "side": "web"},
+    {"id": "cf_plex_member", "name": "Front Row", "emoji": "🍿", "desc": "Got a seat on our Plex server: active Plex access, bought on PATV or not.", "metric": "plex_member", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "web"},
+    {"id": "cf_plex_90d", "name": "Be Kind, Rewind", "emoji": "📼", "desc": "On our Plex server for 3 months straight.", "metric": "plex_days", "threshold": 90, "xp": 10000, "pat": 100000, "tier": "rare", "side": "web"}
   ]
 }

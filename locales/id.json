@@ -1997,6 +1997,7 @@
   "ach.group.casino": "Kasino",
   "ach.group.games": "Game &amp; duel",
   "ach.group.bounties": "Hadiah buruan",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "Lainnya",
   "ach.holders": {
     "other": "{n} pemain memilikinya"
@@ -2976,6 +2977,8 @@
   "subs.plex_unlink": "Lepas tautan",
   "subs.plex_link": "🔗 Tautkan akun Plex-ku",
   "subs.plex_link_note": "Masuk dengan Plex untuk menunjukkan akun Plex mana yang milikmu. Kami hanya membaca nama pengguna dan id-nya.",
+  "subs.plex_ach": "🏆 {!link} Plex: 📼 Tuned In karena menautkan akun Plex-mu (+ cincin avatar VHS Reels), 🍿 Front Row karena dapat tempat di server kami (+ banner Now Playing), 📼 Be Kind, Rewind setelah 3 bulan di sana. Tetap milikmu, meski aksesmu berakhir.",
+  "subs.plex_ach_link": "Pencapaian",
   "subs.plex_get_h": "Dapatkan akses Plex",
   "subs.view": "Lihat ›",
   "subs.subscribe": "🔁 Langganan: {price} PAT setiap {days} hari",

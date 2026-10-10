@@ -1997,6 +1997,7 @@
   "ach.group.casino": "คาสิโน",
   "ach.group.games": "เกม &amp; การต่อสู้",
   "ach.group.bounties": "ค่าหัว",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "อื่น ๆ",
   "ach.holders": {
     "other": "ผู้เล่น {n} คนได้รับแล้ว"
@@ -2976,6 +2977,8 @@
   "subs.plex_unlink": "ยกเลิกการเชื่อม",
   "subs.plex_link": "🔗 เชื่อมบัญชี Plex ของฉัน",
   "subs.plex_link_note": "ลงชื่อเข้าใช้ด้วย Plex เพื่อแสดงว่าบัญชี Plex ใดเป็นของคุณ เราอ่านเฉพาะชื่อผู้ใช้และ id เท่านั้น",
+  "subs.plex_ach": "🏆 {!link} Plex: 📼 Tuned In เมื่อเชื่อมบัญชี Plex (+ วงแหวนอวาตาร์ VHS Reels), 🍿 Front Row เมื่อได้ที่บนเซิร์ฟเวอร์ของเรา (+ แบนเนอร์ Now Playing), 📼 Be Kind, Rewind หลังอยู่ครบ 3 เดือน เป็นของคุณตลอดไป แม้สิทธิ์เข้าถึงจะหมดลง",
+  "subs.plex_ach_link": "ความสำเร็จ",
   "subs.plex_get_h": "ขอสิทธิ์เข้าถึง Plex",
   "subs.view": "ดู ›",
   "subs.subscribe": "🔁 สมัครสมาชิก: {price} PAT ทุก {days} วัน",

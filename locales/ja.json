@@ -1997,6 +1997,7 @@
   "ach.group.casino": "カジノ",
   "ach.group.games": "ゲーム &amp; バトル",
   "ach.group.bounties": "懸賞金",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "その他",
   "ach.holders": {
     "other": "{n}人のプレイヤーが獲得"
@@ -2976,6 +2977,8 @@
   "subs.plex_unlink": "連携解除",
   "subs.plex_link": "🔗 Plexアカウントを連携",
   "subs.plex_link_note": "Plexでサインインして、どのPlexアカウントがあなたのものかを示してください。読み取るのはユーザー名とIDだけです。",
+  "subs.plex_ach": "🏆 Plexの{!link}：Plexアカウントの連携で📼 Tuned In（＋アバターリング VHS Reels）、サーバーに席を得ると🍿 Front Row（＋バナー Now Playing）、3か月続けると📼 Be Kind, Rewind。アクセスが終わっても、ずっとあなたのものです。",
+  "subs.plex_ach_link": "実績",
   "subs.plex_get_h": "Plexアクセスを入手",
   "subs.view": "見る ›",
   "subs.subscribe": "🔁 定期購入：{days}日ごとに {price} PAT",

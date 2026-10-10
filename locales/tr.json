@@ -2031,6 +2031,7 @@
   "ach.group.casino": "Kumarhane",
   "ach.group.games": "Oyunlar &amp; dövüşler",
   "ach.group.bounties": "Ödül görevleri",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "Diğer her şey",
   "ach.holders": {
     "one": "{n} oyuncuda var",
@@ -3019,6 +3020,8 @@
   "subs.plex_unlink": "Bağlantıyı kaldır",
   "subs.plex_link": "🔗 Plex hesabımı bağla",
   "subs.plex_link_note": "Hangi Plex hesabının senin olduğunu göstermek için Plex ile giriş yap. Yalnızca kullanıcı adını ve id'sini okuruz.",
+  "subs.plex_ach": "🏆 Plex {!link}: Plex hesabını bağlamak için 📼 Tuned In (+ VHS Reels avatar halkası), sunucumuzda bir yer için 🍿 Front Row (+ Now Playing afişi), orada 3 ay sonra 📼 Be Kind, Rewind. Erişimin bitse bile senin kalır.",
+  "subs.plex_ach_link": "başarımları",
   "subs.plex_get_h": "Plex erişimi al",
   "subs.view": "Görüntüle ›",
   "subs.subscribe": "🔁 Abone ol: her {days} günde {price} PAT",

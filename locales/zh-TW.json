@@ -1997,6 +1997,7 @@
   "ach.group.casino": "賭場",
   "ach.group.games": "遊戲與對戰",
   "ach.group.bounties": "懸賞",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "其他",
   "ach.holders": {
     "other": "{n} 位玩家擁有"
@@ -2976,6 +2977,8 @@
   "subs.plex_unlink": "取消連結",
   "subs.plex_link": "🔗 連結我的 Plex 帳號",
   "subs.plex_link_note": "用 Plex 登入，表明哪個 Plex 帳號是你的。我們只讀取其使用者名稱和 ID。",
+  "subs.plex_ach": "🏆 Plex {!link}：連結你的 Plex 帳號得 📼 Tuned In（+ 頭像環 VHS Reels），在我們的伺服器上有一席之地得 🍿 Front Row（+ 橫幅 Now Playing），連續 3 個月得 📼 Be Kind, Rewind。即使存取權限結束，它們也永遠屬於你。",
+  "subs.plex_ach_link": "成就",
   "subs.plex_get_h": "取得 Plex 存取權",
   "subs.view": "查看 ›",
   "subs.subscribe": "🔁 訂閱：每 {days} 天 {price} PAT",

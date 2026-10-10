@@ -48,6 +48,7 @@
       <p class="st off"><%- t('subs.plex_none') %></p>
     <% } %>
     <p class="mut"><%- t('subs.plex_perks') %><% if (libraryOpen && !live && price > 0) { %> <%- t('subs.plex_perks_paid', { price: fmt(price) }) %><% } %></p>
+    <p class="mut"><%- t('subs.plex_ach', { link: '<a href="/achievements">' + t('subs.plex_ach_link') + '</a>' }) %></p>
     <% if (rows.length) { %>
       <% rows.forEach((r) => { %>
       <div class="it"><div class="w"><b><%= r.username || r.plex_id %></b> <span class="mut">· <%- r.active ? t('subs.plex_row_active') : r.pending ? t('subs.plex_row_pending') : r.on_server ? t('subs.plex_row_ended') : t('subs.plex_row_off') %></span></div>

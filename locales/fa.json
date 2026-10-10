@@ -2031,6 +2031,7 @@
   "ach.group.casino": "کازینو",
   "ach.group.games": "بازی‌ها &amp; دعواها",
   "ach.group.bounties": "جایزه‌ها",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "بقیه چیزها",
   "ach.holders": {
     "one": "{n} بازیکن دارد",
@@ -3019,6 +3020,8 @@
   "subs.plex_unlink": "قطع اتصال",
   "subs.plex_link": "🔗 حساب Plex من را وصل کن",
   "subs.plex_link_note": "با Plex وارد شو تا نشان دهی کدام حساب Plex مال توست. ما فقط نام کاربری و شناسه‌اش را می‌خوانیم.",
+  "subs.plex_ach": "🏆 {!link} Plex: ‏📼 Tuned In برای پیوند دادن حساب Plex (+ حلقهٔ آواتار VHS Reels)، ‏🍿 Front Row برای جایی روی سرور ما (+ بنر Now Playing)، ‏📼 Be Kind, Rewind پس از ۳ ماه روی آن. حتی اگر دسترسی‌ات تمام شود، مال خودت می‌ماند.",
+  "subs.plex_ach_link": "دستاوردهای",
   "subs.plex_get_h": "دسترسی Plex بگیر",
   "subs.view": "مشاهده ›",
   "subs.subscribe": "🔁 اشتراک: {price} PAT هر {days} روز",

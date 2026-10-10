@@ -2031,6 +2031,7 @@
   "ach.group.casino": "कसीनो",
   "ach.group.games": "गेम &amp; लड़ाइयाँ",
   "ach.group.bounties": "इनाम",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "बाकी सब",
   "ach.holders": {
     "one": "{n} खिलाड़ी के पास यह है",
@@ -3019,6 +3020,8 @@
   "subs.plex_unlink": "अनलिंक करें",
   "subs.plex_link": "🔗 मेरा Plex अकाउंट लिंक करें",
   "subs.plex_link_note": "कौन-सा Plex अकाउंट आपका है यह दिखाने के लिए Plex से साइन इन करें। हम सिर्फ़ उसका यूज़रनेम और आईडी पढ़ते हैं।",
+  "subs.plex_ach": "🏆 Plex {!link}: अपना Plex खाता जोड़ने पर 📼 Tuned In (+ VHS Reels अवतार रिंग), हमारे सर्वर पर जगह मिलने पर 🍿 Front Row (+ Now Playing बैनर), वहाँ 3 महीने बाद 📼 Be Kind, Rewind। पहुँच खत्म होने पर भी ये आपके ही रहते हैं।",
+  "subs.plex_ach_link": "उपलब्धियाँ",
   "subs.plex_get_h": "Plex एक्सेस पाएँ",
   "subs.view": "देखें ›",
   "subs.subscribe": "🔁 सब्सक्राइब करें: हर {days} दिन {price} PAT",

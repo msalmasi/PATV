@@ -1997,6 +1997,7 @@
   "ach.group.casino": "카지노",
   "ach.group.games": "게임 &amp; 싸움",
   "ach.group.bounties": "현상금",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "그 밖의 모든 것",
   "ach.holders": {
     "other": "플레이어 {n}명 보유"
@@ -2976,6 +2977,8 @@
   "subs.plex_unlink": "연결 해제",
   "subs.plex_link": "🔗 내 Plex 계정 연결",
   "subs.plex_link_note": "Plex로 로그인해서 어떤 Plex 계정이 내 것인지 알려 주세요. 사용자 이름과 ID만 읽어요.",
+  "subs.plex_ach": "🏆 Plex {!link}: Plex 계정을 연결하면 📼 Tuned In(+ 아바타 링 VHS Reels), 우리 서버에 자리를 얻으면 🍿 Front Row(+ 배너 Now Playing), 3개월을 채우면 📼 Be Kind, Rewind. 이용 권한이 끝나도 계속 당신의 것입니다.",
+  "subs.plex_ach_link": "업적",
   "subs.plex_get_h": "Plex 접근 권한 받기",
   "subs.view": "보기 ›",
   "subs.subscribe": "🔁 구독: {days}일마다 {price} PAT",

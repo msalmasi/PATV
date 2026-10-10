@@ -1997,6 +1997,7 @@
   "ach.group.casino": "Casino",
   "ach.group.games": "Game &amp; đấu",
   "ach.group.bounties": "Truy nã",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "Mọi thứ khác",
   "ach.holders": {
     "other": "{n} người chơi đã có"
@@ -2976,6 +2977,8 @@
   "subs.plex_unlink": "Hủy liên kết",
   "subs.plex_link": "🔗 Liên kết tài khoản Plex của tôi",
   "subs.plex_link_note": "Đăng nhập bằng Plex để cho biết tài khoản Plex nào là của bạn. Chúng tôi chỉ đọc tên người dùng và id của tài khoản.",
+  "subs.plex_ach": "🏆 {!link} Plex: 📼 Tuned In khi liên kết tài khoản Plex (+ vòng ảnh đại diện VHS Reels), 🍿 Front Row khi có chỗ trên máy chủ của chúng tôi (+ banner Now Playing), 📼 Be Kind, Rewind sau 3 tháng ở đó. Chúng vẫn là của bạn, kể cả khi quyền truy cập hết hạn.",
+  "subs.plex_ach_link": "Thành tích",
   "subs.plex_get_h": "Nhận quyền truy cập Plex",
   "subs.view": "Xem ›",
   "subs.subscribe": "🔁 Đăng ký: {price} PAT mỗi {days} ngày",

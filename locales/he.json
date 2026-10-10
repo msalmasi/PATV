@@ -2065,6 +2065,7 @@
   "ach.group.casino": "קזינו",
   "ach.group.games": "משחקים וקרבות",
   "ach.group.bounties": "פרסים על הראש",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "כל השאר",
   "ach.holders": {
     "one": "לשחקן {n} יש את זה",
@@ -3062,6 +3063,8 @@
   "subs.plex_unlink": "ניתוק",
   "subs.plex_link": "🔗 קישור חשבון ה־Plex שלי",
   "subs.plex_link_note": "התחברו עם Plex כדי להראות איזה חשבון Plex שלכם. אנחנו קוראים רק את שם המשתמש והמזהה שלו.",
+  "subs.plex_ach": "🏆 {!link} של Plex: ‏📼 Tuned In על קישור חשבון ה-Plex שלך (+ טבעת האווטאר VHS Reels), ‏🍿 Front Row על מקום בשרת שלנו (+ הבאנר Now Playing), ‏📼 Be Kind, Rewind אחרי 3 חודשים בו. הם נשארים שלך, גם אם הגישה שלך מסתיימת.",
+  "subs.plex_ach_link": "הישגים",
   "subs.plex_get_h": "קבלת גישה ל־Plex",
   "subs.view": "צפייה ›",
   "subs.subscribe": "🔁 מנוי: {price} PAT כל {days} ימים",

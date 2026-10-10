@@ -2031,6 +2031,7 @@
   "ach.group.casino": "Casinò",
   "ach.group.games": "Giochi &amp; sfide",
   "ach.group.bounties": "Taglie",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "Tutto il resto",
   "ach.holders": {
     "one": "{n} giocatore ce l'ha",
@@ -3019,6 +3020,8 @@
   "subs.plex_unlink": "Scollega",
   "subs.plex_link": "🔗 Collega il mio account Plex",
   "subs.plex_link_note": "Accedi con Plex per mostrare quale account Plex è tuo. Leggiamo solo il nome utente e l'id.",
+  "subs.plex_ach": "🏆 {!link} Plex: 📼 Tuned In collegando il tuo account Plex (+ l’anello avatar VHS Reels), 🍿 Front Row per un posto sul nostro server (+ il banner Now Playing), 📼 Be Kind, Rewind dopo 3 mesi lì. Restano tuoi, anche se il tuo accesso finisce.",
+  "subs.plex_ach_link": "Obiettivi",
   "subs.plex_get_h": "Ottieni l'accesso a Plex",
   "subs.view": "Vedi ›",
   "subs.subscribe": "🔁 Abbonati: {price} PAT ogni {days} giorni",

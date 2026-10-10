@@ -2099,6 +2099,7 @@
   "ach.group.casino": "Казино",
   "ach.group.games": "Ігри й бої",
   "ach.group.bounties": "Завдання",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "Усе інше",
   "ach.holders": {
     "one": "Його має {n} гравець",
@@ -3105,6 +3106,8 @@
   "subs.plex_unlink": "Відв’язати",
   "subs.plex_link": "🔗 Прив’язати мій акаунт Plex",
   "subs.plex_link_note": "Увійди через Plex, щоб показати, який акаунт Plex твій. Ми читаємо лише ім’я користувача та id.",
+  "subs.plex_ach": "🏆 {!link} Plex: 📼 Tuned In за привʼязку облікового запису Plex (+ кільце аватара VHS Reels), 🍿 Front Row за місце на нашому сервері (+ банер Now Playing), 📼 Be Kind, Rewind після 3 місяців на ньому. Вони залишаються твоїми, навіть якщо доступ закінчиться.",
+  "subs.plex_ach_link": "Досягнення",
   "subs.plex_get_h": "Отримати доступ до Plex",
   "subs.view": "Переглянути ›",
   "subs.subscribe": "🔁 Підписатися: {price} PAT кожні {days} дн.",

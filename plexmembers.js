@@ -73,6 +73,7 @@ function init() {
         id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, plex_id TEXT, user_id TEXT, what TEXT NOT NULL, actor TEXT, detail TEXT)`);
       await runQuery("CREATE INDEX IF NOT EXISTS plex_member_log_ts ON plex_member_log (ts)");
       await loadCache();
+      achCheck().catch(() => {});        // 1.99jv: the one-off quiet backfill of the 📼 Plex achievements (then a catch-up)
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
@@ -205,7 +206,54 @@ async function afterChange(before, after) {
 }
 async function reload() {
   const { before, after } = await loadCache();
-  return afterChange(before, after);
+  const ch = await afterChange(before, after);
+  await achCheck();
+  return ch;
+}
+
+// ── 1.99jv: 📼 Plex achievements (achievements.json cf_plex_*: side "web", awarded by achievements.checkWeb) ──
+// plex_linked  any Plex account linked to this PATV account (self / Sign in with Plex / admin / the sync's links)
+// plex_member  an active row right now (PATV-bought, pre-existing, manual or the server owner)
+// plex_days    days on our server in a row: since the CURRENT share was accepted (a removal + re-share starts
+//              over); the owner counts from the oldest share on the server (they had it before anyone)
+async function achMetrics(userId, t = clock()) {
+  const out = { plex_linked: 0, plex_member: 0, plex_days: 0 };
+  if (!userId) return out;
+  const rows = await safeQuery("SELECT * FROM plex_members WHERE user_id = ?", [String(userId)]);
+  if (!rows.length) return out;
+  out.plex_linked = 1;
+  for (const r of rows) {
+    if (!isActiveRow(r, t)) continue;
+    out.plex_member = 1;
+    let since = Number(r.accepted_at) || Number(r.invited_at) || Number(r.first_seen) || t;
+    if (isOwnerRow(r)) {
+      const o = await safeQuery("SELECT MIN(COALESCE(accepted_at, invited_at)) AS m FROM plex_members WHERE share_id IS NOT NULL", []);
+      since = Math.min(Number(o[0] && o[0].m) || since, Number(r.first_seen) || t);
+    }
+    out.plex_days = Math.max(out.plex_days, Math.floor(Math.max(0, t - since) / DAY));
+  }
+  return out;
+}
+// after a sync / link / unlink / renewal: award what linked accounts now qualify for (the first time: the quiet
+// backfill instead - accounts linked before these achievements existed get the badge without XP, PAT or a shout)
+let achChecking = null, achAgain = false;
+async function achCheck() {
+  if (achChecking) { achAgain = true; return achChecking; }      // a change while one runs: run once more after it
+  achChecking = (async () => {
+   do {
+    achAgain = false;
+    try {
+      const A = require("./achievements");
+      await A.plexBackfill();
+      const ids = A.list().filter((a) => a.side === "web" && A.PLEX_METRICS.includes(a.metric)).map((a) => a.id);
+      if (!ids.length) return;
+      const users = await getQuery(`SELECT DISTINCT m.user_id FROM plex_members m WHERE m.user_id IS NOT NULL
+        AND (SELECT COUNT(*) FROM user_badges b WHERE b.userId = m.user_id AND b.badgeId IN (${ids.map(() => "?").join(",")})) < ?`, [...ids, ids.length]);
+      for (const u of users) await A.checkWeb(u.user_id);
+    } catch (e) { console.error("[plex] achievements:", conf.errLine(e)); }
+   } while (achAgain);
+  })().finally(() => { achChecking = null; });
+  return achChecking;
 }
 
 // ── the upstreams (read-only) ──
@@ -669,7 +717,7 @@ function register(app, { addUser, noTimers } = {}) {
 }
 
 module.exports = {
-  init, register, sync, refreshUser, revoke, adminLink, adminPin, adminState, mine, memberFor, memberSync, memberByName, patvAccess, classify,
+  init, register, sync, refreshUser, achMetrics, achCheck, revoke, adminLink, adminPin, adminState, mine, memberFor, memberSync, memberByName, patvAccess, classify,
   isActiveRow, isCandidate, isOwnerRow, OWNER, emailHash, linkStart, linkCheck, linkSelf, unlinkSelf, reload, row, Refuse, PATV_TYPES, KEEP_TYPES, LINK_SOURCES,
   // 1.99jr: Sign in with Plex (plexsso.js) shares the PATV client id + the plex.tv caller (tests swap it with _set)
   plexApi: (...a) => plexTv(...a), clientId: () => CLIENT_ID(), site: () => SITE(),

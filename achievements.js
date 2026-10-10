@@ -94,7 +94,11 @@ const feedReady = runQuery(`CREATE TABLE IF NOT EXISTS achievement_feed (
     created DATETIME DEFAULT CURRENT_TIMESTAMP, announced INTEGER DEFAULT 0)`).catch((e) => console.error("[achievements] feed:", e));
 
 async function webMetrics(userId) {
-  const one = async (sql, p) => { const r = await getQuery(sql, p); return (r[0] && Object.values(r[0])[0]) || 0; };
+  // a table this database doesn't have (a fresh install, a test) counts as 0 instead of failing the whole check
+  const one = async (sql, p) => { const r = await getQuery(sql, p).catch(() => []); return (r[0] && Object.values(r[0])[0]) || 0; };
+  // 1.99jv: 📼 Plex - linked a Plex account, on our server now, days on it in a row (plexmembers.js)
+  let plex = {};
+  try { plex = await require("./plexmembers").achMetrics(userId); } catch (e) { plex = {}; }
   const spent = await one(`SELECT COALESCE(SUM(-points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WAGER}`, [userId]);
   const won = await one(`SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WIN}`, [userId]);
   return {
@@ -106,6 +110,9 @@ async function webMetrics(userId) {
     tips_recv_pat: await one("SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type = 'tip received'", [userId]),
     level: await one("SELECT COALESCE(level,0) FROM users WHERE userId = ?", [userId]),
     role_high_roller: await one("SELECT COUNT(*) FROM user_roles WHERE userId = ? AND LOWER(role) = 'high roller'", [userId]),
+    plex_linked: plex.plex_linked || 0,
+    plex_member: plex.plex_member || 0,
+    plex_days: plex.plex_days || 0,
   };
 }
 
@@ -163,7 +170,8 @@ const webBackfill = (async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
   const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'web_backfill'");
   if (done.length) return;
-  const web = catalog.filter((a) => a.side === "web");
+  // (the 📼 Plex ones have their own quiet backfill, plexBackfill(), which also hands out their cosmetics)
+  const web = catalog.filter((a) => a.side === "web" && !["plex_linked", "plex_member", "plex_days"].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
   for (const u of users) {
@@ -179,8 +187,40 @@ const webBackfill = (async () => {
   console.log(`[achievements] web backfill: ${n} badge(s) given quietly`);
 })().catch((e) => console.error("[achievements] web backfill:", e));
 
+// 1.99jv: once, quietly give the 📼 Plex achievements to the accounts that already qualify (linked Plex
+// accounts, current members, the server owner) - badge + its cosmetic unlocks only: no XP, PAT or announcement.
+// plexmembers.js runs it before its first achievement check, so nobody already linked gets a loud award.
+const PLEX_METRICS = ["plex_linked", "plex_member", "plex_days"];
+let plexBackfilling = null;
+function plexBackfill() {
+  if (!plexBackfilling) {
+    plexBackfilling = (async () => {
+      await ready;
+      await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
+      const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'plex_backfill'");
+      if (done.length) return { done: true, already: true, given: 0 };
+      const plex = catalog.filter((a) => a.side === "web" && PLEX_METRICS.includes(a.metric));
+      const users = await getQuery("SELECT DISTINCT user_id FROM plex_members WHERE user_id IS NOT NULL").catch(() => []);
+      const given = [];
+      for (const u of users) {
+        const m = await require("./plexmembers").achMetrics(u.user_id);
+        for (const a of plex) {
+          if ((m[a.metric] || 0) < (a.threshold || 1)) continue;
+          const r = await award({ userId: u.user_id }, a.id, null, { silent: true });
+          if (r.ok && r.awarded) given.push({ userId: u.user_id, badgeId: a.id });
+        }
+      }
+      await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('plex_backfill', ?)",
+                     [JSON.stringify({ at: new Date().toISOString(), users: users.length, given: given.length })]);
+      console.log(`[achievements] plex backfill: ${given.length} badge(s) given quietly to ${users.length} linked account(s)`);
+      return { done: true, given: given.length, users: users.length, list: given };
+    })().catch((e) => { plexBackfilling = null; throw e; });
+  }
+  return plexBackfilling;
+}
+
 function list() {
   return catalog.map((a) => ({ ...a, icon: iconFor(a) }));
 }
 
-module.exports = { award, list, ready, checkWeb, setUpdateLevel, feed, ackFeed };
+module.exports = { award, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS };

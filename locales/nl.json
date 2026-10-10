@@ -2031,6 +2031,7 @@
   "ach.group.casino": "Casino",
   "ach.group.games": "Games &amp; gevechten",
   "ach.group.bounties": "Premies",
+  "ach.group.plex": "📼 Plex",
   "ach.group.else": "Al het andere",
   "ach.holders": {
     "one": "{n} speler heeft hem",
@@ -3019,6 +3020,8 @@
   "subs.plex_unlink": "Ontkoppelen",
   "subs.plex_link": "🔗 Mijn Plex-account koppelen",
   "subs.plex_link_note": "Log in met Plex om te laten zien welk Plex-account van jou is. We lezen alleen de gebruikersnaam en het id.",
+  "subs.plex_ach": "🏆 Plex-{!link}: 📼 Tuned In voor het koppelen van je Plex-account (+ de avatarring VHS Reels), 🍿 Front Row voor een plek op onze server (+ de banner Now Playing), 📼 Be Kind, Rewind na 3 maanden erop. Ze blijven van jou, ook als je toegang afloopt.",
+  "subs.plex_ach_link": "Prestaties",
   "subs.plex_get_h": "Plex-toegang krijgen",
   "subs.view": "Bekijken ›",
   "subs.subscribe": "🔁 Abonneren: {price} PAT elke {days} dagen",
