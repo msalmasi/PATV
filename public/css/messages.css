@@ -114,7 +114,8 @@ body.dm-page > .dm { flex: 1 1 0; height: auto; min-height: 0; }
 .dm-cbox textarea:focus-visible { outline: none; }
 .dm-cbox textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: none; background: none; color: #fff; font: inherit; font-size: 15px; line-height: 1.45;
   padding: 6px 0; max-height: 180px; }
-.dm-cbox button { flex: none; width: 40px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; background: var(--dm-acc); color: #fff; cursor: pointer; }
+.dm-cbox button { flex: none; padding: 0; width: 40px;  /* 1.99jh: padding 0 - styles.css's button padding (10px 20px) pushed the icons off-centre */
+   height: 36px; display: grid; place-items: center; border: 0; border-radius: 9px; background: var(--dm-acc); color: #fff; cursor: pointer; }
 .dm-cbox button[disabled] { background: #2a2a31; color: #777; cursor: default; }
 .dm-hint { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: #666; padding: 4px 4px 0; }
 .dm-err { color: #ff8a80; font-size: 13px; }

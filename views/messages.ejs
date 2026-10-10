@@ -3,7 +3,7 @@
     with live updates over /events?type=dm. /messages/notices selects the pinned Notices item; GET /inbox 301s there.
     1.99cz: groups (the ✎ "New conversation" dialog, the members dialog), pictures (the 🖼 tray, the lightbox) and post cards. %>
 <%- include('layout', { title: title, user: user, inboxUnread: typeof inboxUnread !== 'undefined' ? inboxUnread : 0, dmUnread: dmUnread }) %>
-<link rel="stylesheet" href="/public/css/messages.css?v=5">
+<link rel="stylesheet" href="/public/css/messages.css?v=6">
 <% const _nt = boot.notices || {}; const _ntOn = boot.view === 'notices'; const _ntN = _nt.unread || 0; %>
 <main class="dm" id="dm" data-view="<%= boot.open || boot.to || _ntOn ? 'chat' : 'list' %>">
   <aside class="dm-side" aria-label="Conversations">
