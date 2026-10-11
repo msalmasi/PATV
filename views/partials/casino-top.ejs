@@ -1,0 +1,21 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# views/partials/casino-top.ejs - D10: the casino pages' top bar (game, your balance, provably-fair badge, viewers, history /
+    host buttons on a table), the toast and the polite announcer. Locals: t, game ('bj' | 'holdem'), tableId. %>
+<div class="cz-bar">
+  <div class="cz-brand">
+    <span class="ic" aria-hidden="true"><%= game === 'holdem' ? '🃏' : '🂡' %></span>
+    <div>
+      <% if (tableId) { %><h1><%- game === 'holdem' ? t('casino.hm_title') : t('casino.bj_title') %></h1><% } else { %><div class="h1"><%- t('casino.lobby_title') %></div><% } %>
+      <small><%- !tableId ? t('casino.lobby_sub') : game === 'holdem' ? t('casino.hm_rules') : t('casino.bj_rules') %></small>
+    </div>
+  </div>
+  <span class="cz-pill" id="cz-bal" hidden title="<%- t('casino.balance') %>">👛 <b>0</b> PAT</span>
+  <% if (tableId) { %>
+    <span class="cz-pill" id="cz-watch" hidden>👁 <b>0</b><span class="cz-sr"> <%- t('casino.watching') %></span></span>
+    <a class="cz-pill fair" id="cz-fair" hidden><%- t('casino.fair') %></a>
+    <button type="button" class="cz-pill" id="cz-histbtn">📜 <%- t('casino.history') %></button>
+    <button type="button" class="cz-pill" id="cz-hostbtn" hidden>🎛️ <%- t('casino.host_tools') %></button>
+  <% } %>
+</div>
+<div class="cz-toast" id="cz-toast" role="status"></div>
+<div class="cz-sr" id="cz-live" aria-live="polite"></div>

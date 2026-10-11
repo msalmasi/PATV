@@ -1,0 +1,35 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# views/partials/casino-sheets.ejs - D10: the table pages' sheets (native <dialog>: focus trap, Esc closes; a bottom sheet on a
+    phone): hand history + the provably-fair commitment, and the host / admin tools (push to a Camfrog room, Pepe's stream with
+    its queue position and the admin override, close the table). Locals: t. %>
+<dialog class="sheet" id="cz-histsheet" aria-labelledby="cz-hist-h">
+  <div class="sheet-h"><h2 id="cz-hist-h">📜 <%- t('casino.history') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
+  <div class="sheet-b">
+    <div class="hist" id="cz-hist"></div>
+    <p class="fine" style="margin-top:14px"><%- t('casino.fair_how') %></p>
+    <p class="commit" id="cz-commit"></p>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="cz-host" aria-labelledby="cz-host-h">
+  <div class="sheet-h"><h2 id="cz-host-h">🎛️ <%- t('casino.host_tools') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
+  <div class="sheet-b">
+    <label class="lbl" for="cz-room"><%- t('casino.push_h') %></label>
+    <p class="fine" id="cz-roomnow"></p>
+    <p class="fine" id="cz-roomnone" hidden><%- t('casino.no_rooms') %></p>
+    <select id="cz-room"></select>
+    <div class="rowb">
+      <button type="button" class="cz-btn blue sm" id="cz-push"><%- t('casino.push') %></button>
+      <button type="button" class="cz-btn ghost sm" id="cz-unpush"><%- t('casino.unpush') %></button>
+    </div>
+    <label class="lbl"><%- t('casino.stream_h') %></label>
+    <p class="fine" id="cz-streamnow"></p>
+    <p class="fine" id="cz-override-row" hidden><label><input type="checkbox" id="cz-override"> <%- t('casino.override') %></label></p>
+    <div class="rowb">
+      <button type="button" class="cz-btn amber sm" id="cz-stream"><%- t('casino.stream_ask') %></button>
+      <button type="button" class="cz-btn ghost sm" id="cz-unstream"><%- t('casino.unstream') %></button>
+    </div>
+    <label class="lbl"><%- t('casino.table_h') %></label>
+    <button type="button" class="cz-btn red sm" id="cz-close"><%- t('casino.close_table') %></button>
+  </div>
+</dialog>

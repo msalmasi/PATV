@@ -251,6 +251,18 @@ built to carry a rich UI:
   per-user endpoint (or the per-user part of the stream), never stored in an event that anyone else can read.
   Showdown reveals are public events.
 
+**Built 2026-10-11 (D10, the design pass):** `/casino/blackjack` and `/casino/holdem` share a lobby (both games' open
+tables: seats taken, stakes, the room each is pushed to, stream, latest proof; Join / Watch / Open a table with the blinds
+picker) and a look (views/partials/casino-*.ejs, public/js/casino-ui.js). Blackjack: a felt with Pepe and six seats on the
+arc, chip-button betting (100 / 500 / 1K / 5K / max, High Rollers uncapped), hit / stand / double / split / insurance only when
+legal, countdown rings on the server deadlines, deal / flip animations from a diff of the cards, the dealer's reveal and
+payout pops. Hold'em: an oval with nine seats (you at the bottom), button and blinds, bets in front of the seats, the pot as
+one total plus "not called yet" mid-street and main / side pots once chips are in the middle, your hole cards only from
+`me`, fold / check / call / bet-raise with a slider and min / half pot / pot / all-in presets, the buy-in / top-up sheet, the
+showdown reveal. Both: history sheet (`GET /api/casino/t/:id/history`, revealed rounds only, with the rake), spectator
+ribbon + count, host tools (push to a room, Pepe's stream with the queue position and the admin override), a sticky thumb
+bar on phones, reduced motion, strings in locales/en.json. Read-only API additions only; the engines and money are unchanged.
+
 ## 13. Pepe's stream: pushing a table to the OBS overlay (added and built 2026-10-11)
 
 When a table is pushed to a room, the host (or an admin) can also ask for it on **Pepe's stream**: the OBS games

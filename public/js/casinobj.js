@@ -1,192 +1,300 @@
-// casinobj.js — the web blackjack table of the casino backend (/casino/blackjack, 1.99lj).
-// Polls /api/casino/bj/t/<id> about once a second (the lobby every 4 s) and posts moves to /api/casino/bj/t/<id>/act
-// with an idempotency key per click, so a double-click or a retry never moves PAT twice.
+// casinobj.js — the web blackjack table (/casino/blackjack/t/<id>; the lobby is casino-ui.js). D10 design pass, 2026-10-11.
+// Draws the felt from /api/casino/t/<id> (polled about once a second by casino-ui.js): Pepe's cards, six seats on the arc,
+// chip-button betting, hit / stand / double / split / insurance with a countdown ring on the server's deadline, deal and flip
+// animations (only what changed is animated: a diff of the cards on the felt), the dealer's reveal and payout pops when a
+// round settles, spectators, and the history sheet. Every move posts with an idempotency key (casino-ui.js actor()).
 (function () {
   "use strict";
-  const root = document.getElementById("cb");
-  if (!root) return;
-  const $ = (id) => document.getElementById(id);
-  const tableId = root.dataset.table || "";
-  const signed = !!root.dataset.signed;
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const fmt = (n) => Number(n || 0).toLocaleString("en-US");
-  const SUIT = { s: "♠", h: "♥", d: "♦", c: "♣" };
-  const SUITN = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" };
-  const RANKN = { A: "Ace", K: "King", Q: "Queen", J: "Jack", T: "10" };
-  const card = (c) => `<span class="cd${"hd".includes(c[1]) ? " red" : ""}" role="img" aria-label="${RANKN[c[0]] || c[0]} of ${SUITN[c[1]]}">` +
-    `<span class="cr" aria-hidden="true">${c[0] === "T" ? "10" : c[0]}</span><span class="cs" aria-hidden="true">${SUIT[c[1]]}</span></span>`;
-  const back = () => '<span class="cd back" role="img" aria-label="face-down card"></span>';
-  const idem = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
-  let skew = 0, last = null, busy = false;
+  const CZ = window.CZ;
+  if (!CZ) return;
+  const { $, T, esc, fmt } = CZ;
+  if (!CZ.tableId) { CZ.startLobby(); return; }
 
-  function status(text, bad) {
-    const el = $("cb-status");
-    el.textContent = text || "";
-    el.className = "status" + (bad ? " bad" : "");
+  const SEATS = 6;
+  const ref = {};
+  const act = CZ.actor(ref);
+  let last = null, stake = 0, drawnRound = null, popRound = null, first = true, revealAt = 0, revealTm = null, prevTurn = false, focusBet = location.hash === "#bet";
+
+  const OUT = (o) => ({ blackjack: T("o_bj", "Blackjack"), win: T("o_win", "Win"), lose: T("o_lose", "Lose"), push: T("o_push", "Push"),
+                        bust: T("o_bust", "Bust") }[o] || o);
+  const isBetting = (t) => t.phase === "betting" || t.phase === "idle";
+
+  function slots() {
+    const box = $("cz-seats");
+    if (box.children.length !== SEATS) {
+      box.innerHTML = Array.from({ length: SEATS }, (_, i) => `<div class="seat" data-slot="${i}"><div class="hands"></div><div class="betspot"></div><div class="who"></div></div>`).join("");
+    }
+    return Array.from(box.children);
   }
 
-  async function post(url, body) {
-    const r = await fetch(url, { method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" }, body: JSON.stringify(body) });
-    let j = {};
-    try { j = await r.json(); } catch (e) { j = {}; }
-    return j;
+  /** the hands one seat shows: live ones during a round, the settled ones (with outcomes) between rounds */
+  function drawHands(seatEl, hands, opts) {
+    const box = seatEl.querySelector(".hands");
+    while (box.children.length > hands.length) box.lastChild.remove();
+    while (box.children.length < hands.length) {
+      const h = document.createElement("div");
+      h.className = "hand";
+      h.innerHTML = '<span class="cards fan"></span><span class="meta"></span>';
+      box.appendChild(h);
+    }
+    hands.forEach((h, i) => {
+      const el = box.children[i];
+      el.classList.toggle("cur", !!h.current);
+      CZ.drawCards(el.querySelector(".cards"), h.cards, { delay0: opts.delay0, step: opts.step, fy: "-160px" });
+      const showOutcome = h.outcome && (h.outcome === "bust" || Date.now() >= revealAt);
+      const v = h.value ? `<span class="val${h.value > 21 ? " bust" : h.is_bj ? " bj" : ""}">${h.is_bj ? "BJ" : esc(String(h.value))}${h.soft && h.value < 21 ? "s" : ""}</span>` : "";
+      const meta = v + (h.doubled ? '<span class="tag">×2</span>' : "") + (showOutcome ? `<span class="oc ${esc(h.outcome)}">${esc(OUT(h.outcome))}</span>` : "");
+      const m = el.querySelector(".meta");
+      if (m.dataset.v !== meta) { m.dataset.v = meta; m.innerHTML = meta; }
+      el.setAttribute("aria-label", T("hand_lbl", "Hand: {value}", { value: h.value || "" }) + (showOutcome ? " · " + OUT(h.outcome) : ""));
+    });
   }
 
-  // ── lobby ──
-  async function lobby() {
-    $("cb-lobby").hidden = false;
-    try {
-      const j = await (await fetch("/api/casino/bj/lobby", { credentials: "same-origin" })).json();
-      const list = (j.tables || []).filter((t) => t.game !== "holdem");
-      $("cb-tables").innerHTML = list.length ? list.map((t) => `<div class="trow"><span><b>${esc(t.host)}'s table</b> · ${t.players}/${t.max_seats} seated · ` +
-        `${fmt(t.min_bet)}–${fmt(t.max_bet)} PAT${t.room ? " · also in Camfrog room <b>" + esc(t.room_name) + "</b>" : " · web only"}</span>` +
-        `<a href="/casino/blackjack/t/${esc(t.id)}">Sit down →</a></div>`).join("") : '<p class="info">No table is open. Open one and others can join you.</p>';
-      $("cb-open-box").hidden = !signed || !j.enabled;
-      if (!j.enabled) status("Blackjack on the site is switched off right now.", true);
-    } catch (e) { status("Couldn't load the tables.", true); }
+  function resetFelt() {
+    for (const c of document.querySelectorAll("#cz-seats .hands")) c.textContent = "";
+    const d = $("cz-dealer");
+    d.textContent = "";
+    delete d.dataset.sig;
   }
-  $("cb-open").addEventListener("click", async () => {
-    if (busy) return;
-    busy = true;
-    const j = await post("/api/casino/bj/open", { idem: idem() });
-    busy = false;
-    if (j.ok && j.table) location.href = "/casino/blackjack/t/" + j.table;
-    else status(j.reply || j.error || "Couldn't open a table.", true);
-  });
 
-  // ── a table ──
   function render(d) {
     const t = d.table, me = d.me;
     last = d;
-    skew = Date.now() - d.now;
-    $("cb-where").textContent = (t.room ? "In Camfrog room " + (t.room_name || t.room) + " and on the web" : "Web table") + " · host " + t.host +
-      (t.on_stream ? " · 📺 on Pepe's stream" : t.stream_queue ? ` · stream queue #${t.stream_queue}` : "");
-    $("cb-round").textContent = t.round_no ? "Round " + t.round_no : "";
-    const dl = t.dealer;
-    $("cb-dealer").innerHTML = (dl.cards || []).map(card).join("") + (dl.hidden ? back() : "");
-    $("cb-dval").textContent = dl.cards && dl.cards.length ? (dl.hidden ? "shows " + dl.value : dl.value + (dl.bust ? " BUST" : dl.blackjack ? " BLACKJACK" : "")) : "";
-    let msg = "";
-    if (t.status === "closed") msg = "This table has closed.";
-    else if (t.phase === "betting") msg = "Place your bets!";
-    else if (t.phase === "insurance") msg = "Pepe shows an Ace — insurance?";
-    else if (t.turn) msg = t.turn.name + " to act" + (t.turn.num_hands > 1 ? ` (hand ${t.turn.hand_index + 1}/${t.turn.num_hands})` : "");
-    $("cb-msg").textContent = msg;
-    const deadline = t.phase === "betting" ? t.bet_deadline : t.phase === "insurance" ? t.ins_deadline : t.turn ? t.turn.deadline : null;
-    const total = t.phase === "betting" ? 30 : t.phase === "insurance" ? 18 : t.act_secs;
-    $("cb-clock").innerHTML = deadline ? `<div class="tbar" data-dl="${deadline}" data-total="${total * 1000}"><i></i></div>` : "";
-    $("cb-seats").innerHTML = (t.seats || []).map((s) => {
-      const mine = me && me.seat && s.seat === me.seat;
-      const tags = [s.host ? '<span class="tag gold">host</span>' : "", s.via === "room" ? '<span class="tag blue">camfrog</span>' : "",
-                    s.autobet ? '<span class="tag">auto</span>' : "", s.insured ? '<span class="tag green">insured</span>' : "",
-                    s.leaving ? '<span class="tag red">leaving</span>' : "", s.pending ? `<span class="tag">next ${fmt(s.pending)}</span>` : ""].join("");
-      const hands = (s.hands || []).map((h) => `<div class="hand${h.current ? " cur" : ""}"><div class="cards">${h.cards.map(card).join("")}</div>` +
-        `<div class="v">${h.value}${h.soft ? " soft" : ""} · ${fmt(h.bet)}${h.doubled ? " ×2" : ""}${h.outcome ? " · " + h.outcome.toUpperCase() : ""}</div></div>`).join("");
-      return `<div class="seat${mine ? " me" : ""}${s.turn ? " turn" : ""}"><div class="nm">${esc(s.name)}</div>` +
-        `<div class="st">${s.bet ? "bet " + fmt(s.bet) : "no bet"}</div><div>${tags}</div>${hands}</div>`;
-    }).join("") || '<p class="info" style="color:#fff">Nobody is seated yet — bet to sit down.</p>';
-    const lr = t.last_round;
-    $("cb-lastround").innerHTML = lr ? `<div class="last">Last round (${lr.round_no}): Pepe ${lr.dealer.value}${lr.dealer.bust ? " BUST" : lr.dealer.blackjack ? " BJ" : ""} — ` +
-      lr.players.map((p) => `${esc(p.name)} ${p.net > 0 ? "+" + fmt(p.net) : p.net < 0 ? fmt(p.net) : "±0"}`).join(" · ") +
-      ` · <a href="/casino/fair/${esc(t.id)}/${lr.round_no}">verify</a></div>` : "";
-    $("cb-log").innerHTML = (t.log || []).slice().reverse().map((l) => `<div>${esc(l.text)}</div>`).join("");
-    $("cb-fair").innerHTML = t.commitment ? `Round ${t.commit_round} commitment: <code>${esc(t.commitment)}</code><br>Client seed: <code>${esc(t.client_seed)}</code>` : "";
-
-    // controls
     const open = t.status === "open";
-    $("cb-signin").hidden = signed;
-    $("cb-ctl").hidden = !signed || !open;
-    if (!me || !open) return;
-    const betting = t.phase === "betting" || t.phase === "idle";
-    $("cb-betrow").hidden = false;
-    $("cb-bet").textContent = betting ? "Bet" : "Bet next round";
-    $("cb-bet").disabled = betting && me.bet > 0;
-    $("cb-auto").textContent = me.autobet ? "Autobet off" : "Autobet";
-    $("cb-deal").hidden = !betting;
-    const amt = $("cb-amt");
-    if (!amt.dataset.touched && me.lastbet) amt.value = me.lastbet;
-    const turn = me.my_turn && t.turn;
-    $("cb-playrow").hidden = !(turn || me.can_insure);
-    for (const b of document.querySelectorAll("#cb-playrow button")) {
+    const betting = isBetting(t);
+    const lr = t.last_round;
+    const resultMode = betting && !!lr && t.seats.every((s) => !s.hands.length);
+    const round = resultMode ? lr.round_no : t.round_no;
+    const seatsN = Math.max(1, t.seats.length);
+    // a different round on the felt: clear it and deal everything in (staggered like a real deal)
+    let delay0 = 0, step = 0.14, dealing = false;
+    if (round !== drawnRound) {
+      resetFelt();
+      dealing = !first && !resultMode;
+      drawnRound = round;
+    }
+    // the dealer: hole card down while players act; between rounds the last round's hand (the reveal animates)
+    const dl = t.dealer || {};
+    let dcards = [], dval = "", dcls = "";
+    if (resultMode) {
+      dcards = lr.dealer.cards || [];
+      if (Date.now() >= revealAt) { dval = lr.dealer.blackjack ? "BJ" : lr.dealer.bust ? T("bust_v", "{v} bust", { v: lr.dealer.value }) : String(lr.dealer.value); dcls = lr.dealer.bust ? "bust" : lr.dealer.blackjack ? "bj" : ""; }
+    } else if (dl.cards && dl.cards.length) {
+      dcards = dl.cards.concat(dl.hidden ? ["??"] : []);
+      dval = dl.hidden ? String(dl.value) : dl.blackjack ? "BJ" : String(dl.value);
+      dcls = dl.bust ? "bust" : dl.blackjack ? "bj" : "";
+    }
+    const dbox = $("cz-dealer");
+    const before = dbox.dataset.sig ? dbox.dataset.sig.split(",").length : 0;
+    const added = CZ.drawCards(dbox, dcards, dealing ? { delay0: seatsN * 0.14, step: (seatsN + 1) * 0.14, fy: "-120px" }
+                                                     : { delay0: 0.45, step: 0.55, flipDelay: 0, fy: "-120px" });
+    // a settle just landed on the felt: hold the outcomes until Pepe's draws have been dealt
+    if (resultMode && popRound !== lr.round_no) {
+      revealAt = first || CZ.reduced ? 0 : Date.now() + (before && added ? 450 + added * 550 : 300);
+      clearTimeout(revealTm);
+      if (revealAt) revealTm = setTimeout(() => last && render(last), revealAt - Date.now() + 30);
+    }
+    const dv = $("cz-dval");
+    dv.textContent = dval;
+    dv.className = "val" + (dcls ? " " + dcls : "");
+
+    // seats: left to right in play order; your own seat is outlined
+    const els = slots();
+    const lrBy = new Map(((lr && lr.players) || []).map((p) => [p.name, p]));
+    for (let i = 0; i < SEATS; i++) {
+      const el = els[i], s = t.seats[i];
+      const mine = !!(s && me && me.seat && s.seat === me.seat);
+      el.className = "seat" + (s ? "" : " empty") + (mine ? " me" : "") + (s && s.turn ? " turn" : "");
+      let hands = [];
+      if (s) {
+        if (resultMode) { const p = lrBy.get(s.name); hands = p ? p.hands.map((h) => ({ cards: h.cards, value: h.value, outcome: h.outcome, is_bj: h.is_bj, doubled: h.doubled })) : []; }
+        else hands = s.hands;
+      }
+      if (dealing) { delay0 = i * 0.14; step = (seatsN + 1) * 0.14; } else { delay0 = 0; step = 0.14; }
+      drawHands(el, hands, { delay0, step });
+      const bet = s ? (resultMode ? 0 : s.hands.reduce((a, h) => a + (h.bet || 0), 0) || s.bet) : 0;
+      const spot = el.querySelector(".betspot");
+      const spotHTML = bet ? CZ.stackHTML(bet, T("bet_lbl", "Bet {n}", { n: fmt(bet) })) : s && s.pending ? `<span class="tag">${esc(T("next_n", "next {n}", { n: fmt(s.pending) }))}</span>` : "";
+      if (spot.dataset.v !== spotHTML) { spot.dataset.v = spotHTML; spot.innerHTML = spotHTML; }
+      spot.classList.toggle("on", !!bet);
+      const who = el.querySelector(".who");
+      let whoHTML;
+      if (s) {
+        const tags = [s.host ? `<span class="tag gold">👑 ${esc(T("host", "host"))}</span>` : "", s.via === "room" ? `<span class="tag blue">🐸 ${esc(T("camfrog", "Camfrog"))}</span>` : "",
+                      s.autobet ? `<span class="tag">${esc(T("auto", "auto"))}</span>` : "", s.insured ? `<span class="tag green">${esc(T("insured", "insured"))}</span>` : "",
+                      s.leaving ? `<span class="tag red">${esc(T("leaving", "leaving"))}</span>` : ""].join("");
+        whoHTML = CZ.avatarHTML(s) + `<span class="plate"><span class="nm">${esc(s.name)}${mine ? " · " + esc(T("you", "you")) : ""}</span>` +
+                  (tags ? `<span class="tags">${tags}</span>` : "") + "</span>";
+      } else {
+        const can = CZ.signed && me && !me.seat && !me.pending && open;
+        whoHTML = can ? `<button type="button" class="sitbtn" data-sit="1"><span class="av" aria-hidden="true">+</span><span class="plate">${esc(T("open_seat_bet", "Open seat: bet to sit"))}</span></button>`
+                      : `<span class="av" aria-hidden="true"></span><span class="plate">${esc(T("open_seat", "Open seat"))}</span>`;
+      }
+      whoHTML += `|${s && s.turn ? 1 : 0}`;
+      if (who.dataset.v !== whoHTML) { who.dataset.v = whoHTML; who.innerHTML = whoHTML.slice(0, whoHTML.lastIndexOf("|")); }
+      const av = who.querySelector(".av");
+      if (av) CZ.armClock(av, s && s.turn && t.turn ? t.turn.deadline : null, t.act_secs);
+    }
+
+    // payout pops + a short announcement for your own result (once per round, never on the first load)
+    if (resultMode && popRound !== lr.round_no) {
+      const roundNo = lr.round_no;
+      const firstSeen = first;
+      popRound = roundNo;
+      if (!firstSeen) {
+        setTimeout(() => {
+          if (!last || popRound !== roundNo) return;
+          lr.players.forEach((p) => {
+            const i = last.table.seats.findIndex((s) => s.name === p.name);
+            if (i < 0) return;
+            const bj = p.hands.some((h) => h.is_bj && h.outcome === "blackjack");
+            CZ.pop(els[i], p.net > 0 ? (bj ? T("pop_bj", "Blackjack +{n}", { n: fmt(p.net) }) : "+" + fmt(p.net)) : p.net < 0 ? "−" + fmt(-p.net) : OUT("push"), p.net > 0 ? "win" : p.net < 0 ? "lose" : "push");
+          });
+          const mine = me && me.seat ? lr.players.find((p) => { const s = last.table.seats.find((x) => x.name === p.name); return s && s.seat === me.seat; }) : null;
+          if (mine) CZ.announce(mine.net > 0 ? T("you_won", "You won {n} PAT.", { n: fmt(mine.net) }) : mine.net < 0 ? T("you_lost", "You lost {n} PAT.", { n: fmt(-mine.net) }) : T("you_push", "Push: your bet comes back."));
+        }, Math.max(0, revealAt - Date.now()));
+      }
+    }
+
+    // the message + the felt's clock (betting window, insurance, or whoever is acting)
+    let msg = "", sub = "", dlx = null, nom = 0;
+    if (!open) msg = T("closed", "That table has closed.");
+    else if (betting) {
+      msg = t.seats.length ? T("place_bets", "Place your bets") : T("bet_to_sit", "Bet to take a seat");
+      sub = resultMode && Date.now() >= revealAt ? T("last_dealer", "Last round: Pepe {v}", { v: lr.dealer.blackjack ? "BJ" : lr.dealer.bust ? T("bust_v", "{v} bust", { v: lr.dealer.value }) : lr.dealer.value }) : "";
+      dlx = t.bet_deadline; nom = t.round_no ? 10 : 30;
+    } else if (t.phase === "insurance") { msg = T("ins_q", "Pepe shows an Ace: insurance?"); dlx = t.ins_deadline; nom = 18; }
+    else if (t.turn) {
+      const mineTurn = me && me.my_turn;
+      msg = mineTurn ? T("your_turn", "Your turn") : T("to_act", "{name} to act", { name: t.turn.name });
+      if (t.turn.num_hands > 1) sub = T("hand_x", "Hand {i} of {n}", { i: t.turn.hand_index + 1, n: t.turn.num_hands });
+      dlx = t.turn.deadline; nom = t.act_secs;
+    } else msg = T("pepe_plays", "Pepe plays his hand…");
+    $("cz-msg").innerHTML = esc(msg) + (sub ? `<small>${esc(sub)}</small>` : "");
+    CZ.armClock($("cz-fclock"), dlx, nom);
+    const where = t.room ? `🐸 ${esc(T("in_room", "Camfrog room {room}", { room: t.room_name || t.room }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
+    const meta = [`👑 ${esc(t.host)}`, where, t.round_no ? esc(T("round_n", "Round {n}", { n: t.round_no })) : "", esc(T("decks_n", "{n} decks", { n: t.decks })),
+                  t.on_stream ? `📺 ${esc(T("on_stream", "On Pepe's stream"))}` : t.stream_queue ? `📺 ${esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))}` : ""]
+      .filter(Boolean).map((x) => `<span class="tag">${x}</span>`).join("");
+    if ($("cz-meta").dataset.v !== meta) { $("cz-meta").dataset.v = meta; $("cz-meta").innerHTML = meta; }
+
+    // spectators
+    const wb = $("cz-watchbar");
+    const seated = !!(me && (me.seat || me.pending));
+    let wtxt = "";
+    if (open && !CZ.signed) wtxt = `👁 ${esc(T("watching_signin", "You're watching."))} <a href="/login">${esc(T("signin_play", "Sign in to play"))}</a>`;
+    else if (open && me && !seated) wtxt = `👁 ${esc(t.seats.length >= SEATS ? T("watching_full", "You're watching: the table is full.") : T("watching_bet", "You're watching. Place a bet below to take a seat."))}`;
+    wb.hidden = !wtxt;
+    if (wb.dataset.v !== wtxt) { wb.dataset.v = wtxt; wb.innerHTML = wtxt; }
+
+    dock(t, me, betting);
+    if (me && me.my_turn && !prevTurn) CZ.announce(T("your_turn_sr", "Your turn. Hit, stand, or more."));
+    prevTurn = !!(me && me.my_turn);
+    first = false;
+  }
+
+  function dock(t, me, betting) {
+    const dk = $("cz-dock");
+    const open = t.status === "open";
+    dk.hidden = !CZ.signed || !open || !me;
+    if (dk.hidden) return;
+    const maxAllowed = Math.max(0, me.high_roller ? me.balance : Math.min(t.max_bet, me.balance));
+    const inRound = !betting && t.seats.some((s) => me.seat && s.seat === me.seat && s.hands.length);
+    const myTurn = !!(me.my_turn && t.turn);
+    const playing = myTurn || me.can_insure;
+    const showBet = !playing && !me.banned && ((betting && !(me.bet > 0)) || (!betting && !inRound && !me.pending)) && (me.seat || t.seats.length < SEATS);
+    $("cz-playbox").hidden = !playing;
+    $("cz-betbox").hidden = !showBet;
+    for (const b of document.querySelectorAll("#cz-playbox [data-v]")) {
       const v = b.dataset.v;
-      b.hidden = v === "insurance" ? !me.can_insure : !turn;
-      if (v === "double") b.disabled = !(turn && t.turn.can_double);
-      if (v === "split") b.disabled = !(turn && t.turn.can_split);
+      if (v === "insurance") { b.hidden = !me.can_insure; b.textContent = T("ins_btn", "Insurance ({n})", { n: fmt(Math.floor((me.bet || 0) / 2)) }); continue; }
+      b.hidden = !myTurn || (v === "double" && !t.turn.can_double) || (v === "split" && !t.turn.can_split);
     }
-    $("cb-mine").textContent = `Balance ${fmt(me.balance)} PAT` + (me.high_roller ? " · High Roller (no max)" : "") + (me.banned ? " · banned from the casino" : "");
-    $("cb-leave").hidden = !me.seat && !me.pending;
-    $("cb-end").hidden = !(me.host || me.admin);
-    const rooms = d.rooms || [];
-    $("cb-pushrow").hidden = !(me.host || me.admin) || (!rooms.length && !t.room);
-    const sel = $("cb-room");
-    const want = rooms.map((r) => r.id + "|" + r.name).join(",");
-    if (sel.dataset.v !== want) {
-      sel.dataset.v = want;
-      sel.innerHTML = rooms.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}${r.busy && r.id !== t.room ? " (has a table)" : ""}</option>`).join("");
+    CZ.armClock($("cz-dclock"), myTurn ? t.turn.deadline : me.can_insure ? t.ins_deadline : null, myTurn ? t.act_secs : 18);
+    if (showBet) {
+      if (stake > maxAllowed) stake = maxAllowed;
+      $("cz-stake").textContent = fmt(stake);
+      $("cz-stakelbl").textContent = betting ? T("your_bet", "Your bet") : T("next_bet", "Next round's bet");
+      $("cz-limits").textContent = (me.high_roller ? T("limits_hr", "Min {min} · no maximum (High Roller)", { min: fmt(t.min_bet) })
+                                                   : T("limits", "Min {min} · max {max}", { min: fmt(t.min_bet), max: fmt(t.max_bet) })) +
+                                   " · " + T("balance_n", "Balance {n}", { n: fmt(me.balance) });
+      const chips = $("cz-chips");
+      if (!chips.children.length) {
+        chips.innerHTML = [[100, "100", ""], [500, "500", "c500"], [1000, "1K", "c1k"], [5000, "5K", "c5k"], ["max", T("max", "Max"), "cmax"]].map(([v, l, c]) =>
+          `<button type="button" class="chipbtn" data-add="${v}" aria-label="${esc(v === "max" ? T("chip_max", "Bet the most you can") : T("chip_add", "Add {n}", { n: fmt(v) }))}">` +
+          `<span class="chip ${c}" aria-hidden="true"></span><span class="l">${esc(l)}</span></button>`).join("");
+      }
+      for (const b of chips.querySelectorAll("button")) b.disabled = b.dataset.add === "max" ? maxAllowed < t.min_bet : stake + Number(b.dataset.add) > maxAllowed;
+      const bet = $("cz-bet");
+      bet.textContent = betting ? T("bet_n", "Bet {n}", { n: fmt(stake) }) : T("bet_next_n", "Bet {n} next round", { n: fmt(stake) });
+      bet.disabled = stake < t.min_bet || stake > maxAllowed;
+      $("cz-clear").disabled = !stake;
+      const rb = $("cz-rebet");
+      const lb = me.lastbet || 0;
+      rb.hidden = !(lb >= t.min_bet && lb <= maxAllowed);
+      rb.textContent = T("rebet_n", "Rebet {n}", { n: fmt(lb) });
+      const au = $("cz-auto");
+      au.setAttribute("aria-pressed", String(!!me.autobet));
+      au.textContent = me.autobet ? T("autobet_on", "Autobet: on") : T("autobet", "Autobet");
+      if (focusBet) { focusBet = false; const c = chips.querySelector("button:not([disabled])"); if (c) c.focus(); }
     }
-    $("cb-push").hidden = !rooms.length;
-    $("cb-unpush").hidden = !t.room;
-    $("cb-stream").hidden = !t.room || t.on_stream;
-    $("cb-unstream").hidden = !(t.on_stream || t.stream_queue);
+    let wait = "";
+    if (me.banned) wait = T("banned", "You're banned from the casino.");
+    else if (!playing && !showBet) {
+      if (betting && me.bet > 0) wait = T("in_for", "You're in for {n}. Pepe deals when the clock runs out.", { n: fmt(me.bet) });
+      else if (me.pending) wait = T("in_next", "You're in next round for {n}.", { n: fmt(me.pending) });
+      else if (t.turn) wait = T("waiting_for", "Waiting for {name}…", { name: t.turn.name });
+      else if (!betting) wait = T("pepe_plays", "Pepe plays his hand…");
+    }
+    $("cz-wait").hidden = !wait;
+    $("cz-wait").textContent = wait;
+    $("cz-deal").hidden = !(betting && me.bet > 0);
+    $("cz-autooff").hidden = !me.autobet || showBet;
+    $("cz-leave").hidden = !(me.seat || me.pending);
   }
 
-  async function act(verb, amount) {
-    if (busy) return;
-    busy = true;
-    try {
-      const j = await post(`/api/casino/bj/t/${tableId}/act`, { verb, amount, idem: idem() });
-      status(j.reply || (j.ok ? "" : j.error || "That didn't work."), !j.ok);
-    } catch (e) {
-      status("Couldn't reach the table — try again.", true);
-    } finally {
-      busy = false;
-      refresh();
-    }
-  }
-
-  async function refresh() {
-    try {
-      const r = await fetch(`/api/casino/bj/t/${tableId}`, { credentials: "same-origin" });
-      if (r.status === 404) { status("That table has closed.", true); $("cb-ctl").hidden = true; return; }
-      render(await r.json());
-    } catch (e) { /* next tick */ }
-  }
-
-  function clocks() {
-    for (const bar of document.querySelectorAll(".tbar")) {
-      const left = Number(bar.dataset.dl) - (Date.now() - skew);
-      const pct = Math.max(0, Math.min(100, (left / Number(bar.dataset.total)) * 100));
-      bar.firstChild.style.width = pct + "%";
-    }
-  }
-
-  if (!tableId) {
-    lobby();
-    setInterval(lobby, 4000);
-    return;
-  }
-  $("cb-table").hidden = false;
-  $("cb-amt").addEventListener("input", (e) => { e.target.dataset.touched = "1"; });
-  $("cb-bet").addEventListener("click", () => act("bet", $("cb-amt").value));
-  $("cb-auto").addEventListener("click", () => act("autobet", last && last.me && last.me.autobet ? "off" : $("cb-amt").value));
-  $("cb-deal").addEventListener("click", () => act("deal"));
-  $("cb-leave").addEventListener("click", () => act("leave"));
-  $("cb-end").addEventListener("click", () => { if (confirm("Close this table?")) act("end"); });
-  for (const b of document.querySelectorAll("#cb-playrow button")) b.addEventListener("click", () => act(b.dataset.v));
-  $("cb-push").addEventListener("click", async () => {
-    const j = await post(`/api/casino/bj/t/${tableId}/push`, { room: $("cb-room").value });
-    status(j.reply || j.error || "", !j.ok);
-    refresh();
+  // ── wiring ──
+  $("cz-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-add]");
+    if (!b || !last || !last.me) return;
+    const t = last.table, me = last.me;
+    const maxAllowed = me.high_roller ? me.balance : Math.min(t.max_bet, me.balance);
+    stake = b.dataset.add === "max" ? maxAllowed : Math.min(maxAllowed, stake + Number(b.dataset.add));
+    render(last);
   });
-  $("cb-unpush").addEventListener("click", async () => {
-    const j = await post(`/api/casino/bj/t/${tableId}/push`, { room: null });
-    status(j.reply || j.error || "", !j.ok);
-    refresh();
+  $("cz-clear").addEventListener("click", () => { stake = 0; if (last) render(last); });
+  $("cz-bet").addEventListener("click", async () => { const j = await act("bet", stake); if (j && j.ok) stake = 0; });
+  $("cz-rebet").addEventListener("click", () => last && act("bet", last.me.lastbet));
+  $("cz-auto").addEventListener("click", () => last && act("autobet", last.me.autobet ? "off" : stake || last.me.lastbet || last.table.min_bet));
+  $("cz-autooff").addEventListener("click", () => act("autobet", "off"));
+  $("cz-deal").addEventListener("click", () => act("deal"));
+  $("cz-leave").addEventListener("click", () => act("leave"));
+  for (const b of document.querySelectorAll("#cz-playbox [data-v]")) b.addEventListener("click", () => act(b.dataset.v));
+  $("cz-seats").addEventListener("click", (e) => {
+    if (!e.target.closest("[data-sit]")) return;
+    const c = document.querySelector("#cz-chips button:not([disabled])");
+    if (c) { c.scrollIntoView({ block: "nearest" }); c.focus(); }
   });
-  const side = async (url, body) => { const j = await post(url, body); status(j.reply || j.error || "", !j.ok); refresh(); };
-  $("cb-stream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, override: !!(last && last.me && last.me.admin && confirm("Admin: take the stream now (the current table goes next in line)? Cancel = join the queue.")) }));
-  $("cb-unstream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: false }));
-  refresh();
-  setInterval(refresh, 1000);
-  setInterval(clocks, 250);
+  // keyboard: H / S / D / P on your turn (not while typing)
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || /input|select|textarea/i.test((e.target && e.target.tagName) || "")) return;
+    if (!last || !last.me || !last.me.my_turn) return;
+    const v = { h: "hit", s: "stand", d: "double", p: "split" }[e.key.toLowerCase()];
+    const b = v && document.querySelector(`#cz-playbox [data-v="${v}"]`);
+    if (b && !b.hidden && !b.disabled) { e.preventDefault(); b.click(); }
+  });
+  $("cz-histbtn").addEventListener("click", () => {
+    CZ.openSheet("cz-histsheet");
+    CZ.loadHistory((r) => {
+      const x = r.results;
+      const dlr = x.dealer || {};
+      return `<div class="hh"><b>${esc(T("round_n", "Round {n}", { n: r.round }))}</b><a href="${esc(r.proof)}">🔐 ${esc(T("verify", "verify"))}</a></div>` +
+        `<div class="pl"><b>${esc(T("dealer", "Pepe"))}</b>${CZ.staticCards(dlr.cards)}<span class="val">${dlr.blackjack ? "BJ" : esc(String(dlr.value))}${dlr.bust ? " " + esc(T("bust", "bust")) : ""}</span></div>` +
+        (x.players || []).map((p) => `<div class="pl"><b>${esc(p.name)}</b>` + p.hands.map((h) => `${CZ.staticCards(h.cards)}<span class="oc ${esc(h.outcome)}">${esc(OUT(h.outcome))}</span>`).join(" ") +
+          `${CZ.net(p.net)}</div>`).join("");
+    });
+  });
+  CZ.wireHost(() => ref.fn && ref.fn(), () => act("end"));
+  const refresh = CZ.startTable(render);
+  ref.fn = refresh;
 })();

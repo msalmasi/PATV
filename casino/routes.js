@@ -10,6 +10,9 @@
 //   POST /api/casino/t/:id/push             {room|null}  push the table to a Camfrog room Pepe serves (host or admin)
 //   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
 //   GET  /casino/fair/:id/:round + /api/casino/fair/:id/:round    the fairness proof of a round / hand
+//   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
+//   (D10) GET /api/casino/t/:id also adds each seat's `avatar` and `watching` (web spectators); the lobby adds me.balance /
+//   me.high_roller and each row's latest `proof`; app.locals.casinoOn(game) gates the navbar links on the site flags.
 //   POST /api/casino/admin/settings         {key, value}  bj_enabled / hm_enabled / max_tables (site Admin, or the bot token)
 // Pepe (bot token in the body):
 //   POST /api/casino/bot/poll               {after, wait, rooms}  events of tables in rooms (cursor) + their public state
@@ -45,9 +48,67 @@ async function webActor(req) {
            iph: svc.ipHash(clientIp(req)), admin: u.class === "Admin" };
 }
 
+// ── read-only extras for the table pages (D10 design pass): seat avatars, a spectator count, hand history ──
+// Avatars: users.avatar (the same public picture a profile shows), cached a minute per account.
+const AV_TTL = 60 * 1000;
+const avCache = new Map();          // uid -> {url, ts}
+async function avatarOf(uid) {
+  const hit = avCache.get(uid), t = svc.S.hooks.now();
+  if (hit && t - hit.ts < AV_TTL) return hit.url;
+  let url = null;
+  try {
+    const r = (await getQuery("SELECT avatar FROM users WHERE userId = ?", [uid]))[0];
+    const a = r && r.avatar ? String(r.avatar) : "";
+    url = /^(https:\/\/|\/)[^\s"'<>]{1,500}$/.test(a) && !a.startsWith("//") ? a : null;
+  } catch (e) { url = null; }
+  if (avCache.size > 5000) avCache.clear();
+  avCache.set(uid, { url, ts: t });
+  return url;
+}
+// Spectators: web viewers of a table page (signed-in account or a hashed address) seen polling in the last WATCH_MS,
+// minus the ones seated. Memory only; nothing about a viewer leaves this map but the count.
+const WATCH_MS = 10 * 1000;
+const watchers = new Map();         // table id -> Map(viewer key -> ts)
+function noteViewer(T, req) {
+  const t = svc.S.hooks.now();
+  const uid = req.user && req.user.userId ? String(req.user.userId) : null;
+  const key = uid ? "u:" + uid : "ip:" + (svc.ipHash(clientIp(req)) || "?");
+  let m = watchers.get(T.id);
+  if (!m) { m = new Map(); watchers.set(T.id, m); }
+  m.set(key, t);
+  if (watchers.size > 500) for (const [id] of watchers) if (!svc.getTable(id)) watchers.delete(id);
+  const seated = new Set((T.eng && T.eng.seats || []).map((k) => "u:" + k));
+  let n = 0;
+  for (const [k, ts] of m) {
+    if (t - ts > WATCH_MS) { m.delete(k); continue; }
+    if (!seated.has(k)) n += 1;
+  }
+  return n;
+}
+/** A table's last rounds from casino_rounds: only revealed ones, only what the felt already showed (results =
+ *  the round's public summary; never the `players` column, which holds account ids). */
+async function history(tableId, limit) {
+  await svc.ensure();
+  const rows = await getQuery(`SELECT round_no, results, revealed FROM casino_rounds WHERE table_id = ? AND revealed IS NOT NULL
+                               ORDER BY round_no DESC LIMIT ?`, [tableId, Math.max(1, Math.min(50, Math.trunc(Number(limit) || 20)))]);
+  return rows.map((r) => {
+    let res = null;
+    try { res = r.results ? JSON.parse(r.results) : null; } catch (e) { res = null; }
+    return { round: r.round_no, revealed: r.revealed, results: res, proof: `/casino/fair/${tableId}/${r.round_no}` };
+  });
+}
+
 function register(app, { isBotToken, addUser }) {
   const boot = () => svc.boot().catch((e) => console.error("[casino] boot:", e));
   setImmediate(boot);
+
+  // the navbar shows a game's link only while its site flag is on (layout.ejs: casinoOn('bj' | 'holdem')). A sync,
+  // cached read: loadSettings() refreshes S.settings at most every 10 s, in the background; unknown = off.
+  app.locals.casinoOn = (game) => {
+    if (svc.S.hooks.now() - svc.S.settingsAt > 10000) svc.loadSettings().catch(() => {});
+    const st = svc.S.settings;
+    return !!(game === "holdem" ? st.hm_enabled : st.bj_enabled);
+  };
 
   // ── pages ──
   const page = (game) => async (req, res) => {
@@ -65,7 +126,7 @@ function register(app, { isBotToken, addUser }) {
                                                      : "Pepe deals blackjack on the web: sit down with your PAT, no Camfrog needed — or play the same table from a Camfrog room.",
                       image: (res.locals.ogBase || "") + "/og/page.png?t=" + encodeURIComponent(title), url: (res.locals.ogBase || "") + (res.locals.ogPath || "") };
     res.render(game === "holdem" ? "casino-hm" : "casino-bj", { user: req.user ? req.user.username : null, signedIn: !!(req.user && req.user.userId),
-                                                                tableId: id, title });
+                                                                tableId: id, title, bjOn: !!st.bj_enabled, hmOn: !!st.hm_enabled });
   };
   app.get("/casino/blackjack", addUser, page("bj"));
   app.get("/casino/blackjack/t/:id", addUser, page("bj"));
@@ -83,8 +144,21 @@ function register(app, { isBotToken, addUser }) {
     await svc.boot();
     const st = await svc.loadSettings();
     const actor = await webActor(req);
-    res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables: svc.lobby(), rooms: svc.freshRooms(),
-               stream: svc.S.stream.table, me: actor ? { name: actor.name, admin: actor.admin } : null });
+    let me = null;
+    if (actor) {
+      const u = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [actor.uid]))[0] || {};
+      const hr = (await getQuery("SELECT 1 FROM user_roles WHERE userId = ? AND LOWER(role) = 'high roller'", [actor.uid]).catch(() => []))[0];
+      me = { name: actor.name, admin: actor.admin, balance: Number(u.points_balance) || 0, high_roller: !!hr };
+    }
+    // D10: each row also says its latest proof (a revealed round) and where it stands in the stream queue
+    const tables = svc.lobby().map((row) => {
+      const T = svc.getTable(row.id);
+      const n = T ? T.last_revealed || T.last_hand_revealed || null : null;
+      const qi = svc.S.stream.queue.indexOf(row.id);
+      return Object.assign(row, { proof: n ? `/casino/fair/${row.id}/${n}` : null, stream_queue: qi >= 0 ? qi + 1 : null });
+    });
+    res.json({ enabled: st.bj_enabled, hm_enabled: st.hm_enabled, tables, rooms: svc.freshRooms(),
+               stream: svc.S.stream.table, me });
   };
   app.get(["/api/casino/lobby", "/api/casino/bj/lobby"], addUser, lobby);
 
@@ -96,7 +170,23 @@ function register(app, { isBotToken, addUser }) {
     if (!T) return res.status(404).json({ ok: false, error: "That table has closed." });
     const out = { ok: true, now: Date.now(), table: svc.publicView(T), rooms: svc.freshRooms() };
     out.me = req.user && req.user.userId ? await svc.meView(T, req.user.userId) : null;     // only the viewer's own seat / cards
+    // D10: each seat's public avatar (both views list seats in T.eng.seats order) and how many web viewers are watching
+    const keys = (T.eng && T.eng.seats) || [];
+    const seats = out.table.seats || [];
+    for (let i = 0; i < seats.length && i < keys.length; i++) seats[i].avatar = await avatarOf(keys[i]);
+    out.watching = noteViewer(T, req);
     res.json(out);
+  });
+
+  app.get("/api/casino/t/:id/history", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
+    try {
+      res.json({ ok: true, rounds: await history(req.params.id, req.query.limit) });
+    } catch (e) {
+      console.error("[casino] history:", e);
+      res.status(500).json({ ok: false, rounds: [] });
+    }
   });
 
   app.post(["/api/casino/open", "/api/casino/bj/open"], addUser, async (req, res) => {

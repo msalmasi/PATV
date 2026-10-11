@@ -1,125 +1,153 @@
-<%- include('layout', { title: title, user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: tableId ? t('casino.hm_title') : t('casino.lobby_title'), user: user}) %>
+<%# views/casino-hm.ejs - /casino/holdem (the lobby) and /casino/holdem/t/<id> (a table). D10 design pass (2026-10-11): an oval felt
+    with nine seats (you at the bottom), the dealer button and blinds, the board, the pot with side pots and uncalled bets
+    spelled out, your hole cards only to you (face down for everyone else), an action bar with a bet slider and presets and
+    a countdown ring on the server's deadline, the buy-in / top-up sheet, the showdown reveal, history with the rake,
+    spectators, and the host's push-to-room / Pepe's-stream tools. Drawn by public/js/casino-ui.js + casinohm.js. %>
+<%- include('partials/casino-css') %>
 <style>
-  .cb { max-width: 980px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; --cw: 40px; }
-  .cb [hidden] { display: none !important; }
-  .cb a { color: #81c784; }
-  .cb h1 { text-align: center; margin: 6px 0 4px; }
-  .cb .sub { text-align: center; color: #9a9; margin: 0 0 14px; font-size: 14px; }
-  .cb h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 26px 0 10px; line-height: 1.6; }
-  .cb .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; }
-  .cb .info { color: #999; font-size: 13px; line-height: 1.6; }
-  .cb .status { min-height: 22px; text-align: center; font-size: 14px; color: #cfe8cf; margin: 6px 0; }
-  .cb .status.bad { color: #ff9a9a; }
-  .felt { border-radius: 18px; padding: 16px; background: radial-gradient(ellipse at 50% 30%, #1f7a43 0%, #145c31 60%, #0d4023 100%);
-          box-shadow: inset 0 0 0 6px #4a2c16, inset 0 0 40px rgba(0,0,0,.5); }
-  .felt .top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; color: rgba(255,255,255,.75); font-size: 12px; }
-  .board { text-align: center; margin: 10px 0; min-height: calc(var(--cw) * 1.4); }
-  .pot { text-align: center; color: #ffd700; font-weight: bold; }
-  .cards { display: inline-flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
-  .cd { position: relative; display: inline-flex; flex-direction: column; justify-content: center; align-items: center; width: var(--cw); height: calc(var(--cw) * 1.4);
-        border-radius: 6px; background: linear-gradient(160deg, #fff 0%, #f1f1f1 100%); color: #111; box-shadow: 0 2px 4px rgba(0,0,0,.5); font-weight: bold; line-height: 1; }
-  .cd .cr { position: absolute; top: 3px; left: 4px; font-size: calc(var(--cw) * .32); }
-  .cd .cs { font-size: calc(var(--cw) * .55); margin-top: calc(var(--cw) * .18); }
-  .cd.red { color: #c62828; }
-  .cd.back { background: repeating-linear-gradient(45deg, #b71c1c 0 4px, #d32f2f 4px 8px); border: 2px solid #fff; box-sizing: border-box; }
-  .msg { text-align: center; color: #fff; font-size: 15px; text-shadow: 0 1px 2px #000; min-height: 20px; margin: 6px 0; }
-  .seats { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
-  .seat { background: rgba(12,12,12,.9); border: 1px solid #333; border-radius: 10px; padding: 8px; text-align: center; --cw: 28px; }
-  .seat.me { border-color: #4caf50; } .seat.turn { border-color: #ffd700; box-shadow: 0 0 0 2px #ffd700; } .seat.folded { opacity: .55; }
-  .seat.winner { background: #2a2208; border-color: #ffd700; }
-  .seat .nm { font-weight: bold; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .seat .st { font-size: 12px; color: #ffd700; }
-  .tag { display: inline-block; font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 4px; background: #333; color: #ddd; text-transform: uppercase; margin: 2px 2px 0 0; }
-  .tag.gold { background: #ffd700; color: #111; } .tag.red { background: #c62828; color: #fff; } .tag.blue { background: #1565c0; color: #fff; } .tag.d { background: #fff; color: #111; }
-  .tbar { height: 4px; background: #333; border-radius: 2px; margin: 6px auto 0; overflow: hidden; max-width: 320px; }
-  .tbar i { display: block; height: 100%; background: #ffd700; width: 100%; transition: width .25s linear; }
-  .mine { text-align: center; margin-top: 10px; --cw: 48px; }
-  .ctl { background: #111; border: 1px solid #222; border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; margin-top: 12px; }
-  .ctl .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .cb button.b { min-height: 44px; min-width: 80px; padding: 0 14px; border-radius: 8px; border: 0; font: inherit; font-weight: bold; font-size: 15px; cursor: pointer; color: #fff; background: #3a3a3a; }
-  .cb button.b.go { background: #2e7d32; } .cb button.b.warn { background: #b26a00; } .cb button.b.stop { background: #8e2424; } .cb button.b.gold { background: #c9a400; color: #111; }
-  .cb button.b.mini { min-height: 34px; min-width: 0; padding: 0 10px; font-size: 13px; }
-  .cb button.b:disabled { opacity: .45; cursor: not-allowed; }
-  .cb button.b:focus-visible, .cb input:focus-visible, .cb select:focus-visible { outline: 3px solid #ffd700; outline-offset: 2px; }
-  .cb input[type=number], .cb input[type=text], .cb select { background: #0d0d0d; color: #eee; border: 1px solid #3a3a3a; border-radius: 8px; padding: 0 10px; min-height: 44px; font: inherit; font-size: 15px; box-sizing: border-box; max-width: 100%; }
-  .cb input[type=number] { width: 140px; } .cb input[type=text] { width: 120px; }
-  .grid2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
-  .log { max-height: 280px; overflow-y: auto; font-size: 13px; display: grid; gap: 2px; }
-  .log div { padding: 4px 2px; border-bottom: 1px solid #1a1a1a; color: #ccc; }
-  .trow { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; align-items: center; background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
-  .last { background: rgba(0,0,0,.45); border: 1px solid #ffd700; border-radius: 8px; padding: 6px 10px; color: #ffe57a; font-size: 13px; margin-top: 10px; --cw: 24px; }
-  .fair { font-size: 12px; color: #9a9; word-break: break-all; }
-  @media (max-width: 720px) { .grid2 { grid-template-columns: minmax(0, 1fr); } .cb { --cw: 34px; } }
+  .hm-wrap { position: relative; padding: 64px 64px 104px; }
+  .felt.hm { position: relative; aspect-ratio: 2.15 / 1; border-radius: 999px; padding: 0; }
+  .felt.hm::after { border-radius: 999px; }
+  .hm-center { position: absolute; left: 50%; top: 48%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 8px;
+               width: 62%; text-align: center; }
+  .board { display: flex; gap: 6px; justify-content: center; --cw: 50px; }
+  .board .pc.slot .pc-f { background: rgba(0,0,0,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.14); }
+  .pot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .pot .main { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px; background: rgba(0,0,0,.55); font: 900 16px/1.2 Ubuntu, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+  .pot .main .chip { width: 18px; height: 18px; }
+  .pot .parts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+  .pot .parts .tag { background: rgba(0,0,0,.4); color: #fff; font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .pot .parts .tag.unc { color: rgba(255,255,255,.65); font-style: italic; }
+  .hm-logo { color: rgba(255,215,64,.28); font: 900 12px/1 Ubuntu, sans-serif; letter-spacing: .3em; text-transform: uppercase; }
+  .hm-seat { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); width: 118px; z-index: 2; }
+  .hm-seat .hole { display: flex; gap: 2px; justify-content: center; min-height: calc(var(--cw) * 1.4); --cw: 30px; margin-bottom: -10px; position: relative; z-index: 1; }
+  .hm-seat.me .hole { --cw: 40px; }
+  .hm-seat .hand { margin-top: 3px; font-size: 11px; color: var(--goldt); background: rgba(0,0,0,.7); border-radius: 6px; padding: 2px 6px; max-width: 100%; }
+  .hm-seat .st { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
+  .hm-seat.empty .av { background: rgba(0,0,0,.2); border-style: dashed; color: rgba(255,255,255,.45); font-size: 20px; }
+  .hm-seat.empty .plate { background: transparent; border: 0; color: rgba(255,255,255,.6); font-size: 12px; }
+  .dbtn { position: absolute; right: 14px; top: 4px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; z-index: 3;
+          background: radial-gradient(circle at 35% 30%, #fff, #ddd); color: #111; font: 900 11px/1 Ubuntu, sans-serif; box-shadow: 0 2px 4px rgba(0,0,0,.6); }
+  .hm-bet { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+            transition: left .35s, top .35s, opacity .35s; }
+  .hm-bet .bl { font: bold 10px/1 Ubuntu, sans-serif; color: rgba(255,255,255,.85); letter-spacing: .08em; }
+  .p0 { --x: 50%; --y: 99%; } .p1 { --x: 20%; --y: 93%; } .p2 { --x: 2%; --y: 62%; } .p3 { --x: 7%; --y: 20%; } .p4 { --x: 32%; --y: 1%; }
+  .p5 { --x: 68%; --y: 1%; } .p6 { --x: 93%; --y: 20%; } .p7 { --x: 98%; --y: 62%; } .p8 { --x: 80%; --y: 93%; }
+  .b0 { --x: 50%; --y: 74%; } .b1 { --x: 30%; --y: 72%; } .b2 { --x: 17%; --y: 58%; } .b3 { --x: 21%; --y: 33%; } .b4 { --x: 37%; --y: 24%; }
+  .b5 { --x: 63%; --y: 24%; } .b6 { --x: 79%; --y: 33%; } .b7 { --x: 83%; --y: 58%; } .b8 { --x: 70%; --y: 72%; }
+  .hm-res { padding: 6px 12px; border-radius: 12px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,215,64,.5); color: var(--goldt); font-size: 13px; line-height: 1.4; }
+  .hm-res b { color: #fff; }
+  .mine { display: flex; align-items: center; gap: 10px; --cw: 52px; }
+  .mine .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .dock-row.raise { display: grid; gap: 8px; width: 100%; max-width: 620px; margin-left: auto; margin-right: auto; }
+  .raise-row { display: flex; align-items: center; gap: 8px; }
+  .raise input[type=range] { flex: 1; min-width: 0; height: 36px; accent-color: var(--gold); }
+  .raise input[type=number] { width: 120px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: #06100a; color: #fff;
+                              font: bold 16px Ubuntu, sans-serif; text-align: center; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .presets button { min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: var(--txt); font: bold 13px Ubuntu, sans-serif; cursor: pointer; }
+  .presets button:hover { border-color: var(--gold); }
+  .buyamt { font: 900 30px/1 Ubuntu, sans-serif; color: var(--goldt); text-align: center; margin: 6px 0; font-variant-numeric: tabular-nums; }
+  .back { display: inline-block; margin: 0 0 6px; font-size: 14px; }
+  @media (max-width: 760px) {
+    .hm-wrap { padding: 56px 34px 96px; }
+    .felt.hm { aspect-ratio: .74 / 1; max-height: 560px; margin: 0 auto; }
+    .hm-center { width: 78%; top: 46%; }
+    .board { --cw: 40px; gap: 4px; }
+    .hm-seat { width: 74px; }
+    .hm-seat .hole { --cw: 22px; }
+    .hm-seat.me .hole { --cw: 30px; }
+    .hm-seat .plate { padding: 3px 5px; }
+    .hm-seat .plate .nm { max-width: 66px; font-size: 11px; }
+    .hm-seat .plate .sub { font-size: 11px; }
+    .hm-seat .tag { font-size: 9px; padding: 1px 4px; }
+    .p0 { --x: 50%; --y: 99%; } .p1 { --x: 8%; --y: 84%; } .p2 { --x: 0%; --y: 58%; } .p3 { --x: 4%; --y: 30%; } .p4 { --x: 28%; --y: 4%; }
+    .p5 { --x: 72%; --y: 4%; } .p6 { --x: 96%; --y: 30%; } .p7 { --x: 100%; --y: 58%; } .p8 { --x: 92%; --y: 84%; }
+    .b0 { --x: 50%; --y: 81%; } .b1 { --x: 25%; --y: 75%; } .b2 { --x: 19%; --y: 58%; } .b3 { --x: 22%; --y: 36%; } .b4 { --x: 35%; --y: 21%; }
+    .b5 { --x: 65%; --y: 21%; } .b6 { --x: 78%; --y: 36%; } .b7 { --x: 81%; --y: 58%; } .b8 { --x: 75%; --y: 75%; }
+    .mine { --cw: 44px; }
+    .hm-seat.empty > .who > .plate { display: none; }   /* an open seat you can't take: just the dashed ring */
+    #cz-minerow { display: none !important; }   /* your cards are already big at your seat; keep the thumb bar short */
+    .dock-acts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .dock-acts .cz-btn { padding: 0 6px; font-size: 15px; }
+    .dock-row.raise { gap: 6px; }
+  }
+  @media (max-width: 380px) { .hm-wrap { padding: 56px 30px 96px; } .board { --cw: 36px; } .hm-seat { width: 68px; } }
 </style>
-<main class="cb" id="cb" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>">
-  <h1>🃏 Texas Hold'em</h1>
-  <p class="sub">No-Limit Hold'em with your PAT (chips = PAT). Play here — no Camfrog needed — or push the table to a Camfrog room where room players sit at the same table. Your hole cards are only ever shown to you.</p>
-  <div class="status" id="cb-status" role="status" aria-live="polite"></div>
-
-  <section id="cb-lobby" hidden>
-    <h2>Tables</h2>
-    <div id="cb-tables"></div>
-    <div class="ctl" id="cb-open-box">
-      <div class="row">
-        <label for="cb-blinds" class="info">Blinds</label>
-        <input type="text" id="cb-blinds" value="25/50" inputmode="numeric" aria-label="Blinds, small/big">
-        <button class="b go" id="cb-open" type="button">Open a table</button>
-      </div>
-      <p class="info" style="margin:0">Blinds up to 5,000/10,000; buy-ins 20–200 big blinds (High Rollers can go bigger). 2% rake on contested pots goes to the House.</p>
-    </div>
-  </section>
-
-  <section id="cb-table" hidden>
-    <p><a href="/casino/holdem">← all tables</a></p>
-    <div class="felt">
-      <div class="top"><span id="cb-where"></span><span id="cb-round"></span></div>
-      <div class="board"><div class="cards" id="cb-board"></div></div>
-      <div class="pot" id="cb-pot"></div>
-      <div class="msg" id="cb-msg"></div>
-      <div id="cb-clock"></div>
-      <div class="seats" id="cb-seats"></div>
-      <div class="mine" id="cb-mine-cards"></div>
-      <div id="cb-lastround"></div>
-    </div>
-
-    <div class="ctl" id="cb-ctl" hidden>
-      <div class="row" id="cb-sitrow">
-        <label for="cb-amt" class="info">Buy-in</label>
-        <input type="number" id="cb-amt" min="1" step="1" inputmode="numeric">
-        <button class="b go" id="cb-sit" type="button">Sit / top up</button>
-        <button class="b mini" id="cb-deal" type="button">Deal</button>
-      </div>
-      <div class="row" id="cb-playrow">
-        <button class="b" data-v="check" type="button">Check</button>
-        <button class="b go" data-v="call" type="button">Call</button>
-        <input type="number" id="cb-raise" min="1" step="1" inputmode="numeric" aria-label="Bet or raise to">
-        <button class="b gold" data-v="raise" type="button">Raise to</button>
-        <button class="b warn" data-v="allin" type="button">All-in</button>
-        <button class="b stop" data-v="fold" type="button">Fold</button>
-      </div>
-      <div class="row">
-        <span class="info" id="cb-mine"></span>
-        <button class="b mini stop" id="cb-leave" type="button">Stand up</button>
-        <button class="b mini stop" id="cb-end" type="button" hidden>Close table</button>
-      </div>
-      <div class="row" id="cb-pushrow" hidden>
-        <label for="cb-room" class="info">Play it in a Camfrog room too:</label>
-        <select id="cb-room"></select>
-        <button class="b mini" id="cb-push" type="button">Push to room</button>
-        <button class="b mini" id="cb-unpush" type="button">Web only</button>
-        <button class="b mini" id="cb-stream" type="button">Put on Pepe's stream</button>
-        <button class="b mini" id="cb-unstream" type="button">Off the stream</button>
+<main class="cz" id="cb" data-game="holdem" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>">
+  <%- include('partials/casino-top', { t, game: 'holdem', tableId }) %>
+  <% if (!tableId) { %><%- include('partials/casino-lobby', { t, game: 'holdem', bjOn: locals.bjOn, hmOn: locals.hmOn }) %><% } else { %>
+  <section id="cz-table" hidden>
+    <a class="back" href="/casino/holdem">← <%- t('casino.all_tables') %></a>
+    <div class="hm-wrap">
+      <div class="felt hm" id="cz-felt">
+        <div class="hm-center">
+          <span class="hm-logo" aria-hidden="true">publicaccess.tv</span>
+          <div class="board" id="cz-board" role="group" aria-label="<%- t('casino.board') %>"></div>
+          <div class="pot" id="cz-pot" aria-live="off"></div>
+          <div class="felt-msg" id="cz-msg"></div>
+          <div class="clock" id="cz-fclock" hidden><span class="secs"></span></div>
+        </div>
+        <div id="cz-bets"></div>
+        <div id="cz-seats"></div>
       </div>
     </div>
-    <p class="info" id="cb-signin" hidden><a href="/login">Sign in</a> to sit down and play.</p>
+    <div class="felt-meta" id="cz-meta"></div>
+    <div class="watchbar" id="cz-watchbar" hidden></div>
 
-    <div class="grid2">
-      <div class="card"><h2 style="margin-top:0">Table log</h2><div class="log" id="cb-log"></div></div>
-      <div class="card"><h2 style="margin-top:0">Provably fair</h2>
-        <div class="fair" id="cb-fair"></div>
-        <p class="info">Each hand's deck is fixed before it's dealt: its commitment is the SHA-256 of a secret seed, revealed when the hand ends. <span id="cb-fairlink"></span></p>
+    <div class="dock" id="cz-dock" hidden>
+      <div class="dock-row" id="cz-minerow" hidden>
+        <div class="mine"><span class="lbl"><%- t('casino.your_cards') %></span><span class="cards row" id="cz-mine"></span></div>
+      </div>
+      <div id="cz-playbox" hidden>
+        <div class="dock-row dock-turn">
+          <div class="clock" id="cz-dclock" hidden><span class="secs"></span></div>
+          <div class="dock-acts">
+            <button type="button" class="cz-btn red" data-v="fold"><%- t('casino.fold') %></button>
+            <button type="button" class="cz-btn green" data-v="check"><%- t('casino.check') %></button>
+            <button type="button" class="cz-btn green" data-v="call"></button>
+            <button type="button" class="cz-btn gold" data-v="raise"></button>
+          </div>
+        </div>
+        <div class="dock-row raise" id="cz-raisebox">
+          <div class="presets" id="cz-presets" role="group" aria-label="<%- t('casino.presets') %>">
+            <button type="button" data-p="min"><%- t('casino.p_min') %></button>
+            <button type="button" data-p="half"><%- t('casino.p_half') %></button>
+            <button type="button" data-p="pot"><%- t('casino.p_pot') %></button>
+            <button type="button" data-p="all"><%- t('casino.p_all') %></button>
+          </div>
+          <div class="raise-row">
+            <input type="range" id="cz-slider" aria-label="<%- t('casino.raise_to') %>">
+            <input type="number" id="cz-raise" inputmode="numeric" aria-label="<%- t('casino.raise_to') %>">
+          </div>
+        </div>
+      </div>
+      <p class="dock-note" id="cz-wait" hidden></p>
+      <div class="dock-row" id="cz-misc">
+        <button type="button" class="cz-btn gold" id="cz-sit" hidden><%- t('casino.sit_down') %></button>
+        <button type="button" class="cz-btn green sm" id="cz-deal" hidden><%- t('casino.deal_now') %></button>
+        <button type="button" class="cz-btn ghost sm" id="cz-topup" hidden><%- t('casino.top_up') %></button>
+        <button type="button" class="cz-btn ghost sm" id="cz-leave" hidden><%- t('casino.stand_up') %></button>
       </div>
     </div>
   </section>
+  <%- include('partials/casino-sheets', { t }) %>
+  <dialog class="sheet" id="cz-buy" aria-labelledby="cz-buy-h">
+    <div class="sheet-h"><h2 id="cz-buy-h"><%- t('casino.buy_in') %></h2><button type="button" class="sheet-x" data-close aria-label="<%- t('casino.close') %>">×</button></div>
+    <div class="sheet-b">
+      <p class="fine" id="cz-buynote"></p>
+      <div class="buyamt" id="cz-buyamt">0</div>
+      <input type="range" id="cz-buyslider" aria-label="<%- t('casino.buy_amount') %>" style="width:100%;accent-color:var(--gold)">
+      <div class="presets" id="cz-buypresets" style="margin-top:8px"></div>
+      <label class="lbl" for="cz-buyin"><%- t('casino.buy_amount') %></label>
+      <input type="number" id="cz-buyin" inputmode="numeric">
+      <p class="fine" id="cz-buyhr" hidden><%- t('casino.buy_hr') %></p>
+      <div class="rowb"><button type="button" class="cz-btn gold wide" id="cz-buygo"></button></div>
+    </div>
+  </dialog>
+  <% } %>
 </main>
-<script src="/public/js/casinohm.js?v=1"></script>
+<script src="/public/js/casino-ui.js?v=1"></script>
+<script src="/public/js/casinohm.js?v=4"></script>

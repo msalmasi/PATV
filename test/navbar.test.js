@@ -74,7 +74,7 @@ const hrefs = (html) => [...html.matchAll(/<a href="([^"]*)" class="nav-link/g)]
 const heads = (html) => [...html.matchAll(/<div class="nav-sec-h" id="([^"]*)">/g)].map((m) => m[1]);
 
 test("More and ☰ menus: labelled sections in order, search on top, More skips the top-bar links", async () => {
-  const n = nav(await render({ user: "someuser", supportOn: () => true }));
+  const n = nav(await render({ user: "someuser", supportOn: () => true, casinoOn: () => true }));
   const more = pop(n, "nav-more"), burger = pop(n, "nav-burger");
   assert.deepEqual(heads(more), ["nm-you", "nm-watch", "nm-play", "nm-shop", "nm-info", "nm-staff"]);
   assert.deepEqual(heads(burger), ["nb-you", "nb-watch", "nb-play", "nb-shop", "nb-info", "nb-staff"]);
@@ -90,7 +90,7 @@ test("More and ☰ menus: labelled sections in order, search on top, More skips 
     assert.ok(!hrefs(more).includes(h), "More skips top-bar " + h);
     assert.ok(hrefs(burger).includes(h), "☰ lists " + h);
   }
-  const all = ["/wallet", "/staking", "/history", "/subscriptions", "/achievements", "/plex", "/lotto", "/blackjack", "/poker", "/bounties",
+  const all = ["/wallet", "/staking", "/history", "/subscriptions", "/achievements", "/plex", "/lotto", "/casino/blackjack", "/casino/holdem", "/bounties",
     "/shop", "/premium", "/cosmetics", "/support", "/polls", "/help", "/economy", "/about", "/info", "/admin", "/u/someuser", "/settings/telegram"];
   for (const h of all) {
     assert.ok(hrefs(more).includes(h), "More has " + h);
@@ -106,4 +106,31 @@ test("menu gating: signed-out drops the personal links; Support only while a don
   assert.ok(!hrefs(burger).some((h) => h.startsWith("/u/")), "no profile link signed out");
   assert.ok(hrefs(burger).includes("/wallet"));
   assert.ok(hrefs(burger).includes("/login"), "the wheel goes to sign-in");
+});
+
+test("casino links follow the site flags: each game shows only while its flag is on (prod is dark)", async () => {
+  const links = async (casinoOn) => hrefs(pop(nav(await render(Object.assign({ user: "someuser" }, casinoOn ? { casinoOn } : {}))), "nav-burger"));
+  let h = await links(null);
+  assert.ok(!h.includes("/casino/blackjack") && !h.includes("/casino/holdem"), "no flags known = no casino links");
+  h = await links(() => false);
+  assert.ok(!h.includes("/casino/blackjack") && !h.includes("/casino/holdem"), "both off");
+  h = await links((g) => g === "bj");
+  assert.ok(h.includes("/casino/blackjack") && !h.includes("/casino/holdem"), "blackjack only");
+  h = await links((g) => g === "holdem");
+  assert.ok(!h.includes("/casino/blackjack") && h.includes("/casino/holdem"), "hold'em only");
+  assert.ok(!h.includes("/blackjack") && !h.includes("/poker"), "the old Pepe-table pages aren't in the menu");
+});
+
+test("Polls sit under Play (interactive), not Info & links, in both More and ☰", async () => {
+  const n = nav(await render({ user: "someuser", casinoOn: () => true }));
+  for (const [cls, pre] of [["nav-more", "nm"], ["nav-burger", "nb"]]) {
+    const p = pop(n, cls);
+    const sec = (id) => {
+      const m = new RegExp('aria-labelledby="' + pre + "-" + id + '"[^]*?</div></div>').exec(p);
+      assert.ok(m, cls + " has section " + id);
+      return hrefs(m[0]);
+    };
+    assert.ok(sec("play").includes("/polls"), cls + ": Polls in Play");
+    assert.ok(!sec("info").includes("/polls"), cls + ": not in Info & links");
+  }
 });

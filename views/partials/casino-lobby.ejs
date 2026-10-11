@@ -1,0 +1,49 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# views/partials/casino-lobby.ejs - D10: the casino lobby, shared by /casino/blackjack and /casino/holdem (the page's game is the
+    first tab): open tables of both games (seats taken, stakes, the Camfrog room each is pushed to, stream, fairness), Join /
+    Watch, and "Open a table". Filled by public/js/casino-ui.js from /api/casino/lobby. Locals: t, game, bjOn, hmOn. %>
+<section id="cz-lobby" hidden>
+  <div class="lob-hero">
+    <div class="lob-suits" aria-hidden="true"><span>♠</span><span>♥</span><span>♦</span><span>♣</span></div>
+    <h1><%- t('casino.lobby_hero') %></h1>
+    <p><%- t('casino.lobby_tag') %></p>
+    <div class="lob-stats">
+      <span class="cz-pill" id="cz-stat-tables"><b>0</b> <%- t('casino.stat_tables') %></span>
+      <span class="cz-pill" id="cz-stat-players"><b>0</b> <%- t('casino.stat_players') %></span>
+      <span class="cz-pill" id="cz-stat-rooms"><b>0</b> <%- t('casino.stat_rooms') %></span>
+    </div>
+  </div>
+
+  <div class="lob-tabs" role="tablist" aria-label="<%- t('casino.tabs') %>">
+    <% const tabs = [['all', t('casino.tab_all')], ['bj', '🂡 ' + t('casino.bj_title')], ['holdem', '🃏 ' + t('casino.hm_title')]]; %>
+    <% for (const [k, label] of tabs) { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= k === game ? 'true' : 'false' %>"><%- label %></button><% } %>
+  </div>
+  <div class="lob-grid" id="cz-tables" aria-live="off"></div>
+
+  <div id="cz-open-wrap">
+    <h2 class="lob-h"><%- t('casino.open_h') %></h2>
+    <div class="openbox">
+      <div class="tcard" id="cz-open-bj"<%= bjOn ? '' : ' hidden' %>>
+        <div class="tcard-h"><span class="ic" aria-hidden="true">🂡</span><div><b><%- t('casino.bj_title') %></b><small><%- t('casino.bj_rules') %></small></div></div>
+        <p id="cz-bjmax"><%- t('casino.bj_limits') %></p>
+        <button type="button" class="cz-btn gold cz-openbtn" id="cz-open-bj-go"><%- t('casino.open_bj') %></button>
+        <a class="cz-btn ghost cz-signin" href="/login"><%- t('casino.signin_open') %></a>
+      </div>
+      <div class="tcard hm" id="cz-open-hm"<%= hmOn ? '' : ' hidden' %>>
+        <div class="tcard-h"><span class="ic" aria-hidden="true">🃏</span><div><b><%- t('casino.hm_title') %></b><small><%- t('casino.hm_rules') %></small></div></div>
+        <p><%- t('casino.blinds_pick') %></p>
+        <div class="blinds" id="cz-blinds" role="group" aria-label="<%- t('casino.blinds') %>"></div>
+        <p class="fine" id="cz-buyrange"></p>
+        <button type="button" class="cz-btn gold cz-openbtn" id="cz-open-hm-go"><%- t('casino.open_hm') %></button>
+        <a class="cz-btn ghost cz-signin" href="/login"><%- t('casino.signin_open') %></a>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="lob-h"><%- t('casino.how_h') %></h2>
+  <div class="howto">
+    <div><b><%- t('casino.how1_h') %></b><%- t('casino.how1') %></div>
+    <div><b><%- t('casino.how2_h') %></b><%- t('casino.how2') %></div>
+    <div><b><%- t('casino.how3_h') %></b><%- t('casino.how3') %></div>
+  </div>
+</section>
