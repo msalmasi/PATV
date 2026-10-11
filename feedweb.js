@@ -28,7 +28,8 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESC[c]
 const URL_RE = /\bhttps?:\/\/[^\s<>"'`]{2,2000}/gi;
 // 1.99ck: the plain-text parts also get p/<slug> pad links (pads.js; known pads only, never inside a URL)
 // 1.99df: and u/<username> profile links
-const padText = (t) => { const P = require("./pads"); return stickerHtml(P.userRefs(P.padRefs(esc(t)))); };
+// 1.99kk: and @username mentions + #hashtags (feedmentions.js - the same for post bodies and comments)
+const padText = (t) => { const P = require("./pads"); return stickerHtml(require("./feedmentions").inlineRefs(P.userRefs(P.padRefs(esc(t))))); };
 // 1.99iw: [sticker:<pack>/<id>] -> the sticker (stickers.js; ownership is checked when the post / comment is written)
 const stickerHtml = (h) => { try { return require("./stickers").inline(h); } catch (e) { return h; } };
 function linkify(text) {

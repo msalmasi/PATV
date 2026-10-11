@@ -573,6 +573,9 @@
   </section>
   <% } %>
 
+  <%# 1.99kk: the banner slot (banner.js): a paid booking ("Sponsored") or a house promo %>
+  <% if (typeof banner !== 'undefined' && banner) { %><%- include('partials/banner', { bn: banner }) %><% } %>
+
   <!-- ───── room + live now ───── -->
   <div class="main">
     <% if (room) { %>

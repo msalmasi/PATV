@@ -64,9 +64,10 @@ const crypto = require("crypto");
 const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm"]);
-const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures" });
-const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media" });
+const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner"]);
+const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads" });
+// 1.99kk: "banner" = a paid homepage banner (banner.js) - everyone sees it, so the strict profile policy (no NSFW at all)
+const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile" });
 const CATEGORIES = Object.freeze(["nudity_explicit", "sexual", "suggestive", "minor_risk", "gore", "hate_symbols"]);
 const POLICY_KEYS = Object.freeze([...CATEGORIES, "nsfw_level"]);
 const ACTIONS = Object.freeze(["allow", "flag", "nsfw", "nsfw_pad", "refuse", "refuse_flag"]);
@@ -77,7 +78,7 @@ const DEFAULT_POLICY = Object.freeze({
 });
 const DEFAULTS = Object.freeze({
   enabled: false, shadow: false, fail_mode: "open", timeout_secs: 20, video_frames: 3, notify_minor: true, retention_days: 30,
-  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true }),
+  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true }),
   thresholds: Object.freeze({ nudity_explicit: 0.5, sexual: 0.5, suggestive: 0.5, minor_risk: 0.4, gore: 0.5, hate_symbols: 0.6 }),
   policy: DEFAULT_POLICY,
 });
@@ -246,7 +247,7 @@ function decide(surface, v, { padAllowsNsfw = true, policy = DEFAULT_POLICY } = 
 function refusalMessage(surface, why, padAllowsNsfw) {
   if (why.includes("minor_risk")) return "That picture can't be posted here (Terms: nothing sexual or suggestive involving anyone who may be under 18).";
   if (GROUP[surface] === "profile") {
-    const what = surface === "profile_photo" ? "Profile photos" : "Pad avatars and banners";
+    const what = surface === "profile_photo" ? "Profile photos" : surface === "banner" ? "Homepage banners" : "Pad avatars and banners";
     return `That picture looks like adult or graphic content - ${what} must be safe for work (Terms).`;
   }
   if (!padAllowsNsfw && (why.includes("nudity_explicit") || why.includes("sexual"))) return "That looks like explicit content, and this pad doesn't allow NSFW posts.";

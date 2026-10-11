@@ -34,6 +34,7 @@
 //                room share goes to Fort Knox - there's no new escrow.
 //   season_pass  [fortknox 100]          - a personal purchase: economy v2 sends purchase spending to Fort Knox.
 //   stickers     [fortknox 100]          - same (stickers.js).
+//   banner       [fortknox 100]          - 1.99kk: homepage banner ads (banner.js): site-wide, no room resolved -> Fort Knox.
 //   A "fortknox" share is a negative reserve_claims row: "fortknox:<flow>" while Fort Knox is live in Pepe
 //   (funding.fortknoxLive()), else "<flow>" (his Federal Reserve as Fort Knox's stand-in, as boosts do); "reserve"
 //   is "<flow>". Pepe's funding tick credits every claim once (frida-bot _funding_tick).
@@ -65,6 +66,7 @@ const ROUTE_FLOWS = Object.freeze({
   prime_time: { label: "📺 Prime Time (pad tier)", room: true },
   season_pass: { label: "🎟️ Season Pass (personal tier)", room: false },
   stickers: { label: "🧸 Sticker packs", room: false },
+  banner: { label: "📣 Homepage banner ads", room: false },        // 1.99kk: banner.js (no room resolved -> Fort Knox)
 });
 const DEFAULTS = Object.freeze({
   sales: true,                     // PAT purchases on (off: buying is refused, renewals still run)
@@ -78,7 +80,7 @@ const DEFAULTS = Object.freeze({
   sp_upload_mult: 2,               // Season Pass: feed upload size / daily / quota multiplier
   sp_sticker_packs: 1,             // Season Pass: free sticker packs per period
   sticker_price: 250000,           // PAT per sticker pack (stickers.js; a pack's own price wins)
-  routes: { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]] },
+  routes: { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]] },
 });
 
 let clock = () => Date.now();

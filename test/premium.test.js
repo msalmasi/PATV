@@ -89,7 +89,7 @@ test.after(() => { if (server) server.close(); F.sync({}); });
 test("config: the proposed prices and perks, routing rows with defaults; a bad row falls back, 'room' only on Prime Time", async () => {
   const C = PR.config();
   assert.deepEqual([C.prime_price, C.season_price, C.period_days, C.grace_days, C.sticker_price], [10000000, 2000000, 30, 3, 250000]);
-  assert.deepEqual(C.routes, { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]] });
+  assert.deepEqual(C.routes, { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]] });
   const R = PR.cleanRoutes({ prime_time: [["burn", 100]], season_pass: [["room", 100]], stickers: [["reserve", 30], ["fortknox", 60]] });
   assert.deepEqual(R.prime_time, [["fortknox", 50], ["room", 50]], "no burn destination exists");
   assert.deepEqual(R.season_pass, [["fortknox", 100]], "a personal flow has no room");

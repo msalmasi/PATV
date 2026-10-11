@@ -1082,6 +1082,8 @@ async function create(userId, input, deps = {}) {
   }
   console.log(`[feed] post ${id} by ${u.username} community=${roomIds.join(",")} files=${atts.length} link=${link ? link.domain : "-"} cost=${cost}`);
   const made = await get(id, u);
+  // 1.99kk: @mentions in the body (feedmentions.js; not while the post waits for a pad's approval everywhere)
+  if (made && body) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, link: made.url || await postLink(id) });
   // 1.99bz: followers who asked for it get an inbox notice (default off); never blocks the post
   if (made) {
     const pending = require("./follows").notifyNewPost(made, u.displayname || u.username);
@@ -1302,6 +1304,11 @@ async function edit(user, id, patch) {
   if (patch.tags !== undefined && patch.tags !== null) await TAGS().setTags(id, TAGS().parseTags(patch.tags));
   const onlyInAll = patch.title == null && patch.body == null && patch.nsfw == null;
   if (!onlyInAll) await runQuery("UPDATE feed_posts SET title = ?, body = ?, nsfw = ?, edited = ? WHERE id = ?", [title || null, body || null, nsfw, NOW(), id]);
+  // 1.99kk: names added by the edit get their @mention notice (feedmentions.js)
+  if (!onlyInAll && body && body !== r.body) {
+    const u = await account(user.userId);
+    if (u) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, prevText: r.body, link: await postLink(id) });
+  }
   return get(id, user);
 }
 
@@ -1546,8 +1553,11 @@ async function comment(user, postId, { body, parent } = {}) {
     await notify(par.author_id, { title: `${who} replied to your comment`, body: `On "${what}": ${text.slice(0, 200)}`, link, ref: "feed-c:" + id + ":p" });
   }
   if (!told.has(p.author_id)) {
+    told.add(p.author_id);
     await notify(p.author_id, { title: `${who} commented on your post`, body: `"${what}": ${text.slice(0, 200)}`, link, ref: "feed-c:" + id });
   }
+  // 1.99kk: @mentions (feedmentions.js; never the people just told above)
+  await require("./feedmentions").notify({ author: u, kind: "comment", id, postId, text, skip: [...told], link });
   return { id };
 }
 async function recount(postId) {
@@ -1562,6 +1572,11 @@ async function editComment(user, id, body) {
   if (!text) throw new Refuse(400, "A comment can't be empty.");
   await stickerCheck(user.userId, text);
   await runQuery("UPDATE feed_comments SET body = ?, edited = ? WHERE id = ?", [text, NOW(), c.id]);
+  // 1.99kk: names added by the edit get their @mention notice (feedmentions.js)
+  if (text !== c.body) {
+    const u = await account(user.userId);
+    if (u) await require("./feedmentions").notify({ author: u, kind: "comment", id: c.id, postId: c.post_id, text, prevText: c.body, link: await postLink(c.post_id, "#c-" + c.id) });
+  }
   return true;
 }
 /** Author, site staff, or the owner of a room the post is in. */

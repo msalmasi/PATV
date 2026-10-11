@@ -259,4 +259,4 @@ function register(app) {
 const padLabel = (R) => (R && R.profile && R.profile.username ? "u/" + R.profile.username : "p/" + (R ? padSlug(R) || R.slug || "" : ""));
 
 module.exports = { register, padSlug, padHref, padRefs, padBySlugSync, qsOf, PAD_REF_RE, OLD_SLUGS, currentSlugFor,
-                   PLATFORM_INFO, platformOf, padBadge, USER_REF_RE, userRefs, profileHref, padLabel, titleSlug, postSlug, postHref, homeOf, _setNames: (m) => { NAMES = m; namesAt = m ? Date.now() : 0; } };
+                   PLATFORM_INFO, platformOf, padBadge, USER_REF_RE, userRefs, knownUserSync, profileHref, padLabel, titleSlug, postSlug, postHref, homeOf, _setNames: (m) => { NAMES = m; namesAt = m ? Date.now() : 0; } };

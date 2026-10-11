@@ -1,0 +1,135 @@
+<%- include('../partials/admin-open', { title: 'Homepage banner', user, section: 'banner', admIsAdmin: isAdmin }) %>
+<%#
+  views/admin/banner.ejs - the homepage banner slot (1.99kk, banner.js): the review queue (staff approve / reject / take down),
+  the settings and the house promos (admins). Locals: user, isAdmin, D = banner.adminData(), fmt.
+%>
+<%
+  const C = D.config;
+  const STAT = (s) => s ? fmt(s.impressions) + ' views · ' + fmt(s.clicks) + ' clicks' + (s.impressions ? ' (' + (s.clicks / s.impressions * 100).toFixed(1) + '%)' : '') : '0 views';
+  const pending = D.bookings.filter((b) => b.status === 'pending');
+  const rest = D.bookings.filter((b) => b.status !== 'pending');
+  const PROMO_LABEL = { lotto: '🎟️ Pepeball (live jackpot)', season_pass: '🎟️ Season Pass', prime_time: '📺 Prime Time', plex: '📼 Plex access', wheel: '🎡 The Wheel', custom: '✏️ Custom' };
+%>
+<style>
+  .bna .ad { max-width: 520px; }
+  .bna .ad img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; border-radius: 8px; border: 1px solid #333; }
+  .bna .ad .h { font-weight: bold; } .bna .ad .l { color: #aaa; font-size: 13px; }
+  .bna .pr td input[type=text] { width: 100%; min-width: 120px; }
+  .bna .pr td input[type=number] { width: 64px; }
+</style>
+<div class="adm-head bna">
+  <h1>📣 Homepage banner</h1>
+  <p>One banner strip on the homepage, under the stage. Members book whole days with PAT on <a href="/sponsor">/sponsor</a> (days are
+     <b><%= D.tz %></b> calendar days); every booking waits here for a staff OK before it shows. Rejecting refunds the hold in full;
+     approving routes it (Prime Time &amp; Season Pass admin, routing row <b>banner</b> - default 100% Fort Knox). A booking nobody
+     reviews by the start of its first day expires and is refunded. Unbooked days rotate the house promos below.</p>
+</div>
+
+<section class="adm-card bna" aria-labelledby="bnStT">
+  <h2 id="bnStT">Status
+    <span class="adm-pill <%= C.enabled ? 'ok' : '' %>"><%= C.enabled ? 'Slot ON' : 'Slot OFF' %></span>
+    <span class="adm-pill <%= C.paid_enabled ? 'ok' : 'admin' %>"><%= C.paid_enabled ? 'Paid booking ON' : 'Paid booking OFF' %></span>
+  </h2>
+  <div class="adm-kv">
+    <div><b>Price</b><span><%= fmt(C.price_per_day) %> PAT a day · up to <%= C.max_days %> days a booking · <%= C.max_bookings %> open per member · up to <%= C.lead_days %> days ahead</span></div>
+    <div><b>Waiting for review</b><span><%= pending.length %></span></div>
+    <div><b>Today</b><span><%= D.today %></span></div>
+  </div>
+</section>
+
+<section class="adm-card bna" id="queue" aria-labelledby="bnQT">
+  <h2 id="bnQT">Review queue</h2>
+  <% if (!pending.length) { %><p class="adm-help">Nothing waiting.</p><% } else { %>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>Days</th><th>Buyer</th><th>Banner</th><th>Link</th><th>Held</th><th></th></tr></thead>
+    <tbody>
+    <% pending.forEach((b) => { %>
+      <tr>
+        <td><%= b.start %><%= b.days > 1 ? ' → ' + b.end : '' %><br><span class="adm-help"><%= b.days %> day<%= b.days === 1 ? '' : 's' %></span></td>
+        <td><a href="/u/<%= encodeURIComponent(b.username || '') %>">@<%= b.username %></a></td>
+        <td><div class="ad"><% if (b.kind === 'image' && b.image) { %><img src="<%= b.image %>" alt=""><div class="l">Alt: <%= b.alt %></div><% } else { %><div class="h"><%= b.headline %></div><div class="l"><%= b.line || '' %></div><% } %></div></td>
+        <td><% if (b.link) { %><code><%= b.link %></code><% } else { %>-<% } %></td>
+        <td><%= fmt(b.price) %></td>
+        <td><button type="button" class="adm-btn" data-approve="<%= b.id %>">Approve</button> <button type="button" class="adm-btn danger" data-reject="<%= b.id %>">Reject…</button></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% } %>
+</section>
+
+<section class="adm-card bna" id="booked" aria-labelledby="bnBT">
+  <h2 id="bnBT">Approved and recent</h2>
+  <% if (!rest.length) { %><p class="adm-help">None yet.</p><% } else { %>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>Days</th><th>Buyer</th><th>Banner</th><th>Status</th><th>PAT</th><th>Stats</th><th></th></tr></thead>
+    <tbody>
+    <% rest.forEach((b) => { %>
+      <tr>
+        <td><%= b.start %><%= b.days > 1 ? ' → ' + b.end : '' %></td>
+        <td>@<%= b.username %></td>
+        <td><div class="ad"><% if (b.kind === 'image' && b.image) { %>🖼️ <%= b.alt %><% } else { %><span class="h"><%= b.headline %></span><% } %></div><% if (b.domain) { %><span class="adm-help"><%= b.domain %></span><% } %></td>
+        <td><%= b.status %><% if (b.reason) { %><br><span class="adm-help"><%= b.reason %></span><% } %></td>
+        <td><%= fmt(b.price) %><%= b.refunded ? ' (refunded)' : '' %></td>
+        <td><%= STAT(b.stats) %></td>
+        <td><% if (b.status === 'approved' && b.end >= D.today) { %><button type="button" class="adm-btn danger" data-takedown="<%= b.id %>">Take down…</button><% } %></td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% } %>
+</section>
+
+<section class="adm-card bna" id="settings" aria-labelledby="bnSetT">
+  <h2 id="bnSetT">Settings <% if (!isAdmin) { %><span class="adm-pill admin">admins only</span><% } %></h2>
+  <form class="adm-form" id="bnSettings">
+    <label class="ck"><input type="checkbox" name="banner_enabled"<%= C.enabled ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Show the banner slot on the homepage (<code>banner_enabled</code>)</label>
+    <label class="ck"><input type="checkbox" name="banner_paid_enabled"<%= C.paid_enabled ? ' checked' : '' %><%= isAdmin ? '' : ' disabled' %>> Members can book it with PAT (<code>banner_paid_enabled</code>)</label>
+    <label>PAT per day (<code>banner_price_per_day</code>) <input type="number" name="banner_price_per_day" min="1000" step="1000" value="<%= C.price_per_day %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label>Max days per booking (<code>banner_max_days</code>) <input type="number" name="banner_max_days" min="1" max="31" value="<%= C.max_days %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label>Max open bookings per member (<code>banner_max_bookings</code>) <input type="number" name="banner_max_bookings" min="1" max="20" value="<%= C.max_bookings %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <label>How far ahead, days (<code>banner_lead_days</code>) <input type="number" name="banner_lead_days" min="2" max="365" value="<%= C.lead_days %>"<%= isAdmin ? '' : ' disabled' %>></label>
+    <% if (isAdmin) { %><div><button type="submit" class="adm-btn">Save settings</button> <span class="adm-msg" id="bnSetMsg" role="status"></span></div><% } %>
+  </form>
+</section>
+
+<section class="adm-card bna" id="promos" aria-labelledby="bnPT">
+  <h2 id="bnPT">House promos <% if (!isAdmin) { %><span class="adm-pill admin">admins only</span><% } %></h2>
+  <p class="adm-help">They fill every day nobody booked, rotating per page view (a higher weight shows more often). Leave the headline empty to use the
+     built-in text (translated). <code>{jackpot}</code> and <code>{draw}</code> work in any text (Pepeball's live jackpot and draw time); the
+     Pepeball promo hides itself while the lotto has no jackpot or draw time.</p>
+  <div class="adm-tbl"><table class="pr">
+    <thead><tr><th>On</th><th>Promo</th><th>Headline</th><th>Line</th><th>Link</th><th>Weight</th><th>Order</th><th>Stats</th><th></th></tr></thead>
+    <tbody>
+    <% D.promos.forEach((p) => { %>
+      <tr data-promo="<%= p.id %>" data-kind="<%= p.kind %>">
+        <td><input type="checkbox" name="enabled"<%= p.enabled ? ' checked' : '' %> aria-label="On"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><%= PROMO_LABEL[p.kind] || p.kind %><br><span class="adm-help"><%= p.id %></span></td>
+        <td><input type="text" name="headline" maxlength="60" value="<%= p.headline || '' %>" placeholder="<%= p.kind === 'custom' ? '' : '(built-in)' %>" aria-label="Headline"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><input type="text" name="line" maxlength="120" value="<%= p.line || '' %>" placeholder="<%= p.kind === 'custom' ? '' : '(built-in)' %>" aria-label="Line"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><input type="text" name="link" maxlength="300" value="<%= p.link || '' %>" aria-label="Link"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><input type="number" name="weight" min="1" max="10" value="<%= p.weight %>" aria-label="Weight"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><input type="number" name="sort" min="0" max="1000" value="<%= p.sort %>" aria-label="Order"<%= isAdmin ? '' : ' disabled' %>></td>
+        <td><%= STAT(p.stats) %></td>
+        <td><% if (isAdmin) { %><button type="button" class="adm-btn ghost" data-save>Save</button><% if (p.kind === 'custom') { %> <button type="button" class="adm-btn danger" data-del>Delete</button><% } %><% } %></td>
+      </tr>
+    <% }) %>
+    <% if (isAdmin) { %>
+      <tr data-promo="" data-kind="custom">
+        <td><input type="checkbox" name="enabled" checked aria-label="On"></td>
+        <td>✏️ New custom promo</td>
+        <td><input type="text" name="headline" maxlength="60" aria-label="Headline"></td>
+        <td><input type="text" name="line" maxlength="120" aria-label="Line"></td>
+        <td><input type="text" name="link" maxlength="300" placeholder="/somewhere or https://" aria-label="Link"></td>
+        <td><input type="number" name="weight" min="1" max="10" value="1" aria-label="Weight"></td>
+        <td><input type="number" name="sort" min="0" max="1000" value="10" aria-label="Order"></td>
+        <td></td>
+        <td><button type="button" class="adm-btn" data-save>Add</button></td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table></div>
+  <p class="adm-msg" id="bnPromoMsg" role="status"></p>
+</section>
+<script src="/public/js/banner-admin.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>

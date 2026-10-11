@@ -1184,6 +1184,8 @@ require("./wallet").register(app, { isBotToken, addUser });
 require("./staking").register(app, { isBotToken, addUser });
 inbox.register(app, { isBotToken, addUser });
 require("./mentions").register(app, { addUser });      // 1.99ii: 📣 room mention alerts (/settings/mentions)
+require("./feedmentions").register(app, { addUser });  // 1.99kk: @mentions + #hashtags in posts and comments - /api/mentions/suggest (autocomplete)
+require("./banner").register(app, { addUser });        // 1.99kk: the homepage banner slot - paid PAT bookings (off until priced), house promos, /sponsor, /admin/banner
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./userstats").register(app, { isBotToken });
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation

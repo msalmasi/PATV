@@ -189,11 +189,13 @@ function register(app, { addUser, xpForNextLevel }) {
       const storyRooms = await require("./stories").forViewer(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] stories:", e.message); return []; });
       // 1.99ci: "Hot on PATV" - the top 5 hot posts across every community (no NSFW for signed-out visitors)
       const hot = await require("./feedweb").hotMini(req.user && req.user.userId ? req.user : null).catch((e) => { console.error("[home] hot:", e.message); return null; });
+      // 1.99kk: the banner slot (banner.js) - a paid booking for today, else a house promo (Pepeball with its live jackpot, ...)
+      const banner = await require("./banner").pick({ lotto: S.lotto, lang: res.locals.lang || "en" }).catch((e) => { console.error("[home] banner:", e.message); return null; });
       res.locals.og = { title: "Public Access TV", description: "Live streams, Pepe the frog, Camfrog rooms live on the web, PAT games, markets and more.",
                         image: res.locals.ogBase + "/og/page.png?t=Public%20Access%20TV", url: res.locals.ogBase + "/" };
       res.render("home", {
         username: me ? me.username : null, me, mine, S, rooms, room, roomLive, stage, top, tops, boostMark: require("./boostmark").boostMark,
-        story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx,
+        story: { rooms: storyRooms, caps: [], room: null, signed: !!me, compose: !!me }, hot, fx: require("./feedweb").fx, banner,
         roomOnStage: !!(onStage && room === onStage), stageAdmin, frontInfo, pepeHere,
         // 1.99al: paid stage slots live now + whether this viewer can cut them
         slots, nextUp, staff: isStaff || (await reg.canManage(req.user, front.id).catch(() => false)),

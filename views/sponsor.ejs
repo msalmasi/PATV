@@ -1,0 +1,120 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /sponsor — book the homepage banner slot with PAT (1.99kk, banner.js). Locals: user, signed, S = banner.state(viewer), fmt.
+    The booking form, the uploader and "my bookings" are public/js/sponsor.js; everything a member typed goes back in as text. %>
+<%- include('layout', { title: t('sponsor.title'), user: user }) %>
+<%- include('partials/legal-css') %>
+<%
+  const C_ = S.config;
+  const dayLbl_ = (d) => { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd)).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }); };
+%>
+<style>
+  .sp .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; min-width: 0; }
+  .sp .card h2 { border: 0; padding: 0; margin: 0 0 8px; font-size: 18px; }
+  .sp .mut { color: #9a9a9a; font-size: 13.5px; }
+  .sp .off { padding: 10px 12px; border-radius: 10px; background: #1d1a10; border: 1px solid #4a4020; color: #f1e2a6; }
+  .sp .fld { display: grid; gap: 4px; margin: 10px 0 0; font-size: 14.5px; min-width: 0; }
+  .sp input[type=text], .sp input[type=url], .sp input[type=number], .sp select { width: 100%; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid #333; background: #0d0d0d; color: #eee; font: inherit; font-size: 15px; }
+  .sp .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 160px); gap: 10px; }
+  .sp .kinds { display: flex; flex-wrap: wrap; gap: 14px; margin: 10px 0 0; }
+  .sp button { padding: 9px 16px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14.5px; cursor: pointer; }
+  .sp button.pri { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+  .sp button:disabled { opacity: .55; cursor: default; }
+  .sp .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .sp .msg { min-height: 1.4em; font-size: 14px; } .sp .msg.bad { color: #ff9e9e; } .sp .msg.ok { color: #a5d6a7; }
+  .sp .cal { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; margin-top: 8px; }
+  .sp .cal span { padding: 6px 8px; border-radius: 8px; border: 1px solid #2a2a2a; font-size: 12.5px; text-align: center; color: #ccc; }
+  .sp .cal .tk { background: #2a1717; border-color: #4a2525; color: #c98f8f; text-decoration: line-through; }
+  .sp .cal .fr { background: #142018; border-color: #24402c; }
+  .sp .cal .td { opacity: .55; }
+  .sp .prev { margin-top: 12px; }
+  .sp .prev img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; border-radius: 10px; border: 1px solid #2a2a2a; }
+  .sp table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .sp th, .sp td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #222; vertical-align: top; }
+  .sp .st { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #333; }
+  .sp .st.pending { color: #f1e2a6; border-color: #4a4020; } .sp .st.approved { color: #a5d6a7; border-color: #24402c; }
+  .sp .st.rejected, .sp .st.removed, .sp .st.expired { color: #ff9e9e; border-color: #4a2525; } .sp .st.cancelled { color: #aaa; }
+  .sp .tw { overflow-x: auto; }
+  @media (max-width: 560px) { .sp .two { grid-template-columns: minmax(0, 1fr); } }
+</style>
+<main class="lg sp">
+  <header class="hero">
+    <div class="eyebrow">📣 <%- t('sponsor.eyebrow') %></div>
+    <h1><%- t('sponsor.h1') %></h1>
+    <p class="lead"><%- t('sponsor.lead') %></p>
+    <p class="note"><%- t('sponsor.how', { price: fmt(C_.price), max: C_.maxDays, n: C_.maxBookings }) %></p>
+  </header>
+
+  <% if (!C_.paid) { %>
+    <p class="off" role="status"><%- t('sponsor.closed') %></p>
+  <% } else if (!signed) { %>
+    <p class="off"><%- t('sponsor.sign_in', { link: '<a href="/login?next=%2Fsponsor">' + t('sponsor.sign_in_link') + '</a>' }) %></p>
+  <% } else { %>
+  <form class="card" id="spForm" autocomplete="off" aria-labelledby="spBookH">
+    <h2 id="spBookH"><%- t('sponsor.book_h') %></h2>
+    <div class="two">
+      <label class="fld"><%- t('sponsor.start') %>
+        <select id="spStart" required>
+          <% S.calendar.filter((d) => d.bookable).forEach((d) => { %><option value="<%= d.day %>"><%= dayLbl_(d.day) %></option><% }) %>
+        </select></label>
+      <label class="fld"><%- t('sponsor.days') %><input type="number" id="spDays" min="1" max="<%= C_.maxDays %>" value="1" required></label>
+    </div>
+    <div class="kinds" role="radiogroup" aria-label="<%- t('sponsor.kind') %>">
+      <label><input type="radio" name="kind" value="text" checked> <%- t('sponsor.kind_text') %></label>
+      <label><input type="radio" name="kind" value="image"> <%- t('sponsor.kind_image') %></label>
+    </div>
+    <div id="spText">
+      <label class="fld"><%- t('sponsor.headline') %><input type="text" id="spHead" maxlength="<%= S.limits.headline %>"></label>
+      <label class="fld"><%- t('sponsor.line') %><input type="text" id="spLine" maxlength="<%= S.limits.line %>"></label>
+    </div>
+    <div id="spImage" hidden>
+      <label class="fld"><%- t('sponsor.picture', { w: S.limits.w, h: S.limits.h, mb: Math.round(S.limits.bytes / 1048576) }) %><input type="file" id="spFile" accept="image/jpeg,image/png,image/gif,image/webp,image/avif"></label>
+      <label class="fld"><%- t('sponsor.alt') %><input type="text" id="spAlt" maxlength="<%= S.limits.alt %>"></label>
+      <div class="prev" id="spPrev" hidden><img alt="" id="spPrevImg"></div>
+    </div>
+    <label class="fld"><%- t('sponsor.link') %><input type="text" id="spLink" maxlength="<%= S.limits.link %>" placeholder="https://"></label>
+    <p class="mut"><%- t('sponsor.rules') %></p>
+    <div class="row">
+      <button type="submit" class="pri" id="spGo"><%- t('sponsor.book_btn') %></button>
+      <span id="spTotal" class="mut"></span>
+    </div>
+    <p class="msg" id="spMsg" role="status" aria-live="polite"></p>
+  </form>
+  <% } %>
+
+  <section class="card" aria-labelledby="spCalH">
+    <h2 id="spCalH"><%- t('sponsor.cal_h') %></h2>
+    <p class="mut"><%- t('sponsor.cal_note') %></p>
+    <div class="cal">
+      <% S.calendar.forEach((d) => { %><span class="<%= d.taken ? 'tk' : d.bookable ? 'fr' : 'td' %>" title="<%- d.taken ? t('sponsor.taken') : d.bookable ? t('sponsor.free') : t('sponsor.today') %>"><%= dayLbl_(d.day) %></span><% }) %>
+    </div>
+  </section>
+
+  <% if (signed) { %>
+  <section class="card" aria-labelledby="spMineH">
+    <h2 id="spMineH"><%- t('sponsor.mine_h') %></h2>
+    <% if (!S.mine.length) { %><p class="mut"><%- t('sponsor.mine_none') %></p><% } else { %>
+    <div class="tw"><table>
+      <thead><tr><th><%- t('sponsor.col.days') %></th><th><%- t('sponsor.col.ad') %></th><th><%- t('sponsor.col.status') %></th><th><%- t('sponsor.col.price') %></th><th><%- t('sponsor.col.views') %></th><th><%- t('sponsor.col.clicks') %></th><th></th></tr></thead>
+      <tbody>
+      <% S.mine.forEach((b) => { const st_ = b.stats || { impressions: 0, clicks: 0 }; %>
+        <tr data-id="<%= b.id %>">
+          <td><%= b.start %><%= b.days > 1 ? ' → ' + b.end : '' %></td>
+          <td><% if (b.kind === 'image' && b.image) { %>🖼️ <%= b.alt || '' %><% } else { %><%= b.headline || '' %><% } %><% if (b.domain) { %> <span class="mut">(<%= b.domain %>)</span><% } %></td>
+          <td><span class="st <%= b.status %>"><%- t('sponsor.status.' + b.status) %></span><% if (b.reason) { %><div class="mut"><%= b.reason %></div><% } %></td>
+          <td><%= fmt(b.price) %><% if (b.refunded) { %><div class="mut"><%- t('sponsor.refunded') %></div><% } %></td>
+          <td><%= fmt(st_.impressions) %></td>
+          <td><%= fmt(st_.clicks) %><% if (st_.impressions) { %> <span class="mut">(<%= (st_.clicks / st_.impressions * 100).toFixed(1) %>%)</span><% } %></td>
+          <td><% if (b.status === 'pending') { %><button type="button" data-cancel="<%= b.id %>"><%- t('sponsor.cancel') %></button><% } %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table></div>
+    <p class="mut"><%- t('sponsor.stats_note') %></p>
+    <% } %>
+  </section>
+  <% } %>
+</main>
+<script type="application/json" id="spBoot"><%- JSON.stringify({ price: C_.price, maxDays: C_.maxDays, chunk: 524288, maxBytes: S.limits.bytes, balance: S.balance }).replace(/</g, '\\u003c') %></script>
+<script src="/public/js/sponsor.js?v=1" defer></script>
+</body>
+</html>

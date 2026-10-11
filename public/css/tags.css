@@ -17,3 +17,14 @@ a.ftag:hover, a.ftag:focus-visible, .ftag.sug:hover, .ftag.sug:focus-visible { b
 .fc-tagsug[hidden] { display: none; }
 .ftag.sug { cursor: pointer; font-size: 12px; }
 .fp-editf input[name=tags] { margin-top: 6px; }
+/* 1.99kk: #hashtags and @mentions inside post / comment text (feedmentions.js) + the @ autocomplete (mention-complete.js) */
+a.tag-ref { color: #a5d6a7; text-decoration: none; }
+a.tag-ref:hover, a.tag-ref:focus-visible { text-decoration: underline; }
+a.user-ref.mention { color: #9fc6ee; text-decoration: none; }
+a.user-ref.mention:hover, a.user-ref.mention:focus-visible { text-decoration: underline; }
+.mc-pop { position: absolute; z-index: 60; min-width: 200px; max-width: min(320px, calc(100vw - 32px)); margin: 0; padding: 4px; list-style: none;
+          background: #151515; border: 1px solid #333; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.5); font: 14px/1.4 Ubuntu, sans-serif; }
+.mc-pop[hidden] { display: none; }
+.mc-pop li { display: flex; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 7px; cursor: pointer; color: #ddd; min-width: 0; }
+.mc-pop li .mc-d { color: #888; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-pop li[aria-selected="true"], .mc-pop li:hover { background: #1f3a26; color: #fff; }

@@ -22,6 +22,7 @@
 // queued). Rate-limited per user: one alert per room per ROOM_GAP_MS and HOUR_MAX an hour.
 //
 //   mention_prefs   user_id, enabled (0/1, default off), names (0/1: match my own names, default on),
+//                   feed (0/1, default ON - 1.99kk: @username mentions in feed posts and comments, feedmentions.js),
 //                   quiet_from / quiet_to (minutes after midnight in tz, both NULL = none), tz, muted_until (ms), updated
 //   mention_words   user_id, phrase, room_id ('' = every room)
 //
@@ -49,6 +50,8 @@ function init() {
     ready = (async () => {
       await runQuery(`CREATE TABLE IF NOT EXISTS mention_prefs (user_id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
         names INTEGER NOT NULL DEFAULT 1, quiet_from INTEGER, quiet_to INTEGER, tz TEXT, muted_until INTEGER, updated INTEGER)`);
+      // 1.99kk: @mentions in posts / comments (feedmentions.js) - on unless the member turns it off
+      try { await runQuery("ALTER TABLE mention_prefs ADD COLUMN feed INTEGER NOT NULL DEFAULT 1"); } catch (e) { /* already there */ }
       await runQuery(`CREATE TABLE IF NOT EXISTS mention_words (user_id TEXT NOT NULL, phrase TEXT NOT NULL, room_id TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (user_id, phrase, room_id))`);
     })().catch((e) => { console.error("[mentions] init:", e.message); ready = null; throw e; });
@@ -122,7 +125,7 @@ async function get(userId) {
   const acc = await accountOf(userId);
   const t = NOW();
   return {
-    prefs: { enabled: !!(r && r.enabled), names: r ? !!r.names : true,
+    prefs: { enabled: !!(r && r.enabled), names: r ? !!r.names : true, feed: r ? r.feed !== 0 : true,
              quiet: r && r.quiet_from != null && r.quiet_to != null ? { from: r.quiet_from, to: r.quiet_to, tz: r.tz || "UTC" } : null,
              tz: (r && r.tz) || null, mutedUntil: r && r.muted_until > t ? r.muted_until : null },
     words: words.map((w) => ({ phrase: w.phrase, room: w.room_id || "" })),
@@ -132,7 +135,7 @@ async function get(userId) {
 }
 class Refuse extends Error { constructor(status, msg) { super(msg); this.status = status; this.refuse = true; } }
 /** Save the whole settings form. words: [{phrase, room}] (room '' = every room; unknown rooms are refused). */
-async function save(userId, { enabled, names, words, quiet } = {}, knownRooms = null) {
+async function save(userId, { enabled, names, words, quiet, feed } = {}, knownRooms = null) {
   await init();
   const list = [], seen = new Set();
   for (const w of (Array.isArray(words) ? words : []).slice(0, 100)) {
@@ -155,10 +158,12 @@ async function save(userId, { enabled, names, words, quiet } = {}, knownRooms = 
   }
   if (!tz && quiet && typeof quiet === "object") tz = validTz(quiet.tz);
   const cur = await prefsRow(userId);
-  await runQuery(`INSERT INTO mention_prefs (user_id, enabled, names, quiet_from, quiet_to, tz, muted_until, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  // feed: undefined keeps what's stored (default on)
+  const fd = feed === undefined || feed === null ? (cur && cur.feed === 0 ? 0 : 1) : feed === false ? 0 : 1;
+  await runQuery(`INSERT INTO mention_prefs (user_id, enabled, names, quiet_from, quiet_to, tz, muted_until, updated, feed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                   ON CONFLICT(user_id) DO UPDATE SET enabled = excluded.enabled, names = excluded.names, quiet_from = excluded.quiet_from,
-                  quiet_to = excluded.quiet_to, tz = COALESCE(excluded.tz, mention_prefs.tz), updated = excluded.updated`,
-                 [userId, enabled ? 1 : 0, names === false ? 0 : 1, qf, qt, tz, cur ? cur.muted_until : null, NOW()]);
+                  quiet_to = excluded.quiet_to, tz = COALESCE(excluded.tz, mention_prefs.tz), updated = excluded.updated, feed = excluded.feed`,
+                 [userId, enabled ? 1 : 0, names === false ? 0 : 1, qf, qt, tz, cur ? cur.muted_until : null, NOW(), fd]);
   await runQuery("DELETE FROM mention_words WHERE user_id = ?", [userId]);
   for (const w of list) await runQuery("INSERT OR IGNORE INTO mention_words (user_id, phrase, room_id) VALUES (?, ?, ?)", [userId, w.phrase, w.room]);
   invalidate();
@@ -330,7 +335,8 @@ function register(app, { addUser }) {
     try {
       const b = req.body || {};
       const known = new Set((await rooms(req.user)).map((r) => r.id));
-      res.json({ ok: true, ...(await save(req.user.userId, { enabled: !!b.enabled, names: b.names !== false, words: b.words, quiet: b.quiet || null }, known)) });
+      res.json({ ok: true, ...(await save(req.user.userId, { enabled: !!b.enabled, names: b.names !== false, words: b.words, quiet: b.quiet || null,
+                                                             feed: b.feed === undefined ? undefined : b.feed !== false }, known)) });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/mentions/mute", addUser, guard(true), async (req, res) => {
@@ -338,5 +344,18 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { init, register, get, save, mute, onLines, matchLine, noticeFor, matcher, inQuiet, minuteOfDay, ownNames, index, invalidate,
+/**
+ * 1.99kk: may a feed @mention notify this account now? (feedmentions.js) The same preferences as room alerts: the
+ * "@mentions in posts and comments" switch (default on), the mute and the quiet hours (skipped, never queued).
+ */
+async function feedAllowed(userId, t = NOW()) {
+  const r = await prefsRow(String(userId || ""));
+  if (!r) return true;
+  if (r.feed === 0) return false;
+  if (r.muted_until && r.muted_until > t) return false;
+  if (r.quiet_from != null && r.quiet_to != null && inQuiet(t, r.quiet_from, r.quiet_to, r.tz)) return false;
+  return true;
+}
+
+module.exports = { init, register, get, save, mute, feedAllowed, onLines, matchLine, noticeFor, matcher, inQuiet, minuteOfDay, ownNames, index, invalidate,
                    WORDS_MAX, ROOM_GAP_MS, HOUR_MAX, _setClock, _idle, _sent: sent, Refuse };

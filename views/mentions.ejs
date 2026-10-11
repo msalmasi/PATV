@@ -40,6 +40,13 @@
       <p class="mut" id="mnNoLink" hidden><%- t('settings.mentions.nolink') %></p>
     </section>
 
+    <%# 1.99kk: @mentions in feed posts and comments (feedmentions.js) - on by default, same mute / quiet hours %>
+    <section class="card" aria-labelledby="mnFH">
+      <h2 id="mnFH"><%- t('settings.mentions.feed_h') %></h2>
+      <label class="ck"><input type="checkbox" id="mnFeed"> <span><%- t('settings.mentions.feed') %></span></label>
+      <p class="mut"><%- t('settings.mentions.feed_note') %></p>
+    </section>
+
     <section class="card" aria-labelledby="mnWH">
       <h2 id="mnWH"><%- t('settings.mentions.words_h') %></h2>
       <p class="mut"><%- t('settings.mentions.words_note', { q: '"', max: '<span id="mnMax"></span>' }) %></p>
@@ -106,6 +113,7 @@
   function paint(d) {
     $('mnOn').checked = !!d.prefs.enabled;
     $('mnNames').checked = d.prefs.names !== false;
+    $('mnFeed').checked = d.prefs.feed !== false;
     var nl = $('mnNameList'); nl.textContent = '';
     (d.names || []).forEach(function (n) { nl.appendChild(el('span', 'chip', n)); });
     $('mnNoLink').hidden = !!d.linked;
@@ -133,7 +141,7 @@
     var quiet = { from: null, to: null, tz: tz };
     if ($('mnQuiet').checked) { quiet.from = mins($('mnFrom').value); quiet.to = mins($('mnTo').value); }
     say(_t('js.settings.mentions.saving', 'Saving…'));
-    api('/api/mentions', { enabled: $('mnOn').checked, names: $('mnNames').checked, words: words, quiet: quiet })
+    api('/api/mentions', { enabled: $('mnOn').checked, names: $('mnNames').checked, feed: $('mnFeed').checked, words: words, quiet: quiet })
       .then(function (d) { paint(d); say(_t('js.settings.mentions.saved', 'Saved.'), 'ok'); })
       .catch(function (x) { say(x.message, 'bad'); });
   });

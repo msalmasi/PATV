@@ -1,0 +1,63 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# views/partials/banner.ejs — the homepage banner slot (1.99kk, banner.js pick()). Locals: bn = {ad, paid, kind, promo, headline,
+    line, image, alt, href, external, domain, by, vars, bookable}. A paid banner says "Sponsored" (+ who bought it); a house promo
+    says "From PATV". Member text is always escaped; a house promo without its own text uses the translated built-in text.
+    Impressions: a beacon once the banner is at least half on screen for a second (aggregate counts only, banner.js). %>
+<%
+  const B_ = bn;
+  const builtIn_ = (part) => (B_.promo && B_.promo !== 'custom' ? t('banner.promo.' + B_.promo + '.' + part, B_.vars || {}) : '');
+  const lab_ = B_.paid ? t('banner.sponsored') : t('banner.from_patv');
+%>
+<style>
+  .bn { position: relative; display: block; margin: 14px 0 0; border: 1px solid #262626; border-radius: 14px; background: linear-gradient(90deg, #121a14, #111 60%); overflow: hidden; min-width: 0; }
+  .bn.paid { background: #111; }
+  .bn-a { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 64px; padding: 12px 16px 12px 16px; color: #e8e8e8; text-decoration: none; min-width: 0; }
+  a.bn-a:hover .bn-h, a.bn-a:focus-visible .bn-h { text-decoration: underline; }
+  .bn-h { font: bold 16px/1.35 Ubuntu, sans-serif; color: #fff; overflow-wrap: anywhere; padding-right: 92px; }
+  .bn-l { font-size: 14px; color: #b9b9b9; overflow-wrap: anywhere; }
+  .bn.img .bn-a { padding: 0; min-height: 0; }
+  .bn.img img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; }
+  .bn-lbl { position: absolute; top: 8px; right: 10px; z-index: 1; padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.65); border: 1px solid #3a3a3a; color: #bdbdbd; font: 11px/1.6 Ubuntu, sans-serif; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
+  .bn-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; padding: 4px 16px 8px; font-size: 12px; color: #8a8a8a; }
+  .bn.img .bn-foot { padding-top: 6px; }
+  .bn-foot a { color: #9a9a9a; }
+  @media (max-width: 560px) { .bn-h { font-size: 15px; padding-right: 0; padding-top: 14px; } .bn-a { padding: 10px 12px; } .bn-foot { padding: 4px 12px 8px; } }
+</style>
+<aside class="bn<%= B_.paid ? ' paid' : '' %><%= B_.kind === 'image' ? ' img' : '' %>" data-bn="<%= B_.ad %>" aria-label="<%- lab_ %>">
+  <span class="bn-lbl"><%- lab_ %></span>
+  <% if (B_.href) { %><a class="bn-a" href="<%= B_.href %>"<% if (B_.external) { %> target="_blank" rel="<%= B_.paid ? 'sponsored ' : '' %>noopener noreferrer"<% } else if (B_.paid) { %> rel="sponsored"<% } %>><% } else { %><div class="bn-a"><% } %>
+    <% if (B_.kind === 'image' && B_.image) { %>
+      <img src="<%= B_.image %>" alt="<%= B_.alt || '' %>" width="1200" height="200" loading="lazy" decoding="async">
+    <% } else { %>
+      <span class="bn-h"><% if (B_.headline) { %><%= B_.headline %><% } else { %><%- builtIn_('h') %><% } %></span>
+      <% if (B_.line || (!B_.headline && B_.promo && B_.promo !== 'custom')) { %><span class="bn-l"><% if (B_.line) { %><%= B_.line %><% } else { %><%- builtIn_('l') %><% } %></span><% } %>
+    <% } %>
+  <% if (B_.href) { %></a><% } else { %></div><% } %>
+  <% if (B_.paid || B_.bookable) { %>
+    <div class="bn-foot">
+      <span><% if (B_.paid && B_.by) { %><%- t('banner.by', { name: '@' + B_.by }) %><% } %><% if (B_.paid && B_.domain) { %> · <%= B_.domain %><% } %></span>
+      <% if (B_.bookable) { %><a href="/sponsor"><%- t('banner.your_ad') %></a><% } %>
+    </div>
+  <% } %>
+</aside>
+<script>
+(function () {
+  'use strict';
+  var el = document.querySelector('aside.bn[data-bn]');
+  if (!el || !('IntersectionObserver' in window)) return;
+  var sent = false, timer = null;
+  var io = new IntersectionObserver(function (es) {
+    es.forEach(function (e) {
+      if (sent) return;
+      if (e.isIntersecting && e.intersectionRatio >= 0.5) {
+        timer = timer || setTimeout(function () {
+          sent = true; io.disconnect();
+          fetch('/api/banner/seen', { method: 'POST', credentials: 'same-origin', keepalive: true,
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ ad: el.getAttribute('data-bn') }) }).catch(function () {});
+        }, 1000);
+      } else if (timer) { clearTimeout(timer); timer = null; }
+    });
+  }, { threshold: [0, 0.5, 1] });
+  io.observe(el);
+})();
+</script>
