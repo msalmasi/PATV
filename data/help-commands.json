@@ -1511,11 +1511,15 @@
    ],
    "aliases": [],
    "syntax": [
-    "!duel [user] [amount]"
+    "!duel [user] [amount]",
+    "!duel cancel [X12]"
    ],
    "summary": "Challenge someone to a dice duel for PAT.",
-   "details": "Challenge someone to a dice duel for PAT. Min 100, max 50,000.",
-   "examples": [],
+   "details": "Challenge someone to a dice duel for PAT — `!duel @bob 5000`. Your stake is held in escrow straight away and the challenge gets an id (like `X12`). They have **2 minutes** to `!accept` or `!decline`; if they don't answer it expires and your stake comes back. Changed your mind? `!duel cancel` (or `!withdraw`) takes it back any time before they accept. You can challenge several people at once (up to 3); challenging the same person again replaces your old challenge. The target has to have a PAT account and be in the room.",
+   "examples": [
+    "!duel @bob 5000",
+    "!duel cancel"
+   ],
    "keywords": [],
    "gates": [
     "game_duel_enabled"
@@ -1571,11 +1575,14 @@
    ],
    "aliases": [],
    "syntax": [
-    "!brawl [user] [amount]"
+    "!brawl [user] [amount]",
+    "!brawl cancel [X12]"
    ],
    "summary": "Challenge one player to a 1v1 sheet-based brawl for PAT — a best-of-5 of opposed stat clashes (rotating combat style each round).",
-   "details": "Challenge one player to a 1v1 sheet-based brawl for PAT — a best-of-5 of opposed stat clashes (rotating combat style each round). Winner takes the pot minus a small jackpot cut. They `!accept` or `!decline`.",
-   "examples": [],
+   "details": "Challenge one player to a 1v1 sheet-based brawl for PAT — a best-of-5 of opposed stat clashes (rotating combat style each round). Winner takes the pot minus a small jackpot cut. Your stake is held in escrow straight away; they have **2 minutes** to `!accept` or `!decline`, or it expires and your stake comes back. `!brawl cancel` (or `!withdraw`) takes it back before they accept.",
+   "examples": [
+    "!brawl cancel"
+   ],
    "keywords": [],
    "gates": [
     "game_brawl_enabled"
@@ -2982,14 +2989,50 @@
    ],
    "aliases": [],
    "syntax": [
-    "!accept",
-    "!decline"
+    "!accept [id]",
+    "!decline [id]"
    ],
-   "summary": "Accept or decline a pending duel or brawl challenge (60s to respond).",
-   "details": "Accept or decline a pending duel or brawl challenge (60s to respond).",
-   "examples": [],
+   "summary": "Accept or decline anything waiting on you: a duel or brawl (2 minutes to answer), a wager or loan offer, a mic head-to-head.",
+   "details": "Accept or decline anything waiting on you: a duel or brawl (`X12`, 2 minutes to answer), a wager (`W12`) or loan (`L5`) offer (10 minutes), or a mic head-to-head (`AC3`). With one thing waiting, plain `!accept` takes it; with more than one Pepe lists them and you add the id. Accepting a duel or brawl takes your matching stake into escrow and the fight starts.",
+   "examples": [
+    "!accept",
+    "!accept X12",
+    "!decline W4"
+   ],
    "keywords": [],
    "webchat": true
+  },
+  {
+   "id": "withdraw",
+   "title": "!withdraw / !cancel / !pending",
+   "category": "games",
+   "role": "everyone",
+   "commands": [
+    "!withdraw",
+    "!cancel",
+    "!pending"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!withdraw [X12]",
+    "!cancel [X12|@user|W12|L5|AC3]",
+    "!pending"
+   ],
+   "summary": "Take back a duel or brawl challenge nobody has accepted yet (full refund), or see what's waiting in the room.",
+   "details": "`!withdraw` takes back your pending duel or brawl challenges before they're accepted — your stake comes straight back (add the id, like `X12`, to pick one). `!cancel` does the same, and also cancels your wager (`W12`) or loan (`L5`) offer or a mic challenge (`AC3`). **Mods** (Pepe admins, staff and the room's owner) can `!cancel X12` or `!cancel @user` to end anyone's pending duel or brawl in the room, refunded. Nothing hangs: an unanswered challenge expires by itself after 2 minutes (admins can change that in the panel) and is refunded, and a pending challenge never stops anyone else from duelling. `!pending` lists the room's open duels and brawls with the time left.",
+   "examples": [
+    "!withdraw",
+    "!cancel X12",
+    "!cancel @bob",
+    "!pending"
+   ],
+   "keywords": [
+    "cancel duel",
+    "withdraw challenge",
+    "refund",
+    "expire",
+    "stuck duel"
+   ]
   },
   {
    "id": "gang",
@@ -3737,10 +3780,11 @@
     "!clipmic 3"
    ],
    "summary": "Post the audio of a recent mic-up to the room's pad, with its transcript - the room's !clip price.",
-   "details": "Pepe keeps the last few **mic-ups** of the room he's listening to (the last 30 per room, up to **15 minutes**). `!clipmic` posts the **last** one to the room's pad as an audio post, with its transcript as the caption; `!clipmic @user` posts that person's last mic-up; `!clipmic 3` merges the last 3 (up to 5). It follows the room's `!clip` switch (admins can still use it while it's off) and costs the room's `!clip` price (admins free) - refunded if posting fails.\n\nNever anyone who is `!incognito` or typed `!bridge hide`: Pepe doesn't keep their audio at all. Anyone heard in a posted clip can tap **Remove me** on it on the website. Admins: `!clipmic status`.",
+   "details": "Pepe keeps the last few **mic-ups** of the room he's listening to (the last 30 per room, up to **15 minutes**). `!clipmic` posts the **last** one to the room's pad as an audio post, with its transcript as the caption; `!clipmic @user` posts that person's last mic-up; `!clipmic 3` merges the last 3 (up to 5). It follows the room's `!clip` switch (admins can still use it while it's off) and costs the room's `!clip` price (admins free) - refunded if posting fails.\n\nNever anyone who is `!incognito` or typed `!bridge hide`: Pepe doesn't keep their audio at all. Anyone heard in a posted clip can tap **Remove me** on it on the website.\n\n**Pepe's own mic-ups** count too: when he speaks on the mic (TTS replies, `!say`, DJ drops, spoken announcements) `!clipmic @pepe` clips his last line, and the website's 🔊 Clip works on his 🎙 lines. Only his TTS voice is kept - never music (Spotify), sound effects or jingles. Admins: `!clipmic status`, `!clipmic pepe on|off`.",
    "examples": [
     "!clipmic",
     "!clipmic @moxier",
+    "!clipmic @pepe",
     "!clipmic 3"
    ],
    "keywords": [
@@ -6593,5 +6637,5 @@
   }
  ],
  "undocumented": [],
- "hash": "5dee55b1f647124e"
+ "hash": "5b2fc517eb30ea7a"
 }
