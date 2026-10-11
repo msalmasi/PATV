@@ -5625,5 +5625,8 @@
   "shop.sd.notify.pm": "Pepe nhắn riêng cho tôi trên Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe nhắn riêng cho tôi trên Camfrog (liên kết Camfrog trong hồ sơ của bạn)",
   "shop.orders.from_link": "từ {!name}",
-  "shop.storefront.picks": "Nổi bật"
+  "shop.storefront.picks": "Nổi bật",
+  "shop.storefront.empty_h": "Hiện chưa có gì để bán",
+  "shop.storefront.empty_p": "Cửa hàng này chưa có mặt hàng nào lúc này. Quay lại sau nhé, hoặc xem thêm phần còn lại của cửa hàng.",
+  "shop.storefront.empty_cta": "Xem toàn bộ cửa hàng"
 }

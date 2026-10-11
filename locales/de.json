@@ -5705,5 +5705,8 @@
   "shop.sd.notify.pm": "Pepe schreibt mir per PM in Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe schreibt mir per PM in Camfrog (verknüpfe Camfrog in deinem Profil)",
   "shop.orders.from_link": "von {!name}",
-  "shop.storefront.picks": "Empfohlen"
+  "shop.storefront.picks": "Empfohlen",
+  "shop.storefront.empty_h": "Momentan nichts zum Verkauf",
+  "shop.storefront.empty_p": "Dieser Shop hat gerade keine Angebote. Schau später noch mal vorbei oder stöbere im restlichen Shop.",
+  "shop.storefront.empty_cta": "Ganzen Shop durchstöbern"
 }

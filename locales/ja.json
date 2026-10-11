@@ -5625,5 +5625,8 @@
   "shop.sd.notify.pm": "Pepe から Camfrog で PM を受け取る ({name})",
   "shop.sd.notify.pm_none": "Pepe から Camfrog で PM を受け取る（プロフィールで Camfrog を連携）",
   "shop.orders.from_link": "{!name} から",
-  "shop.storefront.picks": "おすすめ"
+  "shop.storefront.picks": "おすすめ",
+  "shop.storefront.empty_h": "現在販売中のものはありません",
+  "shop.storefront.empty_p": "このショップには現在出品がありません。後でまたご確認いただくか、ショップのほかの商品をご覧ください。",
+  "shop.storefront.empty_cta": "ショップ全体を見る"
 }

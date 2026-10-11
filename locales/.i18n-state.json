@@ -5462,7 +5462,10 @@
     "shop.sd.notify.pm": "62f96e89cc08",
     "shop.sd.notify.pm_none": "0274685312b5",
     "shop.orders.from_link": "53132d08e52d",
-    "shop.storefront.picks": "78ef7a85cc33"
+    "shop.storefront.picks": "78ef7a85cc33",
+    "shop.storefront.empty_h": "742e6fcb5a50",
+    "shop.storefront.empty_p": "ba105a2a7da2",
+    "shop.storefront.empty_cta": "19053173ec49"
   },
   "lag": {},
   "reviewed": {}

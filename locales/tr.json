@@ -5705,5 +5705,8 @@
   "shop.sd.notify.pm": "Pepe bana Camfrog'dan özel mesaj atsın ({name})",
   "shop.sd.notify.pm_none": "Pepe bana Camfrog'dan özel mesaj atsın (profilinde Camfrog'u bağla)",
   "shop.orders.from_link": "{!name} tarafından",
-  "shop.storefront.picks": "Öne çıkanlar"
+  "shop.storefront.picks": "Öne çıkanlar",
+  "shop.storefront.empty_h": "Şu an satışta hiçbir şey yok",
+  "shop.storefront.empty_p": "Bu mağazada şu an hiç ilan yok. Daha sonra tekrar bak ya da mağazanın geri kalanına göz at.",
+  "shop.storefront.empty_cta": "Tüm mağazaya göz at"
 }

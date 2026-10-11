@@ -5627,5 +5627,8 @@
   "shop.sd.notify.pm": "Pepe kirim PM ke aku di Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe kirim PM ke aku di Camfrog (tautkan Camfrog di profilmu)",
   "shop.orders.from_link": "dari {!name}",
-  "shop.storefront.picks": "Unggulan"
+  "shop.storefront.picks": "Unggulan",
+  "shop.storefront.empty_h": "Belum ada yang dijual sekarang",
+  "shop.storefront.empty_p": "Toko ini belum punya daftar jualan saat ini. Coba cek lagi nanti, atau jelajahi bagian lain dari toko.",
+  "shop.storefront.empty_cta": "Jelajahi seluruh toko"
 }

@@ -5705,5 +5705,8 @@
   "shop.sd.notify.pm": "Pepe Camfrog में मुझे PM करता है ({name})",
   "shop.sd.notify.pm_none": "Pepe Camfrog में मुझे PM करता है (अपनी प्रोफ़ाइल में Camfrog लिंक करें)",
   "shop.orders.from_link": "{!name} से",
-  "shop.storefront.picks": "फ़ीचर्ड"
+  "shop.storefront.picks": "फ़ीचर्ड",
+  "shop.storefront.empty_h": "अभी बिक्री के लिए कुछ नहीं है",
+  "shop.storefront.empty_p": "इस दुकान में अभी कोई लिस्टिंग नहीं है। बाद में फिर देखें, या दुकान के बाकी हिस्से पर नज़र डालें।",
+  "shop.storefront.empty_cta": "पूरी दुकान ब्राउज़ करें"
 }

@@ -5625,5 +5625,8 @@
   "shop.sd.notify.pm": "Pepe가 Camfrog에서 저에게 PM을 보내요 ({name})",
   "shop.sd.notify.pm_none": "Pepe가 Camfrog에서 저에게 PM을 보내요 (프로필에서 Camfrog를 연결해 주세요)",
   "shop.orders.from_link": "{!name}님에게서",
-  "shop.storefront.picks": "추천"
+  "shop.storefront.picks": "추천",
+  "shop.storefront.empty_h": "지금 판매 중인 상품이 없어요",
+  "shop.storefront.empty_p": "이 상점에는 지금 등록된 상품이 없어요. 나중에 다시 확인하시거나 상점의 다른 곳을 둘러봐 주세요.",
+  "shop.storefront.empty_cta": "상점 전체 둘러보기"
 }

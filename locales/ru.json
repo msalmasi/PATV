@@ -5865,5 +5865,8 @@
   "shop.sd.notify.pm": "Pepe присылает мне ЛС в Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe присылает мне ЛС в Camfrog (привяжи Camfrog в профиле)",
   "shop.orders.from_link": "от {!name}",
-  "shop.storefront.picks": "Рекомендуем"
+  "shop.storefront.picks": "Рекомендуем",
+  "shop.storefront.empty_h": "Сейчас ничего нет в продаже",
+  "shop.storefront.empty_p": "В этом магазине сейчас нет товаров. Загляни позже или посмотри остальной магазин.",
+  "shop.storefront.empty_cta": "Посмотреть весь магазин"
 }

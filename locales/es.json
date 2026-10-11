@@ -5740,5 +5740,8 @@
   "shop.sd.notify.pm": "Pepe me envía un mensaje privado en Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe me envía mensajes privados en Camfrog (vincula Camfrog en tu perfil)",
   "shop.orders.from_link": "de {!name}",
-  "shop.storefront.picks": "Destacados"
+  "shop.storefront.picks": "Destacados",
+  "shop.storefront.empty_h": "No hay nada en venta ahora mismo",
+  "shop.storefront.empty_p": "Esta tienda no tiene artículos en este momento. Vuelve más tarde o echa un vistazo al resto de la tienda.",
+  "shop.storefront.empty_cta": "Explora toda la tienda"
 }

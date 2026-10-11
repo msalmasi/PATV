@@ -5625,5 +5625,8 @@
   "shop.sd.notify.pm": "Pepe 在 Camfrog 私訊我（{name}）",
   "shop.sd.notify.pm_none": "Pepe 在 Camfrog 私訊我（請先在個人檔案連結 Camfrog）",
   "shop.orders.from_link": "來自 {!name}",
-  "shop.storefront.picks": "精選"
+  "shop.storefront.picks": "精選",
+  "shop.storefront.empty_h": "目前沒有商品在販售",
+  "shop.storefront.empty_p": "這間商店目前沒有任何商品。請稍後再回來看看，或逛逛商店的其他區域。",
+  "shop.storefront.empty_cta": "逛逛整個商店"
 }

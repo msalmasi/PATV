@@ -5626,5 +5626,8 @@
   "shop.sd.notify.pm": "Pepe ส่งข้อความส่วนตัวถึงฉันใน Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe ส่งข้อความส่วนตัวถึงฉันใน Camfrog (เชื่อม Camfrog ในโปรไฟล์ของคุณ)",
   "shop.orders.from_link": "จาก {!name}",
-  "shop.storefront.picks": "แนะนำ"
+  "shop.storefront.picks": "แนะนำ",
+  "shop.storefront.empty_h": "ขณะนี้ไม่มีสินค้าวางขาย",
+  "shop.storefront.empty_p": "ร้านนี้ยังไม่มีรายการสินค้าในขณะนี้ ลองกลับมาดูใหม่ภายหลัง หรือดูสินค้าอื่นๆ ในร้านค้า",
+  "shop.storefront.empty_cta": "ดูร้านค้าทั้งหมด"
 }

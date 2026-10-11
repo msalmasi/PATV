@@ -5701,5 +5701,8 @@
   "shop.sd.notify.pm": "Pepe توی Camfrog برام پیام خصوصی می‌فرسته ({name})",
   "shop.sd.notify.pm_none": "Pepe توی Camfrog برام پیام خصوصی می‌فرسته (Camfrog رو توی پروفایلت وصل کن)",
   "shop.orders.from_link": "از {!name}",
-  "shop.storefront.picks": "منتخب"
+  "shop.storefront.picks": "منتخب",
+  "shop.storefront.empty_h": "فعلاً چیزی برای فروش نیست",
+  "shop.storefront.empty_p": "این فروشگاه در حال حاضر آگهی‌ای ندارد. بعداً سر بزن، یا بقیه‌ی فروشگاه را بگرد.",
+  "shop.storefront.empty_cta": "کل فروشگاه را بگرد"
 }

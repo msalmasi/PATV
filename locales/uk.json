@@ -5865,5 +5865,8 @@
   "shop.sd.notify.pm": "Pepe пише мені в Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe пише мені в Camfrog (прив’яжи Camfrog у своєму профілі)",
   "shop.orders.from_link": "від {!name}",
-  "shop.storefront.picks": "Рекомендоване"
+  "shop.storefront.picks": "Рекомендоване",
+  "shop.storefront.empty_h": "Зараз на продажу нічого немає",
+  "shop.storefront.empty_p": "У цьому магазині зараз немає товарів. Завітай пізніше або подивися решту магазину.",
+  "shop.storefront.empty_cta": "Переглянути весь магазин"
 }

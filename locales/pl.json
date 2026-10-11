@@ -5865,5 +5865,8 @@
   "shop.sd.notify.pm": "Pepe pisze do mnie na PW w Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe pisze do mnie na PW w Camfrog (połącz Camfrog w swoim profilu)",
   "shop.orders.from_link": "od {!name}",
-  "shop.storefront.picks": "Polecane"
+  "shop.storefront.picks": "Polecane",
+  "shop.storefront.empty_h": "Nic teraz nie jest na sprzedaż",
+  "shop.storefront.empty_p": "Ten sklep nie ma obecnie żadnych ofert. Zajrzyj tu później albo rozejrzyj się po reszcie sklepu.",
+  "shop.storefront.empty_cta": "Przeglądaj cały sklep"
 }

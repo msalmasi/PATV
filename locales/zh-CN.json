@@ -5625,5 +5625,8 @@
   "shop.sd.notify.pm": "Pepe 在 Camfrog 上私信我（{name}）",
   "shop.sd.notify.pm_none": "Pepe 在 Camfrog 上私信我（请在个人资料中绑定 Camfrog）",
   "shop.orders.from_link": "来自 {!name}",
-  "shop.storefront.picks": "精选"
+  "shop.storefront.picks": "精选",
+  "shop.storefront.empty_h": "现在没有在售商品",
+  "shop.storefront.empty_p": "这家商店暂时没有上架商品。稍后再来看看，或者逛逛商店的其他部分。",
+  "shop.storefront.empty_cta": "逛逛整个商店"
 }

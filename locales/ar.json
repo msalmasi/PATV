@@ -6025,5 +6025,8 @@
   "shop.sd.notify.pm": "يرسل لي Pepe رسائل خاصة في Camfrog ({name})",
   "shop.sd.notify.pm_none": "يرسل لي Pepe رسائل خاصة في Camfrog (اربط Camfrog في ملفك الشخصي)",
   "shop.orders.from_link": "من {!name}",
-  "shop.storefront.picks": "مميّز"
+  "shop.storefront.picks": "مميّز",
+  "shop.storefront.empty_h": "لا يوجد شيء معروض للبيع الآن",
+  "shop.storefront.empty_p": "هذا المتجر لا يحتوي على أي عناصر حاليًا. عُد لاحقًا، أو تصفح باقي المتجر.",
+  "shop.storefront.empty_cta": "تصفح المتجر بالكامل"
 }

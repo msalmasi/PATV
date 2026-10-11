@@ -5740,5 +5740,8 @@
   "shop.sd.notify.pm": "Pepe m'envoie un MP sur Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe m'envoie un MP sur Camfrog (lie Camfrog dans ton profil)",
   "shop.orders.from_link": "de {!name}",
-  "shop.storefront.picks": "À la une"
+  "shop.storefront.picks": "À la une",
+  "shop.storefront.empty_h": "Rien en vente pour le moment",
+  "shop.storefront.empty_p": "Cette boutique n’a aucune annonce pour l’instant. Reviens plus tard, ou jette un œil au reste de la boutique.",
+  "shop.storefront.empty_cta": "Parcourir toute la boutique"
 }

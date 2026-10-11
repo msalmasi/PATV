@@ -5705,5 +5705,8 @@
   "shop.sd.notify.pm": "Pepe Camfrog پر مجھے PM کرتا ہے ({name})",
   "shop.sd.notify.pm_none": "Pepe Camfrog پر مجھے PM کرتا ہے (اپنی پروفائل میں Camfrog لنک کریں)",
   "shop.orders.from_link": "{!name} سے",
-  "shop.storefront.picks": "نمایاں"
+  "shop.storefront.picks": "نمایاں",
+  "shop.storefront.empty_h": "اس وقت فروخت کے لیے کچھ نہیں ہے",
+  "shop.storefront.empty_p": "اس دکان پر فی الحال کوئی لسٹنگ نہیں ہے۔ بعد میں دوبارہ دیکھیں، یا دکان کے باقی حصے دیکھ لیں۔",
+  "shop.storefront.empty_cta": "پوری دکان دیکھیں"
 }

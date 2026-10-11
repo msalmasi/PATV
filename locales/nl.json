@@ -5705,5 +5705,8 @@
   "shop.sd.notify.pm": "Pepe stuurt me een pm'tje in Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe stuurt me een pm'tje in Camfrog (koppel Camfrog in je profiel)",
   "shop.orders.from_link": "van {!name}",
-  "shop.storefront.picks": "Uitgelicht"
+  "shop.storefront.picks": "Uitgelicht",
+  "shop.storefront.empty_h": "Momenteel niets te koop",
+  "shop.storefront.empty_p": "Deze shop heeft op dit moment geen aanbod. Kijk later nog eens, of bekijk de rest van de winkel.",
+  "shop.storefront.empty_cta": "Bekijk de hele winkel"
 }

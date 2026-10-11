@@ -5740,5 +5740,8 @@
   "shop.sd.notify.pm": "Pepe me manda MP no Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe me manda MP no Camfrog (vincule o Camfrog no seu perfil)",
   "shop.orders.from_link": "de {!name}",
-  "shop.storefront.picks": "Em destaque"
+  "shop.storefront.picks": "Em destaque",
+  "shop.storefront.empty_h": "Nada à venda no momento",
+  "shop.storefront.empty_p": "Esta loja não tem anúncios no momento. Volte mais tarde ou dê uma olhada no resto da loja.",
+  "shop.storefront.empty_cta": "Ver a loja inteira"
 }
