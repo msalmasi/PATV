@@ -54,6 +54,7 @@ async function savePoll(p) {
   await runQuery(`INSERT INTO polls (id, data, status, created, updated) VALUES (?, ?, ?, ?, ?)
                   ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status, created = excluded.created, updated = excluded.updated`,
                  [p.id, JSON.stringify(p), p.status, p.created_at, Date.now()]);
+  require("./achsocial").pokePoll(p);                        // 1.99oy: 🗳️ poll achievements (voters, a poll's creator)
 }
 async function activePoll() {
   const r = (await getQuery("SELECT data FROM polls WHERE status = 'active' ORDER BY updated DESC LIMIT 1"))[0];
@@ -247,6 +248,7 @@ function register(app, { isBotToken, addUser }) {
                         ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
                         created = excluded.created, updated = excluded.updated`,
           [p.id, JSON.stringify(p), p.status, p.created_at, Date.now()]);
+        require("./achsocial").pokePoll(p);                  // 1.99oy: 🗳️ poll achievements (a local Pepe's snapshot)
         stored++;
       }
       // Pepe runs one poll at a time: anything still "active" that he didn't just send as active has ended

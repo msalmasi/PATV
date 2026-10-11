@@ -161,7 +161,7 @@ test("1.99mw: Pepe's count so far is a base - thresholds use base + the site's c
   await act(ann, "deal", [], { table: r.table });
   if (svc.getTable(r.table).eng.phase === "player") await act(ann, "stand", [], { table: r.table });
   assert.equal(await count("u1", "bj_hands"), 1);
-  assert.deepEqual(await badges("u1"), ["cf_bj_100"], "99 (Pepe) + 1 (site) = 100 hands");
+  assert.deepEqual(await badges("u1"), ["cf_bj_10", "cf_bj_100"], "99 (Pepe) + 1 (site) = 100 hands (1.99oy: the 10-hand one too)");
   NOW += 2 * 3600 * 1000;
   assert.deepEqual(await rewards.wantBases(tables()), ["AnnCF"], "a stale base is asked for again");
   NOW -= 2 * 3600 * 1000;
@@ -199,7 +199,7 @@ test("a small natural doesn't drop; Card Counter at 100 hands; a settlement re-r
   await svc.boot({ tick: false });                       // recovery re-runs the settlement
   assert.equal(await count("u2", "bj_hands"), 100);
   assert.equal(await count("u2", "bj_naturals"), 1);
-  assert.deepEqual(await badges("u2"), ["cf_bj_100", "cf_bj_natural"]);
+  assert.deepEqual(await badges("u2"), ["cf_bj_10", "cf_bj_100", "cf_bj_natural"]);
   assert.equal(await drops("u2", "blackjack"), 0, "1,000 is under the 2,500 minimum");
   assert.ok(svc.getTable(T.id));
 });

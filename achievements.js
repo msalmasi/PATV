@@ -116,6 +116,12 @@ async function webMetrics(userId) {
   const ppIds = catalog.filter((a) => a.side === "web" && PP.METRICS.includes(a.metric)).map((a) => a.id);
   const ppHeld = ppIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${ppIds.map(() => "?").join(",")})`, [userId, ...ppIds]) : 0;
   const pp = ppIds.length && ppHeld < ppIds.length ? await PP.metrics(userId).catch(() => ({})) : {};
+  // 1.99oy: 💬 feed / follows / polls / tips / boosts / banners / 🎨 cosmetics (achsocial.js) - same rule as the feature ones
+  const SO = require("./achsocial");
+  const soBackfilled = await SO.backfill().then(() => true, () => false);
+  const soIds = catalog.filter((a) => a.side === "web" && SO.METRICS.includes(a.metric)).map((a) => a.id);
+  const soHeld = soIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${soIds.map(() => "?").join(",")})`, [userId, ...soIds]) : 0;
+  const so = soBackfilled && soHeld < soIds.length ? await SO.metrics(userId).catch(() => ({})) : {};
   const spent = await one(`SELECT COALESCE(SUM(-points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WAGER}`, [userId]);
   const won = await one(`SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WIN}`, [userId]);
   return {
@@ -134,16 +140,29 @@ async function webMetrics(userId) {
     google_linked: googleBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM sso_links WHERE provider = 'google' AND user_id = ?", [userId])) : 0,
     ...Object.fromEntries(FEATURE_METRICS.map((k) => [k, feat[k] || 0])),
     ...Object.fromEntries(PP.METRICS.map((k) => [k, pp[k] || 0])),
+    ...Object.fromEntries(SO.METRICS.map((k) => [k, so[k] || 0])),
     _quiet: pp._quiet || {},
   };
 }
 
-const checking = new Set();
 // Award every website-side achievement this user now qualifies for, and queue it for Pepe to
-// announce. Safe to call often; re-entrant calls (XP -> level-up -> check) are folded in.
-async function checkWeb(userId) {
-  if (!userId || checking.has(userId)) return;
-  checking.add(userId);
+// announce. Safe to call often. 1.99oy: one check per user at a time; a call that arrives while one runs (a poke from another
+// hook, XP -> level-up -> check) makes it run ONCE more afterwards - the running one may have read the tables before the change
+// that call is about (it used to be dropped, so two hooks close together could miss an award).
+const checking = new Map();       // userId -> { p, rerun }
+function checkWeb(userId) {
+  if (!userId) return Promise.resolve();
+  const cur = checking.get(userId);
+  if (cur) {
+    if (!cur.rerun) cur.rerun = cur.p.then(() => checkWeb(userId));
+    return cur.rerun;
+  }
+  const entry = { p: null, rerun: null };
+  checking.set(userId, entry);
+  entry.p = runCheck(userId).finally(() => { if (checking.get(userId) === entry) checking.delete(userId); });
+  return entry.p;
+}
+async function runCheck(userId) {
   try {
     await ready; await feedReady;
     for (let pass = 0; pass < 3; pass++) {           // XP from one award can unlock a level one
@@ -164,8 +183,6 @@ async function checkWeb(userId) {
     }
   } catch (e) {
     console.error("[achievements] checkWeb:", e.message);
-  } finally {
-    checking.delete(userId);
   }
 }
 
@@ -216,7 +233,7 @@ const webBackfill = (async () => {
   // (the 📼 Plex, 📨 Telegram and 🍀 Google ones have their own quiet backfills, which also hand out their cosmetics)
   const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
   const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...FEATURE_METRICS,
-                                                         ...require("./plexpad").METRICS].includes(a.metric));
+                                                         ...require("./plexpad").METRICS, ...require("./achsocial").METRICS].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
   for (const u of users) {

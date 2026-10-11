@@ -26,7 +26,9 @@
 const { runQuery, getQuery } = require("../dbUtils");
 
 const XP_WIN_RATE = 0.005;                       // Pepe's XP_WIN_RATE (frida-bot.py _grant_xp)
-const METRICS = ["bj_hands", "bj_naturals", "holdem_pots"];
+// 1.99oy: + the new milestone counts Pepe also keeps for his own tables (holdem_hands, bj_double_wins, hm_busts) - one base each
+const METRICS = ["bj_hands", "bj_naturals", "holdem_pots", "holdem_hands", "bj_double_wins", "hm_busts"];
+const AH = require("./achhands");
 const BASE_FRESH_MS = 60 * 60 * 1000;            // ask Pepe again for a base older than this (old-engine hands keep counting there)
 
 let readyP = null;
@@ -62,11 +64,36 @@ async function baseOf(uid, metric) {
 }
 
 async function bump(key, uid, metric, n) {
+  await quietBackfill().catch(() => {});        // 1.99oy: new thresholds on old counts are given quietly first
   if (!(await once(key))) return null;
   await runQuery(`INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES (?, ?, ?, ?)
                   ON CONFLICT(userId, metric) DO UPDATE SET n = n + excluded.n, updated = excluded.updated`, [uid, metric, n, hooks.now()]);
   const row = (await getQuery("SELECT n FROM casino_ach_counts WHERE userId = ? AND metric = ?", [uid, metric]))[0];
   return require("../achievements").awardCount(uid, metric, (row ? row.n : 0) + (await baseOf(uid, metric)));
+}
+
+/** 1.99oy: a running count (a streak) - set, not added; awarded with its value (no Pepe base: his tables keep their own). */
+async function setRun(key, uid, metric, value, award) {
+  if (!(await once(key))) return null;
+  await runQuery(`INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(userId, metric) DO UPDATE SET n = excluded.n, updated = excluded.updated`, [uid, metric, value, hooks.now()]);
+  return award && value > 0 ? require("../achievements").awardCount(uid, award, value) : null;
+}
+async function runOf(uid, metric) {
+  const r = await getQuery("SELECT n FROM casino_ach_counts WHERE userId = ? AND metric = ?", [uid, metric]).catch(() => []);
+  return r[0] ? Number(r[0].n) || 0 : 0;
+}
+
+/** 1.99oy: the card-table achievements of one seat's blackjack round (achhands.blackjackSeat), each step keyed. */
+async function blackjackSeatAch(T, k, uid, r, dealer) {
+  const m = AH.blackjackSeat(r, !!T.high_stakes);
+  for (const [metric, n] of Object.entries(m)) if (metric[0] !== "_") await bump(`${k}:${metric}`, uid, metric, n);
+  // streaks: rounds won in a row (a push neither adds nor breaks), and the dealer busting every round you played
+  const run = m._result === "win" ? (await runOf(uid, "bj_streak_run")) + 1 : m._result === "loss" ? 0 : await runOf(uid, "bj_streak_run");
+  await setRun(`${k}:streak`, uid, "bj_streak_run", run, m._result === "win" ? "bj_streak" : null);
+  const busted = !!(dealer && dealer.bust);
+  const drun = busted ? (await runOf(uid, "bj_dbust_run")) + 1 : 0;
+  await setRun(`${k}:dbust`, uid, "bj_dbust_run", drun, busted ? "bj_dealer_busts" : null);
 }
 
 const cos = () => require("../cosmetics");
@@ -112,6 +139,7 @@ async function blackjackRound(T, n, results, maxBet) {
       const k = `cbj:${T.id}:r${n}:${uid}`;
       await bump(`${k}:hands`, uid, "bj_hands", (r.hands || []).length || 1);
       await winReward(T, k, uid, (Number(r.total_payout) || 0) - (Number(r.total_bet) || 0));
+      await blackjackSeatAch(T, k, uid, r, ((T.eng && T.eng.results) || {}).dealer);    // 1.99oy
       const nat = (r.hands || []).filter((h) => h.is_bj && h.outcome === "blackjack").map((h) => Number(h.bet) || 0);
       if (!nat.length) continue;
       await bump(`${k}:natural`, uid, "bj_naturals", 1);
@@ -170,10 +198,42 @@ async function holdemPot(T, hand, idx, uid, amount, against) {
   }
 }
 
-/** A finished hold'em hand: win XP + gang rep for each winner on chips won minus chips put in. won: {uid: chips}, contrib: {uid: chips} */
+/** A finished hold'em hand: win XP + gang rep for each winner on chips won minus chips put in. won: {uid: chips}, contrib: {uid: chips}
+ *  1.99oy: + a hand played (holdem_hands) for every seat that put chips in. */
 async function holdemHand(T, hand, won, contrib) {
   for (const [uid, amt] of Object.entries(won || {})) {
     await winReward(T, `chm:${T.id}:h${hand}:${uid}`, uid, (Number(amt) || 0) - (Number((contrib || {})[uid]) || 0));
+  }
+  try {
+    for (const [uid, put] of Object.entries(contrib || {})) if (Number(put) > 0) await bump(`chm:${T.id}:h${hand}:${uid}:hands`, uid, "holdem_hands", 1);
+  } catch (e) {
+    console.error("[casino] rewards (hold'em hands):", e.message);
+  }
+}
+
+/** 1.99oy: a hold'em showdown's hand achievements (achhands.holdemShowdown) for every seat at it, keyed per hand + seat + metric.
+ *  sd: holdem.js T.sd ({board, shown: [{cards}], cf: [{uid}]} in reveal order), awards: the engine's awards event. */
+async function holdemShowdown(T, hand, sd, awards) {
+  try {
+    if (!sd || !Array.isArray(sd.shown) || !Array.isArray(sd.cf)) return;
+    const reveals = sd.shown.map((s, i) => ({ who: (sd.cf[i] || {}).uid, cards: s.cards })).filter((r) => r.who && Array.isArray(r.cards));
+    const stacks = Object.assign({}, (T.eng && T.eng.chips) || {});
+    const res = AH.holdemShowdown({ reveals, board: sd.board || [], awards: (awards || []).map((a) => ({ who: a.who, amount: a.amount, pot: a.pot })),
+                                    stacks, highStakes: !!T.high_stakes });
+    // a knock-out of your own alt doesn't count
+    const busts = {};
+    for (const [w, l] of res._bustPairs || []) {
+      if (w === l || (await dupOf(w)) === l || (await dupOf(l)) === w) continue;
+      busts[w] = (busts[w] || 0) + 1;
+    }
+    for (const [uid, m] of Object.entries(res)) {
+      for (const [metric, n0] of Object.entries(m)) {
+        const n = metric === "hm_busts" ? (busts[uid] || 0) : n0;
+        if (n > 0) await bump(`chm:${T.id}:h${hand}:${uid}:${metric}`, uid, metric, n);
+      }
+    }
+  } catch (e) {
+    console.error("[casino] rewards (hold'em showdown):", e.message);
   }
 }
 
@@ -281,6 +341,39 @@ async function siteCount(key, uid, metric, n) {
   }
 }
 
+// 1.99oy: once, quietly give the new thresholds on the counts the site already has (cf_bj_10 / cf_bj_5000 / cf_bj_natural_10 /
+// cf_holdem_100 ...: site count + Pepe's base) - badge only, no XP / PAT / announcement - before any new hand can award them
+// loudly (bump() waits for it). Flag achievement_meta 'casino_ach_backfill_oq'.
+let quietP = null;
+function quietBackfill() {
+  if (!quietP) {
+    quietP = (async () => {
+      await ensure();
+      const A = require("../achievements");
+      await A.ready;
+      await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
+      if ((await getQuery("SELECT v FROM achievement_meta WHERE k = 'casino_ach_backfill_oq'")).length) return { done: true, already: true, given: 0 };
+      const ach = A.list().filter((a) => a.side !== "web" && ["bj_hands", "bj_naturals", "holdem_pots"].includes(a.metric));
+      const rows = await getQuery(`SELECT c.userId, c.metric, c.n + COALESCE(b.n, 0) AS v FROM casino_ach_counts c
+                                   LEFT JOIN casino_ach_base b ON b.userId = c.userId AND b.metric = c.metric
+                                   WHERE c.metric IN ('bj_hands', 'bj_naturals', 'holdem_pots')`);
+      const given = [];
+      for (const r of rows) {
+        for (const a of ach) {
+          if (a.metric !== r.metric || (Number(r.v) || 0) < (a.threshold || 1)) continue;
+          const x = await A.award({ userId: r.userId }, a.id, null, { silent: true });
+          if (x.ok && x.awarded) given.push({ userId: r.userId, badgeId: a.id });
+        }
+      }
+      await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('casino_ach_backfill_oq', ?)",
+                     [JSON.stringify({ at: new Date().toISOString(), given: given.length, users: new Set(given.map((g) => g.userId)).size })]);
+      if (given.length) console.log(`[casino] achievements quiet backfill: ${given.length} badge(s)`);
+      return { done: true, given: given.length, list: given };
+    })().catch((e) => { quietP = null; throw e; });
+  }
+  return quietP;
+}
+
 async function counts(uid) {
   await ensure();
   const out = {};
@@ -288,5 +381,5 @@ async function counts(uid) {
   return out;
 }
 
-module.exports = { blackjackRound, holdemPot, holdemHand, winReward, wantBases, setBases, repPending, repAck, counts, ensure, hooks, siteCount,
+module.exports = { blackjackRound, holdemPot, holdemHand, holdemShowdown, quietBackfill, winReward, wantBases, setBases, repPending, repAck, counts, ensure, hooks, siteCount,
                    XP_WIN_RATE, METRICS };

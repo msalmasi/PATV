@@ -258,6 +258,7 @@ async function boost(user, roomId, opts = {}) {
   });
   if (!out.dup) {
     telemetry(out.row, opts.login || out.username, via);
+    require("./achievements").poke(user.userId);              // 1.99oy: 🚀 boost achievements (achsocial.js)
     try { await rooms.event(R.id, "boost", out.username, `${amount} PAT (${via}); Fort Knox ${out.row.fortknox}, room vault ${out.row.room_vault}`); } catch (e) { /* audit only */ }
     // 1.99nk: 🚀 said in the pad's Camfrog room by Pepe (coalesced per room on his side). A chat !boost is announced by
     // Pepe from its own reply (padLink below), so only web boosts queue a relay job.
