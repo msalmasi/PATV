@@ -636,7 +636,8 @@ async function ownersForPepe() {
   await init();
   return listCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: !!r.slug_set, title: r.title, owner_kind: r.owner_kind,   // 1.99iy: slug_set = links use this slug
     owner: r.owner ? { username: r.owner.username, camfrog: r.owner.camfrog ? String(r.owner.camfrog).toLowerCase() : null } : null,
-    slot_count: r.slot_count }));
+    slot_count: r.slot_count,
+    description: String(r.description || "").slice(0, 300) }));   // 1.99ko: Pepe's room vibe learns from the pad's description
 }
 
 /** Notice to a user: the inbox always, and a Camfrog PM through Pepe when they allow it. */

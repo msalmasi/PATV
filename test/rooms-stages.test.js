@@ -116,6 +116,7 @@ test("seeds: Pepe's Pad is the house's, Houseplants is plantbaked's (matched by 
   const forPepe = await rooms.ownersForPepe();
   assert.equal(forPepe.find((r) => r.id === PLANT).owner.camfrog, "foamy1111");
   assert.equal(forPepe.find((r) => r.id === HOUSE).owner_kind, "house");
+  assert.equal(typeof forPepe.find((r) => r.id === HOUSE).description, "string", "1.99ko: the pad description rides along");
 });
 
 test("owner match (1.99bn): an automatic account whose Camfrog login is someone's display name is never picked", async () => {
