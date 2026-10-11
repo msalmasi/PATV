@@ -367,7 +367,7 @@ function quietBackfill() {
       }
       await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('casino_ach_backfill_oq', ?)",
                      [JSON.stringify({ at: new Date().toISOString(), given: given.length, users: new Set(given.map((g) => g.userId)).size })]);
-      if (given.length) console.log(`[casino] achievements quiet backfill: ${given.length} badge(s)`);
+      console.log(`[casino] achievements quiet backfill: ${given.length} badge(s) given quietly`);
       return { done: true, given: given.length, list: given };
     })().catch((e) => { quietP = null; throw e; });
   }

@@ -453,6 +453,13 @@ function featureBackfill() {
 if (!process.env.NODE_TEST_CONTEXT) {
   const kick = setTimeout(() => featureBackfill().catch((e) => console.error("[achievements] feature backfill:", e.message)), 90e3);
   if (kick.unref) kick.unref();
+  // 1.99ph: the 💬/🎨 social achievements' quiet backfill (achsocial.js is otherwise loaded lazily, at the first check) and the
+  // card tables' (casino/rewards.js, otherwise at the first counted hand)
+  const kick2 = setTimeout(() => {
+    require("./achsocial").backfill().catch((e) => console.error("[achievements] social backfill:", e.message));
+    require("./casino/rewards").quietBackfill().catch((e) => console.error("[casino] achievements quiet backfill:", e.message));
+  }, 100e3);
+  if (kick2.unref) kick2.unref();
 }
 
 /** Fire-and-forget checkWeb for the feature hooks (never blocks or fails the action that called it). */
