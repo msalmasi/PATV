@@ -121,7 +121,8 @@ function register(app, { addUser, isBotToken }) {
       // 1.99ja: the pending pad codes, for Pepe's room-topic check (padconnect.js)
       let padVerify = [];
       try { padVerify = await require("./padconnect").pendingForPepe(); } catch (e) { console.error("[rooms] pad verify:", e.message); }
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
+      // 1.99nr: prime_known - every room carries prime_time (Pepe's retention deletes nothing without this marker)
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

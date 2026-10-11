@@ -669,7 +669,8 @@ async function ownersForPepe() {
     owner: r.owner ? { username: r.owner.username, camfrog: r.owner.camfrog ? String(r.owner.camfrog).toLowerCase() : null } : null,
     slot_count: r.slot_count,
     description: String(r.description || "").slice(0, 300),   // 1.99ko: Pepe's room vibe learns from the pad's description
-    adult: !!r.adult }));                                     // 1.99kz: 18+ pad -> Pepe's room vibe "adult" (unless locked)
+    adult: !!r.adult,                                         // 1.99kz: 18+ pad -> Pepe's room vibe "adult" (unless locked)
+    prime_time: !!primeOf(r.id) }));                          // 1.99nr: 📺 Prime Time -> Pepe's chat-log / recording retention
 }
 
 /** Notice to a user: the inbox always, and a Camfrog PM through Pepe when they allow it. */
