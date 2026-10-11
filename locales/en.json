@@ -3586,6 +3586,8 @@
   "settings.telegram.test": "Send a test alert",
   "settings.telegram.unlink": "Unlink",
   "settings.telegram.privacy": "We only keep your Telegram id and username, to send you your own alerts. Nobody else sees them, and unlinking deletes the link.",
+  "settings.telegram.ach": "🏆 Linking Telegram earns the 📨 Carrier Frog {!link} and the Air Mail name colour - yours to keep.",
+  "settings.telegram.ach_link": "achievement",
   "settings.telegram.tiers_h": "What you get",
   "settings.telegram.tier_alerts": "Every linked account: your alerts, in Telegram.",
   "settings.telegram.tier_full": "With a {!link}: Pepe's commands for PAT (balance, tips, stashes, !ask, !imagine and more - no casino games) and chatting with Pepe, the same as Message Pepe.",

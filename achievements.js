@@ -99,6 +99,9 @@ async function webMetrics(userId) {
   // 1.99jv: 📼 Plex - linked a Plex account, on our server now, days on it in a row (plexmembers.js)
   let plex = {};
   try { plex = await require("./plexmembers").achMetrics(userId); } catch (e) { plex = {}; }
+  // 1.99lk: 📨 Telegram - linked by the bridge's /start code or Sign in with Telegram (telegram.js). Counted only once the
+  // quiet backfill has run, so nobody linked before it gets a loud award from an unrelated check (a spin, a tip)
+  const tgBackfilled = await telegramBackfill().then(() => true, () => false);
   const spent = await one(`SELECT COALESCE(SUM(-points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WAGER}`, [userId]);
   const won = await one(`SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WIN}`, [userId]);
   return {
@@ -113,6 +116,7 @@ async function webMetrics(userId) {
     plex_linked: plex.plex_linked || 0,
     plex_member: plex.plex_member || 0,
     plex_days: plex.plex_days || 0,
+    telegram_linked: tgBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM telegram_links WHERE user_id = ?", [userId])) : 0,
   };
 }
 
@@ -170,8 +174,9 @@ const webBackfill = (async () => {
   await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
   const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'web_backfill'");
   if (done.length) return;
-  // (the 📼 Plex ones have their own quiet backfill, plexBackfill(), which also hands out their cosmetics)
-  const web = catalog.filter((a) => a.side === "web" && !["plex_linked", "plex_member", "plex_days"].includes(a.metric));
+  // (the 📼 Plex and 📨 Telegram ones have their own quiet backfills, which also hand out their cosmetics)
+  const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
+  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked"].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
   for (const u of users) {
@@ -219,8 +224,39 @@ function plexBackfill() {
   return plexBackfilling;
 }
 
+// 1.99lk: once, quietly give 📨 Carrier Frog (cf_telegram_linked) to the accounts that already have Telegram linked (the
+// bridge's /start code or Sign in with Telegram) - badge + its cosmetic unlock only: no XP, PAT or announcement. Runs before
+// any Telegram achievement check (telegram.js saveLink, webMetrics), so only links made after it are announced.
+const TG_METRICS = ["telegram_linked"];
+let tgBackfilling = null;
+function telegramBackfill() {
+  if (!tgBackfilling) {
+    tgBackfilling = (async () => {
+      await ready;
+      await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
+      const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'telegram_backfill'");
+      if (done.length) return { done: true, already: true, given: 0 };
+      const tg = catalog.filter((a) => a.side === "web" && TG_METRICS.includes(a.metric));
+      // no telegram_links table (a fresh install / a test) = nobody linked yet
+      const users = await getQuery("SELECT DISTINCT user_id FROM telegram_links WHERE user_id IS NOT NULL").catch(() => []);
+      const given = [];
+      for (const u of users) {
+        for (const a of tg) {
+          const r = await award({ userId: u.user_id }, a.id, null, { silent: true });
+          if (r.ok && r.awarded) given.push({ userId: u.user_id, badgeId: a.id });
+        }
+      }
+      await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('telegram_backfill', ?)",
+                     [JSON.stringify({ at: new Date().toISOString(), users: users.length, given: given.length })]);
+      console.log(`[achievements] telegram backfill: ${given.length} badge(s) given quietly to ${users.length} linked account(s)`);
+      return { done: true, given: given.length, users: users.length, list: given };
+    })().catch((e) => { tgBackfilling = null; throw e; });
+  }
+  return tgBackfilling;
+}
+
 function list() {
   return catalog.map((a) => ({ ...a, icon: iconFor(a) }));
 }
 
-module.exports = { award, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS };
+module.exports = { award, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS };

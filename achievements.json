@@ -117,6 +117,7 @@
     {"id": "cf_level_50", "name": "Elder Frog", "emoji": "🧙", "desc": "Reached level 50.", "metric": "level", "threshold": 50, "xp": 0, "pat": 500000, "tier": "legendary", "side": "web"},
     {"id": "cf_plex_linked", "name": "Tuned In", "emoji": "📼", "desc": "Linked your Plex account to PATV.", "metric": "plex_linked", "threshold": 1, "xp": 2000, "pat": 25000, "tier": "common", "side": "web"},
     {"id": "cf_plex_member", "name": "Front Row", "emoji": "🍿", "desc": "Got a seat on our Plex server: active Plex access, bought on PATV or not.", "metric": "plex_member", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "web"},
-    {"id": "cf_plex_90d", "name": "Be Kind, Rewind", "emoji": "📼", "desc": "On our Plex server for 3 months straight.", "metric": "plex_days", "threshold": 90, "xp": 10000, "pat": 100000, "tier": "rare", "side": "web"}
+    {"id": "cf_plex_90d", "name": "Be Kind, Rewind", "emoji": "📼", "desc": "On our Plex server for 3 months straight.", "metric": "plex_days", "threshold": 90, "xp": 10000, "pat": 100000, "tier": "rare", "side": "web"},
+    {"id": "cf_telegram_linked", "name": "Carrier Frog", "emoji": "📨", "desc": "Linked your Telegram to PATV: Pepe's alerts and messages fly straight to your phone.", "metric": "telegram_linked", "threshold": 1, "xp": 2000, "pat": 25000, "tier": "common", "side": "web"}
   ]
 }

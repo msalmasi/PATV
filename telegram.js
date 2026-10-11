@@ -156,6 +156,7 @@ async function tierOf(acc) {
 }
 
 // ── linking ──
+const achievementsMod = () => require("./achievements");
 async function linkOf(userId) { await init(); return (await getQuery("SELECT * FROM telegram_links WHERE user_id = ?", [userId]))[0] || null; }
 async function linkByTg(id) { await init(); return (await getQuery("SELECT * FROM telegram_links WHERE tg_id = ?", [String(id)]))[0] || null; }
 
@@ -202,6 +203,8 @@ async function saveLink(acc, id, handle, proof) {
   const other = await linkByTg(id);
   if (other && other.user_id !== acc.userId) throw new Refuse(409, "This Telegram account is linked to another PATV account - unlink it there first.", "E_TG_TAKEN");
   const h = cleanHandle(handle);
+  // 1.99lk: accounts linked before 📨 Carrier Frog existed get it quietly first, so only this link is announced
+  await achievementsMod().telegramBackfill().catch((e) => console.error("[telegram] achievement backfill:", e.message));
   await runQuery(`INSERT INTO telegram_links (user_id, tg_id, handle, link_source, proof, linked_at, paused) VALUES (?, ?, ?, 'self', ?, ?, 0)
                   ON CONFLICT(user_id) DO UPDATE SET tg_id = excluded.tg_id, handle = excluded.handle, link_source = 'self', proof = excluded.proof,
                   linked_at = excluded.linked_at, paused = 0`, [acc.userId, id, h, proof, t]);
@@ -211,6 +214,8 @@ async function saveLink(acc, id, handle, proof) {
       body: tFor(langOf(acc.userId))("tg.notice.linked_body", { handle: h ? "@" + h : "#" + id.slice(-4) }), link: "/settings/telegram", ref: `tglink:${id}:${t}` });
   } catch (e) { /* logged there */ }
   console.log(`[telegram] linked ${acc.username} (tier ${tier}, ${proof})`);
+  // 1.99lk: 📨 Carrier Frog (+ its cosmetic) - XP, PAT from the achievements flow, announced by Pepe; once per account
+  await achievementsMod().checkWeb(acc.userId).catch(() => {});
   return { username: acc.username, lang: langOf(acc.userId), tier };
 }
 
@@ -424,7 +429,8 @@ async function state(userId) {
 
 // ── routes ──
 function register(app, { isBotToken, addUser }) {
-  init().catch(() => {});
+  // 1.99lk: the one-off quiet 📨 Carrier Frog backfill for accounts already linked (a no-op once done)
+  init().then(() => achievementsMod().telegramBackfill()).catch((e) => console.error("[telegram] setup:", e.message));
   const sameSite = (req) => {
     const host = req.get("host"), src = req.get("origin") || req.get("referer");
     if (!src || !host) return true;
