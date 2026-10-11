@@ -52,7 +52,7 @@ async function mkUser(bal = 100000000) {
   await runQuery("INSERT INTO users (userId, username, password, points_balance) VALUES (?, ?, 'x', ?)", [id, "buyer" + n, bal]);
   return { userId: id, username: "buyer" + n };
 }
-const settle = () => new Promise((r) => setTimeout(r, 80));
+const settle = () => new Promise((r) => setTimeout(r, 300));   // 1.99mv: 80 ms was flaky under the full suite (the sale hook is async)
 const buy = (u, prizeId) => shop.purchasePrize({ userId: u.userId, username: u.username, prizeId, source: "website" });
 
 test.before(async () => {

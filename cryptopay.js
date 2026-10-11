@@ -475,7 +475,7 @@ async function settle(id, { force = false, actor = null } = {}) {
     return "credited";
   });
   if (notice) await notify(notice);
-  if (notice && notice.kind === "credited") { try { require("./achievements").poke(notice.userId); } catch (e) { /* achievements never block */ } }   // 1.99mt: 💡 donor achievements
+  if (notice && notice.kind === "credited") { try { require("./supporter").onDonation(notice.userId).catch(() => {}); } catch (e) { /* never blocks */ } }   // 1.99mv: 💚 Supporter perks + achievements
   return status;
 }
 async function notify(n) {

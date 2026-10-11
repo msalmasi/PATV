@@ -54,6 +54,19 @@ function register(app, { addUser, noTimers } = {}) {
   // 1.99kz: the navbar / footer "Support PATV" links (views/layout.ejs) show while /support has something to offer
   app.locals.supportOn = () => { try { return CP.enabled() || stripeOn(); } catch (e) { return false; } };
 
+  // 1.99mv: 💚 what supporting gets you (supporter.js): the flair tiers, the two cosmetics (rendered), the two badges, yours
+  async function supporterPerks(me) {
+    try {
+      const S = require("./supporter");
+      await S.init();
+      const COS = require("./cosmetics");
+      const P = S.perks();
+      const ach = require("./achievements").list();
+      return { tiers: P.tiers, mine: me ? S.supporterSync(me.userId) : null,
+               name: COS.render(COS.byId("nc_supporter")), halo: COS.render(COS.byId("ad_supporter")),
+               badges: P.achievements.map((id) => ach.find((a) => a.id === id)).filter(Boolean).map((a) => ({ id: a.id, icon: a.icon, emoji: a.emoji })) };
+    } catch (e) { console.error("[support] perks:", e.message); return null; }
+  }
   app.get("/support", addUser, async (req, res, next) => {
     try {
       await CP.init();
@@ -78,6 +91,7 @@ function register(app, { addUser, noTimers } = {}) {
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],
         rate: T.rate, bonus_pct: T.bonus_pct, min: CP.get().min_usd, max: CP.get().max_usd, donate, sp, showName, thanks,
+        perks: await supporterPerks(me),
       });
     } catch (e) { next(e); }
   });

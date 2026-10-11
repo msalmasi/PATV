@@ -96,6 +96,11 @@ function plexOn() { try { return !!require("./mediaconf").get().plex_flair; } ca
 const PM = () => require("./plexmembers");
 function plexById(userId) { try { return plexOn() && PM().memberSync(userId) ? plexFlair() : null; } catch (e) { return null; } }
 function plexByName(name) { try { return plexOn() && PM().memberByName(name) ? plexFlair() : null; } catch (e) { return null; } }
+// 1.99mv: the automatic 💚 Supporter flair (supporter.js: donated to PATV; 🥉 / 🥈 / 🥇 by lifetime total) - after the pad's
+// own flair, before the 📼 Plex one; never stored, never assignable
+const SUP = () => require("./supporter");
+function supById(userId) { try { return SUP().flair(SUP().supporterSync(userId)); } catch (e) { return null; } }
+function supByName(name) { try { return SUP().flair(SUP().supporterByName(name)); } catch (e) { return null; } }
 async function load(roomId) {
   const id = String(roomId || "");
   const hit = cache.get(id);
@@ -126,22 +131,23 @@ async function forUsers(roomId, userIds) {
   const out = new Map();
   if (!flairable(roomId)) return out;
   const L = await load(roomId);
-  for (const id of userIds || []) { const f = L.byUser.get(String(id)) || plexById(id); if (f) out.set(String(id), f); }
+  for (const id of userIds || []) { const f = L.byUser.get(String(id)) || supById(id) || plexById(id); if (f) out.set(String(id), f); }
   return out;
 }
 /** The pad's flairs by lowercased PATV username (the live chat resolves people by their linked account's username). */
 async function byUsername(roomId) {
   if (!flairable(roomId)) return new Map();
   const m = (await load(roomId)).byName;
-  // the pad's own flair, else the automatic 📼 Plex one (a Map-like: only get / has are used)
-  return { get: (name) => m.get(name) || plexByName(name) || undefined, has: (name) => m.has(name) || !!plexByName(name), size: m.size };
+  // the pad's own flair, else the automatic 💚 Supporter / 📼 Plex one (a Map-like: only get / has are used)
+  return { get: (name) => m.get(name) || supByName(name) || plexByName(name) || undefined,
+           has: (name) => m.has(name) || !!supByName(name) || !!plexByName(name), size: m.size };
 }
 async function of(roomId, userId) { return (await forUsers(roomId, [userId])).get(String(userId)) || null; }
 
 /** The chip (escaped; colour values are strict hex from cleanColor). */
 function html(f, { cls = "" } = {}) {
   if (!f || !f.name) return "";
-  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
+  return `<span class="ufl${cls ? " " + esc(cls) : ""}" style="--fl:${esc(f.color)};--fli:${esc(f.ink)}" title="${f.auto === "plex" ? "On our Plex server" : f.auto === "supporter" ? "Supports PATV with donations" : "Pad flair: " + esc(f.name)}">${f.emoji ? `<span class="ufl-e" aria-hidden="true">${esc(f.emoji)}</span>` : ""}${esc(f.name)}</span>`;
 }
 /** What the live chat JSON carries (rendered with textContent on the page). */
 const plain = (f) => (f ? { name: f.name, color: f.color, ink: f.ink, emoji: f.emoji || "" } : null);

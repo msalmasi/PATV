@@ -589,7 +589,8 @@ async function profileData(username) {
   for (const k of GTF_KINDS) if (eq[k]) gtf[GTF_OPT[k]] = eq[k].r.layer;
   let plex = null;
   try { plex = require("./mediaconf").get().plex_flair ? !!require("./plexmembers").memberSync(u.userId) : false; } catch (e) { plex = false; }
-  return { equipped: eq, showcase: await showcaseFor(u.userId), seed: await seedFor(u.camfrogUsername), gtf, seasonPass: passOn(u.userId), plex };   // 1.99iv: + the 🎟️ chip
+  return { equipped: eq, showcase: await showcaseFor(u.userId), seed: await seedFor(u.camfrogUsername), gtf, seasonPass: passOn(u.userId), plex,
+           supporter: (() => { try { return require("./supporter").supporterSync(u.userId); } catch (e) { return null; } })() };   // 1.99mt: 💚 chip   // 1.99iv: + the 🎟️ chip
 }
 
 // ── helpers for routes ──

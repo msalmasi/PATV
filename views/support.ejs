@@ -134,6 +134,22 @@
   .sp .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
   .sp .tile { background: #17161a; border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 6px; align-content: start; }
   .sp .tile .ic { font-size: 26px; line-height: 1; }
+  /* 1.99mv: 💚 Supporter perks */
+  .sp .perk-mine { background: #13210f; border: 1px solid #2e5a25; border-radius: 12px; padding: 10px 14px; color: #cfe8c6; margin: 0 0 12px; }
+  .sp .perk-fl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; margin-top: 4px; }
+  .sp .perk-fl .ufl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--fl); color: var(--fli); font-size: 12.5px; font-weight: bold; white-space: nowrap; }
+  .sp .perk-fl small { color: #aaa; }
+  .sp .perk-cx { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+  .sp .perk-halo { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+  .sp .perk-halo > span { width: 46px; height: 46px; border-radius: 50%; background: #17161a; display: grid; place-items: center; font-size: 22px; }
+  .sp .perk-halo.spin { animation: perkspin 8s linear infinite; }
+  .sp .perk-halo.spin > span { animation: perkspin 8s linear infinite reverse; }
+  @keyframes perkspin { to { transform: rotate(360deg); } }
+  @keyframes cx-shift { from { background-position: 0% 50%; } to { background-position: 200% 50%; } }
+  @media (prefers-reduced-motion: reduce) { .sp .perk-halo.spin, .sp .perk-halo.spin > span, .sp .perk-name { animation: none !important; } }
+  .sp .perk-name { font-size: 20px; overflow-wrap: anywhere; }
+  .sp .perk-bd { display: flex; gap: 10px; margin-top: 4px; }
+  .sp .perk-bd img { image-rendering: pixelated; }
   .sp .tile b { color: #fff; font-size: 15.5px; }
   .sp .tile p { margin: 0; font-size: 13.5px; color: #cfc8d4; line-height: 1.55; }
   /* supporters */
@@ -350,6 +366,23 @@
       <div class="tile"><span class="ic" aria-hidden="true">🪙</span><b><%- t('support.where_pot') %></b><p><%- t('support.where_pot_d', { bonus: BP }) %></p></div>
     </div>
   </section>
+
+  <% if (typeof perks !== 'undefined' && perks) { const PK = perks; %>
+  <%# 1.99mv: 💚 Supporter perks (supporter.js) - automatic on any confirmed donation, card or crypto %>
+  <section id="perks" aria-labelledby="perksT">
+    <h2 id="perksT">💚 <%- t('supporter.perks_title') %></h2>
+    <p class="mut"><%- t('supporter.perks_lede') %></p>
+    <% if (PK.mine) { %><p class="perk-mine"><%- t('supporter.perks_yours', { tier: PK.mine.emoji + ' ' + t('supporter.tier.' + PK.mine.tier) }) %></p><% } %>
+    <div class="grid3">
+      <div class="tile"><span class="ic" aria-hidden="true">🏷️</span><b><%- t('supporter.perk_flair') %></b><p><%- t('supporter.perk_flair_d') %></p>
+        <div class="perk-fl"><% PK.tiers.forEach((x) => { %><span class="ufl" style="--fl:<%= x.color %>;--fli:#111"><span class="ufl-e" aria-hidden="true"><%= x.emoji %></span><%- t('supporter.chip') %></span><small><%- x.min ? t('supporter.tier_from', { tier: t('supporter.tier.' + x.id), usd: x.min }) : t('supporter.tier_any', { tier: t('supporter.tier.' + x.id) }) %></small><% }) %></div></div>
+      <div class="tile"><span class="ic" aria-hidden="true">✨</span><b><%- t('supporter.perk_cosmetics') %></b><p><%- t('supporter.perk_cosmetics_d') %></p>
+        <div class="perk-cx"><% if (PK.halo) { %><span class="perk-halo<%= PK.halo.spin ? ' spin' : '' %>" style="<%= PK.halo.conic %>" aria-hidden="true"><span><%= PK.halo.emoji %></span></span><% } %><% if (PK.name) { %><b class="perk-name" style="<%= PK.name.css %>"><%= locals.user || t('supporter.chip') %></b><% } %></div></div>
+      <div class="tile"><span class="ic" aria-hidden="true">🏅</span><b><%- t('supporter.perk_badges') %></b><p><%- t('supporter.perk_badges_d') %></p>
+        <div class="perk-bd"><% PK.badges.forEach((a) => { %><img src="<%= a.icon %>" alt="<%- t('ach.n.' + a.id) %>" title="<%- t('ach.n.' + a.id) %>" width="56" height="56" loading="lazy"><% }) %></div></div>
+    </div>
+  </section>
+  <% } %>
 
   <section aria-labelledby="trustT">
     <h2 id="trustT">🛡️ <%- t('support.trust_title') %></h2>
