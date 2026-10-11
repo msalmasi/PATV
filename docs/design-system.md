@@ -894,7 +894,7 @@ A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewpo
 
 ---
 
-## Area notes: games (lotto, GTF, achievements, rankings, wheel)
+## Area notes: games (lotto, GTF, achievements, rankings, wheel, casino, gangs)
 
 Added by the 1.99pt polish pass (G2; its first commit went out labelled 1.99ps, which G4 took at the same time). Game pages keep their own illustration (balls, felt, minimap, marquee) but sit on `.ds-page` and read the tokens for everything else.
 
@@ -944,3 +944,24 @@ Added by the 1.99pt polish pass (G2; its first commit went out labelled 1.99ps, 
 - `main.ds-page.flow.aw` (block flow; the cabinet manages its own spacing). `arcade-wheel.css` keeps its VT323 + Press Start cabinet, and is also used by the home page's compact coin-op (`.aw.aw-hm`), so it is shared.
 - Its gold is `--ds-gold`, its muted text is `--ds-text-muted`, zero-prize rows use `--ds-text-faint` (#6f6f7d failed AA), focus is the gold 2px ring, and the tool buttons are 44px.
 - Breakpoints collapsed onto the ds set: 1000 (the stage stacks), 600, 420.
+
+### Casino (/casino/blackjack, /casino/holdem, their tables, /casino/fair; Pepe's tables at /tables, /casino, /poker, /blackjack)
+
+Added by 1.99pz.
+
+- **Site casino** (casino-bj, casino-hm + `partials/casino-*`): `main.ds-page.flow.cz`, accent `--ds-acc-casino` with dark ink. The felt, wood rail, cards, chips, High Roller chips and countdown rings are illustration and stay local. The page keeps a 1120 max width (full-bleed game table, §5.5) with the ds gutter.
+- **Game buttons** (`.cz-btn`, Pepe's `button.b`) use the ds `.square` shape (radius 10), because the action dock is a dense toolbar. Every fill passes AA with its ink: green #2a7f3f→#1d6630, red #c43c38→#8e2424, blue #2f6fc0→#1f5aa6, amber with dark ink #1a1200, gold = `--ds-gold-grad` + `--ds-on-gold`. (The old #43b55a, #d9534f and #4f8fe0 tops were 2.6–4.0:1 under white.)
+- **`.cz :where(button) { font: inherit }`**: the font reset on bare buttons is zero-specificity on the element, so a component class (`.cz-btn`, `.lob-tabs button`) keeps its 700 weight. The old `.cz button` rule silently made every `.cz-btn` label regular weight.
+- **Game switcher** (`.lob-tabs`): a segmented control, a pill track with 40px pill buttons, gold selection with `--ds-on-gold`, focus ring.
+- **Sheets** (`dialog.sheet`): radius 18, `--ds-e-4`, scrim with fallback; a bottom sheet under 600 with safe-area padding. Number fields and selects in a sheet are 44px and reset the legacy input margins.
+- **Pepe's tables page** (casino.ejs, tables.js): `main.ds-page.flow.cz` with a centred `.ds-h1` + `.ds-sub` head, `.ds-tabs.wrap` for Lobby / Hold'em / Blackjack (`aria-current`), `.ds-pixel-h` section heads, and the `.card` / `.hint` / `.warn` / `.info` classes that casino.js writes, restyled to ds cards and notes.
+- The fairness page is the same detail-page recipe as Pepeball's (`.ds-page.mid`, `.ds-back`, `.ds-head`, `.ds-card`s).
+
+### Gangs (/gtf/gangs, /gtf/gangs/:tag)
+
+Added by 1.99pz.
+
+- `main.ds-page.wide.gg` (page gap 16), accent `--ds-acc-gtf-violet`. The hero keeps the GTF violet/gold glow and hazard stripe on the ds hero scale, with the display h1. The tag pill stays Press Start.
+- Card heads are `.ds-pixel-h`. Board rows are whole-card links (radius 16, a 1px lift, the violet border and `--ds-e-2` on hover, the gold outline on focus).
+- `.btn` is the ds pill button: 44px (`.small` 36, 40 on touch), transparent with a #333 line, `.gold` = the PAT action, `.red` = the danger fill. Fields are the ds control (44px, radius 10, sunken) and reset the legacy input rule. Field labels (`label.l`) moved from 8.5px Press Start to the ds label style.
+- Messages (`.msg.ok` / `.msg.bad`) and the banner use the ok / danger / gold note tokens.

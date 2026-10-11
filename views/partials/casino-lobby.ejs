@@ -15,7 +15,7 @@
   </div>
 
   <div class="lob-tabs" role="tablist" aria-label="<%- t('casino.tabs') %>">
-    <% const tabs = [['all', t('casino.tab_all')], ['bj', '🂡 ' + t('casino.bj_title')], ['holdem', '🃏 ' + t('casino.hm_title')]]; %>
+    <% const tabs = [['all', t('casino.tab_all')], ['bj', '<span class="ds-ic" aria-hidden="true">🂡</span>' + t('casino.bj_title')], ['holdem', '<span class="ds-ic" aria-hidden="true">🃏</span>' + t('casino.hm_title')]]; %>
     <% for (const [k, label] of tabs) { %><button type="button" role="tab" data-tab="<%= k %>" aria-selected="<%= k === game ? 'true' : 'false' %>"><%- label %></button><% } %>
   </div>
   <div class="lob-grid" id="cz-tables" aria-live="off"></div>

@@ -1,24 +1,27 @@
 <%- include('layout', { title: title, user: user}) %>
 <style>
-  .cf { max-width: 860px; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; }
-  .cf h1 { text-align: center; }
-  .cf .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
-  .cf code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; font-size: 13px; word-break: break-all; }
-  .cf .ok { color: #81c784; } .cf .bad { color: #ff9a9a; }
-  .cf .info { color: #999; font-size: 13px; line-height: 1.6; }
-  .cf .shoe { font-family: monospace; font-size: 12px; color: #bbb; line-height: 1.6; }
+  /* 1.99pz polish: a ds detail page in the casino accent (docs/design-system.md, "Area notes: games"). Ids cf / cf-rec / cf-mine are the script's hooks. */
+  .cf { --ds-ac: var(--ds-acc-casino); --ds-ac-2: var(--ds-acc-casino); --ds-ac-bg: rgba(126,224,138,.12); --ds-ac-line: #2e6b31; }
+  .cf .ds-card p { margin: 0; }
+  .cf code { word-break: break-all; }
+  .cf .ok { color: var(--ds-ok); font-weight: 700; } .cf .bad { color: var(--ds-danger); font-weight: 700; }
+  .cf .info { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.6; }
+  .cf .shoe { font-family: var(--ds-font-mono); font-size: 12px; color: var(--ds-text-2); line-height: 1.6; }
 </style>
-<main class="cf" id="cf" data-table="<%= tableId %>" data-round="<%= round %>">
-  <h1>Provably fair: round <%= round %></h1>
-  <div class="card" id="cf-rec">Loading…</div>
-  <div class="card">
+<main class="ds-page mid cf" id="cf" data-table="<%= tableId %>" data-round="<%= round %>">
+  <a class="ds-back" href="/casino/blackjack/t/<%= tableId %>">← back to the table</a>
+  <div class="ds-head">
+    <span class="ds-eyebrow ac">Casino</span>
+    <h1 class="ds-h1">Provably fair: round <%= round %></h1>
+  </div>
+  <div class="ds-card" id="cf-rec" aria-live="polite">Loading…</div>
+  <div class="ds-card">
     <p><b>Your browser's check</b> (WebCrypto, nothing from the site's own verifier): <span id="cf-mine">…</span></p>
     <p class="info">How it works: before anyone bets, the table publishes <code>sha256(server_seed)</code>. The shoe is 6 fresh decks
       (2s–As in ♠♥♦♣ order) shuffled by Fisher–Yates, each swap index drawn from <code>HMAC-SHA256(server_seed, "client_seed:round:counter")</code>
       read as big-endian 32-bit words with rejection sampling. After the round the seed is revealed, so anyone can rebuild the shoe and
       check the cards dealt were its first cards.</p>
   </div>
-  <p><a href="/casino/blackjack/t/<%= tableId %>">← back to the table</a></p>
 </main>
 <script>
 (function () {

@@ -15,12 +15,12 @@
   .board { display: flex; gap: 6px; justify-content: center; --cw: 50px; }
   .board .pc.slot .pc-f { background: rgba(0,0,0,.18); box-shadow: inset 0 0 0 2px rgba(255,255,255,.14); }
   .pot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .pot .main { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px; background: rgba(0,0,0,.55); font: 900 16px/1.2 Ubuntu, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+  .pot .main { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px; border-radius: 999px; background: rgba(0,0,0,.55); font: 700 16px/1.2 var(--ds-font); color: #fff; font-variant-numeric: tabular-nums; }
   .pot .main .chip { width: 18px; height: 18px; }
   .pot .parts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
   .pot .parts .tag { background: rgba(0,0,0,.4); color: #fff; font-weight: normal; text-transform: none; letter-spacing: 0; font-size: 12px; }
   .pot .parts .tag.unc { color: rgba(255,255,255,.65); font-style: italic; }
-  .hm-logo { color: rgba(255,215,64,.28); font: 900 12px/1 Ubuntu, sans-serif; letter-spacing: .3em; text-transform: uppercase; }
+  .hm-logo { color: rgba(255,215,64,.28); font: 700 12px/1 var(--ds-font); letter-spacing: .3em; text-transform: uppercase; }
   .hm-seat { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); width: 118px; z-index: 2; }
   .hm-seat .hole { display: flex; gap: 2px; justify-content: center; min-height: calc(var(--cw) * 1.4); --cw: 30px; margin-bottom: -10px; position: relative; z-index: 1; }
   .hm-seat.me .hole { --cw: 40px; }
@@ -28,11 +28,11 @@
   .hm-seat .st { display: inline-flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
   .hm-seat.empty .av { background: rgba(0,0,0,.2); border-style: dashed; color: rgba(255,255,255,.45); font-size: 20px; }
   .hm-seat.empty .plate { background: transparent; border: 0; color: rgba(255,255,255,.6); font-size: 12px; }
-  .dbtn { position: absolute; right: 14px; top: 4px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; z-index: 3;
-          background: radial-gradient(circle at 35% 30%, #fff, #ddd); color: #111; font: 900 11px/1 Ubuntu, sans-serif; box-shadow: 0 2px 4px rgba(0,0,0,.6); }
+  .dbtn { position: absolute; inset-inline-end: 14px; top: 4px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; z-index: 3;
+          background: radial-gradient(circle at 35% 30%, #fff, #ddd); color: #111; font: 700 11px/1 var(--ds-font); box-shadow: 0 2px 4px rgba(0,0,0,.6); }
   .hm-bet { position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
             transition: left .35s, top .35s, opacity .35s; }
-  .hm-bet .bl { font: bold 10px/1 Ubuntu, sans-serif; color: rgba(255,255,255,.85); letter-spacing: .08em; }
+  .hm-bet .bl { font: 700 10px/1 var(--ds-font); color: rgba(255,255,255,.85); letter-spacing: .08em; }
   .p0 { --x: 50%; --y: 99%; } .p1 { --x: 20%; --y: 93%; } .p2 { --x: 2%; --y: 62%; } .p3 { --x: 7%; --y: 20%; } .p4 { --x: 32%; --y: 1%; }
   .p5 { --x: 68%; --y: 1%; } .p6 { --x: 93%; --y: 20%; } .p7 { --x: 98%; --y: 62%; } .p8 { --x: 80%; --y: 93%; }
   .b0 { --x: 50%; --y: 74%; } .b1 { --x: 30%; --y: 72%; } .b2 { --x: 17%; --y: 58%; } .b3 { --x: 21%; --y: 33%; } .b4 { --x: 37%; --y: 24%; }
@@ -41,24 +41,25 @@
   .hm-res b { color: #fff; }
   .mine { display: flex; align-items: center; gap: 10px; --cw: 52px; }
   .mine .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
-  .dock-row.raise { display: grid; gap: 8px; width: 100%; max-width: 620px; margin-left: auto; margin-right: auto; }
+  .dock-row.raise { display: grid; gap: 8px; width: 100%; max-width: 620px; margin-inline: auto; }
   .raise-row { display: flex; align-items: center; gap: 8px; }
   .raise input[type=range] { flex: 1; min-width: 0; height: 36px; accent-color: var(--gold); }
-  .raise input[type=number] { width: 120px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: #06100a; color: #fff;
-                              font: bold 16px Ubuntu, sans-serif; text-align: center; }
+  .raise input[type=number] { width: 120px; min-height: 44px; margin: 0; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line); background: #06100a; color: #fff;
+                              font: 700 16px var(--ds-font); text-align: center; }
   .presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-  .presets button { min-height: 38px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: var(--txt); font: bold 13px Ubuntu, sans-serif; cursor: pointer; }
+  .presets button { min-height: 40px; margin: 0; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,.35); color: var(--txt); font: 700 13px var(--ds-font); cursor: pointer; }
   .presets button:hover { border-color: var(--gold); }
   /* 1.99ov: the chip rack (tap a chip to add it to the raise); 💎 chips for High Rollers */
   .rack { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
   .rchip { position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
-           background: transparent; font: 900 11px/1 Ubuntu, sans-serif; color: #111; transition: transform .1s; }
+           background: transparent; font: 700 11px/1 var(--ds-font); color: #111; transition: transform .1s; }
   .rchip .chip { position: absolute; inset: 0; width: 100%; height: 100%; }
   .rchip span.l { position: relative; z-index: 2; padding: 2px 4px; border-radius: 999px; background: rgba(255,255,255,.92); }
   .rchip.hr span.l { background: rgba(0,0,0,.82); color: #ffe082; box-shadow: 0 0 0 1px rgba(255,215,64,.7); }
   .rchip:hover { transform: translateY(-2px); }
-  .buyamt { font: 900 30px/1 Ubuntu, sans-serif; color: var(--goldt); text-align: center; margin: 6px 0; font-variant-numeric: tabular-nums; }
-  .back { display: inline-block; margin: 0 0 6px; font-size: 14px; }
+  .buyamt { font: 700 30px/1 var(--ds-font); color: var(--goldt); text-align: center; margin: 6px 0; font-variant-numeric: tabular-nums; }
+  .back { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; margin: 0 0 6px; font-size: var(--ds-fs-sm); text-decoration: none; }
+  .back:hover { text-decoration: underline; }
   @media (max-width: 760px) {
     .hm-wrap { padding: 56px 34px 96px; }
     .felt.hm { aspect-ratio: .74 / 1; max-height: 560px; margin: 0 auto; }
@@ -82,9 +83,9 @@
     .dock-acts .cz-btn { padding: 0 6px; font-size: 15px; }
     .dock-row.raise { gap: 6px; }
   }
-  @media (max-width: 380px) { .hm-wrap { padding: 56px 30px 96px; } .board { --cw: 36px; } .hm-seat { width: 68px; } }
+  @media (max-width: 420px) { .hm-wrap { padding: 56px 30px 96px; } .board { --cw: 36px; } .hm-seat { width: 68px; } }
 </style>
-<main class="cz" id="cb" data-game="holdem" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>">
+<main class="ds-page flow cz" id="cb" data-game="holdem" data-table="<%= tableId || '' %>" data-signed="<%= signedIn ? '1' : '' %>">
   <%- include('partials/casino-top', { t, game: 'holdem', tableId }) %>
   <% if (!tableId) { %><%- include('partials/casino-lobby', { t, game: 'holdem', bjOn: locals.bjOn, hmOn: locals.hmOn }) %><% } else { %>
   <section id="cz-table" hidden>

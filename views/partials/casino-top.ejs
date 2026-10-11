@@ -9,12 +9,12 @@
       <small><%- !tableId ? t('casino.lobby_sub') : game === 'holdem' ? t('casino.hm_rules') : t('casino.bj_rules') %></small>
     </div>
   </div>
-  <span class="cz-pill" id="cz-bal" hidden title="<%- t('casino.balance') %>">👛 <b>0</b> PAT</span>
+  <span class="cz-pill" id="cz-bal" hidden title="<%- t('casino.balance') %>"><span class="ds-ic" aria-hidden="true">👛</span><b>0</b> PAT</span>
   <% if (tableId) { %>
-    <span class="cz-pill" id="cz-watch" hidden>👁 <b>0</b><span class="cz-sr"> <%- t('casino.watching') %></span></span>
+    <span class="cz-pill" id="cz-watch" hidden><span class="ds-ic" aria-hidden="true">👁️</span><b>0</b><span class="cz-sr"> <%- t('casino.watching') %></span></span>
     <a class="cz-pill fair" id="cz-fair" hidden><%- t('casino.fair') %></a>
-    <button type="button" class="cz-pill" id="cz-histbtn">📜 <%- t('casino.history') %></button>
-    <button type="button" class="cz-pill" id="cz-hostbtn" hidden>🎛️ <%- t('casino.host_tools') %></button>
+    <button type="button" class="cz-pill" id="cz-histbtn"><span class="ds-ic" aria-hidden="true">📜</span><%- t('casino.history') %></button>
+    <button type="button" class="cz-pill" id="cz-hostbtn" hidden><span class="ds-ic" aria-hidden="true">🎛️</span><%- t('casino.host_tools') %></button>
   <% } %>
 </div>
 <div class="cz-toast" id="cz-toast" role="status"></div>

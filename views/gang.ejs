@@ -12,7 +12,7 @@
   const when = (ms) => { const d = new Date(Number(ms)); return isNaN(d) ? '' : d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; };
   const OPS = { deposit: '💰 deposit', withdraw: '🏧 withdrawal', spend: '🛠️ upgrade / spend', move: '🗺️ turf', create: '🏴 founded' };
 %>
-<div class="gg">
+<main class="ds-page wide gg">
   <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <a href="/gtf/gangs">Gangs</a><% if (g) { %> › [<%= g.tag %>]<% } %></div>
   <% if (!v.mode) { %>
     <div class="banner">The gang board fills in as soon as Pepe reports in - see <a href="/gtf/gangs">all gangs</a>.</div>
@@ -41,7 +41,7 @@
   <div class="grid2">
     <div style="display:grid;gap:16px;min-width:0">
       <section class="card violet" aria-labelledby="ggRoster">
-        <h2 id="ggRoster">ROSTER</h2>
+        <h2 id="ggRoster" class="ds-pixel-h">ROSTER</h2>
         <ul class="roster">
           <% g.members.forEach((m) => { %>
           <li>
@@ -67,7 +67,7 @@
       </section>
 
       <section class="card gold" aria-labelledby="ggUps">
-        <h2 id="ggUps">UPGRADES</h2>
+        <h2 id="ggUps" class="ds-pixel-h">UPGRADES</h2>
         <div class="ups">
           <% g.upgrade_list.forEach((u) => { %>
           <div class="up<%= u.lvl ? '' : ' none' %>"><span class="uic" aria-hidden="true"><%= u.icon %></span><b><%= u.name %></b> <span style="color:var(--mut)">Lv<%= u.lvl %>/<%= u.max %></span>
@@ -82,7 +82,7 @@
     <div class="side" style="display:grid;gap:16px;min-width:0">
       <% if (me) { %>
       <section class="card green" aria-labelledby="ggBank">
-        <h2 id="ggBank">YOUR TREASURY ACCESS</h2>
+        <h2 id="ggBank" class="ds-pixel-h">YOUR TREASURY ACCESS</h2>
         <p class="note">You're <b><%= me.rank === 'owner' ? 'the boss' : 'a' + (me.rank === 'officer' ? 'n ' : ' ') + me.rank %></b>.
           <% if (me.limit) { %>Your allowance: <b><%= fmt(Math.max(0, me.limit - me.used)) %></b> of <%= fmt(me.limit) %> PAT left today.<% } else { %>No daily cap on your withdrawals.<% } %>
           A <%= Math.round(v.cfg.cut_rate * 100) %>% laundering fee goes to Fort Knox.</p>
@@ -98,7 +98,7 @@
           <button class="btn" type="submit">Set</button>
         </form>
         <% } else { %>
-        <div style="margin-top:14px"><button class="btn red small" data-op="leave" data-confirm="Leave [<%= g.tag %>]?">Leave the gang</button></div>
+        <div style="margin-top:var(--ds-sp-3h)"><button class="btn red small" data-op="leave" data-confirm="Leave [<%= g.tag %>]?">Leave the gang</button></div>
         <% } %>
         <div class="msg" id="ggMsg" role="status" aria-live="polite"></div>
       </section>
@@ -109,14 +109,14 @@
       <% } %>
 
       <section class="card" aria-labelledby="ggWar">
-        <h2 id="ggWar">WAR RECORD</h2>
+        <h2 id="ggWar" class="ds-pixel-h">WAR RECORD</h2>
         <div class="war"><span class="w"><%= g.wars.wins %>W</span><span class="l"><%= g.wars.losses %>L</span>
           <span class="note" style="margin:0">raids won and lost (attacking and defending)</span></div>
       </section>
 
       <% if (v.live) { %>
       <section class="card" aria-labelledby="ggHist">
-        <h2 id="ggHist">TREASURY MOVES</h2>
+        <h2 id="ggHist" class="ds-pixel-h">TREASURY MOVES</h2>
         <% if (!g.history.length) { %><p class="note">Nothing yet.</p><% } else { %>
         <ul class="hist">
           <% g.history.forEach((h) => { %>
@@ -174,6 +174,6 @@
   })();
   </script>
   <% } %>
-</div>
+</main>
 </body>
 </html>
