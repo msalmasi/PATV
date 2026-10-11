@@ -907,6 +907,14 @@ A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewpo
 - **Tiles and alerts:** overview tiles are radius-16 cards with a 3px inline-start status rule (ok green / warn amber / bad red); alerts are 44px rows on the semantic tints with an end chevron (mirrored in RTL); key/value boxes are sunken wells, radius 10.
 - **Filter chips** inside a page (image safety's review filters) are `.ds-tab`-sized: 36px pills, #151515, accent border when current.
 
+### Staff pages on the plain layout (/shop/admin, /shop/admin/edit/:id, /admin/manage-prizes)
+
+- They are tool pages: `.ds-page` (shop admin at the default width, the edit form `.mid`), then a `div.ds-head` with the eyebrow "Staff · Prize shop", `.ds-h1` and a `.ds-sub` of links back (Shop, the classic editor, Admin). No centred h1.
+- The two shop pages keep `partials/shop-css` (gold accent, the shop's pixel section headings, its fields and buttons) and add `.ds-page.flow` (`.sh.sa`, `.sh.se`); their form grids align to the end so fields sit level under labels of different lengths. "Nothing here" lines are `.ds-empty` boxes; "Item not found" is a `.ds-empty` with a 36px ghost button back.
+- **Bootstrap is gone** from /admin/manage-prizes: a `.ds-card.lg` add form of `.ds-field`s, a `.ds-tbl` table (numbers end-aligned) with 36px Edit (ghost) / Remove (danger) row buttons, and the edit dialog as `.ds-scrim.sheet > .ds-modal` (a bottom sheet on phones). Bootstrap's `$(…).modal('show' | 'hide')` is replaced by a ten-line helper (focus in, Esc and a scrim click close it, focus goes back to the opener), so the page script did not change.
+- **Gotcha:** styles.css still has id rules from old pages (`#costContainer { display: block }`). An old id kept for a script can override a ds component's `display`; re-assert it in the page CSS.
+- `views/activeGames.ejs` has no route (orphaned). It was left as it is.
+
 ---
 
 ## Area notes: games (lotto, GTF, achievements, rankings, wheel, casino, gangs)

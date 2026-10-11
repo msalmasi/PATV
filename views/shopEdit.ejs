@@ -1,12 +1,29 @@
 <%- include('layout', { title: 'Edit item', user: user }) %>
 <%- include('partials/shop-css') %>
-<div class="sh">
-  <div class="links" style="margin:12px 0"><a href="/shop/admin#listings">← Shop admin</a></div>
+<style>
+  /* G6 polish: the staff shop pages on .ds-page (flow) with a .ds-head; shop-css gives the fields, buttons and cards */
+  .sh.sa .ds-head h1, .sh.se .ds-head h1 { text-align: start; margin: 0; }
+  .sh.sa .ds-head .ds-sub a { font-weight: 700; }
+  .sh.sa .formgrid, .sh.se .formgrid { align-items: end; }
+  .sh.sa .item.sm { padding: var(--ds-sp-2h) var(--ds-sp-3); }
+  .sh.sa .tabs { margin: var(--ds-sp-4) 0 0; }
+  .sh.sa .stats { margin: var(--ds-sp-4) 0 0; }
+  .sh.sa .ds-empty, .sh.se .ds-empty { margin: 0; }
+  .sh.sa .box > .muted { margin: 0; }
+  .sh.sa .rm-note { width: 160px; flex: 0 1 160px; }
+  .sh.se .ds-back { margin-bottom: var(--ds-sp-2); }
+  .sh.se .ds-head { margin-bottom: var(--ds-sp-4); }
+</style>
+<main class="sh se ds-page mid flow">
+  <a class="ds-back" href="/shop/admin#listings">← Shop admin</a>
 <% if (!p) { %>
-  <h1>Item not found</h1>
+  <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🔍</span><h1 class="ds-h3">Item not found</h1><a class="ds-btn sm ghost" href="/shop/admin#listings">Back to the listings</a></div>
 <% } else { %>
-  <h1 style="text-align:left;font-size:22px">Edit <%= p.seller_id ? 'listing' : 'official item' %></h1>
-  <p class="muted"><%= p.seller_id ? 'Sold by ' + p.seller_name : 'Official store item' %> · <%= H.lstatus(p.status).label %> · <a href="/shop/item/<%= p.prizeId %>">view</a></p>
+  <div class="ds-head">
+    <span class="ds-eyebrow">Staff · Prize shop</span>
+    <h1 class="ds-h1">Edit <%= p.seller_id ? 'listing' : 'official item' %></h1>
+    <p class="ds-sub"><%= p.seller_id ? 'Sold by ' + p.seller_name : 'Official store item' %> · <%= H.lstatus(p.status).label %> · <a href="/shop/item/<%= p.prizeId %>">view</a></p>
+  </div>
   <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
   <form class="box" method="POST" action="/shop/listing/<%= p.prizeId %>" style="display:grid;gap:10px">
     <input type="hidden" name="back" value="/shop/admin/edit/<%= p.prizeId %>">
@@ -24,4 +41,4 @@
     <div><button type="submit">Save</button></div>
   </form>
 <% } %>
-</div>
+</main>

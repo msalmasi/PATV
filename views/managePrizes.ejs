@@ -1,82 +1,109 @@
 <%- include('layout', { title: 'Manage Prizes', user: user}) %>
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+<%# /admin/manage-prizes - the classic official-prize editor (shop.js). G6 polish: off Bootstrap 4 onto the design system
+    (.ds-page, .ds-head, a .ds-card form, a .ds-tbl table, a .ds-scrim > .ds-modal edit dialog). Every id the script uses is
+    kept; the Bootstrap modal plugin is replaced by a small open / close helper (focus in, Esc and the scrim close it, focus
+    returns to the button that opened it). The requests themselves are unchanged. %>
+<style>
+  .mp .mp-form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); align-items: end; }
+  .mp .mp-form .ds-actions { grid-column: 1 / -1; }
+  .mp #costContainer { display: grid; }   /* styles.css has #costContainer { display: block } (an old wheel form) */
+  .mp .spin-status { height: auto; min-height: 1.5em; padding: 0; margin: 0; text-align: start; color: var(--ds-danger); font-size: var(--ds-fs-sm); font-weight: 700; }
+  .mp #prizesTable td:last-child { white-space: nowrap; }
+  .mp #prizesTable td:last-child .ds-btn + .ds-btn { margin-inline-start: var(--ds-sp-2); }
+  .mp #prizesTable tbody:empty::after { content: "No official prizes yet."; display: table-cell; padding: var(--ds-sp-6) var(--ds-sp-4); color: var(--ds-text-muted); }
+  .mp .ds-modal .ds-form { gap: var(--ds-sp-3); }
+</style>
 
-<body>
-
-  <div class="container mt-5">
-    <h1>Manage Prizes</h1>
-    <p>Official store items only. Descriptions, images, categories, the marketplace (review queue, disputes, orders, fee and approval settings) are in <a href="/shop/admin">Shop admin</a>.</p>
-    <h3>Add New Prize</h3>
-            <form id="prizeListForm" action="/api/prizes/edit" method="POST">    
-            <label for="prizeName">Prize Name:</label>
-            <input type="text" id="prizeName" name="prizeName" required>
-            <div id="costContainer"> 
-                <label for="cost">Prize Cost:</label>
-                <input type="text" id="prizeCost" name="cost">
-            </div>
-            <div id="qtyContainer">
-                                <label for="cost">Prize Qty:</label>
-                <input type="text" id="prizeQty" name="quantity">
-            </div>
-            <button id="addPrizeBtn" class="btn btn-primary mb-3">Add New Prize</button>
-            <div id="PrizeListStatus" class="spin-status"></div>
-        </form>
-    
-    <table class="table table-bordered" id="prizesTable">
-      <thead>
-        <tr>
-          <th>Prize ID</th>
-          <th>Prize Name</th>
-          <th>Cost</th>
-          <th>Quantity</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <!-- Prizes will be dynamically inserted here -->
-      </tbody>
-    </table>
+<main class="mp ds-page mid">
+  <div class="ds-head">
+    <span class="ds-eyebrow">Staff · Prize shop</span>
+    <h1 class="ds-h1">Manage Prizes</h1>
+    <p class="ds-sub">Official store items only. Descriptions, images, categories, the marketplace (review queue, disputes, orders, fee and approval settings) are in <a href="/shop/admin">Shop admin</a>.</p>
   </div>
 
-  <!-- Modal for Editing Prize -->
-  <div class="modal fade" id="editPrizeModal" tabindex="-1" role="dialog" aria-labelledby="editPrizeModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-      <div class="modal-content">
-        <form id="editPrizeForm">
-          <div class="modal-header">
-            <h5 class="modal-title" id="editPrizeModalLabel">Edit Prize</h5>
-            <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="closeEditModal()">
-              <span aria-hidden="true">&times;</span>
-            </button>
-          </div>
-          <div class="modal-body">
-            <input type="hidden" id="editPrizeId" name="prizeId">
-            <div class="form-group">
-              <label for="editPrizeName">Prize Name</label>
-              <input type="text" class="form-control" id="editPrizeName" name="prizeName" required>
-            </div>
-            <div class="form-group">
-              <label for="editPrizeCost">Cost</label>
-              <input type="number" class="form-control" id="editPrizeCost" name="cost" required min="0">
-            </div>
-            <div class="form-group">
-              <label for="editPrizeQuantity">Quantity</label>
-              <input type="number" class="form-control" id="editPrizeQuantity" name="quantity" required min="0">
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-dismiss="modal" onclick="closeEditModal()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </div>
-        </form>
+  <section class="ds-card lg" aria-labelledby="mpAddH">
+    <h2 class="ds-h3" id="mpAddH">Add New Prize</h2>
+    <form id="prizeListForm" class="ds-form mp-form" action="/api/prizes/edit" method="POST">
+      <div class="ds-field">
+        <label for="prizeName">Prize Name</label>
+        <input class="ds-in" type="text" id="prizeName" name="prizeName" required>
       </div>
+      <div class="ds-field" id="costContainer">
+        <label for="prizeCost">Prize Cost</label>
+        <input class="ds-in num" type="text" id="prizeCost" name="cost" inputmode="numeric">
+      </div>
+      <div class="ds-field" id="qtyContainer">
+        <label for="prizeQty">Prize Qty</label>
+        <input class="ds-in num" type="text" id="prizeQty" name="quantity" inputmode="numeric">
+      </div>
+      <div class="ds-actions">
+        <button id="addPrizeBtn" class="ds-btn">Add New Prize</button>
+        <div id="PrizeListStatus" class="spin-status" role="status" aria-live="polite"></div>
+      </div>
+    </form>
+  </section>
+
+  <section class="ds-stack" aria-labelledby="mpListH">
+    <h2 class="ds-h2 dot" id="mpListH">Official prizes</h2>
+    <div class="ds-tbl">
+      <table id="prizesTable">
+        <thead>
+          <tr>
+            <th>Prize ID</th>
+            <th>Prize Name</th>
+            <th class="r">Cost</th>
+            <th class="r">Quantity</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- the edit dialog -->
+  <div class="ds-scrim sheet" id="editPrizeModal" hidden>
+    <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="editPrizeModalLabel">
+      <form id="editPrizeForm" class="ds-form">
+        <div class="ds-modal-h">
+          <h2 id="editPrizeModalLabel">Edit Prize</h2>
+          <button type="button" class="ds-close" aria-label="Close" onclick="closeEditModal()"><span aria-hidden="true">&times;</span></button>
+        </div>
+        <input type="hidden" id="editPrizeId" name="prizeId">
+        <div class="ds-field">
+          <label for="editPrizeName">Prize Name</label>
+          <input type="text" class="ds-in" id="editPrizeName" name="prizeName" required>
+        </div>
+        <div class="ds-field">
+          <label for="editPrizeCost">Cost</label>
+          <input type="number" class="ds-in num" id="editPrizeCost" name="cost" required min="0" inputmode="numeric">
+        </div>
+        <div class="ds-field">
+          <label for="editPrizeQuantity">Quantity</label>
+          <input type="number" class="ds-in num" id="editPrizeQuantity" name="quantity" required min="0" inputmode="numeric">
+        </div>
+        <div class="ds-modal-f">
+          <button type="button" class="ds-btn ghost" onclick="closeEditModal()">Cancel</button>
+          <button type="submit" class="ds-btn">Save Changes</button>
+        </div>
+      </form>
     </div>
   </div>
+</main>
 
   <!-- Include JS libraries -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-  <!-- Include Bootstrap JS -->
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+  <script>
+    // G6: the dialog helper that replaces Bootstrap's $(...).modal('show' / 'hide')
+    (function () {
+      var scrim = document.getElementById('editPrizeModal'), opener = null;
+      function show() { opener = document.activeElement; scrim.hidden = false; var f = document.getElementById('editPrizeName'); if (f) f.focus(); }
+      function hide() { scrim.hidden = true; if (opener && opener.focus && document.contains(opener)) opener.focus(); opener = null; }
+      $.fn.modal = function (cmd) { if (this[0] === scrim) { if (cmd === 'show') show(); else if (cmd === 'hide') hide(); } return this; };
+      scrim.addEventListener('click', function (e) { if (e.target === scrim) window.closeEditModal ? window.closeEditModal() : hide(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !scrim.hidden) { window.closeEditModal ? window.closeEditModal() : hide(); } });
+    })();
+  </script>
 
   <!-- Custom Script -->
   <script>
@@ -111,11 +138,11 @@
             <tr>
               <td>${prize.prizeId}</td>
               <td>${prize.prize}</td>
-              <td>${prize.cost}</td>
-              <td>${prize.quantity}</td>
+              <td class="r">${prize.cost}</td>
+              <td class="r">${prize.quantity}</td>
               <td>
-                <button class="btn btn-sm btn-info" onclick="openEditModal('${prize.prizeId}', '${prize.prize}', ${prize.cost}, ${prize.quantity})">Edit</button>
-                <button class="btn btn-sm btn-danger" onclick="removePrize('${prize.prize}')">Remove</button>
+                <button type="button" class="ds-btn sm ghost" onclick="openEditModal('${prize.prizeId}', '${prize.prize}', ${prize.cost}, ${prize.quantity})">Edit</button>
+                <button type="button" class="ds-btn sm danger" onclick="removePrize('${prize.prize}')">Remove</button>
               </td>
             </tr>
           `;
@@ -271,4 +298,3 @@ document.getElementById('prizeListForm').addEventListener('submit', function(eve
                 });
                 
   </script>
-</body>

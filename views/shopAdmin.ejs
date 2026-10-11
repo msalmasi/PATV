@@ -1,8 +1,25 @@
 <%- include('layout', { title: 'Shop admin', user: user }) %>
 <%- include('partials/shop-css') %>
-<div class="sh">
-  <h1>Shop admin</h1>
-  <p class="sub"><a href="/shop">Shop</a> · <a href="/admin/manage-prizes">Classic prize editor</a></p>
+<style>
+  /* G6 polish: the staff shop pages on .ds-page (flow) with a .ds-head; shop-css gives the fields, buttons and cards */
+  .sh.sa .ds-head h1, .sh.se .ds-head h1 { text-align: start; margin: 0; }
+  .sh.sa .ds-head .ds-sub a { font-weight: 700; }
+  .sh.sa .formgrid, .sh.se .formgrid { align-items: end; }
+  .sh.sa .item.sm { padding: var(--ds-sp-2h) var(--ds-sp-3); }
+  .sh.sa .tabs { margin: var(--ds-sp-4) 0 0; }
+  .sh.sa .stats { margin: var(--ds-sp-4) 0 0; }
+  .sh.sa .ds-empty, .sh.se .ds-empty { margin: 0; }
+  .sh.sa .box > .muted { margin: 0; }
+  .sh.sa .rm-note { width: 160px; flex: 0 1 160px; }
+  .sh.se .ds-back { margin-bottom: var(--ds-sp-2); }
+  .sh.se .ds-head { margin-bottom: var(--ds-sp-4); }
+</style>
+<main class="sh sa ds-page flow">
+  <div class="ds-head">
+    <span class="ds-eyebrow">Staff · Prize shop</span>
+    <h1 class="ds-h1">Shop admin</h1>
+    <p class="ds-sub"><a href="/shop">Shop</a> · <a href="/admin/manage-prizes">Classic prize editor</a> · <a href="/admin">Admin</a></p>
+  </div>
   <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
   <div class="tabs"><a href="#review">Review (<%= review.length %>)</a><a href="#disputes">Disputes (<%= disputes.length %>)</a><a href="#orders">Orders</a><a href="#listings">Listings</a><a href="#official">Add official item</a><a href="#settings">Settings</a></div>
   <div class="stats">
@@ -12,7 +29,7 @@
   </div>
 
   <h2 id="review">Review queue</h2>
-  <% if (!review.length) { %><p class="muted">Nothing waiting for review.</p><% } %>
+  <% if (!review.length) { %><p class="ds-empty">Nothing waiting for review.</p><% } %>
   <div class="list">
     <% review.forEach((l) => { %>
       <div class="item">
@@ -33,7 +50,7 @@
   </div>
 
   <h2 id="disputes">Disputes</h2>
-  <% if (!disputes.length) { %><p class="muted">No open disputes.</p><% } %>
+  <% if (!disputes.length) { %><p class="ds-empty">No open disputes.</p><% } %>
   <div class="list">
     <% disputes.forEach((o) => { %>
       <div class="item">
@@ -58,13 +75,13 @@
   </div>
   <div class="list">
     <% orders.forEach((o) => { const st = H.status(o.status); %>
-      <div class="item" style="padding:9px 12px">
+      <div class="item sm">
         <div class="top"><span><a href="/shop/orders/<%= o.id %>">#<%= o.id %></a> · <%= o.title %></span><span class="pill" style="color:<%= st.color %>"><%= st.label %></span></div>
         <div class="muted"><%= H.day(o.created) %> · <%= o.buyer_name %> ← <%= o.official ? 'PATV Store' : o.seller_name %> · <%= H.fmt(o.price) %> PAT<%= o.fee ? ' · fee ' + H.fmt(o.fee) : '' %> · <%= o.source %></div>
       </div>
     <% }) %>
   </div>
-  <% if (!orders.length) { %><p class="muted">No orders.</p><% } %>
+  <% if (!orders.length) { %><p class="ds-empty">No orders.</p><% } %>
   <% if (opages > 1) { %>
     <nav class="pager">
       <% if (page > 1) { %><a href="/shop/admin?<%= ost ? 'ostatus=' + ost + '&' : '' %>page=<%= page - 1 %>#orders">‹ Newer</a><% } %>
@@ -79,7 +96,7 @@
   </form>
   <div class="list">
     <% listings.forEach((l) => { const ls = H.lstatus(l.status); %>
-      <div class="item" style="padding:9px 12px">
+      <div class="item sm">
         <div class="top"><span><a href="/shop/item/<%= l.prizeId %>"><%= l.prize %></a> · <span class="price"><%= H.fmt(l.cost) %></span> · <%= l.seller_id ? l.seller_name : 'Official' %></span><span class="pill" style="color:<%= ls.color %>"><%= ls.label %></span></div>
         <div class="row">
           <span class="muted">stock <%= H.fmt(l.quantity) %> · sold <%= H.fmt(l.sold || 0) %></span>
@@ -89,7 +106,7 @@
           <% if (l.status !== 'removed') { %>
             <form method="POST" action="/shop/listing/<%= l.prizeId %>/remove" class="row" data-q="Remove “<%= l.prize %>” from the shop?" onsubmit="return confirm(this.dataset.q)">
               <input type="hidden" name="back" value="/shop/admin#listings">
-              <% if (l.seller_id) { %><input type="text" name="note" maxlength="300" placeholder="Reason" style="width:140px"><% } %>
+              <% if (l.seller_id) { %><input type="text" name="note" maxlength="300" placeholder="Reason" aria-label="Reason" class="rm-note"><% } %>
               <button class="bad" type="submit">Remove</button>
             </form>
           <% } else { %>
@@ -111,7 +128,7 @@
       <label>Image (https:// link or /public/img/… path, optional) <input type="text" name="image_url" maxlength="500" inputmode="url" autocomplete="off" pattern="https://\S+|/\S+" title="An https:// link or a site path such as /public/img/shop/ps5-pro.svg" placeholder="/public/img/shop/….svg or https://…"></label>
       <label class="wide">Description <textarea name="description" maxlength="1000"></textarea></label>
     </div>
-    <p class="muted" style="margin:0">Official items are sold instantly: the PAT goes to the store owner's account and the order is completed at once (as the classic prize store always did).</p>
+    <p class="muted">Official items are sold instantly: the PAT goes to the store owner's account and the order is completed at once (as the classic prize store always did).</p>
     <div><button type="submit">Add official item</button></div>
   </form>
 
@@ -125,11 +142,11 @@
       <label class="check wide"><input type="checkbox" name="require_approval" value="1" <%= settings.require_approval ? 'checked' : '' %>> New listings from non-staff need approval</label>
       <label class="wide">Categories (one per line) <textarea name="categories" style="min-height:150px"><%= categories.join('\n') %></textarea></label>
     </div>
-    <p class="muted" style="margin:0">A new fee % applies to orders placed after the change; open orders keep the fee they were bought at.</p>
+    <p class="muted">A new fee % applies to orders placed after the change; open orders keep the fee they were bought at.</p>
     <div><button type="submit">Save settings</button></div>
   </form>
   <% if (typeof subsCfg !== 'undefined' && subsCfg) { %>
-  <h2 id="subscriptions">🔁 Subscriptions</h2>
+  <h2 id="subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span> Subscriptions</h2>
   <form class="box" method="POST" action="/shop/admin/subscriptions" style="display:grid;gap:10px">
     <div class="formgrid">
       <label class="check wide"><input type="checkbox" name="enabled" value="1" <%= subsCfg.enabled ? 'checked' : '' %>> Subscriptions on (off: no new ones; running ones keep renewing)</label>
@@ -137,8 +154,8 @@
       <label class="wide">Official items sold as a subscription <small class="muted">{"prizeId": {"days": 30}} — the price is the item's price, charged every N days</small>
         <textarea name="items" style="min-height:90px" spellcheck="false"><%= JSON.stringify(subsCfg.items, null, 1) %></textarea></label>
     </div>
-    <p class="muted" style="margin:0">Renewals pay the store exactly like a purchase of that item. Members manage theirs at <a href="/subscriptions">/subscriptions</a> (it also lists their Prime Time / Season Pass auto-renewals).</p>
+    <p class="muted">Renewals pay the store exactly like a purchase of that item. Members manage theirs at <a href="/subscriptions">/subscriptions</a> (it also lists their Prime Time / Season Pass auto-renewals).</p>
     <div><button type="submit">Save subscription settings</button></div>
   </form>
   <% } %>
-</div>
+</main>
