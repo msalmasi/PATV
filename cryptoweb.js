@@ -50,6 +50,8 @@ function register(app, { addUser, noTimers } = {}) {
     try { await CP.init(); res.json({ ok: true, ...(await fn(req, req.body || {})) }); } catch (e) { fail(res, e); }
   }];
   const stripeOn = () => { try { return require("./stripebilling").enabled(); } catch (e) { return false; } };
+  // 1.99kz: the navbar / footer "Support PATV" links (views/layout.ejs) show while /support has something to offer
+  app.locals.supportOn = () => { try { return CP.enabled() || stripeOn(); } catch (e) { return false; } };
 
   app.get("/support", addUser, async (req, res, next) => {
     try {

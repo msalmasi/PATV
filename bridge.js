@@ -899,7 +899,8 @@ function register(app, { isBotToken, addUser }) {
       room: { id: R.id, name: title, slug, count: R.count, live: !R.offline && isLive(R), topic: liveOpen ? R.topic : "",
               bridged: !R.offline, siteOnly, platform, description: info ? info.description : "", banner: info ? info.banner : "",
               owner: info && info.owner ? (info.owner.display || info.owner.username) : null, ownerUser: info && info.owner ? info.owner.username : null,
-              house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)) },
+              house: !!(info && info.house), camfrogName: siteOnly ? null : (R.name || (info && info.id)),
+              adult: !!(info && info.adult) },                     // 1.99kz: the 18+ badge
       initial, padTabs, latest, feedSeen,
       dms: reg.hasRoute(app, "/messages"),          // 1.99co: the Manage panel's "Message" (DMs, when that page exists)
       pepeHere: here, stage: st,

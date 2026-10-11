@@ -60,8 +60,11 @@
                 ['/gtf', '🔫', t('nav.gtf')],
                 ['/rankings', '🏆', t('nav.rankings')],
               ];
+              // 1.99kz: "Support PATV" (/support) while a donation rail (card or stablecoins) is on - app.locals.supportOn (cryptoweb.js)
+              const _supportOn = typeof supportOn === 'function' ? !!supportOn() : false;
               const more = [
                 ['/wallet', '👛', t('nav.wallet')],
+                ...(_supportOn ? [['/support', '💖', t('nav.support')]] : []),
                 ...((typeof user !== 'undefined' && user) ? [['/subscriptions', '🔁', t('subs.title')]] : []),   // 1.99jr: signed in only
                 ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
                 ['/staking', '🏦', t('nav.staking')],
@@ -260,6 +263,7 @@
                     <a href="/achievements"><%- t('nav.achievements') %></a>
                     <a href="/shop"><%- t('nav.shop') %></a>
                     <a href="/plex"><%- t('nav.plex') %></a>
+                    <% if (_supportOn) { %><a href="/support"><%- t('foot.support') %></a><% } %>
                 </nav>
                 <div><%- t('foot.tagline') %></div>
                 <%# 1.99jo: the language switcher (i18n.js); the select needs JS, the link always works %>

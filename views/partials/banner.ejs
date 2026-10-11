@@ -2,11 +2,25 @@
 <%# views/partials/banner.ejs — the homepage banner slot (1.99kk, banner.js pick()). Locals: bn = {ad, paid, kind, promo, headline,
     line, image, alt, href, external, domain, by, vars, bookable}. A paid banner says "Sponsored" (+ who bought it); a house promo
     says "From PATV". Member text is always escaped; a house promo without its own text uses the translated built-in text.
-    Impressions: a beacon once the banner is at least half on screen for a second (aggregate counts only, banner.js). %>
+    1.99kz: house promos have their own look - Pepeball gets a lotto card (the exact jackpot counting up, a live countdown
+    to the draw + its time in the viewer's zone, tickets sold, a "Buy tickets" button, bouncing balls); the others an accent
+    colour, an icon and a call-to-action chip. Motion is off under prefers-reduced-motion. A promo with an admin's own text
+    keeps the plain card. Impressions: a beacon once the banner is at least half on screen for a second (aggregate counts only). %>
 <%
   const B_ = bn;
-  const builtIn_ = (part) => (B_.promo && B_.promo !== 'custom' ? t('banner.promo.' + B_.promo + '.' + part, B_.vars || {}) : '');
+  const V_ = B_.vars || {};
+  const builtIn_ = (part) => (B_.promo && B_.promo !== 'custom' ? t('banner.promo.' + B_.promo + '.' + part, V_) : '');
   const lab_ = B_.paid ? t('banner.sponsored') : t('banner.from_patv');
+  const ICON_ = { lotto: '🎟️', season_pass: '🎟️', prime_time: '📺', plex: '📼', wheel: '🎡', support: '💖' };
+  const house_ = !B_.paid && B_.kind !== 'image' && !!ICON_[B_.promo] && !B_.headline && !B_.line;
+  const lotto_ = house_ && B_.promo === 'lotto' && V_.jackpot_n > 0;
+  const fmt_ = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  // the built-in headline without its leading emoji (the icon bubble shows it)
+  const bare_ = (s) => String(s || '').replace(/^\s*(?:\p{Extended_Pictographic}|️|‍)+\s*/u, '');
+  const left_ = (sec) => { const s = Math.max(0, Math.floor(sec)); const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    return d ? d + 'd ' + h + 'h ' + m + 'm' : h ? h + 'h ' + m + 'm ' + (s % 60) + 's' : m + 'm ' + (s % 60) + 's'; };
+  const now_ = Date.now() / 1000;
+  const when_ = lotto_ && V_.next_at ? (typeof tzTime === 'function' ? tzTime(V_.next_at, 'full') : t.esc(V_.draw || '')) : '';
 %>
 <style>
   .bn { position: relative; display: block; margin: 14px 0 0; border: 1px solid #262626; border-radius: 14px; background: linear-gradient(90deg, #121a14, #111 60%); overflow: hidden; min-width: 0; }
@@ -17,17 +31,82 @@
   .bn-l { font-size: 14px; color: #b9b9b9; overflow-wrap: anywhere; }
   .bn.img .bn-a { padding: 0; min-height: 0; }
   .bn.img img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; }
-  .bn-lbl { position: absolute; top: 8px; right: 10px; z-index: 1; padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.65); border: 1px solid #3a3a3a; color: #bdbdbd; font: 11px/1.6 Ubuntu, sans-serif; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
+  .bn-lbl { position: absolute; top: 8px; right: 10px; z-index: 2; padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.65); border: 1px solid #3a3a3a; color: #bdbdbd; font: 11px/1.6 Ubuntu, sans-serif; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
   .bn-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; padding: 4px 16px 8px; font-size: 12px; color: #8a8a8a; }
   .bn.img .bn-foot { padding-top: 6px; }
   .bn-foot a { color: #9a9a9a; }
-  @media (max-width: 560px) { .bn-h { font-size: 15px; padding-right: 0; padding-top: 14px; } .bn-a { padding: 10px 12px; } .bn-foot { padding: 4px 12px 8px; } }
+
+  /* 1.99kz: house promos - accent colour (--ac / --ac2), icon bubble, call-to-action chip with a slow shine */
+  .bn.hp { --ac: #4caf50; --ac2: #1b3a1f; --acb: #3a5a3e; border-color: var(--acb); background: radial-gradient(120% 140% at 0% 0%, var(--ac2), #111 62%); }
+  .bn.hp .bn-a { flex-direction: row; align-items: center; gap: 14px; padding: 24px 16px 16px; }
+  .bn-ic { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; font-size: 24px; background: rgba(0,0,0,.35); border: 1px solid var(--acb); }
+  .bn-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .bn.hp .bn-h { padding-right: 0; }
+  .bn-cta { box-sizing: border-box; flex: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 15px; border-radius: 999px; font: bold 14px/1 Ubuntu, sans-serif; color: #141414; background: var(--ac); white-space: nowrap; }
+  .bn-cta::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); transform: translateX(-120%); animation: bnShine 4.5s ease-in-out 1.2s infinite; }
+  a.bn-a:hover .bn-cta, a.bn-a:focus-visible .bn-cta { filter: brightness(1.12); }
+  .bn.k-season_pass { --ac: #ffd54f; --ac2: #3a3010; --acb: #6b5a20; }
+  .bn.k-prime_time { --ac: #64b5f6; --ac2: #0f2638; --acb: #24527a; }
+  .bn.k-plex { --ac: #ffa726; --ac2: #3a2408; --acb: #7a4f12; }
+  .bn.k-wheel { --ac: #f06292; --ac2: #3a1024; --acb: #7a2448; }
+  .bn.k-support { --ac: #ff7c9c; --ac2: #3d0f1d; --acb: #7a2440; }
+
+  /* Pepeball: the lotto card */
+  .bn.k-lotto { --ac: #ffd740; border-color: #6a4a9c; background: radial-gradient(90% 160% at 100% 0%, rgba(255,215,64,.18), transparent 55%), linear-gradient(120deg, #2a0f4a, #3d1460 45%, #1b0b30); }
+  .bn.k-lotto .bn-a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 18px; padding: 16px 18px; }
+  .bn-balls { display: flex; gap: 4px; align-items: flex-end; height: 46px; padding-top: 14px; }
+  .bn-ball { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: bold 11px/1 Ubuntu, sans-serif; color: #222; background: radial-gradient(circle at 35% 30%, #fff, #e8e8e8 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.4); animation: bnBounce 1.8s ease-in-out infinite; }
+  .bn-ball:nth-child(2) { animation-delay: .2s; } .bn-ball:nth-child(3) { animation-delay: .4s; }
+  .bn-ball.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); animation-delay: .6s; }
+  .bn-kick { font: bold 12px/1.4 Ubuntu, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #e1c7ff; }
+  .bn-jp { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; font: 900 34px/1.05 Ubuntu, sans-serif; color: #ffe082; text-shadow: 0 0 18px rgba(255,215,64,.35); font-variant-numeric: tabular-nums; }
+  .bn-jp small { font-size: 15px; font-weight: bold; color: #ffecb3; letter-spacing: .05em; }
+  .bn-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: #d9c8f0; }
+  .bn-meta b { color: #fff; font-variant-numeric: tabular-nums; }
+  .bn-meta time { color: #d9c8f0; }
+  .bn.k-lotto .bn-cta { padding: 12px 20px; font-size: 15px; color: #2a0f4a; background: linear-gradient(180deg, #ffe57f, #ffc400); box-shadow: 0 3px 14px rgba(255,196,0,.45); }
+  .bn.k-lotto .bn-lbl { background: rgba(20,6,36,.7); border-color: #6a4a9c; color: #e1c7ff; }
+
+  @keyframes bnShine { 0%, 70% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
+  @keyframes bnBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @media (prefers-reduced-motion: reduce) { .bn-cta::after, .bn-ball { animation: none; } }
+
+  @media (max-width: 560px) {
+    .bn-h { font-size: 15px; padding-right: 0; padding-top: 14px; } .bn-a { padding: 10px 12px; } .bn-foot { padding: 4px 12px 8px; }
+    .bn.hp .bn-a { flex-wrap: wrap; gap: 10px 12px; padding: 32px 12px 12px; }
+    .bn.hp .bn-h { padding-top: 0; }
+    .bn-ic { width: 40px; height: 40px; font-size: 21px; }
+    .bn.hp .bn-tx { flex-basis: calc(100% - 56px); }
+    .bn.hp .bn-cta { flex-basis: 100%; }
+    .bn.k-lotto .bn-a { grid-template-columns: minmax(0, 1fr); padding: 46px 14px 14px; }
+    .bn.k-lotto .bn-balls { position: absolute; top: 8px; left: 12px; height: 30px; padding-top: 8px; }
+    .bn.k-lotto .bn-ball { width: 20px; height: 20px; font-size: 10px; }
+    .bn-jp { font-size: 30px; }
+  }
 </style>
-<aside class="bn<%= B_.paid ? ' paid' : '' %><%= B_.kind === 'image' ? ' img' : '' %>" data-bn="<%= B_.ad %>" aria-label="<%- lab_ %>">
+<aside class="bn<%= B_.paid ? ' paid' : '' %><%= B_.kind === 'image' ? ' img' : '' %><%= house_ ? ' hp k-' + B_.promo : '' %>" data-bn="<%= B_.ad %>" aria-label="<%- lab_ %>">
   <span class="bn-lbl"><%- lab_ %></span>
   <% if (B_.href) { %><a class="bn-a" href="<%= B_.href %>"<% if (B_.external) { %> target="_blank" rel="<%= B_.paid ? 'sponsored ' : '' %>noopener noreferrer"<% } else if (B_.paid) { %> rel="sponsored"<% } %>><% } else { %><div class="bn-a"><% } %>
     <% if (B_.kind === 'image' && B_.image) { %>
       <img src="<%= B_.image %>" alt="<%= B_.alt || '' %>" width="1200" height="200" loading="lazy" decoding="async">
+    <% } else if (lotto_) { %>
+      <span class="bn-balls" aria-hidden="true"><span class="bn-ball">7</span><span class="bn-ball">19</span><span class="bn-ball">23</span><span class="bn-ball pb">P</span></span>
+      <span class="bn-tx">
+        <span class="bn-kick"><%- t('banner.lotto.kicker') %></span>
+        <span class="bn-jp"><span data-bn-count="<%= V_.jackpot_n %>"><%= fmt_(V_.jackpot_n) %></span><small>PAT</small></span>
+        <span class="bn-meta">
+          <% if (V_.next_at) { %><span><%- V_.next_at > now_ ? t('banner.lotto.draw_in', { left: '<b data-bn-cd="' + Math.round(V_.next_at) + '">' + left_(V_.next_at - now_) + '</b>' }) : t('banner.lotto.drawing') %><% if (when_) { %> · <%- when_ %><% } %></span><% } %>
+          <% if (V_.sold > 0) { %><span><%- t('banner.lotto.sold', { n: '<b>' + fmt_(V_.sold) + '</b>' }) %></span><% } %>
+        </span>
+      </span>
+      <span class="bn-cta"><%- t('banner.lotto.cta') %></span>
+    <% } else if (house_) { %>
+      <span class="bn-ic" aria-hidden="true"><%= ICON_[B_.promo] %></span>
+      <span class="bn-tx">
+        <span class="bn-h"><%- bare_(builtIn_('h')) %></span>
+        <span class="bn-l"><%- builtIn_('l') %></span>
+      </span>
+      <span class="bn-cta"><%- t('banner.cta.' + B_.promo) %></span>
     <% } else { %>
       <span class="bn-h"><% if (B_.headline) { %><%= B_.headline %><% } else { %><%- builtIn_('h') %><% } %></span>
       <% if (B_.line || (!B_.headline && B_.promo && B_.promo !== 'custom')) { %><span class="bn-l"><% if (B_.line) { %><%= B_.line %><% } else { %><%- builtIn_('l') %><% } %></span><% } %>
@@ -44,7 +123,28 @@
 (function () {
   'use strict';
   var el = document.querySelector('aside.bn[data-bn]');
-  if (!el || !('IntersectionObserver' in window)) return;
+  if (!el) return;
+  // 1.99kz: the Pepeball card - the jackpot counts up once and the countdown ticks (no count-up under reduced motion)
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var jp = el.querySelector('[data-bn-count]');
+  if (jp && !still && window.requestAnimationFrame) {
+    var to = Number(jp.getAttribute('data-bn-count')) || 0, t0 = null, dur = 1400;
+    var show = function (n) { jp.textContent = Math.round(n).toLocaleString('en-US'); };
+    show(to * 0.6);
+    var step = function (ts) { if (t0 === null) t0 = ts; var k = Math.min(1, (ts - t0) / dur); show(to * (0.6 + 0.4 * (1 - Math.pow(1 - k, 3)))); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  var cd = el.querySelector('[data-bn-cd]');
+  if (cd) {
+    var at = Number(cd.getAttribute('data-bn-cd')) || 0;
+    var tick = function () {
+      var s = Math.max(0, Math.floor(at - Date.now() / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+      cd.textContent = d ? d + 'd ' + h + 'h ' + m + 'm' : h ? h + 'h ' + m + 'm ' + (s % 60) + 's' : m + 'm ' + (s % 60) + 's';
+      if (s > 0) setTimeout(tick, 1000);
+    };
+    tick();
+  }
+  if (!('IntersectionObserver' in window)) return;
   var sent = false, timer = null;
   var io = new IntersectionObserver(function (es) {
     es.forEach(function (e) {

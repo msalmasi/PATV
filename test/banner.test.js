@@ -171,7 +171,7 @@ test("what shows: the paid banner on its days, house promos (live Pepeball jackp
   assert.deepEqual([...seen].sort(), ["lotto", "plex", "prime_time", "season_pass", "wheel"]);
   let p;
   do { p = await BN.pick({ lotto }); } while (p.promo !== "lotto");
-  assert.deepEqual(p.vars, { jackpot: "20.8M", draw: "Sunday 9 PM ET" });
+  assert.deepEqual(p.vars, { jackpot: "20.8M", draw: "Sunday 9 PM ET", jackpot_n: 20812345, next_at: lotto.next_at, sold: 0 });
   assert.equal(p.href, "/b/go/h/lotto");
   // no jackpot known -> the Pepeball promo sits out
   for (let i = 0; i < 12; i++) assert.notEqual((await BN.pick({ lotto: null })).promo, "lotto");
@@ -203,6 +203,54 @@ test("what shows: the paid banner on its days, house promos (live Pepeball jackp
   await BN.setConfig({ banner_enabled: false }, "test");
   assert.equal(await BN.pick({ lotto }), null);
   await BN.setConfig({ banner_enabled: true }, "test");
+});
+
+test("1.99kz: the Pepeball promo shows the lotto page's jackpot (lotto_state, uncapped)", async () => {
+  await runQuery("CREATE TABLE IF NOT EXISTS lotto_state (id INTEGER PRIMARY KEY, data TEXT, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO lotto_state (id, data, updated) VALUES (1, ?, ?)",
+                 [JSON.stringify({ draw: 2, next_at: 1791766800, sales_open: true, price: 1000, jackpot: 20982296, sold: 7572, prizes: [], players: {} }), Date.now()]);
+  const home = require(path.join(repo, "home"));
+  const S = await home.stats();
+  assert.equal(S.lotto.jackpot, 20982296, "the full jackpot, not a 5M cap");
+  assert.equal(S.lotto.sold, 7572);
+  const t0 = t;
+  t = Date.UTC(2026, 9, 10, 14);
+  let p;
+  do { p = await BN.pick({ lotto: S.lotto }); } while (p.promo !== "lotto");
+  assert.equal(p.vars.jackpot_n, 20982296);
+  assert.equal(p.vars.jackpot, "21M");
+  assert.equal(p.vars.sold, 7572);
+  const h = await ejs.renderFile(path.join(repo, "views", "partials", "banner.ejs"), { bn: p });
+  assert.match(h, /20,982,296/);
+  assert.match(h, /7,572<\/b> tickets sold/);
+  t = t0;
+});
+
+test("1.99kz: the Support PATV house promo - seeded, shown only while a donation rail is on, with the live rate", async () => {
+  const t0 = t;
+  t = Date.UTC(2026, 9, 10, 14);                          // a day nobody booked
+  const row = (await BN.promos({ all: true })).find((p) => p.id === "support");
+  assert.ok(row && row.enabled && row.link === "/support" && row.weight === 2, "seeded on, weight like the others");
+  for (let i = 0; i < 20; i++) assert.notEqual((await BN.pick({})).promo, "support", "Stripe + crypto off: sits out");
+  const keep = { e: process.env.STRIPE_ENABLED, k: process.env.STRIPE_SECRET_KEY, w: process.env.STRIPE_WEBHOOK_SECRET };
+  Object.assign(process.env, { STRIPE_ENABLED: "1", STRIPE_SECRET_KEY: "sk_test_banner", STRIPE_WEBHOOK_SECRET: "whsec_banner" });
+  try {
+    const seen = new Set();
+    let sp = null;
+    for (let i = 0; i < 30; i++) { const p = await BN.pick({ lotto: { jackpot: 1000000, next_at: Math.floor(t / 1000) + 86400 } }); seen.add(p.promo); if (p.promo === "support") sp = p; }
+    assert.ok(seen.has("support") && seen.has("lotto") && seen.has("wheel"), "in rotation with Pepeball and the rest: " + [...seen]);
+    assert.equal(sp.href, "/b/go/h/support");
+    assert.equal(sp.vars.rate, "500,000");
+    assert.equal(sp.vars.bonus, "20");
+    const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
+    assert.match(en["banner.promo.support.h"], /\{rate\} PAT per \$1/);
+    assert.match(en["banner.promo.support.l"], /\{bonus\}% to the community pot/);
+  } finally {
+    for (const [k, v] of [["STRIPE_ENABLED", keep.e], ["STRIPE_SECRET_KEY", keep.k], ["STRIPE_WEBHOOK_SECRET", keep.w]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    t = t0;
+  }
 });
 
 test("take down (no refund) and expiry of unreviewed bookings (full refund)", async () => {
@@ -262,8 +310,24 @@ test("the views: banner partial (Sponsored + escaped text / From PATV + translat
   do { p = await BN.pick({ lotto: { jackpot: 20812345, next_at: Math.floor(Date.UTC(2026, 9, 26, 1) / 1000) } }); } while (p.promo !== "lotto");
   h = await render(p);
   assert.match(h, /From PATV/);
-  assert.match(h, /Pepeball jackpot: 20.8M PAT/);
-  assert.match(h, /Draw Sunday 9 PM ET/);
+  // 1.99kz: the lotto card - the exact jackpot (counts up from it), the countdown, the draw time, the button
+  assert.match(h, /class="bn hp k-lotto"/);
+  assert.match(h, /Pepeball jackpot/);
+  assert.match(h, /data-bn-count="20812345">20,812,345</);
+  assert.match(h, /Sunday 9 PM ET/);
+  assert.match(h, /Buy tickets/);
+  assert.match(h, /prefers-reduced-motion: reduce/);
+  // the other house promos: icon + call to action
+  do { p = await BN.pick({}); } while (p.promo !== "wheel");
+  h = await render(p);
+  assert.match(h, /class="bn hp k-wheel"/);
+  assert.match(h, /🎡<\/span>/);
+  assert.match(h, />Spin the Wheel</, "headline without its emoji (the icon shows it)");
+  assert.match(h, /Spin now/);
+  // an admin's own text keeps the plain card
+  h = await render({ ...p, headline: "Custom words", line: null });
+  assert.doesNotMatch(h, /class="bn hp/);
+  assert.match(h, /Custom words/);
   assert.match(h, /Your banner here/, "paid booking is on in this test");
   h = await render({ ad: "b:aaaaaaaaaaaa", paid: true, kind: "text", headline: "<script>x</script>", line: null, href: null, by: "z", vars: {} });
   assert.ok(h.includes("&lt;script&gt;x&lt;/script&gt;"));

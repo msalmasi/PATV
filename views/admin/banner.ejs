@@ -8,7 +8,7 @@
   const STAT = (s) => s ? fmt(s.impressions) + ' views · ' + fmt(s.clicks) + ' clicks' + (s.impressions ? ' (' + (s.clicks / s.impressions * 100).toFixed(1) + '%)' : '') : '0 views';
   const pending = D.bookings.filter((b) => b.status === 'pending');
   const rest = D.bookings.filter((b) => b.status !== 'pending');
-  const PROMO_LABEL = { lotto: '🎟️ Pepeball (live jackpot)', season_pass: '🎟️ Season Pass', prime_time: '📺 Prime Time', plex: '📼 Plex access', wheel: '🎡 The Wheel', custom: '✏️ Custom' };
+  const PROMO_LABEL = { lotto: '🎟️ Pepeball (live jackpot)', season_pass: '🎟️ Season Pass', prime_time: '📺 Prime Time', plex: '📼 Plex access', wheel: '🎡 The Wheel', support: '💖 Support PATV (donations)', custom: '✏️ Custom' };
 %>
 <style>
   .bna .ad { max-width: 520px; }

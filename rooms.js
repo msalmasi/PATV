@@ -109,6 +109,8 @@ function init() {
       // 1.99iz: user-made pads (padcreate.js): origin 'user' + who made it (NULL = the bridge / a seed / an admin made it)
       if (!cols.has("origin")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN origin TEXT");
       if (!cols.has("created_by")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN created_by TEXT");
+      // 1.99kz: the owner (or a site admin) marked the pad 18+ - an "18+" badge, and Pepe treats its room as an adult room
+      if (!cols.has("adult")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0");
       // every slug a pad gave up: /p/<old>[/...] 301s to the pad's current address, and nobody else can take it
       await runQuery("CREATE TABLE IF NOT EXISTS pad_slug_aliases (slug TEXT PRIMARY KEY, room_id TEXT NOT NULL, created INTEGER, by TEXT)");
       await runQuery("CREATE INDEX IF NOT EXISTS pad_slug_aliases_room ON pad_slug_aliases (room_id)");
@@ -288,6 +290,7 @@ function view(r) {
     primeTime: primeOf(r.room_id),
     slug_set: !!r.slug_set, slug_changed_at: Number(r.slug_changed_at) || null,      // 1.99iy: a chosen address + its last change
     origin: r.origin || null, created_by: r.created_by || null, created: Number(r.created) || null, updated: Number(r.updated) || null,   // 1.99iz
+    adult: !!r.adult,                                                  // 1.99kz: 18+ pad
   };
 }
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
@@ -387,11 +390,22 @@ function cleanBanner(v) {
   if (/^\/(public|uploads)\/[A-Za-z0-9/_.\-]+$/.test(s) && !s.includes("..")) return s;
   return null;
 }
-/** Owner page settings: title, description, banner. */
+/** 1.99kz: a form / JSON value for the 18+ flag -> true | false | null (not given). */
+function adultFlag(v) {
+  if (v === undefined || v === null) return null;
+  if (typeof v === "boolean") return v;
+  return /^(1|true|on|yes)$/i.test(String(v).trim());
+}
+/** Owner page settings: title, description, banner (1.99kz: and the 18+ flag). */
 async function setPage(roomId, patch, actor) {
   await init();
   const r = await get(roomId);
   if (!r) throw Object.assign(new Error("No such room."), { status: 404 });
+  const adult = adultFlag(patch.adult);
+  if (adult !== null && adult !== r.adult) {
+    await runQuery("UPDATE rooms_registry SET adult = ? WHERE room_id = ?", [adult ? 1 : 0, roomId]);
+    await event(roomId, "page", actor, adult ? "marked 18+" : "18+ removed");
+  }
   const title = patch.title != null ? str(patch.title, 60) : r.title;
   const description = patch.description != null ? String(patch.description).replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, 500) : r.description;
   let banner = r.banner;
@@ -637,7 +651,8 @@ async function ownersForPepe() {
   return listCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: !!r.slug_set, title: r.title, owner_kind: r.owner_kind,   // 1.99iy: slug_set = links use this slug
     owner: r.owner ? { username: r.owner.username, camfrog: r.owner.camfrog ? String(r.owner.camfrog).toLowerCase() : null } : null,
     slot_count: r.slot_count,
-    description: String(r.description || "").slice(0, 300) }));   // 1.99ko: Pepe's room vibe learns from the pad's description
+    description: String(r.description || "").slice(0, 300),   // 1.99ko: Pepe's room vibe learns from the pad's description
+    adult: !!r.adult }));                                     // 1.99kz: 18+ pad -> Pepe's room vibe "adult" (unless locked)
 }
 
 /** Notice to a user: the inbox always, and a Camfrog PM through Pepe when they allow it. */

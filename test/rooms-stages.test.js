@@ -146,6 +146,17 @@ test("owner settings: slot count / price / approval clamped; page fields cleaned
   await rooms.setPage(PLANT, { title: "Houseplants", banner: "" }, "pb");
 });
 
+test("1.99kz: the 18+ pad flag - set from the page form, kept when a save leaves it out, sent to Pepe", async () => {
+  assert.equal((await rooms.get(PLANT)).adult, false, "off by default");
+  assert.equal((await rooms.setPage(PLANT, { title: "Houseplants", adult: true }, "pb")).adult, true);
+  assert.equal((await rooms.setPage(PLANT, { title: "Houseplants" }, "pb")).adult, true, "a save without the field keeps it");
+  assert.equal((await rooms.ownersForPepe()).find((r) => r.id === PLANT).adult, true, "Pepe's owner sync carries it");
+  assert.equal((await rooms.setPage(PLANT, { adult: "off" }, "pb")).adult, false, "form value off");
+  assert.equal((await rooms.setPage(PLANT, { adult: "on" }, "pb")).adult, true, "form value on");
+  assert.equal((await rooms.setPage(PLANT, { adult: false }, "pb")).adult, false);
+  assert.equal((await rooms.ownersForPepe()).find((r) => r.id === PLANT).adult, false);
+});
+
 test("front room: admin pick, else the automatic (fair) pick, else - nothing ever live - the house room", async () => {
   await rooms.setFront("auto", "boss");
   assert.deepEqual(await rooms.frontRoom([]), { id: HOUSE, pinned: false });

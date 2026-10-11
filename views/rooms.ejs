@@ -46,6 +46,7 @@
   .cg .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 2px 9px; border-radius: 999px; font-weight: bold; letter-spacing: .06em; white-space: nowrap; }
   .cg .pill.on { background: #3a1010; border: 1px solid #7a2222; color: #ffb4b4; }
   .cg .pill.off { background: #1c1c1c; border: 1px solid #333; color: #999; }
+  .cg .pill.adult18 { background: #1d0d11; border: 1px solid #6b2230; color: #ff8a9e; }   /* 1.99kz: 18+ pad */
   .cg .dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: cgPulse 1.6s ease-in-out infinite; }
   .cg .pill.off .dot { background: #666; animation: none; }
   /* 1.99eo: a pad's Camfrog room pill is about chat (💬 ROOM ACTIVE); LIVE / ON AIR / ON STAGE = video */
@@ -210,6 +211,7 @@
             <span class="ch-name"><%- PAV_(r.id, { cls: 'ch-av', pad: { title: r.title, house: r.house, community: !!r.site_only } }) %><span class="t<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.title %></span><%- fx_ ? fx_.badges : '' %><%- BM(r.boost_pat, 'pill ch-mark') %></span>
             <span class="ch-badges">
               <%- padBadge_(r.platform || (r.site_only ? 'site' : 'camfrog')) %>
+              <% if (r.adult) { %><span class="pill adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %>
               <% if (r.access === 'approved') { %><span class="pill" title="<%- t('rooms.approved_tip') %>"><%- t('rooms.approved') %></span><% } else if (r.access === 'public') { %><span class="pill" title="<%- t('rooms.public_tip') %>"><%- t('rooms.public') %></span><% } %>
               <% if (!r.site_only) { %><span class="pill <%= r.live ? 'chat' : 'off' %>" title="<%- t('rooms.room_pill_tip') %>"><span class="dot" aria-hidden="true"></span><%- r.live ? t('rooms.room_active') : (r.bridged ? t('rooms.quiet') : t('rooms.off_web')) %></span><% } %>
               <% if (liveNow.length) { %><span class="pill on" title="<%- t('rooms.on_stage_tip') %>"><%- t('rooms.on_stage', { n: liveNow.length }) %></span><% } %>

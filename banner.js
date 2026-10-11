@@ -46,7 +46,7 @@ const REF_RE = /^[A-Za-z0-9_-]{8,64}$/;
 const ID_RE = /^[a-f0-9]{12}$/;
 const FILE_RE = /^[a-f0-9]{32}_s\.webp$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-const PROMO_KINDS = Object.freeze(["lotto", "season_pass", "prime_time", "plex", "wheel", "custom"]);
+const PROMO_KINDS = Object.freeze(["lotto", "season_pass", "prime_time", "plex", "wheel", "support", "custom"]);
 const DEFAULTS = Object.freeze({
   enabled: true,              // the slot shows at all (house promos)
   paid_enabled: false,        // members can book it with PAT - OFF until the price is approved
@@ -61,10 +61,23 @@ const DEFAULT_PROMOS = Object.freeze([
   { id: "prime_time", kind: "prime_time", link: "/premium", weight: 2, sort: 3 },
   { id: "plex", kind: "plex", link: "/shop", weight: 1, sort: 4 },
   { id: "wheel", kind: "wheel", link: "/g/wheel", weight: 2, sort: 5 },
+  // 1.99kz: Support PATV (/support: card + stablecoin donations) - only shown while a donation rail is on
+  { id: "support", kind: "support", link: "/support", weight: 2, sort: 6 },
 ]);
 
 let NOW = () => Date.now();
 const fmt = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
+/** 1.99kz: the Support PATV promo's numbers ({rate} PAT per $1, {bonus}% to the community pot), or null while neither
+ *  card (Stripe) nor stablecoin donations are on - /support would 404 then. */
+let supportTerms = () => {
+  let on = false;
+  try { on = require("./cryptopay").enabled(); } catch (e) { on = false; }
+  if (!on) { try { on = require("./stripebilling").enabled(); } catch (e) { on = false; } }
+  if (!on) return null;
+  let T = { rate: 500000, bonus_pct: 20 };
+  try { T = require("./funding").donationTerms(); } catch (e) { /* defaults */ }
+  return { rate: fmt(T.rate), bonus: String(Math.round(Number(T.bonus_pct) || 0)) };
+};
 const isStaff = (u) => !!u && (u.class === "Admin" || u.class === "Staff");
 const isAdmin = (u) => !!u && u.class === "Admin";
 
@@ -119,6 +132,13 @@ function init() {
           await runQuery("INSERT OR IGNORE INTO banner_promos (id, kind, link, enabled, weight, sort, updated) VALUES (?, ?, ?, 1, ?, ?, ?)", [p.id, p.kind, p.link, p.weight, p.sort, NOW()]);
         }
         await runQuery("INSERT OR IGNORE INTO banner_kv (k, v) VALUES ('promos_seeded', '1')");
+      }
+      // 1.99kz: promos added after the first seed - once each (an admin who deletes / switches one off keeps it that way)
+      for (const p of DEFAULT_PROMOS.filter((x) => x.id === "support")) {
+        const key = "promo_seeded:" + p.id;
+        if ((await getQuery("SELECT 1 FROM banner_kv WHERE k = ?", [key])).length) continue;
+        await runQuery("INSERT OR IGNORE INTO banner_promos (id, kind, link, enabled, weight, sort, updated) VALUES (?, ?, ?, 1, ?, ?, ?)", [p.id, p.kind, p.link, p.weight, p.sort, NOW()]);
+        await runQuery("INSERT OR IGNORE INTO banner_kv (k, v) VALUES (?, '1')", [key]);
       }
       CONFIG = cleanConfig(await readConfig());
     })().catch((e) => { console.error("[banner] init:", e.message); ready = null; throw e; });
@@ -488,7 +508,12 @@ async function pick({ lotto = null, lang = "en", t = NOW() } = {}) {
              domain: linkDomain(d.link), by: d.username, vars: {}, bookable: !!CONFIG.paid_enabled };
   }
   const vars = { jackpot: lotto && lotto.jackpot ? compact(lotto.jackpot) : null, draw: lotto && lotto.next_at ? drawLabel(lotto.next_at, lang) : null };
-  const list = (await promos()).filter((p) => p.kind !== "lotto" || (vars.jackpot && vars.draw));
+  // 1.99kz: the lotto promo's own design shows the exact jackpot (the /lotto page's number: lotto_state.jackpot), a live
+  // countdown to the draw and the tickets sold
+  if (vars.jackpot) Object.assign(vars, { jackpot_n: Math.round(Number(lotto.jackpot)), next_at: Number(lotto.next_at) || 0, sold: Math.max(0, Math.round(Number(lotto.sold) || 0)) });
+  const sup = supportTerms();                  // 1.99kz: {rate, bonus} while /support has a donation rail on, else null
+  if (sup) Object.assign(vars, sup);
+  const list = (await promos()).filter((p) => (p.kind !== "lotto" || (vars.jackpot && vars.draw)) && (p.kind !== "support" || sup));
   if (!list.length) return null;
   const bag = [];
   for (const p of list) for (let i = 0; i < Math.max(1, Math.min(10, p.weight || 1)); i++) bag.push(p);

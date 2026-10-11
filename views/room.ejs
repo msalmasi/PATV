@@ -205,6 +205,7 @@
   .rm .htag { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: bold; border: 1px solid #333; background: #161616; color: #aaa; white-space: nowrap; }
   .rm .htag.own { border-color: #4d421a; background: #17140b; color: #d9c98c; }
   .rm a.htag.own:hover { color: #f3e3a3; border-color: #6b5a20; }
+  .rm .htag.adult18 { border-color: #6b2230; background: #1d0d11; color: #ff8a9e; }   /* 1.99kz: 18+ pad */
   .rm .hd-acts { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; padding-top: 2px; }
   .rm .hd-follow { display: flex; align-items: center; gap: 8px; }
   .rm .hd-follow .fw-btn { min-height: 36px; padding: 7px 16px; font-size: 14px; font-weight: bold; }
@@ -402,6 +403,7 @@
         </h1>
         <div class="hd-ref"><div class="padref">p/<%= room.slug %></div><span class="hd-tags">
           <%- padBadge_(room.platform || (siteOnly_ ? 'site' : 'camfrog')) %>
+          <% if (room.adult) { %><span class="htag adult18" title="<%- t('pad.adult.tip') %>"><%- t('pad.adult.badge') %></span><% } %>
           <% if (access_.level === 'approved') { %><span class="htag" title="<%- t('pad.hdr.approved_tip') %>"><%- t('pad.hdr.approved') %></span><% } else if (access_.level === 'public') { %><span class="htag" title="<%- t('pad.hdr.public_tip') %>"><%- t('pad.hdr.public') %></span><% } %>
           <% if (room.house) { %><span class="htag own" title="<%- t('pad.hdr.run_by_pepe') %>"><%- t('pad.hdr.house') %></span><% } else if (room.owner) { %><a class="htag own" href="/u/<%= encodeURIComponent(room.ownerUser) %>"><%- t('pad.hdr.owner', { name: room.owner }) %></a><% } %>
         </span></div>

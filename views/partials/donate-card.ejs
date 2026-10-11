@@ -35,6 +35,8 @@
     <button type="button" class="btn" id="donateGo">💳 <%- t('donate.button') %><%- D.stripe.test ? ' ' + t('premium.test_mode') : '' %></button>
   </div>
   <p class="msg" id="donateMsg" role="status" aria-live="polite"></p>
+  <%# 1.99kz: the Support PATV page (/support) from the wallet and the store too, when the crypto pointer above isn't shown %>
+  <% if (!D.onSupport && !D.crypto) { %><p><a href="/support"><%- t('support.more_ways') %></a></p><% } %>
 </section>
 <script>
 (function () {

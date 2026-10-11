@@ -62,7 +62,7 @@ async function guideRows(signedIn, viewer) {
       id, slug: r ? linkSlug(r) : b.slug, title: (r && r.title) || (b && b.name) || id,
       owner: r && r.owner ? (r.owner.display || r.owner.username) : null, ownerUser: r && r.owner ? r.owner.username || null : null, house: !!(r && r.house),
       bridged: !!b, live: !!(b && b.live), count: b ? b.count : 0, micCount: b ? b.micCount : 0,
-      topic: b ? b.topic : "", description: r ? r.description : "",
+      topic: b ? b.topic : "", description: r ? r.description : "", adult: !!(r && r.adult),   // 1.99kz: 18+ badge
       slot_count: r ? r.slot_count : 1, now: slots.now, next: slots.next.slice(0, 4),
       featured: slots.now.find((s) => s.featured && s.live) || null,
       // 1.99cj: Pepe is IN the room (his stream is on its stage) - not "his Camfrog window shows it"

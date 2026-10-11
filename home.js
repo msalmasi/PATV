@@ -115,6 +115,10 @@ async function personal(me, S) {
  * front-page auto pick incl. boost points); boosts = Map id -> active boost PAT. A live row the ranking
  * missed (shouldn't happen) goes last by headcount. -> [{id, slug, name, count, micCount, boost}]
  */
+/** 1.99kz: the pad is marked 18+ (registry cache; false when it isn't registered). */
+function padAdult(id) {
+  try { const p = require("./rooms").getCached(id); return !!(p && p.adult); } catch (e) { return false; }
+}
 function topPads(rows, ranked, boosts, n = 5) {
   const live = (rows || []).filter((r) => r && r.live && r.slug);
   const pos = new Map((ranked || []).map((r, i) => [r.id, i]));
@@ -122,7 +126,7 @@ function topPads(rows, ranked, boosts, n = 5) {
   return live.slice().sort((a, b) => at(a) - at(b) || (b.count || 0) - (a.count || 0) || String(a.name).localeCompare(String(b.name)))
     .slice(0, n)
     .map((r) => ({ id: r.id, slug: r.slug, name: r.name, count: r.count || 0, micCount: r.micCount || 0, audio: !!r.audio,
-                   boost: Math.round((boosts && boosts.get && boosts.get(r.id)) || 0) }));
+                   boost: Math.round((boosts && boosts.get && boosts.get(r.id)) || 0), adult: padAdult(r.id) }));
 }
 
 /**
