@@ -113,6 +113,11 @@ const ready = (async () => {
   await runQuery(`CREATE TABLE IF NOT EXISTS shop_order_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER NOT NULL, ts INTEGER NOT NULL,
     status TEXT NOT NULL, actor TEXT, note TEXT)`);
+  // 1.99lz: a GIFT (an official item bought for someone else): buyer_id is who it's for (the order, its effects and anything
+  // delivered on it are theirs), gift_from is who paid (sees the order, never its delivered note / invite link).
+  for (const sql of ["ALTER TABLE shop_orders ADD COLUMN gift_from TEXT", "ALTER TABLE shop_orders ADD COLUMN gift_note TEXT"]) {
+    try { await runQuery(sql); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+  }
   await runQuery("CREATE TABLE IF NOT EXISTS shop_settings (key TEXT PRIMARY KEY, value TEXT)");
   await runQuery(`CREATE TABLE IF NOT EXISTS shop_prefs (
     user_id TEXT PRIMARY KEY, email_off INTEGER NOT NULL DEFAULT 0, pm_off INTEGER NOT NULL DEFAULT 0)`);
@@ -122,6 +127,7 @@ const ready = (async () => {
     "CREATE INDEX IF NOT EXISTS idx_shop_orders_seller ON shop_orders (seller_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_shop_orders_status ON shop_orders (status, updated)",
     "CREATE INDEX IF NOT EXISTS idx_shop_events_order ON shop_order_events (order_id, id)",
+    "CREATE INDEX IF NOT EXISTS idx_shop_orders_gift ON shop_orders (gift_from, id)",
   ]) await runQuery(sql);
   // 1.99fj: the spin boost's list price is its first-copy price; what a buyer pays is spinboostPrice().
   try { await runQuery("ALTER TABLE users ADD COLUMN extra_daily_spins INTEGER DEFAULT 0"); }
@@ -297,7 +303,9 @@ function runSaleHooks(sale) {
 }
 
 // Returns {success, status, message, prize, cost, balance, remaining_stock, owner, order_id}. Never throws.
-async function purchasePrize({ userId, username, prizeId, source, buyerInput, expectedCost }) {
+// 1.99lz: giftTo (a PATV username or linked Camfrog name; website only) buys an OFFICIAL item for someone else: the
+// caller pays, the recipient gets the item (its role / invite / order) - see buyOfficial. giftNote = an optional line.
+async function purchasePrize({ userId, username, prizeId, source, buyerInput, expectedCost, giftTo, giftNote }) {
   try {
     await ready;
     const prizes = await getQuery(
@@ -307,6 +315,12 @@ async function purchasePrize({ userId, username, prizeId, source, buyerInput, ex
     }
     if (prizes[0].status !== "active") {
       return { success: false, status: 400, message: `${prizes[0].prize} isn't for sale right now.` };
+    }
+    if (giftTo != null && String(giftTo).trim() !== "") {
+      const g = await giftRecipient(prizes[0], userId, giftTo);
+      if (g.error) return { success: false, status: g.status || 400, message: g.error };
+      return await buyOfficial(prizes[0], { userId: g.to.userId, username: g.to.username, source, expectedCost,
+                                            gift: { payerId: userId, payerName: username, note: oneLine(giftNote, 140) || null } });
     }
     // The website sends the price the buyer saw; a price edit in between must not charge them more.
     // Official items check it inside buyOfficial, against the price the server computes for this
@@ -343,17 +357,40 @@ async function personalise(rows, userId) {
   return rows;
 }
 
+// 1.99lz: who a gift is for. Only official items that shopcatalog marks giftable (not the spin boost - priced per owner -
+// nor the retired request credits), never a member's listing, never yourself. {to} or {error, status}.
+async function giftRecipient(prize, payerId, giftTo) {
+  const cat = require("./shopcatalog").info(prize);
+  if (prize.seller_id || !cat || !cat.gift) return { error: `${prize.prize} can't be sent as a gift.`, status: 400 };
+  const name = String(giftTo).trim().replace(/^@/, "").replace(/\s+/g, "").slice(0, 60);
+  let to = null;
+  try { to = await require("./cosmetics").resolveUser(name); } catch (e) { to = null; }
+  if (!to) return { error: `There's no PATV account called "${name}" - check the name and try again. You have not been charged.`, status: 404 };
+  if (to.userId === payerId) return { error: "That's you - use Buy to get it for yourself.", status: 400 };
+  return { to };
+}
+
 // The official store: identical to the pre-marketplace purchase, plus a completed order row.
 // The spin boost is priced per buyer and paid to the House (see the header).
-function buyOfficial(listed, { userId, username, source, expectedCost }) {
+// 1.99lz: gift = {payerId, payerName, note}: userId / username are the RECIPIENT (the item, its role, sale hooks and the
+// order are theirs) and the payer's balance pays. Without gift, payer = recipient as always.
+function buyOfficial(listed, { userId, username, source, expectedCost, gift = null }) {
   return serial(async () => {
     const prize = (await getQuery("SELECT prizeId, cost, prize, quantity FROM prizes WHERE prizeId = ?", [listed.prizeId]))[0];
     if (!prize) return { success: false, status: 404, message: "That item isn't in the shop any more." };
     const boost = isSpinboost(prize);
+    if (gift && boost) return { success: false, status: 400, message: `${prize.prize} can't be sent as a gift.` };
+    const payerId = gift ? gift.payerId : userId;
+    const payerName = gift ? gift.payerName : username;
     const users = await getQuery(
       `SELECT points_balance, discordId, camfrogUsername${boost ? ", COALESCE(extra_daily_spins, 0) AS extra_daily_spins" : ""} FROM users WHERE userId = ?`, [userId]);
     if (users.length === 0) {
-      return { success: false, status: 404, message: "We couldn't find your account." };
+      return { success: false, status: 404, message: gift ? "We couldn't find who you're sending it to." : "We couldn't find your account." };
+    }
+    if (gift) {
+      const payer = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [payerId]);
+      if (!payer.length) return { success: false, status: 404, message: "We couldn't find your account." };
+      users[0].payer_balance = payer[0].points_balance;
     }
     // The server's price, never the client's: the list price, or the spin boost's per-buyer price.
     const owned = boost ? spinboostOwned(users[0].extra_daily_spins) : 0;
@@ -366,10 +403,11 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
     if (prize.quantity <= 0) {
       return { success: false, status: 400, message: `${prize.prize} is out of stock — check back later.` };
     }
-    const balance = users[0].points_balance || 0;
+    const balance = (gift ? users[0].payer_balance : users[0].points_balance) || 0;
     const role = ROLE_PRIZES[prize.prizeId] || null;
     if (role && (await userRoles(userId)).includes(role)) {
-      return { success: false, status: 409, message: `You already have the ${prize.prize.replace(/ role$/i, "")} role.` };
+      return { success: false, status: 409, message: gift ? `${username} already has the ${prize.prize.replace(/ role$/i, "")} role. You have not been charged.`
+                                                          : `You already have the ${prize.prize.replace(/ role$/i, "")} role.` };
     }
     if (balance < prize.cost) {
       // Tell them exactly how short they are — "Insufficient coins" left people guessing.
@@ -392,7 +430,7 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
       await runQuery("BEGIN TRANSACTION");
       const paid = await runQuery(
         "UPDATE users SET points_balance = points_balance - ? WHERE userId = ? AND points_balance >= ?",
-        [prize.cost, userId, prize.cost]);
+        [prize.cost, payerId, prize.cost]);
       if (!paid.changes) throw new Error("balance changed mid-purchase");
       const stock = await runQuery(
         "UPDATE prizes SET quantity = quantity - 1, sold = COALESCE(sold, 0) + 1 WHERE prizeId = ? AND quantity > 0 AND status = 'active'",
@@ -414,24 +452,25 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
       }
       await runQuery(
         "INSERT INTO transactions (transactionId, userId, type, points) VALUES (?, ?, ?, ?)",
-        [uuidv4(), userId, `purchase of ${prize.prize}`, -prize.cost]);
+        [uuidv4(), payerId, `purchase of ${prize.prize}${gift ? ` (gift for ${username})` : ""}`, -prize.cost]);
       if (owner) {
-        await require("./ledger").postOrThrow(owner.userId, prize.cost, `store sale: ${prize.prize} to ${username} (${source})`,
+        await require("./ledger").postOrThrow(owner.userId, prize.cost, `store sale: ${prize.prize} to ${username}${gift ? ` (gift from ${payerName})` : ""} (${source})`,
                                               { resolveMerged: true, source: "shop sale" });
       }
       const now = Date.now();
       const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
-          seller_paid, status, source, created, completed_at, closed_at, updated)
-        VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?)`,
-        [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now]);
+          seller_paid, status, source, created, completed_at, closed_at, updated, gift_from, gift_note)
+        VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?, ?, ?)`,
+        [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now, gift ? payerId : null, gift ? gift.note : null]);
       orderId = o.id;
       if (boost) {
         // to the House, the same place gold-wheel wagers go: debit == credit, nothing minted or burned
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
                        [uuidv4(), `shop-order:${orderId}`, userId, prize.cost]);
       }
-      await event(orderId, "completed", username, boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
-                                                        : "Official store item — delivered instantly");
+      await event(orderId, "completed", payerName, boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
+                                                         : gift ? `🎁 Gift from ${payerName} to ${username} — official store item`
+                                                         : "Official store item — delivered instantly");
       await runQuery("COMMIT");
     } catch (error) {
       try { await runQuery("ROLLBACK"); } catch (e) { /* nothing open */ }
@@ -451,7 +490,14 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
     // Notifications are not part of the purchase: an outage must never turn a completed, charged
     // purchase into a reported failure.
     sendEmail(process.env.STORE_NOTIFY_EMAIL || "pb@publicaccess.tv", "Purchase Notification",
-              `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`).catch(() => {});
+              gift ? `User ${payerName} bought ${prize.prize} for ${prize.cost} coins as a GIFT for ${username} (via ${source}) - deliver it to ${username}.`
+                   : `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`).catch(() => {});
+    // 1.99lz: the recipient hears about their gift (inbox + email + Camfrog PM, their own notification settings)
+    if (gift) {
+      notify(userId, { subject: `🎁 ${payerName} sent you a gift: ${prize.prize}`,
+                       text: `${payerName} bought you ${prize.prize} from the PATV shop.${gift.note ? `\n\n"${gift.note}"` : ""}`,
+                       pm: `🎁 ${payerName} sent you a gift from the PATV shop: ${prize.prize}.`, link: `/shop/orders/${orderId}` }).catch(() => {});
+    }
 
     // Discord: the Discord shop announces its own sales and grants roles itself; for website and
     // Camfrog purchases the bot's bridge posts the sale in the purchases channel and grants the
@@ -470,11 +516,12 @@ function buyOfficial(listed, { userId, username, source, expectedCost }) {
 
     const remaining = balance - prize.cost;
     return {
-      success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost,
+      success: true, status: 200, prize: prize.prize, prizeId: prize.prizeId, cost: prize.cost, ...(gift ? { gift_to: username } : {}),
       balance: remaining, remaining_stock: Math.max(0, (prize.quantity || 1) - 1),
       owner: boost ? "House" : (owner ? owner.username : null), role, discord_role, order_id: orderId,
       ...(boost ? { owned: owned + 1, next_cost: spinboostPrice(owned + 1) } : {}),
-      message: `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. ` +
+      message: (gift ? `🎁 Sent ${prize.prize} to ${username} for ${prize.cost.toLocaleString()} PAT. `
+                     : `Bought ${prize.prize} for ${prize.cost.toLocaleString()} PAT. `) +
                `Balance: ${remaining.toLocaleString()} PAT.`,
     };
   });
@@ -837,7 +884,9 @@ function validateListing(b) {
   if (!category) throw new Refuse(400, "Pick a category.");
   if (!(price >= 1 && price <= PRICE_MAX)) throw new Refuse(400, `Price must be 1–${PRICE_MAX.toLocaleString()} PAT.`);
   if (!(stock >= 0 && stock <= STOCK_MAX)) throw new Refuse(400, `Stock must be 0–${STOCK_MAX.toLocaleString()}.`);
-  if (image_url) {
+  if (/^\/public\/img\/shop\/[a-z0-9-]{1,60}\.(svg|png|webp)$/.test(image_url)) {
+    // 1.99lz: one of the shop's own pictures (public/img/shop, tools/gen-shop-art.py) - kept as is
+  } else if (image_url) {
     let u = null;
     try { u = new URL(image_url); } catch (e) { u = null; }
     if (!u || u.protocol !== "https:" || image_url.length > 500 || /["'<>\s]/.test(image_url)) {
@@ -942,6 +991,20 @@ async function browse(q) {
   if (instock) where.push("p.quantity > 0");
   const official = q.official === "1";
   if (official) where.push("p.seller_id IS NULL");
+  // 1.99lz: a shelf chip (shopcatalog.js) - official shelves by prizeId, "market" = members' listings, "more" = any other
+  // official item; and "can afford" (the viewer's balance, passed in by the route as _balance)
+  const CAT = require("./shopcatalog");
+  const shelf = CAT.SHELF_IDS.includes(String(q.shelf)) ? String(q.shelf) : "";
+  if (shelf === "market") where.push("p.seller_id IS NOT NULL");
+  else if (shelf === "more") {
+    const known = CAT.knownIds();
+    where.push(`p.seller_id IS NULL AND p.prizeId NOT IN (${known.map(() => "?").join(",")})`); args.push(...known);
+  } else if (shelf) {
+    const ids = CAT.shelfIds(shelf);
+    where.push(`p.seller_id IS NULL AND p.prizeId IN (${ids.map(() => "?").join(",")})`); args.push(...ids);
+  }
+  const afford = q.afford === "1" && Number.isFinite(Number(q._balance));
+  if (afford) { where.push("p.cost <= ?"); args.push(Math.max(0, Math.floor(Number(q._balance)))); }
   const sorts = {
     newest: "COALESCE(p.created, CAST(strftime('%s', p.timestamp) AS INTEGER) * 1000) DESC",
     price_asc: "p.cost ASC", price_desc: "p.cost DESC", popular: "COALESCE(p.sold, 0) DESC",
@@ -955,8 +1018,20 @@ async function browse(q) {
       p.sold, p.delivery, p.buyer_prompt, u.username AS seller_name, u.displayname AS seller_display
     ${from} ORDER BY (p.quantity > 0) DESC, ${sorts[sort]}, p.prizeId LIMIT ? OFFSET ?`, [...args, PAGE_SIZE, (page - 1) * PAGE_SIZE]);
   const cats = await getQuery("SELECT category, COUNT(*) AS n FROM prizes WHERE status = 'active' GROUP BY category");
-  return { items, total, page, pages, sort, filters: { q: term, cat, min: min > 0 ? min : "", max: max > 0 ? max : "", seller, instock, official },
-           catCounts: Object.fromEntries(cats.map((c) => [c.category || "", c.n])) };
+  // 1.99lz: how many active items each shelf chip holds (chips with none are hidden)
+  const act = await getQuery("SELECT prizeId, seller_id FROM prizes WHERE status = 'active'");
+  const shelfCounts = {};
+  for (const r of act) { const s = CAT.info(r).shelf; shelfCounts[s] = (shelfCounts[s] || 0) + 1; }
+  return { items, total, page, pages, sort, filters: { q: term, cat, min: min > 0 ? min : "", max: max > 0 ? max : "", seller, instock, official, shelf, afford },
+           catCounts: Object.fromEntries(cats.map((c) => [c.category || "", c.n])), shelfCounts };
+}
+
+// 1.99lz: the /shop hero + featured strip: shopcatalog.FEATURED that are active and in stock, in that order.
+async function featured() {
+  const ids = require("./shopcatalog").FEATURED;
+  const rows = await getQuery(`SELECT prizeId, prize, cost, quantity, seller_id, image_url, description, sold FROM prizes
+    WHERE prizeId IN (${ids.map(() => "?").join(",")}) AND status = 'active' AND quantity > 0 AND seller_id IS NULL`, ids);
+  return ids.map((id) => rows.find((r) => r.prizeId === id)).filter(Boolean);
 }
 
 async function sellerSales(userId) {
@@ -1003,6 +1078,10 @@ const H = {
   requestItem: (p) => !!p && !p.seller_id && REQUEST_ITEMS.includes(p.prizeId),
   // a shop search that looks like someone wants a movie / show request -> point them at /plex
   wantsRequests: (q) => /\b(request|requests|movie|movies|tv|show|shows|plex|seerr|overseerr)\b/i.test(String(q || "")),
+  // 1.99lz: shelf / delivery / gift / picture of an item (shopcatalog.js); img = its picture (the DB's, else the catalog's)
+  cat: (p) => require("./shopcatalog").info(p),
+  img: (p) => (p && p.image_url) || ((require("./shopcatalog").info(p) || {}).art) || null,
+  shelves: () => require("./shopcatalog").SHELVES,
   qs: (base, patch) => {
     const p = Object.assign({}, base, patch);
     const parts = Object.entries(p).filter(([, v]) => v !== "" && v != null && v !== false).map(([k, v]) => `${k}=${encodeURIComponent(v === true ? "1" : v)}`);
@@ -1055,7 +1134,7 @@ function register(app, deps) {
   app.post("/shop", addUser, requireUser, async (req, res) => {
     const r = await purchasePrize({ userId: req.user.userId, username: req.user.username,
                                     prizeId: req.body.product, source: "website", buyerInput: req.body.buyer_input,
-                                    expectedCost: req.body.price });
+                                    expectedCost: req.body.price, giftTo: req.body.gift_to, giftNote: req.body.gift_note });
     const { status, ...body } = r;
     res.status(status).json(body);
   });
@@ -1107,9 +1186,13 @@ function register(app, deps) {
   app.get("/shop", addUser, async (req, res) => {
     try {
       const me = await meOf(req);
-      const data = await browse(req.query);
+      const data = await browse({ ...req.query, _balance: me ? me.points_balance : NaN });
       await personalise(data.items, me && me.userId);
-      res.render("shop", base(req, me, { ...data, store: null }));
+      // 1.99lz: the hero + featured strip only on the plain front page (no search / filter / later page)
+      const plain = !data.filters.q && !data.filters.cat && !data.filters.shelf && !data.filters.afford && !data.filters.min && !data.filters.max &&
+                    !data.filters.seller && !data.filters.instock && !data.filters.official && data.page === 1;
+      const feat = plain ? await personalise(await featured(), me && me.userId) : [];
+      res.render("shop", base(req, me, { ...data, store: null, feat }));
     } catch (e) {
       console.error("[shop] browse:", e);
       res.status(500).send("Couldn't load the shop.");
@@ -1127,9 +1210,15 @@ function register(app, deps) {
       if (!canSee) return res.status(404).render("shopItem", base(req, me, { p: null, sales: 0, more: [] }));
       await personalise([p], me && me.userId);
       const sales = p.seller_id ? await sellerSales(p.seller_id) : 0;
-      const more = await getQuery(`SELECT prizeId, prize, cost, quantity, image_url FROM prizes WHERE status = 'active' AND prizeId != ?
-        AND ${p.seller_id ? "seller_id = ?" : "seller_id IS NULL"} ORDER BY COALESCE(sold,0) DESC LIMIT 6`,
-        p.seller_id ? [p.prizeId, p.seller_id] : [p.prizeId]);
+      // 1.99lz: related = the same shelf first (e.g. the other Camfrog memberships), then the store's best sellers
+      const CAT = require("./shopcatalog");
+      const shelfOf = CAT.info(p).shelf;
+      const sameShelf = !p.seller_id && CAT.shelfIds(shelfOf).length ? CAT.shelfIds(shelfOf) : [];
+      const more = await getQuery(`SELECT prizeId, prize, cost, quantity, image_url, seller_id FROM prizes WHERE status = 'active' AND prizeId != ?
+        AND ${p.seller_id ? "seller_id = ?" : "seller_id IS NULL"}
+        ORDER BY ${sameShelf.length ? `CASE WHEN prizeId IN (${sameShelf.map(() => "?").join(",")}) THEN 0 ELSE 1 END, ` : ""}(quantity > 0) DESC, COALESCE(sold,0) DESC LIMIT 8`,
+        p.seller_id ? [p.prizeId, p.seller_id] : [p.prizeId, ...sameShelf]);
+      if (p.seller_id) more.forEach((m) => { m.seller_name = p.seller_name; });
       if (!p.seller_id) await personalise(more, me && me.userId);
       // 1.99jp: an official item that's also sold as a subscription (subscriptions.js)
       let sub = null;
@@ -1211,12 +1300,14 @@ function register(app, deps) {
       const me = await meOf(req);
       if (!me) return res.redirect("/login");
       const page = Math.max(1, toInt(req.query.page) || 1);
-      const total = (await getQuery("SELECT COUNT(*) AS n FROM shop_orders WHERE buyer_id = ?", [me.userId]))[0].n;
-      const orders = await getQuery(`SELECT ${ORDER_COLS} ${ORDER_JOIN} WHERE o.buyer_id = ? ORDER BY o.id DESC LIMIT 30 OFFSET ?`,
-                                    [me.userId, (page - 1) * 30]);
+      // 1.99lz: gifts they sent (gift_from) are on their list too; what they spent = what they paid for
+      const total = (await getQuery("SELECT COUNT(*) AS n FROM shop_orders WHERE buyer_id = ? OR gift_from = ?", [me.userId, me.userId]))[0].n;
+      const orders = await getQuery(`SELECT ${ORDER_COLS}, g.username AS gift_from_name ${ORDER_JOIN} LEFT JOIN users g ON g.userId = o.gift_from
+                                     WHERE o.buyer_id = ? OR o.gift_from = ? ORDER BY o.id DESC LIMIT 30 OFFSET ?`,
+                                    [me.userId, me.userId, (page - 1) * 30]);
       const events = await eventsFor(orders.map((o) => o.id));
-      const spent = (await getQuery(`SELECT COALESCE(SUM(price),0) AS t, COUNT(*) AS n FROM shop_orders WHERE buyer_id = ?
-        AND status NOT IN ('cancelled','refunded')`, [me.userId]))[0];
+      const spent = (await getQuery(`SELECT COALESCE(SUM(price),0) AS t, COUNT(*) AS n FROM shop_orders
+        WHERE ((buyer_id = ? AND gift_from IS NULL) OR gift_from = ?) AND status NOT IN ('cancelled','refunded')`, [me.userId, me.userId]))[0];
       const open = (await getQuery("SELECT COUNT(*) AS n, COALESCE(SUM(price),0) AS t FROM shop_orders WHERE buyer_id = ? AND status IN ('paid','fulfilled','disputed')", [me.userId]))[0];
       res.render("shopOrders", base(req, me, { orders, events, spent, open, page, pages: Math.max(1, Math.ceil(total / 30)) }));
     } catch (e) {
@@ -1232,11 +1323,13 @@ function register(app, deps) {
       const me = await meOf(req);
       if (!me) return res.redirect("/login");
       const o = await getOrder(req.params.id);
-      if (!o || !(me.staff || o.buyer_id === me.userId || o.seller_id === me.userId)) {
+      if (!o || !(me.staff || o.buyer_id === me.userId || o.seller_id === me.userId || (o.gift_from && o.gift_from === me.userId))) {
         return res.status(404).render("shopOrder", base(req, me, { o: null, events: [], role: null }));
       }
       const events = (await eventsFor([o.id]))[o.id] || [];
-      const role = o.buyer_id === me.userId ? "buyer" : o.seller_id === me.userId ? "seller" : "admin";
+      // 1.99lz: "gifter" = paid for it as a gift: sees the order, not what was delivered on it (an invite link, a code)
+      const role = o.buyer_id === me.userId ? "buyer" : o.seller_id === me.userId ? "seller" : (o.gift_from === me.userId && !me.staff) ? "gifter" : "admin";
+      if (o.gift_from) o.gift_from_name = ((await getQuery("SELECT username FROM users WHERE userId = ?", [o.gift_from]))[0] || {}).username || null;
       res.render("shopOrder", base(req, me, { o, events, role }));
     } catch (e) {
       console.error("[shop] order:", e);
@@ -1363,4 +1456,5 @@ function register(app, deps) {
 
 module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
                    ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify,
-                   SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise };
+                   SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
+                   browse, featured, validateListing, H /* 1.99lz: for the storefront tests */ };

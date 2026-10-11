@@ -14,6 +14,7 @@
     <div class="kv">
       <span><%- t('shop.order.price') %></span><div class="price"><%= H.fmt(o.price) %> PAT</div>
       <span><%- t('shop.order.buyer') %></span><div><%= o.buyer_name || '?' %></div>
+      <% if (o.gift_from) { %><span><%- t('shop.order.gift') %></span><div><%- t('shop.order.gift_line', { from: t.esc(o.gift_from_name || '?'), to: t.esc(o.buyer_name || '?') }) %><% if (o.gift_note) { %><div class="pre" style="margin-top:6px"><%= o.gift_note %></div><% } %></div><% } %>
       <span><%- t('shop.order.seller') %></span><div><% if (o.official) { %><%- t('shop.order.official_store') %><% } else { %><%= o.seller_name || '?' %><% } %></div>
       <span><%- t('shop.order.ordered') %></span><div><%- t('shop.order.when_via', { when: H.when(o.created), source: o.source || 'website' }) %></div>
       <% if (!o.official && (role === 'seller' || role === 'admin')) { %>
@@ -23,7 +24,8 @@
       <% if (o.dispute_reason) { %><span><%- t('shop.order.dispute') %></span><div><%= o.dispute_reason %></div><% } %>
       <% if (o.resolution) { %><span><%- t('shop.order.outcome') %></span><div><%= o.resolution %></div><% } %>
     </div>
-    <% if (o.seller_note && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>
+    <% if (role === 'gifter') { %><p class="muted" style="margin:0"><%- t('shop.order.gift_private', { name: t.esc(o.buyer_name || '?') }) %></p><% } %>
+    <% if (o.seller_note && role !== 'gifter' && (role !== 'buyer' || ['fulfilled', 'completed', 'disputed', 'refunded'].includes(o.status))) { %>
       <div><span class="muted"><%- t('shop.order.seller_note') %></span><div class="pre code"><%= o.seller_note %></div></div>
     <% } %>
     <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.order.autocomplete', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>

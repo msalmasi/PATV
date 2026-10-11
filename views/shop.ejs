@@ -1,114 +1,162 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: store && store.username ? t('shop.title_store', { name: store.username }) : t('shop.title'), user: user }) %>
 <%- include('partials/shop-css') %>
+<%- include('partials/shop-store-css') %>
 <%
+  // 1.99lz: the storefront redesign - hero + search, featured, shelf chips, cards with pictures and "can you afford it".
   const f = filters || {};
-  const baseQ = { q: f.q, cat: f.cat, min: f.min, max: f.max, instock: f.instock, official: f.official, sort: sort !== 'newest' ? sort : '' };
+  const baseQ = { q: f.q, cat: f.cat, min: f.min, max: f.max, instock: f.instock, official: f.official, shelf: f.shelf, afford: f.afford, sort: sort !== 'newest' ? sort : '' };
   const path = store && store.username ? '/shop/seller/' + encodeURIComponent(store.username) : '/shop';
   if (!store) baseQ.seller = f.seller;
+  const FEAT = locals.feat || [];
+  const SC = locals.shelfCounts || {};
+  const allN = Object.values(SC).reduce((a, b) => a + b, 0);
+  const subOf = (it) => { const c = H.cat(it) || {}; const rk = H.roleKey ? H.roleKey(it) : null;
+    return rk ? t('shop.role.' + rk + '.short') : (c.tkey && t.has('shop.cat.item.' + c.tkey)) ? t('shop.cat.item.' + c.tkey) : ''; };
 %>
-<div class="sh">
+<div class="sh st">
 <% if (store && store.missing) { %>
   <h1><%- t('shop.not_found') %></h1>
   <p class="sub"><%- t('shop.no_user', { name: '"' + t.esc(store.missing) + '"' }) %> <a href="/shop"><%- t('shop.back') %></a></p>
 <% } else { %>
   <% if (store) { %>
-    <div class="box seller" style="margin-top:14px">
+    <div class="links" style="margin:0 0 10px"><a href="/shop"><%- t('shop.all_items') %></a></div>
+    <div class="box seller">
       <img src="<%= H.av(store.avatar) %>" alt="" onerror="this.src='/public/img/avatar.png'">
       <div style="min-width:0">
-        <div style="color:#fff;font-weight:bold;font-size:18px"><%- t('shop.store_name', { name: store.displayname || store.username }) %></div>
+        <h1 style="text-align:left;color:#fff;font-size:20px;margin:0"><%- t('shop.store_name', { name: store.displayname || store.username }) %></h1>
         <div class="muted">@<%= store.username %> · <%- t('shop.n_sales', { count: store.sales, n: H.fmt(store.sales) }) %> · <%- t('shop.n_for_sale', { count: total, n: H.fmt(total) }) %>
           · <a href="/u/<%= encodeURIComponent(store.username) %>"><%- t('shop.profile') %></a></div>
       </div>
     </div>
+    <form class="st-search" method="GET" action="<%= path %>" role="search" style="margin:10px 0">
+      <label class="vh" for="shopQ"><%- t('shop.search') %></label>
+      <input id="shopQ" type="search" name="q" value="<%= f.q || '' %>" placeholder="<%- t('shop.search_store') %>" maxlength="80">
+      <button type="submit"><%- t('shop.search') %></button>
+    </form>
   <% } else { %>
-    <h1><%- t('shop.heading') %></h1>
-    <p class="sub"><%- t('shop.sub') %></p>
+    <section class="st-hero" aria-labelledby="shopH">
+      <div>
+        <p class="st-eyebrow"><%- t('shop.hero.eyebrow') %></p>
+        <h1 id="shopH"><%- t('shop.hero.title', { em: '<em>' + t('shop.hero.title_em') + '</em>' }) %></h1>
+        <p class="st-lead"><%- t('shop.hero.lead') %></p>
+      </div>
+      <div class="st-wallet">
+        <% if (me) { %>
+          <span class="lbl"><%- t('shop.hero.your_balance') %></span>
+          <span class="bal"><span id="shopBalance"><%= H.fmt(me.points_balance) %></span> <small>PAT</small></span>
+          <nav aria-label="<%- t('shop.hero.your_links') %>">
+            <a href="/shop/orders"><%- t('shop.my_orders') %></a>
+            <a href="/subscriptions">🔁 <%- t('subs.title') %></a>
+            <a href="/shop/seller"><%- t('shop.sell') %></a>
+            <% if (me.staff) { %><a href="/shop/admin"><%- t('shop.admin') %></a><% } %>
+          </nav>
+        <% } else { %>
+          <span class="lbl"><%- t('shop.hero.your_balance') %></span>
+          <a class="btn gold" href="/login"><%- t('shop.signin_buy_sell') %></a>
+          <span class="muted"><%- t('shop.hero.earn', { link: '<a href="/economy">' + t('shop.hero.earn_link') + '</a>' }) %></span>
+        <% } %>
+      </div>
+      <form class="st-search" method="GET" action="/shop" role="search">
+        <label class="vh" for="shopQ"><%- t('shop.search') %></label>
+        <input id="shopQ" type="search" name="q" value="<%= f.q || '' %>" placeholder="<%- t('shop.search_ph') %>" maxlength="80">
+        <% if (f.shelf) { %><input type="hidden" name="shelf" value="<%= f.shelf %>"><% } %>
+        <button type="submit" class="gold"><%- t('shop.search') %></button>
+      </form>
+    </section>
   <% } %>
 
-  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
-  <% if (!store && me) { %><%- include('partials/donate-card', { donate: locals.donate }) %><% } %>
+  <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
 
-  <div class="bar">
-    <div class="links">
-      <% if (store) { %><a href="/shop"><%- t('shop.all_items') %></a><% } %>
-      <% if (me) { %>
-        <a href="/shop/orders"><%- t('shop.my_orders') %></a>
-        <a href="/subscriptions">🔁 <%- t('subs.title') %></a>
-        <a href="/plex">📼 <%- t('nav.plex') %></a>
-        <a href="/shop/seller"><%- t('shop.sell') %></a>
-        <% if (me.staff) { %><a href="/shop/admin"><%- t('shop.admin') %></a><% } %>
-      <% } else { %><a href="/login"><%- t('shop.signin_buy_sell') %></a> <a href="/plex">📼 <%- t('nav.plex') %></a><% } %>
-    </div>
-    <% if (me) { %><div><%- t('shop.balance', { bal: '<span class="bal" id="shopBalance">' + t.esc(H.fmt(me.points_balance)) + '</span>' }) %></div><% } %>
-  </div>
-
-  <form class="box" method="GET" action="<%= path %>" style="display:grid;gap:10px">
-    <div class="row">
-      <input type="search" name="q" value="<%= f.q || '' %>" placeholder="<%- store ? t('shop.search_store') : t('shop.search_ph') %>" maxlength="80" aria-label="<%- t('shop.search') %>" style="flex:1 1 180px">
-      <button type="submit"><%- t('shop.search') %></button>
-    </div>
-    <% const active = f.cat || f.min || f.max || (!store && f.seller) || f.instock || f.official || sort !== 'newest'; %>
-    <details <%= active ? 'open' : '' %>>
-      <summary><%- t('shop.filters') %><%- active ? ' ' + t('shop.filters_on') : '' %></summary>
-      <div class="filters">
-        <label><%- t('shop.category') %>
-          <select name="cat">
-            <option value=""><%- t('shop.all_categories') %></option>
-            <% categories.forEach((c) => { %><option value="<%= c %>" <%= f.cat === c ? 'selected' : '' %>><%= c %><%= catCounts && catCounts[c] && !store ? ' (' + catCounts[c] + ')' : '' %></option><% }) %>
-          </select>
-        </label>
-        <label><%- t('shop.sort') %>
-          <select name="sort">
-            <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>><%- t('shop.sort_newest') %></option>
-            <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>><%- t('shop.sort_price_asc') %></option>
-            <option value="price_desc" <%= sort === 'price_desc' ? 'selected' : '' %>><%- t('shop.sort_price_desc') %></option>
-            <option value="popular" <%= sort === 'popular' ? 'selected' : '' %>><%- t('shop.sort_popular') %></option>
-          </select>
-        </label>
-        <label><%- t('shop.min') %> <input type="number" name="min" min="0" value="<%= f.min %>" inputmode="numeric"></label>
-        <label><%- t('shop.max') %> <input type="number" name="max" min="0" value="<%= f.max %>" inputmode="numeric"></label>
-        <% if (!store) { %><label><%- t('shop.seller') %> <input type="text" name="seller" value="<%= f.seller || '' %>" maxlength="60" placeholder="<%- t('shop.seller_ph') %>"></label><% } %>
-        <div style="display:grid;gap:6px;align-content:end">
-          <label class="check"><input type="checkbox" name="instock" value="1" <%= f.instock ? 'checked' : '' %>> <%- t('shop.in_stock_only') %></label>
-          <% if (!store) { %><label class="check"><input type="checkbox" name="official" value="1" <%= f.official ? 'checked' : '' %>> <%- t('shop.official_only') %></label><% } %>
+  <% if (!store && FEAT.length) { const top = FEAT[0]; const rest = FEAT.slice(1, 4); const topImg = H.img(top); const topCan = me && Number(me.points_balance) >= Number(top.cost); %>
+    <h2 id="featH"><%- t('shop.featured') %></h2>
+    <section class="st-feat" aria-labelledby="featH">
+      <article class="st-top">
+        <a class="st-img" href="/shop/item/<%= encodeURIComponent(top.prizeId) %>" tabindex="-1" aria-hidden="true"><% if (topImg) { %><img src="<%= topImg %>" alt=""><% } %></a>
+        <div class="st-tb">
+          <span class="st-tag"><%- t('shop.featured_pick') %></span>
+          <h3><a href="/shop/item/<%= encodeURIComponent(top.prizeId) %>"><%= top.prize %></a></h3>
+          <% const ts = subOf(top); if (ts) { %><p class="desc"><%- ts %></p><% } %>
+          <div class="st-price"><%= H.fmt(top.cost) %> <small>PAT</small></div>
+          <% if (me) { %><div class="st-aff <%= topCan ? 'ok' : 'no' %>"><%- topCan ? '✓ ' + t('shop.afford.yes') : t('shop.afford.need', { n: H.fmt(Number(top.cost) - Number(me.points_balance || 0)) }) %></div><% } %>
+          <div><a class="btn gold" href="/shop/item/<%= encodeURIComponent(top.prizeId) %>"><%- t('shop.see_it') %><span class="vh"> <%= top.prize %></span></a></div>
         </div>
-        <div class="row" style="align-self:end"><button type="submit"><%- t('shop.apply') %></button><a class="btn alt" href="<%= path %>"><%- t('shop.reset') %></a></div>
-      </div>
-    </details>
-  </form>
+      </article>
+      <% if (rest.length) { %>
+        <div class="st-side">
+          <% rest.forEach((it) => { const im = H.img(it); %>
+            <a class="st-mini" href="/shop/item/<%= encodeURIComponent(it.prizeId) %>">
+              <span class="st-img"><% if (im) { %><img src="<%= im %>" alt="" loading="lazy"><% } %></span>
+              <div><b><%= it.prize %></b><span class="st-price" style="font-size:15px"><%= H.fmt(it.cost) %> <small>PAT</small></span></div>
+            </a>
+          <% }) %>
+        </div>
+      <% } %>
+    </section>
+  <% } %>
 
-  <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
+  <% if (!store) { %>
+    <nav class="st-chips" aria-label="<%- t('shop.chips_label') %>">
+      <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '' }, {}) %>" aria-current="<%= !f.shelf && !f.afford ? 'true' : 'false' %>"><%- t('shop.shelf.all') %> <span class="n"><%= allN %></span></a>
+      <% H.shelves().forEach((s) => { if (!SC[s.id]) return; %>
+        <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '', afford: f.afford }, { shelf: s.id }) %>" aria-current="<%= f.shelf === s.id ? 'true' : 'false' %>"><span aria-hidden="true"><%= s.emoji %></span> <%- t('shop.shelf.' + s.id) %> <span class="n"><%= SC[s.id] %></span></a>
+      <% }) %>
+      <% if (me) { %>
+        <a class="afford" href="/shop<%= H.qs({ q: f.q, shelf: f.shelf, sort: sort !== 'newest' ? sort : '' }, { afford: f.afford ? '' : '1' }) %>" aria-current="<%= f.afford ? 'true' : 'false' %>">✓ <%- t('shop.chip.afford') %></a>
+      <% } %>
+    </nav>
+  <% } %>
+
   <% if (!store && H.wantsRequests && H.wantsRequests(f.q)) { %>
     <p class="notice"><%- t('shop.requests_hint', { link: '<a href="/plex#request">📼 ' + t('nav.plex') + '</a>' }) %></p>
   <% } %>
 
-  <div class="muted" style="margin:4px 0 8px"><%- t('shop.n_items', { count: total, n: H.fmt(total) }) %><%- pages > 1 ? ' · ' + t('shop.page_of', { page: page, pages: pages }) : '' %></div>
+  <div class="st-tools">
+    <div class="muted" role="status"><%- f.q ? t('shop.results_for', { q: f.q }) + ' · ' : '' %><%- t('shop.n_items', { count: total, n: H.fmt(total) }) %><%- pages > 1 ? ' · ' + t('shop.page_of', { page: page, pages: pages }) : '' %></div>
+    <form method="GET" action="<%= path %>">
+      <% Object.entries(baseQ).forEach(([k, v]) => { if (k !== 'sort' && v !== '' && v != null && v !== false) { %><input type="hidden" name="<%= k %>" value="<%= v === true ? '1' : v %>"><% } }) %>
+      <label for="shopSort" class="muted" style="display:inline"><%- t('shop.sort') %></label>
+      <select id="shopSort" name="sort" onchange="this.form.submit()">
+        <option value="newest" <%= sort === 'newest' ? 'selected' : '' %>><%- t('shop.sort_newest') %></option>
+        <option value="price_asc" <%= sort === 'price_asc' ? 'selected' : '' %>><%- t('shop.sort_price_asc') %></option>
+        <option value="price_desc" <%= sort === 'price_desc' ? 'selected' : '' %>><%- t('shop.sort_price_desc') %></option>
+        <option value="popular" <%= sort === 'popular' ? 'selected' : '' %>><%- t('shop.sort_popular') %></option>
+      </select>
+      <noscript><button type="submit" class="alt"><%- t('shop.apply') %></button></noscript>
+    </form>
+  </div>
+
+  <% const active = f.cat || f.min || f.max || (!store && f.seller) || f.instock || f.official; %>
+  <details class="st-more box" <%= active ? 'open' : '' %>>
+    <summary><%- t('shop.filters') %><%- active ? ' ' + t('shop.filters_on') : '' %></summary>
+    <form method="GET" action="<%= path %>" class="filters">
+      <% if (f.q) { %><input type="hidden" name="q" value="<%= f.q %>"><% } %>
+      <% if (f.shelf) { %><input type="hidden" name="shelf" value="<%= f.shelf %>"><% } %>
+      <% if (f.afford) { %><input type="hidden" name="afford" value="1"><% } %>
+      <% if (sort !== 'newest') { %><input type="hidden" name="sort" value="<%= sort %>"><% } %>
+      <label><%- t('shop.category') %>
+        <select name="cat">
+          <option value=""><%- t('shop.all_categories') %></option>
+          <% categories.forEach((c) => { %><option value="<%= c %>" <%= f.cat === c ? 'selected' : '' %>><%= c %><%= catCounts && catCounts[c] && !store ? ' (' + catCounts[c] + ')' : '' %></option><% }) %>
+        </select>
+      </label>
+      <label><%- t('shop.min') %> <input type="number" name="min" min="0" value="<%= f.min %>" inputmode="numeric"></label>
+      <label><%- t('shop.max') %> <input type="number" name="max" min="0" value="<%= f.max %>" inputmode="numeric"></label>
+      <% if (!store) { %><label><%- t('shop.seller') %> <input type="text" name="seller" value="<%= f.seller || '' %>" maxlength="60" placeholder="<%- t('shop.seller_ph') %>"></label><% } %>
+      <div style="display:grid;gap:6px;align-content:end">
+        <label class="check"><input type="checkbox" name="instock" value="1" <%= f.instock ? 'checked' : '' %>> <%- t('shop.in_stock_only') %></label>
+        <% if (!store) { %><label class="check"><input type="checkbox" name="official" value="1" <%= f.official ? 'checked' : '' %>> <%- t('shop.official_only') %></label><% } %>
+      </div>
+      <div class="row" style="align-self:end"><button type="submit"><%- t('shop.apply') %></button><a class="btn alt" href="<%= path %>"><%- t('shop.reset') %></a></div>
+    </form>
+  </details>
+
+  <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
   <% if (!items.length) { %>
     <p class="muted" style="text-align:center;padding:24px 0"><%- t('shop.no_match', { link: '<a href="' + t.esc(path) + '">' + t('shop.clear_filters') + '</a>' }) %></p>
   <% } %>
-  <div class="grid">
-    <% items.forEach((it) => { const official = !it.seller_id; const quick = official && !it.buyer_prompt; %>
-      <div class="card">
-        <a href="/shop/item/<%= it.prizeId %>" style="color:inherit;text-decoration:none">
-          <div class="thumb"><% if (it.image_url) { %><img src="<%= it.image_url %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><%= official ? '🎁' : '🛍️' %><% } %></div>
-        </a>
-        <div class="body">
-          <a class="t" href="/shop/item/<%= it.prizeId %>" style="color:#fff;text-decoration:none"><%= it.prize %></a>
-          <div class="price"><%= H.fmt(it.cost) %> PAT<% if (it.escalating) { %> <span class="muted" style="font-size:12px;font-weight:normal"><%- me ? t('shop.your_price') : t('shop.first_one') %></span><% } %></div>
-          <div class="meta">
-            <% if (official) { %><span class="pill official"><%- t('shop.official') %></span><% } else { %><%- t('shop.by', { seller: '<a href="/shop/seller/' + t.esc(encodeURIComponent(it.seller_name || '')) + '">' + t.esc(it.seller_name) + '</a>' }) %><% } %>
-          </div>
-          <% const rk_ = H.roleKey ? H.roleKey(it) : null; if (rk_) { %><div class="meta"><%- t('shop.role.' + rk_ + '.short') %></div><% } %>
-          <div class="meta"><span class="<%= it.quantity > 0 ? '' : 'oos' %>" data-stock="<%= it.prizeId %>"><%- it.quantity > 0 ? t('shop.n_left', { n: H.fmt(it.quantity) }) : t('shop.out_of_stock') %></span><%- it.sold ? ' · ' + t('shop.n_sold', { n: H.fmt(it.sold) }) : '' %></div>
-          <% if (quick && me && it.quantity > 0) { %>
-            <button class="buy-btn" style="margin-top:4px" data-product="<%= it.prizeId %>" data-name="<%= it.prize %>" data-cost="<%= it.cost %>"><%- t('shop.buy') %></button>
-          <% } else { %>
-            <a class="btn alt" style="margin-top:4px" href="/shop/item/<%= it.prizeId %>"><%- t('shop.view') %></a>
-          <% } %>
-        </div>
-      </div>
-    <% }) %>
+  <div class="st-grid">
+    <% items.forEach((it) => { %><%- include('partials/shop-card', { it, me, H, i18nT: t, quickBuy: true }) %><% }) %>
   </div>
 
   <% if (pages > 1) { %>
@@ -116,19 +164,30 @@
       <% if (page > 1) { %><a href="<%= path + H.qs(baseQ, { page: page - 1 }) %>"><%- t('shop.prev') %></a><% } %>
       <% const lo = Math.max(1, page - 2), hi = Math.min(pages, page + 2);
          if (lo > 1) { %><a href="<%= path + H.qs(baseQ, { page: 1 }) %>">1</a><% if (lo > 2) { %><span>…</span><% } }
-         for (let i = lo; i <= hi; i++) { if (i === page) { %><span class="cur"><%= i %></span><% } else { %><a href="<%= path + H.qs(baseQ, { page: i }) %>"><%= i %></a><% } }
+         for (let i = lo; i <= hi; i++) { if (i === page) { %><span class="cur" aria-current="page"><%= i %></span><% } else { %><a href="<%= path + H.qs(baseQ, { page: i }) %>"><%= i %></a><% } }
          if (hi < pages) { if (hi < pages - 1) { %><span>…</span><% } %><a href="<%= path + H.qs(baseQ, { page: pages }) %>"><%= pages %></a><% } %>
       <% if (page < pages) { %><a href="<%= path + H.qs(baseQ, { page: page + 1 }) %>"><%- t('shop.next') %></a><% } %>
     </nav>
   <% } %>
 
   <% if (!store) { %>
+    <h2 id="anyH"><%- t('shop.anywhere.h') %></h2>
+    <section class="st-any" aria-labelledby="anyH">
+      <div><b>🐸 Camfrog</b><br><%- t('shop.anywhere.camfrog', { a: '<code>!prizes</code>', b: '<code>!redeem 3</code>' }) %></div>
+      <div><b>💬 Discord</b><br><%- t('shop.anywhere.discord', { a: '<code>/shop</code>' }) %></div>
+      <div><b>🌐 publicaccess.tv</b><br><%- t('shop.anywhere.same') %></div>
+    </section>
+
+    <% if (me) { %><%- include('partials/donate-card', { donate: locals.donate }) %><% } %>
+
     <h2><%- t('shop.codes.heading') %></h2>
     <form id="codeform" class="box row" action="/api/redeem-code" method="post">
+      <label class="vh" for="code"><%- t('shop.codes.heading') %></label>
       <input type="text" id="code" name="code" placeholder="<%- t('shop.codes.placeholder') %>" required style="flex:1 1 200px">
       <button class="code-btn" type="submit"><%- t('shop.codes.redeem') %></button>
     </form>
     <div id="codeStatus" class="status-msg" role="status" aria-live="polite"></div>
+    <p class="muted" style="margin-top:18px"><a href="/plex">📼 <%- t('nav.plex') %></a> · <a href="/premium"><%- t('shop.links.premium') %></a> · <a href="/lotto"><%- t('shop.links.lotto') %></a></p>
   <% } %>
 <% } %>
 </div>

@@ -1,59 +1,121 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: p ? p.prize : t('shop.item.title'), user: user }) %>
 <%- include('partials/shop-css') %>
-<div class="sh">
+<%- include('partials/shop-store-css') %>
+<div class="sh st">
 <% if (!p) { %>
   <h1><%- t('shop.item.not_found') %></h1>
   <p class="sub"><%- t('shop.item.not_found_sub') %> <a href="/shop"><%- t('shop.back') %></a></p>
-<% } else { const official = !p.seller_id; const mine = me && me.userId === p.seller_id; %>
-  <div class="bar" style="margin-top:12px">
-    <div class="links"><a href="/shop"><%- t('shop.item.back') %></a><% if (!official) { %><a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>"><%- t('shop.item.more_from', { name: p.seller_name }) %></a><% } %></div>
-    <% if (me) { %><div><%- t('shop.balance', { bal: '<span class="bal" id="shopBalance">' + t.esc(H.fmt(me.points_balance)) + '</span>' }) %></div><% } %>
-  </div>
-  <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+<% } else {
+  // 1.99lz: the item page redesign - gallery, price + "can you afford it", buy / subscribe / 🎁 gift, what you get, related
+  const official = !p.seller_id; const mine = me && me.userId === p.seller_id;
+  const C = H.cat(p) || {};
+  const shelf = H.shelves().find((s) => s.id === C.shelf);
+  const imgs = [H.img(p)].filter(Boolean);
+  const oos = !(p.quantity > 0);
+  const bal = me ? Number(me.points_balance || 0) : 0;
+  const can = me && bal >= Number(p.cost);
+  const rk_ = H.roleKey ? H.roleKey(p) : null;
+  const what = C.tkey && t.has('shop.cat.item.' + C.tkey) ? t('shop.cat.item.' + C.tkey) : '';
+  const giftable = official && C.gift && me && !mine && p.status === 'active' && !oos;
+%>
+  <nav aria-label="<%- t('shop.item.breadcrumb') %>">
+    <ol class="crumbs">
+      <li><a href="/shop"><%- t('shop.title') %></a></li>
+      <% if (shelf && shelf.id !== 'more') { %><li><a href="/shop?shelf=<%= shelf.id %>"><%= shelf.emoji %> <%- t('shop.shelf.' + shelf.id) %></a></li><% } %>
+      <% if (!official) { %><li><a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>"><%- t('shop.item.more_from', { name: p.seller_name }) %></a></li><% } %>
+      <li aria-current="page"><%= p.prize %></li>
+    </ol>
+  </nav>
+  <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
   <% if (p.status !== 'active') { const ls = H.lstatus(p.status); %>
     <p class="warn"><%- t('shop.item.hidden', { status: '<b style="color:' + t.esc(ls.color) + '">' + t.esc(ls.label) + '</b>' }) %><% if (p.review_note) { %> <%- t('shop.item.note', { note: p.review_note }) %><% } %></p>
   <% } %>
+  <% if (H.requestItem && H.requestItem(p)) { %>
+    <p class="notice"><%- t('shop.item.requests_moved', { link: '<a href="/plex#request">' + t('nav.plex') + '</a>' }) %></p>
+  <% } %>
 
-  <div style="display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));align-items:start">
-    <div class="box" style="padding:0;overflow:hidden">
-      <div class="thumb" style="aspect-ratio:4/3;font-size:64px"><% if (p.image_url) { %><img src="<%= p.image_url %>" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><%= official ? '🎁' : '🛍️' %><% } %></div>
+  <div class="st-detail">
+    <div class="st-gal">
+      <% if (imgs.length) { %>
+        <button type="button" class="main" id="galMain" aria-label="<%- t('shop.item.enlarge') %>" aria-haspopup="dialog">
+          <span class="st-img"><img id="galImg" src="<%= imgs[0] %>" alt="<%= p.prize %>" referrerpolicy="no-referrer"></span>
+          <span class="zoom" aria-hidden="true">⤢ <%- t('shop.item.enlarge') %></span>
+        </button>
+        <% if (imgs.length > 1) { %>
+          <div class="st-thumbs">
+            <% imgs.forEach((u, i) => { %><button type="button" data-src="<%= u %>" aria-pressed="<%= i === 0 ? 'true' : 'false' %>" aria-label="<%- t('shop.item.picture_n', { n: i + 1 }) %>"><img src="<%= u %>" alt="" loading="lazy" referrerpolicy="no-referrer"></button><% }) %>
+          </div>
+        <% } %>
+        <dialog class="st-lb" id="galBox" aria-label="<%= p.prize %>">
+          <img id="galBig" src="<%= imgs[0] %>" alt="<%= p.prize %>" referrerpolicy="no-referrer">
+          <form method="dialog"><button class="alt" type="submit"><%- t('shop.item.close') %></button></form>
+        </dialog>
+      <% } else { %>
+        <div class="main" style="cursor:default"><span class="st-img"><span class="ph" aria-hidden="true"><%= shelf ? shelf.emoji : (official ? '🎁' : '🛍️') %></span></span></div>
+      <% } %>
     </div>
-    <div style="display:grid;gap:10px;min-width:0">
-      <div>
-        <h1 style="text-align:left;margin:0 0 6px;font-size:24px"><%= p.prize %></h1>
-        <div class="row">
-          <span class="price" style="font-size:24px"><%= H.fmt(p.cost) %> PAT</span>
-          <% if (official) { %><span class="pill official"><%- t('shop.item.official_store') %></span><% } %>
-          <% if (p.category) { %><a class="chip" href="/shop?cat=<%= encodeURIComponent(p.category) %>"><%= p.category %></a><% } %>
-        </div>
+
+    <div class="st-panel">
+      <div class="row">
+        <% if (official) { %><span class="pill official"><%- t('shop.item.official_store') %></span><% } %>
+        <% if (shelf && shelf.id !== 'more' && shelf.id !== 'market') { %><a class="chip" href="/shop?shelf=<%= shelf.id %>"><%= shelf.emoji %> <%- t('shop.shelf.' + shelf.id) %></a><% } %>
+        <% if (p.category) { %><a class="chip" href="/shop?cat=<%= encodeURIComponent(p.category) %>"><%= p.category %></a><% } %>
       </div>
+      <h1><%= p.prize %></h1>
+      <% if (rk_) { %><p class="st-lead" style="margin:0"><%- t('shop.role.' + rk_ + '.short') %></p><% } else if (what) { %><p class="st-lead" style="margin:0"><%- what %></p><% } %>
+      <div class="st-price"><%= H.fmt(p.cost) %> <small>PAT</small></div>
       <% if (p.escalating) { %>
         <p class="muted" style="margin:0"><%- me ? t('shop.item.your_price') : '' %> <%- t('shop.item.escalating', { price: H.fmt(p.list_cost) }) %></p>
       <% } %>
-      <div class="muted"><span class="<%= p.quantity > 0 ? '' : 'oos' %>" data-stock="<%= p.prizeId %>"><%- p.quantity > 0 ? t('shop.n_left', { n: H.fmt(p.quantity) }) : t('shop.out_of_stock') %></span><%- p.sold ? ' · ' + t('shop.n_sold', { n: H.fmt(p.sold) }) : '' %>
-        · <%- official ? t('shop.item.instant') : t('shop.item.seller_delivers') %></div>
-
-      <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
-      <% if (!me) { %>
-        <a class="btn" href="/login"><%- t('shop.item.signin_buy') %></a>
-      <% } else if (mine) { %>
-        <div class="row"><a class="btn alt" href="/shop/seller?edit=<%= p.prizeId %>#edit"><%- t('shop.item.edit') %></a></div>
-      <% } else if (p.status === 'active' && p.quantity > 0) { %>
-        <% if (p.buyer_prompt) { %>
-          <label><%- t('shop.item.seller_needs', { what: '<b style="color:#ddd">' + t.esc(p.buyer_prompt) + '</b>' }) %>
-            <input type="text" id="buyerInput" maxlength="300" required data-prompt="<%= p.buyer_prompt %>" placeholder="<%= p.buyer_prompt %>">
-          </label>
+      <% if (me && !oos && !mine) { %>
+        <% if (can) { %>
+          <div class="st-aff ok">✓ <%- t('shop.afford.yes') %> · <%- t('shop.afford.after', { n: H.fmt(bal - Number(p.cost)) }) %></div>
+        <% } else { const pct = Math.max(2, Math.min(100, Math.floor(100 * bal / Math.max(1, Number(p.cost))))); %>
+          <div class="st-aff no"><span><%- t('shop.afford.need', { n: H.fmt(Number(p.cost) - bal) }) %> · <%- t('shop.afford.have', { n: H.fmt(bal) }) %></span>
+            <span class="bar" role="img" aria-label="<%- t('shop.afford.pct', { pct: pct }) %>"><i style="width:<%= pct %>%"></i></span></div>
         <% } %>
-        <div><button class="buy-btn" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.item.buy_for', { price: H.fmt(p.cost) }) %></button></div>
-        <% if (typeof sub !== 'undefined' && sub) { %>
-        <div><button class="buy-btn alt" data-subscribe="1" data-days="<%= sub.days %>" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.item.subscribe_btn', { price: H.fmt(p.cost), days: sub.days }) %></button></div>
-        <p class="muted" style="margin:0"><%- t('shop.item.subscribe_note', { days: sub.days, link: '<a href="/subscriptions">' + t('shop.item.subscribe_link') + '</a>' }) %></p>
-        <% } %>
-        <% if (!official) { %><p class="muted" style="margin:0"><%- t('shop.item.cancel_note', { days: settings.auto_complete_days }) %></p><% } %>
       <% } %>
+      <div class="muted"><span class="<%= oos ? 'oos' : '' %>" data-stock="<%= p.prizeId %>"><%- oos ? t('shop.out_of_stock') : t('shop.n_left', { n: H.fmt(p.quantity) }) %></span><%- p.sold ? ' · ' + t('shop.n_sold', { n: H.fmt(p.sold) }) : '' %>
+        · <%- official ? (C.delivery === 'staff' ? t('shop.item.by_team') : t('shop.item.instant')) : t('shop.item.seller_delivers') %></div>
 
-      <div class="box seller">
+      <div class="st-buy">
+        <div id="shopStatus" class="status-msg" role="status" aria-live="polite" style="margin:0"></div>
+        <% if (!me) { %>
+          <a class="btn gold" href="/login"><%- t('shop.item.signin_buy') %></a>
+        <% } else if (mine) { %>
+          <a class="btn alt" href="/shop/seller?edit=<%= p.prizeId %>#edit"><%- t('shop.item.edit') %></a>
+        <% } else if (p.status === 'active' && !oos) { %>
+          <% if (p.buyer_prompt) { %>
+            <label><%- t('shop.item.seller_needs', { what: '<b style="color:#ddd">' + t.esc(p.buyer_prompt) + '</b>' }) %>
+              <input type="text" id="buyerInput" maxlength="300" required data-prompt="<%= p.buyer_prompt %>" placeholder="<%= p.buyer_prompt %>">
+            </label>
+          <% } %>
+          <button class="buy-btn gold" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.item.buy_for', { price: H.fmt(p.cost) }) %></button>
+          <% if (typeof sub !== 'undefined' && sub) { %>
+            <button class="buy-btn alt" data-subscribe="1" data-days="<%= sub.days %>" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.item.subscribe_btn', { price: H.fmt(p.cost), days: sub.days }) %></button>
+            <p class="muted" style="margin:0"><%- t('shop.item.subscribe_note', { days: sub.days, link: '<a href="/subscriptions">' + t('shop.item.subscribe_link') + '</a>' }) %></p>
+          <% } %>
+          <% if (!official) { %><p class="muted" style="margin:0"><%- t('shop.item.cancel_note', { days: settings.auto_complete_days }) %></p><% } %>
+          <% if (giftable) { %>
+            <details class="st-gift">
+              <summary><%- t('shop.gift.summary') %></summary>
+              <div class="fields">
+                <label for="giftTo"><%- t('shop.gift.to') %></label>
+                <input type="text" id="giftTo" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="<%- t('shop.gift.to_ph') %>">
+                <label for="giftNote"><%- t('shop.gift.note') %></label>
+                <input type="text" id="giftNote" maxlength="140" placeholder="<%- t('shop.gift.note_ph') %>">
+                <button class="buy-btn" data-gift="1" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.gift.btn', { price: H.fmt(p.cost) }) %></button>
+                <p class="muted" style="margin:0"><%- t('shop.gift.help') %></p>
+              </div>
+            </details>
+          <% } %>
+        <% } else if (oos) { %>
+          <p class="muted" style="margin:0"><%- t('shop.item.oos_note') %></p>
+        <% } %>
+      </div>
+
+      <div class="box seller" style="margin:0">
         <% if (official) { %>
           <img src="/public/img/coin.png" alt="">
           <div><b style="color:#fff"><%- t('shop.item.patv_store') %></b><div class="muted"><%- t('shop.item.patv_store_sub') %></div></div>
@@ -68,38 +130,52 @@
     </div>
   </div>
 
-  <% const rk_ = H.roleKey ? H.roleKey(p) : null; if (rk_) { %>
-    <%# 1.99la: what a role item gives, where and for how long (shop.role.<key>.*) %>
-    <h2><%- t('shop.role.h') %></h2>
-    <div class="box role-desc">
-      <p style="margin:0 0 6px"><b style="color:#fff"><%- t('shop.role.' + rk_ + '.lead') %></b></p>
-      <ul style="margin:0;padding-left:20px;display:grid;gap:4px">
+  <h2 id="whatH"><%- t('shop.role.h') %></h2>
+  <section class="st-what" aria-labelledby="whatH">
+    <% if (rk_) { %>
+      <%# 1.99la: what a role item gives, where and for how long (shop.role.<key>.*) %>
+      <p class="lead"><%- t('shop.role.' + rk_ + '.lead') %></p>
+      <ul>
         <% ['patv', 'seerr', 'camfrog', 'discord'].forEach((w_) => { if (t.has('shop.role.' + rk_ + '.' + w_)) { %><li><%- t('shop.role.' + rk_ + '.' + w_) %></li><% } }) %>
         <li><%- t('shop.role.' + rk_ + '.length') %></li>
       </ul>
-      <% if (t.has('shop.role.' + rk_ + '.setup')) { %><p class="muted" style="margin:8px 0 0"><%- t('shop.role.' + rk_ + '.setup', { plex: '<a href="/plex#access">' + t('nav.plex') + '</a>' }) %></p><% } %>
-    </div>
-  <% } %>
-  <% if (H.requestItem && H.requestItem(p)) { %>
-    <p class="notice"><%- t('shop.item.requests_moved', { link: '<a href="/plex#request">' + t('nav.plex') + '</a>' }) %></p>
-  <% } %>
-
-  <% if (p.description) { %>
-    <h2><%- t('shop.item.description') %></h2>
-    <div class="pre"><%= p.description %></div>
-  <% } %>
+      <% if (t.has('shop.role.' + rk_ + '.setup')) { %><p class="muted"><%- t('shop.role.' + rk_ + '.setup', { plex: '<a href="/plex#access">' + t('nav.plex') + '</a>' }) %></p><% } %>
+    <% } else { %>
+      <% if (what) { %><p class="lead"><%- what %></p><% } %>
+      <ul>
+        <% if (!official) { %><li><%- t('shop.deliver.seller') %></li>
+        <% } else if (t.has('shop.deliver.' + C.delivery)) { %><li><%- t('shop.deliver.' + C.delivery, { plex: '<a href="/plex">' + t('nav.plex') + '</a>', orders: '<a href="/shop/orders">' + t('shop.my_orders') + '</a>' }) %></li><% } %>
+        <% if (official && C.delivery !== 'retired') { %><li><%- t('shop.deliver.order', { orders: '<a href="/shop/orders">' + t('shop.my_orders') + '</a>' }) %></li><% } %>
+      </ul>
+    <% } %>
+    <% if (p.description) { %><div class="pre"><%= p.description %></div><% } %>
+    <% if (official && C.delivery !== 'retired') { %>
+      <p class="muted"><%- t('shop.item.anywhere', { a: '<code>!prizes</code>', b: '<code>!redeem</code>', c: '<code>/shop</code>' }) %></p>
+    <% } %>
+  </section>
 
   <% if (more && more.length) { %>
-    <h2><%- official ? t('shop.item.more_store') : t('shop.item.more_from', { name: p.seller_name }) %></h2>
-    <div class="grid">
-      <% more.forEach((m) => { %>
-        <a class="card" href="/shop/item/<%= m.prizeId %>">
-          <div class="thumb"><% if (m.image_url) { %><img src="<%= m.image_url %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><%= official ? '🎁' : '🛍️' %><% } %></div>
-          <div class="body"><span class="t"><%= m.prize %></span><span class="price"><%= H.fmt(m.cost) %> PAT</span></div>
-        </a>
-      <% }) %>
+    <h2><%- official ? t('shop.item.related') : t('shop.item.more_from', { name: p.seller_name }) %></h2>
+    <div class="st-grid">
+      <% more.forEach((m) => { %><%- include('partials/shop-card', { it: m, me, H, i18nT: t, quickBuy: false }) %><% }) %>
     </div>
   <% } %>
 <% } %>
 </div>
 <%- include('partials/shop-buy-js') %>
+<script>
+  // 1.99lz: the gallery - thumbnails swap the main picture; the main picture opens the lightbox
+  (function () {
+    var main = document.getElementById('galMain'), box = document.getElementById('galBox');
+    var img = document.getElementById('galImg'), big = document.getElementById('galBig');
+    if (!main || !box) return;
+    main.addEventListener('click', function () { if (typeof box.showModal === 'function') box.showModal(); else window.open(img.src, '_blank'); });
+    box.addEventListener('click', function (e) { if (e.target === box) box.close(); });
+    document.querySelectorAll('.st-thumbs button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        img.src = big.src = b.dataset.src;
+        document.querySelectorAll('.st-thumbs button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      });
+    });
+  })();
+</script>

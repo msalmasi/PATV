@@ -23,12 +23,21 @@
       if (inputEl && inputEl.required && !buyerInput) { show(_t('js.shop.seller_needs', 'The seller needs this to deliver it: {what}', { what: inputEl.dataset.prompt || _t('js.shop.fill_box', 'fill in the box') }), false); inputEl.focus(); return; }
       // 1.99jp: a subscription (subscriptions.js) - the first period now, then every N days until cancelled
       const subscribe = button.dataset.subscribe === '1';
+      // 1.99lz: a gift - bought for someone else (the item page's "Send it as a gift")
+      const gift = button.dataset.gift === '1';
+      const giftEl = gift ? document.getElementById('giftTo') : null;
+      const giftTo = giftEl ? giftEl.value.trim().replace(/^@/, '') : '';
+      const noteEl = gift ? document.getElementById('giftNote') : null;
+      if (gift && !giftTo) { show(_t('js.shop.gift_need_name', 'Type who it’s for first.'), false); if (giftEl) giftEl.focus(); return; }
       const q = subscribe ? _t('js.subs.q_sub', 'Subscribe to {title} for {price} PAT every {days} days? The first period is charged now; cancel any time.', { title: '"' + name + '"', price: cost.toLocaleString(), days: button.dataset.days })
+              : gift ? _t('js.shop.confirm_gift', 'Send {name} to {to} as a gift for {cost} PAT?', { name: '"' + name + '"', to: giftTo, cost: cost.toLocaleString() })
                           : _t('js.shop.confirm_buy', 'Buy {name} for {cost} PAT?', { name: '"' + name + '"', cost: cost.toLocaleString() });
       if (!confirm(q)) return;
       button.disabled = true;
       fetch(subscribe ? '/api/subscriptions/start' : '/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                       body: JSON.stringify(subscribe ? { product, price: cost } : { product, price: cost, buyer_input: buyerInput }) })
+                       body: JSON.stringify(subscribe ? { product, price: cost }
+                                          : gift ? { product, price: cost, gift_to: giftTo, gift_note: noteEl ? noteEl.value.trim() : '' }
+                                          : { product, price: cost, buyer_input: buyerInput }) })
         // The server explains WHY a purchase failed (not logged in, not enough PAT, out of stock).
         .then((r) => r.json().catch(() => ({})).then((data) => ({ ok: r.ok, data })))
         .then(({ ok, data }) => {
@@ -37,7 +46,8 @@
           show((data && data.message ? data.message.replace(/ Track it: \S+$/, '') : '') || (succeeded ? _t('js.shop.purchased_msg', 'Purchase complete.') : _t('js.shop.buy_failed', 'Could not buy that item.')),
                succeeded, succeeded && data.order_id ? '/shop/orders/' + data.order_id : null);
           if (succeeded) {
-            button.textContent = subscribe ? _t('js.subs.subscribed', 'Subscribed') : listing ? _t('js.shop.ordered', 'Ordered') : _t('js.shop.purchased', 'Purchased');      // no accidental double-buy
+            button.textContent = subscribe ? _t('js.subs.subscribed', 'Subscribed') : gift ? _t('js.shop.gifted', 'Sent 🎁') : listing ? _t('js.shop.ordered', 'Ordered') : _t('js.shop.purchased', 'Purchased');      // no accidental double-buy
+            if (gift && giftEl) { giftEl.value = ''; if (noteEl) noteEl.value = ''; }
             const bal = document.getElementById('shopBalance');
             if (bal && typeof data.balance === 'number') bal.textContent = data.balance.toLocaleString();
             document.querySelectorAll('[data-stock="' + product + '"]').forEach((el) => {

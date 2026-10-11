@@ -1,0 +1,143 @@
+<%# 1.99lz: the prize shop's storefront look (/shop, /shop/item/:id, a seller's storefront). Prefix st-. Loaded after shop-css. %>
+<style>
+  .sh.st { max-width: 1120px; width: 100%; min-width: 0; padding-top: 16px; color: #e6e6e6; }
+  .st .st-hero { position: relative; background: radial-gradient(120% 150% at 0% 0%, #2a2208 0%, #121212 55%), #121212; border: 1px solid #2a2a2a;
+    border-radius: 18px; padding: 22px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) auto; align-items: start; overflow: hidden; }
+  .st .st-eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; margin: 0; }
+  .st .st-hero h1 { text-align: left; font-size: clamp(26px, 4.4vw, 40px); line-height: 1.1; margin: 10px 0 8px; }
+  .st .st-hero h1 em { font-style: normal; background: linear-gradient(90deg, #ffcf40, #ff8a3d 55%, #ff6ad5); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .st .st-lead { color: #cfcfc4; font-size: 15px; line-height: 1.55; margin: 0; max-width: 60ch; }
+  .st .st-wallet { background: #0d0d0d; border: 1px solid #3a3010; border-radius: 14px; padding: 12px 14px; min-width: 210px; display: grid; gap: 6px; }
+  .st .st-wallet .lbl { color: #aaa; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .st .st-wallet .bal { font-size: 24px; }
+  .st .st-wallet .bal small { font-size: 12px; color: #aaa; font-weight: normal; }
+  .st .st-wallet nav { display: flex; flex-wrap: wrap; gap: 6px; }
+  .st .st-wallet nav a { font-size: 13px; }
+  .st .st-search { grid-column: 1 / -1; display: flex; gap: 8px; }
+  .st .st-search input[type=search] { flex: 1 1 auto; min-width: 0; font-size: 16px; padding: 11px 14px; border-radius: 10px; background: #0b0b0b; border-color: #3a3a3a; }
+  .st .st-search button { border-radius: 10px; padding: 10px 18px; flex: none; }
+  .st .btn.gold, .st button.gold { background: linear-gradient(90deg, #ffcf40, #ff8a3d); color: #2a1600; }
+  .st .btn.ghost, .st button.ghost { background: #1a1a1a; color: #ddd; border: 1px solid #2f2f2f; }
+  .st a:focus-visible, .st button:focus-visible, .st input:focus-visible, .st select:focus-visible, .st summary:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
+  .st .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* featured */
+  .st .st-feat { display: grid; gap: 12px; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); margin: 18px 0 6px; }
+  .st .st-top { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); background: #121212; border: 1px solid #5a4210; border-radius: 16px; overflow: hidden; min-width: 0; }
+  .st .st-top .st-img { aspect-ratio: auto; height: 100%; min-height: 220px; border-radius: 0; }
+  .st .st-top .st-tb { padding: 16px; display: grid; gap: 8px; align-content: center; min-width: 0; }
+  .st .st-top h3 { margin: 0; font-size: 21px; line-height: 1.2; }
+  .st .st-top h3 a { color: #fff; text-decoration: none; }
+  .st .st-top .desc { color: #b9b9b0; font-size: 14px; line-height: 1.45; margin: 0; }
+  .st .st-side { display: grid; gap: 10px; grid-template-rows: repeat(3, minmax(0, 1fr)); min-width: 0; }
+  .st .st-mini { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 0; background: #121212; border: 1px solid #262626; border-radius: 12px; overflow: hidden; color: inherit; text-decoration: none; min-width: 0; }
+  .st .st-mini:hover { border-color: #ffcf40; }
+  .st .st-mini .st-img { aspect-ratio: 4 / 3; border-radius: 0; height: 100%; }
+  .st .st-mini div { padding: 8px 12px; display: grid; gap: 2px; align-content: center; min-width: 0; }
+  .st .st-mini b { color: #fff; font-size: 14px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .st .st-tag { font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .08em; color: #ffcf40; }
+
+  /* shelves (chips) */
+  .st .st-chips { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 8px; margin: 14px -2px 0; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  .st .st-chips a { flex: none; display: inline-flex; align-items: center; gap: 6px; background: #161616; border: 1px solid #2c2c2c; color: #ddd; border-radius: 999px;
+    padding: 7px 13px; font-size: 14px; text-decoration: none; white-space: nowrap; min-height: 36px; }
+  .st .st-chips a:hover { border-color: #555; }
+  .st .st-chips a[aria-current="true"] { background: #ffcf40; border-color: #ffcf40; color: #241500; font-weight: bold; }
+  .st .st-chips a .n { font-size: 12px; opacity: .7; font-variant-numeric: tabular-nums; }
+  .st .st-chips a.afford { border-color: #2f5f33; color: #9be39f; }
+  .st .st-chips a.afford[aria-current="true"] { background: #4caf50; border-color: #4caf50; color: #fff; }
+  .st .st-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; margin: 6px 0 12px; }
+  .st .st-tools form { display: flex; gap: 6px; align-items: center; }
+  .st .st-tools select { width: auto; padding: 6px 8px; }
+  .st details.st-more { margin: 0 0 12px; }
+
+  /* item cards */
+  .st .st-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 14px; }
+  .st .st-card { background: #121212; border: 1px solid #262626; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; transition: border-color .15s, transform .15s; }
+  .st .st-card:hover { border-color: #4a4a4a; transform: translateY(-2px); }
+  .st .st-card.can { border-color: #2a4a2c; }
+  .st .st-card.oos { opacity: .62; }
+  .st .st-img { position: relative; display: block; aspect-ratio: 4 / 3; background: #0d0d0d; overflow: hidden; }
+  .st .st-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .st .st-img .ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 46px; background: radial-gradient(circle at 50% 42%, #2a2a2a, #0d0d0d 70%); }
+  .st .st-badges { position: absolute; left: 8px; top: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 5px; pointer-events: none; }
+  .st .st-badge { font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,.72); color: #eee; border: 1px solid rgba(255,255,255,.14); line-height: 1.3; }
+  .st .st-badge.gold { color: #ffcf40; border-color: rgba(255,207,64,.45); }
+  .st .st-badge.red { color: #ff9a9a; border-color: rgba(229,115,115,.5); }
+  .st .st-cb { padding: 11px 12px 13px; display: grid; gap: 6px; flex: 1; align-content: start; }
+  .st .st-cb h3 { margin: 0; font-size: 15px; line-height: 1.3; }
+  .st .st-cb h3 a { color: #fff; text-decoration: none; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .st .st-cb h3 a:hover { text-decoration: underline; }
+  .st .st-sub { color: #9a9a92; font-size: 12.5px; line-height: 1.4; margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .st .st-price { color: #ffcf40; font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .st .st-price small { font-size: 12px; font-weight: bold; color: #c9a640; }
+  .st .st-price .note { font-size: 12px; font-weight: normal; color: #999; }
+  .st .st-meta { color: #8a8a8a; font-size: 12px; }
+  .st .st-act { margin-top: auto; padding-top: 4px; display: flex; gap: 6px; }
+  .st .st-act > * { flex: 1; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* "can you afford it" */
+  .st .st-aff { display: grid; gap: 4px; font-size: 12.5px; }
+  .st .st-aff .bar { height: 6px; border-radius: 99px; background: #262626; overflow: hidden; }
+  .st .st-aff .bar i { display: block; height: 100%; background: linear-gradient(90deg, #ff8a3d, #ffcf40); border-radius: 99px; }
+  .st .st-aff.ok { color: #9be39f; }
+  .st .st-aff.no { color: #c9a98a; }
+
+  /* buy anywhere */
+  .st .st-any { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); }
+  .st .st-any > div { background: #121212; border: 1px solid #262626; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.5; color: #ccc; min-width: 0; }
+  .st .st-any b { color: #fff; }
+  .st code { background: #1d1d1d; border: 1px solid #2c2c2c; border-radius: 6px; padding: 1px 6px; color: #ffe08a; font-size: 13px; white-space: nowrap; }
+
+  /* item page */
+  .st .crumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: #888; margin: 0 0 12px; padding: 0; list-style: none; }
+  .st .crumbs li + li::before { content: "›"; margin-right: 6px; color: #555; }
+  .st .st-detail { display: grid; gap: 18px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .st .st-gal { display: grid; gap: 8px; min-width: 0; }
+  .st .st-gal .main { position: relative; display: block; border: 1px solid #2a2a2a; border-radius: 16px; overflow: hidden; background: #0d0d0d; padding: 0; cursor: zoom-in; width: 100%; }
+  .st .st-gal .main .st-img { aspect-ratio: 4 / 3; }
+  .st .st-gal .main .zoom { position: absolute; right: 10px; top: 10px; background: rgba(0,0,0,.7); color: #eee; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: normal; }
+  .st .st-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .st .st-thumbs button { width: 76px; padding: 0; border-radius: 10px; overflow: hidden; border: 2px solid #2a2a2a; background: #0d0d0d; }
+  .st .st-thumbs button[aria-pressed="true"] { border-color: #ffcf40; }
+  .st .st-thumbs img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+  .st .st-panel { display: grid; gap: 12px; min-width: 0; }
+  .st .st-panel h1 { text-align: left; margin: 0; font-size: clamp(22px, 3.4vw, 30px); line-height: 1.15; }
+  .st .st-panel .st-price { font-size: 30px; }
+  .st .st-buy { background: #121212; border: 1px solid #2a2a2a; border-radius: 14px; padding: 14px; display: grid; gap: 10px; }
+  .st .st-buy .status-msg:empty { min-height: 0; }
+  .st .st-buy .buy-btn, .st .st-buy .btn { width: 100%; min-height: 44px; font-size: 15px; }
+  .st .st-gift { border-top: 1px solid #242424; padding-top: 10px; }
+  .st .st-gift summary { color: #ffb3e6; font-weight: bold; list-style: none; display: flex; align-items: center; gap: 6px; min-height: 32px; }
+  .st .st-gift summary::-webkit-details-marker { display: none; }
+  .st .st-gift summary::after { content: "▾"; margin-left: auto; color: #777; }
+  .st .st-gift[open] summary::after { content: "▴"; }
+  .st .st-gift .fields { display: grid; gap: 8px; margin-top: 8px; }
+  .st .st-gift button { background: linear-gradient(90deg, #9b5de5, #ff6ad5); }
+  .st .st-what { background: #121212; border: 1px solid #262626; border-radius: 14px; padding: 16px; display: grid; gap: 10px; }
+  .st .st-what p { margin: 0; line-height: 1.55; }
+  .st .st-what ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; line-height: 1.5; }
+  .st .st-what .lead { color: #fff; font-weight: bold; font-size: 16px; }
+  .st dialog.st-lb { border: 1px solid #333; border-radius: 16px; padding: 0; background: #0d0d0d; max-width: min(92vw, 900px); width: 100%; color: #eee; }
+  .st dialog.st-lb::backdrop { background: rgba(0,0,0,.8); }
+  .st dialog.st-lb img { width: 100%; display: block; }
+  .st dialog.st-lb form { position: absolute; right: 8px; top: 8px; }
+
+  @media (max-width: 760px) {
+    .st .st-hero { grid-template-columns: minmax(0, 1fr); padding: 18px 16px; }
+    .st .st-wallet { min-width: 0; }
+    .st .st-feat { grid-template-columns: minmax(0, 1fr); }
+    .st .st-top { grid-template-columns: minmax(0, 1fr); }
+    .st .st-top .st-img { min-height: 0; aspect-ratio: 4 / 3; height: auto; }
+    .st .st-side { grid-template-rows: none; }
+    .st .st-detail { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 420px) {
+    .st .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .st .st-cb { padding: 9px 9px 11px; }
+    .st .st-price { font-size: 16px; }
+    .st .st-mini { grid-template-columns: 104px minmax(0, 1fr); }
+    .st .st-search button { padding: 10px 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .st .st-card { transition: none; } .st .st-card:hover { transform: none; } }
+</style>

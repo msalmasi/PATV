@@ -1,0 +1,48 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99lz: one item card on the storefront (/shop grid, related items). Pass { it, me, H, i18nT: t, quickBuy }. %>
+<%
+  const c_ = H.cat(it) || {};
+  const img_ = H.img(it);
+  const official_ = !it.seller_id;
+  const oos_ = !(it.quantity > 0);
+  const can_ = me && !oos_ && Number(me.points_balance) >= Number(it.cost);
+  const shelf_ = H.shelves().find((s) => s.id === c_.shelf);
+  const rk_ = H.roleKey ? H.roleKey(it) : null;
+  const sub_ = rk_ ? t('shop.role.' + rk_ + '.short') : (c_.tkey && t.has('shop.cat.item.' + c_.tkey)) ? t('shop.cat.item.' + c_.tkey) : '';
+  const quick_ = quickBuy && official_ && !it.buyer_prompt && me && !oos_;
+  const href_ = '/shop/item/' + encodeURIComponent(it.prizeId);
+%>
+<article class="st-card<%= can_ ? ' can' : '' %><%= oos_ ? ' oos' : '' %>">
+  <a class="st-img" href="<%= href_ %>" tabindex="-1" aria-hidden="true">
+    <% if (img_) { %><img src="<%= img_ %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"><% } else { %><span class="ph"><%= shelf_ ? shelf_.emoji : (official_ ? '🎁' : '🛍️') %></span><% } %>
+    <span class="st-badges">
+      <% if (official_) { %><span class="st-badge gold"><%- t('shop.official') %></span><% } %>
+      <% if (oos_) { %><span class="st-badge red"><%- t('shop.out_of_stock') %></span><% } else if (it.quantity <= 3) { %><span class="st-badge"><%- t('shop.low_stock', { n: H.fmt(it.quantity) }) %></span><% } %>
+    </span>
+  </a>
+  <div class="st-cb">
+    <h3><a href="<%= href_ %>"><%= it.prize %></a></h3>
+    <% if (sub_) { %><p class="st-sub"><%- sub_ %></p><% } %>
+    <div class="st-price"><%= H.fmt(it.cost) %> <small>PAT</small><% if (it.escalating) { %> <span class="note"><%- me ? t('shop.your_price') : t('shop.first_one') %></span><% } %></div>
+    <% if (me && !oos_) { %>
+      <% if (can_) { %>
+        <div class="st-aff ok">✓ <%- t('shop.afford.yes') %></div>
+      <% } else { const pct_ = Math.max(2, Math.min(100, Math.floor(100 * Number(me.points_balance || 0) / Math.max(1, Number(it.cost))))); %>
+        <div class="st-aff no"><span><%- t('shop.afford.need', { n: H.fmt(Number(it.cost) - Number(me.points_balance || 0)) }) %></span>
+          <span class="bar" role="img" aria-label="<%- t('shop.afford.pct', { pct: pct_ }) %>"><i style="width:<%= pct_ %>%"></i></span></div>
+      <% } %>
+    <% } %>
+    <div class="st-meta">
+      <% if (!official_) { %><%- t('shop.by', { seller: '<a href="/shop/seller/' + t.esc(encodeURIComponent(it.seller_name || '')) + '">' + t.esc(it.seller_name) + '</a>' }) %> · <% } %>
+      <span class="<%= oos_ ? 'oos' : '' %>" data-stock="<%= it.prizeId %>"><%- oos_ ? t('shop.out_of_stock') : t('shop.n_left', { n: H.fmt(it.quantity) }) %></span><%- it.sold ? ' · ' + t('shop.n_sold', { n: H.fmt(it.sold) }) : '' %>
+    </div>
+    <div class="st-act">
+      <% if (quick_ && can_) { %>
+        <button class="buy-btn" data-product="<%= it.prizeId %>" data-name="<%= it.prize %>" data-cost="<%= it.cost %>"><%- t('shop.buy') %></button>
+        <a class="btn ghost" href="<%= href_ %>"><%- t('shop.view') %><span class="vh"> <%= it.prize %></span></a>
+      <% } else { %>
+        <a class="btn ghost" href="<%= href_ %>"><%- t('shop.view') %><span class="vh"> <%= it.prize %></span></a>
+      <% } %>
+    </div>
+  </div>
+</article>

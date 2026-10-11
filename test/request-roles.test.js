@@ -419,7 +419,7 @@ test("shop: every role item has a description (what, where, how long); the retir
   const base = { user: "x", me: null, msg: null, settings: { auto_complete_days: 7 }, sales: 0, more: [], sub: null, t, i18nT: t };
   const H = { fmt: (n) => String(n), lstatus: () => ({ label: "Paused", color: "#999" }) };
   const shopMod = require(path.join(repo, "shop"));
-  const Hfull = Object.assign({}, H);
+  const Hfull = Object.assign({}, shopMod.H, H);   // 1.99lz: the storefront helpers (cat / img / shelves) too
   // the view helpers live on the module's render base; rebuild the ones the view uses
   Hfull.roleKey = (p) => (p && !p.seller_id && shopMod.ROLE_PRIZES[p.prizeId] ? shopMod.ROLE_PRIZES[p.prizeId].replace(/\s+/g, "_") : null);
   Hfull.requestItem = (p) => !!p && !p.seller_id && shopMod.REQUEST_ITEMS.includes(p.prizeId);
