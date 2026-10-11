@@ -196,6 +196,45 @@ local escrow until an admin decides.
 - An explicit go for each prod write: §4 (ledger switch), §5 (the ledger cutover), and §7 step 1-2 for every game.
 - The time window from §0.
 
-## 11. Staging rehearsal
+## 11. Staging rehearsal (2026-10-11, done)
 
-(filled in below with the numbers.)
+Ran on staging.publicaccess.tv (site a016f0a, 1.99ou) and PepeBeta (VM 111, bot e0d7e3f; running d931064 and later, each
+passed probation) with the pools already live on staging (Phase 1 soak).
+
+**Prod data, read-only.** Prod Pepe's `escrow.json`, `wagers.json`, `bounties.json` and `loans.json` were read over ssh
+(nothing written on prod) and copied into `C:\PATV\escrow-seed\` on the staging VM; the staging-only seed hook copied them over
+staging Pepe's files at the next start (the old ones kept as `*.pre-seed-<ts>`). Prod held **3 stakes, 21,000 PAT** (the pots of
+the 3 open bounties BT3 / BT7 / BT8), 0 open wagers, 0 open pools, 6 active P2P loans (+3 active Fed loans), 0 pending payouts.
+The staging DB is a recent prod copy: every hold's account exists. Because prod had no open wagers / pools / loan offers, the
+staging-only inject hook (`C:\PATV\escrow-inject.jsonl`, one-off, PepeBeta.Room) added on the **local** path: W5 (offered, 5k),
+W6 (active, 3k + 3k), pool M2 (yes 2k / no 1.5k), the P2P offer L48 (10k) and a 500 chip-in on BT7.
+
+| Step | Pepe (export / mirror) | Site | Match |
+|---|---|---|---|
+| ledger dry run | 10 holds, 46,000 (BT 21,500 · W 11,000 · L 10,000 · M 3,500) | - | ready |
+| ledger cutover `ec-rehearsal-1` | 10 / 46,000 | 10 / 46,000, sha256 2fbee13c…, **supply 1,040,549,782 before = after** (same transaction) | yes |
+| wagers `gc-wagers-rehearsal-1` | 2 live, 11,000 in stakes | 2 live | yes |
+| bounties | 3 open, 21,500 | 3 open | yes |
+| pools | 2 live (M1 empty, M2), 3,500 | 2 live | yes |
+| loans | 7 live (6 active + L48 offered), 10,000 | 7 live | yes |
+
+**On the site, through Pepe's chat verbs** (inject): the judge settled W6 (ginger_snapped won 5,700, 300 fee by the wager_fee
+row), tricon accepted L48 (10,000 paid to him, owes 10,500 in 7d), the judge settled M2 "yes" (tricon +3,425, 75 fee),
+ginger_snapped chipped 500 into BT8, tricon offered W7 (2k) and ginger_snapped accepted it. Every announcement was the local
+wording, once. Held after: **8 holds, 31,000** (BT 22,000 · W 9,000) - exactly the expected 5,000 + 4,000 + 22,000.
+
+**Rollback** (loans → pools → bounties → wagers → ledger, keys `rb-*-rehearsal-1`): every game's records came home
+(loans 7 / pools 2 records / bounties 3 / wagers 3 records); the ledger handed back **8 holds, 31,000, sha256 6f1c54b9…** -
+Pepe's local escrow afterwards: 8 held, 31,000 (BT 22,000 · W 9,000). The site's table: 0 held, live off.
+
+**Cutover again for the soak** (`soak-*-1`): ledger 8 / 31,000, sha256 6f1c54b9… (the same), supply 1,040,549,782 before =
+after; wagers 2 / 9,000, bounties 3 / 22,000, pools 1 / 0, loans 7 / 0 - all matched. Staging was left ON.
+
+**A site deadline with Pepe as a client:** W5's offer ran out ~10 min later; the site tick refunded the 5,000 (Pepe's original
+hold h4331, imported) and Pepe announced "tricon never took wager W5 ..." from the event.
+
+A Pepe restart for another deploy (1.99oy) happened between the bounty and pool cutovers; nothing was lost (the switches,
+the mirror and the cursor are on disk).
+
+Note: run `tools/escrow-backend.js` with the service's environment (`STAGING=1` on staging) - without it the `enabled=` column
+shows the prod default (off); `live` and the totals are read from the database either way.
