@@ -538,7 +538,7 @@ test("tip menu (room-mod.js): a light ⋯ for every signed-in viewer; mods keep 
   assert.ok(!ids(MI(null, { login: "botcf", bot: true, tip: { to: "x", href: "/u/x/tip" } }, { signed: true })).includes("tip"), "bots: never");
   const caps = { actions: ["kick", "djban"], on: true, login: "modcf" };
   assert.deepEqual(ids(MI(caps, alice, { signed: true, inRoom: true })), ["profile", "tip", "kick", "djban", "more"], "mods: tip + their actions");
-  assert.deepEqual(ids(MI(caps, { ...alice, login: "modcf" }, { signed: true })), ["profile", "tip"], "a mod's own row: no moderation");
+  assert.deepEqual(ids(MI(caps, { ...alice, login: "modcf" }, { signed: true })), ["profile", "tip", "kick", "djban", "more"], "1.99os: a mod's own row has their actions too");
   // the page wires it: the ⋯ shows for signed-in viewers, on both lists, and the tip opens the modal
   const src = fs.readFileSync(path.join(repo, "public", "js", "room-mod.js"), "utf8");
   assert.match(src, /if \(P\.tipModal\) P\.tipModal\(\{ to: it\.to, display: u\.display \|\| u\.login, slug: slug, me: opts\.me \|\| null \}\);/);

@@ -148,9 +148,32 @@ test("panel requests: non-mods and actions Pepe didn't list are refused", async 
   assert.equal(r.status, 400, "no X-Requested-With: refused (no cross-site form can send it)");
   r = await post("/api/rooms/pepebeta/mod", "uA", { action: "kick", target: "bob" }, Object.assign(H("uA"), { origin: "https://evil.example" }));
   assert.equal(r.status, 400, "cross-site origin refused");
-  r = await act("uA", { action: "kick", target: "bossadmin" });
-  assert.equal(r.status, 400, "not yourself");
   assert.equal(jobsNow().length, 0, "nothing queued for any of those");
+});
+
+test("1.99os: actions on yourself are allowed; lifting your own penalty is Pepe-admin only", async () => {
+  let r = await act("uA", { action: "kick", target: "BossAdmin" });
+  assert.equal(r.status, 200, "an admin may kick themselves");
+  assert.equal(r.d.line, "!kick BossAdmin");
+  r = await act("uA", { action: "timeout", target: "bossadmin", args: { hours: 1 } });
+  assert.equal(r.status, 200); assert.equal(r.d.line, "!timeout bossadmin 1");
+  r = await act("uA", { action: "unpunish", target: "bossadmin" });
+  assert.equal(r.status, 200, "a Pepe admin may lift their own penalty");
+  r = await act("uS", { action: "djban", target: "stevie" });
+  assert.equal(r.status, 200, "staff may DJ-ban themselves");
+  r = await act("uS", { action: "djunban", target: "Stevie" });
+  assert.equal(r.status, 403, "staff can't lift their own DJ ban");
+  assert.match(r.d.error, /Only Pepe admins can lift their own/);
+  r = await act("uS", { action: "djunban", target: "bob" });
+  assert.equal(r.status, 200, "...but still lifts other people's");
+  const js = jobsNow();
+  assert.deepEqual(js.map((j) => j.text).sort(), ["!djban stevie", "!djunban bob", "!kick BossAdmin", "!timeout bossadmin 1", "!unpunish bossadmin"].sort());
+  for (const a of pm.SELF_LIFT) {
+    assert.equal(pm.selfRefusal(a, { admin: true }), null, a + ": admin ok");
+    assert.ok(pm.selfRefusal(a, { actions: [a] }), a + ": non-admin refused");
+    assert.ok(Object.prototype.hasOwnProperty.call(pm.ACTIONS, a), a + " is a real action");
+  }
+  for (const a of ["kick", "ban", "punish", "blockmic", "timeout", "fine", "casinoban", "djban", "strike"]) assert.equal(pm.selfRefusal(a, {}), null, a);
 });
 
 test("a mod's click becomes the exact command job; raw text in the body is ignored", async () => {

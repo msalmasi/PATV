@@ -257,7 +257,20 @@ test("menuItems: nothing without caps; exactly Pepe's listed actions; never on y
   assert.equal(RM._modMenuItems(staff, bob, {}).find((x) => x.id === "djunban").danger, false);
   assert.equal(RM._modMenuItems(staff, bob, {}).find((x) => x.id === "profile").href, "/u/bobby");
   assert.ok(RM._modMenuItems(Object.assign({}, staff, { on: false }), bob, {}).filter((x) => x.kind === "act").every((x) => x.disabled), "web moderation off: disabled");
-  assert.deepEqual(ids(RM._modMenuItems(staff, { login: "Stevie" }, { cam: true })), ["cam"], "yourself: no moderation");
+  // 1.99os: yourself - the actions too (destructive ones keep the confirm step), but not lifting your own penalty
+  // unless you're a Pepe admin
+  const meItems = RM._modMenuItems(staff, { login: "Stevie" }, { cam: true, inRoom: true });
+  assert.deepEqual(ids(meItems), ["cam", "djban", "casinoban", "more"], "yourself (staff): actions, minus djunban");
+  assert.ok(meItems.filter((x) => x.kind === "act").every((x) => x.self && x.danger), "self items flagged; each asks first");
+  const boss = { actions: Object.keys(pm.ACTIONS).filter((a) => a !== "topic"), on: true, login: "foamy1111", admin: true };
+  const bossSelf = RM._modMenuItems(boss, { login: "Foamy1111", display: "plantbaked" }, { inRoom: true }).filter((x) => x.kind === "act").map((x) => x.id);
+  for (const a of ["kick", "ban", "punish", "unpunish", "blockmic", "unblockmic", "timeout", "fine", "casinoban", "casinounban", "djban", "djunban", "strike", "strike_appeal"]) {
+    assert.ok(bossSelf.includes(a), "a Pepe admin gets " + a + " on themselves");
+  }
+  assert.ok(!bossSelf.includes("unban"), "still no unban for someone in the room");
+  for (const a of ["kick", "ban", "punish", "blockmic", "timeout", "fine", "casinoban", "djban", "strike_appeal"]) {
+    assert.match(String(RM0._modSelfQ(a)), /yourself|your own/, a + ": the confirm question is about you");
+  }
   const all = { actions: Object.keys(pm.ACTIONS), on: true, login: "boss" };
   const acts = RM._modMenuItems(all, { login: "bob" }, { inRoom: true }).filter((x) => x.kind === "act").map((x) => x.id);
   assert.ok(!acts.includes("unban"), "unban is pointless for someone in the room");

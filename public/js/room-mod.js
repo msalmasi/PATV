@@ -40,6 +40,23 @@
     strike:        { label: 'Strikes', icon: '📋', cmd: '!strike', group: 'strikes' },
     strike_appeal: { label: 'Appeal last strike', icon: '⚖️', cmd: '!strike appeal', confirm: 'Take {u}\'s last strike off and lift any time-out / red-list cooldown?', group: 'strikes' },
   };
+  // 1.99os: actions on YOURSELF (your own row in the list) - allowed, with the confirm step phrased for you.
+  // Lifting one of your own penalties (unban / unpunish / unblock / casino unban / DJ unban / strike appeal) is for
+  // Pepe admins only (caps.admin): a staff mod can't undo their own mute or strike. The server and Pepe check it too.
+  var SELF_LIFT = { unban: 1, unpunish: 1, unblockmic: 1, casinounban: 1, djunban: 1, strike_appeal: 1 };
+  var SELF_Q = {
+    kick: 'Kick yourself out of the room? You can rejoin right away.',
+    ban: 'Ban yourself from the room? You won\'t get back in until an admin unbans you.',
+    punish: 'Punish (mute) yourself? Camfrog sets how long.',
+    blockmic: 'Block your own mic?',
+    timeout: 'Time yourself out? Pepe pulls you from the red list, takes your mod role off and mutes you.',
+    fine: 'Fine yourself? The PAT goes to the Federal Reserve.',
+    casinoban: 'Ban yourself from the casino (web, chat and Discord)?',
+    djban: 'Suspend your own music commands in this room?',
+    strike_appeal: 'Take your own last strike off and lift any time-out / red-list cooldown?',
+  };
+  function isMe(caps, u) { return !!(caps && caps.login && u && u.login && String(u.login).toLowerCase() === String(caps.login).toLowerCase()); }
+  function selfOk(caps, a) { return !SELF_LIFT[a] || !!(caps && caps.admin); }
   var GROUPS = [['room', 'Room'], ['voice', 'Voice & mic'], ['pat', 'PAT & games'], ['strikes', 'Automod strikes']];
   var HOURS = [[1, '1 hour'], [6, '6 hours'], [12, '12 hours'], [24, '24 hours'], [72, '3 days'], [168, '1 week'], [720, '30 days']];
   var FINES = [1000, 10000, 25000, 100000];
@@ -65,7 +82,8 @@
   //     when the recipient is there), with href = the site's own tip page as the fallback; {off}: greyed out with the
   //     reason ("not linked to PATV yet"); no u.tip: no item (yourself, Pepe, bots, anonymous)
   //   - moderation: exactly the actions Pepe listed in caps.actions that this menu knows, in group order;
-  //     never on yourself (the server refuses that too); "unban" is left out for people IN the room;
+  //     1.99os: on yourself too (each destructive one asks "...yourself?" first), except lifting your own penalty
+  //     unless you're a Pepe admin (SELF_LIFT; the server + Pepe refuse it too); "unban" is left out for people IN the room;
   //     disabled while web moderation is off in the room; destructive ones flagged (they get a confirm step)
   //   - "More…" (the full Manage dialog: strikes history, roles) whenever there are moderation actions
   function menuItems(caps, u, x) {
@@ -81,14 +99,16 @@
       else if (u.tip.off) out.push({ kind: 'off', id: 'tip', group: 'who', label: '💸 Tip', disabled: true, note: u.tip.off, title: "Can't tip: " + u.tip.off });
     }
     if (!mod) return out;
-    var me = caps.login && String(u.login).toLowerCase() === String(caps.login).toLowerCase();
-    if (me) return out;
+    var me = isMe(caps, u);
     var n = 0;
     GROUPS.forEach(function (g) {
       caps.actions.forEach(function (a) {
         if (!Object.prototype.hasOwnProperty.call(A, a) || A[a].group !== g[0]) return;
         if (x.inRoom && a === 'unban') return;
-        out.push({ kind: 'act', id: a, group: g[0], label: A[a].icon + ' ' + A[a].label + (A[a].confirm ? '…' : ''), danger: !!A[a].confirm, disabled: caps.on === false });
+        if (me && !selfOk(caps, a)) return;
+        var it = { kind: 'act', id: a, group: g[0], label: A[a].icon + ' ' + A[a].label + (A[a].confirm ? '…' : ''), danger: !!A[a].confirm, disabled: caps.on === false };
+        if (me) it.self = true;
+        out.push(it);
         n++;
       });
     });
@@ -308,7 +328,7 @@
       if (!caps.on) main.appendChild(el('p', 'pm-note warn', '🛑 Web moderation is off in this room.'));
       if (caps.blocked) main.appendChild(el('p', 'pm-note warn', '⚠️ Pepe won\'t take commands from you right now: ' + caps.blocked));
       GROUPS.forEach(function (g) {
-        var acts = caps.actions.filter(function (a) { return A[a] && A[a].group === g[0]; });
+        var acts = caps.actions.filter(function (a) { return A[a] && A[a].group === g[0] && (!isMe(caps, u) || selfOk(caps, a)); });
         if (!acts.length) return;
         var sec = el('div', 'pm-grp');
         sec.appendChild(el('div', 'pm-k', g[1]));
@@ -385,9 +405,9 @@
     // the question, the extra input (hours / amount), a reason, the exact command Pepe will run, Go + Cancel.
     // done() after Pepe accepted (or hasn't answered yet), cancel() on Cancel; say(text, cls) shows progress.
     function confirmForm(a, u, pfx, say, done, cancel) {
-      var def = A[a], who = u.display || u.login;
+      var def = A[a], who = u.display || u.login, me = isMe(caps, u);
       var form = el('form', 'pm-cform'); form.setAttribute('autocomplete', 'off');
-      form.appendChild(el('p', 'pm-q', def.confirm.replace('{u}', who)));
+      form.appendChild(el('p', 'pm-q', me ? (SELF_Q[a] || def.confirm.replace('{u}', 'yourself')) : def.confirm.replace('{u}', who)));
       var args = {};
       var hoursSel = null, amtIn = null;
       if (def.arg === 'hours') {
@@ -410,7 +430,7 @@
       var pv = el('div', 'pm-cmd');
       form.appendChild(pv);
       var row = el('div', 'pm-row');
-      var go = el('button', 'pm-btn danger go'); go.type = 'submit'; go.textContent = def.icon + ' ' + def.label + ' ' + who;
+      var go = el('button', 'pm-btn danger go'); go.type = 'submit'; go.textContent = def.icon + ' ' + def.label + ' ' + (me ? 'yourself' : who);
       var back = btn('', 'Cancel', function () { cancel(); });
       row.appendChild(go); row.appendChild(back); form.appendChild(row);
       function paint() {
@@ -440,7 +460,7 @@
     // ── the roster's ⋯ menu (1.99dx): a small popover next to someone IN the room ──
     // Only for viewers Pepe gave caps (the page shows ⋯ only then); it lists exactly the actions in
     // caps.actions (menuItems), runs them through the same run() / confirm step as the dialog, and the
-    // server re-checks everything (/api/rooms/<slug>/mod: caps for this login, action allowed, not yourself).
+    // server re-checks everything (/api/rooms/<slug>/mod: caps for this login, action allowed, self rules).
     var pop = null;
     function closeMenu(refocus) {
       if (!pop) return;
@@ -571,7 +591,7 @@
           w.appendChild(el('small', null, (r.ts || '').replace('T', ' ').slice(0, 16) + (r.by ? ' · by ' + r.by : '')));
           li.appendChild(w);
           var un = UN[r.state];
-          if (un && caps && caps.actions.indexOf(un[0]) >= 0) {
+          if (un && caps && caps.actions.indexOf(un[0]) >= 0 && (!isMe(caps, { login: r.login }) || selfOk(caps, un[0]))) {
             var b = btn('', un[1]);
             b.disabled = !caps.on;
             b.addEventListener('click', function () {
@@ -683,4 +703,5 @@
   P.mod = mod;
   P._modPreview = preview;
   P._modMenuItems = menuItems;
+  P._modSelfQ = function (a) { return SELF_Q[a] || null; };
 })();

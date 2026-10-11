@@ -36,6 +36,13 @@ const ACTIONS = {
   blockmic: "!blockmic", unblockmic: "!unblockmic", timeout: "!timeout", strike: "!strike", strike_appeal: "!strike",
   fine: "!fine", casinoban: "!casinoban", casinounban: "!casinounban", djban: "!djban", djunban: "!djunban",
 };
+// 1.99os: actions on YOURSELF are allowed (the page asks "Kick yourself?" first); lifting your OWN penalty is for
+// Pepe admins only (caps.admin), so a staff mod can't undo their own mute / DJ ban / strike. Pepe re-checks it.
+const SELF_LIFT = new Set(["unban", "unpunish", "unblockmic", "casinounban", "djunban", "strike_appeal"]);
+/** null = OK, else why this action on yourself is refused. */
+function selfRefusal(action, caps) {
+  return SELF_LIFT.has(action) && !(caps && caps.admin) ? "Only Pepe admins can lift their own penalties." : null;
+}
 const SETTINGS = {
   chatty: { on: "!chatty on", off: "!chatty off" },
   chattydepth: { off: "!chattydepth off", short: "!chattydepth short", normal: "!chattydepth normal", long: "!chattydepth long" },
@@ -230,7 +237,10 @@ function register(app, { addUser, bySlug, isLive }) {
     if (!allowed) return bad(res, 403, "You can't do that in this room.");
     const built = buildModLine(action, b.target, b.args);
     if (built.error) return bad(res, 400, built.error);
-    if (action !== "topic" && cleanLogin(b.target).toLowerCase() === String(u.camfrogUsername).toLowerCase()) return bad(res, 400, "That's you.");
+    if (action !== "topic" && cleanLogin(b.target).toLowerCase() === String(u.camfrogUsername).toLowerCase()) {
+      const why = selfRefusal(action, caps);
+      if (why) return bad(res, 403, why);
+    }
     const lim = relay.limited("cmd|" + u.userId, relay.CMD_GAP, relay.CMD_BURST, relay.CMD_WINDOW)
       || (action !== "topic" ? relay.limited("mod|" + u.userId, MOD_GAP, MOD_BURST, MOD_WINDOW) : null);
     if (lim) return bad(res, 429, lim);
@@ -303,5 +313,5 @@ function register(app, { addUser, bySlug, isLive }) {
   });
 }
 
-module.exports = { register, buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
+module.exports = { register, selfRefusal, SELF_LIFT, buildModLine, freeText, cleanModCaps, cleanCaps, cleanInfo, capsFor, viewMod, noteViewer, viewersFor, linkedLogin,
   ACTIONS, SETTINGS, TOPIC_MAX, REASON_MAX, _viewers: viewers, _linkCache: linkCache, _pwFails: pwFails };
