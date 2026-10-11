@@ -697,3 +697,35 @@ Measured across views/*.ejs, views/partials/* and public/css/*. In total there a
 - [ ] Logical properties only. Checked with `dir=rtl`. Long translated labels wrap or ellipsize.
 - [ ] Motion respects `prefers-reduced-motion`.
 - [ ] Bump `?v=` on any CSS file changed, and run `npm test`.
+
+---
+
+## Area notes: profile, account and auth
+
+Added by the 1.99pm polish pass (profile, Edit profile, sign-in pages, language, Telegram, translate, 404). These pages all keep the PATV green accent.
+
+### Auth page (sign in, register, forgot / reset password, Plex / SSO "new account", account-conflict)
+
+- `main.ds-page.narrow.au` > `section.ds-card.lg.au-card`, then an optional `p.au-foot` link line under the card. The page gap is 16, not 24, so the foot line stays attached to its card.
+- **Card anatomy:** a brand row (`.au-brand`: 36px pixel Pepe + `.ds-eyebrow` "publicaccess.tv"), `.ds-h1`, `.ds-sub`, then notes (`.ds-note.ok` / `.ds-note.danger` with `.au-alert`), then the form.
+- **Card background:** a soft green glow at the start corner, `radial-gradient(120% 90% at 0% 0%, var(--ds-green-bg), transparent 60%)` over `--ds-surface`. The lime (#c6e94f) focus rings and eyebrows are retired. Focus is the standard gold.
+- **Form:** fields are `.ds-field.au-field` with `input.ds-in` at 16px on every width; the gap between fields is 14. A password field wraps the input in `.au-pw` with a 36px "Show" text button inset 4px from the end, so the input reserves 76px of end padding.
+- **Submit:** `.ds-btn.lg.wide` (52px, full width) with a spinner that takes `currentColor`, so it reads on dark ink. A second, alternative action is `.ds-btn.lg.wide.ghost`. A tertiary "Cancel" is `.au-linkbtn`, an underlined muted text button 36px tall, centred under the card's actions.
+- **Sub-sections inside the card** ("New to PATV?" / "Already have an account?") use `.ds-h3`, divided by the `.au-or` rule (12px uppercase, `--ds-text-faint`, 1px `--ds-line` rules either side).
+- **Sign in with… buttons (`.au-oauth`):** 44px pills, 15px/700, a 20px brand mark plus the label, in a 2-column grid (1 column at ≤ 420). Plex spans both columns. Fills are the platform tokens with white ink, **except** Telegram, whose #229ED9 is 3.0:1 against white: it uses #1a7bb0 (4.7:1). Google is the white button with #1f1f1f ink and a #dadce0 border, per Google's guideline. Plex is `--ds-plex` with dark ink.
+- **Summary rows** (`.au-sum`, the account-conflict "Signed in as / Other account / PAT it brings"): a sunken well, radius 12, rows of 10/14 padding divided by soft lines, key muted, value bold and end-aligned; a PAT value uses `.v.gold` (gold-text, tabular).
+- **Perks row** (register): `.ds-tag.ac` pills at 12px/500 with a leading `.ds-ic`. They wrap.
+- **JS hooks to keep:** `form[data-au-form]`, `[data-rule]`, `.au-pw .eye`, `#<field>-err`, `.au-hint` (`.ok` is toggled by the strength meter), `.au-caps`, the submit's `.lbl` and `data-busy`.
+
+### Tool or settings page with no hero (language, translate, Telegram)
+
+- `.ds-page.read` (a list of choices) or `.ds-page.mid` (cards of settings), then a `div.ds-head`, then `.ds-card.lg` sections with `.ds-h3` titles.
+- **Gotcha: never put `.ds-head` on a `<header>` element.** styles.css styles every `header` as the site bar (#18181b fill, the header shadow, green text). Use `<div class="ds-head">`.
+- **Choice tiles** (the language list): a `repeat(auto-fill, minmax(min(100%, 200px), 1fr))` grid, gap 8, each tile 44px tall, radius 10, `--ds-surface` with a `--ds-line` border; hover turns the border accent; the current one is `.on` (accent border + accent tint) with `aria-current`.
+- **Checkbox grids** (Telegram alert kinds): `.ds-check` rows in a `minmax(min(100%, 260px), 1fr)` grid with an 8px gap. An icon goes in its own `span.ds-ic` between the box and the label, never in the label text.
+- A heading with its list (translate's "From the page you were on") is wrapped in a `.ds-stack` so the heading-to-content gap is 12, not the page's 24.
+- **Collapsible inline form:** a `details > summary.ds-btn.ghost.sm` (marker hidden) that opens a `.ds-form` of `.ds-field`s, submit `.ds-btn.sm` in `.ds-actions`.
+
+### Not found / forbidden (notFound.ejs)
+
+`.ds-page.narrow`, centred: a 64px `.ds-ic` frog, `.ds-h1`, a `.ds-lead` (max 46ch), then `.ds-actions` centred with one filled `.ds-btn` (Home) and `.ds-btn.ghost` for the rest. 48px top padding. This is the one place body text is centred (§3.2 allows it on a landing-style page under 3 lines).

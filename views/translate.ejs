@@ -13,85 +13,77 @@
   const _row = (it) => {
     const mine = _err && _err.key === it.key ? _err : null;
     const prev = (c) => mine && mine.body ? (c ? mine.body['text_' + c] : mine.body.text) : (it.cur == null ? '' : (c ? (typeof it.cur === 'object' ? it.cur[c] || '' : '') : (typeof it.cur === 'string' ? it.cur : '')));
-    let h = '<li class="tr-item" id="k-' + t.esc(it.key) + '"><div class="tr-key"><code>' + t.esc(it.key) + '</code>'
-      + (it.improved ? ' <span class="tr-tag">✓ ' + t('translate.improved') + '</span>' : '') + '</div>'
+    let h = '<li class="ds-card tr-item" id="k-' + t.esc(it.key) + '"><div class="tr-key"><code>' + t.esc(it.key) + '</code>'
+      + (it.improved ? ' <span class="ds-chip ok">' + t('translate.improved') + '</span>' : '') + '</div>'
       + '<div class="tr-pair"><div><b>' + t('translate.english') + '</b><span lang="en" dir="ltr">' + _show(it, it.en) + '</span></div>'
       + '<div><b>' + t('translate.current') + '</b><span lang="' + t.esc(_lang) + '"' + _dirAttr + '>' + (it.cur == null ? '<i>' + t('translate.fallback') + '</i>' : _show(it, it.cur)) + '</span></div></div>';
-    if (locals.sent && locals.sent === it.key) h += '<p class="tr-ok" role="status">' + t('translate.sent') + '</p>';
+    if (locals.sent && locals.sent === it.key) h += '<p class="ds-note ok tr-ok" role="status">' + t('translate.sent') + '</p>';
     if (mine) {
-      h += '<div class="tr-err" role="alert">' + t.esc(mine.message || '') + (mine.problems && mine.problems.length ? '<ul>' + mine.problems.map((p) => '<li lang="en">' + t.esc(p) + '</li>').join('') + '</ul>' : '') + '</div>';
+      h += '<div class="ds-note danger tr-err" role="alert"><div>' + t.esc(mine.message || '') + (mine.problems && mine.problems.length ? '<ul>' + mine.problems.map((p) => '<li lang="en">' + t.esc(p) + '</li>').join('') + '</ul>' : '') + '</div></div>';
     }
     if (!signedIn) return h + '</li>';
-    h += '<details' + (mine ? ' open' : '') + '><summary>' + t('translate.suggest_btn') + '</summary>'
-      + '<form method="post" action="/translate/suggest" class="tr-form">'
+    h += '<details' + (mine ? ' open' : '') + '><summary class="ds-btn ghost sm">' + t('translate.suggest_btn') + '</summary>'
+      + '<form method="post" action="/translate/suggest" class="ds-form tr-form">'
       + '<input type="hidden" name="lang" value="' + t.esc(_lang) + '"><input type="hidden" name="key" value="' + t.esc(it.key) + '">'
       + '<input type="hidden" name="page" value="' + t.esc(locals.pagePath || '') + '"><input type="hidden" name="q" value="' + t.esc(locals.q || '') + '">';
     if (it.plural) {
       for (const c of it.cats.indexOf('other') >= 0 ? it.cats : it.cats.concat(['other'])) {
-        h += '<label>' + t('translate.plural_form', { cat: c }) + '<textarea name="text_' + t.esc(c) + '" rows="2" lang="' + t.esc(_lang) + '"' + _dirAttr + ' maxlength="2000">' + t.esc(prev(c)) + '</textarea></label>';
+        h += '<label class="ds-field"><span class="ds-label">' + t('translate.plural_form', { cat: c }) + '</span><textarea class="ds-textarea" name="text_' + t.esc(c) + '" rows="2" lang="' + t.esc(_lang) + '"' + _dirAttr + ' maxlength="2000">' + t.esc(prev(c)) + '</textarea></label>';
       }
     } else {
-      h += '<label>' + t('translate.yours') + '<textarea name="text" rows="3" lang="' + t.esc(_lang) + '"' + _dirAttr + ' maxlength="2000" required>' + t.esc(prev('')) + '</textarea></label>';
+      h += '<label class="ds-field"><span class="ds-label">' + t('translate.yours') + '</span><textarea class="ds-textarea" name="text" rows="3" lang="' + t.esc(_lang) + '"' + _dirAttr + ' maxlength="2000" required>' + t.esc(prev('')) + '</textarea></label>';
     }
-    h += '<label>' + t('translate.note') + '<input type="text" name="note" maxlength="300" placeholder="' + t('translate.note_ph') + '" value="' + t.esc(mine && mine.body ? mine.body.note || '' : '') + '"></label>'
-      + '<p class="tr-hint">' + t('translate.hint') + '</p>'
-      + '<button type="submit">' + t('translate.submit') + '</button></form></details></li>';
+    h += '<label class="ds-field"><span class="ds-label">' + t('translate.note') + '</span><input class="ds-in" type="text" name="note" maxlength="300" placeholder="' + t('translate.note_ph') + '" value="' + t.esc(mine && mine.body ? mine.body.note || '' : '') + '"></label>'
+      + '<p class="ds-fine tr-hint">' + t('translate.hint') + '</p>'
+      + '<div class="ds-actions"><button class="ds-btn sm" type="submit">' + t('translate.submit') + '</button></div></form></details></li>';
     return h;
   };
 %>
 <style>
-  .trp { max-width: 860px; margin: 0 auto; padding: 22px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; box-sizing: border-box; }
-  .trp h1 { margin: 6px 0 8px; font-size: 26px; }
-  .trp h2 { font-size: 17px; margin: 26px 0 10px; color: #cfcfcf; }
-  .trp p { color: #bbb; line-height: 1.55; margin: 0 0 14px; }
-  .trp a { color: #7fd6a3; }
-  .tr-search { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 4px; }
-  .tr-search input { flex: 1 1 240px; min-width: 0; padding: 10px 12px; border-radius: 9px; border: 1px solid #333; background: #111; color: #eee; font: inherit; }
-  .trp button { padding: 10px 16px; border-radius: 9px; border: 1px solid #3CC47C; background: #1f2b22; color: #fff; font: inherit; cursor: pointer; min-height: 44px; }
-  .tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .tr-item { border: 1px solid #2b2b2b; background: #161618; border-radius: 10px; padding: 12px; overflow-wrap: anywhere; }
-  .tr-key code { font-size: 11px; color: #888; }
-  .tr-tag { font-size: 12px; color: #3CC47C; }
-  .tr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
-  .tr-pair b { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #8a8a8a; margin-bottom: 2px; }
+  /* 1.99pm: on the design system - tool page recipe; each string is a .ds-card (key · English | current · suggest form) */
+  .trp .tr-search { display: flex; gap: var(--ds-sp-2); flex-wrap: wrap; }
+  .trp .tr-search .ds-in { flex: 1 1 240px; width: auto; }
+  .tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-3); }
+  .tr-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); }
+  .tr-key code { font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+  .tr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ds-sp-3); }
+  .tr-pair b { display: block; margin-block-end: 2px; font: 700 11px/1.3 var(--ds-font); text-transform: uppercase; letter-spacing: var(--ds-ls-label); color: var(--ds-text-muted); }
+  .tr-pair i { color: var(--ds-text-muted); }
   @media (max-width: 600px) { .tr-pair { grid-template-columns: 1fr; } }
-  .tr-item details { margin-top: 8px; }
-  .tr-item summary { cursor: pointer; color: #7fd6a3; min-height: 32px; display: flex; align-items: center; }
-  .tr-form { display: grid; gap: 8px; margin-top: 6px; }
-  .tr-form label { display: grid; gap: 4px; font-size: 13px; color: #aaa; }
-  .tr-form textarea, .tr-form input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #0f0f10; color: #eee; font: inherit; }
-  .tr-hint { font-size: 12px; color: #888; margin: 0; }
-  .tr-ok { color: #3CC47C; margin: 8px 0 0; }
-  .tr-err { color: #ff8a80; margin: 8px 0 0; font-size: 14px; }
+  .tr-item details > summary { list-style: none; justify-self: start; display: inline-flex; }
+  .tr-item details > summary::-webkit-details-marker { display: none; }
+  .tr-item details[open] > summary { margin-block-end: var(--ds-sp-3); }
   .tr-err ul { margin: 4px 0 0; padding-inline-start: 18px; }
 </style>
-<div class="trp">
-  <h1><span aria-hidden="true">🌐</span> <%- t('translate.heading') %></h1>
-  <p><%- t('translate.intro') %></p>
+<main class="ds-page mid trp">
+  <div class="ds-head">
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">🌐</span> <%- t('translate.heading') %></h1>
+    <p class="ds-sub"><%- t('translate.intro') %></p>
+  </div>
   <% if (isEn) { %>
-    <p><%- t('translate.en_only') %> <a href="/language?next=%2Ftranslate"><%- t('translate.choose_language') %></a></p>
+    <p class="ds-note info"><span class="ds-ic" aria-hidden="true">ℹ️</span><span><%- t('translate.en_only') %> <a href="/language?next=%2Ftranslate"><%- t('translate.choose_language') %></a></span></p>
   <% } else { %>
-    <% if (!signedIn) { %><p><%- t('translate.signin', { link: '<a href="/login?next=%2Ftranslate">' + t('translate.signin_link') + '</a>' }) %></p><% } %>
+    <% if (!signedIn) { %><p class="ds-sub"><%- t('translate.signin', { link: '<a href="/login?next=%2Ftranslate">' + t('translate.signin_link') + '</a>' }) %></p><% } %>
     <form class="tr-search" method="get" action="/translate" role="search">
       <label class="sr-only" for="trQ"><%- t('translate.search_label') %></label>
-      <input id="trQ" type="search" name="q" value="<%= q %>" minlength="2" maxlength="80" placeholder="<%- t('translate.search_ph') %>" aria-label="<%- t('translate.search_label') %>">
-      <button type="submit"><%- t('translate.search_btn') %></button>
+      <input class="ds-in" id="trQ" type="search" name="q" value="<%= q %>" minlength="2" maxlength="80" placeholder="<%- t('translate.search_ph') %>" aria-label="<%- t('translate.search_label') %>">
+      <button class="ds-btn" type="submit"><%- t('translate.search_btn') %></button>
     </form>
     <% if (one.length) { %>
-      <ul class="tr-list" style="margin-top:14px"><%- one.map(_row).join('') %></ul>
+      <ul class="tr-list"><%- one.map(_row).join('') %></ul>
     <% } %>
     <% if (q) { %>
-      <h2><%- t('translate.results', { count: results.length }) %></h2>
-      <% if (!results.length) { %><p><%- t('translate.no_results') %></p><% } else { %><ul class="tr-list"><%- results.map(_row).join('') %></ul><% } %>
+      <section class="ds-stack"><h2 class="ds-h2"><%- t('translate.results', { count: results.length }) %></h2>
+      <% if (!results.length) { %><p class="ds-empty"><%- t('translate.no_results') %></p><% } else { %><ul class="tr-list"><%- results.map(_row).join('') %></ul><% } %></section>
     <% } else if (!one.length) { %>
       <% if (pageItems.length) { %>
-        <h2><%- t('translate.from_page', { page: pagePath }) %></h2>
-        <ul class="tr-list"><%- pageItems.map(_row).join('') %></ul>
+        <section class="ds-stack"><h2 class="ds-h2"><%- t('translate.from_page', { page: pagePath }) %></h2>
+        <ul class="tr-list"><%- pageItems.map(_row).join('') %></ul></section>
       <% } else { %>
-        <p><%- t('translate.from_page_none') %></p>
+        <p class="ds-empty"><%- t('translate.from_page_none') %></p>
       <% } %>
     <% } %>
   <% } %>
-</div>
+</main>
 </body>
 </html>

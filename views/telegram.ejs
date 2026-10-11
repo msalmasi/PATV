@@ -2,64 +2,59 @@
 <%# /settings/telegram — ✈️ Pepe on Telegram (1.99kn, telegram.js). Locals: user, title, boot (telegram.state()).
     Everything from the server goes in with textContent; the JSON boot is < -escaped. %>
 <%- include('layout', { title: title, user: user }) %>
-<%- include('partials/legal-css') %>
 <style>
-  .tg .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
-  .tg .card h2 { border: 0; padding: 0; margin: 0 0 6px; font-size: 18px; }
-  .tg .mut { color: #9a9a9a; font-size: 13.5px; }
-  .tg label.ck { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: 15px; }
-  .tg .kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 2px 14px; }
-  .tg button, .tg a.btn { display: inline-block; padding: 8px 14px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; }
-  .tg button.pri, .tg a.pri { background: #229ed9; border-color: #229ed9; color: #fff; font-weight: bold; }
-  .tg .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
-  .tg .code { font: bold 22px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 3px; padding: 6px 12px; border-radius: 9px; background: #0d0d0d; border: 1px dashed #3a3a3a; user-select: all; overflow-wrap: anywhere; }
-  .tg .msg { min-height: 1.4em; font-size: 14px; }
-  .tg .msg.bad { color: #ff9e9e; } .tg .msg.ok { color: #a5d6a7; }
-  .tg ul.tiers { margin: 6px 0 0; padding-left: 20px; } .tg ul.tiers li { margin: 4px 0; }
-  .tg .on { color: #a5d6a7; } .tg .off { color: #9a9a9a; }
+  /* 1.99pm: on the design system - settings page recipe (.ds-head + .ds-card.lg sections), PATV green accent */
+  .tg .ds-card > p { margin: 0; }
+  .tg .kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: var(--ds-sp-2); }
+  .tg .code { font: 700 22px/1.2 var(--ds-font-mono); letter-spacing: 3px; padding: var(--ds-sp-1h) var(--ds-sp-3); border-radius: var(--ds-r-md); background: var(--ds-sunken);
+              border: 1px dashed var(--ds-line-strong); color: var(--ds-text-strong); user-select: all; overflow-wrap: anywhere; }
+  .tg .msg { font-size: var(--ds-fs-sm); }
+  .tg .msg.bad { color: var(--ds-danger); } .tg .msg.ok { color: var(--ds-ok); }
+  .tg ul.tiers { margin: 0; padding-inline-start: 20px; display: grid; gap: var(--ds-sp-1); }
+  .tg #tgCodeBox { display: grid; gap: var(--ds-sp-2h); }
 </style>
-<main class="lg tg">
-  <header class="hero">
-    <div class="eyebrow">✈️ <%- t('settings.telegram.eyebrow') %></div>
-    <h1><%- t('settings.telegram.h1') %></h1>
-    <p class="lead"><%- t('settings.telegram.lead') %></p>
-  </header>
+<main class="ds-page mid tg">
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">✈️</span> <%- t('settings.telegram.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('settings.telegram.h1') %></h1>
+    <p class="ds-sub"><%- t('settings.telegram.lead') %></p>
+  </div>
 
-  <section class="card" aria-labelledby="tgLinkH">
-    <h2 id="tgLinkH"><%- t('settings.telegram.link_h') %></h2>
+  <section class="ds-card lg" aria-labelledby="tgLinkH">
+    <h2 class="ds-h3" id="tgLinkH"><%- t('settings.telegram.link_h') %></h2>
     <p id="tgStatus"></p>
-    <p class="mut" id="tgNoBot" hidden><%- t('settings.telegram.no_bot') %></p>
-    <p class="mut" id="tgBanned" hidden><%- t('settings.telegram.unavailable') %></p>
+    <p class="ds-sub" id="tgNoBot" hidden><%- t('settings.telegram.no_bot') %></p>
+    <p class="ds-sub" id="tgBanned" hidden><%- t('settings.telegram.unavailable') %></p>
     <div id="tgCodeBox" hidden>
       <p><%- t('settings.telegram.code_step') %></p>
-      <div class="row"><span class="code" id="tgCode"></span><a class="btn pri" id="tgOpen" target="_blank" rel="noopener noreferrer" hidden><%- t('settings.telegram.open') %></a></div>
-      <p class="mut" id="tgCodeHelp"></p>
+      <div class="ds-actions"><span class="code" id="tgCode"></span><a class="ds-btn" id="tgOpen" target="_blank" rel="noopener noreferrer" hidden><%- t('settings.telegram.open') %></a></div>
+      <p class="ds-sub" id="tgCodeHelp"></p>
     </div>
-    <div class="row">
-      <button type="button" class="pri" id="tgLinkBtn"><%- t('settings.telegram.link') %></button>
-      <button type="button" id="tgTestBtn" hidden><%- t('settings.telegram.test') %></button>
-      <button type="button" id="tgUnlinkBtn" hidden><%- t('settings.telegram.unlink') %></button>
+    <div class="ds-actions">
+      <button type="button" class="ds-btn" id="tgLinkBtn"><%- t('settings.telegram.link') %></button>
+      <button type="button" class="ds-btn ghost" id="tgTestBtn" hidden><%- t('settings.telegram.test') %></button>
+      <button type="button" class="ds-btn ghost" id="tgUnlinkBtn" hidden><%- t('settings.telegram.unlink') %></button>
       <span class="msg" id="tgMsg" role="status" aria-live="polite"></span>
     </div>
-    <p class="mut"><%- t('settings.telegram.privacy') %></p>
-    <p class="mut"><%- t('settings.telegram.ach', { link: '<a href="/achievements">' + t('settings.telegram.ach_link') + '</a>' }) %></p>
+    <p class="ds-sub"><%- t('settings.telegram.privacy') %></p>
+    <p class="ds-sub"><%- t('settings.telegram.ach', { link: '<a href="/achievements">' + t('settings.telegram.ach_link') + '</a>' }) %></p>
   </section>
 
-  <section class="card" aria-labelledby="tgTierH">
-    <h2 id="tgTierH"><%- t('settings.telegram.tiers_h') %></h2>
+  <section class="ds-card lg" aria-labelledby="tgTierH">
+    <h2 class="ds-h3" id="tgTierH"><%- t('settings.telegram.tiers_h') %></h2>
     <ul class="tiers">
       <li><%- t('settings.telegram.tier_alerts') %></li>
       <li><%- t('settings.telegram.tier_full', { link: '<a href="/premium">' + t('settings.telegram.season_pass') + '</a>' }) %></li>
     </ul>
     <p id="tgTier"></p>
-    <p class="mut" id="tgNoCf" hidden><%- t('settings.telegram.no_camfrog') %></p>
+    <p class="ds-sub" id="tgNoCf" hidden><%- t('settings.telegram.no_camfrog') %></p>
   </section>
 
-  <section class="card" aria-labelledby="tgAlertsH">
-    <h2 id="tgAlertsH"><%- t('settings.telegram.alerts_h') %></h2>
-    <p class="mut"><%- t('settings.telegram.alerts_note', { n: boot.hourMax }) %> <a href="/settings/mentions"><%- t('settings.telegram.mentions_link') %></a></p>
+  <section class="ds-card lg" aria-labelledby="tgAlertsH">
+    <h2 class="ds-h3" id="tgAlertsH"><%- t('settings.telegram.alerts_h') %></h2>
+    <p class="ds-sub"><%- t('settings.telegram.alerts_note', { n: boot.hourMax }) %> <a href="/settings/mentions"><%- t('settings.telegram.mentions_link') %></a></p>
     <div class="kinds" id="tgKinds"></div>
-    <div class="row"><button type="button" class="pri" id="tgSave"><%- t('msg.save') %></button><span class="msg" id="tgSaveMsg" role="status" aria-live="polite"></span></div>
+    <div class="ds-actions"><button type="button" class="ds-btn" id="tgSave"><%- t('msg.save') %></button><span class="msg" id="tgSaveMsg" role="status" aria-live="polite"></span></div>
   </section>
 </main>
 <script type="application/json" id="tgBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
@@ -95,9 +90,9 @@
     $('tgNoCf').hidden = !s.pass || s.camfrog;
     var box = $('tgKinds'); box.textContent = '';
     (s.prefs || []).forEach(function (k) {
-      var lab = el('label', 'ck'), cb = el('input');
+      var lab = el('label', 'ds-check ck'), cb = el('input');
       cb.type = 'checkbox'; cb.checked = !!k.on; cb.setAttribute('data-kind', k.key);
-      lab.appendChild(cb); lab.appendChild(el('span', null, (k.icon ? k.icon + ' ' : '') + k.label));
+      lab.appendChild(cb); if (k.icon) { var ic = el('span', 'ds-ic', k.icon); ic.setAttribute('aria-hidden', 'true'); lab.appendChild(ic); } lab.appendChild(el('span', null, k.label));
       box.appendChild(lab);
     });
   }
