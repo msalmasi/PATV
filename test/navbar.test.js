@@ -63,3 +63,47 @@ test("Post and Go live share one pill base: same height, padding, font, radius, 
   assert.match(n, /class="nav-post"[^>]*><span class="cta-ic" aria-hidden="true">✏️<\/span><span class="nav-lbl">Post<\/span>/);
   assert.match(n, /class="nav-golive"[^>]*><span class="cta-ic" aria-hidden="true">🎥<\/span><span class="nav-lbl">Go live<\/span>/);
 });
+
+// 2026-10-11: More and ☰ are grouped into labelled sections (You / Watch / Play / Shop / Info / Staff)
+const pop = (n, cls) => {
+  const m = new RegExp('<details class="' + cls + '">[\\s\\S]*?</details>').exec(n);
+  assert.ok(m, cls + " rendered");
+  return m[0];
+};
+const hrefs = (html) => [...html.matchAll(/<a href="([^"]*)" class="nav-link/g)].map((m) => m[1]);
+const heads = (html) => [...html.matchAll(/<div class="nav-sec-h" id="([^"]*)">/g)].map((m) => m[1]);
+
+test("More and ☰ menus: labelled sections in order, search on top, More skips the top-bar links", async () => {
+  const n = nav(await render({ user: "someuser", supportOn: () => true }));
+  const more = pop(n, "nav-more"), burger = pop(n, "nav-burger");
+  assert.deepEqual(heads(more), ["nm-you", "nm-watch", "nm-play", "nm-shop", "nm-info", "nm-staff"]);
+  assert.deepEqual(heads(burger), ["nb-you", "nb-watch", "nb-play", "nb-shop", "nb-info", "nb-staff"]);
+  for (const p of [more, burger]) {
+    assert.ok(p.indexOf('class="nav-psearch"') < p.indexOf('class="nav-sec'), "search box first");
+    assert.match(p, /role="group" aria-labelledby="n[mb]-you"/);
+    // the staff section (and its link) stay hidden until the profile fetch unhides .adminLink
+    assert.match(p, /<div class="nav-sec adminLink" role="group" aria-labelledby="n[mb]-staff" hidden>/);
+    assert.match(p, /<a href="\/admin" class="nav-link adminLink" hidden/);
+  }
+  const top = ["/", "/p", "/u/someuser/wheel", "/feed", "/markets", "/wagers", "/gtf", "/rankings"];
+  for (const h of top) {
+    assert.ok(!hrefs(more).includes(h), "More skips top-bar " + h);
+    assert.ok(hrefs(burger).includes(h), "☰ lists " + h);
+  }
+  const all = ["/wallet", "/staking", "/history", "/subscriptions", "/achievements", "/plex", "/lotto", "/blackjack", "/poker", "/bounties",
+    "/shop", "/premium", "/cosmetics", "/support", "/polls", "/help", "/economy", "/about", "/info", "/admin", "/u/someuser", "/settings/telegram"];
+  for (const h of all) {
+    assert.ok(hrefs(more).includes(h), "More has " + h);
+    assert.ok(hrefs(burger).includes(h), "☰ has " + h);
+  }
+  assert.ok(hrefs(more).some((h) => h.startsWith("/language")));
+});
+
+test("menu gating: signed-out drops the personal links; Support only while a donation rail is on", async () => {
+  const n = nav(await render({ supportOn: () => false }));
+  const burger = pop(n, "nav-burger");
+  for (const h of ["/subscriptions", "/settings/telegram", "/support"]) assert.ok(!hrefs(burger).includes(h), "no " + h);
+  assert.ok(!hrefs(burger).some((h) => h.startsWith("/u/")), "no profile link signed out");
+  assert.ok(hrefs(burger).includes("/wallet"));
+  assert.ok(hrefs(burger).includes("/login"), "the wheel goes to sign-in");
+});
