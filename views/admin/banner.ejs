@@ -12,13 +12,13 @@
 %>
 <style>
   .bna .ad { max-width: 520px; }
-  .bna .ad img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; border-radius: 8px; border: 1px solid #333; }
-  .bna .ad .h { font-weight: bold; } .bna .ad .l { color: #aaa; font-size: 13px; }
+  .bna .ad img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; border-radius: var(--ds-r-sm); border: 1px solid var(--ds-line-strong); }
+  .bna .ad .h { font-weight: 700; } .bna .ad .l { color: var(--ds-text-2); font-size: var(--ds-fs-meta); }
   .bna .pr td input[type=text] { width: 100%; min-width: 120px; }
-  .bna .pr td input[type=number] { width: 64px; }
+  .bna .pr td input[type=number] { width: 72px; }
 </style>
 <div class="adm-head bna">
-  <h1>📣 Homepage banner</h1>
+  <h1><span class="ds-ic" aria-hidden="true">📣</span> Homepage banner</h1>
   <p>One banner strip on the homepage, under the stage. Members book whole days with PAT on <a href="/sponsor">/sponsor</a> (days are
      <b><%= D.tz %></b> calendar days); every booking waits here for a staff OK before it shows. Rejecting refunds the hold in full;
      approving routes it (Prime Time &amp; Season Pass admin, routing row <b>banner</b> - default 100% Fort Knox). A booking nobody

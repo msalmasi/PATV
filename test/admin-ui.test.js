@@ -89,7 +89,7 @@ test("gate: /admin and every section are Admin + Staff only (others go to /login
       const r = await page(url, who);
       assert.equal(r.status, 200, url + " for " + who.username);
       assert.match(r.html, /class="adm-side"/, url + " renders in the shell");
-      assert.match(r.html, /\/public\/css\/admin\.css\?v=1/);
+      assert.match(r.html, /\/public\/css\/admin\.css\?v=2/);
       assert.match(r.html, /\/public\/js\/admin-shell\.js\?v=1/);
       assert.match(r.html, /aria-current="page"/, url + " marks its section");
     }

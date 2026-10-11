@@ -1,7 +1,7 @@
 <%- include('../partials/admin-open', { title, user, section: 'comps', admIsAdmin: isAdmin }) %>
 <%# views/admin/comps.ejs - 1.99ma: admin comps (comps.js). Data: C = comps.adminState(), pre = {user, pad, kind} from the query. %>
 <div class="adm-head">
-  <h1>🎁 Comps &amp; gifts</h1>
+  <h1><span class="ds-ic" aria-hidden="true">🎁</span> Comps &amp; gifts</h1>
   <p>Give a member something for free: Plex access (a trial or lifetime), 📺 Prime Time for a pad, 🎟️ Season Pass, or a PATV store item, cosmetic or sticker pack.
     A comp costs nobody PAT and moves no money (no routing, no store-owner credit, no stock). The member gets a "🎁 You've been gifted …" notice in their language.
     Every comp, extension and revoke needs a reason and goes in the admin log.</p>
@@ -9,7 +9,7 @@
 
 <div class="adm-cols">
   <section class="adm-card" id="plex" aria-labelledby="plexT">
-    <h2 id="plexT">📼 Comp Plex access</h2>
+    <h2 id="plexT"><span class="ds-ic" aria-hidden="true">📼</span> Comp Plex access</h2>
     <p class="adm-help">Not on our Plex server yet: they get a one-time Wizarr invite on a free order (order page + 🔔 + Pepe's DM; the manual invite queue on <a href="/admin/media#invites">/admin/media</a> if Wizarr can't be reached).
       Already on it: the time is added to what they have (access type <code>comp-trial</code> / <code>comp-lifetime</code>).
       A trial that ends is listed for removal on <a href="/admin/media#plexMembers">Plex members</a> like ended monthly access - you click Remove (auto-revoke stays off).
@@ -30,7 +30,7 @@
   </section>
 
   <section class="adm-card" id="premium" aria-labelledby="premT">
-    <h2 id="premT">📺 Prime Time / 🎟️ Season Pass</h2>
+    <h2 id="premT"><span class="ds-ic" aria-hidden="true">📺</span> Prime Time / 🎟️ Season Pass</h2>
     <p class="adm-help">Free, never routed, never auto-renewed, revocable. Shows as "Comped (until &lt;date&gt;)" or "(no end date)". A timed comp starts now - or after time they already paid for or were comped.
       Everything gated on the tier honours it (Telegram bridge, the free sticker pack, perk cosmetics, pad perks).</p>
     <form id="premForm" class="adm-form" autocomplete="off">
@@ -45,7 +45,7 @@
   </section>
 
   <section class="adm-card" id="items" aria-labelledby="itemT">
-    <h2 id="itemT">🛍️ Comp a store item, cosmetic or sticker pack</h2>
+    <h2 id="itemT"><span class="ds-ic" aria-hidden="true">🛍️</span> Comp a store item, cosmetic or sticker pack</h2>
     <p class="adm-help">Runs the item's normal fulfilment as if they'd bought it - roles (with their Seerr permissions and Discord role), the spin boost, Plex items - at price 0 with an order marked "comped by you: reason".
       Items fulfilled by hand outside PATV can't be comped here (see the list below for why).</p>
     <form id="itemForm" class="adm-form" autocomplete="off">

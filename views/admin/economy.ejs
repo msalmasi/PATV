@@ -44,7 +44,7 @@
 </section>
 
 <section class="adm-card" id="supply-history" aria-labelledby="shT">
-  <h2 id="shT">📈 Supply history <span class="adm-pill admin">admins</span></h2>
+  <h2 id="shT"><span class="ds-ic" aria-hidden="true">📈</span> Supply history <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">One row per UTC day, written on every supply snapshot Pepe posts: total supply, the Federal Reserve against its band, and each day's mints (Pepe's mint journal, by source) against the PAT burned that day. Month-to-date mints by source are compared with Pepe's caps.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="shStatus" class="adm-help" aria-live="polite">Loading…</div>
@@ -57,17 +57,17 @@
     </table></div>
     <style>
       .sh-fig { margin: 10px 0; min-width: 0; }
-      .sh-fig figcaption { font-size: 13px; opacity: .8; margin-bottom: 4px; }
+      .sh-fig figcaption { font-size: var(--ds-fs-meta); color: var(--ds-text-muted); margin-bottom: 4px; }
       .sh-chart svg { width: 100%; height: auto; display: block; }
       .sh-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; margin-top: 4px; }
-      .sh-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+      .sh-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-inline-end: 4px; vertical-align: middle; }
     </style>
     <script src="/public/js/admin-supply.js?v=1" defer></script>
   <% } %>
 </section>
 
 <section class="adm-card" id="incentives" aria-labelledby="incT">
-  <h2 id="incT">🎁 Incentive budget &amp; grant queue <span class="adm-pill admin">admins</span></h2>
+  <h2 id="incT"><span class="ds-ic" aria-hidden="true">🎁</span> Incentive budget &amp; grant queue <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">Economy v2 E-2. While Pepe's treasury is on (<code>!econ treasury on</code>, with <code>!econ layers on</code>), the weekly surplus waterfall fills the incentive budget and the site pays welcome PAT, level-ups, achievements and connect bonuses from it, each group within its weekly budget. A grant that doesn't fit waits here (FIFO per group) and is paid when a sync shows room; Pepe only settles paid claims. Preview the week with <code>!econ waterfall preview</code>.</p>
   <% const I = typeof inc !== 'undefined' ? inc : null; %>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else if (!I) { %><p class="adm-help">Couldn't read the queue.</p><% } else { %>
@@ -102,7 +102,7 @@
 </section>
 
 <section class="adm-card" id="launchpad" aria-labelledby="lpT">
-  <h2 id="lpT">🚀 Pad launchpad <span class="adm-pill admin">admins</span></h2>
+  <h2 id="lpT"><span class="ds-ic" aria-hidden="true">🚀</span> Pad launchpad <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">New pads build momentum (regulars: real, linked, aged accounts active on 2+ days, never the owner or alts) toward launch tiers. A tier that is reached waits here for review; once approved, Pepe pays <b>his</b> tier amount from the incentive budget's <code>launchpad</code> group into the pad's room vault (needs <code>!econ roomvaults on</code>). Newcomer welcomes, owner deposit matching and front-page boost credit come from the same group. Every number is a Pepe setting: <code>!econ launchpad</code> · <code>!econ launchpad set &lt;key&gt; &lt;value&gt;</code> · <code>!econ launchpad tier &lt;n&gt; &lt;regulars&gt; &lt;days&gt; &lt;grant&gt;</code> · <code>!econ launchpad on|off</code>.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="lpAdmin" aria-live="polite"><p class="adm-help">Loading…</p></div>
@@ -119,7 +119,7 @@
 <%- include('../partials/econ-pools', { isAdmin, me }) %>
 
 <section class="adm-card" id="burn" aria-labelledby="burnT">
-  <h2 id="burnT">🔥 Burn reserve <span class="adm-pill admin">admins</span></h2>
+  <h2 id="burnT"><span class="ds-ic" aria-hidden="true">🔥</span> Burn reserve <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The last step of the weekly surplus waterfall: once the incentive buffer and the Reserve's 25M target are full, the leftover moves into Pepe's burn reserve and is destroyed (total supply goes down). Nothing else feeds it and no other pool can be burned. In <b>accrual</b> mode Pepe burns it at his next burn tick; in <b>batch</b> mode it waits for a burn here (or <code>!burn</code> in chat). Mode and caps are on Pepe's admin panel. Public log: <a href="/economy#burned">/economy#burned</a>.</p>
   <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
     <div id="burnAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">

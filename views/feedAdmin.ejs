@@ -172,7 +172,7 @@
   <% if (typeof automod !== 'undefined' && automod) { const AG = automod.global, AU = automod.used, AMM = automod.main;
        const amLabel = { none: 'Do nothing', flag: 'Flag it', hide: 'Hide until reviewed', remove: 'Remove (clear-cut only)' }; %>
   <section class="fa-card pf-card" id="automod">
-    <h2>🛡️ Pepe automod</h2>
+    <h2><span class="ds-ic" aria-hidden="true">🛡️</span> Pepe automod</h2>
     <p class="sub">Pepe checks new posts and comments in pads that switch it on, against the pad's rules or <a href="/guidelines">Padiquette</a>. Last 24 h: <b><%= AU.count %></b> checks, <b>$<%= Number(AU.cost || 0).toFixed(4) %></b> of $<%= Number(AG.budget_usd).toFixed(2) %> (spend tag <code>feed_automod</code>). Pad owners set theirs in ⚙ Pad settings › Pepe; site staff get the same hub for any pad.</p>
     <% if (!isAdmin) { %><p class="mut">Only site Admins can change these.</p><% } %>
     <h3 class="pf-h">Site-wide caps</h3>

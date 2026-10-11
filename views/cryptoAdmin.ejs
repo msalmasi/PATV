@@ -5,7 +5,7 @@
    const short = (a) => a && a.length > 14 ? a.slice(0, 8) + '…' + a.slice(-6) : (a || ''); const usd = (c) => (Number(c || 0) / 100).toFixed(2); %>
 <main class="sb" id="cryptoAdm">
   <div class="sb-head">
-    <h1>🪙 Crypto donations</h1>
+    <h1><span class="ds-ic" aria-hidden="true">🪙</span> Crypto donations</h1>
     <p class="lede">USDC / USDT sent to the receiving addresses from a wallet a member linked by signature mint PAT exactly like a card donation
       (policy <code>donation</code>: <b><%= fmt(terms.rate) %></b> PAT per $1 to the donor + <b><%= terms.bonus_pct %>%</b> into the incentive budget).
       Receive-only: nobody here holds a key and nothing is ever sent out. Public page: <a href="/support">/support</a>. Card donations: <%= stripe ? 'on' : 'off' %>.</p>
@@ -42,7 +42,7 @@
   <%# 1.99mn: the /support page extras (supportpage.js) - all off by default. Card + crypto donations both count. %>
   <% const SPS_ = locals.SPS || {}; %>
   <section class="sb-card" id="spSettings" aria-labelledby="spsT">
-    <h2 id="spsT">💖 Support page extras</h2>
+    <h2 id="spsT"><span class="ds-ic" aria-hidden="true">💖</span> Support page extras</h2>
     <p class="muted">Optional social proof on <a href="/support">/support</a>. Everything here is OFF by default. Amounts come from the donation mint claims (card + crypto).
       Recent supporters show as “Someone” unless the member ticked “show my name” on the page, and never with an exact amount (only the tier word).</p>
     <form id="spsForm" style="display:grid;gap:8px">
@@ -87,7 +87,7 @@
   </section>
   <% if (suspect.length) { %>
   <section class="sb-card" id="suspect" aria-labelledby="suT">
-    <h2 id="suT">⚠️ Suspect (the verifier RPC disagreed)</h2>
+    <h2 id="suT"><span class="ds-ic" aria-hidden="true">⚠️</span> Suspect (the verifier RPC disagreed)</h2>
     <p class="muted">The scanner reported these, but the independent verifier didn't show the same final transfer - nothing was credited. Check the explorer link; Re-verify asks the verifier again (and credits only if it now agrees).</p>
     <% table(suspect, 'suspect', 'suspect') %>
   </section>

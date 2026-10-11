@@ -4,7 +4,7 @@
 <% const yes = (b) => b ? '✅' : '—'; const fmt = (n) => Number(n || 0).toLocaleString('en-US'); const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : ''; %>
 <main class="sb" id="mediaAdm">
   <div class="sb-head">
-    <h1>🎬 Plex &amp; media</h1>
+    <h1><span class="ds-ic" aria-hidden="true">🎬</span> Plex &amp; media</h1>
     <p class="lede">Everything here is OFF until its keys are in the server's <code>.env</code> and you switch it on. Keys never show on a page.</p>
   </div>
 
@@ -25,7 +25,7 @@
   </section>
   <% } %>
   <section class="sb-card" id="plays" aria-labelledby="plT">
-    <h2 id="plT">📼 Play log</h2>
+    <h2 id="plT"><span class="ds-ic" aria-hidden="true">📼</span> Play log</h2>
     <div class="tblwrap"><table><thead><tr><th>When</th><th>Who</th><th>Pad</th><th>Title</th><th>From</th><th>PAT</th><th>Ended</th></tr></thead><tbody>
       <% plays.forEach((p) => { %><tr><td><%= when(p.ts) %></td><td><%= p.username %></td><td><%= p.room_id %></td><td><%= p.title %> <small class="muted"><%= p.quality %>p</small></td>
         <td><%= p.offset_start ? Math.floor(p.offset_start / 60) + ' min' : 'start' %></td><td><%= p.price ? Number(p.price).toLocaleString('en-US') + ' · ' + (p.charge || '') : (p.charge || 'free') %><%= p.access && p.access !== 'admin' ? ' (' + p.access + ')' : '' %></td><td><%= p.ended_at ? when(p.ended_at) + ' — ' + (p.end_reason || '') : 'playing' %><%= p.error ? ' — ' + p.error : '' %></td></tr><% }) %>
@@ -34,7 +34,7 @@
   </section>
 
   <section class="sb-card" id="plexMembers" aria-labelledby="pmT">
-    <h2 id="pmT">📼 Plex members</h2>
+    <h2 id="pmT"><span class="ds-ic" aria-hidden="true">📼</span> Plex members</h2>
     <p class="muted">Who's on our Plex server (read from Plex through media-control), which PATV account each one is, and the access PATV sold them. Auto-links: a PATV order's Wizarr invite, an Overseerr link, a VERIFIED email match; a same name is only a suggestion. Pre-existing / manual shares are never removed.</p>
     <p class="muted">🎁 <b>Comp Plex access</b> (a trial or lifetime, free, no invite needed if they're already on the server): <a href="/admin/comps#plex">/admin/comps</a> - or the 🎁 Comp button on a linked member below. Ended trials show up under "Would remove" like ended monthly access.</p>
     <div class="row"><button type="button" class="btn primary" id="pmSync">Sync now</button><button type="button" class="btn" id="pmDry">Preview (dry run)</button><span class="msg" id="pmMsg" role="status"></span></div>
@@ -42,7 +42,7 @@
   </section>
 
   <section class="sb-card" id="plexStats" aria-labelledby="psT">
-    <h2 id="psT">📊 Plex watch stats</h2>
+    <h2 id="psT"><span class="ds-ic" aria-hidden="true">📊</span> Plex watch stats</h2>
     <p class="muted">The 📼 Plex tab on profiles: watch time, plays, genres, libraries, favourites and a streak from Tautulli, for accounts with a proven Plex link (linked by the member, an admin, a Wizarr invite or an Overseerr link - never an email or name guess). Synced about once an hour into the site's own table, never per page view. Members choose who sees it (Edit profile → Layout; "Only me &amp; admins" by default).</p>
     <div class="row"><button type="button" class="btn primary" id="psSync"<%= K.tautulli ? '' : ' disabled' %>>Sync now</button><span class="msg" id="psMsg" role="status"></span></div>
     <div id="psOut"><p class="muted">Loading…</p></div>

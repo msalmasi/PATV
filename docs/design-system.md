@@ -484,6 +484,7 @@ Each entry gives the anatomy, the sizes, the states and the do/don't. Live examp
   - Behaviour: focus moves into the modal and returns on close; Esc and a click on the scrim close it.
 - **Sheet:** add `.sheet` to the scrim. Under 600px it docks to the bottom, full width, with top-only radii and safe-area padding.
 - Use a modal only for confirmations and short forms. Anything longer is a page.
+- **Box sizing.** ds.css makes every `ds-` component (and everything inside a `.ds-scrim`) `border-box`, wherever it sits. Before ds.css v=2 only `.ds-page` did, so a `.ds-modal` (width 100% + 20px padding) on a page without `.ds-page`, such as the feed, was 417px wide on a 375px phone. A page never needs its own `box-sizing` fix for a ds component.
 
 ### 6.11 Avatars: `.ds-av`
 
@@ -892,6 +893,19 @@ A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewpo
 - **Top Pads:** the 🎧 listen button is a 36px square (40 on touch), radius 8; counts are tabular in fixed 3.2em columns.
 - **Empty rail:** when there is no featured room card, the row collapses to one column and its cards (Hot on PATV, Live now) sit side by side (`:has()`), instead of leaving a 340px hole.
 - **Homepage banner** (`partials/banner`): a card (radius 16, no own margin; the grid spaces it), 44px CTA pills in the promo's colour with dark ink; Pepeball uses the lotto tokens (`--ds-acc-lotto`, `--ds-lotto-bg`) and a 52px gold-gradient CTA.
+
+### The admin shell (partials/admin-open + public/css/admin.css)
+
+- **Every admin page** (/admin and its sections, /feed/admin, /pads/admin, /stage/admin, /admin/crypto, /admin/media, /admin/media/roles, /admin/pepe/rooms) sits in `.adm` > sidebar + `.adm-main`. admin.css is on the ds tokens; its `--adm-*` names survive only as aliases for the few page views that read them. New admin CSS reads `--ds-*`.
+- **Layout:** sidebar 240px, sticky; content padding 20/32/48 and a 16px gap between cards. At ≤ 1000px the sidebar becomes a sticky top bar of 40px links that scrolls sideways, plus a second row of 36px pill sub-links (40 on touch). The current section has a 3px green inline-start rule (mirrored in RTL), or a 2px bottom rule in the phone bar.
+- **Page head:** `.adm-head` (h1 at `.ds-h1` size, a muted 14px lede). Emoji in an admin h1 / h2 sit in `.ds-ic`.
+- **Cards** (`.adm-card`, and the feature pages' `.sb-card` / `.fa-card` inside the shell): surface / line / radius 16 / padding 16 20 (16 on phones). Card title = 17px/700 white (the `.ds-h3` size) - the one heading style of the admin area; a sub-heading inside a card is 15px/700 (`.ds-h4`), never lime.
+- **Forms (`.adm-form`):** an auto-fit grid of `min(100%, 190px)` columns, gap 12, aligned to the end so fields line up under labels of different lengths. The label is the `.ds-label` (12px/700 uppercase, #b9b9b9) as a block of inline text with the control under it; `code`, `small` and `em` inside a label keep their case (setting names are lowercase). A checkbox label is a sentence-case text block with a 20px green box at its start, never a flex row (its `<code>` children would become columns). Controls are the ds field: 44px, radius 10, sunken, #333 border, green border + halo on focus.
+- **Buttons:** `.adm-btn` and every button in `.adm-form` / `.adm-actions` / `.adm-inline` are the `.ds-btn` recipe: 44px pill, green with dark ink (white on green was 2.8:1). `.ghost`, `.danger` and `.sm` (36px) variants. They wrap rather than overflow on phones. Buttons inside table cells and row actions are 36px (40 on touch).
+- **Feature pages in the shell** (stage.css `.sb`, feed.css `.fa-*`): admin.css re-skins their controls with selectors that start `.adm .adm-main`, so they beat stage.css / feed.css (which load after admin.css): `.sb .btn` and `.btn-s` become ds buttons, `.fa-acts` / `.fa-t` buttons 36px pills, every text field / select / textarea in `.adm-main` is the 44px ds field, settings-grid labels are `.ds-label`s. Inline `style="width:…"` still wins, so narrow number fields stay narrow.
+- **Tables** scroll inside a `.ds-tbl`-style box (radius 12 inside a card, #151515 sticky head, 11.5px uppercase th, tabular cells); admin-shell.js adds the filter box (a 44px field) above long ones.
+- **Tiles and alerts:** overview tiles are radius-16 cards with a 3px inline-start status rule (ok green / warn amber / bad red); alerts are 44px rows on the semantic tints with an end chevron (mirrored in RTL); key/value boxes are sunken wells, radius 10.
+- **Filter chips** inside a page (image safety's review filters) are `.ds-tab`-sized: 36px pills, #151515, accent border when current.
 
 ---
 

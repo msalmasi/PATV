@@ -162,6 +162,10 @@
 /* base layer - safe on every page (no sizes, no spacing) */
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+/* every ds component is border-box wherever it sits, not only inside .ds-page: a .ds-modal is width: 100% plus padding, so
+   outside a .ds-page (the feed pages) it was 416px wide on a 375px phone. Overlay contents follow too. */
+[class*="ds-"], [class*="ds-"]::before, [class*="ds-"]::after,
+.ds-scrim *, .ds-scrim *::before, .ds-scrim *::after { box-sizing: border-box; }
 .ds-sr-only, .sr-only { position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* ───────────────────────── 2. page scaffolding ───────────────────────── */

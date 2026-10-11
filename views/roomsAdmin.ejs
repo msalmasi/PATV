@@ -5,7 +5,7 @@
 <% const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US'); %>
 <main class="sb" id="ra">
   <div class="sb-head">
-    <h1>🏠 Pads admin</h1>
+    <h1><span class="ds-ic" aria-hidden="true">🏠</span> Pads admin</h1>
     <p class="lede">Who owns each pad, which pad the homepage features, and pad owner royalties. <a href="/stage/admin">Stage admin ›</a> · <a href="/p">Pads ›</a></p>
   </div>
 
@@ -46,7 +46,7 @@
 
   <%# 1.99ee: boosts (boosts.js) - the money switch and what's been routed so far %>
   <section class="sb-card" id="boosts" aria-labelledby="boostT">
-    <h2 id="boostT">🚀 Boosts &amp; slot fees</h2>
+    <h2 id="boostT"><span class="ds-ic" aria-hidden="true">🚀</span> Boosts &amp; slot fees</h2>
     <p class="muted">Featuring is earned (the automatic pick above); people boost pads instead. Every boost and stage slot fee is a room flow: half goes to the Federal Reserve (Fort Knox's stand-in until economy v2 E-1), half is held in the pad's room-vault escrow (room_flow_ledger) until E-3 opens room vaults. An owner paying in their own pad: all of it to the Reserve.</p>
     <form id="boostCfg" class="row"><label class="chk"><input type="checkbox" name="pay" id="boostPay"> Boosting on (PAT moves)</label><button type="submit" class="btn primary">Save</button><span class="msg" id="boostMsg" role="status"></span></form>
     <p class="muted" id="boostSum">Loading…</p>
