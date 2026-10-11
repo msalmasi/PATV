@@ -169,3 +169,14 @@
 .sb .pxnow .px-bar span { display: block; height: 100%; background: var(--green); }
 .sb .pxnow .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .sb .pxnow input[type=text] { width: 90px; }
+/* 1.99lr: 📼 queues - my list (before it starts) and what's left of the one playing */
+.sb .px-list, .sb .pxq { border: 1px solid #262626; border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; min-width: 0; }
+.sb .pxq { border-color: #1f3a20; }
+.sb .px-list ol, .sb .pxq ol { margin: 0; padding-left: 22px; display: grid; gap: 4px; max-height: 320px; overflow: auto; }
+.sb .px-list li, .sb .pxq li { overflow-wrap: anywhere; }
+.sb .px-list li > span:first-child, .sb .pxq li > span:first-child { margin-right: 6px; }
+.sb .px-ctl { display: inline-flex; gap: 4px; vertical-align: middle; }
+.sb .px-ctl .btn { padding: 2px 8px; min-height: 28px; font-size: 13px; }
+.sb .px-list .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.sb .px-warn { color: var(--gold); }
+.sb .pxq-next summary { cursor: pointer; color: #bbb; }

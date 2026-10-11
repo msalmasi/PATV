@@ -871,8 +871,9 @@
         return d;
       }
       if (it.k === 'live') {
-        // 1.99kp: 🎥 a stream started on this pad's stage (golive.js)
-        var lt = it.what ? _t('js.pad.chat.live_what', '🎥 {name} just went live on {pad} — {what}', { name: it.who, pad: it.pad, what: it.what })
+        // 1.99kp: 🎥 a stream started on this pad's stage (golive.js); 1.99lr: np = a 📼 queue's next title
+        var lt = it.np ? _t('js.pad.chat.np', '📼 Now playing on {pad}: {what}', { pad: it.pad, what: it.what })
+          : it.what ? _t('js.pad.chat.live_what', '🎥 {name} just went live on {pad} — {what}', { name: it.who, pad: it.pad, what: it.what })
           : _t('js.pad.chat.live', '🎥 {name} just went live on {pad}', { name: it.who, pad: it.pad });
         var lv = el('div', 'ln sys live');
         if (it.link) { var la = el('a', null, lt); la.href = it.link; lv.appendChild(la); } else lv.appendChild(document.createTextNode(lt));

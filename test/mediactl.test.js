@@ -374,7 +374,7 @@ test("makePlex parses Plex's JSON: hub search, a movie's part + streams, a show'
         { streamType: 3, codec: "srt", key: "/library/streams/77", displayTitle: "External" }] }] }] }] } } };
     if (u.pathname === "/library/metadata/200") return { status: 200, json: { MediaContainer: { Metadata: [{ ratingKey: 200, type: "show", title: "Show" }] } } };
     if (u.pathname === "/library/metadata/200/allLeaves") return { status: 200, json: { MediaContainer: { Metadata: [
-      { ratingKey: 201, type: "episode", title: "Pilot", grandparentTitle: "Show", parentIndex: 1, index: 1, duration: 1800000 }] } } };
+      { ratingKey: 201, type: "episode", title: "Pilot", grandparentTitle: "Show", grandparentRatingKey: 200, parentRatingKey: 210, parentIndex: 1, index: 1, duration: 1800000 }] } } };
     return { status: 404, json: null };
   };
   const P = M.makePlex({ plexUrl: "http://127.0.0.1:32400", plexToken: "tok" }, fake);
@@ -389,6 +389,8 @@ test("makePlex parses Plex's JSON: hub search, a movie's part + streams, a show'
   const sh = await P.item("200");
   assert.equal(sh.episodes[0].key, "201");
   assert.equal(sh.episodes[0].episode, 1);
+  assert.deepEqual([sh.episodes[0].show_key, sh.episodes[0].season_key], ["200", "210"], "1.4.0: where the episode sits (📼 queues)");
+  assert.equal(sh.show_key, null);
   await assert.rejects(P.item("999"), (e) => e.status === 404);
   assert.ok(seen.every((x) => x.token === "tok" && !x.url.includes("tok")), "the token never goes in the URL");
 });

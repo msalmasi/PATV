@@ -1,4 +1,6 @@
 // public/js/medialib.js — 1.99ji: the 📼 Play from library panel (views/partials/media-library.ejs, medialib.js).
+// 1.99lr: 📼 queues (mediaqueue.js) - an episode's season / the series from it / a show's whole series; every running
+// queue's ⏮ ⏭, what's left (✕ to drop one) and its money; queues between two titles (waiting for an encoder).
 (function () {
   "use strict";
   var root = document.getElementById("mediaLibrary");
@@ -13,6 +15,26 @@
   var form = document.getElementById("mlSearch");
   var defaultQuality = 720;
   var picked = null;
+  var queueOn = true;
+  function qlabel(it) {
+    if (!it) return "";
+    return it.type === "episode" && it.show ? it.show + " — S" + (it.season == null ? 0 : it.season) + "E" + (it.episode == null ? 0 : it.episode) + " " + (it.title || "")
+      : (it.title || "") + (it.year ? " (" + it.year + ")" : "");
+  }
+  function fmtN(n) { return Math.round(Number(n) || 0).toLocaleString("en-US"); }
+  function queueHtml(q) {
+    if (!q) return "";
+    var h = '<div class="ml-q"><div><b>📋 Queue #' + q.id + ": title " + (q.pos + 1) + " of " + q.count + "</b>" +
+      ' <span class="muted">· ' + hms(q.left_sec) + " left" + (q.per_hour ? " · " + q.paid_hours + " h paid (" + fmtN(q.per_hour) + "/h), ~" + fmtN(q.est_left) + " PAT more" : " · free") +
+      (q.waiting ? " · between titles / waiting for an encoder" : "") + "</span></div>";
+    if (q.next && q.next.length) {
+      h += '<details><summary>Up next (' + q.next.length + ")</summary><ol>" + q.next.map(function (x) {
+        return "<li>" + esc(qlabel(x)) + (x.duration ? ' <span class="muted">' + hms(x.duration) + "</span>" : "") +
+          ' <button type="button" class="btn" data-qrm="' + x.index + '" aria-label="Remove">✕</button></li>';
+      }).join("") + "</ol></details>";
+    }
+    return h + "</div>";
+  }
 
   function room() { return fixedRoom || (roomSel ? roomSel.value : ""); }
   function esc(s) {
@@ -46,7 +68,14 @@
   function drawNow(st) {
     // a pad's settings show that pad's stream; the admin page shows every pad's
     var mine = fixedRoom ? (st.sessions || []).filter(function (s) { return s.room === fixedRoom; }) : (st.sessions || []);
-    nowEl.innerHTML = mine.map(function (s) {
+    var queues = (st.queues || []).filter(function (q) { return !fixedRoom || q.room === fixedRoom; });
+    var qOf = function (room) { return queues.filter(function (q) { return q.room === room; })[0] || null; };
+    var idle = queues.filter(function (q) { return !mine.some(function (s) { return s.room === q.room; }); });
+    nowEl.innerHTML = idle.map(function (q) {
+      return '<div class="ml-now" data-room="' + esc(q.room) + '"><div><b>' + esc(qlabel(q.now)) + '</b> <span class="muted">· ' + esc(q.room) + " · by " + esc(q.by) + "</span></div>" +
+        queueHtml(q) + '<div class="row"><button type="button" class="btn danger" data-act="stop">⏹ Stop the queue</button></div></div>';
+    }).join("") + mine.map(function (s) {
+      var q = s.queue_id ? qOf(s.room) : null;
       var pct = s.duration ? Math.min(100, 100 * (s.position || 0) / s.duration) : 0;
       var paused = s.state === "paused";
       return '<div class="ml-now" data-room="' + esc(s.room) + '" data-pos="' + Math.floor(s.position || 0) + '">' +
@@ -54,16 +83,19 @@
         '<div class="ml-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(pct) + '"><span style="width:' + pct.toFixed(1) + '%"></span></div>' +
         '<div class="muted">' + hms(s.position) + (s.duration ? " / " + hms(s.duration) : "") + (s.error ? ' · <span style="color:#ff8a80">' + esc(s.error) + "</span>" : "") + "</div>" +
         '<div class="row">' +
+          (q ? '<button type="button" class="btn" data-act="prev"' + (q.pos > 0 ? "" : " disabled") + ">⏮ Prev</button>" : "") +
           (paused ? '<button type="button" class="btn primary" data-act="resume">▶ Resume</button>' : '<button type="button" class="btn" data-act="pause">⏸ Pause</button>') +
+          (q ? '<button type="button" class="btn" data-act="next"' + (q.pos < q.count - 1 ? "" : " disabled") + ">Next ⏭</button>" : "") +
           '<button type="button" class="btn" data-act="back">⏪ 10 min</button><button type="button" class="btn" data-act="fwd">10 min ⏩</button>' +
           '<input type="text" inputmode="numeric" placeholder="h:mm:ss" aria-label="Seek to" data-seek><button type="button" class="btn" data-act="seek">Seek</button>' +
-          '<button type="button" class="btn danger" data-act="stop">⏹ Stop</button>' +
-        "</div></div>";
+          '<button type="button" class="btn danger" data-act="stop">⏹ Stop' + (q ? " the queue" : "") + "</button>" +
+        "</div>" + queueHtml(q) + "</div>";
     }).join("");
   }
   function refresh() {
     return api("GET", "/api/medialib/state").then(function (st) {
       defaultQuality = st.quality || 720;
+      queueOn = st.queue_on !== false;
       if (!st.configured) statusEl.textContent = "Not set up yet: the media-control service's address and secret go in the server's .env (MEDIACTL_URL, MEDIACTL_SECRET).";
       else if (!st.flag) statusEl.textContent = "Switched off - turn it on in /admin/media.";
       else if (!st.reachable) statusEl.textContent = "⚠ The media-control service can't be reached right now.";
@@ -73,12 +105,15 @@
     }).catch(function (e) { statusEl.textContent = e.message; });
   }
   nowEl.addEventListener("click", function (ev) {
-    var b = ev.target.closest("button[data-act]");
+    var b = ev.target.closest("button[data-act], button[data-qrm]");
     if (!b) return;
     var card = b.closest(".ml-now"), r = card.getAttribute("data-room"), act = b.getAttribute("data-act");
     var cur = Number(card.getAttribute("data-pos")) || 0;
     var call;
-    if (act === "stop") { if (!confirm("Stop it and end the library slot?")) return; call = api("POST", "/api/medialib/stop", { room: r }); }
+    if (b.hasAttribute("data-qrm")) call = api("POST", "/api/medialib/queue/edit", { room: r, op: "remove", index: +b.getAttribute("data-qrm") });
+    else if (act === "next") call = api("POST", "/api/medialib/queue/next", { room: r });
+    else if (act === "prev") call = api("POST", "/api/medialib/queue/prev", { room: r });
+    else if (act === "stop") { if (!confirm("Stop it and end the library slot?")) return; call = api("POST", "/api/medialib/stop", { room: r }); }
     else if (act === "pause") call = api("POST", "/api/medialib/pause", { room: r });
     else if (act === "resume") call = api("POST", "/api/medialib/resume", { room: r });
     else if (act === "back" || act === "fwd") call = api("POST", "/api/medialib/seek", { room: r, offset: Math.max(0, cur + (act === "fwd" ? 600 : -600)) });
@@ -117,10 +152,12 @@
   pickEl.addEventListener("click", function (ev) {
     var ep = ev.target.closest("[data-ep]");
     if (ep) { openItem(ep.getAttribute("data-ep")); return; }
+    var all = ev.target.closest("[data-series]");
+    if (all) { openItem(all.getAttribute("data-series"), "series_from"); return; }
     var go = ev.target.closest("[data-play]");
     if (go) play(go);
   });
-  function openItem(key) {
+  function openItem(key, wantScope) {
     say("Loading…", true);
     api("GET", "/api/medialib/item/" + encodeURIComponent(key)).then(function (j) {
       var it = j.item;
@@ -129,6 +166,9 @@
               (it.year ? " (" + it.year + ")" : "") + (it.duration ? ' <span class="muted">· ' + hms(it.duration) + "</span>" : "") + "</div>";
       if (it.summary) h += '<p class="muted" style="margin:0">' + esc(it.summary) + "</p>";
       if (it.type === "show") {
+        var eps = (it.episodes || []).slice().sort(function (a, b) { return (a.season - b.season) || (a.episode - b.episode); });
+        var first = eps.filter(function (e) { return e.season !== 0; })[0] || eps[0];
+        if (queueOn && first) h += '<div class="row"><button type="button" class="btn primary" data-series="' + esc(first.key) + '">▶ The whole series (from S' + first.season + "E" + first.episode + ")</button></div>";
         h += '<div class="ml-eps">' + (it.episodes || []).map(function (e) {
           return '<button type="button" class="btn" data-ep="' + esc(e.key) + '">S' + e.season + "E" + e.episode + " · " + esc(e.title) + (e.duration ? ' <span class="muted">' + hms(e.duration) + "</span>" : "") + "</button>";
         }).join("") + "</div>";
@@ -138,7 +178,12 @@
         var su = '<option value="">None</option>' + (it.subs || []).filter(function (s) { return s.burnable; }).map(function (s) {
           return '<option value="' + s.index + '">' + esc(s.label) + (s.forced ? " (forced)" : "") + "</option>";
         }).join("");
-        h += '<div class="row">' +
+        var sc = "";
+        if (queueOn && it.type === "episode" && it.show_key) {
+          sc = '<label>Play <select data-scope>' + [["episode", "Just this episode"], ["season_rest", "The rest of season " + it.season], ["season", "All of season " + it.season], ["series_from", "The series from here"]]
+            .map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === (wantScope || "episode") ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select></label>";
+        }
+        h += '<div class="row">' + sc +
           '<label>Quality <select data-q>' + q + "</select></label>" +
           (au ? '<label>Audio <select data-a>' + au + "</select></label>" : "") +
           '<label>Subtitles (burnt in) <select data-s>' + su + "</select></label>" +
@@ -159,10 +204,13 @@
     var a = pickEl.querySelector("[data-a]"), s = pickEl.querySelector("[data-s]");
     var body = { room: room(), key: picked.key, quality: Number(pickEl.querySelector("[data-q]").value), offset: off || 0,
                  audio: a ? a.value : null, sub: s && s.value !== "" ? s.value : null };
+    var sc = pickEl.querySelector("[data-scope]");
+    var queue = sc && sc.value !== "episode";
+    if (queue) body.scope = sc.value;
     btn.disabled = true;
     say("Starting… (opening a library slot and the encoder)", true);
-    api("POST", "/api/medialib/play", body).then(function (j) {
-      say("▶ Playing " + j.title + ". It shows on the stage within a few seconds.", true);
+    api("POST", queue ? "/api/medialib/queue/start" : "/api/medialib/play", body).then(function (j) {
+      say("▶ Playing " + j.title + (queue ? " - " + j.items + " titles queued" + (j.truncated ? " (cut to fit the queue limits)" : "") : "") + ". It shows on the stage within a few seconds.", true);
       return refresh();
     }).catch(function (e) { say(e.message); }).then(function () { btn.disabled = false; });
   }

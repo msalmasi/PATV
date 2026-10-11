@@ -36,6 +36,11 @@ const DEFAULTS = {
   library_daily_cap: 3,           // paid plays per member per rolling 24 h (refunded ones don't count)
   library_free_daily_cap: 5,      // 1.99jp: free plays per Plex member per rolling 24 h
   library_users: "",              // override: PATV usernames (comma-separated) that count as Plex users whatever the data says
+  // 1.99lr: 📼 QUEUES - a whole season / series (or a hand-made list) back to back in one library slot (medialib.js)
+  library_queue: true,            // the queue choices on /stage + /admin/media
+  library_queue_max_hours: 12,    // the most a queue may hold (what's left of every title in it)
+  library_queue_max_items: 60,    // the most titles in one queue
+  library_queue_announce_min: 20, // Pepe says "now playing" for the next title only this long after the last one (titles always update)
   // 1.99jp: 📼 Plex members (plexmembers.js) - the server's shares, read through mediactl
   plex_sync_min: 60,              // how often the shares are re-read (minutes); "Sync now" on /admin/media any time
   plex_auto_revoke: false,        // OFF = a sync only LISTS the PATV-sold access that ended; an admin clicks Remove
@@ -112,6 +117,10 @@ const CLEAN = {
   library_price: (v) => num(v, 0, 100000000, 50000),
   library_daily_cap: (v) => num(v, 0, 50, 3),
   library_free_daily_cap: (v) => num(v, 0, 50, 5),
+  library_queue: bool,
+  library_queue_max_hours: (v) => num(v, 1, 24, 12),
+  library_queue_max_items: (v) => num(v, 1, 200, 60),
+  library_queue_announce_min: (v) => num(v, 0, 240, 20),
   plex_sync_min: (v) => num(v, 10, 1440, 60),
   plex_auto_revoke: bool, plex_selflink: bool, plex_sso: bool, plex_flair: bool, wizarr_timed: bool,
   library_users: (v) => String(v == null ? "" : v).split(/[\s,]+/).map((x) => x.trim().toLowerCase())

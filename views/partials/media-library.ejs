@@ -17,7 +17,7 @@
   <div id="mlResults" class="ml-grid"></div>
   <div id="mlPick" class="ml-pick hide"></div>
   <p class="msg" id="mlMsg" role="status"></p>
-  <p class="muted">Plays the file on this pad's stage as a free 📼 library slot (one per pad): HLS, ⚡ low latency and the Twitch relay work as for any slot, and Cut on the stage stops it. Pause stops the encoder and keeps your place (the slot ends if it stays paused too long); seeking restarts it at the new time. Every play is logged. Only show what we have the rights to show.</p>
+  <p class="muted">Plays the file on this pad's stage as a free 📼 library slot (one per pad): HLS, ⚡ low latency and the Twitch relay work as for any slot, and Cut on the stage stops it. Pause stops the encoder and keeps your place (the slot ends if it stays paused too long); seeking restarts it at the new time. 📼 Queues: pick an episode and "Play" the rest of its season / all of it / the series from it (or a show's whole series) - one slot, back to back, ⏮ ⏭ and what's left above. Every play is logged. Only show what we have the rights to show.</p>
 </div>
 <style>
   .ml .ml-pad { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: #bbb; margin-bottom: 6px; }
@@ -35,5 +35,8 @@
   .ml .ml-bar { height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
   .ml .ml-bar span { display: block; height: 100%; background: var(--green); }
   .ml .ml-now input[type=text] { width: 90px; }
+  .ml .ml-q { border-top: 1px solid #1f3a20; padding-top: 6px; display: grid; gap: 4px; }
+  .ml .ml-q ol { margin: 4px 0 0; padding-left: 22px; max-height: 240px; overflow: auto; }
+  .ml .ml-q li .btn { padding: 0 6px; min-height: 24px; }
 </style>
-<script src="/public/js/medialib.js?v=1" defer></script>
+<script src="/public/js/medialib.js?v=2" defer></script>

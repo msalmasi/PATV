@@ -40,8 +40,8 @@ test("a Plex user: the third choice with the price, the search panel + rights no
   assert.match(html, /up to 3 paid plays a day/);
   assert.match(html, /Plex members play free: <a href="\/subscriptions">/, "1.99jp: how to play free (1.99jr: /subscriptions)");
   assert.match(html, /id="plexNow"/, "pause / seek / stop live in Your slot");
-  assert.match(html, /stage-plex\.js\?v=2/);
-  assert.match(html, /stage\.css\?v=7/);
+  assert.match(html, /stage-plex\.js\?v=3/);
+  assert.match(html, /stage\.css\?v=8/);
   // the ordinary booking fields step aside in 📼 mode
   for (const id of ["kindSet", "whenSet", "bookBtn"]) assert.match(html, new RegExp('class="[^"]*\\bnp\\b[^"]*" id="' + id + '"|id="' + id + '"[^>]*class="[^"]*\\bnp\\b'), id + " is .np");
   assert.doesNotMatch(html, /id="plexLocked"/);

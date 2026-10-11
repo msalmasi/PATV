@@ -665,6 +665,22 @@ async function libraryExtend(slotId, minutes) {
   const r = await runQuery("UPDATE stage_slots SET max_minutes = MAX(max_minutes, ?) WHERE id = ? AND source = 'library' AND settled = 0", [m, String(slotId || "")]);
   return !!(r && r.changes);
 }
+/** 1.99lr: 📼 a queue moved on to its next title - the slot's title (the stage, "now playing", the pad's live info). */
+async function libraryRetitle(slotId, title) {
+  await init();
+  const r = await runQuery("UPDATE stage_slots SET title = ? WHERE id = ? AND source = 'library' AND settled = 0", [cleanTitle(title), String(slotId || "")]);
+  if (r && r.changes) pubCache.clear();
+  return !!(r && r.changes);
+}
+/** 1.99lr: a fresh one-time key for an open library slot (the site restarted and forgot the raw key; the next title of a
+ *  📼 queue publishes with it). The old key stops working for NEW publishes; one already on keeps its connection. */
+async function libraryRekey(slotId) {
+  await init();
+  const key = newKey();
+  const r = await runQuery("UPDATE stage_slots SET key_hash = ? WHERE id = ? AND source = 'library' AND settled = 0 AND status IN ('waiting','active')",
+                           [sha(key), String(slotId || "")]);
+  return r && r.changes ? key : null;
+}
 
 // ── settle: the ONLY place money comes back out of a slot ──
 async function end(slotId, reason, actor) {
@@ -1697,7 +1713,7 @@ module.exports = {
   setConfig, config, ban, unban, roomBan, roomUnban, roomBans, getSlot, view, chargeFor, billedMinutes, deadline, isLive, relayKey, parseRelayKey,
   unfeature, featureByOwner, purgePaidFeaturing, approve, deny, joinQueue, leaveQueue, queueFor, roomStage, roomSchedule, guide, mine, regenKey, openSlots, futureSlots,
   isBanned, seesPad, Refuse, RTMP_APP, OUT_APP, STREAM_PREFIX, DEFAULTS, RTMP_PUBLIC,
-  libraryOpen, libraryExtend, setLibraryIdle, idleMinFor,
+  libraryOpen, libraryExtend, libraryRetitle, libraryRekey, setLibraryIdle, idleMinFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
   autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,

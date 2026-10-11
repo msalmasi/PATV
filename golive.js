@@ -21,6 +21,9 @@
 //      "🎥 <streamer> just went live on <pad> — <title / what> — <link>"
 //    Both only exist for a pad whose Camfrog room Pepe bridges (that is the pad's chat on PATV); other pads get the
 //    follower alerts only.
+// 3) 1.99lr: a 📼 QUEUE's next title (mediaqueue.js decides when: not more often than library_queue_announce_min) ->
+//    nowPlaying(): "📼 Now playing on <pad>: <title>" in the pad's chat + Pepe's line in its Camfrog room (relay job
+//    "nowplaying"). Same owner switch; NEVER a follower alert (that was the queue's stream start, once).
 //
 // Routes (signed in; JSON = same site + X-Requested-With: fetch)
 //   POST /api/golive/prefs          {alerts?, pm?}
@@ -193,15 +196,46 @@ async function onLive(o) {
   }
 }
 
+// the streamer's Camfrog login for Pepe's line (Pepe re-checks !incognito); "" when hidden / none
+async function camfrogOf(userId) {
+  try {
+    const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [userId]))[0];
+    const camfrog = u && u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : "";
+    return camfrog && require("./quotes").isHidden(camfrog) ? "" : camfrog;
+  } catch (e) { return ""; }
+}
+
+/**
+ * 1.99lr: a 📼 queue moved on to its next title. o = {roomId, userId, display, what}. The caller rate-limits; this checks
+ * the pad owner's switch. -> {announced, said, job}. Never throws.
+ */
+async function nowPlaying(o = {}) {
+  try {
+    await init();
+    const roomId = String(o.roomId || "");
+    const what = clean(o.what, 90);
+    if (!roomId || !what) return { announced: false, why: "bad" };
+    if (!(await padAnnounce(roomId))) return { announced: false, why: "off" };
+    const R = await require("./rooms").get(roomId);
+    if (!R) return { announced: false, why: "no pad" };
+    const href = require("./pads").padHref(R);
+    const padName = clean(R.title, 60) || R.id;
+    const display = clean(o.display, 40) || "Someone";
+    const bridge = require("./bridge");
+    const said = await bridge.liveNotice(roomId, { who: display, pad: padName, what, link: href, np: true });
+    const job = await bridge.liveAnnounce(roomId, { streamer: display, pad: padName, what, link: SITE() + href, camfrog: await camfrogOf(o.userId),
+                                                    userId: o.userId || null, np: true });
+    return { announced: !!(said || job), said: !!said, job: !!job };
+  } catch (e) {
+    console.error("[golive] now playing:", e.message);
+    return { announced: false, error: e.message };
+  }
+}
+
 /** A stage slot went live (mainstage.js). `s` = the stage_slots row. */
 async function onSlot(s) {
   if (!s || !s.id || !s.room_id) return null;
-  let camfrog = "";
-  try {
-    const u = (await getQuery("SELECT camfrogUsername FROM users WHERE userId = ?", [s.userId]))[0];
-    camfrog = u && u.camfrogUsername ? String(u.camfrogUsername).toLowerCase() : "";
-    if (camfrog && require("./quotes").isHidden(camfrog)) camfrog = "";
-  } catch (e) { camfrog = ""; }
+  const camfrog = await camfrogOf(s.userId);
   return onLive({ key: "slot:" + s.id, roomId: s.room_id, userId: s.userId, display: s.displayname || s.username,
                   what: whatOf(s), source: s.source === "library" ? "plex" : s.mode === "embed" ? "embed" : "stage", camfrog });
 }
@@ -303,5 +337,5 @@ function register(app, { addUser, noTimers } = {}) {
   });
 }
 
-module.exports = { init, register, prefs, setPrefs, setFollow, padAnnounce, setPadAnnounce, audience, onLive, onSlot, slotLive, whatOf,
+module.exports = { init, register, prefs, setPrefs, setFollow, padAnnounce, setPadAnnounce, audience, onLive, onSlot, slotLive, whatOf, nowPlaying,
                    twitchTick, twitchNow, _twitchLive: twitchLive, _setClock, Refuse, RESTART_MS, PAD_GAP_MS };

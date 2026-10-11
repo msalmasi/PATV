@@ -40,6 +40,9 @@ the first frame (and not because of the RTMP ingest) falls through to the next o
 * Known limits: Dolby Vision profile 5 (no HDR10 base layer) comes out with the wrong colours; burnt-in subtitles make
   ffmpeg read the subtitle track from the whole file first (a minute or so on a 4K remux on the NAS).
 * `/streams` reports each stream's `mode`, `fallbacks` and `source` (codec, pix_fmt, hdr, dv, interlaced).
+* 1.4.0 (site 1.99lr, 📼 queues): `/item/:key` episodes carry `show_key` + `season_key` (Plex grandparent / parent
+  rating keys), so the site can queue the rest of a season or the series. The site plays a queue one episode at a time
+  (a fresh `PUT /streams/:stage` on the same stage slot for each), so nothing else changed here.
 
 ## Plex members (mediactl 1.2.0, site 1.99jp)
 

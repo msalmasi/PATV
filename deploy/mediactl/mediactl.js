@@ -7,7 +7,8 @@
 //
 //   GET  /health                      {ok, version, encoder, streams}            (no auth; says nothing secret)
 //   GET  /search?q=&limit=            Plex search: movies, shows, episodes
-//   GET  /item/:key                   one item: duration, parts, audio + subtitle tracks (shows: their episodes)
+//   GET  /item/:key                   one item: duration, parts, audio + subtitle tracks (shows / seasons: their episodes)
+//                                     1.4.0: episodes carry show_key + season_key (the site builds 📼 queues from them)
 //   GET  /poster/:key                 the poster (a small JPEG via Plex's photo transcoder)
 //   GET  /streams                     every stream's status
 //   PUT  /streams/:stage              start {rtmp, key, ratingKey, offset, quality, audio, sub, title}
@@ -44,7 +45,7 @@ const path = require("path");
 const crypto = require("crypto");
 const childProcess = require("child_process");
 
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 
 // ── config ──
 function loadConfig(env = process.env) {
@@ -173,6 +174,10 @@ function makePlex(cfg, req = request) {
     show: m.grandparentTitle || null, season: m.parentIndex != null ? m.parentIndex : null, episode: m.index != null && m.type === "episode" ? m.index : null,
     duration: m.duration ? Math.round(m.duration / 1000) : null, poster: !!(m.thumb || m.grandparentThumb || m.parentThumb),
     leafs: m.leafCount || null,
+    // 1.4.0 (site 1.99lr, 📼 queues): where an episode sits, so the site can queue the rest of its season / the series
+    show_key: m.type === "episode" && m.grandparentRatingKey != null ? String(m.grandparentRatingKey)
+      : m.type === "season" && m.parentRatingKey != null ? String(m.parentRatingKey) : null,
+    season_key: m.type === "episode" && m.parentRatingKey != null ? String(m.parentRatingKey) : null,
   });
   // 1.2.0: the server's machine identifier (local, cached) and plex.tv calls with the owner's token in a header
   let mid = null;

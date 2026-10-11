@@ -29,7 +29,8 @@
 // Every play is logged (media_plays: who, what, pad, price, how it ended). Only show what we have the rights to show.
 //
 //   media_sessions   room_id -> the slot + play that pad's stage is running from the library
-//   media_plays      the log (+ price, order_id, charge: free | held | routed | refunded | moved | carried)
+//   media_plays      the log (+ price, order_id, charge: free | held | routed | refunded | moved | carried | covered)
+//   media_queues     1.99lr: 📼 QUEUES (mediaqueue.js) - a season / a series / a list played back to back in ONE slot
 "use strict";
 const crypto = require("crypto");
 const http = require("http");
@@ -143,10 +144,22 @@ function init() {
       for (const def of ["price INTEGER NOT NULL DEFAULT 0", "order_id INTEGER", "charge TEXT", "settled_at INTEGER", "carried_from INTEGER", "access TEXT"]) {
         await addCol("media_plays", def);
       }
+      // 1.99lr: 📼 queues (mediaqueue.js): which queue + place a play belongs to, and the started hours it was charged
+      for (const def of ["queue_id INTEGER", "queue_pos INTEGER", "hours INTEGER"]) await addCol("media_plays", def);
       await runQuery("CREATE INDEX IF NOT EXISTS media_plays_user ON media_plays (user_id, ts)");
       await runQuery(`CREATE TABLE IF NOT EXISTS media_sessions (
         room_id TEXT PRIMARY KEY, slot_id TEXT NOT NULL, play_id INTEGER NOT NULL, rating_key TEXT, title TEXT, state TEXT NOT NULL,
         by_user TEXT, started INTEGER NOT NULL, updated INTEGER NOT NULL, position INTEGER, duration INTEGER)`);
+      // 1.99lr: a queue's session: its queue, whether this title got going (its charge is routed, not refunded), where it started
+      for (const def of ["queue_id INTEGER", "live INTEGER NOT NULL DEFAULT 0", "ep_offset INTEGER"]) await addCol("media_sessions", def);
+      await runQuery(`CREATE TABLE IF NOT EXISTS media_queues (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, room_id TEXT NOT NULL, user_id TEXT, username TEXT, access TEXT, state TEXT NOT NULL,
+        items TEXT NOT NULL, pos INTEGER NOT NULL DEFAULT 0, prefs TEXT, scope TEXT,
+        per_hour INTEGER NOT NULL DEFAULT 0, paid_hours INTEGER NOT NULL DEFAULT 0, played_sec INTEGER NOT NULL DEFAULT 0,
+        slot_id TEXT, created INTEGER NOT NULL, updated INTEGER NOT NULL, ended_at INTEGER, end_reason TEXT, notice TEXT,
+        last_announce INTEGER, fails INTEGER NOT NULL DEFAULT 0, retry_since INTEGER, restarts INTEGER NOT NULL DEFAULT 0)`);
+      await runQuery("CREATE INDEX IF NOT EXISTS media_queues_room ON media_queues (room_id, state)");
+      await runQuery("CREATE INDEX IF NOT EXISTS media_queues_user ON media_queues (user_id, created)");
       stage.setLibraryIdle(conf.get().library_pause_max_min);
     })().catch((e) => { ready = null; throw e; });
   }
@@ -154,8 +167,9 @@ function init() {
 }
 
 const keys = new Map();   // room id -> the slot's raw RTMP key (memory only; resume after a mediactl restart needs it)
+// 1.99lr: an episode reads "Show — S2E5 Title" (the slot title, "now playing", Pepe's announcement)
 const fmtTitle = (it) => (it.type === "episode" && it.show
-  ? `${it.show} S${String(it.season || 0).padStart(2, "0")}E${String(it.episode || 0).padStart(2, "0")} · ${it.title}`
+  ? `${it.show} — S${it.season == null ? 0 : it.season}E${it.episode == null ? 0 : it.episode} ${it.title || ""}`.trim()
   : `${it.title}${it.year ? ` (${it.year})` : ""}`).slice(0, 72);
 const fmtPat = (n) => Math.round(Number(n) || 0).toLocaleString("en-US");
 
@@ -210,7 +224,8 @@ async function goLiveInfo(user) {
   return { show: A.ok || (A.why === "off" && A.free), ok: A.ok, free: A.free, how: A.how, why: A.why, member, admin: A.how === "admin" || A.how === "staff",
            message: A.message, hint: A.hint || null, price_per_hour: A.free ? 0 : S.library_price,
            daily_cap: member ? S.library_free_daily_cap : A.free ? null : S.library_daily_cap,
-           quality: S.library_quality, pause_max_min: S.library_pause_max_min };
+           quality: S.library_quality, pause_max_min: S.library_pause_max_min,
+           queue: S.library_queue !== false, queue_max_hours: S.library_queue_max_hours };   // 1.99lr: 📼 queues
 }
 /** PAT for a play: library_price per STARTED hour of what's left of the title from `offset` (at least one hour). */
 function priceFor(durationSec, offsetSec, S = conf.get()) {
@@ -220,15 +235,19 @@ function priceFor(durationSec, offsetSec, S = conf.get()) {
   const hours = Math.max(1, Math.ceil(left / 3600));
   return { price: per * hours, hours, per_hour: per };
 }
+// 1.99lr: a 📼 QUEUE is ONE play towards the daily caps, however many titles it plays
+const PLAY_ONE = "COUNT(DISTINCT CASE WHEN queue_id IS NULL THEN 'p' || id ELSE 'q' || queue_id END)";
+// (a log from before 1.99lr has no queue_id column yet: every row is its own play)
+async function countPlays(where, args) {
+  try { const r = await getQuery(`SELECT ${PLAY_ONE} AS n FROM media_plays WHERE ${where}`, args); return (r[0] && r[0].n) || 0; }
+  catch (e) { const r = await safeQuery(`SELECT COUNT(*) AS n FROM media_plays WHERE ${where}`, args); return (r[0] && r[0].n) || 0; }
+}
 async function paidToday(userId, t = Date.now()) {
-  const r = await safeQuery("SELECT COUNT(*) AS n FROM media_plays WHERE user_id = ? AND ts > ? AND charge IN ('held','routed')", [userId, t - DAY_MS]);
-  return (r[0] && r[0].n) || 0;
+  return countPlays("user_id = ? AND ts > ? AND charge IN ('held','routed')", [userId, t - DAY_MS]);
 }
 // 1.99jp: a Plex member's free plays in the last 24 h (a resume on a fresh slot carries its play: not counted again)
 async function freeToday(userId, t = Date.now()) {
-  const r = await safeQuery("SELECT COUNT(*) AS n FROM media_plays WHERE user_id = ? AND ts > ? AND charge = 'free' AND access IN ('plex','override') AND carried_from IS NULL",
-                            [userId, t - DAY_MS]);
-  return (r[0] && r[0].n) || 0;
+  return countPlays("user_id = ? AND ts > ? AND charge = 'free' AND access IN ('plex','override') AND carried_from IS NULL", [userId, t - DAY_MS]);
 }
 async function mustAccess(user) {
   const A = await access(user);
@@ -363,20 +382,8 @@ async function play(user, b = {}) {
   const A = carry ? { ok: true, free: true, how: carry.access || "carried" } : await mustAccess(user);
   const R = await roomOf(b.room);
   if (!R) throw new Refuse(404, "No such pad.");
-  if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.");
   const paidRules = !A.free || (!isLibAdmin(user) && !carry);
-  if (!isLibAdmin(user) && !carry) {
-    // a Plex user takes the pad under the ordinary stage-slot rules
-    if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.");
-    if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.");
-    const mine = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]);
-    if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.");
-    const S0 = conf.get();
-    const member = isMemberHow(A.how);
-    const cap = member ? S0.library_free_daily_cap : S0.library_daily_cap;
-    const used = member ? await freeToday(user.userId) : !A.free ? await paidToday(user.userId) : 0;
-    if ((member || !A.free) && used >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.");
-  }
+  await preflight(user, A, R, { carry: !!carry });
   const it = await fetchItem(b.key);
   if (!it || !["movie", "episode"].includes(it.type) || !it.file) throw new Refuse(400, "Pick a movie or an episode.");
   const S = conf.get();
@@ -393,12 +400,7 @@ async function play(user, b = {}) {
     if (Math.floor(Number(b.price)) !== q.price) throw new Refuse(409, `The price is ${fmtPat(q.price)} PAT now - confirm it again.`, { price: q.price });
   }
   // a free encoder before anyone pays (MEDIACTL_MAX_STREAMS); mediactl still has the last word
-  if (paidRules || q.price > 0) {
-    const live = await streamsNow();
-    if (live === null) throw new Refuse(503, "The Plex player can't be reached right now - try again in a bit.");
-    const busy = live.filter((x) => x.state === "playing").length;
-    if (live.max && busy >= live.max) throw new Refuse(429, `Every library stream is in use (${busy} of ${live.max}) - try again when one ends.`);
-  }
+  if (paidRules || q.price > 0) await needEncoder();
   let order = null;
   if (q.price > 0) {
     order = await require("./shop").chargeService({ userId: user.userId, username: user.username, price: q.price, source: "medialib", hold: true,
@@ -434,6 +436,43 @@ async function play(user, b = {}) {
            order_id: order ? order.order_id : null };
 }
 
+/**
+ * The pad rules for a new play / queue (shared with mediaqueue.js): one library stream per pad (a 📼 queue holds its pad
+ * between titles too); a Plex user takes the pad under the ordinary stage-slot rules + the daily cap (a queue = one play).
+ */
+async function preflight(user, A, R, { carry = false } = {}) {
+  if (await session(R.id)) throw new Refuse(409, "This pad is already playing from the library - stop it first.");
+  if ((await safeQuery("SELECT id FROM media_queues WHERE room_id = ? AND state = 'active'", [R.id])).length) {
+    throw new Refuse(409, "This pad is already playing a queue from the library - stop it first.");
+  }
+  if (isLibAdmin(user) || carry) return;
+  if (!(await stage.seesPad(user, R.id))) throw new Refuse(404, "No such pad.");
+  if (await stage.isBanned(user.userId, R.id)) throw new Refuse(403, "You can't book the stage.");
+  const mine = await getQuery(`SELECT id FROM stage_slots WHERE userId = ? AND status IN ${OPEN_STATES}`, [user.userId]);
+  if (mine.length) throw new Refuse(409, "You already have a stage slot - end it first.");
+  const S0 = conf.get();
+  const member = isMemberHow(A.how);
+  const cap = member ? S0.library_free_daily_cap : S0.library_daily_cap;
+  const used = member ? await freeToday(user.userId) : !A.free ? await paidToday(user.userId) : 0;
+  if ((member || !A.free) && used >= cap) throw new Refuse(429, cap ? `That's ${cap} plays from Plex in the last 24 hours - the most for now.` : "Plays from Plex are paused right now.");
+}
+// streams in use: mediactl's playing ones + 1.99lr the 📼 queues between two titles (a queue holds its encoder)
+async function busyOf(live) {
+  const names = new Set(live.filter((x) => x.state === "playing").map((x) => x.stage));
+  const qs = await safeQuery(`SELECT q.room_id, s.state FROM media_queues q LEFT JOIN media_sessions s ON s.room_id = q.room_id
+                              WHERE q.state = 'active'`, []);
+  for (const q of qs) if (q.state !== "paused") names.add(stageName(q.room_id));
+  return names.size;
+}
+/** A free encoder (MEDIACTL_MAX_STREAMS) before anyone pays; mediactl still has the last word. */
+async function needEncoder() {
+  const live = await streamsNow();
+  if (live === null) throw new Refuse(503, "The Plex player can't be reached right now - try again in a bit.");
+  const busy = await busyOf(live);
+  if (live.max && busy >= live.max) throw new Refuse(429, `Every library stream is in use (${busy} of ${live.max}) - try again when one ends.`);
+  return live;
+}
+
 async function needSession(user, room) {
   await init();
   if (!user || !user.userId) throw new Refuse(401, "Sign in first.");
@@ -448,6 +487,10 @@ async function needSession(user, room) {
 }
 
 async function stop(user, room, reason = "stopped") {
+  // 1.99lr: a 📼 queue (with or without a title on right now) ends as a whole
+  const Q = require("./mediaqueue");
+  const q = await Q.forRoomOf(room);
+  if (q) return Q.stop(user, q, reason);
   const { R, s } = await needSession(user, room);
   let pos = null;
   try { const r = await must("POST", `/streams/${encodeURIComponent(stageName(R.id))}/stop`, {}); pos = r.stream && r.stream.position; }
@@ -480,9 +523,12 @@ async function restart(user, room, offset, how) {
       return { ok: true, position: pos, same_slot: true };
     } catch (e) {
       if (!(e.status === 409 || e.status === 404)) throw e;     // mediactl forgot it (restarted): start it again below
+      // 1.99lr: a 📼 queue keeps its slot: the same title starts again at `pos` with a fresh key
+      if (s.queue_id) return { ...(await require("./mediaqueue").restartCurrent(s, pos, user.username)), same_slot: true };
       await stage.end(s.slot_id, "library_restart", user.username).catch(() => {});
     }
   }
+  if (s.queue_id) throw new Refuse(409, "This queue's slot has ended - start the queue again.");
   // a fresh slot (the old one ended - a long pause - or mediactl lost the stream). The new play carries the old one's
   // charge: a still-held one moves over (so it's routed / refunded by how the new one goes), a paid one stays paid.
   const carry = { id: p.id, charge: p.charge, price: p.price, order_id: p.order_id, access: p.access };
@@ -521,9 +567,12 @@ async function state(user) {
       const m = byName.get(stageName(s.room_id));
       return { room: s.room_id, slot_id: s.slot_id, play_id: s.play_id, title: s.title, by: s.by_user, started: s.started,
                state: m ? m.state : s.state, position: m ? m.position : s.position, duration: (m && m.duration) || s.duration, error: m ? m.error : null,
-               mode: m ? m.mode || null : null };
+               mode: m ? m.mode || null : null, queue_id: s.queue_id || null };
     }),
-    plays: await getQuery("SELECT id, ts, username, room_id, title, kind, quality, offset_start, ended_at, end_reason, last_pos, error, price, charge FROM media_plays ORDER BY id DESC LIMIT 30"),
+    plays: await getQuery("SELECT id, ts, username, room_id, title, kind, quality, offset_start, ended_at, end_reason, last_pos, error, price, charge, queue_id FROM media_plays ORDER BY id DESC LIMIT 30"),
+    // 1.99lr: every running 📼 queue (what's left, the money) - the admins control them too
+    queues: await require("./mediaqueue").views({ all: true }),
+    queue_on: S.library_queue !== false,
   };
 }
 /** The Go-live page: may I play, on what terms, and what of mine is playing. */
@@ -546,24 +595,32 @@ async function mine(user, roomId) {
   out.sessions = rows.map((s) => {
     const m = byName.get(stageName(s.room_id));
     return { room: s.room_id, slot_id: s.slot_id, play_id: s.play_id, title: s.title, started: s.started, price: s.price, charge: s.charge,
-             state: m ? m.state : s.state, position: m ? m.position : s.position, duration: (m && m.duration) || s.duration, error: m ? m.error : null };
+             state: m ? m.state : s.state, position: m ? m.position : s.position, duration: (m && m.duration) || s.duration, error: m ? m.error : null,
+             queue_id: s.queue_id || null };
   });
+  // 1.99lr: my 📼 queues (running, or ended in the last few minutes - "you're out of PAT" and the like)
+  out.queue_on = S.library_queue !== false;
+  out.queues = await require("./mediaqueue").views({ userId: user.userId, recent: true });
   if (roomId) out.room = roomId;
   return out;
 }
 
 // ── the watcher: keeps the slot and the stream together, and settles held charges ──
-async function watch() {
+async function watch(only = null) {
   await init();
-  const sessions = await getQuery("SELECT * FROM media_sessions");
-  if (!sessions.length) return 0;
+  // 1.99lr: queues between two titles (no session: waiting for an encoder) are retried here
+  const Q = require("./mediaqueue");
+  let n = only ? 0 : await Q.watchIdle().catch((e) => { console.error("[medialib] queues:", conf.errLine(e)); return 0; });
+  const sessions = only ? await getQuery("SELECT * FROM media_sessions WHERE room_id = ?", [only]) : await getQuery("SELECT * FROM media_sessions");
+  if (!sessions.length) return n;
   const live = await streamsNow();
-  let n = 0;
   for (const s of sessions) {
     try {
       const slot = await stage.getSlot(s.slot_id);
       const name = stageName(s.room_id);
       const m = live ? live.find((x) => x.stage === name) : undefined;
+      // 1.99lr: a 📼 queue's title - the queue moves on by itself (mediaqueue.js)
+      if (s.queue_id) { if (await require("./mediaqueue").onWatch(s, slot, m, live)) n++; continue; }
       // on the stage: a held charge is routed now
       if (slot && slot.went_live) await settle(s.play_id, true).catch((e) => console.error("[medialib] settle:", conf.errLine(e)));
       if (!slot || slot.settled || slot.status === "ended") {
@@ -639,7 +696,11 @@ function register(app, { addUser, noTimers } = {}) {
   app.post("/api/medialib/pause", ...J(async (req) => pause(me(req), (req.body || {}).room)));
   app.post("/api/medialib/resume", ...J(async (req) => resume(me(req), (req.body || {}).room)));
   app.post("/api/medialib/seek", ...J(async (req) => seek(me(req), (req.body || {}).room, (req.body || {}).offset)));
+  // 1.99lr: 📼 queues - a season / a series / a list back to back in one slot (mediaqueue.js)
+  require("./mediaqueue").routes(app, { J, me, timers: !noTimers });
 }
 
 module.exports = { init, register, play, stop, pause, resume, seek, search, item, state, mine, watch, settle, access, goLiveInfo, plexUser, priceFor, paidToday, freeToday,
+                   // 1.99lr: for mediaqueue.js
+                   _q: { must, call, fetchItem, mustAccess, isLibAdmin, isMemberHow, preflight, needEncoder, closePlay, session, roomOf, streamsNow, SLACK_MIN, fmtPat },
                    stageName, call, signHeaders, fmtTitle, inviteItemLink, Refuse, _keys: keys };
