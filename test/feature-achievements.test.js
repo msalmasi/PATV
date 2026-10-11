@@ -107,7 +107,7 @@ test.before(async () => {
 
 test("catalog: 20 new web-side achievements with badge art and rewards in line with the rest; nothing farmable is generous", () => {
   const list = A.list();
-  assert.equal(list.length, 164);              // 1.99nj: + 25 📼 Plex-on-pads achievements (plex-watch-stats.test.js)
+  assert.equal(list.length, 177);              // 1.99nj: + 25 📼 Plex-on-pads achievements, 1.99np: + 13 TV shows (plex-watch-stats.test.js)
   for (const id of NEW) {
     const a = list.find((x) => x.id === id);
     assert.ok(a, id);

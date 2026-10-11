@@ -278,6 +278,36 @@ function inFranchise(f, { title, year, collections, studio }) {
 }
 const showOf = (title) => String(title || "").split(" — ")[0];
 
+// ── 1.99np: TV shows. A show is matched by its NAME (Plex's show title, normalised - "Fargo (2014)" is "fargo 2014", so an
+// optional trailing year is allowed) and, for Drag Race, also by Plex collection. Counted from EPISODES played on pads.
+const show = (...names) => new RegExp("^(" + names.join("|") + ")( (19|20)\\d\\d)?$");
+// "3 episodes" shows: distinct episodes of any show in the group
+const TV = {
+  trek: { re: /^star trek\b/ },
+  who: { re: /^(doctor who|torchwood)\b/ },
+  xfiles: { re: show("the x ?files", "x ?files") },
+  stargate: { re: /^stargate\b/ },
+  dragrace: { re: /\bdrag race\b/, coll: /\bdrag race\b/ },
+};
+// popular sci-fi TV: episodes from 5 of these shows
+const SCIFI_TV = [TV.trek.re, TV.who.re, TV.xfiles.re, TV.stargate.re, show("battlestar galactica"), show("the expanse"), show("black mirror"),
+  show("babylon 5"), show("firefly"), show("farscape"), show("fringe"), show("westworld"), show("the twilight zone"), show("the outer limits"),
+  show("stranger things"), show("red dwarf"), show("quantum leap"), show("lost"), show("severance"), show("silo"), show("foundation"),
+  show("the mandalorian"), show("andor"), show("blakes 7"), show("sliders"), show("orphan black"), show("dark"), show("altered carbon")];
+// prestige dramas: a whole season of the show; the four with their own achievement + the meta list
+const PRESTIGE = {
+  got: show("game of thrones"),
+  breakingbad: show("breaking bad", "better call saul"),
+  sopranos: show("the sopranos"),
+  wire: show("the wire"),
+};
+const PRESTIGE_ALL = [...Object.values(PRESTIGE), show("mad men"), show("true detective"), show("succession"), show("six feet under"),
+  show("chernobyl"), show("band of brothers"), show("the leftovers"), show("fargo"), show("boardwalk empire"), show("deadwood"), show("twin peaks"),
+  show("the americans"), show("the shield"), show("oz"), show("mr robot"), show("ozark"), show("the crown"), show("line of duty"), show("the bear"),
+  show("severance"), show("the pitt"), show("slow horses"), show("shogun"), show("the last of us")];
+const tvName = (p) => norm(p.name);
+const inTv = (g, p) => g.re.test(tvName(p)) || !!(g.coll && (p.collections || []).some((c) => g.coll.test(norm(c))));
+
 // ── the plays ──
 /** On-air seconds of one play row (see the header). */
 function airedOf(p) {
@@ -341,13 +371,17 @@ async function firstAired(works, userId) {
 
 const METRICS = ["plexpad_movies", "plexpad_episodes", "plexpad_plays", "plexpad_same_title", "plexpad_horror", "plexpad_comedy", "plexpad_scifi",
   "plexpad_documentary", "plexpad_animation", "plexpad_genres", "plexpad_mcu", "plexpad_starwars", "plexpad_potter", "plexpad_lotr", "plexpad_bond",
-  "plexpad_fast", "plexpad_pixar", "plexpad_deepcuts", "plexpad_oldies", "plexpad_decades", "plexpad_seasons", "plexpad_marathon", "plexpad_foreign"];
+  "plexpad_fast", "plexpad_pixar", "plexpad_deepcuts", "plexpad_oldies", "plexpad_decades", "plexpad_seasons", "plexpad_marathon", "plexpad_foreign",
+  // 1.99np: TV shows
+  "plexpad_tv_trek", "plexpad_tv_who", "plexpad_tv_xfiles", "plexpad_tv_stargate", "plexpad_scifi_shows", "plexpad_reality", "plexpad_tv_dragrace",
+  "plexpad_dragrace_seasons", "plexpad_got_seasons", "plexpad_breakingbad_seasons", "plexpad_sopranos_seasons", "plexpad_wire_seasons", "plexpad_prestige"];
 
 /** The metrics over a list of counted plays (pure, given others' first-aired map and the season sizes). */
 function compute(Q, first, sizes) {
   const m = Object.fromEntries(METRICS.map((k) => [k, 0]));
   m.plexpad_plays = Q.length;
   const perKey = new Map(), genreWorks = {}, allGenres = new Set(), fran = {}, deep = new Set(), decades = new Set(), foreign = new Set(), seasons = new Map();
+  const tvEps = {}, scifiShows = new Set(), realityEps = new Set(), seasonOf = new Map();
   for (const p of Q) {
     if (p.kind === "movie") m.plexpad_movies++; else m.plexpad_episodes++;
     perKey.set(p.key, (perKey.get(p.key) || 0) + 1);
@@ -365,7 +399,15 @@ function compute(Q, first, sizes) {
     if (p.year && p.year < 1970) m.plexpad_oldies++;
     if (p.year) { const d = Math.floor(p.year / 10) * 10; if (DECADES.includes(d)) decades.add(d); }
     if (p.kind === "movie" && p.lang && !isEnglish(p.lang)) foreign.add(p.work);
-    if (p.kind === "episode" && p.season_key) (seasons.get(p.season_key) || seasons.set(p.season_key, new Set()).get(p.season_key)).add(p.key);
+    if (p.kind === "episode" && p.season_key) {
+      (seasons.get(p.season_key) || seasons.set(p.season_key, new Set()).get(p.season_key)).add(p.key);
+      seasonOf.set(p.season_key, p);
+    }
+    if (p.kind === "episode") {
+      for (const [id, g] of Object.entries(TV)) if (inTv(g, p)) (tvEps[id] = tvEps[id] || new Set()).add(p.key);
+      if (SCIFI_TV.some((re) => re.test(tvName(p)))) scifiShows.add(p.work);
+      if ((p.genres || []).some((g) => /\breality\b/.test(norm(g)))) realityEps.add(p.key);
+    }
   }
   m.plexpad_same_title = Math.max(0, ...perKey.values());
   for (const id of Object.keys(GENRES)) m["plexpad_" + id] = genreWorks[id] ? genreWorks[id].size : 0;
@@ -374,7 +416,20 @@ function compute(Q, first, sizes) {
   m.plexpad_deepcuts = deep.size;
   m.plexpad_decades = decades.size;
   m.plexpad_foreign = foreign.size;
-  for (const [sk, eps] of seasons) { const n = sizes.get(sk); if (n && n >= 2 && eps.size >= n) m.plexpad_seasons++; }
+  const prestigeShows = new Set();
+  for (const [sk, eps] of seasons) {
+    const n = sizes.get(sk);
+    if (!(n && n >= 2 && eps.size >= n)) continue;
+    m.plexpad_seasons++;
+    const p = seasonOf.get(sk);
+    if (inTv(TV.dragrace, p)) m.plexpad_dragrace_seasons++;
+    for (const [id, re] of Object.entries(PRESTIGE)) if (re.test(tvName(p))) m["plexpad_" + id + "_seasons"]++;
+    if (PRESTIGE_ALL.some((re) => re.test(tvName(p)))) prestigeShows.add(p.work);
+  }
+  for (const id of Object.keys(TV)) m["plexpad_tv_" + id] = tvEps[id] ? tvEps[id].size : 0;
+  m.plexpad_scifi_shows = scifiShows.size;
+  m.plexpad_reality = realityEps.size;
+  m.plexpad_prestige = prestigeShows.size;
   // the most on-air time from plays started inside any 24 hours
   let best = 0;
   for (let i = 0, j = 0, sum = 0; j < Q.length; j++) {
@@ -466,6 +521,7 @@ function start() {
 }
 
 module.exports = { init, noteItem, enrich, enrichPending, metrics, compute, playsOf, backfill, profileStats, start, METRICS, GENRES, FRANCHISES, inFranchise,
+                   TV, SCIFI_TV, PRESTIGE, PRESTIGE_ALL,
                    airedOf, qualifies, norm, CUTOFF_KEY, MIN_AIR,
                    _setClock: (fn) => { clock = fn || (() => Date.now()); },
                    _set: (o) => { if (o.fetchItem) fetchItem = o.fetchItem; } };

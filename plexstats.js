@@ -133,8 +133,19 @@ async function build(userId, plexIds, shared) {
   const zone = (() => { try { const tz = require("./tz"); return tz.getPref(userId) || "UTC"; } catch (e) { return "UTC"; } })();
   const st = streak(history.map((x) => (Number(x.started || x.date) || 0) * 1000), zone);
   const works = favourites(history);
-  const fav = (type, sid) => (homeOk[sid] && homeRows[sid].length ? homeRows[sid] : works.filter((w) => w.type === type)
-    .map((w) => ({ title: String(w.title || "").slice(0, 120), year: w.year, plays: w.plays, seconds: w.seconds }))).slice(0, 5);
+  // Tautulli's (checked) favourites first, then filled up from their own history: a long-time viewer's all-time favourites
+  // are often older than the history we read, so the checked ones alone can leave the list short
+  const fav = (type, sid) => {
+    const out = homeOk[sid] ? homeRows[sid].slice() : [];
+    const seen = new Set(out.map((x) => x.title.toLowerCase()));
+    for (const w of works.filter((x) => x.type === type)) {
+      const title = String(w.title || "").slice(0, 120);
+      if (!title || seen.has(title.toLowerCase())) continue;
+      seen.add(title.toLowerCase());
+      out.push({ title, year: w.year, plays: w.plays, seconds: w.seconds });
+    }
+    return out.slice(0, 5);
+  };
   // genres, weighted by time watched, from the top works' metadata (plexpad's cached plex_meta)
   const PP = require("./plexpad");
   await PP.init();

@@ -234,9 +234,38 @@ test("a whole season (sizes from Tautulli or mediactl), cached; noteItem keeps m
   tautulli._set(null);
 });
 
-test("catalog: 25 📼 pad achievements, art, sane rewards, en.json strings; the Plex group on /achievements", () => {
+test("1.99np TV shows: episodes per franchise (Drag Race by name or collection), 5 sci-fi shows, reality episodes, whole seasons, Prestige TV", () => {
+  const ep = (show, key, season, o = {}) => ({ id: 1, ts: T0, key, kind: "episode", aired: 3000, work: "s:" + show, name: show, season_key: season,
+                                               genres: [], collections: [], ...o });
+  const Q = [
+    ep("Star Trek: The Next Generation", "t1", "tng1"), ep("Star Trek: Voyager", "t2", "voy1"), ep("Star Trek: Deep Space Nine", "t3", "ds91"),
+    ep("Doctor Who (2005)", "w1", "w1"), ep("The X-Files", "x1", "x1"), ep("Stargate SG-1", "g1", "g1"), ep("The Expanse", "e1", "e1"),
+    ep("Starstruck", "no1", "no1"),
+    ep("Canada's Drag Race", "d1", "dr1", { genres: ["Reality"] }), ep("Canada's Drag Race", "d2", "dr1", { genres: ["Reality"] }),
+    ep("Untucked", "d3", "un1", { genres: ["Reality"], collections: ["RuPaul's Drag Race"] }),
+    ep("Game of Thrones", "got1", "gots1"), ep("Game of Thrones", "got2", "gots1"),
+    ep("Better Call Saul", "bcs1", "bcs1"), ep("Better Call Saul", "bcs2", "bcs1"),
+    ep("Fargo (2014)", "f1", "fs1"), ep("Fargo (2014)", "f2", "fs1"),
+    ep("The Wire", "wire1", "wires1"),                     // half a season
+  ];
+  const m = PP.compute(Q, new Map(), new Map([["dr1", 2], ["gots1", 2], ["bcs1", 2], ["fs1", 2], ["wires1", 12]]));
+  assert.equal(m.plexpad_tv_trek, 3);
+  assert.equal(m.plexpad_tv_who, 1);
+  assert.equal(m.plexpad_tv_xfiles, 1);
+  assert.equal(m.plexpad_tv_stargate, 1);
+  assert.equal(m.plexpad_scifi_shows, 7, "3 Treks + Who + X-Files + Stargate + Expanse; not Starstruck");
+  assert.equal(m.plexpad_tv_dragrace, 3, "by name, and Untucked by its collection");
+  assert.equal(m.plexpad_reality, 3);
+  assert.equal(m.plexpad_dragrace_seasons, 1);
+  assert.equal(m.plexpad_got_seasons, 1);
+  assert.equal(m.plexpad_breakingbad_seasons, 1, "Better Call Saul counts for Say My Name");
+  assert.equal(m.plexpad_wire_seasons, 0, "a half season doesn't");
+  assert.equal(m.plexpad_prestige, 3, "GoT + Better Call Saul + Fargo (2014)");
+});
+
+test("catalog: 38 📼 pad achievements, art, sane rewards, en.json strings; the Plex group on /achievements", () => {
   const list = A.list().filter((a) => PP.METRICS.includes(a.metric));
-  assert.equal(list.length, 25);
+  assert.equal(list.length, 38);
   const en = JSON.parse(fs.readFileSync(path.join(repo, "locales", "en.json"), "utf8"));
   for (const a of list) {
     assert.ok(a.id.startsWith("cf_plex_"), a.id);
@@ -297,7 +326,7 @@ test("sync: only PROVEN links (self/admin/wizarr/overseerr - never the email gue
   assert.equal(d.found, true);
   assert.equal(d.total_plays, 140);
   assert.equal(d.month_seconds, 21000);
-  assert.deepEqual(d.top_movies.map((x) => x.title), ["Heat"], "a home-stats row that isn't in their history is dropped");
+  assert.deepEqual(d.top_movies.map((x) => x.title), ["Heat", "Arrival"], "a home-stats row that isn't in their history is dropped; the rest filled from history");
   assert.deepEqual(d.top_shows.map((x) => x.title), ["Severance"]);
   assert.deepEqual(d.libraries.map((l) => [l.name, l.plays]), [["Movies", 2], ["TV Shows", 2]], "their rows only; music skipped");
   assert.deepEqual(d.platforms.map((p) => p.name), ["Roku", "Chrome"], "platforms, never the device names");
