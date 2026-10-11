@@ -494,6 +494,16 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/stash/bot/status", bot(async () => ({ ok: true, enabled: await enabled(), live: await live(),
                                                        imported: await meta("imported"), rev: (await meta("rev")) || 0 })));
   app.post("/api/stash/bot/import", bot((b) => importFromPepe(b)));
+  // 1.99ns: read-only export of everything the site holds for stashes (the way back / v2 genesis): every stash with its
+  // members, the totals and a sha256 of the canonical list
+  app.post("/api/stash/admin/export", bot(async () => {
+    const all = await list({ all: true });
+    const text = JSON.stringify(all);
+    const open = all.filter((x) => !x.closed);
+    return { ok: true, live: await live(), stashes: all, count: all.length, total: open.reduce((t, x) => t + x.balance, 0),
+             staked: open.reduce((t, x) => t + x.staked, 0), seq: (await meta("seq")) || 0,
+             digest: crypto.createHash("sha256").update(text, "utf8").digest("hex") };
+  }));
   app.post("/api/stash/bot/state", bot(async (b) => {
     const rev = (await meta("rev")) || 0;
     if (b.since_rev !== undefined && Number(b.since_rev) === rev) return { ok: true, live: await live(), rev, same: true };
