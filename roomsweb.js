@@ -25,9 +25,10 @@ async function resolveRoom(slug) {
   }
   return R;
 }
-/** The slug links should use: the bridge's (what Pepe's !bridge posts) when it's bridged, else ours. */
+/** The slug links should use. 1.99oj: the registry's - a pad's one address (a Camfrog pad's follows its display name,
+ *  rooms.noteBridged); the bridge's only for something with no registry slug. */
 function linkSlug(R) {
-  if (R && R.slug_set && R.slug) return R.slug;      // 1.99iy: a chosen address always wins
+  if (R && R.slug) return R.slug;
   try {
     const B = bridge()._rooms.get(R.id);
     if (B && B.slug) return B.slug;

@@ -103,10 +103,11 @@ function currentSlugFor(slug) {
     try { id = require("./rooms").aliasTarget(s); } catch (e) { id = null; }
     if (!id) {
       // 1.99ja: any other slug of a pad whose address was chosen (its id-based slug - e.g. a Camfrog room's pad that a site
-      // pad was connected to) -> the chosen one
+      // pad was connected to) -> the chosen one. 1.99oj: any pad - one address each (a Camfrog pad's id-based slug
+      // 301s to the display-name address it inherited)
       let R = null;
       try { R = require("./rooms").bySlugCached(s); } catch (e) { R = null; }
-      return R && R.slug_set && R.slug && R.slug !== s && !R.profile ? R.slug : null;
+      return R && R.slug && R.slug !== s && !R.profile ? R.slug : null;
     }
     const A = require("./rooms").getCached(id);
     const cur = A ? padSlug(A) : null;

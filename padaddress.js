@@ -82,13 +82,13 @@ function bridgeHolder(s) {
  * Can pad `roomId` (null = a pad that doesn't exist yet) take slug `s` (folded)? -> null, or why not.
  * Its own current slug and its own old slugs are fine.
  */
-async function takenProblem(s, roomId) {
+async function takenProblem(s, roomId, opts = {}) {
   await rooms.init();
   const alias = (await getQuery("SELECT room_id FROM pad_slug_aliases WHERE slug = ?", [s]))[0];
   if (alias && alias.room_id !== roomId) return "That address belonged to another pad and still points there.";
   const cur = alias ? null : rooms.bySlugCached(s);
   if (cur && cur.id !== roomId) return "Another pad already uses that address.";
-  const held = bridgeHolder(s);
+  const held = (typeof opts.holder === "function" ? opts.holder : bridgeHolder)(s);    // 1.99oj: a script passes the persisted bridge rooms
   if (held && held !== roomId) return "A Camfrog room Pepe is in uses that address.";
   return null;
 }

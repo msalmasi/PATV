@@ -149,7 +149,9 @@ async function loadCache() {
                                ${ucol(C, "camfrogUsername", "u.")} AS owner_camfrog
                                FROM rooms_registry r LEFT JOIN users u ON u.userId = r.owner_user_id`);
   const byId = new Map(), bySlug = new Map();
-  for (const r of rows) { byId.set(r.room_id, r); bySlug.set(r.slug, r); bySlug.set(slugify(r.room_id), r); }
+  // 1.99oj: id-based slugs first, then the pads' own slugs - a pad's address always beats another pad's slugified id
+  for (const r of rows) { byId.set(r.room_id, r); bySlug.set(slugify(r.room_id), r); }
+  for (const r of rows) bySlug.set(r.slug, r);
   const f = (await getQuery("SELECT value FROM rooms_kv WHERE key = 'front_room'"))[0];
   // 1.99iy: retired slugs -> the pad that had them (only for pads that still exist)
   const aliases = new Map();
@@ -367,12 +369,101 @@ async function stageSettings(roomId) {
   return r || { id: roomId, slot_count: 1, approval: false, slot_price: 0, owner_kind: "none", owner: null, house: false, title: roomId };
 }
 
-/** Bridge saw this room: make sure it has a registry row (no owner). Cheap after the first time. */
+/**
+ * Bridge saw this room: make sure it has a registry row (no owner). Cheap after the first time.
+ * 1.99oj: ONE address per Camfrog pad. A new row takes the slug of the room's display name (what the bridge, Pepe's
+ * !bridge links and every old link use) instead of its id; an existing pad whose owner never chose an address
+ * (slug_set = 0) follows a display-name change (followName). The registry slug IS the pad's address everywhere.
+ */
 async function noteBridged(roomId, name) {
-  if (CACHE.byId.has(roomId)) return;
+  const row = CACHE.byId.get(roomId);
+  if (row) {
+    if (!row.slug_set && name && slugify(name) !== row.slug) await followName(roomId, name);
+    return;
+  }
   await init();
   if (CACHE.byId.has(roomId)) return;
-  if (await ensureRow(roomId, name)) await loadCache();
+  const want = await inheritableSlug(roomId, name);
+  if (!(await ensureRow(roomId, name, want))) return;
+  await loadCache();
+  if (!want && name) await followName(roomId, name);      // a display-name slug it can't have as its address: kept as a redirect
+}
+
+/**
+ * 1.99oj: the address a Camfrog room's pad inherits from its display name - slugify(name), when that is a valid pad
+ * address (padaddress.formProblem: length, reserved words, "u-") that no other pad uses, gave up, or shows on the
+ * bridge. -> the slug, or null (the pad keeps the address it has; the bridge shows that one too).
+ * opts.holder(slug) -> the room id a live bridge room shows that slug for (default: the running bridge's rooms).
+ */
+async function inheritableSlug(roomId, name, opts = {}) {
+  if (!name) return null;
+  const s = slugify(name);
+  const A = require("./padaddress");
+  if (A.formProblem(s)) return null;
+  if (await A.takenProblem(s, roomId, opts)) return null;
+  return s;
+}
+
+// a display name whose slug can't be had is retried at most this often (the bridge calls noteBridged every sync)
+const FOLLOW_RETRY_MS = 10 * 60 * 1000;
+const followTried = new Map();     // room id -> {want, at}
+const following = new Map();       // room id -> the running followName (one at a time per pad)
+/**
+ * 1.99oj: a Camfrog pad with no chosen address (slug_set = 0) takes the slug of its room's display name. The old slug
+ * becomes an alias (/p/<old>[/...] 301s here, padaddress.js rules), one of the pad's own aliases is taken back, the
+ * per-account feed view moves, and the pad's log says so. slug_set and slug_changed_at (the owner's rename limit) stay
+ * as they were: the address is still the inherited one. Everything else is keyed by the room id.
+ * -> {from, to} when it moved, else null. opts: {now, by, holder (see inheritableSlug), force (skip the retry wait)}.
+ */
+async function followName(roomId, name, opts = {}) {
+  const id = String(roomId || "");
+  if (following.has(id)) return following.get(id);
+  const run = (async () => {
+    await init();
+    const row = CACHE.byId.get(id);
+    if (!row || row.slug_set || cleanPlatform(row.platform, row.room_id) !== "camfrog" || !name) return null;
+    const want = slugify(name);
+    if (want === row.slug) return null;
+    const now = opts.now || Date.now();
+    const tried = followTried.get(id);
+    if (!opts.force && tried && tried.want === want && now - tried.at < FOLLOW_RETRY_MS) return null;
+    followTried.set(id, { want, at: now });
+    const A = require("./padaddress");
+    if (await A.takenProblem(want, id, opts)) return null;            // another pad's (or another live room's): keep ours
+    const by = opts.by || "display-name";
+    if (A.formProblem(want)) {
+      // not a valid pad address (a reserved word, too long...): the pad keeps its slug, but links people already have
+      // with the display-name slug (the bridge showed it before 1.99oj) still land - an alias that 301s here
+      const have = await getQuery("SELECT 1 FROM pad_slug_aliases WHERE slug = ?", [want]);
+      if (!have.length) {
+        await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, ?)", [want, id, now, by]);
+        await loadCache();
+      }
+      return null;
+    }
+    const old = row.slug;
+    let moved = false;
+    await require("./mainstage")._tx(async () => {
+      await runQuery("DELETE FROM pad_slug_aliases WHERE slug = ? AND room_id = ?", [want, id]);       // one of its own old slugs
+      await runQuery("INSERT OR IGNORE INTO pad_slug_aliases (slug, room_id, created, by) VALUES (?, ?, ?, ?)", [old, id, now, by]);
+      const u = await runQuery("UPDATE rooms_registry SET slug = ?, updated = ? WHERE room_id = ? AND slug = ? AND COALESCE(slug_set, 0) = 0",
+                               [want, now, id, old]);
+      if (!u.changes) throw Object.assign(new Error("changed meanwhile"), { skip: true });
+      const fv = await getQuery("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feed_view'");
+      if (fv.length) await runQuery("UPDATE OR REPLACE feed_view SET scope = ? WHERE scope = ?", ["p/" + want, "p/" + old]);
+      moved = true;
+    }).catch((e) => { if (!e.skip) throw e; });
+    if (!moved) return null;
+    followTried.delete(id);
+    await event(id, "pad-address", by, `p/${old} -> p/${want} (inherited from the Camfrog room's display name "${str(name, 60)}")`);
+    await loadCache();
+    // the running bridge's live room shows it now (never loads the bridge just for this - a tools/ script doesn't run one)
+    try { const bp = require.resolve("./bridge"); const B = require.cache[bp] && require.cache[bp].exports._rooms.get(id); if (B) B.slug = want; } catch (e) { /* no bridge */ }
+    console.log(`[rooms] ${id}: p/${old} -> p/${want} (display name "${str(name, 60)}")`);
+    return { from: old, to: want };
+  })();
+  following.set(id, run);
+  try { return await run; } finally { following.delete(id); }
 }
 
 // ── permissions ──
@@ -665,7 +756,9 @@ async function activity(roomId, fromMs, toMs) {
 // ── for Pepe: the owner of every room, so chat commands can respect them ──
 async function ownersForPepe() {
   await init();
-  return listCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: !!r.slug_set, title: r.title, owner_kind: r.owner_kind,   // 1.99iy: slug_set = links use this slug
+  // 1.99iy: slug_set = links use this slug. 1.99oj: the registry slug is every pad's one address now (a Camfrog pad's
+  // follows its display name - noteBridged), so it is always the link: Pepe's !bridge uses it instead of re-deriving one
+  return listCached().map((r) => ({ id: r.id, slug: r.slug, slug_set: true, title: r.title, owner_kind: r.owner_kind,
     owner: r.owner ? { username: r.owner.username, camfrog: r.owner.camfrog ? String(r.owner.camfrog).toLowerCase() : null } : null,
     slot_count: r.slot_count,
     description: String(r.description || "").slice(0, 300),   // 1.99ko: Pepe's room vibe learns from the pad's description
@@ -701,7 +794,7 @@ function hasRoute(app, path) {
 module.exports = {
   init, get, bySlug, bySlugCached, list, getCached, listCached, stageSettings, noteBridged, canManage, ownedBy, setPage, setStage,
   setOwner, addRoom, setFront, frontRoom, frontSetting, frontStatus, trending, boostPats, rankLive, frontReevaluate, frontCfg, setFrontCfg, evaluateAuto,
-  _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, findUser, event,
+  _setClock: (fn) => { clockFn = fn || (() => Date.now()); }, _reloadAuto: loadAuto, noteActivity, activity, ownersForPepe, notify, followName, inheritableSlug, findUser, event,
   hasRoute, slugify, isStaff, cleanBanner, kvGet, kvSet, loadCache, HOUSE_ROOM, MAX_SLOTS_DEFAULT, SEEDS, LOUNGE_ID, isCommunityOnly,
   PLATFORMS, platformOf, platformFromId, migrateLounge, OLD_LOUNGE_SLUG,
   PROFILE_PREFIX, profileId, isProfile, profilePads, profileOf, profileOfCached, ensureProfile,

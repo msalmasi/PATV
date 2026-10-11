@@ -68,14 +68,16 @@ test.before(async () => {
   await rooms.addRoom("patv:other", "Other Pad", "test");
   await rooms.setOwner("patv:other", "otherowner", "test");
   await rooms.addRoom("Taken_Room", "Taken", "test");
-  // Frog.Room is live through the bridge under its display name "Lily Pond" (bridge slug lily-pond, registry slug frog-room)
+  // a per-account feed view saved under the pad's registry slug - it follows the pad through both moves below
+  await require(path.join(repo, "feedgallery")).init();
+  await runQuery("INSERT INTO feed_view (user_id, scope, view, updated) VALUES ('u_rando', 'p/frog-room', 'gallery', 1)");
+  // Frog.Room is live through the bridge under its display name "Lily Pond" (bridge slug lily-pond; 1.99oj: the registry
+  // slug frog-room follows it - the pad's one address becomes lily-pond, frog-room an alias)
   await bridge.load();
   await bridge.ingest({ events: [ev({ id: "Frog.Room", name: "Lily Pond" }, "message", { user: { id: "a", login: "a", display: "A" }, text: "hi" })],
                         rooms: [{ room: { id: "Frog.Room", name: "Lily Pond" }, topic: "", count: 2, members: [], mic: [] }] });
   // another Camfrog room Pepe is in, with no pad of its own yet
   await bridge.ingest({ rooms: [{ room: { id: "Swamp.Room", name: "Swamp Things" }, topic: "", count: 1, members: [], mic: [] }] });
-  await require(path.join(repo, "feedgallery")).init();
-  await runQuery("INSERT INTO feed_view (user_id, scope, view, updated) VALUES ('u_rando', 'p/frog-room', 'gallery', 1)");
 
   const app = express();
   app.use(express.json());
@@ -111,7 +113,11 @@ test("uniqueness: another pad's slug, an id-based slug, another Camfrog room's b
   const R = await rooms.get("Frog.Room");
   assert.match((await PAD.check("patv-other", R.id)).problem || "", /reserved for the site/);                // patv:other's slug
   assert.match((await PAD.check("taken-room", R.id)).problem || "", /Another pad/);
-  assert.match((await PAD.check("swamp-things", R.id)).problem || "", /Camfrog room Pepe is in/);
+  // 1.99oj: a bridged room gets its pad under its display-name slug, so Swamp.Room's is a pad's address now
+  assert.equal((await rooms.get("Swamp.Room")).slug, "swamp-things");
+  assert.match((await PAD.check("swamp-things", R.id)).problem || "", /Another pad/);
+  // a slug a live bridge room shows that no pad has (the bridge rule on its own)
+  assert.match((await PAD.takenProblem("bog-room", R.id, { holder: (s) => (s === "bog-room" ? "Bog.Room" : null) })) || "", /Camfrog room Pepe is in/);
   assert.equal((await PAD.check("lily-pond", R.id)).problem, null, "its own bridge slug is fine");
   assert.equal((await PAD.check("the-frog-pond", R.id)).problem, null);
 });
@@ -122,10 +128,11 @@ test("owner rename: alias kept, slug_set, logged, feed views moved, bridge shows
   assert.equal(out.slug_set, true);
   const al = await getQuery("SELECT slug FROM pad_slug_aliases WHERE room_id = 'Frog.Room' ORDER BY slug");
   assert.deepEqual(al.map((a) => a.slug), ["frog-room", "lily-pond"], "the registry slug and the bridge's display-name slug both redirect");
-  const evs = await getQuery("SELECT what, actor, detail FROM room_events WHERE room_id = 'Frog.Room' AND what = 'pad-address'");
-  assert.equal(evs.length, 1);
-  assert.equal(evs[0].actor, "padowner");
-  assert.match(evs[0].detail, /p\/frog-room -> p\/the-frog-pond/);
+  // 1.99oj: two address events - the inherited display-name slug (the bridge saw "Lily Pond"), then the owner's rename
+  const evs = await getQuery("SELECT what, actor, detail FROM room_events WHERE room_id = 'Frog.Room' AND what = 'pad-address' ORDER BY ts, rowid");
+  assert.deepEqual(evs.map((e) => e.actor), ["display-name", "padowner"]);
+  assert.match(evs[0].detail, /p\/frog-room -> p\/lily-pond \(inherited/);
+  assert.match(evs[1].detail, /p\/lily-pond -> p\/the-frog-pond/);
   const audit = await require(path.join(repo, "feedstore")).roomAudit("Frog.Room");
   assert.ok(audit.some((a) => a.what === "pad-address"), "the rename is in the pad's audit (mod) log");
   assert.equal((await getQuery("SELECT scope FROM feed_view WHERE user_id = 'u_rando'"))[0].scope, "p/the-frog-pond");

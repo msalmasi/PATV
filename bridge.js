@@ -91,9 +91,12 @@ function roomFor(ref) {
   if (ref.name && ref.name !== R.name) R.name = ref.name;
   // slug from the display name; another room already holding it gets the id-based one.
   // 1.99iy: a pad whose address was CHOSEN (renamed / picked at creation - rooms.js slug_set) uses that one
+  // 1.99oj: a REGISTERED room always shows its pad's one address (rooms_registry.slug). A pad nobody chose an address
+  // for inherits its display-name slug in the registry (rooms.noteBridged -> followName, which also updates R.slug), so
+  // the bridge never shows a second identity. The display-name logic below is only for a room's first sync.
   let reg = null, REG = null;
   try { REG = require("./rooms"); reg = REG.getCached(R.id); } catch (e) { reg = null; }
-  if (reg && reg.slug_set && reg.slug) { R.slug = reg.slug; return R; }
+  if (reg && reg.slug) { R.slug = reg.slug; return R; }
   // 1.99ja: never a slug another PAD owns (a pad that was this room's pad and went back to being a site pad keeps its
   // address; the room shows its own) - the display-name slug, else the room's registry slug, else id-based ones
   const taken = (s) => {
