@@ -3,29 +3,34 @@
 <%- include('layout', { title: G.NAME + ' · Public Access TV', user: user }) %>
 <%- include('partials/legal-css') %>
 <style>
-  .gl .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 10px 0 0; }
-  .gl .tile { background: #111; border: 1px solid #232323; border-radius: 12px; padding: 12px 14px; }
-  .gl .tile b { display: block; color: #fff; margin-bottom: 2px; }
-  .gl .tile p { margin: 0; font-size: 14.5px; color: #c9d3c9; line-height: 1.55; }
-  .gl .free .tile { border-color: #2f6b3a; background: linear-gradient(180deg, #0f1a10 0%, #111 80px); }
-  .gl .hard { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
-  .gl .hard li { background: #111; border: 1px solid #232323; border-left: 4px solid #555; border-radius: 10px; padding: 10px 12px; }
-  .gl .hard li.severe { border-left-color: #ff5252; }
-  .gl .hard li.serious { border-left-color: #ffb74d; }
-  .gl .hard li.minor { border-left-color: #c6e94f; }
-  .gl .hard b { color: #fff; }
-  .gl .hard p { margin: 2px 0 0; font-size: 14.5px; color: #c9d3c9; }
-  .gl .hard .sev { float: right; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #9a9a9a; margin-left: 8px; }
-  .gl .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; border: 1px solid #333; font-size: 12px; color: #bbb; margin: 0 4px 4px 0; }
-  .gl .how { display: grid; gap: 6px; padding-left: 20px; }
+  .gl .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: var(--ds-sp-3); margin: var(--ds-sp-3) 0 0; }
+  .gl .tile { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); min-width: 0; }
+  .gl .tile b { display: block; color: var(--ds-text-strong); margin-bottom: var(--ds-sp-1); font-size: var(--ds-fs-h4); line-height: var(--ds-lh-h4); }
+  .gl .tile p { margin: 0; font-size: var(--ds-fs-sm); color: var(--ds-text-2); line-height: var(--ds-lh-sm); }
+  .gl .free .tile { border-color: var(--ds-ok-line); background: linear-gradient(180deg, var(--ds-ok-bg) 0%, var(--ds-surface) 80px); }
+  .gl .hard { list-style: none; padding: 0; margin: var(--ds-sp-3) 0 0; display: grid; gap: var(--ds-sp-2); }
+  .gl .hard li { margin: 0; background: var(--ds-surface); border: 1px solid var(--ds-line); border-inline-start: 4px solid var(--ds-line-strong); border-radius: var(--ds-r-lg); padding: var(--ds-sp-3) var(--ds-sp-3h); }
+  .gl .hard li.severe { border-inline-start-color: var(--ds-danger-solid); }
+  .gl .hard li.serious { border-inline-start-color: var(--ds-warn-fill); }
+  .gl .hard li.minor { border-inline-start-color: var(--ds-green); }
+  .gl .hard b { color: var(--ds-text-strong); }
+  .gl .hard p { margin: 2px 0 0; font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+  .gl .hard .sev { float: inline-end; margin-inline-start: var(--ds-sp-2); padding: 0 8px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong);
+                   font-size: var(--ds-fs-chip); font-weight: 700; letter-spacing: var(--ds-ls-chip); line-height: 1.6; text-transform: uppercase; color: var(--ds-text-muted); }
+  .gl .hard li.severe .sev { color: var(--ds-danger); border-color: var(--ds-danger-line); }
+  .gl .hard li.serious .sev { color: var(--ds-warn); border-color: var(--ds-warn-line); }
+  .gl .hard li.minor .sev { color: var(--ds-ok); border-color: var(--ds-ok-line); }
+  .gl .pill { display: inline-block; padding: 1px 9px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); font-size: var(--ds-fs-xs); color: var(--ds-text-2); margin: 0 4px 4px 0; }
+  .gl .how { display: grid; gap: 6px; padding-inline-start: 22px; }
+  .gl .how .ds-ic { margin-inline-end: 4px; }
 </style>
-<main class="lg gl" id="guidelines">
+<main class="lg gl ds-page read flow" id="guidelines">
   <header class="hero">
     <link rel="icon" href="/favicon.ico" sizes="48x48">
     <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
     <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
     <div class="eyebrow">PUBLICACCESS.TV</div>
-    <h1>📜 <%= G.NAME %></h1>
+    <h1><span class="ds-ic" aria-hidden="true">📜</span> <%= G.NAME %></h1>
     <div class="updated">How we get along · updated <%= G.UPDATED %></div>
     <p class="lead"><%= G.INTRO %></p>
   </header>
@@ -58,12 +63,12 @@
   <%# 1.99en: the AI generation content policy - rendered from guidelines.js AI_POLICY (the composer's Generate help uses it too) %>
   <% if (G.AI_POLICY) { const A = G.AI_POLICY; %>
   <section id="ai">
-    <h2>✨ AI pictures and video</h2>
+    <h2><span class="ds-ic" aria-hidden="true">✨</span> AI pictures and video</h2>
     <p><%= A.intro %></p>
     <p><b><%= A.short %></b></p>
     <ul class="how">
-      <% A.allowed.forEach((t) => { %><li>✅ <%= t %></li><% }) %>
-      <% A.never.forEach((t) => { %><li>⛔ <%= t %></li><% }) %>
+      <% A.allowed.forEach((t) => { %><li><span class="ds-ic">✅</span><%= t %></li><% }) %>
+      <% A.never.forEach((t) => { %><li><span class="ds-ic">⛔</span><%= t %></li><% }) %>
     </ul>
     <p class="note"><%= A.enforcement %></p>
   </section>

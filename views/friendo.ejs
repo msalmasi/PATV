@@ -1,26 +1,29 @@
 <!DOCTYPE html>
-<html>
-  
-
+<%# /friendo - a standalone easter egg (no site layout). G6 polish: dark ds canvas, a viewport, a responsive box and
+    reduced motion (friendo.css). It loads ds.css for the tokens only. %>
+<html lang="en">
 <head>
-    <link rel="icon" href="/favicon.ico" sizes="48x48">
-    <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
-    <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
-<link rel="stylesheet" href="/public/css/friendo.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#18181b">
+  <title>friendo · Public Access TV</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
+  <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="/public/css/ds.css?v=1">
+  <link rel="stylesheet" href="/public/css/friendo.css?v=2">
 </head>
-
-<body>
-<div id="friendo-container">
+<body class="friendo">
+<main id="friendo-container">
   <div id="success-box">
-    <div class="face">
+    <div class="face" aria-hidden="true">
       <div class="eye"></div>
       <div class="eye right"></div>
       <div class="mouth happy"></div>
     </div>
-    <div class="shadow scale"></div>
+    <div class="shadow scale" aria-hidden="true"></div>
     <div class="message"><h1 class="alert">yes yes!</h1></div>
   </div>
-  </div>
-</div>
- </body> 
+</main>
+</body>
 </html>

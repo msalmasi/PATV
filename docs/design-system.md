@@ -785,3 +785,39 @@ Added by the 1.99pp polish pass (markets, a market, wagers and pools, polls, bou
 - **Poll options on phones:** a vote row is a 2-column grid (text, then the tally and the vote pill). At ≤ 420 it stacks to one column with the tally under the text, so long options don't wrap one word per line.
 - **Option colours** (Yes green #4caf50, No red #e57373, then blue, gold, purple, cyan, orange, lime) are chart colours and stay hex; a settled winner's bar is `--ds-gold`, a voided option's bar `--ds-text-disabled`.
 - **Sticky side card** (the market's trade panel at ≥ 900): `top: calc(var(--ds-nav-h) + var(--ds-sp-3))`, never a hard-coded 76px.
+
+---
+
+## Area notes: home, info, legal and admin
+
+Added by the G6 polish pass (1.99pq onwards): the homepage, /about, /info, /help, /terms, /privacy, /guidelines, /friendo, the admin shell and every staff page. All of them keep the PATV green accent.
+
+### Legal and long-text pages (terms, privacy, guidelines)
+
+- `main.lg.ds-page.read.flow` with the shared `partials/legal-css`: the read width (760), block flow, so the sections keep the prose rhythm (32 between sections, .85em between paragraphs).
+- The hero is the ds hero recipe on a `<header class="hero">`, with `box-shadow: none !important` and an explicit text colour to cancel styles.css's global `header` rule (see the gotcha above).
+- **Status pills in the hero:** "Last updated" is an ok-tinted pill (13px/700); a draft notice is a `--ds-gold-bg` note, radius 12, with a solid amber `DRAFT` chip.
+- **Contents box:** a ds card (surface, 16 radius, 16 padding), a 12px uppercase muted label, two CSS columns from 761px and one below. Set `margin: 0` on the `li`s: a top margin on the first item only applies in the first column, so the columns start 4px apart.
+- Section `h2` is 20px/700 with a 1px `--ds-line` rule under it; `h3` is 17px; both have `scroll-margin-top: nav height + 12` for the TOC anchors.
+- **Data tables** (the privacy retention table) scroll inside a `.tw` box (surface, line, radius 16) at ≥ 761px and turn into one card per row below that; th is the `.ds-tbl` head style.
+- **Placeholders** (`.ph`, `[[FILL ME IN]]`) are a danger-tinted dashed mono chip, so an unfilled value can't pass for real text.
+- **Rule list** (guidelines' hard limits): rows with a 4px inline-start severity rule (danger / warn-fill / green) and an end-floated severity chip in the same colour, so the colour never carries the meaning alone.
+- The legal text itself is never touched by a polish pass; only the wrappers and classes change.
+
+### Help (/help)
+
+- `main.hlp.ds-page.wide.flow` at 1120px. The hero and the sticky filter bar are one unit: the hero has its top radii (18), the bar its bottom radii, and a shared border.
+- Filter controls are 44px (search field with an inset 🔍 at `inset-inline-start: 14px`, role select); the category chips are `.ds-tab`-sized pills (36, 40 on touch) that scroll in one row on phones.
+- The "Ask" box is a gold card (`.ds-card.gold` recipe) with a 44px gold pill submit.
+- Command cards are ds cards with the role colour as the 3px top rule. Role / price / gate badges use the `.ds-tag` shape with the semantic tints (everyone and web = ok, mod = info, admin = danger, gate = warn, price = gold).
+- The copy button is a 36px quiet pill (40 on touch); the `#` permalink is a 32px icon target in muted text.
+
+### Old content pages (info)
+
+- `.ds-page.read`, a `div.ds-head`, then one `.ds-card.lg` per block; flash messages become `.ds-note.danger` / `.ds-note.ok`.
+- **Brand-logo links** (Twitch, Discord, Plex, Jellyfin as images): a 32px pill (`--ds-sunken`, `--ds-line-strong` border, accent on hover) holding a 16px-tall `.ds-ic` image with `alt=""`, and an `aria-label` with the service name on the link.
+- Command lists are a plain `ul` of `code` + description rows, gap 6.
+
+### Standalone pages (friendo)
+
+A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewport meta and `theme-color`, and paints `body` with `--ds-bg`. Its own CSS sizes everything relative to a `min(800px, 100%)` box, and its motion is off under `prefers-reduced-motion`.

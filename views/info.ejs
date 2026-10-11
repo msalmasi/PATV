@@ -1,78 +1,85 @@
-<!-- views/home.ejs -->
+<%# /info - the old "Public Access Info" page (G6 polish: ds-page.read, ds cards and notes; the copy is unchanged) %>
 <%- include('layout', { title: 'Public Access Info', user: user}) %>
-<body>
+<style>
+  .inf .ds-card p { margin: 0; }
+  .inf .ds-card { line-height: 1.6; color: var(--ds-text); }
+  .inf .ds-card > .ln { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-1h); }
+  .inf .brand { display: inline-flex; align-items: center; min-height: 32px; padding: 0 var(--ds-sp-2h); border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); }
+  .inf .brand:hover { border-color: var(--ds-ac); }
+  .inf .brand .ds-ic { width: auto; height: 16px; }
+  .inf .brand .ds-ic > img { width: auto; height: 16px; }
+  .inf .logo { color: var(--ds-brand); font-weight: 700; }
+  .inf .cmds { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--ds-sp-1h); }
+  .inf .cmds code { font-size: .92em; }
+</style>
+<main class="inf ds-page read">
     <% if (errors != "") { %>
-    <div class="panel">
-    <div class="alert alert-danger"><br><br><%= errors %></div>
-    </div>
+    <div class="ds-note danger" role="alert"><span class="ds-ic" aria-hidden="true">⚠️</span><div><%= errors %></div></div>
     <% } %>
     <% if (success != "") { %>
-    <div class="panel">
-    <div class="alert alert-success"><br><br><%= success %></div>
-    </div>
+    <div class="ds-note ok" role="status"><span class="ds-ic" aria-hidden="true">✅</span><div><%= success %></div></div>
     <% } %>
-    <div class="infopanel">
-        <h2>Howdy</h2>
-        <p>Welcome to the home of Public Access TV.</p>
+    <div class="ds-head">
+        <span class="ds-eyebrow">PUBLICACCESS.TV</span>
+        <h1 class="ds-h1">Howdy</h1>
+        <p class="ds-sub">Welcome to the home of Public Access TV.</p>
+    </div>
+    <section class="ds-card lg">
         <p>Public Access TV is a private streaming video platform and community for a group of misfits, weirdos, and oddballs.</p>
-        Watch the livestream on <a href="/" class="infolink"><span class="logo">PublicAccess.tv</span></a> or <a href="https://twitch.tv/publicaccess_ttv" class="inactivePage"><img class="infoImage" src="/public/img/twitch.png" height="16px" width="auto"></a></a><br><br>
-        Join the Public Access community on <a href="https://discord.gg/publicaccess" class="infolink"><img src="/public/img/discord.png" class="infoImage" height="16px" width="auto"></a><br><br>
-        Watch TV and Movies on <a href="https://plex.houseplants.cc/" class="infolink"><img src="/public/img/plex.png" class="infoImage" height="16px" width="auto"></a> or<a href="https://jellyfin.houseplants.cc/" class="infolink"><img src="/public/img/jellyfin.png" class="infoImage" height="16px" width="auto"></a>
-        <!-- Earn PAT (Public Access Tokens) by watching the stream, chatting, or gambling in the <a href="#casino" class="infolink">🎰</a><br><br>
-        Redeem tokens for community perks and rewards in the <a href="/store" class="infolink">🏪</a> -->
-    </div>
+        <p class="ln">Watch the livestream on <a href="/" class="brand infolink"><span class="logo">PublicAccess.tv</span></a> or <a href="https://twitch.tv/publicaccess_ttv" class="brand inactivePage" aria-label="Twitch"><span class="ds-ic"><img class="infoImage" src="/public/img/twitch.png" height="16" alt=""></span></a></p>
+        <p class="ln">Join the Public Access community on <a href="https://discord.gg/publicaccess" class="brand infolink" aria-label="Discord"><span class="ds-ic"><img src="/public/img/discord.png" class="infoImage" height="16" alt=""></span></a></p>
+        <p class="ln">Watch TV and Movies on <a href="https://plex.houseplants.cc/" class="brand infolink" aria-label="Plex"><span class="ds-ic"><img src="/public/img/plex.png" class="infoImage" height="16" alt=""></span></a> or <a href="https://jellyfin.houseplants.cc/" class="brand infolink" aria-label="Jellyfin"><span class="ds-ic"><img src="/public/img/jellyfin.png" class="infoImage" height="16" alt=""></span></a></p>
+    </section>
 
-    <div class="infopanel">
-        <h2 id="PAT">What is PAT?</h2>
-        <p>PAT (Public Access Token) is our community token. You can use your tokens to buy community perks, Plex or Jellyfin invites, and other prizes from the <a href="/store" class="infolink">🏪</a>.</p>
-        Earn PAT (Public Access Tokens) by watching the stream, chatting, or gambling in the casino:<br><br>
-
+    <section class="ds-card lg">
+        <h2 class="ds-h2 dot" id="PAT">What is PAT?</h2>
+        <p>PAT (Public Access Token) is our community token. You can use your tokens to buy community perks, Plex or Jellyfin invites, and other prizes from the <a href="/store" class="infolink" aria-label="store"><span class="ds-ic">🏪</span></a>.</p>
+        <p>Earn PAT (Public Access Tokens) by watching the stream, chatting, or gambling in the casino:</p>
         <% if (typeof user == 'undefined' || !user) { %>
-        <a href="/login" class="infolink">Spin the Wheel of Fortune <img class="infoImage" src="/public/img/star.gif" height="16px" width="auto"></a><br><br>
+        <p><a href="/login" class="infolink">Spin the Wheel of Fortune <span class="ds-ic"><img class="infoImage" src="/public/img/star.gif" width="16" height="16" alt=""></span></a></p>
         <% } else { %>
-        <a href="/u/<%= user %>/wheel" class="infolink">Spin the Wheel of Fortune <img src="/public/img/star.gif" height="16px" width="auto"></a><br><br>
+        <p><a href="/u/<%= user %>/wheel" class="infolink">Spin the Wheel of Fortune <span class="ds-ic"><img src="/public/img/star.gif" width="16" height="16" alt=""></span></a></p>
         <% } %>
-        Start a poker game or play blackjack on <a href="https://discord.com/channels/913269267691094026/1192942144458084433" class="infolink"><img src="/public/img/discord.png" class="infoImage" height="16px" width="auto"></a>
-        <br><br>Winning contests and earning bonuses.
-        <br><br>More games coming soon.
-    </div>
+        <p class="ln">Start a poker game or play blackjack on <a href="https://discord.com/channels/913269267691094026/1192942144458084433" class="brand infolink" aria-label="Discord"><span class="ds-ic"><img src="/public/img/discord.png" class="infoImage" height="16" alt=""></span></a></p>
+        <p>Winning contests and earning bonuses.</p>
+        <p>More games coming soon.</p>
+    </section>
 
-    <div class="infopanel">
-        <h2>Discord Commands</h2>
-        <p>/balance: Check your balance.</p>
-        <p>/tip: Tip a user.</p>
-        <p>/spin: Spin the channel Wheel.</p>
-        /chips check: See your poker chip balance.
-    </div>
+    <section class="ds-card lg">
+        <h2 class="ds-h2 dot">Discord Commands</h2>
+        <ul class="cmds">
+          <li><code>/balance</code>: Check your balance.</li>
+          <li><code>/tip</code>: Tip a user.</li>
+          <li><code>/spin</code>: Spin the channel Wheel.</li>
+          <li><code>/chips check</code>: See your poker chip balance.</li>
+        </ul>
+    </section>
 
-    <div class="infopanel">
-        <h2 id="casino">Poker Commands</h2>
+    <section class="ds-card lg">
+        <h2 class="ds-h2 dot" id="casino">Poker Commands</h2>
         <p>Go to the <a href="https://discord.com/channels/913269267691094026/1192942161747001344" class="infolink">#poker</a> channel</p>
-        <p>/buyin: Buy poker chips.</p>
-        <p>/cashout: Cashout poker chips.</p>
-        <p>/chips beg: Beg for chips.</p>
-        /new-game [sb-bb]: Start a poker table.
-    </div>
+        <ul class="cmds">
+          <li><code>/buyin</code>: Buy poker chips.</li>
+          <li><code>/cashout</code>: Cashout poker chips.</li>
+          <li><code>/chips beg</code>: Beg for chips.</li>
+          <li><code>/new-game [sb-bb]</code>: Start a poker table.</li>
+        </ul>
+    </section>
 
-    <div class="infopanel">
-        <h2 id="casino">Blackjack Commands</h2>
+    <section class="ds-card lg">
+        <h2 class="ds-h2 dot" id="blackjack">Blackjack Commands</h2>
         <p>Go to the <a href="https://discord.com/channels/913269267691094026/1192942144458084433" class="infolink">#blackjack</a> channel</p>
-        <p>!bj [bet amount]: Play a round of Blackjack.</p>
-    </div>
+        <ul class="cmds">
+          <li><code>!bj [bet amount]</code>: Play a round of Blackjack.</li>
+        </ul>
+    </section>
 
-    <div class="infopanel">
-        <h2 id="casino">Twitch Commands</h2>
-        <p>!balance: Check your balance.</p>
-        <p>!tip: Tip a user.</p>
-        !spin: Spin the channel Wheel.
-    </div>
-
-
-</body>
-
-
-
-
-
-
-
+    <section class="ds-card lg">
+        <h2 class="ds-h2 dot" id="twitch">Twitch Commands</h2>
+        <ul class="cmds">
+          <li><code>!balance</code>: Check your balance.</li>
+          <li><code>!tip</code>: Tip a user.</li>
+          <li><code>!spin</code>: Spin the channel Wheel.</li>
+        </ul>
+    </section>
+</main>
