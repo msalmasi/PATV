@@ -53,7 +53,7 @@ The commands are for the VPS (`ssh patv-vps`) and the prod VM (`ssh pepe-prod`, 
 3. The 06:00 UTC read-only epoch check is clean.
 4. Prod runs the shas listed in the agent report:
    - `curl -s https://publicaccess.tv/healthz` is ok;
-   - `Get-Content C:\PATV\camfrog-bot\VERSION` is ≥ 1.99nz.
+   - `Get-Content C:\PATV\camfrog-bot\VERSION` is ≥ 1.99oi (bot) and the site has 054c954.
 5. It is not within 04:00 ± 20 min UTC.
 
 **S1. Backups** (§2). Pass: both files exist and are non-empty.
