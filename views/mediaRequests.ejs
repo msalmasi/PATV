@@ -6,6 +6,8 @@
   <div class="sb-head">
     <h1>🎬 Request a movie or show</h1>
     <p class="lede">Ask for something that isn't on our Plex server yet. You'll get a 🔔 notice when it's ready to watch.</p>
+    <% const tR_ = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); %>
+    <p class="muted"><a href="/plex">‹ 📼 <%- tR_('nav.plex') %></a></p>
   </div>
   <% if (!on) { %>
     <section class="sb-card"><p class="note">Requests aren't open right now — check back soon<%= admin ? ' (admins: /admin/media)' : '' %>.</p></section>

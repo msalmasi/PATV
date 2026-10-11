@@ -462,7 +462,7 @@
           <button type="button" class="btn plex" id="plexLinkBtn" data-back="profile"<%= locals.plexPin ? ' data-pin="' + locals.plexPin + '"' : '' %>><%- t('settings.connections.plex_link') %></button>
         <% } else { %><span></span><% } %>
         <div class="conn-cf"><span class="status" id="plexStatus" role="status" aria-live="polite"></span>
-          <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %></span></div>
+          <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %> <a href="/plex">📼 <%- t('nav.plex') %> ›</a></span></div>
       </div>
       <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
       <% const tg_ = locals.telegram || { linked: false, handle: null }; %>

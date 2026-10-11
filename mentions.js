@@ -322,7 +322,8 @@ function register(app, { addUser }) {
     try {
       const boot = { ...(await get(req.user.userId)), rooms: await rooms(req.user), wordsMax: WORDS_MAX, hourMax: HOUR_MAX };
       res.set({ "Cache-Control": "no-store", "X-Robots-Tag": "noindex" });
-      res.render("mentions", { title: "Mention alerts", user: req.user.username, boot });
+      const golive = await require("./golive").prefs(req.user.userId).catch(() => null);   // 1.99kp
+      res.render("mentions", { title: "Mention alerts", user: req.user.username, boot, golive });
     } catch (e) {
       console.error("[mentions] page:", e.message);
       res.status(500).send("Couldn't load your mention alerts.");

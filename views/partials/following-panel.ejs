@@ -6,18 +6,22 @@
 %><% const F_ = follow || { rooms: [], people: [], followers: [], prefs: { notify: false } }; %>
 <section class="fl" aria-label="<%- t('feed.fl.aria') %>">
   <label class="fl-notify"><input type="checkbox" data-follow-notify<%= F_.prefs.notify ? ' checked' : '' %>> 🔔 <%- t('feed.fl.notify') %></label>
+  <%# 1.99kp: 🎥 go-live alerts (golive.js) - everything you follow, and per follow (🎥 by each name below) %>
+  <% const GL_ = F_.golive || { alerts: true, pm: false }; %>
+  <label class="fl-notify"><input type="checkbox" data-golive-pref="alerts"<%= GL_.alerts ? ' checked' : '' %>> 🎥 <%- t('feed.fl.golive') %></label>
+  <label class="fl-notify"><input type="checkbox" data-golive-pref="pm"<%= GL_.pm ? ' checked' : '' %>> 🐸 <%- t('feed.fl.golive_pm') %></label>
   <details class="fl-lists">
     <summary><%- t('feed.following') %> <b><%= F_.rooms.length + F_.people.length %></b> · <%- t('feed.fl.followers') %> <b><%= F_.followers.length %></b> <span class="mut"><%- t('feed.fl.only_you') %></span></summary>
     <div class="fl-cols">
       <div>
         <h3><%- t('feed.fl.pads') %></h3>
         <% if (!F_.rooms.length) { %><p class="mut"><%- t('feed.fl.no_pads') %></p><% } %>
-        <ul><% F_.rooms.forEach((r) => { %><li><a href="<%= r.href %>"><%= r.label %></a> <%- include('follow-btn', { kind: 'room', id: r.id, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
+        <ul><% F_.rooms.forEach((r) => { %><li><a href="<%= r.href %>"><%= r.label %></a> <%- include('follow-btn', { kind: 'room', id: r.id, following: true, signed: true, next: here, small: true }) %> <button type="button" class="fw-btn sm fl-live<%= r.live !== false ? ' on' : '' %>" data-golive-kind="room" data-golive-id="<%= r.id %>" aria-pressed="<%= r.live !== false ? 'true' : 'false' %>" title="<%- t('feed.fl.golive_one') %>" aria-label="<%- t('feed.fl.golive_one') %>">🎥</button></li><% }) %></ul>
       </div>
       <div>
         <h3><%- t('feed.fl.people') %></h3>
         <% if (!F_.people.length) { %><p class="mut"><%- t('feed.fl.no_people') %></p><% } %>
-        <ul><% F_.people.forEach((u) => { %><li><a href="<%= u.href %>"><%= u.label %></a> <%- include('follow-btn', { kind: 'user', id: u.username, following: true, signed: true, next: here, small: true }) %></li><% }) %></ul>
+        <ul><% F_.people.forEach((u) => { %><li><a href="<%= u.href %>"><%= u.label %></a> <%- include('follow-btn', { kind: 'user', id: u.username, following: true, signed: true, next: here, small: true }) %> <button type="button" class="fw-btn sm fl-live<%= u.live !== false ? ' on' : '' %>" data-golive-kind="user" data-golive-id="<%= u.username %>" aria-pressed="<%= u.live !== false ? 'true' : 'false' %>" title="<%- t('feed.fl.golive_one') %>" aria-label="<%- t('feed.fl.golive_one') %>">🎥</button></li><% }) %></ul>
       </div>
       <div>
         <h3><%- t('feed.fl.your_followers') %></h3>

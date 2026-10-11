@@ -172,6 +172,28 @@
       <h4>Scheduled</h4><ul class="mylist" id="schedList"></ul>
       <h4>Queue (next up when a slot frees)</h4><ul class="mylist" id="queueList"></ul>
     </div>
+    <% if (typeof golive !== 'undefined' && golive !== null) { const tG_ = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); %>
+    <%# 1.99kp: 🎥 stream-start announcements (golive.js) - the pad's live chat on PATV + Pepe in the Camfrog room %>
+    <div class="sb-card ps-card" id="golive">
+      <h3><%- tG_('pad.settings.golive.title') %></h3>
+      <label class="ps-switch"><input type="checkbox" id="psGolive" data-url="/api/rooms/<%= encodeURIComponent(slug) %>/golive"<%= golive ? ' checked' : '' %>><span class="ps-sw" aria-hidden="true"></span>
+        <span><%- tG_('pad.settings.golive.label') %><small><%- tG_('pad.settings.golive.hint') %></small></span></label>
+      <p class="fc-err" id="psGoliveErr" role="alert"></p>
+    </div>
+    <script>
+    (function () {
+      var c = document.getElementById('psGolive'); if (!c) return;
+      c.addEventListener('change', function () {
+        var err = document.getElementById('psGoliveErr'); err.textContent = ''; c.disabled = true;
+        fetch(c.getAttribute('data-url'), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+          body: JSON.stringify({ announce: c.checked }) }).then(function (r) { return r.json(); })
+          .then(function (d) { if (!d.ok) { err.textContent = d.error || __t('js.golive.failed', 'Couldn’t save — try again.'); c.checked = !c.checked; } })
+          .catch(function () { err.textContent = __t('js.golive.failed', 'Couldn’t save — try again.'); c.checked = !c.checked; })
+          .then(function () { c.disabled = false; });
+      });
+    })();
+    </script>
+    <% } %>
     <div class="sb-card ps-card">
       <h3>Slots, prices &amp; approval</h3>
       <form id="stageForm" class="settings ps-form">

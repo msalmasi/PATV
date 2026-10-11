@@ -541,6 +541,7 @@ async function book(user, opts = {}) {
       link: `/p/${encodeURIComponent(RS.slug)}/settings#stage`, ref: "stage-req:" + out.id }).catch(() => {});
   }
   const slot = await getSlot(out.id);
+  if (slot && slot.status === "active" && slot.went_live) require("./golive").slotLive(slot);   // 1.99kp: an embed on now
   return { slot: view(slot), key, rtmp: key ? { server: RTMP_PUBLIC, key } : null };
 }
 
@@ -804,6 +805,7 @@ async function tickFuture(t) {
     if (r.changes) {
       pubCache.clear();
       await event(s.id, "opened", "system", "scheduled", s.room_id);
+      if (embed) require("./golive").slotLive(s);   // 1.99kp: an embed slot is live the moment it opens
       if (!embed) {
         rooms.notify(s.userId, { kind: "stage", title: `Your stage slot in ${RS.title} is open - go live`,
           body: `Start streaming within ${C.start_window_min} min of the start time or it's cancelled and refunded.`, link: "/stage", ref: "stage-open:" + s.id }).catch(() => {});
@@ -965,7 +967,10 @@ async function goLive(s, t, via) {
                             went_live = COALESCE(went_live, ?), last_live = ? WHERE id = ? AND settled = 0`, [t, via || null, t, t, s.id]);
   if (!r.changes) return false;
   pubCache.clear();
-  if (!s.went_live) event(s.id, "live", s.username, via || "rtmp", s.room_id);
+  if (!s.went_live) {
+    event(s.id, "live", s.username, via || "rtmp", s.room_id);
+    require("./golive").slotLive(s);          // 1.99kp: 🎥 followers + the pad's announcement (once per stream)
+  }
   return true;
 }
 /** The open slot streaming under this public stream name (WHEP / HLS reads), or null. */

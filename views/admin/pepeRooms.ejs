@@ -1,0 +1,109 @@
+<%- include('../partials/admin-open', { title, user, section: 'pepe', admIsAdmin: isAdmin }) %>
+<%# 1.99kp: control the Camfrog rooms Pepe is in (roomctl.js -> website action room.ctl -> camfrog-bot pepe_roomctl.py). Admins only. %>
+<div class="adm-head">
+  <h1>Pepe's rooms</h1>
+  <p>The Camfrog rooms Pepe is in right now. Join, leave, pick his active room (his mic/cam window and the main stage) and mute a room's sound. The same controls are on his own admin panel on the VM (port 8766, "Rooms Pepe is in").</p>
+</div>
+
+<section class="adm-card" id="rooms" aria-labelledby="rmT">
+  <h2 id="rmT">In the rooms <span class="adm-pill admin">admins</span> <span class="adm-pill" id="rmOnline"><%= v.online ? 'live' : 'offline' %></span></h2>
+  <p class="adm-help">People / on the mic are known for bridged rooms only. Mute with net audio on also stops transcribing that room (<code>!audioroom -room</code>). Make active is refused while a game or Pepe's mic would be cut short, unless you tick force.</p>
+  <div class="adm-tbl-wrap"><table class="adm-tbl"><thead><tr><th>Room</th><th class="num">👥</th><th class="num">🎙</th><th>Active</th><th>Sound</th><th></th></tr></thead>
+    <tbody id="rmRows"><tr><td colspan="6" class="adm-help">Loading…</td></tr></tbody></table></div>
+  <p class="adm-help" id="rmAudio"></p>
+  <div class="adm-actions"><label><input type="checkbox" id="rmForce"> force (Make active even mid-game / mid-mic)</label>
+    <button type="button" data-rc="active" data-room="auto" class="adm-btn ghost">Active: auto</button></div>
+</section>
+
+<section class="adm-card" id="join" aria-labelledby="jnT">
+  <h2 id="jnT">Join a room</h2>
+  <p class="adm-help">The name on the room's tab (e.g. Pepe's Pad) or its id. The password is used once and not stored (add the room to Auto-join on Pepe's panel to keep it). Pepe can only join while Camfrog is running on his VM.</p>
+  <form class="adm-form" id="rmJoin" autocomplete="off">
+    <label>Room <input type="text" id="rmName" maxlength="64" required></label>
+    <label>Password (optional) <input type="password" id="rmPw" maxlength="64" autocomplete="new-password"></label>
+    <div class="adm-actions"><button type="submit">Join</button></div>
+  </form>
+</section>
+
+<section class="adm-card" id="log" aria-labelledby="lgT">
+  <h2 id="lgT">Recent changes</h2>
+  <p class="adm-msg" id="rmMsg" role="status" aria-live="polite"></p>
+  <ul id="rmLog" class="adm-help"></ul>
+</section>
+
+<script>
+(function () {
+  'use strict';
+  var V = <%- JSON.stringify(v).replace(/</g, '\\u003c') %>;
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function btn(verb, room, label) { var b = el('button', 'adm-btn ghost', label); b.type = 'button'; b.setAttribute('data-rc', verb); b.setAttribute('data-room', room); return b; }
+  function when(ms) { return ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''; }
+  function render() {
+    var st = V.state || { rooms: [] };
+    document.getElementById('rmOnline').textContent = V.online ? 'live' : 'offline' + (V.at ? ' (last seen ' + when(V.at) + ')' : '');
+    var body = document.getElementById('rmRows');
+    body.textContent = '';
+    if (!st.rooms.length) {
+      var tr0 = el('tr'); var td0 = el('td', 'adm-help', V.online ? 'Pepe is not in any room.' : 'No report from Pepe yet.'); td0.colSpan = 6; tr0.appendChild(td0); body.appendChild(tr0);
+    }
+    st.rooms.forEach(function (r) {
+      var tr = el('tr');
+      var n = el('td'); n.appendChild(el('b', null, r.name)); if (r.name !== r.id) n.appendChild(el('div', 'adm-help', r.id));
+      if (r.autojoin) n.appendChild(el('span', 'adm-pill', 'auto-join'));
+      tr.appendChild(n);
+      tr.appendChild(el('td', 'num', r.count == null ? '–' : String(r.count)));
+      tr.appendChild(el('td', 'num', r.mic == null ? '–' : String(r.mic)));
+      var a = el('td'); if (r.active) a.appendChild(el('span', 'adm-pill', st.pinned ? 'active (pinned)' : 'active (auto)')); else a.appendChild(btn('active', r.id, 'Make active'));
+      tr.appendChild(a);
+      var s = el('td'); s.appendChild(r.muted === true ? btn('unmute', r.id, '🔇 Unmute') : btn('mute', r.id, '🔊 Mute'));
+      tr.appendChild(s);
+      var l = el('td'); l.appendChild(btn('leave', r.id, 'Leave')); tr.appendChild(l);
+      body.appendChild(tr);
+    });
+    document.getElementById('rmAudio').textContent = 'Audio: ' + (st.net_audio ? 'net audio (each room its own sound)' : 'one room at a time - ' + (st.audio_room || 'all rooms'))
+      + (st.busy ? ' · now: ' + st.busy.verb + ' ' + st.busy.room + '…' : '');
+    var log = document.getElementById('rmLog');
+    log.textContent = '';
+    (V.actions || []).forEach(function (x) {
+      var mark = x.status === 'done' ? '✅ ' : x.status === 'failed' ? '❌ ' : '⏳ ';
+      log.appendChild(el('li', null, mark + when(x.created) + ' ' + (x.username || '') + ': ' + (x.label || '') + (x.message ? ' - ' + x.message : '')));
+    });
+  }
+  function load() {
+    return fetch('/api/admin/pepe/rooms', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.ok) { V = d; render(); } }).catch(function () {});
+  }
+  function send(body) {
+    var msg = document.getElementById('rmMsg');
+    msg.textContent = '…';
+    return fetch('/api/admin/pepe/rooms', { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { msg.textContent = d.ok ? 'Sent to Pepe - the result shows below in a few seconds.' : '❌ ' + (d.error || 'failed'); load(); })
+      .catch(function () { msg.textContent = '❌ The site did not answer.'; });
+  }
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('button[data-rc]') : null;
+    if (!b) return;
+    var verb = b.getAttribute('data-rc'), room = b.getAttribute('data-room');
+    if (verb === 'leave' && !confirm('Leave ' + room + '?')) return;
+    var body = { verb: verb, room: room };
+    if (verb === 'active' && room !== 'auto' && document.getElementById('rmForce').checked) body.force = true;
+    send(body);
+  });
+  document.getElementById('rmJoin').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var name = document.getElementById('rmName').value.trim(), pw = document.getElementById('rmPw');
+    if (!name) return;
+    var body = { verb: 'join', room: name };
+    if (pw.value) body.password = pw.value;
+    pw.value = '';
+    send(body);
+  });
+  render();
+  setInterval(function () { if (!document.hidden) load(); }, 5000);
+})();
+</script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

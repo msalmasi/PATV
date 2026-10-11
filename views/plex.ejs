@@ -1,0 +1,134 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /plex — 1.99kp (plexhub.js): the 📼 Plex hub. Requests (mediarequests.js), your requests, your Plex access
+    (plexmembers.js / subscriptions.js), 📼 Play from Plex on the Go-live page (medialib.js) and the members' perks.
+    Read-only: every action links to its own page. %>
+<%- include('layout', { title: title, user: user }) %>
+<%- include('partials/legal-css') %>
+<style>
+  .px .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
+  .px .card h2 { border: 0; padding: 0; margin: 0 0 8px; font-size: 18px; }
+  .px .mut { color: #9a9a9a; font-size: 13.5px; }
+  .px .it { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid #1e1e1e; }
+  .px .it:first-of-type { border-top: 0; }
+  .px .it .w { min-width: 0; flex: 1 1 240px; overflow-wrap: anywhere; }
+  .px .it b { color: #fff; }
+  .px .st { font-size: 14px; color: #cfcfcf; }
+  .px .st.ok { color: #a5d6a7; } .px .st.warn { color: #ffd479; } .px .st.off { color: #9a9a9a; }
+  .px .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .px a.bt { padding: 7px 13px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font-size: 14px; text-decoration: none; display: inline-block; }
+  .px a.bt.pri { background: #e5a00d; border-color: #e5a00d; color: #1a1200; font-weight: bold; }
+  .px .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; background: linear-gradient(90deg, #cc7b19, #e5a00d); color: #1a1200; font-size: 13px; font-weight: bold; }
+  .px .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; font-size: 12.5px; color: #ccc; white-space: nowrap; }
+  .px .pill.st-available { border-color: #2e7d32; color: #a5d6a7; } .px .pill.st-declined, .px .pill.st-failed, .px .pill.st-error, .px .pill.st-removed { border-color: #5a2a2a; color: #ffb4b4; }
+  .px .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0 14px; }
+  .px ul.perks { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; }
+  .px .rq-row { display: flex; gap: 10px; align-items: center; }
+  .px .rq-row img { width: 34px; height: 51px; object-fit: cover; border-radius: 4px; flex: none; background: #222; }
+</style>
+<%
+  const fmt = (n) => t.num(Math.round(Number(n) || 0));
+  const d = (ms) => ms ? t.date(Number(ms), { dateStyle: 'medium' }) : '';
+  const R_ = requests;
+  const live = plex && plex.member;
+  const rows = (plex && plex.rows) || [];
+  const price_ = (n) => Number(n) > 0 ? t('plex.req.price', { n: fmt(n) }) : t('plex.req.free');
+  const stKey_ = (s) => ['submitting', 'pending', 'approved', 'partial', 'available', 'declined', 'failed', 'removed', 'error'].includes(s) ? 'plex.st.' + s : null;
+%>
+<main class="lg px">
+  <header class="hero">
+    <div class="eyebrow">📼 <%- t('plex.eyebrow') %></div>
+    <h1><%- t('plex.h1') %></h1>
+    <p class="lead"><%- t('plex.lead') %></p>
+  </header>
+
+  <div class="grid">
+  <section class="card" aria-labelledby="pxReqH" id="request">
+    <h2 id="pxReqH">🍿 <%- t('plex.req.h') %></h2>
+    <% if (!R_.on) { %>
+      <p class="st off"><%- t('plex.req.off') %></p>
+    <% } else { %>
+      <p><%- t('plex.req.what') %></p>
+      <div class="it"><div class="w"><b><%- t('plex.req.movie') %></b></div><span><%- price_(R_.price.movie) %></span></div>
+      <div class="it"><div class="w"><b><%- t('plex.req.show') %></b></div><span><%- price_(R_.price.tv) %></span></div>
+      <p class="mut"><%- t('plex.req.per_day', { n: R_.perDay }) %><% if (signedIn && (R_.credits.movie || R_.credits.tv)) { %> · <%- t('plex.req.credits', { movie: R_.credits.movie, tv: R_.credits.tv }) %><% } %></p>
+    <% } %>
+    <div class="acts"><a class="bt pri" href="/requests"><%- t('plex.req.go') %></a></div>
+  </section>
+
+  <section class="card" aria-labelledby="pxMineH" id="mine">
+    <h2 id="pxMineH">📋 <%- t('plex.mine.h') %></h2>
+    <% if (!signedIn) { %>
+      <p class="mut"><%- t('plex.mine.signin', { link: '<a href="/login?next=%2Fplex">' + t('nav.signin') + '</a>' }) %></p>
+    <% } else if (!R_.mine.length) { %>
+      <p class="mut"><%- t('plex.mine.none') %></p>
+    <% } else { %>
+      <% R_.mine.forEach((r) => { const k_ = stKey_(r.status); %>
+      <div class="it"><div class="w rq-row"><% if (r.poster) { %><img src="<%= r.poster %>" alt="" loading="lazy" referrerpolicy="no-referrer"><% } %><span><b><%= r.title %></b><%= r.year ? ' (' + r.year + ')' : '' %> <span class="mut">· <%- r.type === 'tv' ? t('plex.req.show') : t('plex.req.movie') %> · <%= d(r.created) %></span></span></div>
+        <span class="pill st-<%= r.status %>"><%- k_ ? t(k_) : r.label %></span></div>
+      <% }) %>
+      <div class="acts"><a class="bt" href="/requests#mine"><%- t('plex.mine.all') %></a></div>
+    <% } %>
+  </section>
+  </div>
+
+  <section class="card" aria-labelledby="pxAccH" id="access">
+    <h2 id="pxAccH">🔑 <%- t('plex.acc.h') %></h2>
+    <% if (!signedIn) { %>
+      <p class="mut"><%- t('plex.acc.signin', { link: '<a href="/login?next=%2Fplex">' + t('nav.signin') + '</a>' }) %></p>
+    <% } else if (live) { %>
+      <p class="st ok"><span class="chip">📼 Plex</span> <%- t('subs.plex_member', { plex: live.username || '?' }) %>
+        <%- live.access === 'owner' ? t('subs.plex_owner') : live.access === 'lifetime' ? t('subs.plex_lifetime') : (live.access === 'manual' || live.access === 'pre-existing') ? t('subs.plex_kept') : live.expires ? t('subs.plex_until', { date: d(live.expires) }) : '' %></p>
+    <% } else if (rows.some((r) => r.pending)) { %>
+      <p class="st warn"><%- t('subs.plex_pending', { plex: rows.find((r) => r.pending).username || '?' }) %></p>
+    <% } else if (rows.length) { %>
+      <p class="st off"><%- t('subs.plex_linked_off', { plex: rows[0].username || '?' }) %></p>
+    <% } else { %>
+      <p class="st off"><%- t('subs.plex_none') %></p>
+    <% } %>
+    <% if (sub && sub.live) { %><p class="mut">🔁 <%- t('plex.acc.sub', { date: d(sub.until) }) %></p><% } %>
+    <% if (invites.length) { %>
+      <h3 style="margin:12px 0 2px;font-size:16px"><%- t('subs.plex_get_h') %></h3>
+      <% invites.forEach((x) => { %>
+      <div class="it"><div class="w"><b><%= x.title %></b> <span class="mut">· <%= fmt(x.price) %> PAT<%- x.days ? ' · ' + t('plex.acc.days', { n: x.days }) : ' · ' + t('plex.acc.lifetime') %></span></div>
+        <a class="bt" href="/shop/item/<%= encodeURIComponent(x.prize_id) %>"><%- t('subs.view') %></a></div>
+      <% }) %>
+    <% } else if (!invitesOn) { %>
+      <p class="mut"><%- t('plex.acc.no_items') %></p>
+    <% } %>
+    <div class="acts">
+      <% if (signedIn) { %><a class="bt pri" href="/subscriptions#plex"><%- t('plex.acc.manage') %></a><% } %>
+      <a class="bt" href="/shop"><%- t('nav.shop') %></a>
+      <% if (signedIn) { %><a class="bt" href="/u/<%= encodeURIComponent(user) %>/edit#connections"><%- t('plex.acc.link') %></a><% } %>
+    </div>
+  </section>
+
+  <div class="grid">
+  <section class="card" aria-labelledby="pxPlayH" id="play">
+    <h2 id="pxPlayH"><%- t('stage.px.choice') %></h2>
+    <p><%- t('plex.play.what') %></p>
+    <% if (!library.open) { %>
+      <p class="st off"><%- t('plex.play.off') %></p>
+    <% } else if (play && play.ok && play.member) { %>
+      <p class="st ok"><%- t('plex.play.member', { n: library.freeCap }) %></p>
+    <% } else if (play && play.ok && play.free) { %>
+      <p class="st ok"><%- t('plex.play.free') %></p>
+    <% } else { %>
+      <p class="mut"><%- t('plex.play.price', { price: fmt(library.price), n: library.paidCap }) %> <%- t('plex.play.member_free', { n: library.freeCap }) %></p>
+    <% } %>
+    <div class="acts"><a class="bt pri" href="/stage?mode=plex#srcSet"><%- t('plex.play.go') %></a></div>
+  </section>
+
+  <section class="card" aria-labelledby="pxPerkH" id="perks">
+    <h2 id="pxPerkH">✨ <%- t('plex.perks.h') %></h2>
+    <ul class="perks">
+      <li><%- t('plex.perks.server') %></li>
+      <li><%- t('plex.perks.play', { n: library.freeCap }) %></li>
+      <% if (perks.flair) { %><li><%- t('plex.perks.flair') %></li><% } %>
+      <li><%- t('plex.perks.ach', { link: '<a href="/achievements">' + t('subs.plex_ach_link') + '</a>' }) %></li>
+      <% if (perks.sso) { %><li><%- t('plex.perks.sso') %></li><% } %>
+    </ul>
+  </section>
+  </div>
+</main>
+</body>
+</html>

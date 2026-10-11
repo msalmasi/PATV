@@ -60,6 +60,7 @@ async function hubData(R, viewer, app) {
     staff: rooms.isStaff(viewer), admin: !!viewer && viewer.class === "Admin",
     // stage + page + royalties (was /manage)
     st: await stage.ownerState(R.id), C: stage.config(), roy: R.owner ? await royalties.status(R.id, R.owner.userId) : null,
+    golive: R.profile ? null : await require("./golive").padAnnounce(R.id),      // 1.99kp: 🎥 announce stream starts in the pad
     bridge: B ? { live: Date.now() - B.updated < 90000, relay: !!B.relay, mic: !!B.micRelay, cams: !!B.cams, audio: B.audioOn != null ? !!B.audioOn : !!B.audio,   // 1.99ia: the switch, not "streaming now"
               audioLive: !!B.audio, audioWhy: B.audioWhy || "", transcripts: B.transcripts !== false } : null,
     analytics: app ? rooms.hasRoute(app, "/p/:slug/analytics") : false,

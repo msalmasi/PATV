@@ -77,7 +77,16 @@
       <span class="msg" id="mnMsg" role="status" aria-live="polite"></span>
     </div>
   </form>
+  <%# 1.99kp: 🎥 go-live alerts (golive.js) - saved on change by public/js/follow.js, outside the mentions form %>
+  <% const GL_ = typeof golive !== 'undefined' && golive ? golive : { alerts: true, pm: false }; %>
+  <section class="card" aria-labelledby="mnGlH" id="golive">
+    <h2 id="mnGlH">🎥 <%- t('settings.golive.title') %></h2>
+    <p class="muted"><%- t('settings.golive.what', { link: '<a href="/feed/following">' + t('feed.following') + '</a>' }) %></p>
+    <label class="fl-notify"><input type="checkbox" data-golive-pref="alerts"<%= GL_.alerts ? ' checked' : '' %>> <%- t('feed.fl.golive') %></label>
+    <label class="fl-notify"><input type="checkbox" data-golive-pref="pm"<%= GL_.pm ? ' checked' : '' %>> 🐸 <%- t('feed.fl.golive_pm') %></label>
+  </section>
 </main>
+<script src="/public/js/follow.js?v=2" defer></script>
 <script type="application/json" id="mnBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
 <script>
 (function () {

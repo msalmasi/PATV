@@ -1153,6 +1153,7 @@ require("./stripebilling").register(app, { addUser });
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
+require("./golive").register(app, { addUser });   // 1.99kp: 🎥 go-live alerts + stream-start announcements
 messages.register(app, { isBotToken, addUser });   // 1.99cp: direct messages + Pepe's Camfrog alerts for them
 require("./stories").register(app, { addUser });   // 1.99bz: Pepe's captures as stories
 require("./feedseen").register(app, { addUser });  // 1.99ex: the feed's "N new" seen state per account (GET/POST /api/feed/seen)
@@ -1169,6 +1170,7 @@ require("./bounties").register(app, { isBotToken, addUser });
 require("./mainstage").register(app, { isBotToken, addUser });
 require("./restream").register(app, { addUser });   // 1.99fk: "Also stream to Twitch" relay (deploy/restream)
 require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - 📼 play from library on a stage (deploy/mediactl), 🎬 Overseerr requests (/requests), 🎟️ Wizarr invites; /admin/media
+require("./plexhub").register(app, { addUser });   // 1.99kp: 📼 /plex - the Plex hub (requests, your requests, access, Play from Plex, perks)
 require("./plexmembers").register(app, { addUser });   // 1.99jp: 📼 which PATV users are on our Plex server (hourly sync via mediactl), links, PATV-sold access + removal review
 require("./subscriptions").register(app, { addUser }); // 1.99jp: 🔁 store subscriptions (Plex monthly) + /subscriptions (also Prime Time / Season Pass auto-renew)
 // 1.99cr: viewers snap / clip the stages (server-side from the HLS on disk) -> the pad's story
@@ -1192,6 +1194,7 @@ require("./userstats").register(app, { isBotToken });
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation
 require("./roomstats").register(app, { isBotToken, addUser });   // /p/:slug/analytics (before bridge: it adds the pad pages' analytics links)
 require("./pepecontrol").register(app, { isBotToken, addUser });
+require("./roomctl").register(app, { isBotToken, addUser });   // 1.99kp: 📡 /admin/pepe/rooms - join / leave / active / mute Pepe's Camfrog rooms
 require("./burns").register(app, { isBotToken, addUser });   // 1.99dk: PAT burning - the burn reserve's public log + admin burns   // admin-only Pepe control panel (homepage) + VM supervisor poll/ack
 // 1.99bi: room owners + per-room stages + royalties (pad owner dashboard /p/:slug/manage, /pads/admin)
 require("./roomsweb").register(app, { isBotToken, addUser });

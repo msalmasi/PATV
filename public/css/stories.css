@@ -212,3 +212,4 @@ html.sv-open, html.sv-open body { overflow: hidden; }
 .pf-story .pf-story-set { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #bbb; margin-top: 8px; }
 .pf-story .pf-story-set input { accent-color: #4caf50; }
 .sv-where { color: #c6e94f !important; text-decoration: none; }
+.fl-live:not(.on) { opacity: .45; }   /* 1.99kp: a follow with go-live alerts off */

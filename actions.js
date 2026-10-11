@@ -149,6 +149,8 @@ function register(app, { isBotToken, addUser }) {
       await runQuery("UPDATE pepe_actions SET status = ?, message = ?, code = ?, hint = ?, incident = ?, updated = ? WHERE id = ?",
         [r.ok ? "done" : "failed", String(r.message || "").slice(0, 400), code, hint, incident, Date.now(), parseInt(r.id, 10) || 0]);
     }
+    // 1.99kp: a room.ctl join's password is blanked as soon as Pepe has answered (roomctl.js)
+    if (((req.body || {}).results || []).length) require("./roomctl").scrubPasswords().catch(() => {});
     res.json({ ok: true });
   });
 }

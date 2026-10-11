@@ -34,6 +34,9 @@ function init() {
         PRIMARY KEY (follower, target_kind, target_id))`);
       await runQuery("CREATE INDEX IF NOT EXISTS follows_target ON follows (target_kind, target_id)");
       await runQuery("CREATE TABLE IF NOT EXISTS follow_prefs (user_id TEXT PRIMARY KEY, notify_posts INTEGER NOT NULL DEFAULT 0, updated INTEGER)");
+      // 1.99kp: per follow, go-live alerts (golive.js): NULL / 1 = on, 0 = off
+      const cols = new Set((await getQuery("PRAGMA table_info(follows)")).map((c) => c.name));
+      if (!cols.has("live")) await runQuery("ALTER TABLE follows ADD COLUMN live INTEGER");
     })().catch((e) => { console.error("[follows] init:", e.message); ready = null; throw e; });
   }
   return ready;
@@ -123,11 +126,11 @@ async function counts(kind, id) {
  */
 async function lists(userId) {
   await init();
-  const mine = await getQuery("SELECT target_kind, target_id, created_at FROM follows WHERE follower = ? ORDER BY created_at DESC LIMIT ?", [userId, MAX_FOLLOWS]);
+  const mine = await getQuery("SELECT target_kind, target_id, created_at, live FROM follows WHERE follower = ? ORDER BY created_at DESC LIMIT ?", [userId, MAX_FOLLOWS]);
   const out = { rooms: [], people: [], followers: [] };
   for (const f of mine) {
     const T = await resolve(f.target_kind, f.target_id);
-    if (T) (f.target_kind === "room" ? out.rooms : out.people).push({ ...T, since: f.created_at });
+    if (T) (f.target_kind === "room" ? out.rooms : out.people).push({ ...T, since: f.created_at, live: f.live !== 0 });
   }
   const fs = await getQuery("SELECT follower, created_at FROM follows WHERE target_kind = 'user' AND target_id = ? ORDER BY created_at DESC LIMIT 500", [userId]);
   for (const f of fs) {

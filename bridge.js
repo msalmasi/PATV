@@ -603,6 +603,33 @@ async function tipAnnounce({ slug, senderId, recipient, amount } = {}) {
   }
 }
 
+// ── 1.99kp: 🎥 a stream started on the pad's stage (golive.js) - a "live" line in the pad's chat on PATV, and Pepe's line
+// in the Camfrog room (relay job "golive", camfrog-bot pepe_relay._relay_golive). Only for a bridged room that's live
+// (the pad's chat on PATV is this bridge feed). The page builds the localized text from {who, pad, what, link}.
+const PATH_RE = /^\/[A-Za-z0-9/_.~%-]{0,160}$/;
+async function liveNotice(roomId, { who, pad, what, link } = {}) {
+  await load();
+  const R = rooms.get(String(roomId || ""));
+  if (!R || !isLive(R)) return false;
+  const it = { k: "live", ts: Date.now(), who: str(who, 40), pad: str(pad, 60), what: str(what, 90), link: PATH_RE.test(String(link || "")) ? String(link) : "" };
+  if (!it.who) return false;
+  it.c = ++cursor;
+  R.feed.push(it);
+  if (R.feed.length > FEED_KEEP) R.feed.splice(0, R.feed.length - FEED_KEEP);
+  const { c, ...rest } = it;
+  await runQuery("INSERT INTO bridge_feed (c, room_id, ts, data) VALUES (?, ?, ?, ?)", [c, R.id, it.ts, JSON.stringify(rest)]);
+  return true;
+}
+async function liveAnnounce(roomId, { streamer, pad, what, link, camfrog, userId } = {}) {
+  await load();
+  const R = rooms.get(String(roomId || ""));
+  if (!R || !isLive(R)) return false;
+  const cf = String(camfrog || "").toLowerCase();
+  relay.newJob({ kind: "golive", roomId: R.id, userId: userId || "", username: "", camfrog: LOGIN_RE.test(cf) ? cf : "",
+                 streamer: str(streamer, 40), pad: str(pad, 60), what: str(what, 90), link: str(link, 200) });
+  return true;
+}
+
 async function liveView(R, after, userId, login, username = null) {
   const items = R.feed.filter((it) => it.c > after).slice(-FEED_KEEP);
   const L = await resolveNames([...items.map((it) => it.u), ...R.members, ...R.mic]);
@@ -930,4 +957,4 @@ function padTabsFor(o) {
 }
 
 module.exports = { reslug, _audioRemember: audioRemember, AUDIO_PRIME_MS, register, load, padTabsFor, padLatest, summary, ingest, slugify, stage, stageRoom, stageAdmin, stageRoomRef, pepeIn, snapSwitch, clipSwitch, camfrogName, snapOffText, clipOffText, liveFor, bySlug, isLive, _rooms: rooms,
-  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };
+  liveView, withPatv, resolveNames, _nameCache: nameCache, tipFor, TIP_UNLINKED, tipAnnounce, _tipAnnHits: tipAnnHits, liveNotice, liveAnnounce, _pepeName: (v) => { pepeName = { v, at: Date.now() }; } };

@@ -168,6 +168,8 @@ const RULES = {
   "follows.follower": M({ key: ["target_kind", "target_id"], merge: { created_at: "MIN" } }),
   "follows.target_id": M({ key: ["follower", "target_kind"], merge: { created_at: "MIN" } }),
   "follows.target_kind": { deny: FLAG }, "follow_prefs.user_id": M({ key: [], merge: { notify_posts: "MAX" } }),
+  // 1.99kp: golive.js - go-live alert preferences, the per-start log, the pad switch (who set it, by username)
+  "golive_prefs.user_id": M({ key: [] }), "golive_log.user_id": M(), "golive_pad.by": { deny: NAME },
   // stories
   "story_posts.author_id": M(), "story_posts.posted_by": M(), "story_posts.subject_user_id": M(), "story_posts.removed_by": M(),
   "story_posts.subject_login": { deny: NAME }, "story_posts.subject_name": { deny: NAME },

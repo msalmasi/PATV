@@ -126,6 +126,45 @@ function topPads(rows, ranked, boosts, n = 5) {
 }
 
 /**
+ * 1.99kp: "now playing" for the homepage's Top Pads - one short line per pad from state that's already cached:
+ * the pad's live stage slot (mainstage.publicSlots(""): every room's live slots in one cached read) - its streamer
+ * and title, a 📼 Plex title (library slots), an embed's title; else a Twitch-connected pad's live stream (golive.js,
+ * memory); else who's on the mic (the bridge summary row's names - only filled where this viewer may see the room).
+ * rows = the summary rows (with .mic names + .micCount) -> Map(id -> {k, name?, title?, names?, n?} | null)
+ */
+async function nowPlaying(rows) {
+  const out = new Map();
+  const ids = new Set((rows || []).map((r) => r && r.id).filter(Boolean));
+  if (!ids.size) return out;
+  let slots = [];
+  try { slots = await require("./mainstage").publicSlots(""); } catch (e) { slots = []; }
+  const first = new Map();
+  for (const s of slots) if (s && ids.has(s.room_id) && !first.has(s.room_id)) first.set(s.room_id, s);   // featured first, then earliest
+  let twitchNow = () => null;
+  try { twitchNow = require("./golive").twitchNow; } catch (e) { /* no go-live module */ }
+  const cut = (v, n) => String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, n);
+  for (const r of rows) {
+    if (!r || !r.id) continue;
+    const s = first.get(r.id);
+    let np = null;
+    if (s) {
+      const title = cut(s.title, 80);
+      if (/^📼/u.test(title)) np = { k: "plex", title: cut(title.replace(/^📼\s*/u, ""), 80), name: cut(s.display, 40) };
+      else if (s.embed) np = { k: "embed", title: title || cut(require("./stageembed").label(s.embed), 60), name: cut(s.display, 40) };
+      else np = { k: "stage", name: cut(s.display, 40), title };
+    } else if (twitchNow(r.id)) {
+      np = { k: "twitch", title: cut(twitchNow(r.id).title, 80) };
+    } else if (Array.isArray(r.mic) && r.mic.length) {
+      np = { k: "mic", names: r.mic.slice(0, 3).map((x) => cut(x, 30)), more: Math.max(0, (r.micCount || r.mic.length) - 3) };
+    } else if (r.micCount) {
+      np = { k: "mic_n", n: r.micCount };
+    }
+    out.set(r.id, np);
+  }
+  return out;
+}
+
+/**
  * 1.99eo: the front pad's next SCHEDULED stage slot for the homepage's off-air slate ("Next up: ..."), or null.
  * Only what the stage would show anyway: the display name, the title, the start time - never ids or keys.
  * Requests still waiting for the owner's OK don't count.
@@ -170,6 +209,9 @@ function register(app, { addUser, xpForNextLevel }) {
       const tops = topPads(rooms, RL.ranked, RL.boosts, 5);
       // 1.99hm: 🎧 listen from the homepage - may this viewer hear the pad (padaccess.full, same as /p/<slug>/audio)?
       for (const t of tops) t.listen = PA.full(viewer, t.id);
+      // 1.99kp: what's on in each Top Pad (refreshed by the page every 30 s: /api/home/nowplaying)
+      const NP = await nowPlaying(rooms.filter((r) => tops.some((t) => t.id === r.id))).catch(() => new Map());
+      for (const t of tops) t.np = NP.get(t.id) || null;
       const frontInfo = frontReg ? { id: frontReg.id, slug: web.linkSlug(frontReg), title: frontReg.title, pinned: front.pinned,
                                      owner: frontReg.owner ? frontReg.owner.display || frontReg.owner.username : null,
                                      boost: Math.round(RL.boosts.get(frontReg.id) || 0) } : null;
@@ -210,6 +252,25 @@ function register(app, { addUser, xpForNextLevel }) {
     }
   });
 
+  // 1.99kp: the Top Pads' "now playing" lines - ?ids=<room id>,... (at most 8, only pads this viewer may see)
+  app.get("/api/home/nowplaying", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const want = new Set(String(req.query.ids || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 8));
+      const PA = require("./padaccess");
+      await PA.init();
+      const viewer = req.user && req.user.userId ? req.user : null;
+      const rows = PA.visibleRows(viewer, await bridge.summary(!!viewer)).filter((r) => want.has(r.id));
+      const NP = await nowPlaying(rows);
+      const np = {};
+      for (const r of rows) np[r.id] = NP.get(r.id) || null;
+      res.json({ ok: true, np });
+    } catch (e) {
+      console.error("[home] nowplaying:", e.message);
+      res.status(500).json({ ok: false });
+    }
+  });
+
   app.get("/about", addUser, async (req, res) => {
     const S = await stats();
     const PA = require("./padaccess");
@@ -221,4 +282,4 @@ function register(app, { addUser, xpForNextLevel }) {
   });
 }
 
-module.exports = { register, stats, topPads, nextSlot };
+module.exports = { register, stats, topPads, nextSlot, nowPlaying };

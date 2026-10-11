@@ -63,6 +63,7 @@
               const more = [
                 ['/wallet', '👛', t('nav.wallet')],
                 ...((typeof user !== 'undefined' && user) ? [['/subscriptions', '🔁', t('subs.title')]] : []),   // 1.99jr: signed in only
+                ['/plex', '📼', t('nav.plex')],   // 1.99kp: the Plex hub (plexhub.js)
                 ['/staking', '🏦', t('nav.staking')],
                 ['/cosmetics', '🎨', t('nav.cosmetics')],
                 ['/premium', '📺', t('nav.premium')],
@@ -258,6 +259,7 @@
                     <a href="https://discord.gg/publicaccess" rel="noopener">Discord</a>
                     <a href="/achievements"><%- t('nav.achievements') %></a>
                     <a href="/shop"><%- t('nav.shop') %></a>
+                    <a href="/plex"><%- t('nav.plex') %></a>
                 </nav>
                 <div><%- t('foot.tagline') %></div>
                 <%# 1.99jo: the language switcher (i18n.js); the select needs JS, the link always works %>

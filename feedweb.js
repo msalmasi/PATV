@@ -375,7 +375,8 @@ function register(app, { addUser, isBotToken }) {
       if (mode === "following") {
         if (viewer) {
           L = await store.list({ following: viewer.userId, sort, page, top, viewer, tag });
-          follow = { ...(await follows.lists(viewer.userId)), prefs: await follows.prefs(viewer.userId) };
+          follow = { ...(await follows.lists(viewer.userId)), prefs: await follows.prefs(viewer.userId),
+                     golive: await require("./golive").prefs(viewer.userId) };      // 1.99kp: 🎥 go-live alerts
         }
       } else {
         L = await store.list({ room: R ? R.id : null, author: !R && author ? author.userId : null, sort, page, top, viewer, tag });

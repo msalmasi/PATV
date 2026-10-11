@@ -22,6 +22,13 @@
   // 1.99eo: the front pad's next scheduled slot ({display, title, start_at}) for the off-air slate, or null
   const nextUp_ = typeof nextUp !== 'undefined' && nextUp && Number(nextUp.start_at) > 0 ? nextUp : null;
   const BM = typeof boostMark === 'function' ? boostMark : () => '';
+  // 1.99kp: a Top Pad's "now playing" line (home.nowPlaying; the page's script below keeps it fresh with the same strings)
+  const npText_ = (np) => !np ? '' : np.k === 'plex' ? t('js.home.tp.np_plex', { title: np.title })
+    : np.k === 'embed' ? t('js.home.tp.np_embed', { title: np.title || '' })
+    : np.k === 'stage' ? (np.title ? t('js.home.tp.np_stage_title', { name: np.name, title: np.title }) : t('js.home.tp.np_stage', { name: np.name }))
+    : np.k === 'twitch' ? t('js.home.tp.np_twitch', { title: np.title || 'Twitch' })
+    : np.k === 'mic' ? t('js.home.tp.np_mic', { names: np.names.join(', ') + (np.more ? ' +' + np.more : '') })
+    : np.k === 'mic_n' ? t('js.home.tp.np_mic_n', { n: np.n }) : '';
   const PAV_ = typeof padAv === 'function' ? padAv : () => '';     // 1.99es: a pad's avatar (padlook.js), '' when rendered bare
   const PFX_ = typeof padFx === 'function' ? padFx : () => null;   // 1.99ew: premium pad cosmetics (padcosmetics.fx), null when rendered bare
   const feat = S0.featured;
@@ -157,6 +164,10 @@
   .hm .tp .rooms-mini { grid-template-columns: minmax(0, 1fr); }
   .hm .tp .rooms-mini li { min-width: 0; }
   .hm .tp .rooms-mini a { align-items: center; }
+  /* 1.99kp: what's on (one line, truncated) under a Top Pad */
+  .hm .tp .rooms-mini li { flex-wrap: wrap; }
+  .hm .tp .rooms-mini .np { flex: 1 0 100%; min-width: 0; margin: -2px 0 2px 4px; color: #9aa59a; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hm .tp .rooms-mini .np[hidden] { display: none; }
   .hm .rooms-mini .v { display: inline-flex; flex: none; gap: 8px; align-items: center; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
   .hm .bm { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 999px; border: 1px solid #7a4a1f; background: #20140a; color: #ffd9a8;
             font-size: 12px; font-weight: bold; white-space: nowrap; cursor: help; flex: none; }
@@ -530,7 +541,7 @@
             <% tops_.forEach((r) => { %>
               <%# 1.99es: the 🚀 badge sits by the NAME (not among the counts), so the 👥 / 🎙 columns line up boosted or not; the pad's avatar (padlook.js) first %>
               <% const fx_ = PFX_(r.id); %>
-              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%- t('home.tp.in_room', { n: r.count }) %>">👥 <%= r.count %></span><span title="<%- t('home.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? t('home.tp.relay_off') : !r.listen ? (me ? t('home.tp.members_only') : t('home.tp.sign_in_listen')) : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%- lsWhy_ ? t('home.tp.listen_why', { name: r.name, why: lsWhy_ }) : t('home.tp.listen_to_live', { name: r.name }) %>" title="<%- lsWhy_ ? '🔇 ' + lsWhy_ : t('home.tp.listen_live') %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button></li>
+              <li><a href="/p/<%= encodeURIComponent(r.slug) %>"<% if (fx_ && fx_.cls) { %> class="<%= fx_.cls %>"<% } %>><%- fx_ ? fx_.layer : '' %><span class="n"><%- PAV_(r.id, { cls: 'tp-av', pad: { title: r.name, house: r.house } }) %><span class="nt<%= fx_ && fx_.glow ? ' ' + fx_.glow : '' %>"><%= r.name %></span><%- fx_ ? fx_.badgesMini : '' %><%- BM(r.boost, 'bm') %></span><span class="v"><span title="<%- t('home.tp.in_room', { n: r.count }) %>">👥 <%= r.count %></span><span title="<%- t('home.n_on_mic', { n: r.micCount }) %>">🎙 <%= r.micCount %></span></span></a><% const lsWhy_ = !r.audio ? t('home.tp.relay_off') : !r.listen ? (me ? t('home.tp.members_only') : t('home.tp.sign_in_listen')) : ''; %><button type="button" class="tp-ls" data-listen="<%= r.slug %>" data-name="<%= r.name %>" aria-pressed="false" aria-label="<%- lsWhy_ ? t('home.tp.listen_why', { name: r.name, why: lsWhy_ }) : t('home.tp.listen_to_live', { name: r.name }) %>" title="<%- lsWhy_ ? '🔇 ' + lsWhy_ : t('home.tp.listen_live') %>"<%= lsWhy_ ? ' disabled' : '' %>>🎧</button><% const np_ = npText_(r.np); %><span class="np" data-np="<%= r.id %>"<%- np_ ? ' title="' + np_ + '"' : ' hidden' %>><%- np_ %></span></li>
             <% }) %>
           </ol>
           <div id="tpAudioBox"></div>
@@ -661,8 +672,36 @@
     var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
     // countdowns (lotto draw, markets closing)
     function left(t) { var s = Math.max(0, Math.round(t - Date.now() / 1000)); return s >= 86400 ? Math.floor(s / 86400) + 'd ' + Math.floor(s % 86400 / 3600) + 'h' : s >= 3600 ? Math.floor(s / 3600) + 'h ' + Math.floor(s % 3600 / 60) + 'm' : s > 0 ? Math.max(1, Math.ceil(s / 60)) + 'm' : _t('js.home.now', 'now'); }
+    // 1.99kp: the Top Pads' "now playing" lines, refreshed on the page's 30 s tick (home.js /api/home/nowplaying)
+    function npText(np) {
+      if (!np) return '';
+      if (np.k === 'plex') return _t('js.home.tp.np_plex', '📼 {title}', { title: np.title });
+      if (np.k === 'embed') return _t('js.home.tp.np_embed', '▶️ {title}', { title: np.title || '' });
+      if (np.k === 'stage') return np.title ? _t('js.home.tp.np_stage_title', '🎥 {name} — {title}', { name: np.name, title: np.title }) : _t('js.home.tp.np_stage', '🎥 {name}', { name: np.name });
+      if (np.k === 'twitch') return _t('js.home.tp.np_twitch', '📺 Twitch: {title}', { title: np.title || 'Twitch' });
+      if (np.k === 'mic') return _t('js.home.tp.np_mic', '🎙 on mic: {names}', { names: np.names.join(', ') + (np.more ? ' +' + np.more : '') });
+      if (np.k === 'mic_n') return _t('js.home.tp.np_mic_n', '🎙 {n} on the mic', { n: np.n });
+      return '';
+    }
+    function npRefresh() {
+      var els = [].slice.call(document.querySelectorAll('.tp [data-np]'));
+      if (!els.length || document.hidden) return;
+      var ids = els.map(function (e) { return e.getAttribute('data-np'); }).join(',');
+      fetch('/api/home/nowplaying?ids=' + encodeURIComponent(ids), { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (!d || !d.ok) return;
+          els.forEach(function (e) {
+            var id = e.getAttribute('data-np');
+            if (!(id in d.np)) return;
+            var s = npText(d.np[id]);
+            e.textContent = s; e.title = s; e.hidden = !s;
+          });
+        }).catch(function () {});
+    }
     function tick() { document.querySelectorAll('[data-until]').forEach(function (e) { e.textContent = left(Number(e.getAttribute('data-until'))); }); }
-    tick(); setInterval(tick, 30000);
+    var npFirst = true;
+    function tick30() { tick(); if (!npFirst) npRefresh(); npFirst = false; }
+    tick30(); setInterval(tick30, 30000);
 
     // 1.99eo: the stage keeps one layout on and off air; .live / .off on #stage swaps the off-air slate
     // (#stSlate, in the player's box) for the player - the switcher's 10 s poll of /api/stage calls onAir
@@ -829,6 +868,15 @@
         if (it.k === 'tx') d.title = _t('js.home.room.said_on_mic', 'Said on the mic (auto-transcribed)');
         d.appendChild(nameEl(it.u)); d.appendChild(document.createTextNode(it.k === 'tx' ? '“' + it.text + '”' : it.text)); d.appendChild(el('span', 't', hhmm(it.ts)));
         return d;
+      }
+      if (it.k === 'live') {
+        // 1.99kp: 🎥 a stream started on this pad's stage (golive.js)
+        var lt = it.what ? _t('js.pad.chat.live_what', '🎥 {name} just went live on {pad} — {what}', { name: it.who, pad: it.pad, what: it.what })
+          : _t('js.pad.chat.live', '🎥 {name} just went live on {pad}', { name: it.who, pad: it.pad });
+        var lv = el('div', 'ln sys live');
+        if (it.link) { var la = el('a', null, lt); la.href = it.link; lv.appendChild(la); } else lv.appendChild(document.createTextNode(lt));
+        lv.appendChild(document.createTextNode(' · ' + hhmm(it.ts)));
+        return lv;
       }
       var who = { name: label(it.u) };
       var t = it.k === 'join' ? '→ ' + _t('js.home.room.joined', '{name} joined', who) : it.k === 'leave' ? '← ' + _t('js.home.room.left', '{name} left', who)

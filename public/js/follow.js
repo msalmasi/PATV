@@ -31,6 +31,24 @@
       });
     }).catch(function (e) { alert(e.message); }).then(function () { b.disabled = false; });
   });
+  // 1.99kp: 🎥 go-live alerts - one follow (the 🎥 by a name in your lists), and your global switches (golive.js)
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('button[data-golive-kind]') : null;
+    if (!b) return;
+    ev.preventDefault();
+    var on = b.getAttribute('aria-pressed') !== 'true';
+    b.disabled = true;
+    api('/api/golive/follow', { kind: b.getAttribute('data-golive-kind'), id: b.getAttribute('data-golive-id'), on: on }).then(function (d) {
+      b.setAttribute('aria-pressed', d.live ? 'true' : 'false'); b.classList.toggle('on', !!d.live);
+    }).catch(function (e) { alert(e.message); }).then(function () { b.disabled = false; });
+  });
+  document.addEventListener('change', function (ev) {
+    var t = ev.target;
+    if (!t.matches || !t.matches('input[data-golive-pref]')) return;
+    var body = {}; body[t.getAttribute('data-golive-pref')] = t.checked;
+    t.disabled = true;
+    api('/api/golive/prefs', body).catch(function (e) { alert(e.message); t.checked = !t.checked; }).then(function () { t.disabled = false; });
+  });
   document.addEventListener('change', function (ev) {
     var t = ev.target;
     if (!t.matches || !t.matches('input[data-follow-notify]')) return;
