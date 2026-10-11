@@ -358,6 +358,18 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(s7, /never show a real, identifiable person nude or in a sexual or sexualised way/);
   assert.match(s7, /under 18/);
   assert.equal(terms.VERSION, "2026-10-08", "the §7 carve-out did not bump VERSION; the 2026-10-08 DMCA agent update + enforcement did");
+  // 1.99nn: §10 premium subscriptions, donations and prizes - additive: the date moves, VERSION (re-acceptance) doesn't
+  const s10 = (t.text.match(/<section id="premium">[\s\S]*?<\/section>/) || [""])[0];
+  assert.match(s10, /<h2>10\. Premium subscriptions and donations<\/h2>/);
+  for (const id of ["premium-billing", "premium-cancel", "premium-refunds", "premium-prices", "premium-gifts", "donations", "prizes",
+                    "premium-processor", "premium-chargebacks", "premium-changes", "premium-ending"]) assert.match(s10, new RegExp(`id="${id}"`));
+  assert.match(s10, /renews automatically/);
+  assert.match(s10, /never see or store your full card number/);
+  assert.match(s10, /No purchase necessary/);
+  assert.match(t.text, /href="#premium">Premium subscriptions and donations/);
+  assert.match(t.text, /<h2>20\. Contact<\/h2>/);
+  assert.equal(terms.UPDATED, "11 October 2026");
+  assert.match(p.text, new RegExp("Last updated " + terms.PRIVACY_UPDATED), "the Privacy Policy keeps its own date");
   assert.match(t.text, /id="siteFootTpl"/, "footer links on every layout page");
   assert.match(t.text, /href="\/privacy">Privacy Policy/);
   assert.doesNotMatch(t.text, /class="draft"/, "no Draft banner while enforced");

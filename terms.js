@@ -1,6 +1,6 @@
 // terms.js — the Terms of Service + Privacy Policy pages and acceptance (1.99cc).
 //
-//   /terms, /privacy               the pages (views/terms.ejs, views/privacy.ejs), "Last updated" = UPDATED
+//   /terms, /privacy               the pages (views/terms.ejs, views/privacy.ejs), "Last updated" = UPDATED / PRIVACY_UPDATED
 //   POST /api/terms/accept         the signed-in user accepts the current VERSION (the composer's prompt)
 //   users.terms_accepted_version / users.terms_accepted_at (ms)   recorded at sign-up (the web form) and
 //                                  the first time someone posts or comments after VERSION changed
@@ -12,7 +12,7 @@
 //   placeholders()                 the [[...]] markers still in those two pages ({page, text}); while any
 //                                  remain the switch can't be turned on (feedstore.setConfig refuses)
 //
-// Bump VERSION (and UPDATED) when the terms change materially: everyone is asked once more, the next
+// Bump VERSION (and the page's UPDATED) when the terms change materially: everyone is asked once more, the next
 // time they post.
 "use strict";
 const fs = require("fs");
@@ -20,7 +20,10 @@ const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
 
 const VERSION = "2026-10-08";
-const UPDATED = "8 October 2026";
+// 1.99nn: the "Last updated" date is per page and moves without VERSION: an additive change (the §10 premium,
+// donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
+const UPDATED = "11 October 2026";                 // /terms
+const PRIVACY_UPDATED = "8 October 2026";          // /privacy
 
 let ready = null;
 function init() {
@@ -107,13 +110,13 @@ function register(app, { addUser }) {
   init().catch(() => {});
   // every page rendered after this: may it say "By posting / signing up you agree to the Terms"?
   app.use((req, res, next) => { res.locals.termsEnforced = enforced(); next(); });
-  const page = (view, title, path) => (req, res) => {
+  const page = (view, title, path, updated) => (req, res) => {
     res.locals.og = { title: title + " — Public Access TV", description: title + " for publicaccess.tv.", image: (res.locals.ogBase || "") + "/og/page.png?t=" + encodeURIComponent(title),
                       url: (res.locals.ogBase || "") + path };
-    res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED, enforced: enforced() });
+    res.render(view, { user: req.user ? req.user.username : null, title, VERSION, UPDATED: updated, enforced: enforced() });
   };
-  app.get("/terms", addUser, page("terms", "Terms of Service", "/terms"));
-  app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy"));
+  app.get("/terms", addUser, page("terms", "Terms of Service", "/terms", UPDATED));
+  app.get("/privacy", addUser, page("privacy", "Privacy Policy", "/privacy", PRIVACY_UPDATED));
   app.get(["/tos", "/terms-of-service"], (req, res) => res.redirect(301, "/terms"));
   app.get("/privacy-policy", (req, res) => res.redirect(301, "/privacy"));
   app.post("/api/terms/accept", addUser, async (req, res) => {
@@ -132,4 +135,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { VERSION, UPDATED, init, needs, accept, accepted, register, required, enforced, setEnforced, placeholders, _setRequired, _setPlaceholders };
+module.exports = { VERSION, UPDATED, PRIVACY_UPDATED, init, needs, accept, accepted, register, required, enforced, setEnforced, placeholders, _setRequired, _setPlaceholders };
