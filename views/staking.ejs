@@ -51,6 +51,19 @@
   .sk .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; }
   .sk .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; display: inline-block; white-space: nowrap; }
   .sk code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  /* 1.99lx design pass: the wallet / premium look */
+  .sk { padding-top: 18px; box-sizing: border-box; width: 100%; min-width: 0; }
+  .sk *, .sk *::before, .sk *::after { box-sizing: border-box; }
+  .sk .sk-hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 20px 22px; margin-bottom: 16px; }
+  .sk .sk-hero .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
+  .sk .sk-hero h1 { text-align: left; margin: 6px 0 10px; font-size: clamp(26px, 5vw, 36px); }
+  .sk .sk-hero .explain { background: none; border: 0; padding: 0; margin: 0; color: #c9c9bf; font-size: 14px; }
+  .sk .card, .sk .forms > form { background: #121212; border-color: #262626; border-radius: 16px; }
+  .sk .stat { border-radius: 10px; }
+  .sk .tbl, .sk .chart { border-radius: 12px; }
+  .sk input[type=text], .sk select, .sk button { min-height: 38px; border-radius: 8px; }
+  .sk a:focus-visible, .sk button:focus-visible, .sk input:focus-visible, .sk select:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
+  @media (max-width: 520px) { .sk .sk-hero { padding: 16px; } }
 </style>
 <%
   const V = {
@@ -73,12 +86,16 @@
   const vaultSelect = (sel) => '<select name="a3">' + KEYS.map((k) => '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + V[k].icon + ' ' + V[k].name + '</option>').join('') + '</select>';
 %>
 <div class="sk">
-  <h1>Staking</h1>
+  <%# 1.99lx design pass: the wallet's look (hero, rounder cards); content and forms unchanged %>
+  <section class="sk-hero">
+    <div class="eyebrow">STASHES · VAULTS · YIELD</div>
+    <h1>Staking</h1>
   <p class="explain">Stashes can stake PAT into the protocol's vaults and own a slice of what they earn.
     The <b>🏦 Bank</b> lends to players, the <b>🎰 House</b> banks the casino games and the jackpot, and the <b>📈 Market maker</b> seeds and trades the prediction markets.
     Each vault is priced per share: its value (NAV) divided by its shares, so the share price rises as the vault takes in fees and profits and falls when it pays out.
     <b>🤖 Auto</b> spreads itself over the three by target weights. Stakes and withdrawals run once a day at the cut-off, at that day's price.
-    <a href="/economy#protocol">How the protocol works ›</a></p>
+    <a href="/economy#protocol">How the protocol works ›</a> · <a href="/wallet#stashes">Your stashes ›</a></p>
+  </section>
 
   <%- include('partials/actions', { acts, msg }) %>
 

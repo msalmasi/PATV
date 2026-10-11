@@ -230,6 +230,8 @@ function register(app, { isBotToken, addUser }) {
         myLimit: reserveLimit(ln.reserve || null, camfrog, u.level), // only ever the signed-in user's own
         myCredit: camfrog ? credit.forCamfrog(ln.reserve || { limits: {} }, camfrog, u) : null,
         welcomeStatus: await welcome.status(req.user.userId).catch(() => null),
+        // 1.99lx: the last few PAT movements (history.js, the same sentences /history shows) for the Recent activity card
+        recent: await require("./history").forUser(req.user.userId, { period: "30d", perPage: 6 }).then((h) => h.items).catch(() => []),
         acts: await actions.recentFor(req.user.userId, "wallet"),
         // 1.99jw: the Support PATV card (only while Stripe is on)
         donate: (() => { try { return require("./stripebilling").donateLocals("/wallet", req.query.donate); } catch (e) { return null; } })(),

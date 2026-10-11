@@ -1,88 +1,197 @@
-<%- include('layout', { title: 'PAT History', user: user}) %>
-    <link rel="stylesheet" href="/public/css/leaderboard.css">
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('history.title'), user: user}) %>
+<%# 1.99lx design pass: same data, filters and links as before (period, category, staff lookup, pages, counterparty links,
+    web-tip notes, "Balance carried over" ledger rows), grouped by day with a daily net, sticky filters and a phone layout.
+    The search box only filters the rows already on this page (no new query). -%>
 <style>
-  .hx { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-  .hx h1 { text-align: center; }
-  .hx .who { text-align: center; color: #9a9; margin-bottom: 18px; }
-  .hx form.look { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
-  .hx input, .hx select, .hx button { background: #111; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 6px 10px; font-family: inherit; }
-  .hx button { cursor: pointer; }
-  .tabs2 { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin: 10px 0 18px; }
-  .tabs2 a { padding: 5px 10px; border: 1px solid #333; border-radius: 14px; color: #ccc; text-decoration: none; font-size: 13px; }
-  .tabs2 a.on { border-color: #4caf50; color: #fff; background: #1b2b1b; }
-  .sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 22px; }
-  .sum a { background: #111; border: 1px solid #222; border-radius: 8px; padding: 10px 12px; text-decoration: none; color: #ddd; }
-  .sum a.on { border-color: #4caf50; }
-  .sum .l { font-weight: bold; margin-bottom: 4px; }
-  .sum .n { font-size: 13px; font-variant-numeric: tabular-nums; }
-  .pos { color: #66bb6a; } .neg { color: #ef5350; } .mut { color: #888; }
-  .day { margin: 18px 0 6px; color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 11px; }
-  .row2 { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid #1c1c1c; }
-  .row2 .ic { width: 24px; text-align: center; flex: none; }
-  .row2 .tx { flex: 1; min-width: 0; }
-  .row2 .tm { color: #777; font-size: 12px; width: 52px; flex: none; font-variant-numeric: tabular-nums; }
-  .row2 .am { width: 130px; text-align: right; font-variant-numeric: tabular-nums; flex: none; }
-  .pager { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
-  .cp { color: #81c784; border-bottom: 1px dotted #557; text-decoration: none; }
-  a.cp:hover { color: #a5d6a7; }
-  .tnote { font-size: 12px; color: #b9b9a0; font-style: italic; margin-top: 2px; overflow-wrap: anywhere; }
-  .pager a { color: #81c784; }
+  .hx { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; display: grid; gap: 16px; }
+  .hx *, .hx *::before, .hx *::after { box-sizing: border-box; }
+  .hx a { color: #81c784; text-decoration: none; }
+  .hx a:hover { text-decoration: underline; }
+  .hx .hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 20px 22px; display: grid; gap: 10px; }
+  .hx .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
+  .hx h1 { margin: 0; font-size: clamp(26px, 5vw, 36px); line-height: 1.1; }
+  .hx .who { color: #aaa; margin: 0; font-size: 14px; }
+  .hx .who b { color: #fff; }
+  .hx .err { background: #2a1212; border: 1px solid #6b2a2a; color: #f2b8b8; border-radius: 12px; padding: 10px 14px; margin: 0; }
+  .hx .empty { text-align: center; color: #888; padding: 28px 0; margin: 0; }
+  .hx .tot3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .hx .tot3 div { background: rgba(0,0,0,.35); border: 1px solid #2c2c2c; border-radius: 12px; padding: 8px 12px; min-width: 0; }
+  .hx .tot3 span { display: block; color: #9a9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .hx .tot3 b { font-size: clamp(13px, 3.8vw, 20px); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hx form.look { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; }
+  .hx input, .hx select, .hx button { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; min-height: 38px; font: inherit; font-size: 14px; min-width: 0; }
+  .hx form.look input { flex: 1 1 200px; }
+  .hx button { cursor: pointer; background: #1f1f1f; font-weight: bold; }
+  .hx input:focus-visible, .hx button:focus-visible, .hx a:focus-visible, .hx summary:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
+  /* sticky filters */
+  .hx .filters { position: sticky; top: 0; z-index: 6; background: rgba(10,10,10,.94); backdrop-filter: blur(6px); border: 1px solid #222; border-radius: 14px; padding: 8px; display: grid; gap: 8px; min-width: 0; }
+  .hx .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; min-width: 0; }
+  .hx .chips::-webkit-scrollbar { display: none; }
+  .hx .chips a { flex: none; padding: 6px 11px; border: 1px solid #2a2a2a; border-radius: 999px; color: #ccc; text-decoration: none; font-size: 13px; background: #151515; white-space: nowrap; }
+  .hx .chips a.on { border-color: #ffcf40; color: #2a1600; background: linear-gradient(90deg, #ffcf40, #ff8a3d); font-weight: bold; }
+  .hx .chips a:hover { border-color: #ffcf40; text-decoration: none; }
+  .hx .chips a .mut { color: inherit; opacity: .7; }
+  .hx .frow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .hx .frow input { flex: 1 1 180px; }
+  .hx .frow .cnt { color: #888; font-size: 12px; }
+  /* category totals */
+  .hx details.cats summary { cursor: pointer; color: #bbb; font-size: 14px; padding: 4px 2px; }
+  .hx .sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 8px; margin-top: 8px; }
+  .hx .sum a { background: #121212; border: 1px solid #262626; border-radius: 12px; padding: 10px 12px; text-decoration: none; color: #ddd; display: grid; gap: 3px; }
+  .hx .sum a.on { border-color: #ffcf40; }
+  .hx .sum a:hover { border-color: #4caf50; text-decoration: none; }
+  .hx .sum .l { font-weight: bold; }
+  .hx .sum .n { font-size: 13px; font-variant-numeric: tabular-nums; }
+  .hx .pos { color: #66bb6a; } .hx .neg { color: #ef5350; } .hx .mut { color: #888; }
+  /* day groups */
+  .hx .daycard { background: #121212; border: 1px solid #262626; border-radius: 16px; overflow: hidden; }
+  .hx .dayh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 14px; background: #171717; border-bottom: 1px solid #222; }
+  .hx .day { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6; margin: 0; }
+  .hx .dnet { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: bold; white-space: nowrap; }
+  .hx .row2 { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #1c1c1c; }
+  .hx .row2:last-child { border-bottom: 0; }
+  .hx .row2 .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 16px; background: #1b1b1b; border: 1px solid #262626; }
+  .hx .row2[data-cat=wheel] .ic { background: #241c08; border-color: #4a3a10; }
+  .hx .row2[data-cat=casino] .ic { background: #241212; border-color: #4a2020; }
+  .hx .row2[data-cat=heist] .ic { background: #16141f; border-color: #2e2840; }
+  .hx .row2[data-cat=games] .ic { background: #0f1a24; border-color: #1f3448; }
+  .hx .row2[data-cat=tips] .ic { background: #102010; border-color: #234a23; }
+  .hx .row2[data-cat=shop] .ic { background: #1f1024; border-color: #3d2048; }
+  .hx .row2[data-cat=pepe] .ic { background: #122012; border-color: #2a4a2a; }
+  .hx .row2[data-cat=rewards] .ic { background: #24200a; border-color: #4a4210; }
+  .hx .row2 .tx { min-width: 0; line-height: 1.4; font-size: 14px; }
+  .hx .row2 .tm { display: block; color: #808080; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .hx .row2 .am { text-align: right; font-variant-numeric: tabular-nums; font-weight: bold; white-space: nowrap; font-size: 14px; }
+  .hx .row2 .am small { display: block; font-weight: normal; color: #777; font-size: 11px; }
+  .hx .row2.adj { background: repeating-linear-gradient(135deg, #141414 0 8px, #171717 8px 16px); }
+  .hx .row2.adj .ic { background: #1a1a1a; border-style: dashed; }
+  .hx .adjb { display: inline-block; font-size: 10px; font-weight: bold; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px dashed #777; color: #bbb; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
+  .hx .cp { color: #81c784; border-bottom: 1px dotted #557; text-decoration: none; }
+  .hx a.cp:hover { color: #a5d6a7; }
+  .hx .tnote { font-size: 12px; color: #b9b9a0; font-style: italic; margin-top: 2px; overflow-wrap: anywhere; }
+  .hx .pager { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .hx .pager a { padding: 8px 14px; border: 1px solid #2a2a2a; border-radius: 10px; background: #151515; }
+  .hx .pager a:hover { border-color: #ffcf40; text-decoration: none; }
+  .hx [hidden] { display: none !important; }
+  @media (max-width: 520px) { .hx .hero { padding: 16px; } .hx .row2 { padding: 9px 10px; gap: 8px; grid-template-columns: 30px minmax(0, 1fr) auto; } .hx .row2 .ic { width: 30px; height: 30px; font-size: 14px; } .hx .row2 .tx, .hx .row2 .am { font-size: 13px; } }
 </style>
-<div class="hx">
-  <h1>PAT History</h1>
-  <% if (error) { %><div class="who neg"><%= error %></div><% } %>
-  <% if (canLookup) { %>
-    <form class="look" method="get" action="/history">
-      <input name="user" placeholder="username or camfrog name" value="<%= target || '' %>">
-      <input type="hidden" name="period" value="<%= period %>">
-      <button type="submit">Look up</button>
-    </form>
-  <% } %>
+<main class="hx">
+  <section class="hero" aria-labelledby="hxH">
+    <div class="eyebrow"><%- t('history.eyebrow') %></div>
+    <h1 id="hxH"><%- t('history.title') %></h1>
+    <% if (data) { %>
+      <p class="who"><%- t('history.showing') %> <a href="/u/<%= encodeURIComponent(target) %>" style="color:inherit"><b<% if (targetId) { %> class="cp" title="<%= targetId.title %>"<% } %>><%= target %></b></a><% if (targetId && targetId.alt) { %> <span class="mut">(<%= targetId.alt %>)</span><% } %><%- own ? ' ' + t('history.you') : '' %> · <%- t('history.n_tx', { count: data.count, n: data.count.toLocaleString() }) %></p>
+      <% let tin = 0, tout = 0; Object.values(data.totals).forEach(x => { tin += x.in; tout += x.out; }); const tnet = tin - tout; %>
+      <div class="tot3" role="group" aria-label="<%- t('history.totals_label') %>">
+        <div><span><%- t('history.in') %></span><b class="pos">+<%= tin.toLocaleString() %></b></div>
+        <div><span><%- t('history.out') %></span><b class="neg">−<%= tout.toLocaleString() %></b></div>
+        <div><span><%- t('history.net') %></span><b class="<%= tnet >= 0 ? 'pos' : 'neg' %>"><%= (tnet >= 0 ? '+' : '−') + Math.abs(tnet).toLocaleString() %></b></div>
+      </div>
+    <% } %>
+    <% if (canLookup) { %>
+      <form class="look" method="get" action="/history" role="search">
+        <input name="user" placeholder="<%- t('history.lookup_ph') %>" aria-label="<%- t('history.lookup_ph') %>" value="<%= target || '' %>">
+        <input type="hidden" name="period" value="<%= period %>">
+        <button type="submit"><%- t('history.lookup') %></button>
+      </form>
+    <% } %>
+  </section>
+  <% if (error) { %><p class="err" role="alert"><%= error %></p><% } %>
   <% if (data) { %>
-    <div class="who">Showing <a href="/u/<%= encodeURIComponent(target) %>" style="color:inherit"><b<% if (targetId) { %> class="cp" title="<%= targetId.title %>"<% } %>><%= target %></b></a><% if (targetId && targetId.alt) { %> <span class="mut">(<%= targetId.alt %>)</span><% } %><%= own ? ' (you)' : '' %> · <%= data.count.toLocaleString() %> transactions</div>
-    <% const q = (o) => '/history?' + new URLSearchParams(Object.assign({ user: target, period, cat: cat || '' }, o)).toString(); %>
-    <div class="tabs2">
-      <% [['7d','7 days'],['30d','30 days'],['90d','90 days'],['all','All time']].forEach(([p, l]) => { %>
-        <a class="<%= p === period ? 'on' : '' %>" href="<%= q({ period: p, page: 1 }) %>"><%= l %></a>
-      <% }) %>
+    <% const q = (o) => '/history?' + new URLSearchParams(Object.assign({ user: target, period, cat: cat || '' }, o)).toString();
+       const PERIODS = [['7d', t('history.p7')], ['30d', t('history.p30')], ['90d', t('history.p90')], ['all', t('history.pall')]];
+       const cats = Object.entries(data.totals).sort((a, b) => (b[1].in + b[1].out) - (a[1].in + a[1].out));
+       const sign = (n) => (n >= 0 ? '+' : '−') + Math.abs(n).toLocaleString();
+       // the ledger's own bookkeeping rows (carried-over balance, merges, archive/restore) - shown, but marked as adjustments
+       const ADJ = /^(ledger-correction|balance-zeroed|stale-reclaim|stale-restore|camfrog-merge|account merge)$/i;
+       let ain = 0, aout = 0; Object.values(data.totals).forEach(x => { ain += x.in; aout += x.out; }); %>
+    <div class="filters">
+      <nav class="chips" aria-label="<%- t('history.period_label') %>">
+        <% PERIODS.forEach(([p, l]) => { %>
+          <a class="<%= p === period ? 'on' : '' %>" href="<%= q({ period: p, page: 1 }) %>"<%- p === period ? ' aria-current="true"' : '' %>><%- l %></a>
+        <% }) %>
+      </nav>
+      <nav class="chips" aria-label="<%- t('history.cat_label') %>">
+        <a class="<%= !cat ? 'on' : '' %>" href="<%= q({ cat: '', page: 1 }) %>"<%- !cat ? ' aria-current="true"' : '' %>><%- t('history.everything') %></a>
+        <% cats.forEach(([k, x]) => { %>
+          <a class="<%= cat === k ? 'on' : '' %>" href="<%= q({ cat: k, page: 1 }) %>"<%- cat === k ? ' aria-current="true"' : '' %>><%= x.label %> <span class="mut">(<%= x.n %>)</span></a>
+        <% }) %>
+      </nav>
+      <div class="frow">
+        <input type="search" id="hxFind" placeholder="<%- t('history.find_ph') %>" aria-label="<%- t('history.find_ph') %>" autocomplete="off">
+        <span class="cnt" id="hxCnt" aria-live="polite"></span>
+      </div>
     </div>
-    <div class="sum">
-      <a class="<%= !cat ? 'on' : '' %>" href="<%= q({ cat: '', page: 1 }) %>">
-        <% let tin = 0, tout = 0; Object.values(data.totals).forEach(t => { tin += t.in; tout += t.out; }); %>
-        <div class="l">Everything</div>
-        <div class="n"><span class="pos">+<%= tin.toLocaleString() %></span> · <span class="neg">−<%= tout.toLocaleString() %></span>
-          · net <span class="<%= tin - tout >= 0 ? 'pos' : 'neg' %>"><%= (tin - tout >= 0 ? '+' : '−') + Math.abs(tin - tout).toLocaleString() %></span></div>
-      </a>
-      <% Object.entries(data.totals).sort((a, b) => (b[1].in + b[1].out) - (a[1].in + a[1].out)).forEach(([k, t]) => { const net = t.in - t.out; %>
-        <a class="<%= cat === k ? 'on' : '' %>" href="<%= q({ cat: k, page: 1 }) %>">
-          <div class="l"><%= t.label %> <span class="mut">(<%= t.n %>)</span></div>
-          <div class="n"><span class="pos">+<%= t.in.toLocaleString() %></span> · <span class="neg">−<%= t.out.toLocaleString() %></span>
-            · net <span class="<%= net >= 0 ? 'pos' : 'neg' %>"><%= (net >= 0 ? '+' : '−') + Math.abs(net).toLocaleString() %></span></div>
+
+    <details class="cats">
+      <summary><%- t('history.by_cat') %></summary>
+      <div class="sum">
+        <a class="<%= !cat ? 'on' : '' %>" href="<%= q({ cat: '', page: 1 }) %>">
+          <div class="l"><%- t('history.everything') %></div>
+          <div class="n"><span class="pos">+<%= ain.toLocaleString() %></span> · <span class="neg">−<%= aout.toLocaleString() %></span>
+            · <%- t('history.net_lc') %> <span class="<%= ain - aout >= 0 ? 'pos' : 'neg' %>"><%= sign(ain - aout) %></span></div>
         </a>
-      <% }) %>
-    </div>
-    <% let lastDay = null; data.items.forEach(it => {
+        <% cats.forEach(([k, x]) => { const net = x.in - x.out; %>
+          <a class="<%= cat === k ? 'on' : '' %>" href="<%= q({ cat: k, page: 1 }) %>">
+            <div class="l"><%= x.label %> <span class="mut">(<%= x.n %>)</span></div>
+            <div class="n"><span class="pos">+<%= x.in.toLocaleString() %></span> · <span class="neg">−<%= x.out.toLocaleString() %></span>
+              · <%- t('history.net_lc') %> <span class="<%= net >= 0 ? 'pos' : 'neg' %>"><%= sign(net) %></span></div>
+          </a>
+        <% }) %>
+      </div>
+    </details>
+
+    <% // group the page's rows by day (the viewer's zone, tz.js) with each day's net
+       const groups = [];
+       data.items.forEach(it => {
          const ts = new Date(String(it.timestamp).replace(' ', 'T') + 'Z');
          // 1.99jx: the viewer's zone (tz.js), the time labelled
          const day = (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(ts, 'day');
          const tm = (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(ts, 'time');
-         if (day !== lastDay) { lastDay = day; %>
-      <div class="day"><%= day %></div>
-    <% } %>
-      <div class="row2">
-        <div class="ic"><%= it.icon %></div>
-        <div class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <% if (it.cp.archived) { %><span class="cp" title="<%= it.cp.title %>"><%= it.cp.name %></span><% } else { %><a class="cp" href="/u/<%= encodeURIComponent(it.cp.name) %>" title="<%= it.cp.title %>"><%= it.cp.name %></a><% } %><% if (it.cp.alt) { %> <span class="mut">(<%= it.cp.alt %>)</span><% } %><% } %><% if (it.note) { %><div class="tnote">&ldquo;<%= it.note %>&rdquo;</div><% } %></div>
-        <div class="tm"><%- tm %></div>
-        <div class="am <%= it.points >= 0 ? 'pos' : 'neg' %>"><%= (it.points >= 0 ? '+' : '−') + Math.abs(it.points).toLocaleString() %> PAT</div>
-      </div>
+         let g = groups[groups.length - 1];
+         if (!g || g.day !== day) { g = { day, net: 0, rows: [] }; groups.push(g); }
+         g.net += it.points;
+         g.rows.push({ it, tm });
+       }); %>
+    <div id="hxList" style="display:grid;gap:12px">
+    <% groups.forEach((g) => { %>
+      <section class="daycard" aria-label="<%= g.day %>">
+        <div class="dayh"><h2 class="day"><%= g.day %></h2><span class="dnet <%= g.net >= 0 ? 'pos' : 'neg' %>" title="<%- t('history.day_net') %>"><%= sign(g.net) %></span></div>
+        <% g.rows.forEach(({ it, tm }) => { const adj = ADJ.test(String(it.rawType || '')); %>
+          <div class="row2<%= adj ? ' adj' : '' %>" data-cat="<%= it.cat %>">
+            <div class="ic" aria-hidden="true"><%= it.icon %></div>
+            <div class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <% if (it.cp.archived) { %><span class="cp" title="<%= it.cp.title %>"><%= it.cp.name %></span><% } else { %><a class="cp" href="/u/<%= encodeURIComponent(it.cp.name) %>" title="<%= it.cp.title %>"><%= it.cp.name %></a><% } %><% if (it.cp.alt) { %> <span class="mut">(<%= it.cp.alt %>)</span><% } %><% } %><% if (adj) { %> <span class="adjb"><%- t('history.adjustment') %></span><% } %><% if (it.note) { %><div class="tnote">&ldquo;<%= it.note %>&rdquo;</div><% } %><span class="tm"><%- tm %></span></div>
+            <div class="am <%= it.points >= 0 ? 'pos' : 'neg' %>"><%= (it.points >= 0 ? '+' : '−') + Math.abs(it.points).toLocaleString() %><small>PAT</small></div>
+          </div>
+        <% }) %>
+      </section>
     <% }) %>
-    <% if (!data.items.length) { %><div class="who mut">Nothing in this period.</div><% } %>
-    <div class="pager">
-      <% if (data.page > 1) { %><a href="<%= q({ page: data.page - 1 }) %>">← newer</a><% } %>
-      <span class="mut">page <%= data.page %> / <%= data.pages %></span>
-      <% if (data.page < data.pages) { %><a href="<%= q({ page: data.page + 1 }) %>">older →</a><% } %>
     </div>
+    <% if (!data.items.length) { %><p class="empty"><%- t('history.nothing') %></p><% } %>
+    <p class="empty" id="hxNone" hidden><%- t('history.no_match') %></p>
+    <nav class="pager" aria-label="<%- t('history.pages_label') %>">
+      <% if (data.page > 1) { %><a href="<%= q({ page: data.page - 1 }) %>" rel="prev"><%- t('history.newer') %></a><% } %>
+      <span class="mut"><%- t('history.page_of', { page: data.page, pages: data.pages }) %></span>
+      <% if (data.page < data.pages) { %><a href="<%= q({ page: data.page + 1 }) %>" rel="next"><%- t('history.older') %></a><% } %>
+    </nav>
+    <script>
+    (function () {
+      var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+      var box = document.getElementById('hxFind'), cnt = document.getElementById('hxCnt'), none = document.getElementById('hxNone');
+      if (!box) return;
+      var rows = Array.prototype.slice.call(document.querySelectorAll('#hxList .row2'));
+      var days = Array.prototype.slice.call(document.querySelectorAll('#hxList .daycard'));
+      box.addEventListener('input', function () {
+        var q = box.value.trim().toLowerCase(), shown = 0;
+        rows.forEach(function (r) { var hit = !q || r.textContent.toLowerCase().indexOf(q) >= 0; r.hidden = !hit; if (hit) shown++; });
+        days.forEach(function (d) { d.hidden = !d.querySelector('.row2:not([hidden])'); });
+        cnt.textContent = q ? _t('js.history.matches', '{n} on this page', { n: shown }) : '';
+        none.hidden = !(q && !shown);
+      });
+    })();
+    </script>
   <% } %>
-</div>
+</main>
 </body>
 </html>

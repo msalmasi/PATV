@@ -1,25 +1,121 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
-<%- include('layout', { title: 'PAT Economy Guide', user: user}) %>
+<%- include('layout', { title: t('economy.page_title'), user: user}) %>
+<%# 1.99lx design pass: a live, friendly view up top (econpage.js: supply, the Fed band, where PAT sits, the incentive
+    budget, the vaults, supply history) in the newer pages' look; the full guide below is unchanged in substance. -%>
 <style>
-  .eco { max-width: 980px; width: 100%; min-width: 0; margin: 0 auto; padding: 0 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
+  .eco { max-width: 1040px; width: 100%; min-width: 0; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
   .eco *, .eco *::before, .eco *::after { box-sizing: border-box; }
-  .eco h1 { text-align: center; margin: 6px 0 4px; }
-  .eco .sub { text-align: center; color: #9a9; margin: 0 auto 22px; max-width: 64ch; line-height: 1.55; }
+  .eco h1 { margin: 8px 0 10px; font-size: clamp(26px, 4.6vw, 40px); line-height: 1.1; color: #fff; }
+  .eco h1 em { font-style: normal; background: linear-gradient(90deg, #ffcf40, #ff8a3d 55%, #ff6a4d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .eco .sub { color: #c9c9bf; margin: 0; max-width: 68ch; line-height: 1.6; font-size: 16px; }
   .eco a { color: #81c784; text-decoration: none; }
-  .eco a:hover { color: #a5d6a7; }
+  .eco a:hover { color: #a5d6a7; text-decoration: underline; }
+  .eco a:focus-visible, .eco summary:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
   .eco code { background: #1c1c1c; border: 1px solid #262626; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; color: #e8f5e9; white-space: normal; }
 
-  .eco .toc { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; margin-bottom: 28px; }
-  .eco .toc .lbl { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #ffd700; margin-bottom: 10px; }
+  /* hero + live numbers */
+  .eco .hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 22px; margin-bottom: 18px; display: grid; gap: 14px; }
+  .eco .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
+  .eco .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
+  .eco .tile { background: rgba(0,0,0,.35); border: 1px solid #2c2c2c; border-radius: 12px; padding: 10px 12px; min-width: 0; }
+  .eco .tile span { display: block; color: #9a9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .eco .tile b { display: block; font-size: clamp(17px, 4.2vw, 22px); color: #fff; font-variant-numeric: tabular-nums; }
+  .eco .tile small { color: #8d8d8d; font-size: 12px; }
+  .eco .live-note { color: #8d8d8d; font-size: 12px; margin: 0; }
+  .eco .lv { display: grid; gap: 14px; margin-bottom: 28px; }
+  .eco .epanel { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 16px; min-width: 0; display: grid; gap: 12px; align-content: start; }
+  .eco .epanel h2 { font-size: 18px; color: #fff; margin: 0; }
+  .eco .epanel .k { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #4caf50; letter-spacing: .5px; line-height: 1.6; }
+  .eco .epanel p { margin: 0; color: #bbb; font-size: 14px; line-height: 1.55; }
+  .eco .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 14px; }
+  .eco .num { font-variant-numeric: tabular-nums; }
+  .eco .muted { color: #8d8d8d; }
+  /* the money loop */
+  .eco .loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; position: relative; }
+  .eco .step { background: #0f0f0f; border: 1px solid #262626; border-top: 3px solid var(--c); border-radius: 14px; padding: 12px; position: relative; display: grid; gap: 6px; align-content: start; }
+  .eco .step + .step::before { content: '→'; position: absolute; left: -18px; top: 50%; transform: translateY(-50%); color: #ffcf40; font-weight: bold; font-size: 16px; }
+  .eco .step .sn { font-family: 'Press Start 2P', monospace; font-size: 9px; color: var(--c); letter-spacing: .06em; }
+  .eco .step b { color: #fff; font-size: 15px; }
+  .eco .step p { font-size: 13px; color: #aaa; margin: 0; line-height: 1.5; }
+  .eco .step ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
+  .eco .step li { display: flex; justify-content: space-between; gap: 8px; color: #ccc; }
+  .eco .step li b { font-size: 13px; color: #fff; font-weight: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .eco .loop-back { text-align: center; color: #9a9a9a; font-size: 13px; margin: 0; }
+  .eco .loop-back b { color: #ffcf40; }
+  @media (max-width: 760px) {
+    .eco .loop { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .eco .step + .step::before { content: '↓'; left: 50%; top: -19px; transform: translateX(-50%); }
+  }
+  /* Fed band gauge */
+  .eco .gauge { position: relative; height: 34px; border-radius: 10px; overflow: hidden; display: flex; border: 1px solid #2a2a2a; }
+  .eco .gauge .z { height: 100%; }
+  .eco .gauge .z.lo { background: repeating-linear-gradient(135deg, #2a1610 0 6px, #24130e 6px 12px); }
+  .eco .gauge .z.ok { background: #13200f; }
+  .eco .gauge .z.hi { background: repeating-linear-gradient(45deg, #2a1610 0 6px, #24130e 6px 12px); }
+  .eco .gauge .mk { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 2px #121212; }
+  .eco .gscale { position: relative; height: 34px; font-size: 12px; color: #9a9a9a; }
+  .eco .gscale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; text-align: center; line-height: 1.3; }
+  .eco .gscale span.fedlbl { color: #fff; font-weight: bold; }
+  .eco .glegend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 8px; }
+  .eco .glegend div { font-size: 13px; color: #bbb; line-height: 1.45; padding-left: 10px; border-left: 3px solid #444; }
+  .eco .glegend div.on { border-left-color: #ffcf40; color: #fff; }
+  .eco .glegend b { display: block; color: #fff; }
+  /* where PAT sits */
+  .eco .stack { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; background: #121212; }
+  .eco .stack i { display: block; height: 100%; min-width: 3px; }
+  .eco ul.lg { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .eco ul.lg li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
+  .eco ul.lg li i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; transform: translateY(1px); }
+  .eco ul.lg li small { display: block; color: #8d8d8d; font-size: 12px; }
+  .eco ul.lg li b { font-variant-numeric: tabular-nums; color: #fff; white-space: nowrap; }
+  /* budget bars */
+  .eco ul.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .eco ul.bars li { display: grid; gap: 4px; }
+  .eco ul.bars .bl { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: #ccc; }
+  .eco ul.bars .bl b { color: #fff; font-weight: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .eco ul.bars .track { height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
+  .eco ul.bars .fill { height: 100%; background: linear-gradient(90deg, #ffcf40, #ff8a3d); border-radius: 4px; }
+  .eco ul.bars li.hl .bl { color: #fff; font-weight: bold; }
+  /* vault tiles */
+  .eco .vts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; }
+  .eco .vt { background: #0f0f0f; border: 1px solid #262626; border-top: 3px solid var(--c); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+  .eco .vt b { color: #fff; font-size: 14px; }
+  .eco .vt .v { font-size: 19px; font-weight: 800; color: #ffd700; font-variant-numeric: tabular-nums; }
+  .eco .vt small { color: #8d8d8d; font-size: 12px; line-height: 1.4; }
+  /* charts */
+  .eco .chart { display: grid; gap: 6px; }
+  .eco .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .eco .chart svg text { font-family: Ubuntu, sans-serif; fill: #9a9a9a; font-size: 11px; }
+  .eco .chart .ttl { font-size: 13px; color: #ccc; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .eco .chart .ttl b { color: #fff; }
+  .eco .chart .hit { fill: transparent; }
+  @media (max-width: 600px) { .eco .chart svg text { font-size: 19px; } }
+  .eco .chart .hit:hover { fill: rgba(255,255,255,.06); }
+  .eco .key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #bbb; }
+  .eco .key i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+  .eco .key i.sq { height: 10px; width: 10px; }
+  .eco .key i.dash { background: none !important; border-top: 2px dashed #888; height: 0; }
+  .eco details.data summary { cursor: pointer; color: #9a9a9a; font-size: 13px; }
+
+  /* the guide */
+  .eco .guide-h { margin: 34px 0 12px; display: grid; gap: 6px; }
+  .eco .guide-h h2 { font-size: 22px; color: #fff; margin: 0; }
+  .eco .toc { background: rgba(12,12,12,.95); border: 1px solid #222; border-radius: 14px; padding: 10px 12px; margin-bottom: 28px; }
+  .eco .toc .lbl { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #ffd700; margin-bottom: 8px; }
   .eco .toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .eco .toc a { display: inline-block; padding: 5px 10px; border: 1px solid #2a2a2a; border-radius: 14px; font-size: 13px; background: #161616; }
-  .eco .toc a:hover { border-color: #4caf50; }
+  .eco .toc a { display: inline-block; padding: 5px 10px; border: 1px solid #2a2a2a; border-radius: 999px; font-size: 13px; background: #161616; color: #ccc; }
+  .eco .toc a:hover { border-color: #ffcf40; color: #fff; text-decoration: none; }
+  @media (max-width: 899px) {
+    .eco .toc ul { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+    .eco .toc ul::-webkit-scrollbar { display: none; }
+    .eco .toc li { flex: none; }
+  }
   @media (min-width: 900px) {
-    .eco .toc { position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.55); }
+    .eco .toc { position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.55); backdrop-filter: blur(6px); }
   }
 
   .eco section { margin: 0 0 34px; scroll-margin-top: 90px; }
-  .eco .kicker { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #4caf50; letter-spacing: .5px; margin-bottom: 6px; }
+  .eco .kicker { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #4caf50; letter-spacing: .5px; margin-bottom: 6px; line-height: 1.6; }
   .eco h2 { color: #ffd700; margin: 0 0 8px; font-size: 22px; }
   .eco h3 { margin: 0 0 6px; font-size: 17px; color: #fff; }
   .eco p { line-height: 1.6; margin: 0 0 10px; }
@@ -28,7 +124,7 @@
   .eco .exp { background: #e0a030; }
 
   .eco .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 14px; margin-top: 12px; }
-  .eco .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  .eco .card { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 16px; min-width: 0; }
   .eco .card:hover { border-color: #2e4d2f; }
   .eco .card p { color: #bbb; font-size: 14px; }
   .eco .card ul { margin: 0 0 10px; padding-left: 18px; color: #bbb; font-size: 14px; line-height: 1.6; }
@@ -37,14 +133,14 @@
   .eco .goes b { color: #ffd700; font-weight: normal; }
   .eco .wide { grid-column: 1 / -1; }
 
-  .eco .note { margin: 14px 0 0; padding: 12px 16px; border: 1px solid #4caf50; border-radius: 10px; background: #13200f; color: #cfe8cf; font-size: 14px; line-height: 1.55; }
+  .eco .note { margin: 14px 0 0; padding: 12px 16px; border: 1px solid #4caf50; border-radius: 12px; background: #13200f; color: #cfe8cf; font-size: 14px; line-height: 1.55; }
   .eco .warn { border-color: #e0a030; background: #201a0c; color: #ecdcb5; }
 
   .eco .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 14px 0 4px; font-size: 13px; }
   .eco .flow span { background: #161616; border: 1px solid #2a2a2a; border-radius: 8px; padding: 6px 10px; }
   .eco .flow .arr { border: 0; background: none; color: #4caf50; padding: 0; }
 
-  .eco .tbl { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #222; border-radius: 10px; margin-top: 12px; }
+  .eco .tbl { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #222; border-radius: 12px; margin-top: 12px; }
   .eco table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
   .eco th, .eco td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1e1e1e; vertical-align: top; }
   .eco th { background: #161616; color: #ffd700; font-weight: normal; font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .5px; }
@@ -53,26 +149,258 @@
   .eco .cfg { color: #e0a030; font-size: 12px; }
 
   .eco .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; margin-top: 12px; }
-  .eco .links a { display: block; background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; font-size: 14px; }
-  .eco .links a:hover { border-color: #4caf50; }
+  .eco .links a { display: block; background: #121212; border: 1px solid #262626; border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+  .eco .links a:hover { border-color: #4caf50; text-decoration: none; }
   .eco .links small { display: block; color: #888; margin-top: 2px; }
   .eco .top { font-size: 12px; color: #666; text-align: right; margin-top: 8px; }
   .eco .top a { color: #666; }
 
   .eco .h3s { margin: 28px 0 6px; font-size: 18px; color: #fff; }
-  .eco .fig { background: #0c0c0c; border: 1px solid #222; border-radius: 10px; padding: 14px 12px 10px; margin: 16px 0 4px; }
+  .eco .fig { background: #0c0c0c; border: 1px solid #222; border-radius: 12px; padding: 14px 12px 10px; margin: 16px 0 4px; }
   .eco .fig svg { display: block; width: 100%; height: auto; max-width: 620px; margin: 0 auto; }
   .eco .fig svg text { font-family: Ubuntu, sans-serif; }
   .eco .fig figcaption { text-align: center; color: #9a9; font-size: 13px; margin-top: 8px; line-height: 1.45; }
+  @media (max-width: 520px) { .eco .hero, .eco .epanel, .eco .card { padding: 14px; } }
 </style>
+<%
+  const L = typeof live !== 'undefined' && live ? live : null;
+  const nf = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
+  // short numbers for tight spots: 1.2M, 340k
+  const sh = (x) => { const n = Number(x) || 0, a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B' : a >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : a >= 1e3 ? Math.round(n / 1e3) + 'k' : String(Math.round(n)); };
+  const P = (L && L.pools) || {};
+  const layer = (k) => { const g = L && L.supply ? (L.supply.layers || []).find((x) => x.key === k) : null; return g ? g.amount : null; };
+  const INC = L && L.incentives ? L.incentives : null;
+  const GROUP = { welcome: t('economy.g.welcome'), levelup: t('economy.g.levelup'), achievements: t('economy.g.achievements'), misc: t('economy.g.misc'),
+                  royalties: t('economy.g.royalties'), activity: t('economy.group.activity'), roomgames: t('economy.g.roomgames'), turf: t('economy.g.turf') };
+  const LAYER_C = { players: '#3987e5', fed: '#d95926', treasury: '#199e70', incentive: '#c98500', pots: '#d55181', burn: '#008300' };
+%>
 <div class="eco" id="top">
-  <h1>💰 The PAT Economy</h1>
-  <p class="sub">Everything you can do with PAT: earn it, gamble it, bet it, lend it, stake it, or steal it.
-    Most of it runs through Pepe in the Camfrog rooms, and a lot of it works right here on the site too.</p>
+  <section class="hero" aria-labelledby="ecoH" style="margin-bottom:18px">
+    <div class="eyebrow"><%- t('economy.eyebrow') %></div>
+    <h1 id="ecoH"><%- t('economy.h1') %></h1>
+    <p class="sub"><%- t('economy.lead') %></p>
+    <% if (L && L.supply) { %>
+      <div class="tiles">
+        <div class="tile"><span><%- t('economy.tile.supply') %></span><b><%= nf(L.supply.total) %></b>
+          <% if (L.month.change != null) { %><small><%- t('economy.tile.change30', { pct: (L.month.change >= 0 ? '+' : '') + (L.month.change * 100).toFixed(2) + '%' }) %></small><% } %></div>
+        <div class="tile"><span><%- t('economy.tile.players') %></span><b><%= nf(layer('players')) %></b><small><%- t('economy.tile.players_d') %></small></div>
+        <div class="tile"><span>🏛️ <%- t('economy.tile.fed') %></span><b><%= L.fed == null ? '—' : nf(L.fed) %></b><small><%- t('economy.tile.fed_d') %></small></div>
+        <div class="tile"><span>🔥 <%- t('economy.tile.burned') %></span><b><%= nf(L.supply.burned && L.supply.burned.total) %></b><small><%- t('economy.tile.burned_d') %></small></div>
+      </div>
+      <p class="live-note"><%- t('economy.live_note') %><% if (L.supply.updated) { %> · <%- t('economy.updated', { when: String(L.supply.updated).slice(0, 16) + ' UTC' }) %><% } %></p>
+    <% } %>
+  </section>
+
+  <% if (L) { %>
+  <div class="lv" id="live">
+    <!-- the money loop -->
+    <section class="epanel" aria-labelledby="loopH" style="margin:0">
+      <div class="k"><%- t('economy.loop.k') %></div>
+      <h2 id="loopH"><%- t('economy.loop.h') %></h2>
+      <div class="loop">
+        <div class="step" style="--c:#3a8ad0">
+          <span class="sn">1 · <%- t('economy.loop.s1') %></span>
+          <b>🏛️ <%- t('economy.loop.s1_h') %></b>
+          <p><%- t('economy.loop.s1_d') %></p>
+          <ul><li><%- t('economy.loop.minted30') %> <b><%= nf(L.month.minted) %></b></li></ul>
+        </div>
+        <div class="step" style="--c:#ffcf40">
+          <span class="sn">2 · <%- t('economy.loop.s2') %></span>
+          <b>🏦 <%- t('economy.loop.s2_h') %></b>
+          <ul>
+            <li>🎁 <%- t('economy.v.incentives') %> <b><%= sh(P['vault:incentives'] != null ? P['vault:incentives'] : INC ? INC.balance : 0) %></b></li>
+            <li>🎰 <%- t('economy.v.house') %> <b><%= sh(P.jackpot) %></b></li>
+            <li>🏰 <%- t('economy.v.fortknox') %> <b><%= sh(L.fortknox) %></b></li>
+            <li>🎲 <%- t('economy.v.casino') %> <b><%= sh(P['vault:heist']) %></b></li>
+          </ul>
+        </div>
+        <div class="step" style="--c:#66bb6a">
+          <span class="sn">3 · <%- t('economy.loop.s3') %></span>
+          <b>👛 <%- t('economy.loop.s3_h') %></b>
+          <p><%- t('economy.loop.s3_d') %></p>
+        </div>
+        <div class="step" style="--c:#d65f36">
+          <span class="sn">4 · <%- t('economy.loop.s4') %></span>
+          <b>🔥 <%- t('economy.loop.s4_h') %></b>
+          <p><%- t('economy.loop.s4_d') %></p>
+          <ul><li><%- t('economy.loop.burned30') %> <b><%= nf(L.month.burned) %></b></li></ul>
+        </div>
+      </div>
+      <p class="loop-back"><%- t('economy.loop.back') %></p>
+    </section>
+
+    <div class="duo">
+      <!-- the Fed band -->
+      <section class="epanel" id="fed-band" aria-labelledby="bandH" style="margin:0">
+        <div class="k"><%- t('economy.band.k') %></div>
+        <h2 id="bandH">🏛️ <%- t('economy.band.h') %></h2>
+        <% const B = L.band; if (B && B.floor != null && B.ceiling != null && L.fed != null) {
+             const max = Math.max(B.ceiling * 1.2, L.fed * 1.08, 1);
+             const at = (v) => Math.max(0, Math.min(100, v / max * 100));
+             const zone = L.fed < B.floor ? 'lo' : L.fed > B.ceiling ? 'hi' : 'ok'; %>
+          <p><%- zone === 'lo' ? t('economy.band.now_lo') : zone === 'hi' ? t('economy.band.now_hi') : t('economy.band.now_ok') %></p>
+          <div>
+            <div class="gauge" role="img" aria-label="<%- t('economy.band.aria', { fed: nf(L.fed), floor: nf(B.floor), ceiling: nf(B.ceiling) }) %>">
+              <span class="z lo" style="width:<%= at(B.floor).toFixed(2) %>%"></span>
+              <span class="z ok" style="width:<%= (at(B.ceiling) - at(B.floor)).toFixed(2) %>%"></span>
+              <span class="z hi" style="flex:1"></span>
+              <span class="mk" style="left:<%= at(L.fed).toFixed(2) %>%"></span>
+            </div>
+            <div class="gscale" aria-hidden="true">
+              <span style="left:<%= at(B.floor).toFixed(2) %>%"><%- t('economy.band.floor') %><br><%= sh(B.floor) %></span>
+              <span style="left:<%= at(B.ceiling).toFixed(2) %>%"><%- t('economy.band.ceiling') %><br><%= sh(B.ceiling) %></span>
+            </div>
+          </div>
+          <p class="num" style="color:#fff"><%- t('economy.band.fed_now', { n: nf(L.fed) }) %></p>
+          <div class="glegend">
+            <div class="<%= zone === 'lo' ? 'on' : '' %>"><b><%- t('economy.band.lo_h') %></b><%- t('economy.band.lo') %></div>
+            <div class="<%= zone === 'ok' ? 'on' : '' %>"><b><%- t('economy.band.ok_h') %></b><%- t('economy.band.ok') %></div>
+            <div class="<%= zone === 'hi' ? 'on' : '' %>"><b><%- t('economy.band.hi_h') %></b><%- t('economy.band.hi') %></div>
+          </div>
+        <% } else { %>
+          <p><%- t('economy.band.none') %></p>
+        <% } %>
+      </section>
+
+      <!-- where PAT sits -->
+      <section class="epanel" aria-labelledby="sitsH" style="margin:0">
+        <div class="k"><%- t('economy.sits.k') %></div>
+        <h2 id="sitsH">🧭 <%- t('economy.sits.h') %></h2>
+        <% const LY = L.supply ? (L.supply.layers || []).filter((g) => g.amount > 0) : []; const tot = LY.reduce((a, g) => a + g.amount, 0) || 1; %>
+        <% if (LY.length) { %>
+          <div class="stack" role="img" aria-label="<%- t('economy.sits.aria') %>">
+            <% LY.forEach((g) => { %><i style="flex:<%= g.amount %> 1 0;background:<%= LAYER_C[g.key] || '#888' %>" title="<%= g.label %>: <%= nf(g.amount) %> PAT"></i><% }) %>
+          </div>
+          <ul class="lg">
+            <% LY.forEach((g) => { %>
+              <li><i style="background:<%= LAYER_C[g.key] || '#888' %>"></i><span><%= g.label %><small><%= g.blurb %></small></span><b><%= nf(g.amount) %> <span class="muted">· <%= (g.amount / tot * 100).toFixed(1) %>%</span></b></li>
+            <% }) %>
+          </ul>
+          <p class="muted" style="font-size:12px"><%- t('economy.sits.more', { link: '<a href="/rankings#supply">' + t('economy.sits.link') + '</a>' }) %></p>
+        <% } else { %><p><%- t('economy.not_reported') %></p><% } %>
+      </section>
+    </div>
+
+    <div class="duo">
+      <!-- incentive budget -->
+      <section class="epanel" aria-labelledby="ibH" style="margin:0">
+        <div class="k"><%- t('economy.ib.k') %></div>
+        <h2 id="ibH">🎁 <%- t('economy.ib.h') %></h2>
+        <% if (INC) { const gs = Object.keys(INC.budgets || {}).sort((a, b) => (INC.budgets[b] || 0) - (INC.budgets[a] || 0)); %>
+          <p><%- t('economy.ib.lead', { n: nf(INC.balance) }) %></p>
+          <ul class="bars">
+            <% gs.forEach((g) => { const b = INC.budgets[g] || 0, r = Math.min(b, (INC.remaining || {})[g] || 0); %>
+              <li class="<%= g === 'activity' ? 'hl' : '' %>"><span class="bl"><span><%- GROUP[g] || t.esc(g) %></span><b><%- t('economy.ib.left', { r: sh(r), b: sh(b) }) %></b></span>
+                <span class="track" role="img" aria-label="<%- t('economy.ib.aria', { r: nf(r), b: nf(b) }) %>"><span class="fill" style="display:block;width:<%= b ? (r / b * 100).toFixed(1) : 0 %>%"></span></span></li>
+            <% }) %>
+          </ul>
+          <p class="muted" style="font-size:12px"><%- t('economy.ib.foot') %><% if (INC.share != null) { %> <%- t('economy.ib.share', { n: nf(INC.share) }) %><% } %></p>
+        <% } else { %>
+          <p><%- t('economy.ib.off') %></p>
+        <% } %>
+      </section>
+
+      <!-- vaults -->
+      <section class="epanel" aria-labelledby="vH" style="margin:0">
+        <div class="k"><%- t('economy.v.k') %></div>
+        <h2 id="vH">🏰 <%- t('economy.v.h') %></h2>
+        <div class="vts">
+          <div class="vt" style="--c:#e57373"><b>🎰 <%- t('economy.v.house') %></b><span class="v"><%= sh(P.jackpot) %></span><small><%- t('economy.v.house_d') %></small></div>
+          <div class="vt" style="--c:#ffcf40"><b>🏰 <%- t('economy.v.fortknox') %></b><span class="v"><%= L.fortknox == null ? '—' : sh(L.fortknox) %></span><small><%- t('economy.v.fortknox_d') %></small></div>
+          <div class="vt" style="--c:#c98500"><b>🎲 <%- t('economy.v.casino') %></b><span class="v"><%= P['vault:heist'] == null ? '—' : sh(P['vault:heist']) %></span><small><%- t('economy.v.casino_d') %></small></div>
+          <div class="vt" style="--c:#d55181"><b>🎟️ <%- t('economy.v.lotto') %></b><span class="v"><%= P['vault:lotto'] == null ? '—' : sh(P['vault:lotto']) %></span><small><%- t('economy.v.lotto_d') %></small></div>
+          <div class="vt" style="--c:#64b5f6"><b>🏦 <%- t('economy.v.bank') %></b><span class="v"><%= P['vault:bank'] == null ? '—' : sh(P['vault:bank']) %></span><small><%- t('economy.v.bank_d') %></small></div>
+          <div class="vt" style="--c:#81c784"><b>📈 <%- t('economy.v.mm') %></b><span class="v"><%= P['vault:mm'] == null ? '—' : sh(P['vault:mm']) %></span><small><%- t('economy.v.mm_d') %></small></div>
+        </div>
+        <p class="muted" style="font-size:12px"><%- t('economy.v.foot', { link: '<a href="/staking">' + t('economy.v.staking') + '</a>' }) %></p>
+      </section>
+    </div>
+
+    <!-- supply history -->
+    <% const H = L.history || []; %>
+    <section class="epanel" id="supply-history" aria-labelledby="shH" style="margin:0">
+      <div class="k"><%- t('economy.sh.k') %></div>
+      <h2 id="shH">📈 <%- t('economy.sh.h') %></h2>
+      <% if (H.length < 2) { %><p><%- t('economy.sh.none') %></p><% } else {
+           const W = 640, X0 = 60, X1 = W - 8, n = H.length, xs = (i) => X0 + (n === 1 ? 0 : i * (X1 - X0) / (n - 1)), bw = Math.max(1, (X1 - X0) / n - 2);
+           const line = (vals, y) => vals.map((v, i) => v == null ? null : (xs(i).toFixed(1) + ',' + y(v).toFixed(1))).filter(Boolean).join(' ');
+           const ticks = (lo, hi, k) => { const out = []; for (let j = 0; j <= k; j++) out.push(lo + (hi - lo) * j / k); return out; };
+           const lbl = (d) => d.slice(5);
+           const xl = [0, Math.floor((n - 1) / 2), n - 1];
+           // 1) total supply
+           const tv = H.map((h) => h.total), tmin = Math.min(...tv), tmax = Math.max(...tv), pad = Math.max(1, (tmax - tmin) * 0.15);
+           const tlo = Math.max(0, tmin - pad), thi = tmax + pad, ty = (v) => 150 - (v - tlo) / (thi - tlo || 1) * 130;
+           // 2) the Fed with its floor and ceiling
+           const fv = H.map((h) => h.fed), fmaxv = Math.max(...fv.filter((v) => v != null), ...H.map((h) => h.ceiling || 0), 1);
+           const fy = (v) => 150 - v / (fmaxv * 1.1) * 130;
+           // 3) minted up, burned down
+           const mmax = Math.max(1, ...H.map((h) => Math.max(h.minted, h.burned)));
+           const my = (v) => v / mmax * 46; %>
+        <div class="chart">
+          <div class="ttl"><span><%- t('economy.sh.total') %></span><b class="num"><%= nf(tv[n - 1]) %></b></div>
+          <svg viewBox="0 0 <%= W %> 172" role="img" aria-label="<%- t('economy.sh.total_aria', { from: nf(tv[0]), to: nf(tv[n - 1]), days: n }) %>">
+            <% ticks(tlo, thi, 3).forEach((v) => { %><line x1="<%= X0 %>" x2="<%= X1 %>" y1="<%= ty(v).toFixed(1) %>" y2="<%= ty(v).toFixed(1) %>" stroke="#262626"/><text x="<%= X0 - 6 %>" y="<%= (ty(v) + 4).toFixed(1) %>" text-anchor="end"><%= sh(v) %></text><% }) %>
+            <polyline points="<%= line(tv, ty) %>" fill="none" stroke="#e0a830" stroke-width="2" stroke-linejoin="round"/>
+            <% xl.forEach((i) => { %><text x="<%= xs(i).toFixed(1) %>" y="168" text-anchor="<%= i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' %>"><%= lbl(H[i].day) %></text><% }) %>
+            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (xs(i) - (X1 - X0) / n / 2).toFixed(1) %>" y="10" width="<%= ((X1 - X0) / n).toFixed(1) %>" height="142"><title><%= h.day %>: <%= nf(h.total) %> PAT</title></rect><% }) %>
+          </svg>
+        </div>
+        <div class="chart">
+          <div class="ttl"><span><%- t('economy.sh.fed') %></span><b class="num"><%= fv[n - 1] == null ? '—' : nf(fv[n - 1]) %></b></div>
+          <div class="key" aria-hidden="true"><span><i style="background:#3a8ad0"></i><%- t('economy.tile.fed') %></span><span><i class="dash"></i><%- t('economy.sh.band') %></span></div>
+          <svg viewBox="0 0 <%= W %> 172" role="img" aria-label="<%- t('economy.sh.fed_aria', { to: fv[n - 1] == null ? '—' : nf(fv[n - 1]), days: n }) %>">
+            <% ticks(0, fmaxv * 1.1, 3).forEach((v) => { %><line x1="<%= X0 %>" x2="<%= X1 %>" y1="<%= fy(v).toFixed(1) %>" y2="<%= fy(v).toFixed(1) %>" stroke="#262626"/><text x="<%= X0 - 6 %>" y="<%= (fy(v) + 4).toFixed(1) %>" text-anchor="end"><%= sh(v) %></text><% }) %>
+            <% const fl = line(H.map((h) => h.floor), fy), cl = line(H.map((h) => h.ceiling), fy); %>
+            <% if (fl) { %><polyline points="<%= fl %>" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4"/><% } %>
+            <% if (cl) { %><polyline points="<%= cl %>" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 4"/><% } %>
+            <polyline points="<%= line(fv, fy) %>" fill="none" stroke="#3a8ad0" stroke-width="2" stroke-linejoin="round"/>
+            <% const lastB = [...H].reverse().find((h) => h.ceiling != null); if (lastB) { %>
+              <text x="<%= X1 %>" y="<%= (fy(lastB.ceiling) - 5).toFixed(1) %>" text-anchor="end"><%- t('economy.band.ceiling') %></text>
+              <text x="<%= X1 %>" y="<%= (fy(lastB.floor) - 5).toFixed(1) %>" text-anchor="end"><%- t('economy.band.floor') %></text>
+            <% } %>
+            <% xl.forEach((i) => { %><text x="<%= xs(i).toFixed(1) %>" y="168" text-anchor="<%= i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' %>"><%= lbl(H[i].day) %></text><% }) %>
+            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (xs(i) - (X1 - X0) / n / 2).toFixed(1) %>" y="10" width="<%= ((X1 - X0) / n).toFixed(1) %>" height="142"><title><%= h.day %>: <%= h.fed == null ? '—' : nf(h.fed) %> PAT<%= h.floor != null ? ' (' + sh(h.floor) + '–' + sh(h.ceiling) + ')' : '' %></title></rect><% }) %>
+          </svg>
+        </div>
+        <div class="chart">
+          <div class="ttl"><span><%- t('economy.sh.flows') %></span></div>
+          <div class="key" aria-hidden="true"><span><i class="sq" style="background:#3a8ad0"></i><%- t('economy.sh.minted') %></span><span><i class="sq" style="background:#d65f36"></i><%- t('economy.sh.burned') %></span></div>
+          <svg viewBox="0 0 <%= W %> 124" role="img" aria-label="<%- t('economy.sh.flows_aria', { m: nf(H.reduce((a, h) => a + h.minted, 0)), b: nf(H.reduce((a, h) => a + h.burned, 0)), days: n }) %>">
+            <line x1="<%= X0 %>" x2="<%= X1 %>" y1="56" y2="56" stroke="#444"/>
+            <text x="<%= X0 - 6 %>" y="14" text-anchor="end"><%= sh(mmax) %></text><text x="<%= X0 - 6 %>" y="60" text-anchor="end">0</text><text x="<%= X0 - 6 %>" y="106" text-anchor="end"><%= sh(mmax) %></text>
+            <% H.forEach((h, i) => { const x = (xs(i) - bw / 2).toFixed(1); %>
+              <% if (h.minted > 0) { const hh = Math.max(1.5, my(h.minted)); %><rect x="<%= x %>" y="<%= (55 - hh).toFixed(1) %>" width="<%= bw.toFixed(1) %>" height="<%= hh.toFixed(1) %>" rx="1.5" fill="#3a8ad0"/><% } %>
+              <% if (h.burned > 0) { const hh = Math.max(1.5, my(h.burned)); %><rect x="<%= x %>" y="57" width="<%= bw.toFixed(1) %>" height="<%= hh.toFixed(1) %>" rx="1.5" fill="#d65f36"/><% } %>
+            <% }) %>
+            <% xl.forEach((i) => { %><text x="<%= xs(i).toFixed(1) %>" y="120" text-anchor="<%= i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle' %>"><%= lbl(H[i].day) %></text><% }) %>
+            <% H.forEach((h, i) => { %><rect class="hit" x="<%= (xs(i) - (X1 - X0) / n / 2).toFixed(1) %>" y="4" width="<%= ((X1 - X0) / n).toFixed(1) %>" height="104"><title><%= h.day %>: <%- t('economy.sh.minted') %> <%= nf(h.minted) %><%= Object.keys(h.mints || {}).length ? ' (' + Object.entries(h.mints).filter((e) => e[1] > 0).map((e) => e[0] + ' ' + sh(e[1])).join(', ') + ')' : '' %> · <%- t('economy.sh.burned') %> <%= nf(h.burned) %></title></rect><% }) %>
+          </svg>
+        </div>
+        <details class="data">
+          <summary><%- t('economy.sh.table', { n: Math.min(14, n) }) %></summary>
+          <div class="tbl"><table>
+            <thead><tr><th><%- t('economy.sh.day') %></th><th><%- t('economy.sh.total') %></th><th><%- t('economy.tile.fed') %></th><th><%- t('economy.sh.minted') %></th><th><%- t('economy.sh.burned') %></th></tr></thead>
+            <tbody>
+              <% H.slice(-14).reverse().forEach((h) => { %><tr><td><%= h.day %></td><td class="n"><%= nf(h.total) %></td><td><%= h.fed == null ? '—' : nf(h.fed) %></td><td><%= nf(h.minted) %></td><td><%= nf(h.burned) %></td></tr><% }) %>
+            </tbody>
+          </table></div>
+        </details>
+      <% } %>
+    </section>
+  </div>
+  <% } %>
+
+  <div class="guide-h">
+    <div class="eyebrow"><%- t('economy.guide.k') %></div>
+    <h2><%- t('economy.guide.h') %></h2>
+    <p class="sub" style="font-size:15px">Everything you can do with PAT: earn it, gamble it, bet it, lend it, stake it, or steal it.
+      Most of it runs through Pepe in the Camfrog rooms, and a lot of it works right here on the site too.</p>
+  </div>
 
   <nav class="toc" aria-label="Contents">
     <div class="lbl">JUMP TO</div>
     <ul>
+      <li><a href="#live">📊 <%- t('economy.toc.live') %></a></li>
       <li><a href="#pat">🪙 What is PAT</a></li>
       <li><a href="#flow">🏛️ Where PAT goes</a></li>
       <li><a href="#protocol">⚙️ How the protocol works</a></li>
@@ -147,13 +475,14 @@
     <h2>🏛️ Where PAT goes</h2>
     <p class="lead">When you pay for something (a spin, a ticket, a fee, a paid command) that PAT doesn't vanish.
       <b>Spending never burns PAT.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
-      heist loot and rewards. (The one exception is the <a href="#burned">weekly surplus burn</a>.)</p>
+      heist loot and rewards. (The one exception is the <a href="#burned">Federal Reserve's excess above its ceiling</a>.)</p>
     <div class="grid">
       <div class="card">
         <h3>🏛️ The Federal Reserve</h3>
-        <p>The central bank, in charge of monetary policy. It collects fines, purchases and fees nobody else funded,
-          pays level-up and achievement rewards and raffles, insures the Bank against bad loans, and is the target of
-          the legendary bank heist. <code>!reserve</code> shows its balance.</p>
+        <p>The central bank, in charge of monetary policy, and the only place new PAT is made (every mint is on the
+          record). It keeps itself between a floor and a ceiling (<a href="#fed-band">the Fed band</a>), collects fines and fees
+          nobody else funded, backs the incentive budget's weekly target and insures the Bank against bad loans. Nobody robs
+          it: the bank heist cracks Fort Knox. <code>!reserve</code> shows its balance.</p>
       </div>
       <div class="card">
         <h3>🎰 The House (casino jackpot)</h3>
@@ -260,8 +589,8 @@
           <ul>
             <li><b>20%</b> to stakers in that vault, pro rata, capped at <b>25% APR</b> on what they staked (anything over
               the cap rejoins the rest);</li>
-            <li>the rest: while the Federal Reserve is below its <b>25M</b> target, half to the Reserve and half to the
-              incentive budget; once it's at 25M, <b>all of it</b> to the incentive budget.</li>
+            <li>the rest: while the Federal Reserve is below its <a href="#fed-band">ceiling</a>, half to the Reserve and half to the
+              incentive budget; once it's at the ceiling, <b>all of it</b> to the incentive budget.</li>
           </ul>
         </div>
         <div class="card">
@@ -275,7 +604,7 @@
               !beg are paid from the budget too, within 3.5M a week (paced: at most 1/7 of it per day), and turf income
               within 0.5M. A prize over that is skipped, as it was when the Federal Reserve ran dry.</li>
           </ul>
-          <p>Fort Knox above 15M and the Casino vault above 10M overflow into the House, which becomes next week's surplus.</p>
+          <p>Fort Knox and the Casino vault have caps (a share of the weekly budget target); anything above them overflows into the incentive budget.</p>
         </div>
         <div class="card">
           <h3>📊 This week</h3>
@@ -297,10 +626,9 @@
   <section id="burned">
     <div class="kicker">OUT OF CIRCULATION</div>
     <h2>🔥 Burned</h2>
-    <p class="lead">Once a week the protocol settles its surplus. Rewards and pools are funded first, then a ~4-week incentive
-      buffer and the Federal Reserve's 25M target. <b>Only what's left after all of that</b> moves to the burn reserve and is
-      destroyed, so the total supply goes down. No wallet, vault or other pool is ever burned. Every burn is listed here.
-      <span class="cfg">The weekly settlement is still being built; until it runs, the burn reserve stays empty.</span></p>
+    <p class="lead">PAT is burned in one place only: when the Federal Reserve holds more than its
+      <a href="#fed-band">ceiling</a>, the daily tick releases the excess to the burn reserve and destroys it, so the total
+      supply goes down. No wallet, stash, vault or game pool is ever burned. Every burn is listed here.</p>
     <div class="grid" id="burnStats" aria-live="polite">
       <div class="card"><h3>🔥 Total burned</h3><p class="n" data-b="total">…</p></div>
       <div class="card"><h3>Last 7 days</h3><p class="n" data-b="d7">…</p></div>
@@ -401,7 +729,7 @@
         <line x1="294" y1="558" x2="104" y2="558" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
         <text x="196" y="575" font-size="13.5" fill="#ccc" text-anchor="middle">withdraw</text>
       </svg>
-      <figcaption>Where PAT flows: it moves between wallets and pools; only the weekly surplus left after the buffer and the Reserve are full is burned.</figcaption>
+      <figcaption>Where PAT flows: it moves between wallets and pools; only the Federal Reserve's excess above its ceiling is burned.</figcaption>
     </figure>
 
     <h3 class="h3s">🏗️ Capital vaults: PAT that does a job</h3>
@@ -902,7 +1230,7 @@
       <div class="card">
         <h3>🥷 Heists</h3>
         <p>Crew up and survive rounds of dice rolls to bank loot; bail out or go for the vault door. The store is always open;
-          the casino job robs the <b>Casino vault</b> (its own pot, refilled by heist buy-ins and 15% of the House's profit, so hauls grow when the casino is busy) and the bank job cracks the Federal Reserve.</p>
+          the casino job robs the <b>Casino vault</b> (its own pot, refilled by heist buy-ins and 15% of the House's profit, so hauls grow when the casino is busy) and the bank job cracks <b>Fort Knox</b>.</p>
         <div class="cmd"><code>!heist</code> · <code>!join</code> · <code>!bail</code> · <code>!shop</code></div>
         <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. Heists never burn PAT.</div>
       </div>

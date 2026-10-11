@@ -1227,14 +1227,9 @@ require("./roomdj").register(app, { isBotToken, addUser });   // 1.99ba: the roo
 profileLayout.register(app, { addUser });   // profile section order + visibility (edit page)
 cosmetics.register(app, { isBotToken, addUser });   // /cosmetics shop, market, inventory + bot API
 app.get("/economy", addUser, async (req, res) => {
-  // economy v2 E-2: the incentive budget + weekly waterfall section renders only while Pepe's treasury is live
-  const f = require("./funding");
-  // economy v2 E-3: the room vaults section, only while Pepe's room vaults are live (roomvaults.js)
-  let roomVaults = null;
-  if (f.roomVaultsLive()) {
-    try { roomVaults = await require("./roomvaults").overview(10); } catch (e) { roomVaults = null; }
-  }
-  res.render("economy", { user: req.user ? req.user.username : null, treasury: f.treasuryOn() ? f.state.incentives : null, roomVaults });
+  // economy v2 E-2: the incentive budget + weekly waterfall section renders only while Pepe's treasury is live;
+  // E-3 room vaults; 1.99lx: the live numbers up top (supply, Fed band, budget, vaults, supply history) - econpage.js
+  res.render("economy", await require("./econpage").locals(req, { patSupply }));
 });
 
 const history = require("./history");

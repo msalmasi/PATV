@@ -1,57 +1,95 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: t('wallet.title'), user: user}) %>
+<%# 1.99lx design pass: the wallet in the newer pages' look (/premium, /lotto, the banner) - balance up front, quick actions,
+    recent activity, stashes + staking explained. Every form, field and anchor (#lend #reserve-request #credit #donate
+    #admin-requests #admin-book #admin-stashes) is the same as before. -%>
 <style>
-  .wl { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
-  .wl a { color: #81c784; }
-  .wl h1 { text-align: center; margin-bottom: 4px; }
-  .wl h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 30px 0 10px; line-height: 1.6; }
-  .wl h3 { margin: 18px 0 8px; font-size: 15px; color: #ddd; }
-  .wl .bal { text-align: center; margin: 6px 0 4px; }
-  .wl .bal b { font-size: 34px; color: #ffd700; font-variant-numeric: tabular-nums; }
+  .wl { max-width: 1040px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; display: grid; gap: 18px; }
+  .wl *, .wl *::before, .wl *::after { box-sizing: border-box; }
+  .wl a { color: #81c784; text-decoration: none; }
+  .wl a:hover { text-decoration: underline; }
+  .wl h1 { margin: 0; }
+  .wl .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
+  .wl section.sec { display: grid; gap: 12px; min-width: 0; scroll-margin-top: 70px; }
+  .wl .sec-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+  .wl h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 0; line-height: 1.6; letter-spacing: .04em; }
+  .wl h3 { margin: 4px 0 0; font-size: 15px; color: #ddd; }
   .wl .center { text-align: center; }
-  .wl .info { color: #888; font-size: 13px; line-height: 1.6; }
-  .wl .explain { background: #0d0d0d; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; color: #bbb; font-size: 13px; line-height: 1.55; margin: 0 0 12px; }
-  .wl .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
-  .wl .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
-  .wl .card.own { border-color: #4caf50; }
-  .wl .card.admin { border-color: #e0a030; }
+  .wl .info { color: #9a9a9a; font-size: 13px; line-height: 1.6; }
+  /* hero */
+  .wl .hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 22px; display: grid; gap: 14px; }
+  .wl .hero .bal { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; }
+  .wl .hero .bal b { font-size: clamp(34px, 8vw, 54px); line-height: 1.05; font-weight: 800; font-variant-numeric: tabular-nums;
+                     background: linear-gradient(90deg, #ffe680, #ffcf40 45%, #ff8a3d); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .wl .hero .bal span { color: #d9c88a; font-weight: bold; font-size: 18px; }
+  .wl .hero .who { color: #aaa; font-size: 13px; margin: 0; }
+  .wl .minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; }
+  .wl .mini { background: rgba(0,0,0,.35); border: 1px solid #2c2c2c; border-radius: 12px; padding: 9px 12px; min-width: 0; }
+  .wl .mini span { display: block; color: #9a9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .wl .mini b { font-size: clamp(15px, 4.4vw, 18px); font-variant-numeric: tabular-nums; color: #fff; }
+  .wl .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .wl .qbtn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; min-height: 40px; border-radius: 10px; border: 1px solid #2f2f2f; background: #1a1a1a; color: #e6e6e6 !important; font: bold 14px Ubuntu, sans-serif; text-decoration: none !important; }
+  .wl .qbtn:hover { border-color: #ffcf40; }
+  .wl .qbtn.gold { background: linear-gradient(90deg, #ffcf40, #ff8a3d); color: #2a1600 !important; border-color: #ffcf40; }
+  .wl .qbtn.pink { border-color: #6a3d6a; }
+  /* section chips */
+  .wl .subnav { position: sticky; top: 0; z-index: 6; background: rgba(10,10,10,.92); backdrop-filter: blur(6px); border: 1px solid #222; border-radius: 12px; padding: 6px; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  .wl .subnav::-webkit-scrollbar { display: none; }
+  .wl .subnav a { flex: none; padding: 6px 11px; border-radius: 999px; border: 1px solid #2a2a2a; background: #151515; color: #ccc; font-size: 13px; text-decoration: none; white-space: nowrap; }
+  .wl .subnav a:hover, .wl .subnav a:focus-visible { border-color: #ffcf40; color: #fff; }
+  /* cards */
+  .wl .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+  .wl .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+  .wl .card { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+  .wl .card.own { border-color: #3c6b3e; background: linear-gradient(180deg, #102010 0%, #121212 45%); }
+  .wl .card.admin { border-color: #6b5320; }
+  .wl .card.welcome { border-color: #6b5a20; }
+  .wl .card-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .wl .card-h b { font-size: 16px; color: #fff; }
   .wl .ref { color: #e0a030; font-family: monospace; font-size: 13px; }
   .wl .name { font-weight: bold; color: #fff; font-size: 16px; }
   .wl .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-  .wl .stat { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 8px 10px; min-width: 0; }
-  .wl .stat span { display: block; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .wl .stat { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 8px 10px; min-width: 0; }
+  .wl .stat span { display: block; color: #8d8d8d; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
   .wl .stat b { color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
-  .wl .stat b.gold { color: #ffd700; } .wl .stat b.green { color: #81c784; } .wl .stat b.red { color: #e57373; }
+  .wl .stat b.gold, .wl b.gold { color: #ffd700; } .wl .stat b.green { color: #81c784; } .wl .stat b.red { color: #e57373; }
   .wl .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; display: inline-block; white-space: nowrap; }
   .wl .pill.on { border-color: #4caf50; color: #81c784; } .wl .pill.late, .wl .pill.off { border-color: #e57373; color: #e57373; }
+  /* forms */
+  .wl .card, .wl .forms > form { grid-template-columns: minmax(0, 1fr); }
+  .wl .card > label, .wl .forms > form > label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .wl .card > label select { flex: 1 1 160px; min-width: 0; width: 100%; }
   .wl form { display: grid; gap: 8px; margin: 0; }
   .wl form.inline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .wl .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; margin-top: 12px; }
-  .wl .forms > form { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; align-content: start; }
-  .wl .forms > form.admin { border-color: #e0a030; }
-  .wl input[type=number], .wl input[type=text], .wl select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 9px; box-sizing: border-box; max-width: 100%; font: inherit; font-size: 14px; }
+  .wl .forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+  .wl .forms > form { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 16px; align-content: start; }
+  .wl .forms > form.admin { border-color: #6b5320; }
+  .wl input[type=number], .wl input[type=text], .wl select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; min-height: 38px; max-width: 100%; min-width: 0; font: inherit; font-size: 14px; }
+  .wl input:focus-visible, .wl select:focus-visible, .wl button:focus-visible, .wl a:focus-visible, .wl summary:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
   .wl form.inline input[type=text], .wl form.inline input[type=number] { width: 110px; flex: 1 1 90px; }
   .wl .forms input[type=text], .wl .forms input[type=number] { width: 100%; }
-  .wl button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; font-weight: bold; }
+  .wl button { background: #4caf50; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; min-height: 38px; cursor: pointer; font: inherit; font-weight: bold; }
+  .wl button:hover { filter: brightness(1.1); }
   .wl button.alt { background: #333; color: #ddd; }
   .wl button.danger { background: #5a2a2a; color: #f2b8b8; }
   .wl button.admin { background: #e0a030; color: #111; }
+  .wl button.gold { background: linear-gradient(90deg, #ffcf40, #ff8a3d); color: #2a1600; }
   .wl label { cursor: pointer; font-size: 13px; color: #ccc; }
   .wl details summary { cursor: pointer; color: #aaa; font-size: 13px; }
   .wl details[open] summary { margin-bottom: 8px; }
-  .wl .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; }
-  .wl .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
+  .wl .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 12px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; margin: 0; }
+  /* tables */
+  .wl .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 12px; background: #101010; }
   .wl table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .wl th, .wl td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; vertical-align: top; overflow-wrap: normal; }
+  .wl th, .wl td { padding: 8px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; vertical-align: top; overflow-wrap: normal; }
+  .wl tr:last-child td { border-bottom: 0; }
   .wl td { color: #ddd; }
-  .wl th { color: #888; font-weight: normal; white-space: nowrap; }
+  .wl th { color: #8d8d8d; font-weight: normal; white-space: nowrap; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .wl td.r, .wl th.r { text-align: right; white-space: nowrap; }
   .wl tr.tot td { color: #ffd700; font-weight: bold; border-top: 1px solid #333; }
   .wl .up { color: #81c784; } .wl .down { color: #e57373; }
-  .wl .spark { background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 8px; margin: 10px 0; }
-  .wl .spark svg { display: block; width: 100%; height: 70px; }
   .wl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  .wl .login { text-align: center; margin: 60px 0; }
+  .wl .login { text-align: center; margin: 40px 0; }
   .wl .card.limit .name { font-size: 15px; line-height: 1.5; }
   .wl .card.limit b.lim { color: #ffd700; white-space: nowrap; }
   .wl table.bd td { padding: 5px 10px; }
@@ -66,16 +104,42 @@
   .wl ul.factors { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
   .wl ul.factors li { display: flex; justify-content: space-between; gap: 10px; color: #ccc; border-bottom: 1px solid #1c1c1c; padding: 3px 0; }
   .wl ul.factors b { white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .wl .welcome { border-color: #6b5a20; }
+  /* recent activity */
+  .wl ul.acts { list-style: none; margin: 0; padding: 0; display: grid; }
+  .wl ul.acts li { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #1c1c1c; }
+  .wl ul.acts li:last-child { border-bottom: 0; }
+  .wl ul.acts .ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: #1a1a1a; font-size: 15px; }
+  .wl ul.acts .tx { min-width: 0; font-size: 14px; line-height: 1.35; }
+  .wl ul.acts .tx small { display: block; color: #888; font-size: 12px; }
+  .wl ul.acts .am { font-weight: bold; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
+  /* how-it-works strip */
+  .wl .how { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; counter-reset: how; }
+  .wl .how > div { background: #0f0f0f; border: 1px solid #232323; border-radius: 14px; padding: 12px 14px; position: relative; }
+  .wl .how > div b { display: block; color: #fff; font-size: 15px; margin-bottom: 4px; }
+  .wl .how > div p { margin: 0; color: #aaa; font-size: 13px; line-height: 1.5; }
+  .wl .how .ico { font-size: 22px; display: block; margin-bottom: 6px; }
+  /* vault tiles */
+  .wl .vaults { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 10px; }
+  .wl .vt { background: #121212; border: 1px solid #262626; border-top: 3px solid var(--c, #4caf50); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; }
+  .wl .vt .vn { font-weight: bold; color: #fff; }
+  .wl .vt .px { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: #ffd700; }
+  .wl .vt .px small { font-size: 11px; color: #888; font-weight: normal; display: block; text-transform: uppercase; letter-spacing: .05em; }
+  .wl .vt .aprs { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 13px; color: #999; font-variant-numeric: tabular-nums; }
+  .wl .vt .aprs b { font-weight: bold; }
+  @media (max-width: 520px) { .wl .hero, .wl .card, .wl .forms > form { padding: 14px; } .wl { gap: 14px; } }
+  @media (prefers-reduced-motion: no-preference) { .wl { scroll-behavior: smooth; } }
 </style>
-<div class="wl">
+<main class="wl">
 <% if (!signedIn) { %>
-  <h1><%- t('wallet.title') %></h1>
-  <div class="login">
-    <p class="info"><%- t('wallet.signed_out') %></p>
-    <p><%- t('wallet.sign_in_to_see', { link: '<a href="/login">' + t('wallet.sign_in') + '</a>' }) %></p>
-    <%- include('partials/actions', { acts: [], msg }) %>
-  </div>
+  <section class="hero">
+    <div class="eyebrow"><%- t('wallet.eyebrow') %></div>
+    <h1><%- t('wallet.title') %></h1>
+    <div class="login">
+      <p class="info"><%- t('wallet.signed_out') %></p>
+      <p><%- t('wallet.sign_in_to_see', { link: '<a href="/login">' + t('wallet.sign_in') + '</a>' }) %></p>
+    </div>
+  </section>
+  <%- include('partials/actions', { acts: [], msg }) %>
 <% } else {
   const fmt = (n) => Math.round(Number(n) || 0).toLocaleString();
   const pct = (f, d) => ((Number(f) || 0) * 100).toFixed(d == null ? 1 : d) + '%';
@@ -94,20 +158,42 @@
   const days_ = (d) => t('wallet.n_days', { count: d });
   const terms = [1, 3, 7, 14, 30, 60, 90].filter((d) => !reserve || !reserve.max_days || d <= reserve.max_days);
   const VN = { bank: '🏦 ' + t('wallet.vault.bank'), house: '🎰 ' + t('wallet.vault.house'), mm: '📈 ' + t('wallet.vault.mm'), auto: '🤖 ' + t('wallet.vault.auto') };   // HTML-safe
+  const VC = { bank: '#64b5f6', house: '#e57373', mm: '#ffd54f', auto: '#4caf50' };
   const VK = ['bank', 'house', 'mm', 'auto'];
   const vaultSelect = '<select name="a3" aria-label="' + t('wallet.vault') + '">' + VK.map((k) => '<option value="' + k + '"' + (k === 'auto' ? ' selected' : '') + '>' + VN[k] + '</option>').join('') + '</select>';
   const holdLine = (h) => VK.filter((k) => h && h[k]).map((k) => VN[k] + ' ' + fmt(h[k].value)).join(' · ');
   const bandCls = (b) => String(b || '').toLowerCase().replace(/[^a-z]+/g, '-');
   const pts = (p) => (p > 0 ? '+' : p < 0 ? '−' : '±') + Math.abs(p);
   const meterPos = (s, c) => Math.max(0, Math.min(100, ((s - (c.min || 300)) / ((c.max || 850) - (c.min || 300))) * 100)).toFixed(1);
+  const inStashes = myStashes.reduce((a, s) => a + (Number(s.balance) || 0), 0);
+  const inVaults = myStashes.reduce((a, s) => a + (Number(s.vaulted) || 0), 0);
+  const iOwe = borrowed.reduce((a, l) => a + (Number(l.left) || 0), 0);
+  const RECENT = typeof recent !== 'undefined' && Array.isArray(recent) ? recent : [];
+  const tmOf = (it) => { const ts = new Date(String(it.timestamp).replace(' ', 'T') + 'Z'); return (locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime'); };
 %>
-  <h1><%- t('wallet.title') %></h1>
-  <p class="bal"><b><%= fmt(bal) %></b> PAT</p>
-  <p class="center info"><%= camfrog ? 'Camfrog: ' + camfrog + ' · ' : '' %><a href="/history"><%- t('wallet.history_link') %></a> · <a href="/subscriptions">🔁 <%- t('subs.title') %></a></p>
+  <!-- ───────── Balance + quick actions ───────── -->
+  <section class="hero" aria-labelledby="wlH">
+    <div class="eyebrow"><%- t('wallet.eyebrow') %></div>
+    <h1 id="wlH" class="bal"><b><%= fmt(bal) %></b> <span>PAT</span></h1>
+    <p class="who"><%- camfrog ? t('wallet.hero.camfrog', { name: camfrog }) + ' · ' : '' %><a href="/history"><%- t('wallet.history_link') %></a> · <a href="/subscriptions">🔁 <%- t('subs.title') %></a></p>
+    <% if (canAct) { %>
+    <div class="minis">
+      <div class="mini"><span><%- t('wallet.hero.in_stashes') %></span><b><%= fmt(inStashes) %></b></div>
+      <div class="mini"><span><%- t('wallet.hero.in_vaults') %></span><b class="up"><%= fmt(inVaults) %></b></div>
+      <div class="mini"><span><%- t('wallet.hero.owed') %></span><b class="<%= iOwe ? 'down' : '' %>"><%= fmt(iOwe) %></b></div>
+    </div>
+    <% } %>
+    <nav class="quick" aria-label="<%- t('wallet.act.label') %>">
+      <a class="qbtn gold" href="#send">💸 <%- t('wallet.act.send') %></a>
+      <% if (canAct) { %><a class="qbtn" href="#stashes">🔐 <%- t('wallet.act.stashes') %></a><% } %>
+      <a class="qbtn" href="/history">🧾 <%- t('wallet.act.history') %></a>
+      <a class="qbtn pink" href="/support">💖 <%- t('wallet.act.support') %></a>
+    </nav>
+  </section>
 
   <%- include('partials/actions', { acts, msg }) %>
   <% if (welcomeStatus && welcomeStatus.state === 'pending') { const ws = welcomeStatus; %>
-    <div class="card welcome" style="margin:12px 0">
+    <div class="card welcome">
       <span class="name">👋 <%- t('wallet.welcome.pending', { n: fmt(ws.amount) }) %></span>
       <% if (ws.need && ws.need.length) { %>
         <span class="info"><%- t('wallet.welcome.need', { need: ws.need.join(' · ') }) %></span>
@@ -117,19 +203,77 @@
       <% if (ws.connectOwed) { %><span class="info"><%- t('wallet.welcome.connect') %></span><% } %>
     </div>
   <% } else if (welcomeStatus && welcomeStatus.state === 'paid') { %>
-    <p class="center info">👋 <%- t('wallet.welcome.paid', { n: fmt(welcomeStatus.amount) }) %></p>
+    <p class="center info" style="margin:0">👋 <%- t('wallet.welcome.paid', { n: fmt(welcomeStatus.amount) }) %></p>
   <% } %>
   <% if (!canAct) { %><p class="hint"><%- t('wallet.link_hint') %></p><% } %>
-  <%- include('partials/donate-card', { donate: locals.donate }) %>
+
+  <nav class="subnav" aria-label="<%- t('wallet.nav.label') %>">
+    <a href="#activity"><%- t('wallet.nav.activity') %></a>
+    <% if (canAct) { %><a href="#stashes"><%- t('wallet.nav.stashes') %></a><% } %>
+    <a href="#staking"><%- t('wallet.nav.staking') %></a>
+    <% if (canAct) { %><a href="#loans"><%- t('wallet.nav.loans') %></a><% } %>
+    <a href="#reserve"><%- t('wallet.nav.reserve') %></a>
+    <a href="#positions"><%- t('wallet.nav.markets') %></a>
+    <% if (admin) { %><a href="#admin-requests"><%- t('wallet.nav.admin') %></a><% } %>
+  </nav>
+
+  <!-- ───────── Recent activity · send / tip · give ───────── -->
+  <section class="sec" id="activity" aria-labelledby="actH">
+    <div class="two">
+      <div class="card">
+        <div class="card-h"><b id="actH">🕒 <%- t('wallet.recent.h') %></b><a href="/history"><%- t('wallet.recent.all') %></a></div>
+        <% if (!RECENT.length) { %><p class="info" style="margin:0"><%- t('wallet.recent.none') %></p><% } else { %>
+          <ul class="acts">
+            <% RECENT.forEach((it) => { %>
+              <li><span class="ic" aria-hidden="true"><%= it.icon %></span>
+                <span class="tx"><%= it.text %><% if (it.cp && it.cpPrep !== null) { %> <%= it.cpPrep %> <%= it.cp.name %><% } %><small><%- tmOf(it) %></small></span>
+                <span class="am <%= it.points >= 0 ? 'up' : 'down' %>"><%= (it.points >= 0 ? '+' : '−') + Math.abs(it.points).toLocaleString() %></span></li>
+            <% }) %>
+          </ul>
+        <% } %>
+      </div>
+      <div style="display:grid;gap:14px;align-content:start;min-width:0">
+        <form class="card" id="send" method="get" action="/search" role="search" aria-labelledby="sendH">
+          <b id="sendH" class="name">💸 <%- t('wallet.send.h') %></b>
+          <span class="info"><%- t('wallet.send.blurb') %></span>
+          <div class="inline" style="display:flex;flex-wrap:wrap;gap:6px">
+            <input type="text" name="q" id="sendTo" maxlength="60" autocomplete="off" placeholder="<%- t('wallet.send.ph') %>" aria-label="<%- t('wallet.send.ph') %>" required style="flex:1 1 160px">
+            <button class="gold" type="submit"><%- t('wallet.send.go') %></button>
+          </div>
+          <span class="info"><a href="/u/<%= encodeURIComponent(user) %>/tip"><%- t('wallet.send.jar') %></a></span>
+        </form>
+        <% if (canAct) { %>
+          <form class="card" method="post" action="/act" id="donate"><%- hidden('donate') %>
+            <b class="name">🎁 <%- t('wallet.donate.h') %></b>
+            <label><%- t('wallet.donate.into') %> <select name="a0"><option value="casino">💰 <%- t('wallet.donate.casino') %></option><option value="lotto">🎟️ <%- t('wallet.donate.lotto') %></option><option value="house">🎰 <%- t('wallet.donate.house') %></option></select></label>
+            <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.donate.amount_ph') %>" required aria-label="<%- t('wallet.amount') %>">
+            <button type="submit"><%- t('wallet.donate.button') %></button>
+            <span class="info"><%- t('wallet.donate.info') %></span>
+          </form>
+        <% } %>
+      </div>
+    </div>
+    <%- include('partials/donate-card', { donate: locals.donate }) %>
+  </section>
 
   <!-- ───────── Stashes ───────── -->
-  <h2><%- t('wallet.h.stashes') %></h2>
   <% if (canAct) { %>
-    <% if (!myStashes.length) { %><p class="info"><%- t('wallet.stash.none') %></p><% } %>
+  <section class="sec" id="stashes" aria-labelledby="stH">
+    <div class="sec-h"><h2 id="stH"><%- t('wallet.h.stashes') %></h2><a class="info" href="/economy#stash"><%- t('wallet.stash.more') %></a></div>
+    <details class="card" <%= myStashes.length ? '' : 'open' %>>
+      <summary><b style="color:#fff;font-size:15px">💡 <%- t('wallet.how.h') %></b></summary>
+      <div class="how">
+        <div><span class="ico" aria-hidden="true">👛</span><b>1 · <%- t('wallet.how.wallet_h') %></b><p><%- t('wallet.how.wallet') %></p></div>
+        <div><span class="ico" aria-hidden="true">🔐</span><b>2 · <%- t('wallet.how.stash_h') %></b><p><%- t('wallet.how.stash') %></p></div>
+        <div><span class="ico" aria-hidden="true">📈</span><b>3 · <%- t('wallet.how.stake_h') %></b><p><%- t('wallet.how.stake') %></p></div>
+      </div>
+      <span class="info"><%- t('wallet.stash.stake_info') %></span>
+    </details>
+    <% if (!myStashes.length) { %><p class="info" style="margin:0"><%- t('wallet.stash.none') %></p><% } %>
     <div class="grid">
     <% myStashes.forEach((s) => { %>
       <div class="card<%= s.owner_me ? ' own' : '' %>">
-        <span class="ref"><%- ul(s.owner) %>/<%= s.name %><%- ' · ' + (s.owner_me ? t('wallet.stash.yours') : t('wallet.stash.member')) %></span>
+        <div class="card-h"><span class="ref"><%- ul(s.owner) %>/<%= s.name %></span><span class="pill<%= s.owner_me ? ' on' : '' %>"><%- s.owner_me ? t('wallet.stash.yours') : t('wallet.stash.member') %></span></div>
         <div class="stats">
           <div class="stat"><span><%- t('wallet.balance') %></span><b class="gold"><%= fmt(s.balance) %></b></div>
           <div class="stat"><span><%- t('wallet.in_vaults') %></span><b class="green"><%= fmt(s.vaulted) %></b></div>
@@ -137,25 +281,24 @@
         <span class="info"><%- holdLine(s.hold) || t('wallet.stash.nothing_staked') %></span>
         <span class="info"><%- t('wallet.stash.members', { list: [s.owner].concat(s.members || []).join(', ') }) %></span>
         <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-          <select name="a0"><option value="deposit"><%- t('wallet.stash.deposit') %></option><option value="withdraw"><%- t('wallet.stash.withdraw') %></option></select>
+          <select name="a0" aria-label="<%- t('wallet.stash.deposit') %> / <%- t('wallet.stash.withdraw') %>"><option value="deposit"><%- t('wallet.stash.deposit') %></option><option value="withdraw"><%- t('wallet.stash.withdraw') %></option></select>
           <input type="hidden" name="a1" value="<%= s.ref %>">
-          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.stash.amount_or_all') %>" required>
+          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.stash.amount_or_all') %>" aria-label="<%- t('wallet.amount') %>" required>
           <button type="submit"><%- t('wallet.stash.go') %></button>
         </form>
         <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-          <select name="a0"><option value="stake"><%- t('wallet.stash.stake') %></option><option value="unstake"><%- t('wallet.stash.unstake') %></option></select>
+          <select name="a0" aria-label="<%- t('wallet.stash.stake') %> / <%- t('wallet.stash.unstake') %>"><option value="stake"><%- t('wallet.stash.stake') %></option><option value="unstake"><%- t('wallet.stash.unstake') %></option></select>
           <input type="hidden" name="a1" value="<%= s.ref %>">
-          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.stash.amount_or_all') %>" required>
+          <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.stash.amount_or_all') %>" aria-label="<%- t('wallet.amount') %>" required>
           <%- vaultSelect %>
           <button type="submit"><%- t('wallet.stash.queue') %></button>
         </form>
-        <span class="info"><%- t('wallet.stash.stake_info') %></span>
         <% if (s.owner_me) { %>
           <details><summary><%- t('wallet.stash.members_close') %></summary>
             <form class="inline" method="post" action="/act"><%- hidden('stash') %>
-              <select name="a0"><option value="grant"><%- t('wallet.stash.grant') %></option><option value="revoke"><%- t('wallet.stash.revoke') %></option></select>
+              <select name="a0" aria-label="<%- t('wallet.stash.grant') %> / <%- t('wallet.stash.revoke') %>"><option value="grant"><%- t('wallet.stash.grant') %></option><option value="revoke"><%- t('wallet.stash.revoke') %></option></select>
               <input type="hidden" name="a1" value="<%= s.name %>">
-              <input type="text" name="a2" data-at maxlength="60" placeholder="@member" required>
+              <input type="text" name="a2" data-at maxlength="60" placeholder="@member" aria-label="@member" required>
               <button class="alt" type="submit"><%- t('wallet.stash.apply') %></button>
             </form>
             <form class="inline" method="post" action="/act" style="margin-top:8px"><%- hidden('stash') %>
@@ -172,28 +315,34 @@
       <form method="post" action="/act"><%- hidden('stash') %>
         <b>➕ <%- t('wallet.stash.create_h') %></b>
         <input type="hidden" name="a0" value="create">
-        <input type="text" name="a1" pattern="[a-z0-9_\-]{1,20}" maxlength="20" placeholder="<%- t('wallet.stash.name_ph') %>" required>
+        <input type="text" name="a1" pattern="[a-z0-9_\-]{1,20}" maxlength="20" placeholder="<%- t('wallet.stash.name_ph') %>" aria-label="<%- t('wallet.stash.name_ph') %>" required>
         <button type="submit"><%- t('wallet.stash.create') %></button>
       </form>
     </div>
+  </section>
   <% } %>
 
   <!-- ───────── Staking ───────── -->
-  <h2><%- t('wallet.h.staking') %></h2>
-  <% if (!vaults) { %><p class="info"><%- t('wallet.staking.none') %> <a href="/staking"><%- t('wallet.staking.dashboard') %></a></p><% } else {
-       const ap = (f) => f == null ? '—' : pct(f); %>
-    <div class="tbl"><table>
-      <tr><th><%- t('wallet.vault') %></th><th class="r"><%- t('wallet.staking.share_price') %></th><th class="r"><%- t('wallet.staking.apr7') %></th><th class="r"><%- t('wallet.staking.apr30') %></th></tr>
-      <% VK.forEach((k) => { const a = (vaults.apr || {})[k] || {}; %>
-        <tr><td><%- VN[k] %></td><td class="r"><%= (Number((vaults.prices || {})[k]) || 0).toFixed(4) %></td>
-          <td class="r <%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= ap(a[7]) %></td><td class="r <%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= ap(a[30]) %></td></tr>
-      <% }) %>
-    </table></div>
-    <p class="info"><%- vaults.next_epoch ? t('wallet.staking.next_cutoff', { when: cd(vaults.next_epoch) }) + ' · ' : '' %><a href="/staking"><%- t('wallet.staking.full_dashboard') %></a></p>
-  <% } %>
+  <section class="sec" id="staking" aria-labelledby="skH">
+    <div class="sec-h"><h2 id="skH"><%- t('wallet.h.staking') %></h2><a class="info" href="/staking"><%- t('wallet.staking.full_dashboard') %></a></div>
+    <% if (!vaults) { %><p class="info" style="margin:0"><%- t('wallet.staking.none') %> <a href="/staking"><%- t('wallet.staking.dashboard') %></a></p><% } else {
+         const ap = (f) => f == null ? '—' : pct(f); %>
+      <p class="info" style="margin:0"><%- t('wallet.staking.lead') %></p>
+      <div class="vaults">
+        <% VK.forEach((k) => { const a = (vaults.apr || {})[k] || {}; %>
+          <div class="vt" style="--c:<%= VC[k] %>">
+            <span class="vn"><%- VN[k] %></span>
+            <span class="px"><small><%- t('wallet.staking.share_price') %></small><%= (Number((vaults.prices || {})[k]) || 0).toFixed(4) %></span>
+            <span class="aprs"><span><%- t('wallet.staking.apr7') %> <b class="<%= a[7] == null ? '' : a[7] >= 0 ? 'up' : 'down' %>"><%= ap(a[7]) %></b></span>
+              <span><%- t('wallet.staking.apr30') %> <b class="<%= a[30] == null ? '' : a[30] >= 0 ? 'up' : 'down' %>"><%= ap(a[30]) %></b></span></span>
+          </div>
+        <% }) %>
+      </div>
+      <% if (vaults.next_epoch) { %><p class="info" style="margin:0">⏱️ <%- t('wallet.staking.next_cutoff', { when: cd(vaults.next_epoch) }) %></p><% } %>
+    <% } %>
+  </section>
 
   <!-- ───────── Loans ───────── -->
-  <h2><%- t('wallet.h.loans') %></h2>
   <% if (canAct) {
        const loanTable = (list, side) => { %>
     <div class="tbl"><table>
@@ -211,7 +360,7 @@
               <form class="inline" method="post" action="/act" style="margin-top:4px"><%- hidden('loan') %><input type="hidden" name="a0" value="decline"><input type="hidden" name="a1" value="<%= l.ref %>"><button class="alt" type="submit"><%- t('wallet.loan.decline') %></button></form>
             <% } else if (side === 'b' && l.status === 'active') { %>
               <form class="inline" method="post" action="/act" style="flex-wrap:nowrap"><%- hidden('loan') %><input type="hidden" name="a0" value="repay"><input type="hidden" name="a1" value="<%= l.ref %>">
-                <input type="number" name="a2" min="1" step="1" placeholder="<%- t('wallet.loan.all') %>" style="width:90px"><button type="submit"><%- t('wallet.loan.repay') %></button></form>
+                <input type="number" name="a2" min="1" step="1" placeholder="<%- t('wallet.loan.all') %>" aria-label="<%- t('wallet.amount') %>" style="width:90px"><button type="submit"><%- t('wallet.loan.repay') %></button></form>
             <% } else if (side === 'l' && l.status === 'active' && !l.reserve) { %>
               <form class="inline" method="post" action="/act" style="flex-wrap:nowrap"><%- hidden('loan') %><input type="hidden" name="a0" value="forgive"><input type="hidden" name="a1" value="<%= l.ref %>">
                 <label><input type="checkbox" required> <%- t('wallet.loan.sure') %></label><button class="danger" type="submit"><%- t('wallet.loan.forgive') %></button></form>
@@ -221,10 +370,12 @@
       <% }) %>
     </table></div>
   <% }; %>
+  <section class="sec" id="loans" aria-labelledby="lnH">
+    <div class="sec-h"><h2 id="lnH"><%- t('wallet.h.loans') %></h2></div>
     <h3><%- t('wallet.loan.borrowed') %></h3>
-    <% if (borrowed.length) loanTable(borrowed, 'b'); else { %><p class="info"><%- t('wallet.loan.owe_none') %></p><% } %>
+    <% if (borrowed.length) loanTable(borrowed, 'b'); else { %><p class="info" style="margin:0"><%- t('wallet.loan.owe_none') %></p><% } %>
     <h3><%- t('wallet.loan.lent') %></h3>
-    <% if (lent.length) loanTable(lent, 'l'); else { %><p class="info"><%- t('wallet.loan.lent_none') %></p><% } %>
+    <% if (lent.length) loanTable(lent, 'l'); else { %><p class="info" style="margin:0"><%- t('wallet.loan.lent_none') %></p><% } %>
     <div class="forms">
       <form method="post" action="/act" id="lend"><%- hidden('loan') %>
         <b>🤝 <%- t('wallet.lend.h') %></b>
@@ -238,7 +389,7 @@
       </form>
     </div>
     <% if (loanHistory.length) { %>
-      <details style="margin-top:12px"><summary><%- t('wallet.hist.summary', { n: loanHistory.length }) %></summary>
+      <details><summary><%- t('wallet.hist.summary', { n: loanHistory.length }) %></summary>
         <div class="tbl"><table>
           <tr><th><%- t('wallet.loan.loan') %></th><th><%- t('wallet.hist.with') %></th><th class="r"><%- t('wallet.loan.principal') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th><%- t('wallet.status') %></th><th><%- t('wallet.hist.ended') %></th></tr>
           <% loanHistory.forEach((l) => { %>
@@ -248,18 +399,21 @@
         </table></div>
       </details>
     <% } %>
+  </section>
   <% } %>
 
   <!-- ───────── Federal Reserve ───────── -->
-  <h2><%- t('wallet.h.reserve') %></h2>
-  <% if (!reserve) { %><p class="info"><%- t('wallet.reserve.none') %></p><% } else { %>
+  <section class="sec" id="reserve" aria-labelledby="rsH">
+    <div class="sec-h"><h2 id="rsH"><%- t('wallet.h.reserve') %></h2></div>
+  <% if (!reserve) { %><p class="info" style="margin:0"><%- t('wallet.reserve.none') %></p><% } else { %>
     <div class="stats">
       <div class="stat"><span><%- t('wallet.loan.rate') %></span><b><%- t('wallet.reserve.per_week', { rate: pct(reserve.rate_week) }) %></b></div>
       <div class="stat"><span><%- t('wallet.reserve.max_term') %></span><b><%- t('wallet.reserve.max_days', { n: reserve.max_days }) %></b></div>
       <div class="stat"><span><%- t('wallet.reserve.lending') %></span><b class="<%= reserve.enabled ? 'green' : 'red' %>"><%- reserve.enabled ? t('wallet.reserve.open') : t('wallet.reserve.closed') %></b></div>
     </div>
     <% const ml = myLimit || { state: 'nodata' }; const bd = ml.breakdown; %>
-    <div class="card limit<%= ml.state === 'ok' ? ' own' : '' %>" style="margin-top:12px">
+    <div class="two">
+    <div class="card limit<%= ml.state === 'ok' ? ' own' : '' %>">
       <% if (ml.state === 'nolink') { %>
         <span class="name">🏦 <%- t('wallet.limit.h') %></span>
         <span class="info"><%- t('wallet.limit.nolink', { link: '<a href="/u/' + t.esc(encodeURIComponent(user)) + '">' + t('wallet.limit.link_name') + '</a>' }) %></span>
@@ -286,7 +440,7 @@
       <% } %>
     </div>
     <% if (myCredit) { const c = myCredit; %>
-      <div class="card" id="credit" style="margin-top:12px">
+      <div class="card" id="credit">
         <span class="name">📊 <%- t('wallet.credit.h') %></span>
         <div class="credit">
           <span class="num"><%= c.score %></span>
@@ -301,6 +455,7 @@
         <span class="info"><%- t('wallet.credit.info') %></span>
       </div>
     <% } %>
+    </div>
     <% if (canAct && reserve.enabled) { %>
       <div class="forms">
         <% if (ml.state === 'ok' || ml.state === 'nodata') { %>
@@ -310,7 +465,7 @@
           <% if (ml.state === 'ok') { %>
             <input type="number" name="a1" min="<%= Math.min(reserve.min || 1, ml.limit) %>" max="<%= ml.limit %>" step="1" value="<%= ml.limit %>" placeholder="<%- t('wallet.amount_pat') %>" aria-label="<%- t('wallet.amount_pat') %>" required>
           <% } else { %>
-            <input type="number" name="a1" min="1" step="1" placeholder="<%- t('wallet.amount_pat') %>" required>
+            <input type="number" name="a1" min="1" step="1" placeholder="<%- t('wallet.amount_pat') %>" aria-label="<%- t('wallet.amount_pat') %>" required>
           <% } %>
           <label><%- t('wallet.term') %> <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%- days_(d) %></option><% }) %></select></label>
           <button type="submit"><%- t('wallet.borrow.button') %></button>
@@ -320,21 +475,10 @@
         <form method="post" action="/act" id="reserve-request"><%- hidden('loan') %>
           <b>📝 <%- t('wallet.request.h') %></b>
           <input type="hidden" name="a0" value="request">
-          <input type="number" name="a1" min="1" step="1" placeholder="<%- t('wallet.amount_pat') %>" required>
+          <input type="number" name="a1" min="1" step="1" placeholder="<%- t('wallet.amount_pat') %>" aria-label="<%- t('wallet.amount_pat') %>" required>
           <label><%- t('wallet.term') %> <select name="a2"><% terms.forEach((d) => { %><option value="<%= d %>d"<%= d === 7 ? ' selected' : '' %>><%- days_(d) %></option><% }) %></select></label>
-          <input type="text" name="a3" maxlength="200" placeholder="<%- t('wallet.request.why_ph') %>" required>
+          <input type="text" name="a3" maxlength="200" placeholder="<%- t('wallet.request.why_ph') %>" aria-label="<%- t('wallet.request.why_ph') %>" required>
           <button type="submit"><%- t('wallet.request.send') %></button>
-        </form>
-      </div>
-    <% } %>
-    <% if (canAct) { %>
-      <div class="forms">
-        <form method="post" action="/act" id="donate"><%- hidden('donate') %>
-          <b>🎁 <%- t('wallet.donate.h') %></b>
-          <label><%- t('wallet.donate.into') %> <select name="a0"><option value="casino">💰 <%- t('wallet.donate.casino') %></option><option value="lotto">🎟️ <%- t('wallet.donate.lotto') %></option><option value="house">🎰 <%- t('wallet.donate.house') %></option></select></label>
-          <input type="text" name="a1" pattern="[0-9][0-9,]*[kKmM]?" placeholder="<%- t('wallet.donate.amount_ph') %>" required aria-label="<%- t('wallet.amount') %>">
-          <button type="submit"><%- t('wallet.donate.button') %></button>
-          <span class="info"><%- t('wallet.donate.info') %></span>
         </form>
       </div>
     <% } %>
@@ -349,10 +493,12 @@
       </table></div>
     <% } %>
   <% } %>
+  </section>
 
   <!-- ───────── Market positions ───────── -->
-  <h2><%- t('wallet.h.positions') %></h2>
-  <% if (!positions.length) { %><p class="info"><%- t('wallet.pos.none') %> <a href="/markets"><%- t('wallet.pos.browse') %></a></p><% } else { %>
+  <section class="sec" id="positions" aria-labelledby="psH">
+    <div class="sec-h"><h2 id="psH"><%- t('wallet.h.positions') %></h2><a class="info" href="/markets"><%- t('wallet.pos.browse') %></a></div>
+  <% if (!positions.length) { %><p class="info" style="margin:0"><%- t('wallet.pos.none') %></p><% } else { %>
     <div class="tbl"><table>
       <tr><th><%- t('wallet.pos.market') %></th><th><%- t('wallet.pos.option') %></th><th class="r"><%- t('wallet.pos.shares') %></th><th class="r"><%- t('wallet.pos.entry') %></th><th class="r"><%- t('wallet.pos.price') %></th><th class="r"><%- t('wallet.pos.value') %></th><th class="r"><%- t('wallet.pos.pl') %></th></tr>
       <% positions.forEach((p) => { p.mine.forEach((x, i) => { %>
@@ -361,11 +507,11 @@
           <td class="r"><%= fmt(x.value) %></td><td class="r <%= x.pnl >= 0 ? 'up' : 'down' %>"><%= (x.pnl >= 0 ? '+' : '') + fmt(x.pnl) %></td></tr>
       <% }) }) %>
     </table></div>
-    <p class="info"><%- t('wallet.pos.info') %></p>
+    <p class="info" style="margin:0"><%- t('wallet.pos.info') %></p>
   <% } %>
   <% const settledP = typeof settledPositions !== 'undefined' ? settledPositions : []; %>
   <% if (settledP.length) { %>
-    <h3 style="margin-top:16px"><%- t('wallet.settled.h') %></h3>
+    <h3><%- t('wallet.settled.h') %></h3>
     <div class="tbl"><table class="settled-pos">
       <tr><th><%- t('wallet.pos.market') %></th><th><%- t('wallet.pos.option') %></th><th class="r"><%- t('wallet.pos.shares') %></th><th class="r"><%- t('wallet.settled.cost') %></th><th class="r"><%- t('wallet.loan.paid') %></th><th class="r"><%- t('wallet.pos.pl') %></th><th><%- t('wallet.settled.result') %></th></tr>
       <% settledP.forEach((p) => { p.mine.forEach((x, i) => { %>
@@ -376,13 +522,15 @@
           <td><%- x.state === 'won' ? '🏆 ' + t('wallet.settled.won') : x.state === 'lost' ? t('wallet.settled.lost') : t('wallet.settled.refunded') %></td></tr>
       <% }) }) %>
     </table></div>
-    <p class="info"><%- t('wallet.settled.info') %></p>
+    <p class="info" style="margin:0"><%- t('wallet.settled.info') %></p>
   <% } %>
+  </section>
 
   <!-- ───────── Admin ───────── -->
   <% if (admin) { %>
+  <section class="sec" aria-label="Admin">
     <h2 id="admin-requests">ADMIN · RESERVE REQUESTS</h2>
-    <% if (!admin.pending.length) { %><p class="info">No pending loan requests.</p><% } %>
+    <% if (!admin.pending.length) { %><p class="info" style="margin:0">No pending loan requests.</p><% } %>
     <div class="grid">
       <% admin.pending.forEach((r) => { %>
         <div class="card admin">
@@ -396,14 +544,14 @@
           <span class="info">“<%= r.why %>”</span>
           <form class="inline" method="post" action="/act"><%- hidden('loan') %>
             <input type="hidden" name="a0" value="approve"><input type="hidden" name="a1" value="LR<%= r.id %>">
-            <input type="number" name="a2" min="1" step="1" placeholder="<%= fmt(r.amount) %>" title="Amount (blank = as asked)">
-            <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="<%= dur(r.term) %>" title="Term like 7d (blank = as asked)">
-            <input type="text" name="a4" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="rate %" title="Rate % per week (blank = default)">
+            <input type="number" name="a2" min="1" step="1" placeholder="<%= fmt(r.amount) %>" title="Amount (blank = as asked)" aria-label="Amount (blank = as asked)">
+            <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="<%= dur(r.term) %>" title="Term like 7d (blank = as asked)" aria-label="Term like 7d (blank = as asked)">
+            <input type="text" name="a4" pattern="[0-9]+(\.[0-9]+)?%?" placeholder="rate %" title="Rate % per week (blank = default)" aria-label="Rate % per week (blank = default)">
             <button class="admin" type="submit">Approve</button>
           </form>
           <form class="inline" method="post" action="/act"><%- hidden('loan') %>
             <input type="hidden" name="a0" value="deny"><input type="hidden" name="a1" value="LR<%= r.id %>">
-            <input type="text" name="a2" maxlength="200" placeholder="Reason">
+            <input type="text" name="a2" maxlength="200" placeholder="Reason" aria-label="Reason">
             <button class="danger" type="submit">Deny</button>
           </form>
         </div>
@@ -419,7 +567,7 @@
       </div>
     <% } %>
     <% if (admin.reserveLoans.length) { %>
-      <div class="tbl" style="margin-top:10px"><table>
+      <div class="tbl"><table>
         <tr><th>Loan</th><th>Borrower</th><th class="r">Principal</th><th class="r">Owed</th><th class="r">Paid</th><th class="r">Left</th><th>Due</th></tr>
         <% admin.reserveLoans.forEach((l) => { %>
           <tr><td class="ref"><%= l.ref %><%- l.late ? ' <span class="pill late">LATE</span>' : '' %></td><td><%- ul(l.borrower) %></td><td class="r"><%= fmt(l.principal) %></td>
@@ -431,15 +579,15 @@
       <form class="admin" method="post" action="/act"><%- hidden('loan') %>
         <b>🏦 Grant a Reserve loan</b>
         <input type="hidden" name="a0" value="grant">
-        <input type="text" name="a1" data-at maxlength="60" placeholder="@user" required>
-        <input type="number" name="a2" min="1" step="1" placeholder="Amount (PAT)" required>
-        <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="Term, e.g. 7d" required>
+        <input type="text" name="a1" data-at maxlength="60" placeholder="@user" aria-label="@user" required>
+        <input type="number" name="a2" min="1" step="1" placeholder="Amount (PAT)" aria-label="Amount (PAT)" required>
+        <input type="text" name="a3" pattern="[0-9]+[hdw]" placeholder="Term, e.g. 7d" aria-label="Term, e.g. 7d" required>
         <button class="admin" type="submit">Grant</button>
       </form>
     </div>
 
     <h2 id="admin-stashes">ADMIN · ALL STASHES</h2>
-    <% if (!admin.stashes.length) { %><p class="info">No stashes.</p><% } else { %>
+    <% if (!admin.stashes.length) { %><p class="info" style="margin:0">No stashes.</p><% } else { %>
       <div class="tbl"><table>
         <tr><th>Stash</th><th class="r">Balance</th><th class="r">In vaults</th><th>Holdings</th><th>Members</th></tr>
         <% admin.stashes.forEach((s) => { %>
@@ -449,6 +597,7 @@
         <tr class="tot"><td><%= admin.stashes.length %> stashes</td><td class="r"><%= fmt(admin.totals.balance) %></td><td class="r"><%= fmt(admin.totals.vaulted) %></td><td></td><td></td></tr>
       </table></div>
     <% } %>
+  </section>
   <% } %>
 
   <script>
@@ -457,6 +606,14 @@
       const fmt = (s) => s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : s >= 60 ? Math.floor(s/60) + 'm ' + (s%60) + 's' : s > 0 ? s + 's' : _t('js.wallet.now', 'now');
       const tick = () => document.querySelectorAll('[data-until]').forEach((el) => { el.textContent = fmt(Math.max(0, Math.round(Number(el.dataset.until) - Date.now() / 1000))); });
       tick(); setInterval(tick, 1000);
+      // 💸 Send or tip: straight to that member's tip page (without JS the form searches for them)
+      const send = document.getElementById('send');
+      if (send) send.addEventListener('submit', (e) => {
+        const v = String(document.getElementById('sendTo').value || '').trim().replace(/^@+/, '');
+        if (!/^[A-Za-z0-9_.\-]{1,60}$/.test(v)) return;
+        e.preventDefault();
+        location.href = '/u/' + encodeURIComponent(v) + '/tip';
+      });
       const who = document.querySelector('#lend input[name=a0]'), out = document.getElementById('lend-credit');
       if (who && out) {
         let t = null, last = '';
@@ -480,6 +637,6 @@
     })();
   </script>
 <% } %>
-</div>
+</main>
 </body>
 </html>
