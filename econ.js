@@ -86,7 +86,7 @@ const enabled = async () => !!(await config()).economy_e0;
 // "layer" (E-1, Pepe's pepe_layers.py): an internal move between economy layers - a Fed policy mint, the
 // one-time Fort Knox migration. Journaled with the charges (same ref idempotency) but never revenue.
 const KINDS = new Set(["room", "federal", "fine", "game", "layer"]);
-const VIAS = new Set(["chat", "pm", "web", "system"]);
+const VIAS = new Set(["chat", "pm", "web", "system", "telegram"]);   // 1.99kn: telegram = a command run from Pepe's Telegram bridge
 function cleanCharge(x) {
   if (!x || typeof x !== "object") return null;
   const ref = str(x.ref, 64);

@@ -102,6 +102,8 @@ async function add(userId, n) {
   const r = await runQuery(`INSERT OR IGNORE INTO inbox (user_id, kind, title, body, link, created, ref) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [userId, x.kind, x.title, x.body || null, x.link, x.created, x.ref]);
   const stored = !!(r && r.changes);
+  // 1.99kn: the member's Telegram alert for this notice, if they linked Telegram and want this kind (telegram.js)
+  if (stored) { try { require("./telegram").onNotice(userId, x); } catch (e) { /* never fails the notice */ } }
   if (stored && Math.random() < 0.05) {
     runQuery(`DELETE FROM inbox WHERE user_id = ? AND id NOT IN (SELECT id FROM inbox WHERE user_id = ? ORDER BY id DESC LIMIT ?)`,
       [userId, userId, KEEP_PER_USER]).catch(() => {});

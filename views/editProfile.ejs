@@ -464,6 +464,14 @@
         <div class="conn-cf"><span class="status" id="plexStatus" role="status" aria-live="polite"></span>
           <span class="hint"><%- t('settings.connections.plex_hint', { link: '<a href="/subscriptions#plex">' + t('subs.title') + '</a>' }) %></span></div>
       </div>
+      <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
+      <% const tg_ = locals.telegram || { linked: false, handle: null }; %>
+      <div class="conn-row" id="telegramDiv">
+        <span class="conn-ico" style="background:#229ed9;color:#fff">✈️</span>
+        <span class="conn-name">Telegram<b><% if (tg_.linked) { %><span style="color:#7cc8f0"><%= tg_.handle ? '@' + tg_.handle : t('settings.connections.tg_linked') %></span><% } else { %><span class="none"><%- t('settings.connections.not_linked') %></span><% } %></b></span>
+        <a class="btn" href="/settings/telegram" style="background:#229ed9;border-color:#229ed9;color:#fff"><%- tg_.linked ? t('settings.connections.tg_manage') : t('settings.connections.tg_link') %></a>
+        <div class="conn-cf"><span class="hint"><%- t('settings.connections.tg_hint') %></span></div>
+      </div>
     </div>
   </section>
 

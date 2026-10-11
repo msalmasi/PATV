@@ -543,6 +543,10 @@ async function send(user, { to, conversation, body, pictures, nsfw } = {}, ctx =
       continue;
     }
     if (ra && ra.camfrogUsername && !r.muted && !theyBlock) await queueAlert(r.user_id, conv.id, t, mid);
+    // 1.99kn: the Telegram alert (telegram.js: the member's switch, the preview rule, read-on-site cancels it)
+    if (ra && !r.muted && !theyBlock) {
+      try { require("./telegram").onDm(r.user_id, { conversationId: conv.id, messageId: mid, from: display(me), text, pics: picIds.length, group: group ? conv.title || "group" : null }); } catch (e) { /* never fails the send */ }
+    }
     emit(r.user_id, { t: "msg", c: conv.id, m: theyBlock ? { ...msg, blocked: true } : msg, conv: theirHead });
   }
   emit(me.userId, { t: "msg", c: conv.id, m: msg, conv: head });
@@ -1221,6 +1225,8 @@ async function pepeReply({ conversation, upto, text } = {}) {
   const head = headFor(conv, pepeAcc);
   await dress({ msgs: [msg], people: [head.with] });
   emit(u.userId, { t: "msg", c: conv.id, m: msg, conv: head });
+  // 1.99kn: Pepe's answer to "Message Pepe" reaches Telegram too (telegram.js onDm, the member's "dm" switch)
+  try { require("./telegram").onDm(u.userId, { conversationId: conv.id, messageId: mid, from: (pepeAcc && display(pepeAcc)) || "Pepe", text: body }); } catch (e) { /* never fails the reply */ }
   return { message: { id: mid } };
 }
 

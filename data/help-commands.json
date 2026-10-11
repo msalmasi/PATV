@@ -591,9 +591,12 @@
    "syntax": [
     "Telegram"
    ],
-   "summary": "The bot is also available on Telegram!",
-   "details": "The bot is also available on Telegram! Ask questions, search transcripts/logs, set keyword alerts, and monitor the room remotely.",
-   "examples": [],
+   "summary": "Pepe on Telegram: your alerts, and with a Season Pass his commands and a chat with him.",
+   "details": "Link Telegram at publicaccess.tv → Settings → Telegram (or Edit profile → Connections): you get a one-time code, open Pepe's bot and press Start. Linking is free and brings your alerts to Telegram - direct messages, room mentions, tips, follows / go-live and any other notice kind you switch on.\n\nWith a **Season Pass** you can also run Pepe's PAT commands there - `/balance`, `/tip`, `/stash`, `/history`, `/ask`, `/imagine`, `/chart`, `/web`, `/relay`, `/redeem`, cosmetics and more (`/help` in the bot lists them with prices) - as your linked Camfrog name, at the same prices as in a room. A Telegram spend has no room, so it goes to Fort Knox. Casino games, wagers, markets, loans, heists, moderation and anything that needs Pepe in a room aren't available. Anything that isn't a command is a chat with Pepe, priced like Message Pepe.\n\n`/account` shows your link, `/unlink` removes it.",
+   "examples": [
+    "/tip bob 500",
+    "/ask what's the weather in London"
+   ],
    "keywords": []
   },
   {
@@ -2265,9 +2268,10 @@
     "!reserve"
    ],
    "summary": "The 🏛️ Federal Reserve — the bank heist's vault, and the only pool Pepe can print into.",
-   "details": "The **🏛️ Federal Reserve** — the bank heist's vault, and the only pool Pepe can print into. Anyone can check the balance; admins get `!reserve mint <amount>` to print PAT into it on the spot (announced in every room — silently minting money is exactly what shouldn't be invisible), plus `!reserve auto on|off` and `!reserve floor <amount>` to have the daily tick top it back up to a floor. Auto is **off by default**. **Economy v2** (layers on): the Fed is the untouchable backstop - nobody robs it, it pays no rewards and moves nothing into pools; it only makes liquidity loans to the Treasury vaults (House, Bank, Market maker: `!econ fedloan`) or restores archived accounts, and mints only by written policy: `!reserve mint <amount> loan|restore <reason>`. `!reserve pay` / `!reserve fund` and automint are off while the layers are on.",
+   "details": "The **🏛️ Federal Reserve** — the bank heist's vault, and the only pool Pepe can print into. Anyone can check the balance; admins get `!reserve mint <amount>` to print PAT into it on the spot (announced in every room — silently minting money is exactly what shouldn't be invisible), plus `!reserve auto on|off` and `!reserve floor <amount>` to have the daily tick top it back up to a floor. Auto is **off by default**. **Economy v2/v3** (layers on): the Fed is the protocol's backstop - nobody robs it, it pays no rewards and never pays a wallet (`!reserve pay` is off), and it mints only by written policy. `!reserve mint <amount> <reason>` is the admin mint into the Fed (the same as `!econ mint`). It funds the protocol's pools two ways, admins only, dry run + confirm, logged: a **grant** (`!reserve fund <pool> <amount> <reason>` = `!econ fund`, not repayable) or a **loan** (`!econ fedloan <pool> <amount> <reason>`, repaid from that pool's surplus or overflow). Automint is off while the layers are on.",
    "examples": [
-    "!reserve mint <amount>",
+    "!reserve mint <amount> <reason>",
+    "!reserve fund <pool> <amount> <reason>",
     "!reserve auto on|off",
     "!reserve floor <amount>"
    ],
@@ -2313,9 +2317,13 @@
     "!econ"
    ],
    "summary": "The economy layers at a glance: the Federal Reserve (and its loans to the Treasury vaults), Fort Knox and the incentive budget.",
-   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Loans are repaid first from that vault's weekly surplus. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ get [key]` (the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; one key shows its value, default and label), `!econ set <key> <value>` (changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back; validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card; keys: fed_target, house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap, budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad), `!econ monetary` (economy v3: the Federal Reserve's band - it mints back up to its floor, 25M by default, at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity), `!econ mints` (this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints), `!econ mint <amount> <fed|incentives|house|bank|mm|fortknox|casino> <reason>` (an admin mint into the Fed or a named pool, never a wallet - a dry run first, then `!econ mint confirm <id>`; logged and inside the monthly admin cap), `!econ fedseed <total> [reason]` (mints the Federal Reserve up to <total>, once per total - a dry run first, then `!econ fedseed confirm <id>`), `!econ flash` (the Fed's flash liquidity: when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap at once, inside the Fed loan cap; an admin action that draws on it asks for a second confirm), `!econ set` also takes the v3 keys: fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|admin|loan|restore|total> (a number or unlimited), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, room_vault_cap, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their room vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
+   "details": "Shows each layer's balance and whether the economy v2 layers are on. Admins: `!econ layers on|off`, `!econ roomvaults on|off` (room vaults, economy v2 E-3: room spending goes 50/50 to Fort Knox and the room's vault; needs the layers on), `!econ roomvaults migrate` (moves the pads' room-vault escrow on the website into their room vaults - a dry run first, then `!econ roomvaults confirm <id>`),`!econ fortknox migrate` (a dry run first, then `!econ fortknox confirm <id>`), `!econ seed` (the one-time opening balances: the Bank's idle protocol capital above its target tops Fort Knox up to 2M and the rest goes to the incentive budget - a dry run first, then `!econ seed confirm <id>`; nothing is minted), `!econ fedmint` (the one-time cutover mint that tops the Federal Reserve up to exactly 25M - a dry run first, then `!econ fedmint confirm <id>`), `!econ fedloan` (lists the Federal Reserve's outstanding liquidity loans; `!econ fedloan <house|bank|mm> <amount> <reason>` previews a loan to a Treasury vault whose cash is below its hard floor - House 5M, Bank 1M, Market maker 0.5M - and whose value is below its target, capped at the gap and at 10M outstanding in total, minting the shortfall under the loan policy if the Fed is short; then `!econ fedloan confirm <id>` within 2 minutes. Treasury loans are repaid first from that vault's weekly surplus. `!econ fedloan fortknox|casino <amount> <reason>` lends to Fort Knox or the Casino vault, up to the pool's cap and inside the same 10M; it is repaid first from that pool's overflow above its cap (the daily release pays the Fed before the incentive budget) or early with `!econ fedloan repay <id> [amount]` (dry run + confirm). The incentive budget, the lotto pot and room vaults are grant only (`!econ fund`): they have no surplus of their own to repay from. The Bank's loan-default insurance opens one automatically when its own surplus can't cover a default), `!econ check`, `!econ get [key]` (the economy v2 floors, targets, caps and weekly budgets - every number on the admin panel's Federal Reserve & floors card - with their defaults; one key shows its value, default and label), `!econ set <key> <value>` (changes one, e.g. `!econ set fortknox_floor 2.5m`; `!econ set <key> default` puts it back; validated - whole PAT, floor at most the target / cap, weekly budgets at most 100M in total - applied at once and logged on the card; keys: fed_target, house_target, house_hard_floor, bank_target, bank_hard_floor, bank_lent_mult_pct, bank_peak_days, mm_target, mm_hard_floor, fedloan_cap, fortknox_floor, fortknox_cap, casino_floor, casino_cap (above either cap the daily release sends the overflow into the incentive budget), budget_<group> and pace_<group> (days a group's week is spread over, 0 = not paced) for welcome, levelup, achievements, misc, royalties, roomgames, turf, season, launchpad), `!econ monetary` (economy v3: the Federal Reserve's band - it mints back up to its floor, 25M by default, at most 5M a day, and releases what is above its ceiling, 150M, to the burn or the incentive budget - the Monday incentive guarantee, organic issuance and Fed flash liquidity), `!econ mints` (this month's mints per source - issuance, floor, admin, loans, restores, donations, seed - against their monthly caps, and the latest mints), `!econ mint <amount> <reason>` (an admin mint into the Federal Reserve only - never a pool or a wallet; a dry run first, then `!econ mint confirm <id>`; logged, no cap of its own, counted in the monthly total cap), `!econ fund <house|bank|mm|fortknox|casino|incentives|lotto|room:<id>> <amount> <reason>` (a Fed grant: moves PAT the Fed holds into that pool, not repayable, nothing minted - a dry run first, then `!econ fund confirm <id>`; a grant that takes the Fed below its floor is flagged and needs the confirm twice - the next daily tick mints the Fed back up inside the caps; Fort Knox, the Casino vault and room vaults take at most what fits under their cap; also the admin panel's \"Fund a pool from the Reserve\" form, grant or loan), `!econ fedseed <total> [reason]` (mints the Federal Reserve up to <total>, once per total - a dry run first, then `!econ fedseed confirm <id>`), `!econ flash` (the Fed's flash liquidity: when a player loan, a House payout or a market seed is bigger than the Bank, the House or the Market maker can pay, the Fed lends that vault the gap at once, inside the Fed loan cap; an admin action that draws on it asks for a second confirm), `!econ set` also takes the v3 keys: fed_floor, fed_ceiling, fed_floor_mint_daily, fed_ceiling_action burn|incentives, incentive_guarantee on|off, issuance_mode off|pct|fixed, issuance_pct_month, issuance_fixed_month, issuance_activity_scaling, mintcap_<issuance|floor|loan|restore|total> (a number or unlimited; the admin mint has no cap of its own and counts toward mintcap_total), flash_bank / flash_house / flash_mm on|off, grant_weekly_cap, donation_rate, donation_bonus_pct, staker_share_pct, fed_split_pct, room_vault_cap, `!econ launchpad` (the pad launchpad: new pads build momentum - regulars who keep coming back - toward launch grants from the incentive budget into their room vault, plus newcomer welcomes, owner deposit matching and front-page boost credit; `!econ launchpad on|off`, `!econ launchpad set <key> <value>` for every number, `!econ launchpad tier <n> <regulars> <active days> <grant>`, `!econ launchpad pads|grants`; graduations are approved on the website's admin economy page). `!econ` also shows the Fed loans outstanding.",
    "examples": [
-    "!econ"
+    "!econ",
+    "!econ mint 5m restock the Fed after the event",
+    "!econ fund incentives 2m weekend event prizes",
+    "!econ fedloan casino 3m casino vault for tonight's job",
+    "!econ fedloan repay FL3"
    ],
    "keywords": [
     "fort knox",
@@ -6112,7 +6120,7 @@
   },
   {
    "id": "reserve-fund-casino-lotto-house",
-   "title": "!reserve fund casino|lotto|house [amount]",
+   "title": "!reserve fund <pool> <amount> <reason>",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6120,11 +6128,14 @@
    ],
    "aliases": [],
    "syntax": [
-    "!reserve fund casino|lotto|house [amount]"
+    "!reserve fund <pool> <amount> <reason>"
    ],
-   "summary": "Top up the Casino vault (what casino heists rob), the Lotto pot or the House from the Federal Reserve — a transfer, not a mint, and the Reserve always keeps 1M.",
-   "details": "Top up the **Casino vault** (what casino heists rob), the **Lotto pot** or the **House** from the Federal Reserve — a transfer, not a mint, and the Reserve always keeps 1M. It's tagged “reserve fund”: never counted as House profit, and shown with the mints in the vault-flow table. Also a button under Automint in the admin panel. **Off under economy v2** (layers on): the Fed is the untouchable backstop, so casino pools refill from the incentive budget (floors) or player donations (`!donate casino|lotto|house`).",
-   "examples": [],
+   "summary": "A Fed grant: move PAT from the Federal Reserve into a protocol pool (not repayable, never a wallet). The same as !econ fund.",
+   "details": "Under economy v2/v3 (layers on) this is the **Fed grant**, the same as `!econ fund <pool> <amount> <reason>`: it moves PAT the Federal Reserve already holds into one of the protocol's pools - `house`, `bank`, `mm`, `fortknox`, `casino`, `incentives`, `lotto` or a room vault `room:<room id>` - with a written reason. It is not repayable and nothing is minted; never into a wallet. A dry run first, then `!econ fund confirm <id>` within 2 minutes. A grant that would take the Fed below its floor is flagged and needs the confirm twice (the next daily tick mints the Fed back up, inside the monthly caps). Fort Knox, the Casino vault and room vaults take at most what fits under their cap. A grant into the House, Bank or Market maker is protocol capital (the protocol takes shares at today's price, so stakers' share price doesn't jump). It's tagged “reserve fund”: never counted as House profit. For a repayable top-up use `!econ fedloan`. With the layers off it is the old v1 top-up of the Casino vault, Lotto pot or House.",
+   "examples": [
+    "!reserve fund casino 2m refill the casino vault for the weekend",
+    "!econ fund room:PepeLab 500k launch event"
+   ],
    "keywords": []
   },
   {
@@ -6140,7 +6151,7 @@
     "!reserve pay [user] [amount]"
    ],
    "summary": "Pay a player out of the Federal Reserve (the bank heist's vault).",
-   "details": "Pay a player out of the **Federal Reserve** (the bank heist's vault). It moves PAT that's already in the vault — nothing is created — and it can't pay out more than the Reserve holds. Amounts take `k`/`m` (`50k`, `1.5m`). **Off under economy v2** (layers on): the Fed is the untouchable backstop and pays no one.",
+   "details": "Pay a player out of the **Federal Reserve** (the bank heist's vault). It moves PAT that's already in the vault — nothing is created — and it can't pay out more than the Reserve holds. Amounts take `k`/`m` (`50k`, `1.5m`). **Off under economy v2/v3** (layers on): the Fed never pays a wallet - it funds pools only (`!econ fund` / `!econ fedloan`).",
    "examples": [],
    "keywords": []
   },
@@ -6391,7 +6402,7 @@
   },
   {
    "id": "vault-mint-reserve-mint",
-   "title": "!vault mint [vault] [amount] · !reserve mint [amount]",
+   "title": "!vault mint [amount] [reason] · !reserve mint [amount] [reason]",
    "category": "admin",
    "role": "admin",
    "commands": [
@@ -6400,16 +6411,15 @@
    ],
    "aliases": [],
    "syntax": [
-    "!vault mint [vault] [amount]",
-    "!reserve mint [amount]"
+    "!vault mint [amount] [reason]",
+    "!reserve mint [amount] [reason]"
    ],
-   "summary": "Prints PAT straight into either vault.",
-   "details": "**Prints PAT straight into either vault.** `!vault mint jackpot|reserve <amount>` — the casino jackpot goes through the backend (it's the same pot the site and Discord see), the Reserve is the bot's own. Aliases work: `casino`/`wheel`/`spin` for the jackpot, `fed`/`bank` for the Reserve. Amounts take `k` and `m` suffixes, so `!vault mint casino 500k` is fine.\nThis is the only lever in the game that creates PAT rather than moving it, so it's admin-only and **announced in every room** whichever pool it lands in. Use it to seed a vault early in a season, before sink inflow has built it into a target worth robbing. `!reserve mint <amount>` still works as the Reserve shortcut.\n\n`!reserve auto on|off` has the daily tick top the Reserve back up to a floor automatically (**off by default**), and `!reserve floor <amount>` sets that floor. Plain `!reserve` is public and just shows the balance.",
+   "summary": "The admin mint: prints PAT into the Federal Reserve only, with a written reason (dry run + confirm).",
+   "details": "**The admin mint - into the Federal Reserve only.** `!vault mint <amount> <reason>`, `!reserve mint <amount> <reason>` and `!econ mint <amount> <reason>` are the same written-policy mint (policy \"admin\"): a dry run first, then `!econ mint confirm <id>` within 2 minutes, journaled in the mint log, announced in every room. It has no monthly cap of its own but counts toward `mintcap_total` (unlimited by default). It never lands in another pool or a wallet: naming a pool (`!vault mint casino 500k ...`) is refused - mint into the Fed, then move it with `!econ fund <pool> <amount> <reason>` (a grant) or `!econ fedloan <pool> <amount> <reason>` (a loan). Amounts take `k` and `m` suffixes.\n\n`!reserve auto on|off` / `!reserve floor <amount>` are the v1 auto-top-up (off, and refused while the economy layers are on). Plain `!reserve` is public and shows the balance.",
    "examples": [
-    "!vault mint jackpot|reserve <amount>",
-    "!vault mint casino 500k",
-    "!reserve mint <amount>",
-    "!reserve auto on|off"
+    "!vault mint 5m restock the Fed after the event",
+    "!reserve mint 5m restock the Fed after the event",
+    "!econ mint confirm <id>"
    ],
    "keywords": [],
    "webchat": true
@@ -6497,5 +6507,5 @@
   }
  ],
  "undocumented": [],
- "hash": "53fcdca9fe6bcac9"
+ "hash": "4b496ca7810b05a3"
 }

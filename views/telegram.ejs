@@ -1,0 +1,140 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /settings/telegram — ✈️ Pepe on Telegram (1.99kn, telegram.js). Locals: user, title, boot (telegram.state()).
+    Everything from the server goes in with textContent; the JSON boot is < -escaped. %>
+<%- include('layout', { title: title, user: user }) %>
+<%- include('partials/legal-css') %>
+<style>
+  .tg .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
+  .tg .card h2 { border: 0; padding: 0; margin: 0 0 6px; font-size: 18px; }
+  .tg .mut { color: #9a9a9a; font-size: 13.5px; }
+  .tg label.ck { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-size: 15px; }
+  .tg .kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 2px 14px; }
+  .tg button, .tg a.btn { display: inline-block; padding: 8px 14px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; }
+  .tg button.pri, .tg a.pri { background: #229ed9; border-color: #229ed9; color: #fff; font-weight: bold; }
+  .tg .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+  .tg .code { font: bold 22px/1.2 ui-monospace, Consolas, monospace; letter-spacing: 3px; padding: 6px 12px; border-radius: 9px; background: #0d0d0d; border: 1px dashed #3a3a3a; user-select: all; overflow-wrap: anywhere; }
+  .tg .msg { min-height: 1.4em; font-size: 14px; }
+  .tg .msg.bad { color: #ff9e9e; } .tg .msg.ok { color: #a5d6a7; }
+  .tg ul.tiers { margin: 6px 0 0; padding-left: 20px; } .tg ul.tiers li { margin: 4px 0; }
+  .tg .on { color: #a5d6a7; } .tg .off { color: #9a9a9a; }
+</style>
+<main class="lg tg">
+  <header class="hero">
+    <div class="eyebrow">✈️ <%- t('settings.telegram.eyebrow') %></div>
+    <h1><%- t('settings.telegram.h1') %></h1>
+    <p class="lead"><%- t('settings.telegram.lead') %></p>
+  </header>
+
+  <section class="card" aria-labelledby="tgLinkH">
+    <h2 id="tgLinkH"><%- t('settings.telegram.link_h') %></h2>
+    <p id="tgStatus"></p>
+    <p class="mut" id="tgNoBot" hidden><%- t('settings.telegram.no_bot') %></p>
+    <p class="mut" id="tgBanned" hidden><%- t('settings.telegram.unavailable') %></p>
+    <div id="tgCodeBox" hidden>
+      <p><%- t('settings.telegram.code_step') %></p>
+      <div class="row"><span class="code" id="tgCode"></span><a class="btn pri" id="tgOpen" target="_blank" rel="noopener noreferrer" hidden><%- t('settings.telegram.open') %></a></div>
+      <p class="mut" id="tgCodeHelp"></p>
+    </div>
+    <div class="row">
+      <button type="button" class="pri" id="tgLinkBtn"><%- t('settings.telegram.link') %></button>
+      <button type="button" id="tgTestBtn" hidden><%- t('settings.telegram.test') %></button>
+      <button type="button" id="tgUnlinkBtn" hidden><%- t('settings.telegram.unlink') %></button>
+      <span class="msg" id="tgMsg" role="status" aria-live="polite"></span>
+    </div>
+    <p class="mut"><%- t('settings.telegram.privacy') %></p>
+  </section>
+
+  <section class="card" aria-labelledby="tgTierH">
+    <h2 id="tgTierH"><%- t('settings.telegram.tiers_h') %></h2>
+    <ul class="tiers">
+      <li><%- t('settings.telegram.tier_alerts') %></li>
+      <li><%- t('settings.telegram.tier_full', { link: '<a href="/premium">' + t('settings.telegram.season_pass') + '</a>' }) %></li>
+    </ul>
+    <p id="tgTier"></p>
+    <p class="mut" id="tgNoCf" hidden><%- t('settings.telegram.no_camfrog') %></p>
+  </section>
+
+  <section class="card" aria-labelledby="tgAlertsH">
+    <h2 id="tgAlertsH"><%- t('settings.telegram.alerts_h') %></h2>
+    <p class="mut"><%- t('settings.telegram.alerts_note', { n: boot.hourMax }) %> <a href="/settings/mentions"><%- t('settings.telegram.mentions_link') %></a></p>
+    <div class="kinds" id="tgKinds"></div>
+    <div class="row"><button type="button" class="pri" id="tgSave"><%- t('msg.save') %></button><span class="msg" id="tgSaveMsg" role="status" aria-live="polite"></span></div>
+  </section>
+</main>
+<script type="application/json" id="tgBoot"><%- JSON.stringify(boot).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
+<script>
+(function () {
+  'use strict';
+  var _t = typeof __t === 'function' ? __t : function (k, d, v) { return String(d).replace(/\{!?(\w+)\}/g, function (m, n) { return v && v[n] != null ? v[n] : m; }); };
+  var $ = function (id) { return document.getElementById(id); };
+  var S = JSON.parse($('tgBoot').textContent);
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function say(id, txt, c) { var m = $(id); m.textContent = txt || ''; m.className = 'msg' + (c ? ' ' + c : ''); }
+  function api(url, body) {
+    return fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'HTTP ' + r.status }; }); })
+      .then(function (d) { if (!d.ok) throw new Error(d.error || _t('js.settings.telegram.error', 'Something went wrong.')); return d; });
+  }
+  function paint(s) {
+    S = s;
+    var st = $('tgStatus');
+    st.textContent = s.linked
+      ? _t('js.settings.telegram.linked', 'Linked to Telegram {who} since {when}.', { who: s.handle ? '@' + s.handle : '', when: new Date(s.linkedAt).toLocaleDateString() })
+      : _t('js.settings.telegram.not_linked', 'Not linked yet.');
+    if (s.linked && s.paused) st.textContent += ' ' + _t('js.settings.telegram.paused', 'Alerts are paused because the bot was blocked - send it any message to resume.');
+    $('tgNoBot').hidden = !!s.bot;
+    $('tgBanned').hidden = s.available;
+    $('tgLinkBtn').hidden = !s.available || !s.bot;
+    $('tgLinkBtn').textContent = s.linked ? _t('js.settings.telegram.relink', 'Link a different Telegram account') : _t('js.settings.telegram.link', 'Link Telegram');
+    $('tgUnlinkBtn').hidden = !s.linked;
+    $('tgTestBtn').hidden = !s.linked || !s.available;
+    $('tgTier').textContent = !s.available ? '' : s.pass
+      ? '🎟️ ' + _t('js.settings.telegram.tier_full', 'You have a Season Pass: alerts, Pepe\'s commands and chatting with Pepe are all on.')
+      : _t('js.settings.telegram.tier_alerts', 'You get alerts. Pepe\'s commands and chat need a Season Pass.');
+    $('tgNoCf').hidden = !s.pass || s.camfrog;
+    var box = $('tgKinds'); box.textContent = '';
+    (s.prefs || []).forEach(function (k) {
+      var lab = el('label', 'ck'), cb = el('input');
+      cb.type = 'checkbox'; cb.checked = !!k.on; cb.setAttribute('data-kind', k.key);
+      lab.appendChild(cb); lab.appendChild(el('span', null, (k.icon ? k.icon + ' ' : '') + k.label));
+      box.appendChild(lab);
+    });
+  }
+  paint(S);
+  $('tgLinkBtn').addEventListener('click', function () {
+    say('tgMsg', _t('js.settings.telegram.working', 'One moment…'));
+    api('/api/telegram/code').then(function (d) {
+      $('tgCodeBox').hidden = false;
+      $('tgCode').textContent = d.code;
+      var a = $('tgOpen');
+      if (d.deepLink) { a.href = d.deepLink; a.hidden = false; } else { a.hidden = true; }
+      $('tgCodeHelp').textContent = _t('js.settings.telegram.code_help', 'Or send /start {code} to @{bot} in Telegram. The code works once, for 10 minutes.', { code: d.code, bot: d.bot || '' });
+      say('tgMsg', '');
+    }).catch(function (x) { say('tgMsg', x.message, 'bad'); });
+  });
+  $('tgUnlinkBtn').addEventListener('click', function () {
+    if (!confirm(_t('js.settings.telegram.unlink_q', 'Unlink Telegram? Alerts stop and the bot won\'t know you any more.'))) return;
+    api('/api/telegram/unlink').then(function (d) { $('tgCodeBox').hidden = true; paint(d); say('tgMsg', _t('js.settings.telegram.unlinked', 'Unlinked.'), 'ok'); })
+      .catch(function (x) { say('tgMsg', x.message, 'bad'); });
+  });
+  $('tgTestBtn').addEventListener('click', function () {
+    api('/api/telegram/test').then(function (d) { say('tgMsg', d.queued ? _t('js.settings.telegram.test_sent', 'Sent - it should arrive within a minute.') : _t('js.settings.telegram.test_wait', 'A test alert is already on its way.'), 'ok'); })
+      .catch(function (x) { say('tgMsg', x.message, 'bad'); });
+  });
+  $('tgSave').addEventListener('click', function () {
+    var on = {};
+    Array.prototype.forEach.call(document.querySelectorAll('#tgKinds input[data-kind]'), function (cb) { on[cb.getAttribute('data-kind')] = cb.checked; });
+    say('tgSaveMsg', _t('js.settings.telegram.saving', 'Saving…'));
+    api('/api/telegram/prefs', { on: on }).then(function (d) { paint(d); say('tgSaveMsg', _t('js.settings.telegram.saved', 'Saved.'), 'ok'); })
+      .catch(function (x) { say('tgSaveMsg', x.message, 'bad'); });
+  });
+  // after linking in Telegram, coming back to this tab shows the new state
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState !== 'visible' || $('tgCodeBox').hidden) return;
+    fetch('/api/telegram', { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } }).then(function (r) { return r.json(); })
+      .then(function (d) { if (d && d.ok && d.linked) { $('tgCodeBox').hidden = true; paint(d); } }).catch(function () {});
+  });
+})();
+</script>
+</body>
+</html>

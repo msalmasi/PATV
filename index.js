@@ -1186,6 +1186,7 @@ inbox.register(app, { isBotToken, addUser });
 require("./mentions").register(app, { addUser });      // 1.99ii: 📣 room mention alerts (/settings/mentions)
 require("./feedmentions").register(app, { addUser });  // 1.99kk: @mentions + #hashtags in posts and comments - /api/mentions/suggest (autocomplete)
 require("./banner").register(app, { addUser });        // 1.99kk: the homepage banner slot - paid PAT bookings (off until priced), house promos, /sponsor, /admin/banner
+require("./telegram").register(app, { isBotToken, addUser });   // 1.99kn: Telegram link + alerts + access tiers (/settings/telegram); the bot runs in Pepe
 require("./tables").register(app, { isBotToken, addUser });   // /casino /poker /blackjack: Pepe's live tables, playable from the web
 require("./userstats").register(app, { isBotToken });
 require("./econ").register(app, { isBotToken, addUser });       // economy v2 E-0: revenue attribution, watch-minutes, participation
@@ -1961,7 +1962,8 @@ async function idemBegin(req, res, endpoint) {
   if (!claimed || claimed.changes === 0) {
     const prev = await getQuery("SELECT status, body FROM idempotency_keys WHERE key = ?", [key]);
     if (prev.length && prev[0].status) {
-      res.status(prev[0].status).json(JSON.parse(prev[0].body || "{}"));
+      // 1.99kn: marked as a replay, so the caller doesn't book the side effects (Pepe's routing of a charge) twice
+      res.status(prev[0].status).json(Object.assign(JSON.parse(prev[0].body || "{}"), { replayed: true }));
     } else {
       res.status(409).json({ ok: false, error: "in_progress" });   // the first attempt is still running
     }
@@ -2131,6 +2133,9 @@ app.get(
           // 1.99jr: Connections → 📼 Plex (plexmembers.js self-link)
           let plex = null, plexLink = false;
           try { plex = await require("./plexmembers").mine(user.userId); plexLink = !!require("./mediaconf").get().plex_selflink; } catch (e) { console.error("edit profile plex:", e.message); }
+          // 1.99kn: Connections -> Telegram (telegram.js)
+          let telegram = null;
+          try { const tl = await require("./telegram").linkOf(user.userId); telegram = { linked: !!tl, handle: tl && tl.handle ? tl.handle : null }; } catch (e) { console.error("edit profile telegram:", e.message); }
           res.render("editProfile", {
             // Render profile.ejs with user data
             username: user.username,
@@ -2150,7 +2155,7 @@ app.get(
             privPanels: profileLayout.PRIV,
             errors: errorMessages,
             success: successMessages,
-            plex, plexLink,
+            plex, plexLink, telegram,
             plexPin: /^\d{1,15}$/.test(String(req.query.plex || "")) ? String(req.query.plex) : null,
           });
         } else {

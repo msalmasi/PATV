@@ -129,6 +129,9 @@ const RULES = {
   "mention_prefs.user_id": M({ key: [] }), "mention_words.user_id": M({ key: ["phrase", "room_id"] }),   // 1.99ii: mentions.js
   // 1.99kk banner.js: homepage banner bookings follow their buyer (holds, refunds and stats); staff / admin columns hold a username
   "banner_bookings.user_id": M({ name: "username" }), "banner_bookings.decided_by": { deny: NAME }, "banner_promos.updated_by": { deny: NAME },
+  // 1.99kn: telegram.js - the survivor keeps its own Telegram link if it has one (one link per account, tg_id unique)
+  "telegram_links.user_id": M({ key: [] }), "telegram_prefs.user_id": M({ key: ["kind"] }),
+  "telegram_codes.user_id": M(), "telegram_outbox.user_id": M({ key: ["ref"] }),
   "welcome_bonus.userId": { special: "welcome bonus states are combined (mergeWelcome)" },
   "welcome_keys.userId": M({ key: ["k"], merge: { created: "MIN" } }),
   "welcome_activity.userId": M({ key: ["day"] }),
