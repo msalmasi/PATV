@@ -1217,6 +1217,8 @@ require("./gtfstore").register(app, { isBotToken, addUser });
 // 1.99ns Phase 1: every protocol pool on the site (pools.js) + the economy settings and journals (econstore.js)
 require("./pools").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 require("./econstore").register(app, { isBotToken, addUser });
+// G1: the gang system on the site (gangs.js) - registry, ranks, treasuries (keyed pools rows), rep; /gtf/gangs pages
+require("./gangs").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
 // 1.99ne: website actions queued for Pepe expire (refund / mark / notify) - actionttl.js
 require("./actionttl").register(app, { addUser });
 require("./staking").register(app, { isBotToken, addUser });
@@ -1445,6 +1447,8 @@ async function patSupply() {
   // 1.99ns Phase 1: once the pools live on the site (pools.js) they are counted from its table, not Pepe's (up to 5 min old)
   // vault:<pool> / room:<id> rows; plus a routed charge's turf legs Pepe hasn't applied yet (turf_inbox)
   try { pools = await require("./pools").supplyRows(pools); } catch (e) { /* no pools tables yet */ }
+  // G1: once the gangs live on the site their treasuries are counted from the table, not Pepe's "gangs" row
+  try { pools = await require("./gangs").supplyRows(pools); } catch (e) { /* no gang tables yet */ }
   // 1.99ne: paid-command PAT already taken from wallets that Pepe hasn't routed into his pools yet (patroutes.js)
   try {
     const u = await require("./patroutes").unrouted();

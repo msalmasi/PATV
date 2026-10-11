@@ -1,0 +1,173 @@
+<%- include('layout', { title: v && v.gang ? `[${v.gang.tag}] ${v.gang.name}` : 'Gang', user: user }) %>
+<%#
+  views/gang.ejs - one gang (gangs.js gangView, G1): roster with ranks, treasury, upgrades, war record, recent treasury
+  moves. A member manages it here (POST /api/gangs/act): deposit / withdraw (their rank's daily allowance), leave; officers
+  and the boss invite / kick; the boss promotes / demotes and sets the allowances. Pending invite: accept / decline.
+%>
+<%- include('partials/gangs-css') %>
+<%
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const g = v.gang;
+  const me = v.me;
+  const when = (ms) => { const d = new Date(Number(ms)); return isNaN(d) ? '' : d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; };
+  const OPS = { deposit: '💰 deposit', withdraw: '🏧 withdrawal', spend: '🛠️ upgrade / spend', move: '🗺️ turf', create: '🏴 founded' };
+%>
+<div class="gg">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <a href="/gtf/gangs">Gangs</a><% if (g) { %> › [<%= g.tag %>]<% } %></div>
+  <% if (!v.live) { %>
+    <div class="banner">The gangs still live in Pepe - see <a href="https://pepe.publicaccess.tv/gangs" rel="noopener">pepe.publicaccess.tv/gangs</a>.</div>
+  <% } else if (!g) { %>
+    <div class="card"><p class="note">No gang with that tag. <a href="/gtf/gangs">All gangs</a></p></div>
+  <% } else { %>
+  <section class="hero" aria-labelledby="ggH">
+    <div class="eyebrow">GANG · LEVEL <%= g.level %><% if (g.created) { %> · SINCE <%= g.created %><% } %></div>
+    <h1 id="ggH"><span class="tag">[<%= g.tag %>]</span><%= g.name %></h1>
+    <dl class="stats">
+      <div class="stat"><dt>Treasury</dt><dd><%= fmt(g.treasury) %> <small>PAT</small></dd></div>
+      <div class="stat"><dt>Rep</dt><dd><%= fmt(g.rep) %>
+        <small>next level at <%= fmt(g.next) %></small></dd>
+        <div class="bar" aria-hidden="true"><i style="width:<%= Math.max(0, Math.min(100, Math.round(100 * (g.rep - g.prev) / Math.max(1, g.next - g.prev)))) %>%"></i></div></div>
+      <div class="stat"><dt>Crew</dt><dd><%= g.members.length %>/<%= g.cap %></dd></div>
+      <div class="stat"><dt>Wars</dt><dd><span style="color:var(--green)"><%= g.wars.wins %></span>-<span style="color:var(--red)"><%= g.wars.losses %></span></dd></div>
+      <div class="stat"><dt>Heat</dt><dd><%= g.heat %><% if (g.unpaid_days) { %> <small><%= g.unpaid_days %> day(s) insolvent</small><% } %></dd></div>
+    </dl>
+  </section>
+
+  <% if (v.invited) { %>
+  <div class="banner" id="ggInvite">You're invited to join [<%= g.tag %>].
+    <button class="btn gold small" data-op="accept">Join</button> <button class="btn small" data-op="decline">Decline</button></div>
+  <% } %>
+
+  <div class="grid2">
+    <div style="display:grid;gap:16px;min-width:0">
+      <section class="card violet" aria-labelledby="ggRoster">
+        <h2 id="ggRoster">ROSTER</h2>
+        <ul class="roster">
+          <% g.members.forEach((m) => { %>
+          <li>
+            <span class="who"><b><%= m.name %></b><span class="rank <%= m.rank %>"><%= m.rank === 'owner' ? 'BOSS' : m.rank.toUpperCase() %></span>
+              <% if (me && me.manage && g.limits[m.rank]) { %><small>today: <%= fmt(m.used) %> / <%= fmt(g.limits[m.rank]) %> PAT</small><% } %></span>
+            <% if (me && m.rank !== 'owner' && m.key !== me.key && (me.boss || (me.manage && m.rank !== 'officer'))) { %>
+            <span class="acts">
+              <% if (me.boss && m.rank !== 'officer') { %><button class="btn small" data-op="promote" data-target="<%= m.key %>">Promote</button><% } %>
+              <% if (me.boss && m.rank === 'officer') { %><button class="btn small" data-op="demote" data-target="<%= m.key %>">Demote</button><% } %>
+              <button class="btn small red" data-op="kick" data-target="<%= m.key %>" data-confirm="Kick <%= m.name %> from the gang?">Kick</button>
+            </span>
+            <% } %>
+          </li>
+          <% }) %>
+        </ul>
+        <% if (me && me.manage) { %>
+        <form class="f" data-op="invite">
+          <input name="target" placeholder="Camfrog name or PATV username" aria-label="Invite who" autocomplete="off" required maxlength="60">
+          <button class="btn gold" type="submit">Invite</button>
+        </form>
+        <% } %>
+      </section>
+
+      <section class="card gold" aria-labelledby="ggUps">
+        <h2 id="ggUps">UPGRADES</h2>
+        <div class="ups">
+          <% Object.entries(v.cfg.upgrades || {}).forEach(([k, u]) => { const lv = Number(g.upgrades[k] || 0); %>
+          <div class="up"><b><%= u.name %></b> <span style="color:var(--mut)">Lv<%= lv %>/<%= u.max %></span>
+            <div class="pips" aria-hidden="true"><% for (let i = 1; i <= u.max; i++) { %><i class="<%= i <= lv ? 'on' : '' %>"></i><% } %></div>
+            <small><%= u.desc %><% if (lv < u.max) { %> · next <%= fmt(u.cost * (lv + 1)) %> PAT<% } %></small></div>
+          <% }) %>
+        </div>
+        <p class="note">Bought from the treasury in chat: <code>!gang upgrade &lt;name&gt;</code> (boss or officers).</p>
+      </section>
+    </div>
+
+    <div style="display:grid;gap:16px;min-width:0">
+      <% if (me) { %>
+      <section class="card green" aria-labelledby="ggBank">
+        <h2 id="ggBank">YOUR TREASURY ACCESS</h2>
+        <p class="note">You're <b><%= me.rank === 'owner' ? 'the boss' : 'a' + (me.rank === 'officer' ? 'n ' : ' ') + me.rank %></b>.
+          <% if (me.limit) { %>Your allowance: <b><%= fmt(Math.max(0, me.limit - me.used)) %></b> of <%= fmt(me.limit) %> PAT left today.<% } else { %>No daily cap on your withdrawals.<% } %>
+          A <%= Math.round(v.cfg.cut_rate * 100) %>% laundering fee goes to Fort Knox.</p>
+        <label class="l" for="ggDep">DEPOSIT FROM YOUR WALLET</label>
+        <form class="f" data-op="deposit"><input id="ggDep" name="amount" inputmode="numeric" placeholder="PAT" required><button class="btn gold" type="submit">Deposit</button></form>
+        <label class="l" for="ggWd">WITHDRAW TO YOUR WALLET</label>
+        <form class="f" data-op="withdraw"><input id="ggWd" name="amount" inputmode="numeric" placeholder="PAT" required><button class="btn" type="submit">Withdraw</button></form>
+        <% if (me.boss) { %>
+        <label class="l" for="ggLim">DAILY ALLOWANCE PER RANK (0 = NO CAP)</label>
+        <form class="f three" data-op="limits">
+          <select id="ggLim" name="rank"><% ['officer', 'member', 'recruit', 'owner'].forEach((r) => { %><option value="<%= r %>"><%= r %> (<%= g.limits[r] ? fmt(g.limits[r]) : 'no cap' %>)</option><% }) %></select>
+          <input name="amount" inputmode="numeric" placeholder="PAT / day" required aria-label="PAT per day">
+          <button class="btn" type="submit">Set</button>
+        </form>
+        <% } else { %>
+        <div style="margin-top:14px"><button class="btn red small" data-op="leave" data-confirm="Leave [<%= g.tag %>]?">Leave the gang</button></div>
+        <% } %>
+        <div class="msg" id="ggMsg" role="status" aria-live="polite"></div>
+      </section>
+      <% } else if (!signedIn) { %>
+      <section class="card green"><p class="note"><a href="/login?next=/gtf/gangs/<%= encodeURIComponent(g.tag) %>">Sign in</a> to manage your gang here.</p></section>
+      <% } %>
+
+      <section class="card" aria-labelledby="ggWar">
+        <h2 id="ggWar">WAR RECORD</h2>
+        <div class="war"><span class="w"><%= g.wars.wins %>W</span><span class="l"><%= g.wars.losses %>L</span>
+          <span class="note" style="margin:0">raids won and lost (attacking and defending)</span></div>
+      </section>
+
+      <section class="card" aria-labelledby="ggHist">
+        <h2 id="ggHist">TREASURY MOVES</h2>
+        <% if (!g.history.length) { %><p class="note">Nothing yet.</p><% } else { %>
+        <ul class="hist">
+          <% g.history.forEach((h) => { %>
+          <li><span><%= OPS[h.op] || h.op %><% if (h.who) { %> · <%= h.who %><% } %><% if (h.amount) { %> · <%= fmt(h.amount) %> PAT<% } %><% if (h.via === 'web') { %> · web<% } %></span>
+            <span class="when"><%= when(h.ts) %></span></li>
+          <% }) %>
+        </ul>
+        <% } %>
+      </section>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var msg = document.getElementById('ggMsg');
+    function show(ok, text) {
+      if (!msg) { alert(text); return; }
+      msg.className = 'msg on ' + (ok ? 'ok' : 'bad'); msg.textContent = text;
+    }
+    function idem() { var a = new Uint8Array(12); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach(function (_, i) { a[i] = Math.random() * 256; });
+                      return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
+    function act(body, btn) {
+      body.idem = idem();
+      if (btn) btn.disabled = true;
+      return fetch('/api/gangs/act', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', 'X-Requested-With': 'fetch' },
+                                       body: JSON.stringify(body) })
+        .then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Something went wrong.' }; }); })
+        .then(function (j) {
+          show(!!j.ok, j.ok ? j.msg : (j.error || 'Something went wrong - nothing was moved.'));
+          if (j.ok) setTimeout(function () { location.reload(); }, 900);
+        })
+        .catch(function () { show(false, 'Network error - nothing was moved.'); })
+        .finally(function () { if (btn) btn.disabled = false; });
+    }
+    var amt = function (s) { s = String(s || '').trim().toLowerCase().replace(/[, _]/g, ''); var m = s.match(/^(\d+(?:\.\d+)?)([km]?)$/);
+                             return m ? Math.floor(Number(m[1]) * (m[2] === 'k' ? 1e3 : m[2] === 'm' ? 1e6 : 1)) : NaN; };
+    document.querySelectorAll('.gg form.f').forEach(function (f) {
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var op = f.getAttribute('data-op'), body = { op: op }, btn = f.querySelector('button');
+        if (f.elements.amount) { body.amount = amt(f.elements.amount.value); if (!(body.amount >= 0)) { show(false, 'Enter an amount like 5000, 5k or 1.5m.'); return; } }
+        if (f.elements.target) body.target = f.elements.target.value;
+        if (f.elements.rank) body.rank = f.elements.rank.value;
+        act(body, btn);
+      });
+    });
+    document.querySelectorAll('.gg button[data-op]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var c = b.getAttribute('data-confirm');
+        if (c && !confirm(c)) return;
+        act({ op: b.getAttribute('data-op'), target: b.getAttribute('data-target') || undefined, gid: '<%= g.gid %>' }, b);
+      });
+    });
+  })();
+  </script>
+  <% } %>
+</div>
+</body>
+</html>

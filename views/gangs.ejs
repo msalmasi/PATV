@@ -1,0 +1,47 @@
+<%- include('layout', { title: 'Gangs', user: user }) %>
+<%#
+  views/gangs.ejs - the gang board (gangs.js boardView, G1). Every gang by rep: level, members, treasury, war record.
+  The page reads the site's tables while the gangs live here; before the cutover it points at Pepe's board.
+%>
+<%- include('partials/gangs-css') %>
+<% const fmt = (n) => Number(n || 0).toLocaleString('en-US'); %>
+<div class="gg">
+  <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › Gangs</div>
+  <section class="hero" aria-labelledby="ggH">
+    <div class="eyebrow">GRAND THEFT FROGGER · GANGS</div>
+    <h1 id="ggH">🎩 The gangs</h1>
+    <p class="lead">Every crew in the city, ranked by rep. Rep comes from your members' wins - heists, raids, the casino, the lotto - and every
+      <%= fmt(view.cfg.rep_per_level) %> rep is a level: more members, better upgrades. Start one in a Camfrog room with <code>!gang create &lt;name&gt;</code>.</p>
+    <% if (view.live) { %>
+    <dl class="stats">
+      <div class="stat"><dt>Gangs</dt><dd><%= fmt(view.gangs.length) %></dd></div>
+      <div class="stat"><dt>Members</dt><dd><%= fmt(view.gangs.reduce((t, g) => t + g.members, 0)) %></dd></div>
+      <div class="stat"><dt>In treasuries</dt><dd><%= fmt(view.gangs.reduce((t, g) => t + g.treasury, 0)) %> <small>PAT</small></dd></div>
+    </dl>
+    <% } %>
+  </section>
+
+  <% if (!view.live) { %>
+    <div class="banner">The gangs still live in Pepe. Until they move here, the board is at
+      <a href="https://pepe.publicaccess.tv/gangs" rel="noopener">pepe.publicaccess.tv/gangs</a> and every gang command works in chat (<code>!gang help</code>).</div>
+  <% } else if (!view.gangs.length) { %>
+    <div class="card"><p class="note">No gangs yet - <code>!gang create &lt;name&gt;</code> in a Camfrog room to found the first one.</p></div>
+  <% } else { %>
+  <div class="board" role="list">
+    <% view.gangs.forEach((g, i) => { %>
+    <a class="row<%= view.mine === g.gid ? ' mine' : '' %>" role="listitem" href="/gtf/gangs/<%= encodeURIComponent(g.tag) %>">
+      <span class="rk">#<%= i + 1 %></span>
+      <span class="nm"><span class="t">[<%= g.tag %>]</span><b><%= g.name %></b>
+        <span class="sub">Lv<%= g.level %> · <%= fmt(g.rep) %> rep<% if (view.mine === g.gid) { %> · your gang<% } %></span></span>
+      <span class="cell"><small>CREW</small><%= g.members %>/<%= g.cap %></span>
+      <span class="cell hide-s"><small>TREASURY</small><%= fmt(g.treasury) %></span>
+      <span class="cell hide-s"><small>WARS</small><%= g.wars.wins %>-<%= g.wars.losses %></span>
+      <span class="cell hide-s"><small>HEAT</small><%= g.heat %></span>
+    </a>
+    <% }) %>
+  </div>
+  <% } %>
+  <p class="note">Commands: <code>!gang help</code> · leaderboard in chat: <code>!gangtop</code> · the rest of the game: <a href="/gtf">/gtf</a>.</p>
+</div>
+</body>
+</html>

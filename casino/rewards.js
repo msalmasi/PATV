@@ -89,6 +89,8 @@ async function winReward(T, key, uid, won) {
       if (up) await up(uid, xp);
     } catch (e) { console.error("[casino] win xp:", e.message); }
     const cf = await camfrogOf(T, uid);
+    // G1: once the gangs live on the site the rep is applied here (keyed by the win) and the queue to Pepe retires
+    if (await require("../gangs").addRep({ key: "casino:" + String(key).slice(0, 200), userId: uid, camfrog: cf, amount: xp, src: "casino" })) return xp;
     if (cf) {
       await runQuery("INSERT OR IGNORE INTO casino_rep_queue (key, userId, camfrog, amount, created, acked) VALUES (?, ?, ?, ?, ?, NULL)",
                      [String(key).slice(0, 200), uid, cf.slice(0, 64), xp, hooks.now()]);

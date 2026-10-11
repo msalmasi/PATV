@@ -131,7 +131,9 @@ async function lottoIsService() {
 async function balances() {
   await init();
   const out = {};
-  for (const r of await getQuery("SELECT key, balance FROM pools ORDER BY key")) out[r.key] = Number(r.balance) || 0;
+  // G1 (gangs.js): gang treasuries are rows here too ("gang:<gid>"), but they are not protocol pools - never in the pool
+  // views, digests, exports or rollbacks; gangs.js owns them
+  for (const r of await getQuery("SELECT key, balance FROM pools WHERE key NOT LIKE 'gang:%' ORDER BY key")) out[r.key] = Number(r.balance) || 0;
   return out;
 }
 async function balance(key) {
@@ -141,7 +143,7 @@ async function balance(key) {
 }
 async function total() {
   await init();
-  const r = (await getQuery("SELECT COALESCE(SUM(balance),0) AS t, COUNT(*) AS n FROM pools"))[0];
+  const r = (await getQuery("SELECT COALESCE(SUM(balance),0) AS t, COUNT(*) AS n FROM pools WHERE key NOT LIKE 'gang:%'"))[0];
   return { amount: Number(r.t) || 0, count: Number(r.n) || 0 };
 }
 /** sha256 of the canonical balances (sorted keys, zero pools left out) - what the cutover / rollback compare. */
@@ -418,7 +420,7 @@ async function importFromPepe(body) {
     if (Math.floor(Number((tt.per_pool || {})[k])) !== pools[k]) throw new Refuse(400, `pool ${k}: ${pools[k]} vs ${(tt.per_pool || {})[k]}`, "E_TOTALS");
   }
   if (pools.lotto && (await lottoIsService())) throw new Refuse(409, "the lotto pot already lives in the lotto service - export it as 0", "E_LOTTO_POT");
-  const held = (await getQuery("SELECT key, balance FROM pools WHERE balance != 0"));
+  const held = (await getQuery("SELECT key, balance FROM pools WHERE balance != 0 AND key NOT LIKE 'gang:%'"));
   if (held.length) throw new Refuse(409, `the pools table already holds PAT (${held.map((r) => r.key + "=" + r.balance).join(", ").slice(0, 200)})`, "E_NOT_EMPTY");
   const supplyPools = Array.isArray(p.supply) ? p.supply : null;
   if (supplyPools) {
@@ -504,6 +506,8 @@ async function rollbackToPepe({ key, actor }) {
   const prev = await moveStatus(mk);
   if (prev) return Object.assign({}, prev, { dup: true });
   if (!(await live())) throw new Refuse(409, "the pools aren't live here", "E_NOT_LIVE");
+  // G1: gang treasury moves book their Fort Knox / Reserve legs here - the gangs go back to Pepe first
+  if (await require("./gangs").live().catch(() => false)) throw new Refuse(409, "the gangs live on the site - roll them back first (docs/gangs-cutover-runbook.md)", "E_GANGS_LIVE");
   const backup = await backupDb("pre-pools-rollback");
   const out = await tx(async () => {
     const dup = await seen(mk);
@@ -653,4 +657,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
 
 module.exports = { init, register, enabled, live, rev, balances, balance, total, move, moveStatus, charge, fund, inboxPending, inboxAck,
                    inboxOpen, supplyRows, importFromPepe, exportState, rollbackToPepe, settleClaims, adminView, digestOf, isPool,
-                   Refuse, LABELS, _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta };
+                   Refuse, LABELS, _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta,
+                   // G1 (gangs.js books treasury legs in its own transactions with the same primitives)
+                   _tx: tx, _seen: seen, _applyLegs: applyLegs, _recordMove: recordMove, _bumpRev: bumpRev, _lottoIsService: lottoIsService,
+                   _validKey: validKey };

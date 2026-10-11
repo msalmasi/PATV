@@ -178,6 +178,9 @@ const RULES = {
   // up (two Camfrog names' counts); the gang-rep queue is a journal keyed by the win, delivered by Camfrog name (casino/rewards.js)
   "casino_ach_base.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MIN" } }),
   "casino_rep_queue.userId": { keep: "the casino's gang-rep journal (keyed by the win, delivered to Pepe by Camfrog name)" },
+  // G1: gangs.js - a member's PATV account follows the merge (the member is keyed by the Camfrog login, so no collision); the
+  // rep journal is keyed by the win
+  "gang_members.userId": M(), "gang_rep_events.userId": { keep: "the gang-rep journal (keyed by the win)" },
   // 1.99ml: the lotto backend (lotto/service.js) - tickets follow the account (the survivor holds them for the draw); the
   // purchase journal is history keyed by its charge (a refund / prize follows a merge through ledger.post resolveMerged)
   "lotto_tickets.userId": M(),

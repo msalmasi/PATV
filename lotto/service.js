@@ -302,6 +302,9 @@ async function pay(D) {
       const xp = Math.round(x.amount * 0.005);
       const up = S.hooks.updateLevel || require("../user.controller").updateLevel;
       if (xp > 0 && up) await up(x.uid, xp);
+      // G1: once the gangs live on the site the winner's gang rep is applied here (Pepe's lotto rep path retires: the
+      // "paid" event says gang_rep "site")
+      if (xp > 0 && (await require("../gangs").addRep({ key: `lotto:${D.draw}:${x.uid}`, userId: x.uid, amount: xp, src: "lotto" }))) x.rep_site = true;
     } catch (e) { console.error("[lotto] xp:", e.message); }
     // 1.99nc: the win achievements (cf_lotto_win / cf_lotto_jackpot) for EVERY winner, web-only too - Pepe no longer bumps
     // lotto_wins / lotto_jackpots (an older Pepe still might: the badge is given once, so never twice)
@@ -332,7 +335,8 @@ async function pay(D) {
   const U = new Map(users.map((u) => [u.userId, u]));
   await emit("paid", { draw: D.draw, paid: hist.paid, winners: Array.from(per.values()).map((x) => ({
     name: x.name, camfrog: (U.get(x.uid) || {}).camfrogUsername || null, username: (U.get(x.uid) || {}).username || null,
-    amount: x.amount, wins: x.wins, jackpot: x.jackpot })), reseed_due: jpHit });
+    amount: x.amount, wins: x.wins, jackpot: x.jackpot, gang_rep: x.rep_site ? "site" : undefined })), reseed_due: jpHit,
+    gang_rep: (await require("../gangs").live().catch(() => false)) ? "site" : undefined });
   console.log(`[lotto] draw #${D.draw} paid: ${fmt(hist.paid)} to ${per.size} player(s)`);
   scheduleSnapshot(0);
 }
