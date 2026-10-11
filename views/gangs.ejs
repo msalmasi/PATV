@@ -12,7 +12,7 @@
     <h1 id="ggH">🎩 The gangs</h1>
     <p class="lead">Every crew in the city, ranked by rep. Rep comes from your members' wins - heists, raids, the casino, the lotto - and every
       <%= fmt(view.cfg.rep_per_level) %> rep is a level: more members, better upgrades. Start one in a Camfrog room with <code>!gang create &lt;name&gt;</code>.</p>
-    <% if (view.live) { %>
+    <% if (view.gangs.length) { %>
     <dl class="stats">
       <div class="stat"><dt>Gangs</dt><dd><%= fmt(view.gangs.length) %></dd></div>
       <div class="stat"><dt>Members</dt><dd><%= fmt(view.gangs.reduce((t, g) => t + g.members, 0)) %></dd></div>
@@ -21,9 +21,8 @@
     <% } %>
   </section>
 
-  <% if (!view.live) { %>
-    <div class="banner">The gangs still live in Pepe. Until they move here, the board is at
-      <a href="https://pepe.publicaccess.tv/gangs" rel="noopener">pepe.publicaccess.tv/gangs</a> and every gang command works in chat (<code>!gang help</code>).</div>
+  <% if (!view.mode) { %>
+    <div class="banner">The gang board fills in as soon as Pepe reports in - every gang command works in chat (<code>!gang help</code>).</div>
   <% } else if (!view.gangs.length) { %>
     <div class="card"><p class="note">No gangs yet - <code>!gang create &lt;name&gt;</code> in a Camfrog room to found the first one.</p></div>
   <% } else { %>
@@ -37,10 +36,20 @@
       <span class="cell hide-s"><small>TREASURY</small><%= fmt(g.treasury) %></span>
       <span class="cell hide-s"><small>WARS</small><%= g.wars.wins %>-<%= g.wars.losses %></span>
       <span class="cell hide-s"><small>HEAT</small><%= g.heat %></span>
+      <span class="extra">
+        <span class="crew" aria-label="crew">
+          <% g.avatars.forEach((a, j) => { %><span class="ava sm<%= j >= 5 ? ' d-only' : '' %><%= a.rank === 'owner' ? ' boss' : a.rank === 'officer' ? ' off' : '' %>" data-seed="<%= a.seed %>" data-layers="<%= JSON.stringify(a.layers || {}) %>" title="<%= a.name %><%= a.rank === 'owner' ? ' (boss)' : a.rank === 'officer' ? ' (officer)' : '' %>"></span><% }) %>
+          <% if (g.members > 5) { %><span class="more m-only">+<%= g.members - Math.min(5, g.avatars.length) %></span><% } %>
+          <% if (g.members > g.avatars.length) { %><span class="more d-only">+<%= g.members - g.avatars.length %></span><% } %>
+        </span>
+        <% if (g.upgrades.length) { %><span class="upc"><% g.upgrades.forEach((u) => { %><span class="chip" title="<%= u.name %> Lv<%= u.lvl %>/<%= u.max %> - <%= u.desc %>"><%= u.icon %> <%= u.lvl %></span><% }) %></span><% } %>
+      </span>
     </a>
     <% }) %>
   </div>
   <% } %>
+  <% if (view.mode === 'mirror') { %><p class="note">The gangs are run in chat - this board is Pepe's copy<% if (view.mirror_ts) { %>, updated <span data-ago="<%= view.mirror_ts %>"></span><% } %>.</p><% } %>
+  <%- include('partials/gangs-avatars') %>
   <p class="note">Commands: <code>!gang help</code> · leaderboard in chat: <code>!gangtop</code> · the rest of the game: <a href="/gtf">/gtf</a>.</p>
 </div>
 </body>

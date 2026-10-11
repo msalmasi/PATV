@@ -125,6 +125,32 @@ test("import: digest, totals and identities are checked; a mismatch keeps nothin
   assert.equal((await getQuery("SELECT COUNT(*) AS n FROM gangs"))[0].n, 0);
 });
 
+test("the pages before the cutover: Pepe's mirror (display only) with heist avatars, upgrades and the roster order", async () => {
+  await runQuery("CREATE TABLE IF NOT EXISTS cosmetic_avatar_seeds (camfrog TEXT PRIMARY KEY, seed INTEGER, updated INTEGER)");
+  await runQuery("INSERT OR REPLACE INTO cosmetic_avatar_seeds (camfrog, seed, updated) VALUES ('ann_cf', 4242, 1)");
+  const empty = await G.boardView(null);
+  assert.equal(empty.mode, null);
+  assert.equal((await post("/api/gangs/bot/mirror", { gangs: GANGS, members: MEMBERS })).body.ok, true);
+  const b = await G.boardView("u1");
+  assert.equal(b.mode, "mirror");
+  assert.equal(b.live, false);
+  assert.equal(b.mine, "aa11bb22");                          // ann_cf is in The Family (by her linked Camfrog name)
+  const fam = b.gangs.find((g) => g.tag === "FAM");
+  assert.equal(fam.treasury, 1000);
+  assert.deepEqual(fam.avatars.map((a) => a.rank), ["owner", "officer", "member", "member"]);
+  assert.equal(fam.avatars.find((a) => a.key === "ann_cf").seed, 4242);   // the GTF sheet's seed
+  assert.ok(fam.avatars.find((a) => a.key === "foamy").seed > 0);         // no sheet: a stable seed from the name
+  assert.deepEqual(fam.upgrades.map((u) => [u.key, u.lvl]), [["recruiter", 1], ["lookouts", 3]]);
+  const v = await G.gangView("fam", "u1");
+  assert.equal(v.mode, "mirror");
+  assert.equal(v.me, null);                                  // no management on Pepe's copy
+  assert.equal(v.gang.members.length, 4);
+  assert.equal(v.gang.upgrade_list.length, 5);
+  assert.equal(v.gang.limits.member, 50000);
+  // nothing moves: the mirror never touches a treasury row or the supply
+  assert.equal((await getQuery("SELECT COUNT(*) AS n FROM pools WHERE key LIKE 'gang:%'"))[0].n, 0);
+});
+
 test("import: every gang lands, treasuries match, the supply doesn't move, the casino rep queue retires; idempotent", async () => {
   const before = (await supply()).total;
   const r = await post("/api/gangs/admin/import", pack());
@@ -281,6 +307,8 @@ test("the website: deposit / withdraw / invite / accept / leave for signed-in me
   assert.equal((await web({ op: "deposit", amount: 5 })).status, 401);
   const board = await G.boardView(null);
   assert.equal(board.live, true);
+  assert.equal(board.mode, "site");
+  assert.ok(board.gangs[0].avatars.length >= 1 && board.gangs[0].avatars[0].rank === "owner");
   assert.equal(board.gangs[0].tag, "FAM");
 });
 

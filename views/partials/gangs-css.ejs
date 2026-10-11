@@ -71,10 +71,25 @@
   .gg .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 14px; display: none; }
   .gg .msg.on { display: block; } .gg .msg.ok { background: #0f2414; border: 1px solid #2c7a45; color: #c8f5d0; } .gg .msg.bad { background: #2a1010; border: 1px solid #6b2b2b; color: #ffd9d9; }
   .gg .banner { border: 1px solid #5a4a10; background: #1d1a0c; border-radius: 12px; padding: 12px 14px; color: #ffe9a8; font-size: 14px; line-height: 1.5; }
+  /* heist avatars (avatar.js draws them into .ava; a dark tile until it has) */
+  .gg .ava { flex: none; width: 40px; height: 40px; border-radius: 8px; background: #0b0b0d; border: 1px solid #2a2a2a; display: inline-grid; place-items: center; overflow: hidden; }
+  .gg .ava svg { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+  .gg .ava.sm { width: 30px; height: 30px; border-radius: 6px; }
+  .gg .ava.boss { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(255,207,64,.35); } .gg .ava.off { border-color: #6b4fa3; }
+  .gg .row .extra { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+  .gg .crew { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .gg .more { font: 9px 'Press Start 2P', monospace; color: #bbb; background: #1d1d1d; border: 1px solid #333; border-radius: 6px; padding: 6px 6px; }
+  .gg .upc { display: flex; gap: 5px; flex-wrap: wrap; }
+  .gg .chip { font-size: 12.5px; background: #1a1424; border: 1px solid #3a2d55; color: #e0d4ff; border-radius: 999px; padding: 3px 8px; white-space: nowrap; }
+  .gg .m-only { display: none; }
+  .gg .roster li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .gg .up.none { opacity: .6; } .gg .uic { margin-right: 6px; }
   @media (max-width: 860px) { .gg .grid2 { grid-template-columns: minmax(0, 1fr); } .gg .grid2 > .side { order: -1; } }
   @media (max-width: 640px) {
     .gg .row { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 90px); }
     .gg .row .cell.hide-s { display: none; }
+    .gg .row .extra { grid-column: 1 / -1; }
+    .gg .d-only { display: none; } .gg .m-only { display: inline-block; }
     .gg form.f.three { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .gg form.f.three .btn { grid-column: 1 / -1; }
   }
 </style>

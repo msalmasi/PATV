@@ -1083,66 +1083,180 @@ async function supplyRows(rows) {
 }
 
 // ── the web: pages + the management form ──
-async function boardView(viewerId) {
-  const c = await cfg();
-  const isLive = await live();
-  if (!isLive) return { live: false, gangs: [], cfg: c };
-  const st = await stateAll();
-  const list = Object.entries(st.gangs).map(([gid, g]) => ({
-    gid, tag: g.tag, name: g.name, level: level(g, c), rep: g.rep, members: g.members.length, cap: memberCap({ rep: g.rep, upgrades: J(g.upgrades || {}) }, c),
-    treasury: g.treasury, wars: g.wars || { wins: 0, losses: 0 }, heat: g.heat || 0, upgrades: g.upgrades || {} }));
-  list.sort((a, b) => b.rep - a.rep || a.tag.localeCompare(b.tag));
-  const me = viewerId ? await webMember(viewerId) : null;
-  return { live: true, gangs: list, cfg: c, mine: me ? me.gid : null };
+// The pages work in both modes: with the gangs live here they read the tables; before that (or after a rollback) they
+// read the MIRROR Pepe pushes of his gang_data.json (/api/gangs/bot/mirror, display only - nothing on the site moves).
+const UPGRADE_ICON = { recruiter: "📣", warchest: "💰", armory: "🔫", lookouts: "🔭", bribes: "🤝" };
+const RANK_ORDER = { owner: 0, officer: 1, member: 2, recruit: 3 };
+const BOARD_AVATARS = 8;
+
+async function mirrorState() {
+  const m = await meta("mirror");
+  return m && m.gangs && typeof m.gangs === "object" ? m : null;
 }
-async function names(keys) {
+/** Pepe's gang_data.json (display copy) -> what the pages read. */
+async function putMirror(b) {
+  const gangs = b && b.gangs && typeof b.gangs === "object" ? b.gangs : null;
+  if (!gangs) throw new Refuse(400, "gangs required");
+  const clean = {};
+  for (const [gid, g] of Object.entries(gangs).slice(0, 500)) {
+    if (!GID_RE.test(gid) || !g || typeof g !== "object") continue;
+    const x = {};
+    for (const k of ["name", "tag", "boss", "officers", "members", "recruits", "treasury", "rep", "heat", "wars", "upgrades", "created",
+                     "unpaid_days", "rank_limits"]) {
+      if (g[k] !== undefined) x[k] = g[k];
+    }
+    clean[gid] = x;
+  }
+  const text = J({ gangs: clean, ts: now() });
+  if (text.length > 2000000) throw new Refuse(400, "mirror too large");
+  await setMeta("mirror", JSON.parse(text));
+  return { ok: true, gangs: Object.keys(clean).length };
+}
+/** Every gang in Pepe's shape + where it came from: "site" (live) | "mirror" | null (nothing yet). */
+async function sourceState() {
+  if (await live()) return { mode: "site", st: await stateAll() };
+  const m = await mirrorState();
+  return m ? { mode: "mirror", st: { gangs: m.gangs }, ts: m.ts } : { mode: null, st: { gangs: {} } };
+}
+/** A gang's members with their rank: the boss, the officers, then the rest (by rep earned for the gang, then roster order). */
+async function rosterOf(gid, g, mode) {
+  const officers = new Set((g.officers || []).map(low)), recruits = new Set((g.recruits || []).map(low));
+  const boss = low(g.boss);
+  const contrib = {};
+  if (mode === "site") {
+    for (const r of await getQuery("SELECT member_key, SUM(amount) AS n FROM gang_rep_events WHERE gid = ? GROUP BY member_key", [gid])) contrib[r.member_key] = Number(r.n) || 0;
+  }
+  const list = (g.members || []).map((k, i) => {
+    const key = low(k);
+    const rank = key === boss ? "owner" : officers.has(key) ? "officer" : recruits.has(key) ? "recruit" : "member";
+    return { key, rank, seq: i, contrib: contrib[key] || 0 };
+  });
+  list.sort((a, b) => RANK_ORDER[a.rank] - RANK_ORDER[b.rank] || b.contrib - a.contrib || a.seq - b.seq);
+  return list;
+}
+function keySeed(key) {
+  const h = crypto.createHash("sha256").update(String(key)).digest();
+  return (h.readUInt32BE(0) % 2147483646) + 1;
+}
+/** Display name, account and heist avatar (the GTF sheet's seed + the equipped GTF cosmetics) per member key. */
+async function peopleFor(keys, mode) {
   const out = {};
-  const ks = [...new Set(keys)];
+  const ks = [...new Set(keys.map(low))].slice(0, 800);
   if (!ks.length) return out;
-  const ms = await getQuery(`SELECT gm.member_key, u.username, u.displayname, u.camfrogUsername FROM gang_members gm LEFT JOIN users u ON u.userId = gm.userId
-                             WHERE gm.member_key IN (${ks.map(() => "?").join(",")})`, ks);
-  for (const m of ms) out[m.member_key] = { name: m.camfrogUsername || m.displayname || m.username || m.member_key, username: m.username || null };
-  for (const k of ks) if (!out[k]) out[k] = { name: k, username: null };
+  const q = ks.map(() => "?").join(",");
+  const byKey = {};
+  if (mode === "site") {
+    for (const r of await getQuery(`SELECT gm.member_key AS k, u.userId, u.username, u.displayname, u.camfrogUsername FROM gang_members gm
+                                    LEFT JOIN users u ON u.userId = gm.userId WHERE gm.member_key IN (${q})`, ks)) byKey[r.k] = r;
+  }
+  for (const r of await getQuery(`SELECT userId, username, displayname, camfrogUsername, LOWER(camfrogUsername) AS k FROM users
+                                  WHERE LOWER(camfrogUsername) IN (${q})`, ks)) if (!byKey[r.k] || !byKey[r.k].userId) byKey[r.k] = r;
+  const seeds = {};
+  try {
+    for (const r of await getQuery(`SELECT camfrog, seed FROM cosmetic_avatar_seeds WHERE camfrog IN (${q})`, ks)) seeds[r.camfrog] = Number(r.seed) || null;
+  } catch (e) { /* no seeds table yet */ }
+  const cos = (() => { try { return require("./cosmetics"); } catch (e) { return null; } })();
+  await Promise.all(ks.map(async (k) => {
+    const u = byKey[k] || {};
+    if (!seeds[k] && u.camfrogUsername && low(u.camfrogUsername) !== k) {
+      const r = (await getQuery("SELECT seed FROM cosmetic_avatar_seeds WHERE camfrog = LOWER(?)", [u.camfrogUsername]).catch(() => []))[0];
+      if (r && r.seed) seeds[k] = Number(r.seed);
+    }
+    const layers = {};
+    if (cos && u.userId) {
+      try {
+        const eq = await cos.equippedFor(u.userId);
+        for (const [kind, x] of Object.entries(eq || {})) {
+          if (/^gtf_/.test(kind) && x && x.r && x.r.layer) layers[kind.slice(4)] = x.r.layer;
+        }
+      } catch (e) { /* cosmetics not ready */ }
+    }
+    out[k] = { name: u.camfrogUsername || u.displayname || u.username || k, username: u.username || null,
+               seed: seeds[k] || keySeed(k), sheet: !!seeds[k], layers };
+  }));
   return out;
 }
+function upgradeList(ups, c) {
+  return Object.entries(c.upgrades || {}).map(([k, u]) => {
+    const lvl = Number((ups || {})[k]) || 0;
+    return { key: k, name: u.name, icon: UPGRADE_ICON[k] || "🛠️", lvl, max: u.max, desc: u.desc, next: lvl < u.max ? u.cost * (lvl + 1) : null };
+  });
+}
+
+async function boardView(viewerId) {
+  const c = await cfg();
+  const src = await sourceState();
+  const isLive = src.mode === "site";
+  const entries = Object.entries(src.st.gangs || {});
+  const rosters = {};
+  const show = [];
+  for (const [gid, g] of entries) {
+    rosters[gid] = await rosterOf(gid, g, src.mode);
+    for (const m of rosters[gid].slice(0, BOARD_AVATARS)) show.push(m.key);
+  }
+  const people = await peopleFor(show, src.mode);
+  const list = entries.map(([gid, g]) => ({
+    gid, tag: g.tag, name: g.name, level: level(g, c), rep: Number(g.rep) || 0, members: (g.members || []).length,
+    cap: memberCap({ rep: g.rep, upgrades: J(g.upgrades || {}) }, c), treasury: Number(g.treasury) || 0,
+    wars: g.wars || { wins: 0, losses: 0 }, heat: Number(g.heat) || 0, upgrades: upgradeList(g.upgrades, c).filter((u) => u.lvl > 0),
+    avatars: rosters[gid].slice(0, BOARD_AVATARS).map((m) => Object.assign({ key: m.key, rank: m.rank }, people[m.key])) }));
+  list.sort((a, b) => b.rep - a.rep || String(a.tag).localeCompare(String(b.tag)));
+  let mine = null;
+  if (viewerId) {
+    const me = isLive ? await webMember(viewerId) : null;
+    if (me) mine = me.gid;
+    else {
+      const u = await userFor({ userId: viewerId });
+      const k = u && u.camfrogUsername ? low(u.camfrogUsername) : null;
+      if (k) for (const [gid, g] of entries) if ((g.members || []).map(low).includes(k)) mine = gid;
+    }
+  }
+  return { live: isLive, mode: src.mode, mirror_ts: src.ts || null, gangs: list, cfg: c, mine, avatar_limit: BOARD_AVATARS };
+}
+
 async function gangView(tag, viewerId) {
   const c = await cfg();
-  if (!(await live())) return { live: false };
-  const g = (await getQuery("SELECT * FROM gangs WHERE tag = ? COLLATE NOCASE", [String(tag || "")]))[0];
-  if (!g) return { live: true, gang: null };
-  const ms = await getQuery("SELECT member_key, rank, seq, userId, joined FROM gang_members WHERE gid = ? ORDER BY seq", [g.gid]);
-  const nm = await names(ms.map((m) => m.member_key));
-  const tre = await treasuryOf(g.gid);
-  const s = shapeOf(g, ms, tre);
-  const lvl = level(g, c);
-  const me = viewerId ? await webMember(viewerId) : null;
-  const mine = me && me.gid === g.gid ? me : null;
+  const src = await sourceState();
+  const isLive = src.mode === "site";
+  if (!src.mode) return { live: false, mode: null };
+  const found = Object.entries(src.st.gangs || {}).find(([, x]) => String(x.tag || "").toLowerCase() === String(tag || "").toLowerCase());
+  if (!found) return { live: isLive, mode: src.mode, gang: null };
+  const [gid, s] = found;
+  const row = isLive ? await gangRow(gid) : null;
+  const roster = await rosterOf(gid, s, src.mode);
+  const people = await peopleFor(roster.map((m) => m.key), src.mode);
+  const lvl = level(s, c);
+  const me = isLive && viewerId ? await webMember(viewerId) : null;
+  const mine = me && me.gid === gid ? me : null;
   const today = todayFor(c);
-  const taken = g.withdraw_date === today ? parse(g.withdrawn, {}) || {} : {};
-  const inv = viewerId && !me ? (await getQuery("SELECT gid FROM gang_invites WHERE member_key IN (?, ?)",
-                                                [...await (async () => { const u = await userFor({ userId: viewerId }); return u ? [keyForUser(u), "u:" + u.userId] : ["", ""]; })()]))[0] : null;
-  const history = await getQuery(`SELECT key, op, actor_key, via, ts, result FROM gang_ops WHERE gid = ? AND op IN ('deposit','withdraw','spend','move','create')
-                                  ORDER BY ts DESC LIMIT 15`, [g.gid]);
-  const rankOrder = { owner: 0, officer: 1, member: 2, recruit: 3 };
+  const taken = row && row.withdraw_date === today ? parse(row.withdrawn, {}) || {} : {};
+  let inv = null;
+  if (isLive && viewerId && !me) {
+    const u = await userFor({ userId: viewerId });
+    inv = u ? (await getQuery("SELECT gid FROM gang_invites WHERE member_key IN (?, ?)", [keyForUser(u), "u:" + u.userId]))[0] : null;
+  }
+  const history = isLive ? await getQuery(`SELECT key, op, actor_key, via, ts, result FROM gang_ops WHERE gid = ? AND op IN ('deposit','withdraw','spend','move','create')
+                                            ORDER BY ts DESC LIMIT 15`, [gid]) : [];
+  const hn = history.length ? await peopleFor(history.map((h) => h.actor_key).filter(Boolean), src.mode) : {};
+  const limitsOf = (r) => rankLimit(row || { rank_limits: J(s.rank_limits || {}) }, r, c);
   return {
-    live: true, cfg: c,
+    live: isLive, mode: src.mode, mirror_ts: src.ts || null, cfg: c,
     gang: {
-      gid: g.gid, tag: g.tag, name: g.name, created: g.created, level: lvl, rep: Number(g.rep) || 0, next: lvl * c.rep_per_level,
-      prev: (lvl - 1) * c.rep_per_level, cap: memberCap(g, c), treasury: tre, heat: Number(g.heat) || 0,
-      wars: s.wars || { wins: 0, losses: 0 }, unpaid_days: Number(g.unpaid_days) || 0, upgrades: s.upgrades || {},
-      limits: Object.fromEntries(RANKS.map((r) => [r, rankLimit(g, r, c)])),
-      members: ms.map((m) => ({ key: m.member_key, name: nm[m.member_key].name, username: nm[m.member_key].username, rank: m.rank,
-                                used: Number(taken[m.member_key]) || 0 }))
-        .sort((a, b) => rankOrder[a.rank] - rankOrder[b.rank]),
+      gid, tag: s.tag, name: s.name, created: s.created || null, level: lvl, rep: Number(s.rep) || 0, next: lvl * c.rep_per_level,
+      prev: (lvl - 1) * c.rep_per_level, cap: memberCap({ rep: s.rep, upgrades: J(s.upgrades || {}) }, c), treasury: Number(s.treasury) || 0,
+      heat: Number(s.heat) || 0, wars: s.wars || { wins: 0, losses: 0 }, unpaid_days: Number(s.unpaid_days) || 0, upgrades: s.upgrades || {},
+      upgrade_list: upgradeList(s.upgrades, c),
+      limits: Object.fromEntries(RANKS.map((r) => [r, limitsOf(r)])),
+      members: roster.map((m) => Object.assign({ key: m.key, rank: m.rank, used: Number(taken[m.key]) || 0 }, people[m.key])),
       history: history.map((h) => {
         const r = parse(h.result, {});
-        return { op: h.op, ts: h.ts, via: h.via, who: h.actor_key ? (nm[h.actor_key] || { name: h.actor_key }).name : null,
+        return { op: h.op, ts: h.ts, via: h.via, who: h.actor_key ? (hn[h.actor_key] || { name: h.actor_key }).name : null,
                  amount: r.amount || null, net: r.net || null, cut: r.cut || null };
       }),
     },
-    me: mine ? { key: mine.member_key, rank: mine.rank, limit: rankLimit(g, mine.rank, c), used: Number(taken[mine.member_key]) || 0,
+    me: mine ? { key: mine.member_key, rank: mine.rank, limit: rankLimit(row, mine.rank, c), used: Number(taken[mine.member_key]) || 0,
                  manage: mine.rank === "owner" || mine.rank === "officer", boss: mine.rank === "owner" } : null,
-    invited: !!(inv && inv.gid === g.gid),
+    invited: !!(inv && inv.gid === gid),
   };
 }
 
@@ -1228,6 +1342,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
   }));
   app.post("/api/gangs/bot/op-status", bot(async (b) => ({ ok: true, result: await opStatus(b.key) })));
   app.post("/api/gangs/bot/rep", bot(async (b) => Object.assign({ ok: true }, await applyRep(b.events))));
+  app.post("/api/gangs/bot/mirror", bot((b) => putMirror(b)));      // the pages' display copy while the gangs live in Pepe
   app.post("/api/gangs/bot/config", bot(async (b) => {
     if (!b.cfg || typeof b.cfg !== "object") throw new Refuse(400, "cfg required");
     const s = J(b.cfg);
@@ -1297,5 +1412,5 @@ function register(app, { isBotToken, addUser, patSupply }) {
 
 module.exports = { init, register, enabled, live, rev, cfg, stateAll, totalsOf, digestOf, create, invite, accept, decline, leaveLike, kick, role,
                    setBoss, setTag, limits, deposit, withdraw, spend, move, disband, patch, applyRep, addRep, importFromPepe, exportState,
-                   rollbackToPepe, supplyRows, boardView, gangView, webAct, opStatus, splitShares, Refuse, DEFAULT_CFG,
+                   rollbackToPepe, supplyRows, boardView, gangView, putMirror, webAct, opStatus, splitShares, Refuse, DEFAULT_CFG,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta };

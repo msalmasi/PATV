@@ -1,0 +1,24 @@
+<%# views/partials/gangs-avatars.ejs - draws every .ava[data-seed] on a gang page with Pepe's pixel heist avatars
+    (public/js/avatar.js: the GTF sheet's seed + the member's equipped GTF cosmetics as layers), and fills data-ago times. %>
+<script>
+(function () {
+  function draw() {
+    var f = window.pepeAvatarSVG;
+    if (typeof f !== 'function') return;
+    document.querySelectorAll('.gg .ava[data-seed]').forEach(function (el) {
+      try {
+        var layers = JSON.parse(el.getAttribute('data-layers') || '{}');
+        el.innerHTML = f(+el.getAttribute('data-seed') || 7, el.classList.contains('sm') ? 30 : 40, layers);
+      } catch (e) { /* keep the empty tile */ }
+    });
+  }
+  document.querySelectorAll('.gg [data-ago]').forEach(function (el) {
+    var s = Math.max(0, (Date.now() - Number(el.getAttribute('data-ago'))) / 1000);
+    el.textContent = s < 90 ? 'just now' : s < 5400 ? Math.round(s / 60) + ' min ago' : s < 129600 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago';
+  });
+  var s = document.createElement('script');
+  s.src = '/public/js/avatar.js';
+  s.onload = draw;
+  document.head.appendChild(s);
+})();
+</script>

@@ -12,7 +12,7 @@ const LINKS = {
   turfHelp: "/help#cat-heists",
   turfGuide: "https://pepe.publicaccess.tv/turfwars",
   turfMap: "https://pepe.publicaccess.tv/turf",
-  gangs: "https://pepe.publicaccess.tv/gangs",
+  gangs: "/gtf/gangs",                      // G1: the gang board lives on the site (Pepe's Netlify board retired)
   heistBoard: "https://pepe.publicaccess.tv/heist",
 };
 

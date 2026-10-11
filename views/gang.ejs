@@ -14,8 +14,8 @@
 %>
 <div class="gg">
   <div class="crumbs"><a href="/gtf">Grand Theft Frogger</a> › <a href="/gtf/gangs">Gangs</a><% if (g) { %> › [<%= g.tag %>]<% } %></div>
-  <% if (!v.live) { %>
-    <div class="banner">The gangs still live in Pepe - see <a href="https://pepe.publicaccess.tv/gangs" rel="noopener">pepe.publicaccess.tv/gangs</a>.</div>
+  <% if (!v.mode) { %>
+    <div class="banner">The gang board fills in as soon as Pepe reports in - see <a href="/gtf/gangs">all gangs</a>.</div>
   <% } else if (!g) { %>
     <div class="card"><p class="note">No gang with that tag. <a href="/gtf/gangs">All gangs</a></p></div>
   <% } else { %>
@@ -45,6 +45,7 @@
         <ul class="roster">
           <% g.members.forEach((m) => { %>
           <li>
+            <span class="ava<%= m.rank === 'owner' ? ' boss' : m.rank === 'officer' ? ' off' : '' %>" data-seed="<%= m.seed %>" data-layers="<%= JSON.stringify(m.layers || {}) %>" aria-hidden="true"></span>
             <span class="who"><b><%= m.name %></b><span class="rank <%= m.rank %>"><%= m.rank === 'owner' ? 'BOSS' : m.rank.toUpperCase() %></span>
               <% if (me && me.manage && g.limits[m.rank]) { %><small>today: <%= fmt(m.used) %> / <%= fmt(g.limits[m.rank]) %> PAT</small><% } %></span>
             <% if (me && m.rank !== 'owner' && m.key !== me.key && (me.boss || (me.manage && m.rank !== 'officer'))) { %>
@@ -68,10 +69,10 @@
       <section class="card gold" aria-labelledby="ggUps">
         <h2 id="ggUps">UPGRADES</h2>
         <div class="ups">
-          <% Object.entries(v.cfg.upgrades || {}).forEach(([k, u]) => { const lv = Number(g.upgrades[k] || 0); %>
-          <div class="up"><b><%= u.name %></b> <span style="color:var(--mut)">Lv<%= lv %>/<%= u.max %></span>
-            <div class="pips" aria-hidden="true"><% for (let i = 1; i <= u.max; i++) { %><i class="<%= i <= lv ? 'on' : '' %>"></i><% } %></div>
-            <small><%= u.desc %><% if (lv < u.max) { %> · next <%= fmt(u.cost * (lv + 1)) %> PAT<% } %></small></div>
+          <% g.upgrade_list.forEach((u) => { %>
+          <div class="up<%= u.lvl ? '' : ' none' %>"><span class="uic" aria-hidden="true"><%= u.icon %></span><b><%= u.name %></b> <span style="color:var(--mut)">Lv<%= u.lvl %>/<%= u.max %></span>
+            <div class="pips" aria-hidden="true"><% for (let i = 1; i <= u.max; i++) { %><i class="<%= i <= u.lvl ? 'on' : '' %>"></i><% } %></div>
+            <small><%= u.desc %><% if (u.next) { %> · next level <%= fmt(u.next) %> PAT<% } else { %> · maxed<% } %></small></div>
           <% }) %>
         </div>
         <p class="note">Bought from the treasury in chat: <code>!gang upgrade &lt;name&gt;</code> (boss or officers).</p>
@@ -101,6 +102,8 @@
         <% } %>
         <div class="msg" id="ggMsg" role="status" aria-live="polite"></div>
       </section>
+      <% } else if (v.mode === 'mirror') { %>
+      <section class="card green"><p class="note">This gang is run in chat for now (<code>!gang help</code>) - this page is Pepe's copy<% if (v.mirror_ts) { %>, updated <span data-ago="<%= v.mirror_ts %>"></span><% } %>.</p></section>
       <% } else if (!signedIn) { %>
       <section class="card green"><p class="note"><a href="/login?next=/gtf/gangs/<%= encodeURIComponent(g.tag) %>">Sign in</a> to manage your gang here.</p></section>
       <% } %>
@@ -111,6 +114,7 @@
           <span class="note" style="margin:0">raids won and lost (attacking and defending)</span></div>
       </section>
 
+      <% if (v.live) { %>
       <section class="card" aria-labelledby="ggHist">
         <h2 id="ggHist">TREASURY MOVES</h2>
         <% if (!g.history.length) { %><p class="note">Nothing yet.</p><% } else { %>
@@ -122,8 +126,10 @@
         </ul>
         <% } %>
       </section>
+      <% } %>
     </div>
   </div>
+  <%- include('partials/gangs-avatars') %>
   <script>
   (function () {
     var msg = document.getElementById('ggMsg');
