@@ -116,7 +116,7 @@ async function webMetrics(userId) {
   const ppIds = catalog.filter((a) => a.side === "web" && PP.METRICS.includes(a.metric)).map((a) => a.id);
   const ppHeld = ppIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${ppIds.map(() => "?").join(",")})`, [userId, ...ppIds]) : 0;
   const pp = ppIds.length && ppHeld < ppIds.length ? await PP.metrics(userId).catch(() => ({})) : {};
-  // 1.99oy: 💬 feed / follows / polls / tips / boosts / banners / 🎨 cosmetics (achsocial.js) - same rule as the feature ones
+  // 1.99oz: 💬 feed / follows / polls / tips / boosts / banners / 🎨 cosmetics (achsocial.js) - same rule as the feature ones
   const SO = require("./achsocial");
   const soBackfilled = await SO.backfill().then(() => true, () => false);
   const soIds = catalog.filter((a) => a.side === "web" && SO.METRICS.includes(a.metric)).map((a) => a.id);
@@ -146,7 +146,7 @@ async function webMetrics(userId) {
 }
 
 // Award every website-side achievement this user now qualifies for, and queue it for Pepe to
-// announce. Safe to call often. 1.99oy: one check per user at a time; a call that arrives while one runs (a poke from another
+// announce. Safe to call often. 1.99oz: one check per user at a time; a call that arrives while one runs (a poke from another
 // hook, XP -> level-up -> check) makes it run ONCE more afterwards - the running one may have read the tables before the change
 // that call is about (it used to be dropped, so two hooks close together could miss an award).
 const checking = new Map();       // userId -> { p, rerun }

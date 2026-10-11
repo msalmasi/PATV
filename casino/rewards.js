@@ -26,7 +26,7 @@
 const { runQuery, getQuery } = require("../dbUtils");
 
 const XP_WIN_RATE = 0.005;                       // Pepe's XP_WIN_RATE (frida-bot.py _grant_xp)
-// 1.99oy: + the new milestone counts Pepe also keeps for his own tables (holdem_hands, bj_double_wins, hm_busts) - one base each
+// 1.99oz: + the new milestone counts Pepe also keeps for his own tables (holdem_hands, bj_double_wins, hm_busts) - one base each
 const METRICS = ["bj_hands", "bj_naturals", "holdem_pots", "holdem_hands", "bj_double_wins", "hm_busts"];
 const AH = require("./achhands");
 const BASE_FRESH_MS = 60 * 60 * 1000;            // ask Pepe again for a base older than this (old-engine hands keep counting there)
@@ -64,7 +64,7 @@ async function baseOf(uid, metric) {
 }
 
 async function bump(key, uid, metric, n) {
-  await quietBackfill().catch(() => {});        // 1.99oy: new thresholds on old counts are given quietly first
+  await quietBackfill().catch(() => {});        // 1.99oz: new thresholds on old counts are given quietly first
   if (!(await once(key))) return null;
   await runQuery(`INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES (?, ?, ?, ?)
                   ON CONFLICT(userId, metric) DO UPDATE SET n = n + excluded.n, updated = excluded.updated`, [uid, metric, n, hooks.now()]);
@@ -72,7 +72,7 @@ async function bump(key, uid, metric, n) {
   return require("../achievements").awardCount(uid, metric, (row ? row.n : 0) + (await baseOf(uid, metric)));
 }
 
-/** 1.99oy: a running count (a streak) - set, not added; awarded with its value (no Pepe base: his tables keep their own). */
+/** 1.99oz: a running count (a streak) - set, not added; awarded with its value (no Pepe base: his tables keep their own). */
 async function setRun(key, uid, metric, value, award) {
   if (!(await once(key))) return null;
   await runQuery(`INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES (?, ?, ?, ?)
@@ -84,7 +84,7 @@ async function runOf(uid, metric) {
   return r[0] ? Number(r[0].n) || 0 : 0;
 }
 
-/** 1.99oy: the card-table achievements of one seat's blackjack round (achhands.blackjackSeat), each step keyed. */
+/** 1.99oz: the card-table achievements of one seat's blackjack round (achhands.blackjackSeat), each step keyed. */
 async function blackjackSeatAch(T, k, uid, r, dealer) {
   const m = AH.blackjackSeat(r, !!T.high_stakes);
   for (const [metric, n] of Object.entries(m)) if (metric[0] !== "_") await bump(`${k}:${metric}`, uid, metric, n);
@@ -139,7 +139,7 @@ async function blackjackRound(T, n, results, maxBet) {
       const k = `cbj:${T.id}:r${n}:${uid}`;
       await bump(`${k}:hands`, uid, "bj_hands", (r.hands || []).length || 1);
       await winReward(T, k, uid, (Number(r.total_payout) || 0) - (Number(r.total_bet) || 0));
-      await blackjackSeatAch(T, k, uid, r, ((T.eng && T.eng.results) || {}).dealer);    // 1.99oy
+      await blackjackSeatAch(T, k, uid, r, ((T.eng && T.eng.results) || {}).dealer);    // 1.99oz
       const nat = (r.hands || []).filter((h) => h.is_bj && h.outcome === "blackjack").map((h) => Number(h.bet) || 0);
       if (!nat.length) continue;
       await bump(`${k}:natural`, uid, "bj_naturals", 1);
@@ -199,7 +199,7 @@ async function holdemPot(T, hand, idx, uid, amount, against) {
 }
 
 /** A finished hold'em hand: win XP + gang rep for each winner on chips won minus chips put in. won: {uid: chips}, contrib: {uid: chips}
- *  1.99oy: + a hand played (holdem_hands) for every seat that put chips in. */
+ *  1.99oz: + a hand played (holdem_hands) for every seat that put chips in. */
 async function holdemHand(T, hand, won, contrib) {
   for (const [uid, amt] of Object.entries(won || {})) {
     await winReward(T, `chm:${T.id}:h${hand}:${uid}`, uid, (Number(amt) || 0) - (Number((contrib || {})[uid]) || 0));
@@ -211,7 +211,7 @@ async function holdemHand(T, hand, won, contrib) {
   }
 }
 
-/** 1.99oy: a hold'em showdown's hand achievements (achhands.holdemShowdown) for every seat at it, keyed per hand + seat + metric.
+/** 1.99oz: a hold'em showdown's hand achievements (achhands.holdemShowdown) for every seat at it, keyed per hand + seat + metric.
  *  sd: holdem.js T.sd ({board, shown: [{cards}], cf: [{uid}]} in reveal order), awards: the engine's awards event. */
 async function holdemShowdown(T, hand, sd, awards) {
   try {
@@ -341,7 +341,7 @@ async function siteCount(key, uid, metric, n) {
   }
 }
 
-// 1.99oy: once, quietly give the new thresholds on the counts the site already has (cf_bj_10 / cf_bj_5000 / cf_bj_natural_10 /
+// 1.99oz: once, quietly give the new thresholds on the counts the site already has (cf_bj_10 / cf_bj_5000 / cf_bj_natural_10 /
 // cf_holdem_100 ...: site count + Pepe's base) - badge only, no XP / PAT / announcement - before any new hand can award them
 // loudly (bump() waits for it). Flag achievement_meta 'casino_ach_backfill_oq'.
 let quietP = null;

@@ -1,4 +1,4 @@
-// 1.99oy: the card-table achievements on the site's casino tables (casino/rewards.js + casino/achhands.js), played through the
+// 1.99oz: the card-table achievements on the site's casino tables (casino/rewards.js + casino/achhands.js), played through the
 // real service: a doubled win, Five-Card Charlie, win / dealer-bust streaks, a royal flush + a knock-out at a showdown,
 // hands played, each counted once (a settlement re-run counts nothing twice), and the quiet backfill of the new thresholds on
 // counts the site already had (cf_bj_10 for 15 old hands: badge only, before any new hand could announce it).
@@ -59,7 +59,7 @@ test.before(async () => {
   await funding.init();
   await A.ready;
   await COS.ready;
-  // history from before 1.99oy: 15 site-counted blackjack hands for "old" (and Pepe's base of 0)
+  // history from before 1.99oz: 15 site-counted blackjack hands for "old" (and Pepe's base of 0)
   await rewards.ensure();
   await runQuery("INSERT INTO casino_ach_counts (userId, metric, n, updated) VALUES ('u1', 'bj_hands', 15, 1)");
   await svc.boot({ tick: false });

@@ -278,7 +278,7 @@ function install(core) {
           if (d) found.push(d);
           won[a.who] = (won[a.who] || 0) + a.amount;
         }
-        await rewards.holdemShowdown(T, e.hand_no, T.sd, ev.awards);     // 1.99oy: hand achievements (royal flush, bad beat, ...)
+        await rewards.holdemShowdown(T, e.hand_no, T.sd, ev.awards);     // 1.99oz: hand achievements (royal flush, bad beat, ...)
         await emit(T, "awards", "", { rake: ev.rake, winners: ev.awards.map((a) => ({ amount: a.amount })) });
         for (const d of found) await emit(T, "line", dropLine((T.players[d.uid] || {}).name || "someone", d.item));
         T.sd = null;

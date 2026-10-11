@@ -433,7 +433,7 @@ async function decide(staff, id, approve, reason) {
   });
   await notice(r0.user_id, { title: "📣 Your homepage banner is approved", body: `It shows on ${r0.start_day}${r0.days > 1 ? " to " + endDay(r0) : ""} (New York time). Its views and clicks are on /sponsor.`, ref: "banner-ok:" + r0.id });
   console.log(`[banner] booking ${id} approved by ${who}; routed ${JSON.stringify(routing)}`);
-  require("./achievements").poke(r0.user_id);               // 1.99oy: 🪧 Billboard (achsocial.js)
+  require("./achievements").poke(r0.user_id);               // 1.99oz: 🪧 Billboard (achsocial.js)
   return view(await row(id));
 }
 /** Staff take an approved booking down (a Terms breach): it stops showing, its remaining days free up, no refund. */

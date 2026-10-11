@@ -1071,7 +1071,7 @@ async function create(userId, input, deps = {}) {
     if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
     if (tags.length) await TAGS().setTags(id, tags);
     await recountPost(id);
-    if (!isPepe(u)) require("./achievements").poke(u.userId);      // 1.99oy: 📝 post achievements (achsocial.js)
+    if (!isPepe(u)) require("./achievements").poke(u.userId);      // 1.99oz: 📝 post achievements (achsocial.js)
   } catch (e) {
     await runQuery("DELETE FROM feed_post_tags WHERE post_id = ?", [id]).catch(() => {});
     await runQuery("DELETE FROM feed_votes WHERE post_id = ?", [id]).catch(() => {});
@@ -1432,7 +1432,7 @@ async function applyVote(u, { table, key, id, authorId, postId }, dir, what) {
                     ON CONFLICT(comment_id, user_id) DO UPDATE SET value = excluded.value, w = excluded.w, updated = excluded.updated`, [id, postId, u.userId, want, w, t, t]);
   }
   noteVote(u);
-  if (want === 1 && table === "feed_votes" && authorId && authorId !== u.userId) require("./achievements").poke(authorId);   // 1.99oy: 👍 upvotes received
+  if (want === 1 && table === "feed_votes" && authorId && authorId !== u.userId) require("./achievements").poke(authorId);   // 1.99oz: 👍 upvotes received
   return { vote: want, counted: want === 0 || w === 1, changed: true };
 }
 
@@ -1545,7 +1545,7 @@ async function comment(user, postId, { body, parent } = {}) {
   if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_comment_votes (comment_id, post_id, user_id, value, w, created, updated) VALUES (?, ?, ?, 1, 1, ?, ?)", [id, postId, u.userId, t, t]);
   await recountComment(id);
   await recount(postId);
-  if (!isPepe(u)) require("./achievements").poke(u.userId);        // 1.99oy: 💬 comment achievements (achsocial.js)
+  if (!isPepe(u)) require("./achievements").poke(u.userId);        // 1.99oz: 💬 comment achievements (achsocial.js)
   // notices: the post's author, and the person replied to (never yourself, never twice)
   const who = u.displayname || u.username;
   const what = (p.title || p.body || "your post").replace(/\s+/g, " ").slice(0, 60);

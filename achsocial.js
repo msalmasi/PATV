@@ -1,4 +1,4 @@
-// achsocial.js — 1.99oy: the site-side achievements for everyday site actions (side=web, counted here from the site's own
+// achsocial.js — 1.99oz: the site-side achievements for everyday site actions (side=web, counted here from the site's own
 // tables): 💬 the feed (posts, comments, upvotes from other people), follows, polls, tips (to / from different people, 1,000+
 // PAT each), boosting someone else's pad, a banner booking, and 🎨 cosmetics (equipped, full slots, a legendary, the
 // collection).

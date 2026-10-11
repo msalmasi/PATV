@@ -340,7 +340,7 @@ the poll's `stream` field; Pepe draws only that table's board (blackjack or poke
   lotto_tickets for buyers with no Camfrog link (Pepe still counts linked buyers from the sale event - disjoint), cf_market
   on the market-win payout itself (/api/wager/payout, keyed by Pepe's idempotency key; Pepe stops counting market_wins by
   name, which mis-resolved web-only names). All threshold-1 badges except cf_lotto_100; a badge is only ever given once.
-  **1.99oy: hand achievements** (`casino/achhands.js`, pure; Pepe's `pepe_casinoach.py` mirrors it for his own tables): at a
+  **1.99oz: hand achievements** (`casino/achhands.js`, pure; Pepe's `pepe_casinoach.py` mirrors it for his own tables): at a
   hold'em SHOWDOWN (holdem.js calls `rewards.holdemShowdown` with T.sd + the awards) - full house / quads / straight flush /
   royal flush won when the hole cards make it, 7-2 offsuit, 1M+ pots, all-in wins, knock-outs (not of your own alt), bad beats
   (lost holding quads+, or as an 85%+ favourite on the turn), High Roller table wins; `holdem_hands` per seat that put chips
