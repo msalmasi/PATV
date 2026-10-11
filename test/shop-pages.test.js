@@ -205,6 +205,10 @@ test("storefront: hero, best sellers, the grid; unknown seller 404s", async () =
   assert.match((await get("/shop/seller/alice", "sp-alice")).html, /Manage your shop/);
   const q = await get("/shop/seller/alice?q=steam", "sp-bob");
   assert.doesNotMatch(q.html, /class="st-sbest"/, "a search shows results, not the strip");
+  const empty = await get("/shop/seller/newbie", "sp-bob");
+  assert.match(empty.html, /class="st-empty"/);
+  assert.match(empty.html, /Nothing for sale right now/);
+  assert.match(empty.html, /Browse the whole shop/);
   const missing = await get("/shop/seller/nobody-here", "sp-bob");
   assert.equal(missing.status, 404);
 });

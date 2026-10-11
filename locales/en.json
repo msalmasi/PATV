@@ -5698,5 +5698,8 @@
   "shop.sd.notify.pm": "Pepe PMs me in Camfrog ({name})",
   "shop.sd.notify.pm_none": "Pepe PMs me in Camfrog (link Camfrog in your profile)",
   "shop.orders.from_link": "from {!name}",
-  "shop.storefront.picks": "Featured"
+  "shop.storefront.picks": "Featured",
+  "shop.storefront.empty_h": "Nothing for sale right now",
+  "shop.storefront.empty_p": "This shop has no listings at the moment. Check back later, or look around the rest of the shop.",
+  "shop.storefront.empty_cta": "Browse the whole shop"
 }

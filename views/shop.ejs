@@ -188,7 +188,10 @@
   </details>
 
   <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
-  <% if (!items.length) { %>
+  <% if (!items.length && store && !f.q && !active) { %>
+    <div class="st-empty"><span aria-hidden="true">🛍️</span><b><%- t('shop.storefront.empty_h') %></b><p><%- t('shop.storefront.empty_p') %></p>
+      <a class="btn gold" href="/shop"><%- t('shop.storefront.empty_cta') %></a></div>
+  <% } else if (!items.length) { %>
     <p class="muted" style="text-align:center;padding:24px 0"><%- t('shop.no_match', { link: '<a href="' + t.esc(path) + '">' + t('shop.clear_filters') + '</a>' }) %></p>
   <% } %>
   <div class="st-grid">
