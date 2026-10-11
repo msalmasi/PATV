@@ -1,0 +1,106 @@
+<%- include('../partials/admin-open', { title: 'PATV Creators', user, section: 'creators', admIsAdmin: isAdmin }) %>
+<%# views/admin/creators.ejs - 1.99pv: ⭐ PATV Creators admin (creatorsweb.js / creators.js): the switches, applications and creators
+    (approve / pause / ban), disputes (refund / deny), the ledger (refund / clawback), totals. A = creators.adminView(). %>
+<%
+  const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const when = (t) => t ? new Date(Number(t)).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '';
+  const C = A.config;
+  const pending = A.apps.filter((a) => a.status === 'pending');
+%>
+<div class="adm-head">
+  <h1>⭐ PATV Creators</h1>
+  <p>Creator subscriptions and locked posts paid in PAT (SFW, plus 18+ R-rated profiles and pads - never explicit). Payments sit on the escrow ledger for <%= C.hold_days %> days,
+     then the creator gets <%= C.creator_pct %>% and the cut goes to Fort Knox / the pad's vault (the <code>creators</code> row of the premium routing table).
+     <a href="/admin/creators/explicit">Explicit tier readiness checklist ›</a> · <a href="/admin/takedowns">TAKE IT DOWN queue ›</a></p>
+</div>
+
+<section class="adm-card" aria-labelledby="stT">
+  <h2 id="stT">Status
+    <span class="adm-pill <%= C.enabled ? 'ok' : '' %>"><%= C.enabled ? 'ON' : 'OFF (nobody can apply or buy)' %></span>
+    <span class="adm-pill <%= A.escrowLive ? 'ok' : '' %>">Escrow ledger: <%= A.escrowLive ? 'LIVE' : 'not live - purchases refused' %></span>
+    <span class="adm-pill <%= A.lockedMedia ? 'ok' : '' %>">Locked media check: <%= A.lockedMedia ? 'ENFORCING' : 'off - text locks only' %></span>
+  </h2>
+  <div class="adm-kv">
+    <div><b>Held now</b><span><%= fmt(A.totals.held) %> PAT</span></div>
+    <div><b>Released to creators</b><span><%= fmt(A.totals.released) %> PAT</span></div>
+    <div><b>Platform cut booked</b><span><%= fmt(A.totals.cut) %> PAT</span></div>
+    <div><b>Refunded</b><span><%= fmt(A.totals.refunded) %> PAT</span></div>
+  </div>
+</section>
+
+<section class="adm-card" id="apps" aria-labelledby="apT">
+  <h2 id="apT">Applications &amp; creators <span class="adm-pill"><%= pending.length %> pending</span></h2>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>Creator</th><th>Status</th><th>Rating</th><th>Terms</th><th>Updated</th><th>Note</th><th></th></tr></thead>
+    <tbody>
+      <% if (!A.apps.length) { %><tr><td colspan="7" class="empty">No creators yet.</td></tr><% } %>
+      <% A.apps.forEach((a) => { %>
+        <tr><td><a href="/creators/<%= encodeURIComponent(a.username || '') %>"><%= a.username || a.user_id %></a></td>
+          <td><span class="adm-pill <%= a.status === 'active' ? 'ok' : '' %>"><%= a.status %></span><% if (a.elig) { %><br><small><%= a.elig.checks.filter((c) => !c.ok).map((c) => '✕ ' + c.key).join(' ') || 'eligible' %></small><% } %></td>
+          <td><%= a.rating === 'r18' ? '🔞 18+' : 'SFW' %></td><td><%= a.terms_version || '-' %></td><td><%= when(a.updated) %></td><td><%= a.paused_reason || a.note || '' %></td>
+          <td style="white-space:nowrap">
+            <% if (a.status !== 'active') { %><button type="button" data-cr-admin="active" data-url="/api/admin/creators/<%= encodeURIComponent(a.user_id) %>/status" data-note="Note (optional)">Approve</button><% } %>
+            <% if (a.status === 'active') { %><button type="button" data-cr-admin="paused" data-url="/api/admin/creators/<%= encodeURIComponent(a.user_id) %>/status" data-note="Why pause? (shown to the creator)">Pause</button><% } %>
+            <% if (a.status !== 'banned') { %><button type="button" data-cr-admin="banned" data-url="/api/admin/creators/<%= encodeURIComponent(a.user_id) %>/status" data-note="Why ban? (shown to the creator)" data-confirm="Ban this creator? Every unreleased payment is refunded and their subscriptions end.">Ban</button><% } %>
+          </td></tr>
+      <% }) %>
+    </tbody></table></div>
+</section>
+
+<section class="adm-card" id="disputes" aria-labelledby="dpT">
+  <h2 id="dpT">Disputes</h2>
+  <p class="adm-help">A fan reported a problem while the payment was held. The hold is frozen until you decide: refund (the whole payment back to the fan) or deny (it releases on schedule).</p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>#</th><th>Fan</th><th>Creator</th><th>Payment</th><th>Reason</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <% if (!A.disputes.length) { %><tr><td colspan="7" class="empty">No disputes.</td></tr><% } %>
+      <% A.disputes.forEach((d) => { %>
+        <tr><td><%= d.id %></td><td><%= d.fan %></td><td><%= d.creator %></td><td class="num"><%= fmt(d.amount) %> (<%= d.kind %>, <%= d.lstate %>)</td><td><%= d.reason %><% if (d.note) { %><br><small><%= d.note %></small><% } %></td>
+          <td><%= d.status %><% if (d.resolution) { %><br><small><%= d.resolution %></small><% } %></td>
+          <td style="white-space:nowrap"><% if (d.status === 'open') { %>
+            <button type="button" data-cr-admin="refund" data-url="/api/admin/creators/disputes/<%= d.id %>" data-note="Note for the record">Refund</button>
+            <button type="button" data-cr-admin="deny" data-url="/api/admin/creators/disputes/<%= d.id %>" data-note="Note to the fan">Deny</button><% } %></td></tr>
+      <% }) %>
+    </tbody></table></div>
+</section>
+
+<section class="adm-card" id="ledger" aria-labelledby="lgT">
+  <h2 id="lgT">Ledger (latest 100)</h2>
+  <p class="adm-help">Refund: a held payment goes back to the fan. Clawback (D9, a reversed donation): held -> refunded; released -> taken from the creator only if they're linked to the fan, otherwise the platform absorbs it.
+    <button type="button" data-cr-admin="release" data-url="/api/admin/creators/ledger/0">Run the release job now</button></p>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>#</th><th>When</th><th>Kind</th><th>Fan</th><th>Creator</th><th class="num">Amount</th><th class="num">Creator</th><th class="num">Cut</th><th>State</th><th>Release</th><th></th></tr></thead>
+    <tbody>
+      <% if (!A.ledger.length) { %><tr><td colspan="11" class="empty">Nothing yet.</td></tr><% } %>
+      <% A.ledger.forEach((l) => { %>
+        <tr><td><%= l.id %></td><td><%= when(l.created) %></td><td><%= l.kind %><%= l.linked ? ' 🔗' : '' %></td><td><%= l.fan %></td><td><%= l.creator %></td><td class="num"><%= fmt(l.amount) %></td><td class="num"><%= fmt(l.creator_share) %></td><td class="num"><%= fmt(l.cut) %></td>
+          <td><%= l.state %><%= l.frozen ? ' (frozen)' : '' %></td><td><%= l.state === 'held' ? when(l.release_at) : when(l.released_at || l.refunded_at) %></td>
+          <td style="white-space:nowrap"><% if (l.state === 'held') { %><button type="button" data-cr-admin="refund" data-url="/api/admin/creators/ledger/<%= l.id %>" data-note="Why refund?">Refund</button><% } %>
+            <% if (l.state === 'held' || l.state === 'released') { %><button type="button" data-cr-admin="clawback" data-url="/api/admin/creators/ledger/<%= l.id %>" data-note="Clawback note (e.g. the Stripe dispute id)" data-confirm="Claw this payment back?">Clawback</button><% } %></td></tr>
+      <% }) %>
+    </tbody></table></div>
+</section>
+
+<% if (isAdmin) { %>
+<section class="adm-card" id="settings" aria-labelledby="seT">
+  <h2 id="seT">Settings</h2>
+  <form class="adm-form" data-cr-form="/api/admin/creators/config" data-next="reload">
+    <label><span><input type="checkbox" name="enabled"<%= C.enabled ? ' checked' : '' %>> PATV Creators is on</span></label>
+    <label><span><input type="checkbox" name="apply_open"<%= C.apply_open ? ' checked' : '' %>> Applications open</span></label>
+    <label><span><input type="checkbox" name="review_applications"<%= C.review_applications ? ' checked' : '' %>> Staff approve each application</span></label>
+    <label><span><input type="checkbox" name="require_safety_for_media"<%= C.require_safety_for_media ? ' checked' : '' %>> Locked media only while the image check enforces</span></label>
+    <label><span><input type="checkbox" name="pepe_commands"<%= C.pepe_commands ? ' checked' : '' %>> Pepe's !subscribe / !subs / !creator</span></label>
+    <% ['creator_pct', 'hold_days', 'period_days', 'grace_days', 'sub_min', 'sub_max', 'ppv_min', 'ppv_max', 'release_cap_week', 'royalty_pct', 'fan_max_subs', 'fan_daily_max', 'pair_daily_max', 'ppv_per_day',
+        'elig_age_days', 'elig_level', 'elig_strike_days', 'confirm_over', 'dispute_days'].forEach((k) => { %>
+      <label><%= k %> <small>(default <%= fmt(A.defaults[k]) %>)</small><input type="number" name="<%= k %>" value="<%= C[k] %>"></label>
+    <% }) %>
+    <label><span><input type="checkbox" name="elig_identity"<%= C.elig_identity ? ' checked' : '' %>> Eligibility: a linked identity</span></label>
+    <label><span><input type="checkbox" name="elig_email"<%= C.elig_email ? ' checked' : '' %>> Eligibility: a verified email</span></label>
+    <div class="adm-actions"><button type="submit">Save settings</button><span class="adm-msg cr-msg" role="status"></span></div>
+  </form>
+</section>
+<% } %>
+<script src="/public/js/creators.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

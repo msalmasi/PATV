@@ -235,7 +235,9 @@ async function composerFor(viewer, roomId) {
     for (const [id, list] of per) if (list.length) tagSuggest[id] = list;
     tagSuggest[""] = (await TAGS.popular(null, { viewer, limit: 8 })).map((r) => r.tag);
   } catch (e) { /* suggestions are a convenience */ }
-  return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all,
+  // 1.99pv: ⭐ PATV Creators - the lock options (null unless the viewer is an active creator)
+  const creator = await require("./creators").composerInfo(viewer).catch(() => null);
+  return { user: viewer.username, terms: { enforced: terms.enforced(), needed: termsNeeded, version: terms.VERSION }, rooms: all, creator,
            tags: { max: TAGS.MAX_TAGS, len: TAGS.TAG_MAX, suggest: tagSuggest },
            room: here && here.canPost ? here.id : null, roomRefusal: here && !here.canPost ? here.refusal : null, roomTitle: here ? here.title : null,
            refusal: refusal ? refusal.message : (all.length ? null : "There's no pad you can post in right now."), mediaRefusal: mediaRefusal ? mediaRefusal.message : null,
@@ -543,6 +545,13 @@ function register(app, { addUser, isBotToken }) {
       }
       const nsfw = a.nsfw_admin === 0 || a.nsfw_admin === 1 ? !!a.nsfw_admin : !!a.nsfw;
       if (nsfw && !uid) return res.status(403).end();
+      // 1.99pv: ⭐ PATV Creators - a locked post's files only for entitled viewers (its blurred teasers for everyone who may see
+      // the post), an 18+ community's only for viewers who confirmed their age; never cached publicly
+      if (a.post_id) {
+        const cg = await require("./creators").mediaGate(req.user, a);
+        if (!cg.allow) return res.status(404).end();
+        if (cg.private) locked = true;
+      }
       const ct = name.endsWith(".webp") ? "image/webp" : name.endsWith(".m4a") ? "audio/mp4" : "video/mp4";
       const ext = name.split(".").pop();
       res.set({

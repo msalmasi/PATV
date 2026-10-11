@@ -218,6 +218,8 @@ async function posts(p, viewer, { sort = "relevance", page = 1, limit = PAGE } =
   const byId = new Map(L.posts.map((x) => [x.id, x]));
   const out = pageIds.map((id) => byId.get(id)).filter(Boolean);
   for (const x of out) x.snip = H.snip.get(x.id) || null;
+  // 1.99pv: a gated locked / 18+ post never shows a body snippet (it would leak paid text)
+  for (const x of out) if (x.creator && x.creator.gated && x.snip) x.snip = x.creator.r18Gate ? null : { title: x.snip.title, body: "" };
   return { posts: out, total: ids.length, more: ids.length > page * limit, page };
 }
 

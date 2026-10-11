@@ -1,0 +1,44 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%#
+  /subscriptions: ⭐ PATV Creators (1.99pv) - this account's creator subscriptions (cancel / resume / pay now / auto-renew /
+  change tier) and recent purchases (report a problem while the payment is held). Locals: cs (creators.fanSubs).
+%><%
+  const fmt = (n) => t.num(Math.round(Number(n) || 0));
+  const d = (ms) => ms ? t.date(Number(ms), { dateStyle: 'medium' }) : '';
+  const live = cs.subs.filter((s) => s.status === 'active' || s.status === 'grace');
+  const past = cs.subs.filter((s) => !(s.status === 'active' || s.status === 'grace')).slice(0, 10);
+%>
+<section class="ds-card lg" aria-labelledby="sxCrH" id="creators" style="--ds-ac:#ff5fa2;--ds-ac-bg:rgba(255,95,162,.12);--ds-ac-line:#7a2c52;--ds-on-ac:#2a0016">
+  <h2 class="ds-h2" id="sxCrH">⭐ <%- t('cr.subs.h') %></h2>
+  <% if (!live.length) { %><p class="mut"><%- t('cr.subs.none', { link: '<a href="/creators">' + t('cr.title') + '</a>' }) %></p><% } %>
+  <% live.forEach((s) => { %>
+    <div class="it"><div class="w"><b><a href="/creators/<%= encodeURIComponent(s.creator) %>"><%= s.creator %></a></b> <span class="mut">· <%= s.tierName %><%- s.comp ? ' · ' + t('cr.subs.comp') : ' · ' + t('subs.every', { price: fmt(s.price), days: 30 }) %></span>
+      <div class="st <%= s.status === 'grace' ? 'warn' : s.cancel_at_end || !s.renew ? 'off' : 'ok' %>"><%- s.status === 'grace' ? t('cr.subs.grace', { date: d(s.grace_until) }) : (s.cancel_at_end || !s.renew) ? t('cr.subs.ends', { date: d(s.paid_through) }) : t('subs.renews', { date: d(s.paid_through) }) %><%- s.next_tier ? ' · ' + t('cr.subs.next_tier', { n: s.next_tier }) : '' %></div></div>
+      <div class="acts">
+        <% if (s.status === 'grace') { %><button type="button" class="ds-btn sm gold" data-cr-act="pay" data-id="<%= s.id %>"><%- t('cr.subs.pay') %></button><% } %>
+        <% if (s.status === 'active' && !s.comp && (s.plans || []).length > 1) { %>
+          <label class="ds-sr-only" for="crTier<%= s.id %>"><%- t('cr.subs.change') %></label>
+          <select class="ds-select" id="crTier<%= s.id %>" data-cr-tier-for="<%= s.id %>" style="min-height:36px;width:auto">
+            <% s.plans.forEach((p) => { %><option value="<%= p.tier %>"<%= p.tier === s.tier ? ' selected' : '' %><%= p.price > s.price ? ' data-up="1"' : '' %>><%= p.tier %> · <%= p.name %> · <%= fmt(p.price) %></option><% }) %>
+          </select>
+          <button type="button" class="ds-btn sm ghost" data-cr-act="tier" data-id="<%= s.id %>"><%- t('cr.subs.change') %></button>
+        <% } %>
+        <% if (s.status === 'active' && s.cancel_at_end) { %><button type="button" class="ds-btn sm ghost" data-cr-act="resume" data-id="<%= s.id %>"><%- t('cr.subs.resume') %></button>
+        <% } else if (!s.comp) { %><button type="button" class="ds-btn sm danger" data-cr-act="cancel" data-id="<%= s.id %>"><%- t('cr.subs.cancel') %></button><% } %>
+      </div></div>
+  <% }) %>
+  <% if (cs.purchases.length) { %>
+    <h3 class="ds-h4"><%- t('cr.subs.purchases') %></h3>
+    <% cs.purchases.slice(0, 15).forEach((b) => { %>
+      <div class="it"><div class="w"><b><%= b.kind === 'ppv' ? (b.title || t('cr.subs.a_post')) : t('cr.subs.k_' + b.kind) %></b> <span class="mut">· <%= b.cname %> · <%= fmt(b.amount) %> PAT · <%= d(b.created) %></span>
+        <div class="st <%= b.state === 'refunded' ? 'off' : b.frozen ? 'warn' : 'ok' %>"><%- t('cr.subs.st_' + (b.frozen && b.state === 'held' ? 'frozen' : b.state)) %></div></div>
+        <% if (b.canReport) { %><div class="acts"><button type="button" class="ds-btn sm ghost" data-cr-dispute="<%= b.id %>"><%- t('cr.subs.report') %></button></div><% } %></div>
+    <% }) %>
+  <% } %>
+  <% if (past.length) { %>
+    <details><summary class="mut"><%- t('cr.subs.past', { count: past.length, n: past.length }) %></summary>
+      <% past.forEach((s) => { %><div class="it"><div class="w"><b><%= s.creator %></b> <span class="mut">· <%= s.tierName %> · <%= s.status %> <%= d(s.ended_at) %></span></div></div><% }) %>
+    </details>
+  <% } %>
+</section>
+<script src="/public/js/creators.js?v=1" defer></script>

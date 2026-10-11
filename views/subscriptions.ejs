@@ -98,6 +98,7 @@
     <% } %>
   </section>
 
+  <% if (locals.creators) { %><%- include('partials/creator-subs', { cs: creators }) %><% } %><%# 1.99pv: ⭐ PATV Creators %>
   <section class="ds-card lg" aria-labelledby="sxPremH">
     <h2 class="ds-h2" id="sxPremH"><%- t('subs.prem_h') %></h2>
     <% if (!S.premium.length) { %><p class="mut"><%- t('subs.prem_none', { link: '<a href="/premium">' + t('subs.prem_link') + '</a>' }) %></p><% } %>

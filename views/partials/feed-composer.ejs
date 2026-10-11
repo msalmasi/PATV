@@ -91,6 +91,7 @@
       <label class="fc-tool ck" title="<%- t('feed.fc.nsfw_title') %>"><input type="checkbox" name="nsfw"> 🔞 <%- t('feed.nsfw') %></label>
     </div>
     <% if (cp.mediaRefusal) { %><p class="fc-note">📎 <%= cp.mediaRefusal %></p><% } %>
+    <% if (cp.creator) { %><%- include('creator-lock-composer', { cr: cp.creator }) %><% } %><%# 1.99pv: ⭐ PATV Creators %>
     <%# 1.99ci: every post lives in exactly ONE pad (Reddit-style; Crosspost shares it into others). The picker
         lists the pads this account may post in (the owners' who-can-post settings, bans) and searches them. %>
     <fieldset class="fc-where">

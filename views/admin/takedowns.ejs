@@ -1,0 +1,38 @@
+<%- include('../partials/admin-open', { title: 'TAKE IT DOWN', user, section: 'takedowns', admIsAdmin: isAdmin }) %>
+<%# views/admin/takedowns.ejs - 1.99pv: the TAKE IT DOWN queue (takedown.js). Every case has a 48-hour clock from receipt. Remove = delete
+    the listed posts + identical copies, block their files; Reject restores what was hidden. cases = takedown.queue(). %>
+<%
+  const when = (t) => t ? new Date(Number(t)).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '';
+  const left = (ms) => { if (ms <= 0) return 'OVERDUE by ' + Math.ceil(-ms / 3600e3) + ' h'; const h = Math.floor(ms / 3600e3); return h + ' h ' + Math.floor((ms % 3600e3) / 60e3) + ' min left'; };
+  const open = cases.filter((c) => c.status === 'open' || c.status === 'need_info');
+%>
+<div class="adm-head">
+  <h1>🚨 TAKE IT DOWN</h1>
+  <p>Requests to remove intimate images shared without consent (the public form at <a href="/takedown">/takedown</a>, and feed reports with the reason "Non-consensual intimate imagery").
+     The law gives us <b>48 hours</b> from receipt to remove valid requests and known identical copies. Listed posts are hidden as soon as a request arrives. Don't download or share the content.
+     Anything involving a minor: follow the CSAM procedure (NCMEC CyberTipline) as well.</p>
+</div>
+<section class="adm-card" aria-labelledby="oT">
+  <h2 id="oT">Open <span class="adm-pill <%= open.some((c) => c.overdue) ? '' : 'ok' %>"><%= open.length %> open<%= open.some((c) => c.overdue) ? ', ' + open.filter((c) => c.overdue).length + ' overdue' : '' %></span></h2>
+  <div class="adm-tbl"><table>
+    <thead><tr><th>#</th><th>Received</th><th>Clock</th><th>From</th><th>Content</th><th>Description</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      <% if (!cases.length) { %><tr><td colspan="8" class="empty">No requests.</td></tr><% } %>
+      <% cases.forEach((c) => { const isOpen = c.status === 'open' || c.status === 'need_info'; %>
+        <tr id="c<%= c.id %>"><td><%= c.id %></td><td><%= when(c.created) %><br><small><%= c.source %></small></td>
+          <td><% if (isOpen) { %><span class="adm-pill <%= c.overdue ? '' : c.left < 8 * 3600e3 ? '' : 'ok' %>"><%= left(c.left) %></span><% } else { %><%= when(c.resolved_at) %><% } %></td>
+          <td><%= c.requester_name || '(member report)' %><% if (c.email) { %><br><small><%= c.email %></small><% } %><% if (c.relationship) { %><br><small><%= c.relationship === 'self' ? 'the person shown' : 'authorised representative' %></small><% } %><% if (c.signature) { %><br><small>signed: <%= c.signature %></small><% } %></td>
+          <td><% c.posts.forEach((p) => { %><a href="<%= p.url || '/feed/p/' + p.id %>" rel="noreferrer"><%= p.id %></a><br><% }) %><% if (!c.posts.length) { %><small>no post found from the links:</small><br><% c.urls.slice(0, 5).forEach((u) => { %><small><%= u %></small><br><% }) %><% } %></td>
+          <td><%= c.description || '' %><% if (c.note) { %><br><small>note: <%= c.note %></small><% } %></td>
+          <td><%= c.status %><% if (c.resolved_by) { %><br><small><%= c.resolved_by %></small><% } %></td>
+          <td style="white-space:nowrap"><% if (isOpen) { %>
+            <button type="button" data-cr-td="remove" data-id="<%= c.id %>">Remove</button>
+            <button type="button" data-cr-td="info" data-id="<%= c.id %>">Need info</button>
+            <button type="button" data-cr-td="reject" data-id="<%= c.id %>">Reject</button><% } %></td></tr>
+      <% }) %>
+    </tbody></table></div>
+</section>
+<script src="/public/js/creators.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>

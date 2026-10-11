@@ -1,0 +1,108 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /creators — ⭐ PATV Creators (1.99pv, creatorsweb.js): what it is, the eligibility ticks, the Creator Terms and the apply /
+    update form (rating, 18+ attestation, 1-3 tiers). Locals: C (config), creator (row|null), plans, elig ({ok, checks}|null), termsVersion. %>
+<%- include('layout', { title: title, user: user }) %>
+<link rel="stylesheet" href="/public/css/creators.css?v=1">
+<%
+  const fmt = (n) => t.num(Math.round(Number(n) || 0));
+  const isCreator = !!(creator && (creator.status === 'active' || creator.status === 'paused'));
+  const pending = !!(creator && creator.status === 'pending');
+  const banned = !!(creator && creator.status === 'banned');
+  const rows = [0, 1, 2].map((i) => plans[i] || null);
+%>
+<main class="ds-page cr">
+  <section class="ds-hero">
+    <span class="ds-eyebrow ac"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('cr.eyebrow') %></span>
+    <h1><%- t('cr.h1') %></h1>
+    <p class="ds-lead"><%- t('cr.lead', { pct: C.creator_pct }) %></p>
+    <div class="ds-ctas">
+      <% if (isCreator) { %><a class="ds-btn" href="/creator"><span class="ds-ic" aria-hidden="true">📊</span><%- t('cr.to_dash') %></a>
+      <% } else if (!user) { %><a class="ds-btn" href="/login?next=%2Fcreators"><%- t('cr.sign_in_apply') %></a>
+      <% } else { %><a class="ds-btn" href="#apply"><%- t('cr.apply_cta') %></a><% } %>
+      <a class="ds-btn ghost" href="/creators/terms"><%- t('cr.terms_cta') %></a>
+    </div>
+    <div class="ds-pills">
+      <span class="ds-pill-stat"><%- t('cr.pill_split') %> <b><%= C.creator_pct %>/<%= 100 - C.creator_pct %></b></span>
+      <span class="ds-pill-stat"><%- t('cr.pill_hold') %> <b><%- t('cr.days', { count: C.hold_days, n: C.hold_days }) %></b></span>
+      <span class="ds-pill-stat"><%- t('cr.pill_tiers') %> <b><%= fmt(C.sub_min) %>–<%= fmt(C.sub_max) %></b></span>
+    </div>
+  </section>
+
+  <% if (!C.enabled) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">🚧</span><div><b><%- t('cr.off_b') %></b> <%- t('cr.off_p') %></div></div><% } %>
+
+  <div class="ds-grid">
+    <div class="ds-card top"><h2 class="ds-h3"><span class="ds-ic" aria-hidden="true">🔒</span> <%- t('cr.how1_h') %></h2><p class="ds-sub"><%- t('cr.how1_p') %></p></div>
+    <div class="ds-card top"><h2 class="ds-h3"><span class="ds-ic" aria-hidden="true">🪙</span> <%- t('cr.how2_h') %></h2><p class="ds-sub"><%- t('cr.how2_p', { pct: C.creator_pct, days: C.hold_days }) %></p></div>
+    <div class="ds-card top"><h2 class="ds-h3"><span class="ds-ic" aria-hidden="true">🛡️</span> <%- t('cr.how3_h') %></h2><p class="ds-sub"><%- t('cr.how3_p') %></p></div>
+  </div>
+
+  <% if (user) { %>
+  <section class="ds-card lg" id="apply" aria-labelledby="crApplyH">
+    <h2 class="ds-h2 dot" id="crApplyH"><%- isCreator ? t('cr.update_h') : t('cr.apply_h') %></h2>
+    <% if (banned) { %>
+      <div class="ds-note danger"><div><%- t('cr.banned') %></div></div>
+    <% } else { %>
+      <% if (pending) { %><div class="ds-note info"><div><b><%- t('cr.pending_b') %></b> <%- t('cr.pending_p') %></div></div><% } %>
+      <% if (creator && creator.status === 'paused') { %><div class="ds-note warn"><div><b><%- t('cr.paused_b') %></b> <%= creator.paused_reason || '' %></div></div><% } %>
+      <% if (!isCreator && elig) { %>
+        <h3 class="ds-h4"><%- t('cr.elig_h') %></h3>
+        <ul class="cr-checks">
+          <% elig.checks.forEach((c) => { %>
+            <li class="<%= c.ok ? 'ok' : 'no' %>"><span class="tick" aria-hidden="true"><%= c.ok ? '✓' : '✕' %></span><span><%- t('cr.elig.' + c.key, { have: c.have == null ? '' : fmt(c.have), need: c.need == null ? '' : fmt(c.need) }) %><span class="ds-sr-only"> - <%- c.ok ? t('cr.elig_ok') : t('cr.elig_no') %></span></span></li>
+          <% }) %>
+        </ul>
+        <% if (!elig.ok) { %><p class="cr-mut"><%- t('cr.elig_not_yet') %></p><% } %>
+      <% } %>
+      <% if (isCreator || pending || (elig && elig.ok)) { %>
+      <form class="ds-form" data-cr-form="/api/creators/apply" data-next="<%= isCreator ? 'reload' : '/creator' %>">
+        <fieldset class="cr-radios" style="border:0;padding:0;margin:0;display:grid;gap:6px">
+          <legend class="ds-label"><%- t('cr.rating') %></legend>
+          <label class="ds-check"><input type="radio" name="rating" value="sfw"<%= !creator || creator.rating !== 'r18' ? ' checked' : '' %>> <span><b><%- t('cr.rating_sfw') %></b> · <%- t('cr.rating_sfw_p') %></span></label>
+          <label class="ds-check"><input type="radio" name="rating" value="r18"<%= creator && creator.rating === 'r18' ? ' checked' : '' %>> <span><b>🔞 <%- t('cr.rating_r18') %></b> · <%- t('cr.rating_r18_p') %></span></label>
+          <p class="ds-hint"><%- t('cr.rating_no_explicit') %></p>
+        </fieldset>
+        <div class="cr-attest ds-note danger" id="crAttest"<%= creator && creator.rating === 'r18' ? '' : ' hidden' %>>
+          <div class="ds-stack" style="display:grid;gap:8px">
+            <b><%- t('cr.attest_h') %></b>
+            <label class="ds-check"><input type="checkbox" name="attest.adult"> <%- t('cr.attest_adult') %></label>
+            <label class="ds-check"><input type="checkbox" name="attest.depicted_adults"> <%- t('cr.attest_depicted') %></label>
+            <label class="ds-check"><input type="checkbox" name="attest.not_explicit"> <%- t('cr.attest_not_explicit') %></label>
+            <label class="ds-check"><input type="checkbox" name="attest.rules"> <%- t('cr.attest_rules') %></label>
+          </div>
+        </div>
+        <div class="cr-tier-edit">
+          <% rows.forEach((p, i) => { %>
+          <fieldset>
+            <legend><%- t('cr.tier_n', { n: i + 1 }) %><%- i ? ' · ' + t('cr.optional') : '' %></legend>
+            <div class="ds-field"><label class="ds-label" for="crTn<%= i %>"><%- t('cr.tier_name') %></label><input class="ds-in" id="crTn<%= i %>" name="plans.<%= i %>.name" maxlength="40" value="<%= p ? p.name : '' %>" placeholder="<%- i === 0 ? t('cr.tier_ph1') : i === 1 ? t('cr.tier_ph2') : t('cr.tier_ph3') %>"></div>
+            <div class="ds-field"><label class="ds-label" for="crTp<%= i %>"><%- t('cr.tier_price', { days: C.period_days }) %></label>
+              <div class="ds-in-group"><input class="ds-in" id="crTp<%= i %>" name="plans.<%= i %>.price" inputmode="numeric" value="<%= p ? p.price : '' %>" placeholder="<%= fmt(C.sub_min * (i + 1) * 5) %>"><span class="ds-in-addon">PAT</span></div></div>
+            <div class="ds-field"><label class="ds-label" for="crTd<%= i %>"><%- t('cr.tier_disc') %></label><input class="ds-in" id="crTd<%= i %>" name="plans.<%= i %>.ppv_discount" inputmode="numeric" value="<%= p && p.perks ? p.perks.ppv_discount || 0 : 0 %>"><span class="ds-hint"><%- t('cr.tier_disc_hint') %></span></div>
+          </fieldset>
+          <% }) %>
+          <p class="ds-hint"><%- t('cr.tier_hint', { min: fmt(C.sub_min), max: fmt(C.sub_max), days: C.period_days }) %></p>
+        </div>
+        <div class="ds-field"><label class="ds-label" for="crBio"><%- t('cr.bio') %></label><textarea class="ds-textarea" id="crBio" name="bio" maxlength="300"><%= creator ? creator.bio || '' : '' %></textarea></div>
+        <label class="ds-check"><input type="checkbox" name="terms"<%= creator && creator.terms_version === termsVersion ? ' checked' : '' %>> <span><%- t('cr.terms_ck', { link: '<a href="/creators/terms" target="_blank" rel="noopener">' + t('cr.terms_link') + '</a>' }) %></span></label>
+        <p class="cr-msg" role="status" aria-live="polite"></p>
+        <div class="ds-actions"><button type="submit" class="ds-btn"><%- isCreator ? t('cr.save') : t('cr.apply_go') %></button></div>
+      </form>
+      <% } %>
+    <% } %>
+  </section>
+  <% } %>
+
+  <section class="ds-card" aria-labelledby="crRulesH">
+    <h2 class="ds-h3" id="crRulesH"><span class="ds-ic" aria-hidden="true">📜</span> <%- t('cr.rules_h') %></h2>
+    <ul class="ds-sub" style="margin:0;padding-inline-start:20px;display:grid;gap:6px">
+      <li><%- t('cr.rule1') %></li>
+      <li><%- t('cr.rule2') %></li>
+      <li><%- t('cr.rule3', { link: '<a href="/takedown">' + t('cr.takedown_link') + '</a>' }) %></li>
+      <li><%- t('cr.rule4') %></li>
+    </ul>
+  </section>
+</main>
+<script src="/public/js/patamount.js?v=1"></script>
+<script src="/public/js/creators.js?v=1" defer></script>
+</body>
+</html>

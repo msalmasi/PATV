@@ -1,0 +1,39 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /takedown — the TAKE IT DOWN request form (1.99pv, takedown.js): intimate images shared without consent, removed within 48 hours.
+    No account needed. Locals: prefill {url}. %>
+<%- include('layout', { title: title, user: user }) %>
+<link rel="stylesheet" href="/public/css/creators.css?v=1">
+<main class="ds-page read">
+  <div class="ds-head">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🛡️</span> <%- t('td.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('td.h1') %></h1>
+    <p class="ds-sub"><%- t('td.sub') %></p>
+  </div>
+  <div class="ds-note info"><span class="ds-ic" aria-hidden="true">ℹ️</span><div><%- t('td.note', { email: '<a href="mailto:abuse@publicaccess.tv">abuse@publicaccess.tv</a>' }) %></div></div>
+  <div class="ds-note danger"><span class="ds-ic" aria-hidden="true">🚨</span><div><%- t('td.minor', { link: '<a href="https://report.cybertip.org/" rel="noopener" target="_blank">CyberTipline</a>' }) %></div></div>
+  <section class="ds-card lg" aria-labelledby="tdFormH">
+    <h2 class="ds-h3" id="tdFormH"><%- t('td.form_h') %></h2>
+    <form class="ds-form" data-cr-form="/api/takedown" data-show-id="tdDone" autocomplete="on">
+      <div class="ds-form-row">
+        <div class="ds-field"><label class="ds-label" for="tdName"><%- t('td.name') %></label><input class="ds-in" id="tdName" name="name" maxlength="120" required autocomplete="name"></div>
+        <div class="ds-field"><label class="ds-label" for="tdEmail"><%- t('td.email') %></label><input class="ds-in" id="tdEmail" name="email" type="email" maxlength="254" required autocomplete="email"></div>
+      </div>
+      <fieldset class="cr-radios" style="border:0;padding:0;margin:0;display:grid;gap:6px">
+        <legend class="ds-label"><%- t('td.rel') %></legend>
+        <label class="ds-check"><input type="radio" name="relationship" value="self" checked> <%- t('td.rel_self') %></label>
+        <label class="ds-check"><input type="radio" name="relationship" value="authorized"> <%- t('td.rel_auth') %></label>
+      </fieldset>
+      <div class="ds-field"><label class="ds-label" for="tdUrls"><%- t('td.urls') %></label><textarea class="ds-textarea" id="tdUrls" name="urls" maxlength="4000" required placeholder="https://publicaccess.tv/u/…/posts/…"><%= prefill.url %></textarea><span class="ds-hint"><%- t('td.urls_hint') %></span></div>
+      <div class="ds-field"><label class="ds-label" for="tdDesc"><%- t('td.desc') %></label><textarea class="ds-textarea" id="tdDesc" name="description" maxlength="3000"></textarea><span class="ds-hint"><%- t('td.desc_hint') %></span></div>
+      <label class="ds-check"><input type="checkbox" name="good_faith" required> <span><%- t('td.good_faith') %></span></label>
+      <div class="ds-field"><label class="ds-label" for="tdSig"><%- t('td.sig') %></label><input class="ds-in" id="tdSig" name="signature" maxlength="120" required><span class="ds-hint"><%- t('td.sig_hint') %></span></div>
+      <p class="cr-msg" role="status" aria-live="polite"></p>
+      <div class="ds-actions"><button type="submit" class="ds-btn danger"><%- t('td.go') %></button></div>
+    </form>
+    <div class="ds-note ok" id="tdDone" hidden><span class="ds-ic" aria-hidden="true">✅</span><div><%- t('td.done') %> <b></b></div></div>
+  </section>
+  <p class="ds-fine"><%- t('td.fine', { terms: '<a href="/terms#ncii">' + t('td.terms') + '</a>' }) %></p>
+</main>
+<script src="/public/js/creators.js?v=1" defer></script>
+</body>
+</html>

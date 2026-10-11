@@ -1,0 +1,101 @@
+<%# /creators/terms — the PATV Creator Terms (1.99pv, creatorsweb.js). A DRAFT written for PATV, NOT legal advice: it is marked for
+    the lawyer's review together with the store / prize review (design §3.3 (5)). Versioned by creators.CREATOR_TERMS_VERSION;
+    a creator accepts it on the apply form (creators.terms_version). Locals: version, C (config). %>
+<%- include('layout', { title: 'Creator Terms · Public Access TV', user: user }) %>
+<%- include('partials/legal-css') %>
+<main class="lg ds-page read flow" id="creator-terms">
+  <header class="hero">
+    <div class="eyebrow">⭐ PATV CREATORS</div>
+    <h1>Creator Terms</h1>
+    <div class="updated">Version <%= version %></div>
+    <div class="draft" role="note"><b>Draft for legal review</b> This text is being reviewed by our lawyer. It already applies to PATV Creators as written, and we'll ask creators to accept the reviewed version when it's final.</div>
+    <p class="lead">These terms apply on top of the <a href="/terms">Terms of Service</a> (especially sections 6, 7, 9 and 10) when you sell subscriptions or locked posts on PATV ("PATV Creators") or buy them. If they disagree, these Creator Terms win for PATV Creators.</p>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <b>Contents</b>
+    <ol>
+      <li><a href="#who">Who can be a creator</a></li>
+      <li><a href="#content">What you can sell</a></li>
+      <li><a href="#r18">18+ (R-rated) profiles and pads</a></li>
+      <li><a href="#pat">Earnings are PAT</a></li>
+      <li><a href="#buyers">What buyers get</a></li>
+      <li><a href="#moderation">Moderation, checks and removal</a></li>
+      <li><a href="#refunds">Refunds, disputes and clawbacks</a></li>
+      <li><a href="#ending">Pausing and ending</a></li>
+      <li><a href="#changes">Changes</a></li>
+    </ol>
+  </nav>
+
+  <section id="who">
+    <h2>1. Who can be a creator</h2>
+    <ul>
+      <li>You must be <b>18 or older</b> and in good standing, and meet the requirements shown on the <a href="/creators">apply page</a> (account age, level, a linked identity, a verified email address, no recent moderation strike). One creator account per person.</li>
+      <li>We may ask you to confirm your identity or age at any time, and we may pause your creator account until you do.</li>
+      <li>Staff can approve, pause or end any creator account (section 8).</li>
+    </ul>
+  </section>
+
+  <section id="content">
+    <h2>2. What you can sell</h2>
+    <ul>
+      <li>Locked posts (for your subscribers, or pay-per-view) and subscriptions to your tiers. Everything you sell must follow the Terms of Service and <a href="/guidelines">Padiquette</a>.</li>
+      <li><b>Locked content must be safe for work.</b> On an 18+ profile or pad (section 3) it may be suggestive, but <b>never explicit</b>: no nudity of genitals, buttocks or (where it's sexual) breasts, and no sexual acts, real, simulated or AI-generated. Locked posts can never be marked NSFW; marking one NSFW takes it down and refunds its buyers.</li>
+      <li>Never: anyone who is or looks under 18 in a sexual or suggestive context; anything showing a person who didn't consent to it being made and sold; intimate images of anyone else; sexual depictions of real people made with AI; content you don't have the rights to sell.</li>
+      <li>No offers of sex, escorting, meet-ups, "content" outside PATV for money, or anything that looks like solicitation, in posts, teasers, tiers or messages.</li>
+      <li>A teaser, title and tier name are public: they follow the same rules as any public post.</li>
+      <li>Explicit adult content is not available on PATV Creators.</li>
+    </ul>
+  </section>
+
+  <section id="r18">
+    <h2>3. 18+ (R-rated) profiles and pads</h2>
+    <p>You may mark your profile, or a pad you own, as 18+. By doing so you confirm, every time, that: you are 18 or older; <b>everyone shown is 18 or older and consented</b> to being recorded and to the content being shared and sold; the content is R-rated (suggestive) and <b>not explicit</b>; and you follow these terms. You must be able to show proof of age and consent for anyone shown if we ask, and we may require an identity check. Viewers must be signed in and confirm they're 18 or older to see an 18+ profile or pad; everyone else sees it blurred.</p>
+  </section>
+
+  <section id="pat">
+    <h2>4. Earnings are PAT</h2>
+    <ul>
+      <li>Fans pay in PAT. You receive <b><%= C.creator_pct %>%</b> of each payment; the rest is PATV's cut (it goes to Fort Knox and, for purchases made in a pad, that pad's vault and owner). Tips are the ordinary tip and carry no cut.</li>
+      <li>Each payment is <b>held for <%= C.hold_days %> days</b> before it's released to your wallet, so a buyer can report a problem. At most <%= Number(C.release_cap_week).toLocaleString('en-US') %> PAT is released to you per week; anything over that stays held and is released the next week.</li>
+      <li>PAT earned here is PAT like any other (Terms section 9): <b>it has no cash value and can never be cashed out</b>, withdrawn or exchanged for money, by us or anyone else. It can only be spent on what PATV offers. Prize claims by creators may be reviewed before delivery (Terms section 10), and tax information may be needed for prizes of higher value.</li>
+      <li>Your earnings history is on your <a href="/creator">dashboard</a>, with a CSV export.</li>
+    </ul>
+  </section>
+
+  <section id="buyers">
+    <h2>5. What buyers get</h2>
+    <p>A subscription or an unlock gives the buyer a personal, revocable licence to view that content on PATV while it's available. It isn't ownership. Copying, re-posting or sharing locked content outside PATV isn't allowed; copyright owners can use our <a href="/terms#dmca">DMCA process</a>. A subscription renews every <%= C.period_days %> days until it's cancelled; cancelling keeps access until the end of the paid period.</p>
+  </section>
+
+  <section id="moderation">
+    <h2>6. Moderation, checks and removal</h2>
+    <ul>
+      <li>Site admins and staff can always see locked content, and so can the owner of the pad it's posted in. Reports about a locked post reach the staff with the content.</li>
+      <li>Pictures and videos in locked posts are checked automatically before they're published. If the check can't run, the upload is refused.</li>
+      <li>Intimate images shared without consent are removed within 48 hours of a valid request under our <a href="/takedown">TAKE IT DOWN process</a>, together with known identical copies.</li>
+      <li>We may remove content or end sales that break these terms. Content removed for a policy reason is refunded to its buyers from unreleased payments.</li>
+    </ul>
+  </section>
+
+  <section id="refunds">
+    <h2>7. Refunds, disputes and clawbacks</h2>
+    <ul>
+      <li>While a payment is held, a buyer can report a problem ("not as described", "empty", harassment). That payment stays held until the staff decide; they may refund it.</li>
+      <li>Deleting a pay-per-view post refunds its unreleased purchases. Removing a subscriber refunds their unreleased payment.</li>
+      <li>If the money behind PAT is reversed (a disputed donation), we may reverse the PAT it bought. Payments already released to you are only taken back if you and the buyer are linked accounts; otherwise PATV absorbs it. A balance is never made negative.</li>
+    </ul>
+  </section>
+
+  <section id="ending">
+    <h2>8. Pausing and ending</h2>
+    <p>You can stop selling at any time by deleting locked posts and removing your tiers; existing subscriptions then stop renewing. We may pause your creator account (sales stop, held payments wait) or end it. If we end it for breaking these terms, unreleased payments are refunded to buyers, and earnings from violating content in the last 30 days may be taken back under Terms section 9.</p>
+  </section>
+
+  <section id="changes">
+    <h2>9. Changes</h2>
+    <p>We may change PATV Creators and these terms. Material changes get a new version that we ask creators to accept before they sell again. Questions: <a href="mailto:support@publicaccess.tv">support@publicaccess.tv</a>.</p>
+  </section>
+</main>
+</body>
+</html>

@@ -70,6 +70,7 @@ const ROUTE_FLOWS = Object.freeze({
   season_pass: { label: "🎟️ Season Pass (personal tier)", room: false },
   stickers: { label: "🧸 Sticker packs", room: false },
   banner: { label: "📣 Homepage banner ads", room: false },        // 1.99kk: banner.js (no room resolved -> Fort Knox)
+  creators: { label: "⭐ PATV Creators - the 20% platform cut (at release)", room: true },   // 1.99pv: creators.js (room share minus the pad owner's royalty)
 });
 const DEFAULTS = Object.freeze({
   sales: true,                     // PAT purchases on (off: buying is refused, renewals still run)
@@ -83,7 +84,8 @@ const DEFAULTS = Object.freeze({
   sp_upload_mult: 2,               // Season Pass: feed upload size / daily / quota multiplier
   sp_sticker_packs: 1,             // Season Pass: free sticker packs per period
   sticker_price: 250000,           // PAT per sticker pack (stickers.js; a pack's own price wins)
-  routes: { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]] },
+  routes: { prime_time: [["fortknox", 50], ["room", 50]], season_pass: [["fortknox", 100]], stickers: [["fortknox", 100]], banner: [["fortknox", 100]],
+            creators: [["fortknox", 50], ["room", 50]] },
 });
 
 let clock = () => Date.now();

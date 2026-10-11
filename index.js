@@ -1168,6 +1168,8 @@ require("./help").register(app, { addUser, isBotToken, clientIp: guard.clientIp 
 require("./padlook").register(app, { addUser });       // 1.99es: a pad's look - avatar, banner, accent (/api/rooms/:slug/look, /media/pad/<file>)
 require("./padcosmetics").register(app, { addUser });   // 1.99ew: premium pad cosmetics - frames, glows, badges, animated avatar (/api/rooms/:slug/cosmetics; 100% Fort Knox / gift 50/50)
 require("./premium").register(app, { addUser });        // 1.99iv: Prime Time (pad tier) + Season Pass (personal tier) - /premium, PAT subscriptions, daily renewals, admin comps
+require("./creatorsweb").register(app, { addUser, isBotToken });   // 1.99pv: ⭐ PATV Creators - creator subscriptions, locked posts, 18+ communities (creators.js)
+require("./takedown").register(app, { addUser });   // 1.99pv: TAKE IT DOWN - the 48-hour NCII removal process (/takedown, /admin/takedowns)
 require("./stripebilling").register(app, { addUser });
 require("./cryptoweb").register(app, { addUser });   // 1.99ks: stablecoin donations (USDC/USDT) -> PAT, /support + /admin/crypto
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)

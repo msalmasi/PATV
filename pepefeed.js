@@ -400,6 +400,9 @@ async function authorRefusal(userId, scope) {
 async function postScopes(p) {
   if (!p || p.deleted_at || p.hidden_at || p.locked_at || p.author_id === PEPE_ID) return null;
   if (store.effNsfw(p)) return null;
+  // 1.99pv: Pepe never reads (or repeats) a PATV Creators locked post or anything in an 18+ community (D13)
+  if (p.lock_kind) return null;
+  try { const CR = require("./creators"); await CR.init(); if (CR.isR18Room(p.home_pad)) return null; } catch (e) { return null; }
   // 1.99cq: a crosspost carries the ORIGINAL's words and pictures - so the original must be fine too
   if (p.crosspost_of) {
     const o = await store.getRow(p.crosspost_of);

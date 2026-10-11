@@ -1,0 +1,51 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%#
+  ⭐ PATV Creators (1.99pv): what a viewer who can't see a post gets instead of its content. Locals: q (a decorated post with
+  q.creator = creators.applyLocks), url_ (the post's address), signed (bool). Never the original files: q.creator.teasers are
+  server-side blurred derivatives. A post on an 18+ profile or pad (r18Gate) shows nothing but the gate.
+%><%
+  const c_ = q.creator || {};
+  const n_ = c_.counts || {};
+  const fmtN_ = (v) => t.num(Math.round(Number(v) || 0));
+  const media_ = [];
+  if (n_.images) media_.push(t('cr.lk.photos', { count: n_.images, n: n_.images }));
+  if (n_.video) media_.push(t('cr.lk.videos', { count: n_.video, n: n_.video }));
+  if (n_.audio) media_.push(t('cr.lk.audio', { count: n_.audio, n: n_.audio }));
+  const cname_ = c_.creator || (q.author && q.author.username) || '';
+%>
+<link rel="stylesheet" href="/public/css/creators.css?v=1">
+<% if (c_.r18Gate) { %>
+  <div class="cr-lock r18" data-cr-gate>
+    <div class="cr-lock-h"><span class="cr-badge r18">🔞 <%- t('cr.r18') %></span><b><%- t('cr.lk.r18_h') %></b></div>
+    <p class="cr-lock-teaser"><%- t('cr.lk.r18_p') %></p>
+    <div class="cr-lock-acts">
+      <% if (signed) { %><button type="button" class="ds-btn sm" data-cr-age><%- t('cr.lk.r18_confirm') %></button>
+      <% } else { %><a class="ds-btn sm" href="/login?next=<%= encodeURIComponent(url_) %>"><%- t('cr.lk.sign_in') %></a><% } %>
+    </div>
+  </div>
+<% } else { %>
+  <div class="cr-lock<%= c_.r18 ? ' r18' : '' %>" data-cr-locked="<%= q.id %>">
+    <div class="cr-lock-h">
+      <span class="cr-badge"><span aria-hidden="true">🔒</span> <%- c_.kind === 'ppv' ? t('cr.lk.ppv') : (c_.tierName ? t('cr.lk.tier_named', { name: c_.tierName }) : t('cr.lk.subs')) %></span>
+      <% if (c_.r18) { %><span class="cr-badge r18">🔞 <%- t('cr.r18') %></span><% } %>
+      <b><%- c_.kind === 'ppv' ? t('cr.lk.ppv_h', { price: fmtN_(c_.yourPrice || c_.price) }) : t('cr.lk.sub_h', { name: cname_ }) %></b>
+    </div>
+    <% if (c_.teaser) { %><p class="cr-lock-teaser"><%= c_.teaser %></p><% } %>
+    <% if ((c_.teasers || []).length) { %>
+      <div class="cr-teasers" aria-hidden="true"><% c_.teasers.forEach((z) => { %><div class="tz"><img src="/media/f/<%= z.file %>" alt="" loading="lazy" width="<%= z.w || 480 %>" height="<%= z.h || 360 %>"></div><% }) %></div>
+    <% } %>
+    <% if (media_.length) { %><div class="cr-lock-media">📎 <%= media_.join(' · ') %><%= n_.secs ? ' · ' + Math.floor(n_.secs / 60) + ':' + String(n_.secs % 60).padStart(2, '0') : '' %></div><% } %>
+    <div class="cr-lock-acts">
+      <% if (!signed) { %>
+        <a class="ds-btn sm" href="/login?next=<%= encodeURIComponent(url_) %>"><%- t('cr.lk.sign_in') %></a>
+      <% } else if (c_.kind === 'ppv') { %>
+        <button type="button" class="ds-btn sm gold" data-cr-unlock="<%= q.id %>" data-price="<%= c_.yourPrice || c_.price %>"><span class="ds-ic" aria-hidden="true">🔓</span><%- t('cr.lk.unlock', { price: fmtN_(c_.yourPrice || c_.price) }) %></button>
+        <% if (c_.tier) { %><a class="ds-btn sm ghost" href="/creators/<%= encodeURIComponent(cname_) %>?tier=<%= c_.tier %>"><%- t('cr.lk.or_sub') %></a><% } %>
+      <% } else { %>
+        <button type="button" class="ds-btn sm" data-cr-sub="<%= cname_ %>" data-tier="<%= c_.tier || '' %>"<% const hp_ = q.homePad || ''; if (hp_ && !String(hp_).startsWith('user:')) { %> data-pad="<%= hp_ %>"<% } %>><span class="ds-ic" aria-hidden="true">⭐</span><%- t('cr.lk.subscribe') %></button>
+        <a class="ds-btn sm ghost" href="/creators/<%= encodeURIComponent(cname_) %>"><%- t('cr.lk.tiers') %></a>
+      <% } %>
+    </div>
+  </div>
+<% } %>
+<script src="/public/js/creators.js?v=1" defer></script>

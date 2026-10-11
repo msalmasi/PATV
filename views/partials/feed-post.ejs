@@ -19,7 +19,7 @@
   const live_ = p.roomsAll.filter((r) => !r.removed);
   const lockable = staff_ || (live_.length > 0 && live_.every((r) => mods_.has(r.id)));
   const xp_ = p.xpost || null;
-  const canXpost = signed && !p.deleted && !p.hidden && !(xp_ && xp_.removed);
+  const canXpost = signed && !p.deleted && !p.hidden && !(xp_ && xp_.removed) && !(p.creator && (p.creator.kind || p.creator.r18Gate));   // 1.99pv: locked / 18+ posts aren't crossposted
   // owner menu: the room in view first (room page / ?room= filter), else every room of theirs the post is in
   const ownRooms = ctx_ ? myRooms.filter((r) => r.id === ctx_) : myRooms;
 %>
@@ -40,6 +40,7 @@
       <%- fx.uav(p.author, { size: 22 }) %>
       <%- fx.uname(p.author, { href: '/u/' + encodeURIComponent(p.author.username), cls: 'fp-author' }) %>
       <% } %>
+      <% if (p.author.creator) { %><a class="fp-crb" href="/creators/<%= encodeURIComponent(p.author.username) %>" title="<%- t('cr.badge_title') %>" aria-label="<%- t('cr.badge_title') %>" style="text-decoration:none;font-size:12px;line-height:1;flex:none">⭐</a><% } %><%# 1.99pv: ⭐ PATV Creators %>
       <% if (p.flair && fx.flair) { %><%- fx.flair(p.flair) %><% } %><%# 1.99ir: their flair in this pad (padflair.js) %>
       <% if (signed && !p.mine && !p.author.bot && p.author.username && p.author.username !== '[gone]') { %><span class="fp-follow"><%- include('follow-btn', { kind: 'user', id: p.author.username, following: !!p.followingAuthor, signed: true, next: '/', small: true }) %></span><% } %>
       <% if (roomsShown.length) { %>

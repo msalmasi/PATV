@@ -336,9 +336,12 @@ function register(app, { addUser, noTimers } = {}) {
       }
       invites.sort((a, b) => (a.days || 1e9) - (b.days || 1e9));
       const bal = (await getQuery("SELECT points_balance FROM users WHERE userId = ?", [req.user.userId]))[0];
+      // 1.99pv: ⭐ PATV Creators - the creator subscriptions and purchases of this account
+      let creators = null;
+      try { creators = await require("./creators").fanSubs(req.user.userId); } catch (e) { creators = null; }
       res.render("subscriptions", { user: req.user.username, title: (req.t ? req.t("subs.title") : "Subscriptions"), data, plex, invites,
         selflink: !!MC.get().plex_selflink, balance: bal ? bal.points_balance : 0, pin: req.query.plex ? String(req.query.plex).slice(0, 20) : null,
-        libraryOpen: !!MC.get().library_plex && MC.on.library(), price: MC.get().library_price });
+        libraryOpen: !!MC.get().library_plex && MC.on.library(), price: MC.get().library_price, creators });
     } catch (e) { console.error("[subs] page:", e); res.status(500).send("Couldn't load your subscriptions."); }
   });
   app.post("/api/subscriptions/start", addUser, write, async (req, res) => {

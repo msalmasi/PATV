@@ -11,9 +11,12 @@
   let player_ = null;
   if (link_ && link_.embed) { try { player_ = embeds.playerUrl(link_.embed, host); } catch (e) { player_ = null; } }
 %>
-<% if (hide_) { %>
+<% if (q.creator && q.creator.gated) { %><%# 1.99pv: ⭐ PATV Creators - a locked post / an 18+ community this viewer can't see %>
+  <%- include('creator-locked', { q, url_, signed }) %>
+<% } else if (hide_) { %>
   <div class="fp-nsfw-gate"><%- t('feed.pc.nsfw_gate', { link: '<a href="/login?next=' + t.esc(encodeURIComponent(url_)) + '">' + t('feed.sign_in') + '</a>' }) %></div>
 <% } else { %>
+  <% if (q.creator && q.creator.kind) { %><p class="cr-open"><span aria-hidden="true">🔓</span><%- t('cr.lk.open_' + (q.creator.via || 'sub')) %></p><% } %>
   <%# 1.99fp: a chat quote (quotes.js) shows as the quote card instead of its plain-text body %>
   <% if (q.quote && q.quote.lines && q.quote.lines.length) { const ql_ = detail_ ? q.quote.lines : q.quote.lines.slice(0, 8); %>
     <figure class="fq<%= detail_ ? ' is-detail' : '' %>" aria-label="<%- t('feed.pc.quote_aria') %>">

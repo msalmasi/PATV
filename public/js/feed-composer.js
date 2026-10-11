@@ -715,6 +715,7 @@
       // 1.99df: a profile post's "Also show in All" (the box only exists for the profile choice)
       inAll: form.elements.inAll ? form.elements.inAll.checked : undefined,
       tags: form.elements.tags ? form.elements.tags.value : undefined,      // 1.99iq: content tags (the server normalises)
+      lock: window.patvCreatorLock ? window.patvCreatorLock(form) : undefined,   // 1.99pv: ⭐ PATV Creators (creators.js)
       attachments: files.filter(function (f) { return f.state === 'ready'; }).map(function (f) { return f.id; })
     };
     // 1.99cc: the Terms tick box (shown until this account accepted the current version)

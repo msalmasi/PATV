@@ -304,6 +304,7 @@ function visibleSql(now = NOW(), blocked = []) {
 // 1.99fu: pad visibility (padaccess.js) - the Approved pads a viewer is outside of
 const PADACCESS = () => require("./padaccess");
 const TAGS = () => require("./feedtags");          // 1.99iq: content tags
+const CREATORS = () => require("./creators");      // 1.99pv: ⭐ PATV Creators - locked posts + 18+ communities
 async function blockedFor(viewer) {
   if (isStaff(viewer)) return [];
   try { await PADACCESS().init(); return PADACCESS().blockedFor(viewer); } catch (e) { console.error("[feed] pad access:", e.message); return []; }
@@ -664,7 +665,7 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
       }
     } catch (e) { /* flair is decoration */ }
   }
-  return rows.map((r) => {
+  const outs = rows.map((r) => {
     const roomsOf = PR.filter((x) => x.post_id === r.id && (own(r) || !blocked.has(x.room_id))).map((x) => {
       const R = rooms.getCached(x.room_id);
       return { id: x.room_id, slug: padSlugOf(R, x.room_id), title: R ? R.title : x.room_id, removed: !!x.removed_at, owner: R && R.owner ? R.owner.userId : null,
@@ -732,6 +733,10 @@ async function decorate(rows, viewer, { ctxRoom = null, detail = false, _inner =
     out.url = require("./pads").postHref(out);     // 1.99dv: /p/<pad>/posts/<id>/<slug> or /u/<username>/posts/<id>/<slug>
     return out;
   });
+  // 1.99pv: ⭐ PATV Creators - locked posts the viewer isn't entitled to, and 18+ communities they haven't confirmed their age
+  // for, lose their body / files / link here (out.creator says why); a locked post's address uses its title, never its body
+  try { await CREATORS().applyLocks(outs, rows, viewer); } catch (e) { console.error("[feed] creators gate:", e.message); for (const o of outs) if (rows.find((r) => r.id === o.id && (r.lock_kind || r.lock_rating))) { o.body = ""; o.images = []; o.video = []; o.audio = []; o.link = null; o.creator = { gated: true, kind: "sub", teasers: [], counts: {} }; } }
+  return outs;
 }
 
 /** A post's thumbnail file (its first picture, a video poster or the link preview; a crosspost: the original's). */
@@ -1033,12 +1038,17 @@ async function create(userId, input, deps = {}) {
     previewAtt = pv.thumb || null;
   }
   const cost = deps.free ? 0 : priceOf(C, { ...counts, link: !!link });
+  // 1.99pv: ⭐ PATV Creators - input.lock {kind: sub|ppv, tier, price, teaser}: checked here, before any charge
+  const lock = input.lock && input.lock.kind && input.lock.kind !== "none" && !deps.roomGen && !deps.onBehalf
+    ? await CREATORS().prepareLock(u, input, { roomId: roomIds[0], title, atts, link, aiNsfw: atts.some((a) => a.ai_nsfw) }) : null;
   // 1.99fc: the image safety check (imagesafety.js; a pass-through while it's switched off). Pepe's own posts and
   // posts made on someone's behalf (room generations, story keeps) aren't uploads by that person - not checked.
   let safetyNsfw = false;
+  // 1.99pv: TAKE IT DOWN - an exact copy of removed non-consensual imagery is refused (takedown.js keeps the hashes)
+  if (atts.length) { const blocked = await require("./takedown").blockedFiles(atts).catch(() => null); if (blocked) throw new Refuse(422, blocked); }
   if (atts.length && !deps.roomGen && !deps.onBehalf && !isPepe(u)) {
     let sv;
-    try { sv = await MEDIA_SAFETY({ atts, roomId: roomIds[0], userId: u.userId }); }
+    try { sv = lock ? await CREATORS().lockedMediaCheck({ atts, roomId: roomIds[0], userId: u.userId, lock }) : await MEDIA_SAFETY({ atts, roomId: roomIds[0], userId: u.userId }); }
     catch (e) { sv = { ok: false, reason: "The safety check couldn't run - try again in a minute." }; }
     if (!sv || sv.ok !== true) throw new Refuse(422, (sv && sv.reason) || "That file can't be posted here.");
     safetyNsfw = sv.nsfw === true;
@@ -1063,13 +1073,14 @@ async function create(userId, input, deps = {}) {
       if (!r.changes) throw new Refuse(409, "A file was used twice.");
     }
     if (previewAtt) await runQuery("UPDATE feed_attachments SET post_id = ?, sort = 99 WHERE id = ? AND post_id IS NULL AND owner_id = ?", [id, previewAtt.id, u.userId]);
+    if (lock) await CREATORS().attachLock(id, lock, atts);       // 1.99pv: the lock columns + server-side blurred teasers
     // 1.99bz: Pepe announces the post in a room when the room's OWNER has announcements on (the gate)
     // AND the author left "announce in <room>" ticked. No announce list (older pages) = every such room.
     const announce = Array.isArray(input.announce) ? new Set(input.announce.map(String)) : null;
     const wants = (rid) => !announce || announce.has(rid) || [...announce].some((x) => (rooms.getCached(rid) || {}).slug === x);
     for (const rid of roomIds) {
       await runQuery("INSERT OR IGNORE INTO feed_post_rooms (post_id, room_id, created, pending) VALUES (?, ?, ?, ?)", [id, rid, t, pendingIn.has(rid) ? (wants(rid) ? 1 : 2) : 0]);
-      if (!pendingIn.has(rid) && wants(rid)) await queueMention(rid, id);
+      if (!pendingIn.has(rid) && wants(rid) && !lock) await queueMention(rid, id);     // 1.99pv: Pepe never announces locked posts
     }
     // the author's own upvote (Reddit-style; they can take it back, never turn it into a downvote) - never Pepe's
     if (!isPepe(u)) await runQuery("INSERT OR IGNORE INTO feed_votes (post_id, user_id, value, w, created, updated) VALUES (?, ?, 1, 1, ?, ?)", [id, u.userId, t, t]);
@@ -1088,7 +1099,7 @@ async function create(userId, input, deps = {}) {
   console.log(`[feed] post ${id} by ${u.username} community=${roomIds.join(",")} files=${atts.length} link=${link ? link.domain : "-"} cost=${cost}`);
   const made = await get(id, u);
   // 1.99kk: @mentions in the body (feedmentions.js; not while the post waits for a pad's approval everywhere)
-  if (made && body) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, link: made.url || await postLink(id) });
+  if (made && body && !lock) await require("./feedmentions").notify({ author: u, kind: "post", id, postId: id, text: body, link: made.url || await postLink(id) });
   // 1.99bz: followers who asked for it get an inbox notice (default off); never blocks the post
   if (made) {
     const pending = require("./follows").notifyNewPost(made, u.displayname || u.username);
@@ -1125,6 +1136,7 @@ async function crosspostOriginal(u, origId) {
 /** null when `u` may crosspost `o` into pad R, else {status, message} (the rate limits are checked per action). */
 async function crosspostRefusal(u, o, R) {
   const name = R.profile ? "your profile" : R.title;                  // 1.99df
+  if (o.lock_kind) return { status: 409, message: "Locked posts can't be crossposted - share the link instead." };   // 1.99pv
   const here = (await getQuery("SELECT 1 FROM feed_post_rooms WHERE post_id = ? AND room_id = ? AND removed_at IS NULL", [o.id, R.id]))[0];
   if (here) return { status: 409, message: `That post is already in ${name}.` };
   const dup = (await getQuery(`SELECT x.id FROM feed_posts x JOIN feed_post_rooms pr ON pr.post_id = x.id AND pr.room_id = ? AND pr.removed_at IS NULL
@@ -1297,6 +1309,7 @@ async function edit(user, id, patch) {
   const body = patch.body != null && !isQuote ? cleanText(patch.body, BODY_MAX) : r.body;
   if (body !== r.body) await stickerCheck(user.userId, body);
   const nsfw = patch.nsfw != null ? (patch.nsfw === true || patch.nsfw === 1 || patch.nsfw === "1" || patch.nsfw === "on" ? 1 : 0) : r.nsfw;
+  if (r.lock_kind && nsfw) throw new Refuse(400, "A locked post can't be NSFW (Creator Terms).");      // 1.99pv
   if (!title && !body && !r.link_url && !r.crosspost_of && !(await getQuery("SELECT 1 FROM feed_attachments WHERE post_id = ? AND kind != 'preview' AND state = 'ready' LIMIT 1", [id])).length) {
     throw new Refuse(400, "A post can't be empty.");
   }
@@ -1332,6 +1345,7 @@ async function remove(user, id, reason) {
                           link: "/feed", ref: "feed-rm:" + id });
   }
   console.log(`[feed] post ${id} deleted by ${own ? "author" : user.username}`);
+  if (r.lock_kind) await CREATORS().onPostRemoved(id, { byAuthor: own, actor: user.username });   // 1.99pv: refunds of unreleased unlocks
   return true;
 }
 
@@ -1359,6 +1373,8 @@ async function adminSet(user, id, { nsfw, hidden, locked } = {}) {
   if (!isStaff(user)) throw new Refuse(403, "Admins only.");
   const r = await getRow(id);
   if (!r) throw new Refuse(404, "No such post.");
+  // 1.99pv: locked content can never be explicit - marking it NSFW takes it down (and refunds its buyers) instead
+  if (nsfw && r.lock_kind) { await CREATORS().takedownExplicit(user, id, "admin"); return get(id, user); }
   if (nsfw !== undefined) await runQuery("UPDATE feed_posts SET nsfw_admin = ? WHERE id = ?", [nsfw === null ? null : (nsfw ? 1 : 0), id]);
   if (locked !== undefined) await runQuery("UPDATE feed_posts SET locked_at = ?, locked_by = ? WHERE id = ?", [locked ? NOW() : null, locked ? user.username : null, id]);
   if (hidden !== undefined) {
@@ -1700,6 +1716,8 @@ async function report(user, { post, comment: cid, reason, note } = {}) {
   const r = await runQuery("INSERT OR IGNORE INTO feed_reports (post_id, comment_id, reporter_id, reason, note, created) VALUES (?, ?, ?, ?, ?, ?)",
                            [p.id, c ? c.id : null, user.userId, why, cleanLine(note, 300) || null, NOW()]);
   if (!r.changes) return { ok: true, already: true };
+  // 1.99pv: TAKE IT DOWN - an NCII report opens a 48-hour removal case (takedown.js); a trusted reporter's hides the post now
+  if (why === "ncii" && !c) await require("./takedown").fromReport(p.id, user.userId, note, { hide: trusted });
   if (URGENT.includes(why)) {
     if (trusted) {
       if (c) await runQuery("UPDATE feed_comments SET hidden_at = ? WHERE id = ? AND hidden_at IS NULL", [NOW(), c.id]);
@@ -2180,6 +2198,7 @@ async function roomMod(user, roomId, op, a = {}) {
       await log("unpin", a.post); return { ok: true };
     case "nsfw": case "unnsfw":
       await needPlace();
+      if (op === "nsfw" && (await getRow(a.post) || {}).lock_kind) { await CREATORS().takedownExplicit(user, a.post, "pad:" + roomId); await log("nsfw", a.post); return { ok: true, takedown: true }; }
       await runQuery("UPDATE feed_post_rooms SET nsfw = ? WHERE post_id = ? AND room_id = ?", [op === "nsfw" ? 1 : null, a.post, roomId]);
       await log(op, a.post); return { ok: true };
     case "hide": case "unhide":

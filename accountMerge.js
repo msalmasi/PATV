@@ -273,6 +273,19 @@ const RULES = {
   "dm_reports.sender_id": M(), "dm_reports.reporter_id": M({ key: ["message_id"] }), "dm_reports.resolved_by": M(),
   "dm_media.owner_id": M(),
   "pepe_dm_jobs.user_id": M(),               // 1.99ik: messages to Pepe waiting for his answer
+  // 1.99pv creators.js / takedown.js: ⭐ PATV Creators follows the account - its creator row (the survivor's wins), tiers, subscriptions
+  // and unlocks both ways, the earnings ledger, disputes, the 18+ confirmation; staff / free-text columns hold names
+  "creators.user_id": M({ key: [] }), "creators.paused_by": { deny: NAME },
+  "creator_plans.creator_id": M({ key: ["tier"] }),
+  "creator_subs.fan_id": M(), "creator_subs.creator_id": M(),
+  "creator_unlocks.fan_id": M({ key: ["post_id"] }), "creator_unlocks.creator_id": M(),
+  "creator_ledger.fan_id": M(), "creator_ledger.creator_id": M(), "creator_ledger.creator_share": { deny: "a PAT amount" },
+  "creator_disputes.fan_id": M({ key: ["ledger_id"] }), "creator_disputes.creator_id": M(), "creator_disputes.resolved_by": { deny: NAME },
+  "creator_pads.set_by": { deny: NAME },
+  "creator_performers.creator_id": M(),
+  "age_attest.user_id": M({ key: [] }),
+  "explicit_readiness.owner": { deny: TEXT }, "explicit_readiness.updated_by": { deny: NAME },
+  "takedown_cases.reporter_id": M(), "takedown_cases.resolved_by": { deny: NAME },
 };
 
 /** The rule for one column: its RULES entry, else null (an unclassified candidate). */

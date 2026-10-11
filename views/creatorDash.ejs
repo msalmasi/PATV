@@ -1,0 +1,154 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /creator — the creator dashboard (1.99pv, creatorsweb.js): earnings held / releasing / released, the weekly cap, 30 days of
+    earnings, subscribers (comp, remove, message), pay-per-view sales, disputes, tiers, pad settings, CSV. Locals: d (creators.dashboard), C. %>
+<%- include('layout', { title: title, user: user }) %>
+<link rel="stylesheet" href="/public/css/creators.css?v=1">
+<%
+  const fmt = (n) => t.num(Math.round(Number(n) || 0));
+  const dd = (ms) => ms ? t.date(Number(ms), { dateStyle: 'medium' }) : '';
+  const c = d.creator;
+  const maxDay = Math.max(1, ...d.daily.map((x) => x.amount));
+  const DAY = 86400000;
+  const today = Math.floor(Date.now() / DAY) * DAY;
+  const series = [];
+  for (let i = 29; i >= 0; i--) { const day = today - i * DAY; const hit = d.daily.find((x) => x.day === day); series.push({ day, amount: hit ? hit.amount : 0 }); }
+  const capPct = d.cap ? Math.min(100, Math.round(d.releasedWeek / d.cap * 1000) / 10) : 0;
+  const subsTotal = d.byTier.reduce((s, x) => s + Number(x.n), 0);
+  const tierName = (n) => { const p = d.plans.find((x) => x.tier === n); return p ? p.name : t('cr.tier_n', { n }); };
+%>
+<main class="ds-page wide cr">
+  <div class="ds-head">
+    <span class="ds-eyebrow ac"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('cr.eyebrow') %></span>
+    <h1 class="ds-h1"><%- t('cr.dash.h1') %></h1>
+    <p class="ds-sub"><%- t('cr.dash.sub', { pct: d.creatorPct, days: d.holdDays }) %> · <a href="/creators/<%= encodeURIComponent(user) %>"><%- t('cr.dash.your_page') %></a> · <a href="/creator/ledger.csv"><%- t('cr.dash.csv') %></a></p>
+  </div>
+
+  <% if (c.status === 'paused') { %><div class="ds-note warn"><div><b><%- t('cr.paused_b') %></b> <%= c.paused_reason || '' %></div></div><% } %>
+  <% if (c.status === 'pending') { %><div class="ds-note info"><div><b><%- t('cr.pending_b') %></b> <%- t('cr.pending_p') %></div></div><% } %>
+  <% if (!d.escrowLive) { %><div class="ds-note warn"><span class="ds-ic" aria-hidden="true">🔒</span><div><b><%- t('cr.dash.escrow_b') %></b> <%- t('cr.dash.escrow_p') %></div></div><% } %>
+  <% if (!d.lockedMedia) { %><div class="ds-note info"><span class="ds-ic" aria-hidden="true">🖼️</span><div><%- t('cr.dash.media_off') %></div></div><% } %>
+
+  <section class="ds-stats" aria-label="<%- t('cr.dash.earnings') %>">
+    <div class="ds-stat"><span><%- t('cr.dash.held') %></span><b class="gold"><%= fmt(d.held) %></b><small><%- d.frozen ? t('cr.dash.frozen', { n: fmt(d.frozen) }) : 'PAT' %></small></div>
+    <div class="ds-stat"><span><%- t('cr.dash.next') %></span><b><%= d.next ? dd(d.next) : '—' %></b><small><%- t('cr.dash.next_hint', { days: d.holdDays }) %></small></div>
+    <div class="ds-stat"><span><%- t('cr.dash.week') %></span><b class="gold"><%= fmt(d.releasedWeek) %></b><small><%- t('cr.dash.of_cap', { cap: fmt(d.cap) }) %></small></div>
+    <div class="ds-stat"><span><%- t('cr.dash.d30') %></span><b class="gold"><%= fmt(d.released30) %></b><small><%- t('cr.dash.all', { n: fmt(d.releasedAll) }) %></small></div>
+    <div class="ds-stat"><span><%- t('cr.dash.subs') %></span><b><%= fmt(subsTotal) %></b><small><%- t('cr.dash.churn', { n: d.churn }) %></small></div>
+    <div class="ds-stat"><span><%- t('cr.dash.tips') %></span><b class="gold"><%= fmt(d.tips) %></b><small><%- t('cr.dash.tips_hint') %></small></div>
+  </section>
+
+  <div class="cr-dash-split">
+    <div class="ds-stack" style="display:grid;gap:24px;min-width:0">
+      <section class="ds-card" aria-labelledby="crChartH">
+        <h2 class="ds-h3" id="crChartH"><%- t('cr.dash.chart_h') %></h2>
+        <div class="cr-bars" role="img" aria-label="<%- t('cr.dash.chart_aria', { n: fmt(series.reduce((s, x) => s + x.amount, 0)) }) %>">
+          <% series.forEach((x) => { %><span class="<%= x.amount ? '' : 'zero' %>" style="height:<%= Math.max(2, Math.round(x.amount / maxDay * 100)) %>%" title="<%= dd(x.day) %>: <%= fmt(x.amount) %> PAT"></span><% }) %>
+        </div>
+        <div class="cr-axis"><span><%= dd(series[0].day) %></span><span><%= dd(series[series.length - 1].day) %></span></div>
+        <h3 class="ds-h4" style="margin-top:8px"><%- t('cr.dash.cap_h') %></h3>
+        <div class="ds-bar gold" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= capPct %>"><span style="width:<%= capPct %>%"></span></div>
+        <p class="cr-mut"><%- t('cr.dash.cap_p', { n: fmt(d.releasedWeek), cap: fmt(d.cap) }) %></p>
+        <h3 class="ds-h4" style="margin-top:8px"><%- t('cr.dash.upcoming_h') %></h3>
+        <div class="ds-tbl"><table><thead><tr><th scope="col"><%- t('cr.dash.day') %></th><th scope="col" class="r"><%- t('cr.dash.releasing') %></th></tr></thead><tbody>
+          <% d.upcoming.forEach((u, i) => { %><tr><td><%= i === 0 ? t('cr.dash.today_due') : dd(u.day) %></td><td class="r"><%= fmt(u.amount) %> PAT</td></tr><% }) %>
+        </tbody></table></div>
+      </section>
+
+      <section class="ds-card" aria-labelledby="crSubsH" id="subscribers">
+        <h2 class="ds-h3" id="crSubsH"><%- t('cr.dash.subs_h') %> <span class="ds-count"><%= subsTotal %></span></h2>
+        <% if (d.byTier.length) { %><p class="cr-mut"><%= d.byTier.map((x) => tierName(x.tier) + ': ' + x.n + (x.comps ? ' (' + x.comps + ' comp)' : '')).join(' · ') %></p><% } %>
+        <% if (!d.subs.length) { %>
+          <div class="ds-empty"><div style="font-size:30px" aria-hidden="true">⭐</div><b><%- t('cr.dash.no_subs') %></b><span><%- t('cr.dash.no_subs_p') %></span></div>
+        <% } else { %>
+          <div class="ds-tbl"><table><thead><tr><th scope="col"><%- t('cr.dash.fan') %></th><th scope="col"><%- t('cr.tier') %></th><th scope="col"><%- t('cr.dash.since') %></th><th scope="col" class="r"><%- t('cr.dash.spent') %></th><th scope="col"><span class="ds-sr-only"><%- t('cr.dash.actions') %></span></th></tr></thead><tbody>
+            <% d.subs.forEach((s) => { %><tr><td><a href="/u/<%= encodeURIComponent(s.username || '') %>"><%= s.username || '?' %></a><%- s.comp ? ' <span class="ds-tag">comp</span>' : '' %><%- s.status === 'grace' ? ' <span class="ds-chip warn">grace</span>' : '' %></td>
+              <td><%= tierName(s.tier) %></td><td><%= dd(s.created) %></td><td class="r"><%= fmt(s.spent) %></td>
+              <td class="r"><button type="button" class="ds-btn sm ghost" data-cr-remove="<%= s.id %>"><%- t('cr.dash.remove') %></button></td></tr><% }) %>
+          </tbody></table></div>
+        <% } %>
+      </section>
+
+      <section class="ds-card" aria-labelledby="crPpvH">
+        <h2 class="ds-h3" id="crPpvH"><%- t('cr.dash.ppv_h') %></h2>
+        <% if (!d.ppv.length) { %><div class="ds-empty"><div style="font-size:30px" aria-hidden="true">🔓</div><b><%- t('cr.dash.no_ppv') %></b><span><%- t('cr.dash.no_ppv_p') %></span></div>
+        <% } else { %>
+          <div class="ds-tbl"><table><thead><tr><th scope="col"><%- t('cr.dash.post') %></th><th scope="col" class="r"><%- t('cr.price') %></th><th scope="col" class="r"><%- t('cr.dash.sales') %></th><th scope="col" class="r"><%- t('cr.dash.earned') %></th></tr></thead><tbody>
+            <% d.ppv.forEach((p) => { %><tr><td><a href="/feed/p/<%= p.id %>"><%= p.title || p.id %></a><%- p.deleted_at ? ' <span class="ds-chip mute">deleted</span>' : '' %></td><td class="r"><%= fmt(p.lock_price) %></td><td class="r"><%= p.sales %></td><td class="r"><%= fmt(p.earned) %></td></tr><% }) %>
+          </tbody></table></div>
+        <% } %>
+      </section>
+
+      <% if (d.disputes.length) { %>
+      <section class="ds-card" aria-labelledby="crDispH">
+        <h2 class="ds-h3" id="crDispH"><%- t('cr.dash.disputes_h') %></h2>
+        <ul class="ds-list"><% d.disputes.forEach((x) => { %><li><span class="grow"><%= x.reason %> · <%= fmt(x.amount) %> PAT · <%= dd(x.created) %></span><span class="ds-chip <%= x.status === 'open' ? 'danger' : 'mute' %>"><%= x.status %></span></li><% }) %></ul>
+      </section>
+      <% } %>
+    </div>
+
+    <aside class="ds-stack" style="display:grid;gap:24px;align-content:start;min-width:0">
+      <section class="ds-card" aria-labelledby="crTiersH2">
+        <h2 class="ds-h3" id="crTiersH2"><%- t('cr.dash.tiers_h') %></h2>
+        <form class="ds-form" data-cr-form="/api/creators/plans" data-next="reload">
+          <% [0, 1, 2].forEach((i) => { const p = d.plans.filter((x) => x.active)[i] || null; %>
+            <div class="ds-form-row">
+              <div class="ds-field"><label class="ds-label" for="dTn<%= i %>"><%- t('cr.tier_n', { n: i + 1 }) %></label><input class="ds-in" id="dTn<%= i %>" name="plans.<%= i %>.name" maxlength="40" value="<%= p ? p.name : '' %>"></div>
+              <div class="ds-field"><label class="ds-label" for="dTp<%= i %>"><%- t('cr.price') %></label><div class="ds-in-group"><input class="ds-in" id="dTp<%= i %>" name="plans.<%= i %>.price" inputmode="numeric" value="<%= p ? p.price : '' %>"><span class="ds-in-addon">PAT</span></div></div>
+              <input type="hidden" name="plans.<%= i %>.ppv_discount" value="<%= p && p.perks ? p.perks.ppv_discount || 0 : 0 %>">
+            </div>
+          <% }) %>
+          <p class="ds-hint"><%- t('cr.dash.tiers_hint') %></p>
+          <p class="cr-msg" role="status"></p>
+          <div class="ds-actions"><button type="submit" class="ds-btn sm"><%- t('cr.save') %></button><a class="ds-btn sm ghost" href="/creators#apply"><%- t('cr.dash.more') %></a></div>
+        </form>
+      </section>
+
+      <section class="ds-card" aria-labelledby="crCompH">
+        <h2 class="ds-h3" id="crCompH"><%- t('cr.dash.comp_h') %></h2>
+        <form class="ds-form" data-cr-form="/api/creators/comp" data-next="reload" data-ok="<%- t('cr.dash.comp_ok') %>">
+          <div class="ds-field"><label class="ds-label" for="crCompU"><%- t('cr.dash.comp_who') %></label><input class="ds-in" id="crCompU" name="fan" maxlength="64" autocomplete="off"></div>
+          <div class="ds-field"><label class="ds-label" for="crCompT"><%- t('cr.tier') %></label><select class="ds-select" id="crCompT" name="tier"><% d.plans.filter((x) => x.active).forEach((p) => { %><option value="<%= p.tier %>"><%= p.tier %> · <%= p.name %></option><% }) %></select></div>
+          <p class="cr-msg" role="status"></p>
+          <div class="ds-actions"><button type="submit" class="ds-btn sm ghost"><%- t('cr.dash.comp_go') %></button></div>
+        </form>
+      </section>
+
+      <section class="ds-card" aria-labelledby="crBcH">
+        <h2 class="ds-h3" id="crBcH"><%- t('cr.dash.bc_h') %></h2>
+        <form class="ds-form" data-cr-form="/api/creators/broadcast" data-ok="<%- t('cr.dash.bc_ok') %>">
+          <div class="ds-field"><label class="ds-label" for="crBcT"><%- t('cr.dash.bc_title') %></label><input class="ds-in" id="crBcT" name="title" maxlength="80"></div>
+          <div class="ds-field"><label class="ds-label" for="crBcB"><%- t('cr.dash.bc_body') %></label><textarea class="ds-textarea" id="crBcB" name="body" maxlength="400"></textarea></div>
+          <div class="ds-field"><label class="ds-label" for="crBcTier"><%- t('cr.dash.bc_tier') %></label><select class="ds-select" id="crBcTier" name="tier"><% d.plans.filter((x) => x.active).forEach((p) => { %><option value="<%= p.tier %>"><%= p.tier %> · <%= p.name %></option><% }) %></select></div>
+          <p class="ds-hint"><%- t('cr.dash.bc_hint') %></p>
+          <p class="cr-msg" role="status"></p>
+          <div class="ds-actions"><button type="submit" class="ds-btn sm ghost"><%- t('cr.dash.bc_go') %></button></div>
+        </form>
+      </section>
+
+      <% if (d.pads.length) { %>
+      <section class="ds-card" aria-labelledby="crPadsH">
+        <h2 class="ds-h3" id="crPadsH"><%- t('cr.dash.pads_h') %></h2>
+        <% d.pads.forEach((p) => { %>
+          <form class="ds-form" data-cr-form="/api/creators/pads" data-cr-pad data-next="reload" style="border-top:1px solid var(--ds-line-soft);padding-top:10px">
+            <input type="hidden" name="pad" value="<%= p.id %>">
+            <b>p/<%= p.slug %></b>
+            <label class="ds-check"><input type="checkbox" name="allow_creators"<%= p.allow_creators ? ' checked' : '' %>> <%- t('cr.dash.allow') %></label>
+            <label class="ds-check"><input type="checkbox" name="r18"<%= p.r18 ? ' checked' : '' %>> 🔞 <%- t('cr.dash.r18') %></label>
+            <div class="cr-attest" hidden>
+              <label class="ds-check"><input type="checkbox" name="attest.adult"> <%- t('cr.attest_adult') %></label>
+              <label class="ds-check"><input type="checkbox" name="attest.depicted_adults"> <%- t('cr.attest_depicted') %></label>
+              <label class="ds-check"><input type="checkbox" name="attest.not_explicit"> <%- t('cr.attest_not_explicit') %></label>
+              <label class="ds-check"><input type="checkbox" name="attest.rules"> <%- t('cr.attest_rules') %></label>
+            </div>
+            <p class="cr-msg" role="status"></p>
+            <div class="ds-actions"><button type="submit" class="ds-btn sm ghost"><%- t('cr.save') %></button></div>
+          </form>
+        <% }) %>
+      </section>
+      <% } %>
+    </aside>
+  </div>
+</main>
+<script src="/public/js/creators.js?v=1" defer></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%#
+  ⭐ PATV Creators (1.99pv): the composer's "Lock this post" options, for active creators (feedweb.composerFor -> cp.creator =
+  creators.composerInfo). public/js/creators.js reads them (window.patvCreatorLock) when the post is sent; the server checks
+  everything again (creators.prepareLock). Locals: cr {plans, ppv: {min, max}, media (locked media allowed), pads, rating}.
+%>
+<details class="cr-compose" id="crLock" data-pads="<%= JSON.stringify(cr.pads || []) %>">
+  <summary><span aria-hidden="true">⭐</span> <%- t('cr.fc.lock') %></summary>
+  <div class="row" role="radiogroup" aria-label="<%- t('cr.fc.lock') %>">
+    <label><input type="radio" name="crKind" value="none" checked> <%- t('cr.fc.public') %></label>
+    <% if (cr.plans.length) { %><label><input type="radio" name="crKind" value="sub"> 🔒 <%- t('cr.fc.subs') %></label><% } %>
+    <label><input type="radio" name="crKind" value="ppv"> 🔓 <%- t('cr.fc.ppv') %></label>
+  </div>
+  <div class="row" data-cr-for="sub" hidden>
+    <label><%- t('cr.fc.min_tier') %> <select name="crTier">
+      <% cr.plans.forEach((p) => { %><option value="<%= p.tier %>"><%= p.tier %> · <%= p.name %></option><% }) %>
+    </select></label>
+  </div>
+  <div class="row" data-cr-for="ppv" hidden>
+    <label><%- t('cr.fc.price') %> <input type="text" name="crPrice" inputmode="numeric" placeholder="<%= cr.ppv.min %>" size="10" autocomplete="off"> PAT</label>
+    <% if (cr.plans.length) { %><label><%- t('cr.fc.free_for') %> <select name="crFree"><option value=""><%- t('cr.fc.nobody') %></option>
+      <% cr.plans.forEach((p) => { %><option value="<%= p.tier %>"><%= p.tier %> · <%= p.name %></option><% }) %></select></label><% } %>
+  </div>
+  <div data-cr-for="any" hidden>
+    <label style="display:block;margin-top:8px"><%- t('cr.fc.teaser') %>
+      <textarea name="crTeaser" maxlength="280" placeholder="<%- t('cr.fc.teaser_ph') %>"></textarea></label>
+    <p class="note"><%- t('cr.fc.rules', { min: t.num(cr.ppv.min), max: t.num(cr.ppv.max) }) %><%- cr.media ? '' : ' ' + t('cr.fc.no_media') %><%- cr.rating === 'r18' ? ' ' + t('cr.fc.r18') : '' %></p>
+  </div>
+</details>
+<script src="/public/js/creators.js?v=1" defer></script>

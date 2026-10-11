@@ -1,0 +1,71 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /creators/<username> — a creator's page (1.99pv, creatorsweb.js): who, the ⭐ Creator / 🔞 badges, their tiers with Subscribe,
+    your own subscription. Locals: v (creators.publicView), me (viewer row|null), focusTier, attested, C. %>
+<%- include('layout', { title: title, user: user }) %>
+<link rel="stylesheet" href="/public/css/creators.css?v=1">
+<%
+  const fmt = (n) => t.num(Math.round(Number(n) || 0));
+  const d = (ms) => ms ? t.date(Number(ms), { dateStyle: 'medium' }) : '';
+  const self = !!(me && me.userId === v.user.userId);
+  const mine = v.mine;
+%>
+<main class="ds-page mid cr">
+  <a class="ds-back" href="/u/<%= encodeURIComponent(v.user.username) %>">← <%- t('cr.page.back', { name: v.user.username }) %></a>
+  <section class="ds-hero compact">
+    <span class="ds-eyebrow ac"><span class="ds-ic" aria-hidden="true">⭐</span> <%- t('cr.eyebrow') %></span>
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <% if (v.user.avatarUrl) { %><img class="ds-av lg" src="<%= v.user.avatarUrl %>" alt="" width="64" height="64" referrerpolicy="no-referrer"><% } else { %><span class="ds-av lg" aria-hidden="true" style="display:inline-grid;place-items:center;font-weight:700;font-size:26px"><%= (v.user.displayname || '?').slice(0, 1).toUpperCase() %></span><% } %>
+      <div style="min-width:0">
+        <h1 style="margin:0"><%= v.user.displayname %></h1>
+        <p class="cr-mut" style="margin:4px 0 0">u/<%= v.user.username %> · <span class="cr-badge">⭐ <%- t('cr.badge') %></span><% if (v.rating === 'r18') { %> <span class="cr-badge r18">🔞 <%- t('cr.r18') %></span><% } %></p>
+      </div>
+    </div>
+    <% if (v.bio) { %><p class="ds-lead"><%= v.bio %></p><% } %>
+    <div class="ds-pills">
+      <span class="ds-pill-stat"><%- t('cr.page.subscribers') %> <b><%= fmt(v.subscribers) %></b></span>
+      <span class="ds-pill-stat"><%- t('cr.page.locked') %> <b><%= fmt((v.locked.sub || 0) + (v.locked.ppv || 0)) %></b></span>
+    </div>
+  </section>
+
+  <% if (v.status === 'paused') { %><div class="ds-note warn"><div><%- t('cr.page.paused') %></div></div><% } %>
+  <% if (!C.enabled) { %><div class="ds-note warn"><div><b><%- t('cr.off_b') %></b> <%- t('cr.off_p') %></div></div><% } %>
+  <% if (v.rating === 'r18' && me && !attested && !self) { %>
+    <div class="ds-note danger"><span class="ds-ic" aria-hidden="true">🔞</span><div><b><%- t('cr.page.r18_b') %></b> <%- t('cr.page.r18_p') %> <button type="button" class="ds-btn sm" data-cr-age style="margin-inline-start:8px"><%- t('cr.lk.r18_confirm') %></button></div></div>
+  <% } %>
+
+  <% if (mine) { %>
+    <div class="ds-note ok"><span class="ds-ic" aria-hidden="true">✅</span><div><b><%- t('cr.page.yours', { n: mine.tier }) %></b> <%- mine.cancel_at_end ? t('cr.page.ends', { date: d(mine.paid_through) }) : t('cr.page.renews', { date: d(mine.paid_through) }) %> · <a href="/subscriptions#creators"><%- t('cr.page.manage') %></a></div></div>
+  <% } %>
+
+  <section aria-labelledby="crTiersH" class="ds-stack" style="display:grid;gap:12px">
+    <h2 class="ds-h2 dot" id="crTiersH"><%- t('cr.page.tiers') %></h2>
+    <% if (!v.plans.length) { %>
+      <div class="ds-empty"><div style="font-size:30px" aria-hidden="true">⭐</div><b><%- t('cr.page.no_tiers') %></b></div>
+    <% } else { %>
+    <div class="cr-tiers">
+      <% v.plans.forEach((p) => { const isMine = mine && mine.tier === p.tier; %>
+        <div class="ds-card top cr-tier<%= isMine || focusTier === p.tier ? ' mine' : '' %>">
+          <span class="ds-chip plain"><%- t('cr.tier_n', { n: p.tier }) %></span>
+          <h3 class="ds-h3"><%= p.name %></h3>
+          <span class="ds-pat"><b><%= fmt(p.price) %></b><small>PAT</small></span>
+          <span class="cr-mut"><%- t('cr.page.per', { days: v.periodDays }) %></span>
+          <ul class="ds-sub" style="margin:0;padding-inline-start:18px">
+            <li><%- t('cr.page.perk_locked', { n: p.tier }) %></li>
+            <% if (p.perks && p.perks.ppv_discount) { %><li><%- t('cr.page.perk_disc', { pct: p.perks.ppv_discount }) %></li><% } %>
+          </ul>
+          <% if (self) { %><span class="cr-mut"><%- t('cr.page.self') %></span>
+          <% } else if (isMine) { %><span class="ds-chip ok"><%- t('cr.page.current') %></span>
+          <% } else if (mine) { %><a class="ds-btn sm ghost" href="/subscriptions#creators"><%- t('cr.page.change') %></a>
+          <% } else if (!me) { %><a class="ds-btn sm" href="/login?next=<%= encodeURIComponent('/creators/' + v.user.username) %>"><%- t('cr.lk.sign_in') %></a>
+          <% } else { %><button type="button" class="ds-btn sm gold" data-cr-sub="<%= v.user.username %>" data-tier="<%= p.tier %>"<%= v.status !== 'active' || !C.enabled ? ' disabled' : '' %>><span class="ds-ic" aria-hidden="true">⭐</span><%- t('cr.page.sub_go', { price: fmt(p.price) }) %></button><% } %>
+        </div>
+      <% }) %>
+    </div>
+    <% } %>
+    <p class="ds-fine"><%- t('cr.page.fine', { days: C.hold_days }) %> <a href="/creators/terms"><%- t('cr.terms_link') %></a></p>
+  </section>
+  <p><a class="ds-btn ghost" href="/u/<%= encodeURIComponent(v.user.username) %>/posts"><span class="ds-ic" aria-hidden="true">📝</span><%- t('cr.page.posts') %></a></p>
+</main>
+<script src="/public/js/creators.js?v=1" defer></script>
+</body>
+</html>

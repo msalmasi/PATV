@@ -1,0 +1,57 @@
+<%- include('../partials/admin-open', { title: 'Explicit tier readiness', user, section: 'creators', admIsAdmin: true }) %>
+<%# views/admin/creatorsExplicit.ejs - 1.99pv: the explicit-tier readiness checklist (Admins only). Informational: every gate of the
+    design's §3.2 / §3.4 with a status, owner and evidence. NOTHING here can enable the tier: creators.EXPLICIT_TIER_ENABLED is a
+    code constant and a database trigger refuses the rating. R = creators.readiness(). %>
+<%
+  const done = R.gates.filter((g) => g.status === 'done').length;
+  const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 10) : '';
+  const LABEL = { todo: 'To do', in_progress: 'In progress', done: 'Done', blocked: 'Blocked' };
+%>
+<div class="adm-head">
+  <h1>🔞 Explicit tier readiness</h1>
+  <p>PATV Creators launched safe-for-work, with 18+ R-rated profiles and pads (suggestive, never explicit). Paid explicit content stays
+     <b>hard-disabled in code</b> until every gate below is done <b>and</b> a code change turns it on. Expect the choice the design describes:
+     explicit paywalls versus the current dollar → PAT → prize loop (D12) - decide it with counsel before any of this is built.</p>
+</div>
+
+<section class="adm-card" aria-labelledby="stT">
+  <h2 id="stT">Status <span class="adm-pill">Explicit tier: <%= R.enabled ? 'ENABLED IN CODE' : 'DISABLED (code constant + DB trigger)' %></span> <span class="adm-pill <%= done === R.gates.length ? 'ok' : '' %>"><%= done %> / <%= R.gates.length %> gates done</span></h2>
+  <p class="adm-help">The data-model hooks exist and stay empty while it's off: <code>creators.rating</code> knows the value <code>explicit</code> (refused), <code>creators.id_verification</code> /
+     <code>id_verified_at</code> (an ID / age vendor's reference), <code>creator_performers</code> (performer ID + consent references per post), <code>age_attest</code>
+     (today a self-declaration; a buyer age-assurance vendor would write here), <code>takedown_hashes</code> (exact copies today; PhotoDNA / Safer would add perceptual hashes).</p>
+</section>
+
+<section class="adm-card" aria-labelledby="gT">
+  <h2 id="gT">Gates</h2>
+  <div style="display:grid;gap:10px">
+    <% R.gates.forEach((g, i) => { %>
+      <div id="g-<%= g.key %>" style="border:1px solid var(--adm-line, #26262d);border-radius:12px;padding:12px 14px;display:grid;gap:8px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between">
+          <b><%= i + 1 %>. <%= g.label %></b>
+          <span><span class="adm-pill <%= g.status === 'done' ? 'ok' : '' %>"><%= LABEL[g.status] || g.status %></span> <small>design <%= g.ref %><%= g.updated ? ' · ' + when(g.updated) + (g.updated_by ? ' by ' + g.updated_by : '') : '' %></small></span>
+        </div>
+        <form class="adm-form" data-cr-form="/api/admin/creators/explicit/<%= g.key %>" data-next="reload">
+          <label>Status<select name="status"><% STATUS.forEach((s) => { %><option value="<%= s %>"<%= s === g.status ? ' selected' : '' %>><%= LABEL[s] %></option><% }) %></select></label>
+          <label>Owner<input type="text" name="owner" maxlength="80" value="<%= g.owner || '' %>"></label>
+          <label style="grid-column:1/-1">Evidence (a link, a signed opinion's reference, a contract id)<input type="text" name="evidence" maxlength="500" value="<%= g.evidence || '' %>"></label>
+          <div class="adm-actions"><button type="submit">Save</button><span class="adm-msg cr-msg" role="status"></span></div>
+        </form>
+      </div>
+    <% }) %>
+  </div>
+</section>
+
+<section class="adm-card" aria-labelledby="fT">
+  <h2 id="fT">What turning it on would take (flows, for later)</h2>
+  <ol class="adm-help" style="display:grid;gap:6px">
+    <li><b>Creator onboarding:</b> ID + liveness check through the vendor → <code>creators.id_verification</code>; re-verify on payout-account changes; then the creator may pick the <code>explicit</code> rating (drop the <code>creators_no_explicit_*</code> triggers and flip <code>EXPLICIT_TIER_ENABLED</code>).</li>
+    <li><b>Every explicit post:</b> co-performer releases + IDs → <code>creator_performers</code> before publishing; hash matching (CSAM) then the classifier on every file; a pre-publication review queue unlocks it.</li>
+    <li><b>Viewers / buyers:</b> an age-assurance vendor where the law requires it (instead of today's self-declaration), geofencing by jurisdiction.</li>
+    <li><b>Money:</b> explicit purchases only through the approved adult processor or PAT with no dollar origin - decided with counsel (D12).</li>
+    <li><b>Records:</b> §2257 custodian + statement (or counsel's opinion), NCMEC reporting with 1-year preservation, DMCA leak takedowns.</li>
+  </ol>
+</section>
+<script src="/public/js/creators.js?v=1" defer></script>
+<%- include('../partials/admin-close') %>
+</body>
+</html>
