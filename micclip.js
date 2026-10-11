@@ -21,6 +21,8 @@
 //      clipper, the waveform card as the audio's poster, the transcript as title + body) and feed_voices records who is
 //      heard in it. Every speaker gets "Remove me" (one click: the post comes down, the clipper is told) - one speaker
 //      also through the capture's own subject rule, several (a merged !clipmic 3) only through this.
+//   Pepe himself (1.99md): his TTS mic-ups get a 🎙 line too (the bot keeps only what its TTS engine said - never
+//      Spotify, stings or jingles), so a 🔊 Clip on his line works the same way, with the speaker "Pepe".
 "use strict";
 const fs = require("fs");
 const os = require("os");
@@ -163,7 +165,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
       if (!it) return res.status(404).json({ ok: false, error: "That mic line isn't in the room's feed any more." });
       if (!it.u || it.u.anon || !LOGIN_RE.test(String(it.u.login || ""))) return res.status(403).json({ ok: false, error: "They're private." });
       const login = String(it.u.login).toLowerCase();
-      if (it.u.self) return res.status(400).json({ ok: false, error: "That's Pepe." });
+      // 1.99md: Pepe's own 🎙 lines (his TTS mic-ups - voice only, never music) are clippable like anyone's
       if ((await deps.privateLogins([login])).has(login)) return res.status(403).json({ ok: false, error: "They keep their activity private, so their voice can't be clipped." });
       const off = clipGate(R, u);
       if (off) return res.status(403).json({ ok: false, error: off, code: "E_FEATURE_OFF" });

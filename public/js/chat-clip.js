@@ -227,7 +227,7 @@
     function decorate(nodes) {
       if (!linked || !canMic) return;
       nodes.forEach(function (r) {
-        if (!r.classList || !r.classList.contains('tx') || !r.getAttribute('data-tx') || r.querySelector('.mc-btn') || r.classList.contains('pepe')) return;
+        if (!r.classList || !r.classList.contains('tx') || !r.getAttribute('data-tx') || r.querySelector('.mc-btn')) return;   // 1.99md: Pepe's own 🎙 lines too
         var b = el('button', 'mc-btn', '🔊 Clip'); b.type = 'button'; b.title = 'Clip the audio of this mic-up (free preview, you pay only to post)';
         b.addEventListener('click', function (e) { e.stopPropagation(); if (!on) micClip(r.getAttribute('data-tx')); });
         var body = r.querySelector('.body') || r; body.appendChild(b);

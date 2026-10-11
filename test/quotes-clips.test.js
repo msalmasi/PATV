@@ -285,6 +285,22 @@ test("🔊 Clip: the request's rules (signed in, linked, the line in the feed, t
   assert.equal(takeMicJobs().length, 0, "offered once - a re-offer can never start a second clip");
 });
 
+test("🔊 Clip on Pepe's own 🎙 line (1.99md): allowed like anyone's, the job targets Pepe's login", async () => {
+  takeMicJobs();
+  await setClip(true);
+  const PTX = "tx-" + "b".repeat(16);
+  await sync({ rooms: [{ room: ROOM, topic: "t", members: [u("alicecf"), u("bobcf"), u("carolcf")], count: 4, clip: true }],
+    events: [ev("x.pepe.transcript", { id: PTX, user: { id: "pepebeta", login: "pepebeta", display: "PepeBeta", is_self: true }, text: "the vault is open" })] });
+  const line = feedOf().find((it) => it.k === "tx" && it.id === PTX);
+  assert.ok(line && line.u.self, "Pepe's 🎙 line is in the feed, marked as Pepe");
+  U.dave = U.dave || await mkUser("dave", { camfrog: "davecf" });
+  const r = await post(`/api/rooms/${SLUG}/micclip`, U.dave, { tx: PTX });
+  assert.equal(r.status, 200, "no more \"That's Pepe.\"");
+  const j = takeMicJobs().find((x) => x.id === r.d.id);
+  assert.ok(j && j.tx === PTX && j.target === "pepebeta" && j.camfrog === "davecf", "Pepe gets his own line's id with himself as the speaker");
+  micclip._clips.clear();
+});
+
 test("🔊 Clip: the preview is only the asker's; Post queues micclip.save with the trim; Pepe fetches it back by account", async () => {
   await setClip(true);
   micclip._clips.clear();
