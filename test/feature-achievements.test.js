@@ -181,7 +181,7 @@ test("after it, the hooks award loudly: a gift (recipient), a donation, 3 sticke
   for (const p of ["a", "b", "c"]) await runQuery("INSERT INTO user_sticker_packs (user_id, pack_id, source, ref, created) VALUES (?, ?, 'buy', ?, 1)", [nc.userId, p, "n" + p]);
   await runQuery("INSERT INTO rooms_registry (room_id, owner_user_id, origin, platform, created_by) VALUES ('padn', ?, 'user', 'site', ?)", [nc.userId, nc.userId]);
   await slot(nc);
-  A.poke(nc.userId);
+  await A.checkWeb(nc.userId);                    // 1.99py: what poke runs, awaited (a fixed sleep was flaky on a busy machine)
   await settle();
   const f = await feedFor(nc);
   for (const id of ["cf_donor", "cf_packs_3", "cf_pad_made", "cf_stream_live"]) assert.ok(f.includes(id), id + " in " + f.join(","));

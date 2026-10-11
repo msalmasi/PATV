@@ -166,7 +166,7 @@ async function userIdForName(name) {
 // polls: poke each voter once per poll, and the creator once 3+ other people voted (cheap: polls are saved on every vote)
 const pollSeen = new Map();          // poll id -> Set of names already poked
 function pokePoll(p) {
-  Promise.resolve().then(async () => {
+  return Promise.resolve().then(async () => {
     if (!p || !p.id) return;
     const seen = pollSeen.get(p.id) || new Set();
     if (!pollSeen.has(p.id)) { pollSeen.set(p.id, seen); if (pollSeen.size > 200) pollSeen.delete(pollSeen.keys().next().value); }
@@ -177,7 +177,7 @@ function pokePoll(p) {
       if (seen.has(n)) continue;
       seen.add(n);
       const id = await userIdForName(n.split("\u0000")[0]);
-      if (id) A().poke(id);
+      if (id) await A().checkWeb(id);         // 1.99py: awaited here (the save never waits for this; a test can)
     }
   }).catch(() => {});
 }

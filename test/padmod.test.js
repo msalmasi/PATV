@@ -205,8 +205,12 @@ test("1.99pg: room roles - Pepe owners/admins only, not on a Pepe owner, self al
   await snapshot({ bossadmin: ADMIN_CAPS, stevie: STAFF_CAPS }, { acks: [
     { id: mk.id, ok: true, msg: "ok", replies: ["@bossadmin 🛡️ bob is now a moderator."] },
     { id: fr.id, ok: false, msg: "only an owner can change a Pepe owner's room role" }] });
-  await new Promise((res) => setTimeout(res, 100));
-  const ev = await gq("SELECT what, actor, detail FROM room_events WHERE room_id = ? AND what = 'pad-role' ORDER BY rowid", [ROOM]);
+  // 1.99py: the audit rows land asynchronously - wait for them (up to 5 s) instead of a fixed 100 ms (flaky on a busy machine)
+  let ev = [];
+  for (const end = Date.now() + 5000; Date.now() < end; await new Promise((res) => setTimeout(res, 25))) {
+    ev = await gq("SELECT what, actor, detail FROM room_events WHERE room_id = ? AND what = 'pad-role' ORDER BY rowid", [ROOM]);
+    if (ev.length >= 2) break;
+  }
   assert.equal(ev.length, 2, JSON.stringify(ev));
   assert.equal(ev[0].actor, "boss");
   assert.match(ev[0].detail, /^!mod bob \(as BossAdmin\) -> done: @bossadmin 🛡️ bob is now a moderator\.$/);

@@ -300,10 +300,17 @@ let D = { achievements: null, discordBridge: null, userRoles: null };
 // integrations fulfil their items there (mediainvites.js: a Wizarr invite; mediarequests.js: request credits).
 const saleHooks = [];
 function onOfficialSale(fn) { if (typeof fn === "function" && !saleHooks.includes(fn)) saleHooks.push(fn); }
+const saleHooksRunning = new Set();     // 1.99py: the in-flight hook runs, so a test can wait for them instead of sleeping
 function runSaleHooks(sale) {
   for (const fn of saleHooks) {
-    Promise.resolve().then(() => fn(sale)).catch((e) => console.error("[shop] sale hook:", e && e.message));
+    const p = Promise.resolve().then(() => fn(sale)).catch((e) => console.error("[shop] sale hook:", e && e.message));
+    saleHooksRunning.add(p);
+    p.finally(() => saleHooksRunning.delete(p));
   }
+}
+/** Resolves once every sale hook started so far has finished (tests). */
+async function saleHooksIdle() {
+  while (saleHooksRunning.size) await Promise.all(Array.from(saleHooksRunning));
 }
 
 // Returns {success, status, message, prize, cost, balance, remaining_stock, owner, order_id}. Never throws.
@@ -1637,7 +1644,7 @@ function register(app, deps) {
   });
 }
 
-module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
+module.exports = { register, purchasePrize, orderAction, onOfficialSale, saleHooksIdle, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
                    ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify, Refuse,
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
                    maskAnonGift,                                          // 1.99mt: anonymous gifts

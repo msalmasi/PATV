@@ -329,9 +329,18 @@ function onNotice(userId, n) {
 }
 
 /** messages.js -> here, for a new direct message to `userId` (fire and forget). {conversationId, messageId, from, text, group, pics} */
+// 1.99py: one user's DM alerts are queued in arrival order. They ran concurrently, so the second message of a burst could take
+// the conversation's slot first (INSERT OR IGNORE per 10-minute bucket) and the alert previewed it instead of the first.
+const dmChains = new Map();
 function onDm(userId, m) {
   if (!userId || !m || !m.conversationId) return;
-  (async () => {
+  const prev = dmChains.get(userId) || Promise.resolve();
+  const p = prev.then(() => dmAlert(userId, m));
+  dmChains.set(userId, p);
+  p.finally(() => { if (dmChains.get(userId) === p) dmChains.delete(userId); });
+}
+function dmAlert(userId, m) {
+  return (async () => {
     if (!(await linkOf(userId))) return;
     let preview = true;
     try { preview = (await require("./messages").prefs(userId)).preview; } catch (e) { preview = true; }

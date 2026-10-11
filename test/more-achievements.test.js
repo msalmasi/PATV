@@ -39,7 +39,6 @@ async function mkUser(name, cf) {
 }
 const badges = async (u) => (await getQuery("SELECT badgeId FROM user_badges WHERE userId = ? ORDER BY badgeId", [u.userId])).map((r) => r.badgeId);
 const feedFor = async (u) => (await getQuery("SELECT badgeId FROM achievement_feed WHERE userId = ? ORDER BY id", [u.userId])).map((r) => r.badgeId);
-const settle = () => new Promise((r) => setTimeout(r, 150));
 let pn = 0;
 async function post(u, extra = {}) {
   const id = "p" + (++pn);
@@ -224,15 +223,13 @@ test("social: after it, the hooks award loudly - a 10th upvote from someone else
   for (const f of ["fan1", "fan2", "fan3", "pal", "newcomer"]) await vote("p2", U[f]);
   for (const f of ["fan1", "fan2"]) await vote("p3", U[f]);
   // 4 (p1) + 5 (p2) + 2 (p3) = 11 upvotes from other people
-  A.poke(vet.userId);
-  await settle();
+  await A.checkWeb(vet.userId);           // 1.99py: what the vote hook's poke runs - awaited, not slept on (flaky when busy)
   assert.ok((await feedFor(vet)).includes("cf_likes_10"));
   assert.ok(xp.some((x) => x.userId === vet.userId && x.amount === 1000));
   // the poll: VetCF started it, FAN1 / PalCF voted (VetCF's own vote doesn't count) - FAN2's vote makes 3 others
   const pa = { id: "poll_a", creator: "VetCF", votes: { 0: ["FAN1", "FAN2"], 1: ["PalCF", "VetCF"] }, options: ["a", "b"], status: "ended" };
   await runQuery("UPDATE polls SET data = ? WHERE id = 'poll_a'", [JSON.stringify(pa)]);
-  SO.pokePoll(pa);
-  await settle();
+  await SO.pokePoll(pa);
   assert.ok((await feedFor(vet)).includes("cf_poll_made"), (await feedFor(vet)).join(","));
   // pal's web poll had 2 voters: not yet
   assert.ok(!(await badges(U.pal)).includes("cf_poll_made"));
@@ -241,8 +238,7 @@ test("social: after it, the hooks award loudly - a 10th upvote from someone else
   for (let i = 0; i < 10; i++) targets.push(await mkUser("t" + i));
   for (const t of targets) await follow(social, t);
   await follow(social, social);
-  A.poke(social.userId);
-  await settle();
+  await A.checkWeb(social.userId);
   assert.deepEqual(await feedFor(social), ["cf_follow_10"]);
 });
 

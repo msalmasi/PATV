@@ -148,8 +148,9 @@ test("DM alerts: preview rule, one per conversation per gap, due after the grace
   TG.onDm("u_alice", { conversationId: "c1", messageId: 10, from: "Bob", text: "are you coming tonight?" });
   TG.onDm("u_alice", { conversationId: "c1", messageId: 11, from: "Bob", text: "hello??" });     // same 10-minute bucket
   TG.onDm("u_alice", { conversationId: "c2", messageId: 20, from: "Pepe", text: "ribbit" });
-  await settle();
-  const ob = await outbox("u_alice");
+  // 1.99py: onDm is fire-and-forget - wait for its rows (up to 5 s) instead of a fixed 60 ms (flaky on a busy machine)
+  const until = async (n) => { let r = []; for (const end = Date.now() + 5000; Date.now() < end; await settle()) { r = await outbox("u_alice"); if (r.length >= n) break; } return r; };
+  const ob = await until(2);
   assert.equal(ob.length, 2);
   const c1 = ob.find((o) => o.ref.startsWith("dm:c1:"));
   assert.match(c1.text, /New message from Bob/);
@@ -166,9 +167,9 @@ test("DM alerts: preview rule, one per conversation per gap, due after the grace
   await runQuery("CREATE TABLE IF NOT EXISTS dm_prefs (user_id TEXT PRIMARY KEY, who TEXT NOT NULL DEFAULT 'everyone', alert_preview INTEGER NOT NULL DEFAULT 1, updated INTEGER)");
   await runQuery("INSERT OR REPLACE INTO dm_prefs (user_id, who, alert_preview) VALUES ('u_alice', 'everyone', 0)");
   T += TG.DM_GAP_MS;
+  const had = (await outbox("u_alice")).length;
   TG.onDm("u_alice", { conversationId: "c1", messageId: 12, from: "Bob", text: "secret stuff" });
-  await settle();
-  const last = (await outbox("u_alice")).pop();
+  const last = (await until(had + 1)).pop();
   assert.doesNotMatch(last.text, /secret stuff/);
   assert.match(last.text, /New message from Bob/);
 });
