@@ -140,6 +140,18 @@
   .pe .conn-name .px-st { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: #aaa; }
   .pe .btn.plex { background: #e5a00d; border-color: #e5a00d; color: #1a1200 !important; font-weight: bold; }
   .pe .btn.plex:hover { background: #f0b429; }
+  /* 1.99lu: Link Google = Google's light sign-in button (white, #1f1f1f text 16:1, #747775 outline, the G). The old inline
+     colour lost to .pe .btn's #ddd !important - pale grey on white */
+  .pe .btn.google { background: #fff; border-color: #747775; color: #1f1f1f !important; font-weight: bold; }
+  .pe .btn.google:hover { background: #f2f2f2; border-color: #747775; }
+  .pe .btn.google:focus-visible { outline-color: #8ab4f8; }
+  /* 1.99lu: Password - the cells sit on the grid's bottom edge and the button is as tall as the inputs, so it lines up with
+     them (it used to sit at the labels' height); the status message gets its own row */
+  .pe .pw-form { align-items: end; }
+  .pe .pw-form input[type="password"], .pe .pw-act .btn { height: 38px; }
+  .pe .pw-act { display: flex; }
+  .pe .pw-status { display: block; margin-top: 8px; }
+  .pe .pw-status:empty { min-height: 0; margin: 0; }
 
   /* layout editor */
   .pe .lay-fixed { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px dashed #2b2b2b; color: #888; font-size: 13px; margin-bottom: 8px; }
@@ -236,7 +248,8 @@
     .pe .avup { grid-template-columns: 1fr; justify-items: center; text-align: center; }
     .pe .conn-row { grid-template-columns: 36px minmax(0, 1fr); }
     .pe .conn-row > .btn, .pe .conn-row > form { grid-column: 1 / -1; }
-    .pe .conn-row > .btn { width: 100%; }
+    .pe .conn-row > .btn, .pe .conn-row > form.conn-act .btn { width: 100%; box-sizing: border-box; }
+    .pe .pw-act .btn { width: 100%; }
   }
   @media (prefers-reduced-motion: reduce) { .verify-box { animation: none; } .pe .lay-item, .pe .sw .tr, .pe .sw .tr::after { transition: none; } }
 </style>
@@ -474,10 +487,10 @@
         <% if (gg_.linked) { %>
           <button type="button" class="btn" data-google-unlink><%- t('settings.connections.google_unlink') %></button>
         <% } else { %>
-          <form action="/auth/google/link" method="POST" style="margin:0"><button type="submit" class="btn" style="background:#fff;border-color:#dadce0;color:#1f1f1f"><%- t('settings.connections.google_link') %></button></form>
+          <form class="conn-act" action="/auth/google/link" method="POST" style="margin:0"><button type="submit" class="btn google"><svg viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><%- t('settings.connections.google_link') %></button></form>
         <% } %>
         <div class="conn-cf"><span class="status" id="googleStatus" role="status" aria-live="polite"></span>
-          <span class="hint"><%- t('settings.connections.google_hint') %></span></div>
+          <span class="hint"><%- t('settings.connections.google_hint') %><% if (!gg_.linked) { %> <%- t('settings.connections.google_ach', { link: '<a href="/achievements">' + t('settings.connections.google_ach_link') + '</a>' }) %><% } %></span></div>
       </div>
       <% } %>
       <%# 1.99kn: Telegram (telegram.js - a one-time code sent to Pepe's bot; alerts, and Pepe's commands with a Season Pass) %>
@@ -516,11 +529,12 @@
   <section class="card" id="password">
     <h2><%- t('settings.password') %></h2>
     <p class="lede"><%- t('settings.password.lede') %></p>
-    <form class="grid2" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
+    <form class="grid2 pw-form" id="passwordForm" action="/api/u/<%= username %>/update/password" method="post" onsubmit="return validateForm()">
       <div class="field" style="display:grid;gap:6px"><label class="lbl" for="password"><%- t('settings.password.new') %></label><input type="password" id="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
       <div class="field" style="display:grid;gap:6px"><label class="lbl" for="confirm_password"><%- t('settings.password.confirm') %></label><input type="password" id="confirm_password" required minlength="8" maxlength="72" autocomplete="new-password"></div>
-      <div><button class="btn primary" type="submit"><%- t('settings.password.update') %></button> <span class="status err" id="pwStatus" role="status" aria-live="polite"></span></div>
+      <div class="pw-act"><button class="btn primary" type="submit"><%- t('settings.password.update') %></button></div>
     </form>
+    <span class="status err pw-status" id="pwStatus" role="status" aria-live="polite"></span>
   </section>
 </div>
 

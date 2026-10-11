@@ -65,6 +65,7 @@ async function useOnce(key, keepMs) {
 }
 
 // ── sso_links (Google) ──
+const achievementsMod = () => require("./achievements");
 async function linkOf(provider, userId) { await init(); return (await getQuery("SELECT * FROM sso_links WHERE provider = ? AND user_id = ?", [provider, String(userId || "")]))[0] || null; }
 async function linkBySubject(provider, subject) { await init(); return (await getQuery("SELECT * FROM sso_links WHERE provider = ? AND subject = ?", [provider, String(subject || "")]))[0] || null; }
 async function account(userId) {
@@ -86,8 +87,13 @@ async function addLink(provider, userId, { subject, proof, email, name } = {}) {
     await runQuery("UPDATE sso_links SET email = ?, name = ? WHERE provider = ? AND subject = ?", [email || null, name || null, provider, String(subject)]);
     return { already: true };
   }
+  // 1.99lu: accounts linked before 🍀 I'm Feeling Lucky existed get it quietly first, so only this link is announced
+  if (provider === "google") await achievementsMod().googleBackfill().catch((e) => console.error("[sso] achievement backfill:", e.message));
   await runQuery(`INSERT INTO sso_links (provider, subject, user_id, link_source, proof, email, name, linked_at) VALUES (?, ?, ?, 'self', ?, ?, ?, ?)`,
     [provider, String(subject), userId, proof, email || null, name || null, clock()]);
+  // 1.99lu: 🍀 I'm Feeling Lucky (+ its cosmetic) - XP, PAT from the achievements flow, announced by Pepe; once per account.
+  // Every Google link comes through here: Edit profile -> Connections, "I already have an account", a new SSO account.
+  if (provider === "google") await achievementsMod().checkWeb(userId).catch(() => {});
   return { already: false };
 }
 async function removeLink(provider, userId) {
@@ -198,7 +204,8 @@ async function notifyLinked(user, providerLabel, what) {
 }
 
 function register(app, { addUser, authView }) {
-  init().catch(() => {});
+  // 1.99lu: the one-off quiet 🍀 I'm Feeling Lucky backfill for accounts already linked to Google (a no-op once done)
+  init().then(() => achievementsMod().googleBackfill()).catch((e) => console.error("[sso] setup:", e.message));
   const guard = require("./middleware/authGuard");
   const UC = () => require("./user.controller");
   const createLimit = guard.limiter({ max: 10, windowMs: 15 * 60 * 1000 });

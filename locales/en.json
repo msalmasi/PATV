@@ -3637,6 +3637,8 @@
   "settings.connections.google_linked": "Google is linked. You can sign in with it now.",
   "settings.connections.google_linked_short": "Linked",
   "settings.connections.google_hint": "Sign in with your Google account. It's matched by your Google account, never by email.",
+  "settings.connections.google_ach": "🏆 Linking Google earns the 🍀 I'm Feeling Lucky {!link} and the Search Party avatar ring - yours to keep.",
+  "settings.connections.google_ach_link": "achievement",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe on Telegram",
   "settings.telegram.lead": "Link your account to Pepe's Telegram bot and your alerts (messages, mentions, tips, go-live and the ones you pick below) arrive in Telegram.",
