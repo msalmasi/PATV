@@ -290,7 +290,7 @@ async function grant(userId, itemId, source, idem) {
   const ins = await runQuery("INSERT OR IGNORE INTO user_cosmetics (user_id, item_id, source, acquired, idem, locked) VALUES (?, ?, ?, ?, ?, 0)",
     [userId, it.id, String(source || "grant").slice(0, 30), Date.now(), String(idem).slice(0, 200)]);
   if (ins && ins.changes) {
-    require("./achievements").poke(userId);                    // 1.99oz: 🧥 Wardrobe (achsocial.js)
+    require("./achievements").poke(userId);                    // 1.99pa: 🧥 Wardrobe (achsocial.js)
     return { ok: true, inv_id: ins.id, already: false };
   }
   const prev = await getQuery("SELECT id FROM user_cosmetics WHERE idem = ?", [String(idem).slice(0, 200)]);
@@ -493,7 +493,7 @@ async function equip(userId, invId, on) {
     await runQuery("DELETE FROM user_cosmetic_equips WHERE user_id = ? AND kind = ? AND inv_id = ?", [userId, kind, c.id]);
   }
   if (kind === "name_color") invalidateNames();
-  if (on) require("./achievements").poke(userId);              // 1.99oz: 🎨 cosmetic achievements (achsocial.js)
+  if (on) require("./achievements").poke(userId);              // 1.99pa: 🎨 cosmetic achievements (achsocial.js)
   return { ok: true, kind, item_id: c.item_id, on: !!on };
 }
 

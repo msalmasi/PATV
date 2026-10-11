@@ -161,7 +161,7 @@ test("1.99mw: Pepe's count so far is a base - thresholds use base + the site's c
   await act(ann, "deal", [], { table: r.table });
   if (svc.getTable(r.table).eng.phase === "player") await act(ann, "stand", [], { table: r.table });
   assert.equal(await count("u1", "bj_hands"), 1);
-  assert.deepEqual(await badges("u1"), ["cf_bj_10", "cf_bj_100"], "99 (Pepe) + 1 (site) = 100 hands (1.99oz: the 10-hand one too)");
+  assert.deepEqual(await badges("u1"), ["cf_bj_10", "cf_bj_100"], "99 (Pepe) + 1 (site) = 100 hands (1.99pa: the 10-hand one too)");
   NOW += 2 * 3600 * 1000;
   assert.deepEqual(await rewards.wantBases(tables()), ["AnnCF"], "a stale base is asked for again");
   NOW -= 2 * 3600 * 1000;

@@ -1,4 +1,4 @@
-// casino/achhands.js — 1.99oz: what a settled casino hand is worth in achievements (pure: no I/O). Shared by the site's
+// casino/achhands.js — 1.99pa: what a settled casino hand is worth in achievements (pure: no I/O). Shared by the site's
 // rewards (casino/rewards.js, every backend seat) and mirrored line for line by Pepe's local tables (camfrog-bot
 // pepe_casinoach.py), so the same hand counts the same on both.
 //

@@ -1,4 +1,4 @@
-// Offline tests for 1.99oz "more achievements" (101 new): using things (heist kit, relics, voices, stickers, cosmetics), the
+// Offline tests for 1.99pa "more achievements" (101 new): using things (heist kit, relics, voices, stickers, cosmetics), the
 // everyday site actions (feed, follows, polls, tips, boosts, banners) and the card tables (blackjack + hold'em hands).
 //   * the catalog: badge art for every one, rewards in line with the tiers, localized, grouped on /achievements
 //   * casino/achhands.js: what a showdown / a blackjack seat is worth (the same rules as Pepe's pepe_casinoach.py)

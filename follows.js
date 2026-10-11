@@ -87,7 +87,7 @@ async function follow(user, kind, id, on = true) {
     const n = (await getQuery("SELECT COUNT(*) AS n FROM follows WHERE follower = ?", [user.userId]))[0].n;
     if (n >= MAX_FOLLOWS) throw new Refuse(429, `You can follow up to ${MAX_FOLLOWS} pads and people.`);
     await runQuery("INSERT OR IGNORE INTO follows (follower, target_kind, target_id, created_at) VALUES (?, ?, ?, ?)", [user.userId, kind, T.id, NOW()]);
-    require("./achievements").poke(user.userId, kind === "user" ? T.id : null);   // 1.99oz: 🦋 following / ⭐ followers (achsocial.js)
+    require("./achievements").poke(user.userId, kind === "user" ? T.id : null);   // 1.99pa: 🦋 following / ⭐ followers (achsocial.js)
   } else {
     await runQuery("DELETE FROM follows WHERE follower = ? AND target_kind = ? AND target_id = ?", [user.userId, kind, T.id]);
   }
