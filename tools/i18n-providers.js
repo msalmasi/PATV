@@ -43,7 +43,8 @@ function anthropic(env, opts = {}) {
     name: "anthropic", model,
     async complete({ system, prompt, maxTokens = 8192 }) {
       const j = await postJson(base + "/v1/messages", { "x-api-key": key, "anthropic-version": "2023-06-01" },
-        { model, max_tokens: maxTokens, temperature: 0.2, system, messages: [{ role: "user", content: prompt }] });
+        // no `temperature`: current Claude models (claude-haiku-5-5, the default) reject non-default sampling with a 400
+        { model, max_tokens: maxTokens, system, messages: [{ role: "user", content: prompt }] });
       const text = (j.content || []).filter((c) => c.type === "text").map((c) => c.text).join("");
       return { text, truncated: j.stop_reason === "max_tokens" };
     },
