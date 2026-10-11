@@ -54,4 +54,15 @@ function checkResult(row, userId, payout) {
   return null;
 }
 
-module.exports = { enabled, authorized, gate, checkResult, MIN_MULT, MAX_MULT };
+/**
+ * The stakes of the hands still in play, for the House cover check on a new wager. A hand is open until its payout
+ * transaction exists: `payout` defaults to 0, so "payout IS NULL" never matched and open hands were never counted
+ * (2026-10-11 fix).
+ */
+const OPEN_STAKES_SQL = "SELECT COALESCE(SUM(wager),0) AS t FROM blackjack WHERE payoutTransactionId IS NULL";
+async function openStakes(getQuery) {
+  const r = await getQuery(OPEN_STAKES_SQL);
+  return Number((r[0] && r[0].t) || 0);
+}
+
+module.exports = { enabled, authorized, gate, checkResult, openStakes, OPEN_STAKES_SQL, MIN_MULT, MAX_MULT };

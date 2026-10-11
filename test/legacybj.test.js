@@ -53,3 +53,20 @@ test("index.js: both routes go through the gate, and no route compares with proc
   assert.match(res.slice(0, 2500), /legacybj"\)\.checkResult\(hand, userId, payout\)/);
   assert.match(res.slice(0, 3500), /WHERE blackjackId = \? AND payoutTransactionId IS NULL/);
 });
+
+test("cover check: open hands are the ones without a payout transaction (payout defaults to 0)", async () => {
+  const sqlite3 = require("sqlite3");
+  const db = new sqlite3.Database(":memory:");
+  const q = (sql, p = []) => new Promise((res, rej) => db.all(sql, p, (e, r) => (e ? rej(e) : res(r))));
+  await q(`CREATE TABLE blackjack (blackjackId TEXT PRIMARY KEY, userId TEXT NOT NULL, wager INTEGER NOT NULL, payout INTEGER DEFAULT 0,
+           result TEXT, wagerTransactionId TEXT NOT NULL, payoutTransactionId TEXT)`);
+  await q("INSERT INTO blackjack (blackjackId, userId, wager, wagerTransactionId) VALUES ('a', 'u1', 1000, 'w1'), ('b', 'u2', 250, 'w2')");
+  await q("INSERT INTO blackjack (blackjackId, userId, wager, payout, wagerTransactionId, payoutTransactionId) VALUES ('c', 'u1', 5000, 10000, 'w3', 'p3')");
+  assert.equal((await q("SELECT COUNT(*) AS n FROM blackjack WHERE payout IS NULL"))[0].n, 0, "the old check never saw an open hand");
+  assert.equal(await L.openStakes(q), 1250, "the two open hands, not the settled one");
+  db.close();
+  const src = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  assert.doesNotMatch(src, /FROM blackjack WHERE payout IS NULL/);
+  const w = src.slice(src.indexOf('app.post("/api/blackjack/wager"'));
+  assert.match(w.slice(0, 3000), /require\("\.\/legacybj"\)\.openStakes\(getQuery\)/);
+});

@@ -84,8 +84,9 @@
                 ]],
                 ['play', t('nav.sec_play'), [T.wheel, T.markets, T.wagers, T.gtf,
                   ['/lotto', '🎟️', t('nav.lotto')],
-                  _casino('bj') && ['/casino/blackjack', '🂡', t('nav.blackjack')],     // D10: the casino tables, only while their site flag is on
-                  _casino('holdem') && ['/casino/holdem', '🃏', t('nav.poker')],
+                  // D10: the casino tables once their site flag is on; while dark, the old Pepe-table pages (tables.js)
+                  [_casino('bj') ? '/casino/blackjack' : '/blackjack', '🂡', t('nav.blackjack')],
+                  [_casino('holdem') ? '/casino/holdem' : '/poker', '🃏', t('nav.poker')],
                   ['/bounties', '🎯', t('nav.bounties')],
                   ['/polls', '🗳️', t('nav.polls')],     // 2026-10-11: the user - polls are interactive, so Play (was Info & links)
                 ]],

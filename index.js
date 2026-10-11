@@ -2924,48 +2924,10 @@ app.get("/api/admin/redemption-codes/:code/users", authenticateToken, addUser, a
 
 // HTTP POST endpoint to edit the list of redemption codes.
 app.post("/api/redeem-code", authenticateToken, addUser, async (req, res) => {
-    const { code } = req.body;
+    // redeem.js: the used-check and the claim run inside one transaction with conditional writes (no double-spend)
     const userId = req.user && req.user.userId; // authenticateToken ran first, but don't assume
-
-    try {
-        const codeData = await getQuery("SELECT * FROM redemption_codes WHERE code = ? AND (expiration_date IS NULL OR expiration_date > CURRENT_TIMESTAMP) AND uses_remaining > 0", [code]);
-        const transactionId = uuidv4();
-        // JSON, not text — the shop page parses JSON, so a text body meant these specific
-        // reasons were swallowed and shown as one generic failure.
-        if (codeData.length === 0) {
-            return res.status(404).json({ success: false, message: "That code isn't valid, has expired, or has been fully used." });
-        }
-
-        const userRedemption = await getQuery("SELECT * FROM user_redemptions WHERE userId = ? AND code = ?", [userId, code]);
-        if (userRedemption.length > 0) {
-            return res.status(400).json({ success: false, message: "You've already redeemed that code." });
-        }
-
-        // 1.63: a code's PAT comes out of a vault ("redeem_codes" payout row), never minted.
-        if (!(await funding.takeFunds("redeem_codes", codeData[0].points, userId, `redemption (${codeData[0].code})`))) {
-            return res.status(503).json({ success: false, message: "The bank can't cover codes right now — try again later." });
-        }
-        await runQuery("BEGIN TRANSACTION");
-        await runQuery("INSERT INTO user_redemptions (userId, code) VALUES (?, ?)", [userId, code]);
-        await ledger.postOrThrow(userId, codeData[0].points, `redemption (${codeData[0].code})`, { transactionId, source: "redeem" });
-        await runQuery("UPDATE redemption_codes SET uses_remaining = uses_remaining - 1 WHERE code = ?", [code]);
-        await runQuery("COMMIT");
-        
-        const gained = codeData[0].points || 0;
-        const after = await getQuery("SELECT points_balance FROM users WHERE userId = ?", [userId]);
-        const bal = after.length ? (after[0].points_balance || 0) : null;
-        res.json({
-            success: true,
-            message: `Code redeemed successfully — +${gained.toLocaleString()} PAT` +
-                     (bal === null ? "." : `. Balance: ${bal.toLocaleString()} PAT.`),
-            points: gained,
-            balance: bal,
-        });
-    } catch (error) {
-        try { await runQuery("ROLLBACK"); } catch (e) { /* nothing to roll back */ }
-        console.error("Failed to redeem code:", error);
-        res.status(500).json({ success: false, message: "Something went wrong redeeming that code — no PAT was added." });
-    }
+    const out = await require("./redeem").redeemCode(userId, (req.body || {}).code);
+    res.status(out.status).json(out.body);
 });
 
 // Get all badges
@@ -3070,8 +3032,9 @@ app.post("/api/blackjack/wager", async (req, res) => {
       // 1.63: the table is banked by the casino jackpot - refuse a wager it couldn't pay out
       // (everything still in play x2), then the wager goes INTO the jackpot.
       const potRow = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
-      const openRow = await getQuery("SELECT COALESCE(SUM(wager),0) AS t FROM blackjack WHERE payout IS NULL");
-      if (((potRow[0] && potRow[0].t) || 0) < 2 * (((openRow[0] && openRow[0].t) || 0) + Number(wager))) {
+      // open hands = no payout transaction yet (payout defaults to 0, so "payout IS NULL" never counted them)
+      const open = await require("./legacybj").openStakes(getQuery);
+      if (((potRow[0] && potRow[0].t) || 0) < 2 * (open + Number(wager))) {
         await runQuery("ROLLBACK");
         return res.status(409).json({ success: false, message: "The casino jackpot can't cover that bet right now." });
       }
@@ -4143,7 +4106,10 @@ async function addPokerNowGame(pokerNowId, userId, url, blinds) {
 
 // HTTP POST endpoint for Discord bot to add Poker Now game
 app.post("/api/pokernow/add", async (req, res) => {
-  const { pokerNowId, userId, url, blinds } = req.body;
+  // 2026-10-11: the PokerNow selfbot is retired - 410 unless LEGACY_POKERNOW=1 (legacypokernow.js); it took unauthenticated adds
+  const gate = require("./legacypokernow").gate();
+  if (gate) return res.status(gate.status).json(gate.body);
+  const { pokerNowId, userId, url, blinds } = req.body || {};
   try {
       if (!pokerNowId || !userId || !url || !blinds) {
           return res.status(400).json({ error: "Missing required fields" });

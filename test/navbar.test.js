@@ -108,17 +108,24 @@ test("menu gating: signed-out drops the personal links; Support only while a don
   assert.ok(hrefs(burger).includes("/login"), "the wheel goes to sign-in");
 });
 
-test("casino links follow the site flags: each game shows only while its flag is on (prod is dark)", async () => {
-  const links = async (casinoOn) => hrefs(pop(nav(await render(Object.assign({ user: "someuser" }, casinoOn ? { casinoOn } : {}))), "nav-burger"));
-  let h = await links(null);
-  assert.ok(!h.includes("/casino/blackjack") && !h.includes("/casino/holdem"), "no flags known = no casino links");
-  h = await links(() => false);
-  assert.ok(!h.includes("/casino/blackjack") && !h.includes("/casino/holdem"), "both off");
-  h = await links((g) => g === "bj");
-  assert.ok(h.includes("/casino/blackjack") && !h.includes("/casino/holdem"), "blackjack only");
-  h = await links((g) => g === "holdem");
-  assert.ok(!h.includes("/casino/blackjack") && h.includes("/casino/holdem"), "hold'em only");
-  assert.ok(!h.includes("/blackjack") && !h.includes("/poker"), "the old Pepe-table pages aren't in the menu");
+test("casino links follow the site flags: the old Pepe-table pages while dark, /casino/<game> once its flag is on", async () => {
+  const links = async (casinoOn) => {
+    const n = nav(await render(Object.assign({ user: "someuser" }, casinoOn ? { casinoOn } : {})));
+    return [hrefs(pop(n, "nav-burger")), hrefs(pop(n, "nav-more"))];
+  };
+  const both = (pair, h) => pair.every((x) => x.includes(h));
+  const none = (pair, h) => pair.every((x) => !x.includes(h));
+  for (const flags of [null, () => false]) {
+    const p = await links(flags);
+    assert.ok(both(p, "/blackjack") && both(p, "/poker"), "dark: the old pages keep their menu entries");
+    assert.ok(none(p, "/casino/blackjack") && none(p, "/casino/holdem"), "dark: no casino-table links");
+  }
+  let p = await links((g) => g === "bj");
+  assert.ok(both(p, "/casino/blackjack") && none(p, "/blackjack") && both(p, "/poker") && none(p, "/casino/holdem"), "blackjack on");
+  p = await links((g) => g === "holdem");
+  assert.ok(both(p, "/blackjack") && both(p, "/casino/holdem") && none(p, "/poker") && none(p, "/casino/blackjack"), "hold'em on");
+  p = await links(() => true);
+  assert.ok(both(p, "/casino/blackjack") && both(p, "/casino/holdem") && none(p, "/blackjack") && none(p, "/poker"), "both on");
 });
 
 test("Polls sit under Play (interactive), not Info & links, in both More and ☰", async () => {
