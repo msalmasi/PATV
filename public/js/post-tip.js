@@ -42,7 +42,7 @@
       if (btn && btn.parentNode) btn.parentNode.insertBefore(s, btn.nextSibling); else if (bar) bar.appendChild(s); else return;
     }
     s.textContent = '';
-    s.appendChild(el('span', null, '💸')).setAttribute('aria-hidden', 'true');
+    s.appendChild(el('span', 'fp-tips-i', '💸')).setAttribute('aria-hidden', 'true');
     s.appendChild(el('span', 'fp-tips-n', ' ' + _t('js.feed.tip.count', '{n} tips', { count: t.n, n: fmt(t.n) }) + ' · '));
     s.appendChild(el('b', null, short(t.total)));
     s.appendChild(document.createTextNode(' PAT'));

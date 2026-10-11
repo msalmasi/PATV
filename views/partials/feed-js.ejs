@@ -9,8 +9,8 @@
 <script src="/public/js/feed-crosspost.js?v=7" defer></script>
 <script src="/public/js/feed-tags.js?v=1" defer></script>
 <% if (typeof viewer !== 'undefined' && viewer) { %><script src="/public/js/mention-complete.js?v=1" defer></script><%# 1.99kk: @mention autocomplete (feedmentions.js) %><% } %>
-<link rel="stylesheet" href="/public/css/posttips.css?v=1"><%# 1.99pv: 💸 post tips %>
-<% if (typeof viewer !== 'undefined' && viewer && viewer.username) { %><script src="/public/js/patamount.js?v=1" defer></script><script src="/public/js/post-tip.js?v=1" data-me="<%= viewer.username %>" defer></script><% } %>
+<link rel="stylesheet" href="/public/css/posttips.css?v=2"><%# 1.99pv: 💸 post tips %>
+<% if (typeof viewer !== 'undefined' && viewer && viewer.username) { %><script src="/public/js/patamount.js?v=1" defer></script><script src="/public/js/post-tip.js?v=2" data-me="<%= viewer.username %>" defer></script><% } %>
 <script src="/public/js/follow.js?v=2" defer></script>
 <script src="/public/js/stories.js?v=10" defer></script>
 <%- include('hop-boot') %>

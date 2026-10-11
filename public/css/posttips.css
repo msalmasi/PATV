@@ -6,9 +6,10 @@
 .fp-tipb[aria-expanded="true"] { background: var(--fp-hover); }
 @media (max-width: 600px) {
   .fp-tips-n { display: none; }
-  .fp-tipb .lbl { display: none; }
+  .fp-tipb + .fp-tips .fp-tips-i { display: none; }   /* right after "💸 Tip" the tally reads as just "13k PAT" */
 }
 
+.ptip, .ptip * { box-sizing: border-box; }   /* .ds-modal is width:100% + padding; the feed pages have no global border-box */
 .ptip-quick { display: flex; flex-wrap: wrap; gap: 8px; }
 .ptip-quick .ds-quick[aria-pressed="true"] { border-color: var(--ds-ac); color: #fff; background: var(--ds-ac-bg, #1d2a22); }
 .ptip-quick .ds-quick:disabled { opacity: .45; cursor: not-allowed; }
