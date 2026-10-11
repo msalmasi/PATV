@@ -3263,7 +3263,7 @@
   "support.card_link": "PATV'yi kriptoyla destekle →",
   "settings.connections.crypto": "Kripto cüzdanlar",
   "settings.connections.crypto_n": "{n} bağlı",
-  "settings.connections.crypto_hint": "Stablecoin bağışlarını hesabına yansıtmak için kullanılır - {!link} bölümüne bak. Bağlama sadece cüzdanından bir mesajı imzalamanı ister; para transfer edemez.",
+  "settings.connections.crypto_hint": "Stablecoin bağışlarını hesabına yansıtmak için kullanılır - {!link} bölümüne bak. Bağlama yalnızca cüzdanından bir mesajı imzalamanı ister; fon taşıyamaz.",
   "crypto.notice_body": "Teşekkürler - {chain} üzerinden {amount} {token} alındı, cüzdanına {pat} PAT eklendi.",
   "crypto.notice_held": "Teşekkürler - {amount} {token} bağışın transfer başına ${max} limitinin üzerinde, bu yüzden hesaba eklenmeden önce bir yönetici kontrol edecek.",
   "js.crypto.cancelled": "Cüzdanda iptal edildi - hiçbir şey bağlanmadı.",

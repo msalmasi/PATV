@@ -3309,7 +3309,7 @@
   "support.card_link": "תמכו ב־PATV בקריפטו ←",
   "settings.connections.crypto": "ארנקי קריפטו",
   "settings.connections.crypto_n": "{n} מקושרים",
-  "settings.connections.crypto_hint": "משמש לזיכוי תרומות הסטייבלקוין שלכם - ראו {!link}. קישור מבקש מהארנק רק לחתום על הודעה; הוא לא יכול להעביר כספים.",
+  "settings.connections.crypto_hint": "משמש לזיכוי תרומות הסטייבלקוין שלכם – ראו {!link}. קישור מבקש מהארנק שלכם רק לחתום על הודעה; הוא לא יכול להעביר כספים.",
   "crypto.notice_body": "תודה - התקבלו {amount} {token} ב־{chain}, נוספו {pat} PAT לארנק שלכם.",
   "crypto.notice_held": "תודה - תרומת ה־{amount} {token} שלכם עוברת את מגבלת ה־${max} להעברה, לכן מנהל יבדוק אותה לפני הזיכוי.",
   "js.crypto.cancelled": "בוטל בארנק - שום דבר לא קושר.",

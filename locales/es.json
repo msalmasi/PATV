@@ -3264,7 +3264,7 @@
   "support.card_link": "Apoya a PATV con cripto →",
   "settings.connections.crypto": "Billeteras cripto",
   "settings.connections.crypto_n": "{n} vinculadas",
-  "settings.connections.crypto_hint": "Se usa para acreditar tus donaciones en stablecoins - ver {!link}. Vincular solo pide a tu billetera firmar un mensaje; no puede mover fondos.",
+  "settings.connections.crypto_hint": "Se usa para acreditar tus donaciones en stablecoins - ver {!link}. Vincular solo pide a tu billetera que firme un mensaje; no puede mover fondos.",
   "crypto.notice_body": "Gracias - {amount} {token} recibidos en {chain}, {pat} PAT añadidos a tu billetera.",
   "crypto.notice_held": "Gracias - tu donación de {amount} {token} supera el límite de ${max} por transferencia, así que un admin la revisará antes de acreditarla.",
   "js.crypto.cancelled": "Cancelado en la billetera - no se vinculó nada.",

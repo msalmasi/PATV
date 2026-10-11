@@ -3263,7 +3263,7 @@
   "support.card_link": "Steun PATV met crypto →",
   "settings.connections.crypto": "Crypto-wallets",
   "settings.connections.crypto_n": "{n} gekoppeld",
-  "settings.connections.crypto_hint": "Gebruikt om je stablecoin-donaties bij te schrijven - zie {!link}. Koppelen vraagt alleen je wallet om een bericht te ondertekenen; het kan geen geld verplaatsen.",
+  "settings.connections.crypto_hint": "Gebruikt om je stablecoin-donaties bij te schrijven - zie {!link}. Koppelen vraagt je Wallet alleen om een bericht te ondertekenen; er kan geen geld mee worden verplaatst.",
   "crypto.notice_body": "Bedankt - {amount} {token} ontvangen op {chain}, {pat} PAT toegevoegd aan je wallet.",
   "crypto.notice_held": "Bedankt - je donatie van {amount} {token} is boven de limiet van ${max} per overboeking, dus een beheerder controleert hem voordat hij wordt bijgeschreven.",
   "js.crypto.cancelled": "Geannuleerd in de wallet - er is niets gekoppeld.",
