@@ -1,58 +1,105 @@
-<%- include('layout', { title: m ? m.ref + ' · ' + m.question : 'Market not found', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: m ? m.ref + ' · ' + m.question : t('market.nf_title'), user: user}) %>
+<%# views/market.ejs - 1.99ly design pass (bets.css). One market: a header (ref, status, AI-judge chip, question, its times
+    in the viewer's zone, the volume / trades / holders tiles), the settlement banner + your result card when it's
+    settled (1.99dy; the re-settle banner stays), then the price board (odds bars + the price chart) next to the trade
+    panel (outcome tiles, amount with quick picks, the live LMSR estimate, the judge's resolve form), the judgement and
+    evidence (partials/aijudge), your position, your website orders and every trade. Same forms, routes and fields. %>
+<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .mk { max-width: 892px; width: 100%; box-sizing: border-box; min-width: 0; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }   /* a grid item with auto margins is sized to its content: width 100% keeps the trades table scrolling inside .tbl at 375 px instead of widening the page */
-  .mk a { color: #81c784; }
-  .mk .ref { color: #81c784; font-family: monospace; }
-  .mk h1 { font-size: 22px; margin: 18px 0 4px; }
-  .mk h3 { margin: 22px 0 8px; }
-  .mk .info { color: #888; font-size: 13px; line-height: 1.7; }
-  .mk .opts { display: grid; gap: 8px; margin: 18px 0; }
-  .mk .opt { display: grid; grid-template-columns: minmax(70px, 160px) 1fr auto; gap: 10px; align-items: center; }
-  .mk .bar { height: 12px; background: #1c1c1c; border-radius: 6px; overflow: hidden; }
-  .mk .bar span { display: block; height: 100%; background: #4caf50; }
-  .mk .opt.won .bar span { background: #ffd700; }
-  .mk .num { color: #ccc; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
-  .mk .price { font-size: 20px; font-weight: bold; color: #fff; font-variant-numeric: tabular-nums; }
-  .mk .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
-  .mk table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .mk th, .mk td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; }
-  .mk th { color: #888; font-weight: normal; }
+  .mk { --ac: #4caf50; --ac2: #81c784; --acbg: rgba(76, 175, 80, .14); max-width: 1080px; }   /* width 100% (bets.css) keeps the tables scrolling inside .tbl at 375 px */
+  .mk .ref { color: var(--ac2); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .mk h1 { margin: 10px 0 6px; font: 900 clamp(22px, 4.6vw, 32px)/1.2 Ubuntu, sans-serif; color: #fff; }
+  .mk h3 { display: flex; align-items: center; gap: 10px; margin: 30px 0 12px; font: 900 19px/1.25 Ubuntu, sans-serif; color: #fff; }
+  .mk h3::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 8px var(--ac); }
+  .mk .info { color: var(--mut); font-size: 13.5px; line-height: 1.65; }
+  .mk .mk-head { padding: 18px; border: 1px solid var(--line); border-radius: 18px; background: radial-gradient(90% 140% at 100% 0%, var(--acbg), transparent 60%), #111; }
+  .mk .st { margin: 8px 0 0; }
+  .mk .st .bx-chip { text-transform: none; letter-spacing: 0; font-size: 13px; white-space: normal; }
+  .mk .mk-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+  .mk .mk-stats > span { padding: 10px 12px; border-radius: 12px; background: rgba(0, 0, 0, .35); border: 1px solid #222; color: var(--mut); font-size: 12px; }
+  .mk .mk-stats b { display: block; color: #fff; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .mk .mk-who { margin-top: 10px; }
+
+  .mk .mk-main { display: grid; gap: 16px; margin-top: 16px; }
+  .mk .mk-main.two { grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .mk .mk-main.two { grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); align-items: start; } .mk .mk-side { position: sticky; top: 76px; } }
+  .mk .board, .mk .side-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; min-width: 0; }
+  .mk .board-h { margin: 0 0 12px; font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; color: var(--mut); }
+  .mk .opts { display: grid; gap: 14px; margin: 0; }
+  .mk .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "n v" "b b"; gap: 6px 10px; align-items: baseline; }
+  .mk .opt > div:first-child { grid-area: n; min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
+  .mk .opt > .num { grid-area: v; }
+  .mk .opt > .bar { grid-area: b; }
+  .mk .bar { height: 12px; background: #1f1f1f; border-radius: 999px; overflow: hidden; }
+  .mk .bar span { display: block; height: 100%; border-radius: inherit; background: #4caf50; transition: width .5s ease; }
+  .mk .opt.won .bar span { background: var(--gold); }
+  .mk .num { color: #bdbdbd; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; text-align: right; }
+  .mk .price { font-size: 22px; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; }
+  .mk .opt.won .price { color: var(--goldt); }
+  .mk .chart { position: relative; margin-top: 16px; background: var(--card2); border: 1px solid #1e1e1e; border-radius: 12px; padding: 10px 10px 8px 38px; }
+  .mk .chart svg { display: block; width: 100%; height: 190px; }
+  .mk .chart .yl { position: absolute; left: 8px; font-size: 10.5px; color: #777; transform: translateY(-50%); font-variant-numeric: tabular-nums; }
+  .mk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: #ccc; margin-top: 8px; }
+  .mk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .mk .legend .since { margin-left: auto; color: #888; }
+
+  .mk .side-card { display: grid; gap: 12px; }
+  .mk .side-card + .side-card { margin-top: 12px; }
+  .mk .side-h { margin: 0; font-size: 17px; color: #fff; }
+  .mk .notice { padding: 12px 14px; border-radius: 12px; background: rgba(76, 175, 80, .1); border: 1px solid #2e6b31; color: #d6f0d6; }
+  .mk form.bet { display: grid; gap: 12px; margin: 0; }
+  .mk form.judge { border-color: #6b531e; background: linear-gradient(180deg, rgba(224, 160, 48, .08), var(--card) 50%); }
+  .mk fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .mk legend.lg { padding: 0; margin-bottom: 8px; font-size: 12px; font-weight: bold; letter-spacing: .08em; text-transform: uppercase; color: #b9b9b9; }
+  .mk .opts-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: 8px; }
+  .mk .opts-pick label { position: relative; display: grid; gap: 2px; min-height: 52px; padding: 10px 12px 10px 38px; border-radius: 12px; border: 1px solid var(--line2); background: var(--card2); cursor: pointer; color: #e6e6e6; font-size: 14px; }
+  .mk .opts-pick label input { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; margin: 0; accent-color: var(--oc, var(--ac)); }
+  .mk .opts-pick label:hover { border-color: #555; }
+  .mk .opts-pick label:has(input:checked) { border-color: var(--oc, var(--ac)); box-shadow: 0 0 0 1px var(--oc, var(--ac)) inset; background: #151a15; }
+  .mk .opts-pick .tn { font-weight: bold; color: #fff; overflow-wrap: anywhere; }
+  .mk .opts-pick .tp { font-size: 12.5px; color: var(--mut); font-variant-numeric: tabular-nums; }
+  .mk form input[type=number], .mk form input[type=text] { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line2); background: var(--card2); color: #eee; font: 16px Ubuntu, sans-serif; }
+  .mk form input:focus { border-color: var(--ac); outline: none; box-shadow: 0 0 0 3px var(--acbg); }
+  .mk form button[type=submit] { min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px; background: var(--ac); color: #fff; font: bold 15px Ubuntu, sans-serif; cursor: pointer; }
+  .mk form button[type=submit]:hover { filter: brightness(1.1); }
+  .mk form.judge button[type=submit] { background: var(--amber); color: #1a1200; }
+  .mk form.bet .go { width: 100%; }
+  .mk .est { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgba(76, 175, 80, .08); border: 1px solid #234d25; color: #cfe8cf; font-size: 13.5px; line-height: 1.5; }
+  .mk .bal { margin: 0; color: var(--mut); font-size: 13px; }
+  .mk .bal b { color: #fff; font-variant-numeric: tabular-nums; }
+  .mk .side-st { font-size: 14px; color: #ddd; line-height: 1.55; }
+
+  .mk .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .mk table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .mk th, .mk td { padding: 10px 12px; border-bottom: 1px solid #1d1d1d; text-align: left; white-space: nowrap; }
+  .mk tr:last-child td { border-bottom: 0; }
+  .mk th { color: var(--mut); font-weight: bold; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; background: #151515; }
   .mk td.r, .mk th.r { text-align: right; }
   .mk .up { color: #81c784; } .mk .down { color: #e57373; }
-  .mk .notice { background: #13200f; border: 1px solid #4caf50; border-radius: 8px; padding: 10px 12px; }
-  .mk form.bet { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; margin: 14px 0; display: grid; gap: 10px; }
-  .mk form.judge { border-color: #e0a030; }
-  .mk .opts-pick { display: flex; flex-wrap: wrap; gap: 8px 16px; }
-  .mk .opts-pick label { cursor: pointer; }
-  .mk form .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-  .mk form input[type=number], .mk form input[type=text] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 180px; }
-  .mk form button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; }
-  .mk form button.sell { background: #b85c38; padding: 5px 10px; }
-  .mk form.judge button { background: #e0a030; color: #111; }
   .mk form.inline { display: flex; gap: 6px; align-items: center; justify-content: flex-end; margin: 0; }
-  .mk form.inline input[type=text] { width: 70px; padding: 5px 8px; }
-  .mk .chart { background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 8px; }
-  .mk .chart svg { display: block; width: 100%; height: 180px; }
-  .mk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #ccc; margin-top: 6px; }
-  .mk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .mk form.inline input[type=text] { width: 76px; min-height: 36px; padding: 6px 8px; font-size: 14px; }
+  .mk form button.sell[type=submit] { min-height: 36px; padding: 6px 14px; background: #b85c38; font-size: 13.5px; }
+
   /* 1.99dy: settled market - the result banner, the viewer's result card, the settlement in the trade history */
-  .mk .settled { border: 2px solid var(--oc, #888); background: #121212; border-radius: 12px; padding: 14px 16px; margin: 16px 0; overflow-wrap: anywhere; }
+  .mk .settled { border: 2px solid var(--oc, #888); background: radial-gradient(90% 140% at 100% 0%, color-mix(in srgb, var(--oc, #888) 16%, transparent), transparent 60%), #121212; border-radius: 18px; padding: 16px 18px; margin: 16px 0; overflow-wrap: anywhere; }
   .mk .settled .s-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
-  .mk .settled .s-out { font-size: 28px; font-weight: bold; letter-spacing: .5px; color: var(--oc, #fff); line-height: 1.15; }
+  .mk .settled .s-out { font-size: clamp(24px, 6vw, 32px); font-weight: 900; letter-spacing: .5px; color: var(--oc, #fff); line-height: 1.15; }
   .mk .settled .s-out small { font-size: 14px; color: #aaa; font-weight: normal; letter-spacing: 0; }
   .mk .settled .s-meta { color: #bbb; font-size: 13px; }
   .mk .settled .s-rule { margin: 10px 0 0; font-size: 15px; color: #eee; }
-  .mk .settled .s-why { margin: 10px 0 0; padding: 8px 10px; background: #0d0d0d; border-left: 3px solid #3a4a7a; border-radius: 4px; font-size: 13px; color: #ccc; }
+  .mk .settled .s-why { margin: 10px 0 0; padding: 10px 12px; background: #0d0d0d; border-left: 3px solid #3a4a7a; border-radius: 6px; font-size: 13.5px; color: #ccc; }
   .mk .settled .s-why a { white-space: nowrap; }
-  .mk .settled .s-rs { border-left-color: #e0a030; color: #eee; }
-  .mk .settled .s-rs-sub { color: #aaa; font-size: 12px; }
-  .mk .s-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 10px; font-size: 13px; color: #999; }
-  .mk .s-stats b { display: block; font-size: 18px; color: #fff; font-variant-numeric: tabular-nums; }
-  .mk .myres { border-radius: 12px; padding: 14px 16px; margin: 16px 0; border: 1px solid #333; background: #111; }
-  .mk .myres.won { border-color: #ffd700; background: #1d1a08; }
+  .mk .settled .s-rs { border-left-color: var(--amber); color: #eee; }
+  .mk .settled .s-rs-sub { color: #aaa; font-size: 12.5px; }
+  .mk .s-stats { display: flex; flex-wrap: wrap; gap: 8px 26px; margin-top: 12px; font-size: 13px; color: #999; }
+  .mk .s-stats b { display: block; font-size: 20px; color: #fff; font-variant-numeric: tabular-nums; }
+  .mk .myres { border-radius: 16px; padding: 14px 16px; margin: 16px 0; border: 1px solid #333; background: #111; }
+  .mk .myres.won { border-color: var(--gold); background: linear-gradient(90deg, rgba(255, 215, 64, .12), #111 70%); }
   .mk .myres.lost { border-color: #7a3a3a; background: #1c1010; }
   .mk .myres.refunded { border-color: #666; }
-  .mk .myres .m-head { font-size: 22px; font-weight: bold; }
+  .mk .myres .m-head { font-size: 22px; font-weight: 900; }
   .mk .myres .m-nums { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 8px; font-size: 13px; color: #999; }
   .mk .myres .m-nums b { display: block; font-size: 20px; color: #fff; font-variant-numeric: tabular-nums; }
   .mk .myres .m-nums b.up { color: #81c784; } .mk .myres .m-nums b.down { color: #e57373; }
@@ -62,309 +109,371 @@
   .mk tr.payout td { background: #121208; }
   .mk tr.payout td.pay { color: #ffd700; white-space: nowrap; }
   .mk tr.settle-ord td { background: #121208; color: #ffe082; }
+  .mk td.wrap { white-space: normal; min-width: 180px; }
 </style>
 <%
   const COLORS = ['#4caf50', '#e57373', '#64b5f6', '#ffd54f', '#ba68c8', '#4dd0e1', '#ff8a65', '#aed581'];
   const pc = (p) => (p * 100).toFixed(p >= 0.995 || p <= 0.005 ? 1 : 0) + '%';
-  const fmt = (n) => Math.round(n).toLocaleString();
+  const fmt = (n) => t.num(Math.round(n));
   // 1.99jx: times in the viewer's zone with its label (tz.js), as <time> tags - print them with the raw tag
   const tzT = locals.tzTime || new Function(include('../tz-core.js'))()('UTC', 'en').time;
   const when = (ts) => ts ? tzT(ts, 'datetime') : '';
-  // 1.99dt: E escapes; \u0001 in an escaped status line marks where the linked "(by <who>)" goes
-  const E = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const byWho = () => (m && m.settled_by ? ' (by ' + ul(m.settled_by) + ')' : '');
+  const E = t.esc;
+  const byWho = () => (m && m.settled_by ? t('market.by', { who: ul(m.settled_by) }) : '');
   const judgeOk = typeof judgeMe !== 'undefined' && judgeMe && m && (m.status === 'open' || m.status === 'closed');
   // 1.99dy: adaptive price precision (0.00415, not 0.004 / 0.000) - markets.fmtPrice, passed in by the route
   const fp = typeof fmtPrice === 'function' ? fmtPrice : (x) => Number(x).toFixed(3);
   const S = m && m.shares ? m.settle : null;
+  const oCol = (o, i) => m.options.length === 2 && /^no$/i.test(o.name) ? '#e57373' : m.options.length === 2 && /^yes$/i.test(o.name) ? '#4caf50' : COLORS[i % COLORS.length];
   const sIdx = S && S.kind === 'won' ? m.options.findIndex((o) => o.name === S.result) : -1;
   const sColor = sIdx >= 0 ? (m.options.length === 2 && /^no$/i.test(S.result) ? '#e57373' : m.options.length === 2 && /^yes$/i.test(S.result) ? '#4caf50' : COLORS[sIdx % COLORS.length]) : '#9e9e9e';
-  const sBy = () => S && S.byAi ? '🤖 Pepe (AI judge)' : S && S.by ? ul(S.by) : 'the judge';
+  const sBy = () => S && S.byAi ? t('market.by_ai') : S && S.by ? ul(S.by) : t('market.by_judge');
   const sWhen = S && S.at ? when(S.at) : '';
-  const sPaid = S ? (S.kind === 'void' ? 'refunded ' : '') + fmt(S.paid || 0) + ' PAT ' + (S.kind === 'void' ? 'to ' : 'paid to ') + S.winners + ' holder' + (S.winners === 1 ? '' : 's') : '';
-%>
-<div class="mk">
-  <p><a href="/markets">‹ All markets</a></p>
+  const others = () => E(m.options.filter((o) => !o.won).map((o) => o.name).join(' / '));
+  const scaled = () => S && S.ratio < 1 ? t('market.s.scaled', { pct: (S.ratio * 100).toFixed(0) }) : '';
+  const sPaid = S ? (S.kind === 'void' ? t('market.tr.refunded', { count: S.winners, n: fmt(S.paid || 0) }) : t('market.tr.paid', { count: S.winners, n: fmt(S.paid || 0) })) : '';
+  const pnl = (v) => (v >= 0 ? '+' : '−') + fmt(Math.abs(v));
+  const ordSt = (o, dflt) => o.status === 'placed' ? '✅ ' + E(o.message || dflt) : o.status === 'failed' ? '❌ ' + E(o.message || t('market.ord.failed')) : '⏳ ' + t('market.ord.wait');
+  const meta = (pool) => { %>
+    <div class="mk-stats">
+      <span><b><%= fmt(m.total) %></b><%- t(pool ? 'market.stat_pool' : 'market.stat_vol') %></span>
+      <span><b><%= fmt(m.betCount) %></b><%- t(pool ? 'market.stat_bets' : 'market.stat_trades', { count: m.betCount }) %></span>
+      <span><b><%= fmt(m.bettors) %></b><%- t(pool ? 'market.stat_bettors' : 'market.stat_holders', { count: m.bettors }) %></span>
+    </div>
+<% }; %>
+<main class="bx mk">
+  <a class="bx-back" href="/markets">‹ <%- t('market.back') %></a>
   <% if (!m) { %>
-    <h1>Market not found</h1>
-    <p class="info">It may have been settled more than 60 days ago.</p>
-  <% } else if (m.shares) { %>
-    <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
-    <%- include('partials/mk-times', { m, now }) %>
+    <div class="bx-empty"><span class="ic" aria-hidden="true">🔮</span><h1><%- t('market.nf_title') %></h1><span class="info"><%- t('market.nf_sub') %></span>
+      <a class="bx-btn sm" href="/markets"><%- t('market.back') %></a></div>
+  <% } else if (m.shares) {
+       const open = m.status === 'open';
+       const side = open || judgeOk; %>
+    <header class="mk-head">
+      <div class="bx-top">
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 <%- t('markets.ai_tag') %></span><% } %>
+      </div>
+      <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
+      <%- include('partials/mk-times', { m, now }) %>
+      <% if (!S) { const k = m.status === 'open' ? 'open' : m.status === 'settled' || m.status === 'resolved' ? 'settled' : m.status === 'void' ? 'void' : m.status === 'settling' ? 'settling' : 'closed'; %>
+        <div class="st"><span class="bx-chip c-<%= k %>"><%- k === 'open' ? t('market.st.open') : k === 'settled' ? t('market.st.resolved', { result: m.result, by: byWho() }) : k === 'void' ? t('market.st.void') : k === 'settling' ? t('market.st.settling') : t('market.st.closed') %></span></div>
+      <% } %>
+      <% meta(false) %>
+      <div class="info mk-who"><%- t('market.who', { judge: ul(m.judge), creator: ul(m.creator), room: padLink(m.room, t('market.a_room')) }) %></div>
+    </header>
     <% if (S) { %>
       <div class="settled <%= S.kind %>" id="settlement" style="--oc: <%= sColor %>">
         <div class="s-top">
-          <div class="s-out"><% if (S.kind === 'won') { %>⚖ Resolved: <%= S.result.toUpperCase() %><% } else { %>⚖ Voided <small>— holders refunded</small><% } %></div>
-          <div class="s-meta">judged by <%- sBy() %><%- sWhen ? ' · settled ' + sWhen : '' %></div>
+          <div class="s-out"><% if (S.kind === 'won') { %><%- t('market.s.resolved', { result: S.result.toUpperCase() }) %><% } else { %><%- t('market.s.voided') %><% } %></div>
+          <div class="s-meta"><%- t('market.s.judged', { who: sBy() }) %><%- sWhen ? ' · ' + t('market.s.settled_at', { when: sWhen }) : '' %></div>
         </div>
-        <p class="s-rule"><% if (S.kind === 'won') { %>Each <b><%= S.result %></b> share paid <b>1 PAT</b>; <%= m.options.filter((o) => !o.won).map((o) => o.name).join(' / ') %> shares are worth 0.<% } else { %><%= S.reason ? 'Reason: ' + S.reason + '. ' : '' %>Trading fees are kept; holders got back what they put in (net of the 2% fee)<%= S.ratio < 1 ? ', scaled to ' + (S.ratio * 100).toFixed(0) + '% because the pot after the Reserve\'s seed couldn\'t cover it all' : '' %>.<% } %></p>
+        <p class="s-rule"><% if (S.kind === 'won') { %><%- t('market.s.rule_won', { result: S.result, others: others() }) %><% } else { %><%- S.reason ? t('market.s.reason', { reason: S.reason }) + ' ' : '' %><%- t('market.s.rule_void', { scaled: scaled() }) %><% } %></p>
         <% if (S.why) { %>
-          <p class="s-why">🤖 <%= S.why %> <a href="#judgement">Full judgement ›</a></p>
+          <p class="s-why">🤖 <%= S.why %> <a href="#judgement"><%- t('market.s.full') %></a></p>
         <% } %>
         <% if (S.resettle) { const RS = S.resettle; %>
-          <p class="s-why s-rs" id="resettle">⚖ <b>Re-settled <%= RS.to %></b> by <%- ul(RS.by) %><%- RS.at ? ' · ' + when(RS.at) : '' %>: <%= RS.reason %>
-            <br><span class="s-rs-sub">It was first settled <%= RS.from %>. Taken back: <%= RS.clawback.map((c) => c.nick + ' ' + fmt(c.amount)).join(', ') || 'nothing' %><%= RS.funder_back ? ' · ' + fmt(RS.funder_back) + ' from the ' + RS.funder + ' vault' : '' %>. Paid: <%= RS.payouts.map((p) => p.nick + ' +' + fmt(p.amount)).join(', ') || 'nobody' %><%= RS.leftover ? ' · ' + fmt(RS.leftover) + ' back to the ' + RS.funder + ' vault' : '' %>.</span></p>
+          <p class="s-why s-rs" id="resettle"><%- t('market.rs.head', { to: RS.to, who: ul(RS.by), when: RS.at ? ' · ' + when(RS.at) : '', reason: RS.reason }) %>
+            <br><span class="s-rs-sub"><%- t('market.rs.sub', { from: RS.from,
+              back: RS.clawback.map((c) => E(c.nick) + ' ' + fmt(c.amount)).join(', ') || t('market.rs.nothing'),
+              funder: RS.funder_back ? ' · ' + t('market.rs.funder', { n: fmt(RS.funder_back), vault: RS.funder }) : '',
+              paid: RS.payouts.map((p) => E(p.nick) + ' +' + fmt(p.amount)).join(', ') || t('market.rs.nobody'),
+              left: RS.leftover ? ' · ' + t('market.rs.left', { n: fmt(RS.leftover), vault: RS.funder }) : '' }) %></span></p>
         <% } %>
         <div class="s-stats">
-          <span><b><%= fmt(S.paid || 0) %></b><%= S.kind === 'void' ? 'PAT refunded' : 'PAT paid out' %></span>
-          <span><b><%= S.winners %></b><%= S.kind === 'void' ? 'holder' + (S.winners === 1 ? '' : 's') + ' refunded' : 'winning holder' + (S.winners === 1 ? '' : 's') %></span>
-          <span><b><%= fmt(m.total) %></b>PAT traded</span>
+          <span><b><%= fmt(S.paid || 0) %></b><%- S.kind === 'void' ? t('market.s.st_refunded') : t('market.s.st_paid') %></span>
+          <span><b><%= S.winners %></b><%- S.kind === 'void' ? t('market.s.st_ref_h', { count: S.winners }) : t('market.s.st_win_h', { count: S.winners }) %></span>
+          <span><b><%= fmt(m.total) %></b><%- t('market.s.st_traded') %></span>
         </div>
       </div>
       <% if (m.myResult) { const R = m.myResult; %>
         <div class="myres <%= R.state %>" id="my-result">
-          <div class="m-head"><%= R.state === 'won' ? (R.pnl >= 0 ? '🏆 You won' : '🏆 Your ' + S.result + ' shares won') : R.state === 'lost' ? 'You lost' : '↩ You were refunded' %></div>
+          <div class="m-head"><%- R.state === 'won' ? (R.pnl >= 0 ? t('market.r.won') : t('market.r.won_shares', { result: S.result })) : R.state === 'lost' ? t('market.r.lost') : t('market.r.refunded') %></div>
           <div class="m-nums">
-            <span><b><%= fmt(R.payout) %> PAT</b><%= R.state === 'refunded' ? (S.approx ? 'refund (≈)' : 'refund') : 'paid to you' %></span>
-            <span><b class="<%= R.pnl >= 0 ? 'up' : 'down' %>"><%= (R.pnl >= 0 ? '+' : '−') + fmt(Math.abs(R.pnl)) %><%= R.cost ? ' (' + (R.pnl / R.cost * 100).toFixed(0) + '%)' : '' %></b>net P/L on <%= fmt(R.cost) %> PAT in</span>
+            <span><b><%= fmt(R.payout) %> PAT</b><%- R.state === 'refunded' ? (S.approx ? t('market.r.refund_approx') : t('market.r.refund')) : t('market.r.paid') %></span>
+            <span><b class="<%= R.pnl >= 0 ? 'up' : 'down' %>"><%= pnl(R.pnl) %><%= R.cost ? ' (' + (R.pnl / R.cost * 100).toFixed(0) + '%)' : '' %></b><%- t('market.r.pnl', { n: fmt(R.cost) }) %></span>
           </div>
-          <div class="m-rows"><%= R.rows.map((r) => fmt(r.shares) + ' ' + r.option + ' shares → ' + (r.state === 'won' ? 'paid ' + fmt(r.payout) + ' PAT' : r.state === 'lost' ? 'worth 0' : 'refunded ' + fmt(r.payout) + ' PAT')).join(' · ') %> · <a href="#your-position">details</a></div>
+          <div class="m-rows"><%- R.rows.map((r) => t(r.state === 'won' ? 'market.r.row_won' : r.state === 'lost' ? 'market.r.row_lost' : 'market.r.row_ref', { n: fmt(r.shares), opt: r.option, p: fmt(r.payout) })).join(' · ') %> · <a href="#your-position"><%- t('market.r.details') %></a></div>
         </div>
       <% } %>
     <% } %>
-    <div class="info">
-      <% if (!S) { %><%- E(m.settle && m.settle.kind === 'won' ? 'Resolved: ' + m.settle.result + '\u0001' + ' — each ' + m.settle.result + ' share paid 1 PAT' + (m.settle.total ? ' (' + fmt(m.settle.total) + ' PAT paid out)' : '')
-         : m.settle && m.settle.kind === 'void' ? 'Voided' + (m.settle.reason ? ' (' + m.settle.reason + ')' : '') + ' — holders were refunded' + (m.settle.total != null ? ' ' + fmt(m.settle.total) + ' PAT' : '')
-         : m.status === 'open' ? 'Trading open'
-         : m.status === 'settled' || m.status === 'resolved' ? 'Resolved: ' + m.result + '\u0001'
-         : m.status === 'void' ? 'Voided — holders were refunded'
-         : m.status === 'settling' ? 'Paying out…' : 'Trading closed — waiting for the judge').split('\u0001').join(byWho()) %><br><% } %>
-      Volume <%= fmt(m.total) %> PAT · <%= m.betCount %> trade<%= m.betCount === 1 ? '' : 's' %> · <%= m.bettors %> holder<%= m.bettors === 1 ? '' : 's' %> · judge <%- ul(m.judge) %> · created by <%- ul(m.creator) %> in <%- padLink(m.room, 'a room') %>
-    </div>
-    <% const lastTraded = 'last traded ' + m.options.map((o) => Math.round(o.last * 100)).join('/'); %>
-    <div class="opts">
-      <% m.options.forEach((o, i) => { %>
-        <div class="opt <%= o.won ? 'won' : '' %> <%= m.settle ? 'final' : '' %>">
-          <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
-          <% if (m.settle && m.settle.kind === 'won') { %>
-            <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%; background: <%= o.won ? '#ffd700' : COLORS[i % COLORS.length] %>"></span></div>
-            <div class="num"><span class="price"><%= o.won ? '100%' : '0%' %></span> · <%= o.won ? 'paid 1 PAT/share' : 'worth 0' %></div>
-          <% } else if (m.settle && m.settle.kind === 'void') { %>
-            <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
-            <div class="num">void · refunded</div>
-          <% } else { %>
-            <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffd700' : COLORS[i % COLORS.length] %>"></span></div>
-            <div class="num"><span class="price"><%= pc(o.price) %></span> · <%= fp(o.price) %> PAT/share</div>
-          <% } %>
-        </div>
-      <% }) %>
-      <% if (m.settle) { %><div class="info">Final result<%= m.settle.kind === 'void' ? ' (void)' : '' %> · <%= lastTraded %> before it closed</div><% } %>
-    </div>
-    <% if (m.history.length > 1) {
-      const W = 600, H = 170, t0 = m.history[0][0], t1 = Math.max(m.history[m.history.length - 1][0], t0 + 1);
-      const x = (t) => ((t - t0) / (t1 - t0) * W).toFixed(1), y = (p) => (H - p * H).toFixed(1); %>
-      <div class="chart">
-        <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" aria-label="Price history">
-          <line x1="0" y1="<%= H / 2 %>" x2="<%= W %>" y2="<%= H / 2 %>" stroke="#333" stroke-dasharray="4 4" fill="none" vector-effect="non-scaling-stroke"/>
+    <% const lastTraded = t('market.o.last', { v: m.options.map((o) => Math.round(o.last * 100)).join('/') }); %>
+    <div class="mk-main<%= side ? ' two' : '' %>">
+      <section class="board" aria-label="<%- t('market.board') %>">
+        <p class="board-h"><%- m.settle ? t('market.board_final') : t('market.board') %></p>
+        <div class="opts">
           <% m.options.forEach((o, i) => { %>
-            <polyline fill="none" stroke="<%= COLORS[i % COLORS.length] %>" stroke-width="2" vector-effect="non-scaling-stroke"
-              points="<%= m.history.map((h) => x(h[0]) + ',' + y(h[1][o.name] != null ? h[1][o.name] : 0)).join(' ') %>"/>
+            <div class="opt <%= o.won ? 'won' : '' %> <%= m.settle ? 'final' : '' %>">
+              <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
+              <% if (m.settle && m.settle.kind === 'won') { %>
+                <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%; background: <%= o.won ? '#ffd700' : oCol(o, i) %>"></span></div>
+                <div class="num"><span class="price"><%= o.won ? '100%' : '0%' %></span> · <%- o.won ? t('market.o.paid') : t('market.o.worth0') %></div>
+              <% } else if (m.settle && m.settle.kind === 'void') { %>
+                <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
+                <div class="num"><%- t('market.o.void') %></div>
+              <% } else { %>
+                <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%; background: <%= o.won ? '#ffd700' : oCol(o, i) %>"></span></div>
+                <div class="num"><span class="price"><%= pc(o.price) %></span> · <%- t('market.o.per', { price: fp(o.price) }) %></div>
+              <% } %>
+            </div>
           <% }) %>
-        </svg>
-        <div class="legend">
-          <% m.options.forEach((o, i) => { %><span><i style="background: <%= COLORS[i % COLORS.length] %>"></i><%= o.name %></span><% }) %>
-          <span style="margin-left:auto;color:#888">since <%- when(t0) %> · dashed = 50%</span>
+          <% if (m.settle) { %><div class="info"><%- m.settle.kind === 'void' ? t('market.o.final_void') : t('market.o.final') %> · <%- lastTraded %></div><% } %>
         </div>
-      </div>
-    <% } %>
+        <% if (m.history.length > 1) {
+          const W = 600, H = 170, t0 = m.history[0][0], t1 = Math.max(m.history[m.history.length - 1][0], t0 + 1);
+          const x = (tt) => ((tt - t0) / (t1 - t0) * W).toFixed(1), y = (p) => (H - p * H).toFixed(1); %>
+          <div class="chart">
+            <% [100, 75, 50, 25, 0].forEach((g) => { %><span class="yl" aria-hidden="true" style="top: calc(10px + <%= (100 - g) / 100 %> * 190px)"><%= g %>%</span><% }) %>
+            <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" role="img" aria-label="<%- t('market.chart.aria') %>">
+              <% [0.25, 0.75].forEach((g) => { %><line x1="0" y1="<%= H * g %>" x2="<%= W %>" y2="<%= H * g %>" stroke="#222" fill="none" vector-effect="non-scaling-stroke"/><% }) %>
+              <line x1="0" y1="<%= H / 2 %>" x2="<%= W %>" y2="<%= H / 2 %>" stroke="#3a3a3a" stroke-dasharray="4 4" fill="none" vector-effect="non-scaling-stroke"/>
+              <% m.options.forEach((o, i) => { %>
+                <polyline fill="none" stroke="<%= oCol(o, i) %>" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"
+                  points="<%= m.history.map((h) => x(h[0]) + ',' + y(h[1][o.name] != null ? h[1][o.name] : 0)).join(' ') %>"/>
+              <% }) %>
+            </svg>
+            <div class="legend">
+              <% m.options.forEach((o, i) => { %><span><i style="background: <%= oCol(o, i) %>"></i><%= o.name %></span><% }) %>
+              <span class="since"><%- t('market.chart.since', { when: when(t0) }) %></span>
+            </div>
+          </div>
+        <% } %>
+      </section>
+
+      <% if (side) { %>
+      <aside class="mk-side">
+        <% if (open) { %>
+          <% if (user) { %>
+            <form class="bet side-card" method="post" action="/markets/<%= m.id %>/bet" id="buy">
+              <h2 class="side-h">💹 <%- t('market.buy_h') %></h2>
+              <fieldset>
+                <legend class="lg"><%- t('market.buy_pick') %></legend>
+                <div class="opts-pick">
+                  <% m.options.forEach((o, i) => { %>
+                    <label style="--oc: <%= oCol(o, i) %>"><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <span class="tn"><%= o.name %></span><span class="tp"><%= pc(o.price) %> · <%= fp(o.price) %></span></label>
+                  <% }) %>
+                </div>
+              </fieldset>
+              <label class="lg" for="buy-amt" style="margin:0;font-size:12px;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:#b9b9b9"><%- t('market.buy_amt') %></label>
+              <input id="buy-amt" type="number" name="amount" min="<%= minBet %>" step="100" inputmode="numeric" placeholder="<%- t('market.buy_ph', { n: fmt(minBet) }) %>" required>
+              <div class="bx-chips">
+                <% [1000, 5000, 10000, 50000].filter((v) => v >= minBet).forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v >= 1000 ? v / 1000 + 'k' : v %></button><% }) %>
+                <% if (bal !== null && bal >= minBet) { %><button type="button" class="bx-qa" data-amt="max" data-max="<%= bal %>"><%- t('market.buy_max') %></button><% } %>
+              </div>
+              <p class="est" id="est" aria-live="polite"><%- t('market.buy_est0') %></p>
+              <button class="go" type="submit"><%- t('market.buy_btn') %></button>
+              <% if (bal !== null) { %><p class="bal"><%- t('bx.you_have', { n: fmt(bal) }) %></p><% } %>
+            </form>
+            <script>
+              (() => {
+                const b = <%- JSON.stringify(m.b) %>, q = <%- JSON.stringify(m.q).replace(/</g, '\\u003c') %>, fee = 0.02;
+                const f = document.getElementById('buy'), out = document.getElementById('est');
+                const upd = () => {
+                  const opt = (f.querySelector('input[name=option]:checked') || {}).value, spend = Number(f.amount.value) || 0;
+                  if (!opt || spend <= 0) return;
+                  const vals = Object.values(q).map((v) => v / b), mx = Math.max(...vals);
+                  const S = vals.reduce((a, v) => a + Math.exp(v - mx), 0), Ei = Math.exp(q[opt] / b - mx);
+                  const net = spend * (1 - fee), d = b * Math.log(1 + S * (Math.exp(net / b) - 1) / Ei);
+                  const px = (() => { const x = spend / d; return x >= 0.1 ? x.toFixed(3) : String(Number(x.toPrecision(3))); })();
+                  out.textContent = __t('js.market.est', '≈ {n} {opt} shares at {px} PAT each. They pay {n} PAT (+{gain}) if {opt} wins.',
+                    { n: Math.round(d).toLocaleString(), opt: opt, px: px, gain: Math.round(d - spend).toLocaleString() });
+                };
+                f.addEventListener('input', upd);
+                f.addEventListener('change', upd);
+              })();
+            </script>
+          <% } else { %>
+            <div class="side-card">
+              <h2 class="side-h">💹 <%- t('market.buy_h') %></h2>
+              <p class="info" style="margin:0"><%- t('market.signin', { cmd: '!market ' + m.ref + ' ' + (m.options[0] ? m.options[0].name : 'yes') + ' 5k' }) %></p>
+              <a class="bx-btn" href="/login"><%- t('bx.signin_btn') %></a>
+            </div>
+          <% } %>
+        <% } else { %>
+          <div class="side-card"><p class="side-st" style="margin:0">⏳ <%- t('market.st.closed') %></p></div>
+        <% } %>
+        <% if (judgeOk) { %>
+          <form class="bet judge side-card" method="post" action="/markets/<%= m.id %>/resolve">
+            <b>⚖️ <%- t('market.j.h') %></b>
+            <div class="opts-pick">
+              <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <span class="tn"><%- t('market.j.won', { o: o.name }) %></span></label><% }) %>
+              <label><input type="radio" name="outcome" value="void"> <span class="tn"><%- t('market.j.void') %></span></label>
+            </div>
+            <input type="text" name="reason" maxlength="160" placeholder="<%- t('market.j.reason') %>">
+            <p class="info" style="margin:0"><%- t('market.j.void_note') %></p>
+            <button type="submit"><%- t('market.j.btn') %></button>
+            <span class="info"><%- t('market.j.only', { who: ul(m.judge) }) %></span>
+          </form>
+        <% } %>
+      </aside>
+      <% } %>
+    </div>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+    <% if (m.ai_judge) { %><h3><%- t('market.h_judgement') %></h3><% } %>
     <%- include('partials/aijudge', { m, kind: 'market', inIt: typeof inIt !== 'undefined' && inIt, judgeMe: typeof judgeMe !== 'undefined' && judgeMe, now }) %>
 
     <% if (m.mine && m.mine.length && m.settle) { %>
-      <h3 id="your-position">Your position</h3>
-      <p class="info settled-line"><% if (S.kind === 'won') { %>Settled <b><%= S.result %></b>: <%= S.result %> shares paid 1 PAT each; <%= m.options.filter((o) => !o.won).map((o) => o.name).join(' / ') %> shares are worth 0.<% } else { %>Voided: trading fees are kept, holders got back what they put in (net of the 2% fee)<%= S.ratio < 1 ? ', scaled to ' + (S.ratio * 100).toFixed(0) + '% because the pot after the Reserve\'s seed couldn\'t cover it all' : '' %>.<% } %></p>
+      <h3 id="your-position"><%- t('market.p.h') %></h3>
+      <p class="info settled-line"><% if (S.kind === 'won') { %><%- t('market.p.settled', { result: S.result, others: others() }) %><% } else { %><%- t('market.p.voided', { scaled: scaled() }) %><% } %></p>
       <div class="tbl"><table>
-        <tr><th>Outcome</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Now</th><th class="r">Cost</th><th class="r"><%= S.kind === 'void' ? 'Refund' : 'Value' %></th><th class="r">P/L</th><th>Status</th></tr>
+        <tr><th><%- t('market.p.outcome') %></th><th class="r"><%- t('market.p.shares') %></th><th class="r"><%- t('market.p.entry') %></th><th class="r"><%- t('market.p.now') %></th><th class="r"><%- t('market.p.cost') %></th><th class="r"><%- S.kind === 'void' ? t('market.p.refund') : t('market.p.value') %></th><th class="r"><%- t('market.p.pnl') %></th><th><%- t('market.p.status') %></th></tr>
         <% m.mine.forEach((p) => { %>
           <tr class="<%= p.state %>"><td><b><%= p.option %></b></td><td class="r"><%= fmt(p.shares) %></td>
               <td class="r"><%= fp(p.entry) %></td><td class="r"><%= p.price == null ? '—' : p.price === 1 ? '1.000' : '0' %></td>
               <td class="r"><%= fmt(p.cost) %></td>
-              <td class="r"><%= p.state === 'won' ? 'Paid ' + fmt(p.payout) + ' PAT' : p.state === 'refunded' ? (S.known ? '' : '≈ ') + 'Refunded ' + fmt(p.payout) + ' PAT' : '0' %></td>
-              <td class="r <%= p.pnl >= 0 ? 'up' : 'down' %>"><%= (p.pnl >= 0 ? '+' : '−') + fmt(Math.abs(p.pnl)) %><%= p.cost ? ' (' + (p.pnl / p.cost * 100).toFixed(0) + '%)' : '' %></td>
-              <td><%= p.state === 'won' ? '🏆 Won' : p.state === 'lost' ? 'Lost' : 'Refunded' %></td></tr>
+              <td class="r"><%- p.state === 'won' ? t('market.p.paid', { n: fmt(p.payout) }) : p.state === 'refunded' ? (S.known ? '' : '≈ ') + t('market.p.refunded', { n: fmt(p.payout) }) : '0' %></td>
+              <td class="r <%= p.pnl >= 0 ? 'up' : 'down' %>"><%= pnl(p.pnl) %><%= p.cost ? ' (' + (p.pnl / p.cost * 100).toFixed(0) + '%)' : '' %></td>
+              <td><%- p.state === 'won' ? t('market.p.st_won') : p.state === 'lost' ? t('market.p.st_lost') : t('market.p.st_ref') %></td></tr>
         <% }) %>
       </table></div>
     <% } else if (m.mine && m.mine.length) { %>
-      <h3>Your position</h3>
+      <h3><%- t('market.p.h') %></h3>
       <div class="tbl"><table>
-        <tr><th>Outcome</th><th class="r">Shares</th><th class="r">Entry</th><th class="r">Now</th><th class="r">Cost</th><th class="r">Value</th><th class="r">P/L</th><% if (m.status === 'open') { %><th class="r">Sell</th><% } %></tr>
+        <tr><th><%- t('market.p.outcome') %></th><th class="r"><%- t('market.p.shares') %></th><th class="r"><%- t('market.p.entry') %></th><th class="r"><%- t('market.p.now') %></th><th class="r"><%- t('market.p.cost') %></th><th class="r"><%- t('market.p.value') %></th><th class="r"><%- t('market.p.pnl') %></th><% if (m.status === 'open') { %><th class="r"><%- t('market.p.sell') %></th><% } %></tr>
         <% m.mine.forEach((p) => { %>
           <tr><td><b><%= p.option %></b></td><td class="r"><%= fmt(p.shares) %></td>
               <td class="r"><%= fp(p.entry) %></td><td class="r"><%= fp(p.price) %></td>
               <td class="r"><%= fmt(p.cost) %></td><td class="r"><%= fmt(p.value) %></td>
-              <td class="r <%= p.pnl >= 0 ? 'up' : 'down' %>"><%= (p.pnl >= 0 ? '+' : '−') + fmt(Math.abs(p.pnl)) %> (<%= p.cost ? (p.pnl / p.cost * 100).toFixed(0) : 0 %>%)</td>
+              <td class="r <%= p.pnl >= 0 ? 'up' : 'down' %>"><%= pnl(p.pnl) %> (<%= p.cost ? (p.pnl / p.cost * 100).toFixed(0) : 0 %>%)</td>
               <% if (m.status === 'open') { %><td class="r">
                 <form class="inline" method="post" action="/markets/<%= m.id %>/sell">
                   <input type="hidden" name="option" value="<%= p.option %>">
-                  <input type="text" name="shares" value="all" aria-label="Shares to sell" inputmode="decimal">
-                  <button class="sell" type="submit">Sell</button>
+                  <input type="text" name="shares" value="all" aria-label="<%- t('market.p.sell_aria') %>" inputmode="decimal">
+                  <button class="sell" type="submit"><%- t('market.p.sell') %></button>
                 </form></td><% } %></tr>
         <% }) %>
       </table></div>
-      <p class="info">Entry = what you paid per share, fee included. Value = shares × today's price. A sale returns a bit less, because your own sale moves the price and there's a 2% fee. If your outcome wins, each share pays 1 PAT.</p>
-    <% } %>
-
-    <% if (m.status === 'open') { %>
-      <% if (user) { %>
-        <form class="bet" method="post" action="/markets/<%= m.id %>/bet" id="buy">
-          <div class="opts-pick">
-            <% m.options.forEach((o, i) => { %>
-              <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <%= o.name %> · <%= pc(o.price) %></label>
-            <% }) %>
-          </div>
-          <div class="row">
-            <input type="number" name="amount" min="<%= minBet %>" step="100" placeholder="PAT to spend (min <%= minBet.toLocaleString() %>)" required>
-            <button type="submit">Buy shares</button>
-            <% if (bal !== null) { %><span class="info">You have <%= bal.toLocaleString() %> PAT</span><% } %>
-          </div>
-          <p class="info" id="est">Each share pays 1 PAT if its outcome wins. Sell any time before trading closes.</p>
-        </form>
-        <script>
-          (() => {
-            const b = <%- JSON.stringify(m.b) %>, q = <%- JSON.stringify(m.q).replace(/</g, '\\u003c') %>, fee = 0.02;
-            const f = document.getElementById('buy'), out = document.getElementById('est');
-            const upd = () => {
-              const opt = (f.querySelector('input[name=option]:checked') || {}).value, spend = Number(f.amount.value) || 0;
-              if (!opt || spend <= 0) return;
-              const vals = Object.values(q).map((v) => v / b), mx = Math.max(...vals);
-              const S = vals.reduce((a, v) => a + Math.exp(v - mx), 0), Ei = Math.exp(q[opt] / b - mx);
-              const net = spend * (1 - fee), d = b * Math.log(1 + S * (Math.exp(net / b) - 1) / Ei);
-              out.textContent = `≈ ${Math.round(d).toLocaleString()} ${opt} shares at ${(() => { const x = spend / d; return x >= 0.1 ? x.toFixed(3) : String(Number(x.toPrecision(3))); })()} PAT each. They pay ${Math.round(d).toLocaleString()} PAT (+${Math.round(d - spend).toLocaleString()}) if ${opt} wins.`;
-            };
-            f.addEventListener('input', upd);
-          })();
-        </script>
-      <% } else { %>
-        <p class="info"><a href="/login">Sign in</a> to trade here, or in the Camfrog room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p>
-      <% } %>
-    <% } %>
-
-    <% if (judgeOk) { %>
-      <form class="bet judge" method="post" action="/markets/<%= m.id %>/resolve">
-        <b>⚖️ Resolve this market</b>
-        <div class="opts-pick">
-          <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <%= o.name %> won</label><% }) %>
-          <label><input type="radio" name="outcome" value="void"> void</label>
-        </div>
-        <input type="text" name="reason" maxlength="160" placeholder="Reason (required to void)" style="width:100%;box-sizing:border-box">
-        <p class="info" style="margin:0">Void: trading fees are kept, the Federal Reserve takes back its seed first, and holders split what's left — up to what they put in.</p>
-        <div class="row"><button type="submit">Resolve</button>
-          <span class="info">Only the judge (<%- ul(m.judge) %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
-      </form>
+      <p class="info"><%- t('market.p.note') %></p>
     <% } %>
 
     <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: null }) %>
     <% if (orders && orders.length) { %>
-      <h3>Your website orders</h3>
+      <h3><%- t('market.h_orders') %></h3>
       <div class="tbl"><table>
-        <tr><th>Order</th><th>Outcome</th><th class="r">Amount</th><th>Status</th></tr>
+        <tr><th><%- t('market.ord.order') %></th><th><%- t('market.p.outcome') %></th><th class="r"><%- t('market.ord.amount') %></th><th><%- t('market.p.status') %></th></tr>
         <% if (S && m.myResult) { const R = m.myResult; %>
-          <tr class="settle-ord"><td>settled</td><td><%= S.kind === 'void' ? 'void' : S.result %></td>
+          <tr class="settle-ord"><td><%- t('market.ord.settled') %></td><td><%= S.kind === 'void' ? t('market.tr.void') : S.result %></td>
               <td class="r"><%= fmt(R.payout) %> PAT</td>
-              <td>⚖ <%= R.state === 'won' ? 'paid ' + fmt(R.payout) + ' PAT' : R.state === 'lost' ? 'lost — nothing paid' : 'refunded ' + (S.approx ? '≈ ' : '') + fmt(R.payout) + ' PAT' %> · net <%= (R.pnl >= 0 ? '+' : '−') + fmt(Math.abs(R.pnl)) %> · <%- sWhen %></td></tr>
+              <td class="wrap">⚖ <%- R.state === 'won' ? t('market.ord.paid', { n: fmt(R.payout) }) : R.state === 'lost' ? t('market.ord.lost') : t('market.ord.refunded', { n: (S.approx ? '≈ ' : '') + fmt(R.payout) }) %> · <%- t('market.ord.net', { v: pnl(R.pnl) }) %> · <%- sWhen %></td></tr>
         <% } %>
         <% orders.forEach((o) => { const k = o.kind || 'buy'; %>
-          <tr><td><%= k %></td><td><%= k === 'resolve' ? o.outcome : o.option %></td>
-              <td class="r"><%= k === 'buy' ? Number(o.amount).toLocaleString() + ' PAT' : k === 'sell' ? (o.shares || 'all') + ' sh' : '' %></td>
-              <td><%= o.status === 'placed' ? '✅ ' + (o.message || 'done') : o.status === 'failed' ? '❌ ' + (o.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
+          <tr><td><%- k === 'buy' ? t('market.tr.buy') : k === 'sell' ? t('market.tr.sell') : k === 'resolve' ? t('market.ord.resolve') : E(k) %></td><td><%= k === 'resolve' ? o.outcome : o.option %></td>
+              <td class="r"><%= k === 'buy' ? fmt(Number(o.amount)) + ' PAT' : k === 'sell' ? (o.shares || 'all') + ' sh' : '' %></td>
+              <td class="wrap"><%- ordSt(o, t('market.ord.done')) %></td></tr>
         <% }) %>
       </table></div>
       <% if (orders.some((o) => o.status === 'pending' || o.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
     <% } %>
 
-    <h3>Trades</h3>
+    <h3><%- t('market.h_trades') %></h3>
     <div class="tbl"><table>
-      <tr><th>Who</th><th>Side</th><th>Outcome</th><th class="r">Shares</th><th class="r">PAT</th><th class="r">Price</th><th class="r">When</th></tr>
+      <tr><th><%- t('market.tr.who') %></th><th><%- t('market.tr.side') %></th><th><%- t('market.p.outcome') %></th><th class="r"><%- t('market.p.shares') %></th><th class="r">PAT</th><th class="r"><%- t('market.tr.price') %></th><th class="r"><%- t('market.tr.when') %></th></tr>
       <% if (S) { %>
-        <tr class="settle-ev <%= S.kind %>"><td colspan="7">⚖ <%= S.kind === 'void' ? 'Voided' : 'Settled ' + S.result.toUpperCase() %> by <%- sBy() %><%- sWhen ? ' · ' + sWhen : '' %> · <%= sPaid %><%= S.kind === 'won' ? ' (1 PAT per ' + S.result + ' share)' : '' %></td></tr>
+        <tr class="settle-ev <%= S.kind %>"><td colspan="7"><%- S.kind === 'void' ? t('market.tr.voided', { who: sBy() }) : t('market.tr.settled', { result: S.result.toUpperCase(), who: sBy() }) %><%- sWhen ? ' · ' + sWhen : '' %> · <%- sPaid %><%- S.kind === 'won' ? ' ' + t('market.tr.per', { result: S.result }) : '' %></td></tr>
         <% S.payouts.slice(0, 50).forEach((p) => { %>
-          <tr class="payout"><td><%- ul(p.nick) %></td><td class="pay"><%= S.kind === 'void' ? 'refund' : 'payout' %></td><td><%= p.option || 'void' %></td>
+          <tr class="payout"><td><%- ul(p.nick) %></td><td class="pay"><%- S.kind === 'void' ? t('market.tr.refund') : t('market.tr.payout') %></td><td><%- p.option ? E(p.option) : t('market.tr.void') %></td>
               <td class="r"><%= p.shares == null ? '' : fmt(p.shares) %></td><td class="r pay"><%= S.approx ? '≈ ' : '' %><%= fmt(p.amount) %></td>
               <td class="r"><%= S.kind === 'void' ? '' : '1.000' %></td><td class="r"><%- when(S.at) %></td></tr>
         <% }) %>
-        <% if (S.payouts.length > 50) { %><tr class="payout"><td colspan="7" style="color:#888">… and <%= S.payouts.length - 50 %> more</td></tr><% } %>
+        <% if (S.payouts.length > 50) { %><tr class="payout"><td colspan="7" style="color:#888"><%- t('market.tr.more', { n: S.payouts.length - 50 }) %></td></tr><% } %>
       <% } %>
-      <% m.trades.slice(0, 100).forEach((t) => { %>
-        <tr><td><%- ul(t.nick, { web: t.web }) %></td><td class="<%= t.side === 'buy' ? 'up' : 'down' %>"><%= t.side %></td><td><%= t.option %></td>
-            <td class="r"><%= fmt(t.shares) %></td><td class="r"><%= fmt(t.pat) %></td>
-            <td class="r"><%= t.shares ? fp(t.pat / t.shares) : '' %></td><td class="r"><%- when(t.ts) %></td></tr>
+      <% m.trades.slice(0, 100).forEach((tr) => { %>
+        <tr><td><%- ul(tr.nick, { web: tr.web }) %></td><td class="<%= tr.side === 'buy' ? 'up' : 'down' %>"><%- tr.side === 'buy' ? t('market.tr.buy') : tr.side === 'sell' ? t('market.tr.sell') : E(tr.side) %></td><td><%= tr.option %></td>
+            <td class="r"><%= fmt(tr.shares) %></td><td class="r"><%= fmt(tr.pat) %></td>
+            <td class="r"><%= tr.shares ? fp(tr.pat / tr.shares) : '' %></td><td class="r"><%- when(tr.ts) %></td></tr>
       <% }) %>
-      <% if (!m.trades.length && !S) { %><tr><td colspan="7" style="color:#888">No trades yet.</td></tr><% } %>
+      <% if (!m.trades.length && !S) { %><tr><td colspan="7" style="color:#888"><%- t('market.tr.none') %></td></tr><% } %>
     </table></div>
-  <% } else { %>
-    <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
-    <%- include('partials/mk-times', { m, now }) %>
-    <div class="info">
-      <%- E(m.status === 'open' ? 'Open'
-         : m.status === 'settled' ? 'Settled: ' + m.result + '\u0001'
-         : m.status === 'void' ? 'Voided — everyone was refunded' : 'Closed — waiting for the judge').split('\u0001').join(byWho()) %><br>
-      Pool <%= m.total.toLocaleString() %> PAT · <%= m.betCount %> bet<%= m.betCount === 1 ? '' : 's' %> from <%= m.bettors %> · judge <%- ul(m.judge) %> · created by <%- ul(m.creator) %> in <%- padLink(m.room, 'a room') %>
-      · <i><%= m.model === 'pool' ? 'betting pool' : 'pool market (from before share trading)' %></i>
-    </div>
-    <div class="opts">
-      <% m.options.forEach((o) => { %>
-        <div class="opt <%= o.won ? 'won' : '' %>">
-          <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
-          <div class="bar"><span style="width: <%= o.share %>%"></span></div>
-          <div class="num"><%= o.share %>% · <%= o.pool.toLocaleString() %> PAT<%= o.mult ? ' · pays ' + o.mult.toFixed(2) + 'x' : '' %></div>
+  <% } else { const open = m.status === 'open'; const side = open || judgeOk; %>
+    <header class="mk-head">
+      <div class="bx-top"><span class="bx-chip c-plain"><%- m.model === 'pool' ? t('market.pool.kind') : t('market.pool.kind_old') %></span>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 <%- t('markets.ai_tag') %></span><% } %></div>
+      <h1><span class="ref"><%= m.ref %></span> <%= m.question %></h1>
+      <%- include('partials/mk-times', { m, now }) %>
+      <% const k = m.status === 'open' ? 'open' : m.status === 'settled' ? 'settled' : m.status === 'void' ? 'void' : 'closed'; %>
+      <div class="st"><span class="bx-chip c-<%= k %>"><%- k === 'open' ? t('market.pool.st_open') : k === 'settled' ? t('market.pool.st_settled', { result: m.result, by: byWho() }) : k === 'void' ? t('market.pool.st_void') : t('market.pool.st_closed') %></span></div>
+      <% meta(true) %>
+      <div class="info mk-who"><%- t('market.who', { judge: ul(m.judge), creator: ul(m.creator), room: padLink(m.room, t('market.a_room')) }) %></div>
+    </header>
+    <div class="mk-main<%= side ? ' two' : '' %>">
+      <section class="board">
+        <p class="board-h"><%- t('market.pool.board') %></p>
+        <div class="opts">
+          <% m.options.forEach((o) => { %>
+            <div class="opt <%= o.won ? 'won' : '' %>">
+              <div><%= o.won ? '🏆 ' : '' %><b><%= o.name %></b></div>
+              <div class="bar"><span style="width: <%= o.share %>%"></span></div>
+              <div class="num"><span class="price"><%= o.share %>%</span> · <%= fmt(o.pool) %> PAT<%- o.mult ? ' · ' + t('markets.o.pays', { x: o.mult.toFixed(2) }) : '' %></div>
+            </div>
+          <% }) %>
         </div>
-      <% }) %>
+      </section>
+      <% if (side) { %>
+      <aside class="mk-side">
+        <% if (open) { %>
+          <% if (user) { %>
+            <form class="bet side-card" method="post" action="/markets/<%= m.id %>/bet">
+              <h2 class="side-h">🎲 <%- t('market.pool.bet_h') %></h2>
+              <div class="opts-pick">
+                <% m.options.forEach((o, i) => { %>
+                  <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <span class="tn"><%= o.name %></span><span class="tp"><%= o.mult ? o.mult.toFixed(2) + 'x' : '—' %></span></label>
+                <% }) %>
+              </div>
+              <input type="number" name="amount" min="<%= minBet %>" step="100" inputmode="numeric" placeholder="<%- t('market.pool.ph', { n: fmt(minBet) }) %>" required>
+              <div class="bx-chips">
+                <% [1000, 5000, 10000].filter((v) => v >= minBet).forEach((v) => { %><button type="button" class="bx-qa" data-amt="<%= v %>"><%= v / 1000 + 'k' %></button><% }) %>
+              </div>
+              <button class="go" type="submit"><%- t('market.pool.btn') %></button>
+              <% if (bal !== null) { %><p class="bal"><%- t('bx.you_have', { n: fmt(bal) }) %></p><% } %>
+              <p class="info" style="margin:0"><%- t('market.pool.note') %></p>
+            </form>
+          <% } else { %>
+            <div class="side-card">
+              <p class="info" style="margin:0"><%- t('market.pool.signin', { cmd: '!market ' + m.ref + ' ' + (m.options[0] ? m.options[0].name : 'yes') + ' 5k' }) %></p>
+              <a class="bx-btn" href="/login"><%- t('bx.signin_btn') %></a>
+            </div>
+          <% } %>
+        <% } %>
+        <% if (judgeOk) { %>
+          <form class="bet judge side-card" method="post" action="/markets/<%= m.id %>/resolve">
+            <b>⚖️ <%- t('market.pool.j_h') %></b>
+            <div class="opts-pick">
+              <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <span class="tn"><%- t('market.j.won', { o: o.name }) %></span></label><% }) %>
+              <label><input type="radio" name="outcome" value="void"> <span class="tn"><%- t('market.pool.j_void') %></span></label>
+            </div>
+            <input type="text" name="reason" maxlength="160" placeholder="<%- t('market.j.reason') %>">
+            <button type="submit"><%- t('market.pool.j_btn') %></button>
+            <span class="info"><%- t('market.j.only', { who: ul(m.judge) }) %></span>
+          </form>
+        <% } %>
+      </aside>
+      <% } %>
     </div>
     <% if (msg) { %><p class="notice"><%= msg %></p><% } %>
+    <% if (m.ai_judge) { %><h3><%- t('market.h_judgement') %></h3><% } %>
     <%- include('partials/aijudge', { m, kind: 'pool', inIt: typeof inIt !== 'undefined' && inIt, judgeMe: typeof judgeMe !== 'undefined' && judgeMe, now }) %>
-    <% if (m.status === 'open') { %>
-      <% if (user) { %>
-        <form class="bet" method="post" action="/markets/<%= m.id %>/bet">
-          <div class="opts-pick">
-            <% m.options.forEach((o, i) => { %>
-              <label><input type="radio" name="option" value="<%= o.name %>" <%= i === 0 ? 'checked' : '' %>> <%= o.name %><%= o.mult ? ' · ' + o.mult.toFixed(2) + 'x' : '' %></label>
-            <% }) %>
-          </div>
-          <div class="row">
-            <input type="number" name="amount" min="<%= minBet %>" step="100" placeholder="PAT (min <%= minBet.toLocaleString() %>)" required>
-            <button type="submit">Place bet</button>
-            <% if (bal !== null) { %><span class="info">You have <%= bal.toLocaleString() %> PAT</span><% } %>
-          </div>
-          <p class="info">Your PAT goes into escrow until the judge settles. Winners split the losing side's pool minus 5%.</p>
-        </form>
-      <% } else { %>
-        <p class="info"><a href="/login">Sign in</a> to bet here, or in the Camfrog room: <code>!market <%= m.ref %> <%= m.options[0] ? m.options[0].name : 'yes' %> 5k</code></p>
-      <% } %>
-    <% } %>
-    <% if (judgeOk) { %>
-      <form class="bet judge" method="post" action="/markets/<%= m.id %>/resolve">
-        <b>⚖️ Settle this market</b>
-        <div class="opts-pick">
-          <% m.options.forEach((o) => { %><label><input type="radio" name="outcome" value="<%= o.name %>" required> <%= o.name %> won</label><% }) %>
-          <label><input type="radio" name="outcome" value="void"> void (refund every stake in full)</label>
-        </div>
-        <input type="text" name="reason" maxlength="160" placeholder="Reason (required to void)" style="width:100%;box-sizing:border-box">
-        <div class="row"><button type="submit">Settle</button><span class="info">Only the judge (<%- ul(m.judge) %>) or an admin sees this. It pays out at once and can't be undone.</span></div>
-      </form>
-    <% } %>
     <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: null }) %>
     <% if (orders && orders.length) { %>
-      <h3>Your website orders</h3>
+      <h3><%- t('market.h_orders') %></h3>
       <div class="tbl"><table>
-        <tr><th>On</th><th class="r">PAT</th><th>Status</th></tr>
+        <tr><th><%- t('market.pool.on') %></th><th class="r">PAT</th><th><%- t('market.p.status') %></th></tr>
         <% orders.forEach((o) => { %>
-          <tr><td><%= (o.kind === 'resolve' ? 'settle: ' + o.outcome : o.option) %></td><td class="r"><%= o.kind === 'resolve' ? '' : Number(o.amount).toLocaleString() %></td>
-              <td><%= o.status === 'placed' ? '✅ ' + (o.message || 'placed') : o.status === 'failed' ? '❌ ' + (o.message || 'failed') : '⏳ waiting for Pepe' %></td></tr>
+          <tr><td><%- o.kind === 'resolve' ? t('market.pool.settle_on', { o: o.outcome }) : E(o.option) %></td><td class="r"><%= o.kind === 'resolve' ? '' : fmt(Number(o.amount)) %></td>
+              <td class="wrap"><%- ordSt(o, t('market.ord.placed')) %></td></tr>
         <% }) %>
       </table></div>
       <% if (orders.some((o) => o.status === 'pending' || o.status === 'claimed')) { %><script>setTimeout(() => location.replace(location.pathname), 4000)</script><% } %>
     <% } %>
-    <h3>Bets</h3>
+    <h3><%- t('market.pool.bets_h') %></h3>
     <div class="tbl"><table>
-      <tr><th>Who</th><th>On</th><th class="r">PAT</th><th class="r">When</th></tr>
+      <tr><th><%- t('market.tr.who') %></th><th><%- t('market.pool.on') %></th><th class="r">PAT</th><th class="r"><%- t('market.tr.when') %></th></tr>
       <% (m.bets || []).slice().sort((a, b) => b.ts - a.ts).forEach((b) => { %>
         <tr><td><%- ul(b.nick, { web: b.web }) %></td><td><%= b.option %></td>
-            <td class="r"><%= Number(b.amount).toLocaleString() %></td><td class="r"><%- when(b.ts) %></td></tr>
+            <td class="r"><%= fmt(Number(b.amount)) %></td><td class="r"><%- when(b.ts) %></td></tr>
       <% }) %>
-      <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888">No bets yet.</td></tr><% } %>
+      <% if (!(m.bets || []).length) { %><tr><td colspan="4" style="color:#888"><%- t('market.pool.none') %></td></tr><% } %>
     </table></div>
   <% } %>
-</div>
+</main>
 <%- include('partials/mk-times-script') %>
 </body>
 </html>

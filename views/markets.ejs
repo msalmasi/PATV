@@ -1,97 +1,126 @@
-<%- include('layout', { title: 'Prediction Markets', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('markets.title'), user: user}) %>
+<%# views/markets.ejs - 1.99ly design pass (bets.css): a hero with the live numbers, market cards with each outcome's
+    odds bar (Yes green / No red, the leader lit), status chips, a live "closes in" countdown and the market's times in
+    the viewer's zone; the create form unchanged underneath (same /act post, same fields). %>
+<link rel="stylesheet" href="/public/css/bets.css?v=1">
+<script src="/public/js/bets.js?v=1" defer></script>
 <style>
-  .mk { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-  .mk h1 { text-align: center; margin-bottom: 4px; }
-  .mk .sub { text-align: center; color: #9a9; margin: 0 0 22px; }
-  .mk h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 26px 0 10px; }
-  .mk .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; display: block; color: inherit; text-decoration: none; }
-  .mk .card:hover { border-color: #4caf50; }
-  .mk .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
-  .mk .q { font-weight: bold; font-size: 16px; color: #fff; }
-  .mk .ref { color: #81c784; font-family: monospace; }
-  .mk .info { color: #888; font-size: 13px; margin-top: 2px; }
-  .mk .opts { display: grid; gap: 6px; margin-top: 10px; }
-  .mk .opt { display: grid; grid-template-columns: minmax(70px, 140px) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
-  .mk .bar { height: 10px; background: #1c1c1c; border-radius: 5px; overflow: hidden; }
-  .mk .bar span { display: block; height: 100%; background: #4caf50; }
-  .mk .opt.won .bar span { background: #ffd700; }
-  .mk .num { color: #ccc; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .mk .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; }
-  .mk .pill.open { border-color: #4caf50; color: #81c784; }
-  .mk .pill.closed, .mk .pill.settling { border-color: #e0a030; color: #e0a030; }
-  .mk .pill.void { color: #888; }
-  .mk .empty { color: #888; text-align: center; }
-  .mk .how { color: #888; font-size: 13px; text-align: center; margin-top: 26px; }
-  .mk code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  .mk form.newmk { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 10px; }
-  .mk form.newmk label { display: grid; gap: 4px; font-size: 13px; color: #bbb; min-width: 0; }
-  .mk form.newmk label.chk { display: flex; align-items: center; gap: 6px; }
-  .mk form.newmk .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; }
-  .mk form.newmk input[type=text], .mk form.newmk select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
-  .mk form.newmk button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; justify-self: start; }
-  .mk form.newmk .info { color: #888; font-size: 12px; margin: 0; }
+  .mk { --ac: #4caf50; --ac2: #81c784; --acbg: rgba(76, 175, 80, .14); }
+  .mk .card { gap: 12px; }
+  .mk .card .bx-top .room { margin-left: auto; color: var(--mut); font-size: 12.5px; }
+  .mk .opts { display: grid; gap: 10px; }
+  .mk .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; align-items: baseline; font-size: 14px; }
+  .mk .opt .nm { color: #e8e8e8; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mk .opt.lead .nm { color: #fff; font-weight: bold; }
+  .mk .opt .bar { grid-column: 1 / -1; height: 8px; border-radius: 999px; background: #1f1f1f; overflow: hidden; }
+  .mk .opt .bar span { display: block; height: 100%; border-radius: inherit; background: var(--oc, #4caf50); }
+  .mk .opt.won .bar span { background: var(--gold); }
+  .mk .opt .num { color: #bdbdbd; font-size: 13px; white-space: nowrap; text-align: right; }
+  .mk .opt .num b { color: #fff; font-size: 16px; }
+  .mk .opt.won .num b { color: var(--goldt); }
+  .mk .foot { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; justify-content: space-between; padding-top: 10px; border-top: 1px solid #1e1e1e; color: var(--mut); font-size: 13px; }
+  .mk .cd { color: #8fe08f; font-weight: bold; font-variant-numeric: tabular-nums; }
+  .mk .mk-times.compact { margin: 0; }
+  .mk .done .card { background: #101010; }
+  .mk form.newmk { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+  @media (min-width: 900px) { .mk .bx-grid.live { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 <%
-  const left = (t) => { const s = Math.max(0, Math.round(t - now)); return s >= 86400 ? Math.floor(s/86400) + 'd ' + Math.floor(s%86400/3600) + 'h' : s >= 3600 ? Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm' : Math.max(1, Math.floor(s/60)) + 'm'; };
-  const card = (m) => { %>
-    <a class="card" href="/markets/<%= m.id %>">
-      <div class="top">
-        <div class="q"><span class="ref"><%= m.ref %></span> <%= m.question %></div>
-        <span class="pill <%= m.settle ? (m.settle.kind === 'won' ? 'settled' : 'void') : m.status %>"><%= m.settle && m.settle.kind === 'won' ? 'settled: ' + m.settle.result : m.settle ? 'void' : m.status === 'open' ? 'open · closes in ' + left(m.closes) : m.status === 'settled' ? 'settled: ' + m.result : m.status %></span>
+  const COLORS = ['#4caf50', '#e57373', '#64b5f6', '#ffd54f', '#ba68c8', '#4dd0e1', '#ff8a65', '#aed581'];
+  const oColor = (m, o, i) => m.options.length === 2 && /^yes$/i.test(o.name) ? '#4caf50' : m.options.length === 2 && /^no$/i.test(o.name) ? '#e57373' : COLORS[i % COLORS.length];
+  const fmt = (n) => t.num(Math.round(Number(n) || 0));
+  const left = (s) => { s = Math.max(0, Math.round(s)); return s >= 86400 ? t('bx.dur.dh', { d: Math.floor(s / 86400), h: Math.floor(s % 86400 / 3600) }) : s >= 3600 ? t('bx.dur.hm', { h: Math.floor(s / 3600), m: Math.floor(s % 3600 / 60) }) : t('bx.dur.m', { m: Math.max(1, Math.floor(s / 60)) }); };
+  const chip = (m) => m.settle ? (m.settle.kind === 'won' ? ['settled', t('markets.chip.settled', { result: m.settle.result })] : ['void', t('markets.chip.void')])
+    : m.status === 'open' && m.closes > now ? ['open', t('markets.chip.open')]
+    : m.status === 'open' || m.status === 'closed' ? ['closed', t('markets.chip.judge')]
+    : m.status === 'settling' ? ['settling', t('markets.chip.settling')]
+    : m.status === 'settled' ? ['settled', t('markets.chip.settled', { result: m.result })] : [m.status, t.esc(m.status)];
+  const liveVol = live.reduce((a, m) => a + (Number(m.total) || 0), 0);
+  const card = (m) => { const c = chip(m); const lead = m.shares && !m.settle ? Math.max(...m.options.map((o) => o.price || 0)) : null; %>
+    <a class="card bx-card" href="/markets/<%= m.id %>">
+      <div class="bx-top">
+        <span class="bx-ref"><%= m.ref %></span>
+        <span class="bx-chip c-<%= c[0] %>"><%- c[1] %></span>
+        <% if (m.ai_judge) { %><span class="bx-chip c-ai c-plain">🤖 <%- t('markets.ai_tag') %></span><% } %>
+        <% if (m.room) { %><span class="room"><%= m.room %></span><% } %>
       </div>
-      <%- include('partials/mk-times', { m, now, compact: true }) %>
-      <div class="info"><%= m.shares ? 'Volume' : 'Pool' %> <%= Math.round(m.total).toLocaleString() %> PAT · <%= m.bettors %> <%= m.shares ? 'holder' : 'bettor' %><%= m.bettors === 1 ? '' : 's' %> · judge <%= m.judge %> · <%= m.room || '' %></div>
+      <p class="bx-q"><%= m.question %></p>
       <div class="opts">
-        <% m.options.forEach((o) => { %>
-          <div class="opt <%= o.won ? 'won' : '' %>">
-            <div><%= o.won ? '🏆 ' : '' %><%= o.name %></div>
+        <% m.options.forEach((o, i) => { const isLead = lead != null && o.price === lead && m.options.length > 1; %>
+          <div class="opt <%= o.won ? 'won' : '' %><%= isLead ? ' lead' : '' %>" style="--oc: <%= oColor(m, o, i) %>">
+            <span class="nm"><%= o.won ? '🏆 ' : '' %><%= o.name %></span>
             <% if (m.shares && m.settle && m.settle.kind === 'won') { %>
+              <span class="num"><%- o.won ? t('markets.o.won', { last: Math.round(o.last * 100) }) : t('markets.o.lost', { last: Math.round(o.last * 100) }) %></span>
               <div class="bar"><span style="width: <%= o.won ? 100 : 0 %>%"></span></div>
-              <div class="num"><b><%= o.won ? '100%' : '0%' %></b> · <%= o.won ? 'paid 1 PAT/share' : 'worth 0' %> · last <%= Math.round(o.last * 100) %>%</div>
             <% } else if (m.shares && m.settle) { %>
+              <span class="num"><%- t('markets.o.void', { last: Math.round(o.last * 100) }) %></span>
               <div class="bar"><span style="width: <%= (o.last * 100).toFixed(1) %>%; background: #555"></span></div>
-              <div class="num">void · refunded · last <%= Math.round(o.last * 100) %>%</div>
             <% } else if (m.shares) { %>
+              <span class="num"><%- t('markets.o.price', { pct: Math.round(o.price * 100), price: o.price.toFixed(2) }) %></span>
               <div class="bar"><span style="width: <%= (o.price * 100).toFixed(1) %>%"></span></div>
-              <div class="num"><b><%= Math.round(o.price * 100) %>%</b> · <%= o.price.toFixed(2) %> PAT/share</div>
             <% } else { %>
+              <span class="num"><%- t('markets.o.pool', { pct: o.share, pool: fmt(o.pool) }) %><%- o.mult ? ' · ' + t('markets.o.pays', { x: o.mult.toFixed(2) }) : '' %></span>
               <div class="bar"><span style="width: <%= o.share %>%"></span></div>
-              <div class="num"><%= o.share %>% · <%= o.pool.toLocaleString() %><%= o.mult ? ' · pays ' + o.mult.toFixed(2) + 'x' : '' %></div>
             <% } %>
           </div>
         <% }) %>
       </div>
+      <%- include('partials/mk-times', { m, now, compact: true }) %>
+      <div class="foot">
+        <span><%- t(m.shares ? 'markets.vol' : 'markets.pool', { n: fmt(m.total) }) %> · <%- t(m.shares ? 'markets.holders' : 'markets.bettors', { count: m.bettors, n: fmt(m.bettors) }) %> · <%- t('markets.judge', { who: m.ai_judge ? '🤖 Pepe' : m.judge }) %></span>
+        <% if (c[0] === 'open') { %><span><%- t('markets.closes_in', { left: '<span class="cd" data-until="' + Number(m.closes) + '">' + left(m.closes - now) + '</span>' }) %></span><% } %>
+      </div>
     </a>
 <% }; %>
-<div class="mk">
-  <h1>Prediction Markets</h1>
-  <p class="sub"><a href="#new" style="color:#81c784">＋ Start a market</a> · Trade PAT on what happens next. Prices are the crowd's odds: buy shares in an outcome, sell any time while trading is open, and every winning share pays 1 PAT.</p>
-  <h2>LIVE</h2>
-  <% if (!live.length) { %><p class="empty">No open markets right now.</p><% } %>
-  <% live.forEach((m) => card(m)) %>
-  <h2>RECENTLY SETTLED</h2>
-  <% if (!done.length) { %><p class="empty">Nothing settled yet.</p><% } %>
-  <% done.forEach((m) => card(m)) %>
-  <h2 id="new">START A MARKET</h2>
+<main class="bx mk">
+  <header class="bx-hero">
+    <div class="bx-eyebrow">🔮 <%- t('markets.eyebrow') %></div>
+    <h1><%- t('markets.h1') %></h1>
+    <p class="bx-lead"><%- t('markets.lead') %></p>
+    <div class="bx-stats">
+      <span class="bx-stat"><b><%= fmt(live.length) %></b><%- t('markets.stat_live', { count: live.length }) %></span>
+      <span class="bx-stat"><b><%= fmt(liveVol) %></b><%- t('markets.stat_vol') %></span>
+      <span class="bx-stat"><b><%= fmt(done.length) %></b><%- t('markets.stat_done') %></span>
+    </div>
+    <div class="bx-ctas">
+      <a class="bx-btn" href="#new">＋ <%- t('markets.cta_new') %></a>
+      <a class="bx-btn ghost" href="/economy#markets"><%- t('markets.cta_how') %></a>
+      <a class="bx-btn ghost" href="/wagers">🤝 <%- t('markets.cta_wagers') %></a>
+    </div>
+  </header>
+
+  <h2 class="bx-h"><%- t('markets.h_live') %> <span class="bx-n"><%= fmt(live.length) %></span></h2>
+  <% if (!live.length) { %>
+    <div class="bx-empty"><span class="ic" aria-hidden="true">🔮</span><b><%- t('markets.empty_live') %></b><span><%- t('markets.empty_live_sub') %></span>
+      <a class="bx-btn sm" href="#new">＋ <%- t('markets.cta_new') %></a></div>
+  <% } %>
+  <div class="bx-grid live"><% live.forEach((m) => card(m)) %></div>
+
+  <h2 class="bx-h"><%- t('markets.h_done') %></h2>
+  <% if (!done.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">⚖️</span><b><%- t('markets.empty_done') %></b></div><% } %>
+  <div class="bx-grid done"><% done.forEach((m) => card(m)) %></div>
+
+  <h2 class="bx-h" id="new"><%- t('markets.h_new') %></h2>
   <%- include('partials/actions', { acts: typeof acts !== 'undefined' ? acts : [], msg: typeof msg !== 'undefined' ? msg : null }) %>
   <% if (!user) { %>
-    <p class="empty"><a href="/login" style="color:#81c784">Sign in</a> to start a market.</p>
+    <div class="bx-empty"><span class="ic" aria-hidden="true">🔑</span><b><%- t('markets.signin') %></b><a class="bx-btn sm" href="/login"><%- t('bx.signin_btn') %></a></div>
   <% } else if (!linked) { %>
-    <p class="empty">Link your Camfrog name (type <code>!verify</code> in a Camfrog room) to start markets from here — you create it as that name.</p>
+    <p class="bx-note"><%- t('markets.link') %></p>
   <% } else { %>
-    <form class="newmk" method="post" action="/act">
+    <form class="newmk bx-form" method="post" action="/act">
       <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="market">
       <input type="hidden" name="back" value="/markets"><input type="hidden" name="tag" value="markets">
       <input type="hidden" name="a0" value="new">
-      <label>Question <input type="text" name="a1" maxlength="200" required placeholder="Will Samira come back this week?"></label>
-      <label>Answers (optional, 2–6, separated by /) <input type="text" name="a2" maxlength="190" placeholder="yes / no" data-prefix="options "></label>
-      <div class="row2">
-        <label>Judge <input type="text" name="a3" maxlength="40" placeholder="@someone" data-prefix="judge "></label>
-        <label class="chk"><input type="checkbox" data-ai> 🤖 Let Pepe judge it (AI, experimental)</label>
-        <label>Trading closes in <select name="a4"><option value="closes 1h">1 hour</option><option value="closes 1d" selected>1 day</option><option value="closes 2d">2 days</option><option value="closes 7d">7 days</option><option value="closes 30d">30 days</option></select></label>
+      <label class="bx-field"><%- t('markets.f_q') %> <input class="bx-in" type="text" name="a1" maxlength="200" required placeholder="<%- t('markets.f_q_ph') %>"></label>
+      <label class="bx-field"><%- t('markets.f_opts') %> <input class="bx-in" type="text" name="a2" maxlength="190" placeholder="<%- t('markets.f_opts_ph') %>" data-prefix="options "></label>
+      <div class="bx-row2">
+        <label class="bx-field"><%- t('markets.f_judge') %> <input class="bx-in" type="text" name="a3" maxlength="40" placeholder="@someone" data-prefix="judge "></label>
+        <label class="bx-field"><%- t('markets.f_closes') %> <select class="bx-in" name="a4"><option value="closes 1h"><%- t('bx.d.1h') %></option><option value="closes 1d" selected><%- t('bx.d.1d') %></option><option value="closes 2d"><%- t('bx.d.2d') %></option><option value="closes 7d"><%- t('bx.d.7d') %></option><option value="closes 30d"><%- t('bx.d.30d') %></option></select></label>
       </div>
-      <button type="submit">Create market</button>
-      <p class="info">The judge can't trade on it. The Federal Reserve seeds the liquidity; trades pay a 2% fee. With Pepe as judge he looks it up when trading closes, proposes the result, and it pays out after a dispute window.</p>
+      <label class="bx-check"><input type="checkbox" data-ai> 🤖 <%- t('markets.f_ai') %></label>
+      <div class="bx-row"><button class="bx-btn" type="submit"><%- t('markets.f_submit') %></button></div>
+      <p class="bx-fine"><%- t('markets.f_fine') %></p>
     </form>
     <script>
       (() => {
@@ -108,9 +137,11 @@
       })();
     </script>
   <% } %>
-  <p class="how">Looking for simple betting pools and 1-on-1 wagers? <a href="/wagers" style="color:#81c784">/wagers</a> · How it all works: <a href="/economy#markets" style="color:#81c784">economy guide</a></p>
-  <p class="how">Start one in a Camfrog room: <code>!market new Will X happen? judge @someone closes 2d</code> · buy with <code>!market M3 yes 5k</code> · sell with <code>!market sell M3 yes all</code> · <code>!market mine</code> shows your positions</p>
-</div>
+  <div class="bx-foot">
+    <div><%- t('markets.foot_wagers') %></div>
+    <div><%- t('markets.foot_cmds') %></div>
+  </div>
+</main>
 <%- include('partials/mk-times-script') %>
 </body>
 </html>

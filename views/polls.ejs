@@ -1,119 +1,132 @@
-<%- include('layout', { title: 'Polls', user: user}) %>
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: t('polls.title'), user: user}) %>
+<%# views/polls.ejs - 1.99ly design pass (bets.css): hero, the current poll as a big card where each option is one tappable
+    row (option, count, %, tally bar; the whole row is the vote button - the same poll.vote post), the winner and your vote
+    marked, the start form when nothing is running, past polls as compact cards. %>
+<link rel="stylesheet" href="/public/css/bets.css?v=1">
 <style>
-  .pl { max-width: 860px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-  .pl a { color: #81c784; }
-  .pl h1 { text-align: center; margin-bottom: 4px; }
-  .pl .sub { text-align: center; color: #9a9; margin: 0 0 18px; }
-  .pl h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 28px 0 10px; line-height: 1.6; }
-  .pl .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
-  .pl .card.live { border-color: #4caf50; }
-  .pl .q { font-weight: bold; color: #fff; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; margin: 0 0 4px; }
-  .pl .past .q { font-size: 15px; }
-  .pl .info { color: #888; font-size: 13px; line-height: 1.6; }
-  .pl .opts { display: grid; gap: 8px; margin: 12px 0 4px; }
-  .pl .opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
-  .pl .opt .txt { color: #ddd; overflow-wrap: anywhere; min-width: 0; }
-  .pl .opt .num { color: #ccc; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13px; }
-  .pl .opt .bar { grid-column: 1 / -1; height: 10px; background: #1c1c1c; border-radius: 5px; overflow: hidden; }
-  .pl .opt .bar span { display: block; height: 100%; background: #4caf50; }
-  .pl .opt.mine .txt { color: #81c784; font-weight: bold; }
-  .pl .opt.won .txt { color: #ffd700; font-weight: bold; }
-  .pl .opt.won .bar span { background: #ffd700; }
-  .pl .tag { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid #4caf50; color: #81c784; margin-left: 6px; font-weight: normal; }
-  .pl .opt.won .tag.w { border-color: #ffd700; color: #ffd700; }
-  .pl form { margin: 0; }
-  .pl .votebtn { background: #1c2a1c; color: #cfe8cf; border: 1px solid #2e5e2e; border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; }
-  .pl .votebtn:hover { background: #4caf50; color: #fff; }
-  .pl .opt.mine .votebtn { opacity: .5; cursor: default; }
-  .pl .endbtn { background: #b85c38; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-  .pl form.create { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; display: grid; gap: 8px; }
-  .pl form.create input[type=text] { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; width: 100%; box-sizing: border-box; }
-  .pl form.create .optgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
-  .pl form.create button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 9px 16px; font-weight: bold; cursor: pointer; justify-self: start; }
-  .pl .hint { background: #1a1608; border: 1px solid #5a4a10; border-radius: 8px; padding: 10px 12px; color: #ddd; }
-  .pl .empty { color: #888; text-align: center; }
-  .pl code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
+  .pl { --ac: #4fc3f7; --ac2: #8fd8fb; --acbg: rgba(79, 195, 247, .13); --acink: #04202c; max-width: 900px; }
+  .pl .card.live { border-color: #2a6f8f; box-shadow: 0 0 0 1px #2a6f8f inset; padding: 18px; }
+  .pl .q { margin: 0; font-weight: 900; color: #fff; font-size: clamp(19px, 4.4vw, 24px); line-height: 1.3; overflow-wrap: anywhere; }
+  .pl .past .q { font-size: 16px; font-weight: bold; }
+  .pl .info { color: var(--mut); font-size: 13px; line-height: 1.6; }
+  .pl .opts { display: grid; gap: 8px; margin: 6px 0 0; }
+  .pl .opt { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; align-items: center; width: 100%; padding: 12px 14px; border-radius: 12px;
+             border: 1px solid #262626; background: var(--card2); color: inherit; text-align: left; font: inherit; }
+  .pl .past .opt { padding: 8px 10px; }
+  .pl .opt .txt { color: #e6e6e6; overflow-wrap: anywhere; min-width: 0; font-size: 15px; }
+  .pl .opt .num { color: #cfcfcf; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 13.5px; }
+  .pl .opt .num b { color: #fff; font-size: 16px; }
+  .pl .opt .bar { grid-column: 1 / -1; height: 8px; background: #1f1f1f; border-radius: 999px; overflow: hidden; }
+  .pl .opt .bar span { display: block; height: 100%; background: var(--ac); border-radius: inherit; transition: width .5s ease; }
+  .pl .opt.mine { border-color: #2a6f8f; background: #0c171d; }
+  .pl .opt.mine .txt { color: var(--ac2); font-weight: bold; }
+  .pl .opt.won { border-color: #7a6418; background: linear-gradient(90deg, rgba(255, 215, 64, .1), var(--card2) 70%); }
+  .pl .opt.won .txt { color: var(--goldt); font-weight: bold; }
+  .pl .opt.won .bar span { background: var(--gold); }
+  .pl .tag { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 999px; border: 1px solid #2a6f8f; color: var(--ac2); margin-left: 6px; font-weight: bold; vertical-align: 1px; }
+  .pl .opt.won .tag.w { border-color: var(--gold); color: var(--goldt); }
+  .pl form.vote { margin: 0; }
+  .pl .votebtn { cursor: pointer; transition: border-color .12s, background .12s; }
+  .pl .votebtn:hover, .pl .votebtn:focus-visible { border-color: var(--ac); background: #0e1a20; }
+  .pl .votebtn:disabled { cursor: default; }
+  .pl .vlbl { display: inline-block; margin-left: 8px; padding: 3px 10px; border-radius: 999px; background: var(--ac); color: var(--acink); font-size: 12px; font-weight: bold; }
+  .pl .opt.mine .vlbl { background: transparent; color: var(--ac2); border: 1px solid #2a6f8f; }
+  .pl .endbtn { justify-self: start; }
+  .pl .hint { margin-top: 12px; }
+  .pl .past-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 12px; }
 </style>
 <%
   const linked = !!(me && me.camfrogUsername);
+  const fmt = (n) => t.num(Number(n) || 0);
   const bars = (p, voting) => { %>
     <div class="opts">
-      <% p.rows.forEach((r, i) => { const won = p.status !== 'active' && r.lead; %>
-        <div class="opt<%= r.mine ? ' mine' : '' %><%= won ? ' won' : '' %>">
-          <span class="txt"><%= i + 1 %>. <%= r.text %><% if (won) { %><span class="tag w">winner</span><% } %><% if (r.mine) { %><span class="tag">your vote</span><% } %></span>
-          <span class="num">
-            <%= r.count %> · <%= r.pct %>%
-            <% if (voting) { %>
-              <form method="post" action="/act" style="display:inline">
-                <input type="hidden" name="kind" value="poll.vote">
-                <input type="hidden" name="a0" value="<%= p.id %>"><input type="hidden" name="a1" value="<%= i + 1 %>">
-                <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
-                <button class="votebtn" type="submit"<%= r.mine ? ' disabled' : '' %>><%= r.mine ? 'voted' : (p.mineIdx >= 0 ? 'switch' : 'vote') %></button>
-              </form>
-            <% } %>
-          </span>
-          <div class="bar"><span style="width: <%= r.pct %>%"></span></div>
-        </div>
+      <% p.rows.forEach((r, i) => { const won = p.status !== 'active' && r.lead;
+           const inner = '<span class="txt">' + (i + 1) + '. ' + t.esc(r.text) + (won ? '<span class="tag w">' + t('polls.winner') + '</span>' : '') + (r.mine ? '<span class="tag">' + t('polls.your_vote') + '</span>' : '') + '</span>'
+             + '<span class="num"><b>' + r.pct + '%</b> · ' + t('polls.votes', { count: r.count, n: fmt(r.count) })
+             + (voting ? '<span class="vlbl">' + (r.mine ? t('polls.voted') : (p.mineIdx >= 0 ? t('polls.switch') : t('polls.vote'))) + '</span>' : '') + '</span>'
+             + '<span class="bar"><span style="width: ' + r.pct + '%"></span></span>'; %>
+        <% if (voting) { %>
+          <form class="vote" method="post" action="/act">
+            <input type="hidden" name="kind" value="poll.vote">
+            <input type="hidden" name="a0" value="<%= p.id %>"><input type="hidden" name="a1" value="<%= i + 1 %>">
+            <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
+            <button class="opt votebtn<%= r.mine ? ' mine' : '' %>" type="submit"<%= r.mine ? ' disabled' : '' %> aria-label="<%- t('polls.vote_for', { o: r.text }) %>"><%- inner %></button>
+          </form>
+        <% } else { %>
+          <div class="opt<%= r.mine ? ' mine' : '' %><%= won ? ' won' : '' %>"><%- inner %></div>
+        <% } %>
       <% }) %>
     </div>
 <% }; %>
-<div class="pl">
-  <h1>Polls</h1>
-  <p class="sub">Pepe runs one poll at a time across the Camfrog rooms. Vote here or in chat — voting again moves your vote.</p>
+<main class="bx pl">
+  <header class="bx-hero">
+    <div class="bx-eyebrow">🗳️ <%- t('polls.eyebrow') %></div>
+    <h1><%- t('polls.h1') %></h1>
+    <p class="bx-lead"><%- t('polls.lead') %></p>
+    <div class="bx-stats">
+      <span class="bx-stat"><b><%= active ? fmt(active.total) : '0' %></b><%- t('polls.stat_votes', { count: active ? active.total : 0 }) %></span>
+      <span class="bx-stat"><b><%= fmt(past.length) %></b><%- t('polls.stat_past') %></span>
+    </div>
+  </header>
 
   <%- include('partials/actions', { acts, msg }) %>
 
-  <h2>CURRENT POLL</h2>
+  <h2 class="bx-h"><%- t('polls.h_current') %><% if (active) { %> <span class="bx-chip c-open"><%- t('polls.live') %></span><% } %></h2>
   <% if (active) { %>
-    <div class="card live">
+    <div class="card bx-card live">
       <p class="q"><%= active.question %></p>
-      <div class="info">started by <%= active.creator || 'someone' %><%= active.created_at ? ' · ' + active.created_at : '' %> · <%= active.total %> vote<%= active.total === 1 ? '' : 's' %></div>
+      <div class="info"><%- t('polls.started_by', { who: t.esc(active.creator || t('polls.someone')) }) %><%- active.created_at ? ' · ' + t.esc(active.created_at) : '' %> · <%- t('polls.votes', { count: active.total, n: fmt(active.total) }) %></div>
       <% bars(active, !!me) %>
       <% if (!user) { %>
-        <p class="info"><a href="/login">Sign in</a> to vote from the site.</p>
+        <p class="info" style="margin:0"><%- t('polls.signin') %></p>
       <% } else if (me && !linked) { %>
-        <p class="info">You'll vote as <b><%= '🌐' + me.username %></b> — link your Camfrog name (<code>!verify</code>) to vote as yourself.</p>
+        <p class="info" style="margin:0"><%- t('polls.web_vote', { who: '🌐' + me.username }) %></p>
+      <% } else if (me) { %>
+        <p class="info" style="margin:0"><%- t('polls.tap') %></p>
       <% } %>
       <% if (canEnd) { %>
-        <form method="post" action="/act" onsubmit="return confirm('End this poll now?')">
+        <form method="post" action="/act" onsubmit="return confirm(<%= JSON.stringify(t('polls.end_confirm')) %>)">
           <input type="hidden" name="kind" value="poll.end"><input type="hidden" name="a0" value="<%= active.id %>">
           <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
-          <button class="endbtn" type="submit">End poll</button>
+          <button class="bx-btn danger sm endbtn" type="submit"><%- t('polls.end') %></button>
         </form>
       <% } %>
     </div>
   <% } else { %>
-    <p class="empty">No poll running right now.</p>
+    <div class="bx-empty"><span class="ic" aria-hidden="true">🗳️</span><b><%- t('polls.empty') %></b><span><%- t('polls.empty_sub') %></span></div>
     <% if (linked) { %>
-      <form class="create" method="post" action="/act" id="pl-create">
-        <b>Start a poll</b>
-        <span class="info">Only one poll runs at a time across all the Camfrog rooms. Give it at least 2 options.</span>
+      <form class="create bx-form bx-card" method="post" action="/act" id="pl-create" style="margin-top:12px">
+        <b><%- t('polls.f_h') %></b>
+        <p class="bx-fine"><%- t('polls.f_note') %></p>
         <input type="hidden" name="kind" value="poll.create">
         <input type="hidden" name="back" value="/polls"><input type="hidden" name="tag" value="polls">
-        <input type="text" name="a0" maxlength="200" placeholder="Question" required>
-        <div class="optgrid">
+        <label class="bx-field"><%- t('polls.f_q') %><input class="bx-in" type="text" name="a0" maxlength="200" placeholder="<%- t('polls.f_q_ph') %>" required></label>
+        <div class="bx-row2">
           <% for (let i = 1; i <= maxOptions; i++) { %>
-            <input type="text" name="a<%= i %>" maxlength="100" placeholder="Option <%= i %><%= i > 2 ? ' (optional)' : '' %>"<%= i <= 2 ? ' required' : '' %>>
+            <input class="bx-in" type="text" name="a<%= i %>" maxlength="100" aria-label="<%- t('polls.f_opt', { n: i }) %>" placeholder="<%- i > 2 ? t('polls.f_opt_opt', { n: i }) : t('polls.f_opt', { n: i }) %>"<%= i <= 2 ? ' required' : '' %>>
           <% } %>
         </div>
-        <button type="submit">Start poll</button>
+        <div class="bx-row"><button class="bx-btn" type="submit"><%- t('polls.f_btn') %></button></div>
       </form>
     <% } else if (user) { %>
-      <p class="hint">Link your Camfrog name (<code>!verify</code>) to start a poll from the site.</p>
+      <p class="bx-note hint"><%- t('polls.link') %></p>
     <% } %>
   <% } %>
 
-  <h2>PAST POLLS</h2>
-  <% if (!past.length) { %><p class="empty">No past polls yet.</p><% } %>
+  <h2 class="bx-h"><%- t('polls.h_past') %> <span class="bx-n"><%= past.length %></span></h2>
+  <% if (!past.length) { %><div class="bx-empty"><span class="ic" aria-hidden="true">📜</span><b><%- t('polls.empty_past') %></b></div><% } %>
+  <div class="past-grid">
   <% past.forEach((p) => { %>
-    <div class="card past">
+    <div class="card bx-card past">
       <p class="q"><%= p.question %></p>
-      <div class="info">by <%- /^🌐/.test(p.creator || '') ? ul(p.creator, { user: p.creator.replace(/^🌐/, '') }) : ul(p.creator || 'someone') %><%= p.created_at ? ' · ' + p.created_at : '' %> · <%= p.total %> vote<%= p.total === 1 ? '' : 's' %></div>
+      <div class="info"><%- t('polls.by', { who: /^🌐/.test(p.creator || '') ? ul(p.creator, { user: p.creator.replace(/^🌐/, '') }) : ul(p.creator || t('polls.someone')) }) %><%- p.created_at ? ' · ' + t.esc(p.created_at) : '' %> · <%- t('polls.votes', { count: p.total, n: fmt(p.total) }) %></div>
       <% bars(p, false) %>
     </div>
   <% }) %>
+  </div>
 
-  <p class="info" style="text-align:center;margin-top:26px">Polls started in a Camfrog room show up here too, and votes from chat and the site count the same.</p>
-</div>
+  <div class="bx-foot"><%- t('polls.foot') %></div>
+</main>
 </body>
 </html>

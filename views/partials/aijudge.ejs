@@ -1,4 +1,5 @@
-<%# Pepe-as-judge box for a market/pool page. Pass { m, kind: 'market'|'pool', inIt, judgeMe, now }. judgeMe (= an admin on an AI-judged market) may ask Pepe too. %>
+<%# Pepe-as-judge box for a market/pool page. Pass { m, kind: 'market'|'pool', inIt, judgeMe, now }. judgeMe (= an admin on an AI-judged market) may ask Pepe too.
+    1.99ly: restyled with the market page (a state chip, his call as a quote, the evidence block, the disputes as a list); text from en.json (aij.*). %>
 <% if (m && m.ai_judge) {
   const ai = m.ai || {};
   const ref = 'M' + m.id;
@@ -9,6 +10,7 @@
   const px = (v) => v == null ? '?' : '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: Number(v) >= 1 ? 2 : 6, maximumFractionDigits: Number(v) >= 1 ? 2 : 6 });
   const tj = (ts) => (locals.tzTime || new Function(include('../../tz-core.js'))()('UTC', 'en').time)(ts, 'datetime');
   const P = ai.price && ai.price.source ? ai.price : null;
+  const E_ = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const evidenceHtml = () => {
     if (P) {
       let h = '📈 ' + Tj('market.price.line', { source: P.source, gran: Math.max(1, Math.round((P.gran || 60) / 60)), symbol: P.symbol,
@@ -20,36 +22,41 @@
     if (ai.price_unread) return '📈 ' + Tj('market.price.unread');
     return ai.evidence ? '📈 ' + E_(ai.evidence) : '';
   };
-  const E_ = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); %>
+  const pct = (c) => Math.round((c || 0) * 100);
+  const st = ai.state === 'proposed' && live ? ['proposed', Tj('aij.st.proposed')] : ai.state === 'disputed' && live ? ['disputed', Tj('aij.st.disputed')]
+    : ai.state === 'thinking' ? ['closed', Tj('aij.st.thinking')] : ai.state === 'unsure' && live ? ['closed', Tj('aij.st.unsure')]
+    : ai.state === 'final' && !live && ai.result ? ['settled', Tj('aij.st.final')] : live ? ['ai', Tj('aij.st.waiting')] : null;
+  const dispList = () => (ai.disputes || []).map((d) => '<li>⚖️ ' + ul(d.nick) + ': ' + E_(d.why || Tj('aij.no_reason')) + '</li>').join(''); %>
   <div class="aij">
-    <div class="aij-head">🤖 Judged by Pepe <span class="aij-tag">AI · experimental</span></div>
+    <div class="aij-head"><span>🤖 <%- Tj('aij.head') %> <span class="aij-tag"><%- Tj('aij.tag') %></span></span><% if (st) { %><span class="bx-chip c-<%= st[0] %>"><%- st[1] %></span><% } %></div>
     <% if (ai.state === 'proposed' && live) { %>
-      <p>Pepe's call: <b><%= ai.result %></b> (<%= Math.round((ai.confidence || 0) * 100) %>% sure) — <%= ai.reason %></p>
-      <p class="aij-sub">Pays out in <%= Math.floor(left / 60) %> min unless enough people dispute it<%= (ai.disputes || []).length ? ' (' + ai.disputes.length + ' so far)' : '' %>.</p>
+      <p class="aij-call"><%- Tj('aij.call', { result: ai.result, pct: pct(ai.confidence) }) %> — <%= ai.reason %></p>
+      <p class="aij-sub"><%- Tj('aij.pays_in', { mins: Math.floor(left / 60) }) %><%- (ai.disputes || []).length ? ' ' + Tj('aij.so_far', { count: ai.disputes.length }) : '' %></p>
+      <% if ((ai.disputes || []).length) { %><ul class="aij-dl"><%- dispList() %></ul><% } %>
     <% } else if (ai.state === 'disputed' && live) { %>
-      <p>Pepe said <b><%= ai.result %></b>, but it was disputed — an admin will settle it.</p>
-      <% (ai.disputes || []).forEach((d) => { %><p class="aij-sub">⚖️ <%- ul(d.nick) %>: <%= d.why || '(no reason)' %></p><% }) %>
+      <p class="aij-call"><%- Tj('aij.disputed', { result: ai.result }) %></p>
+      <ul class="aij-dl"><%- dispList() %></ul>
     <% } else if (ai.state === 'thinking') { %>
-      <p>Pepe is looking it up right now…</p>
+      <p><%- Tj('aij.thinking') %></p>
     <% } else if (ai.state === 'unsure' && live && ai.escalated) { %>
-      <p>Pepe couldn't tell after <%= ai.tries || 'several' %> tries — <%= ai.reason %></p>
-      <p class="aij-sub">He's handed it to the admins to settle. Anyone in it can still ask him to look again.</p>
+      <p><%- Tj('aij.unsure_esc', { tries: ai.tries || Tj('aij.several') }) %> — <%= ai.reason %></p>
+      <p class="aij-sub"><%- Tj('aij.unsure_esc_sub') %></p>
     <% } else if (ai.state === 'unsure' && live) { %>
-      <p>Pepe couldn't tell yet — <%= ai.reason %></p>
+      <p><%- Tj('aij.unsure') %> — <%= ai.reason %></p>
       <% if (ai.next_try && ai.next_try > now) { const mins = Math.max(1, Math.round((ai.next_try - now) / 60)); %>
-        <p class="aij-sub">He'll look again at <%- tj(ai.next_try) %> (in <%= mins >= 90 ? Math.round(mins / 60) + ' h' : mins + ' min' %>). If he still can't tell after a few tries, the admins settle it.</p>
+        <p class="aij-sub"><%- Tj('aij.again_at', { when: tj(ai.next_try), left: mins >= 90 ? Tj('aij.in_h', { n: Math.round(mins / 60) }) : Tj('aij.in_min', { n: mins }) }) %></p>
       <% } else { %>
-        <p class="aij-sub">He'll look again shortly.</p>
+        <p class="aij-sub"><%- Tj('aij.again_soon') %></p>
       <% } %>
     <% } else if (ai.state === 'final' && !live && ai.result) { %>
       <%# 1.99dy: his ruling stays on the page after it paid out (the settlement banner links here) %>
-      <% if (m.resettle) { %><p class="aij-rs">⚖ <b>Re-settled <%= m.resettle.to %></b> by an admin (<%= m.resettle.by %>): <%= m.resettle.reason %> Pepe's ruling below was wrong.</p><% } %>
-      <p id="judgement">Pepe ruled <b><%= ai.result %></b><%= ai.confidence ? ' (' + Math.round(ai.confidence * 100) + '% sure)' : '' %> — <%= ai.reason %></p>
+      <% if (m.resettle) { %><p class="aij-rs"><%- Tj('aij.resettled', { to: m.resettle.to, by: m.resettle.by, reason: m.resettle.reason }) %></p><% } %>
+      <p id="judgement"><%- Tj('aij.ruled', { result: ai.result }) %><%- ai.confidence ? ' ' + Tj('aij.sure', { pct: pct(ai.confidence) }) : '' %> — <%= ai.reason %></p>
       <% if (evidenceHtml()) { %><p class="aij-sub aij-ev"><%- evidenceHtml() %></p><% } %>
-      <% if ((ai.disputes || []).length) { %><p class="aij-sub"><%= ai.disputes.length %> dispute<%= ai.disputes.length === 1 ? ' was' : 's were' %> raised:</p>
-        <% ai.disputes.forEach((d) => { %><p class="aij-sub">⚖️ <%- ul(d.nick) %>: <%= d.why || '(no reason)' %></p><% }) %><% } %>
+      <% if ((ai.disputes || []).length) { %><p class="aij-sub"><%- Tj('aij.raised', { count: ai.disputes.length }) %></p>
+        <ul class="aij-dl"><%- dispList() %></ul><% } %>
     <% } else if (live) { %>
-      <p>When <%= kind === 'market' ? 'trading' : 'betting' %> closes, Pepe checks the evidence (exchange price data for price questions, the web, his Camfrog records), proposes the result with his reasoning, and it pays out after a dispute window.</p>
+      <p><%- kind === 'market' ? Tj('aij.how_market') : Tj('aij.how_pool') %></p>
     <% } %>
     <% if (evidenceHtml() && live && (ai.state === 'unsure' || ai.state === 'proposed' || ai.state === 'disputed')) { %>
       <p class="aij-sub aij-ev"><%- evidenceHtml() %></p>
@@ -61,31 +68,34 @@
             <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="<%= kind %>">
             <input type="hidden" name="a0" value="dispute"><input type="hidden" name="a1" value="<%= ref %>">
             <input type="hidden" name="back" value="/markets/<%= m.id %>"><input type="hidden" name="tag" value="market-<%= m.id %>">
-            <input type="text" name="a2" maxlength="160" placeholder="Why is Pepe wrong?">
-            <button type="submit" class="aij-dis">Dispute</button>
+            <input type="text" name="a2" maxlength="160" placeholder="<%- Tj('aij.why_ph') %>" aria-label="<%- Tj('aij.why_ph') %>">
+            <button type="submit" class="aij-dis"><%- Tj('aij.dispute') %></button>
           </form>
         <% } else if (ai.state !== 'proposed' && ai.state !== 'disputed' && ai.state !== 'thinking') { %>
           <form method="post" action="/act">
             <input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="<%= kind %>">
             <input type="hidden" name="a0" value="ai"><input type="hidden" name="a1" value="<%= ref %>">
             <input type="hidden" name="back" value="/markets/<%= m.id %>"><input type="hidden" name="tag" value="market-<%= m.id %>">
-            <button type="submit">Ask Pepe to decide now</button>
+            <button type="submit"><%- Tj('aij.ask') %></button>
           </form>
         <% } %>
       </div>
     <% } %>
   </div>
   <style>
-    .aij { border: 1px solid #3a4a7a; background: #10141f; border-radius: 10px; padding: 12px 14px; margin: 14px 0; }
-    .aij p { margin: 6px 0; overflow-wrap: anywhere; }
-    .aij-head { font-weight: bold; }
+    .aij { border: 1px solid #2f3f6a; background: radial-gradient(90% 140% at 100% 0%, rgba(100, 140, 255, .1), transparent 60%), #10141f; border-radius: 16px; padding: 14px 16px; margin: 14px 0; }
+    .aij p { margin: 8px 0; overflow-wrap: anywhere; line-height: 1.55; }
+    .aij-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; font-weight: bold; font-size: 16px; color: #fff; }
     .aij-tag { font-size: 11px; color: #9fb3ff; border: 1px solid #3a4a7a; border-radius: 10px; padding: 1px 8px; margin-left: 6px; font-weight: normal; }
-    .aij-sub { color: #999; font-size: 13px; }
+    .aij-call { padding: 10px 12px; border-left: 3px solid #64b5f6; background: rgba(0, 0, 0, .3); border-radius: 6px; color: #eee; }
+    .aij-sub { color: #a3a8b8; font-size: 13.5px; }
     .aij-rs { color: #ffe082; }
+    .aij-ev { padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, .35); border: 1px solid #222a40; }
     .aij-ev time { color: #ccc; white-space: nowrap; }
-    .aij-forms form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .aij-forms input[type=text] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 10px; }
-    .aij-forms button { background: #3a4a7a; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font-weight: bold; cursor: pointer; }
+    .aij-dl { margin: 6px 0; padding-left: 0; list-style: none; display: grid; gap: 4px; font-size: 13.5px; color: #c9cddb; }
+    .aij-forms form { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .aij-forms input[type=text] { flex: 1 1 200px; min-width: 0; min-height: 44px; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 10px; padding: 10px 12px; font: 16px Ubuntu, sans-serif; }
+    .aij-forms button { min-height: 44px; background: #2f5f99; color: #fff; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: bold; cursor: pointer; font-size: 14.5px; }
     .aij-forms button.aij-dis { background: #b85c38; }
   </style>
 <% } %>
