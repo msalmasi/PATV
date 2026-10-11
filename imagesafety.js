@@ -64,10 +64,16 @@ const crypto = require("crypto");
 const SHUTDOWN = require("./shutdown");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner"]);
-const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads" });
+const SURFACES = Object.freeze(["pad_look", "profile_photo", "feed", "story", "dm", "banner", "locked"]);
+const SURFACE_LABEL = Object.freeze({ pad_look: "Pad avatar / banner", profile_photo: "Profile photo", feed: "Feed posts", story: "Stories", dm: "DM pictures", banner: "Homepage banner ads",
+                                      locked: "Locked creator posts (PATV Creators)" });
 // 1.99kk: "banner" = a paid homepage banner (banner.js) - everyone sees it, so the strict profile policy (no NSFW at all)
-const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile" });
+// 1.99pv: "locked" = the files of a PATV Creators locked post (subscriber-only / pay-per-view, creators.js). Paid content gets
+// fewer outside eyes, so it has its own switch (locked_enforce) that ALWAYS enforces and fails CLOSED, whatever the master
+// switch and shadow mode say. Policy group "locked" (a SFW creator) or "locked_r18" (an 18+ "R-rated" community: suggestive
+// passes, explicit nudity / sexual content never does). A locked post can never be NSFW, so "nsfw" / "nsfw_pad" mean refuse there.
+const GROUP = Object.freeze({ pad_look: "profile", profile_photo: "profile", feed: "media", story: "media", dm: "media", banner: "profile", locked: "locked" });
+const POLICY_GROUPS = Object.freeze(["profile", "media", "locked", "locked_r18"]);
 const CATEGORIES = Object.freeze(["nudity_explicit", "sexual", "suggestive", "minor_risk", "gore", "hate_symbols"]);
 const POLICY_KEYS = Object.freeze([...CATEGORIES, "nsfw_level"]);
 const ACTIONS = Object.freeze(["allow", "flag", "nsfw", "nsfw_pad", "refuse", "refuse_flag"]);
@@ -75,10 +81,15 @@ const VERDICTS = Object.freeze(["allow", "nsfw", "refuse"]);
 const DEFAULT_POLICY = Object.freeze({
   profile: Object.freeze({ nudity_explicit: "refuse", sexual: "refuse", suggestive: "allow", minor_risk: "refuse_flag", gore: "refuse", hate_symbols: "flag", nsfw_level: "refuse" }),
   media: Object.freeze({ nudity_explicit: "nsfw_pad", sexual: "nsfw_pad", suggestive: "allow", minor_risk: "refuse_flag", gore: "nsfw", hate_symbols: "flag", nsfw_level: "nsfw" }),
+  locked: Object.freeze({ nudity_explicit: "refuse_flag", sexual: "refuse_flag", suggestive: "refuse", minor_risk: "refuse_flag", gore: "refuse", hate_symbols: "refuse_flag", nsfw_level: "refuse" }),
+  locked_r18: Object.freeze({ nudity_explicit: "refuse_flag", sexual: "refuse_flag", suggestive: "allow", minor_risk: "refuse_flag", gore: "refuse", hate_symbols: "refuse_flag", nsfw_level: "flag" }),
 });
 const DEFAULTS = Object.freeze({
+  // 1.99pv: locked_enforce - PATV Creators' locked media (always enforcing, fail-closed). On by default on staging only; prod
+  // is switched by an admin (/admin/imagesafety) - until then creators.js refuses locked pictures / videos (text locks only).
+  locked_enforce: !!process.env.STAGING,
   enabled: false, shadow: false, fail_mode: "open", timeout_secs: 20, video_frames: 3, notify_minor: true, retention_days: 30,
-  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true }),
+  surfaces: Object.freeze({ pad_look: true, profile_photo: true, feed: true, story: true, dm: true, banner: true, locked: true }),
   thresholds: Object.freeze({ nudity_explicit: 0.5, sexual: 0.5, suggestive: 0.5, minor_risk: 0.4, gore: 0.5, hate_symbols: 0.6 }),
   policy: DEFAULT_POLICY,
 });
@@ -87,7 +98,7 @@ const SETTING_NAMES = Object.freeze({
   image_safety_enabled: "enabled", image_safety_shadow: "shadow", image_safety_fail_mode: "fail_mode",
   image_safety_timeout_secs: "timeout_secs", image_safety_surfaces: "surfaces", image_safety_video_frames: "video_frames",
   image_safety_thresholds: "thresholds", image_safety_policy: "policy", image_safety_notify_minor: "notify_minor",
-  image_safety_retention_days: "retention_days",
+  image_safety_retention_days: "retention_days", image_safety_locked_enforce: "locked_enforce",
 });
 
 const FRAME_PX = 768;
@@ -146,20 +157,21 @@ function cleanConfig(c, base = DEFAULTS) {
   for (const [k, v] of Object.entries(c || {})) src[SETTING_NAMES[k] || k] = v;
   const o = {
     enabled: src.enabled != null ? bool(src.enabled) : !!base.enabled,
+    locked_enforce: src.locked_enforce != null ? bool(src.locked_enforce) : !!(base.locked_enforce != null ? base.locked_enforce : DEFAULTS.locked_enforce),
     shadow: src.shadow != null ? bool(src.shadow) : !!base.shadow,
     fail_mode: src.fail_mode === "closed" || src.fail_mode === "open" ? src.fail_mode : (base.fail_mode === "closed" ? "closed" : "open"),
     timeout_secs: num(src.timeout_secs, 0.2, 120, base.timeout_secs),
     video_frames: Math.round(num(src.video_frames, 1, 6, base.video_frames)),
     notify_minor: src.notify_minor != null ? bool(src.notify_minor) : !!base.notify_minor,
     retention_days: Math.round(num(src.retention_days, 1, 365, base.retention_days)),
-    surfaces: {}, thresholds: {}, policy: { profile: {}, media: {} },
+    surfaces: {}, thresholds: {}, policy: { profile: {}, media: {}, locked: {}, locked_r18: {} },
   };
   const sIn = src.surfaces && typeof src.surfaces === "object" ? src.surfaces : {};
   for (const s of SURFACES) o.surfaces[s] = sIn[s] != null ? bool(sIn[s]) : (base.surfaces || DEFAULTS.surfaces)[s] !== false;
   const tIn = src.thresholds && typeof src.thresholds === "object" ? src.thresholds : {};
   for (const k of CATEGORIES) o.thresholds[k] = num(tIn[k], 0.05, 1, (base.thresholds || DEFAULTS.thresholds)[k]);
   const pIn = src.policy && typeof src.policy === "object" ? src.policy : {};
-  for (const g of ["profile", "media"]) {
+  for (const g of POLICY_GROUPS) {
     const gi = pIn[g] && typeof pIn[g] === "object" ? pIn[g] : {};
     const gb = (base.policy || DEFAULT_POLICY)[g] || DEFAULT_POLICY[g];
     for (const k of POLICY_KEYS) o.policy[g][k] = ACTIONS.includes(gi[k]) ? gi[k] : (ACTIONS.includes(gb[k]) ? gb[k] : DEFAULT_POLICY[g][k]);
@@ -181,7 +193,7 @@ async function setConfig(patch, actor = "?") {
   await runQuery("INSERT INTO image_safety_kv (k, v) VALUES ('config', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", [JSON.stringify(next)]);
   CFG = next;
   const flip = (k) => (cur[k] !== next[k] ? ` ${k} ${cur[k]} -> ${next[k]}` : "");
-  console.log(`[imagesafety] settings saved by ${actor}:${flip("enabled")}${flip("shadow")}${flip("fail_mode")}${flip("timeout_secs")}`);
+  console.log(`[imagesafety] settings saved by ${actor}:${flip("enabled")}${flip("shadow")}${flip("fail_mode")}${flip("timeout_secs")}${flip("locked_enforce")}`);
   return next;
 }
 /** The config as the image_safety_* setting names (admin page / API). */
@@ -224,8 +236,9 @@ const RANK = { allow: 0, flag: 1, nsfw: 2, nsfw_pad: 3, refuse: 4, refuse_flag: 
  * The policy: (surface, classification, {padAllowsNsfw}) -> {action: allow|nsfw|refuse, flagged, why: [keys], message}
  * Pure - the tests drive it with a stubbed classification.
  */
-function decide(surface, v, { padAllowsNsfw = true, policy = DEFAULT_POLICY } = {}) {
-  const group = GROUP[surface] || "media";
+function decide(surface, v, { padAllowsNsfw = true, policy = DEFAULT_POLICY, group: groupIn = null } = {}) {
+  const group = (groupIn && POLICY_GROUPS.includes(groupIn) ? groupIn : null) || GROUP[surface] || "media";
+  const strict = group === "profile" || group === "locked" || group === "locked_r18";      // never NSFW: "mark NSFW" = refuse
   const P = (policy && policy[group]) || DEFAULT_POLICY[group];
   const keys = [...(v.categories || [])];
   if (v.verdict === "nsfw" || v.verdict === "refuse") keys.push("nsfw_level");
@@ -240,12 +253,14 @@ function decide(surface, v, { padAllowsNsfw = true, policy = DEFAULT_POLICY } = 
   }
   let action = "allow";
   if (worst === "refuse" || worst === "refuse_flag") action = "refuse";
-  else if (worst === "nsfw_pad") action = group === "profile" || !padAllowsNsfw ? "refuse" : "nsfw";
-  else if (worst === "nsfw") action = group === "profile" ? "refuse" : "nsfw";
-  return { action, flagged, why, worst, message: action === "refuse" ? refusalMessage(surface, why, padAllowsNsfw) : "" };
+  else if (worst === "nsfw_pad") action = strict || !padAllowsNsfw ? "refuse" : "nsfw";
+  else if (worst === "nsfw") action = strict ? "refuse" : "nsfw";
+  return { action, flagged, why, worst, message: action === "refuse" ? refusalMessage(surface, why, padAllowsNsfw, group) : "" };
 }
-function refusalMessage(surface, why, padAllowsNsfw) {
+function refusalMessage(surface, why, padAllowsNsfw, group) {
   if (why.includes("minor_risk")) return "That picture can't be posted here (Terms: nothing sexual or suggestive involving anyone who may be under 18).";
+  if (group === "locked") return "Locked posts must be safe for work: no nudity, sexual or suggestive content (Creator Terms). Suggestive content is allowed only on 18+ profiles and pads.";
+  if (group === "locked_r18") return "Locked posts can be suggestive on an 18+ profile or pad, but never explicit: no nudity or sexual acts (Creator Terms).";
   if (GROUP[surface] === "profile") {
     const what = surface === "profile_photo" ? "Profile photos" : surface === "banner" ? "Homepage banners" : "Pad avatars and banners";
     return `That picture looks like adult or graphic content - ${what} must be safe for work (Terms).`;
@@ -531,6 +546,41 @@ async function prefetch(input = {}) {
   } catch (e) { return false; }
 }
 
+/** 1.99pv: is the PATV Creators locked-media check switched on (enforcing, fail-closed)? */
+async function lockedEnforcing() { try { return !!(await config()).locked_enforce; } catch (e) { return false; } }
+/**
+ * 1.99pv: the check for ONE file of a PATV Creators locked post. ALWAYS enforcing and fail-CLOSED (no shadow, no fail-open):
+ * no classification in time, no frames, an error -> refused. input: {kind, file, poster, secs, userId, roomId, ref, r18}
+ * -> {ok: true} | {ok: false, reason, off?} (off: locked_enforce is switched off - the caller refuses locked media).
+ */
+async function checkLocked(input = {}) {
+  const c = await config();
+  if (!c.locked_enforce) return { ok: false, off: true, reason: "Locked pictures and videos aren't available yet (the image safety check isn't switched on) - lock a text post instead." };
+  const kind = input.kind === "video" ? "video" : "image";
+  const group = input.r18 ? "locked_r18" : "locked";
+  const base = { surface: "locked", kind, userId: input.userId, roomId: input.roomId, ref: input.ref };
+  let frames = [];
+  try { frames = await framesFor({ ...input, kind }, c.video_frames); } catch (e) { frames = []; }
+  const closed = async (why) => {
+    const id = await record({ ...base, mode: "enforce", action: "failclosed", flagged: false, reason: why }, frames).catch(() => null);
+    console.log(`[imagesafety] locked: no classification (${why}) -> fail-closed`);
+    return { ok: false, reason: "The file couldn't be safety-checked right now - nothing was posted. Try again in a minute.", mode: "failclosed", logId: id };
+  };
+  if (!frames.length) return closed("no frames");
+  const job = classify(frames, { surface: "locked", kind });
+  let timer;
+  const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error("timeout"), { code: "timeout" })), c.timeout_secs * 1000); });
+  let v;
+  try { v = await Promise.race([job.promise, timeout]); }
+  catch (e) { return closed(e.code || e.message || "error"); }
+  finally { clearTimeout(timer); }
+  const d = decide("locked", v, { group, policy: c.policy });
+  const id = await record({ ...base, hash: job.hash, mode: "enforce", action: d.action, would: d.action, flagged: d.flagged, v }, frames);
+  if (d.action !== "allow" || d.flagged) console.log(`[imagesafety] locked (${group}): ${v.verdict} [${v.categories.join(",") || "-"}] -> ${d.action}${d.flagged ? " +flag" : ""} (#${id})`);
+  if (d.action !== "allow") return { ok: false, reason: d.message, mode: "enforce", logId: id, flagged: d.flagged, action: d.action };
+  return { ok: true, mode: "enforce", logId: id, flagged: d.flagged };
+}
+
 // ── the hooks the upload surfaces already have (1.99es / 1.99ez) + the new ones ──
 async function padAllowsNsfw(roomId) {
   if (!roomId) return true;
@@ -657,7 +707,7 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
   app.post("/api/pepe/imagesafety/pull", json, bot, async (req, res) => {
     try {
       const c = await config();
-      const on = (c.enabled || c.shadow) && SURFACES.some((s) => c.surfaces[s]);
+      const on = ((c.enabled || c.shadow) && SURFACES.some((s) => c.surfaces[s])) || !!c.locked_enforce;
       if (!on) { LAST_PULL = NOW(); return res.json({ ok: true, enabled: false, jobs: [], idle: 60 }); }
       const wait = Math.min(PULL_WAIT_MAX, Math.max(0, Number((req.body || {}).wait) * 1000 || 0));
       const jobs = await pull(wait);
@@ -719,7 +769,7 @@ function register(app, { addUser, isBotToken, noTimers = false }) {
 function _reset() { JOBS.clear(); CACHE.clear(); PULLERS.length = 0; CFG = null; CLASSIFIER = null; }
 
 module.exports = {
-  init, register, install, check, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
+  init, register, install, check, checkLocked, lockedEnforcing, POLICY_GROUPS, prefetch, decide, cleanVerdict, cleanConfig, config, setConfig, settingsView, active, framesFor, hashFrames,
   enqueue, pull, result, queueStats, setClassifier, recent, stats, review, sweep, padAllowsNsfw, thumbPath, dir, _setDir, _setClock, _reset,
   SURFACES, SURFACE_LABEL, GROUP, CATEGORIES, POLICY_KEYS, ACTIONS, DEFAULTS, DEFAULT_POLICY, SETTING_NAMES, PULL_WAIT_MAX, CLAIM_TTL, LATE_MS,
 };

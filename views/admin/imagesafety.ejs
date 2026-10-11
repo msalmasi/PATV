@@ -24,6 +24,7 @@
 <section class="adm-card" aria-labelledby="stT">
   <h2 id="stT">Status
     <span class="adm-pill <%= mode === 'on' ? 'ok' : mode === 'shadow' ? 'admin' : '' %>"><%= mode === 'on' ? 'ON (enforcing)' : mode === 'shadow' ? 'SHADOW (recording only)' : 'OFF (pass-through)' %></span>
+    <span class="adm-pill <%= C.locked_enforce ? 'ok' : '' %>">⭐ Locked media: <%= C.locked_enforce ? 'ENFORCING, fail-closed' : 'OFF (text locks only)' %></span>
   </h2>
   <div class="adm-kv">
     <div><b>Last 24 h</b><span><%= D.n %> checks · <%= D.refused %> refused · <%= D.marked %> marked NSFW · <%= D.flagged %> flagged · <%= D.unchecked %> unchecked</span></div>
@@ -40,6 +41,7 @@
   <form class="adm-form" id="isfSettings">
     <label class="ck"><span>Master switch (<code>image_safety_enabled</code>)</span><span><input type="checkbox" name="image_safety_enabled"<%= C.enabled ? ' checked' : '' %>> enforce the policy below</span></label>
     <label class="ck"><span>Shadow mode (<code>image_safety_shadow</code>)</span><span><input type="checkbox" name="image_safety_shadow"<%= C.shadow ? ' checked' : '' %>> classify + record only, never block or mark</span></label>
+    <label class="ck" style="grid-column:1/-1"><span>⭐ PATV Creators locked media (<code>image_safety_locked_enforce</code>)</span><span><input type="checkbox" name="image_safety_locked_enforce"<%= C.locked_enforce ? ' checked' : '' %>> always enforce + fail closed on the files of locked (paid) posts, whatever the master switch and shadow mode say. Off: creators can only lock text posts.</span></label>
     <label><span>When Pepe doesn't answer (<code>image_safety_fail_mode</code>)</span>
       <select name="image_safety_fail_mode">
         <option value="open"<%= C.fail_mode !== 'closed' ? ' selected' : '' %>>Fail open: allow it, flag it for review</option>
@@ -66,11 +68,11 @@
       <legend>Policy (<code>image_safety_policy</code>)</legend>
       <div class="isf-table-wrap">
       <table class="isf-table">
-        <thead><tr><th scope="col">Found</th><th scope="col">Pad avatar / banner, profile photo</th><th scope="col">Feed posts, stories, DM pictures</th></tr></thead>
+        <thead><tr><th scope="col">Found</th><th scope="col">Pad avatar / banner, profile photo</th><th scope="col">Feed posts, stories, DM pictures</th><th scope="col">⭐ Locked posts (SFW creator)</th><th scope="col">⭐ Locked posts (18+ profile / pad)</th></tr></thead>
         <tbody>
         <% POLICY_KEYS.forEach((k) => { %>
           <tr><th scope="row"><%= KEY_LABEL[k] %></th>
-          <% ['profile', 'media'].forEach((g) => { %>
+          <% ['profile', 'media', 'locked', 'locked_r18'].forEach((g) => { %>
             <td><select name="pol_<%= g %>_<%= k %>" aria-label="<%= KEY_LABEL[k] %> - <%= g %>">
               <% ACTIONS.forEach((a) => { %><option value="<%= a %>"<%= C.policy[g][k] === a ? ' selected' : '' %>><%= ACTION_LABEL[a] %><%= DEFAULTS.policy[g][k] === a ? ' (default)' : '' %></option><% }) %>
             </select></td>

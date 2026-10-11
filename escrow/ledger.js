@@ -38,6 +38,12 @@ const HID_RE = /^[A-Za-z0-9_.:\-]{1,40}$/;
 const REF_RE = /^[A-Za-z0-9_.:\-]{1,60}$/;
 const MAX_LEGS = 60;
 const GAMES = ["wagers", "bounties", "pools", "loans"];
+// Holds a site SERVICE owns outright (PATV Creators, creators.js): never Pepe's - not in his mirror, never handed back by a
+// rollback, never counted by the cutover's emptiness / verify checks, and his keyed calls can't move them.
+//   CRS creator subscription period, CRP pay-per-view unlock (CRT ticket, CRM paid message request: reserved for P2)
+const SERVICE_KINDS = Object.freeze(["CRS", "CRP", "CRT", "CRM"]);
+const PEPE_SQL = `kind NOT IN (${SERVICE_KINDS.map((k) => `'${k}'`).join(",")})`;
+const isServiceKind = (k) => SERVICE_KINDS.includes(String(k || ""));
 
 class Refuse extends Error {
   constructor(status, message, code, extra) { super(message); this.status = status; this.code = code || null; this.extra = extra || null; }
@@ -120,9 +126,10 @@ async function requireLive() {
 const shapeHold = (h) => ({ id: h.id, ref: h.ref, kind: h.kind, nick: h.login, user: h.username, user_id: h.user_id, amount: Number(h.amount),
                             reason: h.reason, cp: h.cp, state: h.state, ts: Math.floor(Number(h.created) / 1000), done_ts: h.done_at ? Math.floor(h.done_at / 1000) : null,
                             via: h.via });
+/** Pepe's held holds (his mirror, the export, the rollback) - never a site service's (SERVICE_KINDS). */
 async function holdsHeld() {
   await init();
-  return (await getQuery("SELECT * FROM escrow_holds WHERE state = 'held' ORDER BY created, id")).map(shapeHold);
+  return (await getQuery(`SELECT * FROM escrow_holds WHERE state = 'held' AND ${PEPE_SQL} ORDER BY created, id`)).map(shapeHold);
 }
 async function holdsByIds(ids) {
   await init();
@@ -130,9 +137,11 @@ async function holdsByIds(ids) {
   if (!list.length) return [];
   return (await getQuery(`SELECT * FROM escrow_holds WHERE id IN (${list.map(() => "?").join(",")})`, list)).map(shapeHold);
 }
-async function heldTotal() {
+/** The held total: every hold (scope "all", the supply row), Pepe's only ("pepe": the cutover's checks) or the site services' ("service"). */
+async function heldTotal(scope = "all") {
   await init();
-  const r = (await getQuery("SELECT COALESCE(SUM(amount),0) AS t, COUNT(*) AS n FROM escrow_holds WHERE state = 'held'"))[0];
+  const w = scope === "pepe" ? ` AND ${PEPE_SQL}` : scope === "service" ? ` AND NOT (${PEPE_SQL})` : "";
+  const r = (await getQuery(`SELECT COALESCE(SUM(amount),0) AS t, COUNT(*) AS n FROM escrow_holds WHERE state = 'held'${w}`))[0];
   return { amount: Number(r.t) || 0, count: Number(r.n) || 0 };
 }
 async function totalsByKind() {
@@ -389,6 +398,7 @@ const GAME_OF = { W: "wagers", BT: "bounties", M: "pools", L: "loans" };
 async function guardSiteHolds(ids) {
   for (const id of ids) {
     const h = (await getQuery("SELECT ref, kind, via FROM escrow_holds WHERE id = ?", [String(id)]))[0];
+    if (h && isServiceKind(h.kind)) throw new Refuse(409, `hold ${id} (${h.ref}) belongs to a site service`, "E_SITE_HOLD", { hold: String(id), game: "creators" });
     const game = h && GAME_OF[h.kind];
     if (h && h.via === "site" && game && (await meta(`live:${game}`))) {
       throw new Refuse(409, `hold ${id} (${h.ref}) belongs to the site's ${game} engine`, "E_SITE_HOLD", { hold: String(id), game });
@@ -426,7 +436,12 @@ async function status(keys) {
 
 // ── supply: the held total is one row while the escrow is live ──
 async function supplyRows(rows) {
-  if (!(await live())) return rows;
+  if (!(await live())) {
+    // not live: Pepe's rows carry his escrow; the site services' holds (left held after a rollback) are only here
+    const sv = await heldTotal("service").catch(() => ({ amount: 0 }));
+    if (!(sv.amount > 0)) return rows;
+    return (rows || []).filter((p) => String(p.key || "") !== "escrow:service").concat([{ key: "escrow:service", label: "🔒 Escrow holds (PATV Creators)", amount: sv.amount }]);
+  }
   const keep = (rows || []).filter((p) => String(p.key || "") !== "escrow:holds");
   const t = await heldTotal();
   if (t.amount > 0) keep.push({ key: "escrow:holds", label: "🔒 Escrow holds (games in progress)", amount: t.amount });
@@ -497,7 +512,7 @@ async function importFromPepe(body) {
     if (!a) missing.push(h.user);
   }
   if (missing.length) throw new Refuse(409, `no PATV account for ${missing.slice(0, 10).join(", ")}`, "E_TARGET_NOT_FOUND", { missing: missing.slice(0, 50) });
-  const held = await heldTotal();
+  const held = await heldTotal("pepe");
   if (held.count) throw new Refuse(409, `the escrow table already holds ${held.amount} in ${held.count} hold(s)`, "E_NOT_EMPTY");
   const clash = holds.length ? await getQuery(`SELECT id FROM escrow_holds WHERE id IN (${holds.map(() => "?").join(",")})`, holds.map((h) => h.id)) : [];
   const supplyRowsIn = Array.isArray(p.supply) ? p.supply : null;
@@ -529,7 +544,7 @@ async function importFromPepe(body) {
                        [h.id, `import:${key}:${h.id}`, h.ref, kindOf(h.ref), h.nick || a.camfrogUsername || a.username, a.username, a.userId, h.amount,
                         h.reason, h.cp, h.ts ? Math.floor(h.ts * 1000) : t]);
       }
-      const got = await heldTotal();
+      const got = await heldTotal("pepe");
       if (got.amount !== sum || got.count !== holds.length) throw new Refuse(500, `the escrow holds ${got.amount} in ${got.count} after the import, not ${sum} in ${holds.length}`, "E_VERIFY");
       const kinds = await totalsByKind();
       for (const [k, v] of Object.entries(perKind)) if ((kinds[k] || {}).amount !== v) throw new Refuse(500, `kind ${k} reads ${(kinds[k] || {}).amount} after the import, not ${v}`, "E_VERIFY");
@@ -561,7 +576,7 @@ async function importFromPepe(body) {
 /** Read-only: every held hold, sha256, totals (the runbook's before / after). */
 async function exportState() {
   const hs = await holdsHeld();
-  const t = await heldTotal();
+  const t = await heldTotal("pepe");
   return { ok: true, live: await live(), enabled: await enabled(), games: await gamesState(), rev: await rev(), holds: hs, sum: t.amount, count: t.count,
            per_kind: Object.fromEntries(Object.entries(await totalsByKind()).map(([k, v]) => [k, v.amount])),
            digest: digestOf(hs), imported: await meta("imported") };
@@ -588,8 +603,8 @@ async function rollbackToPepe({ key, actor }) {
     if (dup) return dup;
     const hs = await holdsHeld();
     const t = now();
-    await runQuery("UPDATE escrow_holds SET state = 'returned', done_at = ?, done_key = ? WHERE state = 'held'", [t, mk]);
-    const rest = await heldTotal();
+    await runQuery(`UPDATE escrow_holds SET state = 'returned', done_at = ?, done_key = ? WHERE state = 'held' AND ${PEPE_SQL}`, [t, mk]);
+    const rest = await heldTotal("pepe");
     if (rest.count) throw new Refuse(500, `the escrow still holds ${rest.amount} after the rollback`, "E_VERIFY");
     const sum = hs.reduce((a, h) => a + h.amount, 0);
     const res = { ok: true, key, holds: hs, sum, count: hs.length, digest: digestOf(hs), seq: (await meta("seq")) || 0, backup };
@@ -672,7 +687,7 @@ function register(app, { isBotToken, addUser, patSupply }) {
     const r = await rev();
     const base = { ok: true, live: await live(), enabled: await enabled(), games: await gamesState(), rev: r };
     if (b.since_rev !== undefined && Number(b.since_rev) === r) return Object.assign(base, { same: true });
-    return Object.assign(base, { holds: base.live ? await holdsHeld() : [], held: await heldTotal() });
+    return Object.assign(base, { holds: base.live ? await holdsHeld() : [], held: await heldTotal("pepe") });
   }));
   app.post("/api/escrow/bot/hold", bot((b) => hold(b)));
   app.post("/api/escrow/bot/refund", bot((b) => refund(b)));
@@ -713,5 +728,5 @@ function register(app, { isBotToken, addUser, patSupply }) {
 
 module.exports = { init, register, enabled, live, rev, bumpRev, meta, setMeta, tx, seen, record, holdInTx, refundInTx, settleInTx, grantInTx,
                    hold, refund, settle, grant, status, holdsHeld, holdsByIds, heldTotal, totalsByKind, digestOf, supplyRows, importFromPepe,
-                   exportState, rollbackToPepe, gamesState, emitInTx, wake, events, adminView, accountFor, kindOf, Refuse, isRefuse, GAMES,
+                   exportState, rollbackToPepe, gamesState, SERVICE_KINDS, isServiceKind, emitInTx, wake, events, adminView, accountFor, kindOf, Refuse, isRefuse, GAMES,
                    _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive };
