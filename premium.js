@@ -224,6 +224,21 @@ const activeSync = (tier, target, t = now()) => { const s = subSync(tier, target
 const isPrime = (roomId, t) => activeSync("prime_time", roomId, t);
 /** Does this account have a Season Pass right now? (sync, cached) */
 const hasPass = (userId, t) => activeSync("season_pass", userId, t);
+/** 1.99nw: the Camfrog logins (lowercase) of every account with a Season Pass right now - Pepe keeps their PM logs
+ *  without a time limit (his chat-log retention, camfrog-bot pepe_retention.py). */
+async function passCamfrogs(t = now()) {
+  maybeRefresh();
+  const ids = [];
+  for (const [k, s] of CACHE) if (k.startsWith("season_pass:") && t < endsAt(s, t)) ids.push(String(s.target));
+  if (!ids.length) return [];
+  const out = new Set();
+  for (let i = 0; i < ids.length; i += 400) {
+    const part = ids.slice(i, i + 400);
+    const rows = await getQuery(`SELECT camfrogUsername FROM users WHERE userId IN (${part.map(() => "?").join(",")})`, part);
+    for (const r of rows) if (r.camfrogUsername) out.add(String(r.camfrogUsername).toLowerCase());
+  }
+  return [...out].sort();
+}
 /** The perks a pad / an account gets right now (other modules ask this, never the tables). */
 function padPerks(roomId) {
   const on = isPrime(roomId);
@@ -813,7 +828,7 @@ function register(app, { addUser }) {
 
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
-  isPrime, hasPass, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
+  isPrime, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
   padTarget, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

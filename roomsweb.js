@@ -122,7 +122,10 @@ function register(app, { addUser, isBotToken }) {
       let padVerify = [];
       try { padVerify = await require("./padconnect").pendingForPepe(); } catch (e) { console.error("[rooms] pad verify:", e.message); }
       // 1.99nr: prime_known - every room carries prime_time (Pepe's retention deletes nothing without this marker)
-      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
+      // 1.99nw: season_pass - the Camfrog logins with a Season Pass (Pepe keeps their PM logs); pass_known says the list is real
+      let pass = null;
+      try { pass = await require("./premium").passCamfrogs(); } catch (e) { console.error("[rooms] season pass list:", e.message); }
+      res.json({ ok: true, rooms: await rooms.ownersForPepe(), prime_known: true, ...(pass ? { season_pass: pass, pass_known: true } : {}), ...(feed.feed_mentions ? { feed_mentions: feed.feed_mentions } : {}), pad_verify: padVerify });
     } catch (e) { fail(res, e); }
   });
   app.post("/api/rooms/royalties/spend", async (req, res) => {

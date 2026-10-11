@@ -113,6 +113,8 @@ test("Season Pass for yourself: one debit with a ledger row, 100% Fort Knox, per
   const L = await getQuery("SELECT kind, amount, days, period_from, period_to FROM premium_ledger WHERE payer_id = ?", [fan.userId]);
   assert.deepEqual(L.map((x) => [x.kind, x.amount, x.days, x.period_from, x.period_to]), [["buy", 2000000, 30, T0, T0 + 30 * DAY]]);
   assert.equal(PR.hasPass(fan.userId), true);
+  await runQuery("UPDATE users SET camfrogUsername = ? WHERE userId = ?", ["FanCF", fan.userId]);
+  assert.deepEqual(await PR.passCamfrogs(), ["fancf"], "1.99nw: Pepe's list - Camfrog logins with a Season Pass, lowercase");
   assert.deepEqual(PR.userPerks(fan.userId), { seasonPass: true, uploadMult: 2, stickerPacks: 1 });
   const inv = await COS.inventory(fan.userId);
   assert.deepEqual(inv.items.map((i) => i.item_id).sort(), ["ad_seasonpass", "bn_seasonpass", "nc_seasonpass"]);

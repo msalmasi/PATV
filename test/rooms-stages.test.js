@@ -553,6 +553,8 @@ test("HTTP: owner-only routes, Pepe's owner sync + !stage act, front room needs 
     assert.equal(r.j.rooms.find((x) => x.id === PLANT).owner.camfrog, "foamy1111");
     assert.equal(r.j.prime_known, true, "1.99nr: Pepe's retention needs the Prime Time marker");
     assert.ok(r.j.rooms.every((x) => typeof x.prime_time === "boolean"), "1.99nr: every room says whether it has Prime Time");
+    assert.equal(r.j.pass_known, true, "1.99nw: the Season Pass list rides along");
+    assert.ok(Array.isArray(r.j.season_pass), "1.99nw: season_pass is a list of Camfrog logins");
     r = await J("/api/rooms/owners", { password: "bot", owner_shares: [{ flow: "queue", label: "Music queue (!play)", pct: 15 }] });
     assert.ok(r.j.ok); assert.deepEqual(ROY.ownerShares(), [{ flow: "queue", label: "Music queue (!play)", pct: 15 }], "Pepe's live shares stored");
     const u = await mkUser();
