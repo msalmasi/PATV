@@ -11,6 +11,7 @@
 // Rate limits: link start 10 / 15 min per account and 30 per IP; finish 20 / 15 min per account.
 "use strict";
 const CP = require("./cryptopay");
+const SPG = require("./supportpage");   // 1.99mn: /support extras (goal meter, total raised, recent supporters) - admin switches, off by default
 
 const QR = new Map();
 /** An inline SVG QR code for a (public) address. */
@@ -63,12 +64,20 @@ function register(app, { addUser, noTimers } = {}) {
       const chains = CP.accepted().map((c) => ({ ...c, qr: qrSvg(c.address) }));
       const T = CP.patFor(100);
       let donate = null;
-      try { donate = { ...require("./stripebilling").donateLocals("/wallet", req.query.donate), onSupport: true }; } catch (e) { donate = null; }
+      try { donate = { ...require("./stripebilling").donateLocals("/support", req.query.donate), onSupport: true }; } catch (e) { donate = null; }
+      // 1.99mn design pass: the optional goal / total / recent supporters (supportpage.js, all off by default), the viewer's
+      // name opt-in, and the thank-you after Stripe's redirect (the newest card donation credited in the last hour, if any)
+      let sp = {}, showName = false, thanks = null;
+      try {
+        sp = await SPG.pageData();
+        if (me) showName = await SPG.showName(me.userId);
+        if (me && donate && donate.result === "success") thanks = await SPG.latestCard(me.userId);
+      } catch (e) { console.error("[support] page extras:", e.message); }
       res.render("support", {
         user: me ? me.username : null, title: req.t ? req.t("support.title") : "Support PATV",
         cryptoOn, preview: !cryptoOn && admin, chains, me: !!me,
         wallets: me ? await CP.wallets(me.userId) : [], payments: me ? await CP.mine(me.userId) : [],
-        rate: T.rate, bonus_pct: T.bonus_pct, min: CP.get().min_usd, max: CP.get().max_usd, donate,
+        rate: T.rate, bonus_pct: T.bonus_pct, min: CP.get().min_usd, max: CP.get().max_usd, donate, sp, showName, thanks,
       });
     } catch (e) { next(e); }
   });
@@ -85,16 +94,20 @@ function register(app, { addUser, noTimers } = {}) {
     return CP.linkFinish(req.user, String(b.nonce || ""), String(b.signature || ""));
   }));
   app.post("/api/crypto/unlink", ...json(async (req, b) => CP.unlink(req.user, b.id)));
+  // 1.99mn: the viewer's "show my name in recent supporters" opt-in; the admin switches for the page extras
+  app.post("/api/support/prefs", ...json(async (req, b) => SPG.setShowName(req.user.userId, !!b.show_name)));
+  app.post("/api/support/admin/settings", ...json(async (req, b) => SPG.set(b, req.user.username), { admin: true }));
 
   // ── admin ──
   app.get("/admin/crypto", addUser, async (req, res, next) => {
     if (!isAdmin(req.user)) return res.redirect("/login");
     try {
       await CP.init();
+      await SPG.init();
       const [health, payments, unclaimed, held, suspect, totals] = await Promise.all([CP.health(), CP.adminList({ limit: 200 }),
         CP.adminList({ status: "unclaimed" }), CP.adminList({ status: "held" }), CP.adminList({ status: "suspect" }), CP.totals()]);
       res.render("cryptoAdmin", { user: req.user.username, S: CP.get(), health, payments, unclaimed, held, suspect, totals,
-        accepted: CP.accepted(), terms: CP.patFor(100), stripe: stripeOn() });
+        accepted: CP.accepted(), terms: CP.patFor(100), stripe: stripeOn(), SPS: SPG.get() });
     } catch (e) { next(e); }
   });
   app.get("/api/crypto/admin/health", ...json(async () => ({ health: await CP.health(), totals: await CP.totals() }), { admin: true }));

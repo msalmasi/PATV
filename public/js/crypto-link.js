@@ -77,9 +77,5 @@
       }, function (e) { b.disabled = false; say(b, walletError(e), true); });
   });
 
-  // /support: refresh the statuses while something is pending
-  var tbl = document.getElementById('cryptoPayments');
-  if (tbl && tbl.querySelector('[data-status="pending"], [data-status="final"]')) {
-    setTimeout(function () { location.reload(); }, 60000);
-  }
+  // /support refreshes the statuses live itself (public/js/support.js, 1.99mn) - no full-page reload here any more
 })();

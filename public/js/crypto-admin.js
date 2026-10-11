@@ -22,6 +22,20 @@
   });
   if (form && form.elements.crypto_donations_enabled && form.elements.crypto_donations_enabled.checked) form.setAttribute('data-was', 'crypto_donations_enabled');
 
+  // 1.99mn: the /support page extras (goal meter, total raised, recent supporters)
+  var sps = document.getElementById('spsForm');
+  if (sps) sps.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var body = { _bools: [] };
+    Array.prototype.forEach.call(sps.elements, function (el) {
+      if (!el.name) return;
+      if (el.type === 'checkbox') { body._bools.push(el.name); if (el.checked) body[el.name] = true; }
+      else body[el.name] = el.value;
+    });
+    post('/api/support/admin/settings', body).then(function (j) { msg('spsMsg', j.changed && j.changed.length ? 'Saved: ' + j.changed.join(', ') : 'No change.'); },
+      function (e) { msg('spsMsg', e.message, true); });
+  });
+
   var poll = document.getElementById('cxPoll');
   if (poll) poll.addEventListener('click', function () {
     poll.disabled = true; msg('cxPollMsg', 'Scanning…');

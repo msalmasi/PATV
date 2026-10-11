@@ -214,6 +214,8 @@ const RULES = {
   // 1.99ks: crypto donations (cryptopay.js) - a linked wallet, its link requests + log, and its payments follow the account
   "crypto_wallets.user_id": M(), "crypto_link_nonces.user_id": M(), "crypto_wallet_log.user_id": M(), "crypto_wallet_log.actor": { deny: NAME },
   "crypto_payments.user_id": M(), "crypto_payments.decided_by": { deny: NAME },
+  // 1.99mn: the /support "show my name" opt-in (supportpage.js) follows the account; the settings log names the admin
+  "support_prefs.user_id": M({ key: [] }), "support_settings.actor": { deny: NAME },
   "crypto_payments.src_addr": { deny: "a wallet address, not a userId" }, "crypto_payments.dst_addr": { deny: "a wallet address, not a userId" },
   "stage_events.actor": M(), "room_events.actor": M(),
   "stage_bans.userId": M({ key: [], name: "username" }), "stage_bans.by": M(),

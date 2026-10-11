@@ -39,6 +39,21 @@
     </form>
   </section>
 
+  <%# 1.99mn: the /support page extras (supportpage.js) - all off by default. Card + crypto donations both count. %>
+  <% const SPS_ = locals.SPS || {}; %>
+  <section class="sb-card" id="spSettings" aria-labelledby="spsT">
+    <h2 id="spsT">💖 Support page extras</h2>
+    <p class="muted">Optional social proof on <a href="/support">/support</a>. Everything here is OFF by default. Amounts come from the donation mint claims (card + crypto).
+      Recent supporters show as “Someone” unless the member ticked “show my name” on the page, and never with an exact amount (only the tier word).</p>
+    <form id="spsForm" style="display:grid;gap:8px">
+      <label class="chk"><input type="checkbox" name="goal_on" <%= SPS_.goal_on ? 'checked' : '' %>> Show a monthly server-costs goal meter</label>
+      <label>Monthly goal (USD, whole dollars) <input type="number" name="goal_usd" min="0" step="1" value="<%= SPS_.goal_usd || 0 %>"></label>
+      <label class="chk"><input type="checkbox" name="total_on" <%= SPS_.total_on ? 'checked' : '' %>> Show the total raised (all time) and the number of supporters</label>
+      <label class="chk"><input type="checkbox" name="recent_on" <%= SPS_.recent_on ? 'checked' : '' %>> Show recent supporters (anonymous unless they opt in)</label>
+      <div class="row"><button type="submit" class="btn primary">Save</button><span class="msg" id="spsMsg" role="status"></span></div>
+    </form>
+  </section>
+
   <section class="sb-card" id="health" aria-labelledby="hT">
     <h2 id="hT">Watcher</h2>
     <div class="tblwrap"><table><thead><tr><th>Chain</th><th>On</th><th>RPC</th><th>Verifier</th><th>Scanned to</th><th>Final / head</th><th>Last OK</th><th>Last error</th></tr></thead><tbody>
@@ -94,5 +109,5 @@
     <pre id="cxDryOut" style="white-space:pre-wrap;max-height:420px;overflow:auto"></pre>
   </section>
 </main>
-<script src="/public/js/crypto-admin.js?v=1" defer></script>
+<script src="/public/js/crypto-admin.js?v=2" defer></script>
 <%- include('partials/admin-close') %>

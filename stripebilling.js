@@ -152,7 +152,7 @@ async function donate(user, { usd, back } = {}) {
   if (!user || !user.userId) throw new P.Refuse(401, "Sign in first.");
   const n = Number(usd);
   if (!Number.isInteger(n) || n < 1 || n > DONATE_MAX_USD) throw new P.Refuse(400, `Pick a whole number of dollars from 1 to ${DONATE_MAX_USD}.`);
-  const page = back === "/shop" ? "/shop" : "/wallet";
+  const page = back === "/shop" ? "/shop" : back === "/support" ? "/support" : "/wallet";   // 1.99mn: /support shows its own thank-you
   const s = await api("/checkout/sessions", {
     mode: "payment", client_reference_id: user.userId,
     line_items: { 0: { quantity: 1, price_data: { currency: "usd", unit_amount: n * 100, product_data: { name: "Support PATV" } } } },
