@@ -1,4 +1,4 @@
-// cryptosig.js — 1.99kq: wallet-ownership proofs for crypto donations (cryptopay.js). Pure functions, no network, no keys.
+// cryptosig.js — 1.99ks: wallet-ownership proofs for crypto donations (cryptopay.js). Pure functions, no network, no keys.
 //
 // A wallet is linked to a PATV account ONLY by a signature over a message this server wrote (a nonce, the domain, an
 // expiry). A typed address is never trusted.

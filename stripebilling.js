@@ -166,7 +166,7 @@ async function donate(user, { usd, back } = {}) {
 /** 1.99jw: what the Support PATV card (views/partials/donate-card.ejs) needs; enabled:false hides it. */
 function donateLocals(back, result) {
   const st = publicState();
-  // 1.99kq: crypto = the stablecoin donations (cryptopay.js) are on - the card links to /support, independent of Stripe
+  // 1.99ks: crypto = the stablecoin donations (cryptopay.js) are on - the card links to /support, independent of Stripe
   let crypto = false;
   try { crypto = require("./cryptopay").enabled(); } catch (e) { crypto = false; }
   if (!st.enabled) return { stripe: st, crypto, back };

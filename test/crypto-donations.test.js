@@ -1,4 +1,4 @@
-// Offline tests for 1.99kq stablecoin donations (cryptopay.js, cryptosig.js, cryptoweb.js). No network: the parsers run on
+// Offline tests for 1.99ks stablecoin donations (cryptopay.js, cryptosig.js, cryptoweb.js). No network: the parsers run on
 // RECORDED mainnet RPC responses (test/fixtures/crypto, captured 2026-10-10 from public RPCs) and the watcher on a mocked
 // JSON-RPC. Wallet signatures are made here with throwaway test keys.
 //   NODE_PATH=G:/PATV/node_modules node --test test/crypto-donations.test.js

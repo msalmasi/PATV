@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/crypto-dryrun.js — 1.99kq: a READ-ONLY mainnet check of the crypto donation watcher (cryptopay.js).
+// tools/crypto-dryrun.js — 1.99ks: a READ-ONLY mainnet check of the crypto donation watcher (cryptopay.js).
 //   1. confirms every reviewed token on-chain: EVM decimals() + symbol(), Solana mint decimals (getTokenSupply);
 //   2. reads the receiving addresses' recent FINALIZED incoming USDC/USDT transfers and prints what the watcher WOULD
 //      credit (cryptopay.dryRun) - it writes nothing and mints nothing.

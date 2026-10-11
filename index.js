@@ -1150,7 +1150,7 @@ require("./padlook").register(app, { addUser });       // 1.99es: a pad's look -
 require("./padcosmetics").register(app, { addUser });   // 1.99ew: premium pad cosmetics - frames, glows, badges, animated avatar (/api/rooms/:slug/cosmetics; 100% Fort Knox / gift 50/50)
 require("./premium").register(app, { addUser });        // 1.99iv: Prime Time (pad tier) + Season Pass (personal tier) - /premium, PAT subscriptions, daily renewals, admin comps
 require("./stripebilling").register(app, { addUser });
-require("./cryptoweb").register(app, { addUser });   // 1.99kq: stablecoin donations (USDC/USDT) -> PAT, /support + /admin/crypto
+require("./cryptoweb").register(app, { addUser });   // 1.99ks: stablecoin donations (USDC/USDT) -> PAT, /support + /admin/crypto
 require("./supplyhistory").register(app, { addUser });   // 1.99jw: GET /api/admin/econ/supply-history (Admin) - the daily supply record  // 1.99ix: Stripe Checkout/Billing for the same tiers - OFF and hidden unless STRIPE_ENABLED (404 otherwise)
 require("./stickers").register(app, { addUser });       // 1.99iw: chat sticker packs (DMs + posts), sold for PAT, Season Pass allowance
 require("./follows").register(app, { addUser });   // 1.99bz: following rooms + people
@@ -2140,7 +2140,7 @@ app.get(
           // 1.99kn: Connections -> Telegram (telegram.js)
           let telegram = null;
           try { const tl = await require("./telegram").linkOf(user.userId); telegram = { linked: !!tl, handle: tl && tl.handle ? tl.handle : null }; } catch (e) { console.error("edit profile telegram:", e.message); }
-          // 1.99kq: Connections → 🪙 Crypto wallets (cryptopay.js: linked by signature only)
+          // 1.99ks: Connections → 🪙 Crypto wallets (cryptopay.js: linked by signature only)
           let cryptoW = null;
           try { const CP = require("./cryptopay"); await CP.init(); const ws = await CP.wallets(user.userId); if (CP.enabled() || ws.length) cryptoW = { on: CP.enabled(), wallets: ws }; } catch (e) { console.error("edit profile crypto:", e.message); }
           res.render("editProfile", {

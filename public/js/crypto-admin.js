@@ -1,4 +1,4 @@
-// public/js/crypto-admin.js — 1.99kq: /admin/crypto actions (cryptoweb.js). Same-site JSON POSTs, admins only server-side.
+// public/js/crypto-admin.js — 1.99ks: /admin/crypto actions (cryptoweb.js). Same-site JSON POSTs, admins only server-side.
 (function () {
   'use strict';
   function post(url, body) {

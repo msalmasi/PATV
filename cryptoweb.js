@@ -1,4 +1,4 @@
-// cryptoweb.js — 1.99kq: the pages + routes for stablecoin donations (cryptopay.js).
+// cryptoweb.js — 1.99ks: the pages + routes for stablecoin donations (cryptopay.js).
 //   /support                     "Support PATV": the receiving addresses (QR + copy), accepted chains / tokens, the rate,
 //                                the viewer's linked wallets + their payments (pending / credited / held / unclaimed),
 //                                and the card donation when Stripe is on. 404 while both are off (admins see a preview).

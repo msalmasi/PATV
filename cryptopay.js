@@ -1,4 +1,4 @@
-// cryptopay.js — 1.99kq: stablecoin donations (USDC / USDT on Ethereum, Base, Solana) that mint PAT, the same way a Stripe
+// cryptopay.js — 1.99ks: stablecoin donations (USDC / USDT on Ethereum, Base, Solana) that mint PAT, the same way a Stripe
 // donation does (stripebilling.js, Economy v3 policy "donation"). Switch: crypto_donations_enabled (default OFF),
 // independent of Stripe. Pages + routes: cryptoweb.js. Wallet-ownership proofs: cryptosig.js.
 //
@@ -152,14 +152,18 @@ function init() {
         recv TEXT, last_ok INTEGER, last_error TEXT, last_error_at INTEGER, errors INTEGER DEFAULT 0, next_try INTEGER DEFAULT 0)`);
       await runQuery(`CREATE TABLE IF NOT EXISTS crypto_sol_cursors (account TEXT PRIMARY KEY, mint TEXT NOT NULL, recv TEXT NOT NULL,
         last_sig TEXT, last_slot INTEGER, updated INTEGER)`);
-      for (const r of await getQuery("SELECT key, value FROM crypto_settings")) {
-        if (!Object.prototype.hasOwnProperty.call(DEFAULTS, r.key)) continue;
-        try { S[r.key] = JSON.parse(r.value); } catch (e) { /* keep the default */ }
-      }
+      await loadSettings();
       await require("./funding").init();          // reserve_claims (+ meta)
     })().catch((e) => { ready = null; throw e; });
   }
   return ready;
+}
+/** (Re)read the saved settings. The watcher's tick does it too, so tools/crypto-settings.js applies without a restart. */
+async function loadSettings() {
+  for (const r of await getQuery("SELECT key, value FROM crypto_settings")) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULTS, r.key)) continue;
+    try { S[r.key] = JSON.parse(r.value); } catch (e) { /* keep the default */ }
+  }
 }
 const get = () => JSON.parse(JSON.stringify(S));
 const enabled = () => !!S.crypto_donations_enabled;
@@ -715,7 +719,7 @@ function schedule(ms) {
 async function tick() {
   if (running) return schedule(5000);
   running = true;
-  try { if (watching()) await pollOnce(); } catch (e) { console.error("[crypto] watcher:", e.message); } finally { running = false; }
+  try { await loadSettings(); if (watching()) await pollOnce(); } catch (e) { console.error("[crypto] watcher:", e.message); } finally { running = false; }
   schedule(Math.max(20, Number(S.poll_sec) || 60) * 1000);
 }
 function start() { stopped = false; init().then(() => schedule(15000)).catch((e) => console.error("[crypto] setup:", e.message)); }

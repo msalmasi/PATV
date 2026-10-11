@@ -1,4 +1,4 @@
-// public/js/crypto-link.js — 1.99kq: link a crypto wallet by SIGNING (cryptoweb.js / cryptopay.js), copy receiving addresses,
+// public/js/crypto-link.js — 1.99ks: link a crypto wallet by SIGNING (cryptoweb.js / cryptopay.js), copy receiving addresses,
 // refresh the viewer's donation statuses on /support. No library: an injected EVM wallet (window.ethereum, EIP-1193) signs
 // the server's EIP-4361 text with personal_sign; Phantom / Solflare sign the Solana text with signMessage. Nothing here
 // can move funds - no transaction is ever built or requested.
