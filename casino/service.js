@@ -186,7 +186,7 @@ async function emit(T, kind, text, extra) {
   const rs = roomsOf(T);
   const data = Object.assign({ text: text || "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
   const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
-                           [T.id, T.room || null, ts, kind, JSON.stringify(data)]);
+                           [T.id, T.room || (Array.isArray(data.rooms) && data.rooms[0]) || null, ts, kind, JSON.stringify(data)]);
   if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
   if (text) {
     T.log.push({ ts, text: String(text).slice(0, 240) });
@@ -320,6 +320,7 @@ async function openRound(T, first) {
   const secs = first ? C.OPEN_SECS : C.BET_SECS;
   T.dl.bet = clock() + secs * 1000;
   const ab = T.autobet.length && !first ? " (autobet players are in automatically)" : "";
+  await advertRepeat(T);                  // 1.99pc: a round is about to start - remind the advertised rooms (rate-limited)
   await emit(T, "betting", `🃏 Betting open — !bet ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}. Dealing in ${secs}s (or !bj deal).${ab}`,
              { round_no: n, commitment: T.round.commitment, secs });
   await save(T);
@@ -886,6 +887,19 @@ async function cmdEnd(T, actor) {
 const HELP = "🂠 Blackjack — Pepe deals (6-deck, blackjack pays 3:2, dealer hits soft 17). !blackjack start opens a table; " +
              "!bet <amount> each round; then !hit, !stand, !double, !split, !insurance. Beat Pepe without going over 21.";
 
+// 1.99pc: "!bj advertise <room>" / "!holdem unadvertise <room>" - the host advertises the table of this room elsewhere
+const ADVERT_VERBS = ["advertise", "advert", "ad", "unadvertise", "unadvert"];
+async function advertCmd(T, actor, verb, args) {
+  if (!T) return R(false, "there's no casino table here to advertise.");
+  const room = String((args || [])[0] || "").trim();
+  if (!room) {
+    const list = advertList(T).map((r) => r.name);
+    return R(true, list.length ? `📣 advertised in ${list.join(", ")}. !bj advertise <room> / !bj unadvertise <room>.`
+                               : "📣 usage: !bj advertise <room> (or !holdem advertise <room>) - Pepe posts this table's link there.");
+  }
+  return advertiseIn(T, room, actor, !verb.startsWith("un"));
+}
+
 /** Run one command on a table (or open one). verb + args as typed after !bj. -> {ok, reply, table?} */
 async function run(actor, verb, args, opts) {
   opts = opts || {};
@@ -906,6 +920,7 @@ async function run(actor, verb, args, opts) {
       if (u && u.casino_banned) return R(false, "🚫 you're banned from the casino.");
     }
     if (["start", "open", "new"].includes(verb)) return cmdStart(actor, opts.room || null, "holdem", args[0]);
+    if (ADVERT_VERBS.includes(verb)) return advertCmd(live, actor, verb, args);
     if (!live) {
       return R(false, ["status", "", "table", "info", "show"].includes(verb) ? "no Hold'em table open. Start one: !holdem start 25/50."
                                                                              : "no table open — start one with !holdem start 25/50.");
@@ -913,6 +928,7 @@ async function run(actor, verb, args, opts) {
     return HM.run(live, actor, verb, args);
   }
   if (live && game === "holdem") return R(false, "a blackjack table is running here — !bj status.");
+  if (ADVERT_VERBS.includes(verb)) return advertCmd(live, actor, verb, args);
   verb = alias[verb] !== undefined ? alias[verb] : verb;
   if (verb === "help") return R(true, HELP);
   if (actor.uid && !rateOk(actor.uid)) return R(false, "slow down a little.");
@@ -1002,12 +1018,10 @@ async function push(tableId, room, actor, mode) {
       if (!cur.includes(room)) return R(false, "It isn't playing in that room.");
       await emit(T, "unpushed", `This table left this room — play on at ${link(T)}`, { rooms: [room] });
       setRooms(T, cur.filter((x) => x !== room));
-      if (!T.room) streamGone(T.id);
     } else {
       if (!cur.length) return R(true, "It was already web-only.");
       await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`, { rooms: cur });
-      setRooms(T, []);
-      streamGone(T.id);
+      setRooms(T, []);                       // 1.99pc: a web-only table keeps its place on Pepe's stream
     }
     await save(T);
     return R(true, room && mode !== "remove" ? "Announced in the room." : T.room ? "Room removed." : "The table is web-only now.", { rooms: roomsOf(T) });
@@ -1048,7 +1062,7 @@ function bjView(T) {
   return {
     id: T.id, game: "bj", status: T.status, phase: T.status === "closed" ? "closed" : e.phase, rev: T.rev,
     room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: T.host.name, round_no: e.round_no,
-    min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
+    min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, adverts: advertList(T), max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
     client_seed: T.client_seed, commitment: T.round ? T.round.commitment : null, commit_round: T.round ? T.round.no : null,
     dealer, seats, turn, bet_deadline: T.dl.bet, ins_deadline: T.dl.ins,
     last_round: ["betting", "idle", "done"].includes(e.phase) || T.status === "closed" ? T.last_round : null,
@@ -1085,7 +1099,7 @@ async function meView(T, uid) {
 function lobby() {
   return Array.from(S.tables.values()).filter((t) => t.status === "open").map((T) => {
     const room = T.room ? S.rooms.get(T.room) : null;
-    const base = { id: T.id, host: T.host.name, room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), url: link(T), on_stream: S.stream.table === T.id };
+    const base = { id: T.id, host: T.host.name, room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), adverts: advertList(T), url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
     return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
                                  min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes });
@@ -1113,7 +1127,8 @@ async function streamLoad() {
     }
   } catch (e) { /* a fresh database */ }
 }
-const streamable = (id) => { const T = S.tables.get(id); return !!T && T.status === "open" && !!T.room; };
+// 1.99pc: any open table can be on Pepe's stream - a web-only one too (the poll always carries the stream table)
+const streamable = (id) => { const T = S.tables.get(id); return !!T && T.status === "open"; };
 async function streamAdvance() {
   while (S.stream.queue.length) {
     const id = S.stream.queue.shift();
@@ -1163,7 +1178,6 @@ async function stream(tableId, on, actor, override) {
       streamGone(T.id);
       return R(true, had ? "Off the stream." : "It wasn't on the stream.");
     }
-    if (!T.room) return R(false, "Push the table to a Camfrog room first — the stream shows Pepe's rooms.");
     if (S.stream.table === T.id) return R(true, "It's on the stream already.");
     const cur = S.stream.table && streamable(S.stream.table) ? S.tables.get(S.stream.table) : null;
     if (!cur) {
@@ -1190,6 +1204,76 @@ async function stream(tableId, on, actor, override) {
   });
 }
 
+// ── 1.99pc: ADVERTS - announce a table in Camfrog rooms without playing it there ──
+// The host (or an admin) advertises a table in one or more of Pepe's casino rooms: Pepe posts ONE line there (game, host,
+// stakes, free seats, 💎, the link) and repeats it when a round / hand is about to start, at most every 10 minutes per room
+// per table. Nothing else goes to an advertised room - no gameplay events, no commands, no hole cards (that's push).
+// Pepe checks each room's backend switch and game toggle before posting.
+const ADVERT_REPEAT_MS = 10 * 60 * 1000;
+const MAX_ADVERTS = 10;
+const advertsOf = (T) => (Array.isArray(T.adverts) ? T.adverts : []);
+const advertList = (T) => advertsOf(T).map((id) => ({ id, name: roomName(id) }));
+function advertText(T) {
+  const hm = T.game === "holdem";
+  const stakes = hm ? `blinds ${fmt(T.eng.sb)}/${fmt(T.eng.bb)}` : `bets ${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)}`;
+  const free = Math.max(0, (hm ? HM.HC.MAX_SEATS : C.MAX_SEATS) - T.eng.seats.length);
+  return `📣 ${T.high_stakes ? "💎 High Roller " : ""}${hm ? "No-Limit Hold'em" : "Blackjack"} at ${T.host.name}'s table — ${stakes}, ` +
+         `${free} seat${free === 1 ? "" : "s"} free${T.high_stakes ? " (High Rollers only)" : ""}. Play on the web: ${link(T)}`;
+}
+const roomFresh = (id) => { const r = S.rooms.get(id); return !!r && clock() - r.ts < C.ROOM_FRESH_MS; };
+/** a room by id or display name (case-insensitive) among the rooms Pepe serves right now */
+function findRoom(q) {
+  q = String(q || "").trim().toLowerCase();
+  if (!q) return null;
+  const fresh = Array.from(S.rooms.values()).filter((r) => roomFresh(r.id));
+  return fresh.find((r) => r.id.toLowerCase() === q) || fresh.find((r) => r.name.toLowerCase() === q) || null;
+}
+/** on: advertise the table in `room` (posts the line now); off: stop. Host or admin. */
+async function advertiseIn(T, room, actor, on) {
+  if (!T || T.status !== "open") return R(false, "That table has closed.");
+  if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can advertise it.");
+  const r = findRoom(room) || (advertsOf(T).includes(room) ? { id: room, name: roomName(room) } : null);
+  if (!r) return R(false, "Pepe isn't in that room with the casino on right now.");
+  const cur = advertsOf(T);
+  if (!on) {
+    if (!cur.includes(r.id)) return R(false, "It isn't advertised there.");
+    T.adverts = cur.filter((x) => x !== r.id);
+    if (T.advert_ts) delete T.advert_ts[r.id];
+    await save(T);
+    return R(true, `No more adverts in ${r.name}.`, { adverts: advertList(T) });
+  }
+  if (roomsOf(T).includes(r.id)) return R(false, "It's already playing in that room.");
+  if (!cur.includes(r.id) && cur.length >= MAX_ADVERTS) return R(false, `A table can be advertised in up to ${MAX_ADVERTS} rooms.`);
+  if (!cur.includes(r.id)) T.adverts = cur.concat([r.id]);
+  T.advert_ts = Object.assign({}, T.advert_ts || {}, { [r.id]: clock() });
+  await emit(T, "advert", advertText(T), { rooms: [r.id], url: link(T), game: T.game, high_stakes: !!T.high_stakes });
+  await save(T);
+  return R(true, `Advertised in ${r.name}.`, { adverts: advertList(T) });
+}
+async function advertise(tableId, room, actor, on) {
+  await boot();
+  return locked(() => advertiseIn(S.tables.get(tableId), room, actor, on));
+}
+/** a round / hand is about to start: repeat the advert in the rooms not reminded for 10 minutes */
+async function advertRepeat(T) {
+  const due = advertsOf(T).filter((id) => roomFresh(id) && !roomsOf(T).includes(id) && clock() - ((T.advert_ts || {})[id] || 0) >= ADVERT_REPEAT_MS);
+  if (!due.length) return;
+  T.advert_ts = Object.assign({}, T.advert_ts || {});
+  for (const id of due) T.advert_ts[id] = clock();
+  await emit(T, "advert", advertText(T), { rooms: due, url: link(T), game: T.game, high_stakes: !!T.high_stakes, repeat: true });
+}
+
+/** 1.99pc: every open table, short (Pepe lists them as links when someone asks for a game in chat) */
+function openList() {
+  return Array.from(S.tables.values()).filter((t) => t.status === "open").map((T) => {
+    const hm = T.game === "holdem";
+    return { id: T.id, game: hm ? "holdem" : "bj", host: T.host.name, high_stakes: !!T.high_stakes, url: link(T),
+             players: T.eng.seats.length, max_seats: hm ? HM.HC.MAX_SEATS : C.MAX_SEATS,
+             sb: hm ? T.eng.sb : null, bb: hm ? T.eng.bb : null, min_bet: hm ? null : T.eng.min_bet, max_bet: hm ? null : T.eng.max_bet,
+             rooms: roomsOf(T) };
+  });
+}
+
 // ── Pepe's long-poll ──
 function noteRooms(rooms) {
   const t = clock();
@@ -1209,7 +1293,7 @@ function freshRooms() {
 function roomTables() {
   const tables = {}, priv = {};
   for (const T of S.tables.values()) {
-    if (!roomsOf(T).length) continue;
+    if (!roomsOf(T).length && S.stream.table !== T.id) continue;      // 1.99pc: + the stream table, wherever it plays
     tables[T.id] = publicView(T);
     if (T.game === "holdem") Object.assign(priv, HM.privateFor(T));
   }
@@ -1258,7 +1342,7 @@ async function fairRecord(tableId, round) {
 // ── Hold'em (holdem.js) on the same core ──
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards, dropLine,
-  roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T),
+  roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T), advertList: (T) => advertList(T), advertRepeat: (T) => advertRepeat(T),
 });
 
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
@@ -1269,6 +1353,6 @@ function limits() {
 }
 
 module.exports = {
-  C, S, HM, boot, limits, HR_WORDS, roomsOf, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  C, S, HM, boot, limits, HR_WORDS, roomsOf, advertise, advertRepeat, openList, ADVERT_REPEAT_MS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
 };

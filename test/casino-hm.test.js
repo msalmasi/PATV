@@ -340,6 +340,59 @@ test("1.99ox cross-room: one table in several Camfrog rooms - events to every ro
   assert.equal(T.room, null);
 });
 
+test("1.99pc adverts: one line (+ rate-limited reminders) in other rooms, never the gameplay; host only; a chat command", async () => {
+  await fresh();
+  svc.noteRooms([{ id: "RA", name: "Room A" }, { id: "RB", name: "Room B" }, { id: "RC", name: "Room C" }]);
+  const tid = await table("25/50", { room: "RA" });
+  const T = svc.getTable(tid);
+  const s0 = svc.S.lastSeq;
+  assert.match((await svc.advertise(tid, "RB", bob, true)).reply, /host or an admin/);
+  assert.match((await svc.advertise(tid, "Nowhere", ann, true)).reply, /isn't in that room/);
+  assert.match((await svc.advertise(tid, "RA", ann, true)).reply, /already playing in that room/);
+  const r = await svc.advertise(tid, "room b", ann, true);              // by display name
+  assert.ok(r.ok, r.reply);
+  assert.deepEqual(T.adverts, ["RB"]);
+  assert.deepEqual(svc.publicView(T).adverts, [{ id: "RB", name: "Room B" }]);
+  assert.deepEqual(svc.lobby().find((x) => x.id === tid).adverts.map((x) => x.id), ["RB"]);
+  // the chat command from the table's room (bot/act: room RA -> this table)
+  const c = await svc.act(ann, "advertise", ["RC"], { room: "RA", table: tid, game: "holdem" }, key());
+  assert.ok(c.ok, c.reply);
+  assert.deepEqual(T.adverts, ["RB", "RC"]);
+  await A(ann, "sit", ["1000"], { table: tid });
+  await A(bob, "sit", ["1000"], { table: tid });
+  deck(ACES);
+  await A(ann, "deal", [], { table: tid });
+  const evs = (await svc.poll(s0, 0)).events.filter((e) => e.table === tid);
+  const ads = evs.filter((e) => e.kind === "advert");
+  assert.equal(ads.length, 2, "one line per advertised room, no reminder within 10 minutes");
+  assert.match(ads[0].data.text, /No-Limit Hold'em at Ann's table — blinds 25\/50, \d seats? free\. Play on the web: .*\/casino\/holdem\/t\//);
+  for (const e of evs.filter((x) => x.kind !== "advert")) {
+    assert.ok(!(e.data.rooms || []).some((x) => x === "RB" || x === "RC") && e.room === "RA", "no gameplay in advertised rooms");
+  }
+  // a reminder when a hand is about to start, once 10 minutes have passed
+  for (const k of Object.keys(T.advert_ts)) T.advert_ts[k] -= svc.ADVERT_REPEAT_MS;
+  const s1 = svc.S.lastSeq;
+  await svc.HM.recover(T).catch(() => {});
+  const H2 = require("../casino/hmengine");
+  while (T.eng.hand_active) { const k = H2.currentActor(T.eng); await A(k === "u1" ? ann : bob, "fold", [], { table: tid }); }
+  T.dl.next = null;
+  svc.S.rate.clear();
+  await A(ann, "deal", [], { table: tid });
+  const rem = (await svc.poll(s1, 0)).events.filter((e) => e.table === tid && e.kind === "advert");
+  assert.equal(rem.length, 1);
+  assert.deepEqual(rem[0].data.rooms, ["RB", "RC"]);
+  assert.equal(rem[0].data.repeat, true);
+  assert.ok((await svc.act(ann, "unadvertise", ["RB"], { room: "RA", table: tid, game: "holdem" }, key())).ok);
+  assert.deepEqual(T.adverts, ["RC"]);
+  // a web-only table's advert still reaches Pepe (the event's room is the advertised one)
+  const web = await table("25/50");
+  const s2 = svc.S.lastSeq;
+  assert.ok((await svc.advertise(web, "RB", ann, true)).ok);
+  const we = (await svc.poll(s2, 0)).events.filter((e) => e.table === web);
+  assert.equal(we.length, 1);
+  assert.equal(we[0].room, "RB");
+});
+
 test("Pepe's stream: first come, a FIFO queue, admin override, released when the table closes or goes idle", async () => {
   await fresh();
   svc.noteRooms([{ id: "R1", name: "One" }, { id: "R2", name: "Two" }, { id: "R3", name: "Three" }]);
@@ -347,7 +400,6 @@ test("Pepe's stream: first come, a FIFO queue, admin override, released when the
   const t2 = (await svc.act(bob, "start", [], { room: "R2", game: "bj" }, key())).table;
   const t3 = (await svc.act(dan, "start", ["25/50"], { room: "R3", game: "holdem" }, key())).table;
   const t4 = (await svc.act(eve, "start", ["25/50"], { room: null, game: "holdem" }, key())).table;
-  assert.match((await svc.stream(t4, true, eve)).reply, /Camfrog room first/);
   assert.match((await svc.stream(t1, true, bob)).reply, /host or an admin/);
   assert.ok((await svc.stream(t1, true, ann)).reply.includes("on Pepe's stream"));
   assert.match((await svc.stream(t2, true, bob)).reply, /you're next in line/);
@@ -369,6 +421,14 @@ test("Pepe's stream: first come, a FIFO queue, admin override, released when the
   assert.ok(svc.getTable(t2).log.some((l) => /on Pepe's stream now/.test(l.text)));
   // the poll tells Pepe which table is on stream
   assert.equal((await svc.poll(-1, 0)).stream, svc.S.stream.table);
+  // 1.99pc: a web-only table can be on Pepe's stream too, and the poll always carries the stream table
+  assert.match((await svc.stream(t4, true, eve)).reply, /next in line/);
+  await svc.act(bob, "end", [], { table: t2 }, key());
+  assert.equal(svc.S.stream.table, t4);
+  const pl = await svc.poll(-1, 0);
+  assert.equal(pl.stream, t4);
+  assert.ok(pl.tables[t4] && pl.tables[t4].room === null, "the web-only stream table rides in the poll");
+  assert.ok(svc.openList().some((x) => x.id === t4 && x.game === "holdem" && x.bb === 50));
 });
 
 test("blackjack: the open line links the table, each round links its proof, !bj fair answers", async () => {

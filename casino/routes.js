@@ -34,7 +34,7 @@ const BOT_VERBS = new Set(["start", "bet", "autobet", "deal", "hit", "stand", "d
                            "help", "open", "new", "go", "wager", "auto", "rebet", "close", "stop", "quit", "insure", "stay", "dd",
                            "table", "info", "show", "rules", "how", "fair", "",
                            "sit", "buyin", "buy", "join", "cashout", "next", "check", "call", "fold", "allin", "all-in", "raise", "cards",
-                           "hand", "hole"]);
+                           "hand", "hole", "advertise", "advert", "ad", "unadvertise", "unadvert"]);
 const ID = /^[0-9a-f]{10}$/;
 const IDEM = /^[\w:.\-]{8,100}$/;
 
@@ -237,6 +237,17 @@ function register(app, { isBotToken, addUser }) {
     res.json(await svc.push(req.params.id, room, actor, mode));
   });
 
+  // 1.99pc: advertise a table in a Camfrog room (one announcement line + reminders; no gameplay there) - host or admin
+  app.post("/api/casino/t/:id/advertise", addUser, async (req, res) => {
+    if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
+    const actor = await webActor(req);
+    if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
+    if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
+    const b = req.body || {};
+    if (!b.room) return res.status(400).json({ ok: false, error: "Pick a room." });
+    res.json(await svc.advertise(req.params.id, String(b.room).slice(0, 64), actor, b.on !== false));
+  });
+
   app.post("/api/casino/t/:id/stream", addUser, async (req, res) => {
     if (!isJsonFetch(req)) return res.status(400).json({ ok: false, error: "Bad request." });
     const actor = await webActor(req);
@@ -287,6 +298,10 @@ function register(app, { isBotToken, addUser }) {
       out.rep = await rewards.repPending(50);
       out.ach_want = await rewards.wantBases(Array.from(svc.S.tables.values()));
       res.set("Cache-Control", "no-store");
+      // 1.99pc: every open table (Pepe lists them as links in chat) + the lobby page each game's links use
+      const base = svc.link({ id: "x", game: "bj" }).replace(/\/casino\/blackjack\/t\/x$/, "");
+      out.open = svc.openList();
+      out.lobby = { bj: base + svc.frontPath(st, "bj"), holdem: base + svc.frontPath(st, "holdem") };
       res.json(Object.assign({ ok: true, enabled: st.bj_enabled, hm_enabled: st.hm_enabled }, out));
     } catch (e) {
       console.error("[casino] poll:", e);

@@ -23,6 +23,12 @@
       <button type="button" class="cz-btn blue sm" id="cz-push"><%- t('casino.push_add') %></button>
       <button type="button" class="cz-btn ghost sm" id="cz-unpush"><%- t('casino.unpush') %></button>
     </div>
+    <label class="lbl" for="cz-adroom"><%- t('casino.advert_h') %></label>
+    <p class="fine"><%- t('casino.advert_note') %></p>
+    <div class="roomchips" id="cz-adlist"></div>
+    <p class="fine" id="cz-adnone" hidden><%- t('casino.no_rooms') %></p>
+    <select id="cz-adroom"></select>
+    <div class="rowb"><button type="button" class="cz-btn ghost sm" id="cz-adgo"><%- t('casino.advert_go') %></button></div>
     <label class="lbl"><%- t('casino.stream_h') %></label>
     <p class="fine" id="cz-streamnow"></p>
     <p class="fine" id="cz-override-row" hidden><label><input type="checkbox" id="cz-override"> <%- t('casino.override') %></label></p>

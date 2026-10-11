@@ -1622,7 +1622,7 @@
     "!holdem start [sb]/[bb]"
    ],
    "summary": "Open a table at the given blinds, e.g.",
-   "details": "Open a table at the given blinds, e.g. **!holdem start 25/50** (up to 5,000/10,000; `100k`/`2.5m` style amounts work too). One table at a time; buy-ins range 20–200 big blinds, for everyone.\n**💎 High Roller tables** (High Rollers only; anyone can watch): `!holdem start hr` or one of the ladder's blinds - **100K/200K, 250K/500K, 500K/1M, 1M/2M, 2.5M/5M, 5M/10M**. Only High Rollers can open or sit at them, and they get the High Roller chips on publicaccess.tv and the stream overlay.",
+   "details": "Open a table at the given blinds, e.g. **!holdem start 25/50** (up to 5,000/10,000; `100k`/`2.5m` style amounts work too). One table at a time; buy-ins range 20–200 big blinds, for everyone.\n**💎 High Roller tables** (High Rollers only; anyone can watch): `!holdem start hr` or one of the ladder's blinds - **100K/200K, 250K/500K, 500K/1M, 1M/2M, 2.5M/5M, 5M/10M**. Only High Rollers can open or sit at them, and they get the High Roller chips on publicaccess.tv and the stream overlay.\n**Hosts of a publicaccess.tv table:** `!holdem advertise <room>` / `!holdem unadvertise <room>` - one announcement line with the link in another room (+ a reminder before a hand, at most every 10 minutes).",
    "examples": [
     "!holdem start 100k/200k",
     "!holdem start 25/50"
@@ -1792,7 +1792,7 @@
     "!blackjack start hr"
    ],
    "summary": "Open a blackjack table (aliases: !bj start).",
-   "details": "Open a blackjack table (aliases: **!bj start**). Anyone can start one; up to 6 players, bets 100–100,000 PAT. Pepe posts the table's web page when it opens — you can play it from publicaccess.tv too.\n**💎 !bj start hr** opens a **High Roller table**: bets 100,000–1,000,000 PAT, High Rollers only (anyone can watch), played with the High Roller chips.",
+   "details": "Open a blackjack table (aliases: **!bj start**). Anyone can start one; up to 6 players, bets 100–100,000 PAT. Pepe posts the table's web page when it opens — you can play it from publicaccess.tv too.\n**💎 !bj start hr** opens a **High Roller table**: bets 100,000–1,000,000 PAT, High Rollers only (anyone can watch), played with the High Roller chips.\n**Hosts of a publicaccess.tv table:** `!bj advertise <room>` posts the table's link in another of Pepe's rooms (and reminds it before a round, at most every 10 minutes); `!bj unadvertise <room>` stops. The game itself stays where it is.",
    "examples": [],
    "keywords": [
     "21",
@@ -1803,6 +1803,33 @@
     "game_blackjack_enabled"
    ],
    "webchat": true
+  },
+  {
+   "id": "tables",
+   "title": "!tables",
+   "category": "games",
+   "role": "everyone",
+   "commands": [
+    "!tables",
+    "!poker"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!tables",
+    "!poker"
+   ],
+   "summary": "The publicaccess.tv casino's open tables, as links: host, stakes, seats, 💎 for High Roller tables.",
+   "details": "Lists the open **publicaccess.tv casino** tables (blackjack and Hold'em; `!poker` lists Hold'em only) as short links: host, stakes or blinds, seats taken, 💎 for High Roller tables, up to 5 plus the lobby link. Tables in any room and web-only ones. Pepe also posts this line when you ask for a game with no table in your room (`!bj`, `!holdem`, `!bj status`). At most once every 2 minutes per room.",
+   "examples": [
+    "!tables",
+    "!poker"
+   ],
+   "keywords": [
+    "casino",
+    "tables",
+    "links",
+    "lobby"
+   ]
   },
   {
    "id": "bet-2",
@@ -3238,7 +3265,7 @@
     "!heist [job]"
    ],
    "summary": "Rob a target, D&D-style — a multi-round survival gauntlet with your !sheet stats, gear, and gang.",
-   "details": "Rob a target, D&D-style — a multi-round survival gauntlet with your `!sheet` stats, gear, and gang. Each round everyone rolls 1d20 + a random stat's modifier vs a rising difficulty (plus crew/flawless/gang bonuses). Survive to bank loot, `!bail` to cash out, get pinched and your loot is split among the survivors.\n**The vault door:** the casino and bank jobs end at **one shared roll for the whole crew**, made by whoever's best placed for the stat it tests. Open it and the crew splits a slice of the vault — usually a few percent, occasionally a huge haul (up to 40% of the vault, very rarely). Fail it and **everyone at the door loses the loot they were holding** (it stays in the vault) — unless a ⚖️ Good Lawyer saves half. So the last `!bail` window, right before the door, is the big decision: walk away with your loot, or risk it for the vault.\n**Odds:** the door is hard on purpose — even a perfect sheet with a full kit opens the casino door only about a third of the time solo, and the Federal Reserve's under 1 in 10; an ordinary sheet still has a real long shot. The bank pays **4× more loot per round** than the casino to make up for it.\n**Jobs** (**!heist <job>**, or **!heist list**): 🏪 **store** — small, quick, always open, and a clean getaway can swipe a heist-shop item from the back room (about 1 in 4 robbers, more solo or with a flawless crew, 3 a day); 🎰 **casino** — 5,000 to join, 9 rounds + the door (needs a 100k+ jackpot); 🚚 **convoy** — rob a gang's cargo run (needs a casino job first; it pays out of the cargo itself); 🏛️ **bank** — 20,000 to join, 11 rounds + the door, the legendary Federal Reserve (needs 📐 Blueprints and a casino job, 500k+ vault). Money jobs are paced by your **own heat** — everyone in the crew takes it, not just the starter — plus a **cooldown per job type** (store 30m, casino 2h, bank 8h) that now survives Pepe restarting. Round loot and the vault slice both scale with the vault, so a fat vault is worth more to everyone. Deep runs can drop rare scores: 📐 Blueprints (unlocks the bank), 🎲 **Loaded Dice** (`!reroll` a stat), 💍 **Kingpin's Ring** (`!ring` +1 a stat), 📈 **The Fence** (+10% payouts), and 🧠 **Mastermind** (advantage on your two best stats). Gear up with `!shop`. See **/heist** for the guide.\n**Your loot is real:** what you bank each round is set aside from the vault as you win it, so you always walk out with it. If the vault can't cover a round, Pepe says so — nat 20s get paid first and the rest split what's left.\n**Other rooms:** you can `!join` a heist from any room, but the rounds — and `!bail` — only work in the room it's running in.",
+   "details": "Rob a target, D&D-style — a multi-round survival gauntlet with your `!sheet` stats, gear, and gang. Each round everyone rolls 1d20 + a random stat's modifier vs a rising difficulty (plus crew/flawless/gang bonuses). Survive to bank loot, `!bail` to cash out, get pinched and your loot is split among the survivors.\n**The vault door:** the casino and bank jobs end at **one shared roll for the whole crew**, made by whoever's best placed for the stat it tests. Open it and the crew splits a slice of the vault — usually a few percent, occasionally a huge haul (up to 40% of the vault, very rarely). Fail it and **everyone at the door loses the loot they were holding** (it stays in the vault) — unless a ⚖️ Good Lawyer saves half. So the last `!bail` window, right before the door, is the big decision: walk away with your loot, or risk it for the vault.\n**Odds:** the door is hard on purpose — even a perfect sheet with a full kit opens the casino door only about a third of the time solo, and the Federal Reserve's under 1 in 10; an ordinary sheet still has a real long shot. The bank pays **4× more loot per round** than the casino to make up for it.\n**Jobs** (**!heist <job>**, or **!heist list**): 🏪 **store** — small, quick, always open; 🎰 **casino** — 5,000 to join, 9 rounds + the door (needs a 100k+ jackpot); 🚚 **convoy** — rob a gang's cargo run (needs a casino job first; it pays out of the cargo itself); 🏛️ **bank** — 20,000 to join, 11 rounds + the door, the legendary Federal Reserve (needs 📐 Blueprints and a casino job, 500k+ vault). Money jobs are paced by your **own heat** — everyone in the crew takes it, not just the starter — plus a **cooldown per job type** (store 30m, casino 2h, bank 8h) that now survives Pepe restarting. Round loot and the vault slice both scale with the vault, so a fat vault is worth more to everyone. Deep runs can drop rare scores: 📐 Blueprints (unlocks the bank), 🎲 **Loaded Dice** (`!reroll` a stat), 💍 **Kingpin's Ring** (`!ring` +1 a stat), 📈 **The Fence** (+10% payouts), and 🧠 **Mastermind** (advantage on your two best stats). Gear up with `!shop`. See **/heist** for the guide.\n**Your loot is real:** what you bank each round is set aside from the vault as you win it, so you always walk out with it. If the vault can't cover a round, Pepe says so — nat 20s get paid first and the rest split what's left.\n**Other rooms:** you can `!join` a heist from any room, but the rounds — and `!bail` — only work in the room it's running in.",
    "examples": [],
    "keywords": [
     "rob",
@@ -4888,7 +4915,7 @@
   },
   {
    "id": "casinobackend",
-   "title": "!casino backend on|off|status",
+   "title": "!casino backend on|off|status · all on|off|status",
    "category": "moderation",
    "role": "admin",
    "commands": [
@@ -4898,15 +4925,50 @@
    "syntax": [
     "!casino backend on",
     "!casino backend off",
-    "!casino backend status"
+    "!casino backend status",
+    "!casino backend all on",
+    "!casino backend all off",
+    "!casino backend all status",
+    "!casino backend default on|off"
    ],
    "summary": "Switch this room's blackjack and Hold'em to the publicaccess.tv casino backend, where web players can sit at the same table.",
-   "details": "Switch **this room's** blackjack and Hold'em between Pepe's own tables and the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). It refuses to switch while an old table is still open here. **status** says which one the room uses (anyone can ask).",
+   "details": "Switch **this room's** blackjack and Hold'em between Pepe's own tables and the **publicaccess.tv casino backend**. With the backend on, `!bj` / `!holdem` and their verbs (`!bet`, `!hit`, `!stand`, `!double`, `!split`, `!insurance`, `!autobet`, `!sit`, `!check`, `!call`, `!raise`, `!allin`, `!fold`, `!cards`, `!leave`) play a table that lives on the site: the same rules, and signed-in web players can sit at it too (Pepe posts the table's link when it opens, and each round's shuffle proof when it ends; `!bj fair` / `!holdem fair` repeats it). Hold'em hole cards come by PM. A web table's host can push it into the room, and onto Pepe's stream (one table at a time: first come, then a queue). It refuses to switch while an old table is still open here. **status** says which one the room uses (anyone can ask). **all on** / **all off** switch every room Pepe is in at once (rooms with an old table still open are skipped and keep what they play on) and set the **new rooms default**, so rooms Pepe joins later follow it; **default on|off** changes only that default (the rooms he is in keep what they play on now). **all status** lists every room. On a Pepe with no publicaccess.tv site set up, **on** is refused and every table stays Pepe's own. The same switches are in Pepe's admin panel (Website & Feed → Backends).",
    "examples": [
     "!casino backend on",
+    "!casino backend all on",
     "!casino backend status"
    ],
    "keywords": []
+  },
+  {
+   "id": "backends",
+   "title": "!backend status · !backends",
+   "category": "moderation",
+   "role": "everyone",
+   "commands": [
+    "!backend",
+    "!backends"
+   ],
+   "aliases": [],
+   "syntax": [
+    "!backend status",
+    "!backends",
+    "!backend all on",
+    "!backend all off"
+   ],
+   "summary": "See where every publicaccess.tv backend switch stands: the casino per room, the lotto, stashes, GTF records, pools, polls, gangs and the escrow.",
+   "details": "**status** (or `!backends`) lists every switch in one line: where each feature runs (Pepe or publicaccess.tv), anything frozen or in conflict, how many rooms play the casino on the site, and whether the site answers (anyone can ask). **all on|off** (admins) switches the per-room switches in every room Pepe is in, which today means the casino (the same as `!casino backend all on|off`). It never moves the one-way hand-overs: the lotto, stashes, GTF records, pools, polls, gangs and the escrow (ledger and games) each move with their own command (`!lotto backend …`, `!stash backend …`, `!gtf backend …`, `!econ pools backend …`, `!poll backend …`, `!gang backend …`, `!escrow backend …`), one at a time. Pepe's admin panel has the same view (Website & Feed → Backends).",
+   "examples": [
+    "!backends",
+    "!backend all on"
+   ],
+   "keywords": [
+    "backend",
+    "publicaccess.tv",
+    "casino",
+    "switch",
+    "handover"
+   ]
   },
   {
    "id": "gtfbackend",
@@ -6748,5 +6810,5 @@
   "!escrow",
   "!retention"
  ],
- "hash": "9d71d4f2521f54f9"
+ "hash": "08ebcff7a2b0af02"
 }

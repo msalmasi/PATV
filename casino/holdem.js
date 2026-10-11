@@ -206,6 +206,7 @@ function install(core) {
     T.hand = { no: T.next.no, seed: T.next.seed, commitment: T.next.commitment, deck };
     T.last_round = null;
     T.last_activity = clock();
+    await core.advertRepeat(T);                       // 1.99pc: a hand is about to start - remind the advertised rooms (rate-limited)
     const events = H.startHand(e, deck);
     await core.runQuery("UPDATE casino_rounds SET dealt = ?, players = ? WHERE table_id = ? AND round_no = ?",
       [clock(), JSON.stringify(e.players.map((k) => ({ uid: k, name: e.names[k], stack: (e.chips[k] || 0) + (e.contrib[k] || 0) }))), T.id, T.hand.no]);
@@ -521,7 +522,7 @@ function install(core) {
       id: T.id, game: "holdem", status: T.status, rev: T.rev, room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: T.host.name,
       phase: T.status === "closed" ? "closed" : e.hand_active ? H.STREET_NAME[e.street] : "between", hand_no: e.hand_no,
       sb: e.sb, bb: e.bb, min_buy: T.min_buy, max_buy: T.max_buy, high_stakes: T.high_stakes, max_seats: HC.MAX_SEATS, act_secs: HC.ACT_SECS,
-      rake_pct: HC.RAKE * 100, board: e.board.slice(), pot: H.pot(e), pots, current_bet: e.current_bet, seats, turn,
+      adverts: core.advertList(T), rake_pct: HC.RAKE * 100, board: e.board.slice(), pot: H.pot(e), pots, current_bet: e.current_bet, seats, turn,
       next_at: T.dl.next, idle_at: T.dl.idle, client_seed: T.client_seed,
       commitment: e.hand_active && T.hand ? T.hand.commitment : T.next ? T.next.commitment : null,
       commit_round: e.hand_active && T.hand ? T.hand.no : T.next ? T.next.no : null,

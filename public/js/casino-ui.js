@@ -263,14 +263,32 @@
     if (t.on_stream) s = T("stream_on", "📺 This table is on Pepe's stream.");
     else if (t.stream_queue) s = t.stream_queue === 1 ? T("stream_next", "You're next in line for Pepe's stream.")
                                                       : T("stream_queued", "You're number {n} in line for Pepe's stream.", { n: t.stream_queue });
-    else if (!t.room) s = T("stream_needroom", "Push the table to a Camfrog room first: the stream shows Pepe's rooms.");
     else s = T("stream_free", "Ask for Pepe's stream: first come, first served, then a queue.");
     $("cz-streamnow").textContent = s;
-    $("cz-stream").hidden = !t.room || t.on_stream;
+    $("cz-stream").hidden = !!t.on_stream;                    // 1.99pc: a web-only table can be on the stream too
     $("cz-stream").textContent = t.stream_queue ? T("stream_waiting", "In the queue") : T("stream_ask", "Put it on Pepe's stream");
     $("cz-stream").disabled = !!t.stream_queue && !me.admin;
     $("cz-unstream").hidden = !(t.on_stream || t.stream_queue);
-    $("cz-override-row").hidden = !me.admin || !t.room || t.on_stream;
+    $("cz-override-row").hidden = !me.admin || t.on_stream;
+    // 1.99pc: adverts - one line + reminders in other rooms, no gameplay there
+    const adv = t.adverts || [];
+    const advIds = new Set(adv.map((r) => r.id).concat(attached.map((r) => r.id)));
+    const asel = $("cz-adroom");
+    const aopts = (d.rooms || []).filter((r) => !advIds.has(r.id));
+    const asig = aopts.map((r) => r.id + "|" + r.name).join(",");
+    if (asel.dataset.v !== asig) {
+      asel.dataset.v = asig;
+      asel.innerHTML = aopts.map((r) => `<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("");
+    }
+    asel.hidden = !aopts.length;
+    $("cz-adgo").hidden = !aopts.length;
+    const alist = $("cz-adlist");
+    const alsig = adv.map((r) => r.id + "|" + r.name).join(",");
+    if (alist.dataset.v !== alsig) {
+      alist.dataset.v = alsig;
+      alist.innerHTML = adv.map((r) => `<span>📣 ${esc(r.name)}<button type="button" data-unad="${esc(r.id)}" aria-label="${esc(T("room_remove", "Remove {room}", { room: r.name }))}">×</button></span>`).join("");
+    }
+    $("cz-adnone").hidden = adv.length > 0 || aopts.length > 0;
     const closeBtn = $("cz-close");
     if (closeBtn) closeBtn.hidden = false;
   }
@@ -283,6 +301,11 @@
     if (!$("cz-hostbtn")) return;
     $("cz-hostbtn").addEventListener("click", () => openSheet("cz-host"));
     $("cz-push").addEventListener("click", () => side(`/api/casino/t/${tableId}/push`, { room: $("cz-room").value, mode: "add" }));
+    $("cz-adgo").addEventListener("click", () => side(`/api/casino/t/${tableId}/advertise`, { room: $("cz-adroom").value, on: true }));
+    $("cz-adlist").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-unad]");
+      if (b) side(`/api/casino/t/${tableId}/advertise`, { room: b.dataset.unad, on: false });
+    });
     $("cz-roomlist").addEventListener("click", (e) => {
       const b = e.target.closest("button[data-unroom]");
       if (b) side(`/api/casino/t/${tableId}/push`, { room: b.dataset.unroom, mode: "remove" });
@@ -345,7 +368,8 @@
     const dots = Array.from({ length: t.max_seats }, (_, i) => `<i class="${i < t.players ? "on" : ""}"></i>`).join("");
     const stakes = hm ? T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) }) : T("limits_v", "Bets {min}–{max}", { min: fmt(t.min_bet), max: fmt(t.max_bet) });
     const rs = t.rooms && t.rooms.length ? t.rooms : t.room ? [{ id: t.room, name: t.room_name || t.room }] : [];
-    const where = rs.length ? rs.map((r) => `<span class="tag blue">🐸 ${esc(r.name)}</span>`).join("") : `<span class="tag">🌐 ${esc(T("web_only", "Web only"))}</span>`;
+    const where = (rs.length ? rs.map((r) => `<span class="tag blue">🐸 ${esc(r.name)}</span>`).join("") : `<span class="tag">🌐 ${esc(T("web_only", "Web only"))}</span>`) +
+      (t.adverts || []).map((r) => `<span class="tag" title="${esc(T("advertised_in", "Advertised in {room}", { room: r.name }))}">📣 ${esc(r.name)}</span>`).join("");
     const full = t.players >= t.max_seats;
     const locked = hr && !(me && me.high_roller);              // a High Roller table: everyone else can only watch
     const join = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`
