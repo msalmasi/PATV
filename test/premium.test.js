@@ -188,7 +188,7 @@ test("not enough PAT: refused (402), nothing written; comped pads / accounts can
   assert.equal((await claims(poor)).length, 0);
   await assert.rejects(PR.buy(fan, { tier: "gold", ref: ref() }), /Prime Time or Season Pass/);
   await assert.rejects(PR.buy(fan, { tier: "season_pass", ref: "x" }), /ref/);
-  await assert.rejects(PR.buy(fan, { tier: "prime_time", pad: "nope-nope", ref: ref() }), /No such pad/);
+  await assert.rejects(PR.buy(fan, { tier: "prime_time", pad: "nope-nope", ref: ref() }), /No pad called nope-nope/);
 });
 
 test("renewals: the daily job charges the renewer once per period (idempotent), extends from the paid date; can't pay -> grace -> lapse", async () => {

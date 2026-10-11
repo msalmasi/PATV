@@ -174,8 +174,7 @@ async function premiumTarget(tier, opts) {
   const TT = P.TIERS[String(tier || "")];
   if (!TT) throw new Refuse(400, "Pick Prime Time or Season Pass.");
   if (TT.kind === "pad") {
-    const R = await P.padTarget(opts.pad || opts.target);
-    if (!R) throw new Refuse(404, "No such pad.");
+    const R = await P.padOrRefuse(opts.pad || opts.target);   // 1.99od: slug / p/slug / link / room id / title, "did you mean" on a miss
     return { P, TT, target: R.id, label: `p/${R.slug || R.id}`, who: R.owner && R.owner.userId ? { userId: R.owner.userId, username: R.owner.username } : null, R };
   }
   let u = null;
@@ -334,7 +333,7 @@ function register(app, { addUser }) {
       if (req.method === "POST" && (!guard.sameSite(req) || !req.is("application/json"))) return res.status(403).json({ ok: false, error: "Security check failed - reload the page." });
       res.json({ ok: true, ...(await fn(req.body || {}, me, req)) });
     } catch (e) {
-      if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message });
+      if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message, ...(Array.isArray(e.suggestions) ? { pad_query: e.pad_query || "", suggestions: e.suggestions } : {}) });
       console.error("[comps]", req.path, e);
       res.status(500).json({ ok: false, error: "Something went wrong - nothing changed." });
     }

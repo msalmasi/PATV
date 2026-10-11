@@ -75,7 +75,27 @@
   function after(j, msg, okText) {
     if (j && j.ok) { if (j.state) C = j.state; render(); say(msg, okText || "Done.", true); return true; }
     say(msg, (j && j.error) || "Failed.", false);
+    padPicks(msg, j);
     return false;
+  }
+  // 1.99od: an unknown pad -> its "did you mean" list as buttons that fill the Pad field (the server accepts the slug,
+  // p/slug, a link, the Camfrog room id or the title)
+  function padPicks(msg, j) {
+    if (!msg || !j || !j.suggestions || !j.suggestions.length) return;
+    var f = msg.closest("form"), field = f && f.elements.pad;
+    if (!field) return;
+    var box = document.createElement("span");
+    box.className = "adm-picks";
+    j.suggestions.forEach(function (x) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "adm-btn";
+      b.textContent = (x.title && x.title !== x.slug ? x.title + " · " : "") + "p/" + x.slug;
+      b.addEventListener("click", function () { field.value = x.slug; say(msg, "Pad set to p/" + x.slug + " - press Comp it.", true); field.focus(); });
+      box.appendChild(document.createTextNode(" "));
+      box.appendChild(b);
+    });
+    msg.appendChild(box);
   }
 
   // ── forms ──

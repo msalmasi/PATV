@@ -310,15 +310,104 @@ async function bookRoute(flow, amount, opts = {}) {
 }
 
 // ── targets ──
-async function padTarget(slugOrId) {
+// 1.99od: what someone TYPED for a pad. Accepts the slug, p/slug, /p/slug, a full link (…/p/slug, …/premium?pad=x),
+// the Camfrog room id (any case) and the pad's title (case / underscore / punctuation-insensitive: "players lounge",
+// "Players__lounge" and "players-lounge" are one key). A miss comes back with a short "did you mean" list. Before this
+// an unknown pad on /premium just re-rendered the empty form (the admin's "nothing happens").
+const padKey = (s) => String(s || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const padCompact = (s) => padKey(s).replace(/-/g, "");
+function padInput(raw) {
+  let s = String(raw == null ? "" : raw).trim().slice(0, 300);
+  if (!s) return "";
+  // a link: https://publicaccess.tv/p/x, publicaccess.tv/p/x, /p/x/stage, /premium?pad=x
+  const looksUrl = /^https?:\/\//i.test(s) || /^[a-z0-9-]+(\.[a-z0-9-]+)+\//i.test(s) || /^\/[^/]/.test(s) || /[?&](pad|room)=/i.test(s);
+  if (looksUrl) {
+    try {
+      const u = new URL(/^https?:\/\//i.test(s) || s.startsWith("/") ? s : "https://" + s, "https://publicaccess.tv");
+      const q = u.searchParams.get("pad") || u.searchParams.get("room");
+      if (q) s = q;
+      else {
+        const seg = u.pathname.split("/").filter(Boolean).map((x) => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+        const i = seg.findIndex((x) => x.toLowerCase() === "p");
+        s = i >= 0 && seg[i + 1] ? seg[i + 1] : (seg[seg.length - 1] || "");
+      }
+    } catch (e) { /* not a link after all */ }
+  }
+  return s.trim().replace(/^p\//i, "").replace(/^[@#]/, "").trim().slice(0, 120);
+}
+function editDistance(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+/** How close `q` is to a pad (0 = same, 1 = nothing alike), over its slug, title and room id. */
+function padScore(q, R) {
+  const c = padCompact(q);
+  if (!c) return 1;
+  let best = 1;
+  for (const f of [R.slug, R.title, R.id]) {
+    const x = padCompact(f);
+    if (!x) continue;
+    let s = editDistance(c, x) / Math.max(c.length, x.length);
+    if (c.length >= 3 && x.length >= 3 && (x.includes(c) || c.includes(x))) s = Math.min(s, 0.25);
+    best = Math.min(best, s);
+  }
+  return best;
+}
+const padBrief = (R) => ({ id: R.id, slug: R.slug || R.id, title: R.title || R.slug || R.id });
+function padSuggest(q, list, n = 5) {
+  return list.map((R) => ({ R, s: padScore(q, R) })).filter((x) => x.s <= 0.45)
+    .sort((a, b) => a.s - b.s || String(a.R.title).localeCompare(String(b.R.title))).slice(0, n).map(({ R }) => padBrief(R));
+}
+/**
+ * The pad someone typed -> { pad, query, suggestions }. viewer: undefined = internal (no filter); a user or null
+ * (signed out): title / fuzzy matches and suggestions only ever name pads they may see (padaccess.canSee).
+ */
+async function padLookup(raw, viewer) {
   const rooms = require("./rooms");
   await rooms.init();
-  const s = String(slugOrId || "").trim().replace(/^p\//i, "");
-  if (!s) return null;
-  let R = await rooms.bySlug(s);
-  if (!R) R = await rooms.get(s);
-  if (!R || R.profile) return null;
-  return R;
+  const q = padInput(raw);
+  if (!q) return { pad: null, query: "", suggestions: [] };
+  const ok = (R) => (R && !R.profile ? R : null);
+  let R = ok(await rooms.bySlug(q.toLowerCase())) || ok(await rooms.get(q));
+  if (!R) { try { R = ok(await require("./roomsweb").resolveRoom(q)); } catch (e) { R = null; } }
+  if (R) return { pad: R, query: q, suggestions: [] };
+  let all = await rooms.list();
+  if (viewer !== undefined) {
+    try { const A = require("./padaccess"); await A.init(); all = A.visibleRows(viewer, all); } catch (e) { /* no access module: list as is */ }
+  }
+  const lo = q.toLowerCase(), k = padKey(q), c = padCompact(q);
+  let hits = all.filter((p) => String(p.id).toLowerCase() === lo);
+  if (!hits.length && c.length >= 2) hits = all.filter((p) => padKey(p.title) === k || padCompact(p.title) === c || padCompact(p.id) === c || padCompact(p.slug) === c);
+  if (hits.length === 1) return { pad: hits[0], query: q, suggestions: [] };
+  return { pad: null, query: q, suggestions: hits.length > 1 ? hits.slice(0, 5).map(padBrief) : padSuggest(q, all) };
+}
+/** The plain-text "No pad called x. Did you mean …?" line (API errors; the page builds its own from en.json). */
+function padMissText(L) {
+  const name = (x) => (x.title && padKey(x.title) !== padKey(x.slug) ? `${x.title} (p/${x.slug})` : `p/${x.slug}`);
+  if (!L.query) return "Which pad? Type its address (p/name), its link, its Camfrog room name or its title.";
+  const s = L.suggestions || [];
+  return `No pad called ${L.query}.` + (s.length ? ` Did you mean ${s.slice(0, 3).map(name).join(", ")}?`
+    : " Try its address (p/name), its link, its Camfrog room name or its title.");
+}
+/** padLookup, or a Refuse (404; 400 when empty) carrying {pad_query, suggestions} - errBody passes them on. */
+async function padOrRefuse(raw, viewer) {
+  const L = await padLookup(raw, viewer);
+  if (L.pad) return L.pad;
+  const e = new Refuse(L.query ? 404 : 400, padMissText(L));
+  e.pad_query = L.query;
+  e.suggestions = L.suggestions;
+  throw e;
+}
+async function padTarget(slugOrId) {
+  return (await padLookup(slugOrId)).pad;
 }
 async function userTarget(name) {
   const s = String(name || "").trim().replace(/^@/, "").replace(/^u\//i, "");
@@ -356,8 +445,7 @@ async function buy(user, opts = {}) {
   // what's being paid for
   let target, label, ownerSelf = false, roomId = null, recipient = null, R = null;
   if (T.kind === "pad") {
-    R = await padTarget(opts.pad);
-    if (!R) throw new Refuse(404, "No such pad.");
+    R = await padOrRefuse(opts.pad, user);
     target = R.id; roomId = R.id; label = `p/${R.slug || R.id}`;
     ownerSelf = !!(R.owner && R.owner.userId === user.userId);
     if (R.owner && R.owner.userId) recipient = R.owner.userId;
@@ -456,8 +544,7 @@ async function setRenew(user, opts = {}) {
   if (!T) throw new Refuse(400, "Pick Prime Time or Season Pass.");
   let target, owner = false, manage = false;
   if (T.kind === "pad") {
-    const R = await padTarget(opts.pad);
-    if (!R) throw new Refuse(404, "No such pad.");
+    const R = await padOrRefuse(opts.pad, user);
     target = R.id; owner = !!(R.owner && R.owner.userId === user.userId);
     manage = owner || (await require("./rooms").canManage(user, R.id));
   } else { target = user.userId; owner = manage = true; }
@@ -707,9 +794,11 @@ async function state(viewer, padSlug) {
     renewerMe = !!(s && s.renewer_id === viewer.userId);
     pass.renewer_me = renewerMe;
   }
-  let pad = null;
+  let pad = null, padMiss = null;
   if (padSlug) {
-    const R = await padTarget(padSlug);
+    const L = await padLookup(padSlug, signed ? viewer : null);   // 1.99od: slug, p/slug, a link, the room id or the title
+    const R = L.pad;
+    if (!R) padMiss = { query: L.query, suggestions: L.suggestions, text: padMissText(L) };
     if (R) {
       const s = await subRow("prime_time", R.id);
       const owner = !!(signed && R.owner && R.owner.userId === viewer.userId);
@@ -728,6 +817,7 @@ async function state(viewer, padSlug) {
     stripe: (() => { try { return require("./stripebilling").publicState(); } catch (e) { return { enabled: false }; } })(),
     viewer: { signed, balance, pass, username: signed ? viewer.username : null },
     pad,
+    pad_missing: padMiss,          // 1.99od: {query, suggestions, text} when ?pad= named no pad (was: silently nothing)
   };
 }
 const DEST_LABEL = { fortknox: "🪙 Fort Knox", reserve: "🏛️ Federal Reserve", room: "🏦 the pad's room vault" };
@@ -747,7 +837,9 @@ function errBody(e) {
   const ERR = require("./weberrors").ERRORS;
   if (e && e.refuse) {
     const code = e.code && ERR[e.code] ? e.code : "E_REFUSED";
-    return { status: e.status || 400, body: { ok: false, error: e.message, code, hint: ERR[code][1] } };
+    const body = { ok: false, error: e.message, code, hint: ERR[code][1] };
+    if (Array.isArray(e.suggestions)) { body.pad_query = e.pad_query || ""; body.suggestions = e.suggestions; }   // 1.99od: an unknown pad
+    return { status: e.status || 400, body };
   }
   const incident = crypto.randomBytes(4).toString("hex");
   console.error(`[premium] incident ${incident}:`, e);
@@ -772,7 +864,7 @@ function register(app, { addUser }) {
   };
   app.get("/premium", addUser, async (req, res) => {
     try {
-      const S = await state(req.user, req.query.pad ? String(req.query.pad).slice(0, 80) : null);
+      const S = await state(req.user, req.query.pad ? String(req.query.pad).slice(0, 300) : null);
       let stickers = null;
       try { stickers = await require("./stickers").pageData(req.user); } catch (e) { stickers = null; }
       res.render("premium", { S, stickers, user: req.user ? req.user.username : null, title: "Prime Time & Season Pass" });
@@ -780,7 +872,15 @@ function register(app, { addUser }) {
   });
   app.get("/api/premium/state", addUser, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    try { res.json({ ok: true, ...(await state(req.user, req.query.pad ? String(req.query.pad).slice(0, 80) : null)) }); } catch (e) { fail(res, e); }
+    try { res.json({ ok: true, ...(await state(req.user, req.query.pad ? String(req.query.pad).slice(0, 300) : null)) }); } catch (e) { fail(res, e); }
+  });
+  // 1.99od: "which pad is this?" for the pickers (/premium, /admin/comps): the pad, or the near misses this viewer may see
+  app.get("/api/premium/padfind", addUser, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    try {
+      const L = await padLookup(String(req.query.q || "").slice(0, 300), req.user && req.user.userId ? req.user : null);
+      res.json({ ok: true, query: L.query, pad: L.pad ? padBrief(L.pad) : null, suggestions: L.suggestions, text: L.pad ? "" : padMissText(L) });
+    } catch (e) { fail(res, e); }
   });
   app.post("/api/premium/buy", addUser, write, async (req, res) => {
     try {
@@ -815,7 +915,7 @@ function register(app, { addUser }) {
         const T = TIERS[String(b.comp.tier || "")];
         if (!T) throw new Refuse(400, "Unknown tier.");
         let target;
-        if (T.kind === "pad") { const R = await padTarget(b.comp.pad); if (!R) throw new Refuse(404, "No such pad."); target = R.id; }
+        if (T.kind === "pad") target = (await padOrRefuse(b.comp.pad, req.user)).id;
         else { const u = await userTarget(b.comp.user); if (!u) throw new Refuse(404, "No such account."); target = u.userId; }
         await setComp(T.id, target, b.comp.on !== false, req.user.username, b.comp.note);
       }
@@ -829,6 +929,6 @@ function register(app, { addUser }) {
 module.exports = {
   init, register, buy, afterChange, setRenew, setComp, compAdmins, expireComps, compUntil, AUTO, renewDue, tick, state, config, setConfig, loadCache,
   isPrime, hasPass, passCamfrogs, padPerks, userPerks, statusOf, endsAt, subSync, subRow, splitRoute, bookRoute, cleanRoutes, cleanConfig, priceOf, errBody,
-  padTarget, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
+  padTarget, padLookup, padOrRefuse, padInput, padMissText, userTarget, ensureSub, txRef, Refuse, TIERS, DEFAULTS, DAY, ROUTE_FLOWS, routesView,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
 };

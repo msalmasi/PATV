@@ -36,7 +36,7 @@
     <form id="premForm" class="adm-form" autocomplete="off">
       <label>Tier<select name="tier"><option value="season_pass">🎟️ Season Pass (a member)</option><option value="prime_time"<%= pre.pad ? ' selected' : '' %>>📺 Prime Time (a pad)</option></select></label>
       <label data-for="season_pass">Member<input type="text" name="user" maxlength="64" list="compPeople" value="<%= pre.user %>"></label>
-      <label data-for="prime_time">Pad (slug or p/slug)<input type="text" name="pad" maxlength="80" value="<%= pre.pad %>"></label>
+      <label data-for="prime_time">Pad (slug, p/slug, link, Camfrog room or title)<input type="text" name="pad" maxlength="300" value="<%= pre.pad %>"></label>
       <label>Length<select name="mode"><option value="days">N days</option><option value="periods">N periods</option><option value="lifetime">No end date</option></select></label>
       <label data-n>N<input type="number" name="n" min="1" max="3650" value="30"></label>
       <label>Reason (admin log)<input type="text" name="reason" required minlength="3" maxlength="200"></label>
@@ -89,7 +89,7 @@
 
 <datalist id="compPeople"></datalist>
 <script id="compsData" type="application/json"><%- JSON.stringify(C).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-comps.js?v=2" defer></script>
+<script src="/public/js/admin-comps.js?v=3" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

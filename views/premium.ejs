@@ -118,7 +118,16 @@
         <% } %>
         <p class="mut"><a href="/p/<%= encodeURIComponent(PAD.slug) %>"><%- t('premium.pt.back', { pad: PAD.slug }) %></a> · <a href="/premium"><%- t('premium.pt.another') %></a></p>
       <% } else { %>
-        <form class="row" action="/premium" method="GET"><label class="mut" for="ptPad"><%- t('premium.pt.which') %></label><input type="text" id="ptPad" name="pad" placeholder="<%- t('premium.pt.which_ph') %>" autocomplete="off" style="flex:1"><button class="btn gold"><%- t('premium.pt.go') %></button></form>
+        <% const MISS = S.pad_missing; if (MISS) { %>
+          <div class="stat padmiss" id="ptMiss" role="alert">
+            <div><%- MISS.query ? t('premium.pt.no_pad', { pad: MISS.query }) : t('premium.pt.no_pad_empty') %></div>
+            <% if (MISS.suggestions && MISS.suggestions.length) { %>
+              <div class="mut" style="margin-top:6px"><%- t('premium.pt.did_you_mean') %></div>
+              <ul class="contrib"><% MISS.suggestions.forEach((x) => { %><li><a href="/premium?pad=<%= encodeURIComponent(x.slug) %>"><b><%= x.title %></b> · p/<%= x.slug %></a></li><% }) %></ul>
+            <% } else { %><div class="mut" style="margin-top:6px"><%- t('premium.pt.no_pad_help') %></div><% } %>
+          </div>
+        <% } %>
+        <form class="row" action="/premium" method="GET"><label class="mut" for="ptPad"><%- t('premium.pt.which') %></label><input type="text" id="ptPad" name="pad" placeholder="<%- t('premium.pt.which_ph') %>" autocomplete="off" style="flex:1" value="<%= MISS ? MISS.query : '' %>" required><button class="btn gold"><%- t('premium.pt.go') %></button></form>
         <p class="mut"><%- t('premium.pt.or_open') %></p>
       <% } %>
     </section>

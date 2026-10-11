@@ -126,8 +126,7 @@ async function checkout(user, { tier, pad } = {}) {
   if (!price) throw new P.Refuse(423, `${T.name} can't be paid by card yet.`);
   let target = user.userId, back = "/premium";
   if (T.kind === "pad") {
-    const R = await P.padTarget(pad);
-    if (!R) throw new P.Refuse(404, "No such pad.");
+    const R = await P.padOrRefuse(pad, user);
     if (!(await require("./rooms").canManage(user, R.id))) throw new P.Refuse(403, "Card subscriptions for a pad are for its owner.");
     target = R.id; back = "/premium?pad=" + encodeURIComponent(R.slug || R.id);
   }
@@ -182,7 +181,7 @@ async function portal(user, { tier, pad } = {}) {
   const T = P.TIERS[String(tier || "")];
   if (!T) throw new P.Refuse(400, "Pick Prime Time or Season Pass.");
   let target = user.userId;
-  if (T.kind === "pad") { const R = await P.padTarget(pad); if (!R) throw new P.Refuse(404, "No such pad."); target = R.id; }
+  if (T.kind === "pad") { target = (await P.padOrRefuse(pad, user)).id; }
   const sub = await P.subRow(T.id, target);
   if (!sub || !sub.stripe_customer || sub.stripe_user !== user.userId) throw new P.Refuse(404, "No card subscription of yours there.");
   const s = await api("/billing_portal/sessions", { customer: sub.stripe_customer, return_url: site() + "/premium" });
