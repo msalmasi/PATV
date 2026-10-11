@@ -8,6 +8,7 @@
   .mp .mp-form .ds-actions { grid-column: 1 / -1; }
   .mp #costContainer { display: grid; }   /* styles.css has #costContainer { display: block } (an old wheel form) */
   .mp .spin-status { height: auto; min-height: 1.5em; padding: 0; margin: 0; text-align: start; color: var(--ds-danger); font-size: var(--ds-fs-sm); font-weight: 700; }
+  .mp .spin-status.ok { color: var(--ds-ok); }
   .mp #prizesTable td:last-child { white-space: nowrap; }
   .mp #prizesTable td:last-child .ds-btn + .ds-btn { margin-inline-start: var(--ds-sp-2); }
   .mp #prizesTable tbody:empty::after { content: "No official prizes yet."; display: table-cell; padding: var(--ds-sp-6) var(--ds-sp-4); color: var(--ds-text-muted); }
@@ -67,7 +68,7 @@
       <form id="editPrizeForm" class="ds-form">
         <div class="ds-modal-h">
           <h2 id="editPrizeModalLabel">Edit Prize</h2>
-          <button type="button" class="ds-close" aria-label="Close" onclick="closeEditModal()"><span aria-hidden="true">&times;</span></button>
+          <button type="button" class="ds-close" aria-label="Close" data-mp-close><span aria-hidden="true">&times;</span></button>
         </div>
         <input type="hidden" id="editPrizeId" name="prizeId">
         <div class="ds-field">
@@ -83,7 +84,7 @@
           <input type="number" class="ds-in num" id="editPrizeQuantity" name="quantity" required min="0" inputmode="numeric">
         </div>
         <div class="ds-modal-f">
-          <button type="button" class="ds-btn ghost" onclick="closeEditModal()">Cancel</button>
+          <button type="button" class="ds-btn ghost" data-mp-close>Cancel</button>
           <button type="submit" class="ds-btn">Save Changes</button>
         </div>
       </form>
@@ -105,53 +106,56 @@
     })();
   </script>
 
-  <!-- Custom Script -->
+  <!-- Custom Script (1.99qh: the rows are built with the DOM - a prize name is text, never HTML - and the buttons use
+       addEventListener, not inline onclick; adding a prize refreshes the table in place) -->
   <script>
-    $(document).ready(function() {
-      fetchPrizes();
+    (function () {
+      'use strict';
+      var statusEl = document.getElementById('PrizeListStatus');
+      var tbody = document.querySelector('#prizesTable tbody');
+
+      function say(msg, fade, ok) {
+        statusEl.textContent = msg;
+        statusEl.classList.toggle('ok', !!ok);
+        statusEl.style.visibility = 'visible';
+        if (fade) setTimeout(function () { statusEl.style.visibility = 'hidden'; }, 2000);
+      }
+      function cell(text, cls) { var td = document.createElement('td'); td.textContent = text == null ? '' : String(text); if (cls) td.className = cls; return td; }
+      function button(label, cls, onClick) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = cls; b.textContent = label;
+        b.addEventListener('click', onClick); return b;
+      }
+
+      // Populate the prizes table: every value goes in as text (textContent), so a name like <img onerror=...> is shown, not run
+      function populatePrizesTable(prizes) {
+        tbody.textContent = '';
+        (Array.isArray(prizes) ? prizes : []).forEach(function (prize) {
+          var tr = document.createElement('tr');
+          tr.appendChild(cell(prize.prizeId));
+          tr.appendChild(cell(prize.prize));
+          tr.appendChild(cell(prize.cost, 'r'));
+          tr.appendChild(cell(prize.quantity, 'r'));
+          var acts = document.createElement('td');
+          acts.appendChild(button('Edit', 'ds-btn sm ghost', function () { window.openEditModal(prize.prizeId, prize.prize, prize.cost, prize.quantity); }));
+          acts.appendChild(button('Remove', 'ds-btn sm danger', function () { window.removePrize(prize.prize); }));
+          tr.appendChild(acts);
+          tbody.appendChild(tr);
+        });
+      }
 
       // Fetch prizes and populate the table
       function fetchPrizes() {
         $.ajax({
-  url: '/api/prizes',
-  method: 'GET',
-  success: function(response) {
-    // Since response is an array of prizes, we can directly pass it to populatePrizesTable
-    populatePrizesTable(response);
-  },
-  error: function() {
-    document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the prize name.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-                        setTimeout(() => {
-                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                    }, 2000); 
-  }
-});
-      }
-
-      // Populate the prizes table
-      function populatePrizesTable(prizes) {
-        const tbody = $('#prizesTable tbody');
-        tbody.empty();
-        prizes.forEach(prize => {
-          const row = `
-            <tr>
-              <td>${prize.prizeId}</td>
-              <td>${prize.prize}</td>
-              <td class="r">${prize.cost}</td>
-              <td class="r">${prize.quantity}</td>
-              <td>
-                <button type="button" class="ds-btn sm ghost" onclick="openEditModal('${prize.prizeId}', '${prize.prize}', ${prize.cost}, ${prize.quantity})">Edit</button>
-                <button type="button" class="ds-btn sm danger" onclick="removePrize('${prize.prize}')">Remove</button>
-              </td>
-            </tr>
-          `;
-          tbody.append(row);
+          url: '/api/prizes',
+          method: 'GET',
+          success: function (response) { populatePrizesTable(response); },
+          error: function () { say('Prize list change failed. Check the prize name.', true); }
         });
       }
+      window.fetchPrizes = fetchPrizes;
 
       // Open the edit modal with prize details
-      window.openEditModal = function(prizeId, prizeName, cost, quantity) {
+      window.openEditModal = function (prizeId, prizeName, cost, quantity) {
         $('#editPrizeId').val(prizeId);
         $('#editPrizeName').val(prizeName);
         $('#editPrizeCost').val(cost);
@@ -160,141 +164,72 @@
       };
 
       // Close the edit modal
-      window.closeEditModal = function() {
+      window.closeEditModal = function () {
         $('#editPrizeForm')[0].reset();
         $('#editPrizeModal').modal('hide');
       };
+      document.querySelectorAll('[data-mp-close]').forEach(function (b) { b.addEventListener('click', window.closeEditModal); });
 
-    });
-
-    // Handle form submission for adding/editing prize
-$('#editPrizeForm').submit(function(event) {
-  event.preventDefault();
-  const prizeId = $('#editPrizeId').val();
-  const prizeName = $('#editPrizeName').val();
-  const cost = $('#editPrizeCost').val();
-  const quantity = $('#editPrizeQuantity').val();
-
-  let action = 'add'; // Use 'add' for both adding and editing
-
-  $.ajax({
-    url: '/api/prizes/edit',
-    method: 'POST',
-    data: {
-      action: action,
-      prizeId: prizeId,
-      prizeName: prizeName,
-      cost: cost,
-      quantity: quantity
-    },
-    success: function(response) {
-        if (response.message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                        document.getElementById('PrizeListStatus').textContent = 'Prize list edited successfully.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-    }
-      closeEditModal();
-      fetchPrizes();
-    },
-    error: function(xhr) {
-        document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the prize name.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-                        setTimeout(() => {
-                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                    }, 2000); 
-    }
-  });
-});
-
-    // Remove a prize
-    window.removePrize = function(prizeName) {
-      if (confirm('Are you sure you want to remove this prize?')) {
+      // Handle form submission for editing a prize
+      $('#editPrizeForm').submit(function (event) {
+        event.preventDefault();
         $.ajax({
           url: '/api/prizes/edit',
           method: 'POST',
           data: {
-            action: 'remove',
-            prizeName: prizeName
+            action: 'add',   // 'add' with a prizeId edits it
+            prizeId: $('#editPrizeId').val(),
+            prizeName: $('#editPrizeName').val(),
+            cost: $('#editPrizeCost').val(),
+            quantity: $('#editPrizeQuantity').val()
           },
-          success: function(response) {
-            if (response.message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                        document.getElementById('PrizeListStatus').textContent = 'Prize removed successfully.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-    }
+          success: function (response) {
+            if (response && response.message && response.message.includes('successfully')) say('Prize list edited successfully.', false, true);
+            window.closeEditModal();
             fetchPrizes();
           },
-          error: function(xhr) {
-            document.getElementById('PrizeListStatus').textContent = 'Failed to remove prize. Check the prize name.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-                        setTimeout(() => {
-                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                    }, 2000); 
-          }
+          error: function (xhr) { say(xhr && xhr.responseText && xhr.status === 400 ? xhr.responseText : 'Prize list change failed. Check the prize name.', true); }
         });
-      }
-    };
+      });
 
-    //adding prizes
-document.getElementById('prizeListForm').addEventListener('submit', function(event) {
-                    event.preventDefault();
-                    const action = "add";
-                    const prizeName = document.getElementById('prizeName').value;
-                    const cost = document.getElementById('prizeCost').value;
-                    const quantity = document.getElementById('prizeQty').value;
-                    // Prepare the fetch request
-                    fetch('/api/prizes/edit', {
-                        headers: {    "content-type": "application/json",},
-                        body: JSON.stringify({ action: action, prizeName: prizeName, cost: cost, quantity: quantity }),
-                        method: 'POST',
-                    }).then(response => {
-                        if (!response.ok) { // Handle non-200 responses
-                            throw new Error('Failed to edit prize list.');
-                        }
-                        return response.json();
-                    }).then(data => {
-                        fetch('/api/prizes')
-                            .then(response => response.json())
-                            .then(data => {
-                                const prizeList = document.getElementById('prizeList');
-                                prizeList.innerHTML = "";
-                                // Ensure data is an array and has items
-                                if (Array.isArray(data) && data.length > 0) {
-                                    data.forEach(prize => {
-                                        const li = document.createElement('li');
-                                        // Assuming each 'prize' object has 'prize' and 'cost' properties
-                                        li.textContent = `${prize.prize} - Cost: ${prize.cost} Coins`;
-                                        prizeList.appendChild(li);
-                                    });
-                                } else {
-                                    // Handle case where no prizes are returned or data is not in expected format
-                                    const li = document.createElement('li');
-                                    li.textContent = 'No prizes available.';
-                                    prizeList.appendChild(li);
-                                }
-                            })
-                            .catch(error => {
-                                console.error('Error fetching prizes:', error);
-                                const prizeList = document.getElementById('prizeList');
-                                const li = document.createElement('li');
-                                li.textContent = 'Failed to load prizes.';
-                                prizeList.appendChild(li);
-                            });
-                        const message = data.message;
-                        console.log(message);
-                        if (message.includes("successfully")) { // Check that the spin actually happened / is not in progress. Don't update spinId if so.
-                        document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                        document.getElementById('PrizeListStatus').textContent = 'Prize list edited successfully.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-                        }
-                    }).catch(error => {
-                        console.error('Error making the POST request:', error);
-                        document.getElementById('PrizeListStatus').textContent = 'Prize list change failed. Check the classname.'; // Display error message
-                        document.getElementById('PrizeListStatus').style.visibility = 'visible'; // Make the status message visible
-                        setTimeout(() => {
-                            document.getElementById('PrizeListStatus').style.visibility = 'hidden'; // Remove the animation element after it completes
-                    }, 2000); 
-                    });
-                });
-                
+      // Remove a prize
+      window.removePrize = function (prizeName) {
+        if (!confirm('Are you sure you want to remove this prize?')) return;
+        $.ajax({
+          url: '/api/prizes/edit',
+          method: 'POST',
+          data: { action: 'remove', prizeName: prizeName },
+          success: function (response) {
+            if (response && response.message && response.message.includes('successfully')) say('Prize removed successfully.', false, true);
+            fetchPrizes();
+          },
+          error: function () { say('Failed to remove prize. Check the prize name.', true); }
+        });
+      };
+
+      // Adding prizes: then refresh the table in place (it used to look for a #prizeList that isn't on this page)
+      document.getElementById('prizeListForm').addEventListener('submit', function (event) {
+        event.preventDefault();
+        fetch('/api/prizes/edit', {
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'add', prizeName: document.getElementById('prizeName').value,
+                                 cost: document.getElementById('prizeCost').value, quantity: document.getElementById('prizeQty').value }),
+          method: 'POST'
+        }).then(function (response) {
+          if (!response.ok) return response.text().then(function (t) { var e = new Error('Failed to edit prize list.'); e.detail = response.status === 400 ? t : ''; throw e; });
+          return response.json();
+        }).then(function (data) {
+          if (data && data.message && data.message.includes('successfully')) {
+            say('Prize list edited successfully.', false, true);
+            event.target.reset();
+          }
+          fetchPrizes();
+        }).catch(function (error) {
+          console.error('Error making the POST request:', error);
+          say(error.detail || 'Prize list change failed. Check the prize name.', true);
+        });
+      });
+
+      $(fetchPrizes);
+    })();
   </script>

@@ -1610,10 +1610,17 @@ function register(app, deps) {
   app.post("/api/prizes/edit", addUser, async (req, res) => {
     const userType = req.user ? req.user.class : null;
     if (userType === "Admin" || userType === "Staff") {
-      const { action, prizeId, prizeName, cost, quantity } = req.body;
+      const { action, prizeId } = req.body;
+      // 1.99qh: the legacy editor's values are checked like a listing's (validateListing): a one-line name of 1-80
+      // characters (stored as text and escaped wherever it is shown) and whole-number cost / quantity in range.
+      const prizeName = oneLine(req.body.prizeName, 80);
+      const cost = toInt(req.body.cost), quantity = toInt(req.body.quantity);
       try {
         await ready;
         if (action === "add") {
+          if (!prizeName) return res.status(400).send("Give the prize a name (1-80 characters).");
+          if (!(cost >= 0 && cost <= PRICE_MAX)) return res.status(400).send(`Cost must be a whole number, 0-${PRICE_MAX.toLocaleString()} PAT.`);
+          if (!(quantity >= 0 && quantity <= STOCK_MAX)) return res.status(400).send(`Quantity must be a whole number, 0-${STOCK_MAX.toLocaleString()}.`);
           if (prizeId) {
             const r = await runQuery("UPDATE prizes SET prize = ?, cost = ?, quantity = ?, updated = ? WHERE prizeId = ? AND seller_id IS NULL",
                                      [prizeName, cost, quantity, Date.now(), prizeId]);
@@ -1627,7 +1634,7 @@ function register(app, deps) {
           }
         } else if (action === "remove") {
           // Official items only: a marketplace listing with the same name is never touched.
-          const result = await runQuery("DELETE FROM prizes WHERE prize = ? AND seller_id IS NULL", [prizeName]);
+          const result = await runQuery("DELETE FROM prizes WHERE prize = ? AND seller_id IS NULL", [String(req.body.prizeName == null ? "" : req.body.prizeName)]);
           if (result.changes) res.json({ message: "Prize removed successfully." });
           else res.status(404).send("Prize not found.");
         } else {
