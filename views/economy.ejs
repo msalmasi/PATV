@@ -217,6 +217,9 @@
   // (Fed band 50M-150M, a 25M weekly incentive target, $1 = 500k PAT + 20% to incentives). The weekly target is the sum
   // of the groups' budgets (on prod the guarantee target equals it).
   const SOON = '<span class="pm-soon">' + t('economy.soon') + '</span>';
+  // live from Pepe's routing / launchpad (econpage.js); defaults when the page is rendered without them
+  const RS = (typeof roomSplit !== 'undefined' && roomSplit) || { owner: 10, fortknox: 45, room: 45 };
+  const LP_ON = typeof launchpadOn !== 'undefined' && !!launchpadOn;
   const V3 = (() => {
     const b = (L && L.band) || {};
     const bs = (INC && INC.budgets) || (typeof treasury !== 'undefined' && treasury && treasury.budgets) || null;
@@ -569,7 +572,7 @@
             <ul>
               <li><%- t('economy.map.f_grants') %></li>
               <li><%- t('economy.map.f_rooms') %></li>
-              <li><%- t('economy.map.f_launch') %></li>
+              <% if (LP_ON) { %><li><%- t('economy.map.f_launch') %></li><% } else { %><li class="soon"><%- t('economy.map.f_launch') %><%- SOON %></li><% } %>
               <li><%- t('economy.map.f_heist') %></li>
               <li class="soon"><%- t('economy.map.f_activity') %><%- SOON %></li>
               <li class="soon"><%- t('economy.map.f_topup') %><%- SOON %></li>
@@ -602,8 +605,8 @@
       <div class="pm-box" style="--c:#d55181">
         <h4><%- t('economy.map.spend_h') %></h4>
         <div class="pm-routes">
-          <% [['casino'], ['lotto'], ['market'], ['loan'], ['room'], ['premium'], ['heist'], ['fines'], ['tips']].forEach(([k]) => { %>
-            <div class="pm-rt"><span><%- t('economy.map.r.' + k) %></span><span><%- t('economy.map.r.' + k + '_to') %></span></div>
+          <% [['casino'], ['lotto'], ['market'], ['loan'], ['cmds'], ['room'], ['premium'], ['heist'], ['fines'], ['tips']].forEach(([k]) => { %>
+            <div class="pm-rt"><span><%- t('economy.map.r.' + k) %></span><span><%- t('economy.map.r.' + k + '_to', k === 'cmds' ? { fk: RS.fortknox, rv: RS.room, own: RS.owner } : {}) %></span></div>
           <% }) %>
         </div>
         <p class="pm-note"><%- t('economy.map.r_note') %></p>
@@ -785,7 +788,7 @@
             <li><b>Room games.</b> The chat raffle, top mic of the hour, pictionary and !beg, paced through the week (at most
               1/7 of the allowance a day). A prize over the allowance is skipped.</li>
             <li><b>Turf Wars:</b> the turf income and the season prize of the current season.</li>
-            <li><b>Launch grants</b> that seed the room vaults of new pads, as they build a following.</li>
+            <li><% if (!LP_ON) { %><span class="new">SOON</span> <% } %><b>Launch grants</b> that seed the room vaults of new pads, as they build a following.</li>
             <li><span class="new">SOON</span> <b>Activity rewards</b> for people who chat and get on the mic, and <b>room
               top-ups</b> that match what each room's vault pays out.</li>
           </ul>

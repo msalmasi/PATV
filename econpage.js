@@ -62,6 +62,25 @@ async function live({ patSupply } = {}) {
   };
 }
 
+/** The paid-room-command split for the PAT map, from Pepe's live routing: the room_owner % he syncs per room flow
+ *  (royalties.ownerShares(); the most common non-zero share, default 10) - the rest is half Fort Knox, half the room's
+ *  vault (economy v2 room routing). -> {owner, fortknox, room} in %. */
+function roomSplit() {
+  let owner = 10;
+  try {
+    const counts = new Map();
+    for (const s of require("./royalties").ownerShares()) if (s.pct > 0) counts.set(s.pct, (counts.get(s.pct) || 0) + 1);
+    if (counts.size) owner = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+  } catch (e) { /* default */ }
+  const half = Math.round(((100 - owner) / 2) * 100) / 100;
+  return { owner, fortknox: half, room: half };
+}
+
+/** Is Pepe's pad launchpad switched on (launch grants paying)? Off -> the page shows launch grants as coming soon. */
+function launchpadOn() {
+  try { return require("./launchpad").isOn(); } catch (e) { return false; }
+}
+
 /** Everything views/economy.ejs takes. */
 async function locals(req, { patSupply } = {}) {
   const F = require("./funding");
@@ -72,7 +91,8 @@ async function locals(req, { patSupply } = {}) {
   }
   let L = null;
   try { L = await live({ patSupply }); } catch (e) { console.error("[econpage]", e.message); L = null; }
-  return { user: req.user ? req.user.username : null, treasury: F.treasuryOn() ? F.state.incentives : null, roomVaults, live: L };
+  return { user: req.user ? req.user.username : null, treasury: F.treasuryOn() ? F.state.incentives : null, roomVaults, live: L,
+           roomSplit: roomSplit(), launchpadOn: launchpadOn() };
 }
 
-module.exports = { locals, live, series, pools, DAYS };
+module.exports = { locals, live, series, pools, roomSplit, launchpadOn, DAYS };
