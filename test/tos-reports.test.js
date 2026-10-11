@@ -319,7 +319,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(t.text, /Houseplants LLC/);
   // 2026-10-08: the registered DMCA designated agent (CopyByte) replaced the old postal address
   assert.doesNotMatch(t.text, /Park Ave/);
-  assert.equal(terms.VERSION, "2026-10-08");
+  assert.equal(terms.VERSION, "2026-10-11");
   const s12 = (t.text.match(/<section id="reporting">[\s\S]*?<\/section>/) || [""])[0];
   assert.match(s12, /id="dmca"/);
   assert.match(s12, /Houseplants LLC respects the intellectual property rights of others\. Per the DMCA, we will respond expeditiously/);
@@ -357,7 +357,7 @@ test("Terms: sign-up through the form records acceptance; the form and the pages
   assert.match(s7, /must be marked NSFW/);
   assert.match(s7, /never show a real, identifiable person nude or in a sexual or sexualised way/);
   assert.match(s7, /under 18/);
-  assert.equal(terms.VERSION, "2026-10-08", "the §7 carve-out did not bump VERSION; the 2026-10-08 DMCA agent update + enforcement did");
+  assert.equal(terms.VERSION, "2026-10-11", "the §7 carve-out did not bump VERSION; the 2026-10-11 §10 premium terms did (the user asked for re-acceptance)");
   // 1.99nn: §10 premium subscriptions, donations and prizes - additive: the date moves, VERSION (re-acceptance) doesn't
   const s10 = (t.text.match(/<section id="premium">[\s\S]*?<\/section>/) || [""])[0];
   assert.match(s10, /<h2>10\. Premium subscriptions and donations<\/h2>/);

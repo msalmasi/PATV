@@ -19,7 +19,7 @@ const fs = require("fs");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
 
-const VERSION = "2026-10-08";
+const VERSION = "2026-10-11";   // 1.99nt: the user asked everyone to accept the §10 premium/donations/prizes terms
 // 1.99nn: the "Last updated" date is per page and moves without VERSION: an additive change (the §10 premium,
 // donations and prizes section) updates the date but asks nobody to accept again. Bump VERSION too to re-ask.
 const UPDATED = "11 October 2026";                 // /terms
