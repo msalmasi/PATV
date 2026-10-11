@@ -47,7 +47,7 @@ const KINDS = {
   dm:          { icon: "💬", label: "Direct messages (a Camfrog alert from Pepe)", link: "/messages" },   // 1.99cp: messages.js; never filed here
   mention:     { icon: "📣", label: "Mentions (@you in posts and comments, your name or words in a Camfrog room)", link: "/settings/mentions" },   // 1.99ii: mentions.js; site-only; 1.99kk: + feed @mentions (feedmentions.js)
   admin:       { icon: "🛠️", label: "Admin", link: null },
-  system:      { icon: "🐸", label: "Pepe", link: null },
+  system:      { icon: "🐸", label: "Account notices from Pepe", link: null },
 };
 const NOTICES = "/messages/notices";  // where the notices are shown (the 🔔 Notices item of /messages)
 const PAGE = 25;
