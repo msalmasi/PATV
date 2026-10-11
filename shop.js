@@ -52,6 +52,9 @@ const ROLE_PRIZES = {
   "c0e57e08-6696-4c51-94ec-485f13a68cd8": "curator",
   "491cde2e-097e-4c2a-a351-ce441137ba38": "high roller",
 };
+// 1.99la: the request-credit items ("10 Additional Movie Requests", "2 Additional TV Requests"), retired from the shop
+// (status paused) - requests are made and paid for on /plex. Their orders and the credits bought stay valid.
+const REQUEST_ITEMS = ["ff93ad3b-dde3-40c0-a4a7-7bdf9ab7de59", "2aa7a33a-265f-4fa3-98ea-eabad5949a2d"];
 
 const DEFAULT_CATEGORIES = ["Gift cards", "Digital", "Services", "Art & commissions", "Collectibles", "Discord perks", "Other"];
 const DEFAULTS = {
@@ -994,6 +997,12 @@ const H = {
   av: (a) => (a && /^(https:\/\/|\/)/.test(String(a)) ? String(a) : "/public/img/avatar.png"),
   status: (s) => STATUS[s] || { label: s, color: "#ccc" },
   lstatus: (s) => LISTING_STATUS[s] || { label: s, color: "#ccc" },
+  // 1.99la: an official role item -> its catalog key (views print shop.role.<key>.* - what it gives, where, how long)
+  roleKey: (p) => (p && !p.seller_id && ROLE_PRIZES[p.prizeId] ? ROLE_PRIZES[p.prizeId].replace(/\s+/g, "_") : null),
+  // 1.99la: one of the retired request-credit items: requests are made on /plex now
+  requestItem: (p) => !!p && !p.seller_id && REQUEST_ITEMS.includes(p.prizeId),
+  // a shop search that looks like someone wants a movie / show request -> point them at /plex
+  wantsRequests: (q) => /\b(request|requests|movie|movies|tv|show|shows|plex|seerr|overseerr)\b/i.test(String(q || "")),
   qs: (base, patch) => {
     const p = Object.assign({}, base, patch);
     const parts = Object.entries(p).filter(([, v]) => v !== "" && v != null && v !== false).map(([k, v]) => `${k}=${encodeURIComponent(v === true ? "1" : v)}`);
@@ -1112,6 +1121,8 @@ function register(app, deps) {
       await ready;
       const me = await meOf(req);
       const p = await getListing(req.params.id);
+      // 1.99la: a retired request-credit item -> the /plex requests (staff still see the item page, with the notice)
+      if (p && !p.seller_id && REQUEST_ITEMS.includes(p.prizeId) && p.status !== "active" && !(me && me.staff)) return res.redirect(302, "/plex#request");
       const canSee = p && (p.status === "active" || (me && (me.staff || me.userId === p.seller_id)));
       if (!canSee) return res.status(404).render("shopItem", base(req, me, { p: null, sales: 0, more: [] }));
       await personalise([p], me && me.userId);
@@ -1351,5 +1362,5 @@ function register(app, deps) {
 }
 
 module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
-                   ready, ROLE_PRIZES, STORE_OWNER_USERNAME, notify,
+                   ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify,
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise };

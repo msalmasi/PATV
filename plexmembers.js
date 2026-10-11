@@ -530,6 +530,7 @@ async function adminLink(plexId, username, actor) {
   const uid = username ? (await userByName(username)).userId : r.user_id;
   await refreshUser(uid).catch(() => 0);
   await reload();
+  if (username) require("./requestroles").kick(uid);   // 1.99la
   return { ok: true };
 }
 /** Pin the access type (manual | pre-existing: never removed) or unpin ("auto"). "keep" = manual. */
@@ -653,6 +654,7 @@ async function linkSelf(user, pu) {
   await log(pu.plex_id, user.userId, "link", user.username, `self-linked with Plex sign-in (${pu.username || pu.plex_id})`);
   await refreshUser(user.userId);
   await reload();
+  require("./requestroles").kick(user.userId);   // 1.99la: a Scout / Curator waiting for a Plex link gets their Seerr side now
   const r = await row(pu.plex_id);
   return { ok: true, done: true, plex: { username: r.username, on_server: !!r.on_server, active: isActiveRow(r) } };
 }

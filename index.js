@@ -823,6 +823,7 @@ app.get("/auth/discord/callback", async (req, res) => {
         await oauthLink.linkRewards({ userId: currentUser.userId, provider: "discord", providerId: discordUser.id, priorFlag: prior ? prior.discordBonus : 1 });
         await oauthLink.captureAndNotify(req, { userId: currentUser.userId, username: currentUser.username, provider: "discord",
                                                 email: discordEmail, verified: !!discordEmail });
+        require("./requestroles").kick(currentUser.userId);   // 1.99la: a store role bought before linking Discord is given now
         return res.redirect(`/u/${encodeURIComponent(currentUser.username)}/edit`);
       }
     } else {
@@ -854,6 +855,7 @@ app.get("/auth/discord/callback", async (req, res) => {
             [discordUser.id, discordUser.username, 1, existingDiscordEmail[0].userId]
           );
           await oauthLink.linkRewards({ userId: existingDiscordEmail[0].userId, provider: "discord", providerId: discordUser.id, priorFlag: prior ? prior.discordBonus : 1 });
+          require("./requestroles").kick(existingDiscordEmail[0].userId);   // 1.99la
           currentUser = existingDiscordEmail[0];
         } else {
           // Create a new user
@@ -1172,6 +1174,8 @@ require("./mainstage").register(app, { isBotToken, addUser });
 require("./restream").register(app, { addUser });   // 1.99fk: "Also stream to Twitch" relay (deploy/restream)
 require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - 📼 play from library on a stage (deploy/mediactl), 🎬 Overseerr requests (/requests), 🎟️ Wizarr invites; /admin/media
 require("./plexhub").register(app, { addUser });   // 1.99kp: 📼 /plex - the Plex hub (requests, your requests, access, Play from Plex, perks)
+require("./requestroles").register(app, { addUser, discordBridge });   // 1.99la: 🔭 Scout / 🎟️ Curator store roles -> PATV + Seerr + Discord; /admin/media/roles
+require("./mediaissues").register(app, { addUser });   // 1.99la: 🛠️ report a problem with a Plex title (Seerr issues) + /plex/manage for curators
 require("./plexmembers").register(app, { addUser });   // 1.99jp: 📼 which PATV users are on our Plex server (hourly sync via mediactl), links, PATV-sold access + removal review
 require("./subscriptions").register(app, { addUser }); // 1.99jp: 🔁 store subscriptions (Plex monthly) + /subscriptions (also Prime Time / Season Pass auto-renew)
 // 1.99cr: viewers snap / clip the stages (server-side from the HLS on disk) -> the pad's story

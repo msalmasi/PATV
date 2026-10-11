@@ -44,13 +44,16 @@ const LABEL = {
 };
 
 // ── the Overseerr client ──
-async function api(method, p, body = null, { timeout = 15000 } = {}) {
+// 1.99la: `asUser` = an Overseerr user id to act as (Seerr's X-API-User header: the API key is an admin's, the action is
+// recorded as that user's - e.g. a 🎟️ curator approving a request from PATV).
+async function api(method, p, body = null, { timeout = 15000, asUser = null } = {}) {
   const base = env("OVERSEERR_URL").replace(/\/+$/, ""), key = env("OVERSEERR_API_KEY");
   if (!base || !key) throw new Refuse(503, "Requests aren't configured.");
   let r;
   try {
     r = await fetch(base + "/api/v1" + p, {
-      method, headers: { "X-Api-Key": key, Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
+      method, headers: { "X-Api-Key": key, Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}),
+                         ...(asUser && /^\d{1,9}$/.test(String(asUser)) ? { "X-API-User": String(asUser) } : {}) },
       body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(timeout), redirect: "error",
     });
   } catch (e) {
@@ -115,6 +118,9 @@ async function requesterFor(userId) {
   await init();
   const link = (await getQuery("SELECT overseerr_user FROM media_user_links WHERE user_id = ?", [userId]))[0];
   if (link) return { id: link.overseerr_user, how: "link" };
+  // 1.99la: a 🔭 Scout whose Seerr side is in place requests as their own Seerr user (unlimited quota there)
+  const sc = (await getQuery("SELECT seerr_user FROM request_roles WHERE user_id = ? AND role = 'scout' AND status = 'active' AND seerr_state = 'applied' AND seerr_user IS NOT NULL", [userId]).catch(() => []))[0];
+  if (sc) return { id: sc.seerr_user, how: "scout" };
   const u = (await getQuery("SELECT email, isEmailVerified FROM users WHERE userId = ?", [userId]).catch(() => []))[0];
   if (u && u.email && Number(u.isEmailVerified) === 1) {
     try {
@@ -129,6 +135,10 @@ async function requesterFor(userId) {
 // ── search ──
 const year = (d) => (d && /^\d{4}/.test(d) ? Number(String(d).slice(0, 4)) : null);
 const poster = (p) => (p && /^\/[A-Za-z0-9._-]+$/.test(p) ? p : null);
+// 1.99la: Overseerr gives a TMDB poster PATH ("/abc.jpg"); a page needs the TMDB image URL. The /plex hub used the bare
+// path as <img src>, so the browser asked publicaccess.tv/abc.jpg (404) - a broken image on every request.
+const TMDB_IMG = "https://image.tmdb.org/t/p/w185";
+const posterUrl = (p) => (poster(p) ? TMDB_IMG + p : null);
 function shape(x) {
   const ms = x.mediaInfo ? x.mediaInfo.status : null;
   return { type: x.mediaType, tmdb: x.id, title: x.title || x.name || "?", year: year(x.releaseDate || x.firstAirDate), poster: poster(x.posterPath),
@@ -173,8 +183,10 @@ async function request(user, b = {}) {
   if (!me) throw new Refuse(401, "Sign in first.");
   if ((me.level || 0) < S.request_min_level) throw new Refuse(403, `Requests open at level ${S.request_min_level}.`);
   const t = clock();
+  // 1.99la: 🔭 Scout (a store role, requestroles.js) = no daily limit and no PAT per request while it's active
+  const scout = await require("./requestroles").isActive(me.userId, "scout").catch(() => false);
   const today = (await getQuery("SELECT COUNT(*) AS n FROM media_requests WHERE user_id = ? AND created > ? AND status NOT IN ('error')", [me.userId, t - DAY]))[0].n;
-  if (S.requests_per_day > 0 && today >= S.requests_per_day) throw new Refuse(429, `That's ${today} requests in the last 24 hours — the most for now.`);
+  if (!scout && S.requests_per_day > 0 && today >= S.requests_per_day) throw new Refuse(429, `That's ${today} requests in the last 24 hours — the most for now.`);
   const d = await details(type, b.tmdb);
   if (d.media_status === 5) throw new Refuse(409, `${d.title} is already on Plex.`);
   let seasons = null;
@@ -191,11 +203,12 @@ async function request(user, b = {}) {
                               [me.userId, type, d.tmdb, ...OPEN]))[0];
   if (dup) throw new Refuse(409, "You've already asked for that one.");
 
-  // pay: a credit, else PAT, else free
+  // pay: a Scout pays nothing (credits kept); else a credit, else PAT, else free
   const price = type === "tv" ? S.request_price_tv : S.request_price_movie;
   const label = `🎬 Request: ${d.title}${d.year ? ` (${d.year})` : ""}${seasons ? ` — season${seasons.length > 1 ? "s" : ""} ${seasons.join(", ")}` : ""}`;
   let paid = { with: "free", price: 0, order_id: null };
-  if (await takeCredit(me.userId, type)) paid = { with: "credit", price: 0, order_id: null };
+  if (scout) paid = { with: "scout", price: 0, order_id: null };
+  else if (await takeCredit(me.userId, type)) paid = { with: "credit", price: 0, order_id: null };
   else if (price > 0) {
     const o = await require("./shop").chargeService({ userId: me.userId, username: me.username, title: label, price, source: "website",
                                                       note: "Media request — refunded automatically if it's declined or fails" });
@@ -334,7 +347,7 @@ async function onSale(sale) {
 async function mine(userId) {
   await init();
   const rows = await getQuery("SELECT * FROM media_requests WHERE user_id = ? ORDER BY id DESC LIMIT 50", [userId]);
-  return rows.map((r) => ({ id: r.id, type: r.media_type, tmdb: r.tmdb_id, title: r.title, year: r.year, poster: r.poster,
+  return rows.map((r) => ({ id: r.id, type: r.media_type, tmdb: r.tmdb_id, title: r.title, year: r.year, poster: r.poster, poster_url: posterUrl(r.poster),
     seasons: r.seasons ? JSON.parse(r.seasons) : null, status: r.status, label: LABEL[r.status] || r.status, paid_with: r.paid_with, price: r.price,
     order_id: r.order_id, created: r.created, refunded: !!r.refunded_at }));
 }
@@ -390,7 +403,10 @@ function register(app, { addUser, noTimers } = {}) {
       await init();
       const S = conf.get();
       const me = req.user && req.user.userId ? req.user : null;
-      res.render("mediaRequests", { user: me ? me.username : null, on: conf.on.requests(), signedIn: !!me,
+      const RR = require("./requestroles");
+      const roles = me ? await RR.rolesOf(me.userId).catch(() => ({ scout: false, curator: false })) : { scout: false, curator: false };
+      const manage = me ? await RR.canManage(me).catch(() => false) : false;
+      res.render("mediaRequests", { user: me ? me.username : null, on: conf.on.requests(), signedIn: !!me, roles, manage,
         credits: me ? await credits(me.userId) : { movie: 0, tv: 0 }, mine: me ? await mine(me.userId) : [],
         price: { movie: S.request_price_movie, tv: S.request_price_tv }, perDay: S.requests_per_day, admin: conf.isStaff(req.user) });
     } catch (e) {
@@ -425,4 +441,4 @@ function register(app, { addUser, noTimers } = {}) {
 }
 
 module.exports = { init, register, search, details, request, refund, sync, poll, webhook, onSale, credits, addCredits, requesterFor, mine, adminState, setLink,
-                   statusOf, LABEL, Refuse, _setClock: (fn) => { clock = fn || (() => Date.now()); }, _resetUsers: () => { usersCache = { at: 0, list: null }; } };
+                   statusOf, LABEL, Refuse, api, overseerrUsers, posterUrl, TMDB_IMG, MEDIA, _setClock: (fn) => { clock = fn || (() => Date.now()); }, _resetUsers: () => { usersCache = { at: 0, list: null }; } };

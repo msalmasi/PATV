@@ -88,6 +88,7 @@
 
   <section class="sb-card" id="requests" aria-labelledby="rqT">
     <h2 id="rqT">Requests</h2>
+    <p class="muted">🔭 Scout / 🎟️ Curator holders, their Seerr + Discord side and the audit: <a href="/admin/media/roles">Request roles</a> · curators' view: <a href="/plex/manage">/plex/manage</a></p>
     <div class="row"><button type="button" class="btn" id="rqPoll">Re-check open requests now</button><span class="msg" id="rqMsg" role="status"></span></div>
     <div class="tblwrap"><table><thead><tr><th>#</th><th>Who</th><th>Title</th><th>Status</th><th>Paid</th><th>As</th><th>When</th></tr></thead><tbody>
       <% requests.recent.forEach((r) => { %><tr><td><%= r.id %></td><td><%= r.username %></td><td><%= r.media_type === 'tv' ? '📺' : '🎬' %> <%= r.title %><%= r.year ? ' (' + r.year + ')' : '' %></td>

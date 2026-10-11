@@ -1,0 +1,53 @@
+<%- include('partials/admin-open', { title: 'Request roles', user: user, section: 'media', admIsAdmin: true }) %>
+<!-- views/requestRolesAdmin.ejs — 1.99la (requestroles.js): who holds 🔭 Scout / 🎟️ Curator, what was done on Seerr and
+     Discord for them, old holders to activate, grant / revoke, the Discord-vs-PATV-vs-Seerr audit and the log. -->
+<link rel="stylesheet" href="/public/css/stage.css?v=6">
+<% const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : ''; %>
+<main class="sb" id="rrAdm">
+  <div class="sb-head">
+    <h1>🎟️ Request roles</h1>
+    <p class="lede">🔭 <b>Scout</b>: no daily request limit, no PAT per request; Seerr: REQUEST + unlimited quota. 🎟️ <b>Curator</b>: Seerr AUTO_APPROVE (+movie/TV), MANAGE_REQUESTS, MANAGE_ISSUES; /plex/manage. Both: the Discord role. Roles don't expire; Revoke takes back only what PATV added.</p>
+    <p class="muted"><a href="/admin/media">‹ Plex &amp; media</a><%= writable ? '' : ' · ⚠️ staging: Seerr writes are dry runs' %></p>
+  </div>
+
+  <section class="sb-card" aria-labelledby="rrH">
+    <h2 id="rrH">Holders</h2>
+    <div class="tblwrap"><table><thead><tr><th>Who</th><th>Role</th><th>Status</th><th>From</th><th>Seerr</th><th>Discord</th><th></th></tr></thead><tbody>
+      <% rows.forEach((r) => { %><tr data-u="<%= r.username %>" data-r="<%= r.role %>">
+        <td><a href="/u/<%= encodeURIComponent(r.username || '') %>"><%= r.username %></a></td><td><%= r.role %></td>
+        <td><%= r.status %><br><small class="muted"><%= when(r.status === 'active' ? r.granted_at : r.revoked_at) %> <%= r.status === 'active' ? r.granted_by : r.revoked_by %></small></td>
+        <td><%= r.source %><%= r.order_id ? ' · order #' + r.order_id : '' %></td>
+        <td><b><%= r.seerr_state %></b><%= r.seerr_user ? ' #' + r.seerr_user : '' %><br><small class="muted"><%= r.seerr_note || '' %><%= r.seerr_added ? ' · added bits ' + r.seerr_added : '' %><%= r.seerr_quota_set ? ' · quota set' : '' %></small></td>
+        <td><b><%= r.discord_state %></b><br><small class="muted"><%= r.discord_note || '' %><%= r.has_discord ? '' : ' · no Discord linked' %></small></td>
+        <td><% if (r.status === 'active') { %><button type="button" class="btn" data-act="retry">Retry now</button> <button type="button" class="btn" data-act="revoke">Revoke…</button><% } else { %><button type="button" class="btn" data-act="grant">Grant again</button><% } %></td></tr><% }) %>
+      <% if (!rows.length) { %><tr><td colspan="7" class="muted">Nobody yet.</td></tr><% } %>
+    </tbody></table></div>
+    <h3>Store owners not activated</h3>
+    <p class="muted">They own the role in the store's records (user_roles, e.g. from the Discord era) but have no active row here, so nothing was done on PATV / Seerr for them. Activate = the full grant (PATV perks, Seerr, Discord).</p>
+    <div class="tblwrap"><table><thead><tr><th>Who</th><th>Role</th><th>Source</th><th>PATV store orders</th><th></th></tr></thead><tbody>
+      <% legacy.forEach((l) => { %><tr data-u="<%= l.username %>" data-r="<%= String(l.role).toLowerCase() %>"><td><%= l.username %></td><td><%= l.role %></td><td><%= l.source %></td><td><%= l.orders %></td>
+        <td><button type="button" class="btn" data-act="grant">Activate</button></td></tr><% }) %>
+      <% if (!legacy.length) { %><tr><td colspan="5" class="muted">None.</td></tr><% } %>
+    </tbody></table></div>
+    <h3>Add a holder</h3>
+    <form class="row" id="rrAdd"><input name="username" placeholder="PATV username" required maxlength="40"><select name="role"><option value="scout">scout</option><option value="curator">curator</option></select><button type="submit" class="btn">Grant</button></form>
+    <p class="msg" id="rrMsg" role="status"></p>
+  </section>
+
+  <section class="sb-card" aria-labelledby="rrAuH">
+    <h2 id="rrAuH">Audit: Discord vs PATV vs Seerr</h2>
+    <p class="muted">Read-only. Lists the Discord role's members (through the Discord bot), the PATV store orders and records, the active holders here, and Seerr users whose permissions already include the role's bits. Nothing is changed.</p>
+    <button type="button" class="btn" id="rrAudit">Run the audit</button>
+    <div id="rrAuditOut"></div>
+  </section>
+
+  <section class="sb-card" aria-labelledby="rrLogH">
+    <h2 id="rrLogH">Log</h2>
+    <div class="tblwrap"><table><thead><tr><th>When</th><th>Who</th><th>Role</th><th>What</th><th>By</th><th>Detail</th></tr></thead><tbody>
+      <% log.forEach((l) => { %><tr><td><%= when(l.ts) %></td><td><%= l.username || '' %></td><td><%= l.role || '' %></td><td><%= l.action %></td><td><%= l.actor %></td><td><small class="muted"><%= l.detail || '' %></small></td></tr><% }) %>
+      <% if (!log.length) { %><tr><td colspan="6" class="muted">Empty.</td></tr><% } %>
+    </tbody></table></div>
+  </section>
+</main>
+<script src="/public/js/request-roles-admin.js?v=1" defer></script>
+<%- include('partials/admin-close') %>

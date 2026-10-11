@@ -5,6 +5,7 @@
   if (!root) return;
   var form = document.getElementById("mrForm"), results = document.getElementById("mrResults"), pick = document.getElementById("mrPick"), msgEl = document.getElementById("mrMsg");
   var price = { movie: Number(root.getAttribute("data-price-movie")) || 0, tv: Number(root.getAttribute("data-price-tv")) || 0 };
+  if (root.getAttribute("data-scout") === "1") price = { movie: 0, tv: 0 };   // 1.99la: a 🔭 Scout pays nothing
   var IMG = "https://image.tmdb.org/t/p/w185";
   var AV = { unknown: "", pending: "Requested", processing: "On its way", partial: "Partly on Plex", available: "On Plex ✓", blocked: "Not available", deleted: "" };
   var cur = null;
@@ -72,7 +73,7 @@
     b.disabled = true;
     say("Sending…", true);
     api("POST", "/api/requests", body).then(function (j) {
-      say("✓ Requested — " + j.label + (j.paid_with === "credit" ? " (used a credit)" : j.price ? " (" + j.price.toLocaleString("en-US") + " PAT)" : "") + ". Reloading…", true);
+      say("✓ Requested — " + j.label + (j.paid_with === "credit" ? " (used a credit)" : j.paid_with === "scout" ? " (🔭 Scout)" : j.price ? " (" + j.price.toLocaleString("en-US") + " PAT)" : "") + ". Reloading…", true);
       setTimeout(function () { location.reload(); }, 1500);
     }).catch(function (e) { say(e.message); b.disabled = false; });
   });

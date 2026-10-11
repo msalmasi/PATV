@@ -1,0 +1,64 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%# /plex/manage — 1.99la (mediaissues.js): the 🎟️ curators' (and admins') view of every Seerr request and reported
+    problem. Approve / decline / resolve go through the site (server-side role check), never straight to Seerr. %>
+<%- include('layout', { title: t('pm.title'), user: user }) %>
+<%- include('partials/legal-css') %>
+<style>
+  .pm .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
+  .pm .card h2 { border: 0; padding: 0; margin: 0 0 8px; font-size: 18px; }
+  .pm .mut { color: #9a9a9a; font-size: 13.5px; }
+  .pm .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+  .pm .tabs button, .pm .acts button { padding: 5px 11px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 13.5px; cursor: pointer; }
+  .pm .tabs button[aria-pressed="true"] { background: #e5a00d; border-color: #e5a00d; color: #1a1200; font-weight: bold; }
+  .pm .acts button.ok { border-color: #2e7d32; color: #a5d6a7; } .pm .acts button.no { border-color: #5a2a2a; color: #ffb4b4; }
+  .pm ul.rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .pm ul.rows > li { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid #1e1e1e; min-width: 0; }
+  .pm ul.rows > li:first-child { border-top: 0; }
+  .pm .ph, .pm ul.rows img { width: 40px; height: 60px; object-fit: cover; border-radius: 4px; flex: none; background: #222; display: inline-flex; align-items: center; justify-content: center; color: #555; font-size: 18px; }
+  .pm .w { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .pm .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .pm .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; font-size: 12.5px; color: #ccc; white-space: nowrap; }
+  .pm .cm { margin: 3px 0 0 10px; font-size: 13px; color: #bbb; }
+  .pm .pager { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+  .pm .cform { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .pm .cform input { flex: 1 1 180px; min-width: 0; background: #0b0b0b; border: 1px solid #2b2b2b; border-radius: 8px; color: #ddd; padding: 5px 8px; font: inherit; }
+</style>
+<main class="lg pm">
+  <header class="hero">
+    <div class="eyebrow">🎟️ <a href="/plex">📼 <%- t('nav.plex') %></a></div>
+    <h1><%- t('pm.h1') %></h1>
+    <% if (allowed) { %><p class="lead"><%- t('pm.lead') %></p><% } %>
+  </header>
+  <% if (!allowed) { %>
+    <section class="card"><p><%- t('pm.denied', { link: '<a href="/shop?q=curator">' + t('pm.denied_link') + '</a>' }) %></p></section>
+  <% } else { %>
+    <% if (!writable) { %><p class="mut">⚠️ <%- t('pm.dry') %></p><% } %>
+    <section class="card" aria-labelledby="pmReqH" id="requests">
+      <h2 id="pmReqH">🎬 <%- t('pm.req_h') %></h2>
+      <div class="tabs" id="pmReqTabs" role="group" aria-label="<%- t('pm.req_h') %>">
+        <button type="button" data-f="pending" aria-pressed="true"><%- t('pm.f.pending') %></button>
+        <button type="button" data-f="approved" aria-pressed="false"><%- t('pm.f.approved') %></button>
+        <button type="button" data-f="processing" aria-pressed="false"><%- t('pm.f.processing') %></button>
+        <button type="button" data-f="available" aria-pressed="false"><%- t('pm.f.available') %></button>
+        <button type="button" data-f="failed" aria-pressed="false"><%- t('pm.f.failed') %></button>
+        <button type="button" data-f="all" aria-pressed="false"><%- t('pm.f.all') %></button>
+      </div>
+      <ul class="rows" id="pmReq"><li class="mut"><%- t('plex.iss.loading') %></li></ul>
+      <div class="pager" id="pmReqPager"></div>
+    </section>
+    <section class="card" aria-labelledby="pmIssH" id="issues">
+      <h2 id="pmIssH">🛠️ <%- t('pm.iss_h') %></h2>
+      <div class="tabs" id="pmIssTabs" role="group" aria-label="<%- t('pm.iss_h') %>">
+        <button type="button" data-f="open" aria-pressed="true"><%- t('pm.f.open') %></button>
+        <button type="button" data-f="resolved" aria-pressed="false"><%- t('pm.f.resolved') %></button>
+        <button type="button" data-f="all" aria-pressed="false"><%- t('pm.f.all') %></button>
+      </div>
+      <ul class="rows" id="pmIss"><li class="mut"><%- t('plex.iss.loading') %></li></ul>
+      <div class="pager" id="pmIssPager"></div>
+    </section>
+    <p class="mut" id="pmMsg" role="status" aria-live="polite"></p>
+    <script src="/public/js/plex-manage.js?v=1" defer></script>
+  <% } %>
+</main>
+</body>
+</html>

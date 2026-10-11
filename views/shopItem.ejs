@@ -68,6 +68,22 @@
     </div>
   </div>
 
+  <% const rk_ = H.roleKey ? H.roleKey(p) : null; if (rk_) { %>
+    <%# 1.99la: what a role item gives, where and for how long (shop.role.<key>.*) %>
+    <h2><%- t('shop.role.h') %></h2>
+    <div class="box role-desc">
+      <p style="margin:0 0 6px"><b style="color:#fff"><%- t('shop.role.' + rk_ + '.lead') %></b></p>
+      <ul style="margin:0;padding-left:20px;display:grid;gap:4px">
+        <% ['patv', 'seerr', 'camfrog', 'discord'].forEach((w_) => { if (t.has('shop.role.' + rk_ + '.' + w_)) { %><li><%- t('shop.role.' + rk_ + '.' + w_) %></li><% } }) %>
+        <li><%- t('shop.role.' + rk_ + '.length') %></li>
+      </ul>
+      <% if (t.has('shop.role.' + rk_ + '.setup')) { %><p class="muted" style="margin:8px 0 0"><%- t('shop.role.' + rk_ + '.setup', { plex: '<a href="/plex#access">' + t('nav.plex') + '</a>' }) %></p><% } %>
+    </div>
+  <% } %>
+  <% if (H.requestItem && H.requestItem(p)) { %>
+    <p class="notice"><%- t('shop.item.requests_moved', { link: '<a href="/plex#request">' + t('nav.plex') + '</a>' }) %></p>
+  <% } %>
+
   <% if (p.description) { %>
     <h2><%- t('shop.item.description') %></h2>
     <div class="pre"><%= p.description %></div>

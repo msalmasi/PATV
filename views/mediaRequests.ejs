@@ -2,12 +2,12 @@
 <!-- views/mediaRequests.ejs — 1.99ji: 🎬 request movies / shows for the Plex server (mediarequests.js, Overseerr). -->
 <link rel="stylesheet" href="/public/css/stage.css?v=6">
 <% const fmt = (n) => Number(n || 0).toLocaleString('en-US'); %>
-<main class="sb mr" id="mreq" data-price-movie="<%= price.movie %>" data-price-tv="<%= price.tv %>">
+<main class="sb mr" id="mreq" data-price-movie="<%= price.movie %>" data-price-tv="<%= price.tv %>" data-scout="<%= locals.roles && roles.scout ? 1 : 0 %>">
   <div class="sb-head">
     <h1>🎬 Request a movie or show</h1>
     <p class="lede">Ask for something that isn't on our Plex server yet. You'll get a 🔔 notice when it's ready to watch.</p>
     <% const tR_ = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); %>
-    <p class="muted"><a href="/plex">‹ 📼 <%- tR_('nav.plex') %></a></p>
+    <p class="muted"><a href="/plex">‹ 📼 <%- tR_('nav.plex') %></a><% if (locals.manage) { %> · <a href="/plex/manage">🎟️ <%- tR_('plex.manage.go') %></a><% } %></p>
   </div>
   <% if (!on) { %>
     <section class="sb-card"><p class="note">Requests aren't open right now — check back soon<%= admin ? ' (admins: /admin/media)' : '' %>.</p></section>
@@ -16,10 +16,12 @@
   <% } else { %>
     <section class="sb-card" aria-labelledby="mrS">
       <h2 id="mrS">Search</h2>
+      <% if (locals.roles && roles.scout) { %><p class="note"><%- tR_('plex.req.scout') %></p><% } %>
+      <% if (locals.roles && roles.curator) { %><p class="note"><%- tR_('plex.req.curator') %></p><% } %>
       <p class="muted">
         <% if (credits.movie || credits.tv) { %>You have <b><%= credits.movie %></b> movie and <b><%= credits.tv %></b> show request credit<%= credits.movie + credits.tv === 1 ? '' : 's' %> — they're used first. <% } %>
         A request costs <b><%= price.movie ? fmt(price.movie) + ' PAT' : 'nothing' %></b> for a movie and <b><%= price.tv ? fmt(price.tv) + ' PAT' : 'nothing' %></b> for a show<%= (price.movie || price.tv) ? ', given back if it\'s declined or fails' : '' %>.
-        <% if (perDay) { %>Up to <%= perDay %> a day.<% } %>
+        <% if (perDay && !(locals.roles && roles.scout)) { %>Up to <%= perDay %> a day.<% } %>
       </p>
       <form id="mrForm" class="row" role="search" autocomplete="off">
         <input type="text" name="q" minlength="2" maxlength="100" placeholder="Title of a movie or show" aria-label="Search for a movie or show" style="flex:1 1 240px" required>
@@ -33,9 +35,10 @@
       <h2 id="mrM">Your requests</h2>
       <ul class="mr-mine" id="mrMine">
         <% mine.forEach((r) => { %>
-          <li><%= r.type === 'tv' ? '📺' : '🎬' %> <b><%= r.title %></b><%= r.year ? ' (' + r.year + ')' : '' %><%= r.seasons ? ' — S' + r.seasons.join(', S') : '' %>
+          <li><% if (r.poster_url) { %><img class="mr-thumb" src="<%= r.poster_url %>" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'mr-thumb mr-tph',textContent:'🎬'}))"><% } else { %><span class="mr-thumb mr-tph" aria-hidden="true"><%= r.type === 'tv' ? '📺' : '🎬' %></span><% } %>
+            <span class="mr-txt"><b><%= r.title %></b><%= r.year ? ' (' + r.year + ')' : '' %><%= r.seasons ? ' — S' + r.seasons.join(', S') : '' %>
             <span class="pill st-<%= r.status %>"><%= r.label %></span>
-            <small class="muted"><%= new Date(r.created).toISOString().slice(0, 10) %><%= r.paid_with === 'credit' ? ' · credit' : r.paid_with === 'pat' ? ' · ' + fmt(r.price) + ' PAT' : '' %><% if (r.order_id) { %> · <a href="/shop/orders/<%= r.order_id %>">order #<%= r.order_id %></a><% } %></small></li>
+            <small class="muted"><%= new Date(r.created).toISOString().slice(0, 10) %><%= r.paid_with === 'credit' ? ' · credit' : r.paid_with === 'scout' ? ' · 🔭 Scout' : r.paid_with === 'pat' ? ' · ' + fmt(r.price) + ' PAT' : '' %><% if (r.order_id) { %> · <a href="/shop/orders/<%= r.order_id %>">order #<%= r.order_id %></a><% } %></small></span></li>
         <% }) %>
         <% if (!mine.length) { %><li class="muted">Nothing yet.</li><% } %>
       </ul>
@@ -53,11 +56,14 @@
   .mr .mr-seasons { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .mr .mr-seasons label { font-size: 13px; color: #ccc; display: inline-flex; gap: 5px; align-items: center; }
   .mr .mr-mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .mr .mr-mine li { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+  .mr .mr-mine li { display: flex; gap: 10px; align-items: flex-start; }
+  .mr .mr-txt { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; min-width: 0; overflow-wrap: anywhere; }
+  .mr .mr-thumb { width: 34px; height: 51px; object-fit: cover; border-radius: 4px; flex: none; background: #1a1a1a; }
+  .mr .mr-tph { display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: #555; border: 1px solid #2a2a2a; box-sizing: border-box; }
   .mr .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid #333; color: #ccc; }
   .mr .st-available { color: #81c784; border-color: #2e5d32; }
   .mr .st-approved, .mr .st-partial { color: #64b5f6; border-color: #24435e; }
   .mr .st-pending, .mr .st-submitting { color: #ffd54f; border-color: #5e4d14; }
   .mr .st-declined, .mr .st-failed, .mr .st-removed, .mr .st-error { color: #e57373; border-color: #5a2222; }
 </style>
-<% if (on && signedIn) { %><script src="/public/js/media-requests.js?v=1" defer></script><% } %>
+<% if (on && signedIn) { %><script src="/public/js/media-requests.js?v=2" defer></script><% } %>

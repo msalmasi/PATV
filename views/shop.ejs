@@ -79,6 +79,9 @@
   </form>
 
   <div id="shopStatus" class="status-msg" role="status" aria-live="polite"></div>
+  <% if (!store && H.wantsRequests && H.wantsRequests(f.q)) { %>
+    <p class="notice"><%- t('shop.requests_hint', { link: '<a href="/plex#request">📼 ' + t('nav.plex') + '</a>' }) %></p>
+  <% } %>
 
   <div class="muted" style="margin:4px 0 8px"><%- t('shop.n_items', { count: total, n: H.fmt(total) }) %><%- pages > 1 ? ' · ' + t('shop.page_of', { page: page, pages: pages }) : '' %></div>
   <% if (!items.length) { %>
@@ -96,6 +99,7 @@
           <div class="meta">
             <% if (official) { %><span class="pill official"><%- t('shop.official') %></span><% } else { %><%- t('shop.by', { seller: '<a href="/shop/seller/' + t.esc(encodeURIComponent(it.seller_name || '')) + '">' + t.esc(it.seller_name) + '</a>' }) %><% } %>
           </div>
+          <% const rk_ = H.roleKey ? H.roleKey(it) : null; if (rk_) { %><div class="meta"><%- t('shop.role.' + rk_ + '.short') %></div><% } %>
           <div class="meta"><span class="<%= it.quantity > 0 ? '' : 'oos' %>" data-stock="<%= it.prizeId %>"><%- it.quantity > 0 ? t('shop.n_left', { n: H.fmt(it.quantity) }) : t('shop.out_of_stock') %></span><%- it.sold ? ' · ' + t('shop.n_sold', { n: H.fmt(it.sold) }) : '' %></div>
           <% if (quick && me && it.quantity > 0) { %>
             <button class="buy-btn" style="margin-top:4px" data-product="<%= it.prizeId %>" data-name="<%= it.prize %>" data-cost="<%= it.cost %>"><%- t('shop.buy') %></button>

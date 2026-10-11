@@ -188,6 +188,11 @@ const RULES = {
   // 1.99jp: 📼 Plex members (plexmembers.js) + 🔁 store subscriptions (subscriptions.js)
   "plex_members.user_id": M(), "plex_members.linked_by": { deny: NAME }, "plex_members.revoke_by": { deny: NAME },
   "plex_member_log.user_id": M(), "plex_member_log.actor": { deny: NAME },
+  // 1.99la: 🔭 Scout / 🎟️ Curator (requestroles.js) + 🛠️ problem reports (mediaissues.js) follow the account
+  "request_roles.user_id": M({ key: ["role"], merge: { status: { rank: ["active", "revoked"] } } }),
+  "request_roles.granted_by": { deny: NAME }, "request_roles.revoked_by": { deny: NAME },
+  "request_role_log.user_id": M(), "request_role_log.actor": { deny: NAME },
+  "media_issues.user_id": M({ name: "username" }),
   "shop_subs.user_id": M(),
   // 1.99ks: crypto donations (cryptopay.js) - a linked wallet, its link requests + log, and its payments follow the account
   "crypto_wallets.user_id": M(), "crypto_link_nonces.user_id": M(), "crypto_wallet_log.user_id": M(), "crypto_wallet_log.actor": { deny: NAME },

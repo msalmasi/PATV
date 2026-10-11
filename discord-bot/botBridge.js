@@ -3,6 +3,7 @@
 //
 //   /store/purchase, /store/role-members   the PATV backend's prize store (index.js): announce
 //                                          website/Camfrog sales, grant role prizes, list holders
+//   /store/role-grant, /store/role-remove  1.99la: one store role on its own (requestroles.js)
 //   /poker/chips, /poker/newgame           Pepe's PokerNow bridge (off in Camfrog since the
 //                                          built-in Hold'em; kept working). Details below.
 //
@@ -165,14 +166,41 @@ async function handleStorePurchase(client, body, res) {
   return send(res, 200, { ok: true, granted: true });
 }
 
+// The whole member list, at most once every 2 minutes: Discord rate-limits the gateway's member
+// request, and two lookups in a row used to fail with "Members didn't arrive in time".
+let membersAt = 0;
+async function fetchAllMembers(guild) {
+  if (Date.now() - membersAt < 120000) return;
+  try { await guild.members.fetch(); membersAt = Date.now(); }
+  catch (e) { if (!membersAt) throw e; }     // an earlier full fetch is still in the cache
+}
+
 // POST /store/role-members { role } -> { discordIds: [...] } — who holds a role in the server.
 async function handleRoleMembers(client, body, res) {
   const channel = await client.channels.fetch(PURCHASES_CHANNEL_ID);
   const guild = channel.guild;
-  await guild.members.fetch();
+  await fetchAllMembers(guild);
   const r = guild.roles.cache.find((x) => x.name.toLowerCase() === String(body.role || '').toLowerCase());
   if (!r) return send(res, 404, { error: 'no_such_role' });
   return send(res, 200, { role: r.name, discordIds: r.members.map((m) => m.id) });
+}
+
+// 1.99la (requestroles.js): give / take a store role on its own, outside a sale - a role bought
+// before the buyer linked Discord, an admin's grant, or a revoke. Idempotent; says what it found.
+// POST /store/role-grant  { discordId, role } -> { granted, already } | { granted:false, reason }
+// POST /store/role-remove { discordId, role } -> { removed, had }     | { removed:false, reason }
+async function handleRoleChange(client, body, res, add) {
+  const discordId = String(body.discordId || '');
+  if (!/^\d{5,25}$/.test(discordId)) return send(res, 400, { error: 'bad_discord_id' });
+  const { guild, member } = await guildMember(client, discordId);
+  const key = add ? 'granted' : 'removed';
+  if (!member) return send(res, 200, { ok: true, [key]: false, reason: 'not_in_server' });
+  const r = guild.roles.cache.find((x) => x.name.toLowerCase() === String(body.role || '').toLowerCase());
+  if (!r) return send(res, 200, { ok: true, [key]: false, reason: 'no_such_role' });
+  const had = member.roles.cache.has(r.id);
+  if (add && !had) await member.roles.add(r, 'PATV store role');
+  if (!add && had) await member.roles.remove(r, 'PATV store role revoked');
+  return send(res, 200, add ? { ok: true, granted: true, already: had } : { ok: true, removed: had, had });
 }
 
 function start(client) {
@@ -202,6 +230,8 @@ function start(client) {
       if (path === '/poker/newgame') return await handleNewGame(client, body, res);
       if (path === '/store/purchase') return await handleStorePurchase(client, body, res);
       if (path === '/store/role-members') return await handleRoleMembers(client, body, res);
+      if (path === '/store/role-grant') return await handleRoleChange(client, body, res, true);
+      if (path === '/store/role-remove') return await handleRoleChange(client, body, res, false);
       return send(res, 404, { error: 'not_found' });
     } catch (err) {
       console.error('[bot-bridge] handler error:', err && err.message);

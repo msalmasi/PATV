@@ -7,6 +7,7 @@
 //     (subscriptions.js) - managing it stays on /subscriptions
 //   * 📼 Play from Plex on the Go-live page (/stage?mode=plex) and what it costs you (medialib.goLiveInfo)
 //   * The members' perks
+//   * 1.99la: 🔭 Scout / 🎟️ Curator status, 🛠️ Report a problem (mediaissues.js), the curators' /plex/manage link
 // Read-only: every action stays on its own page (same checks). Linked from the navbar (More + ☰), the store,
 // /subscriptions, Edit profile -> Connections (Plex row) and the footer. Signed-out visitors see the public parts.
 "use strict";
@@ -36,8 +37,13 @@ async function pageData(user) {
   invites.sort((a, b) => (a.days || 1e9) - (b.days || 1e9));
   const play = me ? await safe(() => require("./medialib").goLiveInfo(me), null) : null;
   const libOpen = !!S.library_plex && MC.on.library();
+  // 1.99la: 🔭 Scout / 🎟️ Curator (requestroles.js), the manage view, 🛠️ reporting a problem (mediaissues.js)
+  const RR = require("./requestroles");
+  const roles = me ? await safe(() => RR.rolesOf(me.userId), { scout: false, curator: false }) : { scout: false, curator: false };
+  const manage = me ? await safe(() => RR.canManage(me), false) : false;
+  const issues = { on: MC.keys().overseerr, may: me ? await safe(() => require("./mediaissues").mayReport(me), false) : false };
   return {
-    requests, plex, sub, invites, play, signedIn: !!me,
+    requests, plex, sub, invites, play, signedIn: !!me, roles, manage, issues,
     library: { open: libOpen, price: S.library_price, freeCap: S.library_free_daily_cap, paidCap: S.library_daily_cap },
     perks: { flair: !!S.plex_flair, sso: !!S.plex_sso, selflink: !!S.plex_selflink },
     invitesOn: MC.on.invites(),
