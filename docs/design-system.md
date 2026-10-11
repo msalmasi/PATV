@@ -766,6 +766,23 @@ Added by the G5 polish pass (shop, storefront, item, My orders, an order, seller
 - **Tables** (seller listings): `.sd-tbl` is the `.ds-tbl` box (surface, 16 radius, #151515 head, 11.5px uppercase th); row actions are 36px pills. Below 760 the table becomes a card list (`data-l` labels).
 - **Status text** written by the page JS (buy / redeem results) uses `var(--ds-ok)` and `var(--ds-danger-solid)`, and `scrollIntoView` is instant under reduced motion.
 
+### Go live and Requests (.sb pages: /stage, /requests)
+
+- **The `.sb` contract.** `public/css/stage.css` is shared by the Go live hub and eight admin / pad pages. A page opts into the ds metrics by adding `.ds-page` to its `main.sb` (`<main class="ds-page sb">`). The rules sit under `.sb:where(.ds-page)`, so their specificity stays at `.sb` level and the compact variants (`.mylist .btn`, `.px-ctl .btn`) still win. Bare `.sb` pages only got the token swaps and the dark-ink primary button until they are polished: add `.ds-page` and check the page.
+- **What `.sb.ds-page` gives:** the ds width and gutter with a 16px card gap (a long tool page reads as one column of cards); `.sb-head` as a `.ds-head` (h1 at page-title size, the lede at lead size); `.sb-card` radius 16, padding 16 (20 at ≥ 700); h2 = the 12px gold pixel heading; `.btn` = 44px pill (`.big` 52, `.sm` 36), `.primary` green with dark ink, `.danger` / `.gold` on the semantic tokens; fields 44px, radius 10, sunken, green focus halo; `.choice` tiles 44px, radius 10, the checked one green border + `--ds-green-bg`, a focus ring on the tile when its radio has keyboard focus; the stream tabs are 44px with a green underline; fieldset legends are the 11px uppercase label.
+- **Lime retired:** `--lime` in stage.css now points at `--ds-green-2`; selected tiles, tab underlines and focus no longer use #c6e94f.
+- **Request status chips** (/requests, /plex) use the `.ds-chip` vocabulary: available = ok, approved / partial = info, pending / submitting = warn, declined / failed / removed / error = danger. 11px/700 uppercase pills with a tinted fill.
+
+### Stage captures (/stage/captures)
+
+`.ds-page.wide`, a `.ds-head` (eyebrow "Stage", `.ds-h1` with the 📺 in `.ds-ic`), then a `minmax(min(100%, 240px), 1fr)` grid of 16-radius tiles: a 16:9 black media box (the duration / 📸 tag top-start, 12px/700 on a 72% black pill) and a 12px-padded caption. The NSFW gate's reveal is a `.ds-btn.sm.danger`. Signed out and empty are `.ds-empty` with one CTA.
+
+### Plex hub and Manage requests (/plex, /plex/manage)
+
+- **Shared partial:** `views/partials/plex-css.ejs`, prefix `.pxh`. It sets the Plex accent (`--ds-ac: var(--ds-acc-plex)`, `--ds-ac-2: #ffcc80`, `--ds-ac-bg: rgba(255,167,38,.12)`, `--ds-on-ac: #1a1000`), and styles the buttons, fields and chips that the page JS writes (plex-issues.js, plex-manage.js): plain `<button>`s and `a.bt` are 36px quiet pills (40 on touch), `.pri` is the accent fill with dark ink, `.ok` / `.no` are outlined ok / danger, `[aria-pressed=true]` is the accent-tint filter pill. These pages no longer borrow `partials/legal-css`.
+- **Layout:** `.ds-page.pxh`, a `.ds-hero` (`.compact` on Manage), then `.ds-card.lg` sections in a `.pxh-grid` (`minmax(min(100%, 340px), 1fr)`, gap 12). A card title is an h2 at 18px/700 with its emoji in a 20px `.ds-ic`; there is no other section-heading style on these pages. Rows inside a card (`.it`) are at least 44px tall, divided by soft lines.
+- The dry-run warning on Manage is a `.ds-note.warn`.
+
 ---
 
 ## Area notes: money and markets

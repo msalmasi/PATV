@@ -3,47 +3,35 @@
     (plexmembers.js / subscriptions.js), 📼 Play from Plex on the Go-live page (medialib.js) and the members' perks.
     Read-only: every action links to its own page. %>
 <%- include('layout', { title: title, user: user }) %>
-<%- include('partials/legal-css') %>
+<%- include('partials/plex-css') %>
 <style>
-  .px .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 14px 0 0; }
-  .px .card h2 { border: 0; padding: 0; margin: 0 0 8px; font-size: 18px; }
-  .px .mut { color: #9a9a9a; font-size: 13.5px; }
-  .px .it { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 1px solid #1e1e1e; }
+  .px .it { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; justify-content: space-between; min-height: 44px; padding: var(--ds-sp-2) 0; border-top: 1px solid var(--ds-line-soft); }
   .px .it:first-of-type { border-top: 0; }
   .px .it .w { min-width: 0; flex: 1 1 240px; overflow-wrap: anywhere; }
   .px .it b { color: #fff; }
-  .px .st { font-size: 14px; color: #cfcfcf; }
-  .px .st.ok { color: #a5d6a7; } .px .st.warn { color: #ffd479; } .px .st.off { color: #9a9a9a; }
-  .px .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .px a.bt { padding: 7px 13px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font-size: 14px; text-decoration: none; display: inline-block; }
-  .px a.bt.pri { background: #e5a00d; border-color: #e5a00d; color: #1a1200; font-weight: bold; }
-  .px .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; background: linear-gradient(90deg, #cc7b19, #e5a00d); color: #1a1200; font-size: 13px; font-weight: bold; }
-  .px .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; border: 1px solid #333; font-size: 12.5px; color: #ccc; white-space: nowrap; }
-  .px .pill.st-available { border-color: #2e7d32; color: #a5d6a7; } .px .pill.st-declined, .px .pill.st-failed, .px .pill.st-error, .px .pill.st-removed { border-color: #5a2a2a; color: #ffb4b4; }
-  .px .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 0 14px; }
-  .px ul.perks { margin: 4px 0 0; padding-left: 20px; display: grid; gap: 4px; font-size: 14.5px; }
+  .px .st { font-size: var(--ds-fs-sm); color: var(--ds-text-2); }
+  .px .st.ok { color: var(--ds-ok); } .px .st.warn { color: var(--ds-warn); } .px .st.off { color: var(--ds-text-muted); }
+  .px .chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--ds-r-pill); background: linear-gradient(90deg, #cc7b19, var(--ds-plex)); color: #1a1200; font-size: var(--ds-fs-meta); font-weight: 700; }
+  .px ul.perks { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; font-size: var(--ds-fs-body); line-height: 1.5; }
   .px .rq-row { display: flex; gap: 10px; align-items: center; }
-  .px .rq-row img, .px .rq-ph { width: 34px; height: 51px; object-fit: cover; border-radius: 4px; flex: none; background: #222; }
-  .px .rq-ph { display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: #555; border: 1px solid #2a2a2a; box-sizing: border-box; }
-  .px a.bt.sm { padding: 3px 9px; font-size: 12.5px; }
-  .px .pxi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 112px), 1fr)); gap: 8px; margin-top: 8px; }
-  .px .pxi-it { background: #0b0b0b; border: 1px solid #222; border-radius: 10px; padding: 6px; cursor: pointer; text-align: left; color: #ddd; font: inherit; display: grid; gap: 4px; min-width: 0; }
-  .px .pxi-it:hover, .px .pxi-it:focus-visible { border-color: #e5a00d; }
-  .px .pxi-it img, .px .pxi-it .pxi-ph { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 6px; background: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #555; }
+  .px .rq-row img, .px .rq-ph { width: 34px; height: 51px; object-fit: cover; border-radius: var(--ds-r-xs); flex: none; background: #1a1a1a; }
+  .px .rq-ph { display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: var(--ds-text-faint); border: 1px solid #2a2a2a; box-sizing: border-box; }
+  .px .pxi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 112px), 1fr)); gap: var(--ds-sp-2); margin-top: var(--ds-sp-2); }
+  .px .pxi-it { background: var(--ds-sunken); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); padding: 6px; cursor: pointer; text-align: start; color: #ddd; font: inherit; display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .px .pxi-it:hover { border-color: var(--ds-ac); }
+  .px .pxi-it:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
+  .px .pxi-it img, .px .pxi-it .pxi-ph { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: var(--ds-r-xs); background: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 26px; color: var(--ds-text-faint); }
   .px .pxi-it b { font-size: 12.5px; line-height: 1.3; overflow-wrap: anywhere; }
-  .px .pxi-it small { color: #9a9a9a; font-size: 11.5px; }
-  .px .pxi-form { display: grid; gap: 8px; border-top: 1px solid #1e1e1e; margin-top: 10px; padding-top: 10px; }
-  .px .pxi-form .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .px .pxi-form input, .px .pxi-form select, .px .pxi-form textarea { background: #0b0b0b; border: 1px solid #2b2b2b; border-radius: 8px; color: #ddd; padding: 7px 9px; font: inherit; max-width: 100%; box-sizing: border-box; }
+  .px .pxi-it small { color: var(--ds-text-muted); font-size: 11.5px; }
+  .px .pxi-form { display: grid; gap: var(--ds-sp-2); border-top: 1px solid var(--ds-line-soft); margin-top: var(--ds-sp-2h); padding-top: var(--ds-sp-2h); }
+  .px .pxi-form .row { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); align-items: center; }
   .px .pxi-form textarea { width: 100%; min-height: 76px; }
-  .px .pxi-form button, .px .pxi-search button { padding: 7px 13px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; cursor: pointer; }
-  .px .pxi-form button.pri { background: #e5a00d; border-color: #e5a00d; color: #1a1200; font-weight: bold; }
-  .px .pxi-search { display: flex; flex-wrap: wrap; gap: 8px; }
-  .px .pxi-search input { flex: 1 1 200px; min-width: 0; background: #0b0b0b; border: 1px solid #2b2b2b; border-radius: 8px; color: #ddd; padding: 7px 9px; font: inherit; }
-  .px .pxi-mine { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
-  .px .pxi-mine li { border-top: 1px solid #1e1e1e; padding-top: 8px; overflow-wrap: anywhere; }
-  .px .pxi-cm { margin: 4px 0 0 12px; font-size: 13px; color: #bbb; }
-  .px .pxi-msg { min-height: 1.2em; font-size: 13.5px; }
+  .px .pxi-search { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+  .px .pxi-search input { flex: 1 1 200px; min-width: 0; }
+  .px .pxi-mine { list-style: none; margin: var(--ds-sp-2) 0 0; padding: 0; display: grid; gap: var(--ds-sp-2h); }
+  .px .pxi-mine li { border-top: 1px solid var(--ds-line-soft); padding-top: var(--ds-sp-2); overflow-wrap: anywhere; }
+  .px .pxi-cm { margin: 4px 0 0; margin-inline-start: 12px; font-size: var(--ds-fs-meta); color: #bbb; }
+  .px .pxi-msg { min-height: 1.2em; font-size: var(--ds-fs-sm); }
 </style>
 <%
   const fmt = (n) => t.num(Math.round(Number(n) || 0));
@@ -54,16 +42,16 @@
   const price_ = (n) => Number(n) > 0 ? t('plex.req.price', { n: fmt(n) }) : t('plex.req.free');
   const stKey_ = (s) => ['submitting', 'pending', 'approved', 'partial', 'available', 'declined', 'failed', 'removed', 'error'].includes(s) ? 'plex.st.' + s : null;
 %>
-<main class="lg px">
-  <header class="hero">
-    <div class="eyebrow">📼 <%- t('plex.eyebrow') %></div>
-    <h1><%- t('plex.h1') %></h1>
-    <p class="lead"><%- t('plex.lead') %></p>
-  </header>
+<main class="ds-page pxh px">
+  <section class="ds-hero" aria-labelledby="pxH">
+    <span class="ds-eyebrow"><%- t('plex.eyebrow') %></span>
+    <h1 id="pxH"><%- t('plex.h1') %></h1>
+    <p class="ds-lead"><%- t('plex.lead') %></p>
+  </section>
 
-  <div class="grid">
-  <section class="card" aria-labelledby="pxReqH" id="request">
-    <h2 id="pxReqH">🍿 <%- t('plex.req.h') %></h2>
+  <div class="pxh-grid">
+  <section class="ds-card lg" aria-labelledby="pxReqH" id="request">
+    <h2 id="pxReqH"><span class="ds-ic" aria-hidden="true">🍿</span><%- t('plex.req.h') %></h2>
     <% if (!R_.on) { %>
       <p class="st off"><%- t('plex.req.off') %></p>
     <% } else { %>
@@ -77,8 +65,8 @@
     <div class="acts"><a class="bt pri" href="/requests"><%- t('plex.req.go') %></a><% if (manage) { %><a class="bt" href="/plex/manage"><%- t('plex.manage.go') %></a><% } %></div>
   </section>
 
-  <section class="card" aria-labelledby="pxMineH" id="mine">
-    <h2 id="pxMineH">📋 <%- t('plex.mine.h') %></h2>
+  <section class="ds-card lg" aria-labelledby="pxMineH" id="mine">
+    <h2 id="pxMineH"><span class="ds-ic" aria-hidden="true">📋</span><%- t('plex.mine.h') %></h2>
     <% if (!signedIn) { %>
       <p class="mut"><%- t('plex.mine.signin', { link: '<a href="/login?next=%2Fplex">' + t('nav.signin') + '</a>' }) %></p>
     <% } else if (!R_.mine.length) { %>
@@ -94,8 +82,8 @@
   </section>
   </div>
 
-  <section class="card" aria-labelledby="pxIssH" id="issues">
-    <h2 id="pxIssH">🛠️ <%- t('plex.iss.h') %></h2>
+  <section class="ds-card lg" aria-labelledby="pxIssH" id="issues">
+    <h2 id="pxIssH"><span class="ds-ic" aria-hidden="true">🛠️</span><%- t('plex.iss.h') %></h2>
     <p><%- t('plex.iss.what') %></p>
     <% if (!issues.on) { %>
       <p class="st off"><%- t('plex.iss.off') %></p>
@@ -109,26 +97,26 @@
           <input type="search" name="q" minlength="2" maxlength="100" placeholder="<%- t('plex.iss.search_ph') %>" aria-label="<%- t('plex.iss.search_ph') %>">
           <button type="submit"><%- t('plex.iss.search') %></button>
         </form>
-        <div class="mut" style="margin-top:8px" id="pxiListH"><%- t('plex.iss.recent') %></div>
+        <div class="mut" style="margin-top:var(--ds-sp-2)" id="pxiListH"><%- t('plex.iss.recent') %></div>
         <div class="pxi-grid" id="pxiList" aria-live="polite"></div>
         <form class="pxi-form" id="pxiPick" hidden></form>
         <p class="pxi-msg" id="pxiMsg" role="status" aria-live="polite"></p>
-        <h3 style="margin:12px 0 0;font-size:16px"><%- t('plex.iss.mine_h') %></h3>
+        <h3><%- t('plex.iss.mine_h') %></h3>
         <ul class="pxi-mine" id="pxiMine"><li class="mut"><%- t('plex.iss.loading') %></li></ul>
       </div>
     <% } %>
   </section>
 
   <% if (manage) { %>
-  <section class="card" aria-labelledby="pxManH" id="manage">
-    <h2 id="pxManH">🎟️ <%- t('plex.manage.h') %></h2>
+  <section class="ds-card lg" aria-labelledby="pxManH" id="manage">
+    <h2 id="pxManH"><span class="ds-ic" aria-hidden="true">🎟️</span><%- t('plex.manage.h') %></h2>
     <p><%- t('plex.manage.what') %></p>
     <div class="acts"><a class="bt pri" href="/plex/manage"><%- t('plex.manage.go') %></a></div>
   </section>
   <% } %>
 
-  <section class="card" aria-labelledby="pxAccH" id="access">
-    <h2 id="pxAccH">🔑 <%- t('plex.acc.h') %></h2>
+  <section class="ds-card lg" aria-labelledby="pxAccH" id="access">
+    <h2 id="pxAccH"><span class="ds-ic" aria-hidden="true">🔑</span><%- t('plex.acc.h') %></h2>
     <% if (!signedIn) { %>
       <p class="mut"><%- t('plex.acc.signin', { link: '<a href="/login?next=%2Fplex">' + t('nav.signin') + '</a>' }) %></p>
     <% } else if (live) { %>
@@ -141,9 +129,9 @@
     <% } else { %>
       <p class="st off"><%- t('subs.plex_none') %></p>
     <% } %>
-    <% if (sub && sub.live) { %><p class="mut">🔁 <%- t('plex.acc.sub', { date: d(sub.until) }) %></p><% } %>
+    <% if (sub && sub.live) { %><p class="mut"><span class="ds-ic" aria-hidden="true">🔁</span> <%- t('plex.acc.sub', { date: d(sub.until) }) %></p><% } %>
     <% if (invites.length) { %>
-      <h3 style="margin:12px 0 2px;font-size:16px"><%- t('subs.plex_get_h') %></h3>
+      <h3><%- t('subs.plex_get_h') %></h3>
       <% invites.forEach((x) => { %>
       <div class="it"><div class="w"><b><%= x.title %></b> <span class="mut">· <%= fmt(x.price) %> PAT<%- x.days ? ' · ' + t('plex.acc.days', { n: x.days }) : ' · ' + t('plex.acc.lifetime') %></span></div>
         <a class="bt" href="/shop/item/<%= encodeURIComponent(x.prize_id) %>"><%- t('subs.view') %></a></div>
@@ -158,8 +146,8 @@
     </div>
   </section>
 
-  <div class="grid">
-  <section class="card" aria-labelledby="pxPlayH" id="play">
+  <div class="pxh-grid">
+  <section class="ds-card lg" aria-labelledby="pxPlayH" id="play">
     <h2 id="pxPlayH"><%- t('stage.px.choice') %></h2>
     <p><%- t('plex.play.what') %></p>
     <% if (!library.open) { %>
@@ -174,8 +162,8 @@
     <div class="acts"><a class="bt pri" href="/stage?mode=plex#srcSet"><%- t('plex.play.go') %></a></div>
   </section>
 
-  <section class="card" aria-labelledby="pxPerkH" id="perks">
-    <h2 id="pxPerkH">✨ <%- t('plex.perks.h') %></h2>
+  <section class="ds-card lg" aria-labelledby="pxPerkH" id="perks">
+    <h2 id="pxPerkH"><span class="ds-ic" aria-hidden="true">✨</span><%- t('plex.perks.h') %></h2>
     <ul class="perks">
       <li><%- t('plex.perks.server') %></li>
       <li><%- t('plex.perks.play', { n: library.freeCap }) %></li>

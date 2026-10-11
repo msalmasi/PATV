@@ -41,7 +41,7 @@ test("a Plex user: the third choice with the price, the search panel + rights no
   assert.match(html, /Plex members play free: <a href="\/subscriptions">/, "1.99jp: how to play free (1.99jr: /subscriptions)");
   assert.match(html, /id="plexNow"/, "pause / seek / stop live in Your slot");
   assert.match(html, /stage-plex\.js\?v=3/);
-  assert.match(html, /stage\.css\?v=8/);
+  assert.match(html, /stage\.css\?v=9/);
   // the ordinary booking fields step aside in 📼 mode
   for (const id of ["kindSet", "whenSet", "bookBtn"]) assert.match(html, new RegExp('class="[^"]*\\bnp\\b[^"]*" id="' + id + '"|id="' + id + '"[^>]*class="[^"]*\\bnp\\b'), id + " is .np");
   assert.doesNotMatch(html, /id="plexLocked"/);
@@ -69,7 +69,7 @@ test("an admin while it's switched off: the choice is shown disabled with the re
   const html = await render({ ...PLEX, ok: false, free: true, how: "admin", why: "off", message: "Play from library is switched off (/admin/media)." });
   assert.match(html, /<label class="locked"[^>]*><input type="radio" name="mode" value="plex" disabled>/);
   assert.match(html, /🔒 switched off right now/);
-  assert.match(html, /id="plexLocked"[^>]*>🔒 <b>📼 Play from Plex<\/b> puts a movie.*switched off \(\/admin\/media\)/s);
+  assert.match(html, /id="plexLocked"[^>]*><span class="ds-ic" aria-hidden="true">🔒<\/span> <b>📼 Play from Plex<\/b> puts a movie.*switched off \(\/admin\/media\)/s);
   assert.doesNotMatch(html, /id="plexPanel"/, "no search");
 });
 

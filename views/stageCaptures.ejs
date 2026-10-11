@@ -2,34 +2,39 @@
 <%# 1.99cr: the captures feed (stagecap.js): stage snaps and clips people saved, newest first. Members only, like
     every capture. NSFW ones (the streamer marked their slot NSFW) are blurred until tapped. %>
 <style>
-  .sc { max-width: 1100px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; color: #ddd; }
-  .sc h1 { font-size: 24px; margin: 18px 0 4px; color: #c6e94f; }
-  .sc .lead { color: #9aa59a; font-size: 14px; margin: 0 0 16px; }
-  .sc .lead a { color: #81c784; }
-  .sc .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-  .sc .it { background: #111; border: 1px solid #222; border-radius: 12px; overflow: hidden; display: grid; min-width: 0; }
+  /* 1.99po polish (G5): on the ds tokens - .ds-page.wide, a .ds-head, 16-radius tiles, .ds-empty */
+  .sc .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--ds-sp-3); }
+  .sc .it { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); overflow: hidden; display: grid; align-content: start; min-width: 0;
+            transition: border-color var(--ds-dur-2); }
+  .sc .it:hover { border-color: #444; }
   .sc .media { position: relative; aspect-ratio: 16 / 9; background: #000; display: block; }
   .sc .media img, .sc .media video { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .sc .media .k { position: absolute; left: 8px; top: 8px; background: rgba(0,0,0,.7); border-radius: 999px; padding: 2px 8px; font-size: 12px; color: #fff; }
+  .sc .media .k { position: absolute; inset-inline-start: 8px; top: 8px; background: rgba(0,0,0,.72); border-radius: var(--ds-r-pill); padding: 2px 9px; font-size: var(--ds-fs-xs); font-weight: 700;
+                  color: #fff; font-variant-numeric: tabular-nums; }
   .sc .it.nsfw .media img, .sc .it.nsfw .media video { filter: blur(24px); }
-  .sc .it .gate { position: absolute; inset: 0; display: none; place-content: center; gap: 8px; color: #fff; font-size: 13px; text-align: center; background: rgba(0,0,0,.35); }
+  .sc .it .gate { position: absolute; inset: 0; display: none; place-content: center; justify-items: center; gap: 8px; color: #fff; font-size: var(--ds-fs-meta); font-weight: 700; text-align: center; background: rgba(0,0,0,.35); }
   .sc .it.nsfw .gate { display: grid; }
-  .sc .it .gate button { padding: 6px 12px; border-radius: 8px; border: 1px solid #e57373; background: #2a1010; color: #ffcdd2; font: inherit; font-weight: bold; cursor: pointer; }
-  .sc .cap { padding: 9px 11px; font-size: 13px; line-height: 1.5; min-width: 0; }
+  .sc .cap { padding: var(--ds-sp-3); font-size: var(--ds-fs-sm); line-height: 1.5; min-width: 0; color: var(--ds-text-2); }
   .sc .cap b { color: #fff; }
-  .sc .cap a { color: #81c784; }
-  .sc .cap .mut { color: #888; font-size: 12px; }
-  .sc .empty { background: #111; border: 1px solid #222; border-radius: 12px; padding: 28px; text-align: center; color: #9aa59a; }
-  .sc .empty a { color: #81c784; }
+  .sc .cap .mut { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .sc .ds-head .ds-sub a { white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .sc .it { transition: none; } }
 </style>
-<main class="sc">
-  <h1>📺 Stage snaps &amp; clips<%= pad ? ' · ' + pad.title : '' %></h1>
-  <p class="lead">Moments people snapped or clipped from the pads' stages. They also show in each pad's story for 24 h.
-    <% if (pad) { %><a href="/stage/captures">All pads ›</a> · <a href="/p/<%= encodeURIComponent(pad.slug) %>">Back to p/<%= pad.slug %> ›</a><% } %></p>
+<main class="ds-page wide sc">
+  <div class="ds-head">
+    <span class="ds-eyebrow">Stage</span>
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">📺</span> Stage snaps &amp; clips<%= pad ? ' · ' + pad.title : '' %></h1>
+    <p class="ds-sub">Moments people snapped or clipped from the pads' stages. They also show in each pad's story for 24 h.
+      <% if (pad) { %><a href="/stage/captures">All pads ›</a> · <a href="/p/<%= encodeURIComponent(pad.slug) %>">Back to p/<%= pad.slug %> ›</a><% } %></p>
+  </div>
   <% if (!signed) { %>
-    <div class="empty">Stage snaps and clips are for PATV members. <a href="/login?next=%2Fstage%2Fcaptures">Sign in</a> or <a href="/register">join PATV</a>.</div>
+    <div class="ds-empty"><span class="ds-ic" aria-hidden="true">🔒</span><b>For PATV members</b>
+      <span>Stage snaps and clips are for PATV members.</span>
+      <a class="ds-btn sm" href="/login?next=%2Fstage%2Fcaptures">Sign in</a> <a href="/register">or join PATV</a></div>
   <% } else if (!items.length) { %>
-    <div class="empty">Nothing yet. Open a pad's stage and press <b>📸 Snap</b> or <b>🎬 Clip</b> on a live stream.</div>
+    <div class="ds-empty"><span class="ds-ic" aria-hidden="true">📸</span><b>Nothing yet</b>
+      <span>Open a pad's stage and press <b>📸 Snap</b> or <b>🎬 Clip</b> on a live stream.</span>
+      <a class="ds-btn sm ghost" href="/p">Browse pads</a></div>
   <% } else { %>
     <div class="grid">
       <% items.forEach((c) => { const t = titles[c.room] || { title: c.room, slug: c.room }; %>
@@ -38,10 +43,10 @@
             <%# 1.99dq: clips show their poster frame (no video download per tile); the old metadata-video is the fallback %>
             <% if (c.kind === 'clip' && c.poster) { %><img src="<%= c.poster %>" alt="" loading="lazy" data-v="<%= c.src %>" onerror="var v=document.createElement('video');v.src=this.getAttribute('data-v')+'#t=0.5';v.preload='metadata';v.muted=true;v.playsInline=true;this.replaceWith(v)"><% } else if (c.kind === 'clip') { %><video src="<%= c.src %>#t=0.5" preload="metadata" muted playsinline></video><% } else { %><img src="<%= c.src %>" alt="" loading="lazy"><% } %>
             <span class="k"><%= c.kind === 'clip' ? '▶ ' + Math.floor(Math.round(c.secs || 0) / 60) + ':' + String(Math.round(c.secs || 0) % 60).padStart(2, '0') : '📸' %></span>
-            <span class="gate"><span>🔞 NSFW</span><button type="button" data-reveal>Show (18+)</button></span>
+            <span class="gate"><span>🔞 NSFW</span><button type="button" class="ds-btn sm danger" data-reveal>Show (18+)</button></span>
           </a>
           <div class="cap">
-            📺 Stage <%= c.kind === 'clip' ? 'clip' : 'snap' %> of <b><%= c.subject || 'a stream' %></b><%- c.by ? ' by ' + ul(c.by, { uid: c.byUid || false, anon: !c.byUid }) : '' %><br>
+            <span class="ds-ic" aria-hidden="true">📺</span> Stage <%= c.kind === 'clip' ? 'clip' : 'snap' %> of <b><%= c.subject || 'a stream' %></b><%- c.by ? ' by ' + ul(c.by, { uid: c.byUid || false, anon: !c.byUid }) : '' %><br>
             <span class="mut">on <a href="/p/<%= encodeURIComponent(t.slug) %>"><%= t.title %></a> · <time data-ts="<%= c.created %>"><%= new Date(c.created).toISOString().slice(11, 16) %> UTC</time></span>
           </div>
         </article>

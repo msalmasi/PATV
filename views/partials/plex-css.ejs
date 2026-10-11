@@ -1,0 +1,41 @@
+<%# 1.99po polish (G5): shared look of the 📼 Plex pages (/plex hub, /plex/manage) on the design system. Prefix pxh.
+    Area accent = Plex orange (--ds-acc-plex), dark ink on fills. Buttons and fields that page JS writes (plex-issues.js,
+    plex-manage.js: plain <button>, .pri / .ok / .no, .pill.st-*, .cform / .pxi-search inputs) get the ds metrics here. %>
+<style>
+  .pxh { --ds-ac: var(--ds-acc-plex); --ds-ac-2: #ffcc80; --ds-ac-bg: rgba(255, 167, 38, .12); --ds-ac-line: #6b4a14; --ds-on-ac: #1a1000; }
+  .pxh .ds-hero .ds-eyebrow { display: inline-flex; align-items: center; gap: 6px; }
+  .pxh .ds-hero .ds-eyebrow a { color: inherit; }
+  .pxh .ds-card > h2 { display: flex; align-items: center; gap: var(--ds-sp-2); margin: 0; font: 700 18px/1.3 var(--ds-font); color: var(--ds-text-strong); }
+  .pxh .ds-card > h2 .ds-ic { font-size: 20px; }
+  .pxh .ds-card p { margin: 0; }
+  .pxh .ds-card h3 { margin: var(--ds-sp-2) 0 0; font: 700 var(--ds-fs-h4)/var(--ds-lh-h4) var(--ds-font); color: var(--ds-text); }
+  .pxh .mut { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .pxh .pxh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--ds-sp-3); align-items: start; }
+  /* buttons written by the page or its JS */
+  .pxh :is(button:not(.pxi-it), a.bt) { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; margin: 0; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill);
+    border: 1px solid #2c2c2c; background: #1c1c1f; color: var(--ds-text); font: 700 13.5px/1.1 var(--ds-font); text-decoration: none; cursor: pointer; white-space: nowrap;
+    transition: border-color var(--ds-dur-1), background-color var(--ds-dur-1), filter var(--ds-dur-1); }
+  .pxh :is(button:not(.pxi-it), a.bt):hover { background: var(--ds-hover); border-color: #3a3a3a; }
+  .pxh :is(button:not(.pxi-it), a.bt):focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .pxh :is(button:not(.pxi-it), a.bt).pri { background: var(--ds-ac); border-color: transparent; color: var(--ds-on-ac); }
+  .pxh :is(button:not(.pxi-it), a.bt).pri:hover { filter: brightness(1.1); }
+  .pxh button.ok { border-color: var(--ds-ok-line); color: var(--ds-ok); }
+  .pxh button.no { border-color: var(--ds-danger-line); color: var(--ds-danger); }
+  .pxh button[aria-pressed="true"] { background: var(--ds-ac-bg); border-color: var(--ds-ac); color: #fff; }
+  .pxh button:disabled { filter: grayscale(.6) brightness(.7); cursor: not-allowed; }
+  @media (pointer: coarse) { .pxh :is(button:not(.pxi-it), a.bt) { min-height: 40px; } }
+  .pxh .acts { display: flex; flex-wrap: wrap; gap: var(--ds-sp-2); }
+  /* fields written by the JS (search, report form, comments) */
+  .pxh :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { margin: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong);
+    background: var(--ds-sunken); color: #eee; font: 400 15px/1.3 var(--ds-font); max-width: 100%; box-sizing: border-box; }
+  .pxh :is(input, select, textarea):focus { outline: none; border-color: var(--ds-ac); box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  .pxh input[type=checkbox], .pxh input[type=radio] { width: 18px; height: 18px; accent-color: var(--ds-ac); }
+  /* request status chips (the .ds-chip vocabulary) */
+  .pxh .pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: var(--ds-r-pill); border: 1px solid var(--ds-line-strong); font-size: 11px; font-weight: 700;
+    letter-spacing: var(--ds-ls-chip); text-transform: uppercase; color: #ccc; white-space: nowrap; }
+  .pxh .pill.st-available { border-color: var(--ds-ok-line); color: var(--ds-ok); background: var(--ds-ok-bg); }
+  .pxh .pill.st-approved, .pxh .pill.st-partial { border-color: var(--ds-info-line); color: var(--ds-info); background: var(--ds-info-bg); }
+  .pxh .pill.st-pending, .pxh .pill.st-submitting { border-color: var(--ds-warn-line); color: var(--ds-warn); background: var(--ds-warn-bg); }
+  .pxh .pill.st-declined, .pxh .pill.st-failed, .pxh .pill.st-error, .pxh .pill.st-removed { border-color: var(--ds-danger-line); color: var(--ds-danger); background: var(--ds-danger-bg); }
+  @media (prefers-reduced-motion: reduce) { .pxh :is(button:not(.pxi-it), a.bt) { transition: none; } }
+</style>

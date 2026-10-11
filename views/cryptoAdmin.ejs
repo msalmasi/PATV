@@ -1,6 +1,6 @@
 <%- include('partials/admin-open', { title: 'Crypto donations', user: user, section: 'crypto', admIsAdmin: true }) %>
 <!-- views/cryptoAdmin.ejs — 1.99ks: stablecoin donations (cryptoweb.js / cryptopay.js). Receive-only: PATV holds no key. -->
-<link rel="stylesheet" href="/public/css/stage.css?v=6">
+<link rel="stylesheet" href="/public/css/stage.css?v=9">
 <% const fmt = (n) => Number(n || 0).toLocaleString('en-US'); const when = (t) => t ? new Date(Number(t)).toISOString().slice(0, 16).replace('T', ' ') : '—';
    const short = (a) => a && a.length > 14 ? a.slice(0, 8) + '…' + a.slice(-6) : (a || ''); const usd = (c) => (Number(c || 0) / 100).toFixed(2); %>
 <main class="sb" id="cryptoAdm">
