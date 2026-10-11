@@ -420,6 +420,12 @@ function featureBackfill() {
   return featureBackfilling;
 }
 
+// run it shortly after boot (once the modules whose tables it reads have made them), not only at the first check
+if (!process.env.NODE_TEST_CONTEXT) {
+  const kick = setTimeout(() => featureBackfill().catch((e) => console.error("[achievements] feature backfill:", e.message)), 90e3);
+  if (kick.unref) kick.unref();
+}
+
 /** Fire-and-forget checkWeb for the feature hooks (never blocks or fails the action that called it). */
 function poke(...userIds) {
   for (const u of userIds) if (u) Promise.resolve().then(() => checkWeb(String(u))).catch(() => {});
