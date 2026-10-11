@@ -2,21 +2,19 @@
 <%- include('layout', { title: pad ? t('feed.submit.title_in', { pad: pad.slug }) : t('feed.submit.title'), user: user }) %>
 <%# 1.99ec: the create-post page - /submit (any pad) and /p/<pad>/submit (that pad preselected). feedweb.js submitPage:
     signed in only (else /login?next=). The full composer, already open; posting opens the new post. %>
-<link rel="stylesheet" href="/public/css/feed.css?v=17">
+<link rel="stylesheet" href="/public/css/feed.css?v=18">
 <style>
-  .sb { max-width: 760px; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; box-sizing: border-box; width: 100%; display: grid; gap: 12px; }
-  .sb *, .sb *::before, .sb *::after { box-sizing: border-box; }
-  .sb .crumb { font-size: 13px; color: #888; }
-  .sb a { color: #81c784; text-decoration: none; }
-  .sb a:hover { color: #a5d6a7; }
-  .sb h1 { margin: 0; font-size: 24px; }
-  .sb .sb-sub { margin: 0; color: #9aa59a; font-size: 14px; }
+  /* 1.99qb: ds-page.read + ds-head (docs/design-system.md, "Area notes: feed, pads and social") */
   .sb .fc { margin: 0; }
+  .sb .crumb { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
+  .sb .crumb a { text-decoration: none; }
 </style>
-<main class="sb">
-  <div class="crumb"><% if (pad) { %><a href="/p"><%- t('feed.submit.pads') %></a> › <a href="<%= pad.href %>">p/<%= pad.slug %></a> › <%- t('feed.submit.crumb') %><% } else { %><a href="/feed"><%- t('feed.post.feed') %></a> › <%- t('feed.submit.crumb') %><% } %></div>
-  <h1><%- t('feed.submit.h1') %></h1>
-  <p class="sb-sub"><% if (pad) { %><%- t('feed.submit.posting_in', { pad: '<a href="' + t.esc(pad.href) + '"><b>p/' + t.esc(pad.slug) + '</b></a>' }) %><% } else { %><%- t('feed.submit.pick') %><% } %></p>
+<main class="ds-page read sb">
+  <div class="ds-head">
+    <div class="crumb"><% if (pad) { %><a href="/p"><%- t('feed.submit.pads') %></a> › <a href="<%= pad.href %>">p/<%= pad.slug %></a> › <%- t('feed.submit.crumb') %><% } else { %><a href="/feed"><%- t('feed.post.feed') %></a> › <%- t('feed.submit.crumb') %><% } %></div>
+    <h1 class="ds-h1"><%- t('feed.submit.h1').replace(/^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?)*)\s*/u, '<span class="ds-ic" aria-hidden="true">$1</span>') %></h1>
+    <p class="ds-sub sb-sub"><% if (pad) { %><%- t('feed.submit.posting_in', { pad: '<a href="' + t.esc(pad.href) + '"><b>p/' + t.esc(pad.slug) + '</b></a>' }) %><% } else { %><%- t('feed.submit.pick') %><% } %></p>
+  </div>
   <%- include('partials/feed-composer', { composer, next: here, fx, expanded: true }) %>
 </main>
 <%- include('partials/feed-js', { viewer }) %>

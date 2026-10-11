@@ -2,18 +2,18 @@
    🔊 mic clip panels, and the waveform card on audio posts. The site is dark-only; colours follow feed.css's tokens. */
 .fq { margin: 2px 0 8px; padding: 10px 12px 8px; background: #0f120f; border: 1px solid #22302a; border-left: 3px solid #5fd06b;
       border-radius: 10px; font-family: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 13.5px;
-      line-height: 1.5; color: #e4e4e4; min-width: 0; }
+      line-height: 1.5; color: var(--ds-text); min-width: 0; }
 .fq-lines { margin: 0; padding: 0; }
 .fq-l { margin: 0 0 2px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .fq-n { color: #9be7a1; font-weight: 700; }
-.fq-l.anon .fq-n { color: #8d918d; font-style: italic; font-weight: 400; }
+.fq-l.anon .fq-n { color: var(--ds-text-muted); font-style: italic; font-weight: 400; }
 .fq-l.mic .fq-t { color: #d7c9ff; }
 .fq-l.me .fq-n { text-decoration: underline dotted; }
 .fq-mic { font-size: 12px; }
-.fq-ts { color: #6f736f; font-size: 11px; margin-left: 4px; }
+.fq-ts { color: var(--ds-text-faint); font-size: 11px; margin-left: 4px; }
 .fq-more { margin: 4px 0 0; font-size: 12.5px; }
-.fq-more a { color: #81c784; }
-.fq-cap { margin: 6px 0 0; font-family: Ubuntu, sans-serif; font-size: 12px; color: #8d918d; }
+.fq-more a { color: var(--ds-green-2); }
+.fq-cap { margin: 6px 0 0; font-family: var(--ds-font); font-size: 12px; color: var(--ds-text-muted); }
 .fq.is-detail { font-size: 14.5px; padding: 14px 16px 10px; }
 .fq-hop { width: min(92vw, 560px); max-height: 70vh; overflow-y: auto; margin: auto; box-sizing: border-box; font-size: 15px; }
 .hop-m.k-quote { display: flex; align-items: center; justify-content: center; }
@@ -23,26 +23,20 @@
 .fp-wave { display: block; width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px; }
 
 /* /p/<pad>/quotes */
-.qp { max-width: 760px; margin: 0 auto; padding: 18px 16px 48px; font-family: Ubuntu, sans-serif; color: #e4e4e4; }
-.qp h1 { font-size: 22px; margin: 4px 0 2px; overflow-wrap: anywhere; }
-.qp .sub { color: #8d918d; margin: 0 0 14px; font-size: 14px; }
-.qp .back { color: #81c784; text-decoration: none; font-size: 14px; }
-.qp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
-.qp-tabs a { padding: 6px 12px; border-radius: 999px; border: 1px solid #303030; color: #b9bdb9; text-decoration: none; font-size: 13px; }
-.qp-tabs a.on { background: #1e3a22; border-color: #2f6d3a; color: #fff; }
-.qp-qotd { margin: 0 0 16px; padding: 12px; border: 1px solid #3a3420; background: #15130b; border-radius: 12px; }
-.qp-qotd h2 { margin: 0 0 8px; font-size: 15px; color: #ffd54f; }
-.qp-list { display: grid; gap: 10px; }
-.qp-empty { color: #8d918d; }
-.qp-pager { display: flex; justify-content: space-between; margin-top: 14px; }
-.qp-pager a { color: #81c784; }
+/* 1.99qb: .ds-page.mid + ds-head / ds-tabs / ds-empty (docs/design-system.md, "Area notes: feed, pads and social"); the old .qp* rules keep their names */
+.qp { font-family: var(--ds-font); color: var(--ds-text); }
+.qp .ds-head .ds-h1 { overflow-wrap: anywhere; }
+.qp-qotd { display: grid; gap: var(--ds-sp-3); padding: var(--ds-sp-4); border: 1px solid var(--ds-gold-line); background: var(--ds-gold-bg); border-radius: var(--ds-r-xl); }
+.qp-list { display: grid; gap: var(--ds-sp-2h); }
+.qp-pager { display: flex; justify-content: space-between; gap: var(--ds-sp-2h); }
+.qp-pager:empty, .qp-pager:has(> span:only-child) { display: none; }
 
 /* the Live tab: ✂️ Clip chat (public/js/chat-clip.js) */
-.cc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; font-size: 12.5px; color: #8d918d; }
+.cc-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0 0; font-size: 12.5px; color: var(--ds-text-muted); }
 .cc-toggle { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 5px 10px; font: inherit;
              font-size: 13px; cursor: pointer; }
-.cc-toggle[aria-pressed="true"] { background: #1e3a22; border-color: #4caf50; color: #fff; }
-.cc-toggle:focus-visible, .cc-btn:focus-visible { outline: 2px solid #4AFFEF; outline-offset: 2px; }
+.cc-toggle[aria-pressed="true"] { background: #1e3a22; border-color: var(--ds-green); color: #fff; }
+.cc-toggle:focus-visible, .cc-btn:focus-visible { outline: 2px solid var(--ds-focus); outline-offset: 2px; }
 .cc-on .line { cursor: pointer; border-radius: 6px; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .cc-on .line:hover { background: rgba(95, 208, 107, .07); }
 .cc-on .line.cc-sel { background: rgba(95, 208, 107, .18); box-shadow: inset 3px 0 0 #5fd06b; }
@@ -51,15 +45,15 @@
 .cc-panel[hidden] { display: none; }
 .cc-panel .fq { margin: 0; max-height: 260px; overflow-y: auto; }
 .cc-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.cc-row input[type="text"] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px;
+.cc-row input[type="text"] { flex: 1 1 200px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid var(--ds-line-strong); border-radius: 8px; padding: 8px 10px;
                              font: inherit; font-size: 14px; }
 .cc-ck { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #ccc; }
 .cc-btn { appearance: none; background: #181818; color: #ddd; border: 1px solid #2b2b2b; border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
-.cc-btn.primary { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: 700; }
+.cc-btn.primary { background: var(--ds-green); border-color: var(--ds-green); color: var(--ds-on-ac); font-weight: 700; }
 .cc-btn[disabled] { opacity: .5; cursor: not-allowed; }
-.cc-msg { font-size: 12.5px; color: #8d918d; min-height: 1em; overflow-wrap: anywhere; }
+.cc-msg { font-size: 12.5px; color: var(--ds-text-muted); min-height: 1em; overflow-wrap: anywhere; }
 .cc-msg.bad { color: #ff8a80; }
-.cc-msg a { color: #81c784; }
+.cc-msg a { color: var(--ds-green-2); }
 .cc-hint { font-size: 12px; color: #6f8f72; }
 
 /* 🔊 Clip on a 🎙 line */
@@ -76,7 +70,7 @@
 
 /* the feeds' Gallery: a chat quote tile shows its first line (feedgallery.js) */
 .fg-q { position: absolute; inset: 0; padding: 10px 10px 8px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6;
-        font-family: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 1.4; color: #e4e4e4;
+        font-family: ui-monospace, "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 12px; line-height: 1.4; color: var(--ds-text);
         background: linear-gradient(160deg, #13201a, #0d0f0d); border-left: 3px solid #5fd06b; overflow-wrap: anywhere; text-align: left; }
 .fg-q b { color: #9be7a1; }
 @media (max-width: 480px) { .fg-q { font-size: 10.5px; padding: 6px; -webkit-line-clamp: 7; } }

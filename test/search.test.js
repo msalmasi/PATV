@@ -205,7 +205,7 @@ test("the page: tabs, results with avatars + name styles, highlighted + escaped 
   let r = await get("/search");
   assert.equal(r.status, 200);
   // feed.css's .sr is screen-reader-only (1px, clipped) - the page must never carry it
-  assert.match(r.text, /<main class="fd srch">/);
+  assert.match(r.text, /<main class="ds-page mid flow fd srch">/);
   assert.doesNotMatch(r.text, /class="(?:[^"]* )?sr(?: [^"]*)?"/);
   assert.doesNotMatch(fs.readFileSync(path.join(repo, "public", "css", "search.css"), "utf8"), /^\.sr[ ,{]/m);
   assert.match(r.text, /<input type="search" name="q" value="" maxlength="100"/);

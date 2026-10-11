@@ -1,7 +1,6 @@
 <%# /feed/automod/:id — one Pepe automod call, for its author, the pad's managers and staff (1.99dc, feedautomod.js).
     The inbox notice links here. Locals: N (feedautomod.noticeFor), G (guidelines.js), user %>
 <%- include('layout', { title: 'Automod notice · p/' + N.pad.slug, user: user }) %>
-<%- include('partials/legal-css') %>
 <%
   const verb = { flag: 'flagged', hide: 'hid', remove: 'removed', none: 'looked at' }[N.action] || 'looked at';
   const what = N.kind === 'post' ? 'post' : 'comment';
@@ -12,59 +11,52 @@
   const when = (locals.tzFmt || new Function(include('../tz-core.js'))()('UTC', 'en').fmt)(N.at, 'long');
 %>
 <style>
-  .an .card { background: #111; border: 1px solid #232323; border-radius: 14px; padding: 14px 16px; margin: 12px 0 0; }
-  .an .verdict { border-color: #3b4f6b; background: linear-gradient(180deg, #10151d 0%, #111 90px); }
-  .an .verdict.reversed { border-color: #2f6b3a; background: linear-gradient(180deg, #0f1a10 0%, #111 90px); }
-  .an .k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #8a8a8a; margin: 10px 0 2px; }
-  .an .k:first-child { margin-top: 0; }
-  .an .rule { font-size: 17px; color: #fff; font-weight: bold; }
-  .an .why { font-size: 15.5px; color: #e6e6e6; }
-  .an blockquote { margin: 6px 0 0; padding: 8px 12px; border-left: 3px solid #333; color: #bbb; background: #0d0d0d; border-radius: 0 8px 8px 0; overflow-wrap: anywhere; }
-  .an .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: bold; border: 1px solid #444; }
-  .an .tag.flag { border-color: #6b5a20; color: #f3e3a3; } .an .tag.hide { border-color: #6b3a1a; color: #f4c08a; }
-  .an .tag.remove { border-color: #7a2222; color: #ffb4b4; } .an .tag.reversed { border-color: #2f6b3a; color: #b8f0bf; }
-  .an .acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .an .acts a, .an .acts button { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 9px; border: 1px solid #2b2b2b; background: #181818; color: #ddd; font: inherit; font-size: 14px; text-decoration: none; cursor: pointer; }
-  .an .acts .go { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
-  .an ol { padding-left: 20px; display: grid; gap: 6px; margin: 6px 0 0; }
+  /* 1.99qb: ds-page.mid, compact hero, ds-card / ds-chip / ds-btn (docs/design-system.md, "Area notes: feed, pads and social") */
+  .an .an-k { margin-block-start: var(--ds-sp-2); }
+  .an .an-k:first-child { margin-block-start: 0; }
+  .an .an-rule { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-sp-2); }
+  .an .verdict { border-color: var(--ds-info-line); background: linear-gradient(180deg, var(--ds-info-bg), transparent 90px), var(--ds-surface); }
+  .an .verdict.reversed { border-color: var(--ds-ok-line); background: linear-gradient(180deg, var(--ds-ok-bg), transparent 90px), var(--ds-surface); }
+  .an .why { font-size: var(--ds-fs-body); color: var(--ds-text); }
+  .an blockquote { margin: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border-inline-start: 3px solid var(--ds-line-strong); color: var(--ds-text-2); background: var(--ds-sunken);
+                   border-start-end-radius: var(--ds-r-sm); border-end-end-radius: var(--ds-r-sm); overflow-wrap: anywhere; }
+  .an ol { margin: 0; padding-inline-start: 20px; display: grid; gap: 6px; }
+  .an .ds-actions { margin-block-start: var(--ds-sp-1); }
 </style>
-<main class="lg an">
-  <header class="hero">
-    <link rel="icon" href="/favicon.ico" sizes="48x48">
-    <link rel="icon" type="image/png" sizes="192x192" href="/public/img/icon-192.png">
-    <link rel="apple-touch-icon" href="/public/img/apple-touch-icon.png">
-    <div class="eyebrow">🤖 PEPE AUTOMOD · P/<%= N.pad.slug.toUpperCase() %></div>
+<main class="ds-page mid an">
+  <section class="ds-hero compact">
+    <span class="ds-eyebrow"><span class="ds-ic" aria-hidden="true">🤖</span> PEPE AUTOMOD · P/<%= N.pad.slug.toUpperCase() %></span>
     <h1>Pepe <%= verb %> <%= N.mine ? 'your' : 'a' %> <%= what %></h1>
-    <div class="updated"><%= when %></div>
-    <p class="lead"><%= told %><% if (N.state === 'reversed') { %> <b>Update:</b> the pad's moderators reversed this call<%= N.reversed_by ? ' (' + N.reversed_by + ')' : '' %>.<% } %></p>
-  </header>
+    <p class="ds-meta"><%= when %></p>
+    <p class="ds-lead"><%= told %><% if (N.state === 'reversed') { %> <b>Update:</b> the pad's moderators reversed this call<%= N.reversed_by ? ' (' + N.reversed_by + ')' : '' %>.<% } %></p>
+  </section>
 
-  <section class="card verdict <%= N.state === 'reversed' ? 'reversed' : '' %>" aria-label="The call">
-    <div class="k">Rule</div>
-    <div class="rule"><%= N.rule_title || 'A rule of this pad' %> <span class="tag <%= state %>"><%= { flag: '🚩 flagged', hide: '🙈 hidden', remove: '🗑 removed', none: '✓ fine', reversed: '↩ reversed' }[state] || state %></span></div>
-    <% if (N.ruleDesc) { %><div class="muted" style="color:#aaa;font-size:14px"><%= N.ruleDesc %></div><% } %>
-    <div class="k">Pepe's reason</div>
+  <section class="ds-card lg verdict <%= N.state === 'reversed' ? 'reversed' : '' %>" aria-label="The call">
+    <div class="ds-label an-k">Rule</div>
+    <div class="an-rule"><span class="ds-h3"><%= N.rule_title || 'A rule of this pad' %></span> <span class="ds-chip <%= { flag: 'warn', hide: 'warn', remove: 'danger', none: 'ok', reversed: 'ok' }[state] || 'mute' %>"><%= { flag: 'flagged', hide: 'hidden', remove: 'removed', none: 'fine', reversed: 'reversed' }[state] || state %></span></div>
+    <% if (N.ruleDesc) { %><p class="ds-sub"><%= N.ruleDesc %></p><% } %>
+    <div class="ds-label an-k">Pepe's reason</div>
     <div class="why"><%= N.reason || '—' %></div>
-    <div class="k">The <%= what %></div>
+    <div class="ds-label an-k">The <%= what %></div>
     <blockquote><%= N.what %></blockquote>
-    <div class="acts">
-      <a href="<%= N.href %>">Open the <%= what %></a>
-      <a href="/p/<%= encodeURIComponent(N.pad.slug) %>#rules">p/<%= N.pad.slug %>'s rules</a>
-      <a href="<%= N.guidelines %>"><%= G.NAME %></a>
-      <% if (N.manage && N.reversible) { %><button type="button" class="go" id="anReverse" data-id="<%= N.id %>">↩ Reverse this call</button><% } %>
-      <% if (N.manage) { %><a href="/p/<%= encodeURIComponent(N.pad.slug) %>/settings#automodlog">Pad settings › Moderation</a><% } %>
+    <div class="ds-actions">
+      <a class="ds-btn ghost sm" href="<%= N.href %>">Open the <%= what %></a>
+      <a class="ds-btn ghost sm" href="/p/<%= encodeURIComponent(N.pad.slug) %>#rules">p/<%= N.pad.slug %>'s rules</a>
+      <a class="ds-btn ghost sm" href="<%= N.guidelines %>"><%= G.NAME %></a>
+      <% if (N.manage && N.reversible) { %><button type="button" class="ds-btn sm go" id="anReverse" data-id="<%= N.id %>"><span class="ds-ic" aria-hidden="true">↩</span>Reverse this call</button><% } %>
+      <% if (N.manage) { %><a class="ds-btn ghost sm" href="/p/<%= encodeURIComponent(N.pad.slug) %>/settings#automodlog">Pad settings › Moderation</a><% } %>
     </div>
   </section>
 
   <% if (N.mine && N.state !== 'reversed' && N.action !== 'none') { %>
-  <section class="card" aria-label="Appeal">
-    <h2 style="margin-top:0">Think Pepe got it wrong?</h2>
-    <p>He's a bot and he's told to give swearing, dark jokes, roasting and hot takes a wide berth — but he can still misread things.</p>
+  <section class="ds-card lg" aria-label="Appeal">
+    <h2 class="ds-h2 dot">Think Pepe got it wrong?</h2>
+    <p class="ds-body" style="margin:0">He's a bot and he's told to give swearing, dark jokes, roasting and hot takes a wide berth — but he can still misread things.</p>
     <ol>
       <li><b>Ask the pad owner.</b> <%= N.house ? 'This is a house pad, run by the site admins' : N.owner ? N.owner + ' runs p/' + N.pad.slug : 'The pad\'s moderators can see this call' %> and can reverse it with one click<% if (N.ownerUser && !N.house) { %> — <a href="/messages?to=<%= encodeURIComponent(N.ownerUser) %>">message them</a><% } %>.</li>
       <li><b>Appeal to the site admins</b> if that doesn't sort it: see <a href="<%= N.appeal %>">Moderation and appeals</a> in the Terms.</li>
     </ol>
-    <p class="muted" style="color:#9a9a9a;font-size:13.5px">Pepe's automod never bans anyone, and a flag on its own changes nothing until a person looks at it.</p>
+    <p class="ds-fine">Pepe's automod never bans anyone, and a flag on its own changes nothing until a person looks at it.</p>
   </section>
   <% } %>
 </main>

@@ -13,7 +13,7 @@
   const tw_ = typeof tw !== 'undefined' ? tw : '';
   const text_ = G.text && G.text.n ? G.text : null;
 %>
-<link rel="stylesheet" href="/public/css/feed-gallery.css?v=1">
+<link rel="stylesheet" href="/public/css/feed-gallery.css?v=2">
 <div class="fg" data-fg data-fg-scope="<%= G.scope %>" data-fg-hop="<%= hop %>" data-fg-sort="<%= sort %>" data-fg-t="<%= tw_ %>" data-fg-next="<%= G.next || '' %>"<%- G.tiles ? ' data-fg-loaded="1"' : '' %>>
   <p class="fg-text"<%- text_ ? '' : ' hidden' %>><button type="button" class="fg-tl" data-fv="list"><span data-fg-textn><%- text_ ? t('feed.gallery.text_posts', { count: text_.more ? text_.n + 1 : text_.n, n: text_.n + (text_.more ? '+' : '') }) : '' %></span> <%- t('feed.gallery.hidden') %></button></p>
   <ul class="fg-grid" role="list" aria-label="<%- t('feed.gallery.aria') %>">

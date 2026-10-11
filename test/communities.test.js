@@ -378,7 +378,7 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   const all = (await page("/feed", U.bob)).text;
   assert.ok(!all.includes("Everywhere"));
   assert.match(all, /<span class="cb-k">Pad<\/span>[\s\S]*?<b>All<\/b>/);
-  assert.match(all, /class="cb-chip on" href="\/feed" aria-current="page">🌐 All/);
+  assert.match(all, /class="cb-chip on" href="\/feed" aria-current="page"><span class="ds-ic" aria-hidden="true">🌐<\/span>All/);
   assert.ok(all.includes('href="/feed/following"') && all.includes('href="/p/camfrog-lounge"') && all.includes('href="/p/plant-based-chatting"'));
   assert.match(all, /p\/plant-based-chatting · \d+ followers? · \d+ posts?/);
   assert.ok(!/communit/i.test(all.replace(/name="community"|data-comm[\w-]*|fc-comm[\w-]*|\/api\/feed\/communities/g, "")), "no 'community' copy left on /feed");
@@ -409,7 +409,7 @@ test("URL scheme (1.99ck pads): /feed (All), /feed/following, /p/<slug>; old ?ro
   // sort links on /feed keep the view; a pad in the bar opens its pad page; Following has its own path
   assert.ok(all.includes('href="/feed?sort=top&amp;t=week"'));
   const fol = (await page("/feed/following", U.bob)).text;
-  assert.match(fol, /class="cb-chip on" href="\/feed\/following" aria-current="page">⭐ Following/);
+  assert.match(fol, /class="cb-chip on" href="\/feed\/following" aria-current="page"><span class="ds-ic" aria-hidden="true">⭐<\/span>Following/);
   assert.equal(web.fx.feedUrl("all", { sort: "hot", p: 1 }), "/feed");
   assert.equal(web.fx.feedUrl("x y", { sort: "new", p: 3 }), "/p/x%20y?sort=new&p=3");
   // the pad page's feed section: p/<slug> heading, a link back to All, moderation at /p/<slug>/mod

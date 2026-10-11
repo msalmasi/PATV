@@ -176,7 +176,7 @@ test("the Following feed: followed people + followed rooms, one row per post, ow
   const html = await page("/feed?tab=following", U.bob);
   assert.ok(html.includes("alice main feed post") && html.includes("dave in plant") && !html.includes("dave elsewhere"));
   assert.ok(html.includes("only you see these lists") && html.includes("data-follow-notify"));
-  assert.match(html, /aria-current="page">⭐ Following/);
+  assert.match(html, /aria-current="page"><span class="ds-ic" aria-hidden="true">⭐<\/span>Following/);
   const out = await page("/feed?tab=following", null);
   assert.ok(out.includes("Sign in") && !out.includes("alice main feed post"));
   // a feed card's author chip has the Follow button (not on your own posts)

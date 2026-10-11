@@ -25,7 +25,7 @@
   const padAvSrc_ = (id) => { try { const L = typeof padLook === 'function' ? padLook(id) : null; return L && L.avatar ? L.avatar : null; } catch (e) { return null; } };
 %>
 <% if (showRooms || showCaps || compose_) { %>
-<link rel="stylesheet" href="/public/css/stories.css?v=6">
+<link rel="stylesheet" href="/public/css/stories.css?v=7">
 <section class="ss" aria-label="<%- t('feed.story.strip_aria') %>" data-signed="<%= S.signed ? '1' : '' %>" data-next="<%= next_ %>"<% if (scope_) { %> data-scope="<%= scope_ %>"<% } %>>
   <% if (ttlH_) { %><h2 class="ss-h"><%- ttlH_ %> <small><%- t('feed.story.last24') %></small></h2><% } else if (ttl_) { %><h2 class="ss-h"><%= ttl_ %> <small><%- t('feed.story.last24') %></small></h2><% } %>
   <%# 1.99es: no native scrollbar - a fade at the edge that has more, and ‹ › buttons on hover-capable pointers (stories.js) %>

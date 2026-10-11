@@ -1,6 +1,6 @@
 /* hop.css — Hop (1.99eq), the full-screen vertical media viewer (public/js/hop.js). */
 html.hop-open, html.hop-open body { overflow: hidden; }
-.hop { position: fixed; inset: 0; z-index: 10000; background: #000; color: #fff; font-family: Ubuntu, sans-serif; outline: none; }
+.hop { position: fixed; inset: 0; z-index: 10000; background: #000; color: #fff; font-family: var(--ds-font); outline: none; }
 .hop-list { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; overscroll-behavior: contain;
             scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .hop-list::-webkit-scrollbar { display: none; }
@@ -27,7 +27,7 @@ html.hop-open, html.hop-open body { overflow: hidden; }
 .hop-brand { display: inline-flex; align-items: center; gap: 6px; font-size: 17px; }
 .hop-brand b { letter-spacing: .3px; }
 .hop-logo { font-size: 20px; }
-.hop-scope { flex: 1; min-width: 0; font-size: 13px; color: #c6e94f; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hop-scope { flex: 1; min-width: 0; font-size: 13px; color: var(--ds-green-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hop-ico { flex: none; width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(0,0,0,.35); color: #fff; font-size: 17px; cursor: pointer; display: grid; place-items: center; }
 .hop-ico:hover, .hop-ico:focus-visible { background: rgba(255,255,255,.2); outline: none; }
 .hop-ico:disabled { opacity: .35; cursor: default; }
@@ -35,7 +35,7 @@ html.hop-open, html.hop-open body { overflow: hidden; }
 /* the post over the picture */
 .hop-info { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: grid; gap: 4px; justify-items: start;
             padding: 48px 76px max(18px, env(safe-area-inset-bottom)) 14px; background: linear-gradient(transparent, rgba(0,0,0,.78)); text-shadow: 0 1px 2px #000; }
-.hop-pad { color: #c6e94f !important; font-weight: 700; font-size: 13px; text-decoration: none; }
+.hop-pad { color: var(--ds-green-2) !important; font-weight: 700; font-size: 13px; text-decoration: none; }
 .hop-capt { font-size: 12px; color: #ddd; }
 .hop-title { color: #fff !important; font-size: 16px; font-weight: 700; line-height: 1.3; text-decoration: none; overflow-wrap: anywhere;
              display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -47,7 +47,7 @@ html.hop-open, html.hop-open body { overflow: hidden; }
 .hop-by a { color: #fff !important; font-weight: 600; text-decoration: none; }
 .hop-rail { position: absolute; right: 8px; bottom: max(22px, env(safe-area-inset-bottom)); z-index: 3; display: grid; gap: 14px; justify-items: center; }
 .hop-rb { display: grid; justify-items: center; gap: 2px; min-width: 54px; padding: 0; border: 0; background: none; color: #fff !important; cursor: pointer;
-          text-decoration: none !important; font: 12px Ubuntu, sans-serif; text-shadow: 0 1px 2px #000; }
+          text-decoration: none !important; font: 12px var(--ds-font); text-shadow: 0 1px 2px #000; }
 .hop-rb .ic { width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,.4); display: grid; place-items: center; font-size: 19px; }
 .hop-rb:hover .ic, .hop-rb:focus-visible .ic { background: rgba(255,255,255,.22); }
 .hop-rb:focus-visible { outline: none; }
@@ -57,10 +57,10 @@ html.hop-open, html.hop-open body { overflow: hidden; }
 /* NSFW */
 .hop-it.is-gated .hop-img, .hop-it.is-gated .hop-vid { filter: blur(30px); }
 .hop-nsfw { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 12px; background: rgba(0,0,0,.4); text-align: center; padding: 16px; }
-.hop-btn { padding: 9px 16px; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #ddd; font: 14px Ubuntu, sans-serif; cursor: pointer; }
-.hop-btn.primary { background: #4caf50; border-color: #4caf50; color: #fff; font-weight: bold; }
+.hop-btn { padding: 9px 16px; border-radius: 8px; border: 1px solid var(--ds-line-strong); background: #1a1a1a; color: #ddd; font: 14px var(--ds-font); cursor: pointer; }
+.hop-btn.primary { background: var(--ds-green); border-color: var(--ds-green); color: var(--ds-on-ac); font-weight: bold; }
 
-.hop-tail { height: 72px; display: grid; place-items: center; color: #888; font-size: 13px; scroll-snap-align: end; }
+.hop-tail { height: 72px; display: grid; place-items: center; color: var(--ds-text-muted); font-size: 13px; scroll-snap-align: end; }
 .hop-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; color: #aaa; }
 .hop-empty[hidden] { display: none; }
 .hop-empty-ic { font-size: 56px; }
@@ -78,6 +78,19 @@ html.hop-open, html.hop-open body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .hop-list { scroll-behavior: auto; } }
 
 /* the Hop page under the viewer (no JS: a plain list of the posts) */
-.hop-page { max-width: 760px; margin: 24px auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; }
-.hop-page ul { list-style: none; padding: 0; display: grid; gap: 8px; }
-.hop-page a { color: #81c784; }
+.hop-page { font-family: var(--ds-font); }   /* 1.99qb: sized by .ds-page.read */
+.hop-page ul:not(.ds-list) { list-style: none; padding: 0; display: grid; gap: 8px; }
+.hop-page a { color: var(--ds-green-2); }
+
+/* ── 1.99qb polish (docs/design-system.md, "Area notes: feed, pads and social"): gold focus rings on the viewer's round buttons, ds tokens, reduced motion ── */
+.hop { font-family: var(--ds-font); }
+.hop-ico:focus-visible, .hop-btn:focus-visible { box-shadow: var(--ds-focus-ring); }
+.hop-rb:focus-visible .ic { box-shadow: 0 0 0 2px #000, 0 0 0 4px var(--ds-focus); }
+.hop-vote[aria-pressed="true"] .ic { background: var(--ds-green); color: var(--ds-on-ac); }
+.hop-btn { min-height: var(--ds-tap); border-radius: var(--ds-r-pill); padding: 0 var(--ds-sp-5); font-weight: 700; }
+.hop-rb .ic, .hop-logo, .hop-ico { font-family: var(--ds-font-emoji); }
+.hop-page .hop-fallback > li { flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) {
+  .hop-sound, .hop-ico, .hop-rb .ic { transition: none; }
+  .hop-list, .hop-media.multi { scroll-behavior: auto; }
+}

@@ -5,9 +5,9 @@
   visibility rules (search.js); this view only draws it. NSFW posts (signed in only) keep their picture blurred and their
   text hidden until the reader taps, or chose "always show" on the feed (localStorage patvFeedNsfw).
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=17">
-<link rel="stylesheet" href="/public/css/tags.css?v=2">
-<link rel="stylesheet" href="/public/css/search.css?v=2">
+<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<link rel="stylesheet" href="/public/css/tags.css?v=3">
+<link rel="stylesheet" href="/public/css/search.css?v=3">
 <%
   const tabs_ = [['all', t('search.tab.all')], ['people', t('search.tab.people')], ['posts', t('search.tab.posts')], ['pads', t('search.tab.pads')]];   // labels HTML-safe
   const C_ = R ? R.counts : { people: 0, posts: 0, pads: 0 };
@@ -15,8 +15,8 @@
   const cnt_ = (k) => k === 'all' ? '' : num_(C_[k], k === 'posts' ? 400 : k === 'people' ? 100 : 0);
   const sorts_ = [['relevance', t('search.sort.relevance')], ['new', t('search.sort.new')], ['top', t('search.sort.top')]];
 %>
-<main class="fd srch">
-  <h1 class="sr-h"><%- t('search.title') %></h1>
+<main class="ds-page mid flow fd srch">
+  <h1 class="ds-h1 sr-h"><%- t('search.title') %></h1>
   <form class="sr-form" action="/search" method="get" role="search">
     <label class="sr-box"><%- fx.icon('search') %>
       <input type="search" name="q" value="<%= q %>" maxlength="100" placeholder="<%- t('search.placeholder') %>" aria-label="<%- t('search.aria') %>" autocomplete="off" spellcheck="false"<%= q ? '' : ' autofocus' %>></label>

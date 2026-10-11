@@ -6,33 +6,35 @@
 %><%
   const href = (o) => { const x = Object.assign({ sort, t: top, p: 1 }, o); const q = []; if (x.sort !== 'top') q.push('sort=' + x.sort); if (x.sort === 'top' && x.t !== 'week') q.push('t=' + x.t); if (x.p > 1) q.push('p=' + x.p); return pad.href + '/quotes' + (q.length ? '?' + q.join('&') : ''); };
 %>
-<link rel="stylesheet" href="/public/css/feed.css?v=17">
-<main class="qp">
-  <a class="back" href="<%= pad.href %>">‹ p/<%= pad.slug %></a>
-  <h1>💬 Quotes from <%= pad.title %></h1>
-  <p class="sub">Moments from the Camfrog room, clipped with ✂️ Clip chat on the pad's Live tab or <code>!quote</code> in the room. Vote for the best.</p>
-  <nav class="qp-tabs" aria-label="Sort quotes">
-    <a href="<%= href({ sort: 'top', t: 'day' }) %>" class="<%= sort === 'top' && top === 'day' ? 'on' : '' %>">Top today</a>
-    <a href="<%= href({ sort: 'top', t: 'week' }) %>" class="<%= sort === 'top' && top === 'week' ? 'on' : '' %>">Top this week</a>
-    <a href="<%= href({ sort: 'top', t: 'all' }) %>" class="<%= sort === 'top' && top === 'all' ? 'on' : '' %>">Top of all time</a>
-    <a href="<%= href({ sort: 'new' }) %>" class="<%= sort === 'new' ? 'on' : '' %>">New</a>
+<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<main class="ds-page mid qp">
+  <div class="ds-head">
+    <a class="ds-back" href="<%= pad.href %>">‹ p/<%= pad.slug %></a>
+    <h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">💬</span> Quotes from <%= pad.title %></h1>
+    <p class="ds-sub">Moments from the Camfrog room, clipped with ✂️ Clip chat on the pad's Live tab or <code>!quote</code> in the room. Vote for the best.</p>
+  </div>
+  <nav class="ds-tabs qp-tabs" aria-label="Sort quotes">
+    <a href="<%= href({ sort: 'top', t: 'day' }) %>" class="ds-tab<%= sort === 'top' && top === 'day' ? ' on' : '' %>"<%- sort === 'top' && top === 'day' ? ' aria-current="page"' : '' %>>Top today</a>
+    <a href="<%= href({ sort: 'top', t: 'week' }) %>" class="ds-tab<%= sort === 'top' && top === 'week' ? ' on' : '' %>"<%- sort === 'top' && top === 'week' ? ' aria-current="page"' : '' %>>Top this week</a>
+    <a href="<%= href({ sort: 'top', t: 'all' }) %>" class="ds-tab<%= sort === 'top' && top === 'all' ? ' on' : '' %>"<%- sort === 'top' && top === 'all' ? ' aria-current="page"' : '' %>>Top of all time</a>
+    <a href="<%= href({ sort: 'new' }) %>" class="ds-tab<%= sort === 'new' ? ' on' : '' %>"<%- sort === 'new' ? ' aria-current="page"' : '' %>>New</a>
   </nav>
   <% if (qotd && qotd.post) { %>
     <section class="qp-qotd" aria-labelledby="qpQotd">
-      <h2 id="qpQotd">🏆 Quote of the <%= qotd.window === 'day' ? 'day' : 'week' %></h2>
+      <h2 id="qpQotd" class="ds-h2"><span class="ds-ic" aria-hidden="true">🏆</span> Quote of the <%= qotd.window === 'day' ? 'day' : 'week' %></h2>
       <%- include('partials/feed-post', { p: qotd.post, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: pad.id }) %>
     </section>
   <% } %>
   <% if (!posts.length) { %>
-    <p class="qp-empty"><%= page > 1 ? 'No more quotes.' : 'No quotes here yet — pick a few lines on the pad\'s Live tab (✂️ Clip chat) or type !quote last 5 in the room.' %></p>
+    <p class="qp-empty ds-empty"><%= page > 1 ? 'No more quotes.' : 'No quotes here yet — pick a few lines on the pad\'s Live tab (✂️ Clip chat) or type !quote last 5 in the room.' %></p>
   <% } else { %>
     <div class="qp-list fd-list">
       <% posts.forEach((p) => { %><%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: pad.id }) %><% }) %>
     </div>
   <% } %>
   <nav class="qp-pager">
-    <% if (page > 1) { %><a href="<%= href({ p: page - 1 }) %>">‹ Back</a><% } else { %><span></span><% } %>
-    <% if (more) { %><a href="<%= href({ p: page + 1 }) %>">More ›</a><% } %>
+    <% if (page > 1) { %><a class="ds-btn ghost sm" href="<%= href({ p: page - 1 }) %>">‹ Back</a><% } else { %><span></span><% } %>
+    <% if (more) { %><a class="ds-btn ghost sm" href="<%= href({ p: page + 1 }) %>">More ›</a><% } %>
   </nav>
 </main>
 <%- include('partials/feed-js', { viewer }) %>

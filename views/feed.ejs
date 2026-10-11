@@ -1,8 +1,8 @@
 <% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <% const tag_ = typeof tag !== 'undefined' && tag ? tag : null; %>
 <%- include('layout', { title: (tag_ ? '#' + tag_ + ' — ' : '') + (mode === 'following' ? t('feed.title.following') : room ? 'p/' + room.slug + ' — ' + room.title + ' — ' + t('feed.title.feed') : t('feed.title.all')), user: user}) %>
-<link rel="stylesheet" href="/public/css/feed.css?v=17">
-<link rel="stylesheet" href="/public/css/stories.css?v=6">
+<link rel="stylesheet" href="/public/css/feed.css?v=18">
+<link rel="stylesheet" href="/public/css/stories.css?v=7">
 <%
   // 1.99ci: the feed is pad-based (Reddit's model). The bar on top picks WHICH pads you're reading: All
   // (every pad), Following, or one pad (1.99ck: that's the pad's own page, /p/<slug>). Pepe's
@@ -16,7 +16,7 @@
   const chipComms = comms.slice(0, 8);
   const curLabel = mode === 'following' ? t('feed.following') : room ? t.esc(room.title) : t('feed.all');      // HTML (printed raw)
 %>
-<main class="fd">
+<main class="ds-page wide flow fd">
   <div id="fdTop">
     <nav class="cb" aria-label="<%- t('feed.bar.choose') %>">
       <details class="cb-pick">
@@ -40,16 +40,19 @@
         </div>
       </details>
       <div class="cb-chips" aria-label="<%- t('feed.bar.quick') %>">
-        <a data-swap class="cb-chip<%= where === 'all' ? ' on' : '' %>" href="<%= q({ where: 'all', p: '' }) %>"<%- where === 'all' ? ' aria-current="page"' : '' %>>🌐 <%- t('feed.all') %></a>
-        <a data-swap class="cb-chip<%= where === 'following' ? ' on' : '' %>" href="<%= q({ where: 'following', p: '', by: '' }) %>"<%- where === 'following' ? ' aria-current="page"' : '' %>>⭐ <%- t('feed.following') %></a>
+        <a data-swap class="cb-chip<%= where === 'all' ? ' on' : '' %>" href="<%= q({ where: 'all', p: '' }) %>"<%- where === 'all' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">🌐</span><%- t('feed.all') %></a>
+        <a data-swap class="cb-chip<%= where === 'following' ? ' on' : '' %>" href="<%= q({ where: 'following', p: '', by: '' }) %>"<%- where === 'following' ? ' aria-current="page"' : '' %>><span class="ds-ic" aria-hidden="true">⭐</span><%- t('feed.following') %></a>
         <% chipComms.forEach((c) => { %><a data-swap class="cb-chip<%= room && room.id === c.id ? ' on' : '' %>" href="<%= q({ where: c.slug, p: '', by: '' }) %>"<%- room && room.id === c.id ? ' aria-current="page"' : '' %>><%- fx.padChip(c, 'sm') %><%= c.title %></a><% }) %>
         <% if (room && !chipComms.some((c) => c.id === room.id)) { %><a data-swap class="cb-chip on" aria-current="page" href="<%= here %>"><%= room.title %></a><% } %>
       </div>
     </nav>
 
     <% { %>
-      <h1 class="fd-h"><%- mode === 'following' ? t('feed.following') : t('feed.all') %></h1>
-      <p class="sub"><%- mode === 'following' ? t('feed.sub.following') : t('feed.sub.all') %></p>
+      <div class="fd-head">
+        <span class="ds-eyebrow ac"><%- t('nav.feed') %></span>
+        <h1 class="ds-h1 fd-h"><%- mode === 'following' ? t('feed.following') : t('feed.all') %></h1>
+        <p class="ds-sub"><%- mode === 'following' ? t('feed.sub.following') : t('feed.sub.all') %></p>
+      </div>
     <% } %>
     <%- include('partials/story-strip', { story, headingHtml: room ? t('feed.stories.fresh_from', { pad: room.title }) : t('feed.stories.title'), next: here }) %>
     <%# 1.99iq: content tags - the active ?tag= filter, and the popular ones (feedtags.js) %>
@@ -64,21 +67,21 @@
     <%- include('partials/feed-composer', { composer: composer, next: here }) %>
     <div id="fdList">
       <% if (mode === 'following' && !viewer) { %>
-        <p class="login"><%- t('feed.following.login', { link: '<a href="/login?next=' + t.esc(encodeURIComponent(here)) + '">' + t('feed.sign_in') + '</a>' }) %></p>
+        <p class="login ds-empty"><%- t('feed.following.login', { link: '<a href="/login?next=' + t.esc(encodeURIComponent(here)) + '">' + t('feed.sign_in') + '</a>' }) %></p>
       <% } else { %>
         <% if (mode === 'following') { %><%- include('partials/following-panel', { follow, here }) %><% } %>
         <%- include('partials/feed-sort', { fx, sort, top, swap: true, href: (s, t) => q({ sort: s, t: t || '', p: '' }), gallery: typeof gallery !== 'undefined' ? gallery : null,
                                              hop: tag_ ? null : mode === 'following' ? 'following' : room ? 'p/' + room.slug : author ? 'u/' + author.username : 'all' }) %>
         <% if (!posts.length) { %>
-          <p class="empty"><%- page > 1 ? t('feed.empty.no_more') : tag_ ? t('feed.empty.tag', { tag: tag_ }) : mode === 'following' ? ((follow && (follow.rooms.length || follow.people.length)) ? t('feed.empty.following') : t('feed.empty.follow_none')) : room ? t('feed.empty.pad', { pad: room.title }) : t('feed.empty.all') %></p>
+          <p class="empty ds-empty"><%- page > 1 ? t('feed.empty.no_more') : tag_ ? t('feed.empty.tag', { tag: tag_ }) : mode === 'following' ? ((follow && (follow.rooms.length || follow.people.length)) ? t('feed.empty.following') : t('feed.empty.follow_none')) : room ? t('feed.empty.pad', { pad: room.title }) : t('feed.empty.all') %></p>
         <% } else { %>
           <div class="fd-list">
             <% posts.forEach((p) => { %><%- include('partials/feed-post', { p, fx, embeds, host, viewer, modRooms, detail: false, ctxRoom: room ? room.id : null }) %><% }) %>
           </div>
         <% } %>
         <nav class="fd-pager">
-          <% if (page > 1) { %><a data-swap href="<%= q({ p: page - 1 }) %>"><%- t('feed.pager.newer') %></a><% } %>
-          <% if (more) { %><a data-swap href="<%= q({ p: page + 1 }) %>"><%- t('feed.pager.older') %></a><% } %>
+          <% if (page > 1) { %><a class="ds-btn ghost sm" data-swap href="<%= q({ p: page - 1 }) %>"><%- t('feed.pager.newer') %></a><% } %>
+          <% if (more) { %><a class="ds-btn ghost sm" data-swap href="<%= q({ p: page + 1 }) %>"><%- t('feed.pager.older') %></a><% } %>
         </nav>
       <% } %>
     </div>

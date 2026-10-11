@@ -194,7 +194,7 @@ test("pad page: Feed tab is one column (no side cards), Rules chip -> About, bad
   // the navbar
   assert.match(html, new RegExp('<a href="/p/' + s + '/submit" class="nav-post" title="Create a post in p/' + s + '">'));
   assert.ok(html.indexOf('class="nav-post"') < html.indexOf('class="nav-golive"'), "Post sits before Go live");
-  assert.match(html, /feed\.css\?v=17/); assert.match(html, /feed-composer\.js\?v=14/); assert.match(html, /stories\.js\?v=10/);
+  assert.match(html, /feed\.css\?v=18/); assert.match(html, /feed-composer\.js\?v=14/); assert.match(html, /stories\.js\?v=10/);
 });
 
 test("pad page signed out: a sign-in bar instead of the composer; About's analytics link is a button", async () => {
@@ -239,7 +239,7 @@ test("/submit: signed out -> login with next=; signed in -> the open composer wi
   r = await get("/submit", U.alice);
   assert.equal(r.status, 200);
   assert.match(r.text, /<title>Create a post<\/title>/);
-  assert.match(r.text, /<h1>✏️ Create a post<\/h1>/);
+  assert.match(r.text, /<h1 class="ds-h1"><span class="ds-ic" aria-hidden="true">✏️<\/span>Create a post<\/h1>/);
   assert.doesNotMatch(r.text, /id="fcBar"/, "no bar: the form is open");
   assert.match(formTag(r.text), /data-expanded="1"/); assert.doesNotMatch(formTag(r.text), / hidden /);
   assert.match(r.text, /class="fc-comm" data-empty/, "no pad preselected");
