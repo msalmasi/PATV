@@ -71,7 +71,7 @@
   .gg .msg { margin-top: 12px; padding: 10px 12px; border-radius: 10px; font-size: 14px; display: none; }
   .gg .msg.on { display: block; } .gg .msg.ok { background: #0f2414; border: 1px solid #2c7a45; color: #c8f5d0; } .gg .msg.bad { background: #2a1010; border: 1px solid #6b2b2b; color: #ffd9d9; }
   .gg .banner { border: 1px solid #5a4a10; background: #1d1a0c; border-radius: 12px; padding: 12px 14px; color: #ffe9a8; font-size: 14px; line-height: 1.5; }
-  @media (max-width: 860px) { .gg .grid2 { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 860px) { .gg .grid2 { grid-template-columns: minmax(0, 1fr); } .gg .grid2 > .side { order: -1; } }
   @media (max-width: 640px) {
     .gg .row { grid-template-columns: 30px minmax(0, 1fr) minmax(0, 90px); }
     .gg .row .cell.hide-s { display: none; }
