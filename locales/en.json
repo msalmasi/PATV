@@ -3262,7 +3262,7 @@
   "support.card_link": "Support PATV with crypto →",
   "settings.connections.crypto": "Crypto wallets",
   "settings.connections.crypto_n": "{n} linked",
-  "settings.connections.crypto_hint": "Used to credit your stablecoin donations - see {link}. Linking only asks your wallet to sign a message; it can’t move funds.",
+  "settings.connections.crypto_hint": "Used to credit your stablecoin donations - see {!link}. Linking only asks your wallet to sign a message; it can’t move funds.",
   "crypto.notice_body": "Thanks - {amount} {token} received on {chain}, {pat} PAT added to your wallet.",
   "crypto.notice_held": "Thanks - your {amount} {token} donation is over the ${max} per-transfer limit, so an admin will check it before it’s credited.",
   "js.crypto.cancelled": "Cancelled in the wallet - nothing was linked.",

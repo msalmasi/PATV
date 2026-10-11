@@ -3217,7 +3217,7 @@
   "support.card_link": "暗号資産でPATVを応援 →",
   "settings.connections.crypto": "暗号資産ウォレット",
   "settings.connections.crypto_n": "{n}件連携済み",
-  "settings.connections.crypto_hint": "ステーブルコインの寄付を反映するために使用します - {link}をご覧ください。連携時はウォレットに署名を求めるだけで、資金を移動することはできません。",
+  "settings.connections.crypto_hint": "ステーブルコインの寄付を反映するために使用します - {!link}をご覧ください。連携時はウォレットに署名を求めるだけで、資金を移動することはできません。",
   "crypto.notice_body": "ありがとうございます - {chain}で{amount} {token}を受け取り、{pat} PATをウォレットに追加しました。",
   "crypto.notice_held": "ありがとうございます - ${max}の1回あたりの上限を超えているため、{amount} {token}の寄付は管理者が確認してから反映されます。",
   "js.crypto.cancelled": "ウォレットでキャンセルされました - 連携はされていません。",

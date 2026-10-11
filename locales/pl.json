@@ -3355,7 +3355,7 @@
   "support.card_link": "Wspieraj PATV kryptowalutą →",
   "settings.connections.crypto": "Portfele kryptowalut",
   "settings.connections.crypto_n": "{n} powiązane",
-  "settings.connections.crypto_hint": "Służy do zaliczania wpłat w stablecoinach - zobacz {link}. Powiązanie tylko prosi portfel o podpisanie wiadomości; nie może przenosić środków.",
+  "settings.connections.crypto_hint": "Służy do zaliczania wpłat w stablecoinach - zobacz {!link}. Powiązanie tylko prosi portfel o podpisanie wiadomości; nie może przenosić środków.",
   "crypto.notice_body": "Dzięki - otrzymano {amount} {token} w sieci {chain}, dodano {pat} PAT do twojego portfela.",
   "crypto.notice_held": "Dzięki - twoja wpłata {amount} {token} przekracza limit ${max} na przelew, więc administrator ją sprawdzi, zanim zostanie zaliczona.",
   "js.crypto.cancelled": "Anulowano w portfelu - nic nie zostało powiązane.",

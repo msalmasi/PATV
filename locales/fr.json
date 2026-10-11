@@ -3264,7 +3264,7 @@
   "support.card_link": "Soutenir PATV en crypto →",
   "settings.connections.crypto": "Portefeuilles crypto",
   "settings.connections.crypto_n": "{n} lié(s)",
-  "settings.connections.crypto_hint": "Sert à créditer tes dons en stablecoins - voir {link}. Lier un portefeuille demande seulement de signer un message ; ça ne peut pas déplacer de fonds.",
+  "settings.connections.crypto_hint": "Sert à créditer tes dons en stablecoins - voir {!link}. Lier un portefeuille demande seulement de signer un message ; ça ne peut pas déplacer de fonds.",
   "crypto.notice_body": "Merci - {amount} {token} reçus sur {chain}, {pat} PAT ajoutés à ton portefeuille.",
   "crypto.notice_held": "Merci - ton don de {amount} {token} dépasse la limite de ${max} par transfert, donc un admin le vérifiera avant son crédit.",
   "js.crypto.cancelled": "Annulé dans le portefeuille - rien n'a été lié.",

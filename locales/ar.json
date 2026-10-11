@@ -3447,7 +3447,7 @@
   "support.card_link": "ادعم PATV بالعملات المشفّرة →",
   "settings.connections.crypto": "المحافظ المشفّرة",
   "settings.connections.crypto_n": "{n} مرتبطة",
-  "settings.connections.crypto_hint": "تُستخدم لإضافة تبرعاتك بالعملات المستقرة - راجع {link}. الربط يطلب من محفظتك توقيع رسالة فقط؛ لا يمكنه نقل الأموال.",
+  "settings.connections.crypto_hint": "تُستخدم لإضافة تبرعاتك بالعملات المستقرة - راجع {!link}. الربط يطلب من محفظتك توقيع رسالة فقط؛ لا يمكنه نقل الأموال.",
   "crypto.notice_body": "شكرًا - تم استلام {amount} {token} على {chain}، وأُضيفت {pat} PAT إلى محفظتك.",
   "crypto.notice_held": "شكرًا - تبرعك بمبلغ {amount} {token} يتجاوز الحد لكل تحويل وهو ${max}، لذلك سيراجعه مشرف قبل إضافته.",
   "js.crypto.cancelled": "أُلغي في المحفظة - لم يُرتبط شيء.",

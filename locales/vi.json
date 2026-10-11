@@ -3217,7 +3217,7 @@
   "support.card_link": "Ủng hộ PATV bằng tiền mã hóa →",
   "settings.connections.crypto": "Ví tiền mã hóa",
   "settings.connections.crypto_n": "{n} đã liên kết",
-  "settings.connections.crypto_hint": "Dùng để ghi có các khoản quyên góp stablecoin của bạn - xem {link}. Liên kết chỉ yêu cầu ví ký một thông điệp; không thể chuyển tiền.",
+  "settings.connections.crypto_hint": "Dùng để ghi có các khoản quyên góp stablecoin của bạn - xem {!link}. Liên kết chỉ yêu cầu ví ký một thông điệp; không thể chuyển tiền.",
   "crypto.notice_body": "Cảm ơn - đã nhận {amount} {token} trên {chain}, {pat} PAT đã được thêm vào ví của bạn.",
   "crypto.notice_held": "Cảm ơn - khoản quyên góp {amount} {token} của bạn vượt giới hạn ${max} mỗi giao dịch, nên quản trị viên sẽ kiểm tra trước khi ghi có.",
   "js.crypto.cancelled": "Đã hủy trong ví - chưa liên kết gì.",

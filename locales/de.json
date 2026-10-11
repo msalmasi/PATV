@@ -3263,7 +3263,7 @@
   "support.card_link": "PATV mit Krypto unterstützen →",
   "settings.connections.crypto": "Krypto-Wallets",
   "settings.connections.crypto_n": "{n} verknüpft",
-  "settings.connections.crypto_hint": "Wird genutzt, um deine Stablecoin-Spenden gutzuschreiben - siehe {link}. Verknüpfen fragt deine Wallet nur nach einer Signatur; es kann keine Gelder bewegen.",
+  "settings.connections.crypto_hint": "Wird genutzt, um deine Stablecoin-Spenden gutzuschreiben - siehe {!link}. Verknüpfen fragt deine Wallet nur nach einer Signatur; es kann keine Gelder bewegen.",
   "crypto.notice_body": "Danke - {amount} {token} auf {chain} erhalten, {pat} PAT zu deiner Wallet hinzugefügt.",
   "crypto.notice_held": "Danke - deine Spende von {amount} {token} liegt über dem Limit von ${max} pro Überweisung, daher prüft ein Admin sie, bevor sie gutgeschrieben wird.",
   "js.crypto.cancelled": "In der Wallet abgebrochen - nichts wurde verknüpft.",

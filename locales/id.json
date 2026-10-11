@@ -3217,7 +3217,7 @@
   "support.card_link": "Dukung PATV dengan kripto →",
   "settings.connections.crypto": "Dompet kripto",
   "settings.connections.crypto_n": "{n} terhubung",
-  "settings.connections.crypto_hint": "Dipakai untuk mengkredit donasi stablecoin-mu - lihat {link}. Menghubungkan hanya meminta dompetmu menandatangani pesan; tidak bisa memindahkan dana.",
+  "settings.connections.crypto_hint": "Dipakai untuk mengkredit donasi stablecoin-mu - lihat {!link}. Menghubungkan hanya meminta dompetmu menandatangani pesan; tidak bisa memindahkan dana.",
   "crypto.notice_body": "Terima kasih - {amount} {token} diterima di {chain}, {pat} PAT ditambahkan ke dompetmu.",
   "crypto.notice_held": "Terima kasih - donasi {amount} {token}-mu melebihi batas ${max} per transfer, jadi admin akan memeriksanya sebelum dikreditkan.",
   "js.crypto.cancelled": "Dibatalkan di dompet - tidak ada yang terhubung.",

@@ -3217,7 +3217,7 @@
   "support.card_link": "用加密貨幣支持 PATV →",
   "settings.connections.crypto": "加密錢包",
   "settings.connections.crypto_n": "已連結 {n} 個",
-  "settings.connections.crypto_hint": "用於為你的穩定幣打賞入帳，詳見 {link}。連結時只會請你的錢包簽署一則訊息，無法轉移資金。",
+  "settings.connections.crypto_hint": "用於為你的穩定幣打賞入帳，詳見 {!link}。連結時只會請你的錢包簽署一則訊息，無法轉移資金。",
   "crypto.notice_body": "謝謝！已在 {chain} 收到 {amount} {token}，已將 {pat} PAT 加到你的錢包。",
   "crypto.notice_held": "謝謝！你的 {amount} {token} 打賞超過 ${max} 的單筆限額，管理員會先審核，之後才會入帳。",
   "js.crypto.cancelled": "已在錢包中取消，未連結任何錢包。",

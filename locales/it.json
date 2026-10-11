@@ -3264,7 +3264,7 @@
   "support.card_link": "Sostieni PATV con crypto →",
   "settings.connections.crypto": "Portafogli crypto",
   "settings.connections.crypto_n": "{n} collegati",
-  "settings.connections.crypto_hint": "Serve ad accreditare le tue donazioni in stablecoin - vedi {link}. Il collegamento chiede solo al tuo portafoglio di firmare un messaggio; non può spostare fondi.",
+  "settings.connections.crypto_hint": "Serve ad accreditare le tue donazioni in stablecoin - vedi {!link}. Il collegamento chiede solo al tuo portafoglio di firmare un messaggio; non può spostare fondi.",
   "crypto.notice_body": "Grazie - {amount} {token} ricevuti su {chain}, {pat} PAT aggiunti al tuo portafoglio.",
   "crypto.notice_held": "Grazie - la tua donazione di {amount} {token} supera il limite di ${max} per trasferimento, quindi un admin la controllerà prima dell'accredito.",
   "js.crypto.cancelled": "Annullato nel portafoglio - nulla è stato collegato.",

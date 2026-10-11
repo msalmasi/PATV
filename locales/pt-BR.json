@@ -3264,7 +3264,7 @@
   "support.card_link": "Apoie a PATV com cripto →",
   "settings.connections.crypto": "Carteiras cripto",
   "settings.connections.crypto_n": "{n} vinculada(s)",
-  "settings.connections.crypto_hint": "Usado para creditar suas doações em stablecoins - veja {link}. Vincular só pede que sua carteira assine uma mensagem; ela não consegue movimentar fundos.",
+  "settings.connections.crypto_hint": "Usado para creditar suas doações em stablecoins - veja {!link}. Vincular só pede que sua carteira assine uma mensagem; ela não consegue movimentar fundos.",
   "crypto.notice_body": "Obrigado - {amount} {token} recebidos na {chain}, {pat} PAT adicionados à sua carteira.",
   "crypto.notice_held": "Obrigado - sua doação de {amount} {token} está acima do limite de ${max} por transferência, então um admin vai verificar antes de ser creditada.",
   "js.crypto.cancelled": "Cancelado na carteira - nada foi vinculado.",
