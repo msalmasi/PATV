@@ -140,20 +140,20 @@ test("follows.lists carries each follow's go-live switch", async () => {
   await assert.rejects(golive.setFollow(U.fan, "room", ROOM.id, false), /Follow them first/);
 });
 
-test("now playing: the live slot wins, then Twitch, then who's on the mic", async () => {
+test("now playing: the live slot wins, then Twitch, then who's on the mic (shown alongside what's playing)", async () => {
   const MS = require(path.join(repo, "mainstage"));
   const orig = MS.publicSlots;
   try {
     MS.publicSlots = async () => [{ room_id: ROOM.id, display: "Star", title: "📼 Heat (1995)", embed: null }];
     let np = await home.nowPlaying([{ id: ROOM.id, mic: ["Ann"], micCount: 1 }]);
-    assert.deepEqual(np.get(ROOM.id), { k: "plex", title: "Heat (1995)", name: "Star" });
+    assert.deepEqual(np.get(ROOM.id), { k: "plex", title: "Heat (1995)", name: "Star", mic: { k: "mic", names: ["Ann"], more: 0 } });   // who's on mic rides along
     MS.publicSlots = async () => [{ room_id: ROOM.id, display: "Star", title: "Jams", embed: null }];
     np = await home.nowPlaying([{ id: ROOM.id, mic: [], micCount: 0 }]);
     assert.deepEqual(np.get(ROOM.id), { k: "stage", name: "Star", title: "Jams" });
     MS.publicSlots = async () => [];
     golive._twitchLive.set(ROOM.id, { id: "1", title: "Speedrun", since: 1 });
     np = await home.nowPlaying([{ id: ROOM.id, mic: ["Ann"], micCount: 1 }]);
-    assert.deepEqual(np.get(ROOM.id), { k: "twitch", title: "Speedrun" });
+    assert.deepEqual(np.get(ROOM.id), { k: "twitch", title: "Speedrun", mic: { k: "mic", names: ["Ann"], more: 0 } });
     golive._twitchLive.clear();
     np = await home.nowPlaying([{ id: ROOM.id, mic: ["Ann", "Bo", "Cy", "Di"], micCount: 4 }]);
     assert.deepEqual(np.get(ROOM.id), { k: "mic", names: ["Ann", "Bo", "Cy"], more: 1 });

@@ -163,6 +163,11 @@ async function nowPlaying(rows) {
     } else if (r.micCount) {
       np = { k: "mic_n", n: r.micCount };
     }
+    // something is playing: still say who's on the mic (its own line under the title)
+    if (np && np.k !== "mic" && np.k !== "mic_n") {
+      if (Array.isArray(r.mic) && r.mic.length) np.mic = { k: "mic", names: r.mic.slice(0, 3).map((x) => cut(x, 30)), more: Math.max(0, (r.micCount || r.mic.length) - 3) };
+      else if (r.micCount) np.mic = { k: "mic_n", n: r.micCount };
+    }
     out.set(r.id, np);
   }
   return out;
