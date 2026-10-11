@@ -3587,6 +3587,8 @@
   "settings.telegram.test": "فرستادن هشدار آزمایشی",
   "settings.telegram.unlink": "قطع اتصال",
   "settings.telegram.privacy": "ما فقط شناسه و نام کاربری Telegram ات را نگه می‌داریم تا هشدارهای خودت را برایت بفرستیم. هیچ‌کس دیگری آنها را نمی‌بیند و با قطع اتصال، لینک حذف می‌شود.",
+  "settings.telegram.ach": "🏆 اتصال Telegram نشان 📨 Carrier Frog {!link} و رنگ اسم Air Mail را برایت می‌آورد - مال خودت است.",
+  "settings.telegram.ach_link": "دستاورد",
   "settings.telegram.tiers_h": "چی گیرت می‌آید",
   "settings.telegram.tier_alerts": "برای هر حساب متصل: هشدارهایت در Telegram.",
   "settings.telegram.tier_full": "با {!link}: دستورهای Pepe برای PAT (موجودی، انعام‌ها، پس‌اندازها، !ask، !imagine و بیشتر - بدون بازی‌های کازینو) و چت با Pepe، مثل ارسال پیام به Pepe.",

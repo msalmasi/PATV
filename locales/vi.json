@@ -3539,6 +3539,8 @@
   "settings.telegram.test": "Gửi thông báo thử",
   "settings.telegram.unlink": "Hủy liên kết",
   "settings.telegram.privacy": "Chúng tôi chỉ lưu ID và tên người dùng Telegram của bạn để gửi thông báo cho riêng bạn. Không ai khác xem được, và hủy liên kết sẽ xóa liên kết này.",
+  "settings.telegram.ach": "🏆 Liên kết Telegram giúp bạn nhận 📨 {!link} Carrier Frog và màu tên Air Mail, đều là của bạn mãi mãi.",
+  "settings.telegram.ach_link": "thành tích",
   "settings.telegram.tiers_h": "Bạn nhận được gì",
   "settings.telegram.tier_alerts": "Mọi tài khoản đã liên kết: thông báo của bạn, trên Telegram.",
   "settings.telegram.tier_full": "Với {!link}: lệnh của Pepe cho PAT (số dư, tip, kho, !ask, !imagine và nhiều hơn nữa, trừ trò chơi casino) và trò chuyện với Pepe, giống như Nhắn tin cho Pepe.",

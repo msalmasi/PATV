@@ -3539,6 +3539,8 @@
   "settings.telegram.test": "Kirim peringatan uji coba",
   "settings.telegram.unlink": "Putuskan",
   "settings.telegram.privacy": "Kami hanya menyimpan id dan nama pengguna Telegram-mu, untuk mengirimkan peringatanmu sendiri. Tidak ada orang lain yang melihatnya, dan memutuskan tautan akan menghapusnya.",
+  "settings.telegram.ach": "🏆 Menautkan Telegram memberimu 📨 Katak Kurir {!link} dan warna nama Surat Udara - milikmu selamanya.",
+  "settings.telegram.ach_link": "pencapaian",
   "settings.telegram.tiers_h": "Yang kamu dapatkan",
   "settings.telegram.tier_alerts": "Setiap akun tertaut: peringatanmu, di Telegram.",
   "settings.telegram.tier_full": "Dengan {!link}: perintah Pepe untuk PAT (saldo, tip, simpanan, !ask, !imagine, dan lainnya - tanpa game kasino) dan mengobrol dengan Pepe, sama seperti Kirim pesan ke Pepe.",

@@ -3539,6 +3539,8 @@
   "settings.telegram.test": "테스트 알림 보내기",
   "settings.telegram.unlink": "연결 해제",
   "settings.telegram.privacy": "Telegram ID와 사용자 이름은 나만의 알림을 보내는 용도로만 보관해요. 다른 사람은 볼 수 없고, 연결을 해제하면 연결 정보가 삭제돼요.",
+  "settings.telegram.ach": "🏆 Telegram을 연결하면 📨 캐리어 개구리 {!link}와 에어 메일 이름 색을 받아요. 계속 간직할 수 있어요.",
+  "settings.telegram.ach_link": "업적",
   "settings.telegram.tiers_h": "받을 수 있는 혜택",
   "settings.telegram.tier_alerts": "연결된 모든 계정: Telegram에서 받는 내 알림이요.",
   "settings.telegram.tier_full": "{!link} 사용 시: PAT용 Pepe 명령어(잔액, 팁, 금고, !ask, !imagine 등 - 카지노 게임 제외)와 Pepe와의 채팅을 메시지 Pepe와 같은 방식으로 이용할 수 있어요.",

@@ -3590,6 +3590,8 @@
   "settings.telegram.test": "Envoyer une alerte test",
   "settings.telegram.unlink": "Délier",
   "settings.telegram.privacy": "Nous ne gardons que ton identifiant et ton nom d'utilisateur Telegram, pour t'envoyer tes propres alertes. Personne d'autre ne les voit, et délier supprime le lien.",
+  "settings.telegram.ach": "🏆 Lier Telegram te rapporte le 📨 Carrier Frog {!link} et la couleur de pseudo Air Mail - à toi pour de bon.",
+  "settings.telegram.ach_link": "succès",
   "settings.telegram.tiers_h": "Ce que tu obtiens",
   "settings.telegram.tier_alerts": "Chaque compte lié : tes alertes, sur Telegram.",
   "settings.telegram.tier_full": "Avec un {!link} : les commandes de Pepe pour PAT (solde, pourboires, cachettes, !ask, !imagine et plus - sans les jeux de casino) et discuter avec Pepe, comme avec Message Pepe.",

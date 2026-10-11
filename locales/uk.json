@@ -3683,6 +3683,8 @@
   "settings.telegram.test": "Надіслати тестове сповіщення",
   "settings.telegram.unlink": "Відв’язати",
   "settings.telegram.privacy": "Ми зберігаємо лише твій id і ім’я користувача Telegram, щоб надсилати тобі твої сповіщення. Їх ніхто інший не бачить, а відв’язування видаляє прив’язку.",
+  "settings.telegram.ach": "🏆 Прив’язка Telegram приносить 📨 досягнення «Жаба-поштар» {!link} і колір імені «Повітряна пошта», які залишаться твоїми.",
+  "settings.telegram.ach_link": "досягнення",
   "settings.telegram.tiers_h": "Що ти отримуєш",
   "settings.telegram.tier_alerts": "Кожен прив’язаний акаунт: твої сповіщення в Telegram.",
   "settings.telegram.tier_full": "З {!link}: команди Pepe для PAT (баланс, чайові, схованки, !ask, !imagine та інші, без казино-ігор) і спілкування з Pepe, так само як у Написати Pepe.",

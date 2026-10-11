@@ -3635,6 +3635,8 @@
   "settings.telegram.test": "שליחת התראת בדיקה",
   "settings.telegram.unlink": "ניתוק",
   "settings.telegram.privacy": "אנחנו שומרים רק את מזהה הטלגרם ושם המשתמש שלכם, כדי לשלוח לכם את ההתראות שלכם. אף אחד אחר לא רואה אותן, וניתוק מוחק את הקישור.",
+  "settings.telegram.ach": "🏆 חיבור טלגרם מעניק לכם את 📨 Carrier Frog {!link} וצבע השם Air Mail - נשאר שלכם.",
+  "settings.telegram.ach_link": "הישג",
   "settings.telegram.tiers_h": "מה תקבלו",
   "settings.telegram.tier_alerts": "לכל חשבון מקושר: ההתראות שלכם, בטלגרם.",
   "settings.telegram.tier_full": "עם {!link}: הפקודות של Pepe ל־PAT (יתרה, טיפים, כספות, !ask, !imagine ועוד - ללא משחקי קזינו) והשיחה עם Pepe, בדומה להודעה ל־Pepe.",

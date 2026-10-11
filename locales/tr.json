@@ -3587,6 +3587,8 @@
   "settings.telegram.test": "Test uyarısı gönder",
   "settings.telegram.unlink": "Bağlantıyı kaldır",
   "settings.telegram.privacy": "Yalnızca Telegram kimliğini ve kullanıcı adını tutuyoruz, sana kendi uyarılarını göndermek için. Başkası bunları görmez, bağlantıyı kaldırınca bağlantı silinir.",
+  "settings.telegram.ach": "🏆 Telegram'ı bağlamak 📨 Taşıyıcı Kurbağa {!link} başarımını ve Hava Postası isim rengini kazandırır - hepsi senin.",
+  "settings.telegram.ach_link": "başarım",
   "settings.telegram.tiers_h": "Neler alırsın",
   "settings.telegram.tier_alerts": "Bağlı her hesap: uyarıların, Telegram'da.",
   "settings.telegram.tier_full": "{!link} ile: PAT için Pepe'nin komutları (bakiye, bahşişler, kasalar, !ask, !imagine ve daha fazlası - casino oyunları hariç) ve Pepe ile sohbet; Pepe'ye Mesaj Gönder ile aynı.",

@@ -3779,6 +3779,8 @@
   "settings.telegram.test": "أرسل تنبيها تجريبيا",
   "settings.telegram.unlink": "افصل الربط",
   "settings.telegram.privacy": "نحتفظ فقط بمعرّف Telegram واسم المستخدم الخاص بك لإرسال تنبيهاتك إليك. لا يراها أحد غيرك، وفصل الربط يحذف الرابط.",
+  "settings.telegram.ach": "🏆 ربط Telegram يمنحك 📨 ضفدع الناقل {!link} ولون الاسم البريد الجوي - ملكك لتحتفظ به.",
+  "settings.telegram.ach_link": "الإنجاز",
   "settings.telegram.tiers_h": "ما ستحصل عليه",
   "settings.telegram.tier_alerts": "كل حساب مرتبط: تنبيهاتك على Telegram.",
   "settings.telegram.tier_full": "مع {!link}: أوامر Pepe لـ PAT (الرصيد والإكراميات والمخزونات و!ask و!imagine وغيرها - بدون ألعاب الكازينو) والدردشة مع Pepe، كما في زر مراسلة Pepe.",

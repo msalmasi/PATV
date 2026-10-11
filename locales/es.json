@@ -3590,6 +3590,8 @@
   "settings.telegram.test": "Enviar alerta de prueba",
   "settings.telegram.unlink": "Desvincular",
   "settings.telegram.privacy": "Solo guardamos tu id y nombre de usuario de Telegram, para enviarte tus propias alertas. Nadie más las ve, y desvincular borra el vínculo.",
+  "settings.telegram.ach": "🏆 Vincular Telegram te da la 📨 Rana Mensajera {!link} y el color de nombre Correo aéreo: es tuyo para siempre.",
+  "settings.telegram.ach_link": "logro",
   "settings.telegram.tiers_h": "Lo que obtienes",
   "settings.telegram.tier_alerts": "Cada cuenta vinculada: tus alertas, en Telegram.",
   "settings.telegram.tier_full": "Con un {!link}: los comandos de Pepe para PAT (saldo, propinas, bóvedas, !ask, !imagine y más, sin juegos de casino) y chatear con Pepe, igual que Enviar mensaje a Pepe.",

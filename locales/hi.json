@@ -3587,6 +3587,8 @@
   "settings.telegram.test": "टेस्ट अलर्ट भेजें",
   "settings.telegram.unlink": "अनलिंक करें",
   "settings.telegram.privacy": "हम केवल आपकी Telegram आईडी और यूज़रनेम रखते हैं, ताकि आपके अपने अलर्ट आप तक भेजे जा सकें। कोई और इन्हें नहीं देखता, और अनलिंक करने पर लिंक हट जाता है।",
+  "settings.telegram.ach": "🏆 टेलीग्राम लिंक करने पर 📨 Carrier Frog {!link} और Air Mail नाम का रंग मिलता है - यह आपका हमेशा के लिए है।",
+  "settings.telegram.ach_link": "उपलब्धि",
   "settings.telegram.tiers_h": "आपको क्या मिलता है",
   "settings.telegram.tier_alerts": "हर लिंक किया गया अकाउंट: आपके अलर्ट, Telegram में।",
   "settings.telegram.tier_full": "{!link} के साथ: PAT के लिए Pepe के कमांड (बैलेंस, टिप, स्टैश, !ask, !imagine और भी - कैसीनो गेम्स नहीं) और Pepe से चैट, जैसे Message Pepe में होती है।",

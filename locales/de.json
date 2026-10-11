@@ -3587,6 +3587,8 @@
   "settings.telegram.test": "Test-Benachrichtigung senden",
   "settings.telegram.unlink": "Verknüpfung aufheben",
   "settings.telegram.privacy": "Wir speichern nur deine Telegram-ID und deinen Benutzernamen, um dir deine eigenen Benachrichtigungen zu senden. Niemand sonst sieht sie, und beim Aufheben der Verknüpfung wird sie gelöscht.",
+  "settings.telegram.ach": "🏆 Telegram zu verknüpfen bringt dir den 📨 Carrier Frog {!link} und die Namensfarbe Air Mail - die gehört dir dauerhaft.",
+  "settings.telegram.ach_link": "Erfolg",
   "settings.telegram.tiers_h": "Was du bekommst",
   "settings.telegram.tier_alerts": "Jedes verknüpfte Konto: deine Benachrichtigungen, in Telegram.",
   "settings.telegram.tier_full": "Mit einem {!link}: Pepes Befehle für PAT (Kontostand, Trinkgelder, Verstecke, !ask, !imagine und mehr - keine Casino-Spiele) und Chatten mit Pepe, genau wie bei Nachricht an Pepe.",

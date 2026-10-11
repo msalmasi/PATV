@@ -3683,6 +3683,8 @@
   "settings.telegram.test": "Отправить тестовое уведомление",
   "settings.telegram.unlink": "Отвязать",
   "settings.telegram.privacy": "Мы храним только твой Telegram id и имя пользователя, чтобы отправлять тебе твои уведомления. Никто другой их не видит, а отвязка удаляет связь.",
+  "settings.telegram.ach": "🏆 Привязка Telegram даёт достижение {!link} 📨 «Лягушка-почтальон» и цвет имени «Авиапочта», они твои навсегда.",
+  "settings.telegram.ach_link": "достижение",
   "settings.telegram.tiers_h": "Что ты получаешь",
   "settings.telegram.tier_alerts": "Каждый привязанный аккаунт: твои уведомления в Telegram.",
   "settings.telegram.tier_full": "С {!link}: команды Pepe для PAT (баланс, чаевые, копилки, !ask, !imagine и другое, без казино-игр) и общение с Pepe, как в «Написать Pepe».",

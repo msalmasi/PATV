@@ -3539,6 +3539,8 @@
   "settings.telegram.test": "テストアラートを送信",
   "settings.telegram.unlink": "連携を解除",
   "settings.telegram.privacy": "保存するのはTelegramのIDとユーザー名のみで、ご自身宛てのアラートの送信に使用します。他の人が見ることはなく、連携を解除するとリンクも削除されます。",
+  "settings.telegram.ach": "🏆 Telegramを連携すると、📨 Carrier Frog {!link}とエアメールの名前色を獲得できます。どちらもずっとお使いいただけます。",
+  "settings.telegram.ach_link": "実績",
   "settings.telegram.tiers_h": "利用できる内容",
   "settings.telegram.tier_alerts": "連携したすべてのアカウント: 自分宛てのアラートをTelegramで受け取れます。",
   "settings.telegram.tier_full": "{!link}があると: PATのPepeコマンド（残高、チップ、ストッシュ、!ask、!imagineなど。カジノゲームは除く）が使えるほか、「Pepeにメッセージ」と同じようにPepeとチャットできます。",

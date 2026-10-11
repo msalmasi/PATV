@@ -3539,6 +3539,8 @@
   "settings.telegram.test": "ส่งการแจ้งเตือนทดสอบ",
   "settings.telegram.unlink": "ยกเลิกการเชื่อม",
   "settings.telegram.privacy": "เราเก็บเฉพาะ id และชื่อผู้ใช้ Telegram ของคุณเพื่อส่งการแจ้งเตือนของคุณเอง ไม่มีใครอื่นเห็นข้อมูลนี้ และการยกเลิกการเชื่อมจะลบการเชื่อมต่อ",
+  "settings.telegram.ach": "🏆 การเชื่อม Telegram จะได้รับ 📨 Carrier Frog {!link} และสีชื่อ Air Mail ซึ่งเป็นของคุณถาวร",
+  "settings.telegram.ach_link": "ความสำเร็จ",
   "settings.telegram.tiers_h": "สิ่งที่คุณได้รับ",
   "settings.telegram.tier_alerts": "ทุกบัญชีที่เชื่อม: การแจ้งเตือนของคุณใน Telegram",
   "settings.telegram.tier_full": "เมื่อมี {!link}: คำสั่งของ Pepe สำหรับ PAT (ยอดคงเหลือ ทิป ห้องนิรภัย !ask !imagine และอื่น ๆ ไม่รวมเกมคาสิโน) และการแชตกับ Pepe เหมือนกับ ส่งข้อความถึง Pepe",

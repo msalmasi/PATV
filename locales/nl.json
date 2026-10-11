@@ -3587,6 +3587,8 @@
   "settings.telegram.test": "Testmelding sturen",
   "settings.telegram.unlink": "Ontkoppelen",
   "settings.telegram.privacy": "We bewaren alleen je Telegram-id en gebruikersnaam, om je eigen meldingen te sturen. Niemand anders ziet ze, en bij ontkoppelen wordt de koppeling verwijderd.",
+  "settings.telegram.ach": "🏆 Telegram koppelen levert de 📨 Carrier Frog {!link} op en de naamkleur Air Mail - die is voor altijd van jou.",
+  "settings.telegram.ach_link": "prestatie",
   "settings.telegram.tiers_h": "Wat je krijgt",
   "settings.telegram.tier_alerts": "Elk gekoppeld account: je meldingen, in Telegram.",
   "settings.telegram.tier_full": "Met een {!link}: Pepe's commando's voor PAT (saldo, fooien, kluizen, !ask, !imagine en meer - geen casinospellen) en chatten met Pepe, hetzelfde als Pepe een bericht sturen.",

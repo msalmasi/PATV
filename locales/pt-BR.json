@@ -3590,6 +3590,8 @@
   "settings.telegram.test": "Enviar um alerta de teste",
   "settings.telegram.unlink": "Desvincular",
   "settings.telegram.privacy": "Guardamos apenas seu id e nome de usuário do Telegram, para enviar seus próprios alertas. Ninguém mais os vê, e desvincular apaga o vínculo.",
+  "settings.telegram.ach": "🏆 Vincular o Telegram te dá o 📨 Sapo Carteiro {!link} e a cor de nome Correio Aéreo - é tudo seu para manter.",
+  "settings.telegram.ach_link": "conquista",
   "settings.telegram.tiers_h": "O que você ganha",
   "settings.telegram.tier_alerts": "Toda conta vinculada: seus alertas, no Telegram.",
   "settings.telegram.tier_full": "Com um {!link}: comandos do Pepe para PAT (saldo, gorjetas, cofres, !ask, !imagine e mais - sem jogos de cassino) e conversar com o Pepe, igual a Mandar mensagem ao Pepe.",

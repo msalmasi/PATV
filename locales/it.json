@@ -3590,6 +3590,8 @@
   "settings.telegram.test": "Invia un avviso di prova",
   "settings.telegram.unlink": "Scollega",
   "settings.telegram.privacy": "Conserviamo solo il tuo id Telegram e il tuo username, per inviarti i tuoi avvisi. Nessun altro li vede e scollegare elimina il collegamento.",
+  "settings.telegram.ach": "🏆 Collegare Telegram ti fa ottenere il 📨 Carrier Frog {!link} e il colore del nome Air Mail - è tuo per sempre.",
+  "settings.telegram.ach_link": "Obiettivo",
   "settings.telegram.tiers_h": "Cosa ottieni",
   "settings.telegram.tier_alerts": "Ogni account collegato: i tuoi avvisi, su Telegram.",
   "settings.telegram.tier_full": "Con un {!link}: i comandi di Pepe per PAT (saldo, mance, depositi, !ask, !imagine e altro, senza giochi da casinò) e chattare con Pepe, come in Scrivi a Pepe.",

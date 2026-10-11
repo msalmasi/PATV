@@ -3683,6 +3683,8 @@
   "settings.telegram.test": "Wyślij testowe powiadomienie",
   "settings.telegram.unlink": "Odłącz",
   "settings.telegram.privacy": "Przechowujemy tylko twoje id i nazwę użytkownika Telegram, by wysyłać ci twoje powiadomienia. Nikt inny ich nie widzi, a odłączenie usuwa połączenie.",
+  "settings.telegram.ach": "🏆 Połączenie Telegrama daje 📨 Carrier Frog {!link} oraz kolor nicku Air Mail - są twoje na stałe.",
+  "settings.telegram.ach_link": "osiągnięcie",
   "settings.telegram.tiers_h": "Co dostajesz",
   "settings.telegram.tier_alerts": "Każde połączone konto: twoje powiadomienia na Telegramie.",
   "settings.telegram.tier_full": "Z {!link}: komendy Pepe dla PAT (saldo, napiwki, skrytki, !ask, !imagine i więcej - bez gier kasynowych) oraz rozmowa z Pepe, tak jak Wyślij wiadomość do Pepe.",
