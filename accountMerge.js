@@ -169,6 +169,8 @@ const RULES = {
   // 1.99lj: the casino backend - the action journal replays a stored answer by its idempotency key (history, keyed by the
   // caller's key, never looked up by user); a seat's payout follows a merge through ledger.post resolveMerged
   "casino_actions.userId": { keep: "the casino's idempotency journal (an answer stored under the caller's key)" },
+  // 1.99mj: the site's casino achievement counters (web-only players) follow the account; the same metric adds up
+  "casino_ach_counts.userId": M({ key: ["metric"], merge: { n: "SUM", updated: "MAX" } }),
   "casino_settings.actor": { deny: NAME },
   "media.by_user_id": M(), "media.by_user": { deny: NAME }, "media.subject": { deny: NAME }, "media.subject_login": { deny: NAME },
   // follows

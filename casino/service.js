@@ -18,6 +18,7 @@ const { runQuery, getQuery } = require("../dbUtils");
 const E = require("./bjengine");
 const fair = require("./fair");
 const money = require("./money");
+const rewards = require("./rewards");     // 1.99mj: achievements / drops for seats Pepe can't count (D4)
 
 // ── the rules (Pepe's BJ_* constants) ──
 const C = {
@@ -51,6 +52,7 @@ function siteBase() {
   return String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL || (process.env.STAGING ? "https://staging.publicaccess.tv" : "https://publicaccess.tv"))
     .replace(/\/+$/, "");
 }
+const dropLine = (name, it) => `🎁 ${name} found a cosmetic: ${it.name}${it.rarity ? " (" + String(it.rarity).toUpperCase() + ")" : ""}! ${siteBase()}/cosmetics`;
 const link = (T) => `${siteBase()}/casino/${T.game === "holdem" ? "holdem" : "blackjack"}/t/${T.id}`;
 const fairLink = (T, n) => `${siteBase()}/casino/fair/${T.id}/${n}`;
 
@@ -408,14 +410,18 @@ async function settle(T) {
     const left = await money.houseBalance();
     if (left < 0 && !fl.used) console.warn(`[casino] UNCOVERED ${T.id} r${n}: the House is at ${left} after paying ${profit} (no flash)`);
   }
+  // 1.99mj (D4): hands / naturals / natural drops for the seats Pepe doesn't count - keyed, so a re-run counts nothing twice
+  const drops = await rewards.blackjackRound(T, n, ev.results, T.eng.max_bet);
   if (S.hooks.crash === "settle") throw new Error("test crash mid-settle");          // tests only
   const net = lostTotal - profit;
   await emit(T, "settle", `🏁 Pepe ${d.value}${dtag} — ` + summ.join(" | "), {
     round_no: n, dealer: d,
-    results: ev.results.map((r) => ({ name: r.name, camfrog: (T.players[r.key] || {}).camfrog || null, total_bet: r.total_bet,
+    // camfrog: only for the seats Pepe counts (a room table + a Camfrog name) - the rest are counted on the site (rewards.js)
+    results: ev.results.map((r) => ({ name: r.name, camfrog: rewards.pepeName(T, r.key), total_bet: r.total_bet,
                                       total_payout: r.total_payout, hands: r.hands.map((h) => ({ outcome: h.outcome, bet: h.bet, is_bj: h.is_bj })) })),
   });
   if (net) await emit(T, "line", `🏦 House ${net > 0 ? "wins" : "pays out"} ${fmt(Math.abs(net))} PAT this round ${net > 0 ? "into" : "from"} the casino jackpot.`);
+  for (const d of drops) await emit(T, "line", dropLine((T.players[d.uid] || {}).name || "someone", d.item));
   // the last round on the felt, and the reveal
   T.last_round = {
     round_no: n, dealer: d,
@@ -1167,7 +1173,7 @@ async function fairRecord(tableId, round) {
 
 // ── Hold'em (holdem.js) on the same core ──
 const HM = require("./holdem").install({
-  S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone,
+  S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards, dropLine,
 });
 
 module.exports = {

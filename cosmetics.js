@@ -297,7 +297,10 @@ async function grant(userId, itemId, source, idem) {
 // ── drops ──
 // Pepe owns the drop table (pepe_cosmetics.py) and rolls every game drop himself. The wheel is settled
 // here, so its two rows (and the daily cap) are pushed to us; these defaults match his until he does.
-const DROP_DEFAULTS = { wheel: 0.0005, wheel_jackpot: 0.25, cap: 3 };
+const DROP_DEFAULTS = { wheel: 0.0005, wheel_jackpot: 0.25, cap: 3,
+  // 1.99mj: the casino backend's tables are settled here too (casino/rewards.js): web-only players' drops are rolled on the
+  // site with Pepe's rows and gates (pepe_cosmetics.py COSMETIC_DROP_CHANCE / COSDROP_*); he pushes them with the rest
+  blackjack: 0.02, holdem: 0.015, min_bj_bet: 2500, min_holdem_pot: 20000, min_level: 2, pair_rolls: 3 };
 const DROP_GROUPS = {
   heist: ["crack", "door", "store", "convoy"],
   fight: ["arena", "duel", "brawl"],
@@ -320,15 +323,24 @@ async function dropConfig() {
   return cfg;
 }
 
-async function setDropConfig(rates, cap) {
+async function setDropConfig(rates, cap, params) {
   await ready;
   const now = Date.now();
-  for (const k of ["wheel", "wheel_jackpot"]) {
+  for (const k of ["wheel", "wheel_jackpot", "blackjack", "holdem"]) {
     const v = Number((rates || {})[k]);
     if (Number.isFinite(v)) {
       await runQuery(`INSERT INTO cosmetic_drop_config (key, value, updated) VALUES (?, ?, ?)
                       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`,
         [k, Math.max(0, Math.min(1, v)), now]);
+    }
+  }
+  // 1.99mj: the casino gates (whole numbers): minimum blackjack bet / hold'em pot, PvP minimum level, rolls per pair a day
+  for (const k of ["min_bj_bet", "min_holdem_pot", "min_level", "pair_rolls"]) {
+    const v = Number((params || {})[k]);
+    if (Number.isFinite(v)) {
+      await runQuery(`INSERT INTO cosmetic_drop_config (key, value, updated) VALUES (?, ?, ?)
+                      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated = excluded.updated`,
+        [k, Math.max(0, Math.min(1e9, Math.floor(v))), now]);
     }
   }
   const c = Number(cap);
@@ -385,7 +397,9 @@ async function rollDrop(userId, event, key, opts = {}) {
   try {
     if (!userId) return null;
     const cfg = await dropConfig();
-    const chance = Math.max(0, Math.min(1, Number(cfg[event]) || 0));
+    // opts.scale (1.99mj): blackjack's chance scales with the bet, as in Pepe's _cos_drop
+    const scale = opts.scale === undefined ? 1 : Math.max(0, Math.min(1, Number(opts.scale) || 0));
+    const chance = Math.max(0, Math.min(1, (Number(cfg[event]) || 0) * scale));
     if (!(chance > 0) || Math.random() >= chance) return null;
     const it = pickDrop(event, opts.minRarity);
     if (!it) return null;
@@ -701,8 +715,8 @@ function register(app, { isBotToken, addUser }) {
   }));
 
   app.post("/api/cosmetics/drop-config", bot(async (b, res) => {
-    await setDropConfig(b.rates, b.cap);
-    res.json({ ok: true, config: await dropConfig() });
+    await setDropConfig(b.rates, b.cap, b.params);
+    res.json({ ok: true, config: await dropConfig() });   // (b.params: 1.99mj casino gates, see setDropConfig)
   }));
 
   app.post("/api/cosmetics/transfer", bot(async (b, res) => {

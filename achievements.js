@@ -152,6 +152,24 @@ async function checkWeb(userId) {
   }
 }
 
+// 1.99mj: the casino backend counts blackjack hands / naturals and hold'em pots for players Pepe can't count (no Camfrog name
+// on the seat, or a web-only table): the same "bot"-side achievements (cf_bj_*, cf_holdem_*), awarded once like any other,
+// with XP / PAT and an announcement in Pepe's feed. `value` is the site's running count for that user and metric.
+async function awardCount(userId, metric, value) {
+  if (!userId || !metric) return [];
+  await ready; await feedReady;
+  const out = [];
+  for (const a of catalog) {
+    if (a.metric !== metric || a.side === "web" || (Number(value) || 0) < (a.threshold || 1)) continue;
+    const r = await award({ userId }, a.id, updateLevelFn);
+    if (r.ok && r.awarded) {
+      await runQuery("INSERT INTO achievement_feed (userId, badgeId, patPaid) VALUES (?, ?, ?)", [userId, a.id, r.patPaid ? 1 : 0]);
+      out.push(r);
+    }
+  }
+  return out;
+}
+
 async function feed() {
   await feedReady;
   const rows = await getQuery(`SELECT f.id, f.badgeId, f.patPaid, u.username, u.displayname, u.camfrogUsername
@@ -293,4 +311,4 @@ function list() {
   return catalog.map((a) => ({ ...a, icon: iconFor(a) }));
 }
 
-module.exports = { award, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS };
+module.exports = { award, awardCount, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS };

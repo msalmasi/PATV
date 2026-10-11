@@ -305,7 +305,14 @@ the poll's `stream` field; Pepe draws only that table's board (blackjack or poke
 - D1. Prod: ship the code DARK (site flags off, every room off); the user promotes the batches.
 - D2. Hold'em follows this design (built: section 14).
 - D3. Keep the Discord blackjack for now; later move it onto this backend (one engine).
-- D4. Web-only players get achievements and drops on the website (not built yet: the site needs its own counters).
+- D4. Web-only players get achievements and drops on the website - built 1.99mj (`casino/rewards.js`): the site counts a seat
+  unless the table is in a Camfrog room AND the seat has a Camfrog name (Pepe counts those; the events name a seat's
+  Camfrog name only then, so nobody is counted twice). Same metrics (bj_hands, bj_naturals, holdem_pots) in
+  `casino_ach_counts`, the same cf_bj_* / cf_holdem_* badges via `achievements.awardCount` (XP, PAT, Pepe's feed), the same
+  drops and gates as Pepe (natural on a bet >= 2,500 scaled by bet / max; showdown pot >= 20,000 against someone else, not
+  linked, both level 2+, 3 rolls per pair a day; organic daily cap), keyed per round so a re-run never counts twice. Pepe
+  pushes the blackjack / hold'em rows and gates with the wheel's (`/api/cosmetics/drop-config` rates + params).
+  Known edge: progress isn't merged when a web-only player later links Camfrog (Pepe's counters start at 0 for them).
 - D5. Keep the JS engines for v2, with the shared Python test vectors.
 - D6. Client seeds later; a short fairness link in chat after each round, and on request (`!bj fair`, `!holdem fair`) - built.
 - D7. One table per room (either game), NO site-wide limit (`max_tables` 0 = none) - built.

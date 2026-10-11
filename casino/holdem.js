@@ -24,7 +24,7 @@ const HC = {
 };
 
 function install(core) {
-  const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link } = core;
+  const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, rewards, dropLine } = core;
   const opKey = (T, uid, op) => `chm:${T.id}:${uid}:${op}:${++T.opno}`;
   const handSpin = (T, n) => `chm:${T.id}:h${n}`;
 
@@ -233,8 +233,10 @@ function install(core) {
         T.last_round = { hand_no: e.hand_no, uncontested: true, board: e.board.slice(), shown: [], pot: ev.amount, rake: 0,
                          winners: [{ name: ev.name, amount: ev.amount, hand: "everyone folded", pot: "pot" }] };
         dumpWatch(T, ev.who);
+        // 1.99mj (D4): camfrog only for a seat Pepe counts; the site counts the rest (an uncontested pot never drops)
+        await rewards.holdemPot(T, e.hand_no, 0, ev.who, ev.amount, []);
         await emit(T, "win", `🏆 ${ev.name} wins ${fmt(ev.amount)} chips — everyone folded.`,
-                   { winners: [{ camfrog: (T.players[ev.who] || {}).camfrog || null, amount: ev.amount }] });
+                   { winners: [{ camfrog: rewards.pepeName(T, ev.who), amount: ev.amount }] });
       } else if (t === "showdown") {
         T.dl.turn = null; T.turn = null;
         T.sd = { board: ev.board.slice(), shown: ev.reveals.map((r) => ({ name: r.name, cards: r.cards.slice(), hand: r.hand, seat: uidHash(r.who) })),
@@ -249,9 +251,16 @@ function install(core) {
         if (ev.rake > 0) T.rake_due = { key: `${handSpin(T, e.hand_no)}:rake`, n: e.hand_no, amount: ev.rake };
         // for Pepe's achievements / drops: each winner and the Camfrog names they beat at this showdown
         const sdcf = T.sd ? T.sd.cf : [];
+        // 1.99mj (D4): each pot a seat Pepe doesn't count is counted (and may drop) here; the event names only Pepe's seats
+        const found = [];
+        for (const [i, a] of ev.awards.entries()) {
+          const d = await rewards.holdemPot(T, e.hand_no, i, a.who, a.amount, sdcf.filter((x) => x.uid !== a.who).map((x) => x.uid));
+          if (d) found.push(d);
+        }
         await emit(T, "awards", "", { rake: ev.rake,
-          winners: ev.awards.map((a) => ({ camfrog: (T.players[a.who] || {}).camfrog || null, amount: a.amount,
+          winners: ev.awards.map((a) => ({ camfrog: rewards.pepeName(T, a.who), amount: a.amount,
                                            against: sdcf.filter((x) => x.uid !== a.who && x.camfrog).map((x) => x.camfrog) })) });
+        for (const d of found) await emit(T, "line", dropLine((T.players[d.uid] || {}).name || "someone", d.item));
         T.sd = null;
       } else if (t === "hand_end") {
         await save(T);
