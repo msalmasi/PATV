@@ -236,19 +236,29 @@
     const btn = $("cz-hostbtn");
     if (btn) btn.hidden = !can;
     if (!can) return;
-    const rooms = d.rooms || [];
+    // 1.99ox: a table can play in several Camfrog rooms at once - the attached ones (✕ detaches), and the rest to add
+    const attached = t.rooms || (t.room ? [{ id: t.room, name: t.room_name || t.room }] : []);
+    const ids = new Set(attached.map((r) => r.id));
+    const rooms = (d.rooms || []).filter((r) => !ids.has(r.id));
     const sel = $("cz-room");
     const want = rooms.map((r) => r.id + "|" + r.name + "|" + (r.busy ? 1 : 0)).join(",");
     if (sel.dataset.v !== want) {
       sel.dataset.v = want;
-      sel.innerHTML = rooms.map((r) => `<option value="${esc(r.id)}"${r.id === t.room ? " selected" : ""}>${esc(r.name)}${r.busy && r.id !== t.room ? " · " + esc(T("room_busy", "has a table")) : ""}</option>`).join("");
+      sel.innerHTML = rooms.map((r) => `<option value="${esc(r.id)}"${r.busy ? " disabled" : ""}>${esc(r.name)}${r.busy ? " · " + esc(T("room_busy", "has a table")) : ""}</option>`).join("");
     }
-    $("cz-roomnone").hidden = rooms.length > 0;
+    const list = $("cz-roomlist");
+    const lsig = attached.map((r) => r.id + "|" + r.name).join(",");
+    if (list && list.dataset.v !== lsig) {
+      list.dataset.v = lsig;
+      list.innerHTML = attached.map((r) => `<span>🐸 ${esc(r.name)}<button type="button" data-unroom="${esc(r.id)}" aria-label="${esc(T("room_remove", "Remove {room}", { room: r.name }))}">×</button></span>`).join("");
+    }
+    $("cz-roomnone").hidden = rooms.length > 0 || attached.length > 0;
     $("cz-room").hidden = !rooms.length;
     $("cz-push").hidden = !rooms.length;
-    $("cz-unpush").hidden = !t.room;
-    $("cz-roomnow").textContent = t.room ? T("room_now", "Now in Camfrog room {room} and on the web.", { room: t.room_name || t.room })
-                                         : T("room_web", "Web only right now.");
+    $("cz-unpush").hidden = !attached.length;
+    $("cz-roomnow").textContent = attached.length > 1 ? T("rooms_now", "Playing in {n} Camfrog rooms and on the web.", { n: attached.length })
+                                : t.room ? T("room_now", "Now in Camfrog room {room} and on the web.", { room: t.room_name || t.room })
+                                : T("room_web", "Web only right now.");
     let s;
     if (t.on_stream) s = T("stream_on", "📺 This table is on Pepe's stream.");
     else if (t.stream_queue) s = t.stream_queue === 1 ? T("stream_next", "You're next in line for Pepe's stream.")
@@ -272,7 +282,11 @@
     };
     if (!$("cz-hostbtn")) return;
     $("cz-hostbtn").addEventListener("click", () => openSheet("cz-host"));
-    $("cz-push").addEventListener("click", () => side(`/api/casino/t/${tableId}/push`, { room: $("cz-room").value }));
+    $("cz-push").addEventListener("click", () => side(`/api/casino/t/${tableId}/push`, { room: $("cz-room").value, mode: "add" }));
+    $("cz-roomlist").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-unroom]");
+      if (b) side(`/api/casino/t/${tableId}/push`, { room: b.dataset.unroom, mode: "remove" });
+    });
     $("cz-unpush").addEventListener("click", () => side(`/api/casino/t/${tableId}/push`, { room: null }));
     $("cz-stream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: true, override: !!($("cz-override") && $("cz-override").checked) }));
     $("cz-unstream").addEventListener("click", () => side(`/api/casino/t/${tableId}/stream`, { on: false }));
@@ -330,7 +344,8 @@
     const url = (hm ? "/casino/holdem/t/" : "/casino/blackjack/t/") + encodeURIComponent(t.id);
     const dots = Array.from({ length: t.max_seats }, (_, i) => `<i class="${i < t.players ? "on" : ""}"></i>`).join("");
     const stakes = hm ? T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) }) : T("limits_v", "Bets {min}–{max}", { min: fmt(t.min_bet), max: fmt(t.max_bet) });
-    const where = t.room ? `<span class="tag blue">🐸 ${esc(t.room_name || t.room)}</span>` : `<span class="tag">🌐 ${esc(T("web_only", "Web only"))}</span>`;
+    const rs = t.rooms && t.rooms.length ? t.rooms : t.room ? [{ id: t.room, name: t.room_name || t.room }] : [];
+    const where = rs.length ? rs.map((r) => `<span class="tag blue">🐸 ${esc(r.name)}</span>`).join("") : `<span class="tag">🌐 ${esc(T("web_only", "Web only"))}</span>`;
     const full = t.players >= t.max_seats;
     const locked = hr && !(me && me.high_roller);              // a High Roller table: everyone else can only watch
     const join = locked ? `<span class="tag lock" title="${esc(T("hr_only_t", "Only High Rollers can play here. Anyone can watch."))}">🔒 ${esc(T("hr_only", "High Rollers only"))}</span>`

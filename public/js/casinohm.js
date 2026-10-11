@@ -170,7 +170,8 @@
     }
     $("cz-msg").innerHTML = esc(msg) + (sub ? `<small>${esc(sub)}</small>` : "");
     CZ.armClock($("cz-fclock"), dl, nom);
-    const where = t.room ? `🐸 ${esc(T("in_room", "Camfrog room {room}", { room: t.room_name || t.room }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
+    const rs = t.rooms && t.rooms.length ? t.rooms.map((r) => r.name) : t.room ? [t.room_name || t.room] : [];       // 1.99ox: every room it plays in
+    const where = rs.length ? `🐸 ${esc(rs.length > 1 ? T("in_rooms", "Camfrog rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Camfrog room {room}", { room: rs[0] }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
     const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, esc(T("blinds_v", "Blinds {sb}/{bb}", { sb: fmt(t.sb), bb: fmt(t.bb) })), where,
                   t.hand_no ? esc(T("hand_n", "Hand #{n}", { n: t.hand_no })) : "",
                   esc(T("rake_pct", "{n}% rake at showdown", { n: t.rake_pct })),
@@ -193,14 +194,14 @@
     first = false;
   }
 
-  // ── the chip rack (1.99ov): tap a chip to add it to your bet / raise. Regular chips from the big blind up; the 💎 ones
+  // ── the chip rack (1.99ov): tap a chip to add it to your bet / raise. Regular chips from half the small blind up; the 💎 ones
   // (100K / 500K / 1M / 5M) only for High Rollers and at High Roller tables. At most six, the ones that fit your stack.
   const RACK = [[25, ""], [100, ""], [500, "c500"], [1000, "c1k"], [5000, "c5k"], [25000, "c25k"]];
   const RACK_HR = [[100000, "c100k hrc"], [500000, "c500k hrc"], [1000000, "c1m hrc"], [5000000, "c5m hrc"]];
   function rackFor(t, me) {
     const hr = !!(t.high_stakes || me.high_roller);
     const { max } = raiseBounds(t);
-    let set = (t.high_stakes ? RACK_HR : RACK.concat(hr ? RACK_HR : [])).filter(([v]) => v >= t.bb && v <= max);
+    let set = (t.high_stakes ? RACK_HR : RACK.concat(hr ? RACK_HR : [])).filter(([v]) => v >= Math.max(1, t.sb / 2) && v <= max);
     if (!set.length) set = (t.high_stakes ? RACK_HR : RACK).slice(0, 1);
     set = set.slice(0, 6);
     const box = $("cz-rack");

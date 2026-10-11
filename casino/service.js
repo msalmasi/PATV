@@ -182,7 +182,9 @@ async function save(T) {
 // ── events (the cursor Pepe long-polls; public only) ──
 async function emit(T, kind, text, extra) {
   const ts = clock();
-  const data = Object.assign({ text: text || "" }, extra || {});
+  // 1.99ox: every room the table plays in hears it (an event can name its own rooms: a push / a room leaving)
+  const rs = roomsOf(T);
+  const data = Object.assign({ text: text || "" }, rs.length > 1 ? { rooms: rs } : {}, extra || {});
   const r = await runQuery("INSERT INTO casino_events (table_id, room, ts, kind, data) VALUES (?, ?, ?, ?, ?)",
                            [T.id, T.room || null, ts, kind, JSON.stringify(data)]);
   if (r && r.id) S.lastSeq = Math.max(S.lastSeq, r.id);
@@ -673,7 +675,7 @@ async function cmdStart(actor, room, game, blinds) {
     return R(false, game === "holdem" ? "🃏 Hold'em on the site is switched off right now." : "🂠 Blackjack on the site is switched off right now.");
   }
   const open = Array.from(S.tables.values()).filter((t) => t.status === "open");
-  const here = room ? open.find((t) => t.room === room) : null;      // one table per room (either game)
+  const here = room ? open.find((t) => roomsOf(t).includes(room)) : null;      // one table per room (either game; 1.99ox: any attached room)
   if (here) {
     return R(false, here.game === "holdem" ? "a Hold'em table is already open here — !sit to join, or !holdem status."
                                            : "a blackjack table is already open — !bet to play.");
@@ -719,7 +721,8 @@ async function seatChecks(T, actor) {
 function remember(T, actor) {
   const prev = T.players[actor.uid] || {};
   T.players[actor.uid] = { name: actor.name || prev.name || actor.username, username: actor.username || prev.username || null,
-                           camfrog: actor.camfrog || prev.camfrog || null, via: actor.via || prev.via || "web", iph: actor.iph || prev.iph || null };
+                           camfrog: actor.camfrog || prev.camfrog || null, via: actor.via || prev.via || "web", iph: actor.iph || prev.iph || null,
+                           room: actor.room || prev.room || null };
 }
 
 async function cmdBet(T, actor, amount) {
@@ -961,36 +964,60 @@ async function act(actor, verb, args, opts, key) {
   });
 }
 
-/** Push a table to a Camfrog room (or back to web-only with room = null). Host or admin. */
-async function push(tableId, room, actor) {
+/** 1.99ox: cross-room play - a table plays in SEVERAL Camfrog rooms at once. T.rooms = [home, ...pushed] (T.room stays the
+ *  home room = T.rooms[0], so everything that only needs "is it in a room" / the stream slot is unchanged). Still one
+ *  table per room: a room can't be attached to two open tables. Events carry data.rooms = every attached room. */
+const roomsOf = (T) => (Array.isArray(T.rooms) ? T.rooms : T.room ? [T.room] : []);
+function setRooms(T, list) {
+  T.rooms = Array.from(new Set(list.filter(Boolean)));
+  T.room = T.rooms[0] || null;
+}
+const roomName = (id) => { const r = S.rooms.get(id); return r ? r.name : id; };
+const MAX_ROOMS = 6;
+
+/** Push a table to a Camfrog room. mode "add" (the default): attach one more room; "remove": detach that room;
+ *  room = null: back to web-only (every room detached). Host or admin. */
+async function push(tableId, room, actor, mode) {
   await boot();
   return locked(async () => {
     const T = S.tables.get(tableId);
     if (!T || T.status !== "open") return R(false, "That table has closed.");
     if (actor.uid !== T.host.uid && !actor.admin) return R(false, "Only the table's host or an admin can move it.");
-    if (room) {
+    const cur = roomsOf(T);
+    if (room && mode !== "remove") {
+      if (cur.includes(room)) return R(true, "It's already playing there.", { rooms: cur });
       const r = S.rooms.get(room);
       if (!r || clock() - r.ts > C.ROOM_FRESH_MS) return R(false, "Pepe isn't in that room with the casino on right now.");
-      if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.room === room && t.id !== T.id)) return R(false, "That room already has a casino table.");
-      T.room = room;
+      if (Array.from(S.tables.values()).some((t) => t.status === "open" && t.id !== T.id && roomsOf(t).includes(room))) return R(false, "That room already has a casino table.");
+      if (cur.length >= MAX_ROOMS) return R(false, `A table can play in up to ${MAX_ROOMS} rooms at once.`);
+      setRooms(T, cur.concat([room]));
       const how = T.game === "holdem"
-        ? `a No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
+        ? `a ${T.high_stakes ? "💎 High Roller " : ""}No-Limit Hold'em table (${fmt(T.eng.sb)}/${fmt(T.eng.bb)}) — !sit <amount> to buy in (${fmt(T.min_buy)}–${fmt(T.max_buy)})`
         : `a ${T.high_stakes ? "💎 High Roller " : ""}Blackjack table — !bet <amount> to sit in (${fmt(T.eng.min_bet)}–${fmt(T.eng.max_bet)})`;
-      await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}`,
-                 { room_name: r.name, url: link(T) });
+      const also = cur.length ? ` Also playing in ${cur.map(roomName).join(", ")}.` : "";
+      await emit(T, "pushed", `${T.game === "holdem" ? "🃏" : "🂠"} ${T.host.name}'s ${how}. It's playing in this room now, and on the web: ${link(T)}${also}`,
+                 { room_name: r.name, url: link(T), rooms: [room] });
+      if (cur.length) await emit(T, "line", `🐸 This table is now also playing in ${r.name} — players there sit at the same table.`, { rooms: cur });
+    } else if (room) {
+      if (!cur.includes(room)) return R(false, "It isn't playing in that room.");
+      await emit(T, "unpushed", `This table left this room — play on at ${link(T)}`, { rooms: [room] });
+      setRooms(T, cur.filter((x) => x !== room));
+      if (!T.room) streamGone(T.id);
     } else {
-      const was = T.room;
-      if (!was) return R(true, "It was already web-only.");
-      await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`);
-      T.room = null;
+      if (!cur.length) return R(true, "It was already web-only.");
+      await emit(T, "unpushed", `This table went back to the website — play on at ${link(T)}`, { rooms: cur });
+      setRooms(T, []);
       streamGone(T.id);
     }
     await save(T);
-    return R(true, room ? "Announced in the room." : "The table is web-only now.");
+    return R(true, room && mode !== "remove" ? "Announced in the room." : T.room ? "Room removed." : "The table is web-only now.", { rooms: roomsOf(T) });
   });
 }
 
 // ── views ──
+/** [{id, name}] of every room a table plays in (home first) */
+const roomList = (T) => roomsOf(T).map((id) => ({ id, name: roomName(id) }));
+
 function bjView(T) {
   const e = T.eng;
   const hidden = ["insurance", "player"].includes(e.phase);
@@ -1020,7 +1047,7 @@ function bjView(T) {
   const room = T.room ? S.rooms.get(T.room) : null;
   return {
     id: T.id, game: "bj", status: T.status, phase: T.status === "closed" ? "closed" : e.phase, rev: T.rev,
-    room: T.room, room_name: room ? room.name : T.room, host: T.host.name, round_no: e.round_no,
+    room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: T.host.name, round_no: e.round_no,
     min_bet: e.min_bet, max_bet: e.max_bet, high_stakes: !!T.high_stakes, max_seats: C.MAX_SEATS, decks: e.num_decks, act_secs: C.ACT_SECS,
     client_seed: T.client_seed, commitment: T.round ? T.round.commitment : null, commit_round: T.round ? T.round.no : null,
     dealer, seats, turn, bet_deadline: T.dl.bet, ins_deadline: T.dl.ins,
@@ -1058,7 +1085,7 @@ async function meView(T, uid) {
 function lobby() {
   return Array.from(S.tables.values()).filter((t) => t.status === "open").map((T) => {
     const room = T.room ? S.rooms.get(T.room) : null;
-    const base = { id: T.id, host: T.host.name, room: T.room, room_name: room ? room.name : T.room, url: link(T), on_stream: S.stream.table === T.id };
+    const base = { id: T.id, host: T.host.name, room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), url: link(T), on_stream: S.stream.table === T.id };
     if (T.game === "holdem") return Object.assign(base, HM.lobbyRow(T));
     return Object.assign(base, { game: "bj", phase: T.eng.phase, players: T.eng.seats.length, max_seats: C.MAX_SEATS,
                                  min_bet: T.eng.min_bet, max_bet: T.eng.max_bet, round_no: T.eng.round_no, high_stakes: !!T.high_stakes });
@@ -1066,7 +1093,7 @@ function lobby() {
 }
 
 const getTable = (id) => S.tables.get(id) || null;
-const tableForRoom = (room) => Array.from(S.tables.values()).find((t) => t.status === "open" && t.room === room) || null;
+const tableForRoom = (room) => Array.from(S.tables.values()).find((t) => t.status === "open" && roomsOf(t).includes(room)) || null;
 
 // ── Pepe's stream: ONE table on the OBS games overlay at a time (the user's D9) ──
 // First come takes the slot; a later request joins a FIFO queue (with its place); an admin can override (the bumped
@@ -1182,7 +1209,7 @@ function freshRooms() {
 function roomTables() {
   const tables = {}, priv = {};
   for (const T of S.tables.values()) {
-    if (!T.room) continue;
+    if (!roomsOf(T).length) continue;
     tables[T.id] = publicView(T);
     if (T.game === "holdem") Object.assign(priv, HM.privateFor(T));
   }
@@ -1231,6 +1258,7 @@ async function fairRecord(tableId, round) {
 // ── Hold'em (holdem.js) on the same core ──
 const HM = require("./holdem").install({
   S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, fairLink, runQuery, streamGone, rewards, dropLine,
+  roomsOf: (T) => roomsOf(T), roomList: (T) => roomList(T),
 });
 
 /** 1.99ov: the limits the lobby / pages show (blackjack normal + 💎 tables, the Hold'em blind cap + the High Roller ladder) */
@@ -1241,6 +1269,6 @@ function limits() {
 }
 
 module.exports = {
-  C, S, HM, boot, limits, HR_WORDS, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
+  C, S, HM, boot, limits, HR_WORDS, roomsOf, stop, act, run, push, stream, poll, noteRooms, freshRooms, lobby, publicView, meView, getTable, tableForRoom,
   loadSettings, setSetting, FRONTS, frontOf, frontPath, isSiteAdmin, fairRecord, tickOnce, ipHash, locked, ensure, HELP, link, fairLink,
 };

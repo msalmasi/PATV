@@ -7,7 +7,7 @@
 //                                            cards); per-user, never cached
 //   POST /api/casino/open                   {game: bj|holdem, blinds?, idem}  open a web-only table
 //   POST /api/casino/t/:id/act              {verb, amount?, idem}
-//   POST /api/casino/t/:id/push             {room|null}  push the table to a Camfrog room Pepe serves (host or admin)
+//   POST /api/casino/t/:id/push             {room|null, mode: add|remove}  attach / detach a Camfrog room Pepe serves (1.99ox: several at once; null = web only; host or admin)
 //   POST /api/casino/t/:id/stream           {on, override?}  Pepe's stream: one table at a time, FIFO queue, admin override
 //   GET  /casino/fair/:id/:round + /api/casino/fair/:id/:round    the fairness proof of a round / hand
 //   GET  /api/casino/t/:id/history          (D10) a table's last revealed rounds: the felt's public summary + proof link
@@ -233,7 +233,8 @@ function register(app, { isBotToken, addUser }) {
     if (!actor) return res.status(401).json({ ok: false, error: "Sign in first." });
     if (!ID.test(req.params.id)) return res.status(404).json({ ok: false, error: "No such table." });
     const room = (req.body || {}).room ? String(req.body.room).slice(0, 64) : null;
-    res.json(await svc.push(req.params.id, room, actor));
+    const mode = (req.body || {}).mode === "remove" ? "remove" : "add";       // 1.99ox: attach / detach one room
+    res.json(await svc.push(req.params.id, room, actor, mode));
   });
 
   app.post("/api/casino/t/:id/stream", addUser, async (req, res) => {
@@ -310,7 +311,7 @@ function register(app, { isBotToken, addUser }) {
     const game = b.game === "holdem" ? "holdem" : b.game === "bj" ? "bj" : null;
     const actor = { uid: u.userId, name: String(b.name || u.displayname || u.username).replace(/[\u0000-\u001f]/g, " ").slice(0, 40),
                     username: u.username, camfrog: b.camfrog ? String(b.camfrog).slice(0, 40) : u.camfrogUsername || null, via: "room",
-                    iph: null, admin: !!b.admin };
+                    iph: null, admin: !!b.admin, room };
     const args = Array.isArray(b.args) ? b.args.slice(0, 2).map((x) => String(x).slice(0, 24)) : [];
     const out = await svc.act(actor, verb, args, { room, table, game }, `cf-${idem}`);
     res.json(out);

@@ -40,7 +40,7 @@ const short = (n) => (n >= 1e6 && n % 1e5 === 0 ? `${n / 1e6}M` : n >= 1e3 && n 
 const ladderText = () => HC.HR_LADDER.map(([a, b]) => `${short(a)}/${short(b)}`).join(", ");
 
 function install(core) {
-  const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, rewards, dropLine } = core;
+  const { S, clock, save, emit, userRow, isHighRoller, dupOf, R, uidHash, fmt, link, rewards, dropLine, roomsOf, roomList } = core;
   const opKey = (T, uid, op) => `chm:${T.id}:${uid}:${op}:${++T.opno}`;
   const handSpin = (T, n) => `chm:${T.id}:h${n}`;
 
@@ -114,7 +114,8 @@ function install(core) {
   function remember(T, actor) {
     const prev = T.players[actor.uid] || {};
     T.players[actor.uid] = { name: actor.name || prev.name, username: actor.username || prev.username || null,
-                             camfrog: actor.camfrog || prev.camfrog || null, via: actor.via || prev.via || "web", iph: actor.iph || prev.iph || null };
+                             camfrog: actor.camfrog || prev.camfrog || null, via: actor.via || prev.via || "web", iph: actor.iph || prev.iph || null,
+                             room: actor.room || prev.room || null };
   }
 
   async function sit(T, actor, amountArg) {
@@ -516,7 +517,7 @@ function install(core) {
     const pots = e.hand_active ? H.buildPots(e.players, e.contrib, e.folded).map((p) => ({ amount: p.amount, players: p.eligible.length })) : [];
     const room = T.room ? S.rooms.get(T.room) : null;
     return {
-      id: T.id, game: "holdem", status: T.status, rev: T.rev, room: T.room, room_name: room ? room.name : T.room, host: T.host.name,
+      id: T.id, game: "holdem", status: T.status, rev: T.rev, room: T.room, room_name: room ? room.name : T.room, rooms: roomList(T), host: T.host.name,
       phase: T.status === "closed" ? "closed" : e.hand_active ? H.STREET_NAME[e.street] : "between", hand_no: e.hand_no,
       sb: e.sb, bb: e.bb, min_buy: T.min_buy, max_buy: T.max_buy, high_stakes: T.high_stakes, max_seats: HC.MAX_SEATS, act_secs: HC.ACT_SECS,
       rake_pct: HC.RAKE * 100, board: e.board.slice(), pot: H.pot(e), pots, current_bet: e.current_bet, seats, turn,
@@ -542,10 +543,14 @@ function install(core) {
   // Pepe's private part: the hole cards of room players seated at a table in one of his rooms (never stored in an event)
   function privateFor(T) {
     const e = T.eng, out = {};
-    if (!T.room || !e.hand_active) return out;
+    const rooms = roomsOf(T);
+    if (!rooms.length || !e.hand_active) return out;
     for (const k of e.players) {
-      const cf = (T.players[k] || {}).camfrog;
-      if (cf && !e.folded.includes(k)) out[String(cf).toLowerCase()] = { table: T.id, hand_no: e.hand_no, cards: e.hole[k].slice(), camfrog: cf };
+      const p = T.players[k] || {};
+      const cf = p.camfrog;
+      // 1.99ox: the PM goes out in the room the player plays from (cross-room tables); the home room otherwise
+      const room = p.via === "room" && p.room && rooms.includes(p.room) ? p.room : T.room;
+      if (cf && !e.folded.includes(k)) out[String(cf).toLowerCase()] = { table: T.id, hand_no: e.hand_no, cards: e.hole[k].slice(), camfrog: cf, room };
     }
     return out;
   }

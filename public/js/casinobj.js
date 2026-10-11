@@ -174,7 +174,8 @@
     } else msg = T("pepe_plays", "Pepe plays his hand…");
     $("cz-msg").innerHTML = esc(msg) + (sub ? `<small>${esc(sub)}</small>` : "");
     CZ.armClock($("cz-fclock"), dlx, nom);
-    const where = t.room ? `🐸 ${esc(T("in_room", "Camfrog room {room}", { room: t.room_name || t.room }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
+    const rs = t.rooms && t.rooms.length ? t.rooms.map((r) => r.name) : t.room ? [t.room_name || t.room] : [];       // 1.99ox: every room it plays in
+    const where = rs.length ? `🐸 ${esc(rs.length > 1 ? T("in_rooms", "Camfrog rooms {rooms}", { rooms: rs.join(", ") }) : T("in_room", "Camfrog room {room}", { room: rs[0] }))}` : `🌐 ${esc(T("web_only", "Web only"))}`;
     const meta = [t.high_stakes ? `💎 ${esc(T("high_roller", "High Roller"))}` : "", `👑 ${esc(t.host)}`, where, t.round_no ? esc(T("round_n", "Round {n}", { n: t.round_no })) : "", esc(T("decks_n", "{n} decks", { n: t.decks })),
                   t.on_stream ? `📺 ${esc(T("on_stream", "On Pepe's stream"))}` : t.stream_queue ? `📺 ${esc(T("stream_q", "stream queue #{n}", { n: t.stream_queue }))}` : ""]
       .filter(Boolean).map((x, i) => `<span class="tag${i === 0 && t.high_stakes ? " hr" : ""}">${x}</span>`).join("");

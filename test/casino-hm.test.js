@@ -288,6 +288,58 @@ test("rooms: one table per room across both games; no site-wide limit; Pepe's po
   assert.ok((await A(ann, "cards", [], { table: tid })).pm, "!cards answers privately");
 });
 
+test("1.99ox cross-room: one table in several Camfrog rooms - events to every room, cards PM'd per room, one table per room", async () => {
+  await fresh();
+  svc.noteRooms([{ id: "RA", name: "Room A" }, { id: "RB", name: "Room B" }, { id: "RC", name: "Room C" }]);
+  const tid = await table("25/50", { room: "RA" });
+  const T = svc.getTable(tid);
+  assert.match((await svc.push(tid, "RB", bob, "add")).reply, /host or an admin/);
+  const r = await svc.push(tid, "RB", ann, "add");
+  assert.ok(r.ok, r.reply);
+  assert.deepEqual(T.rooms, ["RA", "RB"]);
+  assert.equal(T.room, "RA", "the home room stays first");
+  assert.equal(svc.tableForRoom("RB").id, tid);
+  assert.deepEqual(svc.publicView(T).rooms, [{ id: "RA", name: "Room A" }, { id: "RB", name: "Room B" }]);
+  assert.deepEqual(svc.lobby().find((x) => x.id === tid).rooms.map((x) => x.id), ["RA", "RB"]);
+  // still one table per room: RB can't open its own, and RB can't be attached to a second table
+  assert.match((await svc.act(dan, "start", [], { room: "RB", game: "bj" }, key())).reply, /already open/);
+  const other = (await svc.act(dan, "start", ["25/50"], { room: "RC", game: "holdem" }, key())).table;
+  assert.match((await svc.push(other, "RB", dan, "add")).reply, /already has a casino table/);
+  // a player in each room: Ann from RA, Bob from RB (a Camfrog player there)
+  const bobRB = Object.assign({}, bob, { camfrog: "BobCF", via: "room", room: "RB", iph: null });
+  const annRA = Object.assign({}, ann, { room: "RA" });
+  await A(annRA, "sit", ["1000"], { table: tid });
+  await A(bobRB, "sit", ["1000"], { table: tid });
+  assert.equal(await bal("u2"), 99000, "money as before: the buy-in once");
+  const before = svc.S.lastSeq;
+  deck(ACES);
+  await A(annRA, "deal", [], { table: tid });
+  const p = await svc.poll(before, 0);
+  assert.equal(p.private.anncf.room, "RA");
+  assert.equal(p.private.bobcf.room, "RB", "Bob's hole cards are PM'd in the room he plays from");
+  const evs = p.events.filter((e) => e.table === tid);
+  assert.ok(evs.length > 0);
+  for (const e of evs) assert.deepEqual(e.data.rooms, ["RA", "RB"], "every event goes to both rooms");
+  // the push / leave announcements go to the rooms they concern
+  const all = (await svc.poll(0, 0)).events.filter((e) => e.table === tid);
+  const pushed = all.find((e) => e.kind === "pushed");
+  assert.deepEqual(pushed.data.rooms, ["RB"]);
+  assert.match(pushed.data.text, /Also playing in Room A/);
+  assert.ok(all.some((e) => e.kind === "line" && /also playing in Room B/.test(e.data.text) && e.data.rooms.join() === "RA"));
+  // detach the HOME room: RB becomes home; the table keeps playing
+  const rm = await svc.push(tid, "RA", ann, "remove");
+  assert.ok(rm.ok, rm.reply);
+  assert.deepEqual(T.rooms, ["RB"]);
+  assert.equal(T.room, "RB");
+  assert.equal(svc.tableForRoom("RA"), null);
+  const un = (await svc.poll(0, 0)).events.filter((e) => e.table === tid && e.kind === "unpushed");
+  assert.deepEqual(un[un.length - 1].data.rooms, ["RA"]);
+  // web only
+  assert.ok((await svc.push(tid, null, ann)).ok);
+  assert.deepEqual(T.rooms, []);
+  assert.equal(T.room, null);
+});
+
 test("Pepe's stream: first come, a FIFO queue, admin override, released when the table closes or goes idle", async () => {
   await fresh();
   svc.noteRooms([{ id: "R1", name: "One" }, { id: "R2", name: "Two" }, { id: "R3", name: "Three" }]);
