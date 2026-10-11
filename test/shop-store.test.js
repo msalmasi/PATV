@@ -209,7 +209,7 @@ test("/shop renders: hero, featured, chips, cards with pictures, afford states, 
   assert.match(html, /class="st-feat"/);
   assert.match(html, /src="\/public\/img\/shop\/gaming-pc\.svg"/);
   assert.match(html, /aria-label="Shelves"/);
-  assert.match(html, /🎖️<\/span> Roles <span class="n">1<\/span>/);
+  assert.match(html, /🎖️<\/span>Roles <span class="n">1<\/span>/);
   assert.match(html, /✓ You can afford this/);
   assert.match(html, /PAT to go/);
   assert.match(html, /<code>!prizes<\/code>/);

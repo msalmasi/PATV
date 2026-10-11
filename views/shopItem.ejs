@@ -2,10 +2,14 @@
 <%- include('layout', { title: p ? p.prize : t('shop.item.title'), user: user }) %>
 <%- include('partials/shop-css') %>
 <%- include('partials/shop-store-css') %>
-<div class="sh st">
+<main class="ds-page wide flow sh st">
 <% if (!p) { %>
-  <h1><%- t('shop.item.not_found') %></h1>
-  <p class="sub"><%- t('shop.item.not_found_sub') %> <a href="/shop"><%- t('shop.back') %></a></p>
+  <div class="st-empty">
+    <span aria-hidden="true">🔍</span>
+    <h1 class="ds-h3" style="margin:0"><%- t('shop.item.not_found') %></h1>
+    <p><%- t('shop.item.not_found_sub') %></p>
+    <a class="btn gold" href="/shop"><%- t('shop.back') %></a>
+  </div>
 <% } else {
   // 1.99lz: the item page redesign - gallery, price + "can you afford it", buy / subscribe / 🎁 gift, what you get, related
   const official = !p.seller_id; const mine = me && me.userId === p.seller_id;
@@ -22,7 +26,7 @@
   <nav aria-label="<%- t('shop.item.breadcrumb') %>">
     <ol class="crumbs">
       <li><a href="/shop"><%- t('shop.title') %></a></li>
-      <% if (shelf && shelf.id !== 'more') { %><li><a href="/shop?shelf=<%= shelf.id %>"><%= shelf.emoji %> <%- t('shop.shelf.' + shelf.id) %></a></li><% } %>
+      <% if (shelf && shelf.id !== 'more') { %><li><a href="/shop?shelf=<%= shelf.id %>"><span class="ds-ic" aria-hidden="true"><%= shelf.emoji %></span> <%- t('shop.shelf.' + shelf.id) %></a></li><% } %>
       <% if (!official) { %><li><a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>"><%- t('shop.item.more_from', { name: p.seller_name }) %></a></li><% } %>
       <li aria-current="page"><%= p.prize %></li>
     </ol>
@@ -59,7 +63,7 @@
     <div class="st-panel">
       <div class="row">
         <% if (official) { %><span class="pill official"><%- t('shop.item.official_store') %></span><% } %>
-        <% if (shelf && shelf.id !== 'more' && shelf.id !== 'market') { %><a class="chip" href="/shop?shelf=<%= shelf.id %>"><%= shelf.emoji %> <%- t('shop.shelf.' + shelf.id) %></a><% } %>
+        <% if (shelf && shelf.id !== 'more' && shelf.id !== 'market') { %><a class="chip" href="/shop?shelf=<%= shelf.id %>"><span class="ds-ic" aria-hidden="true"><%= shelf.emoji %></span><%- t('shop.shelf.' + shelf.id) %></a><% } %>
         <% if (p.category) { %><a class="chip" href="/shop?cat=<%= encodeURIComponent(p.category) %>"><%= p.category %></a><% } %>
       </div>
       <h1><%= p.prize %></h1>
@@ -87,7 +91,7 @@
           <a class="btn alt" href="/shop/seller?edit=<%= p.prizeId %>#edit"><%- t('shop.item.edit') %></a>
         <% } else if (p.status === 'active' && !oos) { %>
           <% if (p.buyer_prompt) { %>
-            <label><%- t('shop.item.seller_needs', { what: '<b style="color:#ddd">' + t.esc(p.buyer_prompt) + '</b>' }) %>
+            <label><%- t('shop.item.seller_needs', { what: '<b style="color:var(--ds-text)">' + t.esc(p.buyer_prompt) + '</b>' }) %>
               <input type="text" id="buyerInput" maxlength="300" required data-prompt="<%= p.buyer_prompt %>" placeholder="<%= p.buyer_prompt %>">
             </label>
           <% } %>
@@ -116,14 +120,14 @@
         <% } %>
       </div>
 
-      <div class="box seller" style="margin:0">
+      <div class="box seller" style="margin:0;padding:var(--ds-sp-3) var(--ds-sp-4)">
         <% if (official) { %>
-          <img src="/public/img/coin.png" alt="">
-          <div><b style="color:#fff"><%- t('shop.item.patv_store') %></b><div class="muted"><%- t('shop.item.patv_store_sub') %></div></div>
+          <img src="/public/img/coin.png" alt="" width="44" height="44">
+          <div><b style="color:var(--ds-text-strong)"><%- t('shop.item.patv_store') %></b><div class="muted"><%- t('shop.item.patv_store_sub') %></div></div>
         <% } else { %>
-          <img src="<%= H.av(p.seller_avatar) %>" alt="" onerror="this.src='/public/img/avatar.png'">
+          <img src="<%= H.av(p.seller_avatar) %>" alt="" width="44" height="44" onerror="this.src='/public/img/avatar.png'">
           <div style="min-width:0">
-            <a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>" style="color:#fff;font-weight:bold"><%= p.seller_display || p.seller_name %></a>
+            <a href="/shop/seller/<%= encodeURIComponent(p.seller_name || '') %>" style="color:var(--ds-text-strong);font-weight:700"><%= p.seller_display || p.seller_name %></a>
             <div class="muted">@<%= p.seller_name %> · <%- t('shop.item.completed_sales', { count: sales, n: H.fmt(sales) }) %></div>
           </div>
         <% } %>
@@ -162,7 +166,7 @@
     </div>
   <% } %>
 <% } %>
-</div>
+</main>
 <%- include('partials/shop-buy-js') %>
 <script>
   // 1.99lz: the gallery - thumbnails swap the main picture; the main picture opens the lightbox

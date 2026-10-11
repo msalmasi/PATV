@@ -15,14 +15,18 @@
   const subOf = (it) => { const c = H.cat(it) || {}; const rk = H.roleKey ? H.roleKey(it) : null;
     return rk ? t('shop.role.' + rk + '.short') : (c.tkey && t.has('shop.cat.item.' + c.tkey)) ? t('shop.cat.item.' + c.tkey) : ''; };
 %>
-<div class="sh st">
+<main class="ds-page wide flow sh st">
 <% if (store && store.missing) { %>
-  <h1><%- t('shop.not_found') %></h1>
-  <p class="sub"><%- t('shop.no_user', { name: '"' + t.esc(store.missing) + '"' }) %> <a href="/shop"><%- t('shop.back') %></a></p>
+  <div class="st-empty">
+    <span aria-hidden="true">🔍</span>
+    <h1 class="ds-h3" style="margin:0"><%- t('shop.not_found') %></h1>
+    <p><%- t('shop.no_user', { name: '"' + t.esc(store.missing) + '"' }) %></p>
+    <a class="btn gold" href="/shop"><%- t('shop.back') %></a>
+  </div>
 <% } else { %>
   <% if (store) { const SB = store.best || []; %>
     <%# 1.99mv: the storefront hero - the seller's photo, name style, level, showcase badges, stats, search %>
-    <div class="links" style="margin:0 0 10px"><a href="/shop"><%- t('shop.all_items') %></a></div>
+    <div class="st-back"><a class="ds-back" href="/shop"><%- t('shop.all_items') %></a></div>
     <section class="st-hero st-store" aria-labelledby="storeH">
       <div class="st-sh">
         <span class="st-sav" style="--h:<%= Array.from(String(store.username)).reduce((h, ch) => (h * 31 + ch.codePointAt(0)) >>> 0, 0) % 360 %>" aria-hidden="true"><%= (Array.from(String(store.displayname || store.username).replace(/^[^\p{L}\p{N}]+/u, ''))[0] || '?').toUpperCase() %><% if (H.av(store.avatar) !== '/public/img/avatar.png') { %><img src="<%= H.av(store.avatar) %>" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><% } %></span>
@@ -45,7 +49,7 @@
       <div class="st-wallet st-sstats">
         <div><span class="lbl"><%- t('shop.storefront.sales') %></span><b class="bal"><%= H.fmt(store.sales) %></b></div>
         <div><span class="lbl"><%- t('shop.storefront.items') %></span><b class="bal"><%= H.fmt(total) %></b></div>
-        <% if (store.mine) { %><a class="btn gold" href="/shop/seller">🏪 <%- t('shop.storefront.manage') %></a><% } %>
+        <% if (store.mine) { %><a class="btn gold" href="/shop/seller"><span class="ds-ic" aria-hidden="true">🏪</span><%- t('shop.storefront.manage') %></a><% } %>
       </div>
       <form class="st-search" method="GET" action="<%= path %>" role="search">
         <label class="vh" for="shopQ"><%- t('shop.search') %></label>
@@ -79,7 +83,7 @@
           <span class="bal"><span id="shopBalance"><%= H.fmt(me.points_balance) %></span> <small>PAT</small></span>
           <nav aria-label="<%- t('shop.hero.your_links') %>">
             <a href="/shop/orders"><%- t('shop.my_orders') %></a>
-            <a href="/subscriptions">🔁 <%- t('subs.title') %></a>
+            <a href="/subscriptions"><span class="ds-ic" aria-hidden="true">🔁</span><%- t('subs.title') %></a>
             <a href="/shop/seller"><%- t('shop.sell') %></a>
             <% if (me.staff) { %><a href="/shop/admin"><%- t('shop.admin') %></a><% } %>
           </nav>
@@ -133,10 +137,10 @@
     <nav class="st-chips" id="stChips" aria-label="<%- t('shop.chips_label') %>">
       <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '' }, {}) %>" aria-current="<%= !f.shelf && !f.afford ? 'true' : 'false' %>"><%- t('shop.shelf.all') %> <span class="n"><%= allN %></span></a>
       <% H.shelves().forEach((s) => { if (!SC[s.id]) return; %>
-        <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '', afford: f.afford }, { shelf: s.id }) %>" aria-current="<%= f.shelf === s.id ? 'true' : 'false' %>"><span aria-hidden="true"><%= s.emoji %></span> <%- t('shop.shelf.' + s.id) %> <span class="n"><%= SC[s.id] %></span></a>
+        <a href="/shop<%= H.qs({ q: f.q, sort: sort !== 'newest' ? sort : '', afford: f.afford }, { shelf: s.id }) %>" aria-current="<%= f.shelf === s.id ? 'true' : 'false' %>"><span class="ds-ic" aria-hidden="true"><%= s.emoji %></span><%- t('shop.shelf.' + s.id) %> <span class="n"><%= SC[s.id] %></span></a>
       <% }) %>
       <% if (me) { %>
-        <a class="afford" href="/shop<%= H.qs({ q: f.q, shelf: f.shelf, sort: sort !== 'newest' ? sort : '' }, { afford: f.afford ? '' : '1' }) %>" aria-current="<%= f.afford ? 'true' : 'false' %>">✓ <%- t('shop.chip.afford') %></a>
+        <a class="afford" href="/shop<%= H.qs({ q: f.q, shelf: f.shelf, sort: sort !== 'newest' ? sort : '' }, { afford: f.afford ? '' : '1' }) %>" aria-current="<%= f.afford ? 'true' : 'false' %>"><span aria-hidden="true">✓</span><%- t('shop.chip.afford') %></a>
       <% } %>
     </nav>
     <button type="button" class="st-chip-arr r" data-dir="1" aria-label="<%- t('shop.chips_next') %>" tabindex="-1">›</button>
@@ -192,7 +196,7 @@
     <div class="st-empty"><span aria-hidden="true">🛍️</span><b><%- t('shop.storefront.empty_h') %></b><p><%- t('shop.storefront.empty_p') %></p>
       <a class="btn gold" href="/shop"><%- t('shop.storefront.empty_cta') %></a></div>
   <% } else if (!items.length) { %>
-    <p class="muted" style="text-align:center;padding:24px 0"><%- t('shop.no_match', { link: '<a href="' + t.esc(path) + '">' + t('shop.clear_filters') + '</a>' }) %></p>
+    <div class="st-empty"><span aria-hidden="true">🔍</span><p><%- t('shop.no_match', { link: '<a href="' + t.esc(path) + '">' + t('shop.clear_filters') + '</a>' }) %></p></div>
   <% } %>
   <div class="st-grid">
     <% items.forEach((it) => { %><%- include('partials/shop-card', { it, me, H, i18nT: t, quickBuy: true }) %><% }) %>
@@ -212,9 +216,9 @@
   <% if (!store) { %>
     <h2 id="anyH"><%- t('shop.anywhere.h') %></h2>
     <section class="st-any" aria-labelledby="anyH">
-      <div><b>🐸 Camfrog</b><br><%- t('shop.anywhere.camfrog', { a: '<code>!prizes</code>', b: '<code>!redeem 3</code>' }) %></div>
-      <div><b>💬 Discord</b><br><%- t('shop.anywhere.discord', { a: '<code>/shop</code>' }) %></div>
-      <div><b>🌐 publicaccess.tv</b><br><%- t('shop.anywhere.same') %></div>
+      <div><b><span class="ds-ic" aria-hidden="true">🐸</span>Camfrog</b><br><%- t('shop.anywhere.camfrog', { a: '<code>!prizes</code>', b: '<code>!redeem 3</code>' }) %></div>
+      <div><b><span class="ds-ic" aria-hidden="true">💬</span>Discord</b><br><%- t('shop.anywhere.discord', { a: '<code>/shop</code>' }) %></div>
+      <div><b><span class="ds-ic" aria-hidden="true">🌐</span>publicaccess.tv</b><br><%- t('shop.anywhere.same') %></div>
     </section>
 
     <% if (me) { %><%- include('partials/donate-card', { donate: locals.donate }) %><% } %>
@@ -226,10 +230,10 @@
       <button class="code-btn" type="submit"><%- t('shop.codes.redeem') %></button>
     </form>
     <div id="codeStatus" class="status-msg" role="status" aria-live="polite"></div>
-    <p class="muted" style="margin-top:18px"><a href="/plex">📼 <%- t('nav.plex') %></a> · <a href="/premium"><%- t('shop.links.premium') %></a> · <a href="/lotto"><%- t('shop.links.lotto') %></a></p>
+    <nav class="st-links" aria-label="<%- t('shop.links.label') %>"><a href="/plex"><span class="ds-ic" aria-hidden="true">📼</span><%- t('nav.plex') %></a><a href="/premium"><%- t('shop.links.premium') %></a><a href="/lotto"><%- t('shop.links.lotto') %></a></nav>
   <% } %>
 <% } %>
-</div>
+</main>
 
 <%- include('partials/shop-buy-js') %>
 <script>
@@ -249,7 +253,8 @@
     row.addEventListener('scroll', edges, { passive: true });
     window.addEventListener('resize', edges);
     wrap.querySelectorAll('.st-chip-arr').forEach(function (b) {
-      b.addEventListener('click', function () { row.scrollBy({ left: Number(b.dataset.dir) * Math.max(160, row.clientWidth * 0.7), behavior: 'smooth' }); });
+      b.addEventListener('click', function () { row.scrollBy({ left: Number(b.dataset.dir) * Math.max(160, row.clientWidth * 0.7) * (document.dir === 'rtl' ? -1 : 1),
+                                                           behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); });
     });
     row.addEventListener('wheel', function (e) {
       if (row.scrollWidth <= row.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
@@ -288,7 +293,7 @@
     let timer = null;
     function show(message, ok) {
       const el = document.getElementById('codeStatus');
-      el.textContent = message; el.style.color = ok ? '#81C784' : '#e57373';
+      el.textContent = message; el.style.color = ok ? 'var(--ds-ok)' : 'var(--ds-danger-solid)';
       clearTimeout(timer); timer = setTimeout(() => { el.textContent = ''; }, ok ? 6000 : 9000);
     }
     form.addEventListener('submit', function (event) {

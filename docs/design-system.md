@@ -729,3 +729,24 @@ Added by the 1.99pm polish pass (profile, Edit profile, sign-in pages, language,
 ### Not found / forbidden (notFound.ejs)
 
 `.ds-page.narrow`, centred: a 64px `.ds-ic` frog, `.ds-h1`, a `.ds-lead` (max 46ch), then `.ds-actions` centred with one filled `.ds-btn` (Home) and `.ds-btn.ghost` for the rest. 48px top padding. This is the one place body text is centred (§3.2 allows it on a landing-style page under 3 lines).
+
+---
+
+## Area notes: stage, media and shop
+
+Added by the G5 polish pass (shop, storefront, item, My orders, an order, seller dashboard; Go live, stage captures; Plex hub, Manage requests, Requests).
+
+### Shop (/shop, /shop/item/:id, /shop/seller/:u, /shop/orders, /shop/orders/:id, /shop/seller)
+
+- **Accent.** The shop's area accent *is* the loot gold (§2.5): `.sh` sets `--ds-ac: var(--ds-gold)`, `--ds-ac-2: var(--ds-gold-text)`, `--ds-ac-bg: rgba(255,207,64,.12)`, `--ds-ac-line: var(--ds-gold-line)`, `--ds-on-ac: var(--ds-on-gold)`. So focus halos, current pills and hovers are gold. Links stay green (`--ds-green-2`), and the **Buy / Apply / Mark fulfilled** buttons stay green with dark ink (`--sh-on-green`, #04150a), because green means "act" and gold means "spend". Gold buttons (`.btn.gold`, `.qbtn.gold`) are the PAT actions: search, See it, Buy for N PAT, List it.
+- **Wrappers.** Storefront pages: `main.ds-page.wide.flow.sh.st` (block flow, the sections keep their own rhythm). Dashboards: `main.ds-page.sh.sd` (the 24px grid gap); a single order is `.ds-page.mid`. `/shop/admin` and `/shop/edit` still use the legacy `.sh` box (`.sh:not(.ds-page)` keeps its old max-width and padding) and get the token colours, field reset and dark-ink buttons only.
+- **One heading style:** every shop section heading is the pixel heading (12px gold Press Start, `.ds-pixel-h` values). The shop is an arcade-flavoured area, so it never mixes in `.ds-h2`.
+- **Heroes.** The storefront hero and the dashboard hero (`.st-hero`, `.sd-hero`) follow `.ds-hero.gold`: radius 18, padding 24/20/20 then 32/32/28 at ≥ 700, the #2a2208 gold glow (a seller's storefront swaps it for the #10261a green glow; a gift order for #2a0f24 pink). The h1 is the display size with one gradient `em`. The wallet box in the hero is a `--ds-glass` well with a `--ds-gold-line` border, radius 12.
+- **Hero search** is a 44px pill input with a 44px gold pill button. The redemption-code form uses the same 44px pair.
+- **Shelf chips** (`.st-chips`) keep the 1.99mv scroller (edge fades, arrows on fine pointers, drag) but take the `.ds-tab` metrics: 36px pills (40 on touch), 14px/500, #151515 fill, #2a2a2a border. The current shelf is a **solid gold** pill with `--ds-on-gold` ink (the shop's look, instead of `.ds-tab`'s tint); "✓ I can afford" is the green variant. The arrows are 36px circles on `--ds-surface-3`, `inset-inline`, mirrored in RTL.
+- **Item card** (`.st-card`): `--ds-surface`, 16 radius, 4:3 picture, body padding 12/12/14, title 15px clamped to 2 lines, price 18px gold-text with the unit at .7em #d9c88a, actions 40px pills. Hover lifts 1px with `--ds-e-2`. At ≤ 420 the grid is 2 columns and the Buy / View pair stacks full-width.
+- **Order card** (`.sd-order`): card padding 16, a 112px picture column (76 at ≤ 600), title `.ds-h3` size, a status chip (`.sd-badge`, 11px/700 uppercase, the dot, colour from the server's status colour through `--c`), the stepper, then the actions. The `.sd-subnav` bar is `.ds-subnav` with the gold current pill; the unread count inside it is a `--ds-badge` pill.
+- **Quick-link buttons** (`.qbtn`) are 44px ghost pills with a leading `.ds-ic`; `.qbtn.gold` is the filled one. In an empty state they drop to 36px.
+- **Empty states** (`.st-empty`, `.sd-empty`) are the `.ds-empty` recipe (dashed #333, radius 16, 30px emoji, 15px title). The "no such seller / item / order" pages use the same box with an h1 at card-title size.
+- **Tables** (seller listings): `.sd-tbl` is the `.ds-tbl` box (surface, 16 radius, #151515 head, 11.5px uppercase th); row actions are 36px pills. Below 760 the table becomes a card list (`data-l` labels).
+- **Status text** written by the page JS (buy / redeem results) uses `var(--ds-ok)` and `var(--ds-danger-solid)`, and `scrollIntoView` is instant under reduced motion.

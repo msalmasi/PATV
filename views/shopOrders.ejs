@@ -12,7 +12,7 @@
   const SHELF_EMO = Object.fromEntries(H.shelves().map((s) => [s.id, s.emoji]));
   const emo = (o) => o.comp_by ? '🎁' : SHELF_EMO[o.shelf] || (o.official ? '🎁' : '🛍️');
 %>
-<main class="sh sd">
+<main class="ds-page sh sd">
   <section class="sd-hero" aria-labelledby="ordH">
     <p class="sd-eyebrow"><%- t('shop.orders.eyebrow') %></p>
     <h1 id="ordH"><%- t('shop.my_orders') %></h1>
@@ -24,9 +24,9 @@
       <div class="sd-mini"><span><%- t('shop.orders.balance') %></span><b class="gold"><%= H.fmt(me.points_balance) %> <small>PAT</small></b><em><a href="/wallet"><%- t('shop.orders.wallet') %></a></em></div>
     </div>
     <nav class="sd-quick" aria-label="<%- t('shop.hero.your_links') %>">
-      <a class="qbtn gold" href="/shop">🛒 <%- t('shop.orders.browse') %></a>
+      <a class="qbtn gold" href="/shop"><span class="ds-ic" aria-hidden="true">🛒</span><%- t('shop.orders.browse') %></a>
       <a class="qbtn" href="/subscriptions"><%- t('shop.orders.subs_link') %></a>
-      <a class="qbtn" href="/shop/seller">🏪 <%- t('shop.orders.seller_dashboard') %></a>
+      <a class="qbtn" href="/shop/seller"><span class="ds-ic" aria-hidden="true">🏪</span><%- t('shop.orders.seller_dashboard') %></a>
     </nav>
   </section>
 
@@ -35,7 +35,7 @@
   <% if (counts_) { %>
     <nav class="sd-subnav" aria-label="<%- t('shop.orders.views') %>">
       <% [['all', '🧾'], ['open', '⏳'], ['gifts_in', '🎁'], ['gifts_out', '💝']].forEach(([v, ic]) => { %>
-        <a href="/shop/orders<%= v === 'all' ? '' : '?view=' + v %>" aria-current="<%= view_ === v ? 'true' : 'false' %>"><span aria-hidden="true"><%= ic %></span> <%- t('shop.orders.view.' + v) %> <span class="n<%= v === 'open' && counts_[v] ? ' hot' : '' %>"><%= H.fmt(counts_[v]) %></span></a>
+        <a href="/shop/orders<%= v === 'all' ? '' : '?view=' + v %>" aria-current="<%= view_ === v ? 'true' : 'false' %>"><span class="ds-ic" aria-hidden="true"><%= ic %></span><%- t('shop.orders.view.' + v) %> <span class="n<%= v === 'open' && counts_[v] ? ' hot' : '' %>"><%= H.fmt(counts_[v]) %></span></a>
       <% }) %>
     </nav>
   <% } %>

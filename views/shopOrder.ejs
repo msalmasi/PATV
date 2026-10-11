@@ -8,24 +8,24 @@
   const stl = (s) => t.has('shop.status.' + s) ? t('shop.status.' + s) : H.status(s).label;
   const SHELF_EMO = Object.fromEntries(H.shelves().map((s) => [s.id, s.emoji]));
 %>
-<main class="sh sd">
+<main class="ds-page mid sh sd">
 <% if (!o) { %>
   <div class="sd-empty">
     <span class="big" aria-hidden="true">🔍</span>
-    <h1 style="margin:0;font-size:22px"><%- t('shop.order.not_found') %></h1>
+    <h1><%- t('shop.order.not_found') %></h1>
     <p><%- t('shop.order.not_found_sub') %></p>
-    <div class="sd-quick"><a class="qbtn gold" href="/shop/orders"><%- t('shop.order.your_orders') %></a><a class="qbtn" href="/shop">🛒 <%- t('shop.orders.browse') %></a></div>
+    <div class="sd-quick"><a class="qbtn gold" href="/shop/orders"><%- t('shop.order.your_orders') %></a><a class="qbtn" href="/shop"><span class="ds-ic" aria-hidden="true">🛒</span><%- t('shop.orders.browse') %></a></div>
   </div>
 <% } else { const st = H.status(o.status); const back = '/shop/orders/' + o.id; const isOpen = ['paid', 'fulfilled', 'disputed'].includes(o.status); %>
-  <div class="links"><a href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : '/shop/orders' %>"><%- t('shop.order.back') %></a><% if (o.prize_id) { %><a href="/shop/item/<%= o.prize_id %>"><%- t('shop.order.item_page') %></a><% } %></div>
+  <div class="ds-row between"><a class="ds-back" href="<%= role === 'seller' ? '/shop/seller' : role === 'admin' ? '/shop/admin' : '/shop/orders' %>"><%- t('shop.order.back') %></a><% if (o.prize_id) { %><a class="ds-back" href="/shop/item/<%= o.prize_id %>"><%- t('shop.order.item_page') %></a><% } %></div>
   <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
   <section class="sd-hero<%= o.gift_from ? ' pink' : '' %>" aria-labelledby="oH">
     <div class="sd-detail">
       <span class="sd-thumb" aria-hidden="true"><span class="ph"><%= o.comp_by || o.gift_from ? '🎁' : SHELF_EMO[o.shelf] || (o.official ? '🎁' : '🛍️') %></span><% if (o.art) { %><img src="<%= o.art %>" alt="" referrerpolicy="no-referrer" onerror="this.remove()"><% } %></span>
       <div style="display:grid;gap:10px;min-width:0">
         <p class="sd-eyebrow"><%- t('shop.order.title_n', { id: o.id }) %></p>
-        <h1 id="oH" style="font-size:clamp(22px,3.6vw,30px)"><%= o.title %></h1>
-        <div class="sd-meta"><span class="sd-badge<%= isOpen ? ' live' : '' %>" style="--c:<%= st.color %>"><%= stl(o.status) %></span><span class="price" style="font-size:20px"><%= H.fmt(o.price) %> <small>PAT</small></span></div>
+        <h1 id="oH"><%= o.title %></h1>
+        <div class="sd-meta"><span class="sd-badge<%= isOpen ? ' live' : '' %>" style="--c:<%= st.color %>"><%= stl(o.status) %></span><span class="price" style="font-size:20px;font-weight:700"><%= H.fmt(o.price) %> <small>PAT</small></span></div>
         <div class="kv">
           <span><%- t('shop.order.buyer') %></span><div><%= o.buyer_name || '?' %></div>
           <% if (o.comp_by) { %><span>🎁</span><div><%- t('gifts.order.comped') %><% if (role === 'admin') { %> <span class="muted">(<%= o.comp_by %>: <%= o.comp_reason || '-' %>)</span><% } %></div><% } %>
@@ -57,7 +57,7 @@
     <% } %>
     <% if (o.status === 'fulfilled') { %><p class="muted" style="margin:0"><%- t('shop.order.autocomplete', { date: H.day(Number(o.fulfilled_at) + settings.auto_complete_days * 86400000) }) %></p><% } %>
     <div class="sd-acts"><%- include('partials/shop-order-actions', { o, role, back, H, settings, staff: me && me.staff }) %></div>
-    <h2 style="margin-top:6px"><%- t('shop.order.timeline') %></h2>
+    <h2 style="margin-top:var(--ds-sp-2)"><%- t('shop.order.timeline') %></h2>
     <ul class="tl">
       <% events.forEach((e) => { %><li style="--c:<%= H.status(e.status).color %>"><b><%= stl(e.status) %></b><% if (e.actor) { %> <%- t('shop.order.by', { name: e.actor }) %><% } %><% if (e.note) { %> — <%= e.note %><% } %><small><%= H.when(e.ts) %></small></li><% }) %>
     </ul>

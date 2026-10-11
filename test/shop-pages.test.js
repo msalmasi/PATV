@@ -107,7 +107,7 @@ test("attachArt: an order gets its item's picture, shelf and delivery; a comp / 
 test("My orders: pictures, badges, the stepper, gift lines (anonymous masked), view chips with counts, the buyer actions", async () => {
   const { status, html } = await get("/shop/orders", "sp-bob");
   assert.equal(status, 200);
-  assert.match(html, /<main class="sh sd">/);
+  assert.match(html, /<main class="ds-page sh sd">/);
   assert.match(html, /src="\/public\/img\/shop\/plex-1m\.svg"/, "the official item's picture");
   assert.match(html, /src="\/public\/img\/shop\/gift-card\.svg"/, "the listing's picture");
   assert.match(html, /class="sd-badge live" style="--c:#ffd700">Paid — awaiting seller</);
@@ -120,7 +120,7 @@ test("My orders: pictures, badges, the stepper, gift lines (anonymous masked), v
   assert.match(html, /Gift for dave/);
   assert.doesNotMatch(html, /DAVE-ONLY/, "the gifter never sees what was delivered");
   assert.match(html, /https:\/\/plex\.example\/invite/, "the recipient sees their invite");
-  assert.match(html, /aria-current="true"><span aria-hidden="true">🧾<\/span> All <span class="n">4<\/span>/);
+  assert.match(html, /aria-current="true"><span class="ds-ic" aria-hidden="true">🧾<\/span>All <span class="n">4<\/span>/);
   assert.match(html, /In progress <span class="n hot">2<\/span>/);
   assert.match(html, /Gifts received <span class="n">1<\/span>/);
   assert.match(html, /Gifts sent <span class="n">1<\/span>/);

@@ -10,8 +10,8 @@
     if (!el) { alert(message); return; }
     el.textContent = message;
     if (link) { el.appendChild(document.createTextNode(' ')); const a = document.createElement('a'); a.href = link; a.textContent = _t('js.shop.view_order', 'View order ›'); el.appendChild(a); }
-    el.style.color = ok ? '#81C784' : '#e57373';
-    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    el.style.color = ok ? 'var(--ds-ok)' : 'var(--ds-danger-solid)';
+    el.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     clearTimeout(timer);
     if (!link) timer = setTimeout(() => { el.textContent = ''; }, ok ? 8000 : 12000);
   }

@@ -30,7 +30,7 @@
       <label class="wide"><%- t('shop.sd.f.ask') %> <input type="text" name="buyer_prompt" maxlength="120" value="<%= v.buyer_prompt || '' %>" placeholder="<%- t('shop.sd.f.ask_ph') %>"></label>
     </div>
 <% }; %>
-<main class="sh sd">
+<main class="ds-page sh sd">
   <section class="sd-hero" aria-labelledby="sdH">
     <p class="sd-eyebrow"><%- t('shop.sd.eyebrow') %></p>
     <h1 id="sdH"><%- t('shop.sd.title') %></h1>
@@ -42,20 +42,20 @@
       <div class="sd-mini"><span><%- t('shop.sd.stat.listings') %></span><b><%= H.fmt(active_.length) %></b><em><%- t('shop.sd.stat.listings_sub', { n: H.fmt(live_.length) }) %></em></div>
     </div>
     <nav class="sd-quick" aria-label="<%- t('shop.hero.your_links') %>">
-      <% if (canSell) { %><a class="qbtn gold" href="#new">＋ <%- t('shop.sd.new') %></a><% } %>
-      <a class="qbtn" href="/shop/seller/<%= encodeURIComponent(me.username) %>">🏪 <%- t('shop.sd.storefront') %></a>
-      <a class="qbtn" href="/shop/orders">🧾 <%- t('shop.sd.purchases') %></a>
+      <% if (canSell) { %><a class="qbtn gold" href="#new"><span class="ds-ic" aria-hidden="true">＋</span><%- t('shop.sd.new') %></a><% } %>
+      <a class="qbtn" href="/shop/seller/<%= encodeURIComponent(me.username) %>"><span class="ds-ic" aria-hidden="true">🏪</span><%- t('shop.sd.storefront') %></a>
+      <a class="qbtn" href="/shop/orders"><span class="ds-ic" aria-hidden="true">🧾</span><%- t('shop.sd.purchases') %></a>
     </nav>
   </section>
 
   <% if (msg) { %><p class="notice" role="status"><%= msg %></p><% } %>
 
   <nav class="sd-subnav" aria-label="<%- t('shop.sd.sections') %>">
-    <a href="#todo">📦 <%- t('shop.sd.nav.todo') %> <span class="n<%= todo.length ? ' hot' : '' %>"><%= todo.length %></span></a>
-    <a href="#listings">🏷️ <%- t('shop.sd.nav.listings') %> <span class="n"><%= live_.length %></span></a>
-    <a href="#revenue">📈 <%- t('shop.sd.nav.revenue') %></a>
-    <a href="#history">🧾 <%- t('shop.sd.nav.history') %></a>
-    <a href="#notify">🔔 <%- t('shop.sd.nav.notify') %></a>
+    <a href="#todo"><span class="ds-ic" aria-hidden="true">📦</span><%- t('shop.sd.nav.todo') %> <span class="n<%= todo.length ? ' hot' : '' %>"><%= todo.length %></span></a>
+    <a href="#listings"><span class="ds-ic" aria-hidden="true">🏷️</span><%- t('shop.sd.nav.listings') %> <span class="n"><%= live_.length %></span></a>
+    <a href="#revenue"><span class="ds-ic" aria-hidden="true">📈</span><%- t('shop.sd.nav.revenue') %></a>
+    <a href="#history"><span class="ds-ic" aria-hidden="true">🧾</span><%- t('shop.sd.nav.history') %></a>
+    <a href="#notify"><span class="ds-ic" aria-hidden="true">🔔</span><%- t('shop.sd.nav.notify') %></a>
   </nav>
 
   <section class="sd-sec" id="todo" aria-labelledby="todoH">
@@ -102,13 +102,13 @@
   </section>
 
   <section class="sd-sec" id="listings" aria-labelledby="lstH">
-    <div class="sd-sec-h"><h2 id="lstH"><%- t('shop.sd.listings.h') %></h2><% if (canSell) { %><a class="muted" href="#new">＋ <%- t('shop.sd.new') %></a><% } %></div>
+    <div class="sd-sec-h"><h2 id="lstH"><%- t('shop.sd.listings.h') %></h2><% if (canSell) { %><a class="muted" href="#new"><span class="ds-ic" aria-hidden="true">＋</span><%- t('shop.sd.new') %></a><% } %></div>
     <% if (!canSell) { %>
       <p class="warn"><%- t('shop.sd.level', { need: settings.min_level, have: me.level || 0 }) %></p>
     <% } else { %>
       <% if (edit) { %>
         <div class="sd-card gold" id="edit">
-          <h3 style="margin:0;color:#fff"><%- t('shop.sd.edit_h', { name: t.esc(edit.prize) }) %></h3>
+          <h3><%- t('shop.sd.edit_h', { name: t.esc(edit.prize) }) %></h3>
           <form method="POST" action="/shop/listing/<%= edit.prizeId %>" style="display:grid;gap:10px">
             <% form(edit) %>
             <% if (settings.require_approval && !me.staff) { %><p class="muted" style="margin:0"><%- t('shop.sd.edit_review') %></p><% } %>
@@ -156,11 +156,11 @@
       </div>
     <% } else if (canSell) { %>
       <div class="sd-empty"><span class="big" aria-hidden="true">🏷️</span><b><%- t('shop.sd.listings.none') %></b><p><%- t('shop.sd.listings.none_p') %></p>
-        <div class="sd-quick"><a class="qbtn gold" href="#new">＋ <%- t('shop.sd.new') %></a></div></div>
+        <div class="sd-quick"><a class="qbtn gold" href="#new"><span class="ds-ic" aria-hidden="true">＋</span><%- t('shop.sd.new') %></a></div></div>
     <% } %>
     <% if (canSell) { %>
       <details class="sd-card" id="new" <%= listings.length ? '' : 'open' %>>
-        <summary>＋ <%- t('shop.sd.new') %></summary>
+        <summary><span class="ds-ic" aria-hidden="true">＋</span><%- t('shop.sd.new') %></summary>
         <form method="POST" action="/shop/listing" style="display:grid;gap:10px">
           <% form(null) %>
           <p class="muted" style="margin:0"><%- settings.require_approval && !me.staff ? t('shop.sd.new_review') + ' ' : '' %><%- t('shop.sd.new_rules', { fee: settings.fee_pct }) %></p>
@@ -184,7 +184,7 @@
         </div>
       </div>
       <div class="sd-card">
-        <h3 style="margin:0;color:#fff"><%- t('shop.sd.rev.top') %></h3>
+        <h3><%- t('shop.sd.rev.top') %></h3>
         <% if (rev.best.length) { %>
           <ol class="sd-bars">
             <% rev.best.forEach((b) => { %>
