@@ -5,7 +5,7 @@
 // through the action queue (actions.js): the form posts to /act with cmd=lotto and Pepe runs it as
 // the user's linked Camfrog name, exactly like `!lotto quick 5` or `!lotto 3 9 14 27 pb 6` in chat.
 //
-// 1.99mj: with the lotto backend ON (lotto/service.js, docs/lotto-backend.md) the SITE owns the lotto: the service
+// 1.99ml: with the lotto backend ON (lotto/service.js, docs/lotto-backend.md) the SITE owns the lotto: the service
 // writes lotto_state itself (storeSnapshot below) and Pepe's /api/lotto/sync is refused (409 {backend: true}, so a
 // Pepe still running his own lotto stops selling). The description above is true while lotto_backend is off.
 const { runQuery, getQuery } = require("./dbUtils");
@@ -110,7 +110,7 @@ function register(app, { isBotToken, addUser }) {
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
       await ready;
-      // 1.99mj: the backend owns the lotto - a Pepe still running his own must not overwrite it
+      // 1.99ml: the backend owns the lotto - a Pepe still running his own must not overwrite it
       if ((await require("./lotto/service").loadSettings()).lotto_backend) return res.status(409).json({ success: false, backend: true });
       const clean = cleanSnapshot(body);
       await keepLastTickets(clean);
@@ -135,7 +135,7 @@ function register(app, { isBotToken, addUser }) {
         acts = await actions.recentFor(req.user.userId, "lotto");
       }
       const backend = !!(L && L.backend);
-      // 1.99mj: the backend keys a player without a Camfrog link as "@<username>"
+      // 1.99ml: the backend keys a player without a Camfrog link as "@<username>"
       const pkey = me ? (me.camfrogUsername ? String(me.camfrogUsername) : backend ? "@" + me.username : "").toLowerCase() : "";
       const mine = L && pkey ? L.players[pkey] || null : null;
       // prize table: jackpot row first, then Pepe's list, each with its odds
@@ -178,7 +178,7 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-/** 1.99mj: the lotto backend (lotto/service.js) writes the page's snapshot here - the same row Pepe's sync wrote. */
+/** 1.99ml: the lotto backend (lotto/service.js) writes the page's snapshot here - the same row Pepe's sync wrote. */
 async function storeSnapshot(snap) {
   await ready;
   const clean = Object.assign(cleanSnapshot(snap), { backend: true, commitment: snap.commitment ? String(snap.commitment).slice(0, 64) : null });

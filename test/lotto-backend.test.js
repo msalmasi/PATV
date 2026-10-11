@@ -1,4 +1,4 @@
-// 1.99mj: Pepeball on the backend (lotto/*.js, docs/lotto-backend.md):
+// 1.99ml: Pepeball on the backend (lotto/*.js, docs/lotto-backend.md):
 //   * engine: the Sunday 21:00 ET schedule (EDT + EST), provably fair numbers (commit / tickets digest / reveal, verify), the
 //     prize plan per tier (Pepe's per-ticket int scaling, the jackpot split per ticket);
 //   * the service on a temp DB: purchases (40% pot / 60% House, keyed, replay-safe, refused when short / closed / banned),

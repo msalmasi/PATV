@@ -108,7 +108,7 @@ function register(app, { isBotToken, addUser }) {
     } else {
       args = words;
     }
-    // 1.99mj: with the lotto backend on, a lotto form buys on the site directly - nothing is sent to Pepe
+    // 1.99ml: with the lotto backend on, a lotto form buys on the site directly - nothing is sent to Pepe
     if (kind === "cmd" && args[0] === "lotto") {
       try {
         const msg = await require("./lotto/routes").buyFromForm(req.user.userId, args.slice(1), b.idem);

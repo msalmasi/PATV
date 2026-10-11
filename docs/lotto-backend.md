@@ -1,6 +1,6 @@
 # Pepeball (the lotto) on the backend
 
-Site 1.99mj (`lotto/engine.js`, `lotto/service.js`, `lotto/routes.js`) + bot 1.99mk (`pepe_lotto.py` client).
+Site 1.99ml (`lotto/engine.js`, `lotto/service.js`, `lotto/routes.js`) + bot 1.99mm (`pepe_lotto.py` client).
 Approved by the user on 2026-10-11: "move the lotto backend to PATV so it doesn't have to 'send to Pepe'".
 It follows the casino backend pattern (`docs/casino-backend.md`): the site owns the state and the money, and Pepe is a thin client.
 The cutover runbook is `docs/lotto-cutover-runbook.md`, and the wider audit is `docs/backend-migration-audit.md`.

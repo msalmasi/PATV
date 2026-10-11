@@ -1,4 +1,4 @@
-// lotto/service.js — Pepeball owned by the SITE (1.99mj; docs/lotto-backend.md). Pepe is a thin client.
+// lotto/service.js — Pepeball owned by the SITE (1.99ml; docs/lotto-backend.md). Pepe is a thin client.
 //
 //   * State: lotto_draws (one row per draw: selling -> closed -> drawn -> paid, its commitment / seed / digest / numbers /
 //     prize plan / payout progress), lotto_tickets, lotto_purchases (one per purchase, its key = the charge's

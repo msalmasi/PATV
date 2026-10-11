@@ -1,4 +1,4 @@
-// lotto/engine.js — Pepeball's rules, schedule, fairness and prize plan (pure: no I/O). 1.99mj, docs/lotto-backend.md.
+// lotto/engine.js — Pepeball's rules, schedule, fairness and prize plan (pure: no I/O). 1.99ml, docs/lotto-backend.md.
 //
 // The rules are Pepe's pepe_lotto.py, unchanged: pick 4 of 1-30 + a Pepe Ball 1-10, PAT 1,000 a ticket (an admin setting
 // on Pepe - carried over at the cutover), the draw every Sunday 21:00 America/New_York, sales close 5 minutes before.

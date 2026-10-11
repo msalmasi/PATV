@@ -1202,7 +1202,7 @@ og.register(app);
 // 1.90: one action queue for everything started on the site, plus the new game pages
 require("./actions").register(app, { isBotToken, addUser });
 require("./lotto").register(app, { isBotToken, addUser });
-require("./lotto/routes").register(app, { isBotToken, addUser, updateLevel });   // 1.99mj: Pepeball owned by the site (docs/lotto-backend.md)
+require("./lotto/routes").register(app, { isBotToken, addUser, updateLevel });   // 1.99ml: Pepeball owned by the site (docs/lotto-backend.md)
 require("./polls").register(app, { isBotToken, addUser });
 require("./wagers").register(app, { isBotToken, addUser });
 require("./wallet").register(app, { isBotToken, addUser });
@@ -1411,7 +1411,7 @@ async function patSupply() {
   try { pools = snap.length ? JSON.parse(snap[0].pools) : []; } catch (e) { pools = []; }
   // 1.99dk: burned PAT is gone - it's never a pool, whatever a snapshot says
   pools = pools.filter((p) => !/^burned/i.test(String(p.key || "")));
-  // 1.99mj: once the lotto backend holds the jackpot pot (lotto_pot), it is counted here and Pepe's old "vault:lotto"
+  // 1.99ml: once the lotto backend holds the jackpot pot (lotto_pot), it is counted here and Pepe's old "vault:lotto"
   // row (his local pot - 0 after the cutover, but a snapshot can be up to 5 minutes old) is not
   try {
     const LS = require("./lotto/service");

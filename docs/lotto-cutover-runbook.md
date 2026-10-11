@@ -6,9 +6,9 @@ The first prod run is planned for **after the Sun 2026-10-11 draw**: draw #2 at 
 
 ## 0. Preconditions
 
-1. The code is on prod: site ≥ 1.99mj and bot ≥ 1.99mk.
+1. The code is on prod: site ≥ 1.99ml and bot ≥ 1.99mm.
    - On the site, `curl -s https://publicaccess.tv/api/lotto/state` returns `{"ok":true,"enabled":false,...}`.
-   - On the bot, `!version` shows 1.99mk or later.
+   - On the bot, `!version` shows 1.99mm or later.
 2. **The last draw is finished.**
    - Pepe's console (`C:\PATV\pepe-console.log`) shows the `[LOTTO]` draw line and no `will retry` after it.
    - `!lotto results` shows the new draw.

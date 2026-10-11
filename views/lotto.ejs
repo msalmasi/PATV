@@ -238,7 +238,7 @@
   const tierBalls = (w, b) => '<span class="pb-balls" aria-hidden="true">' + Array.from({ length: rules.WHITE_PICK }, (_, i) => '<span class="pb-x' + (i < w ? ' on' : '') + '"></span>').join('')
     + '<span class="pb-x pbo' + (b ? ' on' : '') + '"></span></span>';
   const now_ = locals.now || Math.floor(Date.now() / 1000);
-  // 1.99mj: with the lotto backend any signed-in account can play (no Camfrog link needed)
+  // 1.99ml: with the lotto backend any signed-in account can play (no Camfrog link needed)
   const linked = !!(user && me && (me.camfrogUsername || locals.backend));
   // decorative floating balls in the hero: [number, left, top, size, duration, delay, pepe ball?]
   const FLOAT = [[7, '4%', '12%', 34, 5.5, 0, 0], [19, '88%', '8%', 40, 6.5, .6, 0], [3, '10%', '70%', 28, 7, 1.2, 1], [23, '92%', '62%', 30, 5, .3, 0],

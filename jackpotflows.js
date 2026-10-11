@@ -12,7 +12,7 @@
 //   spinId "bj:..." / NULL           the website's blackjack table (wager in, payout out). Untagged NULL rows
 //                                    are older blackjack rows - or, out only, a funded reward (below)
 //   spinId "cbj:<table>:r<n>"        1.99lj: the casino backend's blackjack tables (lost stakes in, winners' profit out)
-//   spinId "lotto:T<draw>"           1.99mj: the lotto backend - 60% of every ticket in, the fixed prizes out
+//   spinId "lotto:T<draw>"           1.99ml: the lotto backend - 60% of every ticket in, the fixed prizes out
 //   spinId "fund:<flow>"             a reward the PAT Routing table sends to the House (funding.takeFunds)
 //   spinId "shop-order:<id>"         official store boosts (shop.js)
 //   spinId "admin:..."               an admin's manual adjustment (/api/g/wheel/jackpot)
@@ -67,7 +67,7 @@ function classify(r, staked) {
   if (sid === null) return { kind: "site", dir, name: amt > 0 ? "web blackjack" : "web blackjack / rewards" };
   if (sid.startsWith("bj:")) return { kind: "site", dir, name: "web blackjack" };
   if (sid.startsWith("cbj:") || sid.startsWith("chm:")) return { kind: "site", dir, name: "casino tables" };   // chm: hold'em rake (1.99lv)   // 1.99lj: the casino backend (casino/money.js)
-  if (sid.startsWith("lotto:")) return { kind: "site", dir, name: "lotto (tickets / fixed prizes)" };   // 1.99mj: lotto/service.js
+  if (sid.startsWith("lotto:")) return { kind: "site", dir, name: "lotto (tickets / fixed prizes)" };   // 1.99ml: lotto/service.js
   if (sid.startsWith("fund:")) return { kind: "site", dir, name: "funded: " + (sid.slice(5).split(":")[0] || "reward") };
   if (sid.startsWith("shop-order:")) return { kind: "site", dir, name: "store boosts" };
   if (sid.startsWith("admin:")) return { kind: "site", dir, name: "admin (website)" };

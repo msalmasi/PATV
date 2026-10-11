@@ -35,7 +35,7 @@ the site (Phase 1). After that, every game that moves next no longer has to "sen
 | # | Item | State today | Pepe down → | Recommendation | Effort | Risk | Phase |
 |---|---|---|---|---|---|---|---|
 | 1 | Blackjack | site `casino/*` (staging only) | works on web (staging) | **moved** (phase 1 of casino) | - | - | 0 (done on staging) |
-| 2 | Lotto / Pepeball | bot `lotto.json` + pot in `turf_data.json` | no web sales, draw delayed | **moved** (site 1.99mj + bot 1.99mk, `docs/lotto-backend.md`; prod cutover: `docs/lotto-cutover-runbook.md`) | M | M | 0 (built, staging) |
+| 2 | Lotto / Pepeball | bot `lotto.json` + pot in `turf_data.json` | no web sales, draw delayed | **moved** (site 1.99ml + bot 1.99mm, `docs/lotto-backend.md`; prod cutover: `docs/lotto-cutover-runbook.md`) | M | M | 0 (built, staging) |
 | 3 | Hold'em | bot (`poker_engine.py`, `holdem_escrow.json`) | no web play | move (casino phase 2 - landed on staging during this audit, bot 1.99mf) | L | M | 0b |
 | 4 | Pools + routing + econ config | bot `turf_data.json`, `bot_settings.json` | site claims unsettled; restart → legacy routing | **move** (foundation) | L | H | 1 |
 | 5 | Funding claims (`reserve_claims`) | site pays, bot settles | claims pile up | **delete** (falls out of 4) | S after 4 | M | 1 |

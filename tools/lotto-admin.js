@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tools/lotto-admin.js — 1.99mj: the lotto backend (lotto/service.js) from the server's shell. Run in the site directory (it opens
+// tools/lotto-admin.js — 1.99ml: the lotto backend (lotto/service.js) from the server's shell. Run in the site directory (it opens
 // ./myapp.db); the running site picks a settings change up within 5 s. docs/lotto-cutover-runbook.md.
 //   node tools/lotto-admin.js                                       # status: settings, draws, pot, tickets, totals
 //   node tools/lotto-admin.js --actor=<who> lotto_backend=0         # switch (1 = on). price= / pot_share= exist too (the import sets them)

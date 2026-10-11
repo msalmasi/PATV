@@ -1,4 +1,4 @@
-// lotto/routes.js — Pepeball's HTTP API (1.99mj; docs/lotto-backend.md).
+// lotto/routes.js — Pepeball's HTTP API (1.99ml; docs/lotto-backend.md).
 //
 // Web (a signed-in PATV account - no Camfrog link needed):
 //   GET  /api/lotto/state                 the draw, jackpot, schedule, commitment + your ticket count
