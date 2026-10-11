@@ -574,7 +574,7 @@ test("flag OFF renders no WebRTC UI (home, pad, /stage); ON adds the toggle scri
     assert.match(html, /webrtc-client\.js\?v=2/, name);   // 1.99il: listen() for the room audio
     assert.match(html, /webrtc\.css\?v=2/, name);
   }
-  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=7/);
+  assert.match(await renderHome(on), /stage-lowlat\.js\?v=2"><\/script>\s*<\/?[a-z%]*[^]*stage-room\.js\?v=8/);
   assert.match(await renderRoom(on), /stage-lowlat\.js\?v=2/);
   const book = await renderBook(on);
   assert.match(book, /id="tabRtc"[^>]*>⚡ Browser · ultra-low latency/);

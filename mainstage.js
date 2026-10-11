@@ -98,7 +98,21 @@ const DEFAULTS = {
   // link - stageembed.js). Twitch being live no longer swaps anything by itself (Twitch is a relay of
   // his stream since 1.99fk). Live detection, snaps / clips and the front-pad pick stay on his HLS.
   pepe_embed: null,
+  // 1.99lm: AUTO-FEATURE ("take-over"). "when_idle" = a user stream (RTMP / browser / WHIP slot, 📼 library play,
+  // embed) that goes live on a pad where nothing is featured becomes that pad's FEATURED stream by itself
+  // (feature_by 'auto') until it ends - then the earliest other live one, else nobody (Pepe's stream again). It is
+  // the ordinary featuring (the stage's default view, ★, the homepage when it's the front pad, Top Pads' now
+  // playing, the guide), just started by the system. Never over a real feature (owner / staff / a booked featured
+  // slot) and never while Pepe's stream is featured (pepe_feature). "off" = only people feature. A pad may
+  // override it (rooms.takeover: off | when_idle; null = this setting).
+  takeover_mode: "when_idle",
+  // 1.99lm: FEATURE PEPE'S STREAM (events): null, or {from, until, by, at, note} - active while from <= now (null =
+  // already) and now < until (null = until an admin turns it off). While active no user stream is auto-featured
+  // anywhere (one that is up is dropped); a pad owner can still feature a slot by hand.
+  pepe_feature: null,
 };
+const TAKEOVER_MODES = ["off", "when_idle"];
+const AUTO_HOLD_MS = 60 * 1000;      // an auto-featured stream that drops keeps the feature this long before another live one gets it
 // 1.99fv: Pepe's Twitch channel (the "Use Twitch" shortcut on /stage/admin + the viewers' "Watch on Twitch" link)
 const TW_LOGIN_RE = /^[A-Za-z0-9_]{3,25}$/;
 function pepeTwitchChannel() {
@@ -172,6 +186,7 @@ function init() {
       await addColumn("stage_slots", "notified", "INTEGER NOT NULL DEFAULT 0");
       await addColumn("stage_slots", "via", "TEXT");                  // 1.99et: how it's live now - rtmp | browser | whip
       await addColumn("stage_slots", "source", "TEXT");               // 1.99ji: 'library' = 📼 played from the Plex library (medialib.js)
+      await addColumn("stage_slots", "auto_off", "INTEGER NOT NULL DEFAULT 0");   // 1.99lm: its auto-feature was cancelled by a person
       await runQuery(`UPDATE stage_slots SET room_id = ?, kind = COALESCE(kind, 'slot'), mode = COALESCE(mode, 'stream'),
                       start_at = COALESCE(start_at, created) WHERE room_id IS NULL`, [rooms.HOUSE_ROOM]);
       await runQuery("CREATE INDEX IF NOT EXISTS stage_slots_status ON stage_slots (status)");
@@ -305,6 +320,8 @@ function cleanConfig(c) {
     room_rtc: ["off", "prime", "all"].includes(String(c.room_rtc)) ? String(c.room_rtc) : DEFAULTS.room_rtc,
     room_rtc_cap: int(c.room_rtc_cap, 0, 500, DEFAULTS.room_rtc_cap),
     pepe_embed: (() => { try { return pepeEmbedFrom(c.pepe_embed); } catch (e) { return null; } })(),
+    takeover_mode: TAKEOVER_MODES.includes(String(c.takeover_mode)) ? String(c.takeover_mode) : DEFAULTS.takeover_mode,
+    pepe_feature: cleanPepeFeature(c.pepe_feature),
   };
   if (o.max_minutes < o.min_minutes) o.max_minutes = o.min_minutes;
   return o;
@@ -325,6 +342,57 @@ function pepeEmbedFrom(v) {
   if (TW_LOGIN_RE.test(s)) return { p: "twitch", t: "channel", id: s.toLowerCase() };        // a bare channel name
   try { return embeds.parse(s); } catch (e) { throw new Refuse(400, e.message || "That isn't a YouTube or Twitch link we can play."); }
 }
+/** 1.99lm: a stored "feature Pepe's stream" window -> {from, until, by, at, note} or null (bad / empty). */
+function cleanPepeFeature(v) {
+  if (!v || typeof v !== "object") return null;
+  const ms = (x) => (x === null || x === undefined || x === "" ? null : (Number.isFinite(Number(x)) && Number(x) > 0 ? Math.floor(Number(x)) : NaN));
+  const from = ms(v.from), until = ms(v.until), at = ms(v.at);
+  if (Number.isNaN(from) || Number.isNaN(until)) return null;
+  if (from != null && until != null && until <= from) return null;
+  return { from, until, at: Number.isNaN(at) ? null : at, by: v.by ? String(v.by).slice(0, 40) : null, note: v.note ? cleanTitle(v.note) : null };
+}
+/** 1.99lm: Pepe's stream is featured right now (an admin's event window) -> that window, or null. */
+function pepeFeatured(t = now(), C = CONFIG) {
+  const f = C && C.pepe_feature;
+  if (!f) return null;
+  if (f.from != null && t < f.from) return null;
+  if (f.until != null && t >= f.until) return null;
+  return f;
+}
+/** 1.99lm: an admin features Pepe's stream. {on: false} clears it; else {minutes} (from now, or from `from`) or
+ *  {from, until} (ms or a date string); no end = until turned off. At most 30 days ahead / long. -> the window */
+async function setPepeFeature(b, actor) {
+  await init();
+  b = b || {};
+  let next = null;
+  if (!(b.on === false || b.on === "false" || b.on === "0" || b.on === 0 || b.on === "off")) {
+    const t = now();
+    const when = (x) => {
+      if (x === undefined || x === null || x === "") return null;
+      const n = typeof x === "number" || /^[0-9]+$/.test(String(x)) ? Number(x) : Date.parse(String(x));
+      if (!Number.isFinite(n) || n <= 0) throw new Refuse(400, "That isn't a time we can read.");
+      return Math.floor(n);
+    };
+    let from = when(b.from);
+    if (from != null && from <= t) from = null;
+    let until = when(b.until);
+    const mins = b.minutes === undefined || b.minutes === null || b.minutes === "" ? null : Math.floor(Number(b.minutes));
+    if (mins != null) {
+      if (!Number.isFinite(mins) || mins < 1 || mins > 30 * 24 * 60) throw new Refuse(400, "Pick 1 minute to 30 days.");
+      until = (from || t) + mins * 60000;
+    }
+    const LIM = 30 * 86400000;
+    if (from != null && from > t + LIM) throw new Refuse(400, "That's more than 30 days ahead.");
+    if (until != null && until <= (from || t)) throw new Refuse(400, "The end has to be after the start.");
+    if (until != null && until - (from || t) > LIM) throw new Refuse(400, "At most 30 days.");
+    next = { from, until, at: t, by: actor || null, note: cleanTitle(b.note) };
+  }
+  const cfg = await setConfig({ pepe_feature: next }, actor);
+  await event(null, next ? "pepe_featured" : "pepe_unfeatured", actor,
+              next ? `from ${next.from ? new Date(next.from).toISOString() : "now"} until ${next.until ? new Date(next.until).toISOString() : "turned off"}${next.note ? " - " + next.note : ""}` : null);
+  await autoFeatureAll().catch((e) => console.error("[stage] auto-feature:", e.message));
+  return cfg.pepe_feature;
+}
 /** 1.99fv: what Pepe's main stage shows - {mode: 'stream'} (HLS + ⚡) or {mode: 'embed', embed, label, url};
  *  plus his Twitch channel for the viewers' "Watch on Twitch" link (twitch_live = our relay to it is running). */
 function pepeSource(cfg = CONFIG) {
@@ -332,7 +400,8 @@ function pepeSource(cfg = CONFIG) {
   let twLive = false;
   try { twLive = require("./restream").mainRelayLive(); } catch (err) { /* the relay is optional */ }
   const twitch = { login: pepeTwitchChannel(), url: "https://www.twitch.tv/" + pepeTwitchChannel(), live: twLive };
-  return e ? { mode: "embed", embed: e, label: embeds.label(e), url: embedUrl(e), twitch } : { mode: "stream", twitch };
+  const featured = !!pepeFeatured(now(), cfg);            // 1.99lm: an admin featured his stream (the ★ on his tab)
+  return e ? { mode: "embed", embed: e, label: embeds.label(e), url: embedUrl(e), twitch, featured } : { mode: "stream", twitch, featured };
 }
 /** 1.99fv: the player Pepe's stage uses, from his stream state (bridge.stage()) and the source above. The
  *  page (stage-room.js) does the same. Live = HLS only: Twitch never turns it on or swaps it in by itself. */
@@ -540,8 +609,12 @@ async function book(user, opts = {}) {
       body: `${minutes} min on ${new Date(startAt).toUTCString()}. Approve or deny it on your pad page.`,
       link: `/p/${encodeURIComponent(RS.slug)}/settings#stage`, ref: "stage-req:" + out.id }).catch(() => {});
   }
-  const slot = await getSlot(out.id);
-  if (slot && slot.status === "active" && slot.went_live) require("./golive").slotLive(slot);   // 1.99kp: an embed on now
+  let slot = await getSlot(out.id);
+  if (slot && slot.status === "active" && slot.went_live) {
+    require("./golive").slotLive(slot);   // 1.99kp: an embed on now
+    // 1.99lm: ...and maybe the pad's featured stream from now
+    if (await autoFeature(roomId).catch((e) => { console.error("[stage] auto-feature:", e.message); return null; })) slot = await getSlot(out.id);
+  }
   return { slot: view(slot), key, rtmp: key ? { server: RTMP_PUBLIC, key } : null };
 }
 
@@ -630,6 +703,8 @@ async function end(slotId, reason, actor) {
     pubCache.clear();
     try { require("./webrtc").soon(); } catch (e) { /* 1.99et: kicks an ended slot's WHIP publisher */ }
     await event(res.id, "ended", actor, `${reason}: charged ${res.charged}, refunded ${res.refund}`, res.room_id);
+    // 1.99lm: its feature (auto or not) is gone - hand the pad to the next live stream, or back to Pepe
+    await autoFeature(res.room_id || rooms.HOUSE_ROOM).catch((e) => console.error("[stage] auto-feature:", e.message));
   }
   return res;
 }
@@ -639,11 +714,78 @@ async function unfeature(slotId, actor, why = "unfeatured") {
   await init();
   const s = (await getQuery(`SELECT * FROM stage_slots WHERE id = ? AND settled = 0`, [String(slotId || "")]))[0];
   if (!s || !s.featured) return null;
-  const r = await runQuery("UPDATE stage_slots SET featured = 0, feature_by = NULL WHERE id = ? AND featured = 1", [s.id]);
+  // 1.99lm: a PERSON taking an auto-feature away cancels it for good on that slot (the system never re-features it)
+  const cancel = s.feature_by === "auto" && actor !== "system";
+  const r = await runQuery(`UPDATE stage_slots SET featured = 0, feature_by = NULL${cancel ? ", auto_off = 1" : ""} WHERE id = ? AND featured = 1`, [s.id]);
   if (!r.changes) return null;
   pubCache.clear();
-  await event(s.id, "unfeatured", actor, why, s.room_id);
-  return { id: s.id, room_id: s.room_id, userId: s.userId };
+  await event(s.id, "unfeatured", actor, s.feature_by === "auto" ? "auto-feature: " + why : why, s.room_id);
+  return { id: s.id, room_id: s.room_id, userId: s.userId, auto: s.feature_by === "auto" };
+}
+
+// ── 1.99lm: AUTO-FEATURE - a live user stream on a pad with nothing featured is featured by the system ──
+// The rule, per pad (re-checked when a stream goes live / ends, and every tick):
+//   * off (the pad's takeover, else the site's takeover_mode), Pepe's stream featured (pepe_feature), or a REAL
+//     feature on an open slot (owner / staff / a booked featured slot)  -> no auto-feature; one that is up is dropped
+//   * an auto-featured slot keeps it while it's live, and through a drop of up to AUTO_HOLD_MS (or longer while
+//     no other stream is live); then it's handed over
+//   * else the live slot that went live FIRST (not one whose auto-feature a person cancelled) is featured
+//   * no live user stream -> nothing is featured: the stage is Pepe's stream again
+// It is the ordinary `featured` flag (feature_by 'auto'): everything that follows a featured slot follows it.
+async function takeoverModeFor(roomId) {
+  let pad = null;
+  try { pad = (await rooms.stageSettings(roomId)).takeover || null; } catch (e) { pad = null; }
+  return TAKEOVER_MODES.includes(pad) ? pad : CONFIG.takeover_mode;
+}
+async function autoFeature(roomId, t = now()) {
+  await init();
+  roomId = roomId || rooms.HOUSE_ROOM;
+  const open = await openSlots(roomId);
+  const autos = open.filter((s) => s.featured && s.feature_by === "auto");
+  const real = open.some((s) => s.featured && s.feature_by !== "auto");
+  const mode = await takeoverModeFor(roomId);
+  const why = mode === "off" ? "auto-featuring is off" : pepeFeatured(t) ? "Pepe's stream is featured" : real ? "a slot was featured by hand" : null;
+  if (why) {
+    for (const a of autos) await unfeature(a.id, "system", why);
+    return null;
+  }
+  const live = open.filter((s) => isLive(s, t) && !s.auto_off && !s.featured)
+    .sort((a, b) => (a.went_live || startOf(a)) - (b.went_live || startOf(b)) || (a.created || 0) - (b.created || 0) || String(a.id).localeCompare(String(b.id)));
+  const cur = autos[0] || null;
+  for (const extra of autos.slice(1)) await unfeature(extra.id, "system", "one featured stream per pad");
+  if (cur) {
+    if (isLive(cur, t) || !live.length || t - (cur.last_live || cur.went_live || startOf(cur)) < AUTO_HOLD_MS) return cur.id;
+    await unfeature(cur.id, "system", "its stream dropped - handed over");
+  }
+  const next = live[0];
+  if (!next) return null;
+  // guarded: never a second featured slot in the pad (an owner may have featured one a moment ago)
+  const r = await runQuery(`UPDATE stage_slots SET featured = 1, feature_by = 'auto' WHERE id = ? AND settled = 0 AND featured = 0 AND auto_off = 0
+                            AND status IN ${OPEN} AND NOT EXISTS (SELECT 1 FROM stage_slots o WHERE o.room_id = ? AND o.featured = 1 AND o.settled = 0
+                            AND o.status IN ${OPEN})`, [next.id, roomId]);
+  if (!r.changes) return null;
+  pubCache.clear();
+  await event(next.id, "featured", "system", cur ? "auto: took over from the stream before it" : "auto: live while nothing else was featured", roomId);
+  return next.id;
+}
+/** Every pad with an open slot (or an auto-feature to drop). */
+async function autoFeatureAll(t = now()) {
+  await init();
+  const ids = new Set((await getQuery(`SELECT DISTINCT room_id FROM stage_slots WHERE status IN ${OPEN}`)).map((r) => r.room_id || rooms.HOUSE_ROOM));
+  for (const id of ids) {
+    try { await autoFeature(id, t); } catch (e) { console.error("[stage] auto-feature", id + ":", e.message); }
+  }
+}
+/** Admin / owner: cancel an auto-feature. The slot stays on as an ordinary one and is never auto-featured again. */
+async function cancelAutoFeature(slotId, actor) {
+  await init();
+  const s = await getSlot(slotId);
+  if (!s || s.settled) throw new Refuse(404, "That slot isn't open.");
+  if (!s.featured || s.feature_by !== "auto") {
+    await runQuery("UPDATE stage_slots SET auto_off = 1 WHERE id = ? AND settled = 0", [s.id]);
+    return { done: false };
+  }
+  return { done: !!(await unfeature(s.id, actor || "admin", "cancelled")) };
 }
 // The owner / staff feature an open slot (free). Whatever was featured in that room stops being so.
 async function featureByOwner(slotId, actor) {
@@ -651,8 +793,9 @@ async function featureByOwner(slotId, actor) {
   const s = await getSlot(slotId);
   if (!s || s.settled || !["waiting", "active", "scheduled"].includes(s.status)) throw new Refuse(404, "That slot isn't open.");
   if (s.featured) return { already: true };
-  const others = await getQuery(`SELECT id FROM stage_slots WHERE room_id = ? AND featured = 1 AND settled = 0 AND id != ? AND status IN ${OPEN}`, [s.room_id, s.id]);
-  for (const o of others) await unfeature(o.id, actor, "the owner featured another slot");
+  const others = await getQuery(`SELECT id, feature_by FROM stage_slots WHERE room_id = ? AND featured = 1 AND settled = 0 AND id != ? AND status IN ${OPEN}`, [s.room_id, s.id]);
+  // 1.99lm: an auto-feature just yields (not cancelled - it may come back when this one ends)
+  for (const o of others) await unfeature(o.id, o.feature_by === "auto" ? "system" : actor, "the owner featured another slot");
   await runQuery("UPDATE stage_slots SET featured = 1, feature_by = 'owner' WHERE id = ? AND settled = 0", [s.id]);
   pubCache.clear();
   await event(s.id, "featured", actor, "by the pad owner", s.room_id);
@@ -757,6 +900,7 @@ async function tick() {
   }
   try { await tickFuture(t); } catch (e) { console.error("[stage] schedule:", e.message); }
   try { await tickQueue(t); } catch (e) { console.error("[stage] queue:", e.message); }
+  try { await autoFeatureAll(t); } catch (e) { console.error("[stage] auto-feature:", e.message); }   // 1.99lm
 }
 
 async function tickFuture(t) {
@@ -793,7 +937,9 @@ async function tickFuture(t) {
     if (open.length >= RS.slot_count || all[0].n >= C.max_concurrent) continue;
     if (open.some((x) => x.userId === s.userId)) continue;
     if (s.featured && open.some((x) => x.featured)) {
-      if (t < start) continue;
+      if (t < start && !open.some((x) => x.featured && x.feature_by !== "auto")) {
+        // 1.99lm: an auto-feature never holds up a booked featured slot - it yields once the slot opens
+      } else if (t < start) continue;
       // a booking the owner featured ahead of time takes over the pad's main stream when it starts
       const f = open.find((x) => x.featured);
       await unfeature(f.id, "system", "a booked featured slot started");
@@ -806,6 +952,7 @@ async function tickFuture(t) {
       pubCache.clear();
       await event(s.id, "opened", "system", "scheduled", s.room_id);
       if (embed) require("./golive").slotLive(s);   // 1.99kp: an embed slot is live the moment it opens
+      if (embed) await autoFeature(s.room_id, t).catch((e) => console.error("[stage] auto-feature:", e.message));   // 1.99lm
       if (!embed) {
         rooms.notify(s.userId, { kind: "stage", title: `Your stage slot in ${RS.title} is open - go live`,
           body: `Start streaming within ${C.start_window_min} min of the start time or it's cancelled and refunded.`, link: "/stage", ref: "stage-open:" + s.id }).catch(() => {});
@@ -971,6 +1118,7 @@ async function goLive(s, t, via) {
     event(s.id, "live", s.username, via || "rtmp", s.room_id);
     require("./golive").slotLive(s);          // 1.99kp: 🎥 followers + the pad's announcement (once per stream)
   }
+  await autoFeature(s.room_id || rooms.HOUSE_ROOM, t).catch((e) => console.error("[stage] auto-feature:", e.message));   // 1.99lm
   return true;
 }
 /** The open slot streaming under this public stream name (WHEP / HLS reads), or null. */
@@ -1301,7 +1449,8 @@ async function adminState() {
   const log = (await getQuery("SELECT * FROM stage_slots ORDER BY created DESC LIMIT 50")).map((s) => view(s, t));
   const bans = await getQuery("SELECT userId, username, reason, by, at FROM stage_bans ORDER BY at DESC");
   const events = await getQuery("SELECT slot_id, ts, what, actor, detail, room_id FROM stage_events ORDER BY ts DESC LIMIT 60");
-  return { config: config(), open, upcoming, log, bans, events, rtmp_app: RTMP_APP + " -> " + OUT_APP, relays: relays.size, pepe_src: pepeSource() };
+  return { config: config(), open, upcoming, log, bans, events, rtmp_app: RTMP_APP + " -> " + OUT_APP, relays: relays.size, pepe_src: pepeSource(),
+           pepe_feature: CONFIG.pepe_feature, pepe_featured: !!pepeFeatured(t), now: t };   // 1.99lm
 }
 /** What a room owner sees on the manage page. */
 async function ownerState(roomId) {
@@ -1502,6 +1651,14 @@ function register(app, { addUser, isBotToken, noTimers }) {
   app.post("/api/stage/admin/config", addUser, needStaff, async (req, res) => {
     try { res.json({ ok: true, config: await setConfig(req.body || {}, actor(req)) }); } catch (e) { fail(res, e); }
   });
+  // 1.99lm: ★ feature Pepe's stream (events): {on:false} | {minutes} | {from, until} (+ note)
+  app.post("/api/stage/admin/pepe-feature", addUser, needStaff, async (req, res) => {
+    try { res.json({ ok: true, pepe_feature: await setPepeFeature(req.body || {}, actor(req)), pepe_featured: !!pepeFeatured() }); } catch (e) { fail(res, e); }
+  });
+  // 1.99lm: cancel a slot's auto-feature (it stays on as an ordinary slot and isn't auto-featured again)
+  app.post("/api/stage/admin/autofeature/cancel", addUser, needStaff, async (req, res) => {
+    try { res.json({ ok: true, ...(await cancelAutoFeature((req.body || {}).id, actor(req))) }); } catch (e) { fail(res, e); }
+  });
   app.post("/api/stage/admin/cut", addUser, needStaff, async (req, res) => {
     try {
       const b = req.body || {};
@@ -1543,6 +1700,7 @@ module.exports = {
   libraryOpen, libraryExtend, setLibraryIdle, idleMinFor,
   publishGate, goLive, whipBeat, openSlotByStream, hlsOf,
   pepeSource, pepePlayer, pepeEmbedFrom, pepeTwitchChannel,
+  autoFeature, autoFeatureAll, cancelAutoFeature, pepeFeatured, setPepeFeature, takeoverModeFor, TAKEOVER_MODES,
   _setClock: (fn) => { clock = fn || (() => Date.now()); },
   _setSpawn: (fn) => { spawnImpl = fn; },
   _relays: relays, _clients: clients, _lastTick: lastTick, _pubCache: pubCache, _tx: tx,

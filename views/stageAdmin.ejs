@@ -15,6 +15,24 @@
       <tbody id="openRows"></tbody></table></div>
   </section>
 
+  <!-- 1.99lm: featuring - Pepe's stream for events, and the automatic feature of a live user stream (takeover_mode) -->
+  <section class="sb-card" id="featCard" aria-labelledby="ftT">
+    <h2 id="ftT">★ Featuring</h2>
+    <p id="pfNow" role="status">Loading…</p>
+    <div class="row">
+      <button type="button" class="btn primary" data-pf="on">★ Feature Pepe's stream until I turn it off</button>
+      <button type="button" class="btn" data-pf="off">Stop featuring Pepe's stream</button><span class="msg" id="pfMsg" role="status"></span>
+    </div>
+    <form id="pfForm" class="row" autocomplete="off">
+      <label>For <input type="number" name="minutes" min="1" max="43200" placeholder="minutes" style="width:7em" aria-label="Minutes"></label>
+      <label>or from <input type="datetime-local" name="from" aria-label="From"></label>
+      <label>until <input type="datetime-local" name="until" aria-label="Until"></label>
+      <input type="text" name="note" maxlength="80" placeholder="event (optional)" aria-label="Event name">
+      <button type="submit" class="btn">Schedule</button>
+    </form>
+    <p class="muted">While Pepe's stream is featured, no user stream is featured automatically on any pad (one that is up is dropped); owners can still feature a slot by hand. <b>Auto-feature</b> (<i>Settings</i> below, and per pad on its settings page): a stream that goes live on a pad where nothing is featured becomes that pad's featured stream - its stage's default view, the homepage when it's the front pad, Top Pads' now playing, the ★ in the guide and schedule - until it ends; then the next live one (the first to go live), else Pepe's stream. It shows under <i>On the stage now</i> as <b>auto-featured (live)</b>; <b>Cancel auto-feature</b> drops it for that stream for good (another live stream may take over).</p>
+  </section>
+
   <!-- 1.99fv: what Pepe's main stage plays (stage setting pepe_embed; null = his own stream) -->
   <% const PS = state.pepe_src || { mode: 'stream' }; const twCh = PS.twitch && PS.twitch.login; %>
   <section class="sb-card" id="pepeSrc" aria-labelledby="psT">
@@ -57,6 +75,9 @@
     <h2 id="setT">Settings</h2>
     <form id="cfg" class="settings">
       <label class="chk"><input type="checkbox" name="enabled" <%= C.enabled ? 'checked' : '' %>> Booking open</label>
+      <label title="1.99lm: a user stream that goes live on a pad where nothing is featured becomes its featured stream until it ends. Pads can override this on their settings page.">★ Auto-feature live streams<select name="takeover_mode">
+        <option value="when_idle" <%= C.takeover_mode !== 'off' ? 'selected' : '' %>>When nothing is featured (default)</option>
+        <option value="off" <%= C.takeover_mode === 'off' ? 'selected' : '' %>>Off</option></select></label>
       <label>Max slot price (PAT / live minute)<input type="number" name="price_per_min" min="1" value="<%= C.price_per_min %>"></label>
       <label>Min minutes<input type="number" name="min_minutes" min="1" value="<%= C.min_minutes %>"></label>
       <label>Max minutes<input type="number" name="max_minutes" min="1" value="<%= C.max_minutes %>"></label>
@@ -104,7 +125,7 @@
   </section>
 </main>
 <script id="saState" type="application/json"><%- JSON.stringify(state).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/stage-admin.js?v=3" defer></script>
+<script src="/public/js/stage-admin.js?v=4" defer></script>
 <script src="/public/js/restream.js?v=1" defer></script>
 <%- include('partials/admin-close') %>
 </body>

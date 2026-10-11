@@ -143,7 +143,7 @@ test("live detection ignores Twitch: off air on his HLS = off air, whatever Twit
   for (const v of ["home.ejs", "room.ejs"]) {
     const src = fs.readFileSync(path.join(repo, "views", v), "utf8");
     assert.ok(src.includes("pepeSrc: <%- JSON.stringify(st.pepe_src || null).replace(/</g, '\\\\u003c') %>"), v + " passes st.pepe_src (escaped)");
-    assert.match(src, /stage-room\.js\?v=7/, v + " cache-buster");
+    assert.match(src, /stage-room\.js\?v=8/, v + " cache-buster");
   }
 });
 
@@ -231,7 +231,7 @@ test("/stage/admin: the source card (default, Twitch embed button, link form, Ba
   const ejs = require("ejs");
   const file = path.join(repo, "views", "stageAdmin.ejs");
   const tpl = fs.readFileSync(file, "utf8");
-  assert.match(tpl, /stage-admin\.js\?v=3/);
+  assert.match(tpl, /stage-admin\.js\?v=4/);
   const render = (pepe_src) => ejs.render(tpl.replace(/<%- include\([^%]*%>/g, ""), {
     user: "admin", isAdmin: true, state: { config: S.config(), open: [], upcoming: [], log: [], bans: [], events: [], rtmp_app: "stage -> live", relays: 0, pepe_src } }, { filename: file });
   const def = render(S.pepeSource());

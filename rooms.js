@@ -111,6 +111,8 @@ function init() {
       if (!cols.has("created_by")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN created_by TEXT");
       // 1.99kz: the owner (or a site admin) marked the pad 18+ - an "18+" badge, and Pepe treats its room as an adult room
       if (!cols.has("adult")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN adult INTEGER NOT NULL DEFAULT 0");
+      // 1.99lm: the pad's own auto-feature switch (mainstage.js takeover): NULL = the site setting, 'off' | 'when_idle'
+      if (!cols.has("takeover")) await runQuery("ALTER TABLE rooms_registry ADD COLUMN takeover TEXT");
       // every slug a pad gave up: /p/<old>[/...] 301s to the pad's current address, and nobody else can take it
       await runQuery("CREATE TABLE IF NOT EXISTS pad_slug_aliases (slug TEXT PRIMARY KEY, room_id TEXT NOT NULL, created INTEGER, by TEXT)");
       await runQuery("CREATE INDEX IF NOT EXISTS pad_slug_aliases_room ON pad_slug_aliases (room_id)");
@@ -291,6 +293,7 @@ function view(r) {
     slug_set: !!r.slug_set, slug_changed_at: Number(r.slug_changed_at) || null,      // 1.99iy: a chosen address + its last change
     origin: r.origin || null, created_by: r.created_by || null, created: Number(r.created) || null, updated: Number(r.updated) || null,   // 1.99iz
     adult: !!r.adult,                                                  // 1.99kz: 18+ pad
+    takeover: r.takeover === "off" || r.takeover === "when_idle" ? r.takeover : null,   // 1.99lm: null = the site's takeover_mode
   };
 }
 function primeOf(roomId) { try { return require("./premium").isPrime(roomId); } catch (e) { return false; } }
@@ -430,9 +433,15 @@ async function setStage(roomId, patch, actor, caps = {}) {
   const slots = patch.slot_count != null ? int(patch.slot_count, 1, maxSlots, r.slot_count) : r.slot_count;
   const approval = patch.approval != null ? (patch.approval === true || patch.approval === "1" || patch.approval === 1 || patch.approval === "on" || patch.approval === "true") : r.approval;
   const price = patch.slot_price != null ? int(patch.slot_price, 0, maxPrice, r.slot_price) : r.slot_price;
-  await runQuery("UPDATE rooms_registry SET slot_count = ?, approval = ?, slot_price = ?, updated = ? WHERE room_id = ?",
-                 [slots, approval ? 1 : 0, price, Date.now(), roomId]);
-  await event(roomId, "stage", actor, `slots=${slots} approval=${approval ? 1 : 0} price=${price}`);
+  // 1.99lm: auto-feature on this pad: "" / "site" / "inherit" = the site setting, else off | when_idle
+  let takeover = r.takeover || null;
+  if (patch.takeover !== undefined) {
+    const v = String(patch.takeover == null ? "" : patch.takeover);
+    takeover = v === "off" || v === "when_idle" ? v : null;
+  }
+  await runQuery("UPDATE rooms_registry SET slot_count = ?, approval = ?, slot_price = ?, takeover = ?, updated = ? WHERE room_id = ?",
+                 [slots, approval ? 1 : 0, price, takeover, Date.now(), roomId]);
+  await event(roomId, "stage", actor, `slots=${slots} approval=${approval ? 1 : 0} price=${price} takeover=${takeover || "site"}`);
   await loadCache();
   return get(roomId);
 }

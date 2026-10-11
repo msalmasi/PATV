@@ -29,15 +29,30 @@
       return true;
     });
   }
+  // 1.99lm: ★ Pepe's stream featured (an event window) - S.pepe_feature {from, until, by, note}, S.pepe_featured
+  function renderFeat(S) {
+    if (!$('pfNow')) return;
+    var f = S.pepe_feature, on = !!S.pepe_featured, t = Number(S.now) || Date.now();
+    var mode = S.config && S.config.takeover_mode === 'off' ? 'auto-feature is <b>off</b>' : 'auto-feature is <b>on</b> (when nothing is featured)';
+    var till = function () { return f.until ? ' until ' + esc(when(f.until)) : ' until turned off'; };
+    if (!f) $('pfNow').innerHTML = 'Pepe\'s stream is not featured - ' + mode + '.';
+    else if (on) $('pfNow').innerHTML = '<b>★ Pepe\'s stream is featured</b>' + (f.note ? ' for <b>' + esc(f.note) + '</b>' : '') + till() + (f.by ? ' (by ' + esc(f.by) + ')' : '') + ' - no auto-feature anywhere.';
+    else if (f.from && f.from > t) $('pfNow').innerHTML = 'Scheduled: Pepe\'s stream is featured from <b>' + esc(when(f.from)) + '</b>' + till() + (f.note ? ' (' + esc(f.note) + ')' : '') + '. Until then ' + mode + '.';
+    else $('pfNow').innerHTML = 'Pepe\'s feature ended ' + esc(when(f.until)) + ' - ' + mode + '.';
+    var off = document.querySelector('[data-pf="off"]');
+    if (off) off.disabled = !f;
+  }
   function render(S) {
     renderSrc(S.pepe_src);
+    renderFeat(S);
     var o = S.open || [];
     $('openRows').innerHTML = o.length ? o.map(function (s) {
       return '<tr><td><a href="/u/' + encodeURIComponent(s.username) + '">' + esc(s.display) + '</a><br><span class="muted">' + esc(s.room_id || '') +
-        (s.featured ? ' · ★ ' + esc(s.feature_by || '') : '') + (s.mode === 'embed' ? ' · ' + esc(s.embed_label || 'video') : '') + '</span></td>' +
+        (s.featured ? (s.feature_by === 'auto' ? ' · <b>★ auto-featured (live)</b>' : ' · ★ ' + esc(s.feature_by || '')) : '') + (s.mode === 'embed' ? ' · ' + esc(s.embed_label || 'video') : '') + '</span></td>' +
         '<td>' + (s.live ? '<span class="live-tag">● LIVE</span>' : esc(s.status === 'waiting' ? 'waiting to go live' : 'off air')) + (s.relay ? ' · browser' : '') + '</td>' +
         '<td class="num">' + mmss(s.live_seconds) + '</td><td class="num">' + fmt(s.charged) + ' / ' + fmt(s.held) + '</td><td>' + when(s.created) + '</td>' +
-        '<td><span class="row" style="margin:0"><button type="button" class="btn danger" data-cut="' + esc(s.id) + '">✂ Cut</button>' +
+        '<td><span class="row" style="margin:0">' + (s.featured && s.feature_by === 'auto' ? '<button type="button" class="btn" data-autocancel="' + esc(s.id) + '">Cancel auto-feature</button>' : '') +
+        '<button type="button" class="btn danger" data-cut="' + esc(s.id) + '">✂ Cut</button>' +
         '<button type="button" class="btn danger" data-cut="' + esc(s.id) + '" data-ban="1">Cut + ban</button></span></td></tr>';
     }).join('') : '<tr><td colspan="6" class="muted">Nobody has the stage - Pepe\'s stream is on.</td></tr>';
     $('cutAll').disabled = !o.length;
@@ -72,6 +87,14 @@
       if (!confirm(ban ? 'Cut this slot to Pepe and ban them from booking?' : 'Cut this slot to Pepe? Unused PAT is refunded.')) return;
       b.disabled = true;
       post('/api/stage/admin/cut', { id: b.getAttribute('data-cut'), ban: ban }).then(function (j) { if (!j.ok) alert(j.error); load(); });
+    } else if (b.hasAttribute('data-autocancel')) {
+      if (!confirm('Stop featuring this stream? It stays on as an ordinary slot and won\'t be auto-featured again.')) return;
+      b.disabled = true;
+      post('/api/stage/admin/autofeature/cancel', { id: b.getAttribute('data-autocancel') }).then(function (j) { if (!j.ok) alert(j.error); load(); });
+    } else if (b.hasAttribute('data-pf')) {
+      var pfOn = b.getAttribute('data-pf') === 'on';
+      $('pfMsg').textContent = 'Saving…';
+      post('/api/stage/admin/pepe-feature', { on: pfOn }).then(function (j) { $('pfMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Could not save.'); load(); });
     } else if (b.hasAttribute('data-unban')) {
       post('/api/stage/admin/unban', { userId: b.getAttribute('data-unban') }).then(load);
     } else if (b.hasAttribute('data-ps')) {
@@ -100,6 +123,16 @@
     var inp = e.target.elements.pepe_embed, v = inp.value.trim();
     if (!v) { $('psMsg').textContent = 'Paste a Twitch channel or a YouTube / Twitch link.'; return; }
     setSrc(v).then(function (ok) { if (ok) inp.value = ''; });
+  });
+  if ($('pfForm')) $('pfForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var f = e.target, body = { on: true, note: f.note.value };
+    var ts = function (v) { if (!v) return ''; var n = new Date(v).getTime(); return isFinite(n) ? n : ''; };   // datetime-local = the admin's own zone
+    if (f.minutes.value) body.minutes = f.minutes.value;
+    if (f.from.value) body.from = ts(f.from.value);
+    if (!f.minutes.value && f.until.value) body.until = ts(f.until.value);
+    $('pfMsg').textContent = 'Saving…';
+    post('/api/stage/admin/pepe-feature', body).then(function (j) { $('pfMsg').textContent = j.ok ? 'Saved.' : (j.error || 'Could not save.'); if (j.ok) f.reset(); load(); });
   });
   $('banForm').addEventListener('submit', function (e) {
     e.preventDefault();

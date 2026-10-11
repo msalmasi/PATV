@@ -16,6 +16,9 @@
 //                                                              bar (stage-capture.js): null | {stream, label, embed, capture, nsfw}
 //   })
 // Default view: the room's FEATURED slot when it's live, else Pepe's stream. Viewers switch freely.
+// 1.99lm: a slot can be featured automatically (feature_by 'auto': it went live while nothing was featured -
+// mainstage.js autoFeature) - the same default; its star says "live now". Pepe's tab gets the star while an
+// admin features his stream (pepeSrc.featured; no auto-feature happens then).
 // 1.99fv: no more automatic Twitch swap - Twitch is a relay of his stream (1.99fk); an admin can still pick
 // a YouTube / Twitch embed for his stage on /stage/admin (pepeSrc). On air = HIS stream (pepeOn), always.
 // 1.99cj: Pepe's stream (his broadcast) is part of EVERY room's stage that
@@ -43,8 +46,9 @@
     if (!x || typeof x !== 'object') return null;
     var tw = x.twitch && typeof x.twitch === 'object' && TW_LOGIN.test(String(x.twitch.login || ''))
       ? { login: String(x.twitch.login), live: x.twitch.live === true } : null;
-    if (x.mode === 'embed' && embedUrl(x.embed)) return { mode: 'embed', embed: { p: x.embed.p, t: x.embed.t, id: x.embed.id }, label: typeof x.label === 'string' ? x.label.slice(0, 60) : '', twitch: tw };
-    return { mode: 'stream', twitch: tw };
+    var feat = x.featured === true;                       // 1.99lm: an admin featured Pepe's stream (an event)
+    if (x.mode === 'embed' && embedUrl(x.embed)) return { mode: 'embed', embed: { p: x.embed.p, t: x.embed.t, id: x.embed.id }, label: typeof x.label === 'string' ? x.label.slice(0, 60) : '', twitch: tw, featured: feat };
+    return { mode: 'stream', twitch: tw, featured: feat };
   }
   var esc = function (t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 
@@ -135,13 +139,15 @@
       slots.forEach(function (s) {
         h += '<button type="button" class="stab' + (s.featured ? ' feat' : '') + '" role="tab" data-v="slot:' + esc(s.id) + '" aria-selected="' + (view === 'slot:' + s.id) + '"' +
              (s.title ? ' title="' + esc(s.title) + '"' : '') + '>' +
-             '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="' + esc(_t('js.stage.room.featured', 'featured')) + '">★</span>' : '') +
+             '<span class="dot" aria-hidden="true"></span>' + (s.featured ? '<span class="star" aria-label="' + esc(s.feature_by === 'auto' ? _t('js.stage.room.featured_auto', 'featured while live') : _t('js.stage.room.featured', 'featured')) + '"' +
+               (s.feature_by === 'auto' ? ' title="' + esc(_t('js.stage.room.featured_auto_title', 'Featured automatically: it went live while nothing else was featured')) + '"' : '') + '>★</span>' : '') +
              '<span class="n' + (s.nameCss ? ' cx-name' : '') + '" style="' + esc(s.nameCss || '') + '">' + esc(s.display) + '</span>' +
              (s.embed ? '<span class="src">' + (s.embed.p === 'youtube' ? 'YouTube' : 'Twitch') + '</span>' : '') + '</button>';
       });
       var pOn = pepeOn;                                     // 1.99fv: his own stream only - Twitch never counts
-      if (pepeHere) h += '<button type="button" class="stab' + (pOn ? '' : ' off') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
-           '<span class="dot" aria-hidden="true"></span>' + esc(pOn ? _t('js.stage.room.pepe_tab', '🐸 Pepe\'s stream') : _t('js.stage.room.pepe_tab_off', '🐸 Pepe\'s stream (off air)')) + '</button>';
+      var pF = !!(pepeSrc && pepeSrc.featured);             // 1.99lm
+      if (pepeHere) h += '<button type="button" class="stab' + (pOn ? '' : ' off') + (pF ? ' feat' : '') + '" role="tab" data-v="pepe" aria-selected="' + (view === 'pepe') + '">' +
+           '<span class="dot" aria-hidden="true"></span>' + (pF ? '<span class="star" aria-label="' + esc(_t('js.stage.room.featured', 'featured')) + '">★</span>' : '') + esc(pOn ? _t('js.stage.room.pepe_tab', '🐸 Pepe\'s stream') : _t('js.stage.room.pepe_tab_off', '🐸 Pepe\'s stream (off air)')) + '</button>';
       h += pepeExtras();
       var s = cur();
       if (o.manage && s) {
