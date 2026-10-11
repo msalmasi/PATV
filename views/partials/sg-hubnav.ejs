@@ -1,0 +1,18 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%# 1.99qa: the styleguide hub's tab bar (styleguide.js): Overview · Brand · Design system · Pepe · Writing.
+    Shared by views/styleguide-hub.ejs and views/styleguide.ejs (the Design system tab). Pass { tab }. -%>
+<%
+  const _tabs = [
+    ['home', '/styleguide', '🧭', t('sg.hub.tab.home')],
+    ['brand', '/styleguide/brand', '📺', t('sg.hub.tab.brand')],
+    ['design', '/styleguide/design', '🎨', t('sg.hub.tab.design')],
+    ['pepe', '/styleguide/pepe', '🐸', t('sg.hub.tab.pepe')],
+    ['writing', '/styleguide/writing', '✍️', t('sg.hub.tab.writing')],
+  ];
+-%>
+<style>.sgh-nav { --ds-ac: var(--ds-green); --ds-ac-bg: var(--ds-green-bg); padding-block: var(--ds-sp-1); border-block-end: 1px solid var(--ds-line-soft); padding-block-end: var(--ds-sp-3); }</style>
+<nav class="sgh-nav" aria-label="<%- t('sg.hub.nav') %>">
+  <div class="ds-tabs">
+    <% for (const [id, href, ic, label] of _tabs) { %><a class="ds-tab<%= id === tab ? ' on' : '' %>" href="<%= href %>"<% if (id === tab) { %> aria-current="page"<% } %>><span class="ds-ic" aria-hidden="true"><%= ic %></span><%- label %></a><% } %>
+  </div>
+</nav>

@@ -1,3 +1,4 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
 <%- include('layout', { title: title, user: user }) %>
 <%# 1.99pj: /styleguide (styleguide.js) - every token and ds-* component from public/css/ds.css, rendered live.
     The spec is docs/design-system.md. Token values are read from the stylesheet in the browser (getComputedStyle),
@@ -45,6 +46,9 @@
       <span class="ds-pill-stat"><b>44px</b> tap targets</span>
     </div>
   </section>
+
+  <%# 1.99qa: the styleguide hub's tabs (this page is its Design system tab, /styleguide/design) -%>
+  <%- include('partials/sg-hubnav', { tab: 'design', t }) %>
 
   <nav class="ds-subnav" aria-label="Styleguide sections">
     <div class="ds-tabs">

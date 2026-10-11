@@ -39,11 +39,64 @@ const SPACE = ["--ds-sp-px", "--ds-sp-1", "--ds-sp-1h", "--ds-sp-2", "--ds-sp-2h
 const RADII = ["--ds-r-xs", "--ds-r-sm", "--ds-r-md", "--ds-r-lg", "--ds-r-xl", "--ds-r-2xl", "--ds-r-pill"];
 const ELEV = ["--ds-e-1", "--ds-e-2", "--ds-e-3", "--ds-e-4"];
 
-function register(app, { addUser }) {
-  app.get("/styleguide", addUser, (req, res) => {
-    res.set("X-Robots-Tag", "noindex");
-    res.render("styleguide", { title: "Design system · PATV", user: req.user ? req.user.username : null, TOKENS, TYPE, SPACE, RADII, ELEV });
-  });
+// 1.99qa: /styleguide is a hub - Brand, Design system, Pepe and Writing - so the brand guide (docs/brand.md) and the
+// design system live in one place. The Brand / Pepe / Writing tabs render docs/brand.md server-side with mdlite.js
+// (escapes everything, no raw HTML), split by its numbered "## N." sections. The token page moved to /styleguide/design;
+// old /styleguide#colour-style links are forwarded there by a tiny script on the hub home.
+const fs = require("fs");
+const path = require("path");
+const md = require("./mdlite");
+
+const BRAND_MD = path.join(__dirname, "docs", "brand.md");
+const LOOKS_DIR = path.join(__dirname, "public", "img", "pepe-looks");
+// which numbered sections of brand.md each tab shows (0 = the intro before the first "## ")
+const TAB_SECTIONS = { brand: [0, 1, 2, 3, 4], pepe: [5], writing: [6] };
+const TABS = ["home", "brand", "design", "pepe", "writing"];
+
+let cache = { mtime: 0, parts: null };
+function brandParts() {
+  let st;
+  try { st = fs.statSync(BRAND_MD); } catch (_) { return []; }
+  if (cache.parts && cache.mtime === st.mtimeMs) return cache.parts;
+  cache = { mtime: st.mtimeMs, parts: md.sections(fs.readFileSync(BRAND_MD, "utf8")) };
+  return cache.parts;
 }
 
-module.exports = { register, TOKENS, TYPE, SPACE, RADII, ELEV };
+/** The rendered HTML + table of contents for one hub tab (brand / pepe / writing). */
+function brandTab(tab) {
+  const want = TAB_SECTIONS[tab] || [];
+  const src = brandParts().filter((p) => want.includes(p.n)).map((p) => p.md).join("\n\n")
+    .replace(/^# .*$/m, ""); // the doc's own "# title" - the hub hero is the page's one h1
+  return md.render(src);
+}
+
+// Pepe's looks (public/img/pepe-looks/*.png): base art, costume looks (klook-*), holiday looks and mods (mod-*).
+function pepeLooks() {
+  let files = [];
+  try { files = fs.readdirSync(LOOKS_DIR).filter((f) => /\.png$/.test(f)); } catch (_) {}
+  const nice = (id) => id.replace(/^(klook|mod|base)-/, "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ")
+    .replace(/(^|\s)\w/g, (c) => c.toUpperCase());
+  const group = (id) => (id.startsWith("base-") || id === "pepe" ? "base" : id.startsWith("klook-") ? "persona" : id.startsWith("mod-") ? "mod" : "costume");
+  return files.sort().map((f) => { const id = f.replace(/\.png$/, ""); return { id, file: f, name: nice(id), group: group(id) }; });
+}
+
+function register(app, { addUser }) {
+  const user = (req) => (req.user ? req.user.username : null);
+  app.get("/styleguide", addUser, (req, res) => {
+    res.set("X-Robots-Tag", "noindex");
+    res.render("styleguide-hub", { title: "Styleguide · PATV", user: user(req), tab: "home", doc: null, looks: [] });
+  });
+  app.get("/styleguide/design", addUser, (req, res) => {
+    res.set("X-Robots-Tag", "noindex");
+    res.render("styleguide", { title: "Design system · PATV", user: user(req), TOKENS, TYPE, SPACE, RADII, ELEV });
+  });
+  for (const tab of ["brand", "pepe", "writing"]) {
+    app.get("/styleguide/" + tab, addUser, (req, res) => {
+      res.set("X-Robots-Tag", "noindex");
+      const titles = { brand: "Brand", pepe: "Pepe", writing: "Writing" };
+      res.render("styleguide-hub", { title: titles[tab] + " · Styleguide · PATV", user: user(req), tab, doc: brandTab(tab), looks: tab === "pepe" ? pepeLooks() : [] });
+    });
+  }
+}
+
+module.exports = { register, TOKENS, TYPE, SPACE, RADII, ELEV, TABS, TAB_SECTIONS, brandTab, pepeLooks };

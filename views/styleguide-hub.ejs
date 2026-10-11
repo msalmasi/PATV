@@ -1,0 +1,125 @@
+<% const t = locals.i18nT || new Function(include('../i18n-core.js'))()(JSON.parse(include('../locales/en.json'))); -%>
+<%- include('layout', { title: title, user: user }) %>
+<%# 1.99qa: the styleguide hub (styleguide.js) - Overview, Brand, Pepe and Writing. The Design system tab is
+    views/styleguide.ejs. Brand / Pepe / Writing are docs/brand.md rendered server-side by mdlite.js (doc.html is
+    built from escaped text only - see mdlite.js), split by the doc's numbered sections. Unlisted, noindex. -%>
+<style>
+  .sgh { --ds-ac: var(--ds-green); }
+  .sgh .sgh-cards { --ds-col: 240px; }
+  .sgh a.sgh-card { color: var(--ds-text) !important; text-decoration: none; transition: transform .12s, border-color .12s; }
+  .sgh a.sgh-card:hover, .sgh a.sgh-card:focus-visible { border-color: var(--ds-ac); transform: translateY(-1px); }
+  .sgh .sgh-card .ds-ic { font-size: 26px; width: 32px; height: 32px; }
+  .sgh .sgh-card b { color: var(--ds-text-strong); font-size: var(--ds-fs-h4); }
+  .sgh .sgh-card p { margin: 0; }
+  .sgh .sgh-src li { margin-block: 4px; }
+  .sgh .sgh-doc { display: grid; gap: var(--ds-sp-5); grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 1024px) { .sgh .sgh-doc { grid-template-columns: 230px minmax(0, 1fr); } .sgh .sgh-toc { position: sticky; top: 120px; max-height: calc(100vh - 140px); overflow: auto; } }
+  .sgh .sgh-toc { border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); padding: var(--ds-sp-3); font-size: var(--ds-fs-sm); }
+  .sgh .sgh-toc summary { cursor: pointer; font-weight: 700; color: var(--ds-text-strong); }
+  .sgh .sgh-toc ol { list-style: none; margin: var(--ds-sp-2) 0 0; padding: 0; display: grid; gap: 2px; }
+  .sgh .sgh-toc a { display: block; padding: 4px 6px; border-radius: var(--ds-r-sm); color: var(--ds-text-2) !important; text-decoration: none; }
+  .sgh .sgh-toc a:hover { background: var(--ds-hover); color: #fff !important; }
+  .sgh .sgh-toc .l3 a { padding-inline-start: 18px; color: var(--ds-text-muted) !important; }
+  .sgh .ds-prose { max-width: 78ch; min-width: 0; }
+  .sgh .ds-prose h2 { scroll-margin-top: 120px; }
+  .sgh .ds-prose h2:first-child { margin-block-start: 0; }
+  .sgh .ds-prose h3, .sgh .ds-prose h4 { scroll-margin-top: 120px; }
+  .sgh .ds-prose h4 { font: 700 var(--ds-fs-h4)/var(--ds-lh-h4) var(--ds-font); color: var(--ds-text-strong); margin-block-start: 1.2em; }
+  .sgh .ds-prose a { color: var(--ds-green-2); }
+  .sgh .ds-prose code { font: .9em var(--ds-font-mono); background: var(--ds-surface-2); border: 1px solid var(--ds-line-soft); border-radius: 4px; padding: 0 4px; overflow-wrap: anywhere; }
+  .sgh .ds-prose pre { overflow-x: auto; background: var(--ds-sunken); border: 1px solid var(--ds-line); border-radius: var(--ds-r-md); padding: var(--ds-sp-3); }
+  .sgh .ds-prose pre code { background: none; border: 0; padding: 0; white-space: pre; overflow-wrap: normal; }
+  .sgh .ds-prose blockquote { margin-inline: 0; padding: var(--ds-sp-2) var(--ds-sp-3); border-inline-start: 3px solid var(--ds-gold); background: var(--ds-gold-bg); border-radius: 0 var(--ds-r-md) var(--ds-r-md) 0; color: var(--ds-text-2); }
+  .sgh .ds-prose blockquote > * { margin: 0; } .sgh .ds-prose blockquote > * + * { margin-block-start: .5em; }
+  .sgh .ds-prose hr { border: 0; border-block-start: 1px solid var(--ds-line); }
+  .sgh .ds-prose .ds-tbl { overflow-x: auto; }
+  .sgh .ds-prose table { width: 100%; border-collapse: collapse; font-size: var(--ds-fs-sm); }
+  .sgh .ds-prose th, .sgh .ds-prose td { text-align: start; vertical-align: top; padding: 8px 10px; border-block-end: 1px solid var(--ds-line-soft); }
+  .sgh .ds-prose th { color: var(--ds-text-muted); font-weight: 700; font-size: var(--ds-fs-xs); text-transform: uppercase; letter-spacing: .04em; }
+  .sgh .ds-prose ul.md-tasks { list-style: none; padding-inline-start: 0; }
+  .sgh .ds-prose .md-cb { display: inline-block; width: 1.2em; color: var(--ds-green-2); }
+  .sgh .sgh-looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--ds-sp-2h); }
+  .sgh .sgh-look { display: grid; justify-items: center; gap: 6px; padding: var(--ds-sp-2h) var(--ds-sp-1h); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); background: var(--ds-surface); text-align: center; min-width: 0; }
+  .sgh .sgh-look img { width: 64px; height: 64px; image-rendering: pixelated; }
+  .sgh .sgh-look span { font-size: var(--ds-fs-xs); color: var(--ds-text-2); overflow-wrap: anywhere; }
+  .sgh .sgh-look small { font: 10px/1 var(--ds-font-mono); color: var(--ds-text-muted); }
+</style>
+<main class="ds-page sgh" id="top">
+  <section class="ds-hero<%= tab === 'home' ? '' : ' compact' %>">
+    <span class="ds-eyebrow"><%- t('sg.hub.eyebrow') %></span>
+    <h1><%- t('sg.hub.h.' + tab) %></h1>
+    <p class="ds-lead"><%- t('sg.hub.lead.' + tab) %></p>
+    <% if (tab === 'home') { %>
+      <div class="ds-ctas">
+        <a class="ds-btn" href="/styleguide/brand"><span class="ds-ic" aria-hidden="true">📺</span><%- t('sg.hub.cta.brand') %></a>
+        <a class="ds-btn ghost" href="/styleguide/design"><span class="ds-ic" aria-hidden="true">🎨</span><%- t('sg.hub.cta.design') %></a>
+      </div>
+    <% } %>
+  </section>
+
+  <%- include('partials/sg-hubnav', { tab, t }) %>
+
+  <% if (tab === 'home') { %>
+    <section class="ds-grid sgh-cards" aria-label="<%- t('sg.hub.nav') %>">
+      <% for (const [id, ic] of [['brand', '📺'], ['design', '🎨'], ['pepe', '🐸'], ['writing', '✍️']]) { %>
+        <a class="ds-card sgh-card" href="/styleguide/<%= id %>">
+          <span class="ds-ic" aria-hidden="true"><%= ic %></span>
+          <b><%- t('sg.hub.tab.' + id) %></b>
+          <p class="ds-sub"><%- t('sg.hub.card.' + id) %></p>
+        </a>
+      <% } %>
+    </section>
+    <section class="ds-card">
+      <h2 class="ds-h2 dot"><%- t('sg.hub.src.h') %></h2>
+      <p class="ds-sub"><%- t('sg.hub.src.lead') %></p>
+      <ul class="sgh-src ds-body">
+        <li><code>docs/brand.md</code> · <%- t('sg.hub.src.brand') %></li>
+        <li><code>docs/design-system.md</code> · <%- t('sg.hub.src.ds') %></li>
+        <li><code>public/css/ds.css</code> · <%- t('sg.hub.src.css') %></li>
+        <li><code>locales/glossary.json</code> · <%- t('sg.hub.src.glossary') %></li>
+        <li><code>docs/README.md</code> · <%- t('sg.hub.src.readme') %></li>
+      </ul>
+    </section>
+    <script>
+      // the token page moved to /styleguide/design (1.99qa): forward old /styleguide#colour-style links there
+      (function () {
+        var h = location.hash.slice(1);
+        var old = ['colour', 'type', 'space', 'radii', 'layout', 'icons', 'components', 'chips', 'cards', 'forms', 'tables', 'feedback', 'overlays', 'data', 'accents'];
+        if (old.indexOf(h) >= 0) location.replace('/styleguide/design#' + h);
+      })();
+    </script>
+  <% } else { %>
+    <% if (tab === 'pepe' && looks.length) { %>
+      <section class="ds-card" aria-labelledby="sghLooks">
+        <h2 class="ds-h2 dot" id="sghLooks"><%- t('sg.hub.looks.h') %></h2>
+        <p class="ds-sub"><%- t('sg.hub.looks.lead') %></p>
+        <% for (const g of ['base', 'persona', 'costume', 'mod']) { const ls = looks.filter((l) => l.group === g); if (!ls.length) continue; %>
+          <h3 class="ds-label"><%- t('sg.hub.looks.g.' + g) %></h3>
+          <div class="sgh-looks">
+            <% for (const l of ls) { %><figure class="sgh-look" style="margin:0"><img src="/public/img/pepe-looks/<%= encodeURIComponent(l.file) %>" alt="" width="64" height="64" loading="lazy"><span><%= l.name %></span><small><%= l.id %></small></figure><% } %>
+          </div>
+        <% } %>
+      </section>
+    <% } %>
+    <% if (doc && doc.html) { %>
+      <div class="sgh-doc">
+        <% if (doc.toc.length) { %>
+          <details class="sgh-toc" open>
+            <summary><%- t('sg.hub.toc') %></summary>
+            <ol>
+              <% for (const h of doc.toc) { %><li class="l<%= h.level %>"><a href="#<%= h.id %>"><%= h.text %></a></li><% } %>
+            </ol>
+          </details>
+        <% } %>
+        <article class="ds-prose"><%- doc.html %></article>
+      </div>
+    <% } else { %>
+      <div class="ds-empty"><span class="ds-ic" aria-hidden="true">📄</span><p><%- t('sg.hub.missing') %></p></div>
+    <% } %>
+    <p class="ds-fine"><%- t('sg.hub.source', { file: 'docs/brand.md' }) %></p>
+  <% } %>
+</main>
+<script>
+  // collapse the table of contents on phones (open by default so it works without JS)
+  (function () { var d = document.querySelector('.sgh-toc'); if (d && window.matchMedia('(max-width: 1023px)').matches) d.open = false; })();
+</script>

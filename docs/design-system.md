@@ -4,6 +4,7 @@ The look of publicaccess.tv, written down so any page can be built or polished w
 
 - **Stylesheet:** `public/css/ds.css`. It holds the tokens (`--ds-*` custom properties) and the component classes (`.ds-*`). `views/layout.ejs` loads it on every page.
 - **Living styleguide:** `/styleguide` (styleguide.js, views/styleguide.ejs). It is unlisted and noindex, and renders every token and component live from ds.css. It also has an RTL toggle.
+- **See also:** [brand.md](brand.md), the brand guide (voice, tone, visual identity, Pepe). Since 1.99qa `/styleguide` is a hub (Brand, Design system, Pepe, Writing) and the live token page is `/styleguide/design`.
 - **Origin:** the system formalises the 1.99lx–1.99pf redesigns: bets.css (markets, wagers, polls, bounties), the wallet, the shop dashboards, /economy, /premium, /support, /lotto, GTF, gangs and the casino. Wherever those pages disagreed, this document picks one value. §12 lists every disagreement and the value that won.
 
 ---
