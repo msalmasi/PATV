@@ -327,6 +327,7 @@ function register(app, { isBotToken, addUser, bySlug, isLive }) {
                       ON CONFLICT(post_id) DO UPDATE SET logins = excluded.logins`,
                      [r.post.id, row.room || "", row.id, " " + speakers.join(" ") + " ", by, t]);
       console.log(`[micclip] capture ${row.id} -> post ${r.post.id} (${speakers.length} speaker(s))`);
+      try { require("./achievements").poke(acct.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🎙️ Hot Mic / 🐸 Frog Quotes
       res.json({ ok: true, url: r.post.url, id: r.post.id, again: !!r.again });
     } catch (e) {
       if (e && e.refuse) return res.status(e.status || 400).json({ ok: false, error: e.message });

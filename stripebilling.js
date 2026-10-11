@@ -291,6 +291,7 @@ async function handleEvent(ev) {
     if (m && m.tier) await P.afterChange(m.tier, String(m.target || ""));
   }
   if (donation && !out.dup) {
+    try { require("./achievements").poke(donation.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 💡 donor achievements
     try {
       const i18n = require("./i18n");
       await i18n.ensure();

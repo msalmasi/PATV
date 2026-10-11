@@ -711,6 +711,14 @@ function register(app, { isBotToken, addUser }) {
       ? await grantCapped(u.userId, String(b.item || ""), b.source || "drop", b.idem, cap)
       : await grant(u.userId, String(b.item || ""), b.source || "drop", b.idem);
     if (r.ok && !r.already && BY_ID[b.item] && BY_ID[b.item].kind === "name_color") invalidateNames();
+    // 1.99mt: a gift Pepe sold (!cosmetic gift, also from /cosmetics/act) names its giver (`from`) and `anon` - into the gift log
+    if (r.ok && !r.already && b.source === "gift" && b.from) {
+      const g = await resolveUser(b.from).catch(() => null);
+      if (g && g.userId !== u.userId) {
+        await require("./gifts").record({ kind: "cosmetic", giverId: g.userId, recipientId: u.userId, item: (BY_ID[b.item] || {}).name || b.item,
+                                          ref: `cos:${String(b.idem || "").slice(0, 100)}`, anon: require("./gifts").anonFlag(b.anon) });
+      }
+    }
     res.status(r.ok ? 200 : 400).json({ ...r, username: u.username, camfrog: u.camfrogUsername || null });
   }));
 
@@ -859,9 +867,18 @@ function register(app, { isBotToken, addUser }) {
     const c = (await getQuery("SELECT item_id, locked FROM user_cosmetics WHERE id = ? AND user_id = ?", [invId, me]))[0];
     if (!c || !BY_ID[c.item_id]) return back("You don't own that item.");
     if (c.locked) return back("Cancel the listing before gifting it.");
-    const r = await transfer({ invId, fromId: me, toId: to.userId, idem: `gift:${invId}:${me}:${Date.now()}` });
+    const idem = `gift:${invId}:${me}:${Date.now()}`;
+    const r = await transfer({ invId, fromId: me, toId: to.userId, idem });
     if (!r.ok) return back("Couldn't gift it — " + r.error);
-    back(`Gifted ${BY_ID[c.item_id].name} to ${to.displayname || to.username}.`);
+    // 1.99mt: the recipient hears about it (🕶 "Someone" when sent anonymously) and it goes in the gift log
+    const G = require("./gifts");
+    const anon = G.anonFlag(b.anon);
+    const item = BY_ID[c.item_id].name;
+    await G.record({ kind: "cosmetic", giverId: me, recipientId: to.userId, item, ref: `cos:${idem}`, anon });
+    let from = null;
+    if (!anon) { const g = await resolveUser({ userId: me }).catch(() => null); from = g ? (g.displayname || g.username) : null; }
+    await G.notifyGift(to.userId, { item: `🎨 ${item}`, from, link: "/cosmetics?tab=mine#tabs", ref: `cos-gift:${idem}` });
+    back(anon ? `Gifted ${item} to ${to.displayname || to.username} anonymously.` : `Gifted ${item} to ${to.displayname || to.username}.`);
   }));
 
   app.post("/cosmetics/showcase", addUser, owner(async (b, me, back) => {
@@ -905,6 +922,7 @@ function register(app, { isBotToken, addUser }) {
           if (to.userId === me.userId) return back("That's you — use Buy instead.");
           try { await require("./gifts").guard(me, to); } catch (e) { return back(e.message); }    // 1.99ma: blocks + gift rate limit
           args = ["cosmetic", "gift", it.id, "@" + to.camfrogUsername];
+          if (require("./gifts").anonFlag(b.anon)) args.push("anon");     // 1.99mt: Pepe's notice then says "Someone" (bot 1.99mu)
         }
       } else if (op === "buylisting") {
         const l = await listingView(intOf(b.listing));

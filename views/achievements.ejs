@@ -10,7 +10,7 @@
   const TIERS = ['common', 'uncommon', 'rare', 'legendary'];
   const fmt = (n) => Number(n || 0).toLocaleString('en-US');
   const siteIds = achievements.filter(a => a.site).map(a => a.id);
-  const GROUPS = [['patv', t.esc("PATV"), siteIds], ['start', t('ach.group.start'), ["cf_linked","cf_telegram_","cf_google_","cf_cmd_1","cf_level_"]], ['chat', t('ach.group.chat'), ["cf_chat_","cf_streak_"]], ['mic', t('ach.group.mic'), ["cf_mic_","cf_top_mic"]], ['commands', t('ach.group.commands'), ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ['room', t('ach.group.room'), ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ['heists', t('ach.group.heists'), ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ['wheel', t('ach.group.wheel'), ["cf_spin","cf_wheel"]], ['casino', t('ach.group.casino'), ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ['games', t('ach.group.games'), ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ['bounties', t('ach.group.bounties'), ["cf_bounty"]], ['plex', t('ach.group.plex'), ["cf_plex_"]], ['else', t('ach.group.else'), ["cf_"]]];
+  const GROUPS = [['patv', t.esc("PATV"), siteIds], ['start', t('ach.group.start'), ["cf_linked","cf_telegram_","cf_google_","cf_wallet_","cf_cmd_1","cf_level_"]], ['chat', t('ach.group.chat'), ["cf_chat_","cf_streak_"]], ['mic', t('ach.group.mic'), ["cf_mic_","cf_top_mic"]], ['commands', t('ach.group.commands'), ["cf_cmd_","cf_say_","cf_roast_","cf_look_","cf_video_","cf_clip_10","cf_snap_","cf_sticker_","cf_sponsor","cf_imagine","cf_ask","cf_dj"]], ['room', t('ach.group.room'), ["cf_tip","cf_unblocked","cf_roasted","cf_clipped","cf_gang","cf_turf","cf_beg"]], ['heists', t('ach.group.heists'), ["cf_heist","cf_crack","cf_door","cf_convoy","cf_nat20","cf_bail","cf_pinched","cf_reroll"]], ['wheel', t('ach.group.wheel'), ["cf_spin","cf_wheel"]], ['casino', t('ach.group.casino'), ["cf_bj","cf_holdem","cf_lotto","cf_bingo","cf_wager","cf_market","cf_loan","cf_high_roller"]], ['games', t('ach.group.games'), ["cf_trivia","cf_pictionary","cf_showdown","cf_fight"]], ['bounties', t('ach.group.bounties'), ["cf_bounty"]], ['plex', t('ach.group.plex'), ["cf_plex_"]], ['giving', t('ach.group.giving'), ["cf_gift_","cf_donor"]], ['stream', t('ach.group.stream'), ["cf_stream_","cf_micclip_"]], ['pads', t('ach.group.pads'), ["cf_pad_","cf_packs_","cf_translator"]], ['else', t('ach.group.else'), ["cf_"]]];
   const used = new Set();
   const sections = GROUPS.map(([slug, title, prefixes]) => {
     const items = achievements.filter(a => !used.has(a.id) && prefixes.some(p => a.id === p || a.id.startsWith(p)));
@@ -18,6 +18,9 @@
     return { slug, title, items, got: owned ? items.filter(a => owned.has(a.id)).length : 0 };
   }).filter(s => s.items.length);
   const has = (a) => !!(owned && owned.has(a.id));
+  // 1.99mt: names + descriptions localized (en.json ach.n.<id> / ach.d.<id>); the site's own PATV badges stay as stored
+  const nameOf = (a) => t.has('ach.n.' + a.id) ? t('ach.n.' + a.id) : t.esc(a.name);
+  const descOf = (a) => t.has('ach.d.' + a.id) ? t('ach.d.' + a.id) : t.esc(a.desc);
   const total = achievements.length, gotN = owned ? achievements.filter(has).length : 0;
   const pct = total ? Math.round(gotN * 100 / total) : 0;
   const tierN = Object.fromEntries(TIERS.map(k => [k, { all: achievements.filter(a => (a.tier || 'common') === k).length, got: achievements.filter(a => (a.tier || 'common') === k && has(a)).length }]));
@@ -196,8 +199,8 @@
           <% if (owned) { %><span class="st" title="<%- got ? t('ach.state.unlocked') : t('ach.state.locked') %>"><span aria-hidden="true"><%= got ? '✓' : '🔒' %></span><span class="sr"><%- got ? t('ach.state.unlocked') : t('ach.state.locked') %></span></span><% } %>
           <div class="frame"><img src="<%= a.icon %>" alt="" loading="lazy" width="68" height="68"></div>
           <div class="tier"><%- t('ach.tier.' + tier) %></div>
-          <h3 class="nm" style="margin:0"><%= a.name %></h3>
-          <p class="ds"><%= a.desc %></p>
+          <h3 class="nm" style="margin:0"><%- nameOf(a) %></h3>
+          <p class="ds"><%- descOf(a) %></p>
           <div class="rw"><% if (a.xp) { %><span class="chip xp">+<%= fmt(a.xp) %> XP</span><% } %><% if (a.pat) { %><span class="chip pat">+<%= fmt(a.pat) %> PAT</span><% } %></div>
           <div class="hd"><%- t('ach.holders', { count: holders[a.id] || 0, n: (holders[a.id] || 0).toLocaleString() }) %></div>
         </article>

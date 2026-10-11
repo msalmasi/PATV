@@ -287,6 +287,7 @@ async function sync(row) {
 }
 async function notifyChange(row) {
   const inbox = require("./inbox");
+  if (["approved", "partial", "available"].includes(row.status)) { try { require("./achievements").poke(row.user_id); } catch (e) { /* achievements never block */ } }   // 1.99mt: 📬 Request Granted
   const name = `${row.title}${row.year ? ` (${row.year})` : ""}`;
   if (row.status === "available" || row.status === "partial") {
     const ok = await runQuery("UPDATE media_requests SET notified_at = ? WHERE id = ? AND notified_at IS NULL AND ? = 'available'", [clock(), row.id, row.status]);

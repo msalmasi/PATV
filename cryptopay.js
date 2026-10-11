@@ -475,6 +475,7 @@ async function settle(id, { force = false, actor = null } = {}) {
     return "credited";
   });
   if (notice) await notify(notice);
+  if (notice && notice.kind === "credited") { try { require("./achievements").poke(notice.userId); } catch (e) { /* achievements never block */ } }   // 1.99mt: 💡 donor achievements
   return status;
 }
 async function notify(n) {
@@ -606,6 +607,7 @@ async function linkFinish(user, nonce, signature) {
     return true;
   });
   if (linked) console.log(`[crypto] ${user.username || user.userId} linked ${n.family} wallet ${n.address} (signature)`);
+  if (linked) { try { require("./achievements").poke(user.userId); } catch (e) { /* achievements never block */ } }   // 1.99mt: 👛 Wallet Frog
   const claimed = await claimUnclaimed(n.family, n.address);
   return { linked: true, family: n.family, address: n.family === "evm" ? sig.toChecksum(n.address) : n.address, claimed };
 }

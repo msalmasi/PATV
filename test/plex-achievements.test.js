@@ -89,7 +89,7 @@ test.before(async () => {
 });
 
 test("catalog: three 📼 Plex achievements (web side) with badge art, and two cosmetics they unlock for good", () => {
-  const list = A.list().filter((a) => a.id.startsWith("cf_plex_"));
+  const list = A.list().filter((a) => a.id.startsWith("cf_plex_") && A.PLEX_METRICS.includes(a.metric));   // 1.99mt: cf_plex_play/binge/request are feature achievements
   assert.deepEqual(list.map((a) => [a.id, a.name, a.metric, a.threshold, a.xp, a.pat, a.tier, a.side]), [
     ["cf_plex_linked", "Tuned In", "plex_linked", 1, 2000, 25000, "common", "web"],
     ["cf_plex_member", "Front Row", "plex_member", 1, 5000, 50000, "uncommon", "web"],

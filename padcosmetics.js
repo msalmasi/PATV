@@ -123,6 +123,8 @@ function init() {
         ref TEXT NOT NULL, created INTEGER NOT NULL, decided INTEGER, decided_by TEXT)`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS pad_cos_ref ON pad_cosmetic_items (ref)");
       await runQuery("CREATE INDEX IF NOT EXISTS pad_cos_room ON pad_cosmetic_items (room_id, state)");
+      try { await runQuery("ALTER TABLE pad_cosmetic_items ADD COLUMN anon INTEGER NOT NULL DEFAULT 0"); }   // 1.99mt: 🕶 anonymous gift
+      catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
       await runQuery("CREATE TABLE IF NOT EXISTS pad_cosmetics_config (key TEXT PRIMARY KEY, value TEXT)");
       const r = (await getQuery("SELECT value FROM pad_cosmetics_config WHERE key = 'pay'"))[0];
       PAY = r ? r.value !== "false" : true;
@@ -177,6 +179,7 @@ async function buy(user, roomId, itemId, opts = {}) {
   const ref = "padcos:" + user.userId + ":" + rawRef;
   const via = opts.via === "chat" ? "chat" : "web";
   const ownerSelf = !!(R.owner && R.owner.userId === user.userId);
+  const anon = !ownerSelf && require("./gifts").anonFlag(opts.anon);     // 1.99mt: the owner sees "Someone"
   const slug = R.slug || R.id;
   const out = await tx(async () => {
     const had = (await getQuery("SELECT * FROM room_flow_ledger WHERE ref = ?", [ref]))[0];
@@ -196,15 +199,20 @@ async function buy(user, roomId, itemId, opts = {}) {
     const row = await require("./boosts").routeInTx({ ref, kind: "pad_cosmetic", room_id: R.id, payer_id: user.userId, payer_name: u.username,
       amount: item.price, owner_self: ownerSelf, via, flow: "pad_cosmetics", detail: `${item.id} p/${slug}` });
     const t = row.created;
-    const ins = await runQuery(`INSERT INTO pad_cosmetic_items (room_id, item_id, kind, state, buyer_id, buyer_name, price, owner_self, ref, created)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                               [R.id, item.id, item.kind, ownerSelf ? "owned" : "gift", user.userId, u.username, item.price, ownerSelf ? 1 : 0, ref, t]);
+    const ins = await runQuery(`INSERT INTO pad_cosmetic_items (room_id, item_id, kind, state, buyer_id, buyer_name, price, owner_self, ref, created, anon)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                               [R.id, item.id, item.kind, ownerSelf ? "owned" : "gift", user.userId, u.username, item.price, ownerSelf ? 1 : 0, ref, t, anon ? 1 : 0]);
     return { dup: false, row, username: u.username, it: { id: ins.id, state: ownerSelf ? "owned" : "gift" } };
   });
   if (!out.dup) {
-    require("./boosts").telemetry(out.row, opts.login || out.username, via);
-    try { await rooms.event(R.id, ownerSelf ? "cosmetic-buy" : "cosmetic-gift", out.username, `${item.id} ${item.price} PAT; Fort Knox ${out.row.fortknox}, room vault ${out.row.room_vault}`); } catch (e) { /* audit only */ }
-    if (!ownerSelf && R.owner && R.owner.userId) await giftNotice(R, item, out.username, out.it.id);
+    require("./boosts").telemetry(out.row, anon ? "" : (opts.login || out.username), via);
+    try { await rooms.event(R.id, ownerSelf ? "cosmetic-buy" : "cosmetic-gift", anon ? "anonymous" : out.username, `${item.id} ${item.price} PAT; Fort Knox ${out.row.fortknox}, room vault ${out.row.room_vault}`); } catch (e) { /* audit only */ }
+    if (!ownerSelf && R.owner && R.owner.userId) {
+      await giftNotice(R, item, anon ? require("./gifts").tFor(R.owner.userId)("gifts.anon.someone") : out.username, out.it.id);
+    }
+    // 1.99mt: the gift log (admins see the real giver; the 🎁 achievements count it)
+    if (!ownerSelf) await require("./gifts").record({ kind: "pad_cosmetic", giverId: user.userId, recipientId: (R.owner && R.owner.userId) || null, target: R.id,
+                                                      item: `${item.name} (p/${slug})`, ref: `padcos:${ref}`, anon });
   }
   const r = out.row;
   return { dup: out.dup, item: item.id, name: item.name, amount: r.amount, fortknox: r.fortknox, room_vault: r.room_vault, owner_self: !!r.owner_self,
@@ -345,7 +353,7 @@ async function state(R, viewer) {
     has: [...new Set([...items.map((i) => i.item_id), ...(prime ? CAT.items.filter((i) => i.perk === "prime_time").map((i) => i.id) : [])])],
     prime: { on: prime, link: `/premium?pad=${encodeURIComponent(R.slug || R.id)}` },
     // who gave what is for the people who run the pad
-    items: manage ? items.map((i) => ({ id: i.id, item_id: i.item_id, kind: i.kind, state: i.state, from: i.owner_self ? null : i.buyer_name, created: i.created })) : [],
+    items: manage ? items.map((i) => ({ id: i.id, item_id: i.item_id, kind: i.kind, state: i.state, from: i.owner_self || Number(i.anon) ? null : i.buyer_name, anon: !!Number(i.anon), created: i.created })) : [],
     equipped: PL.cosmeticsOf(R.id),
     anim: manage ? { uploaded: !!L.hasAnim, url: L.avatarAnim, max_frames: PL.ANIM_MAX_FRAMES, max_out: PL.ANIM_MAX_OUT } : null,
     pad: { id: R.id, slug: R.slug || R.id, title: R.title, accent: L.accent, avatar: L.avatar, owner: R.owner ? (R.owner.display || R.owner.username) : null },
@@ -390,7 +398,7 @@ function register(app, { addUser }) {
     try {
       const R = await pad(req);
       const b = req.body || {};
-      const r = await buy(req.user, R.id, b.item, { ref: b.ref, via: "web" });
+      const r = await buy(req.user, R.id, b.item, { ref: b.ref, via: "web", anon: b.anon === true });
       res.json({ ok: true, ...r, state: await state(R, req.user) });
     } catch (e) { fail(res, e); }
   });

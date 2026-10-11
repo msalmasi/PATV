@@ -158,6 +158,8 @@ function init() {
         kind TEXT NOT NULL, payer_id TEXT, payer_name TEXT, amount INTEGER NOT NULL DEFAULT 0, days REAL NOT NULL DEFAULT 0,
         period_from INTEGER, period_to INTEGER, routing TEXT, via TEXT, created INTEGER NOT NULL)`);
       await runQuery("CREATE UNIQUE INDEX IF NOT EXISTS premium_ledger_ref ON premium_ledger (ref)");
+      try { await runQuery("ALTER TABLE premium_ledger ADD COLUMN anon INTEGER NOT NULL DEFAULT 0"); }   // 1.99mt: 🕶 anonymous gift / chip-in
+      catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
       await runQuery("CREATE INDEX IF NOT EXISTS premium_ledger_sub ON premium_ledger (sub_id, created)");
       await runQuery("CREATE TABLE IF NOT EXISTS premium_jobs (day TEXT PRIMARY KEY, started INTEGER NOT NULL, finished INTEGER, result TEXT)");
       await loadConfig();
@@ -320,7 +322,9 @@ const tx = (fn) => require("./boosts").tx(fn);
 
 /**
  * Pay for a tier. user = {userId, username}; opts = {tier, pad (slug/id) | user (username), months | amount, ref,
- * renew (true: become the renewer), via}. Idempotent per (user, ref).
+ * renew (true: become the renewer), via, anon (1.99mt: a gift / chip-in for someone else, sent anonymously - the
+ * recipient's notice and the pad's backers list say "Someone"; the ledger + gift log keep the payer for admins)}.
+ * Idempotent per (user, ref).
  * -> {dup, tier, target, amount, days, paid_through, routing, gift}
  */
 async function buy(user, opts = {}) {
@@ -375,19 +379,20 @@ async function buy(user, opts = {}) {
     const u = (await getQuery("SELECT username FROM users WHERE userId = ?", [user.userId]))[0];
     if (!u) throw new Refuse(404, "Couldn't find your account.");
     const kind = opts.amount != null && opts.months == null ? "contribute" : ownerSelf ? "buy" : "gift";
+    const anon = !ownerSelf && require("./gifts").anonFlag(opts.anon);
     const L = require("./ledger");
     const res = await L.post(user.userId, -amount, `${T.emoji} ${T.name} ${kind === "contribute" ? "contribution" : kind}: ${label}`.slice(0, 120),
                              { requireCover: true, transactionId: txRef(ref), source: "premium" });
     if (!res.ok) throw new Refuse(402, `That's ${fmt(amount)} PAT - you don't have enough.`);
     const routing = await bookRoute(T.flow, amount, { roomId, ownerSelf: T.kind === "pad" ? ownerSelf : true, payerId: user.userId, label: `${T.name} ${label}` });
-    await runQuery(`INSERT INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, payer_name, amount, days, period_from, period_to, routing, via, created)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                   [ref, sub.id, T.id, target, kind, user.userId, u.username, amount, days, from, to, JSON.stringify(routing), via, t]);
+    await runQuery(`INSERT INTO premium_ledger (ref, sub_id, tier, target, kind, payer_id, payer_name, amount, days, period_from, period_to, routing, via, created, anon)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                   [ref, sub.id, T.id, target, kind, user.userId, u.username, amount, days, from, to, JSON.stringify(routing), via, t, anon ? 1 : 0]);
     const renewer = opts.renew === true && (!sub.renewer_id || sub.renewer_id === user.userId || ownerSelf) && (T.kind === "pad" || ownerSelf)
       ? user.userId : sub.renewer_id;
     await runQuery("UPDATE premium_subs SET paid_through = ?, renewer_id = ?, status = 'active', notified = NULL, updated = ? WHERE id = ?",
                    [to, renewer || null, t, sub.id]);
-    return { dup: false, username: u.username, kind, routing, to, from, subId: sub.id };
+    return { dup: false, username: u.username, kind, routing, to, from, subId: sub.id, anon };
   });
   await loadCache();
   if (!out.dup) await afterChange(T.id, target);
@@ -395,18 +400,25 @@ async function buy(user, opts = {}) {
     const r = out.row;
     return { dup: true, tier: T.id, target, amount: r.amount, days: r.days, paid_through: r.period_to, routing: JSON.parse(r.routing || "[]"), gift: r.kind === "gift" };
   }
-  await audit(roomId, "premium-" + out.kind, out.username, `${T.id} ${label} ${amount} PAT ${days.toFixed(2)}d -> ${new Date(out.to).toISOString().slice(0, 10)}`);
-  if (roomId) telemetry(ref, roomId, out.username, ownerSelf, amount, via, t);
+  // 1.99mt: the pad's event log is read by its owner/mods - an anonymous payer stays anonymous there (premium_ledger keeps them)
+  await audit(roomId, "premium-" + out.kind, out.anon ? "anonymous" : out.username, `${T.id} ${label} ${amount} PAT ${days.toFixed(2)}d -> ${new Date(out.to).toISOString().slice(0, 10)}`);
+  if (roomId) telemetry(ref, roomId, out.anon ? "" : out.username, ownerSelf, amount, via, t);
+  // 1.99mt: every gift goes in the gift log (gifts.js: the admins' audit + the 🎁 achievements), anonymous or not
+  if (out.kind === "gift") {
+    await require("./gifts").record({ kind: T.id, giverId: user.userId, recipientId: recipient && recipient !== user.userId ? recipient : null,
+                                      target: T.kind === "pad" ? target : null, item: `${T.emoji} ${T.name}`, ref: `prem:${ref}`, anon: out.anon });
+  }
   if (recipient && recipient !== user.userId && T.kind === "user") {
-    // 1.99ma: the shared 🎁 gift notice (gifts.js), in the recipient's language
+    // 1.99ma: the shared 🎁 gift notice (gifts.js), in the recipient's language; 1.99mt: from = null when anonymous
     const G = require("./gifts");
     const tr = G.tFor(recipient);
-    await G.notifyGift(recipient, { item: `${T.emoji} ${T.name}`, from: out.username, link: "/premium", ref: `prem-${out.subId}-${ref}`,
+    await G.notifyGift(recipient, { item: `${T.emoji} ${T.name}`, from: out.anon ? null : out.username, link: "/premium", ref: `prem-${out.subId}-${ref}`,
       extra: tr("gifts.notice.premium_until", { date: new Date(out.to).toISOString().slice(0, 10) }) });
   } else if (recipient && recipient !== user.userId) {
+    const who = out.anon ? require("./gifts").tFor(recipient)("gifts.anon.someone") : out.username;
     await notify(recipient, T.kind === "pad" ? "room" : "cosmetics", `prem-${out.subId}-${ref}`,
-      `${T.emoji} ${out.username} ${out.kind === "contribute" ? "chipped in" : "paid"} for ${T.name} on ${label}`,
-      `${out.username} added ${days >= 1 ? Math.floor(days) + " day" + (Math.floor(days) === 1 ? "" : "s") : "time"} of ${T.name} - paid through ${new Date(out.to).toISOString().slice(0, 10)}.`,
+      `${T.emoji} ${who} ${out.kind === "contribute" ? "chipped in" : "paid"} for ${T.name} on ${label}`,
+      `${who} added ${days >= 1 ? Math.floor(days) + " day" + (Math.floor(days) === 1 ? "" : "s") : "time"} of ${T.name} - paid through ${new Date(out.to).toISOString().slice(0, 10)}.`,
       T.kind === "pad" && R ? `/premium?pad=${encodeURIComponent(R.slug || R.id)}` : "/premium");
   }
   return { dup: false, tier: T.id, target, amount, days, paid_through: out.to, routing: out.routing, gift: out.kind === "gift", kind: out.kind };
@@ -660,9 +672,12 @@ function subView(tier, sub, t = now()) {
            ends: sub && !sub.comped ? endsAt(sub, t) : null, renewing: !!(sub && (sub.renewer_id || sub.stripe_sub)),
            stripe: !!(sub && sub.stripe_sub) };
 }
+// 1.99mt: anonymous payments are one "🕶 Someone" row per payer with no name (the page never gets who)
 async function contributors(subId, limit = 8) {
-  return getQuery(`SELECT payer_name AS name, SUM(amount) AS amount, MAX(created) AS last FROM premium_ledger
-                   WHERE sub_id = ? AND amount > 0 AND payer_name IS NOT NULL GROUP BY payer_id ORDER BY amount DESC LIMIT ?`, [subId, limit]);
+  const rows = await getQuery(`SELECT CASE WHEN COALESCE(anon, 0) = 1 THEN NULL ELSE payer_name END AS name, COALESCE(anon, 0) AS anon,
+                                      SUM(amount) AS amount, MAX(created) AS last FROM premium_ledger
+                               WHERE sub_id = ? AND amount > 0 AND payer_name IS NOT NULL GROUP BY payer_id, COALESCE(anon, 0) ORDER BY amount DESC LIMIT ?`, [subId, limit]);
+  return rows.map((r) => ({ name: r.anon ? null : r.name, anon: !!r.anon, amount: r.amount, last: r.last }));
 }
 async function state(viewer, padSlug) {
   await init();
@@ -685,7 +700,7 @@ async function state(viewer, padSlug) {
       const owner = !!(signed && R.owner && R.owner.userId === viewer.userId);
       pad = { id: R.id, slug: R.slug || R.id, title: R.title, owner: R.owner ? (R.owner.display || R.owner.username) : null, mine: owner,
               ...subView("prime_time", s, t), renewer_me: !!(s && signed && s.renewer_id === viewer.userId),
-              contributors: s ? (await contributors(s.id)).map((c) => ({ name: c.name, amount: c.amount })) : [] };
+              contributors: s ? (await contributors(s.id)).map((c) => ({ name: c.name, anon: c.anon, amount: c.amount })) : [] };
     }
   }
   const C = CONFIG;
@@ -755,7 +770,7 @@ function register(app, { addUser }) {
   app.post("/api/premium/buy", addUser, write, async (req, res) => {
     try {
       const b = req.body || {};
-      const r = await buy(req.user, { tier: b.tier, pad: b.pad, user: b.user, months: b.months, amount: b.amount, ref: b.ref, renew: b.renew === true, via: "web" });
+      const r = await buy(req.user, { tier: b.tier, pad: b.pad, user: b.user, months: b.months, amount: b.amount, ref: b.ref, renew: b.renew === true, via: "web", anon: b.anon === true });
       res.json({ ok: true, ...r, state: await state(req.user, b.tier === "prime_time" ? b.pad : null) });
     } catch (e) { fail(res, e); }
   });

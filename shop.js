@@ -116,8 +116,10 @@ const ready = (async () => {
   // 1.99lz: a GIFT (an official item bought for someone else): buyer_id is who it's for (the order, its effects and anything
   // delivered on it are theirs), gift_from is who paid (sees the order, never its delivered note / invite link).
   // 1.99ma: an admin COMP (comps.js / compPrize): comp_by = the admin, comp_reason = why; price 0, nothing routed
+  // 1.99mt: gift_anon = 1 - an 🕶 anonymous gift: the recipient never sees gift_from (gifts.js)
   for (const sql of ["ALTER TABLE shop_orders ADD COLUMN gift_from TEXT", "ALTER TABLE shop_orders ADD COLUMN gift_note TEXT",
-                     "ALTER TABLE shop_orders ADD COLUMN comp_by TEXT", "ALTER TABLE shop_orders ADD COLUMN comp_reason TEXT"]) {
+                     "ALTER TABLE shop_orders ADD COLUMN comp_by TEXT", "ALTER TABLE shop_orders ADD COLUMN comp_reason TEXT",
+                     "ALTER TABLE shop_orders ADD COLUMN gift_anon INTEGER NOT NULL DEFAULT 0"]) {
     try { await runQuery(sql); } catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
   }
   await runQuery("CREATE TABLE IF NOT EXISTS shop_settings (key TEXT PRIMARY KEY, value TEXT)");
@@ -307,7 +309,8 @@ function runSaleHooks(sale) {
 // Returns {success, status, message, prize, cost, balance, remaining_stock, owner, order_id}. Never throws.
 // 1.99lz: giftTo (a PATV username or linked Camfrog name; website only) buys an OFFICIAL item for someone else: the
 // caller pays, the recipient gets the item (its role / invite / order) - see buyOfficial. giftNote = an optional line.
-async function purchasePrize({ userId, username, prizeId, source, buyerInput, expectedCost, giftTo, giftNote }) {
+// 1.99mt: giftAnon = send it anonymously (the recipient sees "Someone"; gifts.js).
+async function purchasePrize({ userId, username, prizeId, source, buyerInput, expectedCost, giftTo, giftNote, giftAnon }) {
   try {
     await ready;
     const prizes = await getQuery(
@@ -322,7 +325,8 @@ async function purchasePrize({ userId, username, prizeId, source, buyerInput, ex
       const g = await giftRecipient(prizes[0], userId, giftTo);
       if (g.error) return { success: false, status: g.status || 400, message: g.error };
       return await buyOfficial(prizes[0], { userId: g.to.userId, username: g.to.username, source, expectedCost,
-                                            gift: { payerId: userId, payerName: username, note: oneLine(giftNote, 140) || null } });
+                                            gift: { payerId: userId, payerName: username, note: oneLine(giftNote, 140) || null,
+                                                    anon: require("./gifts").anonFlag(giftAnon) } });
     }
     // The website sends the price the buyer saw; a price edit in between must not charge them more.
     // Official items check it inside buyOfficial, against the price the server computes for this
@@ -531,7 +535,7 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       }
       if (role) {
         await runQuery("INSERT OR IGNORE INTO user_roles (userId, role, source) VALUES (?, ?, ?)",
-                       [userId, role, comp ? `comp:${comp.by}` : gift ? `gift:${payerName}` : `purchase:${source}`]);
+                       [userId, role, comp ? `comp:${comp.by}` : gift ? `gift:${gift.anon ? "anonymous" : payerName}` : `purchase:${source}`]);
         if (D.achievements) D.achievements.checkWeb(userId);               // e.g. High Roller
       }
       if (!comp) {
@@ -545,18 +549,20 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
       }
       const now = Date.now();
       const o = await runQuery(`INSERT INTO shop_orders (prize_id, buyer_id, seller_id, official, title, price, fee_pct, fee, net,
-          seller_paid, status, source, created, completed_at, closed_at, updated, gift_from, gift_note, comp_by, comp_reason)
-        VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          seller_paid, status, source, created, completed_at, closed_at, updated, gift_from, gift_note, comp_by, comp_reason, gift_anon)
+        VALUES (?, ?, NULL, 1, ?, ?, 0, 0, ?, 1, 'completed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [prize.prizeId, userId, prize.prize, prize.cost, prize.cost, source, now, now, now, now, gift ? payerId : null, gift ? gift.note : null,
-         comp ? String(comp.by).slice(0, 60) : null, comp ? String(comp.reason || "").slice(0, 200) : null]);
+         comp ? String(comp.by).slice(0, 60) : null, comp ? String(comp.reason || "").slice(0, 200) : null, gift && gift.anon ? 1 : 0]);
       orderId = o.id;
       if (boost && !comp) {
         // to the House, the same place gold-wheel wagers go: debit == credit, nothing minted or burned
         await runQuery("INSERT INTO jackpot_rakes (jackpotId, spinId, userId, amount) VALUES (?, ?, ?, ?)",
                        [uuidv4(), `shop-order:${orderId}`, userId, prize.cost]);
       }
-      await event(orderId, "completed", comp ? comp.by : payerName, comp ? `🎁 Comped by ${comp.by}: ${comp.reason || "-"} — no charge, nothing routed`
+      // 1.99mt: an anonymous gift's events are seen by the recipient too - no giver name in them (admins: gift_from / gift_log)
+      await event(orderId, "completed", comp ? comp.by : gift && gift.anon ? null : payerName, comp ? `🎁 Comped by ${comp.by}: ${comp.reason || "-"} — no charge, nothing routed`
                                                          : boost ? `Official store item — delivered instantly; ${prize.cost.toLocaleString()} PAT to the House (copy #${owned + 1})`
+                                                         : gift && gift.anon ? `🎁 An anonymous gift to ${username} — official store item`
                                                          : gift ? `🎁 Gift from ${payerName} to ${username} — official store item`
                                                          : "Official store item — delivered instantly");
       await runQuery("COMMIT");
@@ -581,7 +587,17 @@ function buyOfficial(listed, { userId, username, source, expectedCost, gift = nu
               comp ? `${comp.by} comped ${prize.prize} to ${username}: ${comp.reason || "-"}` : gift ?`User ${payerName} bought ${prize.prize} for ${prize.cost} coins as a GIFT for ${username} (via ${source}) - deliver it to ${username}.`
                    : `User ${username} purchased ${prize.prize} for ${prize.cost} coins (via ${source}).`).catch(() => {});
     // 1.99lz: the recipient hears about their gift (inbox + email + Camfrog PM, their own notification settings)
+    // 1.99mt: 🕶 anonymous = "Someone", in the recipient's language; every gift goes in the gift log (admins see the giver)
     if (gift) {
+      const G = require("./gifts");
+      G.record({ kind: "shop", giverId: payerId, recipientId: userId, item: prize.prize, ref: `shop:${orderId}`, anon: !!gift.anon }).catch(() => {});
+    }
+    if (gift && gift.anon) {
+      const tr = require("./gifts").tFor(userId);
+      notify(userId, { subject: tr("gifts.anon.subject", { item: prize.prize }),
+                       text: tr("gifts.anon.text", { item: prize.prize }) + (gift.note ? `\n\n"${gift.note}"` : ""),
+                       pm: tr("gifts.anon.pm", { item: prize.prize }), link: `/shop/orders/${orderId}` }).catch(() => {});
+    } else if (gift) {
       notify(userId, { subject: `🎁 ${payerName} sent you a gift: ${prize.prize}`,
                        text: `${payerName} bought you ${prize.prize} from the PATV shop.${gift.note ? `\n\n"${gift.note}"` : ""}`,
                        pm: `🎁 ${payerName} sent you a gift from the PATV shop: ${prize.prize}.`, link: `/shop/orders/${orderId}` }).catch(() => {});
@@ -1128,6 +1144,21 @@ async function sellerSales(userId) {
   return r[0].n;
 }
 
+/**
+ * 1.99mt: an 🕶 anonymous gift seen by anyone but its giver - including its recipient when they are staff (staff see the giver
+ * only on someone else's order, as admins) - loses the giver: gift_from -> "anonymous", gift_from_name -> null, anon_view.
+ */
+function maskAnonGift(o, me) {
+  if (!o || !o.gift_from || !Number(o.gift_anon)) return o;
+  const mine = me && o.gift_from === me.userId;
+  const adminView = me && me.staff && o.buyer_id !== me.userId;
+  if (mine || adminView) return o;
+  o.gift_from = "anonymous";
+  o.gift_from_name = null;
+  o.anon_view = true;
+  return o;
+}
+
 async function eventsFor(ids) {
   if (!ids.length) return {};
   const rows = await getQuery(`SELECT * FROM shop_order_events WHERE order_id IN (${ids.map(() => "?").join(",")}) ORDER BY id`, ids);
@@ -1223,7 +1254,7 @@ function register(app, deps) {
   app.post("/shop", addUser, requireUser, async (req, res) => {
     const r = await purchasePrize({ userId: req.user.userId, username: req.user.username,
                                     prizeId: req.body.product, source: "website", buyerInput: req.body.buyer_input,
-                                    expectedCost: req.body.price, giftTo: req.body.gift_to, giftNote: req.body.gift_note });
+                                    expectedCost: req.body.price, giftTo: req.body.gift_to, giftNote: req.body.gift_note, giftAnon: req.body.gift_anon });
     const { status, ...body } = r;
     res.status(status).json(body);
   });
@@ -1394,6 +1425,7 @@ function register(app, deps) {
       const orders = await getQuery(`SELECT ${ORDER_COLS}, g.username AS gift_from_name ${ORDER_JOIN} LEFT JOIN users g ON g.userId = o.gift_from
                                      WHERE o.buyer_id = ? OR o.gift_from = ? ORDER BY o.id DESC LIMIT 30 OFFSET ?`,
                                     [me.userId, me.userId, (page - 1) * 30]);
+      orders.forEach((o) => maskAnonGift(o, me));
       const events = await eventsFor(orders.map((o) => o.id));
       const spent = (await getQuery(`SELECT COALESCE(SUM(price),0) AS t, COUNT(*) AS n FROM shop_orders
         WHERE ((buyer_id = ? AND gift_from IS NULL) OR gift_from = ?) AND status NOT IN ('cancelled','refunded')`, [me.userId, me.userId]))[0];
@@ -1419,6 +1451,7 @@ function register(app, deps) {
       // 1.99lz: "gifter" = paid for it as a gift: sees the order, not what was delivered on it (an invite link, a code)
       const role = o.buyer_id === me.userId ? "buyer" : o.seller_id === me.userId ? "seller" : (o.gift_from === me.userId && !me.staff) ? "gifter" : "admin";
       if (o.gift_from) o.gift_from_name = ((await getQuery("SELECT username FROM users WHERE userId = ?", [o.gift_from]))[0] || {}).username || null;
+      maskAnonGift(o, me);                          // 1.99mt: the recipient of an 🕶 anonymous gift never sees who sent it
       res.render("shopOrder", base(req, me, { o, events, role }));
     } catch (e) {
       console.error("[shop] order:", e);
@@ -1546,5 +1579,6 @@ function register(app, deps) {
 module.exports = { register, purchasePrize, orderAction, onOfficialSale, chargeService, chargeRenewal, refundService, getOrder, event, createListing, editListing, listingStatus, sweep, settings, saveSettings,
                    ready, ROLE_PRIZES, REQUEST_ITEMS, STORE_OWNER_USERNAME, notify, Refuse,
                    compPolicy, compPrize, compOrder, officialPolicies,     // 1.99ma: admin comps (comps.js)
+                   maskAnonGift,                                          // 1.99mt: anonymous gifts
                    SPINBOOST_ID, SPINBOOST_SPINS, SPINBOOST_BASE, SPINBOOST_STEP, spinboostPrice, spinboostOwned, priceFor, personalise,
                    browse, featured, validateListing, H /* 1.99lz: for the storefront tests */ };

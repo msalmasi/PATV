@@ -265,6 +265,7 @@ async function finishCamfrog(connId, { roomId, roomName, method, actor, evidence
   await rooms.notify(P.owner.userId, { kind: "stage", title: `p/${P.slug} is now the pad of Camfrog room ${out.target}`, pm: true,
     body: "Its room bridge, room vault and owner !stage commands are yours now.", link: "/p/" + encodeURIComponent(P.slug) + "/settings?tab=address" });
   if (out.c.join_opt_in) await tellAdmins(`Pepe join request: p/${P.slug}`, `${P.title} (Camfrog room ${out.target}) asks for Pepe to join.`);
+  try { require("./achievements").poke(out.c.requested_by); } catch (e) { /* achievements never block */ }   // 1.99mt: 🌉 Bridge Builder
   return P;
 }
 async function isStaffId(userId) {

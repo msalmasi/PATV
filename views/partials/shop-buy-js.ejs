@@ -28,15 +28,18 @@
       const giftEl = gift ? document.getElementById('giftTo') : null;
       const giftTo = giftEl ? giftEl.value.trim().replace(/^@/, '') : '';
       const noteEl = gift ? document.getElementById('giftNote') : null;
+      const anonEl = gift ? document.getElementById('giftAnon') : null;      // 1.99mt: 🕶 send anonymously
+      const anon = !!(anonEl && anonEl.checked);
       if (gift && !giftTo) { show(_t('js.shop.gift_need_name', 'Type who it’s for first.'), false); if (giftEl) giftEl.focus(); return; }
       const q = subscribe ? _t('js.subs.q_sub', 'Subscribe to {title} for {price} PAT every {days} days? The first period is charged now; cancel any time.', { title: '"' + name + '"', price: cost.toLocaleString(), days: button.dataset.days })
+              : gift && anon ? _t('js.shop.confirm_gift_anon', 'Send {name} to {to} anonymously for {cost} PAT? They won’t see who sent it.', { name: '"' + name + '"', to: giftTo, cost: cost.toLocaleString() })
               : gift ? _t('js.shop.confirm_gift', 'Send {name} to {to} as a gift for {cost} PAT?', { name: '"' + name + '"', to: giftTo, cost: cost.toLocaleString() })
                           : _t('js.shop.confirm_buy', 'Buy {name} for {cost} PAT?', { name: '"' + name + '"', cost: cost.toLocaleString() });
       if (!confirm(q)) return;
       button.disabled = true;
       fetch(subscribe ? '/api/subscriptions/start' : '/shop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                        body: JSON.stringify(subscribe ? { product, price: cost }
-                                          : gift ? { product, price: cost, gift_to: giftTo, gift_note: noteEl ? noteEl.value.trim() : '' }
+                                          : gift ? { product, price: cost, gift_to: giftTo, gift_note: noteEl ? noteEl.value.trim() : '', gift_anon: anon }
                                           : { product, price: cost, buyer_input: buyerInput }) })
         // The server explains WHY a purchase failed (not logged in, not enough PAT, out of stock).
         .then((r) => r.json().catch(() => ({})).then((data) => ({ ok: r.ok, data })))
@@ -47,7 +50,7 @@
                succeeded, succeeded && data.order_id ? '/shop/orders/' + data.order_id : null);
           if (succeeded) {
             button.textContent = subscribe ? _t('js.subs.subscribed', 'Subscribed') : gift ? _t('js.shop.gifted', 'Sent 🎁') : listing ? _t('js.shop.ordered', 'Ordered') : _t('js.shop.purchased', 'Purchased');      // no accidental double-buy
-            if (gift && giftEl) { giftEl.value = ''; if (noteEl) noteEl.value = ''; }
+            if (gift && giftEl) { giftEl.value = ''; if (noteEl) noteEl.value = ''; if (anonEl) anonEl.checked = false; }
             const bal = document.getElementById('shopBalance');
             if (bal && typeof data.balance === 'number') bal.textContent = data.balance.toLocaleString();
             document.querySelectorAll('[data-stock="' + product + '"]').forEach((el) => {

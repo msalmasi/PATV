@@ -105,6 +105,7 @@
                 <input type="text" id="giftTo" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="<%- t('shop.gift.to_ph') %>">
                 <label for="giftNote"><%- t('shop.gift.note') %></label>
                 <input type="text" id="giftNote" maxlength="140" placeholder="<%- t('shop.gift.note_ph') %>">
+                <label class="st-anon"><input type="checkbox" id="giftAnon"> <%- t('gifts.anon.box') %></label>
                 <button class="buy-btn" data-gift="1" data-product="<%= p.prizeId %>" data-name="<%= p.prize %>" data-cost="<%= p.cost %>"><%- t('shop.gift.btn', { price: H.fmt(p.cost) }) %></button>
                 <p class="muted" style="margin:0"><%- t('shop.gift.help') %></p>
               </div>

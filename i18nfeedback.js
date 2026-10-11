@@ -210,6 +210,7 @@ async function accept(id, adminName, edited) {
   await runQuery("UPDATE translation_suggestions SET status = 'superseded', reviewed_by = ?, reviewed_at = ? WHERE lang = ? AND key = ? AND status = 'pending' AND id <> ?",
     [adminName, now, r.lang, r.key, r.id]);
   await reload();
+  try { require("./achievements").poke(r.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🌍 Polyglot
   return { lang: r.lang, key: r.key, value };
 }
 

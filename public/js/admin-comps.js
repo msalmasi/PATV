@@ -52,6 +52,12 @@
       return "<tr><td>" + esc(when(r.at)) + "</td><td>" + esc(r.admin_name) + "</td><td>" + esc(r.action) + "</td><td>" + esc(r.target_name || "") + "</td>" +
         "<td><code>" + esc(r.detail ? JSON.stringify(r.detail).slice(0, 160) : "") + "</code></td><td>" + esc(r.reason || "") + "</td></tr>";
     }).join("") || "<tr><td class=\"empty\" colspan=\"6\">Nothing yet.</td></tr>";
+    var gr = document.getElementById("giftRows");          // 1.99mt: the gift log (real givers)
+    if (gr) gr.innerHTML = (C.gifts || []).map(function (g) {
+      var who = function (n) { return n ? "<a href=\"/u/" + encodeURIComponent(n) + "\">" + esc(n) + "</a>" : "—"; };
+      return "<tr><td>" + esc(when(g.created)) + "</td><td>" + esc(g.kind) + "</td><td>" + esc(g.item || "") + "</td><td>" + who(g.giver) + "</td>" +
+        "<td>" + (g.recipient ? who(g.recipient) : esc(g.target || "—")) + "</td><td>" + (g.anon ? "🕶 yes" : "") + "</td></tr>";
+    }).join("") || "<tr><td class=\"empty\" colspan=\"6\">No gifts yet.</td></tr>";
     fillItems();
     void t;
   }

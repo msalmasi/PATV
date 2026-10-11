@@ -5,8 +5,8 @@
 // (points = XP, plus a `pat` column), so they show on profiles like any other badge.
 //
 // Pepe counts the activity in Camfrog and calls POST /api/g/achievement when a threshold is crossed;
-// this awards the badge once, adds the XP (which can level the user up), and pays the PAT out of the
-// vault the "achievements" payout row names (the Federal Reserve) - skipped if it can't cover it.
+// this awards the badge once, adds the XP (which can level the user up), and pays the PAT through funding.fundPayout
+// "achievements" (economy v2/v3: the incentive budget's achievements group; queued when the budget is short).
 const fs = require("fs");
 const path = require("path");
 const { runQuery, getQuery } = require("./dbUtils");
@@ -104,6 +104,12 @@ async function webMetrics(userId) {
   const tgBackfilled = await telegramBackfill().then(() => true, () => false);
   // 1.99lu: 🍀 Google - linked from Edit profile or by Sign in with Google (ssolinks.js sso_links); same rule as Telegram
   const googleBackfilled = await googleBackfill().then(() => true, () => false);
+  // 1.99mt: the feature achievements (gifts, Support PATV, Play from Plex, streams, clips, ...) - same rule, their own backfill
+  const featBackfilled = await featureBackfill().then(() => true, () => false);
+  // (skipped once the account holds every one of them - checkWeb runs on every spin)
+  const featIds = catalog.filter((a) => a.side === "web" && FEATURE_METRICS.includes(a.metric)).map((a) => a.id);
+  const featHeld = featIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${featIds.map(() => "?").join(",")})`, [userId, ...featIds]) : 0;
+  const feat = featBackfilled && featHeld < featIds.length ? await featureMetrics(userId).catch(() => ({})) : {};
   const spent = await one(`SELECT COALESCE(SUM(-points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WAGER}`, [userId]);
   const won = await one(`SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WIN}`, [userId]);
   return {
@@ -120,6 +126,7 @@ async function webMetrics(userId) {
     plex_days: plex.plex_days || 0,
     telegram_linked: tgBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM telegram_links WHERE user_id = ?", [userId])) : 0,
     google_linked: googleBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM sso_links WHERE provider = 'google' AND user_id = ?", [userId])) : 0,
+    ...Object.fromEntries(FEATURE_METRICS.map((k) => [k, feat[k] || 0])),
   };
 }
 
@@ -197,7 +204,7 @@ const webBackfill = (async () => {
   if (done.length) return;
   // (the 📼 Plex, 📨 Telegram and 🍀 Google ones have their own quiet backfills, which also hand out their cosmetics)
   const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
-  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked"].includes(a.metric));
+  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...FEATURE_METRICS].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
   for (const u of users) {
@@ -307,8 +314,120 @@ function googleBackfill() {
   return googleBackfilling;
 }
 
+// ── 1.99mt: achievements for the recent features (gifts, Support PATV, 📼 Play from Plex, streaming, mic clips, translations,
+// sticker packs, pads). All website-side: the site sees each action complete, so the module where it happens calls
+// checkWeb(userId) (gifts.js record, stripebilling / cryptopay credit + wallet link, medialib settle, mediaqueue, mediarequests,
+// mainstage goLive / autoFeature, micclip post, i18nfeedback accept, stickers buy / comp, padcreate, padconnect).
+// FEATURE_METRICS are counted only once their own quiet backfill has run (featureBackfill, achievement_meta
+// 'feature_backfill_1'), so nobody whose history already qualifies gets a loud award from an unrelated check.
+const FEATURE_METRICS = ["gift_people", "gifts_received", "donations", "donated_usd", "wallet_linked", "plex_plays", "plex_binges",
+  "plex_requests", "streams", "stream_featured", "mic_clips", "pepe_clips", "translations", "sticker_packs", "pads_made", "pads_connected"];
+const PEPE_SUBJECT = "Pepe";              // micclip: Pepe's own TTS mic-ups are captured with subject "Pepe" (1.99md)
+
+/** A durable "this happened" mark for metrics whose source row changes later (a slot that stops being featured). */
+const marksReady = runQuery(`CREATE TABLE IF NOT EXISTS ach_marks (userId TEXT NOT NULL, mark TEXT NOT NULL, created INTEGER NOT NULL,
+                                PRIMARY KEY (userId, mark))`).catch((e) => console.error("[achievements] marks:", e));
+async function mark(userId, what) {
+  if (!userId || !what) return false;
+  await marksReady;
+  const r = await runQuery("INSERT OR IGNORE INTO ach_marks (userId, mark, created) VALUES (?, ?, ?)", [String(userId), String(what).slice(0, 40), Date.now()]).catch(() => null);
+  return !!(r && r.changes);
+}
+
+/** The feature metrics for one account (0 for a table this database doesn't have). */
+async function featureMetrics(userId) {
+  const one = async (sql, p) => { const r = await getQuery(sql, p).catch(() => []); return Number((r[0] && Object.values(r[0])[0]) || 0) || 0; };
+  let g = {};
+  try { g = await require("./gifts").achMetrics(userId); } catch (e) { g = {}; }
+  await marksReady;
+  const DON = "FROM reserve_claims WHERE flow = 'mint:donation' AND userId = ? AND amount > 0";
+  return {
+    gift_people: g.gift_people || 0,
+    gifts_received: g.gifts_received || 0,
+    donations: await one(`SELECT COUNT(*) ${DON}`, [userId]),
+    donated_usd: Math.floor(await one(`SELECT COALESCE(SUM(json_extract(meta, '$.usd_cents')), 0) ${DON}`, [userId]) / 100),
+    wallet_linked: Math.min(1, await one("SELECT COUNT(*) FROM crypto_wallets WHERE user_id = ?", [userId])),
+    // 📼 a library play that actually went on air (queue plays share one slot)
+    plex_plays: await one(`SELECT COUNT(*) FROM media_plays p JOIN stage_slots s ON s.id = p.slot_id
+                           WHERE p.user_id = ? AND s.went_live IS NOT NULL`, [userId]),
+    plex_binges: await one(`SELECT COUNT(*) FROM media_queues q JOIN stage_slots s ON s.id = q.slot_id
+                            WHERE q.user_id = ? AND json_array_length(q.items) >= 3 AND s.went_live IS NOT NULL`, [userId]),
+    plex_requests: await one("SELECT COUNT(*) FROM media_requests WHERE user_id = ? AND status IN ('approved', 'partial', 'available')", [userId]),
+    // 🎥 your own stream on a stage (RTMP / browser / WHIP), not an embed or a 📼 library play
+    streams: await one(`SELECT COUNT(*) FROM stage_slots WHERE userId = ? AND went_live IS NOT NULL
+                        AND COALESCE(mode, 'stream') = 'stream' AND COALESCE(source, '') != 'library'`, [userId]),
+    stream_featured: Math.min(1, await one("SELECT COUNT(*) FROM ach_marks WHERE userId = ? AND mark = 'stream_featured'", [userId])),
+    // 🎙 mic clips you saved (chat !clipmic or the website's 🔊 Clip both post through micclip.js)
+    mic_clips: await one(`SELECT COUNT(*) FROM feed_voices v JOIN feed_posts p ON p.id = v.post_id
+                          WHERE p.author_id = ? AND v.removed_at IS NULL AND p.deleted_at IS NULL`, [userId]),
+    pepe_clips: await one(`SELECT COUNT(*) FROM feed_voices v JOIN feed_posts p ON p.id = v.post_id JOIN media m ON m.id = v.media_id
+                           WHERE p.author_id = ? AND v.removed_at IS NULL AND p.deleted_at IS NULL AND m.subject = ?`, [userId, PEPE_SUBJECT]),
+    translations: await one("SELECT COUNT(*) FROM translation_suggestions WHERE userId = ? AND status = 'accepted'", [userId]),
+    sticker_packs: await one("SELECT COUNT(DISTINCT pack_id) FROM user_sticker_packs WHERE user_id = ?", [userId]),
+    pads_made: await one("SELECT COUNT(*) FROM rooms_registry WHERE created_by = ? AND origin = 'user' AND COALESCE(platform, '') != 'profile'", [userId]),
+    pads_connected: await one("SELECT COUNT(*) FROM pad_connections WHERE requested_by = ? AND platform = 'camfrog' AND status = 'verified'", [userId]),
+  };
+}
+
+// Once: quietly give the feature achievements to everyone whose history already earned them - badge only (no XP, PAT or
+// announcement), like the launch backfill. Candidates = every account that appears in one of the tables the metrics read.
+let featureBackfilling = null;
+function featureBackfill() {
+  if (!featureBackfilling) {
+    featureBackfilling = (async () => {
+      await ready;
+      await marksReady;
+      await runQuery("CREATE TABLE IF NOT EXISTS achievement_meta (k TEXT PRIMARY KEY, v TEXT)");
+      const done = await getQuery("SELECT v FROM achievement_meta WHERE k = 'feature_backfill_1'");
+      if (done.length) return { done: true, already: true, given: 0 };
+      // 🎥 featured slots that are still marked featured: auto-featured, or featured by someone other than the streamer
+      await runQuery(`INSERT OR IGNORE INTO ach_marks (userId, mark, created)
+                      SELECT s.userId, 'stream_featured', COALESCE(s.went_live, 0) FROM stage_slots s LEFT JOIN rooms_registry r ON r.room_id = s.room_id
+                      WHERE s.featured = 1 AND s.went_live IS NOT NULL AND COALESCE(s.mode, 'stream') = 'stream' AND COALESCE(s.source, '') != 'library'
+                        AND (s.feature_by = 'auto' OR (s.feature_by = 'owner' AND COALESCE(r.owner_user_id, '') != s.userId))`).catch(() => {});
+      const ach = catalog.filter((a) => a.side === "web" && FEATURE_METRICS.includes(a.metric));
+      const SRC = [
+        "SELECT giver_id AS u FROM gift_log", "SELECT recipient_id AS u FROM gift_log",
+        "SELECT userId AS u FROM reserve_claims WHERE flow = 'mint:donation'", "SELECT user_id AS u FROM crypto_wallets",
+        "SELECT user_id AS u FROM media_plays", "SELECT user_id AS u FROM media_queues", "SELECT user_id AS u FROM media_requests",
+        "SELECT userId AS u FROM stage_slots WHERE went_live IS NOT NULL", "SELECT userId AS u FROM ach_marks",
+        "SELECT author_id AS u FROM feed_posts WHERE id IN (SELECT post_id FROM feed_voices)",
+        "SELECT userId AS u FROM translation_suggestions WHERE status = 'accepted'", "SELECT user_id AS u FROM user_sticker_packs",
+        "SELECT created_by AS u FROM rooms_registry WHERE origin = 'user'", "SELECT requested_by AS u FROM pad_connections WHERE status = 'verified'",
+      ];
+      try { await require("./gifts").logBackfill(); } catch (e) { /* no gift tables yet */ }
+      const ids = new Set();
+      for (const q of SRC) for (const r of await getQuery(q).catch(() => [])) if (r.u) ids.add(String(r.u));
+      const known = new Set((await getQuery("SELECT userId FROM users").catch(() => [])).map((r) => r.userId));
+      const given = [];
+      for (const id of ids) {
+        if (!known.has(id)) continue;
+        const m = await featureMetrics(id);
+        for (const a of ach) {
+          if ((m[a.metric] || 0) < (a.threshold || 1)) continue;
+          const r = await award({ userId: id }, a.id, null, { silent: true });
+          if (r.ok && r.awarded) given.push({ userId: id, badgeId: a.id });
+        }
+      }
+      const by = {};
+      for (const x of given) by[x.badgeId] = (by[x.badgeId] || 0) + 1;
+      await runQuery("INSERT OR REPLACE INTO achievement_meta (k, v) VALUES ('feature_backfill_1', ?)",
+                     [JSON.stringify({ at: new Date().toISOString(), candidates: ids.size, given: given.length, by })]);
+      console.log(`[achievements] feature backfill: ${given.length} badge(s) given quietly (${ids.size} candidate account(s)) ${JSON.stringify(by)}`);
+      return { done: true, given: given.length, candidates: ids.size, by, list: given };
+    })().catch((e) => { featureBackfilling = null; throw e; });
+  }
+  return featureBackfilling;
+}
+
+/** Fire-and-forget checkWeb for the feature hooks (never blocks or fails the action that called it). */
+function poke(...userIds) {
+  for (const u of userIds) if (u) Promise.resolve().then(() => checkWeb(String(u))).catch(() => {});
+}
+
 function list() {
   return catalog.map((a) => ({ ...a, icon: iconFor(a) }));
 }
 
-module.exports = { award, awardCount, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS };
+module.exports = { award, awardCount, list, ready, checkWeb, setUpdateLevel, feed, ackFeed, plexBackfill, PLEX_METRICS, telegramBackfill, TG_METRICS, googleBackfill, GOOGLE_METRICS,
+                   featureBackfill, featureMetrics, FEATURE_METRICS, mark, poke, webMetrics };

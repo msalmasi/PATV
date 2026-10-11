@@ -99,6 +99,7 @@
           <form method="POST" action="/cosmetics/act" class="cxp-row">
             <input type="hidden" name="op" value="gift"><input type="hidden" name="item" value="<%= it.id %>"><input type="hidden" name="tab" value="shop">
             <input name="to" placeholder="Camfrog name or username" required maxlength="60" aria-label="Gift to">
+            <label class="cxp-anon"><input type="checkbox" name="anon" value="1"> <%- t('gifts.anon.box_short') %></label>
             <button class="cxp-btn" type="submit">Gift</button>
           </form>
         </details>
@@ -161,6 +162,7 @@
   .cxp-price { font-size: 18px; font-weight: bold; color: #ffd700; font-variant-numeric: tabular-nums; }
   .cxp-muted { color: #888; font-size: 13px; }
   .cxp-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; align-items: center; }
+  .cxp-anon { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #bbb; min-height: 32px; }
   .cxp-row input { flex: 1 1 120px; min-width: 0; background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 9px; font-family: inherit; }
   .cxp-btn { background: #181818; color: #ddd; border: 1px solid #2f2f2f; border-radius: 6px; padding: 7px 12px; cursor: pointer; font-family: inherit; font-size: 13px; }
   .cxp-btn:hover { border-color: #4caf50; }
@@ -411,6 +413,7 @@
                     <form method="POST" action="/cosmetics/gift" class="cxp-row">
                       <input type="hidden" name="inv_id" value="<%= c.inv_id %>"><input type="hidden" name="tab" value="mine">
                       <input name="to" placeholder="PATV username or Camfrog name" required maxlength="60" aria-label="Gift to">
+                      <label class="cxp-anon"><input type="checkbox" name="anon" value="1"> <%- t('gifts.anon.box_short') %></label>
                       <button class="cxp-btn" type="submit">Gift</button>
                     </form>
                   </details>

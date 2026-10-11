@@ -833,7 +833,16 @@ async function autoFeature(roomId, t = now()) {
   if (!r.changes) return null;
   pubCache.clear();
   await event(next.id, "featured", "system", cur ? "auto: took over from the stream before it" : "auto: live while nothing else was featured", roomId);
+  await featuredMark(next);                                        // 1.99mt: ⭐ Headliner
   return next.id;
+}
+/** 1.99mt: ⭐ Headliner - a durable mark (the featured flag itself goes away later) + the achievement check. */
+async function featuredMark(slot) {
+  if (!slot || !slot.userId || (slot.mode || "stream") !== "stream" || slot.source === "library") return;   // your own stream only
+  try {
+    const A = require("./achievements");
+    if (await A.mark(slot.userId, "stream_featured")) A.poke(slot.userId);
+  } catch (e) { /* achievements never block */ }
 }
 /** Every pad with an open slot (or an auto-feature to drop). */
 async function autoFeatureAll(t = now()) {
@@ -866,6 +875,11 @@ async function featureByOwner(slotId, actor) {
   await runQuery("UPDATE stage_slots SET featured = 1, feature_by = 'owner' WHERE id = ? AND settled = 0", [s.id]);
   pubCache.clear();
   await event(s.id, "featured", actor, "by the pad owner", s.room_id);
+  // 1.99mt: ⭐ Headliner - featured by someone else (an owner featuring their own slot doesn't count)
+  if (s.went_live) {
+    const R = await rooms.get(s.room_id).catch(() => null);
+    if (!(R && R.owner && R.owner.userId === s.userId)) await featuredMark(s);
+  }
   rooms.notify(s.userId, { kind: "stage", title: "You're featured on the stage", body: "The pad owner featured your slot - it's the pad's main stream now.",
     link: "/stage", ref: "featured:" + s.id + ":" + now(), pm: false }).catch(() => {});
   return { ok: true };
@@ -1191,6 +1205,7 @@ async function goLive(s, t, via) {
   if (!s.went_live) {
     event(s.id, "live", s.username, via || "rtmp", s.room_id);
     require("./golive").slotLive(s);          // 1.99kp: 🎥 followers + the pad's announcement (once per stream)
+    try { require("./achievements").poke(s.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🔴 On Air / 🎬 Now Showing / 🛋️ Binge Mode
   }
   await autoFeature(s.room_id || rooms.HOUSE_ROOM, t).catch((e) => console.error("[stage] auto-feature:", e.message));   // 1.99lm
   return true;

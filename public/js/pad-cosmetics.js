@@ -63,7 +63,8 @@
     go.addEventListener('click', function () {
       if (busy) return;
       busy = true; go.disabled = true; msg.textContent = gift ? 'Sending the gift…' : 'Buying…';
-      api(base + '/buy', { item: it.id, ref: ref }).then(function (j) {
+      var anonEl = document.getElementById('pcAnon');           // 1.99mt: 🕶 gift anonymously (the pad page's dialog)
+      api(base + '/buy', { item: it.id, ref: ref, anon: !!(gift && anonEl && anonEl.checked) }).then(function (j) {
         busy = false;
         if (!j.ok) { go.disabled = false; msg.innerHTML = errHtml(j); return; }
         msg.innerHTML = '<span class="pc-ok">' + (gift ? '🎁 Sent! The owner has been told.' : '✅ It’s your pad’s now.') + '</span>';
@@ -87,7 +88,7 @@
     function isEq(it) { var e = S.equipped || {}; return it.kind === 'pad_badge' ? (e.pad_badge || []).indexOf(it.id) >= 0 : e[it.kind] === it.id; }
     function card(it) {
       var own = ownedRow(it.id), eq = own && isEq(it);
-      var stateTxt = !own ? (it.perk ? '📺 Comes with <a href="' + esc((S.prime && S.prime.link) || '/premium') + '">Prime Time</a>' : it.sale ? fmt(it.price) + ' PAT' : 'Not on sale') : eq ? '✅ Equipped' : own.state === 'gift' ? '🎁 Gift from ' + esc(own.from || 'someone') : 'Owned';
+      var stateTxt = !own ? (it.perk ? '📺 Comes with <a href="' + esc((S.prime && S.prime.link) || '/premium') + '">Prime Time</a>' : it.sale ? fmt(it.price) + ' PAT' : 'Not on sale') : eq ? '✅ Equipped' : own.state === 'gift' ? (own.anon ? '🎁 An anonymous gift' : '🎁 Gift from ' + esc(own.from || 'someone')) : 'Owned';
       var acts = '';
       if (own) {
         acts += eq ? '<button type="button" class="btn ghost" data-pc-eq="' + esc(it.id) + '" data-on="0">Take off</button>'
@@ -212,7 +213,8 @@
       var list = S.catalog.filter(function (it) { return it.sale && S.has.indexOf(it.id) < 0; });
       var h = '<p class="pc-lede">For <b>' + esc(S.pad.title) + '</b> (p/' + esc(S.pad.slug) + ')' + (S.pad.owner ? ', owned by <b>' + esc(S.pad.owner) + '</b>' : '') +
         '. Where the PAT goes: <b>' + esc(S.routing.gift) + '</b>. The owner is told and can equip it or decline it — <b>gifts are never refunded</b>.' +
-        (S.viewer.balance != null ? ' Your balance: <b>' + fmt(S.viewer.balance) + ' PAT</b>.' : '') + '</p>';
+        (S.viewer.balance != null ? ' Your balance: <b>' + fmt(S.viewer.balance) + ' PAT</b>.' : '') + '</p>' +
+        '<p class="pc-anon"><label><input type="checkbox" id="pcAnon"> ' + esc(typeof __t === 'function' ? __t('js.gifts.anon_pad', '🕶 Send anonymously - the owner won’t see it’s from you') : '🕶 Send anonymously - the owner won’t see it’s from you') + '</label></p>';
       if (!S.pay) h += '<p class="pc-off">Pad cosmetics aren’t on sale right now.</p>';
       else if (!list.length) h += '<p>This pad already has everything on sale.</p>';
       else h += '<div class="pc-grid">' + list.map(function (it) {

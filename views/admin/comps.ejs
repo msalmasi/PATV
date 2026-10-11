@@ -80,9 +80,16 @@
   <div class="adm-tbl"><table aria-label="Recent comps"><thead><tr><th>When (UTC)</th><th>Admin</th><th>Action</th><th>Member</th><th>Detail</th><th>Reason</th></tr></thead><tbody id="logRows"></tbody></table></div>
 </section>
 
+<section class="adm-card" id="gifts" aria-labelledby="giftT">
+  <h2 id="giftT">Member gifts (gift log)</h2>
+  <p class="adm-help">Every gift members send each other (store items, Season Pass / Prime Time, sticker packs, cosmetics, pad cosmetics), with the <b>real giver</b>.
+    🕶 = sent anonymously: the recipient was told "Someone" - keep it that way unless it's an abuse case. The same giver is on the order page (admin view).</p>
+  <div class="adm-tbl"><table aria-label="Gift log"><thead><tr><th>When (UTC)</th><th>Kind</th><th>Item</th><th>Giver</th><th>Recipient</th><th>Anon</th></tr></thead><tbody id="giftRows"></tbody></table></div>
+</section>
+
 <datalist id="compPeople"></datalist>
 <script id="compsData" type="application/json"><%- JSON.stringify(C).replace(/</g, '\\u003c') %></script>
-<script src="/public/js/admin-comps.js?v=1" defer></script>
+<script src="/public/js/admin-comps.js?v=2" defer></script>
 <%- include('../partials/admin-close') %>
 </body>
 </html>

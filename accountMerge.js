@@ -102,6 +102,8 @@ const RULES = {
   // 1.99jx tz.js: the saved time zone (one per account; both have one: the target's stays)
   "user_timezone.userId": M({ key: [] }),
   "achievement_feed.userId": M(),
+  // 1.99mt: durable achievement marks (achievements.js mark: ⭐ Headliner) - one per account + mark
+  "ach_marks.userId": M({ key: ["mark"], merge: { created: "MIN" } }),
   "user_roles.userId": M({ key: ["role"], merge: { granted_at: "MIN" } }), "user_roles.granted_at": { deny: "a date" },
   "user_cosmetics.user_id": M(), "user_cosmetic_equips.user_id": M({ key: ["kind"] }),
   "cosmetic_listings.seller_id": M(), "cosmetic_listings.buyer_id": M(),
@@ -205,6 +207,9 @@ const RULES = {
   // 1.99ma: 🎁 admin comps (comps.js) - the Plex comp rows; a comped order's admin is a name
   "plex_comps.user_id": M(), "plex_comps.by_id": M(), "plex_comps.by_name": { deny: NAME }, "plex_comps.revoked_by": { deny: NAME },
   "shop_orders.comp_by": { deny: NAME },
+  // 1.99mt: 🎁 the gift log (gifts.js) - giver + recipient follow the account (the gifting achievements count it); anon is a flag
+  "gift_log.giver_id": M(), "gift_log.recipient_id": M(), "gift_log.anon": { deny: FLAG }, "gift_log.target": { deny: "a pad (room) id, never a user" }, "shop_orders.gift_anon": { deny: FLAG },
+  "premium_ledger.anon": { deny: FLAG }, "pad_cosmetic_items.anon": { deny: FLAG },
   // 1.99la: 🔭 Scout / 🎟️ Curator (requestroles.js) + 🛠️ problem reports (mediaissues.js) follow the account
   "request_roles.user_id": M({ key: ["role"], merge: { status: { rank: ["active", "revoked"] } } }),
   "request_roles.granted_by": { deny: NAME }, "request_roles.revoked_by": { deny: NAME },

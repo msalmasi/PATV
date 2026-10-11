@@ -95,7 +95,7 @@ async function allowance(userId, t = now()) {
 
 /**
  * Get a pack. user = {userId, username}; opts = {pack, ref, to (username: a gift), allowance (true: use the Season
- * Pass allowance, own account only)}. Idempotent per (user, ref). -> {dup, pack, to, price, source}
+ * Pass allowance, own account only), anon (1.99mt: a gift sent anonymously)}. Idempotent per (user, ref). -> {dup, pack, to, price, source}
  */
 async function buy(user, opts = {}) {
   await init();
@@ -112,6 +112,7 @@ async function buy(user, opts = {}) {
     if (!to) throw new Refuse(404, "No such account.");
   }
   const gift = to.userId !== user.userId;
+  const anon = gift && require("./gifts").anonFlag(opts.anon);      // 1.99mt: 🕶 the recipient's notice says "Someone"
   // 1.99ma: blocks + the gift rate limit (gifts.js), before anything is charged (a retried ref is answered as before)
   if (gift && !(await getQuery("SELECT 1 FROM user_sticker_packs WHERE ref = ?", [ref]))[0]) await require("./gifts").guard(user, to);
   const useAllowance = !!opts.allowance;
@@ -143,9 +144,13 @@ async function buy(user, opts = {}) {
     return { dup: false };
   });
   if (out.dup) return { dup: true, pack: pack.id, to: to.username, price: out.row.price, source: out.row.source };
+  try { require("./achievements").poke(to.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 📒 sticker-pack achievements
   if (gift) {
+    const G = require("./gifts");
+    await G.record({ kind: "sticker", giverId: user.userId, recipientId: to.userId, item: pack.name, ref: `stk:${ref}`, anon });
     try {
-      await require("./inbox").addSafe(to.userId, { kind: "cosmetics", ref: "stk-gift:" + ref, title: `🧸 ${user.username} gave you the ${pack.name} sticker pack`,
+      const title = anon ? G.tFor(to.userId)("gifts.anon.sticker_title", { pack: pack.name }) : `🧸 ${user.username} gave you the ${pack.name} sticker pack`;
+      await require("./inbox").addSafe(to.userId, { kind: "cosmetics", ref: "stk-gift:" + ref, title,
         body: "Use it in messages and posts - the 🧸 button in the composer.", link: "/premium#stickers" });
     } catch (e) { /* notice only */ }
   }
@@ -214,7 +219,7 @@ function register(app, { addUser }) {
     if (!req.is("application/json")) return res.status(415).json({ ok: false, error: "JSON only." });
     try {
       const b = req.body || {};
-      const r = await buy(req.user, { pack: b.pack, ref: b.ref, to: b.to || null, allowance: b.allowance === true });
+      const r = await buy(req.user, { pack: b.pack, ref: b.ref, to: b.to || null, allowance: b.allowance === true, anon: b.anon === true });
       res.json({ ok: true, ...r, state: await pageData(req.user) });
     } catch (e) { const x = P().errBody(e); res.status(x.status).json(x.body); }
   });
@@ -229,6 +234,7 @@ async function grantComp(userId, packId, by) {
   const t = now();
   await runQuery(`INSERT INTO user_sticker_packs (user_id, pack_id, source, payer_id, price, ref, period, routing, created)
                   VALUES (?, ?, 'comp', NULL, 0, ?, NULL, NULL, ?)`, [userId, pack.id, `comp:${String(by || "?").slice(0, 40)}:${userId}:${pack.id}:${t}`, t]);
+  try { require("./achievements").poke(userId); } catch (e) { /* achievements never block */ }   // 1.99mt
   return { pack, already: false };
 }
 

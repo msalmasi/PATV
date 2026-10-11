@@ -158,6 +158,7 @@ async function create(user, input = {}, { now = NOW() } = {}) {
     try { await PA.init(); await PA.setLevel(user, R, vis); } catch (e) { console.error("[pads] create visibility:", e.message); }
   }
   console.log(`[pads] ${user.username} created ${id} p/${slug}${fee ? ` (${fee} PAT)` : ""}`);
+  try { require("./achievements").poke(user.userId); } catch (e) { /* achievements never block */ }   // 1.99mt: 🏠 Home Sweet Pad
   return R;
 }
 async function ensureClaims() {

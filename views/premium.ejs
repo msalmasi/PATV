@@ -101,7 +101,7 @@
         <div class="stat" id="ptState">
           <div><b>p/<%= PAD.slug %></b><% if (PAD.title && PAD.title !== PAD.slug) { %> · <%= PAD.title %><% } %></div>
           <div><%- statusTxt(PAD) %><% if (PAD.renewing && PAD.status !== 'comped') { %> · <%- t('premium.renews') %><% } %></div>
-          <% if (PAD.contributors && PAD.contributors.length) { %><div class="mut" style="margin-top:6px"><%- t('premium.backed_by') %></div><ul class="contrib"><% PAD.contributors.forEach((c) => { %><li><%= c.name %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
+          <% if (PAD.contributors && PAD.contributors.length) { %><div class="mut" style="margin-top:6px"><%- t('premium.backed_by') %></div><ul class="contrib"><% PAD.contributors.forEach((c) => { %><li><% if (c.anon) { %><%- t('premium.anon_backer') %><% } else { %><%= c.name %><% } %> · <%= fmt(c.amount) %></li><% }) %></ul><% } %>
         </div>
         <% if (PAD.status !== 'comped') { %>
           <% if (V.signed) { %>
@@ -112,6 +112,7 @@
             <div class="row"><label class="mut" for="ptAmt"><%- t('premium.chip_in') %></label><input type="number" id="ptAmt" min="<%= S.day_price.prime_time %>" step="1000" value="<%= S.day_price.prime_time * 7 %>" style="width:150px"> <span class="mut">PAT</span>
               <button type="button" class="btn" data-chip="1">🤝 <%- t('premium.chip_in') %></button></div>
             <div class="row"><label class="mut"><input type="checkbox" id="ptRenew"<%= PAD.renewer_me ? ' checked' : '' %>> <%- t('premium.renew_label', { days: S.period_days }) %></label></div>
+            <% if (!PAD.mine) { %><div class="row"><label class="mut"><input type="checkbox" id="ptAnon"> <%- t('gifts.anon.box_pad') %></label></div><% } %>
             <% if (ST.enabled && ST.tiers && ST.tiers.prime_time && PAD.mine) { %><div class="row card-pay"><button type="button" class="btn" data-card="prime_time">💳 <%- t('premium.pay_card') %><%- ST.test ? ' ' + t('premium.test_mode') : '' %></button><% if (PAD.stripe) { %><button type="button" class="btn ghost" data-portal="prime_time"><%- t('premium.manage_card') %></button><% } %></div><% } %>
           <% } else { %><p><%- t('premium.pt.signin', { link: '<a href="/login?next=' + t.esc(encodeURIComponent('/premium?pad=' + PAD.slug)) + '">' + t('premium.sign_in') + '</a>' }) %></p><% } %>
         <% } %>
@@ -139,6 +140,7 @@
           <% if (ST.enabled && ST.tiers && ST.tiers.season_pass) { %><div class="row card-pay"><button type="button" class="btn" data-card="season_pass">💳 <%- t('premium.pay_card') %><%- ST.test ? ' ' + t('premium.test_mode') : '' %></button><% if (PASS && PASS.stripe) { %><button type="button" class="btn ghost" data-portal="season_pass"><%- t('premium.manage_card') %></button><% } %></div><% } %>
         <% } %>
         <div class="row"><label class="mut" for="spGift"><%- t('premium.sp.gift_to') %></label><input type="text" id="spGift" placeholder="<%- t('premium.sp.gift_ph') %>" autocomplete="off" style="width:160px"><button type="button" class="btn" data-gift="season_pass"><%- t('premium.sp.gift_btn', { price: fmt(S.prices.season_pass) }) %></button></div>
+        <div class="row"><label class="mut"><input type="checkbox" id="spAnon"> <%- t('gifts.anon.box') %></label></div>
       <% } else { %><p><%- t('premium.sp.signin', { link: '<a href="/login?next=/premium">' + t('premium.sign_in') + '</a>' }) %></p><% } %>
     </section>
   </div>
@@ -147,6 +149,7 @@
   <section class="card" id="stickers" aria-labelledby="stkH">
     <h2 id="stkH"><%- t('premium.stk.heading') %></h2>
     <p class="mut" style="margin:0"><%- t('premium.stk.intro', { price: fmt(S.prices.sticker_pack) }) %><% if (STK.allowance && STK.allowance.per) { %> · <%- t('premium.stk.left', { count: STK.allowance.left }) %><% } else { %> · <%- t('premium.stk.sp_includes', { n: S.perks.sp_sticker_packs }) %><% } %>.</p>
+    <% if (STK.signed) { %><p class="mut" style="margin:6px 0 0"><label><input type="checkbox" id="stkAnon"> <%- t('gifts.anon.box_stk') %></label></p><% } %>
     <div class="packs">
       <% STK.packs.forEach((p) => { %>
         <div class="card pack">
@@ -207,19 +210,23 @@
       var renewEl = document.getElementById(tier === 'prime_time' ? 'ptRenew' : 'spRenew');
       if (!confirm(_t('js.premium.confirm_pay', months > 1 ? 'Pay {price} PAT for {count} periods? Payments are final.' : 'Pay {price} PAT for {count} period? Payments are final.', { price: b.textContent.split('·').pop().trim(), count: months }))) return;
       b.disabled = true;
-      post('/api/premium/buy', { tier: tier, pad: pad || undefined, months: months, ref: ref(), renew: !!(renewEl && renewEl.checked) })
+      var ptAnon = tier === 'prime_time' && document.getElementById('ptAnon');      // 1.99mt: 🕶 anonymous (someone else's pad only)
+      post('/api/premium/buy', { tier: tier, pad: pad || undefined, months: months, ref: ref(), renew: !!(renewEl && renewEl.checked), anon: !!(ptAnon && ptAnon.checked) })
         .then(function (j) { b.disabled = false; done(j, _t('js.premium.paid_through', 'Done - paid through {date}.', { date: j.paid_through ? new Date(j.paid_through).toISOString().slice(0, 10) : '' })); });
     } else if (b.hasAttribute('data-chip')) {
       var amt = Math.floor(Number(document.getElementById('ptAmt').value));
       if (!confirm(_t('js.premium.confirm_chip', 'Chip in {amount} PAT to p/{pad}’s Prime Time? Payments are final.', { amount: fmt(amt), pad: pad }))) return;
       b.disabled = true;
-      post('/api/premium/buy', { tier: 'prime_time', pad: pad, amount: amt, ref: ref() }).then(function (j) { b.disabled = false; done(j, _t('js.premium.chip_thanks', 'Thanks - p/{pad} is on air a little longer.', { pad: pad })); });
+      var chipAnon = document.getElementById('ptAnon');
+      post('/api/premium/buy', { tier: 'prime_time', pad: pad, amount: amt, ref: ref(), anon: !!(chipAnon && chipAnon.checked) }).then(function (j) { b.disabled = false; done(j, _t('js.premium.chip_thanks', 'Thanks - p/{pad} is on air a little longer.', { pad: pad })); });
     } else if (b.hasAttribute('data-gift')) {
       var to = document.getElementById('spGift').value.trim();
       if (!to) return say(_t('js.premium.type_username', 'Type a username first.'), false);
-      if (!confirm(_t('js.premium.confirm_gift', 'Gift a Season Pass period to {user}? Payments are final.', { user: to }))) return;
+      var spAnon = document.getElementById('spAnon'), anonSp = !!(spAnon && spAnon.checked);
+      if (!confirm(anonSp ? _t('js.premium.confirm_gift_anon', 'Gift a Season Pass period to {user} anonymously? They won’t see who sent it. Payments are final.', { user: to })
+                          : _t('js.premium.confirm_gift', 'Gift a Season Pass period to {user}? Payments are final.', { user: to }))) return;
       b.disabled = true;
-      post('/api/premium/buy', { tier: 'season_pass', user: to, months: 1, ref: ref() }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: to })); });
+      post('/api/premium/buy', { tier: 'season_pass', user: to, months: 1, ref: ref(), anon: anonSp }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: to })); });
     } else if (b.hasAttribute('data-stk')) {
       var free = b.hasAttribute('data-free');
       if (!free && !confirm(_t('js.premium.confirm_stk', 'Buy this sticker pack for {price} PAT?', { price: b.textContent.split('·').pop().trim() }))) return;
@@ -229,7 +236,8 @@
       var who = prompt(_t('js.premium.stk_gift_prompt', 'Gift this sticker pack to (username):'));
       if (!who) return;
       b.disabled = true;
-      post('/api/stickers/buy', { pack: b.getAttribute('data-stk-gift'), ref: ref(), to: who.trim() }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: who.trim() })); });
+      var stkAnon = document.getElementById('stkAnon');
+      post('/api/stickers/buy', { pack: b.getAttribute('data-stk-gift'), ref: ref(), to: who.trim(), anon: !!(stkAnon && stkAnon.checked) }).then(function (j) { b.disabled = false; done(j, _t('js.premium.gifted', 'Gifted to {user} 🎁', { user: who.trim() })); });
     } else if (b.hasAttribute('data-card') || b.hasAttribute('data-portal')) {
       var card = b.hasAttribute('data-card');
       b.disabled = true;
