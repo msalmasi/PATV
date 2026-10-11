@@ -793,4 +793,6 @@ function ipRateOk(uid) {
 module.exports = { boot, ensure, loadSettings, setSetting, buy, info, myTickets, history, snapshot, poll, botPot, botReseeded, forceDraw,
                    fairRecord, importState, exportState, resetAll, potBalance, potHasRows, tickOnce, ipRateOk, totals, stop, recover: () => locked(recover),
                    tick: () => locked(tickOnce),
-                   _S: S, _locked: locked, _pay: pay, _draws: draws };
+                   _S: S, _locked: locked, _pay: pay, _draws: draws,
+                   // 1.99ou: escrow/ledger.js books an escrow fee / donation into the pot inside ITS open transaction
+                   _inTx: { potMove, sellingDraw } };

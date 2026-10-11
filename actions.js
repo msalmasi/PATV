@@ -136,6 +136,16 @@ function register(app, { isBotToken, addUser }) {
         return go("Something went wrong — nothing was moved.");
       }
     }
+    // 1.99ou Phase 2: with an escrow game on the site (escrow/games.js), its form runs here directly - nothing is sent to Pepe
+    if (kind === "cmd" && ["wager", "bounty", "pool", "loan"].includes(args[0])) {
+      try {
+        const msg = await require("./escrow/games").fromForm(req.user.userId, args[0], args.slice(1), b.idem);
+        if (msg) return go(msg);
+      } catch (e) {
+        console.error(`[act] escrow ${args[0]}:`, e.message);
+        return go("Something went wrong — nothing changed.");
+      }
+    }
     // 1.99ns: with the polls on the site (polls.js backend), a poll form is done here directly - nothing is sent to Pepe
     if (kind.startsWith("poll.")) {
       try {

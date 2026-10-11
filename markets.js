@@ -45,6 +45,9 @@ const ready = runQuery(`CREATE TABLE IF NOT EXISTS markets (
 // Website bets (orders). The PAT moves in Pepe (escrow): he claims pending orders every few
 // seconds, places each through the same checks as a chat bet, and acks the result. A bet carries its
 // order id, so an order claimed twice (Pepe restarted mid-way) is never placed twice.
+// 1.99ou Phase 2: while the parimutuel POOLS run on the site (escrow/pools.js, `live:pools`), a pool bet / a judge's call
+// from /markets/:id runs on that engine at once and is never queued; only the LMSR share markets (still Pepe's until
+// Phase 3) keep using this queue. A pool order queued before the cutover is placed by Pepe on the engine (keyed by its id).
 const ordersReady = runQuery(`CREATE TABLE IF NOT EXISTS market_orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT, market_id INTEGER NOT NULL, user_id TEXT NOT NULL,
   username TEXT NOT NULL, camfrog TEXT, option TEXT NOT NULL, amount INTEGER NOT NULL,
@@ -228,6 +231,45 @@ function view(m, me) {
   return { ...m, ref: `M${m.id}`, options, total, bettors: bettors.size, betCount: (m.bets || []).length };
 }
 
+/** A market row as the /markets and /wagers pages store it (Pepe's snapshot shape; escrow/pools.js mirrors its pools through it). */
+function cleanMarket(m) {
+  const id = parseInt(m && m.id, 10);
+  if (!id) return null;
+  const clean = {
+    id, question: String(m.question || "").slice(0, 200), options: (m.options || []).map((o) => String(o).slice(0, 30)).slice(0, 6),
+    creator: m.creator || "", judge: m.judge || "", room: m.room || "", status: m.status || "open",
+    created: Number(m.created) || 0, closes: Number(m.closes) || 0, result: m.result || null,
+    settled_by: m.settled_by || null, fee: Number(m.fee) || 0, ended: Number(m.ended) || null,
+    ai_judge: !!m.ai_judge, ai: cleanAi(m.ai), ...(m.model === "pool" ? { model: "pool" } : {}),
+    // 1.99do: Pepe's payout stamp (a share market is paid once this is set) + why it was voided
+    paid_out: m.paid_out && typeof m.paid_out === "object"
+      ? { at: Number(m.paid_out.at) || 0, total: Math.floor(Number(m.paid_out.total) || 0), result: String(m.paid_out.result || "").slice(0, 200) } : null,
+    void_reason: m.void_reason ? String(m.void_reason).slice(0, 200) : null,
+    // 1.99ka: an admin re-settle (pepe_mktresettle): who, when, from -> to, why, and the PAT it moved
+    resettle: cleanResettle(m.resettle),
+    bets: (m.bets || []).map((x) => ({ nick: String(x.nick || ""), option: String(x.option || ""),
+                                     amount: Math.floor(Number(x.amount) || 0), ts: Number(x.ts) || 0, web: !!x.web })),
+  };
+  if (m.model === "lmsr") {
+    Object.assign(clean, {
+      model: "lmsr", b: Number(m.b) || 50000, volume: Math.floor(Number(m.volume) || 0),
+      q: Object.fromEntries(clean.options.map((o) => [o, Number((m.q || {})[o]) || 0])),
+      positions: Object.fromEntries(Object.entries(m.positions || {}).slice(0, 2000).map(([k, p]) => [String(k).toLowerCase(), {
+        nick: String(p.nick || k), shares: Object.fromEntries(clean.options.map((o) => [o, Number((p.shares || {})[o]) || 0])),
+        cost: Object.fromEntries(clean.options.map((o) => [o, Number((p.cost || {})[o]) || 0])) }])),
+      trades: (m.trades || []).slice(-300).map((t) => ({ ts: Number(t.ts) || 0, nick: String(t.nick || ""), side: t.side === "sell" ? "sell" : "buy",
+        option: String(t.option || ""), shares: Number(t.shares) || 0, pat: Math.floor(Number(t.pat) || 0), web: !!t.web })),
+      history: (m.history || []).slice(-400).map((h) => [Number(h[0]) || 0, h[1] || {}]),
+    });
+  }
+  return clean;
+}
+
+/** The parimutuel pools run on the site (escrow/pools.js live): their rows here are the engine's, not Pepe's. */
+async function poolsOnSite() {
+  try { return await require("./escrow/games").gameLive("pools"); } catch (e) { return false; }
+}
+
 function register(app, { isBotToken, addUser }) {
   require("./userlinks").install(app);   // 1.99dt: <%- ul(name) %> in its views links names to profiles
   // Snapshot push (Pepe)
@@ -237,35 +279,20 @@ function register(app, { isBotToken, addUser }) {
     const list = Array.isArray(b.markets) ? b.markets.slice(0, 500) : [];
     try {
       await ready;
+      const poolsLive = await poolsOnSite();
       for (const m of list) {
-        const id = parseInt(m.id, 10);
-        if (!id) continue;
-        const clean = {
-          id, question: String(m.question || "").slice(0, 200), options: (m.options || []).map((o) => String(o).slice(0, 30)).slice(0, 6),
-          creator: m.creator || "", judge: m.judge || "", room: m.room || "", status: m.status || "open",
-          created: Number(m.created) || 0, closes: Number(m.closes) || 0, result: m.result || null,
-          settled_by: m.settled_by || null, fee: Number(m.fee) || 0, ended: Number(m.ended) || null,
-          ai_judge: !!m.ai_judge, ai: cleanAi(m.ai), ...(m.model === "pool" ? { model: "pool" } : {}),
-          // 1.99do: Pepe's payout stamp (a share market is paid once this is set) + why it was voided
-          paid_out: m.paid_out && typeof m.paid_out === "object"
-            ? { at: Number(m.paid_out.at) || 0, total: Math.floor(Number(m.paid_out.total) || 0), result: String(m.paid_out.result || "").slice(0, 200) } : null,
-          void_reason: m.void_reason ? String(m.void_reason).slice(0, 200) : null,
-          // 1.99ka: an admin re-settle (pepe_mktresettle): who, when, from -> to, why, and the PAT it moved
-          resettle: cleanResettle(m.resettle),
-          bets: (m.bets || []).map((x) => ({ nick: String(x.nick || ""), option: String(x.option || ""),
-                                           amount: Math.floor(Number(x.amount) || 0), ts: Number(x.ts) || 0, web: !!x.web })),
-        };
-        if (m.model === "lmsr") {
-          Object.assign(clean, {
-            model: "lmsr", b: Number(m.b) || 50000, volume: Math.floor(Number(m.volume) || 0),
-            q: Object.fromEntries(clean.options.map((o) => [o, Number((m.q || {})[o]) || 0])),
-            positions: Object.fromEntries(Object.entries(m.positions || {}).slice(0, 2000).map(([k, p]) => [String(k).toLowerCase(), {
-              nick: String(p.nick || k), shares: Object.fromEntries(clean.options.map((o) => [o, Number((p.shares || {})[o]) || 0])),
-              cost: Object.fromEntries(clean.options.map((o) => [o, Number((p.cost || {})[o]) || 0])) }])),
-            trades: (m.trades || []).slice(-300).map((t) => ({ ts: Number(t.ts) || 0, nick: String(t.nick || ""), side: t.side === "sell" ? "sell" : "buy",
-              option: String(t.option || ""), shares: Number(t.shares) || 0, pat: Math.floor(Number(t.pat) || 0), web: !!t.web })),
-            history: (m.history || []).slice(-400).map((h) => [Number(h[0]) || 0, h[1] || {}]),
-          });
+        // 1.99ou Phase 2: while the betting pools run on the site (escrow/pools.js) their rows are the site's - Pepe's
+        // snapshot carries only his LMSR markets then, and a stale pool row from him never overwrites the engine's
+        if (poolsLive && (!m || m.model !== "lmsr")) continue;
+        const clean = cleanMarket(m);
+        if (!clean) continue;
+        const id = clean.id;
+        if (poolsLive) {
+          // an id the site's pool engine owns is never overwritten by an LMSR row (the ids come from its reserve_id)
+          const was = (await getQuery("SELECT data FROM markets WHERE id = ?", [id]))[0];
+          let wm = null;
+          try { wm = was ? JSON.parse(was.data) : null; } catch (e) { wm = null; }
+          if (wm && wm.model !== "lmsr") { console.error(`[markets] sync: M${id} is a site pool - Pepe's LMSR row for it ignored`); continue; }
         }
         await runQuery(`INSERT INTO markets (id, data, status, closes, updated) VALUES (?, ?, ?, ?, ?)
                         ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
@@ -289,6 +316,12 @@ function register(app, { isBotToken, addUser }) {
       const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
       if (!rows.length) return back("That market doesn't exist.");
       const m = JSON.parse(rows[0].data);
+      if (m.model !== "lmsr") {
+        // 1.99ou Phase 2: a pool bet with the pools on the site runs on the engine now (escrow/pools.js) - nothing is queued
+        const msg = await require("./escrow/games").fromForm(req.user.userId, "pool", [`M${id}`, String((req.body || {}).option || ""),
+                                                                                      String((req.body || {}).amount || "")], null);
+        if (msg) return back(msg);
+      }
       if (m.status !== "open" || m.closes * 1000 < Date.now()) return back("Betting on this market is closed.");
       const option = String((req.body || {}).option || "");
       if (!(m.options || []).includes(option)) return back("Pick one of the options.");
@@ -316,6 +349,11 @@ function register(app, { isBotToken, addUser }) {
       const rows = await getQuery("SELECT data FROM markets WHERE id = ?", [id]);
       if (!rows.length) return back("That market doesn't exist.");
       const m = JSON.parse(rows[0].data);
+      if (fields.kind === "resolve" && m.model !== "lmsr") {
+        // 1.99ou Phase 2: the judge's call on a pool runs on the site engine when the pools live there (null = they don't)
+        const msg = await require("./escrow/games").fromForm(req.user.userId, "pool", ["settle", `M${id}`, ...String(fields.outcome || "").split(" ")], null);
+        if (msg) return back(msg);
+      }
       if (fields.kind === "sell" && (m.model !== "lmsr" || m.status !== "open")) return back("Shares can only be sold while trading is open.");
       if (fields.kind === "resolve" && !["open", "closed"].includes(m.status)) return back("This market is already resolved.");
       const u = (await getQuery("SELECT username, camfrogUsername, class FROM users WHERE userId = ?", [req.user.userId]))[0];
@@ -434,4 +472,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs };
+module.exports = { register, view, settlement, lmsrPrices, fmtPrice, fixOrderMessage, settledActs, cleanMarket, cleanAi };

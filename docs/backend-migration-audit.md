@@ -576,6 +576,11 @@ rule as v2 §16 ("riskiest thing (money) first").
   sit on the real ledger), and L-6 genesis prep.
 
 ### Phase 2 — escrow games on one site escrow service
+- **Built 1.99ou (site + bot), staging:** `escrow/ledger.js` (every escrowed stake, keyed one-transaction hold / refund / settle /
+  grant, supply row, import / export / rollback) + `escrow/games.js` with the wager, bounty, pool and P2P-loan engines; bot
+  `pepe_escrowstore.py` / `pepe_escrowgames.py`. Switches, cutover, rollback, detach and the staging rehearsal:
+  `docs/escrow-cutover-runbook.md`. Bingo, duels / brawls, mic challenges, donations, shout-outs, cosmetics and room-vault
+  deposits keep their engines in Pepe and hold their stakes on the same ledger.
 - 5.8: wagers → bounties (bot remains the evidence verifier) → parimutuel pools → P2P loans → donations and mic
   challenges.
 - The `market_orders` / `bounty_actions` queues and C1 `cmd` kinds for these retire.

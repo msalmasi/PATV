@@ -660,4 +660,6 @@ module.exports = { init, register, enabled, live, rev, balances, balance, total,
                    Refuse, LABELS, _setSupplyFn: (f) => { supplyFn = f; }, _forgetLive: forgetLive, _setMeta: setMeta,
                    // G1 (gangs.js books treasury legs in its own transactions with the same primitives)
                    _tx: tx, _seen: seen, _applyLegs: applyLegs, _recordMove: recordMove, _bumpRev: bumpRev, _lottoIsService: lottoIsService,
-                   _validKey: validKey };
+                   _validKey: validKey,
+                   // 1.99ou: for escrow/ledger.js - a settle's fee legs / a grant's pool debit inside ITS open transaction
+                   _inTx: { applyLegs, recordMove, seen, bumpRev } };

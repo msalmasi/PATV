@@ -1,0 +1,557 @@
+{
+ "note": "pepe_market._market_pay on fixed pools (escrow_pool_test.py --write); the site's test/escrow-pools.test.js checks its engine against the same file (test/fixtures/pool-payout-vectors.json)",
+ "vectors": [
+  {
+   "name": "two sides, one each",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 1000
+    },
+    {
+     "nick": "bob",
+     "option": "no",
+     "amount": 3000
+    }
+   ],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "ann",
+      3850
+     ]
+    ],
+    "fee": 150,
+    "fee_legs": [
+     [
+      "mm",
+      150
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": yes! 1 winner(s) split PAT 3,850 — ann +3,850. PAT 150 to the casino."
+   }
+  },
+  {
+   "name": "the underdog side wins",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 5000
+    },
+    {
+     "nick": "bob",
+     "option": "no",
+     "amount": 777
+    },
+    {
+     "nick": "carl",
+     "option": "yes",
+     "amount": 2500
+    }
+   ],
+   "result": "no",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "bob",
+      7902
+     ]
+    ],
+    "fee": 375,
+    "fee_legs": [
+     [
+      "mm",
+      375
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": no! 1 winner(s) split PAT 7,902 — bob +7,902. PAT 375 to the casino."
+   }
+  },
+  {
+   "name": "three options, repeat bettors, rounding dust",
+   "options": [
+    "red",
+    "blue",
+    "green"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "red",
+     "amount": 777
+    },
+    {
+     "nick": "bob",
+     "option": "blue",
+     "amount": 1234
+    },
+    {
+     "nick": "ann",
+     "option": "red",
+     "amount": 501
+    },
+    {
+     "nick": "carl",
+     "option": "green",
+     "amount": 999
+    },
+    {
+     "nick": "dave",
+     "option": "blue",
+     "amount": 3333
+    },
+    {
+     "nick": "erin",
+     "option": "blue",
+     "amount": 1001
+    }
+   ],
+   "result": "blue",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "bob",
+      1713
+     ],
+     [
+      "dave",
+      4628
+     ],
+     [
+      "erin",
+      1390
+     ]
+    ],
+    "fee": 114,
+    "fee_legs": [
+     [
+      "mm",
+      114
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": blue! 3 winner(s) split PAT 7,731 — dave +4,628, bob +1,713, erin +1,390. PAT 114 to the casino."
+   }
+  },
+  {
+   "name": "dust from many small winners",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "w1",
+     "option": "yes",
+     "amount": 501
+    },
+    {
+     "nick": "w2",
+     "option": "yes",
+     "amount": 503
+    },
+    {
+     "nick": "w3",
+     "option": "yes",
+     "amount": 509
+    },
+    {
+     "nick": "w4",
+     "option": "yes",
+     "amount": 521
+    },
+    {
+     "nick": "w5",
+     "option": "yes",
+     "amount": 541
+    },
+    {
+     "nick": "w6",
+     "option": "yes",
+     "amount": 557
+    },
+    {
+     "nick": "w7",
+     "option": "yes",
+     "amount": 563
+    },
+    {
+     "nick": "l1",
+     "option": "no",
+     "amount": 1003
+    }
+   ],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "w1",
+      630
+     ],
+     [
+      "w2",
+      632
+     ],
+     [
+      "w3",
+      640
+     ],
+     [
+      "w4",
+      655
+     ],
+     [
+      "w5",
+      680
+     ],
+     [
+      "w6",
+      700
+     ],
+     [
+      "w7",
+      708
+     ]
+    ],
+    "fee": 53,
+    "fee_legs": [
+     [
+      "mm",
+      53
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": yes! 7 winner(s) split PAT 4,645 — w7 +708, w6 +700, w5 +680 …. PAT 53 to the casino."
+   }
+  },
+  {
+   "name": "nobody backed the result",
+   "options": [
+    "yes",
+    "no",
+    "maybe"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 1000
+    },
+    {
+     "nick": "bob",
+     "option": "no",
+     "amount": 2000
+    }
+   ],
+   "result": "maybe",
+   "expect": {
+    "status": "settled",
+    "refund_all": true,
+    "refunds": [
+     "ann",
+     "bob"
+    ],
+    "payouts": [],
+    "fee": 0,
+    "fee_legs": [],
+    "msg": "📈 M7 \"Question 7?\": maybe! nobody backed maybe, so everyone gets their PAT back."
+   }
+  },
+  {
+   "name": "everyone backed the result (a wash)",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 1000
+    },
+    {
+     "nick": "bob",
+     "option": "yes",
+     "amount": 2000
+    }
+   ],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": true,
+    "refunds": [
+     "ann",
+     "bob"
+    ],
+    "payouts": [],
+    "fee": 0,
+    "fee_legs": [],
+    "msg": "📈 M7 \"Question 7?\": yes! everyone backed yes, so it's a wash — stakes returned."
+   }
+  },
+  {
+   "name": "void",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 1000
+    },
+    {
+     "nick": "bob",
+     "option": "no",
+     "amount": 2000
+    }
+   ],
+   "result": null,
+   "expect": {
+    "status": "void",
+    "refund_all": true,
+    "refunds": [
+     "ann",
+     "bob"
+    ],
+    "payouts": [],
+    "fee": 0,
+    "fee_legs": [],
+    "msg": "📈 M7 \"Question 7?\": why not."
+   }
+  },
+  {
+   "name": "no bets at all",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": true,
+    "refunds": [],
+    "payouts": [],
+    "fee": 0,
+    "fee_legs": [],
+    "msg": "📈 M7 \"Question 7?\": yes! nobody backed yes, so everyone gets their PAT back."
+   }
+  },
+  {
+   "name": "case-different nicks are separate winners",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "Ann",
+     "option": "yes",
+     "amount": 1000
+    },
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 3000
+    },
+    {
+     "nick": "bob",
+     "option": "no",
+     "amount": 4321
+    }
+   ],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "Ann",
+      2026
+     ],
+     [
+      "ann",
+      6078
+     ]
+    ],
+    "fee": 217,
+    "fee_legs": [
+     [
+      "mm",
+      217
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": yes! 2 winner(s) split PAT 8,104 — ann +6,078, Ann +2,026. PAT 217 to the casino."
+   }
+  },
+  {
+   "name": "past 2^53 in the products (exact ints)",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 123456789012
+    },
+    {
+     "nick": "bob",
+     "option": "no",
+     "amount": 987654321098
+    },
+    {
+     "nick": "carl",
+     "option": "yes",
+     "amount": 555555555555
+    },
+    {
+     "nick": "dave",
+     "option": "no",
+     "amount": 31415926535
+    }
+   ],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "ann",
+      299478012306
+     ],
+     [
+      "carl",
+      1347651067512
+     ]
+    ],
+    "fee": 50953512382,
+    "fee_legs": [
+     [
+      "mm",
+      50953512382
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": yes! 2 winner(s) split PAT 1,647,129,079,818 — carl +1,347,651,067,512, ann +299,478,012,306. PAT 50,953,512,382 to the casino."
+   }
+  },
+  {
+   "name": "a fee under 1 PAT is 0, dust still lands",
+   "options": [
+    "yes",
+    "no"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "yes",
+     "amount": 500
+    },
+    {
+     "nick": "bob",
+     "option": "yes",
+     "amount": 700
+    },
+    {
+     "nick": "carl",
+     "option": "no",
+     "amount": 19
+    }
+   ],
+   "result": "yes",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "ann",
+      507
+     ],
+     [
+      "bob",
+      711
+     ]
+    ],
+    "fee": 1,
+    "fee_legs": [
+     [
+      "mm",
+      1
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": yes! 2 winner(s) split PAT 1,218 — bob +711, ann +507. PAT 1 to the casino."
+   }
+  },
+  {
+   "name": "unicode options",
+   "options": [
+    "🐸 frog",
+    "🦊 fox"
+   ],
+   "bets": [
+    {
+     "nick": "ann",
+     "option": "🐸 frog",
+     "amount": 1500
+    },
+    {
+     "nick": "bob",
+     "option": "🦊 fox",
+     "amount": 2500
+    },
+    {
+     "nick": "carl",
+     "option": "🐸 frog",
+     "amount": 900
+    }
+   ],
+   "result": "🦊 fox",
+   "expect": {
+    "status": "settled",
+    "refund_all": false,
+    "refunds": [],
+    "payouts": [
+     [
+      "bob",
+      4780
+     ]
+    ],
+    "fee": 120,
+    "fee_legs": [
+     [
+      "mm",
+      120
+     ]
+    ],
+    "msg": "📈 M7 \"Question 7?\": 🦊 fox! 1 winner(s) split PAT 4,780 — bob +4,780. PAT 120 to the casino."
+   }
+  }
+ ]
+}

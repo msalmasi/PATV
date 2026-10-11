@@ -190,6 +190,8 @@ const RULES = {
   "pat_route_intents.user_id": M(), "pat_route_intents.payer": { deny: NAME },
   "stashes.owner": { deny: "a Camfrog login (the stash follows the login, not the PATV account)" }, "stash_moves.user_id": M(),
   "action_ttl_config.actor": { deny: NAME },
+  // 1.99ou: escrow/ledger.js - an escrowed stake follows its account (a refund / payout also resolves merged ids)
+  "escrow_holds.user_id": M(),
   // 1.99ns: pools.js / econstore.js - who changed a setting (a label: "pepe", "web:<admin>", a Camfrog login), a Fed journal
   // row's actor (Pepe's journal), a turf_inbox leg's payer (a Camfrog login)
   "fed_journal.actor": { deny: NAME }, "pat_routes.by": { deny: NAME }, "pat_routes_log.by": { deny: NAME },

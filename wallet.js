@@ -125,6 +125,10 @@ function register(app, { isBotToken, addUser }) {
     const body = req.body || {};
     if (!isBotToken(body.password)) return res.status(403).json({ success: false, error: "unauthorized" });
     try {
+      // 1.99ou: with the P2P loans on the site (escrow/loans.js), Pepe's P2P rows are only his mirror - the site's records win;
+      // his Federal Reserve loans (still his, Phase 3) come from his snapshot as before
+      const G = require("./escrow/games");
+      if (await G.gameLive("loans").catch(() => false)) body.loans = await require("./escrow/loans").mergeSnapshot(body.loans);
       const snap = cleanLoans(body);
       await save("loans", snap);
       res.json({ success: true, stored: snap.loans.length, requests: snap.requests.length });

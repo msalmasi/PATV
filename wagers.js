@@ -146,4 +146,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, cleanAi, viewWager, viewPool };
+module.exports = { register, cleanAi, cleanWager, viewWager, viewPool };

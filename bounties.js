@@ -5,6 +5,11 @@
 // it) resolve or cancel from the site: each of those is queued as an action that Pepe claims every
 // few seconds, runs through the same checks as the chat command, and acks. An action carries its
 // id, so one claimed twice (Pepe restarted mid-way) is never applied twice.
+//
+// 1.99ou Phase 2: with the bounties cut over to the site (escrow/bounties.js, escrow_meta live:bounties) the site owns them:
+// the engine keeps the `bounties` table below itself (mirror()), the /bounties/:id/:kind forms run on the engine at once,
+// Pepe's /api/bounties/sync is ignored and /api/bounties/actions/claim hands out nothing (the queue is retired while the
+// switch is on - it stays for the local plugin path).
 const { runQuery, getQuery } = require("./dbUtils");
 const actions = require("./actions");
 
@@ -43,6 +48,30 @@ function cleanClaim(c) {
     rejected: c.rejected ? { by: String(c.rejected.by || "").slice(0, 60), why: String(c.rejected.why || "").slice(0, 160) } : null,
     disputed: !!c.disputed,
   };
+}
+
+// One bounty from Pepe's snapshot (or the site's own engine, escrow/bounties.js mirror()), cleaned for storage.
+function cleanSnap(b) {
+  const id = parseInt(b && b.id, 10);
+  if (!id) return null;
+  return {
+    id, creator: String(b.creator || "").slice(0, 60), task: String(b.task || "").slice(0, 300),
+    room: String(b.room || "").slice(0, 80), status: String(b.status || "open").slice(0, 20),
+    created: Number(b.created) || 0, deadline: Number(b.deadline) || 0,
+    pot: (b.pot || []).slice(0, 500).map((c) => ({ nick: String(c.nick || "").slice(0, 60), amount: Math.floor(Number(c.amount) || 0) })),
+    claims: (b.claims || []).slice(0, 200).map(cleanClaim),
+    hunters: (b.hunters || []).slice(0, 50).map((h) => String(h).slice(0, 60)),
+    resolved: Number(b.resolved) || null,
+    verify: b.verify && b.verify.text ? { text: String(b.verify.text).slice(0, 300), action: String(b.verify.action || "").slice(0, 20) } : null,
+    auto: !!b.auto,
+  };
+}
+async function storeSnap(clean) {
+  await ready;
+  await runQuery(`INSERT INTO bounties (id, data, status, deadline, updated) VALUES (?, ?, ?, ?, ?)
+                  ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
+                  deadline = excluded.deadline, updated = excluded.updated`,
+    [clean.id, JSON.stringify(clean), clean.status, clean.deadline, Date.now()]);
 }
 
 // What the viewer may do with one claim on an open bounty.
@@ -87,24 +116,12 @@ function register(app, { isBotToken, addUser }) {
     const list = Array.isArray(body.bounties) ? body.bounties.slice(0, 1000) : [];
     try {
       await ready;
+      // 1.99ou: while the site owns the bounties (escrow/bounties.js) it keeps this table itself - a late snapshot from Pepe
+      // must not overwrite it
+      if (await require("./escrow/games").gameLive("bounties")) return res.json({ success: true, stored: 0, live: true });
       for (const b of list) {
-        const id = parseInt(b.id, 10);
-        if (!id) continue;
-        const clean = {
-          id, creator: String(b.creator || "").slice(0, 60), task: String(b.task || "").slice(0, 300),
-          room: String(b.room || "").slice(0, 80), status: String(b.status || "open").slice(0, 20),
-          created: Number(b.created) || 0, deadline: Number(b.deadline) || 0,
-          pot: (b.pot || []).slice(0, 500).map((c) => ({ nick: String(c.nick || "").slice(0, 60), amount: Math.floor(Number(c.amount) || 0) })),
-          claims: (b.claims || []).slice(0, 200).map(cleanClaim),
-          hunters: (b.hunters || []).slice(0, 50).map((h) => String(h).slice(0, 60)),
-          resolved: Number(b.resolved) || null,
-          verify: b.verify && b.verify.text ? { text: String(b.verify.text).slice(0, 300), action: String(b.verify.action || "").slice(0, 20) } : null,
-          auto: !!b.auto,
-        };
-        await runQuery(`INSERT INTO bounties (id, data, status, deadline, updated) VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(id) DO UPDATE SET data = excluded.data, status = excluded.status,
-                        deadline = excluded.deadline, updated = excluded.updated`,
-          [id, JSON.stringify(clean), clean.status, clean.deadline, Date.now()]);
+        const clean = cleanSnap(b);
+        if (clean) await storeSnap(clean);
       }
       await runQuery("DELETE FROM bounties WHERE status != 'open' AND updated < ?", [Date.now() - KEEP_DAYS * 86400000]);
       res.json({ success: true, stored: list.length });
@@ -177,6 +194,23 @@ function register(app, { isBotToken, addUser }) {
           ok = "Sent to Pepe: cancelling — everyone who chipped in is refunded.";
         }
       }
+      // 1.99ou Phase 2: while the site owns the bounties (escrow/bounties.js) the action runs here, now - nothing is queued for
+      // Pepe (the bounty_actions queue is retired while the switch is on; it stays for the local plugin path)
+      const games = require("./escrow/games");
+      if (await games.gameLive("bounties")) {
+        const E = require("./escrow/bounties");
+        const verb = kind === "cancel" ? (creator ? "cancel" : "void") : kind;
+        const args = { ref: `BT${id}` };
+        if (kind === "add") args.amount = amount;
+        else if (kind === "claim") { args.note = note; args.link = evidence || ""; }
+        else if (kind === "reject") { args.hunter = JSON.parse(hunters)[0]; args.why = note; }
+        else if (kind === "dispute") args.why = note;
+        else if (kind === "resolve") args.hunters = JSON.parse(hunters);
+        const actor = { userId: req.user.userId, username: u.username, login: u.camfrogUsername || null, admin: u.class === "Admin", via: "web" };
+        const idem = /^[A-Za-z0-9_-]{8,64}$/.test(String(body.idem || "")) ? `web-${req.user.userId}-${body.idem}` : null;
+        const r = await games.act("bounties", { verb, actor, args, idem });
+        return back(E.webReply(verb, r, args));
+      }
       const open = await getQuery("SELECT COUNT(*) AS n FROM bounty_actions WHERE user_id = ? AND status IN ('pending','claimed')", [req.user.userId]);
       if (open[0].n >= 5) return back("You already have actions waiting — give Pepe a moment.");
       await evidenceCol;
@@ -195,6 +229,13 @@ function register(app, { isBotToken, addUser }) {
   app.post("/api/bounties/actions/claim", async (req, res) => {
     if (!isBotToken((req.body || {}).password)) return res.status(403).json({ error: "unauthorized" });
     await actionsReady; await evidenceCol;
+    // 1.99ou: while the site owns the bounties nothing is handed to Pepe (he doesn't run the local engine then); a row that
+    // somehow got queued is answered here so it doesn't sit "pending" for ever
+    if (await require("./escrow/games").gameLive("bounties")) {
+      await runQuery("UPDATE bounty_actions SET status = 'failed', message = ?, updated = ? WHERE status IN ('pending','claimed')",
+                     ["The bounty board runs on publicaccess.tv now - nothing happened; send it again.", Date.now()]);
+      return res.json({ actions: [], live: true });
+    }
     // 1.99ne: overdue pending actions expire first (actionttl.js)
     await ttl.sweepTable("bounty_actions").catch((e) => console.error("[bounties] ttl sweep:", e.message));
     const now = Date.now();
@@ -267,4 +308,4 @@ function register(app, { isBotToken, addUser }) {
   });
 }
 
-module.exports = { register, view, cleanLink, cleanClaim, claimPerms };
+module.exports = { register, view, cleanLink, cleanClaim, claimPerms, cleanSnap, storeSnap };

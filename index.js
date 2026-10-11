@@ -1216,6 +1216,9 @@ require("./stashes").register(app, { isBotToken, addUser });
 require("./gtfstore").register(app, { isBotToken, addUser });
 // 1.99ns Phase 1: every protocol pool on the site (pools.js) + the economy settings and journals (econstore.js)
 require("./pools").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
+// 1.99ou Phase 2: the escrow ledger (every escrowed stake) + the escrow game engines (wagers, ...) - docs/escrow-cutover-runbook.md
+require("./escrow/ledger").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
+require("./escrow/games").register(app, { isBotToken, addUser });
 require("./econstore").register(app, { isBotToken, addUser });
 // G1: the gang system on the site (gangs.js) - registry, ranks, treasuries (keyed pools rows), rep; /gtf/gangs pages
 require("./gangs").register(app, { isBotToken, addUser, patSupply: (...a) => patSupply(...a) });
@@ -1449,6 +1452,8 @@ async function patSupply() {
   try { pools = await require("./pools").supplyRows(pools); } catch (e) { /* no pools tables yet */ }
   // G1: once the gangs live on the site their treasuries are counted from the table, not Pepe's "gangs" row
   try { pools = await require("./gangs").supplyRows(pools); } catch (e) { /* no gang tables yet */ }
+  // 1.99ou Phase 2: once the escrow lives on the site its held stakes are counted from escrow_holds, not Pepe's "escrow:holds" row
+  try { pools = await require("./escrow/ledger").supplyRows(pools); } catch (e) { /* no escrow tables yet */ }
   // 1.99ne: paid-command PAT already taken from wallets that Pepe hasn't routed into his pools yet (patroutes.js)
   try {
     const u = await require("./patroutes").unrouted();
