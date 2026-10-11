@@ -211,6 +211,17 @@ async function holdemHand(T, hand, won, contrib) {
   }
 }
 
+/** 1.99pk: everyone else folded after a royal-flush river: the one player still in the hand gets 👑 Royal Treatment
+ *  (the same key as the showdown path, so a hand is never counted twice). */
+async function holdemBoardRoyal(T, hand, uids, board) {
+  try {
+    if (!AH.boardRoyal(board)) return;
+    for (const uid of uids || []) if (uid) await bump(`chm:${T.id}:h${hand}:${uid}:hm_board_royal`, uid, "hm_board_royal", 1);
+  } catch (e) {
+    console.error("[casino] rewards (board royal):", e.message);
+  }
+}
+
 /** 1.99pa: a hold'em showdown's hand achievements (achhands.holdemShowdown) for every seat at it, keyed per hand + seat + metric.
  *  sd: holdem.js T.sd ({board, shown: [{cards}], cf: [{uid}]} in reveal order), awards: the engine's awards event. */
 async function holdemShowdown(T, hand, sd, awards) {
@@ -381,5 +392,5 @@ async function counts(uid) {
   return out;
 }
 
-module.exports = { blackjackRound, holdemPot, holdemHand, holdemShowdown, quietBackfill, winReward, wantBases, setBases, repPending, repAck, counts, ensure, hooks, siteCount,
+module.exports = { blackjackRound, holdemPot, holdemHand, holdemShowdown, holdemBoardRoyal, quietBackfill, winReward, wantBases, setBases, repPending, repAck, counts, ensure, hooks, siteCount,
                    XP_WIN_RATE, METRICS };

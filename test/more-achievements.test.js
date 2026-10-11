@@ -116,7 +116,7 @@ test("catalog: 101 new achievements, badge art for each, tiers + rewards in line
   const list = A.list();
   const fresh = list.filter((a) => NEW_PREFIXES.some((p) => a.id.startsWith(p)) || /^cf_(bj|holdem)_/.test(a.id) && !["cf_bj_natural", "cf_bj_100", "cf_bj_1000",
     "cf_holdem_pot", "cf_holdem_25"].includes(a.id) || ["cf_reroll_10"].includes(a.id));
-  assert.equal(fresh.length, 101, fresh.length);
+  assert.equal(fresh.length, 102, fresh.length);
   const band = { common: [500, 2000, 5000, 20000], uncommon: [2000, 5000, 20000, 50000], rare: [8000, 15000, 80000, 150000], legendary: [20000, 30000, 250000, 500000] };
   for (const a of fresh) {
     assert.ok(fs.existsSync(path.join(repo, a.icon.replace(/^\//, ""))), "badge art: " + a.icon);
@@ -149,7 +149,10 @@ test("achhands: royal flush / straight flush / quads / full house only when the 
   assert.equal(r.b, undefined, "7-2 that LOST is nothing");
   // a royal flush on the board is nobody's (split pot, nobody's hole cards made it)
   r = sd({ a: ["2c", "3d"], b: ["4c", "5d"] }, ["Ah", "Kh", "Qh", "Jh", "Th"], [{ who: "a", amount: 50, pot: "main pot" }, { who: "b", amount: 50, pot: "main pot" }], { a: 500, b: 500 });
-  assert.deepEqual(r, {});
+  assert.deepEqual(r, { a: { hm_board_royal: 1 }, b: { hm_board_royal: 1 } }, "1.99pk: but both get 👑 Royal Treatment");
+  assert.equal(AH.boardRoyal(["Ah", "Kh", "Qh", "Jh", "Th"]), true);
+  assert.equal(AH.boardRoyal(["Ah", "Kh", "Qh", "Jh", "9h"]), false, "a straight flush board isn't royal");
+  assert.equal(AH.boardRoyal(["Ah", "Kh", "Qh", "Jh"]), false, "four cards");
   r = sd({ a: ["9s", "9h"], b: ["Kc", "Kd"] }, ["9c", "9d", "Ks", "2h", "3c"], [{ who: "a", amount: 300, pot: "main pot" }], { a: 900, b: 400 });
   assert.deepEqual(r.a, { hm_quads: 1 });
   assert.deepEqual(r.b, undefined, "a full house that lost isn't a bad beat (K-K was way behind on the turn)");

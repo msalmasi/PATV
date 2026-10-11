@@ -147,6 +147,22 @@ test("hold'em: a royal flush (the hole cards make it) that busts the other playe
   assert.equal(JSON.stringify(await rewards.counts("u2")), before);
 });
 
+test("1.99pk: a royal-flush board - everyone at the showdown gets Royal Treatment; everyone folded after the river: the one left; once per hand + seat", async () => {
+  const T = { id: "br-t", eng: { chips: { u2: 3000, u3: 1000 } }, high_stakes: false };
+  const board = ["Ah", "Kh", "Qh", "Jh", "Th"];
+  await rewards.holdemShowdown(T, 1, { board, shown: [{ cards: ["2c", "3d"] }, { cards: ["4c", "5d"] }], cf: [{ uid: "u2" }, { uid: "u3" }] },
+                               [{ who: "u2", amount: 500, pot: "main pot" }, { who: "u3", amount: 500, pot: "main pot" }]);
+  assert.ok((await feed("u2")).includes("cf_holdem_boardroyal") && (await feed("u3")).includes("cf_holdem_boardroyal"));
+  assert.ok(!(await feed("u3")).includes("cf_holdem_royal"), "the board's royal isn't YOUR royal flush");
+  await rewards.holdemBoardRoyal(T, 1, ["u2"], board);                                 // the same hand again
+  assert.equal(await count("u2", "hm_board_royal"), 1);
+  await rewards.holdemBoardRoyal(T, 2, ["u1"], board);                                 // a fold-out after the river
+  await rewards.holdemBoardRoyal(T, 3, ["u1"], board.slice(0, 4));                     // no river: nothing
+  assert.equal(await count("u1", "hm_board_royal"), 1);
+  await rewards.holdemBoardRoyal(T, 4, ["u1"], ["Ah", "Kh", "Qh", "Jh", "9h"]);
+  assert.equal(await count("u1", "hm_board_royal"), 1, "a straight flush board isn't royal");
+});
+
 test("a knock-out of your own alt doesn't count", async () => {
   await runQuery("INSERT OR REPLACE INTO welcome_bonus (userId, dup_of) VALUES ('u3', 'u2')");
   const T = { id: "alt-t", eng: { chips: { u2: 4000, u3: 0 } }, high_stakes: false };

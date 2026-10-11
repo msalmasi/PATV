@@ -255,6 +255,7 @@ function install(core) {
         dumpWatch(T, ev.who);
         // 1.99mw: the site counts every seat (an uncontested pot never drops); the event names nobody for Pepe to award
         await rewards.holdemPot(T, e.hand_no, 0, ev.who, ev.amount, []);
+        await rewards.holdemBoardRoyal(T, e.hand_no, [ev.who], e.board);    // 1.99pk: a royal-flush board, everyone else folded
         won[ev.who] = (won[ev.who] || 0) + ev.amount;
         await emit(T, "win", `🏆 ${ev.name} wins ${fmt(ev.amount)} chips — everyone folded.`,
                    { winners: [{ amount: ev.amount }] });

@@ -302,6 +302,7 @@
     {"id": "cf_holdem_bust", "name": "Knockout", "emoji": "🥊", "desc": "Knocked someone out of a hold'em table.", "metric": "hm_busts", "threshold": 1, "xp": 2000, "pat": 20000, "tier": "common", "side": "bot"},
     {"id": "cf_holdem_bust_10", "name": "Eliminator", "emoji": "🦈", "desc": "Knocked 10 players out of hold'em tables.", "metric": "hm_busts", "threshold": 10, "xp": 10000, "pat": 100000, "tier": "rare", "side": "bot"},
     {"id": "cf_holdem_bigpot", "name": "Monster Pot", "emoji": "💰", "desc": "Won a hold'em pot of 1,000,000+.", "metric": "hm_big_pots", "threshold": 1, "xp": 10000, "pat": 100000, "tier": "rare", "side": "bot"},
-    {"id": "cf_cards_velvet", "name": "Velvet Rope", "emoji": "🥂", "desc": "Won a hand at a High Roller table.", "metric": "casino_hr_wins", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "bot"}
+    {"id": "cf_cards_velvet", "name": "Velvet Rope", "emoji": "🥂", "desc": "Won a hand at a High Roller table.", "metric": "casino_hr_wins", "threshold": 1, "xp": 5000, "pat": 50000, "tier": "uncommon", "side": "bot"},
+    {"id": "cf_holdem_boardroyal", "name": "Royal Treatment", "emoji": "🎆", "desc": "Were still in a hold'em hand when the board itself came a royal flush.", "metric": "hm_board_royal", "threshold": 1, "xp": 15000, "pat": 150000, "tier": "rare", "side": "bot"}
   ]
 }

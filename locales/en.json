@@ -6171,5 +6171,7 @@
   "ach.group.kit": "🧰 Kit in action",
   "ach.group.cards": "🃏 Card tables",
   "ach.group.style": "🎨 Look &amp; sound",
-  "ach.group.social": "💬 Feed &amp; friends"
+  "ach.group.social": "💬 Feed &amp; friends",
+  "ach.n.cf_holdem_boardroyal": "Royal Treatment",
+  "ach.d.cf_holdem_boardroyal": "Were still in a hold'em hand when the board itself came a royal flush."
 }

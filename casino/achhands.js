@@ -11,6 +11,8 @@
 //   hm_badbeats  lost the main pot holding quads or better (hole cards counting), or as a BIG favourite with one card to
 //                come: on the turn's board this hand won outright on at least BADBEAT_EQ of the river cards left
 //   casino_hr_wins  won a pot at a High Roller table
+//   hm_board_royal  1.99pk: the five board cards ARE a royal flush - every player still in the hand (at the showdown, or the
+//                   one left when everyone else folded after the river)
 // Blackjack (one seat's settled round):
 //   bj_charlies (a winning hand of 5+ cards), bj_double_wins, bj_split_sweeps (split, and every hand won),
 //   bj_insurance_wins, round result for the streaks (win / loss / push), casino_hr_wins (a hand won at a High Roller table)
@@ -21,6 +23,13 @@ const BIG_POT = 1000000;
 const BADBEAT_EQ = 0.85;
 const RANKS = "23456789TJQKA";
 const SUITS = "shdc";
+
+/** The five board cards are themselves a royal flush (1.99pk: 👑 Royal Treatment for everyone still in the hand). */
+function boardRoyal(board) {
+  if (!Array.isArray(board) || board.length !== 5) return false;
+  const r = H.eval5(board);
+  return r[0] === 8 && r[1] === 14;
+}
 
 /** Did the hole cards make this hand (better than the board's own five)? */
 function holeMatters(rank, board) {
@@ -57,6 +66,7 @@ function holdemShowdown({ reveals, board, awards, stacks, highStakes }) {
   const won = {};
   for (const a of awards || []) if (a.who in hands) won[a.who] = (won[a.who] || 0) + (Number(a.amount) || 0);
   const main = new Set((awards || []).filter((a) => a.pot === "main pot" || a.pot === undefined).map((a) => a.who));
+  if (boardRoyal(board)) for (const k of Object.keys(hands)) add(k, "hm_board_royal");     // 1.99pk: everyone at the showdown
   for (const [k, amt] of Object.entries(won)) {
     if (!(amt > 0)) continue;
     const rk = rank[k], made = holeMatters(rk, board);
@@ -100,4 +110,4 @@ function blackjackSeat(r, highStakes) {
   return out;
 }
 
-module.exports = { holdemShowdown, blackjackSeat, riverEquity, holeMatters, BIG_POT, BADBEAT_EQ };
+module.exports = { holdemShowdown, blackjackSeat, boardRoyal, riverEquity, holeMatters, BIG_POT, BADBEAT_EQ };
