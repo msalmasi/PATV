@@ -206,7 +206,7 @@
   const L = typeof live !== 'undefined' && live ? live : null;
   const nf = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
   // short numbers for tight spots: 1.2M, 340k
-  const sh = (x) => { const n = Number(x) || 0, a = Math.abs(n); return a >= 1e9 ? (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B' : a >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : a >= 1e3 ? Math.round(n / 1e3) + 'k' : String(Math.round(n)); };
+  const sh = (x) => { const n = Number(x) || 0, a = Math.abs(n); return a >= 1e15 ? (n / 1e15).toFixed(2).replace(/\.?0+$/, '') + 'Q' : a >= 1e12 ? (n / 1e12).toFixed(2).replace(/\.?0+$/, '') + 'T' : a >= 1e9 ? (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B' : a >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : a >= 1e3 ? Math.round(n / 1e3) + 'k' : String(Math.round(n)); };
   const P = (L && L.pools) || {};
   const layer = (k) => { const g = L && L.supply ? (L.supply.layers || []).find((x) => x.key === k) : null; return g ? g.amount : null; };
   const INC = L && L.incentives ? L.incentives : null;
@@ -389,7 +389,7 @@
            const niceStep = (x) => { const p = Math.pow(10, Math.floor(Math.log10(x))), f = x / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p; };
            // tick labels in one unit, with as many decimals as it takes for the ticks to read differently
            const tickLbls = (vals) => {
-             const a = Math.max(...vals.map(Math.abs)), U = a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : a >= 1e3 ? [1e3, 'k'] : [1, ''];
+             const a = Math.max(...vals.map(Math.abs)), U = a >= 1e15 ? [1e15, 'Q'] : a >= 1e12 ? [1e12, 'T'] : a >= 1e9 ? [1e9, 'B'] : a >= 1e6 ? [1e6, 'M'] : a >= 1e3 ? [1e3, 'k'] : [1, ''];
              let out = [];
              for (let d = 0; d <= 6; d++) { out = vals.map((v) => (v / U[0]).toFixed(d) + U[1]); if (new Set(out).size === out.length) break; }
              return out;

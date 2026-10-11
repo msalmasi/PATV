@@ -38,6 +38,10 @@ test("total supply: nearly flat data still gets distinct y-axis labels", async (
   // perfectly flat too
   const flat = yLabels(svgAfter(await render(rows(3, () => ({ total: 1062e6 }))), "Total supply"));
   assert.equal(new Set(flat).size, flat.length, "flat labels differ: " + flat.join(", "));
+  // staging's sandbox supply is in the quadrillions: short labels in Q, still distinct
+  const huge = yLabels(svgAfter(await render(rows(1, () => ({ total: 30.25e15 }))), "Total supply"));
+  assert.equal(new Set(huge).size, huge.length, "huge labels differ: " + huge.join(", "));
+  assert.ok(huge.every((l) => /^\d+\.\d+Q$/.test(l) && l.length <= 8), "short Q labels: " + huge.join(", "));
 });
 
 for (const n of [1, 2, 90]) {
