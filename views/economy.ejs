@@ -3,204 +3,215 @@
 <%# 1.99lx design pass: a live, friendly view up top (econpage.js: supply, the Fed band, where PAT sits, the incentive
     budget, the vaults, supply history) in the newer pages' look; the full guide below is unchanged in substance. -%>
 <style>
-  .eco { max-width: 1040px; width: 100%; min-width: 0; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #ddd; box-sizing: border-box; overflow-wrap: anywhere; }
-  .eco *, .eco *::before, .eco *::after { box-sizing: border-box; }
-  .eco h1 { margin: 8px 0 10px; font-size: clamp(26px, 4.6vw, 40px); line-height: 1.1; color: #fff; }
-  .eco h1 em { font-style: normal; background: linear-gradient(90deg, #ffcf40, #ff8a3d 55%, #ff6a4d); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .eco .sub { color: #c9c9bf; margin: 0; max-width: 68ch; line-height: 1.6; font-size: 16px; }
-  .eco a { color: #81c784; text-decoration: none; }
-  .eco a:hover { color: #a5d6a7; text-decoration: underline; }
-  .eco a:focus-visible, .eco summary:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
-  .eco code { background: #1c1c1c; border: 1px solid #262626; padding: 1px 5px; border-radius: 4px; font-size: 0.92em; color: #e8f5e9; white-space: normal; }
+  /* 1.99pr polish: the page is a .ds-page.flow (block flow, so the sticky contents bar works) and reads the ds tokens.
+     Section headings: .ds-h2 (one style) under a green .ds-eyebrow.ac kicker; card titles are h3. */
+  .eco > * + * { margin-block-start: var(--ds-sp-6); }
+  .eco > .guide-h { margin-block-start: var(--ds-sp-12); }
+  .eco h1 em { font-style: normal; background: var(--ds-gold-text-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .eco .num { font-variant-numeric: tabular-nums; }
+  .eco .muted { color: var(--ds-text-muted); }
+  .eco .ds-fine a { font-weight: 500; }
 
   /* hero + live numbers */
-  .eco .hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 22px; margin-bottom: 18px; display: grid; gap: 14px; }
-  .eco .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
-  .eco .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; }
-  .eco .tile { background: rgba(0,0,0,.35); border: 1px solid #2c2c2c; border-radius: 12px; padding: 10px 12px; min-width: 0; }
-  .eco .tile span { display: block; color: #9a9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-  .eco .tile b { display: block; font-size: clamp(17px, 4.2vw, 22px); color: #fff; font-variant-numeric: tabular-nums; }
-  .eco .tile small { color: #8d8d8d; font-size: 12px; }
-  .eco .live-note { color: #8d8d8d; font-size: 12px; margin: 0; }
-  .eco .lv { display: grid; gap: 14px; margin-bottom: 28px; }
-  .eco .epanel { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 16px; min-width: 0; display: grid; gap: 12px; align-content: start; }
-  .eco .epanel h2 { font-size: 18px; color: #fff; margin: 0; }
-  .eco .epanel .k { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #4caf50; letter-spacing: .5px; line-height: 1.6; }
-  .eco .epanel p { margin: 0; color: #bbb; font-size: 14px; line-height: 1.55; }
-  .eco .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 14px; }
-  .eco .num { font-variant-numeric: tabular-nums; }
-  .eco .muted { color: #8d8d8d; }
+  .eco .ds-hero .ds-stats { grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); margin-block-start: var(--ds-sp-2); }
+  .eco .ds-hero .ds-stat > b { font-size: clamp(17px, 4.2vw, 22px); }
+  .eco .ds-stat > span .ds-ic { font-size: 13px; vertical-align: -.3em; margin-inline-end: 2px; }
+  .eco .lv { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-4); }
+  .eco .ep { gap: var(--ds-sp-3); }
+  .eco .ep p { margin: 0; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: var(--ds-lh-sm); }
+  .eco .ep p.fed-now { color: var(--ds-text-strong); font-weight: 500; }
+  .eco .ep p.ds-fine { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .eco .ep .ds-eyebrow + .ds-h2 { margin-block-start: calc(var(--ds-sp-1) * -1); }
+  .eco .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--ds-sp-4); }
+
   /* the money loop */
-  .eco .loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; position: relative; }
-  .eco .step { background: #0f0f0f; border: 1px solid #262626; border-top: 3px solid var(--c); border-radius: 14px; padding: 12px; position: relative; display: grid; gap: 6px; align-content: start; }
-  .eco .step + .step::before { content: '→'; position: absolute; left: -18px; top: 50%; transform: translateY(-50%); color: #ffcf40; font-weight: bold; font-size: 16px; }
-  .eco .step .sn { font-family: 'Press Start 2P', monospace; font-size: 9px; color: var(--c); letter-spacing: .06em; }
-  .eco .step b { color: #fff; font-size: 15px; }
-  .eco .step p { font-size: 13px; color: #aaa; margin: 0; line-height: 1.5; }
-  .eco .step ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 13px; }
-  .eco .step li { display: flex; justify-content: space-between; gap: 8px; color: #ccc; }
-  .eco .step li b { font-size: 13px; color: #fff; font-weight: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .eco .loop-back { text-align: center; color: #9a9a9a; font-size: 13px; margin: 0; }
-  .eco .loop-back b { color: #ffcf40; }
+  .eco .loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--ds-sp-6); position: relative; }
+  .eco .step { position: relative; display: grid; gap: var(--ds-sp-1h); align-content: start; min-width: 0; padding: var(--ds-sp-3); border-radius: var(--ds-r-lg);
+               background: var(--ds-sunken); border: 1px solid var(--ds-line); border-block-start: 3px solid var(--c); }
+  .eco .step + .step::before { content: '→'; position: absolute; inset-inline-start: -19px; top: 50%; transform: translateY(-50%); color: var(--ds-gold); font-weight: 700; font-size: 16px; line-height: 1; }
+  [dir="rtl"] .eco .step + .step::before { content: '←'; }
+  .eco .step .sn { color: var(--c); font: 700 var(--ds-fs-chip)/1.4 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; }
+  .eco .step > b { color: var(--ds-text-strong); font-size: var(--ds-fs-h4); line-height: var(--ds-lh-h4); }
+  .eco .step p { font-size: var(--ds-fs-meta); color: var(--ds-text-muted); margin: 0; line-height: var(--ds-lh-meta); }
+  .eco .step ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-1); font-size: var(--ds-fs-meta); }
+  .eco .step li { display: flex; justify-content: space-between; align-items: center; gap: var(--ds-sp-2); color: var(--ds-text-2); }
+  .eco .step li b { font-size: var(--ds-fs-meta); color: var(--ds-gold-text); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .eco .ep p.loop-back { text-align: center; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); }
   @media (max-width: 760px) {
-    .eco .loop { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-    .eco .step + .step::before { content: '↓'; left: 50%; top: -19px; transform: translateX(-50%); }
+    .eco .loop { grid-template-columns: minmax(0, 1fr); gap: var(--ds-sp-5); }
+    .eco .step + .step::before, [dir="rtl"] .eco .step + .step::before { content: '↓'; inset-inline-start: 50%; top: -18px; transform: translateX(-50%); }
+    [dir="rtl"] .eco .step + .step::before { transform: translateX(50%); }
   }
-  /* Fed band gauge */
-  .eco .gauge { position: relative; height: 34px; border-radius: 10px; overflow: hidden; display: flex; border: 1px solid #2a2a2a; }
+
+  /* Fed band gauge (a chart: always left-to-right) */
+  .eco .gauge, .eco .gscale { direction: ltr; }
+  .eco .gauge { position: relative; height: 34px; border-radius: var(--ds-r-md); overflow: hidden; display: flex; border: 1px solid var(--ds-line-strong); }
   .eco .gauge .z { height: 100%; }
   .eco .gauge .z.lo { background: repeating-linear-gradient(135deg, #2a1610 0 6px, #24130e 6px 12px); }
-  .eco .gauge .z.ok { background: #13200f; }
+  .eco .gauge .z.ok { background: var(--ds-green-deep); }
   .eco .gauge .z.hi { background: repeating-linear-gradient(45deg, #2a1610 0 6px, #24130e 6px 12px); }
-  .eco .gauge .mk { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: #fff; border-radius: 2px; box-shadow: 0 0 0 2px #121212; }
-  .eco .gscale { position: relative; height: 34px; font-size: 12px; color: #9a9a9a; }
+  .eco .gauge .mk { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: var(--ds-text-strong); border-radius: 2px; box-shadow: 0 0 0 2px var(--ds-surface); }
+  .eco .gscale { position: relative; height: 34px; margin-block-start: var(--ds-sp-1h); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
   .eco .gscale span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; text-align: center; line-height: 1.3; }
-  .eco .gscale span.fedlbl { color: #fff; font-weight: bold; }
-  .eco .glegend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 8px; }
-  .eco .glegend div { font-size: 13px; color: #bbb; line-height: 1.45; padding-left: 10px; border-left: 3px solid #444; }
-  .eco .glegend div.on { border-left-color: #ffcf40; color: #fff; }
-  .eco .glegend b { display: block; color: #fff; }
+  .eco .glegend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: var(--ds-sp-2); }
+  .eco .glegend div { font-size: var(--ds-fs-meta); color: var(--ds-text-muted); line-height: var(--ds-lh-meta); padding-inline-start: var(--ds-sp-2h); border-inline-start: 3px solid var(--ds-line-strong); }
+  .eco .glegend div.on { border-inline-start-color: var(--ds-gold); color: var(--ds-text); }
+  .eco .glegend b { display: block; color: var(--ds-text-strong); }
+
   /* where PAT sits */
-  .eco .stack { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; background: #121212; }
+  .eco .stack { display: flex; height: 22px; border-radius: var(--ds-r-xs); overflow: hidden; gap: 2px; background: var(--ds-surface); }
   .eco .stack i { display: block; height: 100%; min-width: 3px; }
-  .eco ul.lg { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  .eco ul.lg li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 14px; }
+  .eco ul.lg { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-2); }
+  .eco ul.lg li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: var(--ds-sp-2); align-items: baseline; font-size: var(--ds-fs-sm); }
   .eco ul.lg li i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; transform: translateY(1px); }
-  .eco ul.lg li small { display: block; color: #8d8d8d; font-size: 12px; }
-  .eco ul.lg li b { font-variant-numeric: tabular-nums; color: #fff; white-space: nowrap; }
+  .eco ul.lg li small { display: block; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
+  .eco ul.lg li b { font-variant-numeric: tabular-nums; color: var(--ds-text-strong); white-space: nowrap; }
+
   /* budget bars */
-  .eco ul.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .eco ul.bars li { display: grid; gap: 4px; }
-  .eco ul.bars .bl { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: #ccc; }
-  .eco ul.bars .bl b { color: #fff; font-weight: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .eco ul.bars .track { height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
-  .eco ul.bars .fill { height: 100%; background: linear-gradient(90deg, #ffcf40, #ff8a3d); border-radius: 4px; }
-  .eco ul.bars li.hl .bl { color: #fff; font-weight: bold; }
+  .eco ul.bars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-2h); }
+  .eco ul.bars li { display: grid; gap: var(--ds-sp-1); }
+  .eco ul.bars .bl { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-2); font-size: var(--ds-fs-meta); color: var(--ds-text-2); }
+  .eco ul.bars .bl b { color: var(--ds-text-strong); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .eco ul.bars .track { display: block; height: 8px; background: #1f1f1f; border-radius: var(--ds-r-pill); overflow: hidden; }
+  .eco ul.bars .fill { height: 100%; background: var(--ds-gold-grad); border-radius: var(--ds-r-pill); }
+  .eco ul.bars li.hl .bl { color: var(--ds-text-strong); font-weight: 700; }
+
   /* vault tiles */
-  .eco .vts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 10px; }
-  .eco .vt { background: #0f0f0f; border: 1px solid #262626; border-top: 3px solid var(--c); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
-  .eco .vt b { color: #fff; font-size: 14px; }
-  .eco .vt .v { font-size: 19px; font-weight: 800; color: #ffd700; font-variant-numeric: tabular-nums; }
-  .eco .vt small { color: #8d8d8d; font-size: 12px; line-height: 1.4; }
-  /* charts */
-  .eco .chart { display: grid; gap: 6px; }
+  .eco .vts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: var(--ds-sp-2h); }
+  .eco .vt { display: grid; gap: 2px; align-content: start; min-width: 0; padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-lg);
+             background: var(--ds-sunken); border: 1px solid var(--ds-line); border-block-start: 3px solid var(--c); }
+  .eco .vt b { color: var(--ds-text-strong); font-size: var(--ds-fs-sm); }
+  .eco .vt .v { font-size: 19px; font-weight: 700; line-height: 1.25; color: var(--ds-gold-text); font-variant-numeric: tabular-nums; }
+  .eco .vt small { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); line-height: var(--ds-lh-xs); }
+
+  /* charts (SVGs scale with their box; the text grows on phones so it stays readable after the scale-down) */
+  .eco .chart { display: grid; gap: var(--ds-sp-1h); min-width: 0; }
   .eco .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
-  .eco .chart svg text { font-family: Ubuntu, sans-serif; fill: #9a9a9a; font-size: 11px; }
-  .eco .chart .ttl { font-size: 13px; color: #ccc; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-  .eco .chart .ttl b { color: #fff; }
+  .eco .chart svg text { font-family: var(--ds-font); fill: var(--ds-text-muted); font-size: 11px; }
+  .eco .chart .ttl { font-size: var(--ds-fs-meta); color: var(--ds-text-2); display: flex; justify-content: space-between; gap: var(--ds-sp-2); flex-wrap: wrap; }
+  .eco .chart .ttl b { color: var(--ds-text-strong); }
   .eco .chart .hit { fill: transparent; }
+  .eco .chart .hit:hover { fill: rgba(255, 255, 255, .06); }
   @media (max-width: 600px) { .eco .chart svg text { font-size: 19px; } .eco .chart svg text.yl { font-size: 16px; } }
-  .eco .chart .hit:hover { fill: rgba(255,255,255,.06); }
-  .eco .key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: #bbb; }
-  .eco .key i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+  .eco .key { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-3h); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+  .eco .key i { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-inline-end: 5px; border-radius: 2px; }
   .eco .key i.sq { height: 10px; width: 10px; }
-  .eco .key i.dash { background: none !important; border-top: 2px dashed #888; height: 0; }
-  .eco details.data summary { cursor: pointer; color: #9a9a9a; font-size: 13px; }
+  .eco .key i.dash { background: none !important; border-top: 2px dashed var(--ds-text-muted); height: 0; }
+  .eco details.data summary { display: flex; align-items: center; min-height: var(--ds-tap); cursor: pointer; color: var(--ds-ac-2); font-size: var(--ds-fs-meta); font-weight: 500; }
+  .eco details.data[open] summary { margin-block-end: var(--ds-sp-2); }
 
   /* the PAT map (Economy v3): new PAT -> the Fed -> the incentive budget / the working vaults -> players -> back */
-  .eco .pmap { background: #0c0c0c; border: 1px solid #222; border-radius: 16px; padding: 16px; margin: 16px 0 6px; display: grid; gap: 0; min-width: 0; }
-  .eco .pmap .pm-top { display: grid; gap: 4px; margin-bottom: 12px; }
-  .eco .pmap .pm-top .k { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #4caf50; letter-spacing: .5px; line-height: 1.6; }
-  .eco .pmap .pm-top h3 { margin: 0; font-size: 18px; color: #fff; }
-  .eco .pmap .pm-top p { margin: 0; color: #9a9a9a; font-size: 13px; }
-  .eco .pm-box { background: #121212; border: 1px solid #2a2a2a; border-left: 4px solid var(--c, #888); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; align-content: start; }
-  .eco .pm-box h4 { margin: 0; font-size: 15px; color: #fff; line-height: 1.3; }
-  .eco .pm-box p { margin: 0; font-size: 13.5px; color: #bbb; line-height: 1.5; }
-  .eco .pm-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 13.5px; color: #ccc; line-height: 1.45; }
-  .eco .pm-box li { padding-left: 14px; position: relative; }
-  .eco .pm-box li::before { content: ''; position: absolute; left: 2px; top: .6em; width: 6px; height: 6px; border-radius: 50%; background: var(--c, #888); }
-  .eco .pm-box li.soon { border: 1px dashed #4a4a4a; border-radius: 8px; padding: 4px 8px 4px 22px; color: #9a9a9a; }
-  .eco .pm-box li.soon::before { left: 9px; top: 1em; background: transparent; border: 1px dashed var(--c, #888); }
-  .eco .pm-box li b { color: #fff; font-weight: bold; }
-  .eco .pm-soon { display: inline-block; font-size: 10px; font-weight: bold; color: #111; background: #e0a030; border-radius: 8px; padding: 0 6px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
-  .eco .pm-ar { display: flex; align-items: center; justify-content: center; gap: 8px; color: #9a9a9a; font-size: 12.5px; padding: 6px 4px; text-align: center; line-height: 1.35; }
-  .eco .pm-ar::before { content: '↓'; color: #ffcf40; font-weight: bold; font-size: 18px; line-height: 1; flex: none; }
-  .eco .pm-fed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: 12px; align-items: stretch; }
-  .eco .pm-burn { background: #1d0f0b; border: 1px dashed #d65f36; border-radius: 12px; padding: 12px 14px; color: #f0b9a3; font-size: 13.5px; line-height: 1.45; display: grid; align-content: center; gap: 4px; min-width: 0; }
-  .eco .pm-burn b { color: #fff; }
-  .eco .pm-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+  .eco .pmap { display: grid; gap: 0; min-width: 0; margin: var(--ds-sp-4) 0 var(--ds-sp-1h); padding: var(--ds-sp-4); border-radius: var(--ds-r-xl);
+               background: var(--ds-sunken); border: 1px solid var(--ds-line); scroll-margin-top: 90px; }
+  .eco .pmap .pm-top { display: grid; gap: var(--ds-sp-1); margin-block-end: var(--ds-sp-3); }
+  .eco .pmap .pm-top p { margin: 0; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: var(--ds-lh-meta); }
+  .eco .pm-box { display: grid; gap: var(--ds-sp-1h); min-width: 0; align-content: start; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg);
+                 background: var(--ds-surface); border: 1px solid var(--ds-line); border-inline-start: 4px solid var(--c, var(--ds-text-muted)); }
+  .eco .pm-box h4 { margin: 0; font: 700 var(--ds-fs-h4)/var(--ds-lh-h4) var(--ds-font); color: var(--ds-text-strong); }
+  .eco .pm-box p { margin: 0; font-size: var(--ds-fs-sm); color: var(--ds-text-2); line-height: var(--ds-lh-sm); }
+  .eco .pm-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--ds-sp-1h); font-size: var(--ds-fs-sm); color: var(--ds-text-2); line-height: 1.45; }
+  .eco .pm-box li { position: relative; padding-inline-start: var(--ds-sp-3h); }
+  .eco .pm-box li::before { content: ''; position: absolute; inset-inline-start: 2px; top: .6em; width: 6px; height: 6px; border-radius: 50%; background: var(--c, var(--ds-text-muted)); }
+  .eco .pm-box li.soon { padding: var(--ds-sp-1) var(--ds-sp-2); padding-inline-start: 22px; border: 1px dashed #4a4a4a; border-radius: var(--ds-r-sm); color: var(--ds-text-muted); }
+  .eco .pm-box li.soon::before { inset-inline-start: 9px; top: 1em; background: transparent; border: 1px dashed var(--c, var(--ds-text-muted)); }
+  .eco .pm-box li b { color: var(--ds-text-strong); font-weight: 700; }
+  .eco .pm-soon, .eco .new { display: inline-flex; align-items: center; padding: 1px 7px; margin-inline-start: var(--ds-sp-1h); border-radius: var(--ds-r-pill); vertical-align: 1px;
+                             font: 700 var(--ds-fs-chip)/1.5 var(--ds-font); letter-spacing: .02em; white-space: nowrap; }
+  .eco .pm-soon { background: var(--ds-warn-fill); color: #1a1200; }
+  .eco .pm-ar { display: flex; align-items: center; justify-content: center; gap: var(--ds-sp-2); padding: var(--ds-sp-1h) var(--ds-sp-1); color: var(--ds-text-muted); font-size: var(--ds-fs-xs); text-align: center; line-height: 1.35; }
+  .eco .pm-ar::before { content: '↓'; flex: none; color: var(--ds-gold); font-weight: 700; font-size: 18px; line-height: 1; }
+  .eco .pm-fed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: var(--ds-sp-3); align-items: stretch; }
+  .eco .pm-burn { display: grid; align-content: center; gap: var(--ds-sp-1); min-width: 0; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg);
+                  background: #1d0f0b; border: 1px dashed #d65f36; color: #f0b9a3; font-size: var(--ds-fs-sm); line-height: 1.45; }
+  .eco .pm-burn b { color: var(--ds-text-strong); }
+  .eco .pm-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--ds-sp-4); }
   .eco .pm-col { display: grid; align-content: start; min-width: 0; }
   .eco .pm-routes { display: grid; }
-  .eco .pm-rt { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 4px 12px; padding: 7px 0; border-top: 1px dashed #262626; font-size: 13.5px; color: #ccc; line-height: 1.45; }
-  .eco .pm-rt:first-child { border-top: 0; }
-  .eco .pm-rt span:last-child { color: #ffd700; }
-  .eco .pm-note { font-size: 12px; color: #8d8d8d; margin: 4px 0 0; line-height: 1.45; }
-  .eco .pm-back { border-left-color: #81c784; }
-  .eco .pm-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: #9a9a9a; margin-top: 12px; }
-  .eco .pm-key i { display: inline-block; width: 18px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+  .eco .pm-rt { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--ds-sp-1) var(--ds-sp-3); padding: var(--ds-sp-2) 0; border-block-start: 1px dashed var(--ds-line); font-size: var(--ds-fs-sm); color: var(--ds-text-2); line-height: 1.45; }
+  .eco .pm-rt:first-child { border-block-start: 0; }
+  .eco .pm-rt span:last-child { color: var(--ds-gold-text); }
+  .eco .pm-box p.pm-note { margin-block-start: var(--ds-sp-1); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); line-height: var(--ds-lh-xs); }
+  .eco .pm-back { --c: var(--ds-green-2); }
+  .eco .pm-key { display: flex; flex-wrap: wrap; gap: var(--ds-sp-1) var(--ds-sp-4); margin-block-start: var(--ds-sp-3); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
+  .eco .pm-key i { display: inline-block; width: 18px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-inline-end: var(--ds-sp-1h); }
   @media (max-width: 700px) {
     .eco .pm-fed, .eco .pm-split { grid-template-columns: minmax(0, 1fr); }
-    .eco .pm-split .pm-col + .pm-col { margin-top: 4px; }
+    .eco .pm-split .pm-col + .pm-col { margin-block-start: var(--ds-sp-1); }
   }
   @media (max-width: 520px) {
-    .eco .pmap { padding: 12px; }
+    .eco .pmap { padding: var(--ds-sp-3); }
     .eco .pm-rt { grid-template-columns: minmax(0, 1fr); }
   }
 
   /* the guide */
-  .eco .guide-h { margin: 34px 0 12px; display: grid; gap: 6px; }
-  .eco .guide-h h2 { font-size: 22px; color: #fff; margin: 0; }
-  .eco .toc { background: rgba(12,12,12,.95); border: 1px solid #222; border-radius: 14px; padding: 10px 12px; margin-bottom: 28px; }
-  .eco .toc .lbl { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #ffd700; margin-bottom: 8px; }
-  .eco .toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .eco .toc a { display: inline-block; padding: 5px 10px; border: 1px solid #2a2a2a; border-radius: 999px; font-size: 13px; background: #161616; color: #ccc; }
-  .eco .toc a:hover { border-color: #ffcf40; color: #fff; text-decoration: none; }
-  @media (max-width: 899px) {
-    .eco .toc ul { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
-    .eco .toc ul::-webkit-scrollbar { display: none; }
-    .eco .toc li { flex: none; }
-  }
+  .eco .guide-h { display: grid; gap: var(--ds-sp-2); }
+  .eco .toc { padding: var(--ds-sp-2h) var(--ds-sp-3); border-radius: var(--ds-r-lg); background: rgba(10, 10, 10, .92); border: 1px solid var(--ds-line); }
+  .eco .toc .ds-label { margin-block-end: var(--ds-sp-2); }
+  .eco .toc ul { list-style: none; margin: 0; }
+  .eco .toc li { flex: none; }
   @media (min-width: 900px) {
-    .eco .toc { position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.55); backdrop-filter: blur(6px); }
+    .eco .toc { position: sticky; top: var(--ds-sp-2); z-index: var(--ds-z-sticky); box-shadow: var(--ds-e-3); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+    .eco .toc ul { flex-wrap: wrap; overflow: visible; }
   }
 
-  .eco section { margin: 0 0 34px; scroll-margin-top: 90px; }
-  .eco .kicker { font-family: 'Press Start 2P', monospace; font-size: 10px; color: #4caf50; letter-spacing: .5px; margin-bottom: 6px; line-height: 1.6; }
-  .eco h2 { color: #ffd700; margin: 0 0 8px; font-size: 22px; }
-  .eco h3 { margin: 0 0 6px; font-size: 17px; color: #fff; }
-  .eco p { line-height: 1.6; margin: 0 0 10px; }
-  .eco .lead { color: #bbb; max-width: 72ch; }
-  .eco .new { display: inline-block; font-size: 10px; font-weight: bold; color: #111; background: #81c784; border-radius: 8px; padding: 1px 6px; vertical-align: middle; margin-left: 4px; }
-  .eco .exp { background: #e0a030; }
+  .eco > section { scroll-margin-top: 90px; }
+  .eco > section > .ds-eyebrow { margin-block-end: var(--ds-sp-1h); }
+  .eco > section > .ds-h2 { margin-block-end: var(--ds-sp-2h); }
+  .eco h3 { margin: 0 0 var(--ds-sp-1h); font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); }
+  .eco > section p { line-height: var(--ds-lh-body); margin: 0 0 var(--ds-sp-2h); }
+  .eco .lead { color: var(--ds-text-2); max-width: 72ch; }
+  .eco .new { background: var(--ds-ok); color: var(--ds-on-ac); }
+  .eco .new.exp { background: var(--ds-warn-fill); color: #1a1200; }
 
-  .eco .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 14px; margin-top: 12px; }
-  .eco .card { background: #121212; border: 1px solid #262626; border-radius: 16px; padding: 16px; min-width: 0; }
-  .eco .card:hover { border-color: #2e4d2f; }
-  .eco .card p { color: #bbb; font-size: 14px; }
-  .eco .card ul { margin: 0 0 10px; padding-left: 18px; color: #bbb; font-size: 14px; line-height: 1.6; }
-  .eco .cmd { font-size: 13px; color: #9a9; margin: 8px 0 6px; line-height: 1.9; }
-  .eco .goes { font-size: 13px; color: #ccc; border-top: 1px dashed #2a2a2a; padding-top: 8px; margin-top: 8px; line-height: 1.5; }
-  .eco .goes b { color: #ffd700; font-weight: normal; }
+  .eco .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: var(--ds-sp-3); margin-block-start: var(--ds-sp-3); }
+  .eco .card { min-width: 0; padding: var(--ds-sp-4); border-radius: var(--ds-r-xl); background: var(--ds-surface); border: 1px solid var(--ds-line); }
+  .eco .card > :last-child { margin-block-end: 0; }
+  .eco .card p { color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: var(--ds-lh-sm); }
+  .eco .card ul { margin: 0 0 var(--ds-sp-2h); padding-inline-start: 18px; color: var(--ds-text-2); font-size: var(--ds-fs-sm); line-height: 1.6; }
+  .eco .card li + li { margin-block-start: var(--ds-sp-1); }
+  .eco .card p.n { margin: 0; font-size: var(--ds-fs-num-lg); line-height: 1.15; font-weight: 700; color: var(--ds-gold-text); font-variant-numeric: tabular-nums; }
+  .eco .cmd { margin: var(--ds-sp-2) 0 var(--ds-sp-1h); font-size: var(--ds-fs-meta); color: var(--ds-text-muted); line-height: 1.9; }
+  .eco .goes { margin-block-start: var(--ds-sp-2); padding-block-start: var(--ds-sp-2); border-block-start: 1px dashed var(--ds-line-strong); font-size: var(--ds-fs-meta); color: var(--ds-text-2); line-height: var(--ds-lh-meta); }
+  .eco .goes b { color: var(--ds-gold); font-weight: 700; }
   .eco .wide { grid-column: 1 / -1; }
 
-  .eco .note { margin: 14px 0 0; padding: 12px 16px; border: 1px solid #4caf50; border-radius: 12px; background: #13200f; color: #cfe8cf; font-size: 14px; line-height: 1.55; }
-  .eco .warn { border-color: #e0a030; background: #201a0c; color: #ecdcb5; }
+  .eco .note { margin: var(--ds-sp-3h) 0 0; padding: var(--ds-sp-3) var(--ds-sp-3h); border-radius: var(--ds-r-lg); border: 1px solid var(--ds-ok-line); background: var(--ds-ok-bg);
+               color: var(--ds-ok-ink); font-size: var(--ds-fs-sm); line-height: var(--ds-lh-sm); }
+  .eco .note b { color: var(--ds-text-strong); }
+  .eco .note.warn { border-color: var(--ds-warn-line); background: var(--ds-warn-bg); color: var(--ds-warn-ink); }
 
-  .eco .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; margin: 14px 0 4px; font-size: 13px; }
-  .eco .flow span { background: #161616; border: 1px solid #2a2a2a; border-radius: 8px; padding: 6px 10px; }
-  .eco .flow .arr { border: 0; background: none; color: #4caf50; padding: 0; }
+  .eco .ds-tbl { margin-block-start: var(--ds-sp-3); }
+  .eco .ds-tbl table { min-width: 520px; }
+  .eco .ds-tbl td { vertical-align: top; }
+  .eco .ds-tbl td.n { white-space: nowrap; color: var(--ds-ac-2); }
+  .eco .cfg { color: var(--ds-warn); font-size: var(--ds-fs-xs); }
 
-  .eco .tbl { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #222; border-radius: 12px; margin-top: 12px; }
-  .eco table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 460px; }
-  .eco th, .eco td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1e1e1e; vertical-align: top; }
-  .eco th { background: #161616; color: #ffd700; font-weight: normal; font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: .5px; }
-  .eco tr:last-child td { border-bottom: 0; }
-  .eco td.n { white-space: nowrap; color: #81c784; }
-  .eco .cfg { color: #e0a030; font-size: 12px; }
+  .eco .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(150px, 20vw, 200px)), 1fr)); gap: var(--ds-sp-2h); margin-block-start: var(--ds-sp-3); }
+  .eco .links a { display: grid; grid-template-columns: 1.25em minmax(0, 1fr); align-content: center; align-items: center; gap: 2px var(--ds-sp-2); min-height: var(--ds-tap); padding: var(--ds-sp-3) var(--ds-sp-3h);
+                  border-radius: var(--ds-r-lg); background: var(--ds-surface); border: 1px solid var(--ds-line); color: var(--ds-text-strong); font-size: var(--ds-fs-sm); font-weight: 700;
+                  transition: border-color var(--ds-dur-1), transform var(--ds-dur-1); }
+  .eco .links a:hover, .eco .links a:focus-visible { border-color: var(--ds-ac); text-decoration: none; transform: translateY(-1px); }
+  .eco .links small { grid-column: 2; color: var(--ds-text-muted); font-size: var(--ds-fs-xs); font-weight: 400; }
+  .eco .top { margin-block-start: var(--ds-sp-2); text-align: end; font-size: var(--ds-fs-xs); }
+  .eco .top a { display: inline-flex; align-items: center; min-height: 36px; padding-inline: var(--ds-sp-1); color: var(--ds-text-faint); }
+  .eco .top a:hover { color: var(--ds-text); }
 
-  .eco .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 10px; margin-top: 12px; }
-  .eco .links a { display: block; background: #121212; border: 1px solid #262626; border-radius: 12px; padding: 12px 14px; font-size: 14px; }
-  .eco .links a:hover { border-color: #4caf50; text-decoration: none; }
-  .eco .links small { display: block; color: #888; margin-top: 2px; }
-  .eco .top { font-size: 12px; color: #666; text-align: right; margin-top: 8px; }
-  .eco .top a { color: #666; }
-
-  .eco .h3s { margin: 28px 0 6px; font-size: 18px; color: #fff; }
-  .eco .fig { background: #0c0c0c; border: 1px solid #222; border-radius: 12px; padding: 14px 12px 10px; margin: 16px 0 4px; }
+  .eco .h3s { margin: var(--ds-sp-7) 0 var(--ds-sp-1h); }
+  .eco .fig { margin: var(--ds-sp-4) 0 var(--ds-sp-1); padding: var(--ds-sp-3h) var(--ds-sp-3) var(--ds-sp-2h); border-radius: var(--ds-r-xl); background: var(--ds-sunken); border: 1px solid var(--ds-line); }
   .eco .fig svg { display: block; width: 100%; height: auto; max-width: 620px; margin: 0 auto; }
-  .eco .fig svg text { font-family: Ubuntu, sans-serif; }
-  .eco .fig figcaption { text-align: center; color: #9a9; font-size: 13px; margin-top: 8px; line-height: 1.45; }
-  @media (max-width: 520px) { .eco .hero, .eco .epanel, .eco .card { padding: 14px; } }
+  .eco .fig svg text { font-family: var(--ds-font); }
+  .eco .fig figcaption { margin-block-start: var(--ds-sp-2); text-align: center; color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.45; }
+  @media (max-width: 520px) { .eco .card { padding: var(--ds-sp-3h); } .eco .fig { padding-inline: var(--ds-sp-2); } }
+  /* the burn counters: total across the top, 7 / 30 days side by side on phones */
+  @media (max-width: 700px) {
+    .eco #burnStats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .eco #burnStats > :first-child { grid-column: 1 / -1; }
+    .eco #burnStats .card p.n { font-size: clamp(18px, 6vw, 26px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .eco *, .eco *::before, .eco *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    .eco .links a:hover, .eco .links a:focus-visible { transform: none; }
+  }
 </style>
 <%
   const L = typeof live !== 'undefined' && live ? live : null;
@@ -232,54 +243,54 @@
   })();
   const LAYER_C = { players: '#3987e5', fed: '#d95926', treasury: '#199e70', incentive: '#c98500', pots: '#d55181', burn: '#008300' };
 %>
-<div class="eco" id="top">
-  <section class="hero" aria-labelledby="ecoH" style="margin-bottom:18px">
-    <div class="eyebrow"><%- t('economy.eyebrow') %></div>
+<main class="ds-page flow eco" id="top">
+  <section class="ds-hero gold" aria-labelledby="ecoH">
+    <div class="ds-eyebrow"><%- t('economy.eyebrow') %></div>
     <h1 id="ecoH"><%- t('economy.h1') %></h1>
-    <p class="sub"><%- t('economy.lead') %></p>
+    <p class="ds-lead"><%- t('economy.lead') %></p>
     <% if (L && L.supply) { %>
-      <div class="tiles">
-        <div class="tile"><span><%- t('economy.tile.supply') %></span><b><%= nf(L.supply.total) %></b>
+      <div class="ds-stats">
+        <div class="ds-stat"><span><%- t('economy.tile.supply') %></span><b><%= nf(L.supply.total) %></b>
           <% if (L.month.change != null) { %><small><%- t('economy.tile.change30', { pct: (L.month.change >= 0 ? '+' : '') + (L.month.change * 100).toFixed(2) + '%' }) %></small><% } %></div>
-        <div class="tile"><span><%- t('economy.tile.players') %></span><b><%= nf(layer('players')) %></b><small><%- t('economy.tile.players_d') %></small></div>
-        <div class="tile"><span>🏛️ <%- t('economy.tile.fed') %></span><b><%= L.fed == null ? '—' : nf(L.fed) %></b><small><%- t('economy.tile.fed_d') %></small></div>
-        <div class="tile"><span>🔥 <%- t('economy.tile.burned') %></span><b><%= nf(L.supply.burned && L.supply.burned.total) %></b><small><%- t('economy.tile.burned_d') %></small></div>
+        <div class="ds-stat"><span><%- t('economy.tile.players') %></span><b><%= nf(layer('players')) %></b><small><%- t('economy.tile.players_d') %></small></div>
+        <div class="ds-stat"><span><span class="ds-ic" aria-hidden="true">🏛️</span><%- t('economy.tile.fed') %></span><b><%= L.fed == null ? '—' : nf(L.fed) %></b><small><%- t('economy.tile.fed_d') %></small></div>
+        <div class="ds-stat"><span><span class="ds-ic" aria-hidden="true">🔥</span><%- t('economy.tile.burned') %></span><b><%= nf(L.supply.burned && L.supply.burned.total) %></b><small><%- t('economy.tile.burned_d') %></small></div>
       </div>
-      <p class="live-note"><%- t('economy.live_note') %><% if (L.supply.updated) { %> · <%- t('economy.updated', { when: String(L.supply.updated).slice(0, 16) + ' UTC' }) %><% } %></p>
+      <p class="ds-fine"><%- t('economy.live_note') %><% if (L.supply.updated) { %> · <%- t('economy.updated', { when: String(L.supply.updated).slice(0, 16) + ' UTC' }) %><% } %></p>
     <% } %>
   </section>
 
   <% if (L) { %>
   <div class="lv" id="live">
     <!-- the money loop -->
-    <section class="epanel" aria-labelledby="loopH" style="margin:0">
-      <div class="k"><%- t('economy.loop.k') %></div>
-      <h2 id="loopH"><%- t('economy.loop.h') %></h2>
+    <section class="ds-card lg ep" aria-labelledby="loopH">
+      <div class="ds-eyebrow ac"><%- t('economy.loop.k') %></div>
+      <h2 class="ds-h2" id="loopH"><%- t('economy.loop.h') %></h2>
       <div class="loop">
         <div class="step" style="--c:#3a8ad0">
           <span class="sn">1 · <%- t('economy.loop.s1') %></span>
-          <b>🏛️ <%- t('economy.loop.s1_h') %></b>
+          <b><span class="ds-ic" aria-hidden="true">🏛️</span> <%- t('economy.loop.s1_h') %></b>
           <p><%- t('economy.loop.s1_d') %></p>
           <ul><li><%- t('economy.loop.minted30') %> <b><%= nf(L.month.minted) %></b></li></ul>
         </div>
         <div class="step" style="--c:#ffcf40">
           <span class="sn">2 · <%- t('economy.loop.s2') %></span>
-          <b>🏦 <%- t('economy.loop.s2_h') %></b>
+          <b><span class="ds-ic" aria-hidden="true">🏦</span> <%- t('economy.loop.s2_h') %></b>
           <ul>
-            <li>🎁 <%- t('economy.v.incentives') %> <b><%= sh(P['vault:incentives'] != null ? P['vault:incentives'] : INC ? INC.balance : 0) %></b></li>
-            <li>🎰 <%- t('economy.v.house') %> <b><%= sh(P.jackpot) %></b></li>
-            <li>🏰 <%- t('economy.v.fortknox') %> <b><%= sh(L.fortknox) %></b></li>
-            <li>🎲 <%- t('economy.v.casino') %> <b><%= sh(P['vault:heist']) %></b></li>
+            <li><span><span class="ds-ic" aria-hidden="true">🎁</span> <%- t('economy.v.incentives') %></span> <b><%= sh(P['vault:incentives'] != null ? P['vault:incentives'] : INC ? INC.balance : 0) %></b></li>
+            <li><span><span class="ds-ic" aria-hidden="true">🎰</span> <%- t('economy.v.house') %></span> <b><%= sh(P.jackpot) %></b></li>
+            <li><span><span class="ds-ic" aria-hidden="true">🏰</span> <%- t('economy.v.fortknox') %></span> <b><%= sh(L.fortknox) %></b></li>
+            <li><span><span class="ds-ic" aria-hidden="true">🎲</span> <%- t('economy.v.casino') %></span> <b><%= sh(P['vault:heist']) %></b></li>
           </ul>
         </div>
         <div class="step" style="--c:#66bb6a">
           <span class="sn">3 · <%- t('economy.loop.s3') %></span>
-          <b>👛 <%- t('economy.loop.s3_h') %></b>
+          <b><span class="ds-ic" aria-hidden="true">👛</span> <%- t('economy.loop.s3_h') %></b>
           <p><%- t('economy.loop.s3_d') %></p>
         </div>
         <div class="step" style="--c:#d65f36">
           <span class="sn">4 · <%- t('economy.loop.s4') %></span>
-          <b>🔥 <%- t('economy.loop.s4_h') %></b>
+          <b><span class="ds-ic" aria-hidden="true">🔥</span> <%- t('economy.loop.s4_h') %></b>
           <p><%- t('economy.loop.s4_d') %></p>
           <ul><li><%- t('economy.loop.burned30') %> <b><%= nf(L.month.burned) %></b></li></ul>
         </div>
@@ -289,9 +300,9 @@
 
     <div class="duo">
       <!-- the Fed band -->
-      <section class="epanel" id="fed-band" aria-labelledby="bandH" style="margin:0">
-        <div class="k"><%- t('economy.band.k') %></div>
-        <h2 id="bandH">🏛️ <%- t('economy.band.h') %></h2>
+      <section class="ds-card lg ep" id="fed-band" aria-labelledby="bandH">
+        <div class="ds-eyebrow ac"><%- t('economy.band.k') %></div>
+        <h2 class="ds-h2" id="bandH"><span class="ds-ic" aria-hidden="true">🏛️</span> <%- t('economy.band.h') %></h2>
         <% const B = L.band; if (B && B.floor != null && B.ceiling != null && L.fed != null) {
              const max = Math.max(B.ceiling * 1.2, L.fed * 1.08, 1);
              const at = (v) => Math.max(0, Math.min(100, v / max * 100));
@@ -309,7 +320,7 @@
               <span style="left:<%= at(B.ceiling).toFixed(2) %>%"><%- t('economy.band.ceiling') %><br><%= sh(B.ceiling) %></span>
             </div>
           </div>
-          <p class="num" style="color:#fff"><%- t('economy.band.fed_now', { n: nf(L.fed) }) %></p>
+          <p class="num fed-now"><%- t('economy.band.fed_now', { n: nf(L.fed) }) %></p>
           <div class="glegend">
             <div class="<%= zone === 'lo' ? 'on' : '' %>"><b><%- t('economy.band.lo_h') %></b><%- t('economy.band.lo') %></div>
             <div class="<%= zone === 'ok' ? 'on' : '' %>"><b><%- t('economy.band.ok_h') %></b><%- t('economy.band.ok') %></div>
@@ -321,9 +332,9 @@
       </section>
 
       <!-- where PAT sits -->
-      <section class="epanel" aria-labelledby="sitsH" style="margin:0">
-        <div class="k"><%- t('economy.sits.k') %></div>
-        <h2 id="sitsH">🧭 <%- t('economy.sits.h') %></h2>
+      <section class="ds-card lg ep" aria-labelledby="sitsH">
+        <div class="ds-eyebrow ac"><%- t('economy.sits.k') %></div>
+        <h2 class="ds-h2" id="sitsH"><span class="ds-ic" aria-hidden="true">🧭</span> <%- t('economy.sits.h') %></h2>
         <% const LY = L.supply ? (L.supply.layers || []).filter((g) => g.amount > 0) : []; const tot = LY.reduce((a, g) => a + g.amount, 0) || 1; %>
         <% if (LY.length) { %>
           <div class="stack" role="img" aria-label="<%- t('economy.sits.aria') %>">
@@ -334,16 +345,16 @@
               <li><i style="background:<%= LAYER_C[g.key] || '#888' %>"></i><span><%= g.label %><small><%= g.blurb %></small></span><b><%= nf(g.amount) %> <span class="muted">· <%= (g.amount / tot * 100).toFixed(1) %>%</span></b></li>
             <% }) %>
           </ul>
-          <p class="muted" style="font-size:12px"><%- t('economy.sits.more', { link: '<a href="/rankings#supply">' + t('economy.sits.link') + '</a>' }) %></p>
+          <p class="ds-fine"><%- t('economy.sits.more', { link: '<a href="/rankings#supply">' + t('economy.sits.link') + '</a>' }) %></p>
         <% } else { %><p><%- t('economy.not_reported') %></p><% } %>
       </section>
     </div>
 
     <div class="duo">
       <!-- incentive budget -->
-      <section class="epanel" aria-labelledby="ibH" style="margin:0">
-        <div class="k"><%- t('economy.ib.k') %></div>
-        <h2 id="ibH">🎁 <%- t('economy.ib.h') %></h2>
+      <section class="ds-card lg ep" aria-labelledby="ibH">
+        <div class="ds-eyebrow ac"><%- t('economy.ib.k') %></div>
+        <h2 class="ds-h2" id="ibH"><span class="ds-ic" aria-hidden="true">🎁</span> <%- t('economy.ib.h') %></h2>
         <% if (INC) { const gs = Object.keys(INC.budgets || {}).sort((a, b) => (INC.budgets[b] || 0) - (INC.budgets[a] || 0)); %>
           <p><%- t('economy.ib.lead', { n: nf(INC.balance) }) %></p>
           <ul class="bars">
@@ -352,33 +363,33 @@
                 <span class="track" role="img" aria-label="<%- t('economy.ib.aria', { r: nf(r), b: nf(b) }) %>"><span class="fill" style="display:block;width:<%= b ? (r / b * 100).toFixed(1) : 0 %>%"></span></span></li>
             <% }) %>
           </ul>
-          <p class="muted" style="font-size:12px"><%- t('economy.ib.foot_v3', { target: sh(V3.target) }) %><% if (INC.share != null) { %> <%- t('economy.ib.share', { n: nf(INC.share) }) %><% } %></p>
+          <p class="ds-fine"><%- t('economy.ib.foot_v3', { target: sh(V3.target) }) %><% if (INC.share != null) { %> <%- t('economy.ib.share', { n: nf(INC.share) }) %><% } %></p>
         <% } else { %>
           <p><%- t('economy.ib.off') %></p>
         <% } %>
       </section>
 
       <!-- vaults -->
-      <section class="epanel" aria-labelledby="vH" style="margin:0">
-        <div class="k"><%- t('economy.v.k') %></div>
-        <h2 id="vH">🏰 <%- t('economy.v.h') %></h2>
+      <section class="ds-card lg ep" aria-labelledby="vH">
+        <div class="ds-eyebrow ac"><%- t('economy.v.k') %></div>
+        <h2 class="ds-h2" id="vH"><span class="ds-ic" aria-hidden="true">🏰</span> <%- t('economy.v.h') %></h2>
         <div class="vts">
-          <div class="vt" style="--c:#e57373"><b>🎰 <%- t('economy.v.house') %></b><span class="v"><%= sh(P.jackpot) %></span><small><%- t('economy.v.house_d') %></small></div>
-          <div class="vt" style="--c:#ffcf40"><b>🏰 <%- t('economy.v.fortknox') %></b><span class="v"><%= L.fortknox == null ? '—' : sh(L.fortknox) %></span><small><%- t('economy.v.fortknox_d') %></small></div>
-          <div class="vt" style="--c:#c98500"><b>🎲 <%- t('economy.v.casino') %></b><span class="v"><%= P['vault:heist'] == null ? '—' : sh(P['vault:heist']) %></span><small><%- t('economy.v.casino_d') %></small></div>
-          <div class="vt" style="--c:#d55181"><b>🎟️ <%- t('economy.v.lotto') %></b><span class="v"><%= P['vault:lotto'] == null ? '—' : sh(P['vault:lotto']) %></span><small><%- t('economy.v.lotto_d') %></small></div>
-          <div class="vt" style="--c:#64b5f6"><b>🏦 <%- t('economy.v.bank') %></b><span class="v"><%= P['vault:bank'] == null ? '—' : sh(P['vault:bank']) %></span><small><%- t('economy.v.bank_d') %></small></div>
-          <div class="vt" style="--c:#81c784"><b>📈 <%- t('economy.v.mm') %></b><span class="v"><%= P['vault:mm'] == null ? '—' : sh(P['vault:mm']) %></span><small><%- t('economy.v.mm_d') %></small></div>
+          <div class="vt" style="--c:#e57373"><b><span class="ds-ic" aria-hidden="true">🎰</span> <%- t('economy.v.house') %></b><span class="v"><%= sh(P.jackpot) %></span><small><%- t('economy.v.house_d') %></small></div>
+          <div class="vt" style="--c:#ffcf40"><b><span class="ds-ic" aria-hidden="true">🏰</span> <%- t('economy.v.fortknox') %></b><span class="v"><%= L.fortknox == null ? '—' : sh(L.fortknox) %></span><small><%- t('economy.v.fortknox_d') %></small></div>
+          <div class="vt" style="--c:#c98500"><b><span class="ds-ic" aria-hidden="true">🎲</span> <%- t('economy.v.casino') %></b><span class="v"><%= P['vault:heist'] == null ? '—' : sh(P['vault:heist']) %></span><small><%- t('economy.v.casino_d') %></small></div>
+          <div class="vt" style="--c:#d55181"><b><span class="ds-ic" aria-hidden="true">🎟️</span> <%- t('economy.v.lotto') %></b><span class="v"><%= P['vault:lotto'] == null ? '—' : sh(P['vault:lotto']) %></span><small><%- t('economy.v.lotto_d') %></small></div>
+          <div class="vt" style="--c:#64b5f6"><b><span class="ds-ic" aria-hidden="true">🏦</span> <%- t('economy.v.bank') %></b><span class="v"><%= P['vault:bank'] == null ? '—' : sh(P['vault:bank']) %></span><small><%- t('economy.v.bank_d') %></small></div>
+          <div class="vt" style="--c:#81c784"><b><span class="ds-ic" aria-hidden="true">📈</span> <%- t('economy.v.mm') %></b><span class="v"><%= P['vault:mm'] == null ? '—' : sh(P['vault:mm']) %></span><small><%- t('economy.v.mm_d') %></small></div>
         </div>
-        <p class="muted" style="font-size:12px"><%- t('economy.v.foot', { link: '<a href="/staking">' + t('economy.v.staking') + '</a>' }) %></p>
+        <p class="ds-fine"><%- t('economy.v.foot', { link: '<a href="/staking">' + t('economy.v.staking') + '</a>' }) %></p>
       </section>
     </div>
 
     <!-- supply history -->
     <% const H = L.history || []; %>
-    <section class="epanel" id="supply-history" aria-labelledby="shH" style="margin:0">
-      <div class="k"><%- t('economy.sh.k') %></div>
-      <h2 id="shH">📈 <%- t('economy.sh.h') %></h2>
+    <section class="ds-card lg ep" id="supply-history" aria-labelledby="shH">
+      <div class="ds-eyebrow ac"><%- t('economy.sh.k') %></div>
+      <h2 class="ds-h2" id="shH"><span class="ds-ic" aria-hidden="true">📈</span> <%- t('economy.sh.h') %></h2>
       <% if (H.length < 1) { %><p><%- t('economy.sh.none') %></p><% } else {
            // one slot per day: points and bars sit at the slot centres, always inside X0..X1, so 1-2 days of data no
            // longer spill over the axis labels; axis labels get enough decimals to differ; burned is labelled below 0.
@@ -457,7 +468,7 @@
         </div>
         <details class="data">
           <summary><%- t('economy.sh.table', { n: Math.min(14, n) }) %></summary>
-          <div class="tbl"><table>
+          <div class="ds-tbl"><table>
             <thead><tr><th><%- t('economy.sh.day') %></th><th><%- t('economy.sh.total') %></th><th><%- t('economy.tile.fed') %></th><th><%- t('economy.sh.minted') %></th><th><%- t('economy.sh.burned') %></th></tr></thead>
             <tbody>
               <% H.slice(-14).reverse().forEach((h) => { %><tr><td><%= h.day %></td><td class="n"><%= nf(h.total) %></td><td><%= h.fed == null ? '—' : nf(h.fed) %></td><td><%= nf(h.minted) %></td><td><%= nf(h.burned) %></td></tr><% }) %>
@@ -470,54 +481,54 @@
   <% } %>
 
   <div class="guide-h">
-    <div class="eyebrow"><%- t('economy.guide.k') %></div>
-    <h2><%- t('economy.guide.h') %></h2>
-    <p class="sub" style="font-size:15px">Everything you can do with PAT: earn it, gamble it, bet it, lend it, stake it, or steal it.
+    <div class="ds-eyebrow ac"><%- t('economy.guide.k') %></div>
+    <h2 class="ds-h2"><%- t('economy.guide.h') %></h2>
+    <p class="ds-lead">Everything you can do with PAT: earn it, gamble it, bet it, lend it, stake it, or steal it.
       Most of it runs through Pepe in the Camfrog rooms, and a lot of it works right here on the site too.</p>
   </div>
 
   <nav class="toc" aria-label="Contents">
-    <div class="lbl">JUMP TO</div>
-    <ul>
-      <li><a href="#live">📊 <%- t('economy.toc.live') %></a></li>
-      <li><a href="#pat">🪙 What is PAT</a></li>
-      <li><a href="#pat-map">🗺️ <%- t('economy.toc.map') %></a></li>
-      <li><a href="#flow">🏛️ Where PAT goes</a></li>
-      <li><a href="#protocol">⚙️ How the protocol works</a></li>
-      <% if (typeof roomVaults !== 'undefined' && roomVaults) { %><li><a href="#roomvaults">🏦 Room vaults</a></li><% } %>
-      <li><a href="#incentives">🎁 Incentive budget</a></li>
-      <li><a href="#burned">🔥 Burned</a></li>
-      <li><a href="#casino">🎰 Casino</a></li>
-      <li><a href="#betting">🤝 Wagers &amp; pools</a></li>
-      <li><a href="#markets">📈 Markets</a></li>
-      <li><a href="#judge">🤖 AI judge</a></li>
-      <li><a href="#bounties">🎯 Bounties</a></li>
-      <li><a href="#loans">🏦 Loans</a></li>
-      <li><a href="#stash">🔐 Stashes &amp; staking</a></li>
-      <li><a href="#gtf">🔫 Grand Theft Frogger</a></li>
-      <li><a href="#polls">🗳️ Polls</a></li>
-      <li><a href="#web">🌐 On the website</a></li>
-      <li><a href="#fees">🧾 Fees</a></li>
-      <li><a href="#links">🔗 Links</a></li>
+    <div class="ds-label">JUMP TO</div>
+    <ul class="ds-tabs">
+      <li><a class="ds-tab" href="#live"><span class="ds-ic sm" aria-hidden="true">📊</span><%- t('economy.toc.live') %></a></li>
+      <li><a class="ds-tab" href="#pat"><span class="ds-ic sm" aria-hidden="true">🪙</span>What is PAT</a></li>
+      <li><a class="ds-tab" href="#pat-map"><span class="ds-ic sm" aria-hidden="true">🗺️</span><%- t('economy.toc.map') %></a></li>
+      <li><a class="ds-tab" href="#flow"><span class="ds-ic sm" aria-hidden="true">🏛️</span>Where PAT goes</a></li>
+      <li><a class="ds-tab" href="#protocol"><span class="ds-ic sm" aria-hidden="true">⚙️</span>How the protocol works</a></li>
+      <% if (typeof roomVaults !== 'undefined' && roomVaults) { %><li><a class="ds-tab" href="#roomvaults"><span class="ds-ic sm" aria-hidden="true">🏦</span>Room vaults</a></li><% } %>
+      <li><a class="ds-tab" href="#incentives"><span class="ds-ic sm" aria-hidden="true">🎁</span>Incentive budget</a></li>
+      <li><a class="ds-tab" href="#burned"><span class="ds-ic sm" aria-hidden="true">🔥</span>Burned</a></li>
+      <li><a class="ds-tab" href="#casino"><span class="ds-ic sm" aria-hidden="true">🎰</span>Casino</a></li>
+      <li><a class="ds-tab" href="#betting"><span class="ds-ic sm" aria-hidden="true">🤝</span>Wagers &amp; pools</a></li>
+      <li><a class="ds-tab" href="#markets"><span class="ds-ic sm" aria-hidden="true">📈</span>Markets</a></li>
+      <li><a class="ds-tab" href="#judge"><span class="ds-ic sm" aria-hidden="true">🤖</span>AI judge</a></li>
+      <li><a class="ds-tab" href="#bounties"><span class="ds-ic sm" aria-hidden="true">🎯</span>Bounties</a></li>
+      <li><a class="ds-tab" href="#loans"><span class="ds-ic sm" aria-hidden="true">🏦</span>Loans</a></li>
+      <li><a class="ds-tab" href="#stash"><span class="ds-ic sm" aria-hidden="true">🔐</span>Stashes &amp; staking</a></li>
+      <li><a class="ds-tab" href="#gtf"><span class="ds-ic sm" aria-hidden="true">🔫</span>Grand Theft Frogger</a></li>
+      <li><a class="ds-tab" href="#polls"><span class="ds-ic sm" aria-hidden="true">🗳️</span>Polls</a></li>
+      <li><a class="ds-tab" href="#web"><span class="ds-ic sm" aria-hidden="true">🌐</span>On the website</a></li>
+      <li><a class="ds-tab" href="#fees"><span class="ds-ic sm" aria-hidden="true">🧾</span>Fees</a></li>
+      <li><a class="ds-tab" href="#links"><span class="ds-ic sm" aria-hidden="true">🔗</span>Links</a></li>
     </ul>
   </nav>
 
   <!-- 1. PAT -->
   <section id="pat">
-    <div class="kicker">THE BASICS</div>
-    <h2>🪙 What PAT is</h2>
+    <div class="ds-eyebrow ac">THE BASICS</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🪙</span> What PAT is</h2>
     <p class="lead">PAT (Public Access Token) is the points currency of PATV. It's one balance shared by the website, the
       Camfrog rooms and Discord, so PAT you win from Pepe in a room is the same PAT you spend on the site.
       It isn't crypto and it isn't real money, but you can spend it on real prizes in the <a href="/shop">shop</a>.</p>
     <div class="grid">
       <div class="card">
-        <h3>💬 Hang out</h3>
+        <h3><span class="ds-ic" aria-hidden="true">💬</span> Hang out</h3>
         <p>Chatting in a room enters you in Pepe's automatic raffles, and whoever spends the most time on mic each hour
           gets a top-mic reward. Chat messages and mic time also earn XP.</p>
         <div class="cmd"><code>!xp</code> · <code>!level</code></div>
       </div>
       <div class="card">
-        <h3>⬆️ Level up</h3>
+        <h3><span class="ds-ic" aria-hidden="true">⬆️</span> Level up</h3>
         <p>1 XP per chat message, 1 XP per second on mic. Every new level pays <strong>25,000 PAT</strong>, and every
           5th level is a <strong>milestone</strong>: a bonus of 250,000 PAT &times; (level &divide; 5) &mdash; 250k at
           level 5, 500k at 10, 1.25M at 25, 2.5M at 50 &mdash; plus a level cosmetic for your profile or
@@ -526,19 +537,19 @@
           level-up budget is used up, your reward waits in line and lands as soon as it refills.</p>
       </div>
       <div class="card">
-        <h3>🏅 Achievements</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🏅</span> Achievements</h3>
         <p>100 achievements for chatting, mic time, games, heists and more. Each one is a pixel badge on your profile,
           plus XP and a PAT bonus.</p>
         <div class="cmd"><code>!achievements</code> · <a href="/achievements">/achievements</a></div>
       </div>
       <div class="card">
-        <h3>🎲 Play</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎲</span> Play</h3>
         <p>Spin the wheel, win at the tables, win trivia, crack a vault, collect on a good bet. Getting tipped counts too:
           anyone can send you PAT with <code>!tip</code>.</p>
         <div class="cmd">Broke? <code>!beg</code> for a small handout (only when you're nearly out).</div>
       </div>
       <div class="card wide">
-        <h3>👛 Your wallet and history</h3>
+        <h3><span class="ds-ic" aria-hidden="true">👛</span> Your wallet and history</h3>
         <p>Your balance shows on your profile. <a href="/history">/history</a> lists every PAT transaction on your account
           (tips, wins, bets, bonuses), and <code>!history</code> shows your last five in chat.
           The <a href="/rankings">leaderboard</a> shows the top balances and the <b>total PAT supply</b>: every PAT that
@@ -551,16 +562,16 @@
 
   <!-- 2. Flow (Economy v3, 2026-10-11: the PAT map + the pools) -->
   <section id="flow">
-    <div class="kicker">MONEY FLOW</div>
-    <h2>🏛️ Where PAT goes</h2>
+    <div class="ds-eyebrow ac">MONEY FLOW</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🏛️</span> Where PAT goes</h2>
     <p class="lead">When you pay for something (a spin, a ticket, a fee, a paid command) that PAT doesn't vanish.
       <b>Spending never burns PAT.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
       heist loot and rewards. (The one exception is the <a href="#burned">Federal Reserve's excess above its ceiling</a>.)</p>
 
     <figure class="pmap" id="pat-map" aria-labelledby="pmH">
       <div class="pm-top">
-        <div class="k"><%- t('economy.map.k') %></div>
-        <h3 id="pmH">🗺️ <%- t('economy.map.h') %></h3>
+        <div class="ds-eyebrow ac"><%- t('economy.map.k') %></div>
+        <h3 class="ds-h3" id="pmH"><span class="ds-ic" aria-hidden="true">🗺️</span> <%- t('economy.map.h') %></h3>
         <p><%- t('economy.map.lead') %></p>
       </div>
 
@@ -655,7 +666,7 @@
 
     <div class="grid">
       <div class="card">
-        <h3>🏛️ The Federal Reserve</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🏛️</span> The Federal Reserve</h3>
         <p>The central bank, in charge of monetary policy, and the only place new PAT is made: every mint follows a written
           rule and is on the public record. It keeps itself between a floor and a ceiling (<a href="#fed-band">the Fed
           band</a>): below the floor it mints back up, a little each day; above the ceiling the excess is burned. It never
@@ -666,32 +677,32 @@
           its balance.</p>
       </div>
       <div class="card">
-        <h3>🎁 The incentive budget</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎁</span> The incentive budget</h3>
         <p>Pays every reward in the game: welcome PAT, level-ups, achievements, room games, pad royalties, launch grants and
           the heist vaults' floors. Each kind has a weekly allowance, and the Fed guarantees the weekly total
           (<%= sh(V3.target) %> PAT). Rewards are never printed straight into wallets. <a href="#incentives">More below</a>.</p>
       </div>
       <div class="card">
-        <h3>🎰 The House (casino jackpot)</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎰</span> The House (casino jackpot)</h3>
         <p>The casino's bankroll. Wheel spins, losing bets, rake, the bingo cut, the wager fee and 60% of every lotto ticket
           go in; it pays the wheel, blackjack wins and the fixed lotto prizes. If a big win ever runs it short, the Fed lends
           it the gap on the spot. Its profit is settled every Monday. <code>!jackpot</code> (or <code>!vault</code>) shows
           what's in it.</p>
       </div>
       <div class="card">
-        <h3>🎟️ The Lotto pot</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎟️</span> The Lotto pot</h3>
         <p>A separate rolling jackpot fed by 40% of every lotto ticket. Only a lotto jackpot win is paid from it,
           so a big lotto winner never drains the House. Capped at 100M.</p>
       </div>
       <div class="card">
-        <h3>🏦 The Bank &amp; 📈 Market maker</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🏦</span> The Bank &amp; 📈 Market maker</h3>
         <p>Two working vaults: the Bank lends PAT to players through Reserve loans and keeps the interest, and the Market
           maker puts up the starting money for every prediction market and keeps its trading fees. Together with the House
           they're the <a href="#protocol">capital vaults</a> you can stake in, and the Fed backs all three with flash
           liquidity.</p>
       </div>
       <div class="card">
-        <h3>🥷 Fort Knox &amp; the Casino vault</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🥷</span> Fort Knox &amp; the Casino vault</h3>
         <p>The heist vaults. Fort Knox (the bank job) collects half of what's spent in rooms, Prime Time, Season Passes,
           sticker packs and bank and store heist buy-ins; the Casino vault collects casino heist buy-ins. The incentive budget
           keeps each at 2M or more, and above its cap (<%= sh(V3.fk) %> and <%= sh(V3.cv) %>, 60% and 40% of the weekly
@@ -699,14 +710,14 @@
           switch that faucet on and off.</p>
       </div>
       <div class="card">
-        <h3>🧭 The routing table</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🧭</span> The routing table</h3>
         <p>Every fee in the game has a row in one table that says where it goes. A fee goes to whoever funded the activity:
           casino play and the wager fee to the House, market and pool fees to the Market maker, loan interest to the Bank.
           Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox
           and that room's vault. The admins tune the splits.</p>
       </div>
       <div class="card">
-        <h3>🚀 Boosts &amp; stage slots</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🚀</span> Boosts &amp; stage slots</h3>
         <p>The front page shows the liveliest pad: you can't buy it. Anyone can <b>boost</b> a pad with PAT to push it up
           the ranking (boosts fade by half every hour and only count while the pad is active). Stage slots are free unless
           the pad's owner sets a price. Boosts and slot fees go <b>half to that pad's room vault</b> and <b>half to Fort
@@ -717,7 +728,7 @@
           their own pad sends 100% to Fort Knox; a gift from anyone else goes half to Fort Knox, half to that pad's room vault.</p>
       </div>
       <div class="card">
-        <h3>🔒 Escrow</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🔒</span> Escrow</h3>
         <p>When you stake PAT on something that takes days (a wager, a market, a loan, a bounty, a bingo card) it leaves
           your wallet straight away and is held in escrow. Every step is recorded, so if Pepe restarts mid-game your
           PAT is either paid out or refunded: never lost, never paid twice.</p>
@@ -731,8 +742,8 @@
      const _rf = (x) => Math.round(Number(x) || 0).toLocaleString('en-US'); %>
   <% if (_rv) { %>
   <section id="roomvaults">
-    <div class="kicker">REVENUE FOLLOWS THE ROOM</div>
-    <h2>🏦 Room vaults</h2>
+    <div class="ds-eyebrow ac">REVENUE FOLLOWS THE ROOM</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🏦</span> Room vaults</h2>
     <p class="lead">Every pad with a Camfrog room has its own vault. Half of what's spent in a room (paid commands, songs,
       voices, heist gear, boosts, stage slots, pad cosmetic gifts) goes to that room's vault and half to Fort Knox; on
       commands in a pad with an owner, the owner's 10% royalty comes first. Spending with no room goes all to Fort Knox, and
@@ -743,7 +754,7 @@
       streamers, its regulars and its room games, but only what the room really earned.</span></p>
     <div class="grid">
       <div class="card wide">
-        <h3>📊 Room vaults now: <%= _rf(_rv.total) %> PAT</h3>
+        <h3><span class="ds-ic" aria-hidden="true">📊</span> Room vaults now: <%= _rf(_rv.total) %> PAT</h3>
         <% if (_rv.rooms.length) { %>
         <ul>
           <% _rv.rooms.forEach((r) => { %>
@@ -765,8 +776,8 @@
     const _f = (x) => Math.round(Number(x) || 0).toLocaleString('en-US');
   %>
   <section id="incentives">
-    <div class="kicker">REWARDS HAVE A BUDGET</div>
-    <h2>🎁 The incentive budget</h2>
+    <div class="ds-eyebrow ac">REWARDS HAVE A BUDGET</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🎁</span> The incentive budget</h2>
     <% if (!_tr) { %>
       <p class="lead">Coming soon: rewards (level-ups, welcome PAT, achievements, connect bonuses) will be paid from an
         <b>incentive budget</b> that the protocol fills every week out of its real profit, instead of from the Federal
@@ -778,7 +789,7 @@
         <b>waits in line</b> (first come, first paid) and lands in your wallet as soon as it refills. Nothing is ever skipped.</p>
       <div class="grid">
         <div class="card">
-          <h3>📅 The weekly settlement</h3>
+          <h3><span class="ds-ic" aria-hidden="true">📅</span> The weekly settlement</h3>
           <p>Every Monday at 04:00 UTC the House, the Bank and the Market maker each keep a target bankroll (House 15M,
             Bank 2M or twice its busiest lending, Market maker 1M or 1.5× its market seeds). The protocol's profit above
             that target is the <b>surplus</b>, and it is split in this order:</p>
@@ -791,7 +802,7 @@
           </ul>
         </div>
         <div class="card">
-          <h3>🛟 The weekly guarantee</h3>
+          <h3><span class="ds-ic" aria-hidden="true">🛟</span> The weekly guarantee</h3>
           <p>Right after the settlement, the Federal Reserve tops the incentive budget up to the week's target:
             <b><%= sh(V3.target) %> PAT</b>. A quiet week at the casino never means smaller rewards, and a busy one refills the
             Reserve instead of piling up in the budget.</p>
@@ -799,7 +810,7 @@
             rewards follow the people who show up. Activity checks keep alts and spam out of the count.</p>
         </div>
         <div class="card">
-          <h3>🧮 What the budget pays</h3>
+          <h3><span class="ds-ic" aria-hidden="true">🧮</span> What the budget pays</h3>
           <ul>
             <li><b>Heist vault floors.</b> Fort Knox and the Casino vault are topped back up to 2M each day, so heists always
               have something to rob. Above their caps (<%= sh(V3.fk) %> and <%= sh(V3.cv) %>, 60% and 40% of the weekly
@@ -815,7 +826,7 @@
           </ul>
         </div>
         <div class="card">
-          <h3>📊 This week</h3>
+          <h3><span class="ds-ic" aria-hidden="true">📊</span> This week</h3>
           <ul>
             <li>Incentive budget: <b><%= _f(_tr.balance) %> PAT</b></li>
             <% if (_tr.share !== null && _tr.share !== undefined) { %><li>From this week's settlement: <%= _f(_tr.share) %> PAT (about <%= _f(_tr.release_per_day) %> a day)</li><% } %>
@@ -832,17 +843,17 @@
 
   <!-- 2a. Burned (1.99dk) -->
   <section id="burned">
-    <div class="kicker">OUT OF CIRCULATION</div>
-    <h2>🔥 Burned</h2>
+    <div class="ds-eyebrow ac">OUT OF CIRCULATION</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🔥</span> Burned</h2>
     <p class="lead">PAT is burned in one place only: when the Federal Reserve holds more than its
       <a href="#fed-band">ceiling</a>, the daily tick releases the excess to the burn reserve and destroys it, so the total
       supply goes down. No wallet, stash, vault or game pool is ever burned. Every burn is listed here.</p>
     <div class="grid" id="burnStats" aria-live="polite">
-      <div class="card"><h3>🔥 Total burned</h3><p class="n" data-b="total">…</p></div>
+      <div class="card"><h3><span class="ds-ic" aria-hidden="true">🔥</span> Total burned</h3><p class="n" data-b="total">…</p></div>
       <div class="card"><h3>Last 7 days</h3><p class="n" data-b="d7">…</p></div>
       <div class="card"><h3>Last 30 days</h3><p class="n" data-b="d30">…</p></div>
     </div>
-    <div class="tbl"><table aria-label="Burn log">
+    <div class="ds-tbl"><table aria-label="Burn log">
       <thead><tr><th>Date</th><th>PAT</th><th>From</th><th>Why</th></tr></thead>
       <tbody id="burnLog"><tr><td colspan="4">Loading…</td></tr></tbody>
     </table></div>
@@ -852,8 +863,8 @@
 
   <!-- 2b. Protocol -->
   <section id="protocol">
-    <div class="kicker">UNDER THE HOOD</div>
-    <h2>⚙️ How the PAT protocol works</h2>
+    <div class="ds-eyebrow ac">UNDER THE HOOD</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">⚙️</span> How the PAT protocol works</h2>
     <p class="lead">The short version: <b>playing never burns PAT.</b> Every PAT that exists is sitting somewhere: in a wallet,
       in a stash, or in one of the pools (the Federal Reserve, the incentive budget, the House, the Lotto pot, the Bank, the
       Market maker, the heist vaults, the room vaults, a gang's turf, or escrow while a game or bet is running). Playing
@@ -967,12 +978,12 @@
       <figcaption>Where PAT flows: it moves between wallets and pools. The Fed makes new PAT and funds the pools but never pays a wallet; only its excess above the ceiling is burned.</figcaption>
     </figure>
 
-    <h3 class="h3s">🏗️ Capital vaults: PAT that does a job</h3>
+    <h3 class="h3s"><span class="ds-ic" aria-hidden="true">🏗️</span> Capital vaults: PAT that does a job</h3>
     <p class="lead">Three of those pools are <b>capital vaults</b>. Each one holds PAT that does a real job in the game and
       earns from that job. You can put your own PAT in alongside it (that's staking) and earn or lose with it.</p>
     <div class="grid">
       <div class="card">
-        <h3>🏦 Bank</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🏦</span> Bank</h3>
         <p>Funds Reserve loans to players (<code>!loan reserve</code>). Earns their interest and late penalties, plus the
           protocol's 10% cut of interest on loans between players.</p>
         <p><b>Risk:</b> borrowers who don't pay. A loan 30 days late is a default: the protocol's own profit in the Bank
@@ -980,7 +991,7 @@
           the borrower, and stakers' share price is untouched unless a default is bigger than all of that.</p>
       </div>
       <div class="card">
-        <h3>🎰 House</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎰</span> House</h3>
         <p>This <i>is</i> the casino bankroll: the jackpot that pays out wins. Earns the house edge: losing blackjack bets,
           hold'em rake, wheel spins, the lotto's margin, the bingo house cut and the 5% wager fee.</p>
         <p><b>Risk:</b> big wins, like a wheel jackpot or a blackjack streak. If a payout ever runs it short, the Federal
@@ -988,7 +999,7 @@
           vault, which the incentive budget keeps topped up. Still the most up-and-down vault.</p>
       </div>
       <div class="card">
-        <h3>📈 Market maker</h3>
+        <h3><span class="ds-ic" aria-hidden="true">📈</span> Market maker</h3>
         <p>Puts up the starting money (the "seed") for every new prediction market, then takes that market's 2% trading fees
           and whatever's left when it settles. The fee on betting pools goes to it too.</p>
         <p><b>Risk:</b> a market can lose at most its seed.</p>
@@ -997,7 +1008,7 @@
           straight away instead of at settlement.</p>
       </div>
       <div class="card">
-        <h3>🤖 Auto <span class="new">DEFAULT</span></h3>
+        <h3><span class="ds-ic" aria-hidden="true">🤖</span> Auto <span class="new">DEFAULT</span></h3>
         <p>A fund that holds all three for you, inside admin limits: <b>at least 40% Bank</b>, <b>at most 35% House</b>,
           <b>at most 25% Market maker</b>. Every day it leans toward whichever vault has done best over the last 30 days
           for the risk it took.</p>
@@ -1076,7 +1087,7 @@
       <figcaption>Who takes the risk, who gets the fee: each vault funds one thing, earns from it, and carries its risk.</figcaption>
     </figure>
 
-    <h3 class="h3s">📊 Shares: how a stake grows</h3>
+    <h3 class="h3s"><span class="ds-ic" aria-hidden="true">📊</span> Shares: how a stake grows</h3>
     <p class="lead">Staking buys <b>shares</b> of a vault at today's share price (the vault's value ÷ the number of shares).
       When the vault earns, the share price goes up; when it pays out a big loss, the price goes down.
       Nothing is "paid out" to you and nothing piles up in a separate pool: your earnings compound automatically inside the price.
@@ -1102,7 +1113,7 @@
       <figcaption>Share price: revenue nudges it up day by day; a big win or loss knocks it down for a while.</figcaption>
     </figure>
 
-    <h3 class="h3s">🔁 Your stake, step by step</h3>
+    <h3 class="h3s"><span class="ds-ic" aria-hidden="true">🔁</span> Your stake, step by step</h3>
     <figure class="fig">
       <svg viewBox="0 0 520 545" role="img" aria-label="Flow of a stake from your stash through the daily cut-off into vault shares and back">
         <defs>
@@ -1162,17 +1173,17 @@
     </figure>
     <div class="grid">
       <div class="card">
-        <h3>🕛 The daily cut-off</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🕛</span> The daily cut-off</h3>
         <p>Stake and unstake requests don't happen instantly. They queue up and all run once a day (around midnight ET)
           at that day's price. That way nobody can jump in just before a lotto draw and jump out right after.</p>
       </div>
       <div class="card">
-        <h3>💸 Getting your PAT out</h3>
+        <h3><span class="ds-ic" aria-hidden="true">💸</span> Getting your PAT out</h3>
         <p>A withdrawal needs free cash in that vault: Bank money may be lent out, and the House always keeps a minimum float
           to pay winners. If there isn't enough, your request waits in the queue and fills as cash frees up.</p>
       </div>
       <div class="card">
-        <h3>📏 Limits</h3>
+        <h3><span class="ds-ic" aria-hidden="true">📏</span> Limits</h3>
         <ul>
           <li>Stakers can own at most <b>50%</b> of any vault, so the protocol always keeps skin in the game.</li>
           <li><b>The weekly settlement:</b> every Monday a vault's profit above its target size (the House: 15M; the Bank: 2M or twice its busiest lending; the Market maker: 1M or 1.5× its market seeds) is shared out. It first repays any Fed loan, then stakers get <b>20%</b>, and the rest goes half to the Federal Reserve (while it's below its ceiling) and half to the <a href="#incentives">incentive budget</a>. Stakers' shares are never touched.</li>
@@ -1181,19 +1192,19 @@
       </div>
     </div>
 
-    <h3 class="h3s">⚖️ Fees follow risk</h3>
+    <h3 class="h3s"><span class="ds-ic" aria-hidden="true">⚖️</span> Fees follow risk</h3>
     <p class="lead">A fee goes to whoever put up the money for that activity. Market and pool fees go to the Market maker
       that seeds the markets, loan interest goes to the Bank that lent it, casino margins and the wager fee go to the House.
       Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox and
       that room's vault, by the routing table. Stakers don't get paid for activity they don't fund.</p>
 
-    <h3 class="h3s">🎟️ The Lotto pot</h3>
+    <h3 class="h3s"><span class="ds-ic" aria-hidden="true">🎟️</span> The Lotto pot</h3>
     <p class="lead">Each 1,000 PAT lotto ticket splits in two: <b>40%</b> builds the Lotto pot, a separate rolling jackpot that only
       the lotto jackpot is paid from (so a jackpot win never drains the House), and <b>60%</b> goes to the House, which pays
       the smaller fixed prizes and keeps the margin. The jackpot is capped at 100M.</p>
 
-    <h3 class="h3s">🤔 Which vault is right for me?</h3>
-    <div class="tbl">
+    <h3 class="h3s"><span class="ds-ic" aria-hidden="true">🤔</span> Which vault is right for me?</h3>
+    <div class="ds-tbl">
       <table>
         <thead><tr><th>VAULT</th><th>FEELS LIKE</th><th>PICK IT IF</th></tr></thead>
         <tbody>
@@ -1212,13 +1223,13 @@
 
   <!-- 3. Casino -->
   <section id="casino">
-    <div class="kicker">GAMES OF CHANCE</div>
-    <h2>🎰 The casino</h2>
+    <div class="ds-eyebrow ac">GAMES OF CHANCE</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🎰</span> The casino</h2>
     <p class="lead">Pepe runs the tables in the Camfrog rooms and shows the action on stream. Each game runs in one room;
       Pepe tells you where to head if you type a command somewhere else.</p>
     <div class="grid">
       <div class="card">
-        <h3>🎡 Wheel of Misfortune</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎡</span> Wheel of Misfortune</h3>
         <p>5,000 PAT a spin, on the site or in chat. Where it stops is what you win. The thin gold slice is the
           jackpot: it hits about 1 in 3,000 spins and pays a share of the House, the casino jackpot (up to 5M).</p>
         <p>The gold wheel on your profile allows <strong>100 spins a day plus 25 per level</strong> (level 10: 350), resetting at
@@ -1228,21 +1239,21 @@
         <div class="goes"><b>PAT goes:</b> every spin into the House (the casino bankroll), which pays the prizes.</div>
       </div>
       <div class="card">
-        <h3>🂡 Blackjack</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🂡</span> Blackjack</h3>
         <p>Pepe deals from a 6-deck shoe, shuffled fresh and provably fair every round. Blackjack pays 3:2, dealer hits
           soft 17. Double, split (up to 4 hands), insurance. Bets 100 to 10,000 PAT, up to 6 players.</p>
         <div class="cmd"><code>!bj start</code> · <code>!bet 500</code> · <code>!hit</code> / <code>!stand</code> · <code>!autobet</code></div>
         <div class="goes"><b>PAT goes:</b> losing bets go to the House, and the House pays the winners.</div>
       </div>
       <div class="card">
-        <h3>🂠 Texas Hold'em</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🂠</span> Texas Hold'em</h3>
         <p>No-limit cash game in chat. Chips are PAT 1:1: buy in to sit (20 to 200 big blinds), cash out any time.
           Your hole cards come by private message. Up to 9 players. Can't run alongside a blackjack table.</p>
         <div class="cmd"><code>!holdem start 25/50</code> · <code>!sit 5000</code> · <code>!call</code> · <code>!raise 600</code> · <code>!stand</code></div>
         <div class="goes"><b>PAT goes:</b> pots go to the winners, minus a small rake (set by the admins) for the House.</div>
       </div>
       <div class="card">
-        <h3>🎟️ PAT Lottery</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎟️</span> PAT Lottery</h3>
         <p>Powerball-style, drawn every Sunday at 9pm ET, ball by ball on stream. Pick 4 numbers from 1–30 plus a Pepe Ball
           from 1–10, or let Pepe pick. 1,000 PAT a ticket, no limit. All 4 + Pepe Ball wins the jackpot
           (1 in 274,050); smaller prizes from 1k to 500k, and about 1 in 6 tickets wins something.
@@ -1251,7 +1262,7 @@
         <div class="goes"><b>PAT goes:</b> 40% of each ticket builds the Lotto pot (the rolling jackpot, capped at 100M); 60% goes to the House, which pays the fixed prizes.</div>
       </div>
       <div class="card">
-        <h3>🔢 Bingo</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🔢</span> Bingo</h3>
         <p>75-ball bingo on the stream overlay. Cards are 2,500 PAT (up to 4), sent by PM. Type <code>!bingo</code> the moment
           you have a line; Pepe checks it for you. First line wins 30% of the prize pool, first full card wins the rest.
           A wrong call costs 1,000 PAT and a 60s sit-out.</p>
@@ -1259,27 +1270,27 @@
         <div class="goes"><b>PAT goes:</b> 10% of card sales to the House, the rest is the prize pool. Unclaimed prizes roll into the next game.</div>
       </div>
       <div class="card">
-        <h3>🧠 Trivia</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🧠</span> Trivia</h3>
         <p>Everyone pays the buy-in (default 1,000 PAT) into one pot and the winner takes it all. Pick a topic if you like.</p>
         <div class="cmd"><code>!trivia 5000 movies</code> · <code>!join</code></div>
         <div class="goes"><b>PAT goes:</b> player to player, winner takes the pot.</div>
       </div>
       <div class="card">
-        <h3>💲 Showdown</h3>
+        <h3><span class="ds-ic" aria-hidden="true">💲</span> Showdown</h3>
         <p>Price-is-Right style: guess Pepe's secret number (1–10,000). 10,000 PAT buy-in, closest without going over takes the
           pot, and nailing it exactly pays a bonus.</p>
         <div class="cmd"><code>!showdown</code> · <code>!guess 4200</code></div>
         <div class="goes"><b>PAT goes:</b> the pot is just the buy-ins, back to the players.</div>
       </div>
       <div class="card">
-        <h3>⚔️ Duels, brawls &amp; the Arena</h3>
+        <h3><span class="ds-ic" aria-hidden="true">⚔️</span> Duels, brawls &amp; the Arena</h3>
         <p>Dice duels (100 to 50,000 PAT), 1v1 brawls using your heist character's stats, and the Arena: a battle royale where
           the last fighter standing takes the pot.</p>
         <div class="cmd"><code>!duel @bob 5000</code> · <code>!brawl @bob 10k</code> · <code>!arena 5000</code> · <code>!accept</code></div>
         <div class="goes"><b>PAT goes:</b> winner takes the pot; brawls and the Arena take a small cut for the protocol.</div>
       </div>
       <div class="card">
-        <h3>🎨 Pictionary</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎨</span> Pictionary</h3>
         <p>Pepe draws live on stream, you guess in chat. Free to play; the first right guess each round wins PAT.</p>
         <div class="cmd"><code>!pictionary 5 animals</code></div>
       </div>
@@ -1289,13 +1300,13 @@
 
   <!-- 4. Betting between people -->
   <section id="betting">
-    <div class="kicker">PLAYER VS PLAYER</div>
-    <h2>🤝 Wagers &amp; betting pools</h2>
+    <div class="ds-eyebrow ac">PLAYER VS PLAYER</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🤝</span> Wagers &amp; betting pools</h2>
     <p class="lead">Bet on anything that happens, in the room or out in the world. Somebody you both trust is the judge
       and calls the result. Stakes sit in escrow until then. Everything shows on <a href="/wagers">/wagers</a>.</p>
     <div class="grid">
       <div class="card">
-        <h3>🤝 1-on-1 wagers</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🤝</span> 1-on-1 wagers</h3>
         <p>Challenge one person. Your stake is held right away; they have 10 minutes to accept and match it.
           The judge (anyone but the two of you) picks the winner, or voids it to refund both. Min 1,000 PAT.
           If the judge doesn't settle by the deadline (default 7 days, max 30), both get their PAT back.</p>
@@ -1303,7 +1314,7 @@
         <div class="goes"><b>PAT goes:</b> winner takes the pot minus a 5% fee.</div>
       </div>
       <div class="card">
-        <h3>👥 Betting pools <span class="new">NEW</span></h3>
+        <h3><span class="ds-ic" aria-hidden="true">👥</span> Betting pools <span class="new">NEW</span></h3>
         <p>A bet the whole room can get in on. Make a question (yes/no, or your own options), name a judge, and everyone
           backs the side they like with as much as they want. When the judge calls it, the winners split the losing side's
           pool in proportion to what they put in, so a correct bet never comes back smaller than it went in.
@@ -1319,13 +1330,13 @@
 
   <!-- 5. Markets -->
   <section id="markets">
-    <div class="kicker">TRADE THE ODDS</div>
-    <h2>📈 Prediction markets</h2>
+    <div class="ds-eyebrow ac">TRADE THE ODDS</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">📈</span> Prediction markets</h2>
     <p class="lead">Polymarket-style share trading. Each answer has a price between 0 and 1 PAT, and that price is the
       crowd's odds: 0.70 means "about 70% likely". Every share of the winning answer pays out 1 PAT, losing shares pay 0.</p>
     <div class="grid">
       <div class="card">
-        <h3>📊 How it works</h3>
+        <h3><span class="ds-ic" aria-hidden="true">📊</span> How it works</h3>
         <ul>
           <li>Buying pushes an answer's price up, selling pushes it down.</li>
           <li>Sell any time while trading's open: lock in a profit or cut a loss before the result.</li>
@@ -1334,7 +1345,7 @@
         </ul>
       </div>
       <div class="card">
-        <h3>⌨️ Commands</h3>
+        <h3><span class="ds-ic" aria-hidden="true">⌨️</span> Commands</h3>
         <div class="cmd"><code>!market new Will Sam come back this week? judge @carol closes 2d</code><br>
           <code>!market M3 yes 5k</code> (spend 5k, min 500)<br>
           <code>!market sell M3 yes all</code><br>
@@ -1342,7 +1353,7 @@
         <p>Your positions on <a href="/markets">/markets</a> show your entry price, today's price and your profit or loss, with a price chart.</p>
       </div>
       <div class="card">
-        <h3>🏛️ Who pays the winners?</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🏛️</span> Who pays the winners?</h3>
         <p>An automated market maker (LMSR, the maths behind many prediction sites) is always there to trade with you.
           The <a href="#protocol">Market maker vault</a> seeds each market's starting liquidity, and the pot can always cover
           every winning share. Whatever's left over when it settles goes back to the Market maker.</p>
@@ -1354,8 +1365,8 @@
 
   <!-- 6. AI judge -->
   <section id="judge">
-    <div class="kicker">EXPERIMENTAL</div>
-    <h2>🤖 Pepe as judge <span class="new exp">NEW · EXPERIMENTAL</span></h2>
+    <div class="ds-eyebrow ac">EXPERIMENTAL</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🤖</span> Pepe as judge <span class="new exp">NEW · EXPERIMENTAL</span></h2>
     <p class="lead">No neutral human around? A market, pool or wager can name Pepe himself as the judge.</p>
     <div class="grid">
       <div class="card">
@@ -1382,8 +1393,8 @@
 
   <!-- 7. Bounties -->
   <section id="bounties">
-    <div class="kicker">GET STUFF DONE</div>
-    <h2>🎯 Bounties</h2>
+    <div class="ds-eyebrow ac">GET STUFF DONE</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🎯</span> Bounties</h2>
     <div class="grid">
       <div class="card">
         <p>Put PAT up for someone to do something. Others can chip in to grow the pot. Hunters claim it ("I did it"),
@@ -1392,7 +1403,7 @@
         <div class="goes"><b>PAT goes:</b> held in escrow; the hunters get the pot minus a 5% fee. Cancelled or expired (default 7 days)? Everyone who put money in is refunded.</div>
       </div>
       <div class="card">
-        <h3>🌐 On the site</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🌐</span> On the site</h3>
         <p>See every bounty on <a href="/bounties">/bounties</a>, chip in, claim one with a note, and (if you posted it)
           pay the hunters or cancel.</p>
       </div>
@@ -1402,11 +1413,11 @@
 
   <!-- 8. Loans -->
   <section id="loans">
-    <div class="kicker">CREDIT</div>
-    <h2>🏦 Loans</h2>
+    <div class="ds-eyebrow ac">CREDIT</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🏦</span> Loans</h2>
     <div class="grid">
       <div class="card">
-        <h3>🤝 Person to person</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🤝</span> Person to person</h3>
         <p>Lend PAT with interest (a flat rate for the term, max 50%). The amount is held from you right away; they have
           10 minutes to accept. Borrowers can repay early, in part or in full.</p>
         <p>When it's due, Pepe collects automatically: whatever they have, then the rest as PAT comes in. Anything still
@@ -1415,7 +1426,7 @@
         <div class="goes"><b>PAT goes:</b> the lender always gets the full amount back; 10% of the interest and penalties goes to the Bank.</div>
       </div>
       <div class="card">
-        <h3>🏛️ Federal Reserve loans <span class="new">NEW</span></h3>
+        <h3><span class="ds-ic" aria-hidden="true">🏛️</span> Federal Reserve loans <span class="new">NEW</span></h3>
         <p>Borrow at the Reserve's rate, with the PAT lent out of the Bank vault. Within your limit it's approved instantly; your limit grows
           with your level and a clean repayment record. Want more? Ask the admins, who can also grant loans themselves.</p>
         <div class="cmd"><code>!loan reserve 50k 7d</code> · <code>!loan request 200k 14d why</code> (bigger amounts) · <code>!loan reserve</code> shows your limit</div>
@@ -1430,17 +1441,17 @@
 
   <!-- 9. Stashes & staking -->
   <section id="stash">
-    <div class="kicker">SAVE &amp; EARN</div>
-    <h2>🔐 Stashes &amp; staking</h2>
+    <div class="ds-eyebrow ac">SAVE &amp; EARN</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🔐</span> Stashes &amp; staking</h2>
     <div class="grid">
       <div class="card">
-        <h3>🔐 Stashes</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🔐</span> Stashes</h3>
         <p>Personal vaults. Park PAT outside your wallet and share it with accounts you trust: anyone you grant can
           deposit and withdraw. Up to 3 stashes, 10 members each. Closing one pays what's left to the owner.</p>
         <div class="cmd"><code>!stash create savings</code> · <code>!stash deposit savings 50k</code><br><code>!stash grant savings @myalt</code> · <code>!stash withdraw savings 10k</code> · <code>!stash list</code></div>
       </div>
       <div class="card">
-        <h3>📈 Staking: capital vaults <span class="new">NEW</span></h3>
+        <h3><span class="ds-ic" aria-hidden="true">📈</span> Staking: capital vaults <span class="new">NEW</span></h3>
         <p>Stake PAT from a stash into a <a href="#protocol">capital vault</a>: the 🏦 Bank (lends PAT, insured),
           the 🎰 House (the casino bankroll, most volatile), the 📈 Market maker (seeds prediction markets), or 🤖 Auto
           (the default, a mix of all three). You buy shares; as the vault earns, the share price rises and your earnings
@@ -1451,7 +1462,7 @@
           <code>!stash unstake &lt;stash&gt; &lt;amount|all&gt; [vault]</code> · <code>!stash yield</code> · <code>!vaults</code></div>
       </div>
       <div class="card">
-        <h3>👛 Your wallet &amp; the vaults</h3>
+        <h3><span class="ds-ic" aria-hidden="true">👛</span> Your wallet &amp; the vaults</h3>
         <p>See your stashes, stakes (value and profit or loss) and loans in one place on <a href="/wallet">/wallet</a>.
           <a href="/staking">/staking</a> is the live vault dashboard: share prices, APR, revenue by source and your positions.</p>
       </div>
@@ -1461,26 +1472,26 @@
 
   <!-- 10. GTF -->
   <section id="gtf">
-    <div class="kicker">CRIME PAYS</div>
-    <h2>🔫 Grand Theft Frogger</h2>
+    <div class="ds-eyebrow ac">CRIME PAYS</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🔫</span> Grand Theft Frogger</h2>
     <p class="lead">The crime side of PATV. Roll a character with <code>!sheet</code> and go to work. Full guide on <a href="/gtf">/gtf</a>.</p>
     <div class="grid">
       <div class="card">
-        <h3>🥷 Heists</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🥷</span> Heists</h3>
         <p>Crew up and survive rounds of dice rolls to bank loot; bail out or go for the vault door. The store is always open;
           the casino job robs the <b>Casino vault</b> (its own pot, refilled by casino heist buy-ins) and the bank job cracks <b>Fort Knox</b> (half of everything spent in rooms flows into it). The incentive budget keeps both at 2M or more.</p>
         <div class="cmd"><code>!heist</code> · <code>!join</code> · <code>!bail</code> · <code>!shop</code></div>
         <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. Heists never burn PAT, and the admins can switch the heist faucet on and off.</div>
       </div>
       <div class="card">
-        <h3>🗺️ Turf Wars</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🗺️</span> Turf Wars</h3>
         <p>Gangs fight over the districts on this season's map (the map changes every season). Each district runs a business
           that earns its owner PAT every day. Claim, raid, defend, and climb the season score.</p>
         <div class="cmd"><code>!turf</code> · <code>!claim</code> · <code>!raid</code></div>
         <div class="goes"><b>PAT goes:</b> turf income and the season prize are paid from the incentive budget, and a small slice of blackjack, hold'em and fight rake still goes to the gang that owns the matching business. <b>Coming later:</b> room turf wars, where gangs take control of real rooms and their vaults.</div>
       </div>
       <div class="card">
-        <h3>🎩 Gangs</h3>
+        <h3><span class="ds-ic" aria-hidden="true">🎩</span> Gangs</h3>
         <p>A gang shares a treasury, wages and heat. Take turf together, defend it together, split what it earns.</p>
         <div class="cmd"><code>!gang create [TAG] name</code> · <code>!gang invite @user</code></div>
       </div>
@@ -1490,8 +1501,8 @@
 
   <!-- 11. Polls -->
   <section id="polls">
-    <div class="kicker">HAVE YOUR SAY</div>
-    <h2>🗳️ Polls</h2>
+    <div class="ds-eyebrow ac">HAVE YOUR SAY</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🗳️</span> Polls</h2>
     <div class="grid">
       <div class="card">
         <p>Free, no PAT involved. One vote per person, in the room or on the site. Every poll gets a live results page;
@@ -1504,8 +1515,8 @@
 
   <!-- 12. Website -->
   <section id="web">
-    <div class="kicker">NO CAMFROG NEEDED</div>
-    <h2>🌐 Doing it all from the website</h2>
+    <div class="ds-eyebrow ac">NO CAMFROG NEEDED</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🌐</span> Doing it all from the website</h2>
     <div class="grid">
       <div class="card">
         <p>Once your Camfrog name is linked to your PATV account (start the link on your profile, then type
@@ -1526,12 +1537,12 @@
 
   <!-- Fees -->
   <section id="fees">
-    <div class="kicker">AT A GLANCE</div>
-    <h2>🧾 Fees</h2>
+    <div class="ds-eyebrow ac">AT A GLANCE</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🧾</span> Fees</h2>
     <p class="lead">Fees aren't burned, and they <a href="#protocol">follow risk</a>: a fee goes to the vault that funded the
       activity (Bank, House or Market maker). Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending
       in a room is split between Fort Knox and that room's vault. <span class="cfg">⚙ = set by the admins, can change.</span></p>
-    <div class="tbl">
+    <div class="ds-tbl">
       <table>
         <thead><tr><th>WHAT</th><th>FEE</th><th>NOTES</th></tr></thead>
         <tbody>
@@ -1562,22 +1573,22 @@
 
   <!-- Links -->
   <section id="links">
-    <div class="kicker">GO PLAY</div>
-    <h2>🔗 Links</h2>
+    <div class="ds-eyebrow ac">GO PLAY</div>
+    <h2 class="ds-h2"><span class="ds-ic" aria-hidden="true">🔗</span> Links</h2>
     <div class="links">
-      <a href="/markets">📈 Markets<small>trade the odds</small></a>
-      <a href="/wagers">🤝 Wagers &amp; pools<small>bets between people</small></a>
-      <a href="/bounties">🎯 Bounties<small>post or hunt a job</small></a>
-      <a href="/lotto">🎟️ Lotto<small>tickets and results</small></a>
-      <a href="/polls">🗳️ Polls<small>vote and results</small></a>
-      <a href="/wallet">👛 Wallet<small>stashes, stakes, loans</small></a>
-      <a href="/staking">🏗️ Staking<small>live vault dashboard</small></a>
-      <a href="/gtf">🔫 Grand Theft Frogger<small>heists, turf, gangs</small></a>
-      <a href="/history">🧾 History<small>every PAT in and out</small></a>
-      <a href="/help">📖 Pepe's commands<small>the full command list</small></a>
+      <a href="/markets"><span class="ds-ic" aria-hidden="true">📈</span><span>Markets</span><small>trade the odds</small></a>
+      <a href="/wagers"><span class="ds-ic" aria-hidden="true">🤝</span><span>Wagers &amp; pools</span><small>bets between people</small></a>
+      <a href="/bounties"><span class="ds-ic" aria-hidden="true">🎯</span><span>Bounties</span><small>post or hunt a job</small></a>
+      <a href="/lotto"><span class="ds-ic" aria-hidden="true">🎟️</span><span>Lotto</span><small>tickets and results</small></a>
+      <a href="/polls"><span class="ds-ic" aria-hidden="true">🗳️</span><span>Polls</span><small>vote and results</small></a>
+      <a href="/wallet"><span class="ds-ic" aria-hidden="true">👛</span><span>Wallet</span><small>stashes, stakes, loans</small></a>
+      <a href="/staking"><span class="ds-ic" aria-hidden="true">🏗️</span><span>Staking</span><small>live vault dashboard</small></a>
+      <a href="/gtf"><span class="ds-ic" aria-hidden="true">🔫</span><span>Grand Theft Frogger</span><small>heists, turf, gangs</small></a>
+      <a href="/history"><span class="ds-ic" aria-hidden="true">🧾</span><span>History</span><small>every PAT in and out</small></a>
+      <a href="/help"><span class="ds-ic" aria-hidden="true">📖</span><span>Pepe's commands</span><small>the full command list</small></a>
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
   </section>
-</div>
+</main>
 </body>
 </html>

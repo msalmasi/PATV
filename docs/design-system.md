@@ -786,6 +786,17 @@ Added by the 1.99pp polish pass (markets, a market, wagers and pools, polls, bou
 - **Option colours** (Yes green #4caf50, No red #e57373, then blue, gold, purple, cyan, orange, lime) are chart colours and stay hex; a settled winner's bar is `--ds-gold`, a voided option's bar `--ds-text-disabled`.
 - **Sticky side card** (the market's trade panel at ≥ 900): `top: calc(var(--ds-nav-h) + var(--ds-sp-3))`, never a hard-coded 76px.
 
+### Money pages: wallet, staking, history, economy (1.99pr)
+
+- **Recipe:** `.ds-hero.gold` (eyebrow, h1, lead) on all four. The wallet's balance is the page's one `.ds-pat.xl` (the gold-gradient number); its mini stats are `.ds-stats` in 3 fixed columns. Quick actions are `.ds-btn.sm` (gold for Send, ghost for the rest). Wrappers: wallet `.ds-page`, staking `.ds-page.flow`, history `.ds-page.mid`, economy `.ds-page.flow`.
+- **Pixel or Ubuntu section headings (§6.6):** when a page's heading strings are uppercase in the locale files ("MY STASHES", "STAKING"), use `.ds-pixel-h` for that page's sections (wallet, staking, history day cards). Ubuntu `.ds-h2` is for sentence-case strings (economy). Never re-case translated strings with CSS.
+- **Sticky in-page nav:** the wallet's section links and history's period/category filters are `.ds-subnav` > `.ds-tabs` > `.ds-tab`; the current filter is the accent tab (`.on`), not a gold fill.
+- **Tables with a long text column (§6.8):** give the long-text cell a minimum width (wallet's market positions: `td.q { min-width: 200px; max-width: 320px }`) and keep number cells `nowrap`. The table then scrolls inside its `.ds-tbl` on phones instead of crushing the question to one word per line.
+- **Radio-driven tabs (CSS-only switches, staking's 7/30-day chart):** hide the radios with `.ds-sr-only`, never `display: none`, so they stay keyboard-reachable, and show focus on the label: `#id:focus-visible ~ .tabs label[for=id] { box-shadow: var(--ds-focus-ring) }`.
+- **Pages that keep their own field and button markup (§6.7):** style them to match in page CSS: 44px fields, radius 10, `--ds-sunken`, a `--ds-line-strong` border, `margin: 0` (undoes the legacy rule), 16px at ≤ 760; buttons are 44px pills with `--ds-on-ac` ink on green and `--ds-on-gold` on the gold gradient, 36px inside inline forms and table cells. Spending PAT (Stake, Send) is the gold button; reversing it (Unstake) is `quiet`.
+- **Long explainer pages (economy):** `.ds-page.flow`, because a sticky contents bar can't stick inside a grid cell. Space top-level blocks with `> * + * { margin-block-start: var(--ds-sp-6) }` and `--ds-sp-12` before a new part. The contents bar is a `ul.ds-tabs` of `.ds-tab` links: it scrolls sideways on phones and, at ≥ 900, wraps and sticks at `top: var(--ds-sp-2)` with blur and `--ds-e-3`. Sections get `scroll-margin-top: 90px`. Each section is a `.ds-eyebrow.ac` kicker, then a `.ds-h2` with a `.ds-ic` emoji, then a lead. Diagram panels are sunken figures (radius 16); tiles inside a card are sunken, radius 12, with a 3px `border-block-start` in their own colour (`--c`). A chart or gauge forces `direction: ltr`.
+- **Known gap:** economy's large explainer SVGs scale to fit at 375, so their text renders around 8px; they need a phone-specific drawing.
+
 ---
 
 ## Area notes: home, info, legal and admin

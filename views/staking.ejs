@@ -3,67 +3,72 @@
    const UL = typeof ul === 'function' ? ul : (n, o) => escapeFn(o && o.text != null ? o.text : (n == null ? '' : n)) + (o && o.web ? ' 🌐' : '');
    const ULE = typeof ulEsc === 'function' ? ulEsc : escapeFn; %>
 <style>
-  .sk { max-width: 980px; margin: 0 auto; padding: 0 16px 48px; font-family: Ubuntu, sans-serif; overflow-wrap: anywhere; }
-  .sk a { color: #81c784; }
-  .sk h1 { text-align: center; margin-bottom: 4px; }
-  .sk h2 { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 30px 0 10px; line-height: 1.6; }
-  .sk h3 { margin: 18px 0 8px; font-size: 15px; color: #ddd; }
+  /* 1.99pr polish: .ds-page.flow + ds tokens (the money pages' look: gold hero, pixel section headings, .ds-tbl tables) */
+  .sk { --ds-w: 1040px; }
+  .sk a:not(.ds-btn) { text-decoration: none; } .sk a:not(.ds-btn):hover { text-decoration: underline; }
+  .sk .ds-hero { margin-block-end: var(--ds-sp-4); }
+  .sk .ds-hero .explain { margin: 0; max-width: 72ch; font-size: var(--ds-fs-sm); }
+  .sk .ds-hero .explain b { color: var(--ds-text-strong); }
+  .sk h2.ds-pixel-h { margin: var(--ds-sp-8) 0 var(--ds-sp-3); }
   .sk .center { text-align: center; }
-  .sk .info { color: #888; font-size: 13px; line-height: 1.6; }
-  .sk .explain { background: #0d0d0d; border: 1px solid #222; border-radius: 10px; padding: 12px 14px; color: #bbb; font-size: 13px; line-height: 1.55; margin: 0 0 12px; }
-  .sk .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
-  .sk .card { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
-  .sk .card .vname { font-weight: bold; color: #fff; font-size: 16px; }
-  .sk .card .price { font-size: 26px; color: #ffd700; font-weight: bold; font-variant-numeric: tabular-nums; }
-  .sk .card .price small { font-size: 12px; color: #888; font-weight: normal; }
-  .sk .kv { display: grid; grid-template-columns: auto auto; gap: 3px 10px; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .sk .kv span { color: #888; } .sk .kv b { color: #ddd; text-align: right; font-weight: normal; }
-  .sk .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
-  .sk .stat { background: #0d0d0d; border: 1px solid #1c1c1c; border-radius: 8px; padding: 8px 10px; min-width: 0; }
-  .sk .stat span { display: block; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-  .sk .stat b { color: #fff; font-size: 17px; font-variant-numeric: tabular-nums; }
-  .sk .stat em { display: block; color: #888; font-size: 12px; font-style: normal; }
-  .sk .gold { color: #ffd700 !important; } .sk .up { color: #81c784 !important; } .sk .down { color: #e57373 !important; }
-  .sk .chart { background: #0d0d0d; border: 1px solid #222; border-radius: 8px; padding: 8px; }
+  .sk .info { color: var(--ds-text-muted); font-size: var(--ds-fs-meta); line-height: 1.6; margin: var(--ds-sp-2h) 0; }
+  .sk .info b { color: var(--ds-text-2); }
+  .sk .mut { color: var(--ds-text-muted); }
+  .sk .pend { color: var(--ds-warn-ink); }
+  .sk .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: var(--ds-sp-3); }
+  .sk .card { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); display: grid; gap: var(--ds-sp-2); align-content: start; min-width: 0; }
+  .sk .card .vname { font: 700 var(--ds-fs-h3)/var(--ds-lh-h3) var(--ds-font); color: var(--ds-text-strong); }
+  .sk .card .price { font-size: var(--ds-fs-num-lg); line-height: 1.1; color: var(--ds-gold-text); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sk .card .price small { font-size: var(--ds-fs-xs); color: var(--ds-text-muted); font-weight: 400; }
+  .sk .kv { display: grid; grid-template-columns: auto auto; gap: 4px 10px; font-size: var(--ds-fs-meta); font-variant-numeric: tabular-nums; }
+  .sk .kv span { color: var(--ds-text-muted); } .sk .kv b { color: var(--ds-text); text-align: end; font-weight: 500; }
+  .sk .kv b small { color: var(--ds-text-faint); font-weight: 400; }
+  .sk .ds-stats { margin: var(--ds-sp-3) 0; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); }
+  .sk .ds-stat em { color: var(--ds-text-faint); font-size: var(--ds-fs-xs); font-style: normal; }
+  .sk .gold { color: var(--ds-gold-text) !important; } .sk .up { color: var(--ds-ok) !important; } .sk .down { color: var(--ds-danger-solid) !important; }
+  .sk .chart { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-3); }
   .sk .chart svg { display: block; width: 100%; height: auto; }
-  .sk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: #ccc; margin-top: 6px; }
-  .sk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
-  .sk .tbl { overflow-x: auto; border: 1px solid #222; border-radius: 8px; }
-  .sk table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .sk th, .sk td { padding: 7px 10px; border-bottom: 1px solid #1c1c1c; text-align: left; vertical-align: top; overflow-wrap: normal; }
-  .sk td { color: #ddd; } .sk th { color: #888; font-weight: normal; white-space: nowrap; }
-  .sk td.r, .sk th.r { text-align: right; white-space: nowrap; }
-  .sk tr.tot td { color: #ffd700; font-weight: bold; border-top: 1px solid #333; }
-  .sk .rev { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-  .sk .rev .card h4 { margin: 0; color: #fff; font-size: 14px; }
-  .sk .tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-  .sk .tabs label { background: #1c1c1c; color: #ccc; border-radius: 6px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
-  .sk input.tabsel { display: none; }
-  .sk #rv7:checked ~ .tabs label[for=rv7], .sk #rv30:checked ~ .tabs label[for=rv30] { background: #4caf50; color: #fff; }
+  .sk .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--ds-fs-xs); color: var(--ds-text-2); margin-top: var(--ds-sp-2); }
+  .sk .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-inline-end: 5px; vertical-align: -1px; }
+  .sk .legend .lg-note { margin-inline-start: auto; color: var(--ds-text-muted); }
+  .sk .ds-tbl td { vertical-align: top; }
+  .sk .ds-tbl td:not([colspan]) { white-space: nowrap; }
+  .sk .rev { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: var(--ds-sp-3); }
+  .sk .rev .card h4 { margin: 0; font: 700 var(--ds-fs-h4)/var(--ds-lh-h4) var(--ds-font); color: var(--ds-text-strong); }
+  .sk .rev .ds-tbl { border-radius: var(--ds-r-lg); background: var(--ds-sunken); }
+  .sk .rev .ds-tbl td { padding: 6px 10px; }
+  /* the 7 / 30 day switch: radios (visually hidden, still keyboard-focusable) + pill labels */
+  .sk .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: var(--ds-sp-3); }
+  .sk .tabs label { display: inline-flex; align-items: center; min-height: 36px; padding: 0 var(--ds-sp-3h); border-radius: var(--ds-r-pill); border: 1px solid #2a2a2a; background: #151515;
+       color: #ccc; font: 500 var(--ds-fs-meta)/1 var(--ds-font); cursor: pointer; }
+  .sk .tabs label:hover { border-color: var(--ds-ac); color: #fff; }
+  .sk #rv7:checked ~ .tabs label[for=rv7], .sk #rv30:checked ~ .tabs label[for=rv30] { border-color: var(--ds-ac); background: var(--ds-ac-bg); color: #fff; }
+  .sk #rv7:focus-visible ~ .tabs label[for=rv7], .sk #rv30:focus-visible ~ .tabs label[for=rv30] { box-shadow: var(--ds-focus-ring); }
   .sk .rvp { display: none; }
   .sk #rv7:checked ~ .rvp.d7, .sk #rv30:checked ~ .rvp.d30 { display: block; }
-  .sk form { display: grid; gap: 8px; margin: 0; }
-  .sk .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 12px; margin-top: 12px; }
-  .sk .forms > form { background: #111; border: 1px solid #222; border-radius: 10px; padding: 14px; align-content: start; }
-  .sk input[type=text], .sk select { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 7px 9px; box-sizing: border-box; width: 100%; max-width: 100%; font: inherit; font-size: 14px; }
-  .sk button { background: #4caf50; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; cursor: pointer; font: inherit; font-weight: bold; }
-  .sk button.alt { background: #333; color: #ddd; }
-  .sk .hint { background: #1d1a0f; border: 1px solid #6b5a20; border-radius: 8px; padding: 10px 12px; color: #e8d9a0; font-size: 14px; }
-  .sk .pill { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid #333; color: #ccc; display: inline-block; white-space: nowrap; }
-  .sk code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; }
-  /* 1.99lx design pass: the wallet / premium look */
-  .sk { padding-top: 18px; box-sizing: border-box; width: 100%; min-width: 0; }
-  .sk *, .sk *::before, .sk *::after { box-sizing: border-box; }
-  .sk .sk-hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 20px 22px; margin-bottom: 16px; }
-  .sk .sk-hero .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
-  .sk .sk-hero h1 { text-align: left; margin: 6px 0 10px; font-size: clamp(26px, 5vw, 36px); }
-  .sk .sk-hero .explain { background: none; border: 0; padding: 0; margin: 0; color: #c9c9bf; font-size: 14px; }
-  .sk .card, .sk .forms > form { background: #121212; border-color: #262626; border-radius: 16px; }
-  .sk .stat { border-radius: 10px; }
-  .sk .tbl, .sk .chart { border-radius: 12px; }
-  .sk input[type=text], .sk select, .sk button { min-height: 38px; border-radius: 8px; }
-  .sk a:focus-visible, .sk button:focus-visible, .sk input:focus-visible, .sk select:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
-  @media (max-width: 520px) { .sk .sk-hero { padding: 16px; } }
+  .sk details.more { margin-top: var(--ds-sp-2); }
+  .sk details.more > summary { background: none; cursor: pointer; min-height: 36px; display: flex; align-items: center; }
+  /* forms */
+  .sk form { display: grid; gap: var(--ds-sp-2h); margin: 0; }
+  .sk .forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--ds-sp-3); margin-top: var(--ds-sp-3); }
+  .sk .forms > form { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); padding: var(--ds-sp-4); align-content: start; min-width: 0; }
+  .sk .forms > form > b:first-of-type { color: var(--ds-text-strong); font-size: var(--ds-fs-h4); }
+  .sk .forms > form .info { margin: 0; }
+  .sk input[type=text], .sk select { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; min-height: var(--ds-tap); margin: 0; padding: 10px 12px; border-radius: var(--ds-r-md);
+       border: 1px solid var(--ds-line-strong); background: var(--ds-sunken); color: #eee; font: 400 15px/1.3 var(--ds-font); }
+  .sk input[type=text]:hover, .sk select:hover { border-color: #444; }
+  .sk input[type=text]:focus, .sk select:focus { outline: none; border-color: var(--ds-ac); box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  .sk input::placeholder { color: #777; }
+  .sk button { display: inline-flex; align-items: center; justify-content: center; gap: var(--ds-sp-2); margin: 0; min-height: var(--ds-tap); padding: 0 var(--ds-sp-5);
+       border: 1px solid transparent; border-radius: var(--ds-r-pill); background: var(--ds-gold-grad); color: var(--ds-on-gold); font: 700 15px/1.1 var(--ds-font); cursor: pointer; transition: filter var(--ds-dur-1); }
+  .sk button:hover { filter: brightness(1.1); }
+  .sk button:disabled, .sk button[aria-busy="true"] { filter: grayscale(.6) brightness(.7); cursor: not-allowed; }
+  .sk button.alt { background: #1c1c1f; color: var(--ds-text); border-color: var(--ds-line-strong); }
+  .sk button.alt:hover { border-color: var(--ds-gold); filter: none; }
+  .sk .hint { margin: 0; }
+  .sk .act-box { margin: var(--ds-sp-3) 0; }
+  @media (max-width: 760px) { .sk input[type=text], .sk select { font-size: 16px; } }
+  @media (prefers-reduced-motion: reduce) { .sk button { transition: none; } }
 </style>
 <%
   const V = {
@@ -85,12 +90,12 @@
   const hidden = (cmd) => '<input type="hidden" name="kind" value="cmd"><input type="hidden" name="cmd" value="' + cmd + '"><input type="hidden" name="back" value="/staking"><input type="hidden" name="tag" value="staking">';
   const vaultSelect = (sel) => '<select name="a3">' + KEYS.map((k) => '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + V[k].icon + ' ' + V[k].name + '</option>').join('') + '</select>';
 %>
-<div class="sk">
+<main class="ds-page flow sk">
   <%# 1.99lx design pass: the wallet's look (hero, rounder cards); content and forms unchanged %>
-  <section class="sk-hero">
-    <div class="eyebrow">STASHES · VAULTS · YIELD</div>
+  <section class="ds-hero gold sk-hero">
+    <div class="ds-eyebrow">STASHES · VAULTS · YIELD</div>
     <h1>Staking</h1>
-  <p class="explain">Stashes can stake PAT into the protocol's vaults and own a slice of what they earn.
+  <p class="ds-lead explain">Stashes can stake PAT into the protocol's vaults and own a slice of what they earn.
     The <b>🏦 Bank</b> lends to players, the <b>🎰 House</b> banks the casino games and the jackpot, and the <b>📈 Market maker</b> seeds and trades the prediction markets.
     Each vault is priced per share: its value (NAV) divided by its shares, so the share price rises as the vault takes in fees and profits and falls when it pays out.
     <b>🤖 Auto</b> spreads itself over the three by target weights. Stakes and withdrawals run once a day at the cut-off, at that day's price.
@@ -100,24 +105,24 @@
   <%- include('partials/actions', { acts, msg }) %>
 
 <% if (!snap) { %>
-  <p class="info center">No staking numbers from Pepe yet.</p>
+  <div class="ds-empty"><span class="ds-ic" aria-hidden="true">📈</span><b>No staking numbers from Pepe yet.</b></div>
 <% } else {
      const s = snap.settings || {};
      const share = (k) => snap.nav[k] ? (snap.staked[k] || 0) / snap.nav[k] : 0;
 %>
-  <div class="stats">
-    <div class="stat"><span>Next cut-off</span><b><%- snap.next_epoch ? cd(snap.next_epoch) : '—' %></b><% if (snap.next_epoch) { %><em><%= when(snap.next_epoch) %> UTC</em><% } %></div>
-    <div class="stat"><span>Pending requests</span><b><%= pending.length %></b></div>
-    <div class="stat"><span>Total in vaults</span><b class="gold"><%= fmt((snap.nav.bank || 0) + (snap.nav.house || 0) + (snap.nav.mm || 0)) %></b></div>
-    <div class="stat"><span>Staked by stashes</span><b class="up"><%= fmt((snap.staked.bank || 0) + (snap.staked.house || 0) + (snap.staked.mm || 0)) %></b></div>
+  <div class="ds-stats">
+    <div class="ds-stat"><span>Next cut-off</span><b><%- snap.next_epoch ? cd(snap.next_epoch) : '—' %></b><% if (snap.next_epoch) { %><em><%= when(snap.next_epoch) %> UTC</em><% } %></div>
+    <div class="ds-stat"><span>Pending requests</span><b><%= pending.length %></b></div>
+    <div class="ds-stat"><span>Total in vaults</span><b class="gold"><%= fmt((snap.nav.bank || 0) + (snap.nav.house || 0) + (snap.nav.mm || 0)) %></b></div>
+    <div class="ds-stat"><span>Staked by stashes</span><b class="up"><%= fmt((snap.staked.bank || 0) + (snap.staked.house || 0) + (snap.staked.mm || 0)) %></b></div>
   </div>
 
   <!-- ───────── Vaults ───────── -->
-  <h2>VAULTS</h2>
+  <h2 class="ds-pixel-h">VAULTS</h2>
   <div class="grid">
     <% KEYS.forEach((k) => { const a = (snap.apr || {})[k] || {}; %>
       <div class="card" style="border-top: 3px solid <%= V[k].color %>">
-        <span class="vname"><%= V[k].icon %> <%= V[k].name %></span>
+        <span class="vname"><span class="ds-ic" aria-hidden="true"><%= V[k].icon %></span> <%= V[k].name %></span>
         <span class="price"><%= price(snap.prices[k]) %> <small>PAT / share</small></span>
         <div class="kv">
           <% if (k === 'auto') { %>
@@ -141,15 +146,15 @@
       </div>
     <% }) %>
   </div>
-  <div class="stats" style="margin-top:12px">
-    <div class="stat"><span>🏦 Bank cash</span><b><%= fmt(snap.bank_cash) %></b><em><%= fmt(Math.max(0, snap.nav.bank - snap.bank_cash)) %> lent out</em></div>
-    <div class="stat"><span>📈 Market maker cash</span><b><%= fmt(snap.mm_cash) %></b><em><%= fmt(Math.max(0, snap.nav.mm - snap.mm_cash)) %> committed to markets</em></div>
-    <div class="stat"><span>🎟️ Lotto pot</span><b class="gold"><%= fmt(snap.lotto_pot) %></b></div>
-    <% if (snap.heist_vault != null) { %><div class="stat"><span>🎰 Casino vault</span><b><%= fmt(snap.heist_vault) %></b><em>what casino heists rob</em></div><% } %>
+  <div class="ds-stats">
+    <div class="ds-stat"><span>🏦 Bank cash</span><b><%= fmt(snap.bank_cash) %></b><em><%= fmt(Math.max(0, snap.nav.bank - snap.bank_cash)) %> lent out</em></div>
+    <div class="ds-stat"><span>📈 Market maker cash</span><b><%= fmt(snap.mm_cash) %></b><em><%= fmt(Math.max(0, snap.nav.mm - snap.mm_cash)) %> committed to markets</em></div>
+    <div class="ds-stat"><span>🎟️ Lotto pot</span><b class="gold"><%= fmt(snap.lotto_pot) %></b></div>
+    <% if (snap.heist_vault != null) { %><div class="ds-stat"><span>🎰 Casino vault</span><b><%= fmt(snap.heist_vault) %></b><em>what casino heists rob</em></div><% } %>
   </div>
 
   <!-- ───────── The weekly settlement (Economy v3) + the older daily dividends ───────── -->
-  <h2>WEEKLY SETTLEMENT</h2>
+  <h2 class="ds-pixel-h">WEEKLY SETTLEMENT</h2>
   <% const divs = snap.dividends || [];
      const nowS = Date.now() / 1000;
      const sumSince = (k, days) => divs.filter((x) => x.vault === k && x.ts >= nowS - days * 86400).reduce((a, x) => a + x.amount, 0);
@@ -160,7 +165,7 @@
     that pays everyone's rewards. Stakers' shares are never touched. <a href="/economy#incentives">How it works</a></p>
   <p class="info">The table below is the older daily protocol dividend, which paid the protocol's earnings straight to the
     Federal Reserve before the weekly settlement replaced it.</p>
-  <div class="tbl"><table>
+  <div class="ds-tbl"><table>
     <tr><th>Vault</th><th class="r">Value now</th><th class="r">Target</th><th class="r">Paid · 7 days</th><th class="r">Paid · 30 days</th><th class="r">Paid · all</th></tr>
     <% ['bank', 'house', 'mm'].forEach((k) => { %>
       <tr><td><%= V[k].icon %> <%= V[k].name %></td>
@@ -171,8 +176,8 @@
     <% }) %>
   </table></div>
   <% if (divs.length) { %>
-    <details style="margin-top:8px"><summary class="info" style="cursor:pointer">Recent payouts (<%= divs.length %>)</summary>
-      <div class="tbl"><table>
+    <details class="more"><summary class="info">Recent payouts (<%= divs.length %>)</summary>
+      <div class="ds-tbl"><table>
         <tr><th>When (UTC)</th><th>Vault</th><th class="r">PAT to the Reserve</th></tr>
         <% divs.slice().reverse().slice(0, 30).forEach((x) => { %>
           <tr><td><%= when(x.ts) %></td><td><%= V[x.vault].icon %> <%= V[x.vault].name %></td><td class="r"><%= fmt(x.amount) %></td></tr>
@@ -188,7 +193,7 @@
     <% if (snap.updated) { %>Updated <%= when(snap.updated / 1000) %> UTC.<% } %></p>
 
   <!-- ───────── Share price chart ───────── -->
-  <h2>SHARE PRICE</h2>
+  <h2 class="ds-pixel-h">SHARE PRICE</h2>
   <% const ts = chart.ts;
      const vals = [];
      KEYS.forEach((k) => (chart.series[k] || []).forEach((v) => { if (v != null) vals.push(v); }));
@@ -209,13 +214,13 @@
       <svg viewBox="0 0 <%= W %> <%= H %>" role="img" aria-label="Share price per vault, normalised to 1.0 at the first cut-off">
         <% ticks.forEach((v) => { %>
           <line x1="<%= L %>" y1="<%= Y(v) %>" x2="<%= W - R %>" y2="<%= Y(v) %>" stroke="#1f1f1f"/>
-          <text x="<%= L - 6 %>" y="<%= Number(Y(v)) + 6 %>" fill="#888" font-size="17" text-anchor="end"><%= v.toFixed(3) %></text>
+          <text x="<%= L - 6 %>" y="<%= Number(Y(v)) + 6 %>" fill="#9a9a9a" font-size="17" text-anchor="end"><%= v.toFixed(3) %></text>
         <% }) %>
         <line x1="<%= L %>" y1="<%= Y(1) %>" x2="<%= W - R %>" y2="<%= Y(1) %>" stroke="#444" stroke-dasharray="4 4"/>
         <line x1="<%= L %>" y1="<%= T %>" x2="<%= L %>" y2="<%= H - B %>" stroke="#333"/>
         <line x1="<%= L %>" y1="<%= H - B %>" x2="<%= W - R %>" y2="<%= H - B %>" stroke="#333"/>
         <% xl.forEach((i, n) => { %>
-          <text x="<%= X(ts[i]) %>" y="<%= H - 6 %>" fill="#888" font-size="17" text-anchor="<%= n === 0 ? 'start' : n === 2 ? 'end' : 'middle' %>"><%= day(ts[i]) %></text>
+          <text x="<%= X(ts[i]) %>" y="<%= H - 6 %>" fill="#9a9a9a" font-size="17" text-anchor="<%= n === 0 ? 'start' : n === 2 ? 'end' : 'middle' %>"><%= day(ts[i]) %></text>
         <% }) %>
         <% KEYS.forEach((k) => segs(chart.series[k] || []).forEach((pts) => { %>
           <polyline fill="none" stroke="<%= V[k].color %>" stroke-width="2" stroke-linejoin="round" points="<%= pts.join(' ') %>"/>
@@ -225,16 +230,16 @@
         <% KEYS.forEach((k) => { const sr = (chart.series[k] || []).filter((v) => v != null); const last = sr[sr.length - 1]; %>
           <span><i style="background: <%= V[k].color %>"></i><%= V[k].name %><%= last != null ? ' ' + ((last - 1) * 100 >= 0 ? '+' : '') + ((last - 1) * 100).toFixed(2) + '%' : '' %></span>
         <% }) %>
-        <span style="margin-left:auto;color:#888">1.0 = price at <%= day(t0) %> · <%= ts.length %> cut-offs</span>
+        <span class="lg-note">1.0 = price at <%= day(t0) %> · <%= ts.length %> cut-offs</span>
       </div>
     </div>
   <% } %>
 
   <!-- ───────── Revenue by source ───────── -->
-  <h2>REVENUE BY SOURCE</h2>
+  <h2 class="ds-pixel-h">REVENUE BY SOURCE</h2>
   <% if (!rev.length) { %><p class="info">No cut-offs yet.</p><% } else { %>
-    <input class="tabsel" type="radio" name="rv" id="rv7" checked>
-    <input class="tabsel" type="radio" name="rv" id="rv30">
+    <input class="tabsel ds-sr-only" type="radio" name="rv" id="rv7" checked>
+    <input class="tabsel ds-sr-only" type="radio" name="rv" id="rv30">
     <div class="tabs"><label for="rv7">Last 7 days</label><label for="rv30">Last 30 days</label></div>
     <% rev.forEach((r) => { %>
       <div class="rvp d<%= r.days %>">
@@ -242,8 +247,8 @@
           <% [['bank', V.bank.icon + ' Bank'], ['jackpot', V.house.icon + ' House'], ['mm', V.mm.icon + ' Market maker'], ['lotto', '🎟️ Lotto']].forEach(([acct, title]) => { const a = r.accounts[acct]; %>
             <div class="card">
               <h4><%= title %></h4>
-              <div class="tbl"><table>
-                <% if (!a.in.length && !a.out.length) { %><tr><td style="color:#888">Nothing moved.</td></tr><% } %>
+              <div class="ds-tbl"><table>
+                <% if (!a.in.length && !a.out.length) { %><tr><td class="mut">Nothing moved.</td></tr><% } %>
                 <% a.in.forEach((x) => { %><tr><td><%= x.k %></td><td class="r up">+<%= fmt(x.v) %></td></tr><% }) %>
                 <% a.out.forEach((x) => { %><tr><td><%= x.k %></td><td class="r down">−<%= fmt(x.v) %></td></tr><% }) %>
                 <tr class="tot"><td>Net</td><td class="r <%= a.net >= 0 ? 'up' : 'down' %>"><%= (a.net >= 0 ? '+' : '−') + fmt(Math.abs(a.net)) %></td></tr>
@@ -257,19 +262,19 @@
   <% } %>
 
   <!-- ───────── Your stakes ───────── -->
-  <h2>YOUR STAKES</h2>
+  <h2 class="ds-pixel-h">YOUR STAKES</h2>
   <% if (!signedIn) { %>
     <p class="info"><a href="/login">Sign in</a> to see and manage your stashes' stakes.</p>
   <% } else if (!camfrog) { %>
-    <p class="hint">Link your Camfrog name (<code>!verify</code>) to stake from here — Pepe runs it as you.</p>
+    <p class="ds-note warn hint">Link your Camfrog name (<code>!verify</code>) to stake from here — Pepe runs it as you.</p>
   <% } else if (!mine.length) { %>
     <p class="info">You don't own or share a stash yet. <a href="/wallet">Create one in your wallet ›</a></p>
   <% } else { %>
-    <div class="tbl"><table>
+    <div class="ds-tbl"><table>
       <tr><th>Stash</th><th>Vault</th><th class="r">Shares</th><th class="r">Price</th><th class="r">Value</th></tr>
       <% let grand = 0; mine.forEach((m) => { const rows = KEYS.filter((k) => m.hold[k]); grand += m.total; %>
         <% if (!rows.length) { %>
-          <tr><td><%- UL(m.owner) %>/<%= m.name %></td><td colspan="4" style="color:#888">nothing staked</td></tr>
+          <tr><td><%- UL(m.owner) %>/<%= m.name %></td><td colspan="4" class="mut">nothing staked</td></tr>
         <% } %>
         <% rows.forEach((k, i) => { %>
           <tr><td><%- i === 0 ? UL(m.owner) + '/' + ULE(m.name) : '' %></td><td><%= V[k].icon %> <%= V[k].name %></td>
@@ -277,7 +282,7 @@
             <td class="r"><%= price(snap.prices[k]) %></td><td class="r"><%= fmt(m.hold[k].value) %></td></tr>
         <% }) %>
         <% m.pending.forEach((q) => { %>
-          <tr><td></td><td colspan="4" style="color:#e8d9a0">⏳ <%= q.kind %> <%= q.amount ? fmt(q.amount) + ' PAT' : q.shares ? q.shares.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' shares' : '' %>
+          <tr><td></td><td colspan="4" class="pend">⏳ <%= q.kind %> <%= q.amount ? fmt(q.amount) + ' PAT' : q.shares ? q.shares.toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' shares' : '' %>
             <%= q.kind === 'withdraw' ? 'from' : 'into' %> <%= (V[q.vault] || { name: q.vault }).name %> · <%= q.state || 'queued' %><%= q.ts ? ' · ' + when(q.ts) + ' UTC' : '' %></td></tr>
         <% }) %>
       <% }) %>
@@ -286,7 +291,7 @@
 
     <div class="forms">
       <form method="post" action="/act"><%- hidden('stash') %>
-        <b>📥 Stake</b>
+        <b><span class="ds-ic" aria-hidden="true">📥</span> Stake</b>
         <input type="hidden" name="a0" value="stake">
         <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner %>/<%= m.name %></option><% }) %></select>
         <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
@@ -295,7 +300,7 @@
         <span class="info">Moves PAT from the stash into the vault at the next daily cut-off, at that day's share price.</span>
       </form>
       <form method="post" action="/act"><%- hidden('stash') %>
-        <b>📤 Unstake</b>
+        <b><span class="ds-ic" aria-hidden="true">📤</span> Unstake</b>
         <input type="hidden" name="a0" value="unstake">
         <select name="a1"><% mine.forEach((m) => { %><option value="<%= m.ref %>"><%= m.owner %>/<%= m.name %></option><% }) %></select>
         <input type="text" name="a2" pattern="[Aa][Ll][Ll]|[0-9][0-9,]*[kKmM]?" placeholder="amount or all" required>
@@ -314,6 +319,6 @@
       tick(); setInterval(tick, 1000);
     })();
   </script>
-</div>
+</main>
 </body>
 </html>

@@ -4,54 +4,62 @@
     web-tip notes, "Balance carried over" ledger rows), grouped by day with a daily net, sticky filters and a phone layout.
     The search box only filters the rows already on this page (no new query). -%>
 <style>
-  .hx { max-width: 980px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 18px 16px 56px; font-family: Ubuntu, sans-serif; color: #e6e6e6; overflow-wrap: anywhere; display: grid; gap: 16px; }
-  .hx *, .hx *::before, .hx *::after { box-sizing: border-box; }
-  .hx a { color: #81c784; text-decoration: none; }
-  .hx a:hover { text-decoration: underline; }
-  .hx .hero { background: radial-gradient(110% 140% at 0% 0%, #2a2208 0%, #111 55%), #111; border: 1px solid #2a2a2a; border-radius: 18px; padding: 20px 22px; display: grid; gap: 10px; }
-  .hx .eyebrow { font-family: 'Press Start 2P', monospace; font-size: 10px; letter-spacing: .12em; color: #ffcf40; line-height: 1.6; }
-  .hx h1 { margin: 0; font-size: clamp(26px, 5vw, 36px); line-height: 1.1; }
-  .hx .who { color: #aaa; margin: 0; font-size: 14px; }
-  .hx .who b { color: #fff; }
-  .hx .err { background: #2a1212; border: 1px solid #6b2a2a; color: #f2b8b8; border-radius: 12px; padding: 10px 14px; margin: 0; }
-  .hx .empty { text-align: center; color: #888; padding: 28px 0; margin: 0; }
-  .hx .tot3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .hx .tot3 div { background: rgba(0,0,0,.35); border: 1px solid #2c2c2c; border-radius: 12px; padding: 8px 12px; min-width: 0; }
-  .hx .tot3 span { display: block; color: #9a9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-  .hx .tot3 b { font-size: clamp(13px, 3.8vw, 20px); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .hx form.look { display: flex; gap: 8px; flex-wrap: wrap; margin: 0; }
-  .hx input, .hx select, .hx button { background: #0d0d0d; color: #eee; border: 1px solid #333; border-radius: 8px; padding: 8px 10px; min-height: 38px; font: inherit; font-size: 14px; min-width: 0; }
+  /* 1.99pr polish: .ds-page.mid + ds tokens (gold hero, tab-pill filters in a .ds-subnav bar, day cards) */
+  .hx { gap: var(--ds-sp-4); }
+  .hx a:not(.ds-btn) { text-decoration: none; }
+  .hx .hero { gap: var(--ds-sp-2h); }
+  .hx .who { color: var(--ds-text-2); margin: 0; font-size: var(--ds-fs-sm); }
+  .hx .who b { color: var(--ds-text-strong); }
+  .hx .err { margin: 0; }
+  .hx .empty { margin: 0; }
+  .hx .tot3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--ds-sp-2); max-width: 560px; }
+  .hx .tot3 div { background: var(--ds-glass); border: 1px solid #2c2c2c; border-radius: var(--ds-r-md); padding: var(--ds-sp-2h) var(--ds-sp-3); min-width: 0; display: grid; gap: 2px; }
+  .hx .tot3 span { color: var(--ds-text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: var(--ds-ls-label); }
+  .hx .tot3 b { font-size: clamp(14px, 3.8vw, 20px); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hx form.look { display: flex; gap: var(--ds-sp-2); flex-wrap: wrap; margin: 0; }
+  .hx form.look input, .hx .frow input { box-sizing: border-box; margin: 0; min-height: var(--ds-tap); min-width: 0; padding: 10px 12px; border-radius: var(--ds-r-md); border: 1px solid var(--ds-line-strong);
+       background: var(--ds-sunken); color: #eee; font: 400 15px/1.3 var(--ds-font); }
+  .hx form.look input:hover, .hx .frow input:hover { border-color: #444; }
+  .hx form.look input:focus, .hx .frow input:focus { outline: none; border-color: var(--ds-ac); box-shadow: 0 0 0 3px var(--ds-ac-bg); }
+  .hx input::placeholder { color: #777; }
   .hx form.look input { flex: 1 1 200px; }
-  .hx button { cursor: pointer; background: #1f1f1f; font-weight: bold; }
-  .hx input:focus-visible, .hx button:focus-visible, .hx a:focus-visible, .hx summary:focus-visible { outline: 2px solid #ffcf40; outline-offset: 2px; }
-  /* sticky filters */
-  .hx .filters { position: sticky; top: 0; z-index: 6; background: rgba(10,10,10,.94); backdrop-filter: blur(6px); border: 1px solid #222; border-radius: 14px; padding: 8px; display: grid; gap: 8px; min-width: 0; }
-  .hx .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; min-width: 0; }
+  /* sticky filters: period + category pills (the .ds-tab look; .on = current) */
+  .hx .filters { display: grid; gap: var(--ds-sp-2); min-width: 0; }
+  .hx .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; min-width: 0; padding: 2px; margin: -2px; }
   .hx .chips::-webkit-scrollbar { display: none; }
-  .hx .chips a { flex: none; padding: 6px 11px; border: 1px solid #2a2a2a; border-radius: 999px; color: #ccc; text-decoration: none; font-size: 13px; background: #151515; white-space: nowrap; }
-  .hx .chips a.on { border-color: #ffcf40; color: #2a1600; background: linear-gradient(90deg, #ffcf40, #ff8a3d); font-weight: bold; }
-  .hx .chips a:hover { border-color: #ffcf40; text-decoration: none; }
-  .hx .chips a .mut { color: inherit; opacity: .7; }
-  .hx .frow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .hx .frow input { flex: 1 1 180px; }
-  .hx .frow .cnt { color: #888; font-size: 12px; }
+  .hx .chips a { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--ds-sp-3h); border: 1px solid #2a2a2a; border-radius: var(--ds-r-pill);
+       background: #151515; color: #ccc; font: 500 var(--ds-fs-meta)/1 var(--ds-font); white-space: nowrap; transition: border-color var(--ds-dur-1), color var(--ds-dur-1); }
+  .hx .chips a:hover { border-color: var(--ds-ac); color: #fff; }
+  .hx .chips a.on { border-color: var(--ds-ac); background: var(--ds-ac-bg); color: #fff; }
+  .hx .chips a:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+  .hx .chips a .mut { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); font-variant-numeric: tabular-nums; }
+  @media (pointer: coarse) { .hx .chips a { min-height: 40px; } }
+  .hx .frow { display: flex; gap: var(--ds-sp-2); align-items: center; flex-wrap: wrap; }
+  .hx .frow input { flex: 1 1 180px; min-height: 40px; padding-block: 8px; }
+  .hx .frow .cnt { color: var(--ds-text-muted); font-size: var(--ds-fs-xs); }
   /* category totals */
-  .hx details.cats summary { cursor: pointer; color: #bbb; font-size: 14px; padding: 4px 2px; }
-  .hx .sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 8px; margin-top: 8px; }
-  .hx .sum a { background: #121212; border: 1px solid #262626; border-radius: 12px; padding: 10px 12px; text-decoration: none; color: #ddd; display: grid; gap: 3px; }
-  .hx .sum a.on { border-color: #ffcf40; }
-  .hx .sum a:hover { border-color: #4caf50; text-decoration: none; }
-  .hx .sum .l { font-weight: bold; }
-  .hx .sum .n { font-size: 13px; font-variant-numeric: tabular-nums; }
-  .hx .pos { color: #66bb6a; } .hx .neg { color: #ef5350; } .hx .mut { color: #888; }
+  .hx details.cats summary { cursor: pointer; color: var(--ds-text-2); font-size: var(--ds-fs-sm); min-height: 36px; display: flex; align-items: center; gap: var(--ds-sp-2); }
+  .hx details.cats summary::before { content: "▸"; color: var(--ds-text-muted); }
+  .hx details.cats[open] summary::before { content: "▾"; }
+  .hx details.cats summary::-webkit-details-marker { display: none; }
+  .hx details.cats summary { list-style: none; background: none; }
+  .hx .sum { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: var(--ds-sp-2); margin-top: var(--ds-sp-2); }
+  .hx .sum a { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-lg); padding: var(--ds-sp-2h) var(--ds-sp-3); color: var(--ds-text); display: grid; gap: 3px; min-width: 0;
+       transition: border-color var(--ds-dur-1); }
+  .hx .sum a.on { border-color: var(--ds-ac); background: linear-gradient(180deg, var(--ds-ac-bg), transparent 70%), var(--ds-surface); }
+  .hx .sum a:hover { border-color: var(--ds-ac); }
+  .hx .sum .l { font-weight: 700; color: var(--ds-text-strong); }
+  .hx .sum .n { font-size: var(--ds-fs-meta); font-variant-numeric: tabular-nums; color: var(--ds-text-muted); }
+  .hx .pos { color: var(--ds-ok); } .hx .neg { color: var(--ds-danger-solid); } .hx .mut { color: var(--ds-text-muted); }
   /* day groups */
-  .hx .daycard { background: #121212; border: 1px solid #262626; border-radius: 16px; overflow: hidden; }
-  .hx .dayh { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 14px; background: #171717; border-bottom: 1px solid #222; }
-  .hx .day { color: #ffd700; font-family: 'Press Start 2P', monospace; font-size: 10px; line-height: 1.6; margin: 0; }
-  .hx .dnet { font-size: 13px; font-variant-numeric: tabular-nums; font-weight: bold; white-space: nowrap; }
-  .hx .row2 { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #1c1c1c; }
+  .hx #hxList { display: grid; gap: var(--ds-sp-3); }
+  .hx .daycard { background: var(--ds-surface); border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); overflow: hidden; }
+  .hx .dayh { display: flex; justify-content: space-between; align-items: center; gap: var(--ds-sp-2); padding: var(--ds-sp-2h) var(--ds-sp-4); background: var(--ds-surface-2); border-bottom: 1px solid var(--ds-line-soft); }
+  .hx .day { font-size: 10px; }
+  .hx .dnet { font-size: var(--ds-fs-meta); font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+  .hx .row2 { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: var(--ds-sp-2h); align-items: center; min-height: var(--ds-tap); padding: var(--ds-sp-2h) var(--ds-sp-4); border-bottom: 1px solid var(--ds-line-soft); }
   .hx .row2:last-child { border-bottom: 0; }
-  .hx .row2 .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 16px; background: #1b1b1b; border: 1px solid #262626; }
+  .hx .row2 .ic { width: 36px; height: 36px; border-radius: var(--ds-r-md); display: grid; place-items: center; font-family: var(--ds-font-emoji); font-size: 18px; line-height: 1; background: #1a1a1a; border: 1px solid var(--ds-line); }
   .hx .row2[data-cat=wheel] .ic { background: #241c08; border-color: #4a3a10; }
   .hx .row2[data-cat=casino] .ic { background: #241212; border-color: #4a2020; }
   .hx .row2[data-cat=heist] .ic { background: #16141f; border-color: #2e2840; }
@@ -60,25 +68,25 @@
   .hx .row2[data-cat=shop] .ic { background: #1f1024; border-color: #3d2048; }
   .hx .row2[data-cat=pepe] .ic { background: #122012; border-color: #2a4a2a; }
   .hx .row2[data-cat=rewards] .ic { background: #24200a; border-color: #4a4210; }
-  .hx .row2 .tx { min-width: 0; line-height: 1.4; font-size: 14px; }
-  .hx .row2 .tm { display: block; color: #808080; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 1px; }
-  .hx .row2 .am { text-align: right; font-variant-numeric: tabular-nums; font-weight: bold; white-space: nowrap; font-size: 14px; }
-  .hx .row2 .am small { display: block; font-weight: normal; color: #777; font-size: 11px; }
+  .hx .row2 .tx { min-width: 0; line-height: 1.4; font-size: var(--ds-fs-sm); color: var(--ds-text); }
+  .hx .row2 .tm { display: block; color: var(--ds-text-faint); font-size: var(--ds-fs-xs); font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .hx .row2 .am { text-align: end; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; font-size: var(--ds-fs-sm); }
+  .hx .row2 .am small { display: block; font-weight: 700; color: var(--ds-text-faint); font-size: 11px; letter-spacing: .02em; }
   .hx .row2.adj { background: repeating-linear-gradient(135deg, #141414 0 8px, #171717 8px 16px); }
   .hx .row2.adj .ic { background: #1a1a1a; border-style: dashed; }
-  .hx .adjb { display: inline-block; font-size: 10px; font-weight: bold; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; border: 1px dashed #777; color: #bbb; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
-  .hx .cp { color: #81c784; border-bottom: 1px dotted #557; text-decoration: none; }
+  .hx .adjb { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: var(--ds-r-pill); border: 1px dashed #777; color: var(--ds-text-2); margin-inline-start: 4px; vertical-align: 1px; white-space: nowrap; }
+  .hx .cp { color: var(--ds-green-2); border-bottom: 1px dotted #557; }
   .hx a.cp:hover { color: #a5d6a7; }
-  .hx .tnote { font-size: 12px; color: #b9b9a0; font-style: italic; margin-top: 2px; overflow-wrap: anywhere; }
-  .hx .pager { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
-  .hx .pager a { padding: 8px 14px; border: 1px solid #2a2a2a; border-radius: 10px; background: #151515; }
-  .hx .pager a:hover { border-color: #ffcf40; text-decoration: none; }
-  .hx [hidden] { display: none !important; }
-  @media (max-width: 520px) { .hx .hero { padding: 16px; } .hx .row2 { padding: 9px 10px; gap: 8px; grid-template-columns: 30px minmax(0, 1fr) auto; } .hx .row2 .ic { width: 30px; height: 30px; font-size: 14px; } .hx .row2 .tx, .hx .row2 .am { font-size: 13px; } }
+  .hx .tnote { font-size: var(--ds-fs-xs); color: #b9b9a0; font-style: italic; margin-top: 2px; overflow-wrap: anywhere; }
+  .hx .pager { margin-block-start: 0; }
+  .hx .pager > span.mut { border: 0; background: none; color: var(--ds-text-muted); font-weight: 500; }
+  @media (max-width: 760px) { .hx form.look input, .hx .frow input { font-size: 16px; } }
+  @media (max-width: 520px) { .hx .row2 { padding: var(--ds-sp-2h) var(--ds-sp-3); gap: var(--ds-sp-2); grid-template-columns: 32px minmax(0, 1fr) auto; } .hx .row2 .ic { width: 32px; height: 32px; font-size: 16px; } .hx .dayh { padding-inline: var(--ds-sp-3); } }
+  @media (prefers-reduced-motion: reduce) { .hx .chips a, .hx .sum a { transition: none; } }
 </style>
-<main class="hx">
-  <section class="hero" aria-labelledby="hxH">
-    <div class="eyebrow"><%- t('history.eyebrow') %></div>
+<main class="ds-page mid hx">
+  <section class="ds-hero gold hero" aria-labelledby="hxH">
+    <div class="ds-eyebrow"><%- t('history.eyebrow') %></div>
     <h1 id="hxH"><%- t('history.title') %></h1>
     <% if (data) { %>
       <p class="who"><%- t('history.showing') %> <a href="/u/<%= encodeURIComponent(target) %>" style="color:inherit"><b<% if (targetId) { %> class="cp" title="<%= targetId.title %>"<% } %>><%= target %></b></a><% if (targetId && targetId.alt) { %> <span class="mut">(<%= targetId.alt %>)</span><% } %><%- own ? ' ' + t('history.you') : '' %> · <%- t('history.n_tx', { count: data.count, n: data.count.toLocaleString() }) %></p>
@@ -93,11 +101,11 @@
       <form class="look" method="get" action="/history" role="search">
         <input name="user" placeholder="<%- t('history.lookup_ph') %>" aria-label="<%- t('history.lookup_ph') %>" value="<%= target || '' %>">
         <input type="hidden" name="period" value="<%= period %>">
-        <button type="submit"><%- t('history.lookup') %></button>
+        <button class="ds-btn ghost" type="submit"><%- t('history.lookup') %></button>
       </form>
     <% } %>
   </section>
-  <% if (error) { %><p class="err" role="alert"><%= error %></p><% } %>
+  <% if (error) { %><p class="ds-note danger err" role="alert"><%= error %></p><% } %>
   <% if (data) { %>
     <% const q = (o) => '/history?' + new URLSearchParams(Object.assign({ user: target, period, cat: cat || '' }, o)).toString();
        const PERIODS = [['7d', t('history.p7')], ['30d', t('history.p30')], ['90d', t('history.p90')], ['all', t('history.pall')]];
@@ -106,7 +114,7 @@
        // the ledger's own bookkeeping rows (carried-over balance, merges, archive/restore) - shown, but marked as adjustments
        const ADJ = /^(ledger-correction|balance-zeroed|stale-reclaim|stale-restore|camfrog-merge|account merge)$/i;
        let ain = 0, aout = 0; Object.values(data.totals).forEach(x => { ain += x.in; aout += x.out; }); %>
-    <div class="filters">
+    <div class="filters ds-subnav">
       <nav class="chips" aria-label="<%- t('history.period_label') %>">
         <% PERIODS.forEach(([p, l]) => { %>
           <a class="<%= p === period ? 'on' : '' %>" href="<%= q({ period: p, page: 1 }) %>"<%- p === period ? ' aria-current="true"' : '' %>><%- l %></a>
@@ -154,10 +162,10 @@
          g.net += it.points;
          g.rows.push({ it, tm });
        }); %>
-    <div id="hxList" style="display:grid;gap:12px">
+    <div id="hxList">
     <% groups.forEach((g) => { %>
       <section class="daycard" aria-label="<%= g.day %>">
-        <div class="dayh"><h2 class="day"><%= g.day %></h2><span class="dnet <%= g.net >= 0 ? 'pos' : 'neg' %>" title="<%- t('history.day_net') %>"><%= sign(g.net) %></span></div>
+        <div class="dayh"><h2 class="ds-pixel-h day"><%= g.day %></h2><span class="dnet <%= g.net >= 0 ? 'pos' : 'neg' %>" title="<%- t('history.day_net') %>"><%= sign(g.net) %></span></div>
         <% g.rows.forEach(({ it, tm }) => { const adj = ADJ.test(String(it.rawType || '')); %>
           <div class="row2<%= adj ? ' adj' : '' %>" data-cat="<%= it.cat %>">
             <div class="ic" aria-hidden="true"><%= it.icon %></div>
@@ -168,9 +176,9 @@
       </section>
     <% }) %>
     </div>
-    <% if (!data.items.length) { %><p class="empty"><%- t('history.nothing') %></p><% } %>
-    <p class="empty" id="hxNone" hidden><%- t('history.no_match') %></p>
-    <nav class="pager" aria-label="<%- t('history.pages_label') %>">
+    <% if (!data.items.length) { %><p class="ds-empty empty"><%- t('history.nothing') %></p><% } %>
+    <p class="ds-empty empty" id="hxNone" hidden><%- t('history.no_match') %></p>
+    <nav class="ds-pager pager" aria-label="<%- t('history.pages_label') %>">
       <% if (data.page > 1) { %><a href="<%= q({ page: data.page - 1 }) %>" rel="prev"><%- t('history.newer') %></a><% } %>
       <span class="mut"><%- t('history.page_of', { page: data.page, pages: data.pages }) %></span>
       <% if (data.page < data.pages) { %><a href="<%= q({ page: data.page + 1 }) %>" rel="next"><%- t('history.older') %></a><% } %>

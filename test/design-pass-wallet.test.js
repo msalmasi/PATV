@@ -56,7 +56,7 @@ test.after(() => server.close());
 
 test("/wallet: balance up front, quick actions, recent activity and every form it had", async () => {
   const html = await (await fetch(base + "/wallet", { headers: { "x-test-user": "u1" } })).text();
-  assert.match(html, /<h1 id="wlH" class="bal"><b>1,234,567<\/b> <span>PAT<\/span><\/h1>/);
+  assert.match(html, /<h1 id="wlH" class="bal ds-pat xl"><b>1,234,567<\/b> <span>PAT<\/span><\/h1>/);
   for (const href of ['href="#send"', 'href="/history"', 'href="/subscriptions"', 'href="/support"', 'href="/u/alice/tip"']) assert.ok(html.includes(href), href);
   assert.match(html, /id="activity"[\s\S]*Recent activity[\s\S]*Won 25,000 PAT on the gold wheel/);
   assert.match(html, /<form class="card" id="send" method="get" action="\/search"/, "send/tip works without JS too (search)");

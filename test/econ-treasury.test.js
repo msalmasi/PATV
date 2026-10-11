@@ -199,10 +199,10 @@ test("/economy explains the budget only while it's live", async () => {
   const opts = { views: [path.join(repo, "views")] };
   const off = await ejs.renderFile(view, { user: null, treasury: null, ogBase: "http://t" }, opts);
   assert.match(off, /Coming soon/);
-  assert.doesNotMatch(off, /📅 The weekly settlement/);
+  assert.doesNotMatch(off, /📅<\/span> The weekly settlement/);
   live(1234567, { welcome: 1500000, levelup: 1400000, achievements: 2100000, misc: 350000 });
   const on = await ejs.renderFile(view, { user: null, treasury: F.state.incentives, ogBase: "http://t" }, opts);
-  assert.match(on, /📅 The weekly settlement/);
+  assert.match(on, /📅<\/span> The weekly settlement/);   // the emoji sits in a .ds-ic box (1.99pj polish)
   assert.match(on, /1,234,567 PAT/);
   assert.doesNotMatch(on, /Coming soon/);
 });

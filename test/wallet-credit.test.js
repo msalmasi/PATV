@@ -64,7 +64,7 @@ const page = async (u, p = "/wallet") => (await fetch(base + p, { headers: u ? {
 
 test("my credit score, band and factors sit next to my borrow limit", async () => {
   const h = await (await page("u1")).text();
-  assert.match(h, /📊 Your credit score/);
+  assert.match(h, /📊<\/span> Your credit score/);
   assert.match(h, /<span class="num">721<\/span>/);
   assert.match(h, /class="band good">Good/);
   assert.match(h, /3 loans repaid on time<\/span><b class="up">\+60/);
