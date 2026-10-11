@@ -23,26 +23,27 @@
   const when_ = lotto_ && V_.next_at ? (typeof tzTime === 'function' ? tzTime(V_.next_at, 'full') : t.esc(V_.draw || '')) : '';
 %>
 <style>
-  .bn { position: relative; display: block; margin: 14px 0 0; border: 1px solid #262626; border-radius: 14px; background: linear-gradient(90deg, #121a14, #111 60%); overflow: hidden; min-width: 0; }
-  .bn.paid { background: #111; }
-  .bn-a { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 64px; padding: 12px 16px 12px 16px; color: #e8e8e8; text-decoration: none; min-width: 0; }
+  /* G6 polish: ds tokens, radius 16 (a card), logical properties, 44px CTAs; the homepage grid gives the spacing (no own margin) */
+  .bn { position: relative; display: block; margin: 0; border: 1px solid var(--ds-line); border-radius: var(--ds-r-xl); background: linear-gradient(90deg, var(--ds-green-bg), var(--ds-surface) 60%); overflow: hidden; min-width: 0; }
+  .bn.paid { background: var(--ds-surface); }
+  .bn-a { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 64px; padding: var(--ds-sp-3) var(--ds-sp-4); color: var(--ds-text); text-decoration: none; min-width: 0; }
   a.bn-a:hover .bn-h, a.bn-a:focus-visible .bn-h { text-decoration: underline; }
-  .bn-h { font: bold 16px/1.35 Ubuntu, sans-serif; color: #fff; overflow-wrap: anywhere; padding-right: 92px; }
-  .bn-l { font-size: 14px; color: #b9b9b9; overflow-wrap: anywhere; }
+  .bn-h { font: 700 16px/1.35 var(--ds-font); color: var(--ds-text-strong); overflow-wrap: anywhere; padding-inline-end: 92px; }
+  .bn-l { font-size: var(--ds-fs-sm); color: var(--ds-text-2); overflow-wrap: anywhere; }
   .bn.img .bn-a { padding: 0; min-height: 0; }
   .bn.img img { display: block; width: 100%; height: auto; aspect-ratio: 6 / 1; object-fit: cover; }
-  .bn-lbl { position: absolute; top: 8px; right: 10px; z-index: 2; padding: 1px 8px; border-radius: 999px; background: rgba(0,0,0,.65); border: 1px solid #3a3a3a; color: #bdbdbd; font: 11px/1.6 Ubuntu, sans-serif; letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
-  .bn-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; padding: 4px 16px 8px; font-size: 12px; color: #8a8a8a; }
+  .bn-lbl { position: absolute; top: 8px; inset-inline-end: 10px; z-index: 2; padding: 1px 8px; border-radius: var(--ds-r-pill); background: rgba(0,0,0,.65); border: 1px solid #3a3a3a; color: #bdbdbd; font: 700 11px/1.6 var(--ds-font); letter-spacing: .04em; text-transform: uppercase; pointer-events: none; }
+  .bn-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; padding: 4px var(--ds-sp-4) var(--ds-sp-2); font-size: var(--ds-fs-xs); color: var(--ds-text-muted); }
   .bn.img .bn-foot { padding-top: 6px; }
-  .bn-foot a { color: #9a9a9a; }
+  .bn-foot a { color: var(--ds-text-muted); text-decoration: underline; text-underline-offset: 3px; }
 
   /* 1.99kz: house promos - accent colour (--ac / --ac2), icon bubble, call-to-action chip with a slow shine */
-  .bn.hp { --ac: #4caf50; --ac2: #1b3a1f; --acb: #3a5a3e; border-color: var(--acb); background: radial-gradient(120% 140% at 0% 0%, var(--ac2), #111 62%); }
-  .bn.hp .bn-a { flex-direction: row; align-items: center; gap: 14px; padding: 24px 16px 16px; }
-  .bn-ic { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; font-size: 24px; background: rgba(0,0,0,.35); border: 1px solid var(--acb); }
+  .bn.hp { --ac: #4caf50; --ac2: #1b3a1f; --acb: #3a5a3e; border-color: var(--acb); background: radial-gradient(120% 140% at 0% 0%, var(--ac2), var(--ds-surface) 62%); }
+  .bn.hp .bn-a { flex-direction: row; align-items: center; gap: var(--ds-sp-3h); padding: var(--ds-sp-6) var(--ds-sp-4) var(--ds-sp-4); }
+  .bn-ic { flex: none; display: grid; place-items: center; width: 46px; height: 46px; border-radius: var(--ds-r-lg); font: 24px/1 var(--ds-font-emoji); background: rgba(0,0,0,.35); border: 1px solid var(--acb); }
   .bn-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
-  .bn.hp .bn-h { padding-right: 0; }
-  .bn-cta { box-sizing: border-box; flex: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 15px; border-radius: 999px; font: bold 14px/1 Ubuntu, sans-serif; color: #141414; background: var(--ac); white-space: nowrap; }
+  .bn.hp .bn-h { padding-inline-end: 0; }
+  .bn-cta { box-sizing: border-box; flex: none; position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 var(--ds-sp-5); border-radius: var(--ds-r-pill); font: 700 15px/1.1 var(--ds-font); color: #141414; background: var(--ac); white-space: nowrap; }
   .bn-cta::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); transform: translateX(-120%); animation: bnShine 4.5s ease-in-out 1.2s infinite; }
   a.bn-a:hover .bn-cta, a.bn-a:focus-visible .bn-cta { filter: brightness(1.12); }
   .bn.k-season_pass { --ac: #ffd54f; --ac2: #3a3010; --acb: #6b5a20; }
@@ -52,34 +53,34 @@
   .bn.k-support { --ac: #ff7c9c; --ac2: #3d0f1d; --acb: #7a2440; }
 
   /* Pepeball: the lotto card */
-  .bn.k-lotto { --ac: #ffd740; border-color: #6a4a9c; background: radial-gradient(90% 160% at 100% 0%, rgba(255,215,64,.18), transparent 55%), linear-gradient(120deg, #2a0f4a, #3d1460 45%, #1b0b30); }
-  .bn.k-lotto .bn-a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 18px; padding: 16px 18px; }
+  .bn.k-lotto { --ac: var(--ds-gold); border-color: var(--ds-acc-lotto); background: radial-gradient(90% 160% at 100% 0%, rgba(255,215,64,.18), transparent 55%), linear-gradient(120deg, var(--ds-lotto-bg), #3d1460 45%, #1b0b30); }
+  .bn.k-lotto .bn-a { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 6px 18px; padding: var(--ds-sp-4) var(--ds-sp-5); }
   .bn-balls { display: flex; gap: 4px; align-items: flex-end; height: 46px; padding-top: 14px; }
-  .bn-ball { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: bold 11px/1 Ubuntu, sans-serif; color: #222; background: radial-gradient(circle at 35% 30%, #fff, #e8e8e8 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.4); animation: bnBounce 1.8s ease-in-out infinite; }
+  .bn-ball { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 700 11px/1 var(--ds-font); color: #222; background: radial-gradient(circle at 35% 30%, #fff, #e8e8e8 45%, #b8b8b8); box-shadow: 0 2px 4px rgba(0,0,0,.4); animation: bnBounce 1.8s ease-in-out infinite; }
   .bn-ball:nth-child(2) { animation-delay: .2s; } .bn-ball:nth-child(3) { animation-delay: .4s; } .bn-ball:nth-child(4) { animation-delay: .6s; }
   .bn-ball.pb { color: #fff; background: radial-gradient(circle at 35% 30%, #9ef09e, #3fa34d 50%, #1d5c27); animation-delay: .8s; }
-  .bn-kick { font: bold 12px/1.4 Ubuntu, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #e1c7ff; }
-  .bn-jp { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; font: 900 34px/1.05 Ubuntu, sans-serif; color: #ffe082; text-shadow: 0 0 18px rgba(255,215,64,.35); font-variant-numeric: tabular-nums; }
-  .bn-jp small { font-size: 15px; font-weight: bold; color: #ffecb3; letter-spacing: .05em; }
+  .bn-kick { font: 700 var(--ds-fs-label)/1.4 var(--ds-font); letter-spacing: var(--ds-ls-label); text-transform: uppercase; color: var(--ds-acc-lotto-2); }
+  .bn-jp { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; font: 700 34px/1.05 var(--ds-font); color: var(--ds-gold-text); text-shadow: 0 0 18px rgba(255,215,64,.35); font-variant-numeric: tabular-nums; }
+  .bn-jp small { font-size: 15px; font-weight: 700; color: #ffecb3; letter-spacing: .05em; }
   .bn-meta { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 13px; color: #d9c8f0; }
   .bn-meta b { color: #fff; font-variant-numeric: tabular-nums; }
   .bn-meta time { color: #d9c8f0; }
-  .bn.k-lotto .bn-cta { padding: 12px 20px; font-size: 15px; color: #2a0f4a; background: linear-gradient(180deg, #ffe57f, #ffc400); box-shadow: 0 3px 14px rgba(255,196,0,.45); }
-  .bn.k-lotto .bn-lbl { background: rgba(20,6,36,.7); border-color: #6a4a9c; color: #e1c7ff; }
+  .bn.k-lotto .bn-cta { min-height: 52px; padding: 0 var(--ds-sp-6); font-size: 16px; color: var(--ds-on-gold); background: var(--ds-gold-grad); box-shadow: 0 3px 14px rgba(255,196,0,.35); }
+  .bn.k-lotto .bn-lbl { background: rgba(20,6,36,.7); border-color: var(--ds-acc-lotto); color: var(--ds-acc-lotto-2); }
 
   @keyframes bnShine { 0%, 70% { transform: translateX(-120%); } 100% { transform: translateX(120%); } }
   @keyframes bnBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
   @media (prefers-reduced-motion: reduce) { .bn-cta::after, .bn-ball { animation: none; } }
 
-  @media (max-width: 560px) {
-    .bn-h { font-size: 15px; padding-right: 0; padding-top: 14px; } .bn-a { padding: 10px 12px; } .bn-foot { padding: 4px 12px 8px; }
-    .bn.hp .bn-a { flex-wrap: wrap; gap: 10px 12px; padding: 32px 12px 12px; }
+  @media (max-width: 520px) {
+    .bn-h { font-size: 15px; padding-inline-end: 0; padding-top: 14px; } .bn-a { padding: var(--ds-sp-3); } .bn-foot { padding: 4px var(--ds-sp-3) var(--ds-sp-2); }
+    .bn.hp .bn-a { flex-wrap: wrap; gap: 10px 12px; padding: var(--ds-sp-8) var(--ds-sp-3) var(--ds-sp-3); }
     .bn.hp .bn-h { padding-top: 0; }
     .bn-ic { width: 40px; height: 40px; font-size: 21px; }
     .bn.hp .bn-tx { flex-basis: calc(100% - 56px); }
     .bn.hp .bn-cta { flex-basis: 100%; }
     .bn.k-lotto .bn-a { grid-template-columns: minmax(0, 1fr); padding: 46px 14px 14px; }
-    .bn.k-lotto .bn-balls { position: absolute; top: 8px; left: 12px; height: 30px; padding-top: 8px; }
+    .bn.k-lotto .bn-balls { position: absolute; top: 8px; inset-inline-start: 12px; height: 30px; padding-top: 8px; }
     .bn.k-lotto .bn-ball { width: 20px; height: 20px; font-size: 10px; }
     .bn-jp { font-size: 30px; }
   }

@@ -157,7 +157,7 @@ test("home: Top Pads lists the given (top 5, live) pads with 👥 / 🎙 and a �
   const box = html.slice(html.indexOf('id="tpH"'), html.indexOf("</ol>", html.indexOf('id="tpH"')));
   assert.deepEqual([...box.matchAll(/href="\/p\/([^"]+)"/g)].map((m) => m[1]), ["b", "a"], "in the given order");
   // 1.99es: the badge sits by the name, the counts stay in their own column
-  assert.match(box, /<span class="nt">Bee<\/span><span class="bm boost-mark"[^>]*>🚀 1\.2M<\/span><\/span><span class="v"><span[^>]*>👥 12<\/span><span[^>]*>🎙 2<\/span><\/span>/);
+  assert.match(box, /<span class="nt">Bee<\/span><span class="bm boost-mark"[^>]*>🚀 1\.2M<\/span><\/span><span class="v"><span[^>]*><span class="ds-ic" aria-hidden="true">👥<\/span> 12<\/span><span[^>]*><span class="ds-ic" aria-hidden="true">🎙<\/span> 2<\/span><\/span>/);
   assert.equal((box.match(/boost-mark/g) || []).length, 1, "the unboosted pad has no badge");
   const bar = html.slice(html.indexOf('id="stTtl"'), html.indexOf('id="stSub"'));
   assert.match(bar, /<span class="bm boost-mark" title="Boosted: 1,234,567 PAT still active[^"]*"[^>]*>🚀 1\.2M<\/span>/, "front stage header badge");

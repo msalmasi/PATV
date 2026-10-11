@@ -608,6 +608,7 @@ As of 1.99pj.
   - Links are 40px (44px in the phone menu's 2-column grid).
   - The More chevron rotates when open.
   - A click outside **or Esc** closes the menu, and Esc returns focus to its summary.
+  - The open-state fill (`--ds-hover`, white text) is scoped to `.nav-more[open] > summary` and `.nav-burger[open] > summary`. Never write a bare `details[open] > summary` in the shell: layout.ejs loads on every page, so it greyed every open `<details>` on the site (fixed in 1.99pw).
 - **CTAs.** Post and Go live share one pill base: 34px, min-width 104, 14px bold, icon box 18×18.
   - Post is green-deep with a #3c7a46 outline.
   - Go live is the `--ds-live` gradient (#d32f2f → #e64a19; was #e53935 → #ff7043, which was 2.7:1 at the end).
@@ -878,6 +879,18 @@ Added by the G6 polish pass (1.99pq onwards): the homepage, /about, /info, /help
 ### Standalone pages (friendo)
 
 A page without layout.ejs still loads `ds.css` (for the tokens), sets the viewport meta and `theme-color`, and paints `body` with `--ds-bg`. Its own CSS sizes everything relative to a `min(800px, 100%)` box, and its motion is off under `prefers-reduced-motion`.
+
+### Homepage (/)
+
+- `main.hm.ds-page` at `--ds-w: 1400px` (the one page allowed past `wide`, §5.5). The page keeps a 16px gap between cards (12 at ≤ 520), not the ds 24, because it is a dense dashboard of cards.
+- **One heading style:** every card heading is the pixel heading (12px gold Press Start), including the stage's "Main stage" label; the end link or count in the heading row is 13px/700 Ubuntu, green-2. Heading rows are at least 32px tall so two cards side by side line their headings up whether or not they carry a link.
+- **Cards** are surface / line / 16 radius / 16 padding; the stage is a hero-sized block (radius 18). Inner tiles (things to do, top frogs, the hot list, live-now rows, room boxes) are `--ds-sunken` wells, radius 12, with a soft border that turns `--ds-green-line` on hover.
+- **Buttons:** the page's `.btn` is the `.ds-btn.sm.ghost` shape (36px pill, 40 on touch); `.btn.primary` is green with dark ink; the sign-up row (`.pitch`) uses 44px. Go live is the `--ds-live` gradient pill, 36px (44 on the off-air slate).
+- **Status pills** (ON AIR / OFF AIR / ROOM ACTIVE) are the `.ds-chip` shape: on air = danger tint, off = muted, room active = ok tint.
+- **Chips that truncate** (the "Link Camfrog" chip in the you card): `display: inline-block`, `min-width: 0`, `max-width: 100%` and ellipsis. A `nowrap` flex item needs `min-width: 0`, or its min-content width beats `max-width` and it spills out of the card; and `text-overflow` needs a block box, not `inline-flex`.
+- **Top Pads:** the 🎧 listen button is a 36px square (40 on touch), radius 8; counts are tabular in fixed 3.2em columns.
+- **Empty rail:** when there is no featured room card, the row collapses to one column and its cards (Hot on PATV, Live now) sit side by side (`:has()`), instead of leaving a 340px hole.
+- **Homepage banner** (`partials/banner`): a card (radius 16, no own margin; the grid spaces it), 44px CTA pills in the promo's colour with dark ink; Pepeball uses the lotto tokens (`--ds-acc-lotto`, `--ds-lotto-bg`) and a 52px gold-gradient CTA.
 
 ---
 

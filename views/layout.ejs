@@ -188,7 +188,7 @@
             .nav-more > summary, .nav-burger > summary { list-style: none; cursor: pointer; color: #aaa; display: inline-flex; align-items: center; gap: 6px; min-height: 40px;
                                                         box-sizing: border-box; padding: 0 10px; border-radius: var(--ds-r-sm); user-select: none; font-size: 15px; }
             .nav-more > summary::-webkit-details-marker, .nav-burger > summary::-webkit-details-marker { display: none; }
-            .nav-more > summary:hover, .nav-burger > summary:hover, details[open] > summary { background: var(--ds-hover); color: #fff; }
+            .nav-more > summary:hover, .nav-burger > summary:hover, .nav-more[open] > summary, .nav-burger[open] > summary { background: var(--ds-hover); color: #fff; }   /* scoped: an unscoped details[open] > summary greyed every open <details> on the site */
             .nav-more > summary [aria-hidden] { font-size: 11px; transition: transform var(--ds-dur-2); }
             .nav-more[open] > summary [aria-hidden] { transform: rotate(180deg); }
             .nav-pop { position: absolute; top: calc(100% + 8px); min-width: 220px; background: var(--ds-surface-3); border: 1px solid var(--ds-line-menu);

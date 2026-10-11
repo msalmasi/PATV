@@ -15,21 +15,21 @@
   .fpk { grid-template-columns: minmax(0, 1fr); }
   .fpk .fp-line { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; min-width: 0; }
   .fpk .fp-line b { color: #e8f5e9; }
-  .fpk .fp-score { color: #c6e94f; font-weight: bold; font-variant-numeric: tabular-nums; }
-  .fpk .fp-why { color: #8f9a8f; overflow-wrap: anywhere; }
-  .fpk .fp-re { padding: 4px 10px; border-radius: 8px; border: 1px solid #355e3b; background: #13241a; color: #b9f6ca; font: inherit; font-size: 12.5px; font-weight: bold; cursor: pointer; }
+  .fpk .fp-score { color: var(--ds-green-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .fpk .fp-why { color: var(--ds-text-muted); overflow-wrap: anywhere; }
+  .fpk .fp-re { min-height: 32px; margin: 0; width: auto; padding: 0 10px; border-radius: var(--ds-r-pill); border: 1px solid #355e3b; background: #13241a; color: var(--ds-ok-ink); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
   .fpk .fp-re[disabled] { opacity: .6; cursor: default; }
   .fpk details > summary { cursor: pointer; color: #9fd3a5; }
   .fpk .fp-tbl { overflow-x: auto; max-width: 100%; }
   .fpk table { border-collapse: collapse; width: 100%; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .fpk th, .fpk td { padding: 4px 8px; border-bottom: 1px solid #222; text-align: right; white-space: nowrap; }
-  .fpk th:first-child, .fpk td:first-child { text-align: left; white-space: normal; overflow-wrap: anywhere; min-width: 7em; }
-  .fpk th { color: #8f9a8f; font-weight: normal; }
+  .fpk th, .fpk td { padding: 4px 8px; border-bottom: 1px solid var(--ds-line-soft); text-align: end; white-space: nowrap; }
+  .fpk th:first-child, .fpk td:first-child { text-align: start; white-space: normal; overflow-wrap: anywhere; min-width: 7em; }
+  .fpk th { color: var(--ds-text-muted); font-weight: normal; }
   .fpk tr.cur td { color: #fff; background: #13200f; }
-  .fpk .tag { font-size: 10.5px; border: 1px solid #3a3a3a; border-radius: 999px; padding: 0 6px; margin-left: 4px; color: #aaa; }
-  .fpk .tag.dead { border-color: #5a2222; color: #ffb4b4; }
+  .fpk .tag { font-size: 11px; border: 1px solid #3a3a3a; border-radius: var(--ds-r-pill); padding: 0 6px; margin-inline-start: 4px; color: var(--ds-text-2); }
+  .fpk .tag.dead { border-color: #5a2222; color: var(--ds-danger); }
   .fpk .tag.lead { border-color: #6b5a20; color: #f3e3a3; }
-  .fpk .fp-f { color: #8f9a8f; font-size: 12px; overflow-wrap: anywhere; }
+  .fpk .fp-f { color: var(--ds-text-muted); font-size: 12px; overflow-wrap: anywhere; }
 </style>
 <div class="fpk" data-fp>
   <div class="fp-line">
