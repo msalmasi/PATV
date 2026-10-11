@@ -148,14 +148,18 @@
     <% if (snap.heist_vault != null) { %><div class="stat"><span>🎰 Casino vault</span><b><%= fmt(snap.heist_vault) %></b><em>what casino heists rob</em></div><% } %>
   </div>
 
-  <!-- ───────── Protocol dividends ───────── -->
-  <h2>PROTOCOL DIVIDENDS</h2>
+  <!-- ───────── The weekly settlement (Economy v3) + the older daily dividends ───────── -->
+  <h2>WEEKLY SETTLEMENT</h2>
   <% const divs = snap.dividends || [];
      const nowS = Date.now() / 1000;
      const sumSince = (k, days) => divs.filter((x) => x.vault === k && x.ts >= nowS - days * 86400).reduce((a, x) => a + x.amount, 0);
      const tsz = snap.targets_size || {}; %>
-  <p class="info">When a vault grows past its target size, the protocol cashes in <b>its own earnings</b> (never its starting
-    capital, never stakers' shares) and pays them to the Federal Reserve, which funds rewards, level-ups and the Bank's insurance.</p>
+  <p class="info">Every Monday each vault settles its week. Its profit above its target size is the <b>surplus</b>: it first
+    repays anything the vault borrowed from the Federal Reserve, then <b>20%</b> goes to that vault's stakers (up to 25% APR),
+    and the protocol's part goes half to the Federal Reserve while it's below its ceiling and the rest to the incentive budget
+    that pays everyone's rewards. Stakers' shares are never touched. <a href="/economy#incentives">How it works</a></p>
+  <p class="info">The table below is the older daily protocol dividend, which paid the protocol's earnings straight to the
+    Federal Reserve before the weekly settlement replaced it.</p>
   <div class="tbl"><table>
     <tr><th>Vault</th><th class="r">Value now</th><th class="r">Target</th><th class="r">Paid · 7 days</th><th class="r">Paid · 30 days</th><th class="r">Paid · all</th></tr>
     <% ['bank', 'house', 'mm'].forEach((k) => { %>

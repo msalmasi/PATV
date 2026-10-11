@@ -97,6 +97,46 @@
   .eco .key i.dash { background: none !important; border-top: 2px dashed #888; height: 0; }
   .eco details.data summary { cursor: pointer; color: #9a9a9a; font-size: 13px; }
 
+  /* the PAT map (Economy v3): new PAT -> the Fed -> the incentive budget / the working vaults -> players -> back */
+  .eco .pmap { background: #0c0c0c; border: 1px solid #222; border-radius: 16px; padding: 16px; margin: 16px 0 6px; display: grid; gap: 0; min-width: 0; }
+  .eco .pmap .pm-top { display: grid; gap: 4px; margin-bottom: 12px; }
+  .eco .pmap .pm-top .k { font-family: 'Press Start 2P', monospace; font-size: 9px; color: #4caf50; letter-spacing: .5px; line-height: 1.6; }
+  .eco .pmap .pm-top h3 { margin: 0; font-size: 18px; color: #fff; }
+  .eco .pmap .pm-top p { margin: 0; color: #9a9a9a; font-size: 13px; }
+  .eco .pm-box { background: #121212; border: 1px solid #2a2a2a; border-left: 4px solid var(--c, #888); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; align-content: start; }
+  .eco .pm-box h4 { margin: 0; font-size: 15px; color: #fff; line-height: 1.3; }
+  .eco .pm-box p { margin: 0; font-size: 13.5px; color: #bbb; line-height: 1.5; }
+  .eco .pm-box ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 13.5px; color: #ccc; line-height: 1.45; }
+  .eco .pm-box li { padding-left: 14px; position: relative; }
+  .eco .pm-box li::before { content: ''; position: absolute; left: 2px; top: .6em; width: 6px; height: 6px; border-radius: 50%; background: var(--c, #888); }
+  .eco .pm-box li.soon { border: 1px dashed #4a4a4a; border-radius: 8px; padding: 4px 8px 4px 22px; color: #9a9a9a; }
+  .eco .pm-box li.soon::before { left: 9px; top: 1em; background: transparent; border: 1px dashed var(--c, #888); }
+  .eco .pm-box li b { color: #fff; font-weight: bold; }
+  .eco .pm-soon { display: inline-block; font-size: 10px; font-weight: bold; color: #111; background: #e0a030; border-radius: 8px; padding: 0 6px; margin-left: 4px; vertical-align: 1px; white-space: nowrap; }
+  .eco .pm-ar { display: flex; align-items: center; justify-content: center; gap: 8px; color: #9a9a9a; font-size: 12.5px; padding: 6px 4px; text-align: center; line-height: 1.35; }
+  .eco .pm-ar::before { content: '↓'; color: #ffcf40; font-weight: bold; font-size: 18px; line-height: 1; flex: none; }
+  .eco .pm-fed { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: 12px; align-items: stretch; }
+  .eco .pm-burn { background: #1d0f0b; border: 1px dashed #d65f36; border-radius: 12px; padding: 12px 14px; color: #f0b9a3; font-size: 13.5px; line-height: 1.45; display: grid; align-content: center; gap: 4px; min-width: 0; }
+  .eco .pm-burn b { color: #fff; }
+  .eco .pm-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+  .eco .pm-col { display: grid; align-content: start; min-width: 0; }
+  .eco .pm-routes { display: grid; }
+  .eco .pm-rt { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 4px 12px; padding: 7px 0; border-top: 1px dashed #262626; font-size: 13.5px; color: #ccc; line-height: 1.45; }
+  .eco .pm-rt:first-child { border-top: 0; }
+  .eco .pm-rt span:last-child { color: #ffd700; }
+  .eco .pm-note { font-size: 12px; color: #8d8d8d; margin: 4px 0 0; line-height: 1.45; }
+  .eco .pm-back { border-left-color: #81c784; }
+  .eco .pm-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: #9a9a9a; margin-top: 12px; }
+  .eco .pm-key i { display: inline-block; width: 18px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+  @media (max-width: 700px) {
+    .eco .pm-fed, .eco .pm-split { grid-template-columns: minmax(0, 1fr); }
+    .eco .pm-split .pm-col + .pm-col { margin-top: 4px; }
+  }
+  @media (max-width: 520px) {
+    .eco .pmap { padding: 12px; }
+    .eco .pm-rt { grid-template-columns: minmax(0, 1fr); }
+  }
+
   /* the guide */
   .eco .guide-h { margin: 34px 0 12px; display: grid; gap: 6px; }
   .eco .guide-h h2 { font-size: 22px; color: #fff; margin: 0; }
@@ -171,7 +211,22 @@
   const layer = (k) => { const g = L && L.supply ? (L.supply.layers || []).find((x) => x.key === k) : null; return g ? g.amount : null; };
   const INC = L && L.incentives ? L.incentives : null;
   const GROUP = { welcome: t('economy.g.welcome'), levelup: t('economy.g.levelup'), achievements: t('economy.g.achievements'), misc: t('economy.g.misc'),
-                  royalties: t('economy.g.royalties'), activity: t('economy.group.activity'), roomgames: t('economy.g.roomgames'), turf: t('economy.g.turf') };
+                  royalties: t('economy.g.royalties'), activity: t('economy.group.activity'), roomgames: t('economy.g.roomgames'), turf: t('economy.g.turf'),
+                  season: t('economy.g.season'), launchpad: t('economy.g.launchpad') };
+  // Economy v3 numbers for the PAT map and the guide: the live values when Pepe has reported them, else the defaults
+  // (Fed band 50M-150M, a 25M weekly incentive target, $1 = 500k PAT + 20% to incentives). The weekly target is the sum
+  // of the groups' budgets (on prod the guarantee target equals it).
+  const SOON = '<span class="pm-soon">' + t('economy.soon') + '</span>';
+  const V3 = (() => {
+    const b = (L && L.band) || {};
+    const bs = (INC && INC.budgets) || (typeof treasury !== 'undefined' && treasury && treasury.budgets) || null;
+    const bud = bs ? Object.values(bs).reduce((a, x) => a + (Number(x) || 0), 0) : 0;
+    const target = bud > 0 ? bud : 25e6;
+    const d = (L && L.donation) || {};
+    return { floor: b.floor != null ? b.floor : 50e6, ceiling: b.ceiling != null ? b.ceiling : 150e6, target,
+             fk: Math.max(2e6, target * 0.6), cv: Math.max(2e6, target * 0.4),
+             rate: d.rate != null ? d.rate : 500000, bonus: d.bonus_pct != null ? d.bonus_pct : 20 };
+  })();
   const LAYER_C = { players: '#3987e5', fed: '#d95926', treasury: '#199e70', incentive: '#c98500', pots: '#d55181', burn: '#008300' };
 %>
 <div class="eco" id="top">
@@ -290,11 +345,11 @@
           <p><%- t('economy.ib.lead', { n: nf(INC.balance) }) %></p>
           <ul class="bars">
             <% gs.forEach((g) => { const b = INC.budgets[g] || 0, r = Math.min(b, (INC.remaining || {})[g] || 0); %>
-              <li class="<%= g === 'activity' ? 'hl' : '' %>"><span class="bl"><span><%- GROUP[g] || t.esc(g) %></span><b><%- t('economy.ib.left', { r: sh(r), b: sh(b) }) %></b></span>
+              <li class="<%= g === 'activity' ? 'hl' : '' %>"><span class="bl"><span><%- GROUP[g] || t.esc(g) %><%- g === 'activity' ? SOON : '' %></span><b><%- t('economy.ib.left', { r: sh(r), b: sh(b) }) %></b></span>
                 <span class="track" role="img" aria-label="<%- t('economy.ib.aria', { r: nf(r), b: nf(b) }) %>"><span class="fill" style="display:block;width:<%= b ? (r / b * 100).toFixed(1) : 0 %>%"></span></span></li>
             <% }) %>
           </ul>
-          <p class="muted" style="font-size:12px"><%- t('economy.ib.foot') %><% if (INC.share != null) { %> <%- t('economy.ib.share', { n: nf(INC.share) }) %><% } %></p>
+          <p class="muted" style="font-size:12px"><%- t('economy.ib.foot_v3', { target: sh(V3.target) }) %><% if (INC.share != null) { %> <%- t('economy.ib.share', { n: nf(INC.share) }) %><% } %></p>
         <% } else { %>
           <p><%- t('economy.ib.off') %></p>
         <% } %>
@@ -402,6 +457,7 @@
     <ul>
       <li><a href="#live">📊 <%- t('economy.toc.live') %></a></li>
       <li><a href="#pat">🪙 What is PAT</a></li>
+      <li><a href="#pat-map">🗺️ <%- t('economy.toc.map') %></a></li>
       <li><a href="#flow">🏛️ Where PAT goes</a></li>
       <li><a href="#protocol">⚙️ How the protocol works</a></li>
       <% if (typeof roomVaults !== 'undefined' && roomVaults) { %><li><a href="#roomvaults">🏦 Room vaults</a></li><% } %>
@@ -442,8 +498,8 @@
           5th level is a <strong>milestone</strong>: a bonus of 250,000 PAT &times; (level &divide; 5) &mdash; 250k at
           level 5, 500k at 10, 1.25M at 25, 2.5M at 50 &mdash; plus a level cosmetic for your profile or
           <a href="/cosmetics">GTF avatar</a> (prestige borders every 10 levels past 50). You also get a stat point every
-          10 levels for your heist character. Paid by the Federal Reserve: a milestone it can't cover yet is paid as
-          soon as it can.</p>
+          10 levels for your heist character. Paid from the <a href="#incentives">incentive budget</a>: if this week's
+          level-up budget is used up, your reward waits in line and lands as soon as it refills.</p>
       </div>
       <div class="card">
         <h3>🏅 Achievements</h3>
@@ -469,26 +525,134 @@
     <div class="top"><a href="#top">↑ top</a></div>
   </section>
 
-  <!-- 2. Flow -->
+  <!-- 2. Flow (Economy v3, 2026-10-11: the PAT map + the pools) -->
   <section id="flow">
     <div class="kicker">MONEY FLOW</div>
     <h2>🏛️ Where PAT goes</h2>
     <p class="lead">When you pay for something (a spin, a ticket, a fee, a paid command) that PAT doesn't vanish.
       <b>Spending never burns PAT.</b> It moves into one of the pools below, and those pools pay it back out as prizes,
       heist loot and rewards. (The one exception is the <a href="#burned">Federal Reserve's excess above its ceiling</a>.)</p>
+
+    <figure class="pmap" id="pat-map" aria-labelledby="pmH">
+      <div class="pm-top">
+        <div class="k"><%- t('economy.map.k') %></div>
+        <h3 id="pmH">🗺️ <%- t('economy.map.h') %></h3>
+        <p><%- t('economy.map.lead') %></p>
+      </div>
+
+      <div class="pm-box" style="--c:#9b7be0">
+        <h4><%- t('economy.map.src_h') %></h4>
+        <ul>
+          <li><%- t('economy.map.src_floor') %></li>
+          <li><%- t('economy.map.src_issue') %></li>
+          <li><%- t('economy.map.src_admin') %></li>
+          <li><%- t('economy.map.src_loan') %></li>
+        </ul>
+        <p class="pm-note"><%- t('economy.map.src_note', { link: '<a href="#supply-history">' + t('economy.map.src_link') + '</a>' }) %></p>
+      </div>
+      <div class="pm-ar"><%- t('economy.map.to_fed') %></div>
+
+      <div class="pm-fed">
+        <div class="pm-box" style="--c:#3a8ad0">
+          <h4><%- t('economy.map.fed_h') %></h4>
+          <p><%- t('economy.map.fed_d', { floor: sh(V3.floor), ceiling: sh(V3.ceiling) }) %></p>
+        </div>
+        <div class="pm-burn"><b><%- t('economy.map.burn_h') %></b><span><%- t('economy.map.burn_d', { ceiling: sh(V3.ceiling) }) %></span></div>
+      </div>
+
+      <div class="pm-split">
+        <div class="pm-col">
+          <div class="pm-ar"><%- t('economy.map.to_ib', { target: sh(V3.target) }) %></div>
+          <div class="pm-box" style="--c:#ffcf40">
+            <h4><%- t('economy.map.ib_h') %></h4>
+            <p><%- t('economy.map.ib_d') %></p>
+            <ul>
+              <li><%- t('economy.map.f_grants') %></li>
+              <li><%- t('economy.map.f_rooms') %></li>
+              <li><%- t('economy.map.f_launch') %></li>
+              <li><%- t('economy.map.f_heist') %></li>
+              <li class="soon"><%- t('economy.map.f_activity') %><%- SOON %></li>
+              <li class="soon"><%- t('economy.map.f_topup') %><%- SOON %></li>
+              <li class="soon"><%- t('economy.map.f_scaled') %><%- SOON %></li>
+            </ul>
+          </div>
+        </div>
+        <div class="pm-col">
+          <div class="pm-ar"><%- t('economy.map.to_tr') %></div>
+          <div class="pm-box" style="--c:#e57373">
+            <h4><%- t('economy.map.tr_h') %></h4>
+            <p><%- t('economy.map.tr_d') %></p>
+          </div>
+          <div class="pm-ar"><%- t('economy.map.to_hv') %></div>
+          <div class="pm-box" style="--c:#c98500">
+            <h4><%- t('economy.map.hv_h') %></h4>
+            <p><%- t('economy.map.hv_d') %></p>
+          </div>
+        </div>
+      </div>
+
+      <div class="pm-ar"><%- t('economy.map.to_players') %></div>
+      <div class="pm-box" style="--c:#66bb6a">
+        <h4><%- t('economy.map.pl_h') %></h4>
+        <p><%- t('economy.map.pl_d') %></p>
+        <p><%- t('economy.map.don', { rate: sh(V3.rate), pct: V3.bonus, link: '<a href="/support">' + t('economy.map.don_link') + '</a>' }) %></p>
+      </div>
+
+      <div class="pm-ar"><%- t('economy.map.to_spend') %></div>
+      <div class="pm-box" style="--c:#d55181">
+        <h4><%- t('economy.map.spend_h') %></h4>
+        <div class="pm-routes">
+          <% [['casino'], ['lotto'], ['market'], ['loan'], ['room'], ['premium'], ['heist'], ['fines'], ['tips']].forEach(([k]) => { %>
+            <div class="pm-rt"><span><%- t('economy.map.r.' + k) %></span><span><%- t('economy.map.r.' + k + '_to') %></span></div>
+          <% }) %>
+        </div>
+        <p class="pm-note"><%- t('economy.map.r_note') %></p>
+      </div>
+
+      <div class="pm-ar"><%- t('economy.map.to_back') %></div>
+      <div class="pm-box pm-back">
+        <h4><%- t('economy.map.back_h') %></h4>
+        <ul>
+          <li><%- t('economy.map.b_monday') %></li>
+          <li><%- t('economy.map.b_heist', { fk: sh(V3.fk), cv: sh(V3.cv) }) %></li>
+          <li><%- t('economy.map.b_fed') %></li>
+          <li class="soon"><%- t('economy.map.b_rooms') %><%- SOON %></li>
+        </ul>
+      </div>
+
+      <div class="pm-key" aria-hidden="true">
+        <span><i style="background:#9b7be0"></i><%- t('economy.map.key_new') %></span>
+        <span><i style="background:#3a8ad0"></i><%- t('economy.map.key_fed') %></span>
+        <span><i style="background:#ffcf40"></i><%- t('economy.map.key_ib') %></span>
+        <span><i style="background:#e57373"></i><%- t('economy.map.key_pools') %></span>
+        <span><i style="border:1px dashed #888"></i><%- t('economy.map.key_soon') %></span>
+      </div>
+    </figure>
+
     <div class="grid">
       <div class="card">
         <h3>🏛️ The Federal Reserve</h3>
-        <p>The central bank, in charge of monetary policy, and the only place new PAT is made (every mint is on the
-          record). It keeps itself between a floor and a ceiling (<a href="#fed-band">the Fed band</a>), collects fines and fees
-          nobody else funded, backs the incentive budget's weekly target and insures the Bank against bad loans. Nobody robs
-          it: the bank heist cracks Fort Knox. <code>!reserve</code> shows its balance.</p>
+        <p>The central bank, in charge of monetary policy, and the only place new PAT is made: every mint follows a written
+          rule and is on the public record. It keeps itself between a floor and a ceiling (<a href="#fed-band">the Fed
+          band</a>): below the floor it mints back up, a little each day; above the ceiling the excess is burned. It never
+          pays a wallet. Its job is to keep the protocol funded: it tops the <a href="#incentives">incentive budget</a> up
+          every Monday, lends the House, the Bank and the Market maker the gap the moment one runs short (flash liquidity),
+          and can grant PAT to a pool. It collects fines, the bounty fee and the shop fee, plus half of the protocol's weekly
+          profit while it's below its ceiling. Nobody robs it: the bank heist cracks Fort Knox. <code>!reserve</code> shows
+          its balance.</p>
+      </div>
+      <div class="card">
+        <h3>🎁 The incentive budget</h3>
+        <p>Pays every reward in the game: welcome PAT, level-ups, achievements, room games, pad royalties, launch grants and
+          the heist vaults' floors. Each kind has a weekly allowance, and the Fed guarantees the weekly total
+          (<%= sh(V3.target) %> PAT). Rewards are never printed straight into wallets. <a href="#incentives">More below</a>.</p>
       </div>
       <div class="card">
         <h3>🎰 The House (casino jackpot)</h3>
-        <p>The casino's bankroll. Wheel spins, rake, losing bets, the bingo cut and 60% of every lotto ticket go in;
-          it pays the wheel, blackjack wins and the fixed lotto prizes. 15% of its profit refills the Casino vault that heists rob.
-          <code>!jackpot</code> (or <code>!vault</code>) shows what's in it.</p>
+        <p>The casino's bankroll. Wheel spins, losing bets, rake, the bingo cut, the wager fee and 60% of every lotto ticket
+          go in; it pays the wheel, blackjack wins and the fixed lotto prizes. If a big win ever runs it short, the Fed lends
+          it the gap on the spot. Its profit is settled every Monday. <code>!jackpot</code> (or <code>!vault</code>) shows
+          what's in it.</p>
       </div>
       <div class="card">
         <h3>🎟️ The Lotto pot</h3>
@@ -497,24 +661,34 @@
       </div>
       <div class="card">
         <h3>🏦 The Bank &amp; 📈 Market maker</h3>
-        <p>Two working vaults: the Bank lends PAT to players through Reserve loans, and the Market maker puts up the
-          starting money for every prediction market. Together with the House they're the <a href="#protocol">capital vaults</a>
-          you can stake in.</p>
+        <p>Two working vaults: the Bank lends PAT to players through Reserve loans and keeps the interest, and the Market
+          maker puts up the starting money for every prediction market and keeps its trading fees. Together with the House
+          they're the <a href="#protocol">capital vaults</a> you can stake in, and the Fed backs all three with flash
+          liquidity.</p>
+      </div>
+      <div class="card">
+        <h3>🥷 Fort Knox &amp; the Casino vault</h3>
+        <p>The heist vaults. Fort Knox (the bank job) collects half of what's spent in rooms, Prime Time, Season Passes,
+          sticker packs and bank and store heist buy-ins; the Casino vault collects casino heist buy-ins. The incentive budget
+          keeps each at 2M or more, and above its cap (<%= sh(V3.fk) %> and <%= sh(V3.cv) %>, 60% and 40% of the weekly
+          budget) the extra flows back to the incentive budget. Heists pay out of them like a dividend, and the admins can
+          switch that faucet on and off.</p>
       </div>
       <div class="card">
         <h3>🧭 The routing table</h3>
-        <p>Every fee in the game has a row in one table that says where it goes. A fee goes to whoever funded the activity
-          (market fees to the Market maker, loan interest to the Bank, casino margins to the House); fees with nothing
-          behind them go to the Reserve, the jackpot or a gang's turf business. The admins tune the splits.</p>
+        <p>Every fee in the game has a row in one table that says where it goes. A fee goes to whoever funded the activity:
+          casino play and the wager fee to the House, market and pool fees to the Market maker, loan interest to the Bank.
+          Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox
+          and that room's vault. The admins tune the splits.</p>
       </div>
       <div class="card">
         <h3>🚀 Boosts &amp; stage slots</h3>
         <p>The front page shows the liveliest pad: you can't buy it. Anyone can <b>boost</b> a pad with PAT to push it up
           the ranking (boosts fade by half every hour and only count while the pad is active). Stage slots are free unless
-          the pad's owner sets a price. Boosts and slot fees go <b>half to that pad's room vault</b> (held for the pad until
-          room vaults open, then paid out to its owner, streamers and regulars) and <b>half to Fort Knox</b> (for now, the
-          Federal Reserve). An owner paying in their own pad sends it all to Fort Knox. Boost from the 🚀 button on a pad's
-          page, or type <code>!boost 5000</code> in its Camfrog room.</p>
+          the pad's owner sets a price. Boosts and slot fees go <b>half to that pad's room vault</b> and <b>half to Fort
+          Knox</b>; room vaults start paying out to their pad's owner, streamers and regulars soon. An owner paying in their
+          own pad sends it all to Fort Knox. Boost from the 🚀 button on a pad's page, or type <code>!boost 5000</code> in its
+          Camfrog room.</p>
         <p><b>✨ Pad cosmetics</b> (frames, name glows, badges, an animated avatar) take the same route: a pad's owner buying for
           their own pad sends 100% to Fort Knox; a gift from anyone else goes half to Fort Knox, half to that pad's room vault.</p>
       </div>
@@ -524,9 +698,6 @@
           your wallet straight away and is held in escrow. Every step is recorded, so if Pepe restarts mid-game your
           PAT is either paid out or refunded: never lost, never paid twice.</p>
       </div>
-    </div>
-    <div class="flow" aria-hidden="true">
-      <span>You spend PAT</span><span class="arr">→</span><span>Reserve · House · Lotto pot · Bank · Market maker · Turf</span><span class="arr">→</span><span>Prizes · Loot · Rewards · Staker profits</span><span class="arr">→</span><span>Your wallet</span>
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
   </section>
@@ -544,7 +715,8 @@
       so does the pad owner's (or the controlling gang's) spending in their own room. A vault holds at most
       <%= _rf(_rv.cap) %> PAT; anything above goes to Fort Knox. Anyone can add to a vault with
       <code>!roomvault deposit &lt;amount&gt;</code> (deposits never count as the room's income).
-      <span class="cfg">The vaults are filling up: paying out to each room's owner, streamers and regulars comes next.</span></p>
+      <span class="cfg">The vaults are filling up. Soon each vault will pay out a little every day to the room's owner, its
+      streamers, its regulars and its room games, but only what the room really earned.</span></p>
     <div class="grid">
       <div class="card wide">
         <h3>📊 Room vaults now: <%= _rf(_rv.total) %> PAT</h3>
@@ -576,17 +748,18 @@
         <b>incentive budget</b> that the protocol fills every week out of its real profit, instead of from the Federal
         Reserve. <span class="cfg">Not switched on yet: rewards are still paid the way they are today.</span></p>
     <% } else { %>
-      <p class="lead">Rewards aren't printed. Every week the protocol settles its profit, and the incentive budget gets its
-        share. Level-ups, welcome PAT, achievements and connect bonuses are paid from it, each with a weekly budget.
-        If a budget runs out, your reward <b>waits in line</b> (first come, first paid) and lands in your wallet as soon as
-        it refills. Nothing is ever skipped.</p>
+      <p class="lead">Rewards aren't printed. Every reward in the game is paid from one budget, and each kind of reward has a
+        weekly allowance. The budget is refilled every Monday from the protocol's real profit, and the Federal Reserve
+        guarantees the rest of the week's total (<%= sh(V3.target) %> PAT). If an allowance runs out, your reward
+        <b>waits in line</b> (first come, first paid) and lands in your wallet as soon as it refills. Nothing is ever skipped.</p>
       <div class="grid">
         <div class="card">
           <h3>📅 The weekly settlement</h3>
           <p>Every Monday at 04:00 UTC the House, the Bank and the Market maker each keep a target bankroll (House 15M,
             Bank 2M or twice its busiest lending, Market maker 1M or 1.5× its market seeds). The protocol's profit above
-            that target is the <b>surplus</b>, and it is split:</p>
+            that target is the <b>surplus</b>, and it is split in this order:</p>
           <ul>
+            <li>first it repays anything that vault borrowed from the Federal Reserve;</li>
             <li><b>20%</b> to stakers in that vault, pro rata, capped at <b>25% APR</b> on what they staked (anything over
               the cap rejoins the rest);</li>
             <li>the rest: while the Federal Reserve is below its <a href="#fed-band">ceiling</a>, half to the Reserve and half to the
@@ -594,17 +767,28 @@
           </ul>
         </div>
         <div class="card">
-          <h3>🧮 What the budget pays, in order</h3>
+          <h3>🛟 The weekly guarantee</h3>
+          <p>Right after the settlement, the Federal Reserve tops the incentive budget up to the week's target:
+            <b><%= sh(V3.target) %> PAT</b>. A quiet week at the casino never means smaller rewards, and a busy one refills the
+            Reserve instead of piling up in the budget.</p>
+          <p><span class="new">SOON</span> The target will grow and shrink with how many real, verified people are active, so
+            rewards follow the people who show up. Activity checks keep alts and spam out of the count.</p>
+        </div>
+        <div class="card">
+          <h3>🧮 What the budget pays</h3>
           <ul>
-            <li><b>1. Vault floors.</b> Fort Knox and the Casino vault are topped back up to 2M each day, so heists always
-              have something to rob.</li>
-            <li><b>2. Rewards.</b> Weekly budgets: welcome PAT 1.5M, level-ups 1.4M, achievements 2.1M, connect bonuses /
-              codes / platform rewards 0.35M, pad owner royalties 0.3M. Rewards over budget wait in line.</li>
-            <li><b>Room games.</b> Until rooms get their own vaults, the chat raffle, top mic of the hour, pictionary and
-              !beg are paid from the budget too, within 3.5M a week (paced: at most 1/7 of it per day), and turf income
-              within 0.5M. A prize over that is skipped, as it was when the Federal Reserve ran dry.</li>
+            <li><b>Heist vault floors.</b> Fort Knox and the Casino vault are topped back up to 2M each day, so heists always
+              have something to rob. Above their caps (<%= sh(V3.fk) %> and <%= sh(V3.cv) %>, 60% and 40% of the weekly
+              budget) the extra flows back here.</li>
+            <li><b>Rewards.</b> Welcome PAT, level-ups, achievements, connect bonuses, codes and platform rewards, and pad owner
+              royalties, each within its weekly allowance. Rewards over it wait in line.</li>
+            <li><b>Room games.</b> The chat raffle, top mic of the hour, pictionary and !beg, paced through the week (at most
+              1/7 of the allowance a day). A prize over the allowance is skipped.</li>
+            <li><b>Turf Wars:</b> the turf income and the season prize of the current season.</li>
+            <li><span class="new">SOON</span> <b>Launch grants</b> that seed the room vaults of new pads.</li>
+            <li><span class="new">SOON</span> <b>Activity rewards</b> for people who chat and get on the mic, and <b>room
+              top-ups</b> that match what each room's vault pays out.</li>
           </ul>
-          <p>Fort Knox and the Casino vault have caps (a share of the weekly budget target); anything above them overflows into the incentive budget.</p>
         </div>
         <div class="card">
           <h3>📊 This week</h3>
@@ -612,7 +796,7 @@
             <li>Incentive budget: <b><%= _f(_tr.balance) %> PAT</b></li>
             <% if (_tr.share !== null && _tr.share !== undefined) { %><li>From this week's settlement: <%= _f(_tr.share) %> PAT (about <%= _f(_tr.release_per_day) %> a day)</li><% } %>
             <% Object.keys(_tr.budgets || {}).forEach((g) => { %>
-              <li><%= ({ welcome: 'Welcome PAT', levelup: 'Level-ups', achievements: 'Achievements', misc: 'Connect bonuses, codes, platform rewards', royalties: 'Pad owner royalties', activity: t('economy.group.activity'), roomgames: 'Room games (raffle, top mic, pictionary, !beg)', turf: 'Turf income' })[g] || g %>:
+              <li><%- GROUP[g] || t.esc(g) %>:
                 <%= _f((_tr.remaining || {})[g]) %> of <%= _f(_tr.budgets[g]) %> left</li>
             <% }) %>
           </ul>
@@ -647,11 +831,13 @@
     <div class="kicker">UNDER THE HOOD</div>
     <h2>⚙️ How the PAT protocol works</h2>
     <p class="lead">The short version: <b>playing never burns PAT.</b> Every PAT that exists is sitting somewhere: in a wallet,
-      in a stash, or in one of the pools (the Federal Reserve, the House, the Lotto pot, the Bank, the Market maker,
-      a gang's turf, or escrow while a game or bet is running). Playing just moves it around. Here's the map.</p>
+      in a stash, or in one of the pools (the Federal Reserve, the incentive budget, the House, the Lotto pot, the Bank, the
+      Market maker, the heist vaults, the room vaults, a gang's turf, or escrow while a game or bet is running). Playing
+      just moves it around. Here's how each pool deals with your wallet; <a href="#pat-map">the PAT map</a> shows the
+      whole loop.</p>
 
     <figure class="fig">
-      <svg viewBox="0 0 480 600" role="img" aria-label="Diagram of where PAT flows between players' wallets and the pools">
+      <svg viewBox="0 0 480 860" role="img" aria-label="Diagram of where PAT flows between players' wallets and the pools: the Federal Reserve, the incentive budget, the Bank, the Market maker, the House, the Lotto pot, the heist vaults, the room vaults and your stashes">
         <defs>
           <marker id="fa-out" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e0a030"/></marker>
           <marker id="fa-in" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#81c784"/></marker>
@@ -660,76 +846,101 @@
         <!-- legend -->
         <line x1="12" y1="16" x2="40" y2="16" stroke="#e0a030" stroke-width="3" marker-end="url(#fa-out)"/>
         <text x="48" y="21" font-size="13" fill="#ccc">into a pool</text>
-        <line x1="160" y1="16" x2="188" y2="16" stroke="#81c784" stroke-width="3" marker-end="url(#fa-in)"/>
-        <text x="196" y="21" font-size="13" fill="#ccc">paid back out</text>
-        <line x1="320" y1="16" x2="348" y2="16" stroke="#ffd700" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#fa-ins)"/>
-        <text x="356" y="21" font-size="13" fill="#ccc">insurance</text>
+        <line x1="150" y1="16" x2="178" y2="16" stroke="#81c784" stroke-width="3" marker-end="url(#fa-in)"/>
+        <text x="186" y="21" font-size="13" fill="#ccc">paid back out</text>
+        <line x1="300" y1="16" x2="328" y2="16" stroke="#ffd700" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#fa-ins)"/>
+        <text x="336" y="21" font-size="13" fill="#ccc">Fed funding</text>
 
         <!-- wallets -->
-        <rect x="10" y="46" width="88" height="544" rx="10" fill="#111" stroke="#ccc" stroke-width="2"/>
-        <text x="54" y="300" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">Players'</text>
-        <text x="54" y="320" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">wallets</text>
-        <text x="54" y="345" font-size="12.5" fill="#ccc" text-anchor="middle">you and</text>
-        <text x="54" y="362" font-size="12.5" fill="#ccc" text-anchor="middle">everyone</text>
+        <rect x="10" y="46" width="88" height="804" rx="10" fill="#111" stroke="#ccc" stroke-width="2"/>
+        <text x="54" y="430" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">Players'</text>
+        <text x="54" y="450" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">wallets</text>
+        <text x="54" y="475" font-size="12.5" fill="#ccc" text-anchor="middle">you and</text>
+        <text x="54" y="492" font-size="12.5" fill="#ccc" text-anchor="middle">everyone</text>
 
         <!-- Federal Reserve (y 50) -->
-        <rect x="296" y="50" width="174" height="60" rx="10" fill="#1a1708" stroke="#ffd700" stroke-width="2"/>
-        <text x="383" y="76" font-size="16" font-weight="bold" fill="#ffd700" text-anchor="middle">Federal Reserve</text>
-        <text x="383" y="96" font-size="12.5" fill="#ccc" text-anchor="middle">monetary policy</text>
+        <rect x="296" y="50" width="174" height="60" rx="10" fill="#0f1a24" stroke="#3a8ad0" stroke-width="2"/>
+        <text x="383" y="76" font-size="16" font-weight="bold" fill="#64b5f6" text-anchor="middle">Federal Reserve</text>
+        <text x="383" y="96" font-size="12.5" fill="#ccc" text-anchor="middle">makes PAT, funds pools</text>
         <line x1="102" y1="74" x2="290" y2="74" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
-        <text x="196" y="67" font-size="13.5" fill="#ccc" text-anchor="middle">fines, purchases, fees</text>
-        <line x1="294" y1="88" x2="104" y2="88" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
-        <text x="196" y="105" font-size="13.5" fill="#ccc" text-anchor="middle">rewards &amp; level-ups</text>
+        <text x="196" y="67" font-size="13.5" fill="#ccc" text-anchor="middle">fines, bounty &amp; shop fees</text>
+        <text x="196" y="96" font-size="12.5" fill="#999" text-anchor="middle" font-style="italic">never pays a wallet</text>
         <line x1="383" y1="111" x2="383" y2="137" stroke="#ffd700" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#fa-ins)"/>
-        <text x="376" y="129" font-size="12.5" fill="#ffd700" text-anchor="end">insures</text>
+        <text x="376" y="129" font-size="12.5" fill="#ffd700" text-anchor="end">weekly guarantee</text>
 
-        <!-- Bank (y 140) -->
-        <rect x="296" y="140" width="174" height="60" rx="10" fill="#0f1a24" stroke="#64b5f6" stroke-width="2"/>
-        <text x="383" y="166" font-size="16" font-weight="bold" fill="#64b5f6" text-anchor="middle">Bank</text>
-        <text x="383" y="186" font-size="12.5" fill="#ccc" text-anchor="middle">lends PAT</text>
-        <line x1="102" y1="164" x2="290" y2="164" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
-        <text x="196" y="157" font-size="13.5" fill="#ccc" text-anchor="middle">loan interest + penalties</text>
-        <line x1="294" y1="178" x2="104" y2="178" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
-        <text x="196" y="195" font-size="13.5" fill="#ccc" text-anchor="middle">Reserve loans</text>
+        <!-- Incentive budget (y 140) -->
+        <rect x="296" y="140" width="174" height="60" rx="10" fill="#201a0c" stroke="#ffcf40" stroke-width="2"/>
+        <text x="383" y="166" font-size="16" font-weight="bold" fill="#ffcf40" text-anchor="middle">Incentive budget</text>
+        <text x="383" y="186" font-size="12.5" fill="#ccc" text-anchor="middle">pays every reward</text>
+        <text x="196" y="157" font-size="12.5" fill="#999" text-anchor="middle" font-style="italic">filled by profit + the Fed</text>
+        <line x1="294" y1="174" x2="104" y2="174" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
+        <text x="196" y="193" font-size="13.5" fill="#ccc" text-anchor="middle">rewards, level-ups, raffles</text>
 
-        <!-- Market maker (y 230) -->
-        <rect x="296" y="230" width="174" height="60" rx="10" fill="#13200f" stroke="#4caf50" stroke-width="2"/>
-        <text x="383" y="256" font-size="16" font-weight="bold" fill="#81c784" text-anchor="middle">Market maker</text>
-        <text x="383" y="276" font-size="12.5" fill="#ccc" text-anchor="middle">seeds every market</text>
+        <!-- Bank (y 230) -->
+        <rect x="296" y="230" width="174" height="60" rx="10" fill="#0f1a24" stroke="#64b5f6" stroke-width="2"/>
+        <text x="383" y="256" font-size="16" font-weight="bold" fill="#64b5f6" text-anchor="middle">Bank</text>
+        <text x="383" y="276" font-size="12.5" fill="#ccc" text-anchor="middle">lends PAT</text>
         <line x1="102" y1="254" x2="290" y2="254" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
-        <text x="196" y="247" font-size="13.5" fill="#ccc" text-anchor="middle">2% market fees</text>
+        <text x="196" y="247" font-size="13.5" fill="#ccc" text-anchor="middle">loan interest + penalties</text>
         <line x1="294" y1="268" x2="104" y2="268" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
-        <text x="196" y="285" font-size="13.5" fill="#ccc" text-anchor="middle">pays winning shares</text>
+        <text x="196" y="285" font-size="13.5" fill="#ccc" text-anchor="middle">Reserve loans</text>
 
-        <!-- House (y 330) -->
-        <rect x="296" y="330" width="174" height="60" rx="10" fill="#241212" stroke="#e57373" stroke-width="2"/>
-        <text x="383" y="356" font-size="16" font-weight="bold" fill="#e57373" text-anchor="middle">House (casino)</text>
-        <text x="383" y="376" font-size="12.5" fill="#ccc" text-anchor="middle">the casino bankroll</text>
-        <line x1="102" y1="354" x2="290" y2="354" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
-        <text x="196" y="330" font-size="13.5" fill="#ccc" text-anchor="middle">buy-ins, spins, lost bets,</text>
-        <text x="196" y="347" font-size="13.5" fill="#ccc" text-anchor="middle">60% of each lotto ticket</text>
-        <line x1="294" y1="368" x2="104" y2="368" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
-        <text x="196" y="385" font-size="13.5" fill="#ccc" text-anchor="middle">wins &amp; fixed prizes</text>
+        <!-- Market maker (y 320) -->
+        <rect x="296" y="320" width="174" height="60" rx="10" fill="#13200f" stroke="#4caf50" stroke-width="2"/>
+        <text x="383" y="346" font-size="16" font-weight="bold" fill="#81c784" text-anchor="middle">Market maker</text>
+        <text x="383" y="366" font-size="12.5" fill="#ccc" text-anchor="middle">seeds every market</text>
+        <line x1="102" y1="344" x2="290" y2="344" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
+        <text x="196" y="337" font-size="13.5" fill="#ccc" text-anchor="middle">market &amp; pool fees</text>
+        <line x1="294" y1="358" x2="104" y2="358" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
+        <text x="196" y="375" font-size="13.5" fill="#ccc" text-anchor="middle">pays winning shares</text>
 
-        <!-- Lotto pot (y 430) -->
-        <rect x="296" y="430" width="174" height="60" rx="10" fill="#201a0c" stroke="#e0a030" stroke-width="2"/>
-        <text x="383" y="456" font-size="16" font-weight="bold" fill="#e0a030" text-anchor="middle">Lotto pot</text>
-        <text x="383" y="476" font-size="12.5" fill="#ccc" text-anchor="middle">jackpot only, max 100M</text>
-        <line x1="102" y1="454" x2="290" y2="454" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
-        <text x="196" y="447" font-size="13.5" fill="#ccc" text-anchor="middle">40% of each lotto ticket</text>
-        <line x1="294" y1="468" x2="104" y2="468" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
-        <text x="196" y="485" font-size="13.5" fill="#ccc" text-anchor="middle">the lotto jackpot</text>
+        <!-- House (y 410) -->
+        <rect x="296" y="410" width="174" height="60" rx="10" fill="#241212" stroke="#e57373" stroke-width="2"/>
+        <text x="383" y="436" font-size="16" font-weight="bold" fill="#e57373" text-anchor="middle">House (casino)</text>
+        <text x="383" y="456" font-size="12.5" fill="#ccc" text-anchor="middle">the casino bankroll</text>
+        <line x1="102" y1="434" x2="290" y2="434" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
+        <text x="196" y="410" font-size="13.5" fill="#ccc" text-anchor="middle">spins, lost bets, wager fee,</text>
+        <text x="196" y="427" font-size="13.5" fill="#ccc" text-anchor="middle">60% of each lotto ticket</text>
+        <line x1="294" y1="448" x2="104" y2="448" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
+        <text x="196" y="465" font-size="13.5" fill="#ccc" text-anchor="middle">wins &amp; fixed prizes</text>
 
-        <!-- Stashes (y 520) -->
-        <rect x="296" y="520" width="174" height="60" rx="10" fill="#161616" stroke="#ccc" stroke-width="2" stroke-dasharray="6 4"/>
-        <text x="383" y="546" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">Your stashes</text>
-        <text x="383" y="566" font-size="12.5" fill="#ccc" text-anchor="middle">stake into the vaults</text>
-        <line x1="102" y1="544" x2="290" y2="544" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
-        <text x="196" y="537" font-size="13.5" fill="#ccc" text-anchor="middle">deposit</text>
-        <line x1="294" y1="558" x2="104" y2="558" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
-        <text x="196" y="575" font-size="13.5" fill="#ccc" text-anchor="middle">withdraw</text>
+        <!-- Lotto pot (y 500) -->
+        <rect x="296" y="500" width="174" height="60" rx="10" fill="#201a0c" stroke="#e0a030" stroke-width="2"/>
+        <text x="383" y="526" font-size="16" font-weight="bold" fill="#e0a030" text-anchor="middle">Lotto pot</text>
+        <text x="383" y="546" font-size="12.5" fill="#ccc" text-anchor="middle">jackpot only, max 100M</text>
+        <line x1="102" y1="524" x2="290" y2="524" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
+        <text x="196" y="517" font-size="13.5" fill="#ccc" text-anchor="middle">40% of each lotto ticket</text>
+        <line x1="294" y1="538" x2="104" y2="538" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
+        <text x="196" y="555" font-size="13.5" fill="#ccc" text-anchor="middle">the lotto jackpot</text>
+
+        <!-- Heist vaults (y 590) -->
+        <rect x="296" y="590" width="174" height="60" rx="10" fill="#1d0f0b" stroke="#d65f36" stroke-width="2"/>
+        <text x="383" y="616" font-size="16" font-weight="bold" fill="#f08a64" text-anchor="middle">Heist vaults</text>
+        <text x="383" y="636" font-size="12.5" fill="#ccc" text-anchor="middle">Fort Knox · Casino vault</text>
+        <line x1="102" y1="614" x2="290" y2="614" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
+        <text x="196" y="607" font-size="13.5" fill="#ccc" text-anchor="middle">room spends, heist buy-ins</text>
+        <line x1="294" y1="628" x2="104" y2="628" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
+        <text x="196" y="645" font-size="13.5" fill="#ccc" text-anchor="middle">heist loot</text>
+
+        <!-- Room vaults (y 680) -->
+        <rect x="296" y="680" width="174" height="60" rx="10" fill="#161616" stroke="#c98500" stroke-width="2"/>
+        <text x="383" y="706" font-size="16" font-weight="bold" fill="#e0a030" text-anchor="middle">Room vaults</text>
+        <text x="383" y="726" font-size="12.5" fill="#ccc" text-anchor="middle">one per room</text>
+        <line x1="102" y1="704" x2="290" y2="704" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
+        <text x="196" y="697" font-size="13.5" fill="#ccc" text-anchor="middle">half of each room spend</text>
+        <line x1="294" y1="718" x2="104" y2="718" stroke="#81c784" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#fa-in)"/>
+        <text x="196" y="735" font-size="13.5" fill="#ccc" text-anchor="middle">payouts (coming soon)</text>
+
+        <!-- Stashes (y 770) -->
+        <rect x="296" y="770" width="174" height="60" rx="10" fill="#161616" stroke="#ccc" stroke-width="2" stroke-dasharray="6 4"/>
+        <text x="383" y="796" font-size="16" font-weight="bold" fill="#fff" text-anchor="middle">Your stashes</text>
+        <text x="383" y="816" font-size="12.5" fill="#ccc" text-anchor="middle">stake into the vaults</text>
+        <line x1="102" y1="794" x2="290" y2="794" stroke="#e0a030" stroke-width="2.5" marker-end="url(#fa-out)"/>
+        <text x="196" y="787" font-size="13.5" fill="#ccc" text-anchor="middle">deposit</text>
+        <line x1="294" y1="808" x2="104" y2="808" stroke="#81c784" stroke-width="2.5" marker-end="url(#fa-in)"/>
+        <text x="196" y="825" font-size="13.5" fill="#ccc" text-anchor="middle">withdraw</text>
       </svg>
-      <figcaption>Where PAT flows: it moves between wallets and pools; only the Federal Reserve's excess above its ceiling is burned.</figcaption>
+      <figcaption>Where PAT flows: it moves between wallets and pools. The Fed makes new PAT and funds the pools but never pays a wallet; only its excess above the ceiling is burned.</figcaption>
     </figure>
 
     <h3 class="h3s">🏗️ Capital vaults: PAT that does a job</h3>
@@ -738,22 +949,24 @@
     <div class="grid">
       <div class="card">
         <h3>🏦 Bank</h3>
-        <p>Funds Federal Reserve loans (<code>!loan reserve</code>). Earns the interest and late penalties.</p>
-        <p><b>Risk:</b> borrowers who don't pay. A loan 30 days late is a default: the Federal Reserve pays the Bank
-          back and takes over collecting it. That's like deposit insurance (up to a big monthly limit), so only defaults
-          beyond that would ever hit stakers.</p>
+        <p>Funds Reserve loans to players (<code>!loan reserve</code>). Earns their interest and late penalties, plus the
+          protocol's 10% cut of interest on loans between players.</p>
+        <p><b>Risk:</b> borrowers who don't pay. A loan 30 days late is a default: the protocol's own profit in the Bank
+          absorbs it first, and if that isn't enough the Federal Reserve lends the Bank the rest. The Bank keeps the claim on
+          the borrower, and stakers' share price is untouched unless a default is bigger than all of that.</p>
       </div>
       <div class="card">
         <h3>🎰 House</h3>
         <p>This <i>is</i> the casino bankroll: the jackpot that pays out wins. Earns the house edge: losing blackjack bets,
-          hold'em rake, wheel spins, the lotto's margin and the bingo house cut.</p>
-        <p><b>Risk:</b> big wins, like a wheel jackpot or a blackjack streak. Casino heists don't touch it: they rob the separate Casino vault,
-          which the House refills with 15% of its profit. Still the most up-and-down vault.</p>
+          hold'em rake, wheel spins, the lotto's margin, the bingo house cut and the 5% wager fee.</p>
+        <p><b>Risk:</b> big wins, like a wheel jackpot or a blackjack streak. If a payout ever runs it short, the Federal
+          Reserve lends it the gap on the spot (flash liquidity). Casino heists don't touch it: they rob the separate Casino
+          vault, which the incentive budget keeps topped up. Still the most up-and-down vault.</p>
       </div>
       <div class="card">
         <h3>📈 Market maker</h3>
         <p>Puts up the starting money (the "seed") for every new prediction market, then takes that market's 2% trading fees
-          and whatever's left when it settles.</p>
+          and whatever's left when it settles. The fee on betting pools goes to it too.</p>
         <p><b>Risk:</b> a market can lose at most its seed.</p>
         <p>Its value counts each open market at what it expects back when it settles (the pot minus the winning
           shares, weighted by the market's own odds), not at the seed, so a one-sided market shows its coming loss
@@ -784,8 +997,8 @@
         <rect x="10" y="86" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
         <rect x="165" y="86" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
         <rect x="320" y="86" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
-        <text x="85" y="114" font-size="13" fill="#ccc" text-anchor="middle">Federal Reserve</text>
-        <text x="85" y="132" font-size="13" fill="#ccc" text-anchor="middle">loans to players</text>
+        <text x="85" y="114" font-size="13" fill="#ccc" text-anchor="middle">Reserve loans</text>
+        <text x="85" y="132" font-size="13" fill="#ccc" text-anchor="middle">to players</text>
         <text x="240" y="114" font-size="13" fill="#ccc" text-anchor="middle">the casino</text>
         <text x="240" y="132" font-size="13" fill="#ccc" text-anchor="middle">bankroll</text>
         <text x="395" y="114" font-size="13" fill="#ccc" text-anchor="middle">every new</text>
@@ -799,10 +1012,10 @@
         <rect x="320" y="182" width="150" height="66" rx="6" fill="#111" stroke="#222"/>
         <text x="85" y="210" font-size="13" fill="#ccc" text-anchor="middle">loan interest +</text>
         <text x="85" y="228" font-size="13" fill="#ccc" text-anchor="middle">late penalties</text>
-        <text x="240" y="202" font-size="13" fill="#ccc" text-anchor="middle">the house edge:</text>
-        <text x="240" y="220" font-size="13" fill="#ccc" text-anchor="middle">lost bets, rake,</text>
-        <text x="240" y="238" font-size="13" fill="#ccc" text-anchor="middle">spins, lotto 60%</text>
-        <text x="395" y="202" font-size="13" fill="#ccc" text-anchor="middle">2% trading fees</text>
+        <text x="240" y="202" font-size="13" fill="#ccc" text-anchor="middle">the house edge,</text>
+        <text x="240" y="220" font-size="13" fill="#ccc" text-anchor="middle">spins, wager fee,</text>
+        <text x="240" y="238" font-size="13" fill="#ccc" text-anchor="middle">lotto 60%</text>
+        <text x="395" y="202" font-size="13" fill="#ccc" text-anchor="middle">market &amp; pool fees</text>
         <text x="395" y="220" font-size="13" fill="#ccc" text-anchor="middle">+ what's left</text>
         <text x="395" y="238" font-size="13" fill="#ccc" text-anchor="middle">when it settles</text>
 
@@ -826,13 +1039,15 @@
         <rect x="10" y="374" width="150" height="66" rx="6" fill="#111" stroke="#64b5f6"/>
         <rect x="165" y="374" width="150" height="66" rx="6" fill="#111" stroke="#e57373"/>
         <rect x="320" y="374" width="150" height="66" rx="6" fill="#111" stroke="#4caf50"/>
-        <text x="85" y="394" font-size="13" fill="#ccc" text-anchor="middle">the Reserve insures</text>
-        <text x="85" y="412" font-size="13" fill="#ccc" text-anchor="middle">the Bank first (up to</text>
-        <text x="85" y="430" font-size="13" fill="#ccc" text-anchor="middle">a big monthly limit)</text>
-        <text x="240" y="402" font-size="13" fill="#ccc" text-anchor="middle">none: the most</text>
-        <text x="240" y="420" font-size="13" fill="#ccc" text-anchor="middle">volatile vault</text>
-        <text x="395" y="402" font-size="13" fill="#ccc" text-anchor="middle">a market can lose</text>
-        <text x="395" y="420" font-size="13" fill="#ccc" text-anchor="middle">at most its seed</text>
+        <text x="85" y="394" font-size="13" fill="#ccc" text-anchor="middle">its own profit, then</text>
+        <text x="85" y="412" font-size="13" fill="#ccc" text-anchor="middle">a Fed loan covers</text>
+        <text x="85" y="430" font-size="13" fill="#ccc" text-anchor="middle">a default</text>
+        <text x="240" y="394" font-size="13" fill="#ccc" text-anchor="middle">Fed flash liquidity</text>
+        <text x="240" y="412" font-size="13" fill="#ccc" text-anchor="middle">if a payout runs</text>
+        <text x="240" y="430" font-size="13" fill="#ccc" text-anchor="middle">it short</text>
+        <text x="395" y="394" font-size="13" fill="#ccc" text-anchor="middle">a market can lose</text>
+        <text x="395" y="412" font-size="13" fill="#ccc" text-anchor="middle">at most its seed;</text>
+        <text x="395" y="430" font-size="13" fill="#ccc" text-anchor="middle">Fed flash for seeds</text>
       </svg>
       <figcaption>Who takes the risk, who gets the fee: each vault funds one thing, earns from it, and carries its risk.</figcaption>
     </figure>
@@ -936,18 +1151,17 @@
         <h3>📏 Limits</h3>
         <ul>
           <li>Stakers can own at most <b>50%</b> of any vault, so the protocol always keeps skin in the game.</li>
-          <li><b>Protocol dividend:</b> once a vault is bigger than its target size (the House: 20M; the Bank and Market maker: 1.5× what they have lent or committed), the protocol cashes in its <i>own</i> earnings and pays them to the Federal Reserve, where they fund rewards and insurance. Stakers' shares are never touched.</li>
-          <li>Optional <b>ceiling</b>: stakers' return above 25% a year <span class="cfg">⚙</span> goes back to the Federal Reserve.</li>
-          <li>Optional <b>floor</b>: the Reserve can top stakers up <span class="cfg">⚙</span> (off by default).</li>
+          <li><b>The weekly settlement:</b> every Monday a vault's profit above its target size (the House: 15M; the Bank: 2M or twice its busiest lending; the Market maker: 1M or 1.5× its market seeds) is shared out. It first repays any Fed loan, then stakers get <b>20%</b>, and the rest goes half to the Federal Reserve (while it's below its ceiling) and half to the <a href="#incentives">incentive budget</a>. Stakers' shares are never touched.</li>
+          <li><b>Ceiling:</b> stakers' share of a week is capped at 25% a year <span class="cfg">⚙</span>; anything above it rejoins the rest of the surplus.</li>
         </ul>
       </div>
     </div>
 
     <h3 class="h3s">⚖️ Fees follow risk</h3>
-    <p class="lead">A fee goes to whoever put up the money for that activity. Market fees go to the Market maker that seeded
-      the market, loan interest goes to the Bank that lent it, casino margins go to the House. Fees with no money behind them
-      (wager and bounty fees, fines, purchases, paid commands) go to the Federal Reserve or the jackpot, by the
-      routing table. Stakers don't get paid for activity they don't fund.</p>
+    <p class="lead">A fee goes to whoever put up the money for that activity. Market and pool fees go to the Market maker
+      that seeds the markets, loan interest goes to the Bank that lent it, casino margins and the wager fee go to the House.
+      Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending in a room is split between Fort Knox and
+      that room's vault, by the routing table. Stakers don't get paid for activity they don't fund.</p>
 
     <h3 class="h3s">🎟️ The Lotto pot</h3>
     <p class="lead">Each 1,000 PAT lotto ticket splits in two: <b>40%</b> builds the Lotto pot, a separate rolling jackpot that only
@@ -1038,7 +1252,7 @@
         <p>Dice duels (100 to 50,000 PAT), 1v1 brawls using your heist character's stats, and the Arena: a battle royale where
           the last fighter standing takes the pot.</p>
         <div class="cmd"><code>!duel @bob 5000</code> · <code>!brawl @bob 10k</code> · <code>!arena 5000</code> · <code>!accept</code></div>
-        <div class="goes"><b>PAT goes:</b> winner takes the pot; brawls and the Arena send a small cut to the House.</div>
+        <div class="goes"><b>PAT goes:</b> winner takes the pot; brawls and the Arena take a small cut for the protocol.</div>
       </div>
       <div class="card">
         <h3>🎨 Pictionary</h3>
@@ -1174,7 +1388,7 @@
         <p>When it's due, Pepe collects automatically: whatever they have, then the rest as PAT comes in. Anything still
           owed grows 2% a day (capped at +50% of the loan) and the borrower carries a public <b>LATE</b> mark until square.</p>
         <div class="cmd"><code>!loan @bob 50k 10% 7d</code> · <code>!loan repay L5</code> · <code>!loan check @bob</code> · <code>!loans</code></div>
-        <div class="goes"><b>PAT goes:</b> the lender always gets the full amount back; 10% of the interest and penalties goes to the Reserve.</div>
+        <div class="goes"><b>PAT goes:</b> the lender always gets the full amount back; 10% of the interest and penalties goes to the Bank.</div>
       </div>
       <div class="card">
         <h3>🏛️ Federal Reserve loans <span class="new">NEW</span></h3>
@@ -1183,8 +1397,8 @@
         <div class="cmd"><code>!loan reserve 50k 7d</code> · <code>!loan request 200k 14d why</code> (bigger amounts) · <code>!loan reserve</code> shows your limit</div>
         <div class="goes"><b>PAT goes:</b> these loans are funded by the <a href="#protocol">Bank vault</a>, so principal, interest and
           late penalties go back to the Bank (and its stakers). Unpaid loans are collected automatically, and a late borrower is
-          marked LATE and can't borrow again until they're square. A loan 30 days late is a default: the Federal Reserve pays
-          the Bank back and takes over collecting it.</div>
+          marked LATE and can't borrow again until they're square. A loan 30 days late is a default: the Bank's own profit covers
+          it first, the Federal Reserve lends the Bank anything more, and the Bank keeps collecting from the borrower.</div>
       </div>
     </div>
     <div class="top"><a href="#top">↑ top</a></div>
@@ -1230,16 +1444,16 @@
       <div class="card">
         <h3>🥷 Heists</h3>
         <p>Crew up and survive rounds of dice rolls to bank loot; bail out or go for the vault door. The store is always open;
-          the casino job robs the <b>Casino vault</b> (its own pot, refilled by heist buy-ins and 15% of the House's profit, so hauls grow when the casino is busy) and the bank job cracks <b>Fort Knox</b>.</p>
+          the casino job robs the <b>Casino vault</b> (its own pot, refilled by casino heist buy-ins) and the bank job cracks <b>Fort Knox</b> (half of everything spent in rooms flows into it). The incentive budget keeps both at 2M or more.</p>
         <div class="cmd"><code>!heist</code> · <code>!join</code> · <code>!bail</code> · <code>!shop</code></div>
-        <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. Heists never burn PAT.</div>
+        <div class="goes"><b>PAT goes:</b> heists pay out of the vaults, like a dividend. A failed vault door leaves the loot in the vault. Heists never burn PAT, and the admins can switch the heist faucet on and off.</div>
       </div>
       <div class="card">
         <h3>🗺️ Turf Wars</h3>
         <p>Gangs fight over the districts on this season's map (the map changes every season). Each district runs a business
           that earns its owner PAT every day. Claim, raid, defend, and climb the season score.</p>
         <div class="cmd"><code>!turf</code> · <code>!claim</code> · <code>!raid</code></div>
-        <div class="goes"><b>PAT goes:</b> some fees route to the gang that owns the matching turf business.</div>
+        <div class="goes"><b>PAT goes:</b> turf income and the season prize are paid from the incentive budget, and a small slice of blackjack, hold'em and fight rake still goes to the gang that owns the matching business. <b>Coming later:</b> room turf wars, where gangs take control of real rooms and their vaults.</div>
       </div>
       <div class="card">
         <h3>🎩 Gangs</h3>
@@ -1291,8 +1505,8 @@
     <div class="kicker">AT A GLANCE</div>
     <h2>🧾 Fees</h2>
     <p class="lead">Fees aren't burned, and they <a href="#protocol">follow risk</a>: a fee goes to the vault that funded the
-      activity (Bank, House or Market maker). Fees with no money behind them go to the Federal Reserve or the jackpot
-      by the routing table. <span class="cfg">⚙ = set by the admins, can change.</span></p>
+      activity (Bank, House or Market maker). Fines, the bounty fee and the shop fee go to the Federal Reserve, and spending
+      in a room is split between Fort Knox and that room's vault. <span class="cfg">⚙ = set by the admins, can change.</span></p>
     <div class="tbl">
       <table>
         <thead><tr><th>WHAT</th><th>FEE</th><th>NOTES</th></tr></thead>
@@ -1303,15 +1517,18 @@
           <tr><td>Hold'em</td><td class="n">small rake <span class="cfg">⚙</span></td><td>Taken from pots, to the House</td></tr>
           <tr><td>Lotto ticket</td><td class="n">1,000 / ticket</td><td>40% to the Lotto pot (jackpot, max 100M), 60% to the House (pays the fixed prizes)</td></tr>
           <tr><td>Bingo</td><td class="n">10% of card sales</td><td>House cut; the rest is the prize pool</td></tr>
-          <tr><td>1-on-1 wager</td><td class="n">5% of the pot</td><td>Only when someone wins; voids are free. To the casino jackpot</td></tr>
-          <tr><td>Betting pool</td><td class="n">5% of losing side <span class="cfg">⚙</span></td><td>Winners never get back less than they bet. To the casino jackpot</td></tr>
+          <tr><td>1-on-1 wager</td><td class="n">5% of the pot</td><td>Only when someone wins; voids are free. To the House</td></tr>
+          <tr><td>Betting pool</td><td class="n">5% of losing side <span class="cfg">⚙</span></td><td>Winners never get back less than they bet. To the Market maker</td></tr>
           <tr><td>Prediction market</td><td class="n">2% per trade</td><td>On every buy and sell, to the Market maker that seeded the market</td></tr>
           <tr><td>Bounty</td><td class="n">5% of payout</td><td>Refunds on cancel or expiry are free. To the Federal Reserve</td></tr>
+          <tr><td>Fines</td><td class="n">set by staff</td><td>To the Federal Reserve</td></tr>
+          <tr><td>Shop listings</td><td class="n">10% of the sale</td><td>The seller gets 90%; the fee goes to the Federal Reserve</td></tr>
+          <tr><td>Spending in a room</td><td class="n">the item's price</td><td>Half to Fort Knox, half to that room's vault (all to Fort Knox in your own pad or with no room)</td></tr>
           <tr><td>Reserve loan</td><td class="n">Reserve rate</td><td>Interest and late penalties to the Bank that lent it</td></tr>
-          <tr><td>Player loan</td><td class="n">10% of interest</td><td>To the Reserve; principal never taxed</td></tr>
+          <tr><td>Player loan</td><td class="n">10% of interest</td><td>To the Bank; principal never taxed</td></tr>
           <tr><td>Late loan</td><td class="n">+2% / day</td><td>On what's still owed, capped at +50% of the loan</td></tr>
-          <tr><td>Brawl / Arena</td><td class="n">small cut <span class="cfg">⚙</span></td><td>To the House</td></tr>
-          <tr><td>Staking yield cap</td><td class="n">above 25% APR <span class="cfg">⚙</span></td><td>Optional: stakers' return above the ceiling goes back to the Federal Reserve</td></tr>
+          <tr><td>Duel / Brawl / Arena</td><td class="n">small cut <span class="cfg">⚙</span></td><td>Shared by the Federal Reserve and the Fight Club turf business (to Fort Knox once room turf wars arrive)</td></tr>
+          <tr><td>Staking yield cap</td><td class="n">above 25% APR <span class="cfg">⚙</span></td><td>Stakers' weekly share above the cap rejoins the rest of the surplus</td></tr>
           <tr><td>Fee splits</td><td class="n"><span class="cfg">⚙</span></td><td>Where each fee goes is set in the routing table</td></tr>
         </tbody>
       </table>

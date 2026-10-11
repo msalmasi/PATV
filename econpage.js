@@ -53,6 +53,8 @@ async function live({ patSupply } = {}) {
     fed: fed == null ? null : Math.floor(Number(fed) || 0),
     band: band ? { floor: band.floor == null ? null : Number(band.floor), ceiling: band.ceiling == null ? null : Number(band.ceiling) } : null,
     incentives: F.state.incentives || null,
+    // Economy v3: the donation terms for the PAT map ($1 = rate PAT to the donor, + bonus_pct% to the incentive budget)
+    donation: F.donationTerms(),
     fortknox: P["vault:fortknox"] != null ? P["vault:fortknox"] : F.state.fortknox,
     history: hist,
     month: { minted: sum("minted"), burned: sum("burned"),
