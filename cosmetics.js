@@ -952,7 +952,7 @@ function locals(app) {
     if (!nameAt) await refreshNames();          // first request after boot
     next();
   });
-  app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], async (req, res, next) => {     // 1.99dv: the profile + its tabs
+  app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], async (req, res, next) => {     // 1.99dv: the profile + its tabs
     try {
       res.locals.profileCosmetics = await profileData(req.params.username);
     } catch (e) {

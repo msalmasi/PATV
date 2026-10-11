@@ -303,6 +303,7 @@ async function startTitle(q, i, { offset = 0, item = null, tracks = null } = {})
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
                            [t, q.user_id, q.username, q.room_id, q.slot_id, String(it.key), title, it.type, it.year || null, it.duration || null,
                             quality, off, tr.audio, tr.sub, price, order ? order.order_id : null, charge, q.access, q.id, i, hours]);
+  require("./plexpad").noteItem(it).catch(() => {});                   // 1.99nj: its metadata for the 📼 pad achievements
   await runQuery("DELETE FROM media_sessions WHERE room_id = ?", [q.room_id]);
   await runQuery(`INSERT INTO media_sessions (room_id, slot_id, play_id, rating_key, title, state, by_user, started, updated, position, duration, queue_id, live, ep_offset)
                   VALUES (?, ?, ?, ?, ?, 'playing', ?, ?, ?, ?, ?, ?, 0, ?)`,

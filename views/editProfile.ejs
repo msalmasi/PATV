@@ -398,10 +398,10 @@
           </div>
           <label class="sw"><input type="checkbox" name="show" value="<%= id %>"<%= off ? '' : ' checked' %> aria-label="<%- t('settings.layout.show_aria', { label: lbl_(s) }) %>"><span class="tr" aria-hidden="true"></span><span class="st"><%- off ? t('settings.layout.hidden') : t('settings.layout.visible') %></span></label>
           <span class="mv"><button type="button" class="up" aria-label="<%- t('settings.layout.up_aria', { label: lbl_(s) }) %>">▲</button><button type="button" class="dn" aria-label="<%- t('settings.layout.down_aria', { label: lbl_(s) }) %>">▼</button></span>
-          <% if (id === 'analytics' && privs.length) { %>
+          <% const privsHere = privs.filter((p) => (p.sec || 'analytics') === id); if (privsHere.length) { %>
           <div class="lay-priv" role="group" aria-label="<%- t('settings.layout.priv') %>">
             <div class="lay-priv-h"><%- t('settings.layout.priv') %> <span>· <%- t('settings.layout.priv_who') %></span></div>
-            <% privs.forEach((p) => { const st = stateOf(p.id); %>
+            <% privsHere.forEach((p) => { const st = stateOf(p.id); %>
             <fieldset class="pv is-<%= st %>" data-pv="<%= p.id %>">
               <legend class="sr"><%- t('settings.layout.priv_legend', { label: lbl_(p) }) %></legend>
               <div class="pv-txt" aria-hidden="true"><b><%= p.icon %> <%- lbl_(p) %></b><small><%- desc_(p) %></small></div>

@@ -265,6 +265,11 @@ async function session(roomId) { return (await getQuery("SELECT * FROM media_ses
 async function closePlay(playId, reason, pos, error) {
   await runQuery("UPDATE media_plays SET ended_at = COALESCE(ended_at, ?), end_reason = COALESCE(end_reason, ?), last_pos = COALESCE(?, last_pos), error = COALESCE(?, error) WHERE id = ?",
                  [Date.now(), reason, pos == null ? null : Math.round(pos), error || null, playId]);
+  // 1.99nj: a play that ended may complete a 📼 Plex-on-pads achievement (plexpad.js; fire-and-forget, never blocks)
+  try {
+    const p = (await getQuery("SELECT user_id FROM media_plays WHERE id = ?", [playId]))[0];
+    if (p && p.user_id) require("./achievements").poke(p.user_id);
+  } catch (e) { /* achievements never block */ }
 }
 
 // ── the money (1.99jn) ──
@@ -440,6 +445,7 @@ async function play(user, b = {}) {
   await runQuery(`INSERT INTO media_sessions (room_id, slot_id, play_id, rating_key, title, state, by_user, started, updated, position, duration)
                   VALUES (?, ?, ?, ?, ?, 'playing', ?, ?, ?, ?, ?)`,
                  [R.id, slot.id, p.id, String(it.key), fmtTitle(it), user.username, t, t, o.offset, it.duration || null]);
+  require("./plexpad").noteItem(it).catch(() => {});                   // 1.99nj: its metadata for the 📼 pad achievements
   console.log(`[medialib] ${user.username} (${A.how}) plays "${fmtTitle(it)}" (${it.key}) on ${R.id} at ${o.offset}s, ${o.quality}p - play #${p.id}` +
               (q.price ? `, ${q.price} PAT held (order ${order.order_id})` : carry ? ` (carries play #${carry.id})` : ", free"));
   return { ok: true, play_id: p.id, slot: { id: slot.id, stream: slot.stream, hls: slot.hls }, title: fmtTitle(it), price: q.price,

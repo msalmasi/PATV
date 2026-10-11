@@ -14,7 +14,7 @@ const env = (k) => String(process.env[k] || "").trim();
 // connection checks: says reachable / not, never echoes a key or a body
 async function checks() {
   const K = conf.keys();
-  const out = { mediactl: null, overseerr: null, wizarr: null };
+  const out = { mediactl: null, overseerr: null, wizarr: null, tautulli: null };
   if (K.mediactl) {
     try {
       const r = await lib.call("GET", "/streams", null, { timeout: 6000 });
@@ -31,6 +31,11 @@ async function checks() {
   };
   if (K.overseerr) out.overseerr = await get(env("OVERSEERR_URL"), "/api/v1/settings/about", { "X-Api-Key": env("OVERSEERR_API_KEY") });
   if (K.wizarr) out.wizarr = await get(env("WIZARR_URL"), "/api/status", { "X-API-Key": env("WIZARR_API_KEY") });
+  // 1.99nj: 📊 Tautulli (plexstats.js) - its own client (the key goes in the query string, so never through `get`)
+  if (K.tautulli) {
+    try { const i = await require("./tautulli").call("get_tautulli_info", {}, { timeout: 6000 }); out.tautulli = { ok: true, version: (i && i.tautulli_version) || null }; }
+    catch (e) { out.tautulli = { ok: false, error: conf.errLine(e) }; }
+  }
   return out;
 }
 

@@ -110,6 +110,12 @@ async function webMetrics(userId) {
   const featIds = catalog.filter((a) => a.side === "web" && FEATURE_METRICS.includes(a.metric)).map((a) => a.id);
   const featHeld = featIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${featIds.map(() => "?").join(",")})`, [userId, ...featIds]) : 0;
   const feat = featBackfilled && featHeld < featIds.length ? await featureMetrics(userId).catch(() => ({})) : {};
+  // 1.99nj: 📼 Plex on pads (plexpad.js) - 0 until its quiet backfill has run; `_quiet` = the same counted over plays from
+  // before it (an achievement those alone earn is given quietly, see checkWeb). Skipped once every one of them is held.
+  const PP = require("./plexpad");
+  const ppIds = catalog.filter((a) => a.side === "web" && PP.METRICS.includes(a.metric)).map((a) => a.id);
+  const ppHeld = ppIds.length ? await one(`SELECT COUNT(*) FROM user_badges WHERE userId = ? AND badgeId IN (${ppIds.map(() => "?").join(",")})`, [userId, ...ppIds]) : 0;
+  const pp = ppIds.length && ppHeld < ppIds.length ? await PP.metrics(userId).catch(() => ({})) : {};
   const spent = await one(`SELECT COALESCE(SUM(-points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WAGER}`, [userId]);
   const won = await one(`SELECT COALESCE(SUM(points),0) FROM transactions WHERE userId = ? AND type IN ${SPIN_WIN}`, [userId]);
   return {
@@ -127,6 +133,8 @@ async function webMetrics(userId) {
     telegram_linked: tgBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM telegram_links WHERE user_id = ?", [userId])) : 0,
     google_linked: googleBackfilled ? Math.min(1, await one("SELECT COUNT(*) FROM sso_links WHERE provider = 'google' AND user_id = ?", [userId])) : 0,
     ...Object.fromEntries(FEATURE_METRICS.map((k) => [k, feat[k] || 0])),
+    ...Object.fromEntries(PP.METRICS.map((k) => [k, pp[k] || 0])),
+    _quiet: pp._quiet || {},
   };
 }
 
@@ -143,11 +151,13 @@ async function checkWeb(userId) {
       let any = false;
       for (const a of catalog) {
         if (a.side !== "web" || (m[a.metric] || 0) < (a.threshold || 1)) continue;
-        const r = await award({ userId }, a.id, updateLevelFn);
+        // 1.99nj: earned by history from before its quiet backfill alone (plays whose metadata only arrived later) = quiet too
+        const quiet = !!(m._quiet && (m._quiet[a.metric] || 0) >= (a.threshold || 1));
+        const r = await award({ userId }, a.id, updateLevelFn, { silent: quiet });
         if (r.ok && r.awarded) {
           any = true;
-          await runQuery("INSERT INTO achievement_feed (userId, badgeId, patPaid) VALUES (?, ?, ?)",
-                         [userId, a.id, r.patPaid ? 1 : 0]);
+          if (!quiet) await runQuery("INSERT INTO achievement_feed (userId, badgeId, patPaid) VALUES (?, ?, ?)",
+                                     [userId, a.id, r.patPaid ? 1 : 0]);
         }
       }
       if (!any) break;
@@ -205,7 +215,8 @@ const webBackfill = (async () => {
   if (done.length) return;
   // (the 📼 Plex, 📨 Telegram and 🍀 Google ones have their own quiet backfills, which also hand out their cosmetics)
   const PLEX_METRICS_ = ["plex_linked", "plex_member", "plex_days"];
-  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...FEATURE_METRICS].includes(a.metric));
+  const web = catalog.filter((a) => a.side === "web" && ![...PLEX_METRICS_, "telegram_linked", "google_linked", ...FEATURE_METRICS,
+                                                         ...require("./plexpad").METRICS].includes(a.metric));
   const users = await getQuery("SELECT userId FROM users");
   let n = 0;
   for (const u of users) {

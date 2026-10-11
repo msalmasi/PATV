@@ -74,6 +74,7 @@ function keys() {
     overseerr: !!(env("OVERSEERR_URL") && env("OVERSEERR_API_KEY")),
     overseerr_webhook: !!env("OVERSEERR_WEBHOOK_SECRET"),
     wizarr: !!(env("WIZARR_URL") && env("WIZARR_API_KEY")),
+    tautulli: !!(env("TAUTULLI_URL") && env("TAUTULLI_API_KEY")),     // 1.99nj: 📊 Plex watch stats (plexstats.js)
   };
 }
 

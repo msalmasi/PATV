@@ -1192,6 +1192,7 @@ require("./mediaweb").register(app, { addUser });   // 1.99ji: Plex / media - �
 require("./plexhub").register(app, { addUser });   // 1.99kp: 📼 /plex - the Plex hub (requests, your requests, access, Play from Plex, perks)
 require("./requestroles").register(app, { addUser, discordBridge });   // 1.99la: 🔭 Scout / 🎟️ Curator store roles -> PATV + Seerr + Discord; /admin/media/roles
 require("./mediaissues").register(app, { addUser });   // 1.99la: 🛠️ report a problem with a Plex title (Seerr issues) + /plex/manage for curators
+require("./plexstats").register(app, { addUser });   // 1.99nj: 📼 Plex watch stats on profiles (Tautulli, hourly sync) + the 📼 pad achievements' metadata job
 require("./plexmembers").register(app, { addUser });   // 1.99jp: 📼 which PATV users are on our Plex server (hourly sync via mediactl), links, PATV-sold access + removal review
 require("./comps").register(app, { addUser });         // 1.99ma: 🎁 admin comps (Plex trial/lifetime, Prime Time / Season Pass timed, store items) - /admin/comps
 require("./subscriptions").register(app, { addUser }); // 1.99jp: 🔁 store subscriptions (Plex monthly) + /subscriptions (also Prime Time / Season Pass auto-renew)
@@ -1503,7 +1504,7 @@ async function profileStoryFor(user, viewer, owner) {
 }
 
 // Get user profile
-app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser, async (req, res) => {
+app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics|plex)"], addUser, async (req, res) => {
   const username = req.user ? req.user.username : null; // Fallback to null if no user in session
   const usernameProfile = req.params.username; // Fallback to null if no user in session
   const sql =
@@ -1552,6 +1553,9 @@ app.get(["/u/:username", "/u/:username/:tab(posts|overview|analytics)"], addUser
           admin: isAdmin && !preview,
           show: L.show,
         }),
+        // 1.99nj: the 📼 Plex tab (plexstats.js): Tautulli watch stats + PATV pad plays, each panel only when this viewer may see it
+        plexProfile: await require("./plexstats").forProfile(user.userId, { show: L.show, owner: isOwner && !preview })
+          .catch((e) => { console.error("profile plex:", e.message); return null; }),
         // section order + visibility (profilelayout.js)
         layout: L,
         // 1.99du: the profile's tabs (profilelayout.tabsFor / pickTab) - ?tab= picks the open one, Posts by default

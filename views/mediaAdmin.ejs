@@ -15,6 +15,7 @@
         <tr><td>📼 Media-control (homelab)</td><td><%= yes(K.mediactl) %> <small class="muted">MEDIACTL_URL, MEDIACTL_SECRET<%= K.mediactl_tls_pinned ? ', TLS pinned' : '' %></small></td><td><%= yes(S.library_enabled) %></td><td data-ck="mediactl">…</td></tr>
         <tr><td>🎬 Overseerr / Seerr</td><td><%= yes(K.overseerr) %> <small class="muted">OVERSEERR_URL, OVERSEERR_API_KEY<%= K.overseerr_webhook ? ', webhook secret' : '' %></small></td><td><%= yes(S.requests_enabled) %></td><td data-ck="overseerr">…</td></tr>
         <tr><td>🎟️ Wizarr</td><td><%= yes(K.wizarr) %> <small class="muted">WIZARR_URL, WIZARR_API_KEY</small></td><td><%= yes(S.invites_enabled) %></td><td data-ck="wizarr">…</td></tr>
+        <tr><td>📊 Tautulli (profile watch stats)</td><td><%= yes(K.tautulli) %> <small class="muted">TAUTULLI_URL, TAUTULLI_API_KEY</small></td><td><%= yes(K.tautulli) %> <small class="muted">on with its keys</small></td><td data-ck="tautulli">…</td></tr>
       </tbody></table></div>
   </section>
 
@@ -38,6 +39,13 @@
     <p class="muted">🎁 <b>Comp Plex access</b> (a trial or lifetime, free, no invite needed if they're already on the server): <a href="/admin/comps#plex">/admin/comps</a> - or the 🎁 Comp button on a linked member below. Ended trials show up under "Would remove" like ended monthly access.</p>
     <div class="row"><button type="button" class="btn primary" id="pmSync">Sync now</button><button type="button" class="btn" id="pmDry">Preview (dry run)</button><span class="msg" id="pmMsg" role="status"></span></div>
     <div id="pmOut"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section class="sb-card" id="plexStats" aria-labelledby="psT">
+    <h2 id="psT">📊 Plex watch stats</h2>
+    <p class="muted">The 📼 Plex tab on profiles: watch time, plays, genres, libraries, favourites and a streak from Tautulli, for accounts with a proven Plex link (linked by the member, an admin, a Wizarr invite or an Overseerr link - never an email or name guess). Synced about once an hour into the site's own table, never per page view. Members choose who sees it (Edit profile → Layout; "Only me &amp; admins" by default).</p>
+    <div class="row"><button type="button" class="btn primary" id="psSync"<%= K.tautulli ? '' : ' disabled' %>>Sync now</button><span class="msg" id="psMsg" role="status"></span></div>
+    <div id="psOut"><p class="muted">Loading…</p></div>
   </section>
 
   <section class="sb-card" id="settings" aria-labelledby="stT">

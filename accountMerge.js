@@ -213,6 +213,8 @@ const RULES = {
   // 1.99jp: 📼 Plex members (plexmembers.js) + 🔁 store subscriptions (subscriptions.js)
   "plex_members.user_id": M(), "plex_members.linked_by": { deny: NAME }, "plex_members.revoke_by": { deny: NAME },
   "plex_member_log.user_id": M(), "plex_member_log.actor": { deny: NAME },
+  // 1.99nj: 📊 the cached Plex watch stats (plexstats.js, one row per account; the next sync rebuilds it from the moved link)
+  "plex_watch_stats.user_id": M({ key: [] }),
   // 1.99ma: 🎁 admin comps (comps.js) - the Plex comp rows; a comped order's admin is a name
   "plex_comps.user_id": M(), "plex_comps.by_id": M(), "plex_comps.by_name": { deny: NAME }, "plex_comps.revoked_by": { deny: NAME },
   "shop_orders.comp_by": { deny: NAME },

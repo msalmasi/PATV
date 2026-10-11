@@ -1,0 +1,146 @@
+<% const t = locals.i18nT || new Function(include('../../i18n-core.js'))()(JSON.parse(include('../../locales/en.json'))); -%>
+<%#
+  1.99nj: Profile → 📼 Plex (plexstats.forProfile builds `px`). Two privacy panels (profilelayout.js PRIV, both
+  "Only me & admins" until the owner changes them):
+    px_watch  watch stats from our Plex server (Tautulli, synced hourly - never fetched per page view)
+    px_pads   what they put on PATV pads with 📼 Play from Plex (the site's own play log)
+  The server only puts a panel's data in `px` when this viewer may see it; the template renders what it gets and tags it.
+%>
+<%
+  const P = px;
+  const LL = typeof L !== 'undefined' && L ? L : null;
+  const hc = (id) => (LL && LL.hidden(id) ? ' px-hid' : '');
+  const ht = (id) => (LL && LL.hidden(id) ? '<span class="px-hidtag">\u{1F441} ' + t('profile.hidden_from_visitors') + '</span>' : '');
+  const isPriv = (id) => !!(LL && LL.priv && LL.priv(id) && !LL.hidden(id));
+  const pt = (id) => (isPriv(id) ? '<span class="lock">\u{1F512} ' + (LL.owner ? t('profile.an.only_you') : t('profile.an.only_owner')) + '</span>' : '');
+  const fmtN = (n) => Math.floor(Number(n) || 0).toLocaleString('en-US');
+  const hrs = (sec) => t('profile.px.hours', { n: (Math.round((Number(sec) || 0) / 360) / 10).toLocaleString('en-US') });
+  const fmtDay = (ts) => (locals.tzFmt || new Function(include('../../tz-core.js'))()('UTC', 'en').fmt)(ts, 'day');
+  const W = P.watch && P.watch.found ? P.watch : null;
+  const bar = (rows, val, label, color) => rows.map((r) => ({ r, w: Math.max(3, Math.round((val(r) / Math.max(1, ...rows.map(val))) * 100)), label: label(r), color }));
+%>
+<style>
+  .px { display: grid; gap: 18px; }
+  .px-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px 14px; flex-wrap: wrap; }
+  .px-head h2 { margin: 0; }
+  .px .blk { display: grid; gap: 14px; min-width: 0; }
+  .px .sub { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #9a9; margin: 0; }
+  .px .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .px .tile { background: #0d0d0d; border: 1px solid #1f1f1f; border-radius: 10px; padding: 11px 13px; min-width: 0; }
+  .px .tile .k { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #888; }
+  .px .tile .v { font-size: 21px; font-weight: bold; margin-top: 3px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+  .px .tile .s { font-size: 12px; color: #888; margin-top: 2px; }
+  .px .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .px .rlist { display: grid; gap: 7px; }
+  .px .rrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; font-size: 13px; }
+  .px .rrow .rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ccc; }
+  .px .rrow .rv { color: #999; font-variant-numeric: tabular-nums; }
+  .px .rrow .rb { grid-column: 1 / -1; height: 6px; background: #1a1a1a; border-radius: 999px; overflow: hidden; }
+  .px .rrow .rb span { display: block; height: 100%; border-radius: 999px; }
+  .px ol.fav { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; color: #ccc; }
+  .px ol.fav small { color: #888; }
+  .px ul.recent { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .px ul.recent li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid #1c1c1c; font-size: 13px; }
+  .px ul.recent li:first-child { border-top: 0; }
+  .px ul.recent .ti { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ddd; }
+  .px ul.recent .wh { color: #888; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .px .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .px .pill { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: #161616; border: 1px solid #2a2a2a; color: #ccc; }
+  .px .pill b { color: #fff; margin-left: 3px; }
+  .px .lock { display: inline-block; white-space: nowrap; font-size: 11px; color: #c9a36a; border: 1px solid #4a3820; border-radius: 999px; padding: 1px 8px; margin-left: 6px; letter-spacing: 0; text-transform: none; vertical-align: 1px; }
+  .px .px-hid { opacity: .55; }
+  .px .px-hidtag { font-size: 11px; color: #aaa; border: 1px dashed #444; border-radius: 999px; padding: 1px 8px; justify-self: start; }
+  .px .note { color: #888; font-size: 12.5px; margin: 0; }
+  .px .empty { color: #777; font-size: 13px; margin: 0; }
+  @media (max-width: 640px) { .px .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+<section class="card px" id="plex">
+  <div class="px-head">
+    <h2><%- t('profile.px.title') %></h2>
+    <% if (W && P.synced_at) { %><span class="note"><%- t('profile.px.synced', { when: fmtDay(P.synced_at) }) %></span><% } %>
+  </div>
+
+  <% if (P.watch || (P.owner && P.linked && (!LL || LL.show('px_watch')))) { %>
+  <div class="blk<%= hc('px_watch') %>" data-px="watch"><%- ht('px_watch') %>
+    <div class="sub"><%- t('profile.px.watch_h') %> <%- pt('px_watch') %></div>
+    <% if (W) { %>
+      <div class="tiles">
+        <div class="tile"><div class="k"><%- t('profile.px.t_time') %></div><div class="v"><%= hrs(W.total_seconds) %></div><div class="s"><%- t('profile.px.n_plays', { count: W.total_plays }) %></div></div>
+        <div class="tile"><div class="k"><%- t('profile.px.t_month') %></div><div class="v"><%= hrs(W.month_seconds) %></div><div class="s"><%- t('profile.px.n_plays', { count: W.month_plays }) %></div></div>
+        <div class="tile"><div class="k"><%- t('profile.px.t_week') %></div><div class="v"><%= hrs(W.week_seconds) %></div><div class="s"><%- t('profile.px.n_plays', { count: W.week_plays }) %></div></div>
+        <div class="tile"><div class="k"><%- t('profile.px.t_streak') %></div><div class="v"><%- t('profile.px.days', { count: (W.streak && W.streak.current) || 0 }) %></div><div class="s"><%- t('profile.px.best', { count: (W.streak && W.streak.best) || 0 }) %></div></div>
+      </div>
+      <div class="two">
+        <div>
+          <div class="sub" style="margin-bottom:8px"><%- t('profile.px.genres') %></div>
+          <% if (W.genres && W.genres.length) { %><div class="rlist">
+            <% bar(W.genres, (g) => g.pct, (g) => g.pct + '%', '#6fbf73').forEach((b) => { %>
+              <div class="rrow"><span class="rn"><%= b.r.name %></span><span class="rv"><%= b.label %></span><span class="rb"><span style="width:<%= b.w %>%;background:<%= b.color %>"></span></span></div>
+            <% }) %></div>
+          <% } else { %><p class="empty"><%- t('profile.px.none_yet') %></p><% } %>
+        </div>
+        <div>
+          <div class="sub" style="margin-bottom:8px"><%- t('profile.px.libraries') %></div>
+          <% if (W.libraries && W.libraries.length) { %><div class="rlist">
+            <% bar(W.libraries, (l) => l.seconds || l.plays, (l) => hrs(l.seconds), '#5aa3d6').forEach((b) => { %>
+              <div class="rrow"><span class="rn"><%= b.r.type === 'show' ? '📺' : '🎬' %> <%= b.r.name %></span><span class="rv"><%= b.label %></span><span class="rb"><span style="width:<%= b.w %>%;background:<%= b.color %>"></span></span></div>
+            <% }) %></div>
+          <% } else { %><p class="empty"><%- t('profile.px.none_yet') %></p><% } %>
+        </div>
+      </div>
+      <div class="two">
+        <div>
+          <div class="sub" style="margin-bottom:8px"><%- t('profile.px.fav_shows') %></div>
+          <% if (W.top_shows && W.top_shows.length) { %><ol class="fav"><% W.top_shows.forEach((f) => { %><li><%= f.title %> <small>· <%= hrs(f.seconds) %></small></li><% }) %></ol>
+          <% } else { %><p class="empty"><%- t('profile.px.none_yet') %></p><% } %>
+        </div>
+        <div>
+          <div class="sub" style="margin-bottom:8px"><%- t('profile.px.fav_movies') %></div>
+          <% if (W.top_movies && W.top_movies.length) { %><ol class="fav"><% W.top_movies.forEach((f) => { %><li><%= f.title %><%= f.year ? ' (' + f.year + ')' : '' %> <small>· <%= hrs(f.seconds) %></small></li><% }) %></ol>
+          <% } else { %><p class="empty"><%- t('profile.px.none_yet') %></p><% } %>
+        </div>
+      </div>
+      <div>
+        <div class="sub" style="margin-bottom:6px"><%- t('profile.px.recent') %></div>
+        <% if (W.recent && W.recent.length) { %><ul class="recent">
+          <% W.recent.forEach((r) => { %>
+            <li><span aria-hidden="true"><%= r.type === 'episode' ? '📺' : r.type === 'movie' ? '🎬' : '🎵' %></span><span class="ti"><%= r.title %></span>
+              <span class="wh"><%= r.done ? '✓' : r.pct + '%' %> · <%= fmtDay(r.at) %></span></li>
+          <% }) %></ul>
+        <% } else { %><p class="empty"><%- t('profile.px.none_yet') %></p><% } %>
+      </div>
+      <% if (W.platforms && W.platforms.length) { %>
+        <div><div class="sub" style="margin-bottom:8px"><%- t('profile.px.platforms') %></div>
+          <div class="pills"><% W.platforms.forEach((p) => { %><span class="pill"><%= p.name %><b><%= fmtN(p.plays) %></b></span><% }) %></div></div>
+      <% } %>
+      <p class="note"><%- t('profile.px.source') %></p>
+    <% } else if (P.watch && P.watch.found === false) { %>
+      <p class="empty"><%- t('profile.px.not_found') %></p>
+    <% } else { %>
+      <p class="empty"><%- P.configured ? t('profile.px.not_synced') : t('profile.px.not_configured') %></p>
+    <% } %>
+  </div>
+  <% } %>
+
+  <% if (P.pads) { const D = P.pads; %>
+  <div class="blk<%= hc('px_pads') %>" data-px="pads"><%- ht('px_pads') %>
+    <div class="sub"><%- t('profile.px.pads_h') %> <%- pt('px_pads') %></div>
+    <% if (D.plays) { %>
+      <div class="tiles">
+        <div class="tile"><div class="k"><%- t('profile.px.pad_plays') %></div><div class="v"><%= fmtN(D.plays) %></div><div class="s"><%- t('profile.px.pad_split', { movies: fmtN(D.movies), episodes: fmtN(D.episodes) }) %></div></div>
+        <div class="tile"><div class="k"><%- t('profile.px.pad_hours') %></div><div class="v"><%= t('profile.px.hours', { n: D.hours.toLocaleString('en-US') }) %></div></div>
+        <div class="tile"><div class="k"><%- t('profile.px.pad_titles') %></div><div class="v"><%= fmtN(D.titles) %></div></div>
+      </div>
+      <div>
+        <div class="sub" style="margin-bottom:6px"><%- t('profile.px.recent_pads') %></div>
+        <ul class="recent"><% D.recent.forEach((r) => { %>
+          <li><span aria-hidden="true"><%= r.kind === 'episode' ? '📺' : '🎬' %></span><span class="ti"><%= r.title %></span><span class="wh"><%= fmtDay(r.at) %></span></li>
+        <% }) %></ul>
+      </div>
+    <% } else { %>
+      <p class="empty"><%- t('profile.px.pad_none') %></p>
+    <% } %>
+    <p class="note"><%- t('profile.px.pad_note') %> <a href="/achievements#plex"><%- t('profile.px.pad_ach') %></a></p>
+  </div>
+  <% } %>
+</section>

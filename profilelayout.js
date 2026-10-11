@@ -34,10 +34,13 @@ const SECTIONS = [
   { id: "gtf", label: "Grand Theft Frogger", desc: "Overview tab: heist sheet and GTF links", icon: "🥷" },
   { id: "badges", label: "Badges", desc: "Overview tab: every badge you've earned", icon: "🏅" },
   { id: "analytics", label: "Analytics", desc: "Analytics tab: Camfrog chat, mic and command activity", icon: "📈" },
+  // 1.99nj: 📼 Plex tab (plexstats.js): watch stats from the Plex server + what you put on PATV pads
+  { id: "plex", label: "Plex", desc: "📼 Plex tab: your watch stats on our Plex server and your 📼 plays on PATV pads", icon: "📼" },
 ];
 // Which tab each section is in (sections not listed are in the header).
-const TABS = { posts: { label: "Posts", icon: "📝" }, overview: { label: "Overview", icon: "🧾" }, analytics: { label: "Analytics", icon: "📈" } };
-const TAB_OF = { posts: "posts", gtf: "overview", badges: "overview", analytics: "analytics" };
+const TABS = { posts: { label: "Posts", icon: "📝" }, overview: { label: "Overview", icon: "🧾" }, analytics: { label: "Analytics", icon: "📈" },
+               plex: { label: "Plex", icon: "📼" } };
+const TAB_OF = { posts: "posts", gtf: "overview", badges: "overview", analytics: "analytics", plex: "plex" };
 const DEFAULT_TAB = "posts";
 // Panels inside a section that can be hidden on their own (not reordered).
 const SUBS = {
@@ -54,26 +57,34 @@ const SUBS = {
     { id: "an_mod", label: "Mod actions taken" },
   ],
 };
-// Privacy panels (all inside Analytics): Public / Only me & admins / Hidden.
+// Privacy panels: Public / Only me & admins / Hidden. `sec` = the section whose editor row holds the switch.
+// 1.99nj: `def: "private"` = "Only me & admins" until the owner picks something else (stored as {pub: [...]} when they
+// make one public) - the 📼 Plex panels: watch history is personal, so it starts private.
 const PRIV = [
-  { id: "an_words", label: "Top words", icon: "💬", desc: "Your most-used words in chat (never recorded while you're !incognito)" },
-  { id: "an_modon", label: "Moderated against", icon: "🛡", desc: "Shows kicks, bans, mutes and strikes others did to you" },
-  { id: "an_modlist", label: "Mod actions taken — itemised", icon: "📋", desc: "Each kick, ban or topic change you made, with who and where (the totals are always shown)" },
-  { id: "an_modcmds", label: "Moderation & admin commands", icon: "🔨", desc: "Your moderation and admin commands in the Commands panel" },
+  { id: "an_words", sec: "analytics", label: "Top words", icon: "💬", desc: "Your most-used words in chat (never recorded while you're !incognito)" },
+  { id: "an_modon", sec: "analytics", label: "Moderated against", icon: "🛡", desc: "Shows kicks, bans, mutes and strikes others did to you" },
+  { id: "an_modlist", sec: "analytics", label: "Mod actions taken — itemised", icon: "📋", desc: "Each kick, ban or topic change you made, with who and where (the totals are always shown)" },
+  { id: "an_modcmds", sec: "analytics", label: "Moderation & admin commands", icon: "🔨", desc: "Your moderation and admin commands in the Commands panel" },
+  { id: "px_watch", sec: "plex", def: "private", label: "Plex watch stats", icon: "📊", desc: "Watch time, plays, genres, libraries, favourites, your streak and what you watched lately on our Plex server" },
+  { id: "px_pads", sec: "plex", def: "private", label: "Plays on PATV pads", icon: "📼", desc: "The titles you put on PATV pads with 📼 Play from Plex" },
 ];
 const STATES = ["public", "private", "hidden"];
 const SECTION_IDS = SECTIONS.map((s) => s.id);
 const SUB_IDS = Object.values(SUBS).flat().map((s) => s.id);
 const PRIV_IDS = PRIV.map((p) => p.id);
+const PRIV_DEFAULT_PRIVATE = PRIV.filter((p) => p.def === "private").map((p) => p.id);
 const ALL_IDS = new Set([...SECTION_IDS, ...SUB_IDS, ...PRIV_IDS]);
-const DEFAULT = Object.freeze({ order: SECTION_IDS.slice(), hidden: [], priv: [] });
+const DEFAULT = Object.freeze({ order: SECTION_IDS.slice(), hidden: [], priv: [], pub: [] });
 
 const ready = runQuery(`CREATE TABLE IF NOT EXISTS profile_layout (
   user_id TEXT PRIMARY KEY, layout TEXT NOT NULL, updated INTEGER)`).catch((e) => console.error("[profilelayout] init:", e));
 
 const list = (v) => (Array.isArray(v) ? v : v == null || v === "" ? [] : [v]).map((x) => String(x).slice(0, 32));
 
-/** Any input -> a valid {order, hidden, priv}. Unknown ids are dropped; hidden beats private. */
+/**
+ * Any input -> a valid {order, hidden, priv, pub}. Unknown ids are dropped; hidden beats private beats public.
+ * 1.99nj: a default-private panel (PRIV def "private") is in `priv` unless it's in `pub` (the owner made it public) or hidden.
+ */
 function sanitize(raw) {
   const r = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const order = [];
@@ -83,7 +94,10 @@ function sanitize(raw) {
   for (const id of list(r.hidden).slice(0, 50)) if (ALL_IDS.has(id) && !hidden.includes(id)) hidden.push(id);
   const priv = [];
   for (const id of list(r.priv).slice(0, 50)) if (PRIV_IDS.includes(id) && !hidden.includes(id) && !priv.includes(id)) priv.push(id);
-  return { order, hidden, priv };
+  const pub = [];
+  for (const id of list(r.pub).slice(0, 50)) if (PRIV_DEFAULT_PRIVATE.includes(id) && !hidden.includes(id) && !priv.includes(id) && !pub.includes(id)) pub.push(id);
+  for (const id of PRIV_DEFAULT_PRIVATE) if (!hidden.includes(id) && !pub.includes(id) && !priv.includes(id)) priv.push(id);
+  return { order, hidden, priv, pub };
 }
 
 /** "public" | "private" | "hidden" for any id (plain ids are never private). */
@@ -104,15 +118,16 @@ function fromForm(body) {
   const b = body || {};
   const shown = new Set(list(b.show));
   const hidden = [...SECTION_IDS, ...SUB_IDS].filter((id) => !shown.has(id));
-  const priv = [];
+  const priv = [], pub = [];
   for (const id of PRIV_IDS) {
     const raw = b["vis_" + id];
     const st = raw == null || raw === "" ? "hidden" : String(Array.isArray(raw) ? raw[raw.length - 1] : raw);
     if (!STATES.includes(st)) { const e = new Error("bad visibility state"); e.code = "BAD_STATE"; throw e; }
     if (st === "hidden") hidden.push(id);
     else if (st === "private") priv.push(id);
+    else if (PRIV_DEFAULT_PRIVATE.includes(id)) pub.push(id);
   }
-  return sanitize({ order: list(b.order), hidden, priv });
+  return sanitize({ order: list(b.order), hidden, priv, pub });
 }
 
 async function get(userId) {
@@ -220,4 +235,4 @@ function register(app, { addUser }) {
   });
 }
 
-module.exports = { SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };
+module.exports = { SECTIONS, TABS, TAB_OF, DEFAULT_TAB, tabsFor, pickTab, SUBS, PRIV, STATES, SECTION_IDS, SUB_IDS, PRIV_IDS, PRIV_DEFAULT_PRIVATE, DEFAULT, sanitize, stateOf, fromForm, get, save, reset, view, register };

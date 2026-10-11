@@ -10,7 +10,7 @@
   const isMe = username && username == usernameProfile && !previewing;
   // section order + visibility (profilelayout.js). Hidden sections render only for the owner/admins, greyed.
   const PL = typeof profileLayoutMod !== 'undefined' && profileLayoutMod ? profileLayoutMod : null;
-  const L = typeof layout !== 'undefined' && layout ? layout : { order: ['posts', 'stats', 'level', 'avatar', 'gtf', 'badges', 'analytics'],
+  const L = typeof layout !== 'undefined' && layout ? layout : { order: ['posts', 'stats', 'level', 'avatar', 'gtf', 'badges', 'analytics', 'plex'],
     hidden: () => false, show: () => true, seesHidden: false, anyHidden: false };
   const hidTag = (id) => L.hidden(id) ? '<span class="pf-hid">\u{1F441} ' + t('profile.hidden_from_visitors') + '</span>' : '';
   const role = (classh || '').toLowerCase();
@@ -32,6 +32,8 @@
     stats: true, level: true, gtf: true, badges: true,
     avatar: !!(av && (av.svg || av.items.length || isMe || sheet)),
     analytics: !!hasAnalytics,
+    // 1.99nj: 📼 Plex (plexstats.forProfile: null when this viewer has nothing to see there)
+    plex: !!(typeof plexProfile !== 'undefined' && plexProfile),
     posts: !!(typeof social !== 'undefined' && social && (social.posts.length || isMe || social.page > 1 || social.view === 'profile')),
   };
   // the GTF portrait: its best item's rarity colours the frame
@@ -351,6 +353,9 @@
   <% } else if (isMe && !cf) { %>
     <section class="card" id="analytics"><h2><%- t('profile.analytics') %></h2><p class="muted" style="margin:0"><%- t('profile.analytics.unlinked') %></p></section>
   <% } %>
+  <% };
+    SEC.plex = function () { %>
+  <%- include('partials/profile-plex', { px: plexProfile, L }) %>
   <% };
     SEC.gtf = function () { %>
   <section class="card" id="gtf">

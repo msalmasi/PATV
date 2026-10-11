@@ -15,13 +15,39 @@
 
   // connection checks
   api("GET", "/api/media/admin/checks").then(function (j) {
-    ["mediactl", "overseerr", "wizarr"].forEach(function (k) {
+    ["mediactl", "overseerr", "wizarr", "tautulli"].forEach(function (k) {
       var td = document.querySelector('[data-ck="' + k + '"]');
       if (!td) return;
       var c = j.checks[k];
       td.textContent = c == null ? "— (no keys)" : c.ok ? "✅" + (c.version ? " v" + c.version : "") + (c.streams != null ? " · " + c.streams + " streams" : "") : "⚠ " + (c.error || "no");
     });
   }).catch(function (e) { document.querySelectorAll("[data-ck]").forEach(function (td) { td.textContent = "⚠ " + e.message; }); });
+
+  // 1.99nj: 📊 Plex watch stats (plexstats.js)
+  function psLoad() {
+    var out = document.getElementById("psOut");
+    if (!out) return;
+    api("GET", "/api/media/admin/plexstats").then(function (j) {
+      var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+      var when = function (t) { return t ? new Date(Number(t)).toISOString().slice(0, 16).replace("T", " ") : "—"; };
+      var html = "<p class=\"muted\">" + (j.configured ? "Every " + j.every_min + " min." : "Not configured (TAUTULLI_URL, TAUTULLI_API_KEY).") +
+        (j.last ? " Last run " + when(j.last.at) + ": " + j.last.synced + " ok, " + j.last.failed + " failed, " + j.last.not_in_tautulli + " not in Tautulli." : "") + "</p>";
+      if (j.accounts.length) {
+        html += "<div class=\"tblwrap\"><table><thead><tr><th>Account</th><th>Synced</th><th>In Tautulli</th><th>Last error</th></tr></thead><tbody>" +
+          j.accounts.map(function (a) { return "<tr><td>" + esc(a.username || a.user_id) + "</td><td>" + when(a.synced_at) + "</td><td>" + (a.found ? "✅" : a.synced_at ? "—" : "") +
+            "</td><td>" + (a.error ? esc(a.error) + " (" + when(a.error_at) + ")" : "") + "</td></tr>"; }).join("") + "</tbody></table></div>";
+      }
+      out.innerHTML = html;
+    }).catch(function (e) { out.textContent = "⚠ " + e.message; });
+  }
+  psLoad();
+  var psSync = document.getElementById("psSync");
+  if (psSync) psSync.addEventListener("click", function () {
+    psSync.disabled = true; msg("psMsg", "Syncing…");
+    api("POST", "/api/media/admin/plexstats/sync", {}).then(function (j) {
+      msg("psMsg", j.configured === false ? "Not configured." : j.synced + " ok, " + j.failed + " failed.", true); psLoad();
+    }).catch(function (e) { msg("psMsg", e.message); }).then(function () { psSync.disabled = false; });
+  });
 
   // settings
   var f = document.getElementById("mediaSettings");
