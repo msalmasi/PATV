@@ -3638,6 +3638,8 @@
   "settings.connections.google_linked": "Google bağlı. Artık onunla giriş yapabilirsin.",
   "settings.connections.google_linked_short": "Bağlı",
   "settings.connections.google_hint": "Google hesabınla giriş yap. Eşleşme Google hesabına göre yapılır, asla e-postaya göre değil.",
+  "settings.connections.google_ach": "🏆 Google'ı bağlamak 🍀 I'm Feeling Lucky {!link} başarımını ve Search Party avatar halkasını kazandırır - tamamen senin olsun.",
+  "settings.connections.google_ach_link": "başarım",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Telegram'da Pepe",
   "settings.telegram.lead": "Hesabını Pepe'nin Telegram botuna bağla; uyarıların (mesajlar, etiketlemeler, bahşişler, yayına geçişler ve aşağıda seçtiklerin) Telegram'a gelsin.",

@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "Google 已关联。你现在可以用它登录了。",
   "settings.connections.google_linked_short": "已关联",
   "settings.connections.google_hint": "使用你的 Google 账号登录。系统通过 Google 账号匹配，从不通过邮箱匹配。",
+  "settings.connections.google_ach": "🏆 关联 Google 可解锁 🍀「手气不错」{!link}，以及「搜索小队」头像光环，永久归你所有。",
+  "settings.connections.google_ach_link": "成就",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Telegram 上的 Pepe",
   "settings.telegram.lead": "关联你的账号到 Pepe 的 Telegram 机器人，你的提醒（消息、@提及、打赏、开播以及你在下方选择的提醒）都会发到 Telegram。",

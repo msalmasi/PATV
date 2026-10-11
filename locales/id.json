@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "Google sudah terhubung. Kamu sekarang bisa masuk dengan itu.",
   "settings.connections.google_linked_short": "Terhubung",
   "settings.connections.google_hint": "Masuk dengan akun Google-mu. Akunmu dicocokkan lewat akun Google-mu, bukan lewat email.",
+  "settings.connections.google_ach": "🏆 Menghubungkan Google memberimu pencapaian 🍀 Saya Lagi Beruntung {!link} dan cincin avatar Search Party, milikmu selamanya.",
+  "settings.connections.google_ach_link": "Pencapaian",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe di Telegram",
   "settings.telegram.lead": "Hubungkan akunmu ke bot Telegram Pepe dan peringatanmu (pesan, sebutan, tip, go-live, dan yang kamu pilih di bawah) akan masuk ke Telegram.",

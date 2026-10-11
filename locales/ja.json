@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "Googleが連携されています。今すぐそれでログインできます。",
   "settings.connections.google_linked_short": "連携済み",
   "settings.connections.google_hint": "Googleアカウントでログインします。照合はGoogleアカウントで行われ、メールアドレスでは行われません。",
+  "settings.connections.google_ach": "🏆 Googleを連携すると、🍀 「ラッキー気分」の{!link}と「Search Party」のアバターリングを獲得できます。どちらもずっとあなたのものです。",
+  "settings.connections.google_ach_link": "実績",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Telegram版のPepe",
   "settings.telegram.lead": "アカウントをPepeのTelegramボットと連携すると、メッセージ、メンション、チップ、配信開始、下で選んだ通知がTelegramに届きます。",

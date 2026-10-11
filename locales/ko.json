@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "Google이 연결됐어요. 이제 이걸로 로그인할 수 있어요.",
   "settings.connections.google_linked_short": "연결됨",
   "settings.connections.google_hint": "Google 계정으로 로그인하세요. Google 계정으로만 확인하며 이메일로는 확인하지 않아요.",
+  "settings.connections.google_ach": "🏆 Google을 연결하면 🍀 「I'm Feeling Lucky」 {!link} 업적과 검색 파티 아바타 링을 받아요. 계속 간직할 수 있어요.",
+  "settings.connections.google_ach_link": "업적",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Telegram의 Pepe",
   "settings.telegram.lead": "계정을 Pepe의 Telegram 봇에 연결하면 메시지, 멘션, 팁, 방송 시작 알림 등 아래에서 고른 알림이 Telegram으로 도착해요.",

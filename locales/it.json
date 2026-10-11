@@ -3642,6 +3642,8 @@
   "settings.connections.google_linked": "Google è collegato. Ora puoi accedere con esso.",
   "settings.connections.google_linked_short": "Collegato",
   "settings.connections.google_hint": "Accedi con il tuo account Google. La corrispondenza avviene tramite il tuo account Google, mai tramite l'email.",
+  "settings.connections.google_ach": "🏆 Collegare Google ti fa ottenere 🍀 I'm Feeling Lucky {!link} e l'anello avatar Search Party, che è tuo per sempre.",
+  "settings.connections.google_ach_link": "Obiettivo",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe su Telegram",
   "settings.telegram.lead": "Collega il tuo account al bot Telegram di Pepe e i tuoi avvisi (messaggi, menzioni, mance, dirette e quelli che scegli qui sotto) arriveranno su Telegram.",

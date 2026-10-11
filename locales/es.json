@@ -3642,6 +3642,8 @@
   "settings.connections.google_linked": "Google está vinculado. Ya puedes iniciar sesión con él.",
   "settings.connections.google_linked_short": "Vinculado",
   "settings.connections.google_hint": "Entra con tu cuenta de Google. Se empareja por tu cuenta de Google, nunca por correo electrónico.",
+  "settings.connections.google_ach": "🏆 Vincular Google te da el logro 🍀 Voy con suerte {!link} y el aro de avatar Equipo de búsqueda, que es tuyo para siempre.",
+  "settings.connections.google_ach_link": "logro",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe en Telegram",
   "settings.telegram.lead": "Vincula tu cuenta al bot de Telegram de Pepe y tus alertas (mensajes, menciones, propinas, en vivo y las que elijas abajo) llegarán a Telegram.",

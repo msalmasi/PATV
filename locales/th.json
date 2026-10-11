@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "เชื่อม Google แล้ว ตอนนี้คุณเข้าสู่ระบบด้วยบัญชีนี้ได้",
   "settings.connections.google_linked_short": "เชื่อมแล้ว",
   "settings.connections.google_hint": "ลงชื่อเข้าใช้ด้วยบัญชี Google ของคุณ ระบบจับคู่ด้วยบัญชี Google เท่านั้น ไม่ใช้อีเมล",
+  "settings.connections.google_ach": "🏆 เชื่อม Google เพื่อรับ 🍀 I'm Feeling Lucky {!link} และวงแหวนอวาตาร์ Search Party ซึ่งเป็นของคุณเก็บไว้ตลอดไป",
+  "settings.connections.google_ach_link": "ความสำเร็จ",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe บน Telegram",
   "settings.telegram.lead": "เชื่อมบัญชีของคุณกับบอต Telegram ของ Pepe แล้วการแจ้งเตือนของคุณ (ข้อความ การกล่าวถึง ทิป การไลฟ์ และรายการที่คุณเลือกด้านล่าง) จะส่งมาที่ Telegram",

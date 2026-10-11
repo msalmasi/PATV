@@ -3638,6 +3638,8 @@
   "settings.connections.google_linked": "Google लिंक है। अब आप इससे साइन इन कर सकते हैं।",
   "settings.connections.google_linked_short": "लिंक किया गया",
   "settings.connections.google_hint": "अपने Google अकाउंट से साइन इन करें। यह आपके Google अकाउंट से मिलाया जाता है, ईमेल से कभी नहीं।",
+  "settings.connections.google_ach": "🏆 Google लिंक करने पर 🍀 I'm Feeling Lucky {!link} और Search Party अवतार रिंग मिलती है, जो हमेशा आपकी रहेगी।",
+  "settings.connections.google_ach_link": "उपलब्धि",
   "settings.telegram.eyebrow": "टेलीग्राम",
   "settings.telegram.h1": "टेलीग्राम पर Pepe",
   "settings.telegram.lead": "अपना अकाउंट Pepe के टेलीग्राम बॉट से लिंक करें, फिर आपके अलर्ट (संदेश, मेंशन, टिप, लाइव जाना और नीचे चुने गए अलर्ट) टेलीग्राम में आएँगे।",

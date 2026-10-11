@@ -3638,6 +3638,8 @@
   "settings.connections.google_linked": "Google لنک ہو گیا ہے۔ اب آپ اس سے سائن ان کر سکتے ہیں۔",
   "settings.connections.google_linked_short": "منسلک",
   "settings.connections.google_hint": "اپنے گوگل اکاؤنٹ سے سائن ان کریں۔ یہ آپ کے گوگل اکاؤنٹ سے ملایا جاتا ہے، کبھی ای میل سے نہیں۔",
+  "settings.connections.google_ach": "🏆 گوگل کو لنک کرنے سے آپ کو 🍀 “I'm Feeling Lucky” {!link} اور Search Party اوتار رنگ ملتا ہے، جو آپ کا ہمیشہ کے لیے ہے۔",
+  "settings.connections.google_ach_link": "کامیابی",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Telegram پر Pepe",
   "settings.telegram.lead": "اپنا اکاؤنٹ Pepe کے Telegram بوٹ سے لنک کریں، پھر آپ کے الرٹس (پیغامات، مینشنز، ٹِپس، لائیو ہونا اور نیچے منتخب کردہ دیگر) Telegram میں پہنچیں گے۔",

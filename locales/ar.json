@@ -3834,6 +3834,8 @@
   "settings.connections.google_linked": "تم ربط Google. يمكنك تسجيل الدخول به الآن.",
   "settings.connections.google_linked_short": "مرتبط",
   "settings.connections.google_hint": "سجّل الدخول بحساب Google الخاص بك. يُطابَق بحساب Google وليس بالبريد الإلكتروني أبدًا.",
+  "settings.connections.google_ach": "🏆 ربط حساب Google يمنحك {!link} «🍀 I'm Feeling Lucky» وحلقة الصورة الرمزية «Search Party»، وهي لك لتحتفظ بها.",
+  "settings.connections.google_ach_link": "إنجاز",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe على Telegram",
   "settings.telegram.lead": "اربط حسابك ببوت Pepe على Telegram، وستصلك تنبيهاتك (الرسائل والإشارات والإكراميات والبث المباشر والتنبيهات التي تختارها أدناه) على Telegram.",

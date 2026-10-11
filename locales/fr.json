@@ -3642,6 +3642,8 @@
   "settings.connections.google_linked": "Google est lié. Tu peux maintenant t'y connecter.",
   "settings.connections.google_linked_short": "Lié",
   "settings.connections.google_hint": "Connecte-toi avec ton compte Google. La correspondance se fait par ton compte Google, jamais par e-mail.",
+  "settings.connections.google_ach": "🏆 Lier Google te fait gagner le succès 🍀 J'ai de la chance {!link} et l'anneau d'avatar Équipe de recherche, à toi pour toujours.",
+  "settings.connections.google_ach_link": "Succès",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe sur Telegram",
   "settings.telegram.lead": "Lie ton compte au bot Telegram de Pepe et tes alertes (messages, mentions, pourboires, passages en direct et celles que tu choisis ci-dessous) arrivent sur Telegram.",

@@ -3687,6 +3687,8 @@
   "settings.connections.google_linked": "Google מקושר. אפשר להיכנס איתו עכשיו.",
   "settings.connections.google_linked_short": "מקושר",
   "settings.connections.google_hint": "היכנסו עם חשבון Google שלכם. ההתאמה נעשית לפי חשבון Google, לעולם לא לפי אימייל.",
+  "settings.connections.google_ach": "🏆 חיבור גוגל מעניק את 🍀 ״מרגיש בר מזל״ {!link} וטבעת האווטאר ״מסיבת החיפוש״ - שלכם לתמיד.",
+  "settings.connections.google_ach_link": "הישג",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe בטלגרם",
   "settings.telegram.lead": "קשרו את החשבון שלכם לבוט הטלגרם של Pepe וההתראות שלכם (הודעות, אזכורים, טיפים, שידורים חיים ואלה שתבחרו למטה) יגיעו לטלגרם.",

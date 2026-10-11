@@ -3638,6 +3638,8 @@
   "settings.connections.google_linked": "Google ist verknüpft. Du kannst dich jetzt damit anmelden.",
   "settings.connections.google_linked_short": "Verknüpft",
   "settings.connections.google_hint": "Melde dich mit deinem Google-Konto an. Die Zuordnung erfolgt nur über dein Google-Konto, nie über die E-Mail-Adresse.",
+  "settings.connections.google_ach": "🏆 Wenn du Google verknüpfst, erhältst du den {!link} 🍀 I'm Feeling Lucky und den Avatar-Ring Search Party - gehört dir für immer.",
+  "settings.connections.google_ach_link": "Erfolg",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe auf Telegram",
   "settings.telegram.lead": "Verknüpfe dein Konto mit Pepes Telegram-Bot, dann kommen deine Benachrichtigungen (Nachrichten, Erwähnungen, Trinkgelder, Live-Gehen und die, die du unten auswählst) in Telegram an.",

@@ -3736,6 +3736,8 @@
   "settings.connections.google_linked": "Google jest połączone. Możesz się już nim zalogować.",
   "settings.connections.google_linked_short": "Połączono",
   "settings.connections.google_hint": "Zaloguj się swoim kontem Google. Konto jest dopasowywane po koncie Google, nigdy po e-mailu.",
+  "settings.connections.google_ach": "🏆 Połączenie z Google daje ci 🍀 I'm Feeling Lucky {!link} oraz pierścień awatara Search Party - zostaje twój na zawsze.",
+  "settings.connections.google_ach_link": "osiągnięcie",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe na Telegramie",
   "settings.telegram.lead": "Połącz konto z botem Pepe na Telegramie, a twoje powiadomienia (wiadomości, wzmianki, napiwki, transmisje na żywo i te, które wybierzesz poniżej) będą przychodzić na Telegram.",

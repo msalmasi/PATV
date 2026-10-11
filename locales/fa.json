@@ -3638,6 +3638,8 @@
   "settings.connections.google_linked": "Google وصل شده. الان می‌توانی با آن وارد شوی.",
   "settings.connections.google_linked_short": "متصل شد",
   "settings.connections.google_hint": "با حساب گوگلت وارد شو. تطبیق با حساب گوگلت انجام می‌شود، هرگز با ایمیل.",
+  "settings.connections.google_ach": "🏆 اتصال گوگل، دستاورد «🍀 احساس خوش‌شانسی» {!link} و حلقه‌ی آواتار «تیم جست‌وجو» را برایت می‌آورد؛ مال خودت است.",
+  "settings.connections.google_ach_link": "دستاورد",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe در Telegram",
   "settings.telegram.lead": "حسابت را به ربات Telegram مربوط به Pepe وصل کن تا هشدارهایت (پیام‌ها، منشن‌ها، انعام‌ها، پخش زنده و آنچه پایین انتخاب می‌کنی) در Telegram برایت بیاید.",

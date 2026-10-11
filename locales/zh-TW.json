@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "Google 已連結。你現在可以用它登入。",
   "settings.connections.google_linked_short": "已連結",
   "settings.connections.google_hint": "使用你的 Google 帳號登入。系統只會依 Google 帳號比對，絕不會以電子郵件比對。",
+  "settings.connections.google_ach": "🏆 連結 Google 可獲得 🍀 I'm Feeling Lucky {!link} 成就，以及 Search Party 頭像外框，永久歸你所有。",
+  "settings.connections.google_ach_link": "成就",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Telegram 上的 Pepe",
   "settings.telegram.lead": "將你的帳號連結到 Pepe 的 Telegram 機器人，你的提醒（訊息、提及、打賞、開播，以及你在下方選擇的項目）都會傳到 Telegram。",

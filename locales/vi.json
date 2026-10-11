@@ -3589,6 +3589,8 @@
   "settings.connections.google_linked": "Google đã được liên kết. Bạn có thể đăng nhập bằng Google ngay bây giờ.",
   "settings.connections.google_linked_short": "Đã liên kết",
   "settings.connections.google_hint": "Đăng nhập bằng tài khoản Google của bạn. Tài khoản được khớp theo tài khoản Google, không bao giờ theo email.",
+  "settings.connections.google_ach": "🏆 Liên kết Google sẽ mở khóa 🍀 “I'm Feeling Lucky” {!link} và vòng viền avatar Search Party, bạn giữ mãi nhé.",
+  "settings.connections.google_ach_link": "thành tích",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe trên Telegram",
   "settings.telegram.lead": "Liên kết tài khoản với bot Telegram của Pepe, các thông báo của bạn (tin nhắn, lượt nhắc tên, tip, phát trực tiếp và những mục bạn chọn bên dưới) sẽ được gửi về Telegram.",

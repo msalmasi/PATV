@@ -3736,6 +3736,8 @@
   "settings.connections.google_linked": "Google привязан. Теперь можно входить через него.",
   "settings.connections.google_linked_short": "Привязано",
   "settings.connections.google_hint": "Войди через свой аккаунт Google. Он сопоставляется по аккаунту Google, а не по почте.",
+  "settings.connections.google_ach": "🏆 Привязка Google даёт 🍀 достижение «Мне повезёт» {!link} и кольцо аватара «Поисковый отряд», оно твоё навсегда.",
+  "settings.connections.google_ach_link": "достижение",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe в Telegram",
   "settings.telegram.lead": "Привяжи аккаунт к боту Pepe в Telegram, и твои уведомления (сообщения, упоминания, чаевые, эфиры и те, что ты выберешь ниже) будут приходить в Telegram.",

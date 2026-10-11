@@ -3736,6 +3736,8 @@
   "settings.connections.google_linked": "Google прив’язано. Тепер можна входити через нього.",
   "settings.connections.google_linked_short": "Під’єднано",
   "settings.connections.google_hint": "Увійди зі свого акаунта Google. Зв’язок іде через акаунт Google, а не через е-пошту.",
+  "settings.connections.google_ach": "🏆 Прив’язавши Google, ти отримуєш 🍀 «Мені пощастить» {!link} і кільце аватара «Пошукова команда», яке лишиться твоїм.",
+  "settings.connections.google_ach_link": "досягнення",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe в Telegram",
   "settings.telegram.lead": "Прив’яжи акаунт до бота Pepe в Telegram, і твої сповіщення (повідомлення, згадки, чайові, початок ефіру та ті, що ти вибереш нижче) приходитимуть у Telegram.",

@@ -3638,6 +3638,8 @@
   "settings.connections.google_linked": "Google is gekoppeld. Je kunt er nu mee inloggen.",
   "settings.connections.google_linked_short": "Gekoppeld",
   "settings.connections.google_hint": "Log in met je Google-account. Je wordt herkend aan je Google-account, nooit aan je e-mailadres.",
+  "settings.connections.google_ach": "🏆 Google koppelen levert je de 🍀 ‘I'm Feeling Lucky’ {!link} op en de Search Party-avatarring, die is van jou om te houden.",
+  "settings.connections.google_ach_link": "prestatie",
   "settings.telegram.eyebrow": "Telegram",
   "settings.telegram.h1": "Pepe op Telegram",
   "settings.telegram.lead": "Koppel je account aan Pepe's Telegram-bot en je meldingen (berichten, vermeldingen, fooien, live gaan en de meldingen die je hieronder kiest) komen binnen op Telegram.",
