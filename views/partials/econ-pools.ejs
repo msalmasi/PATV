@@ -1,0 +1,53 @@
+<%# 1.99ns Phase 1: the protocol pools, the PAT Routing overrides, econ_cfg and the Fed actions - on the site (pools.js,
+    econstore.js). Edits run through Pepe's own validation as website actions (econ.routes / econ.cmd), each with a password
+    step-up. public/js/admin-pools.js renders it from GET /api/admin/econ/store. %>
+<section class="adm-card" id="pools" aria-labelledby="poolsT">
+  <h2 id="poolsT">🏦 Protocol pools &amp; economy settings <span class="adm-pill admin">admins</span></h2>
+  <p class="adm-help">Every protocol pool (the Federal Reserve, Fort Knox, the incentive budget, the Casino vault, Bank / Market-maker cash, stakers, bingo, the burn reserve, each room vault) once Pepe's pools are cut over to the site - moved only by keyed moves (<code>pool_moves</code>). Before the cutover this shows the switch and what Pepe syncs. Routing, econ_cfg and Fed actions are applied by Pepe with the same rules as in chat (<code>!econ</code>); his answer saves the new table here. Runbook: <code>docs/pools-cutover-runbook.md</code>.</p>
+  <% if (!isAdmin) { %><p class="adm-help">Admins only.</p><% } else { %>
+    <div id="poolsAdm" data-csrf="<%= typeof pepeCtlCsrf === 'function' ? pepeCtlCsrf(me.username) : '' %>">
+      <div class="adm-kv" id="poolsKv"><div><b>Status</b><span>loading…</span></div></div>
+      <div class="adm-actions"><button type="button" id="poolsSwitch" class="adm-btn ghost" hidden></button></div>
+      <div class="adm-tbl"><table aria-label="Pools">
+        <thead><tr><th>Pool</th><th class="num">PAT</th><th>Updated (UTC)</th></tr></thead>
+        <tbody id="poolsRows"><tr><td colspan="3" class="empty">loading…</td></tr></tbody>
+      </table></div>
+      <details><summary>Recent pool moves</summary>
+        <div class="adm-tbl"><table aria-label="Recent pool moves">
+          <thead><tr><th>When (UTC)</th><th>Kind</th><th>Flow</th><th>Legs</th><th>Key</th></tr></thead>
+          <tbody id="poolsMoves"></tbody>
+        </table></div>
+      </details>
+      <details><summary>Fed journal (mints, grants, loans) · incentive groups · journals held here</summary>
+        <div class="adm-tbl"><table aria-label="Fed journal"><thead><tr><th>Id</th><th class="num">PAT</th><th>Pool</th><th>Policy</th><th>State</th><th>Reason</th></tr></thead>
+          <tbody id="poolsFed"></tbody></table></div>
+        <div class="adm-tbl"><table aria-label="Incentive groups"><thead><tr><th>Group</th><th>Week</th><th class="num">Budget</th><th class="num">Spent</th><th class="num">Left</th></tr></thead>
+          <tbody id="poolsInc"></tbody></table></div>
+        <p class="adm-help" id="poolsDocs"></p>
+      </details>
+      <h3>PAT Routing</h3>
+      <div class="adm-tbl"><table aria-label="PAT Routing overrides"><thead><tr><th>Flow</th><th>Route</th><th>Default</th></tr></thead>
+        <tbody id="poolsRoutes"></tbody></table></div>
+      <form class="adm-form" id="routeForm" autocomplete="off">
+        <label for="routeFlow">Flow<select id="routeFlow"></select></label>
+        <label for="routeShares">Shares<input type="text" id="routeShares" maxlength="200" placeholder="reserve 90, room_owner 10 (empty = back to the default)"></label>
+        <div class="adm-actions"><button type="submit">Preview change…</button></div>
+      </form>
+      <h3>econ_cfg &amp; Fed actions</h3>
+      <p class="adm-help">One <code>!econ</code> command, as in chat: <code>set fed_floor 50m</code> · <code>mint 5m &lt;reason&gt;</code> then <code>mint confirm &lt;id&gt;</code> · <code>fund incentives 1m &lt;reason&gt;</code> · <code>fedloan house 2m &lt;reason&gt;</code> · <code>flash</code> · <code>monetary</code>. Dry runs answer with a confirm id.</p>
+      <div class="adm-tbl"><table aria-label="econ_cfg"><thead><tr><th>Key</th><th>Value</th></tr></thead><tbody id="poolsCfg"></tbody></table></div>
+      <form class="adm-form" id="econForm" autocomplete="off">
+        <label for="econText">!econ<input type="text" id="econText" maxlength="300" placeholder="set fed_floor 50m"></label>
+        <div class="adm-actions"><button type="submit">Send to Pepe…</button></div>
+      </form>
+      <div id="poolsConfirm" hidden>
+        <p class="adm-help" id="poolsWhat"></p>
+        <label for="poolsPw" class="adm-help">Confirm with your account password</label>
+        <input type="password" id="poolsPw" maxlength="200" autocomplete="current-password">
+        <div class="adm-actions"><button type="button" id="poolsYes">Send it</button><button type="button" id="poolsNo" class="adm-btn ghost">Cancel</button></div>
+      </div>
+      <p class="adm-msg" id="poolsMsg" role="status"></p>
+    </div>
+    <script src="/public/js/admin-pools.js?v=1" defer></script>
+  <% } %>
+</section>

@@ -193,6 +193,16 @@ async function unsettledReserve() {
   return (r[0] && r[0].t) || 0;
 }
 
+// 1.99ns Phase 1: once the pools live on the site (pools.js) the Reserve's balance is read from its table - fresh, and
+// still known after a site restart while Pepe is away (audit 3.1) - instead of Pepe's last sync. null = unknown.
+async function reserveNow() {
+  try {
+    const P = require("./pools");
+    if (await P.live()) return await P.balance("reserve");
+  } catch (e) { /* no pools tables yet */ }
+  return state.reserve;
+}
+
 async function jackpotPot() {
   const r = await getQuery("SELECT COALESCE(SUM(amount),0) AS t FROM jackpot_rakes");
   return (r[0] && r[0].t) || 0;
@@ -211,8 +221,9 @@ async function fundable(flow) {
     const bal = (Number(inc.balance) || 0) - (await unsettledIncentives());
     return Math.max(0, Math.floor(Math.min(left, bal)));
   }
-  if (state.reserve === null) return 0;
-  return Math.max(0, state.reserve - (await unsettledReserve()));
+  const rv = await reserveNow();
+  if (rv === null) return 0;
+  return Math.max(0, rv - (await unsettledReserve()));
 }
 
 // 1.99gq: is the wheel shortfall backstopped by the House (Pepe's economy v2 layers) instead of the Reserve?
@@ -319,8 +330,9 @@ async function canFund(flow, amount) {
   if (amount <= 0) return true;
   if (vaultFor(flow) === "jackpot") return (await jackpotPot()) >= amount;
   if (vaultFor(flow) === "incentives") return canFundIncentives(flow, amount, false);
-  if (state.reserve === null) return false;
-  return state.reserve - (await unsettledReserve()) >= amount;
+  const rv = await reserveNow();
+  if (rv === null) return false;
+  return rv - (await unsettledReserve()) >= amount;
 }
 
 // Take `amount` for `flow` out of its vault and record it. Does NOT credit the user - the caller
@@ -352,8 +364,9 @@ async function takeFundsRef(flow, amount, userId, type) {
 // 1.99jt: what the Federal Reserve could pay right now (its synced balance net of unsettled claims), or null
 // when Pepe has never synced it.
 async function reserveAvailable() {
-  if (state.reserve === null) return null;
-  return Math.max(0, state.reserve - (await unsettledReserve()));
+  const rv = await reserveNow();
+  if (rv === null) return null;
+  return Math.max(0, rv - (await unsettledReserve()));
 }
 
 // 1.99jt: a Reserve claim for `flow` that ignores the PAT Routing table (the staff PAT grant is ALWAYS the
@@ -628,4 +641,6 @@ module.exports = { fundPayout, fundPayoutEx, takeFunds, takeFundsRef, canFund, s
                    init: () => ready, cleanMonetary, takeIncentivesRef, houseFlashPlan, houseFlashCover, unsettledFlash, unsettledReserve,
                    donationTerms, jackpotPot,
                    // 1.99ne
-                   persist, restore, _persisted: () => persistChain };
+                   persist, restore, _persisted: () => persistChain,
+                   // 1.99ns
+                   reserveNow };

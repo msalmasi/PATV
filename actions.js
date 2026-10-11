@@ -136,6 +136,16 @@ function register(app, { isBotToken, addUser }) {
         return go("Something went wrong — nothing was moved.");
       }
     }
+    // 1.99ns: with the polls on the site (polls.js backend), a poll form is done here directly - nothing is sent to Pepe
+    if (kind.startsWith("poll.")) {
+      try {
+        const msg = await require("./polls").fromForm(req.user.userId, kind, words);
+        if (msg) return go(msg);
+      } catch (e) {
+        console.error("[act] polls backend:", e.message);
+        return go("Something went wrong — nothing was changed.");
+      }
+    }
     const tag = clean(b.tag, 40) || back.split(/[/?]/)[1] || "home";
     const label = clean(b.label || (kind === "cmd" ? "!" + args.join(" ") : kind + " " + words.join(" ")), 200);
     try {

@@ -116,6 +116,8 @@
   <% } %>
 </section>
 
+<%- include('../partials/econ-pools', { isAdmin, me }) %>
+
 <section class="adm-card" id="burn" aria-labelledby="burnT">
   <h2 id="burnT">🔥 Burn reserve <span class="adm-pill admin">admins</span></h2>
   <p class="adm-help">The last step of the weekly surplus waterfall: once the incentive buffer and the Reserve's 25M target are full, the leftover moves into Pepe's burn reserve and is destroyed (total supply goes down). Nothing else feeds it and no other pool can be burned. In <b>accrual</b> mode Pepe burns it at his next burn tick; in <b>batch</b> mode it waits for a burn here (or <code>!burn</code> in chat). Mode and caps are on Pepe's admin panel. Public log: <a href="/economy#burned">/economy#burned</a>.</p>
