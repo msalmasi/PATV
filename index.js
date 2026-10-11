@@ -192,7 +192,7 @@ module.exports = db;
 app.use(cors());
 // Parse JSON bodies — except /api/media, which carries clips (several MB of base64) and parses
 // with its own larger limit in media.js.
-app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/premium/stripe/webhook" ? next() : express.json()(req, res, next)));
+app.use((req, res, next) => (req.path === "/api/media" || req.path === "/api/staking/sync" || req.path === "/api/userstats/sync" || req.path === "/api/econ/charges" || req.path === "/api/econ/participation" || req.path === "/api/roomstats/sync" || req.path === "/api/bridge/sync" || req.path === "/api/bridge/audio" || req.path === "/api/bridge/snap" || req.path === "/api/bridge/micclip" || req.path === "/api/bridge/camclip" || req.path === "/api/feed/aigen/chunk" || req.path === "/api/pepe/help/sync" || req.path === "/api/gtf/bot/import" || req.path === "/api/gtf/bot/put" || req.path === "/api/premium/stripe/webhook" ? next() : express.json()(req, res, next)));
 app.use(express.urlencoded({ extended: true }));
 // link previews (og.js): every page knows its absolute URL for the Open Graph tags
 const og = require("./og");
@@ -1212,6 +1212,8 @@ const patroutes = require("./patroutes");
 patroutes.register(app, { isBotToken });
 // 1.99ne: stashes live on the site (Pepe is a client); the web + bot routes and the one-off import from Pepe
 require("./stashes").register(app, { isBotToken, addUser });
+// 1.99nk: Grand Theft Frogger's persistent data (heist sheets, loadouts, avatars, pvp records) behind the GTF backend switch
+require("./gtfstore").register(app, { isBotToken, addUser });
 // 1.99ne: website actions queued for Pepe expire (refund / mark / notify) - actionttl.js
 require("./actionttl").register(app, { addUser });
 require("./staking").register(app, { isBotToken, addUser });

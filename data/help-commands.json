@@ -4855,6 +4855,34 @@
    "keywords": []
   },
   {
+   "id": "gtfbackend",
+   "title": "!gtf backend on|off|status",
+   "category": "moderation",
+   "role": "admin",
+   "commands": [
+    "!gtf"
+   ],
+   "aliases": [
+    "!gangwars",
+    "!grandtheftfrog",
+    "!pond",
+    "!pondlife"
+   ],
+   "syntax": [
+    "!gtf backend on",
+    "!gtf backend off",
+    "!gtf backend off force",
+    "!gtf backend status"
+   ],
+   "summary": "Move Grand Theft Frogger's records (heist sheets, loadouts, avatars, duel / brawl / arena records, vault cracks) to publicaccess.tv, or bring them back into Pepe.",
+   "details": "**on** hands GTF's records to the publicaccess.tv GTF backend (the site must have it enabled too). Pepe pauses GTF commands for a moment once no heist, arena, raid or fight is running, sends everything with a checksum and totals, and switches only when the site confirms the same totals. From then on his files are a local copy and every change goes up to the site; the heist and raid engines stay in Pepe. **off** is the way back: last changes go up, the site freezes its copy and hands everything back, and Pepe writes it into his own files again. **off force** goes back to Pepe's local copy without asking the site (only if the site lost the data). **status** says where the records live and how many changes are waiting to sync (anyone can ask).",
+   "examples": [
+    "!gtf backend status",
+    "!gtf backend on"
+   ],
+   "keywords": []
+  },
+  {
    "id": "automod",
    "title": "!automod [action] [user]",
    "category": "moderation",
@@ -6638,5 +6666,5 @@
   }
  ],
  "undocumented": [],
- "hash": "21b808b3dedbd4ad"
+ "hash": "34e311603df00cf0"
 }

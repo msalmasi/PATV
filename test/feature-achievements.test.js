@@ -107,7 +107,7 @@ test.before(async () => {
 
 test("catalog: 20 new web-side achievements with badge art and rewards in line with the rest; nothing farmable is generous", () => {
   const list = A.list();
-  assert.equal(list.length, 177);              // 1.99nj: + 25 📼 Plex-on-pads achievements, 1.99np: + 13 TV shows (plex-watch-stats.test.js)
+  assert.equal(list.length, 190);              // 1.99nj: + 25 📼 Plex-on-pads achievements, 1.99np: + 13 TV shows (plex-watch-stats.test.js), 1.99nq: + 13 🛒 heist shop (gtfstore.test.js)
   for (const id of NEW) {
     const a = list.find((x) => x.id === id);
     assert.ok(a, id);

@@ -74,10 +74,75 @@
   .gtf .steps span { color: #bbb; font-size: 13.5px; line-height: 1.45; }
   .gtf .foot { margin: 12px 0 0; color: #888; font-size: 13px; }
 
+  /* 1.99nk: the heist minimap */
+  .gtf .mm { background: #0f0f10; border: 1px solid #262626; border-radius: 16px; padding: 16px; display: grid; gap: 14px; position: relative; overflow: hidden; }
+  .gtf .mm-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .gtf .mm-head h2 { margin: 0; font-family: 'Press Start 2P', monospace; font-size: 12px; letter-spacing: .1em; color: var(--gold); line-height: 1.6; }
+  .gtf .mm-head p { margin: 0; color: var(--mut); font-size: 13.5px; line-height: 1.5; flex: 1 1 240px; }
+  .gtf .mm-upd { text-transform: uppercase; font: 9px 'Press Start 2P', monospace; color: #7f8a7f; letter-spacing: .06em; line-height: 1.6; }
+  .gtf .mm-upd.stale { color: #ff9f6b; }
+  .gtf .radar { flex: none; width: 54px; height: 54px; border-radius: 50%; position: relative; border: 2px solid #1f5130; overflow: hidden;
+                background: radial-gradient(circle, rgba(111,220,123,.18) 0 1px, transparent 1.5px) 0 0 / 9px 9px, radial-gradient(circle at 50% 50%, #0c2414, #050b07 70%);
+                box-shadow: inset 0 0 0 9px rgba(5,11,7,.0), inset 0 0 0 1px #2c7a45, 0 0 14px rgba(111,220,123,.18); }
+  .gtf .radar::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, rgba(111,220,123,.55), rgba(111,220,123,0) 70deg, transparent 360deg); }
+  .gtf .radar::after { content: ''; position: absolute; inset: 25%; border-radius: 50%; border: 1px solid rgba(111,220,123,.35); }
+  .gtf .radar i { position: absolute; width: 6px; height: 6px; margin: -3px 0 0 -3px; background: var(--green); box-shadow: 0 0 6px currentColor; color: var(--green); z-index: 1; }
+  .gtf .radar i.cool { background: #ffb340; color: #ffb340; } .gtf .radar i.hot { background: #ff4d4d; color: #ff4d4d; } .gtf .radar i.shut { background: #666; color: #666; box-shadow: none; }
+
+  .gtf .mm-live { display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border-radius: 12px; border: 2px solid #ff4d4d;
+                  background: repeating-linear-gradient(-45deg, rgba(255,77,77,.12) 0 10px, rgba(0,0,0,0) 10px 20px), #1a0b0b; }
+  .gtf .mm-live.on { display: flex; }
+  .gtf .mm-live .siren { flex: none; font: 10px 'Press Start 2P', monospace; color: #fff; background: #c62828; padding: 6px 8px; border-radius: 6px; letter-spacing: .08em; }
+  .gtf .mm-live .txt { flex: 1 1 220px; color: #ffd9d9; font-size: 14px; line-height: 1.5; }
+  .gtf .mm-live .pips { display: flex; gap: 3px; flex-wrap: wrap; }
+  .gtf .mm-live .pips b { width: 10px; height: 10px; background: #3a1d1d; border: 1px solid #6b2b2b; }
+  .gtf .mm-live .pips b.done { background: #ff4d4d; border-color: #ff8080; }
+  .gtf .mm-live .pips b.now { background: #ffcf40; border-color: #fff1b8; }
+
+  .gtf .city { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; padding: 13px; border-radius: 12px;
+               background: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 8px 8px, linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px) 0 0 / 8px 8px, #19191c;
+               border: 1px solid #2a2a2e; }
+  .gtf .city::before, .gtf .city::after { content: ''; position: absolute; pointer-events: none; }
+  .gtf .city::before { left: 0; right: 0; top: calc(50% - 1px); height: 3px; background: repeating-linear-gradient(90deg, #d9b23a 0 12px, transparent 12px 24px); opacity: .7; }
+  .gtf .city::after { top: 0; bottom: 0; left: calc(50% - 1px); width: 3px; background: repeating-linear-gradient(180deg, #d9b23a 0 12px, transparent 12px 24px); opacity: .7; }
+  .gtf .lot { --st: var(--green); position: relative; z-index: 1; background: #121214; border: 2px solid #2d2d33; border-radius: 10px; padding: 12px; display: grid; gap: 10px; min-width: 0;
+              box-shadow: 0 0 0 4px #232327; }
+  .gtf .lot.cool { --st: #ffb340; } .gtf .lot.hot { --st: #ff4d4d; border-color: #6b2b2b; } .gtf .lot.shut { --st: #777; }
+  .gtf .lot-top { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: center; }
+  .gtf .sprite { width: 72px; height: 72px; border-radius: 8px; background: #0b0b0d; border: 1px solid #2a2a2a; display: grid; place-items: center; position: relative; }
+  .gtf .sprite svg { width: 64px; height: 64px; image-rendering: pixelated; }
+  .gtf .sprite .lamp { position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; background: var(--st); box-shadow: 0 0 8px var(--st); }
+  .gtf .lot h3 { margin: 0 0 6px; font-size: 16px; color: #fff; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+  .gtf .chip { display: inline-block; font: 8.5px 'Press Start 2P', monospace; letter-spacing: .06em; line-height: 1.5; padding: 4px 6px; border-radius: 4px;
+               color: #0b0b0b; background: var(--st); }
+  .gtf .cd { font: 15px 'Press Start 2P', monospace; color: #fff; letter-spacing: .04em; margin-top: 6px; line-height: 1.4; }
+  .gtf .cd small { display: block; font: 12px Ubuntu, sans-serif; color: var(--mut); letter-spacing: 0; margin-bottom: 2px; }
+  .gtf .lot dl { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; font-size: 13.5px; align-items: center; }
+  .gtf .lot dt { color: #8d948d; font-family: 'Press Start 2P', monospace; font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
+  .gtf .lot dd { margin: 0; color: #e6e6e6; min-width: 0; }
+  .gtf .lot dd .sub { color: var(--mut); font-size: 12.5px; }
+  .gtf .bar { display: flex; gap: 2px; margin-top: 3px; }
+  .gtf .bar b { flex: 1; height: 7px; background: #26262b; }
+  .gtf .bar b.on { background: #ff7a3d; } .gtf .bar.vault b.on { background: var(--gold); }
+  .gtf .lot .go { justify-self: start; }
+  .gtf .lot .go code { color: #ffe08a; }
+  .gtf .mm-empty { color: var(--mut); font-size: 14px; margin: 0; }
+
   @media (prefers-reduced-motion: no-preference) {
     .gtf h1 em { animation: gtf-shine 8s ease-in-out infinite alternate; }
     @keyframes gtf-shine { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+    .gtf .radar::before { animation: gtf-sweep 3s linear infinite; }
+    @keyframes gtf-sweep { to { transform: rotate(360deg); } }
+    .gtf .lot.hot .lamp, .gtf .mm-live .siren { animation: gtf-blink .7s steps(2, jump-none) infinite; }
+    @keyframes gtf-blink { 50% { opacity: .25; } }
+    .gtf .radar i.hot { animation: gtf-blink .7s steps(2, jump-none) infinite; }
   }
+  @media (max-width: 700px) {
+    .gtf .city { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+    .gtf .city::before { display: none; }
+    .gtf .city::after { left: 22px; }
+  }
+  @media (max-width: 380px) { .gtf .lot-top { grid-template-columns: 56px minmax(0, 1fr); } .gtf .sprite { width: 56px; height: 56px; } .gtf .sprite svg { width: 48px; height: 48px; } }
   @media (max-width: 760px) { .gtf .hero { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 520px) { .gtf .hero, .gtf .start { padding: 18px 16px 16px; } .gtf .lead { font-size: 15px; } }
 </style>
@@ -107,6 +172,160 @@
       <% } %>
     </aside>
   </section>
+
+  <%
+    // 1.99nk: the heist minimap - Pepe's live board (gtf.js /api/gtf/board), drawn and kept fresh by the script below
+    const MM_KEYS = ['heading', 'sub', 'updated', 'stale', 'none', 'off', 'st.open', 'st.cooldown', 'st.running', 'st.lobby', 'st.vault_low',
+      'st.no_convoy', 'st.off', 'st.busy', 'cd', 'ready', 'busy', 'vault', 'cargo', 'till', 'needs', 'last', 'never', 'out.cracked', 'out.taken',
+      'out.getaway', 'out.door', 'out.busted', 'out.bailed', 'crew', 'heat', 'heat_v', 'buyin', 'buyin_l', 'live', 'live_lobby', 'live_run', 'go',
+      'ago.s', 'ago.m', 'ago.h', 'ago.d', 'prereq.casino', 'prereq.blueprints', 'door', 'convoy_until', 'radar'];
+    const MM = {};
+    MM_KEYS.forEach((k) => { MM[k] = t('gtf.mm.' + k); });
+    const mmJson = (v) => JSON.stringify(v == null ? null : v).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  %>
+  <section class="mm" id="gtfMap" aria-labelledby="gtfMapH">
+    <div class="mm-head">
+      <div class="radar" id="mmRadar" role="img" aria-label="<%- MM['radar'] %>"></div>
+      <div>
+        <h2 id="gtfMapH">🗺️ <%- MM['heading'] %></h2>
+        <div class="mm-upd" id="mmUpd" aria-live="polite"></div>
+      </div>
+      <p><%- MM['sub'] %></p>
+    </div>
+    <div class="mm-live" id="mmLive" role="status"><span class="siren">🚨 <%- MM['live'] %></span><span class="txt" id="mmLiveTxt"></span><span class="pips" id="mmPips" aria-hidden="true"></span></div>
+    <div class="city" id="mmCity"><p class="mm-empty"><%- MM['none'] %></p></div>
+  </section>
+  <script>
+  (function () {
+    var S = <%- mmJson(MM) %>;
+    var state = <%- mmJson(locals.board) %>;
+    var lang = document.documentElement.lang || 'en';
+    var skew = state && state.now ? state.now - Date.now() : 0;
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;' }[c]; }); };
+    var fmt = function (tpl, v) { return String(tpl).replace(/\{(!?)(\w+)\}/g, function (m, raw, k) { return v && v[k] != null ? (raw ? String(v[k]) : esc(v[k])) : m; }); };
+    var nf; try { nf = new Intl.NumberFormat(lang, { notation: 'compact', maximumFractionDigits: 1 }); } catch (e) { nf = null; }
+    var big = function (n) { n = Number(n) || 0; return nf ? nf.format(n) : n.toLocaleString(); };
+    var full = function (n) { try { return Number(n || 0).toLocaleString(lang); } catch (e) { return String(n); } };
+    var ago = function (ms) {
+      var s = Math.max(0, Math.round(ms / 1000));
+      if (s < 60) return fmt(S['ago.s'], { n: s });
+      if (s < 3600) return fmt(S['ago.m'], { n: Math.floor(s / 60) });
+      if (s < 86400) return fmt(S['ago.h'], { n: Math.floor(s / 3600) });
+      return fmt(S['ago.d'], { n: Math.floor(s / 86400) });
+    };
+    var clock = function (sec) {
+      sec = Math.max(0, Math.ceil(sec));
+      var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60, p = function (x) { return (x < 10 ? '0' : '') + x; };
+      return (h ? h + ':' + p(m) : m) + ':' + p(s);
+    };
+    // 16x16 pixel sprites, one character per pixel ('.' = clear)
+    var PAL = { k: '#0b0b0b', w: '#f2f2f2', r: '#e53935', y: '#ffcf40', o: '#ff8a3d', g: '#6fdc7b', G: '#2e7d32', b: '#4fc3f7', B: '#1d3557',
+                s: '#9ea3a8', S: '#55595e', d: '#5d4037', p: '#b98cff', t: '#263238', m: '#c9a227' };
+    var SPR = {
+      store: ['................', '..kkkkkkkkkkkk..', '..kyyyyyyyyyyk..', '..kyrryyrryyyk..', '..kkkkkkkkkkkk..', '.krwrwrwrwrwrwk.', '.krwrwrwrwrwrwk.',
+              '..kssssssssssk..', '..ksbbbbsskddk..', '..ksbwbbsskddk..', '..ksbbbbsskdyk..', '..kssssssskddk..', '..kssssssskddk..', '..kkkkkkkkkkkk..',
+              '.SSSSSSSSSSSSSS.', '................'],
+      casino: ['.......yy.......', '......yrry......', '..kkkkkkkkkkkk..', '..kpypypypypyk..', '..kkkkkkkkkkkk..', '..kBBBBBBBBBBk..', '..kByyByyByyBk..',
+               '..kBBBBBBBBBBk..', '..kByyByyByyBk..', '..kBBBBBBBBBBk..', '..kBBBkddkBBBk..', '..kBBBkdykBBBk..', '..kBBBkddkBBBk..', '..kkkkkkkkkkkk..',
+               '.SSSSSSSSSSSSSS.', '................'],
+      convoy: ['................', '................', '................', '.kkkkkkkkkk.....', '.ksssssssskkkk..', '.ksSSSSSSSkbbbk.', '.ksSyyyySSkbbbk.',
+               '.ksSSSSSSSkkkkkk', '.kssssssssssssk.', '.kkkkkkkkkkkkkk.', '..ktttk...ktttk.', '...kk......kk...', 'SSSSSSSSSSSSSSSS',
+               'yy..yy..yy..yy..', 'SSSSSSSSSSSSSSSS', '................'],
+      bank: ['.......kk.......', '.....kkmmkk.....', '...kkmmmmmmkk...', '..kkkkkkkkkkkk..', '..ksSsssssSssk..', '..ksSskkkkSssk..', '..ksSkmmmmkSsk..',
+             '..ksSkmkkmkSsk..', '..ksSkmmmmkSsk..', '..ksSskkkkSssk..', '..ksSsssssSssk..', '..kkkkkkkkkkkk..', '.kssssssssssssk.', '.kkkkkkkkkkkkkk.',
+             '.SSSSSSSSSSSSSS.', '................'],
+      other: ['................', '..kkkkkkkkkkkk..', '..kssssssssssk..', '..ksbbssbbsssk..', '..ksbbssbbsssk..', '..kssssssssssk..', '..ksbbssbbsssk..',
+              '..ksbbssbbsssk..', '..kssssssssssk..', '..ksssskddksssk.', '..ksssskddkssk..', '..ksssskddkssk..', '..kkkkkkkkkkkk..', '.SSSSSSSSSSSSSS.',
+              '................', '................'],
+    };
+    var sprite = function (job) {
+      var rows = SPR[job] || SPR.other, out = '';
+      for (var y = 0; y < 16; y++) {
+        var row = (rows[y] || '') + '................';
+        for (var x = 0; x < 16; x++) { var c = PAL[row.charAt(x)]; if (c) out += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + c + '"/>'; }
+      }
+      return '<svg viewBox="0 0 16 16" shape-rendering="crispEdges" aria-hidden="true">' + out + '</svg>';
+    };
+    var bar = function (on, cls) { var h = '<span class="bar ' + (cls || '') + '" aria-hidden="true">'; for (var i = 0; i < 10; i++) h += '<b' + (i < on ? ' class="on"' : '') + '></b>'; return h + '</span>'; };
+    var statusOf = function (b, j, nowS) {
+      var r = b.running;
+      if (r && r.job === j.job) return r.phase === 'running' ? ['hot', S['st.running']] : ['hot', S['st.lobby']];
+      if (!b.enabled) return ['shut', S['st.off']];
+      if (j.ready_at && j.ready_at > nowS) return ['cool', S['st.cooldown']];
+      if (j.why === 'vault_low') return ['shut', S['st.vault_low']];
+      if (j.why === 'no_convoy') return ['shut', S['st.no_convoy']];
+      if (r) return ['cool', S['st.busy']];
+      return ['', S['st.open']];
+    };
+    function render() {
+      var city = document.getElementById('mmCity'), upd = document.getElementById('mmUpd');
+      var b = state && state.board;
+      if (!b || !b.jobs || !b.jobs.length) { city.innerHTML = '<p class="mm-empty">' + S.none + '</p>'; upd.textContent = ''; return; }
+      var now = Date.now() + skew, nowS = now / 1000;
+      upd.className = 'mm-upd' + (state.stale ? ' stale' : '');
+      upd.innerHTML = state.stale ? S.stale : fmt(S.updated, { ago: ago(now - state.at) });
+      var radar = '', html = '';
+      b.jobs.forEach(function (j, i) {
+        var st = statusOf(b, j, nowS), cls = st[0], h = '';
+        var ang = (i / b.jobs.length) * Math.PI * 2 - Math.PI / 4, rr = 30 + (i % 2) * 10;
+        radar += '<i class="' + (cls || 'open') + '" style="left:' + (50 + Math.cos(ang) * rr).toFixed(1) + '%;top:' + (50 + Math.sin(ang) * rr).toFixed(1) + '%"></i>';
+        h += '<article class="lot ' + cls + '" aria-label="' + esc(j.name) + '">';
+        h += '<div class="lot-top"><div class="sprite">' + sprite(j.job) + '<span class="lamp"></span></div><div>';
+        h += '<h3><span aria-hidden="true">' + esc(j.emoji) + '</span>' + esc(j.name) + '</h3><span class="chip">' + st[1] + '</span>';
+        if (cls === 'cool' && j.ready_at > nowS) h += '<div class="cd"><small>' + S.cd + '</small><span data-ready="' + j.ready_at + '">' + clock(j.ready_at - nowS) + '</span></div>';
+        else if (cls === '') h += '<div class="cd"><small>&nbsp;</small>' + S.ready + '</div>';
+        h += '</div></div><dl>';
+        if (j.convoy) h += '<dt>' + S.cargo + '</dt><dd>' + big(j.convoy.cargo) + ' PAT' + (j.convoy.gang ? ' <span class="sub">[' + esc(j.convoy.gang) + ']</span>' : '') +
+                           (j.convoy.until > nowS ? '<div class="sub">' + fmt(S.convoy_until, { t: clock(j.convoy.until - nowS) }) + '</div>' : '') + '</dd>';
+        else if (j.vault) {
+          var seg = Math.max(0, Math.min(10, Math.round((Math.log(Math.max(1, j.vault.balance)) / Math.LN10 - 3) * 2)));
+          h += '<dt>' + (j.job === 'store' ? S.till : S.vault) + '</dt><dd><span title="' + esc(full(j.vault.balance)) + ' PAT">' + esc(j.vault.emoji || '') + ' ' + big(j.vault.balance) + ' PAT</span>' +
+               (j.min_vault ? ' <span class="sub">' + fmt(S.needs, { n: big(j.min_vault) }) + '</span>' : '') + bar(seg, 'vault') + '</dd>';
+        }
+        var heatSeg = Math.max(0, Math.min(10, Math.round(j.heat / (b.heat_max || 100) * 10)));
+        h += '<dt>' + S.heat + '</dt><dd>' + fmt(S.heat_v, { n: j.heat }) + bar(heatSeg) + '</dd>';
+        var l = j.last;
+        h += '<dt>' + S.last + '</dt><dd>' + (l ? fmt(S['out.' + l.outcome] || l.outcome, { amt: big(l.amount) + ' PAT' }) + ' <span class="sub">' + ago(now - l.at * 1000) +
+             (l.crew ? ' · ' + fmt(S.crew, { n: l.crew }) : '') + '</span>' : '<span class="sub">' + S.never + '</span>') + '</dd>';
+        h += '<dt>' + S.buyin_l + '</dt><dd>' + fmt(S.buyin, { amt: full(j.buyin) + ' PAT' }) +
+             (j.door_dc ? ' <span class="sub">· ' + fmt(S.door, { dc: j.door_dc }) + '</span>' : '') +
+             (j.prereq && S['prereq.' + j.prereq] ? '<div class="sub">' + S['prereq.' + j.prereq] + '</div>' : '') + '</dd>';
+        h += '</dl><div class="go">' + fmt(S.go, { cmd: '<code>!heist ' + esc(j.job) + '</code>' }) + '</div></article>';
+        html += h;
+      });
+      city.innerHTML = html;
+      document.getElementById('mmRadar').innerHTML = radar;
+      var live = document.getElementById('mmLive'), r = b.running;
+      if (r) {
+        var job = b.jobs.filter(function (j) { return j.job === r.job; })[0] || { name: r.job, emoji: '💰' };
+        document.getElementById('mmLiveTxt').innerHTML = r.phase === 'running'
+          ? fmt(S.live_run, { job: job.emoji + ' ' + job.name, r: r.round || 1, total: r.rounds || '?', n: r.crew })
+          : fmt(S.live_lobby, { job: job.emoji + ' ' + job.name, room: r.room || '?', n: r.crew, cmd: '<code>!join</code>' });
+        var p = '';
+        if (r.phase === 'running') for (var k = 1; k <= Math.min(20, r.rounds || 0); k++) p += '<b class="' + (k < r.round ? 'done' : k === r.round ? 'now' : '') + '"></b>';
+        document.getElementById('mmPips').innerHTML = p;
+        live.classList.add('on');
+      } else live.classList.remove('on');
+    }
+    function tick() {
+      var nowS = (Date.now() + skew) / 1000, redo = false;
+      document.querySelectorAll('#mmCity [data-ready]').forEach(function (el) {
+        var left = Number(el.getAttribute('data-ready')) - nowS;
+        if (left <= 0) redo = true; else el.textContent = clock(left);
+      });
+      if (redo) render();
+    }
+    function poll() {
+      fetch('/api/gtf/board', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (j && j.ok) { state = j; skew = j.now ? j.now - Date.now() : 0; render(); }
+      }).catch(function () {});
+    }
+    render();
+    setInterval(tick, 1000);
+    setInterval(function () { if (!document.hidden) poll(); }, 15000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) poll(); });
+  })();
+  </script>
 
   <div class="parts">
     <% PARTS.forEach((p) => { %>
